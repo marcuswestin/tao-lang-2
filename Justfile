@@ -1,5 +1,10 @@
 set quiet
 
+# Direct `just` runs use the same checkout toolchain as `./agent` and `./dev`.
+BUN := justfile_directory() + "/.devenv/profile/bin/bun"
+BUNX := justfile_directory() + "/.devenv/profile/bin/bunx"
+export PATH := justfile_directory() + "/.devenv/profile/bin:" + env("PATH")
+
 WORD_FLOWER_APP := justfile_directory() + "/Apps/WordFlower/1 - Current/WordFlower.tao"
 IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extension.vsix"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
@@ -161,7 +166,7 @@ studio-canary project="Apps/HNReader" app="HNReader":
 # Export real release and Studio-preview iOS bundles and prove only the preview carries Studio code
 [group('Host proofs')]
 ship-bundle-proof:
-    bun run packages/apps/expo-host/expo-host-src/testing/verify-release-bundle.ts
+    "{{ BUN }}" run packages/apps/expo-host/expo-host-src/testing/verify-release-bundle.ts
 
 # Compile every repository native module for the iOS simulator; intentionally outside routine verification
 [group('Host proofs')]
@@ -206,18 +211,18 @@ ide-extension-release-publish target="all":
 # Build a standalone Tao binary for this host, with its runtime resources embedded, after generating its parser
 [group('Ship')]
 standalone-cli-build: _parser-gen
-    bun run packages/cli/tao-cli/cli-src/standalone-build.ts .artifacts/build/tao
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts .artifacts/build/tao
 
 # Build the files one standalone Tao release publishes, and print the command that publishes them
 [group('Ship')]
 standalone-cli-release version: _parser-gen
-    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
 
 # Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, compile, and build --compile-only work with no Bun or Node on PATH
 [group('Ship')]
 standalone-cli-acceptance: _parser-gen
-    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
-    bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
+    "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
 
 # Build a 0.0.0 release and run its acceptance in a fresh vanilla macOS Tart VM, retaining guest logs
 [group('Ship')]
@@ -428,7 +433,7 @@ lint: _repo-lint
 # Fail on exported symbols nothing imports; a gate in verify and verify-full
 [group('Dev')]
 dead-exports:
-    bun run packages/testing/verification/verification-src/DeadExports.ts
+    "{{ BUN }}" run packages/testing/verification/verification-src/DeadExports.ts
 
 # Diagnose this checkout without changing it; pass --json for a structured report
 [group('Report')]
@@ -496,12 +501,12 @@ simplify-audit *ARGS:
 # Benchmark cold and steady-state language-service performance; fails when a steady-state median passes its budget
 [group('Report')]
 bench iterations="10":
-    bun run packages/cli/dev-cli/dev-cli-src/performance/language-performance.ts "{{ iterations }}"
+    "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/performance/language-performance.ts "{{ iterations }}"
 
 # Measure machine-wide lane admission against DEVENV-094's bar; agents use ./agent unsandboxed admission-experiment on a quiet machine. --provision <count> makes and removes its own checkouts
 [group('Report')]
 admission-experiment *ARGS:
-    bun run packages/cli/dev-cli/dev-cli-src/performance/admission-experiment.ts {{ ARGS }}
+    "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/performance/admission-experiment.ts {{ ARGS }}
 
 # Compile a Tao app path relative to the invocation directory into the local runtime host
 [group('Run')]
@@ -518,7 +523,7 @@ install-ide-extension: _ide-extension-package
 # Compile WordFlower, launch an Android emulator, and start the Expo runtime on Android.
 [group('Run')]
 android: _compile-word-flower-app _android-emulator _android-expo-go
-    bun run packages/cli/dev-cli/dev-cli-src/dev.ts expo-android
+    "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/dev.ts expo-android
 
 # Reclaim bootstrap scratch a failed dependency install abandoned, reporting what it freed
 [group('Setup')]
@@ -611,7 +616,7 @@ _git-hooks:
     ./packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh install
 
 _dependency-health:
-    bun run packages/testing/verification/verification-src/DependencyHealth.ts
+    "{{ BUN }}" run packages/testing/verification/verification-src/DependencyHealth.ts
 
 # The three fix steps, each over its own file class, as the verify graph runs them
 _fix-dprint:
@@ -638,10 +643,10 @@ _fix-just-fmt:
 
 # Both developer-environment index pages are generated from the entry files; never hand-edit them.
 _fix-ledger-index:
-    bun run packages/testing/verification/verification-src/fix-ledger-index.ts
+    "{{ BUN }}" run packages/testing/verification/verification-src/fix-ledger-index.ts
 
 _runtime-pack-check:
-    bun run packages/testing/verification/verification-src/runtime-package-pack.ts
+    "{{ BUN }}" run packages/testing/verification/verification-src/runtime-package-pack.ts
 
 # `CompileApp.ts` stamps and then delegates to `./tao compile`. Four test recipes and both verify
 # lanes depend on this gate, so an unconditional 2.7s compile was paid before a single test could
@@ -649,15 +654,15 @@ _runtime-pack-check:
 # as a module rather than through `./dev`, matching `_parser-gen`: nobody types a private recipe, so
 # the discoverable command bought nothing and cost `./dev`'s boot on every run.
 _compile-word-flower-app: _parser-gen
-    bun run packages/testing/verification/verification-src/CompileApp.ts "{{ WORD_FLOWER_APP }}" --app WordFlower
+    "{{ BUN }}" run packages/testing/verification/verification-src/CompileApp.ts "{{ WORD_FLOWER_APP }}" --app WordFlower
 
 _ide-extension-build: _parser-gen
-    cd packages/ides/ide-extension && bun esbuild.config.ts
+    cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts
 
 _ide-extension-package: _parser-gen
     mkdir -p .artifacts/build
-    cd packages/ides/ide-extension && bun esbuild.config.ts --minify
-    cd packages/ides/ide-extension && bunx @vscode/vsce package --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
+    cd packages/ides/ide-extension && "{{ BUN }}" esbuild.config.ts --minify
+    cd packages/ides/ide-extension && "{{ BUNX }}" @vscode/vsce package --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
 
 _tao-check: _parser-gen
     ./tao check
@@ -667,26 +672,26 @@ _dprint-check:
     just --fmt --check
 
 _repo-lint:
-    bun run packages/cli/dev-cli/dev-cli-src/repo-lint-entry.ts
+    "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/repo-lint-entry.ts
 
 # TypeScript 7's native compiler, installed under the `typescript-native` npm alias: the same
 # build takes ~2s where `typescript` 5.9 takes ~17s. `typescript` itself stays at 5.9 because the
 # editor's tsserver and `bunx tsc` still need its JavaScript API, which 7.0 does not ship.
 _typecheck:
-    bun node_modules/typescript-native/bin/tsc --build packages/*/tsconfig.json packages/*/*/tsconfig.json
+    "{{ BUN }}" node_modules/typescript-native/bin/tsc --build packages/*/tsconfig.json packages/*/*/tsconfig.json
 
 # `just test`'s own runner. In a lane's gate list, `_test` and `_test-changed` are not recipes at
 # all: `./dev gates` replaces each with one node per test suite and per shard of a long suite, so the
 # suites a verification lane schedules are the same nodes `./dev test` schedules. There is no
 # `_test-changed` recipe for that reason — nothing would ever run it.
 _test PATTERN="":
-    bun run packages/cli/dev-cli/dev-cli-src/dev.ts test "{{ PATTERN }}"
+    "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/dev.ts test "{{ PATTERN }}"
 
 _android-emulator:
-    bun run packages/cli/dev-cli/dev-cli-src/dev.ts android-emulator
+    "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/dev.ts android-emulator
 
 _android-expo-go:
-    bun run packages/cli/dev-cli/dev-cli-src/dev.ts android-expo-go
+    "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/dev.ts android-expo-go
 
 _parser-gen:
-    bun run packages/testing/verification/verification-src/ParserGenerate.ts
+    "{{ BUN }}" run packages/testing/verification/verification-src/ParserGenerate.ts

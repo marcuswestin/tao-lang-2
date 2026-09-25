@@ -29,7 +29,8 @@ const ANDROID_AVD_CONFIG = {
 }
 const EMULATOR_BOOT_TIMEOUT_MS = 180_000
 const EMULATOR_BOOT_POLL_MS = 2_000
-const androidAdbMissingMessage = 'Android adb CLI not found. Run direnv allow so devenv can expose the Android SDK.'
+const androidAdbMissingMessage =
+  'Android adb CLI not found. Enter ./enter-tao-dev-env to expose the pinned Android SDK.'
 
 export type AndroidSession = ReturnType<typeof createAndroid>
 
@@ -86,11 +87,11 @@ export const Android = createAndroid(ExpoConfig, ExpoMetro)
 async function ensureEmulator(): Promise<void> {
   await requireCommand(
     'emulator',
-    'Android emulator CLI not found. Run direnv allow so devenv can expose the Android SDK.',
+    'Android emulator CLI not found. Enter ./enter-tao-dev-env to expose the pinned Android SDK.',
   )
   await requireCommand(
     'avdmanager',
-    'Android avdmanager CLI not found. Run direnv allow so devenv can expose the Android SDK.',
+    'Android avdmanager CLI not found. Enter ./enter-tao-dev-env to expose the pinned Android SDK.',
   )
   await requireCommand('adb', androidAdbMissingMessage)
 
@@ -98,7 +99,7 @@ async function ensureEmulator(): Promise<void> {
   if (avds.length === 0) {
     await requireCommand(
       'sdkmanager',
-      'Android sdkmanager CLI not found. Run direnv allow so devenv can expose the Android SDK.',
+      'Android sdkmanager CLI not found. Enter ./enter-tao-dev-env to expose the pinned Android SDK.',
     )
     await requireAndroidSdkPackage(ANDROID_SYSTEM_IMAGE)
     DevLoopOutput.logDevLoop('dev', `No Android emulator found; creating ${ANDROID_AVD_NAME}.`)
@@ -377,7 +378,7 @@ async function requireAndroidSdkPackage(sdkPackage: string): Promise<void> {
 
   Errors.throwUserInput(Text.stripIndent(`
     Android SDK package ${sdkPackage} is not available in this devenv shell.
-    Run \`direnv allow\` so Nix rebuilds the Android SDK from devenv.nix, then retry \`just android\`.
+    Re-enter \`./enter-tao-dev-env\` so Nix rebuilds the Android SDK from devenv.nix, then retry \`just android\`.
   `))
 }
 

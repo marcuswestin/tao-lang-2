@@ -10,6 +10,7 @@ const expected = [
   'land',
   'finalize',
   'merge-main',
+  'merge-recover',
   'landed',
   'capabilities',
   'open-pr',
@@ -58,7 +59,7 @@ const expected = [
 ]
 
 Describe('agent host command permissions', () => {
-  Test('one canonical list generates exact Codex and Claude host rules', async () => {
+  Test('one canonical list gates runtime dispatch behind per-operation Codex and Claude host rules', async () => {
     const source = CodexConfigGenerator.parsePermissions(
       await FS.readText(Repo.resolvePath('.rulesync/permissions.jsonc')),
     )
@@ -68,22 +69,23 @@ Describe('agent host command permissions', () => {
     Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
-    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(12))
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(['merge-recover', ...expected.slice(13)])
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
       permissions: { allow: string[] }
       sandbox: { excludedCommands: string[] }
     }
+    const operations = [...new Set(prefixes.map(prefix => prefix[0]))]
     Expect(rules.split('\n').filter(line => line.startsWith('prefix_rule('))).toEqual(
-      prefixes.map(prefix =>
+      operations.map(operation =>
         `prefix_rule(pattern=${
-          JSON.stringify(['./agent', 'unsandboxed', ...prefix])
-        }, decision="allow", justification="Repository-approved host command.")`
+          JSON.stringify(['./agent', 'unsandboxed', operation])
+        }, decision="allow", justification="Repository host wrapper validates subcommands and arguments.")`
       ),
     )
-    const shapes = expected.flatMap(command => [
-      `./agent unsandboxed ${command}`,
-      `./agent unsandboxed ${command} *`,
+    const shapes = operations.flatMap(operation => [
+      `./agent unsandboxed ${operation}`,
+      `./agent unsandboxed ${operation} *`,
     ])
     Expect(settings.sandbox.excludedCommands).toEqual(shapes)
     Expect(settings.permissions.allow.filter(rule => rule.startsWith('Bash(./agent unsandboxed')))
@@ -186,7 +188,12 @@ Describe('agent host command permissions', () => {
       renderClaudeHostSettings(JSON.stringify({ permissions: {}, sandbox: { enabled: true } }), [['land']], {}),
     ) as { permissions: { allow: string[] }; sandbox: unknown }
 
-    Expect(rendered.permissions.allow).toEqual(['Bash(./agent unsandboxed land)', 'Bash(./agent unsandboxed land *)'])
-    Expect(rendered.sandbox).toEqual({ excludedCommands: ['./agent unsandboxed land', './agent unsandboxed land *'] })
+    Expect(rendered.permissions.allow).toEqual([
+      'Bash(./agent unsandboxed land)',
+      'Bash(./agent unsandboxed land *)',
+    ])
+    Expect(rendered.sandbox).toEqual({
+      excludedCommands: ['./agent unsandboxed land', './agent unsandboxed land *'],
+    })
   })
 })

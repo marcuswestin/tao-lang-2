@@ -48,7 +48,7 @@ description = "Tao review: inspect the worktree and reference repository without
 "~/.ssh/**" = "deny"
 
 [permissions.tao-review.filesystem.":workspace_roots"]
-# Not `.env*`: that pattern also matches this repository's own `.envrc`.
+# Keep the patterns narrow so they do not match unrelated repository files.
 "**/.env" = "deny"
 "**/.env.*" = "deny"
 
@@ -89,6 +89,7 @@ description = "Tao worktree: write the workspace, read the reference repo, reach
 "~/code/tao-lang-2/.git" = "write"
 # Caches and shared state the pinned toolchain writes outside the worktree. One list serves
 # both harnesses: these are Claude Code's sandbox write paths, spelled as Codex rules.
+"~/.tao" = "write"
 "~/.bun" = "write"
 "~/.cache" = "write"
 "~/.gradle" = "write"

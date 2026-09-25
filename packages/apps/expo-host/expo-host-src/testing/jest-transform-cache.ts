@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { FS, Platform, TaoHome } from '@shared'
 import { TestRunRoot } from './test-run-root'
 
 /** Jest's transform cache is useful across runs, but Jest never evicts entries for obsolete paths. */
@@ -26,7 +26,7 @@ export const JestTransformCache = { ENV, root, run } as const
 /** Keep reusable transforms out of macOS boot-time temp cleanup, scoped by the run-root identity. */
 function root(runtimePackageRoot: string): string {
   const checkoutIdentity = FS.basename(FS.dirname(TestRunRoot.hostGeneratedRoot(runtimePackageRoot)))
-  return FS.resolvePath(`.cache/tao/jest-transform-cache/${checkoutIdentity}`, FS.homeDir())
+  return TaoHome.resolve(`cache/jest-transform-cache/${checkoutIdentity}`)
 }
 
 /**

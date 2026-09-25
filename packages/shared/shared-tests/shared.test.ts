@@ -1369,19 +1369,19 @@ Describe('TaoStdlib', () => {
 
 Describe('TaoHome', () => {
   // The install script spells the same rule in shell; these pin the paths it must agree with.
-  Test('defaults to ~/.local/share/tao', () => {
+  Test('defaults to ~/.tao', () => {
     withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: undefined }, () => {
-      Expect(TaoHome.root()).toBe('/Users/someone/.local/share/tao')
-      Expect(TaoHome.resolve('hosts')).toBe('/Users/someone/.local/share/tao/hosts')
+      Expect(TaoHome.root()).toBe('/Users/someone/.tao')
+      Expect(TaoHome.resolve('hosts')).toBe('/Users/someone/.tao/hosts')
     })
   })
 
-  Test('honours XDG_DATA_HOME, and ignores a relative one as the specification asks', () => {
+  Test('keeps the single home when XDG_DATA_HOME is set', () => {
     withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: '/data' }, () => {
-      Expect(TaoHome.root()).toBe('/data/tao')
+      Expect(TaoHome.root()).toBe('/Users/someone/.tao')
     })
     withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: 'data' }, () => {
-      Expect(TaoHome.root()).toBe('/Users/someone/.local/share/tao')
+      Expect(TaoHome.root()).toBe('/Users/someone/.tao')
     })
   })
 

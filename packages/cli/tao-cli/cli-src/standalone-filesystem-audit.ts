@@ -13,12 +13,16 @@ type Change = { after: Entry; before: Entry; path: string }
 type Diff = {
   added: string[]
   beforeIssues: Issue[]
+  beforeSkippedMounts: string[]
   changed: Change[]
   incomplete: boolean
   removed: string[]
   root: string
   afterIssues: Issue[]
+  afterSkippedMounts: string[]
+  violations: string[]
 }
+type AuditScope = { guestHome: string; guestTemp: string; root: string }
 
 const REPORT_LIMIT = 200
 
@@ -32,22 +36,32 @@ async function main(args: string[]): Promise<void> {
     )
     return
   }
-  if (args[0] === 'compare' && args.length === 5) {
+  if (args[0] === 'compare' && (args.length === 5 || args.length === 6)) {
     const before = await FS.readJson<Snapshot>(FS.resolvePath(args[1]!))
     const after = await FS.readJson<Snapshot>(FS.resolvePath(args[2]!))
     const diff = compare(before, after)
+    if (args[5] !== undefined) {
+      const scope = await FS.readJson<AuditScope>(FS.resolvePath(args[5]))
+      diff.violations = violations(diff, scope)
+    }
     await FS.writeText(FS.resolvePath(args[3]!), `${JSON.stringify(diff)}\n`)
     await FS.writeText(FS.resolvePath(args[4]!), report(diff))
     HCI.writeLine(
       `Filesystem audit: ${diff.added.length} added, ${diff.changed.length} changed, `
         + `${diff.removed.length} removed; ${
           diff.incomplete ? 'incomplete (unreadable paths)' : 'complete in scanned volume'
-        }.`,
+        }; ${diff.violations.length} disallowed changes.`,
     )
+    if (diff.violations.length > 0) {
+      Errors.throwHostEnvironment(
+        `Filesystem audit found ${diff.violations.length} disallowed or unobservable test paths. `
+          + `See ${args[4]} and ${args[3]}.`,
+      )
+    }
     return
   }
   Errors.throwUserInput(
-    'Usage: filesystem-audit snapshot <root> <output.json> | compare <before.json> <after.json> <diff.json> <report.txt>',
+    'Usage: filesystem-audit snapshot <root> <output.json> | compare <before.json> <after.json> <diff.json> <report.txt> [scope.json]',
   )
 }
 
@@ -100,11 +114,14 @@ function compare(before: Snapshot, after: Snapshot): Diff {
   const diff: Diff = {
     added: [],
     afterIssues: after.issues,
+    afterSkippedMounts: after.skippedMounts,
     beforeIssues: before.issues,
+    beforeSkippedMounts: before.skippedMounts,
     changed: [],
     incomplete: before.issues.length > 0 || after.issues.length > 0,
     removed: [],
     root: before.root,
+    violations: [],
   }
   for (const path of Object.keys(after.entries)) {
     const old = before.entries[path]
@@ -125,15 +142,205 @@ function compare(before: Snapshot, after: Snapshot): Diff {
   return diff
 }
 
+/** Require every observed change to belong to the acceptance or an explicit macOS-owned area. */
+function violations(diff: Diff, scope: AuditScope): string[] {
+  for (const path of [scope.root, scope.guestHome, scope.guestTemp]) {
+    if (!FS.isAbsolute(path)) {
+      Errors.throwUserInput(`Filesystem audit scope path must be absolute: ${path}`)
+    }
+  }
+  const onVolume = (path: string) => FS.resolvePath(path.slice(1), diff.root)
+  const acceptanceRoot = onVolume(scope.root)
+  const acceptanceHome = FS.resolvePath('home', acceptanceRoot)
+  const guestHome = onVolume(scope.guestHome)
+  const guestTemp = onVolume(scope.guestTemp)
+  const permittedHome = ['.tao', 'a-tally-counter', 'a-reading-list'].map(name => FS.resolvePath(name, acceptanceHome))
+  const permittedHarness = ['releases', 'releases.json', 'watchman-bin']
+    .map(name => FS.resolvePath(name, acceptanceRoot))
+  const forbiddenExternal = [
+    '.tao',
+    '.cache/tao',
+    '.local/share/tao',
+    '.bun',
+    '.expo',
+    'Library/Caches/bun',
+    'Library/Caches/dotslash',
+  ].map(path => FS.resolvePath(path, guestHome))
+  const forbiddenTemp = ['metro-cache', 'tao-test-runs', 'tao-ship-coordination']
+    .map(path => FS.resolvePath(path, guestTemp))
+  const guestCache = [
+    'CloudKit',
+    'GeoServices',
+    'PassKit',
+    'com.apple.appleaccountd',
+    'com.apple.appstoreagent',
+    'com.apple.duetexpertd',
+    'com.apple.chrono',
+    'com.apple.AppleMediaServices',
+    'com.apple.dataaccess.dataaccessd',
+    'com.apple.passd',
+    'com.apple.amsengagementd',
+    'com.apple.ap.adprivacyd',
+    'com.apple.cache_delete',
+    'com.apple.feedbacklogger',
+    'com.apple.askpermissiond',
+    'com.apple.proactive.eventtracker',
+  ].map(name => FS.resolvePath(`Library/Caches/${name}`, guestHome))
+  const guestSystem = [
+    'Library/AppleMediaServices',
+    'Library/Application Scripts',
+    'Library/Application Support',
+    'Library/Biome',
+    'Library/ContainerManager',
+    'Library/Containers',
+    'Library/Daemon Containers',
+    'Library/DataDeliveryServices',
+    'Library/DuetExpertCenter',
+    'Library/Finance',
+    'Library/Group Containers',
+    'Library/HomeKit',
+    'Library/IdentityServices',
+    'Library/Keychains',
+    'Library/Messages',
+    'Library/Metadata',
+    'Library/Passes',
+    'Library/PersonalizationPortrait',
+    'Library/Preferences',
+    'Library/Suggestions',
+    'Library/Trial',
+    'Library/Weather',
+    'Library/com.apple.aiml.instrumentation',
+    'Pictures/Photos Library.photoslibrary',
+  ].map(path => FS.resolvePath(path, guestHome))
+  const system = [
+    '/.fseventsd',
+    '/System/Library/AssetsV2',
+    '/System/Library/Caches',
+    '/Library/Trial',
+    '/Library/Preferences',
+    '/Library/Caches/com.apple.iconservices.store',
+    '/private/var/db',
+    '/private/var/folders',
+    '/private/var/log',
+    '/private/var/protected',
+    '/private/tmp/.com.apple.dt.CommandLineTools.installondemand.in-progress',
+  ].map(onVolume)
+  const systemParents = [
+    '/System',
+    '/System/Library',
+    '/Library',
+    '/Library/Caches',
+    '/private',
+    '/private/var',
+    '/private/tmp',
+  ].map(onVolume)
+  const guestParents = [
+    guestHome,
+    FS.resolvePath('Library', guestHome),
+    FS.resolvePath('Library/Caches', guestHome),
+    FS.resolvePath('Pictures', guestHome),
+  ]
+  const allowedSystem = [...system, ...guestSystem, ...guestCache]
+  const changed = [
+    ...diff.added,
+    ...diff.changed.map(change => change.path),
+    ...diff.removed,
+  ]
+  const violations = changed.filter(path => {
+    if (FS.pathIsWithin(path, acceptanceHome)) {
+      return path !== acceptanceHome && !permittedHome.some(allowed => FS.pathIsWithin(path, allowed))
+    }
+    if (FS.pathIsWithin(path, acceptanceRoot)) {
+      return path !== acceptanceRoot && !permittedHarness.some(allowed => FS.pathIsWithin(path, allowed))
+    }
+    if ([...forbiddenExternal, ...forbiddenTemp].some(forbidden => FS.pathIsWithin(path, forbidden))) {
+      return true
+    }
+    if (FS.pathIsWithin(path, guestTemp)) {
+      const child = path.slice(guestTemp.length + 1).split('/')[0] ?? ''
+      return path !== guestTemp && !child.startsWith('com.apple.')
+        && !['.LINKS', 'TemporaryItems', 'duetexpertd', 'diagnosticextensionsd'].includes(child)
+    }
+    return ![diff.root, ...systemParents, ...guestParents].includes(path)
+      && !allowedSystem.some(allowed => FS.pathIsWithin(path, allowed))
+  })
+  const unobservableSystem = [
+    '/.Spotlight-V100',
+    '/.fseventsd',
+    '/Library/Application Support/Apple/AssetCache/Data',
+    '/Library/Application Support/Apple/ParentalControls/Users',
+    '/Library/Caches/com.apple.amsengagementd.classicdatavault',
+    '/Library/Caches/com.apple.aned',
+    '/Library/Caches/com.apple.aneuserd',
+    '/private/etc/cups/certs',
+    '/private/var/OOPJit',
+    '/private/var/agentx',
+    '/private/var/at/tabs',
+    '/private/var/at/tmp',
+    '/private/var/audit',
+    '/private/var/backups',
+    '/private/var/dirs_cleaner',
+    '/private/var/install',
+    '/private/var/jabberd',
+    '/private/var/lib/postfix',
+    '/private/var/ma',
+    '/private/var/networkd/Library',
+    '/private/var/networkd/db',
+    '/private/var/root',
+    '/private/var/run/mds',
+    '/private/var/spool/cups',
+    '/private/var/spool/mqueue',
+    '/private/var/spool/postfix/active',
+    '/private/var/spool/postfix/bounce',
+    '/private/var/spool/postfix/corrupt',
+    '/private/var/spool/postfix/defer',
+    '/private/var/spool/postfix/deferred',
+    '/private/var/spool/postfix/flush',
+    '/private/var/spool/postfix/hold',
+    '/private/var/spool/postfix/incoming',
+    '/private/var/spool/postfix/maildrop',
+    '/private/var/spool/postfix/private',
+    '/private/var/spool/postfix/public',
+    '/private/var/spool/postfix/saved',
+    '/private/var/spool/postfix/trace',
+  ].map(onVolume)
+  const unobservable = [
+    ...diff.beforeIssues.map(issue => issue.path),
+    ...diff.afterIssues.map(issue => issue.path),
+    ...diff.beforeSkippedMounts,
+    ...diff.afterSkippedMounts,
+  ].filter(path => {
+    if (FS.pathIsWithin(path, acceptanceRoot)) {
+      return true
+    }
+    if ([onVolume('/Volumes/My Shared Files'), onVolume('/home')].includes(path)) {
+      return false
+    }
+    return !unobservableSystem.includes(path)
+      && !allowedSystem.some(allowed => FS.pathIsWithin(path, allowed))
+  })
+  violations.push(...unobservable.map(path => `unobservable: ${path}`))
+  if (!changed.some(path => FS.pathIsWithin(path, acceptanceRoot))) {
+    violations.push(`acceptance root absent from the diff: ${acceptanceRoot}`)
+  }
+  return [...new Set(violations)].sort()
+}
+
 function report(diff: Diff): string {
   const lines = [
     `Filesystem audit of ${diff.root}`,
     `Added: ${diff.added.length}; changed: ${diff.changed.length}; removed: ${diff.removed.length}.`,
     `Unreadable paths: ${diff.beforeIssues.length} before, ${diff.afterIssues.length} after.`,
+    `Disallowed or unobservable test paths: ${diff.violations.length}.`,
     'This compares path metadata (type, size, modification time, ownership, mode, symlink target), not file contents.',
     'It excludes other mounted volumes and cannot see files created and removed between snapshots.',
     'Full path lists and metadata are in filesystem-diff.json; macOS background changes may appear.',
+    'The policy rejects every observed change outside the acceptance and explicit macOS-owned paths.',
+    'Allowed OS directories can also contain unobserved tool writes; this snapshot cannot attribute writers.',
   ]
+  if (diff.violations.length > 0) {
+    lines.push('', 'Disallowed or unobservable test paths (first 200):', ...diff.violations.slice(0, REPORT_LIMIT))
+  }
   for (
     const [label, paths] of [
       ['Added', diff.added],

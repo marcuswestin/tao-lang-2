@@ -215,6 +215,7 @@ Describe('changed suite plan', () => {
       const path of [
         'Justfile',
         'agent',
+        'enter-tao-dev-env',
         '.rulesync/permissions.jsonc',
         'agents/skills/git-workflow/SKILL.md',
         'config/dprint.jsonc',

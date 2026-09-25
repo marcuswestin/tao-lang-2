@@ -55,7 +55,7 @@ Describe('Companion host build', () => {
   })
 
   Test('names the remedy when no Android SDK is at hand', async () => {
-    await Expect(companionGradleEnv('/nonexistent-checkout', {})).rejects.toThrow('Run `direnv allow`')
+    await Expect(companionGradleEnv('/nonexistent-checkout', {})).rejects.toThrow('Enter `./enter-tao-dev-env`')
   })
 })
 

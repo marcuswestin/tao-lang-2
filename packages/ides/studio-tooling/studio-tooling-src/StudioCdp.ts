@@ -64,6 +64,7 @@ type Point = {
 
 type StudioCdpOptions = {
   artifactRoot?: string
+  useMockKeychain?: boolean
 }
 
 type StudioCdpKeyOptions = {
@@ -137,6 +138,7 @@ export class StudioCdp {
         '--disable-gpu',
         '--no-default-browser-check',
         '--no-first-run',
+        ...(options.useMockKeychain ? ['--use-mock-keychain'] : []),
         'about:blank',
       ],
       onOutput(stream, chunk) {

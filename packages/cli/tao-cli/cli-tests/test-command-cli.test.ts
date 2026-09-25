@@ -1,5 +1,5 @@
 import { RuntimeTesting } from '@expo-host/testing/runtime-testing'
-import { FS, Platform, TaoTestProtocol, Text } from '@shared'
+import { FS, Platform, TaoHome, TaoTestProtocol, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runTaoCliForTest, withTaoFixture } from './test-cli-files'
 
@@ -701,7 +701,7 @@ Describe('tao test CLI', () => {
           Expect(entrypointsOf(outputText(first))).toBeDefined()
           Expect(entrypointsOf(outputText(second))).toBe(entrypointsOf(outputText(first)))
           Expect(entrypointsOf(outputText(first))).not.toContain('/run-')
-          Expect(jestCacheOf(outputText(first))).toContain('/.cache/tao/jest-transform-cache/')
+          Expect(jestCacheOf(outputText(first))).toContain(TaoHome.resolve('cache/jest-transform-cache/'))
           Expect(jestCacheOf(outputText(second))).toBe(jestCacheOf(outputText(first)))
           Expect(jestCacheOf(outputText(third))).toBe(jestCacheOf(outputText(first)))
           Expect(firstModules.length).toBeGreaterThan(0)

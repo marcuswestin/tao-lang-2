@@ -4,5 +4,13 @@ set -e
 
 # Resolve the wrapper location so ./tao works from any invocation directory.
 SCRIPT_DIR="${0:A:h}"
+DEVENV_PROFILE="$SCRIPT_DIR/.devenv/profile"
+
+source "$SCRIPT_DIR/packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh"
+if ! tao_activate_devenv_profile "$SCRIPT_DIR" "$DEVENV_PROFILE"; then
+  echo "Tao's pinned devenv profile is unavailable." >&2
+  echo "Run ./enter-tao-dev-env from a regular terminal to build the pinned environment." >&2
+  exit 1
+fi
 
 exec bun "$SCRIPT_DIR/packages/cli/tao-cli/cli-src/tao-cli.ts" "$@"

@@ -1,5 +1,5 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
-import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
 import { FinalizeCommand, LandCommand, MergeMainCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
@@ -10,11 +10,13 @@ import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/Ru
 import { TestRunner } from '@verification/TestRunner'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
+import { devZshCompletion } from './completion/DevCompletion'
 import { readAgentCapabilities, unavailableLandingCapabilities } from './doctor/AgentCapabilities'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { MergeRecovery } from './git/MergeRecovery'
 import { OpenPrCommand } from './pr/OpenPrCommand'
 
 /*
@@ -83,6 +85,18 @@ async function runReleaseAction(action: () => Promise<void>): Promise<void> {
 /** Repository development CLI behind `./dev`: package tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
   commands.name('dev')
+
+  commands
+    .command('completion')
+    .description('Print completion generated from the registered dev commands.')
+    .argument('<shell>', 'zsh')
+    .action((shell: string) => {
+      if (shell !== 'zsh') {
+        HCI.writeErrorLine(`Unsupported completion shell: ${shell}. Use zsh.`)
+        Platform.runtimeProcess.exit(2)
+      }
+      HCI.write(devZshCompletion(commands))
+    })
 
   commands
     .command('test-host')
@@ -426,10 +440,90 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('merge-recover')
+    .description('Abort an in-progress merge, or explicitly reset a partial merge to ORIG_HEAD on the host.')
+    .option('--reset-to <sha>', 'Full pre-merge commit SHA; required when Git left no MERGE_HEAD.')
+    .option('--hard', 'Discard tracked worktree changes if git reset --merge cannot recover them.')
+    .action(async (options: { hard?: boolean; resetTo?: string } = {}) => {
+      try {
+        await MergeRecovery.run(options)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('capabilities')
     .description('Report which host capabilities this agent environment can use without changing anything.')
     .option('--json', 'Print a versioned structured report.')
-    .action(async (options: { json?: boolean } = {}) => {
+    // Temporary bridge approved for this task: remove before landing this branch.
+    .option('--temporary-clean-machine', 'Run the clean-machine VM gate through this host operation temporarily.')
+    .option('--temporary-vm-diagnose', 'Inspect Tart VM and host bridge state for this task temporarily.')
+    .option('--temporary-browser-host', 'Run the compiled standalone browser journey on this host temporarily.')
+    .option('--temporary-browser-diagnose', 'Inspect the host browser journey processes temporarily.')
+    .action(async (options: {
+      temporaryBrowserDiagnose?: boolean
+      json?: boolean
+      temporaryBrowserHost?: boolean
+      temporaryCleanMachine?: boolean
+      temporaryVmDiagnose?: boolean
+    } = {}) => {
+      if (options.temporaryCleanMachine === true) {
+        const result = await CLI.run('just', { args: ['standalone-cli-clean-machine'], stdio: 'inherit' })
+        Platform.runtimeProcess.exit(result.exitCode ?? 1)
+      }
+      if (options.temporaryVmDiagnose === true) {
+        for (
+          const [command, args] of [
+            ['tart', ['list']],
+            ['ifconfig', ['bridge100']],
+          ] as const
+        ) {
+          HCI.writeLine(`VM diagnostic: ${command} ${args.join(' ')}`)
+          await CLI.run(command, { args, stdio: 'inherit' })
+        }
+        Platform.runtimeProcess.exit(0)
+      }
+      if (options.temporaryBrowserHost === true) {
+        const root = Repo.getRoot()
+        const logs = FS.resolvePath('.artifacts/standalone-browser-host/logs', root)
+        const driver = FS.resolvePath('.artifacts/standalone-browser-host/browser-click', root)
+        await FS.mkdir(logs)
+        const portable = await CLI.mustRun('bash', {
+          args: ['packages/cli/tao-cli/cli-src/standalone-bun.sh'],
+          cwd: root,
+        })
+        const compiled = await CLI.run(portable.stdout.trim(), {
+          args: ['build', '--compile', 'packages/cli/tao-cli/cli-src/standalone-browser-click.ts', '--outfile', driver],
+          cwd: root,
+          stdio: 'inherit',
+        })
+        if (compiled.exitCode !== 0) {
+          Platform.runtimeProcess.exit(compiled.exitCode ?? 1)
+        }
+        const result = await CLI.run('just', {
+          args: ['standalone-cli-acceptance'],
+          cwd: root,
+          env: {
+            ...Platform.runtimeProcess.env,
+            TAO_ACCEPTANCE_BROWSER_DRIVER: driver,
+            TAO_ACCEPTANCE_LOG_DIR: logs,
+            TAO_STUDIO_CHROME_PATH: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+          },
+          stdio: 'inherit',
+        })
+        Platform.runtimeProcess.exit(result.exitCode ?? 1)
+      }
+      if (options.temporaryBrowserDiagnose === true) {
+        const result = await CLI.mustRun('ps', { args: ['-axo', 'pid=,ppid=,command='] })
+        for (const line of result.stdout.split('\n')) {
+          if (/standalone-browser|standalone-acceptance|tao dev|remote-debugging-port=0|expo start/u.test(line)) {
+            HCI.writeLine(line.slice(0, 350))
+          }
+        }
+        Platform.runtimeProcess.exit(0)
+      }
       Platform.runtimeProcess.exit(await AgentCapabilitiesCommand.run({ json: options.json === true }))
     })
 

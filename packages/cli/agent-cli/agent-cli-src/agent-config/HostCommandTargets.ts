@@ -15,6 +15,7 @@ const UTF8_LOCALE = { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' } as const
 
 /** Implementations for named host operations. Permissions still come solely from agentHostCommands. */
 export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> = {
+  'merge-recover': { command: './dev', fixedArgs: ['merge-recover'] },
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
   'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
   'app-dev': { command: './tao', fixedArgs: ['dev'], server: true },

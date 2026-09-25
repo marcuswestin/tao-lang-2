@@ -18,7 +18,6 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
     bunVersion: '1.4.2',
     dependencyIssues: [],
     devenvProfileNode: '/w/.devenv/profile/bin/node',
-    direnvAllowed: true,
     fingerprint: {
       architecture: 'arm64',
       kernel: { name: 'Darwin', version: '27.0.0' },
@@ -85,7 +84,7 @@ Describe('repository doctor', () => {
     const report = doctorReport(facts({ devenvProfileNode: undefined, nodeVersion: undefined }))
 
     Expect(report.status).toBe('fail')
-    Expect(check(report, 'devenv profile')?.remediation).toContain('direnv exec . ./agent setup')
+    Expect(check(report, 'devenv profile')?.remediation).toContain('./enter-tao-dev-env')
     Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(1)
   })
 
@@ -96,13 +95,6 @@ Describe('repository doctor', () => {
     Expect(check(report, 'worktree')?.remediation).toContain('git switch -c feat/<name>')
     Expect(report.status).toBe('warn')
     Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(0)
-  })
-
-  Test('treats optional tooling as a warning, never a failure', () => {
-    const report = doctorReport(facts({ direnvAllowed: undefined }))
-
-    Expect(check(report, 'direnv')?.status).toBe('warn')
-    Expect(report.status).toBe('warn')
   })
 
   Test('fails a checkout whose Watchman does not answer, because the fallback dies with EMFILE', () => {

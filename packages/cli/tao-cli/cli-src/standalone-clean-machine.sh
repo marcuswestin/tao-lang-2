@@ -10,21 +10,10 @@ input="$root/input"
 logs="$root/logs"
 release="$(pwd)/.artifacts/release/v0.0.0"
 expect_script='packages/cli/tao-cli/cli-src/standalone-clean-machine.expect'
-if [ -n "${TAO_STANDALONE_BUN:-}" ]; then
-  bun_bin="$TAO_STANDALONE_BUN"
-elif [ -x .devenv/profile/bin/bun ]; then
-  bun_bin="$(pwd)/.devenv/profile/bin/bun"
-else
-  bun_bin=bun
-fi
+bun_bin="${TAO_STANDALONE_BUN:-$(pwd)/.devenv/profile/bin/bun}"
 portable_bun_script='packages/cli/tao-cli/cli-src/standalone-bun.sh'
-audit=0
-case "${1:-}" in
-  '') ;;
-  --audit) audit=1 ;;
-  *) printf 'Usage: %s [--audit]\n' "$0" >&2; exit 2 ;;
-esac
-if [ "$#" -gt 1 ]; then
+browser_app="${TAO_STANDALONE_BROWSER_APP:-/Applications/Google Chrome.app}"
+if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != --audit ]; }; then
   printf 'Usage: %s [--audit]\n' "$0" >&2
   exit 2
 fi
@@ -74,7 +63,11 @@ if ! command -v tart >/dev/null; then
   exit 1
 fi
 if ! command -v "$bun_bin" >/dev/null; then
-  printf 'Bun is required to build the 0.0.0 release: %s\n' "$bun_bin" >&2
+  printf 'The checkout Bun is unavailable: %s. Run ./agent setup first.\n' "$bun_bin" >&2
+  exit 1
+fi
+if [ ! -x "$browser_app/Contents/MacOS/Google Chrome" ]; then
+  printf 'The VM browser test needs Google Chrome at %s or TAO_STANDALONE_BROWSER_APP.\n' "$browser_app" >&2
   exit 1
 fi
 version=$("$bun_bin" --version)
@@ -103,15 +96,21 @@ if ! step 'compile the existing acceptance for the guest' "$portable_bun" build 
 fi
 cat "$logs/compile.log"
 
-if [ "$audit" -eq 1 ]; then
-  if ! step 'compile the filesystem auditor for the guest' "$portable_bun" build --compile \
-    packages/cli/tao-cli/cli-src/standalone-filesystem-audit.ts --outfile "$input/filesystem-audit" \
-    > "$logs/audit-compile.log" 2>&1; then
-    cat "$logs/audit-compile.log" >&2
-    exit 1
-  fi
-  cat "$logs/audit-compile.log"
+if ! step 'compile the browser click driver for the guest' "$portable_bun" build --compile \
+  packages/cli/tao-cli/cli-src/standalone-browser-click.ts --outfile "$input/browser-click" \
+  > "$logs/browser-compile.log" 2>&1; then
+  cat "$logs/browser-compile.log" >&2
+  exit 1
 fi
+cat "$logs/browser-compile.log"
+
+if ! step 'compile the filesystem auditor for the guest' "$portable_bun" build --compile \
+  packages/cli/tao-cli/cli-src/standalone-filesystem-audit.ts --outfile "$input/filesystem-audit" \
+  > "$logs/audit-compile.log" 2>&1; then
+  cat "$logs/audit-compile.log" >&2
+  exit 1
+fi
+cat "$logs/audit-compile.log"
 
 cat > "$input/run.sh" <<'GUEST'
 #!/bin/sh
@@ -119,6 +118,10 @@ set -eu
 cd /
 export PATH=/usr/bin:/bin
 export TAO_ACCEPTANCE_LOG_DIR='/Volumes/My Shared Files/tao-logs/steps'
+export TAO_ACCEPTANCE_BROWSER_DRIVER='/Volumes/My Shared Files/tao-input/browser-click'
+export TAO_STUDIO_CHROME_PATH='/Volumes/My Shared Files/tao-browser/Contents/MacOS/Google Chrome'
+test -x "$TAO_ACCEPTANCE_BROWSER_DRIVER" || { echo 'The browser click driver is missing.' >&2; exit 1; }
+test -x "$TAO_STUDIO_CHROME_PATH" || { echo 'The shared browser is missing.' >&2; exit 1; }
 for tool in brew bun node; do
   if command -v "$tool" >/dev/null 2>&1; then
     echo "The vanilla guest unexpectedly has $tool on PATH." >&2
@@ -137,21 +140,18 @@ if [ -d /Library/Developer/CommandLineTools ] || [ -d /Applications/Xcode.app ];
 fi
 auditor='/Volumes/My Shared Files/tao-input/filesystem-audit'
 audit_logs='/Volumes/My Shared Files/tao-logs'
-if [ -x "$auditor" ]; then
-  "$auditor" snapshot /System/Volumes/Data "$audit_logs/filesystem-before.json"
-  export TAO_ACCEPTANCE_AUDIT_FILESYSTEM=1
-fi
+test -x "$auditor" || { echo 'The filesystem auditor is missing.' >&2; exit 1; }
+"$auditor" snapshot /System/Volumes/Data "$audit_logs/filesystem-before.json"
+export TAO_ACCEPTANCE_AUDIT_FILESYSTEM=1
 if '/Volumes/My Shared Files/tao-input/acceptance' \
   '/Volumes/My Shared Files/tao-input/release/v0.0.0'; then
   acceptance_status=0
 else
   acceptance_status=$?
 fi
-if [ -x "$auditor" ]; then
-  "$auditor" snapshot /System/Volumes/Data "$audit_logs/filesystem-after.json"
-  "$auditor" compare "$audit_logs/filesystem-before.json" "$audit_logs/filesystem-after.json" \
-    "$audit_logs/filesystem-diff.json" "$audit_logs/filesystem-diff.txt"
-fi
+"$auditor" snapshot /System/Volumes/Data "$audit_logs/filesystem-after.json"
+"$auditor" compare "$audit_logs/filesystem-before.json" "$audit_logs/filesystem-after.json" \
+  "$audit_logs/filesystem-diff.json" "$audit_logs/filesystem-diff.txt" "$audit_logs/steps/audit-scope.json"
 exit "$acceptance_status"
 GUEST
 
@@ -161,7 +161,8 @@ if ! step 'clone vanilla macOS' tart clone "$image" "$name" 2>&1 | tee "$logs/cl
 fi
 printf 'Clean-machine: booting %s headless...\n' "$name"
 boot_started=$(date +%s)
-tart run --no-graphics --dir="tao-input:$input:ro" --dir="tao-logs:$logs" "$name" > "$logs/boot.log" 2>&1 &
+tart run --no-graphics --dir="tao-input:$input:ro" --dir="tao-logs:$logs" \
+  --dir="tao-browser:$browser_app:ro" "$name" > "$logs/boot.log" 2>&1 &
 vm_pid=$!
 started=1
 
@@ -205,10 +206,7 @@ fi
 printf 'Clean-machine: guest SSH ready in %ss\n' "$(($(date +%s) - boot_started))"
 
 printf 'Clean-machine: SSH password is supplied automatically; no input is needed.\n'
-ssh_timeout=600
-if [ "$audit" -eq 1 ]; then
-  ssh_timeout=1800
-fi
+ssh_timeout=1800
 if ! step 'run standalone acceptance in the vanilla guest' \
   /usr/bin/expect "$expect_script" "$address" '/bin/sh "/Volumes/My Shared Files/tao-input/run.sh"' "$ssh_timeout" \
   2>&1 | tee "$logs/acceptance.log"; then

@@ -8,4 +8,4 @@
 # `direnv exec` is what builds or trusts the devenv profile the first time; `./agent` itself
 # links a linked worktree to the primary checkout's profile when one exists.
 [pre-start]
-setup = "direnv allow && direnv exec . ./agent setup"
+setup = "devenv shell --no-tui ./agent setup"
