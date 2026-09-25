@@ -132,6 +132,7 @@ export const DataCompiler = {
           ],
           ${clauses.find(AST.isOrderClause) ? Compile.OrderClause(clauses.find(AST.isOrderClause)!) : ''}
           ${compileLimitClause(clauses.find(AST.isLimitClause))}
+          ${compileSearchClause(clauses.find(AST.isSearchClause))}
         },
         TR.Value,
       )
@@ -245,6 +246,10 @@ function compileLimitClause(limit: AST.LimitClause | undefined): Compiled {
   return limit ? gen`limit: ${limit.count.value},` : gen.noop()
 }
 
+function compileSearchClause(search: AST.SearchClause | undefined): Compiled {
+  return search ? gen`search: () => ${Compile.Expression(search.term)},` : gen.noop()
+}
+
 function compileRelationSourceFilter(
   source: AST.MemberAccessExpression,
   entity: ASTUtils.DataEntityDefinition,
@@ -288,6 +293,7 @@ function compileEntityDataField(
       ${indexed ? 'indexed: true,' : ''}
       ${traits.some(trait => trait.unique) ? 'unique: true,' : ''}
       ${traits.some(AST.traitIsTitle) ? 'title: true,' : ''}
+      ${traits.some(trait => trait.search) ? 'search: true,' : ''}
       ${compileEntityFieldDefault(field, defaultModifier)}
     },`
   }

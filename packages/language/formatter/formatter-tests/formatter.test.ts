@@ -532,6 +532,25 @@ Describe('Tao formatter views and blocks', () => {
   )
 
   Test(
+    'formats a query search clause',
+    formats(
+      `view Main(){state Find=""\nrender Col(){query Documents as Found{search   Find\norder   by   Title}\nloop Found/Document{Text(Document.Title)}}}`,
+      `
+        view Main() {
+           state Find = ""
+           render Col() {
+              query Documents as Found {
+                 search Find
+                 order by Title
+              }
+              loop Found / Document {
+                 Text(Document.Title)
+        }  }  }
+      `,
+    ),
+  )
+
+  Test(
     'collapses deep closing brace runs onto one line at the outermost indentation',
     formats(
       `view MainView(){render Stack() {Text("a") {Text("b") {Text("c")}}}}`,
