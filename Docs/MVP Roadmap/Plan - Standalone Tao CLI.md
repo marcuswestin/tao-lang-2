@@ -788,9 +788,10 @@ landing this work needs.
    `moduleNameMapper` or transform for `@noble/*` in `jest.tao-test.config.cjs`, or break
    `TR-studio-device-*` out of `TR.ts`'s eager graph, and re-run
    `tao test Apps/Starters/Notebook` with the binary as the runner. A day's work and it removes the
-   managed Node entirely. **Researched 2026-09-25:** nothing public runs the real Jest under Bun;
-   Bun hosts only its own Jest-compatible runner, and the request to support the Jest CLI
-   (oven-sh/bun#4562) closed without a plan. The `@noble/*` failure has two candidate causes: Jest
+   managed Node entirely. **Researched 2026-09-25:** nothing public runs the real Jest under Bun,
+   and Bun states no plan to: it hosts only its own Jest-compatible runner, and the Jest-named issue
+   (oven-sh/bun#4562, closed in 2023) asked for `bun test` to accept Jest's command-line flags, not
+   to run Jest itself. The `@noble/*` failure has two candidate causes: Jest
    documents `require()` of an ES module only from Node 24.9, and under `BUN_BE_BUN` it may not see
    a Node version that qualifies; and those packages reach Jest untransformed. Two experiments
    settle it: transform `@noble/(hashes|curves|ciphers)` through babel-jest (a `transform` entry and
