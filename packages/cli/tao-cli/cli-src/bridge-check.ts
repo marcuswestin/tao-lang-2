@@ -42,13 +42,18 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
       ...typescript.sys,
       onUnRecoverableConfigFileDiagnostic: () => {},
     })?.options
+  const projectTypeRoots = inheritedOptions?.typeRoots ?? visibleTypeRoots(workspaceRoot)
+  const projectTypes = inheritedOptions?.types ?? typescript.getAutomaticTypeDirectiveNames({
+    ...inheritedOptions,
+    typeRoots: projectTypeRoots,
+  }, typescript.sys)
   const bridgeTypeRoots = [
     ...new Set([
-      ...(inheritedOptions?.typeRoots ?? [FS.resolvePath('node_modules/@types', workspaceRoot)]),
+      ...projectTypeRoots,
       ...typeRoots,
     ]),
   ]
-  const bridgeTypes = [...new Set([...(inheritedOptions?.types ?? []), ...ambientTypes])]
+  const bridgeTypes = [...new Set([...projectTypes, ...ambientTypes])]
   const configPath = FS.resolvePath('.tao/bridge-check.tsconfig.json', workspaceRoot)
   const config = {
     ...(inheritedConfig === undefined ? {} : { extends: inheritedConfig }),
@@ -130,6 +135,20 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
     severity: 'error',
     source: 'compiler',
   }]
+}
+
+/** TypeScript's default ambient lookup visits node_modules/@types in every ancestor directory. */
+function visibleTypeRoots(workspaceRoot: string): string[] {
+  const roots: string[] = []
+  let directory = FS.resolvePath('.tao', workspaceRoot)
+  while (true) {
+    roots.push(FS.resolvePath('node_modules/@types', directory))
+    const parent = FS.dirname(directory)
+    if (parent === directory) {
+      return roots
+    }
+    directory = parent
+  }
 }
 
 /** Only missing packages already installed with the host are linked; project dependencies win. */

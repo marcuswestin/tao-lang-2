@@ -300,13 +300,14 @@ export function CountWords(value: string): number {
     })
   })
 
-  Test('adds host ambient types to the generated project tsconfig', async () => {
+  Test('keeps auto-discovered project types alongside host types in the generated tsconfig', async () => {
     await withTaoFixture({
       ...checkedProjectFile,
       'tsconfig.json': PROJECT_TSCONFIG,
       'Main.tao': functionSource,
+      'node_modules/@types/project/index.d.ts': 'declare const BUILD_LABEL: string\n',
       'Words.ts': `export function CountWords(value: string): number {
-   return value.length + (${'process'}.env.BUILD_LABEL?.length ?? 0)
+   return value.length + BUILD_LABEL.length + (${'process'}.env.BUILD_LABEL?.length ?? 0)
 }
 `,
     }, async root => {
