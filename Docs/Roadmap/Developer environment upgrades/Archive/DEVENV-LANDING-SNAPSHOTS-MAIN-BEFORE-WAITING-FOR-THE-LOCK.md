@@ -1,6 +1,10 @@
 # DEVENV-LANDING-SNAPSHOTS-MAIN-BEFORE-WAITING-FOR-THE-LOCK — A landing that queues behind another loses to every landing that finishes while it waits
 
-- **Status:** Candidate
+- **Status:** Resolved
+- **Update:** `a14ac0fa` moved the main refresh into the acquired landing lock and added a
+  regression for a changed main during the wait. A clean integration of newer main preserves the
+  branch-authored diff described by the merge message; a conflicting merge already stops for
+  author resolution. No extra confirmation is needed for the clean queued case.
 - **Section:** External
 - **Area:** Landing, verification lanes, parallel agents
 - **Impact:** On an evening when several agents land, `just land` refuses itself after every wait for
@@ -19,16 +23,16 @@
   refused before the lock because the by-hand merge of `main` counted as a new commit the merge
   message had not been confirmed for; the fourth landed in 45 s. Measured: the four logs. Inferred:
   that the mirror-worktree fast-forward another landing performs is what moves local `main`.
-- **Workaround:** Run `./agent unsandboxed finalize` to integrate current main and record the
-  message for the new HEAD, then retry `./agent unsandboxed land`. If another landing moves main
-  during the next wait, repeat from `finalize`.
+- **Workaround:** Historical, before `a14ac0fa`: run `./agent unsandboxed finalize` to
+  integrate current main and refresh the reviewed message, then retry
+  `./agent unsandboxed land`. No workaround is needed for a clean queued landing now.
 - **Proposed change:** Re-read the preflight facts after the lease is granted, or take the snapshot
   of `main` inside the lock. `references/landing.md` already says local `main` being behind is no
   longer a precondition and that the landing integrates whatever `main` has become; the snapshot
-  check should hold the feature worktree still, not `main`. Let `finalize` treat a merge of `main`
-  that changes no branch-authored content as not needing the message re-confirmed.
+  check should hold the feature worktree still, not `main`. A clean merge of `main` that changes no branch-authored content needs no new message confirmation; a conflict stops for author resolution.
 - **Dependencies:** `Docs/Roadmap/Parallel agents on one machine.md` owns the lock's wider design.
 - **Acceptance:** A landing that waits behind another and finds `main` moved integrates it and
   continues, and a test in `verification-tests` pins that a moved `main` during the lock wait does
   not refuse the landing.
 - **Source:** 2026-09-21 landing of `feat/smoke-gate-and-inset-decisions`.
+- **Archived:** 2026-09-23

@@ -603,6 +603,16 @@ Describe('Studio device gateway sealed control plane', () => {
       })
       await new Promise(resolve => setTimeout(resolve, 10))
       Expect(env.gateway.status(env.sessionId).lensSamples).toHaveLength(1)
+
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      const sameCell = await nextAssignedCell(device)
+      Expect(sameCell.identity.cellId).toBe('cell:phone')
+      Expect(env.gateway.status(env.sessionId).lensSamples).toHaveLength(1)
+
+      device.sendSealed({ cellId: 'cell:tablet', type: 'device.selectCell' })
+      const reassigned = await nextAssignedCell(device)
+      Expect(reassigned.identity.cellId).toBe('cell:tablet')
+      Expect(env.gateway.status(env.sessionId).lensSamples).toBeUndefined()
     })
   })
 

@@ -16,23 +16,26 @@ set -eu
 releases="${TAO_RELEASES:-@TAO_RELEASES@}"
 releases="${releases%/}"
 requested="${TAO_VERSION:-}"
-# As `TaoHome.ts` resolves it: a relative XDG_DATA_HOME is ignored, and a relative TAO_HOME refused.
-data_home="${XDG_DATA_HOME:-}"
-case "$data_home" in
-  /*) ;;
-  *) data_home="$HOME/.local/share" ;;
-esac
-tao_home="${TAO_HOME:-$data_home/tao}"
 
 fail() {
   printf 'Tao install: %s\n' "$*" >&2
   exit 1
 }
 
-case "$tao_home" in
-  /*) ;;
-  *) fail "TAO_HOME must be an absolute path, and $tao_home is not." ;;
-esac
+# Match TaoHome in the binary: a declared home must be absolute, and XDG ignores relative roots.
+if [ -n "${TAO_HOME:-}" ]; then
+  case "$TAO_HOME" in
+    /*) tao_home="$TAO_HOME" ;;
+    *) fail "TAO_HOME must be an absolute path; it was $TAO_HOME." ;;
+  esac
+elif [ -n "${XDG_DATA_HOME:-}" ]; then
+  case "$XDG_DATA_HOME" in
+    /*) tao_home="$XDG_DATA_HOME/tao" ;;
+    *) tao_home="$HOME/.local/share/tao" ;;
+  esac
+else
+  tao_home="$HOME/.local/share/tao"
+fi
 
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) target=darwin-arm64 ;;

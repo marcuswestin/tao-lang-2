@@ -75,9 +75,9 @@ export class StudioPhoneSaveGate {
   }
 
   async #awaitPhone(revision: number): Promise<void> {
-    let disconnectedAt: number | undefined
+    const deadline = this.#now() + this.#timeoutMs
     while (!this.#closed) {
-      await Promise.race([this.#sleep(this.#pollMs), this.#closedSignal])
+      await Promise.race([this.#sleep(Math.min(this.#pollMs, Math.max(0, deadline - this.#now()))), this.#closedSignal])
       if (this.#closed) {
         break
       }
@@ -90,11 +90,8 @@ export class StudioPhoneSaveGate {
           this.#pendingRevision = undefined
           return
         }
-        disconnectedAt = undefined
-        continue
       }
-      disconnectedAt ??= this.#now()
-      if (this.#now() - disconnectedAt >= this.#timeoutMs) {
+      if (this.#now() >= deadline) {
         this.#pendingRevision = undefined
         this.#onUnsynced?.(revision)
         return

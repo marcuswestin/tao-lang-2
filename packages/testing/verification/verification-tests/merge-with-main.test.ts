@@ -714,6 +714,19 @@ Describe('merge-with-main', () => {
     )
   })
 
+  Test('requires the confirmed --skip-all path instead of combining both noninteractive skips', async () => {
+    const fake = fakeDependencies()
+
+    await Expect(MergeWithMainCommand.run({
+      repositoryRoot: fake.repository.featureRoot,
+      skipVerify: true,
+      skipVerifyFull: true,
+    }, fake.dependencies)).rejects.toThrow('Use --skip-all')
+
+    Expect(fake.calls).toEqual([])
+    Expect(fake.leases.acquired).toBe(0)
+  })
+
   Test('lands a branch whose local main is behind the remote, catching up inside the lock', async () => {
     // This used to be a refusal: preflight required local main to equal origin/main, so a landing
     // that had already paid for a full verification lost the race to whoever moved main first. The
@@ -1323,14 +1336,13 @@ Describe('merge-with-main', () => {
     Expect(outcome.mode).toBe('executed')
   })
 
-  Test('refuses a built commit whose tree is not the verified one, under every flag combination', async () => {
+  Test('refuses a built commit whose tree is not the verified one, under every supported skip mode', async () => {
     for (
       const options of [
         {},
         { skipVerifyFull: true },
         { skipVerify: true },
         { skipAll: true },
-        { skipVerifyFull: true, skipVerify: true },
       ]
     ) {
       const fake = fakeDependencies({ builtTree: 'different-tree' })

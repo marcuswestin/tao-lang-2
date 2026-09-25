@@ -34,6 +34,37 @@ Describe('standalone install script', () => {
     })
   })
 
+  Test('rejects relative TAO_HOME before creating an installation', async () => {
+    await withRelease(async ({ home, install }) => {
+      const result = await install({ PATH: '/usr/bin:/bin', TAO_HOME: 'relative-home' })
+
+      Expect(result.exitCode).not.toBe(0)
+      Expect(result.stderr).toContain('TAO_HOME must be an absolute path')
+      Expect(await FS.exists(FS.resolvePath('relative-home', home))).toBe(false)
+    })
+  })
+
+  Test('ignores relative XDG_DATA_HOME and installs under the default home', async () => {
+    await withRelease(async ({ home, install }) => {
+      const result = await install({ PATH: '/usr/bin:/bin', XDG_DATA_HOME: 'relative-data' })
+
+      Expect(result.exitCode).toBe(0)
+      Expect(await FS.isFile(FS.resolvePath('.local/share/tao/versions/0.4.0/tao', home))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('relative-data', home))).toBe(false)
+    })
+  })
+
+  Test('installs into an absolute declared home', async () => {
+    await withRelease(async ({ home, install }) => {
+      const declared = FS.resolvePath('chosen-home', home)
+      const result = await install({ PATH: '/usr/bin:/bin', TAO_HOME: declared, XDG_DATA_HOME: 'ignored-relative' })
+
+      Expect(result.exitCode).toBe(0)
+      Expect(await FS.isFile(FS.resolvePath('versions/0.4.0/tao', declared))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('.local/share/tao', home))).toBe(false)
+    })
+  })
+
   // Someone else's `tao` on PATH is theirs; the installer falls back to printing the PATH line.
   Test('leaves another tao in a user bin directory alone', async () => {
     await withRelease(async ({ home, install }) => {
@@ -94,15 +125,6 @@ Describe('standalone install script', () => {
 
       Expect(result.stderr).toBe('')
       Expect(result.exitCode).toBe(0)
-    })
-  })
-
-  Test('refuses a relative TAO_HOME, as the binary does', async () => {
-    await withRelease(async ({ install }) => {
-      const result = await install({ PATH: '/usr/bin:/bin', TAO_HOME: 'tao-home' })
-
-      Expect(result.exitCode).not.toBe(0)
-      Expect(result.stderr).toContain('TAO_HOME must be an absolute path')
     })
   })
 
