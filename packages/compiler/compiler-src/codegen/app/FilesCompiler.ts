@@ -5,6 +5,7 @@ import { isRuntimeConfigurableDeclaration } from './ConfigurationCompiler'
 import { activeFixtureStores } from './data-store-context'
 
 type TaoFileCompileOptions = CodegenOptions & {
+  bridgeTypes?: string
   configurationTypes?: string
   dataEntities?: readonly AST.EntityDataDeclaration[]
   emitDataCatalog?: boolean
@@ -18,6 +19,7 @@ export const FilesCompiler = {
   /** TaoFile compiles a parsed Tao file into a default React component module. */
   TaoFile(taoFile: AST.TaoFile, opts: TaoFileCompileOptions = {}): Compiled {
     const configurationTypes = opts.configurationTypes ?? ''
+    const bridgeTypes = opts.bridgeTypes ?? ''
     const importLines = opts.importLines?.join('\n') ?? ''
     const scopeBindings = opts.scopeBindings?.join('\n') ?? ''
     const viewRegistrations = opts.viewRegistrations ?? ''
@@ -32,7 +34,7 @@ export const FilesCompiler = {
       || (AST.isEmittingRuntimeBinding(statement)
         && (!AST.isTypeDeclaration(statement) || isRuntimeConfigurableDeclaration(statement)))
     )
-    if (!hasRuntimeStatements && !importLines && !scopeBindings && !exportLines) {
+    if (!hasRuntimeStatements && !importLines && !scopeBindings && !exportLines && !bridgeTypes) {
       return gen`export {}`
     }
     const registry = apps.length === 0 ? gen.noop() : gen`
@@ -75,6 +77,7 @@ export const FilesCompiler = {
       ${registry}
       ${gen.textLines(exportLines)}
       ${gen.textLines(configurationTypes)}
+      ${gen.textLines(bridgeTypes)}
     `
   },
 } as const

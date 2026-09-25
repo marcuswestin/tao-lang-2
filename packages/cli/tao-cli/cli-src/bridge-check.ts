@@ -14,6 +14,17 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
     ? FS.resolvePath('node_modules', checkoutRoot)
     : FS.resolvePath(`../${TaoResources.HOST_DEPENDENCIES_DIRECTORY}/node_modules`, resourceRoot)
   const runtimeRoot = TaoAppModules.runtimeRoot()
+  const dependencyRoots = [
+    hostModules,
+    ...(resourceRoot === undefined ? [FS.resolvePath('packages/apps/expo-host/node_modules', checkoutRoot)] : []),
+    FS.resolvePath('node_modules', runtimeRoot),
+  ]
+  const typeRoots = dependencyRoots.map(root => FS.resolvePath('@types', root))
+  const ambientTypes = (await Promise.all(
+    ['bun', 'node', 'react'].map(async name =>
+      typeRoots.some(root => FS.existsSync(FS.resolvePath(name, root))) ? name : undefined
+    ),
+  )).filter((name): name is string => name !== undefined)
   const repositoryConfig = FS.resolvePath('packages/tsconfig.base.json', checkoutRoot)
   const inheritedConfig = await FS.isFile(projectConfig)
     ? projectConfig
@@ -39,8 +50,8 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
       skipLibCheck: true,
       strict: true,
       target: 'ES2022',
-      typeRoots: [FS.resolvePath('@types', hostModules), FS.resolvePath('node_modules/@types', runtimeRoot)],
-      types: ['bun', 'node', 'react'],
+      typeRoots,
+      types: ambientTypes,
       ...(inheritedConfig === repositoryConfig ? { rootDir: checkoutRoot } : {}),
     },
     files: modules,
@@ -50,10 +61,21 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
   const tsc = resourceRoot === undefined
     ? FS.resolvePath('../../../../node_modules/typescript/bin/tsc', import.meta.dir)
     : FS.resolvePath(`../${TaoResources.HOST_DEPENDENCIES_DIRECTORY}/node_modules/typescript/bin/tsc`, resourceRoot)
-  const result = await CLI.run(Platform.runtimeProcess.execPath, {
-    args: [...(resourceRoot === undefined ? [] : ['--bun']), tsc, '--project', configPath, '--pretty', 'false'],
-    cwd: workspaceRoot,
-  })
+  const runTsc = () =>
+    CLI.run(Platform.runtimeProcess.execPath, {
+      args: [...(resourceRoot === undefined ? [] : ['--bun']), tsc, '--project', configPath, '--pretty', 'false'],
+      cwd: workspaceRoot,
+    })
+  let result = await runTsc()
+  if (
+    result.exitCode !== 0 && await linkMissingHostDependencies(
+      workspaceRoot,
+      `${result.stdout}\n${result.stderr}`,
+      dependencyRoots,
+    )
+  ) {
+    result = await runTsc()
+  }
   if (result.exitCode === 0) {
     return []
   }
@@ -90,4 +112,47 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
     severity: 'error',
     source: 'compiler',
   }]
+}
+
+/** Only missing packages already installed with the host are linked; project dependencies win. */
+async function linkMissingHostDependencies(
+  workspaceRoot: string,
+  output: string,
+  dependencyRoots: readonly string[],
+): Promise<boolean> {
+  let linked = false
+  const missing = [...output.matchAll(/error TS2307: Cannot find module '([^']+)'/g)]
+  for (const [, specifier] of missing) {
+    const packageName = hostPackageName(specifier ?? '')
+    if (packageName === undefined) {
+      continue
+    }
+    const linkPath = FS.resolvePath(`node_modules/${packageName}`, workspaceRoot)
+    if (await FS.exists(linkPath) || await FS.isSymbolicLink(linkPath)) {
+      continue
+    }
+    const target = dependencyRoots.map(root => FS.resolvePath(packageName, root))
+      .find(path => FS.existsSync(path))
+    if (target === undefined || !await FS.isDirectory(target)) {
+      continue
+    }
+    try {
+      await FS.symlink(target, linkPath)
+      linked = true
+    } catch (error) {
+      if (!await FS.exists(linkPath) && !await FS.isSymbolicLink(linkPath)) {
+        throw error
+      }
+    }
+  }
+  return linked
+}
+
+function hostPackageName(specifier: string): string | undefined {
+  if (specifier.startsWith('.') || specifier.startsWith('/') || specifier.startsWith('#')) {
+    return undefined
+  }
+  const segments = specifier.split('/')
+  const name = specifier.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0]
+  return name !== undefined && /^(@[a-zA-Z0-9._-]+\/)?[a-zA-Z0-9._-]+$/.test(name) ? name : undefined
 }

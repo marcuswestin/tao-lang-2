@@ -1,11 +1,19 @@
 import { ASTUtils, Type } from '@ast-utils'
-import { AST, type ParsedFile } from '@parser'
+import { AST, Langium, type ParsedFile } from '@parser'
 import { Assert, FS, Switch } from '@shared'
+import { ConfigurationCompiler } from './codegen/app/ConfigurationCompiler'
 
 type BridgeContract = { arity?: string; exportName: string; path: string; result?: string; type: string }
 
 /** BridgeMetadata is the TypeScript-facing contract generated beside each Tao boundary source. */
 export const BridgeMetadata = {
+  /** typesFor mirrors the exported contract types in compiled Tao modules for copied sidecars. */
+  typesFor(file: AST.TaoFile): string {
+    const contracts = contractsOf(file)
+    return contracts.map((contract, index) => `export type ${contractTypeName(contracts, index)} = ${contract.type}`)
+      .join('\n')
+  },
+
   /** collect generates one module for each source that owns a TypeScript boundary. */
   collect(files: readonly ParsedFile[]): { path: string; code: string }[] {
     return files.flatMap(file => {
@@ -55,9 +63,15 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
     const type = AST.isFunctionCallExpression(expression)
       ? `(${
         expression.argumentList?.arguments.map((argument, index) =>
-          `arg${index}: ${typescriptType(Type.ofArgument(argument))}`
+          `arg${index}: ${foreignActionParameterType(Type.ofArgument(argument))}`
         ).join(', ') ?? ''
       }) => ${typescriptType(result)}`
+      : result.kind === 'primitive' && result.primitive === 'action'
+      ? `(${
+        result.parameters.map((parameter, index) =>
+          `arg${index}${parameter.optional ? '?' : ''}: ${foreignActionParameterType(parameter.type)}`
+        ).join(', ')
+      }) => void | Promise<void>`
       : typescriptType(result)
     const actionValue = result.kind === 'primitive' && result.primitive === 'action'
     contracts.push({
@@ -113,22 +127,12 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
     })
   }
   for (const declaration of file.statements.filter(AST.isConfigurableDeclaration)) {
-    if (declaration.aliasTarget !== undefined) {
-      continue
-    }
     const primitive = AST.configurationPrimitiveOf(declaration)
     if (primitive !== 'nav' && primitive !== 'datasource') {
       continue
     }
-    const implementation = AST.configurationImplementationOf(declaration)
-    if (implementation?.path === undefined) {
-      continue
-    }
-    let owner: AST.Node | undefined = implementation
-    while (owner !== undefined && owner !== declaration) {
-      owner = owner.$container
-    }
-    if (owner !== declaration) {
+    const implementation = directConfigurationImplementation(declaration)
+    if (implementation === undefined) {
       continue
     }
     contracts.push({
@@ -139,6 +143,20 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
     })
   }
   return contracts
+}
+
+function directConfigurationImplementation(
+  declaration: AST.ConfigurableDeclaration,
+): AST.ConfigurationImplementation | undefined {
+  if (declaration.aliasTarget !== undefined) {
+    return undefined
+  }
+  const implementation = AST.configurationImplementationOf(declaration)
+  let owner: AST.Node | undefined = implementation
+  while (owner !== undefined && owner !== declaration) {
+    owner = owner.$container
+  }
+  return owner === declaration && implementation?.path !== undefined ? implementation : undefined
 }
 
 function bridgedResultType(bridge: AST.FromExpression): ASTUtils.TaoType | undefined {
@@ -160,10 +178,7 @@ function typescriptType(type: ASTUtils.TaoType, seen = new Set<AST.EntityDataDec
   return Switch.kind(type, {
     primitive: type => {
       if (type.primitive === 'action') {
-        const parameters = type.parameters.map((parameter, index) =>
-          `arg${index}${parameter.optional ? '?' : ''}: ${typescriptType(parameter.type, seen)}`
-        )
-        return `(${parameters.join(', ')}) => void | Promise<void>`
+        return runtimeActionType(type)
       }
       if (type.primitive === 'text' || type.primitive === 'color' || type.primitive === 'shortcut') {
         return 'string'
@@ -179,11 +194,7 @@ function typescriptType(type: ASTUtils.TaoType, seen = new Set<AST.EntityDataDec
       }
       return 'unknown'
     },
-    list: type => {
-      const element = type.element ?? { kind: 'unresolved' }
-      const rendered = typescriptType(element, seen)
-      return `${element.kind === 'union' ? `(${rendered})` : rendered}[]`
-    },
+    list: type => `Array<${typescriptType(type.element ?? { kind: 'unresolved' }, seen)}>`,
     union: type => type.members.map(member => typescriptType(member, seen)).join(' | '),
     entity: type => {
       if (seen.has(type.entity)) {
@@ -226,9 +237,19 @@ function foreignActionParameterType(type: ASTUtils.TaoType): string {
 
 function runtimeActionType(type: Extract<ASTUtils.TaoType, { kind: 'primitive'; primitive: 'action' }>): string {
   const parameters = type.parameters.map(parameter =>
-    `TR.Value<${typescriptType(parameter.type)}>${parameter.optional ? '?' : ''}`
+    `${runtimeActionArgumentType(parameter.type)}${parameter.optional ? '?' : ''}`
   )
   return `TR.ActionValue<[${parameters.join(', ')}]>`
+}
+
+function runtimeActionArgumentType(type: ASTUtils.TaoType): string {
+  if (type.kind === 'primitive' && type.primitive === 'action') {
+    return `TR.Action<[${
+      type.parameters.map(parameter => `${runtimeActionArgumentType(parameter.type)}${parameter.optional ? '?' : ''}`)
+        .join(', ')
+    }]>`
+  }
+  return type.kind === 'union' ? 'TR.Evaluable' : `TR.Value<${typescriptType(type)}>`
 }
 
 function itemActionType(type: Extract<ASTUtils.TaoType, { kind: 'primitive'; primitive: 'action' }>): string {
@@ -272,14 +293,8 @@ function moduleFor(contracts: readonly BridgeContract[], file: AST.TaoFile): str
   if (caseSets.length > 0) {
     lines.push('')
   }
-  const nameCounts = new Map<string, number>()
-  for (const contract of contracts) {
-    nameCounts.set(contract.exportName, (nameCounts.get(contract.exportName) ?? 0) + 1)
-  }
   for (const [index, contract] of contracts.entries()) {
-    const typeName = nameCounts.get(contract.exportName) === 1
-      ? contract.exportName
-      : `Bridge${index + 1}_${contract.exportName}`
+    const typeName = contractTypeName(contracts, index)
     const sidecar = imports.get(contract.path)
     Assert.defined(sidecar, 'bridge sidecar import is planned')
     lines.push(`export type ${typeName} = ${contract.type}`)
@@ -296,5 +311,18 @@ function moduleFor(contracts: readonly BridgeContract[], file: AST.TaoFile): str
     }
     lines.push('')
   }
+  for (const declaration of file.statements.filter(AST.isConfigurableDeclaration)) {
+    if (directConfigurationImplementation(declaration) !== undefined) {
+      lines.push(Langium.toString(ConfigurationCompiler.ConfigurationType(declaration)).trimEnd(), '')
+    }
+  }
   return `${lines.join('\n').trimEnd()}\n`
+}
+
+function contractTypeName(contracts: readonly BridgeContract[], index: number): string {
+  const contract = contracts[index]
+  Assert.defined(contract, 'bridge contract index is planned')
+  return contracts.filter(candidate => candidate.exportName === contract.exportName).length === 1
+    ? contract.exportName
+    : `Bridge${index + 1}_${contract.exportName}`
 }

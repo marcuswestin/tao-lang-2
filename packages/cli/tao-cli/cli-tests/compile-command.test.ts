@@ -18,13 +18,18 @@ function CountWords(Value text) returns number {
    return CountWords(Value) from ./Words.ts
 }
 `,
-      'Words.ts': 'export const CountWords = (value: string): number => value.length\n',
+      'Words.ts': `import type { CountWords as CountWordsContract } from './Main.tao'
+export const CountWords: CountWordsContract = (value) => value.length
+`,
     }, async paths => {
       const sourcePath = paths['Main.tao']!
       const runtimePackageRoot = FS.resolvePath('runtime', FS.dirname(sourcePath))
-      await runCompile(sourcePath, { runtimePackageRoot })
+      const compiled = await runCompile(sourcePath, { runtimePackageRoot })
       const metadataPath = `${sourcePath}.ts`
       Expect(await FS.readText(metadataPath)).toContain('Sidecar.CountWords satisfies CountWords')
+      Expect(await FS.readText(compiled.outputPath)).toContain('export type CountWords = (arg0: string) => number')
+      const copiedSidecar = FS.resolvePath('Words.ts', FS.dirname(compiled.outputPath))
+      Expect(await FS.readText(copiedSidecar)).toContain("from './App'")
       await FS.remove(metadataPath)
       await runCompile(sourcePath, { runtimePackageRoot })
       Expect(await FS.isFile(metadataPath)).toBe(true)

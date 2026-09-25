@@ -122,7 +122,7 @@ action ExportDocument(Document) from ./Export.ts
     })
   })
 
-  Test('parenthesizes union list elements in the sidecar contract', async () => {
+  Test('groups union list elements in the sidecar contract', async () => {
     await withTaoFixture({
       ...checkedProjectFile,
       'Main.tao': `type Mixed is text | number
@@ -135,7 +135,7 @@ function Echo(Values list of Mixed) returns list of Mixed {
       const results = await runCheck(root)
       Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
-      Expect(await FS.readText(FS.resolvePath('Main.tao.ts', root))).toContain('(string | number)[]')
+      Expect(await FS.readText(FS.resolvePath('Main.tao.ts', root))).toContain('Array<string | number>')
     })
   })
 
@@ -165,7 +165,12 @@ type CustomMemory is Memory with { }
 let OpenUrl is action(text) = OpenUrl from ./OpenUrl.ts
 `,
       'Memory.ts': `import type TR from '@tao/runtime'
-export function MemoryProvider(): TR.DataProvider { throw Error('test') }
+import type { MemoryConfig } from './Main.tao'
+export function MemoryProvider(): TR.DataProvider {
+   const configuration: MemoryConfig = {}
+   void configuration
+   throw Error('test')
+}
 `,
       'OpenUrl.ts': 'export function OpenUrl(url: string): void { void url }\n',
     }, async root => {
@@ -174,6 +179,7 @@ export function MemoryProvider(): TR.DataProvider { throw Error('test') }
         .toEqual([])
       const metadata = await FS.readText(FS.resolvePath('Main.tao.ts', root))
       Expect(metadata).toContain('Sidecar2.MemoryProvider satisfies MemoryProvider')
+      Expect(metadata).toContain('export type MemoryConfig =')
       Expect(metadata.split('MemoryProvider satisfies MemoryProvider').length).toBe(2)
       Expect(metadata).toContain('unknown as 1 satisfies Parameters<typeof Sidecar1.OpenUrl>')
       await FS.writeText(FS.resolvePath('OpenUrl.ts', root), 'export function OpenUrl(): number { return 1 }\n')
@@ -183,6 +189,72 @@ export function MemoryProvider(): TR.DataProvider { throw Error('test') }
           diagnostic.message.includes('TypeScript bridge:')
         ),
       ).toBe(true)
+    })
+  })
+
+  Test('passes invokable callbacks through function and bare-action bridges', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'Main.tao': `function Register(Callback action(text)) returns number {
+   return Register(Callback) from ./Register.ts
+}
+let Open is action(action(text)) = Open from ./Open.ts
+`,
+      'Register.ts': `import type TR from '@tao/runtime'
+export function Register(callback: TR.ActionValue<[TR.Value<string>]>): number {
+   return typeof callback.invoke === 'function' ? 1 : 0
+}
+`,
+      'Open.ts': `import type TR from '@tao/runtime'
+export function Open(callback: TR.ActionValue<[TR.Value<string>]>): void { void callback.invoke }
+`,
+    }, async root => {
+      const results = await runCheck(root)
+      Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
+        .toEqual([])
+      const metadata = await FS.readText(FS.resolvePath('Main.tao.ts', root))
+      Expect(metadata).toContain('Register = (arg0: TR.ActionValue<[TR.Value<string>]>) => number')
+      Expect(metadata).toContain('Open = (arg0: TR.ActionValue<[TR.Value<string>]>) => void | Promise<void>')
+    })
+  })
+
+  Test('groups lists of actions without turning the function into the array', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'Main.tao': `function Echo(Callbacks list of action(text)) returns list of action(text) {
+   return Echo(Callbacks) from ./Echo.ts
+}
+`,
+      'Echo.ts': `import type TR from '@tao/runtime'
+export const Echo = (callbacks: Array<TR.ActionValue<[TR.Value<string>]>>) => callbacks
+`,
+    }, async root => {
+      const results = await runCheck(root)
+      Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
+        .toEqual([])
+      Expect(await FS.readText(FS.resolvePath('Main.tao.ts', root)))
+        .toContain('Array<TR.ActionValue<[TR.Value<string>]>>')
+    })
+  })
+
+  Test('resolves an installed host dependency used by a sidecar', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'Main.tao': functionSource,
+      'tsconfig.json': JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@local/*': ['./Local/*'] } } }),
+      'Local/Suffix.ts': 'export const suffix = "!"\n',
+      'Words.ts': `import type { TextProps } from 'react-native'
+import { suffix } from '@local/Suffix'
+export function CountWords(value: string): number {
+   const props: TextProps = { children: value }
+   return String(props.children).length + suffix.length
+}
+`,
+    }, async root => {
+      const results = await runCheck(root)
+      Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
+        .toEqual([])
+      Expect(await FS.isSymbolicLink(FS.resolvePath('node_modules/react-native', root))).toBe(true)
     })
   })
 })
