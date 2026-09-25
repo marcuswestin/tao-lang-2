@@ -366,5 +366,16 @@ rendered style the harness itself produces.
 
 **Does not belong here:** the device and fixture vocabulary reused from Studio scenarios
 (`ScenarioDeviceClause`, `ScenarioFixtureClause`), which Studio's own scenario coverage owns; the
-still-deferred `network`, `wait for sync`, `datasource fails after`, `as <account>`, and `expect
-refused` test world controls.
+`network`, `wait for sync`, and `datasource fails after`, which the Test World Controls entry owns;
+the still-deferred `as <account>` and `expect refused` controls.
+
+## Test World Controls
+
+Exercise Decisions §16's network, sync, and datasource fault controls with rendered Tao journeys.
+
+**Belongs here:** a granular provider stand-in queues an offline write, syncs it on reconnect,
+reports an injected failed write, and retries that record. Data MVP covers the snapshot provider's
+offline and injected save errors through `guard … error`.
+
+**Does not belong here:** live CloudKit or InstantDB transport acceptance, account policy, and
+atomic backend rejection. Those need provider and device evidence.

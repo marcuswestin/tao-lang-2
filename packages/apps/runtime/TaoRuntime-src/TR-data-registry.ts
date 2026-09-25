@@ -1,13 +1,14 @@
 import { RuntimeAssert } from './TR-assert'
 import type { TaoConfiguredDatasource, TaoDataSchema } from './TR-data'
 import { entityHandle, metadataOf, type TaoEntityReferenceSnapshot } from './TR-data-entity'
-import { testDataConnection } from './TR-data-provider'
 import { UserInputError } from './TR-errors'
 import { runtimeListeners } from './TR-listeners'
+import { TestWorld } from './TR-test-world'
 
 export type DataStatus = 'error' | 'loading' | 'ready' | 'unauthorized'
 
 let testMode = false
+const granularTestBindings = new Set<TaoDataSchema>()
 const schemas = new Set<TaoDataSchema>()
 const globalListeners = runtimeListeners()
 let globalRevision = 0
@@ -56,6 +57,13 @@ export function bindConfiguredDataSchema(
     // production mount, so the runtime-owned validation runs here even though the provider is
     // never connected under test.
     schema.validateConfigured(source, storageName)
+    if (source.declaration.provider.testWriteRecovery === true) {
+      if (!granularTestBindings.has(schema)) {
+        granularTestBindings.add(schema)
+        schema.configure(TestWorld.connection(true), 'test')
+      }
+      return
+    }
     // A snapshot provider stays replaced by the fresh test Memory store. A fill-capable provider
     // binds anyway: fills are how a query-driven datasource has any rows at all, and determinism
     // is the running app variant's responsibility — a test runs the variant whose adapter is a
@@ -136,13 +144,16 @@ export function revision(): number {
 
 export function beginTest(): void {
   testMode = true
+  TestWorld.begin()
+  granularTestBindings.clear()
   for (const schema of schemas) {
-    schema.configure(testDataConnection(), 'test')
+    schema.configure(TestWorld.connection(), 'test')
   }
 }
 
 export function endTest(): void {
   testMode = false
+  TestWorld.end()
 }
 
 export function emitDataChange(localListeners: Iterable<() => void>): void {

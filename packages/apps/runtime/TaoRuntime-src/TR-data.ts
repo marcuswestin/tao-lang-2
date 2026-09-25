@@ -1,7 +1,7 @@
 import React from 'react'
 import { RuntimeAssert } from './TR-assert'
 import { entityHandle, metadataOf } from './TR-data-entity'
-import { testDataConnection, UnboundConnection } from './TR-data-provider'
+import { UnboundConnection } from './TR-data-provider'
 import {
   beginTest as beginDataTest,
   bindConfiguredDataSchema,
@@ -26,6 +26,7 @@ import { canonicalDescriptor } from './TR-navigation-identity'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import { StudioEnvironmentControls } from './TR-studio-environment'
 import { useStudioLensScope } from './TR-studio-lens'
+import { TestWorld } from './TR-test-world'
 
 export { testProvider } from './TR-data-provider'
 
@@ -198,6 +199,8 @@ export type TaoDataProviderContext = Readonly<{
 /** TaoDataProvider is the clean package boundary implemented by Local, Memory, and remote providers. */
 export type TaoDataProvider = {
   connect(context: TaoDataProviderContext): TaoDataConnection
+  /** Declares that this provider supports recorded per-write recovery in behavior tests. */
+  testWriteRecovery?: true
   /**
    * fills marks a query-driven provider whose connections offer fill. Tao behavior tests keep the
    * fresh test Memory store for snapshot providers but bind a fill-capable provider anyway: fills
@@ -356,7 +359,7 @@ export const DataControls = {
     connection?: TaoDataConnection,
   ): RuntimeDataSchema {
     const selectedConnection = connection
-      ?? (isDataTestMode() ? testDataConnection() : UnboundConnection(definition.name))
+      ?? (isDataTestMode() ? TestWorld.connection() : UnboundConnection(definition.name))
     const schema = new RuntimeDataSchema(
       definition,
       selectedConnection,
@@ -570,6 +573,9 @@ export const DataControls = {
   endTest(): void {
     endDataTest()
   },
+
+  /** TestWorld controls the deterministic provider stand-in for the current check. */
+  TestWorld,
 
   Capture(): TaoDataCapture {
     return captureDataSchemas()

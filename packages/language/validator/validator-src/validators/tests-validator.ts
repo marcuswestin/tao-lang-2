@@ -30,6 +30,9 @@ export const testValidationMessages = {
   backPlacement: 'Back steps are only allowed inside test blocks.',
   relaunchPlacement: 'Relaunch steps are only allowed inside test blocks.',
   advancePlacement: 'Advance steps are only allowed inside test blocks.',
+  networkPlacement: 'Network steps are only allowed inside test blocks.',
+  syncPlacement: 'Wait for sync steps are only allowed inside test blocks.',
+  datasourceFailurePlacement: 'Datasource failure steps are only allowed inside test blocks.',
   narrowPlacement: 'Narrow steps are only allowed inside test blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
@@ -72,6 +75,9 @@ const validateBackPlacement = validateStepPlacement(testValidationMessages.backP
 const validateRelaunchPlacement = validateStepPlacement(testValidationMessages.relaunchPlacement)
 const validateAdvancePlacement = validateStepPlacement(testValidationMessages.advancePlacement)
 const validateNarrowPlacement = validateStepPlacement(testValidationMessages.narrowPlacement)
+const validateNetworkPlacement = validateStepPlacement(testValidationMessages.networkPlacement)
+const validateSyncPlacement = validateStepPlacement(testValidationMessages.syncPlacement)
+const validateDatasourceFailurePlacement = validateStepPlacement(testValidationMessages.datasourceFailurePlacement)
 
 /** testValidationChecks validates v0 Tao test declarations and steps. */
 export const testValidationChecks = {
@@ -96,6 +102,9 @@ export const testValidationChecks = {
   [AST.BackTestStep.$type]: validateBackPlacement,
   [AST.RelaunchStep.$type]: validateRelaunchPlacement,
   [AST.AdvanceStep.$type]: [validateAdvancePlacement, validateAdvanceDuration],
+  [AST.NetworkTestStep.$type]: validateNetworkPlacement,
+  [AST.WaitForSyncStep.$type]: validateSyncPlacement,
+  [AST.DatasourceFailureStep.$type]: validateDatasourceFailurePlacement,
   [AST.ExpectCheckboxStateStep.$type]: validateExpectationPlacement,
   [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector],
   [AST.ExpectNavigationTitleStep.$type]: [
@@ -217,6 +226,9 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
         hasRun = true
       },
       AdvanceStep: checkStepOrder,
+      NetworkTestStep: checkStepOrder,
+      WaitForSyncStep: checkStepOrder,
+      DatasourceFailureStep: checkStepOrder,
       SubmitInputStep: checkStepOrder,
       TagSubmitStep: checkStepOrder,
       SelectStep: checkStepOrder,
@@ -248,7 +260,10 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       | AST.SelectStep
       | AST.BackTestStep
       | AST.RelaunchStep
-      | AST.AdvanceStep,
+      | AST.AdvanceStep
+      | AST.NetworkTestStep
+      | AST.WaitForSyncStep
+      | AST.DatasourceFailureStep,
   ): void {
     if (!hasRun) {
       ctx.error(step, testValidationMessages.expectationBeforeRun)

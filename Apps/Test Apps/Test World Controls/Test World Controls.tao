@@ -1,0 +1,47 @@
+use CloudKit from @tao/data/providers/cloudkit
+use StackNav from @tao/nav
+use Col, FormButton, Text, TextInput from @tao/ui
+
+app TestWorldApp {
+   Name "Test World"
+   Navigator StackNav {
+      Initial Main
+   }
+   Datasource CloudKit { }
+}
+
+data Notes / Note {
+   Title text
+}
+
+scene Main() {
+   Title "Test World"
+   state Draft = ""
+   query Notes { }
+   action Add() {
+      create Note {
+         Title: Draft
+      }
+      set Draft = ""
+   }
+   render Col() {
+      #draft
+      TextInput(Value: Draft, Label: "Title") {
+         on submit Add
+      }
+
+      #add
+      FormButton("Add") {
+         on press Add
+      }
+      loop Notes / Note {
+         Col() {
+            Text(Note.Title)
+            Text("Queued { Note.WritesQueued }")
+            Text("Failed { Note.WritesFailed }")
+            Text(Note.WriteError)
+
+            #retry
+            FormButton("Retry") {
+               on press -> { retry Note }
+}  }  }  }  }

@@ -995,7 +995,7 @@ export class RuntimeDataSchema {
     }
     return RuntimeSwitch<DataStatus, TaoEntityAvailability>(this.status, {
       error: () =>
-        this.errorRecoverable && metadata.generation === this.generation
+        this.errorRecoverable && this.failedSaveSequence === undefined && metadata.generation === this.generation
           && this.storedRow(metadata.entity, metadata.id)
           ? { status: 'available' }
           : { message: this.error, status: 'error' },

@@ -1,0 +1,26 @@
+use TestWorldApp from ./
+
+test "Test world controls" {
+   test "queues an offline granular write and syncs on reconnect" {
+      run TestWorldApp
+      network offline
+      enter "Offline note" into #draft
+      press #add
+      expect text "Offline note"
+      expect text "Queued 1"
+      network online
+      wait for sync
+      expect text "Queued 0"
+   }
+   test "fails one granular write and retries that record" {
+      run TestWorldApp
+      datasource fails after create Note "rejected note"
+      enter "Retry note" into #draft
+      press #add
+      expect text "Failed 1"
+      expect text "rejected note"
+      press #retry
+      wait for sync
+      expect text "Failed 0"
+   }
+}

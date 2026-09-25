@@ -1,0 +1,5 @@
+project {
+   id "test-world-controls"
+   name "Test World Controls"
+   version "0.1.0"
+}

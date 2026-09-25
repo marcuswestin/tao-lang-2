@@ -161,4 +161,18 @@ export const TestsFormatter = {
   AdvanceStep(f) {
     f.oneSpaceAfter('advance')
   },
+
+  NetworkTestStep(f) {
+    f.oneSpaceAfter('network')
+  },
+
+  WaitForSyncStep(f) {
+    f.oneSpaceAfter('wait', 'for')
+  },
+
+  DatasourceFailureStep(f) {
+    f.oneSpaceAfter('datasource', 'fails', 'after')
+    f.oneSpaceBetweenProperties('operation', 'entity')
+    f.oneSpaceBetweenProperties('entity', 'message')
+  },
 } satisfies Partial<FormatHandlers>

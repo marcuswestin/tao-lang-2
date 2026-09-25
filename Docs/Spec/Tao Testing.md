@@ -22,7 +22,7 @@ test "WordFlower" {
 ```
 
 A `test` groups checks. Each `check` runs independently, starts exactly one declared app with
-`run AppName`, and receives a fresh mounted app, Memory datasource replacement, and navigation
+`run AppName`, and receives a fresh mounted app, capability-matched in-memory datasource stand-in, and navigation
 state. A sidecar sees declarations through ordinary Tao import and visibility rules. Test files and
 inline test declarations are excluded from application builds.
 
@@ -401,16 +401,23 @@ The same split holds for persisted state: a relaunch really does read the device
 asserting a persisted value across one fails when the round trip through storage is broken, while
 the encoding and the storage keys themselves stay with the runtime's persisted-state suite.
 
-Before every check, the runner installs a fresh in-memory snapshot store and prevents the app's
-configured snapshot provider from replacing it, so no step reads or mutates durable data (a
-fill-capable provider still binds; see `Tao Data.md`). The shipped Memory declaration in
+Before every check, the runner installs a fresh in-memory provider stand-in, so no step reads or
+mutates durable provider data. Snapshot providers use whole-snapshot saves: an offline or rejected
+save puts the datasource into an error state visible through `guard … error`. A provider that
+declares per-write recovery gets an isolated stand-in with queued, failed, and retryable records;
+`WritesQueued`, `WritesFailed`, `WriteError`, and `retry` retain that provider's capability. A
+fill-capable provider still binds for query fills (see `Tao Data.md`). The shipped Memory declaration in
 `@tao/data/providers/memory` is bound through the published `TR.DataProvider` connection protocol;
 its implementation passes the same `TR.testProvider` empty-load, round-trip,
 key/instance-boundary, ordering, and rejection conformance used by other providers.
 
 Driving a provider into `loading`, `error`, or `ready` from a test step is retired (Decisions §16).
-The states those steps reached return through the world controls — network, sync, and datasource
-fault injection — which have not landed yet.
+The states those steps reached return through `network offline|online`, `wait for sync`, and
+`datasource fails after create|update|delete <Entity> "message"`. A failure matches the next save
+containing the named row operation. `wait for sync` succeeds when no writes remain pending and reports
+an offline or failed sync rather than pretending it completed. Each check starts online with no
+injection, regardless of the prior check. These controls are in-process journey behavior; host
+adapters preflight and reject them until they implement equivalent capabilities.
 
 ## Compiler/runtime boundary
 
@@ -433,7 +440,5 @@ The implemented test-runner surface intentionally omits direct state/value asser
 calls, provider-row inspection, production datasource access, arbitrary sleeps, public runtime or
 test IDs, entity-ID row selection, focused render subjects, and navigation diagnostic assertions. A
 `with <fixture>` clause seeds a check's store (`through <Action>(...)` bindings excepted, above), but
-reading it back stays through ordinary rendered output, never a store query. `network`, `wait for
-sync`, `datasource fails after …`, `as <account>`, and `expect refused` remain out of scope for `on`
-and `with`. Those may be connected independently without weakening the current user-observable
-testing contract.
+reading it back stays through ordinary rendered output, never a store query. `as <account>` and
+`expect refused` remain out of scope.
