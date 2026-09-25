@@ -32,7 +32,7 @@ network_proxy = true
 # agents/skills/delegation/SKILL.md, which is the one place this repository spells a model name.
 [agents]
 enabled = true
-default_subagent_model = "gpt-5.6-terra"
+default_subagent_model = "gpt-6-sol"
 default_subagent_reasoning_effort = "medium"
 max_concurrent_threads_per_session = 5
 

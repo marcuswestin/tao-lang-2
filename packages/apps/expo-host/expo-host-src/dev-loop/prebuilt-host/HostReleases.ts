@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Json, Platform } from '@shared'
+import { CLI, Errors, FS, Json, Platform, TaoHome } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
 import { CompanionIdentity } from './CompanionIdentity'
 import {
@@ -55,10 +55,9 @@ export function hostReleasesRepository(): string {
   return Platform.runtimeProcess.env['TAO_HOST_RELEASES'] ?? DEFAULT_HOST_RELEASES_REPOSITORY
 }
 
-/** taoHostsRoot is where downloaded hosts live: `$TAO_HOME/hosts`, or `~/.tao/hosts`. */
+/** taoHostsRoot is where downloaded hosts live: `hosts/` in the Tao home. */
 export function taoHostsRoot(): string {
-  const taoHome = Platform.runtimeProcess.env['TAO_HOME'] ?? FS.resolvePath('.tao', FS.homeDir())
-  return FS.resolvePath('hosts', taoHome)
+  return TaoHome.resolve('hosts')
 }
 
 /** HostDownloadOptions are the seams a test replaces: the network, the repository, and the cache. */

@@ -49,7 +49,18 @@ const COPIED_TREES = [
   // their declarations the project identity every compiled app's navigation is keyed on.
   { source: 'packages/apps/stdlib', within: ['@tao', 'Project.tao'], target: TaoResources.STDLIB_DIRECTORY },
   { source: 'packages/apps/expo-host', within: ['.'], target: TaoResources.HOST_DIRECTORY },
+  // The stdlib's data-provider sidecars import `@shared/core`, which Metro resolves by path.
+  { source: 'packages/shared/shared-src/core', within: ['.'], target: TaoResources.SHARED_CORE_DIRECTORY },
 ] as const
+
+/** HOST_MANIFEST is the host's own manifest, which names workspace packages an install cannot reach. */
+const HOST_MANIFEST = 'packages/apps/expo-host/package.json'
+
+/** HOST_DEPENDENCY_ROOTS are where the repository's install puts the host's resolved dependencies. */
+const HOST_DEPENDENCY_ROOTS = ['packages/apps/expo-host/node_modules', 'node_modules'] as const
+
+/** BASE_TSCONFIG is the repository-wide compiler configuration the host's tsconfig extends. */
+const BASE_TSCONFIG = 'packages/tsconfig.base.json'
 
 try {
   await main(Platform.runtimeProcess.argv.slice(2))
@@ -128,6 +139,7 @@ async function buildBinary(outfile: string, releaseVersion?: string): Promise<vo
     }
   }
   await TaoAppModules.packageRuntime(staging, FS.resolvePath('packages/apps/runtime', repoRoot))
+  await makeHostInstallable(repoRoot, FS.resolvePath(TaoResources.HOST_DIRECTORY, staging))
   const fileCount = await packTree(staging, archive)
   HCI.logProcessInfo('standalone', `Packed ${fileCount} resource files into ${FS.relativePath(repoRoot, archive)}.`)
 
@@ -140,6 +152,72 @@ async function buildBinary(outfile: string, releaseVersion?: string): Promise<vo
     cwd: repoRoot,
     stdio: 'inherit',
   })
+}
+
+/**
+ * makeHostInstallable rewrites the staged host so an installed Tao can resolve it on a machine with no
+ * repository. Its manifest loses the five `workspace:*` packages, none of which the host reaches by
+ * name — two it never reaches, two Metro and Jest reach by path, and one is a config plugin only an
+ * iCloud release build names — and pins every other dependency to the version this repository has
+ * installed, so a release starts from what the repository tested. Its lockfile is resolved here,
+ * once per release, and embedded; transitive versions are resolved now rather than copied from the
+ * repository's lock, so they can drift from it. Its tsconfig stops extending the repository's base,
+ * which Expo's TypeScript resolver cannot follow outside the repository.
+ */
+async function makeHostInstallable(repoRoot: string, stagedHost: string): Promise<void> {
+  const manifest = await FS.readJson<HostManifest>(FS.resolvePath(HOST_MANIFEST, repoRoot))
+  const dependencies: Record<string, string> = {}
+  for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
+    if (!range.startsWith('workspace:')) {
+      dependencies[name] = await installedVersion(repoRoot, name)
+    }
+  }
+  await FS.writeJson(FS.resolvePath('package.json', stagedHost), {
+    name: manifest.name,
+    private: true,
+    version: manifest.version,
+    main: manifest.main,
+    dependencies,
+  })
+
+  const tsconfigPath = FS.resolvePath('tsconfig.json', stagedHost)
+  const tsconfig = await FS.readJson<Tsconfig>(tsconfigPath)
+  const base = await FS.readJson<Tsconfig>(FS.resolvePath(BASE_TSCONFIG, repoRoot))
+  // The base's `paths` map repository packages the installed host does not carry.
+  const { baseUrl: _baseUrl, paths: _paths, ...baseOptions } = base.compilerOptions ?? {}
+  const { extends: _extends, ...ownSettings } = tsconfig
+  await FS.writeJson(tsconfigPath, {
+    ...ownSettings,
+    compilerOptions: { ...baseOptions, ...tsconfig.compilerOptions },
+  })
+
+  await CLI.mustRun(Platform.runtimeProcess.execPath, {
+    args: ['install', '--lockfile-only', '--cwd', stagedHost],
+    cwd: repoRoot,
+  })
+}
+
+/** installedVersion is the exact version of `name` this repository's install resolved for the host. */
+async function installedVersion(repoRoot: string, name: string): Promise<string> {
+  for (const root of HOST_DEPENDENCY_ROOTS) {
+    const packageJson = FS.resolvePath(`${root}/${name}/package.json`, repoRoot)
+    if (await FS.isFile(packageJson)) {
+      return (await FS.readJson<{ version: string }>(packageJson)).version
+    }
+  }
+  return Errors.throwHostEnvironment(`The host depends on ${name}, which this repository has not installed.`)
+}
+
+type HostManifest = {
+  dependencies?: Record<string, string>
+  main?: string
+  name: string
+  version: string
+}
+
+type Tsconfig = {
+  compilerOptions?: Record<string, unknown> & { baseUrl?: unknown; paths?: unknown }
+  extends?: string
 }
 
 /**

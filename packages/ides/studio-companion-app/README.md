@@ -107,7 +107,8 @@ over by name and Expo Go is used instead; the directory name decides nothing.
 Publishing puts each built platform's manifest and binary — the simulator app zipped — on a GitHub
 release tagged `companion-host-<version>-<kit digest>`, marked as a prerelease and never as latest.
 When no cached host fits, `tao dev` lists those releases without signing in, downloads the newest
-whose kit covers its own into `~/.tao/hosts` (`$TAO_HOME/hosts`), and uses it. While the repository
+whose kit covers its own into the Tao home's `hosts/` (`~/.local/share/tao/hosts`, or under
+`$TAO_HOME` or `$XDG_DATA_HOME/tao`), and uses it. While the repository
 is private that listing answers 404, which `tao dev` reports in one line before falling back to Expo
 Go.
 
