@@ -6,36 +6,27 @@ notes after each completed pass; Git history is the longer record.
 
 ## Current status
 
-- **Reviewed through:** `7af6064174487e54c17c0737b8f91dd8d3bd4275` on local `main` (2026-09-25). The [September 2026 repository review](<September 2026 repository review.md>) retains the historical 142-landing ledger through `ff4f017c` and separately disposes all 24 newer first-parent landings. Four read-only units and independent challenges checked repair integration and current behavior. The review branch has integrated this main tip; the locked landing gate and archive ref remain unproved.
-- **Outcome:** The review branch carries the earlier fixes plus focused corrections for a host-test receipt interruption, a released-port test race, an inherited host marker, a false-green admission measurement, direct CocoaPods locale propagation, stale Android emulator exit logs, Studio publication recovery, standalone installer home paths, and the Claude model warning. Focused tests passed, including the host controls after a deliberate mutation failed. Current `main` still retains old host-test output; managed Jest identities and direct Jest lack aggregate bounds and do not follow `TAO_HOME`. Old shared and receipt-less state was preserved because ownership/liveness was not established. Emulator and Studio fixes have no real host acceptance in this pass.
-- **Security follow-up:** The current Bun audit still reports one moderate `uuid` advisory with no affected caller found in its installed `xcode` parent; the [dependency advisory follow-up](<Dependency advisory follow-up.md>) keeps its owner and September 28 review date. The pinned Nixpkgs input still needs upstream-patch comparison and Linux closure. Standalone and Companion release downloads need an authenticity decision and signing inputs before public distribution.
+- **Reviewed through:** `e94c3e1a480a8efaffdf359cf6e3f43f6653c527` on local `main` (2026-09-25). The prior review integrated as `d296b239`; the [September 2026 repository review](<September 2026 repository review.md>) now disposes that landing and the 41 later first-parent landings. Three read-only specialist reviews and an independent challenge checked current behavior. The present pass branch carries two focused repairs; `./agent verify` passed, while finalization and landing remain to be established.
+- **Outcome:** Query search combined words from separate `(search)` fields, and a stamped installed Expo host reused missing packages. Both have focused before/after regressions and repairs on the pass branch. Explicit prerelease installation and WordFlower outline export need Developer decisions. The read-only computer inventory found 16 reclaimable, 15 live, and five unclassified registered worktrees; a clean 39.2 GiB worktree contains 31.3 GiB of older host-test artifacts, and two unregistered worktree directories have broken or reused Git pointers. Tao cache roots and OS temp entries have grown; no owner-unknown or active state was deleted. Temporary-state creation and cleanup code was excluded at the Developer's request because another task owns it.
+- **Security and host follow-up:** `bun audit` still reports one moderate `uuid` record with no affected caller demonstrated through its installed `xcode` parent; the pinned Nixpkgs patch lags later fixes without a Linux closure. The [dependency advisory follow-up](<Dependency advisory follow-up.md>) retains both owners and the September 28 review date. Real HNReader Studio smoke passed, but the new-emulator exit-log path, packaged installation, signing, distribution, and external-service acceptance were not exercised. Official sources describe Codex cloud's reference Ubuntu-based container and Claude Code cloud's Ubuntu 24.04 x86_64 VM; neither publishes the exact hosted image digest.
 
 ## Consider next time
 
-- Shortlist developer-environment work from the generated [open index](<Developer environment upgrades.md>).
-  Check each entry's evidence, impact, dependencies, acceptance, and live branch owner against
-  current `main` and the [archive](<Developer environment upgrades archive.md>); reproduce candidates,
-  defer owned or blocked work, and take only a few high-impact items with achievable acceptance checks.
-- Start after `7af60641` or the newer first-parent boundary established during landing. Check the
-  [emulator log repair](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>)
-  under real host use when available.
-- Recheck `uuid`, the Appium transitive pins, and Linux Nixpkgs in
-  [Dependency advisory follow-up](<Dependency advisory follow-up.md>). Use real host or device evidence
-  before claiming native, Cloud, signing, distribution, or installed-binary acceptance.
-- Re-measure identity count, bytes, file count, age, and leases in Tao's configured cache root
-  (`TAO_HOME/cache`, `$XDG_CACHE_HOME/tao`, or `~/.cache/tao`), legacy `$TMPDIR/jest_dx` and
-  `$TMPDIR/tao-test-runs`, and `.artifacts/host-testing` across relevant worktrees. Give every
-  owner-unknown root an explicit disposition and preserve active state. Check that routine runs
-  retire inactive identities without touching legacy roots that lack ownership evidence.
-- Recheck that `TAO_HOME` moves managed caches without creating new login-home cache state.
-  The installed Claude Code 2.1.267 needs an approved host update to
-  run configured Opus 5.5 standard and deep profiles; the shared Bun 1.3.13 profile needs its
-  already tracked reload before standalone-binary acceptance.
-- Include a quick dependency-advisory check in every security review. Inspect dependency changes
-  against primary sources: run [`bun audit`](https://bun.sh/docs/pm/cli/audit) for the Bun graph and
-  inspect `devenv.lock` changes against the [Nixpkgs security tracker](https://tracker.security.nixos.org/)
-  and affected upstream notices. Add other dependency systems when they appear. Recheck the Appium
-  transitive pins when Base Driver permits `morgan@1.12.0` and run installed-link health after lock changes.
+- Start after `e94c3e1a` or a newer first-parent boundary established during landing. Resolve the
+  explicit-prerelease and WordFlower-outline decisions before changing those product behaviors.
+  Check the [emulator log repair](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>)
+  under a real **new** emulator launch when one is available.
+- Keep the read-only worktree and computer-file inventory, but leave temporary-state creation and
+  cleanup implementation with its current owner. Preserve live and owner-unknown roots, including
+  the broken-pointer directories, until ownership is established. The
+  [open developer-environment index](<Developer environment upgrades.md>) still needs a small,
+  owner-aware shortlist; `DEVENV-094` needs a quiet-machine admission experiment and `DEVENV-055`
+  its native-host proof.
+- Recheck `uuid`, Appium pins, and Nixpkgs using the
+  [advisory register](<Dependency advisory follow-up.md>) and current primary sources. Use host,
+  Linux, device, installed-binary, and public-distribution evidence only for the acceptance each
+  actually exercises. Include [`bun audit`](https://bun.sh/docs/pm/cli/audit) and inspect any
+  `devenv.lock` change against the [Nixpkgs tracker](https://tracker.security.nixos.org/).
 
 ## Run a pass
 
