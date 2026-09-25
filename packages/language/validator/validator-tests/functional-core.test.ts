@@ -130,6 +130,19 @@ Describe('validator: functional core', () => {
     ),
   )
 
+  Test('warns that guard in an action is retired, and leaves a view guard alone', async () => {
+    const result = await accepts(functionalApp(`
+      state Name = ""
+      action Add() { guard Name empty }
+      render Stack(){ guard Name empty -> { Text("Empty") } }
+    `))()
+
+    const retired = result.diagnostics.filter(diagnostic =>
+      diagnostic.severity === 'warning' && diagnostic.message === FunctionalCoreValidator.messages.actionGuardRetired
+    )
+    Expect(retired).toHaveLength(1)
+  })
+
   Test(
     'rejects non-boolean check conditions',
     rejects(

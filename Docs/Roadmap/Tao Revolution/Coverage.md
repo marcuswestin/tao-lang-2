@@ -15,100 +15,103 @@ loses its justification.
 Tier values: **MVP** (must run for v1), **Post-MVP** (Revolution; activated with the app
 expansion), **TBD** (assigned at step 4). Test status is updated as tranches land.
 
-| Capability (Decisions §)                                      | Forcing app · feature                                                         | Tier     | Test status               |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------- | ------------------------- |
-| Types, typed slots, unit values (§2)                          | WordFlower · everywhere; units: focused-writing mode                          | MVP      | in Current                |
-| Convertible unit families, dimensional arithmetic (§2)        | Hearth · a search radius in km; Skillet · step timers and total time          | Post-MVP | —                         |
-| Entities, relations, yes/no poles (§2)                        | WordFlower · workspaces, documents, paragraphs                                | MVP      | partially in Current      |
-| `relation` trait for a differently-named relation (§2)        | Skillet · `Person (relation Accounts)`; Wayfare · `Seats`                     | Post-MVP | —                         |
-| validate / required / refuse (§2)                             | WordFlower · document and workspace rules                                     | MVP      | partially in Current[^16] |
-| Cross-row validate, lowered per write path (§2)               | Skillet · a kitchen needs an owner; Wayfare · a trip needs an owner           | Post-MVP | —                         |
-| `together` as one fact (§2)                                   | Skillet · an amount never syncs without its unit                              | Post-MVP | —                         |
-| Preferences incl. device scope (§2)                           | WordFlower · editor preferences                                               | MVP      | pending                   |
-| `secret` capability values and rotation (§2, §4)              | Skillet · a share code; Wayfare · a seat's invite code                        | Post-MVP | —                         |
-| Deleted-row / redacted-account refs (§2)                      | Hearth · a finished chore keeps who finished it after they leave              | Post-MVP | —                         |
-| Authority: access, audiences, through (§3)                    | Skillet · who cooks here (owner, cook, guest) and what each may write         | Post-MVP | —                         |
-| Holder-of-secret grants, invites (§3)                         | Skillet · an invitation that works once, for one address                      | Post-MVP | —                         |
-| Public boundary: publish, projections (§4)                    | Skillet · the shared recipe as a different read-only type                     | Post-MVP | —                         |
-| Projection with a filtered relation (§4)                      | Hearth · a shared list shows open items and nothing finished                  | Post-MVP | —                         |
-| Generated publication preview (§4)                            | Skillet · "this is what crosses the boundary" before creating the link        | Post-MVP | —                         |
-| Direct write verbs (§5)                                       | WordFlower · document operations (single-user subset)                         | MVP      | —                         |
-| Named transactions, for-caller (§5)                           | Skillet · StartKitchen and membership operations                              | Post-MVP | —                         |
-| One atomic commit across rows (§5)                            | Skillet · StartKitchen; Wayfare · CreateTrip mints the owner's own seat       | Post-MVP | —                         |
-| Bulk write verbs (`update each`, `delete each`) (§5)          | Skillet · clear what was bought; Hearth · clear a finished list               | Post-MVP | —                         |
-| Guard default, effect outcomes (§5)                           | WordFlower · document availability                                            | MVP      | partially in Current      |
-| Outcome vocabulary incl. `queued` (§5)                        | Wayfare · saving a stop with no network                                       | Post-MVP | —                         |
-| Queries, search, grouping (§6)                                | WordFlower · library search and lists                                         | MVP      | partially in Current      |
-| Entity-declared search consumed by a query (§6)               | Skillet · find anything; Hearth · find across every list                      | Post-MVP | —                         |
-| Grouped queries retaining their source rows (§6)              | Skillet · a folded shopping line one tick buys; Hearth · the same fold        | Post-MVP | —                         |
-| Presence (§6)                                                 | Skillet · two cooks on one recipe; Wayfare · two planners on one stop         | Post-MVP | —                         |
-| Editing: write-through + drafts (§7)                          | WordFlower · title/body editing                                               | MVP      | partially in Current      |
-| Draft conflict comparison (§7)                                | Wayfare · stop editing                                                        | Post-MVP | —                         |
-| Commands as configured values and generated catalog (§8)      | WordFlower · module-level Finish, workspace save toolbar                      | MVP      | in Current[^9]            |
-| Shortcut values and keyboard dispatch (§8)                    | WordFlower · pause focus command and document verbs                           | MVP      | in Current[^11]           |
-| Interaction outline, derived row labels, `(title)` (§2, §9)   | WordFlower · workspace, draft, and paragraph rows; HNReader · story row       | MVP      | in Current[^10]           |
-| Attention reducer and locale-aware narrowing (§9)             | WordFlower · workspace targeting and document-title engagement                | MVP      | in Current[^11]           |
-| Command ordering, hiding, and verb surface (§8)               | WordFlower · draft and finished document rows                                 | MVP      | in Current[^11]           |
-| Generated interaction surfaces and key allocation (§8, §13)   | WordFlower · hints, overview, draft verbs, and command palette                | MVP      | in Current[^12]           |
-| Narrowing feedback and off-window targeting (§9)              | WordFlower · subdued nonmatches; virtualized libraries                        | MVP      | partially in Current[^13] |
-| Pointer/touch attention parity (§9)                           | WordFlower · contextual verbs and region focus                                | MVP      | partially in Current[^13] |
-| Verb-pending chooser and input surfaces (§8–§9)               | WordFlower · commands with open entity and scalar slots                       | MVP      | in Current[^13]           |
-| Generated contextual Help (§9, §13)                           | WordFlower · explain the focused region and target                            | MVP      | pending[^13]              |
-| Accessibility projection (§9)                                 | WordFlower · selectable rows, controls, and generated surfaces                | MVP      | partially in Current[^13] |
-| Multi-target interaction (§9)                                 | Story 12 · bulk operations                                                    | TBD      | pending[^13]              |
-| OS menu bar (§8)                                              | WordFlower · command menus                                                    | Post-MVP | —                         |
-| Assistant projection (§8)                                     | WordFlower · assistant block                                                  | Post-MVP | —                         |
-| Undo derivation (§8)                                          | WordFlower · document edits                                                   | Post-MVP | —                         |
-| Declared concurrency: single-flight, latest-pending (§8)      | Hearth · a quick tick-untick settles last; Skillet · one sign-in link         | Post-MVP | —                         |
-| Conditionals, ternary, check/guard (§8)                       | WordFlower · everywhere; ternary: focused-writing mode                        | MVP      | in Current[^2]            |
-| Ticking clock — @tao/time (§9)                                | **WordFlower · focused-writing mode** (X-minute free write)                   | **MVP**  | in Current                |
-| Unified view kind, inferred capabilities (§9)                 | WordFlower · everywhere; stateful wrapper: settings details                   | MVP      | in Current[^4]            |
-| Scene, host-read chrome slots (§9–§10)                        | WordFlower · reactive workspace title + save; HNReader                        | MVP      | in Current[^5]            |
-| Headerless scene, pushed plain view (§9–§10)                  | Test Apps · Navigation MVP full-bleed and chromeless pushes                   | MVP      | in Current                |
-| Ephemeral non-serializable parameters (§9, §10)               | WordFlower · revert-save toast action                                         | MVP      | in Current                |
-| Layout, render, clause lists (§9)                             | WordFlower · all screens                                                      | MVP      | in Current                |
-| Conditional styling incl. states (§9)                         | WordFlower · buttons and active focus bar                                     | MVP      | in Current[^11]           |
-| Grid over loop, cell min (§9)                                 | Skillet · recipe cards; Hearth · the week as seven columns                    | Post-MVP | —                         |
-| Pages over loop (§9)                                          | Skillet · cook mode steps                                                     | Post-MVP | —                         |
-| Map with a required non-map alternative (§9)                  | Hearth · errands near you; Skillet · where to buy these                       | Post-MVP | —                         |
-| Navigation: native/basic kits, links, split, windows (§10)    | WordFlower · native stack + deterministic harness                             | MVP      | partially in Current[^5]  |
-| Split: compact progression and collapse order (§10)           | Wayfare · a three-pane workspace a phone walks as a stack                     | Post-MVP | —                         |
-| Reveal-or-focus and keyed windows (§10)                       | Hearth · one window per item; Skillet · one cook window per recipe            | Post-MVP | —                         |
-| Links: parameters, paths, and derived anonymous reads (§10)   | Skillet · a shared recipe link that opens signed out                          | Post-MVP | —                         |
-| Rendered nav, root view with arguments; frame retired (§10)   | WordFlower · shell with persistent focus bar; Test Apps · Shell               | MVP      | in Current                |
-| Device-local entities (§2, §11)                               | **WordFlower · focus session as data** (journey smoke)                        | **MVP**  | compiler-proven           |
-| Restoration policy (§10)                                      | WordFlower · relaunch                                                         | MVP      | in Current                |
-| Project identity and release metadata (§10)                   | WordFlower · a checked-in project id; Skillet · `version`, `DefaultApp`       | MVP      | partially in Current      |
-| App composition, variants, providers (§11)                    | WordFlower · app root + test variants                                         | MVP      | partially in Current      |
-| InstantDB datasource (§11)                                    | WordFlower · sync                                                             | MVP      | experimental              |
-| Datasource membership, bound sets (§6)                        | HNReader · a feed store beside the reader's own bookmarks                     | MVP      | in Current[^14]           |
-| Patching a datasource where it is bound (§6)                  | HNReader · the shipped bookmarks storage key                                  | MVP      | in Current[^14]           |
-| reference across datasources (§6)                             | HNReader · a bookmark naming a story in the feed store                        | MVP      | in Current[^14]           |
-| Query-driven Http datasource, descriptor fill (§6)            | HNReader · the story feed                                                     | MVP      | in Current[^15]           |
-| Cache-first availability: refreshing, stale (§6)              | HNReader · a failed refresh over cached stories                               | MVP      | in Current[^15]           |
-| auth library, Me binding (§11)                                | WordFlower · account                                                          | MVP      | pending                   |
-| Files provider (§11)                                          | Wayfare · offline documents                                                   | Post-MVP | —                         |
-| Permissions as multi-state values (§11)                       | Hearth · Around without location access                                       | Post-MVP | —                         |
-| Places provider, nearby search (§11, §17)                     | Skillet · which shop is nearest; Hearth · errands on a map                    | Post-MVP | —                         |
-| Offline closure (§11)                                         | Skillet · a kept kitchen; Wayfare · the map around saved places               | TBD      | —                         |
-| Automations, notifications, levels (§12)                      | Skillet · timers, meal reminders                                              | Post-MVP | —                         |
-| Design system: blocks, styles, screens (§13)                  | Skillet, Hearth, Wayfare · one design each, and WordFlower's own              | MVP      | pending                   |
-| Container conditions (§13)                                    | **none — for the Developer**                                                  | Post-MVP | —                         |
-| Copy, phrase, words, extraction (§14)                         | WordFlower · all copy + one locale                                            | MVP      | pending                   |
-| Measurement phrases (§14)                                     | Skillet · metric/imperial amounts                                             | Post-MVP | —                         |
-| TypeScript boundary: from, fails, progress (§15)              | WordFlower · build stamp; @tao/text; @tao/time                                | MVP      | partially in Current[^3]  |
-| Declared foreign-action failure cases (§15)                   | Skillet · importing a page that is not a recipe                               | Post-MVP | —                         |
-| Foreign views (`accepts content … from ./X.tsx`) (§15)        | **none — for the Developer**                                                  | TBD      | —                         |
-| Foreign `runs latest` scheduling (§8, §15)                    | **none — for the Developer**                                                  | TBD      | —                         |
-| Render failure containment and recovery (§15)                 | **none — for the Developer** (no author surface; it is runtime policy)        | MVP      | —                         |
-| Fixtures, tests, query assertions (§16)                       | WordFlower · behavior tests                                                   | MVP      | partially in Current      |
-| Fault injection (§16)                                         | WordFlower · sync failure journey                                             | MVP      | pending — regressed[^1]   |
-| Sidecar stubs by declared case (§16)                          | Skillet · the import journey's two outcomes                                   | Post-MVP | —                         |
-| World controls: clock, network, relaunch, collaborators (§16) | Skillet · a timer that outlives the window; Wayfare · a live conflict         | MVP      | partially in Current      |
-| Scenarios, pseudolocale, review gallery (§16)                 | WordFlower · scenario set                                                     | TBD      | partially in Current      |
-| Sketch placeholders and flexible space (§16)                  | WordFlower · the Placeholder journey                                          | MVP      | in Current                |
-| Occurrence queries (§17)                                      | **none — for the Developer** (§17 decides Hearth's routines; Hearth has none) | Post-MVP | —                         |
-| Nearness, distance, places (§17)                              | Hearth · Around                                                               | Post-MVP | —                         |
+| Capability (Decisions §)                                    | Forcing app · feature                                                         | Tier     | Test status               |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------- | -------- | ------------------------- |
+| Types, typed slots, unit values (§2)                        | WordFlower · everywhere; units: focused-writing mode                          | MVP      | in Current                |
+| Convertible unit families, dimensional arithmetic (§2)      | Hearth · a search radius in km; Skillet · step timers and total time          | Post-MVP | —                         |
+| Entities, relations, yes/no poles (§2)                      | WordFlower · workspaces, documents, paragraphs                                | MVP      | partially in Current      |
+| `relation` trait for a differently-named relation (§2)      | Skillet · `Person (relation Accounts)`; Wayfare · `Seats`                     | Post-MVP | —                         |
+| `required` completeness, `Incomplete`, `Problems` (§2)      | WordFlower · workspace and document forms                                     | MVP      | in Current[^16]           |
+| `validate` and `refuse when` (§2)                           | WordFlower · document and workspace rules                                     | Post-MVP | —                         |
+| Cross-row validate, lowered per write path (§2)             | Skillet · a kitchen needs an owner; Wayfare · a trip needs an owner           | Post-MVP | —                         |
+| `together` as one fact (§2)                                 | Skillet · an amount never syncs without its unit                              | Post-MVP | —                         |
+| Preferences incl. device scope (§2)                         | Hearth · keep this home offline, an Around radius                             | Post-MVP | —                         |
+| `secret` capability values and rotation (§2, §4)            | Skillet · a share code; Wayfare · a seat's invite code                        | Post-MVP | —                         |
+| Deleted-row / redacted-account refs (§2)                    | Hearth · a finished chore keeps who finished it after they leave              | Post-MVP | —                         |
+| Authority: access, audiences, through (§3)                  | Skillet · who cooks here (owner, cook, guest) and what each may write         | Post-MVP | —                         |
+| Holder-of-secret grants, invites (§3)                       | Skillet · an invitation that works once, for one address                      | Post-MVP | —                         |
+| Public boundary: publish, projections (§4)                  | Skillet · the shared recipe as a different read-only type                     | Post-MVP | —                         |
+| Projection with a filtered relation (§4)                    | Hearth · a shared list shows open items and nothing finished                  | Post-MVP | —                         |
+| Generated publication preview (§4)                          | Skillet · "this is what crosses the boundary" before creating the link        | Post-MVP | —                         |
+| Direct write verbs (§5)                                     | WordFlower · document operations (single-user subset)                         | MVP      | —                         |
+| Named transactions, for-caller (§5)                         | Skillet · StartKitchen and membership operations                              | Post-MVP | —                         |
+| One atomic commit across rows (§5)                          | Skillet · StartKitchen; Wayfare · CreateTrip mints the owner's own seat       | Post-MVP | —                         |
+| Bulk write verbs (`update each`, `delete each`) (§5)        | Skillet · clear what was bought; Hearth · clear a finished list               | Post-MVP | —                         |
+| Guard default, effect outcomes (§5)                         | WordFlower · document availability                                            | MVP      | partially in Current      |
+| Outcome vocabulary incl. `queued` (§5)                      | Wayfare · saving a stop with no network                                       | Post-MVP | —                         |
+| Queries: filters, ordering, limits (§6)                     | WordFlower · drafts, finished documents, paragraphs                           | MVP      | in Current                |
+| Entity-declared search consumed by a query (§6)             | WordFlower · find in a workspace; Skillet · find anything                     | MVP      | in Current                |
+| Grouped queries retaining their source rows (§6)            | Skillet · a folded shopping line one tick buys; Hearth · the same fold        | Post-MVP | —                         |
+| Presence (§6)                                               | Skillet · two cooks on one recipe; Wayfare · two planners on one stop         | Post-MVP | —                         |
+| Editing: write-through + drafts (§7)                        | WordFlower · title/body editing                                               | MVP      | partially in Current      |
+| Draft conflict comparison (§7)                              | Wayfare · stop editing                                                        | Post-MVP | —                         |
+| Commands as configured values and generated catalog (§8)    | WordFlower · module-level Finish, workspace save toolbar                      | MVP      | in Current[^9]            |
+| Shortcut values and keyboard dispatch (§8)                  | WordFlower · pause focus command and document verbs                           | MVP      | in Current[^11]           |
+| Interaction outline, derived row labels, `(title)` (§2, §9) | WordFlower · workspace, draft, and paragraph rows; HNReader · story row       | MVP      | in Current[^10]           |
+| Attention reducer and locale-aware narrowing (§9)           | WordFlower · workspace targeting and document-title engagement                | MVP      | in Current[^11]           |
+| Command ordering, hiding, and verb surface (§8)             | WordFlower · draft and finished document rows                                 | MVP      | in Current[^11]           |
+| Generated interaction surfaces and key allocation (§8, §13) | WordFlower · hints, overview, draft verbs, and command palette                | MVP      | in Current[^12]           |
+| Narrowing feedback and off-window targeting (§9)            | WordFlower · subdued nonmatches; virtualized libraries                        | MVP      | partially in Current[^13] |
+| Pointer/touch attention parity (§9)                         | WordFlower · contextual verbs and region focus                                | MVP      | partially in Current[^13] |
+| Verb-pending chooser and input surfaces (§8–§9)             | WordFlower · commands with open entity and scalar slots                       | MVP      | in Current[^13]           |
+| Generated contextual Help (§9, §13)                         | WordFlower · explain the focused region and target                            | MVP      | pending[^13]              |
+| Accessibility projection (§9)                               | WordFlower · selectable rows, controls, and generated surfaces                | MVP      | partially in Current[^13] |
+| Multi-target interaction (§9)                               | Story 12 · bulk operations                                                    | Post-MVP | pending[^13]              |
+| OS menu bar (§8)                                            | WordFlower · command menus                                                    | Post-MVP | —                         |
+| Assistant projection (§8)                                   | WordFlower · assistant block                                                  | Post-MVP | —                         |
+| Undo derivation (§8)                                        | WordFlower · document edits                                                   | Post-MVP | —                         |
+| Declared concurrency: single-flight, latest-pending (§8)    | Hearth · a quick tick-untick settles last; Skillet · one sign-in link         | Post-MVP | —                         |
+| Conditionals, ternary, check/guard (§8)                     | WordFlower · everywhere; ternary: focused-writing mode                        | MVP      | in Current[^2]            |
+| Ticking clock — @tao/time (§9)                              | **WordFlower · focused-writing mode** (X-minute free write)                   | **MVP**  | in Current                |
+| Unified view kind, inferred capabilities (§9)               | WordFlower · everywhere; stateful wrapper: settings details                   | MVP      | in Current[^4]            |
+| Scene, host-read chrome slots (§9–§10)                      | WordFlower · reactive workspace title + save; HNReader                        | MVP      | in Current[^5]            |
+| Headerless scene, pushed plain view (§9–§10)                | Test Apps · Navigation MVP full-bleed and chromeless pushes                   | MVP      | in Current                |
+| Ephemeral non-serializable parameters (§9, §10)             | WordFlower · revert-save toast action                                         | MVP      | in Current                |
+| Layout, render, clause lists (§9)                           | WordFlower · all screens                                                      | MVP      | in Current                |
+| Conditional styling incl. states (§9)                       | WordFlower · buttons and active focus bar                                     | MVP      | in Current[^11]           |
+| Grid over loop, cell min (§9)                               | Skillet · recipe cards; Hearth · the week as seven columns                    | Post-MVP | —                         |
+| Pages over loop (§9)                                        | Skillet · cook mode steps                                                     | Post-MVP | —                         |
+| Map with a required non-map alternative (§9)                | Hearth · errands near you; Skillet · where to buy these                       | Post-MVP | —                         |
+| Navigation: native/basic kits, links, split, windows (§10)  | WordFlower · native stack + deterministic harness                             | MVP      | partially in Current[^5]  |
+| Split: compact progression and collapse order (§10)         | Wayfare · a three-pane workspace a phone walks as a stack                     | Post-MVP | —                         |
+| Reveal-or-focus and keyed windows (§10)                     | Hearth · one window per item; Skillet · one cook window per recipe            | Post-MVP | —                         |
+| Links: parameters, paths, and derived anonymous reads (§10) | Skillet · a shared recipe link that opens signed out                          | Post-MVP | —                         |
+| Rendered nav, root view with arguments; frame retired (§10) | WordFlower · shell with persistent focus bar; Test Apps · Shell               | MVP      | in Current                |
+| Device-local entities (§2, §11)                             | **WordFlower · focus session as data** (journey smoke)                        | **MVP**  | compiler-proven           |
+| Restoration policy (§10)                                    | WordFlower · relaunch                                                         | MVP      | in Current                |
+| Project identity and release metadata (§10)                 | WordFlower · a checked-in project id; Skillet · `version`, `DefaultApp`       | MVP      | partially in Current      |
+| App composition, variants, providers (§11)                  | WordFlower · app root + test variants                                         | MVP      | partially in Current      |
+| InstantDB datasource (§11)                                  | WordFlower · sync                                                             | MVP      | experimental              |
+| Datasource membership, bound sets (§6)                      | HNReader · a feed store beside the reader's own bookmarks                     | MVP      | in Current[^14]           |
+| Patching a datasource where it is bound (§6)                | HNReader · the shipped bookmarks storage key                                  | MVP      | in Current[^14]           |
+| reference across datasources (§6)                           | HNReader · a bookmark naming a story in the feed store                        | MVP      | in Current[^14]           |
+| Query-driven Http datasource, descriptor fill (§6)          | HNReader · the story feed                                                     | MVP      | in Current[^15]           |
+| Cache-first availability: refreshing, stale (§6)            | HNReader · a failed refresh over cached stories                               | MVP      | in Current[^15]           |
+| auth library, Me binding (§11)                              | Skillet · sign in to a kitchen; Hearth · sign in to a home                    | Post-MVP | —                         |
+| Files provider (§11)                                        | Wayfare · offline documents                                                   | Post-MVP | —                         |
+| Permissions as multi-state values (§11)                     | Hearth · Around without location access                                       | Post-MVP | —                         |
+| Places provider, nearby search (§11, §17)                   | Skillet · which shop is nearest; Hearth · errands on a map                    | Post-MVP | —                         |
+| Offline closure (§11)                                       | Skillet · a kept kitchen; Wayfare · the map around saved places               | TBD      | —                         |
+| Automations, notifications, levels (§12)                    | Skillet · timers, meal reminders                                              | Post-MVP | —                         |
+| Design system: blocks, styles, screens (§13)                | Skillet, Hearth, Wayfare · one design each, and WordFlower's own              | MVP      | pending                   |
+| Container conditions (§13)                                  | **none — for the Developer**                                                  | Post-MVP | —                         |
+| Plural phrases (§14)                                        | WordFlower · paragraph and document counts                                    | MVP      | —                         |
+| Copy extraction, words, `tao words check` (§14)             | WordFlower · all copy + one locale                                            | Post-MVP | —                         |
+| Measurement phrases (§14)                                   | Skillet · metric/imperial amounts                                             | Post-MVP | —                         |
+| TypeScript boundary: from, fails (§15)                      | WordFlower · build stamp, document export; @tao/text; @tao/time               | MVP      | partially in Current[^3]  |
+| Bridge metadata module (§15)                                | WordFlower · type-checked TypeScript behind `from`                            | MVP      | —                         |
+| Foreign views (`accepts content … from ./X.tsx`) (§15)      | **none — for the Developer**                                                  | TBD      | —                         |
+| Foreign `runs latest` scheduling (§8, §15)                  | **none — for the Developer**                                                  | TBD      | —                         |
+| Render failure containment and recovery (§15)               | **none — for the Developer** (no author surface; it is runtime policy)        | MVP      | —                         |
+| Fixtures, tests, query assertions (§16)                     | WordFlower · behavior tests                                                   | MVP      | partially in Current      |
+| Fault injection (§16)                                       | WordFlower · sync failure journey                                             | MVP      | pending — regressed[^1]   |
+| Sidecar stubs by declared case (§16)                        | Skillet · the import journey's two outcomes                                   | Post-MVP | —                         |
+| World controls: network, sync, relaunch (§16)               | WordFlower · offline edits that sync on reconnect                             | MVP      | partially in Current      |
+| World controls: clock, collaborators (§16)                  | Skillet · a timer that outlives the window; Wayfare · a live conflict         | Post-MVP | —                         |
+| Scenarios, pseudolocale, review gallery (§16)               | WordFlower · scenario set                                                     | TBD      | partially in Current      |
+| Sketch placeholders and flexible space (§16)                | WordFlower · the Placeholder journey                                          | MVP      | in Current                |
+| Occurrence queries (§17)                                    | **none — for the Developer** (§17 decides Hearth's routines; Hearth has none) | Post-MVP | —                         |
+| Nearness, distance, places (§17)                            | Hearth · Around                                                               | Post-MVP | —                         |
 
 Rows marked _partially in Current_ have behavior tests for part of the capability; _pending_ means
 the capability is decided but not yet implemented or tested; a `—` test status means the capability
@@ -124,11 +127,13 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
 
 [^2]: `if`, `when` in value and render position, the compact two-outcome `when`, view `guard`, and
     `check` — §8's action-only early exit — are in Current. A `check` may not sit inside an action's
-    `if` or `guard` block, where it would stop only that block. The language still accepts `guard` in
-    an action, which §8 reserves for views; WordFlower no longer uses it.
+    `if` or `guard` block, where it would stop only that block. `guard` in an action, which §8
+    reserves for views, still runs but draws a retirement warning; no app, starter, or tutorial
+    uses it.
 
 [^3]: `<expression> from <path>` is in Current and is how both stdlib packages bind their runtimes.
-    Declared failures (`fails`), `progress`, and the emitted bridge metadata module are not.
+    Declared failures (`fails`) are in the language but no WordFlower tier uses them yet; the MVP
+    tier's document export will. `progress` was struck on 2026-09-25: no decision ever defined it.
 
 [^4]: The unified view tranche established one renderable family with content acceptance, render
     slots, and `responds` inferred from the body; the later host-read tranche added `scene is view`
@@ -221,7 +226,7 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     with `CacheFor` and journeys bind a deterministic stub adapter through an ordinary app variant.
 
 [^16]: `required` and the `Incomplete` and `Problems` it derives on rows and projections are in the
-    language, with `create … with`, and the Write Rules test app proves them. WordFlower does not
-    use them yet: whether `Workspace.Name` and `Document.Title` carry `required` beside `validate` is
-    an open decision. `validate` and `refuse when` are not implemented, and neither is a stdlib view
-    that presents `Problems`, whose spelling is also open.
+    language, with `create … with`, and the Write Rules test app proves them. WordFlower's workspace
+    form and document editor use them through the stdlib `Problems(Input.Problems)` view; its MVP
+    rules are `required` alone on `Workspace.Name` and `Document.Title`, since `validate` and
+    `refuse when` were deferred to Post-MVP on 2026-09-25.

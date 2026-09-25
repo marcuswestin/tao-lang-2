@@ -90,12 +90,12 @@ stop-local-instantdb:
 
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
-studio project="Apps/HNReader":
+studio project="Apps/HNReader": _parser-gen
     ./dev studio "{{ project }}"
 
 # Launch Tao Studio in its local Electrobun shell; offers to stop another session holding the native host
 [group('Run')]
-studio-native project="Apps/HNReader":
+studio-native project="Apps/HNReader": _parser-gen
     ./dev studio-native "{{ project }}"
 
 # Install the Tao Companion development build on a connected iPhone or iPad, once per native change
@@ -465,6 +465,11 @@ capabilities *ARGS:
 [group('Report')]
 delegation-report *ARGS:
     ./dev delegation-report {{ ARGS }}
+
+# Report where the delegation routing table lags the models this machine runs, and measure context
+[group('Report')]
+model-audit *ARGS:
+    ./dev model-audit {{ ARGS }}
 
 # Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs
 [group('Report')]

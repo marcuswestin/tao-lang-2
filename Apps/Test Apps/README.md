@@ -158,7 +158,7 @@ Exercise `required` completeness and the writes that consume it through an ordin
 
 **Belongs here:** `required "<sentence>"` deriving `Incomplete` and `Problems` on a stored row and on a projection that selects the field; a projection that leaves a required field out never reporting it; a projection-backed form disabling its submit while incomplete; `check` stopping an action on an incomplete input; `create Entity with Input` creating a row from a projected item; and a row written incomplete that reads complete after an update.
 
-**Does not belong here:** `validate` and store-side rejection, which are not implemented; diagnostic cases for the completeness members and `create … with`, which belong to package tests; and a stdlib view that presents `Problems`, whose spelling is undecided.
+**Does not belong here:** `validate` and store-side rejection, which are Post-MVP; diagnostic cases for the completeness members and `create … with`, which belong to package tests; and the stdlib `Problems(…)` view, which WordFlower's forms prove.
 
 ## Data MVP
 
@@ -304,3 +304,17 @@ through `0`, `1`, and `2`, rendered through the running `Text` view.
 **Does not belong here:** copy extraction, `words` blocks, and measurement forms, which are
 post-MVP; parser, validator, formatter, and compiler diagnostics, which are package tests; runtime
 locale-selection coverage across CLDR categories, which the runtime package tests own.
+
+## Search
+
+Exercise the query `search` clause: multi-field text search over an entity's `(search)` fields,
+matched with the same attention matcher keyboard narrowing and the command palette use.
+
+**Belongs here:** rows narrowing as a term is entered; a term matching a row only through its
+second `(search)` field; every row returned on a blank term; a field without `(search)` never
+matching. Schema and query diagnostics — a query search term that is not text, a query search
+clause over an entity with no `(search)` field, and `(search)` on a non-text field — are package
+tests, not journeys.
+
+**Does not belong here:** relevance ranking, which is explicitly not decided; `group by`, which is
+Post-MVP; remote providers; navigation or WordFlower product behavior.

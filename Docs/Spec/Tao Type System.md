@@ -345,6 +345,9 @@ is published; statements before the `check` stand. A `check` inside an action re
 such as `on press -> { … }` and an `async { … }` block are actions of their own, so a `check` there
 stops that handler or block.
 
+`guard` in an action is retired in favour of `check` and `if`: it still runs as described under
+_Block-scoped guards_, but every use draws a warning naming them, ahead of becoming an error.
+
 A `check` may not appear inside an action's `if` block or `guard` case: those compile to nested
 blocks, where an early exit would skip only the nested block while the action carried on. Fold the
 enclosing condition into the checked expression instead.

@@ -47,7 +47,7 @@ QueryBlock:
     '{' clauses+=QueryClause* '}';
 
 QueryClause:
-    WhereClause | BooleanWhereClause | OrderClause | LimitClause;
+    WhereClause | BooleanWhereClause | SearchClause | OrderClause | LimitClause;
 
 WhereClause:
     'where' fieldName=ID operator=QueryComparisonOperator value=Expression;
@@ -57,6 +57,10 @@ BooleanWhereClause:
 
 QueryComparisonOperator returns string:
     '==' | '!=' | '<' | '<=' | '>' | '>=';
+
+// Multi-field text search over an entity's `(search)` fields. A blank term matches every row.
+SearchClause:
+    'search' term=Expression;
 
 OrderClause:
     'order' 'by' fieldName=ID direction=OrderDirection?;

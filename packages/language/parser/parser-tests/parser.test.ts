@@ -635,6 +635,38 @@ Describe('parser: core language syntax', () => {
     Expect(AST.isImportableValueDeclaration(moduleQuery)).toBe(false)
   })
 
+  Test('parses a query search clause alongside its entity (search) fields', async () => {
+    const parseResult = await testParseCode(`
+      data Documents / Document {
+        Title text (search, title)
+        Body text (default "", search)
+      }
+      view Board() {
+        state Find = ""
+        query Documents as Found {
+          search Find
+          order by Title
+        }
+        render Text(Found.Count)
+      }
+      view Text(Value number) { render inject \`\`\`ts return null \`\`\` }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const query = AST.streamAllContents(parseResult.entry.ast).find(AST.isEntityQueryDeclaration)
+    Expect.Is(query, AST.isEntityQueryDeclaration)
+    const search = query.block?.clauses.find(AST.isSearchClause)
+    Expect.Is(search, AST.isSearchClause)
+    Expect.Is(search.term, AST.isValueReference)
+    Expect.Is(search.term.target.ref, AST.isStateDeclaration)
+    Expect(search.term.target.ref.name).toBe('Find')
+    const entity = Type.queryEntity(query)
+    Expect.Is(entity, AST.isEntityDataDeclaration)
+    const searchFields = Type.dataFields(entity)
+      .filter(field => (field.traits?.traits ?? []).some(trait => trait.search))
+    Expect(searchFields.map(field => field.name)).toEqual(['Title', 'Body'])
+  })
+
   Test('parses configured apps, view declarations, and contextual presentation', async () => {
     const parseResult = await testParseCode(`
       public type StackNav is nav with {

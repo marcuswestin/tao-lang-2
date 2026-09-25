@@ -1,6 +1,6 @@
 use Documents, Finish, Paragraphs from @data
 use CountWords from @tao/text
-use Checkbox, Col, Panes, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Checkbox, Col, Panes, Problems, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
 // Shared values, types, and the typed-injection escape hatch.
@@ -46,7 +46,7 @@ view DocumentEditor(Document) {
          Final: Value
    }  }
    action SaveDocument() {
-      check Input.Title is not empty
+      check not Input.Incomplete // the projection carries Title's `required` sentence
       set PreviousTitle = Document.Title
       set PreviousBody = Document.Body
       update Document with Input
@@ -94,6 +94,7 @@ view DocumentEditor(Document) {
             TextInput(Value: Input.Title, Label: "Document title", Placeholder: "Document title") {
                on submit SaveDocument
             }
+            Problems(Input.Problems) [validation]
 
             #editDocumentBody
             TextInput(Value: Input.Body, Label: "Document body", Placeholder: "Write the document body") [claimDouble] {
@@ -110,7 +111,7 @@ view DocumentEditor(Document) {
             }
 
             #saveDocument
-            FormButton("Save document", Disabled: Input.Title is empty) {
+            FormButton("Save document", Disabled: Input.Incomplete) {
                on press SaveDocument
             }
             TextMultiline("Saved title: { Document.Title }") [body]
