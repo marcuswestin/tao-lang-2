@@ -31,6 +31,18 @@ await runWithCommands(commands => {
     })
 
   registerAgentHelpCommand(commands, JUST_COMMANDS)
+  commands
+    .command('start-branch <name>')
+    .description('Start a feat/* branch from fetched origin/main after checking checkout writes.')
+    .action(async (name: string) => {
+      const exitCode = await runAgentCommand({
+        args: [name],
+        command: 'start-branch',
+        spawnArgs: ['start-branch'],
+        spawnCommand: './dev',
+      })
+      Platform.runtimeProcess.setExitCode(exitCode)
+    })
   for (const command of JUST_COMMANDS) {
     commands
       .command(`${command} [args...]`)

@@ -146,7 +146,15 @@
       "Bash(./agent unsandboxed processes list)",
       "Bash(./agent unsandboxed processes list *)",
       "Bash(./agent unsandboxed processes started)",
-      "Bash(./agent unsandboxed processes started *)"
+      "Bash(./agent unsandboxed processes started *)",
+      "Bash(./agent unsandboxed start-branch)",
+      "Bash(./agent unsandboxed start-branch *)"
+    ],
+    "ask": [
+      "Bash(./agent land-unlock --force*)",
+      "Bash(./dev land-unlock --force*)",
+      "Bash(just land-unlock --force*)",
+      "mcp__ccd_session_mgmt__send_message"
     ],
     "deny": [
       "Bash(bun install *)",
@@ -155,12 +163,6 @@
       "Read(~/.aws/**)",
       "Read(~/.config/gh/**)",
       "Read(~/.ssh/**)"
-    ],
-    "ask": [
-      "Bash(./agent land-unlock --force*)",
-      "Bash(./dev land-unlock --force*)",
-      "Bash(just land-unlock --force*)",
-      "mcp__ccd_session_mgmt__send_message"
     ]
   },
   "sandbox": {
@@ -265,7 +267,9 @@
       "./agent unsandboxed processes list",
       "./agent unsandboxed processes list *",
       "./agent unsandboxed processes started",
-      "./agent unsandboxed processes started *"
+      "./agent unsandboxed processes started *",
+      "./agent unsandboxed start-branch",
+      "./agent unsandboxed start-branch *"
     ],
     "filesystem": {
       "allowWrite": [
