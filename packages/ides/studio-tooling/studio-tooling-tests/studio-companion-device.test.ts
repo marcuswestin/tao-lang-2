@@ -372,11 +372,11 @@ Describe('Studio companion device tooling', () => {
   })
 
   Test('reads installed state from a devicectl app list', () => {
-    Expect(installedFromDevicectlApps(appsFixture(['dev.tao-lang.studio.companion']), 'dev.tao-lang.studio.companion'))
+    Expect(installedFromDevicectlApps(appsFixture(['com.devtao.studio.companion']), 'com.devtao.studio.companion'))
       .toBe(true)
-    Expect(installedFromDevicectlApps(appsFixture(['other.app']), 'dev.tao-lang.studio.companion')).toBe(false)
-    Expect(installedFromDevicectlApps({ result: {} }, 'dev.tao-lang.studio.companion')).toBeUndefined()
-    Expect(installedFromDevicectlApps(undefined, 'dev.tao-lang.studio.companion')).toBeUndefined()
+    Expect(installedFromDevicectlApps(appsFixture(['other.app']), 'com.devtao.studio.companion')).toBe(false)
+    Expect(installedFromDevicectlApps({ result: {} }, 'com.devtao.studio.companion')).toBeUndefined()
+    Expect(installedFromDevicectlApps(undefined, 'com.devtao.studio.companion')).toBeUndefined()
   })
 
   Test('matches a host by exact name, then case-insensitively, then by id', () => {
@@ -522,7 +522,7 @@ Describe('Studio device launcher', () => {
     Expect(info.installCommand).toBe('just studio-companion-install device="example-phone"')
     Expect(info.metroPort).toBe(8081)
     Expect(info.scheme).toBe('taostudiocompanion')
-    Expect(info.bundleIdentifier).toBe('dev.tao-lang.studio.companion')
+    Expect(info.bundleIdentifier).toBe('com.devtao.studio.companion')
     Expect(info.diagnostics).toEqual([])
     Expect(fetched.urls).toEqual([
       'http://127.0.0.1:8081/_expo/open?platform=ios',

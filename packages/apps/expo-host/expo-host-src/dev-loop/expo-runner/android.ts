@@ -131,8 +131,7 @@ async function ensureEmulator(): Promise<void> {
     DevLoopOutput.logDevLoop('dev', `Android emulator ${runningSerial} is starting.`)
     await waitForBootedEmulator(logPath)
   } else {
-    await startEmulator(avdName, logPath)
-    await waitForBootedEmulator(logPath)
+    await waitForBootedEmulator(logPath, await startEmulator(avdName, logPath))
   }
 }
 
@@ -403,9 +402,11 @@ async function isEmulatorBooted(serial: string): Promise<boolean> {
   return !result.error && result.exitCode === 0 && result.stdout.trim() === '1'
 }
 
-async function startEmulator(avdName: string, logPath: string): Promise<void> {
+/** startEmulator starts the emulator detached and answers whether that process has since exited. */
+async function startEmulator(avdName: string, logPath: string): Promise<() => boolean> {
   DevLoopOutput.logDevLoop('dev', `Starting Android emulator ${avdName}.`)
   const logFile = await FS.openAppend(logPath)
+  let exited = false
   try {
     const emulator = CLI.start('emulator', {
       args: ['-avd', avdName, '-memory', String(ANDROID_EMULATOR_MEMORY_MB), '-netdelay', 'none', '-netspeed', 'full'],
@@ -413,24 +414,55 @@ async function startEmulator(avdName: string, logPath: string): Promise<void> {
       stdio: ['ignore', logFile.fd, logFile.fd],
       unref: true,
     })
+    emulator.onceClose(() => {
+      exited = true
+    })
     emulator.onceError(error =>
       DevLoopOutput.logDevLoop('dev', `Failed to start Android emulator: ${error.message}`, 'error')
     )
   } finally {
     await logFile.close()
   }
+  return () => exited
 }
 
-async function waitForBootedEmulator(logPath: string): Promise<void> {
+/**
+ * waitForBootedEmulator waits for an emulator to finish booting. An emulator this loop started that
+ * exits first ends the wait at once with the reason its log gives, rather than after the whole boot
+ * timeout with none.
+ */
+async function waitForBootedEmulator(logPath: string, exited: () => boolean = () => false): Promise<void> {
   const serial = await Time.pollUntil(async () => {
     const candidate = await findRunningEmulator()
     return candidate && await isEmulatorBooted(candidate) ? candidate : undefined
-  }, { intervalMs: EMULATOR_BOOT_POLL_MS, timeoutMs: EMULATOR_BOOT_TIMEOUT_MS })
+  }, { intervalMs: EMULATOR_BOOT_POLL_MS, stop: exited, timeoutMs: EMULATOR_BOOT_TIMEOUT_MS })
   if (serial !== undefined) {
     DevLoopOutput.logDevLoop('dev', `Android emulator ${serial} is booted.`)
     return
   }
+  if (exited()) {
+    Errors.throwUserInput(emulatorExitMessage(await FS.readText(logPath).catch(() => ''), logPath))
+  }
   Errors.throwUserInput(`Android emulator did not finish booting. Check ${logPath}.`)
+}
+
+/**
+ * emulatorExitMessage names why an emulator exited before booting, from the last line its log holds.
+ * Qt's processor check is the one worth explaining: a sandboxed shell hides the CPU's features, so
+ * an Apple silicon Mac reads as lacking NEON, and the emulator only starts from an ordinary shell.
+ */
+export function emulatorExitMessage(logText: string, logPath: string): string {
+  const lines = logText.split(/\r?\n/u).map(line => line.trim()).filter(line => line.length > 0)
+  const processorCheck = lines.findIndex(line => line.startsWith('Incompatible processor'))
+  if (processorCheck !== -1) {
+    return `Android emulator exited before it booted: ${lines.slice(processorCheck).join(' ')} That check fails `
+      + `when a sandboxed shell hides the CPU's features; start the emulator from an ordinary shell. Its log is ${logPath}.`
+  }
+  const reason = lines.at(-1)
+  if (reason === undefined) {
+    return `Android emulator exited before it booted, leaving nothing in ${logPath}.`
+  }
+  return `Android emulator exited before it booted: ${reason}. Its log is ${logPath}.`
 }
 
 async function requireBootedEmulator(): Promise<string> {

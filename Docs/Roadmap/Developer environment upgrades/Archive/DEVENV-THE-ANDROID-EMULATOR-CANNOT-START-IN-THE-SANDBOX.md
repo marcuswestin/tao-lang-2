@@ -1,6 +1,6 @@
 # DEVENV-THE-ANDROID-EMULATOR-CANNOT-START-IN-THE-SANDBOX — The Android emulator cannot start in the sandbox
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Android emulator, dev loop, agent sandbox
 - **Impact:** `./dev android-emulator`, and `tao dev --android` when no emulator is running, wait the
@@ -23,3 +23,8 @@
 - **Acceptance:** A sandboxed `./dev android-emulator` fails within seconds, naming the emulator's own
   reason, and a dev-loop test pins that an exited emulator ends the wait.
 - **Source:** 2026-09-22, proving the prebuilt Android host (`just companion-host-build`) for `A9`.
+- **Resolution:** 2026-09-24, `feat/host-listing-and-emulator-exit-2fcfe3`: `startEmulator` records
+  the emulator's exit and `waitForBootedEmulator` stops on it, reporting the log's reason through
+  `emulatorExitMessage`, which also explains the sandbox's processor check. A sandboxed
+  `./dev android-emulator` now fails in 3 seconds with that sentence instead of after 180.
+- **Archived:** 2026-09-24

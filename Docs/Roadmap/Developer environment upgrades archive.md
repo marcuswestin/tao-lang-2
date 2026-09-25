@@ -74,3 +74,4 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION — A fixed short `timeoutMs` around real work loses to contention](<Developer environment upgrades/Archive/DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION.md>) — Resolved
 - [DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND — Jest's transform cache grows without bound](<Developer environment upgrades/Archive/DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND.md>) — Resolved
 - [DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS — Setup can retain an old transitive package link](<Developer environment upgrades/Archive/DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS.md>) — Resolved
+- [DEVENV-THE-ANDROID-EMULATOR-CANNOT-START-IN-THE-SANDBOX — The Android emulator cannot start in the sandbox](<Developer environment upgrades/Archive/DEVENV-THE-ANDROID-EMULATOR-CANNOT-START-IN-THE-SANDBOX.md>) — Resolved

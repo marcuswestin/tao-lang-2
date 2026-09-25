@@ -45,7 +45,7 @@ export type ShipCommandOptions = {
   yes?: boolean
 }
 
-const DEFAULT_SHIP_NAMESPACE = 'dev.tao-lang'
+const DEFAULT_SHIP_NAMESPACE = 'com.devtao'
 
 export type PreparedShip = {
   actions: string[]
