@@ -1,7 +1,7 @@
 import { CLI, Diagnostic, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { CheckCache } from '../cli-src/check-cache'
-import { type CheckWorkspaceOutcome, runCheck } from '../cli-src/source-commands'
+import { type CheckWorkspaceOutcome, runCheck, runFix } from '../cli-src/source-commands'
 import { withTaoFixture } from './test-cli-files'
 
 /**
@@ -83,6 +83,37 @@ Describe('tao check per-workspace stamp', () => {
     await withTaoFixture(TWO_WORKSPACES, async rootDir => {
       Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
       Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
+    })
+  })
+
+  Test('regenerates deleted metadata for an imported bridge on a targeted cached check', async () => {
+    await withTaoFixture({
+      'App/.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
+      'App/Project.tao': 'project {\n   id "check-cache-bridge"\n   name "Check cache bridge"\n}\n',
+      'App/Main.tao': `use CountWords from ./Bridge.tao
+
+function Total() returns number {
+   return CountWords("hello")
+}
+`,
+      'App/Bridge.tao': `public function CountWords(Value text) returns number {
+   return CountWords(Value) from ./Words.ts
+}
+`,
+      'App/Words.ts': 'export function CountWords(value: string): number { return value.length }\n',
+    }, async rootDir => {
+      await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: rootDir })
+      const main = FS.resolvePath('App/Main.tao', rootDir)
+      const metadata = FS.resolvePath('App/Bridge.tao.ts', rootDir)
+      await runFix(FS.resolvePath('App', rootDir))
+      const first = await runCheck(main, { cache: { repositoryRoot: rootDir } })
+      Expect(first.flatMap(result => result.diagnostics ?? []).filter(Diagnostic.isError)).toEqual([])
+      Expect(first.map(result => result.status)).toEqual(['unchanged'])
+      Expect(await FS.isFile(metadata)).toBe(true)
+      Expect(await checkedWorkspaces(rootDir, main)).toEqual({ App: 'replayed' })
+      await FS.remove(metadata)
+      Expect(await checkedWorkspaces(rootDir, main)).toEqual({ App: 'checked' })
+      Expect(await FS.isFile(metadata)).toBe(true)
     })
   })
 
