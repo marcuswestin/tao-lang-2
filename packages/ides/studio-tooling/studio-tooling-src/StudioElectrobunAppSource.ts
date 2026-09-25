@@ -926,6 +926,8 @@ async function settleStudioQuitCleanup(
       }),
     ])
   } finally {
-    if (timeout !== undefined) clearTimeout(timeout)
+    if (timeout !== undefined) {
+      clearTimeout(timeout)
+    }
   }
 }
