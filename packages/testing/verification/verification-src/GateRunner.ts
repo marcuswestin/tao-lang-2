@@ -255,14 +255,13 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = createReporter(options, location.logRoot)
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
-  // Named before the CPU broker below reserves anything, so a lane that will wait or fail on the
-  // window server never holds slots for work it has not yet been allowed to run.
+  // A lane registers before it takes any other lease. A landing priority window captures existing
+  // registrations; a later lane must wait here so it cannot hold GUI or prepare while paused.
   const guiLeaseNames = new Set(
     states
       .filter(state => (state.node.resources ?? []).includes(GateCatalog.GUI_RESOURCE))
       .map(state => state.name),
   )
-  const guiLease = guiLeaseNames.size === 0 ? undefined : await acquireGuiLease(location.repositoryRoot, options)
   // Every worktree on this machine reserves against the same CPUs. Registration puts this lane in
   // the machine-wide queue; admission is whole-lane and in arrival order, so a lane either runs at
   // its full requested width or waits with a printed position — it is never thinned to a slot or
@@ -280,7 +279,17 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const prepareNames = new Set(states.filter(state => GateCatalog.isPrepare(state.name)).map(state => state.name))
   // Two lanes must not run fixers and generators over the same files at once. Read-only work may
   // overlap freely, so the lock covers the prepare phase and is released the moment it ends.
-  const prepareLease = prepareNames.size === 0 ? undefined : await acquirePrepare(location.repositoryRoot, options)
+  let guiLease: MachineResourceLease | undefined
+  let prepareLease: MachineResourceLease | undefined
+  try {
+    await machineLane.waitForLandingPriority()
+    guiLease = guiLeaseNames.size === 0 ? undefined : await acquireGuiLease(location.repositoryRoot, options)
+    prepareLease = prepareNames.size === 0 ? undefined : await acquirePrepare(location.repositoryRoot, options)
+  } catch (error) {
+    await guiLease?.release()
+    await machineLane.release()
+    throw error
+  }
   let verifiedTree: TreeFingerprint | undefined
   let verifiedGenerated: GeneratedEvidenceRecord | undefined
   let snapshot: Promise<TreeFingerprint | undefined> = Promise.resolve(startingTree)
