@@ -57,6 +57,7 @@ async function run(): Promise<number> {
   const result = await CLI.run(target.command, {
     args: [...target.fixedArgs, ...forwardedArgs],
     cwd,
+    ...(target.env === undefined ? {} : { env: target.env }),
     processPolicy: target.server ? 'server' : 'tool',
     stdio: 'inherit',
   })
