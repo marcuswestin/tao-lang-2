@@ -170,7 +170,7 @@ diagnostic frames.
 Root action invocations are serialized. `do Callee(...)` does not open a second transaction: it joins the
 caller's transaction, and its name becomes another diagnostic frame. A failure anywhere in that joined
 call chain aborts the whole transaction, skips the rest of the caller's block, and publishes one report for
-the root action.
+the root action, unless a `when do` on the way contains it (see Effect outcomes below).
 
 State and runtime data schemas participate through private overlays:
 
@@ -195,6 +195,63 @@ reports that fact but does not automatically retry an action.
 
 An `async { ... }` action block is detached from its caller. When encountered inside a transaction, it starts
 as a new serialized root after the caller finishes rather than joining the caller's overlay.
+
+## Effect outcomes
+
+A call site that must react to a verb's failure runs it with `when do` and names what happens next:
+
+```tao
+type ExportFailure is one of Offline, TooLarge
+
+action ExportDocument(Format text)
+   fails Offline "Exporting needs a connection."
+   fails TooLarge "This document is too long to export."
+   from ./Export.ts
+
+action RunExport() {
+   when do ExportDocument(Format: "pdf") {
+      saved -> { set Status = "Exported" }
+      Offline -> { set RetryWhenOnline = true }
+      rejected -> Problem { set Status = Problem }
+      error -> Message { set Status = Message }
+}  }
+```
+
+`when do` is an action statement. Its invocation is exactly a `do`'s, a command included, and the verb
+joins the caller's transaction as it would under `do`. What differs is failure: the runtime takes a
+savepoint of the caller's private overlays before the verb runs, and a failure restores it, so the verb's
+own writes vanish while the caller's earlier writes stay. The site then runs one outcome:
+
+- `saved` when the verb finished on this device. It takes no name.
+- a case the verb declares, when the site names that case. It handles only itself.
+- `rejected -> Problem` for every other declared case.
+- `error -> Message` for any failure the verb never declared: an undeclared provider case, a thrown error.
+
+The name after `->` is optional wherever it is allowed, and binds the selected user message from the
+failure-report ladder below, with the fallback naming the verb. Each outcome appears at most once, and a
+named case must belong to the verb's effective failure contract. An outcome block is a nested action block,
+so `check` is rejected inside one as it is inside `if` and `guard`. There is no `queued` outcome yet.
+
+A failure the site names no outcome for leaves exactly as a plain `do` failure would: it aborts the root
+and publishes the root's report. A handled failure publishes no report. External effects that already ran
+cannot be undone, so they stay recorded and still make a later report ineligible for retry. A `respond`
+or `async` block queued by the rolled-back verb is dropped with its writes. Row ids stay monotonic: a row
+the rolled-back verb created never lends its id to a later row. A `runs latest` call that a newer call
+superseded never ran, so it runs no outcome at all.
+
+When the verb is dynamic — an action-typed parameter — its contract is unknown at the site. No case can be
+named there; any declared failure it raises runs `rejected`, and only an undeclared throw runs `error`.
+
+A verb's effective failure contract is the cases its own `fail` or `fails` declare, plus those of every
+verb it reaches through a plain `do`, transitively and cycle-safe, minus those a `when do` inside it
+handles. A `when do` that names `rejected` handles every declared case. An `async` block is a boundary:
+it runs as its own root after the action returns, so nothing inside it joins the action's contract.
+
+An unhandled failure stays silent at runtime, but the compiler warns at a root invocation whose effective
+contract is not covered: a view event handler (`on press Verb` or a `do` in `on press -> { … }`), an
+`on select` handler, a command's `do` clause, or a `do` directly inside an `async` block. The warning names the cases and points at `when do`; at a
+root `when do` it names the cases the site leaves unhandled. A `do` inside another action is not a root —
+its cases join that action's contract instead.
 
 ## Unexpected render failure containment
 

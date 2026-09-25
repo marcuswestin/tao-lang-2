@@ -29,6 +29,14 @@ import {
 import { createRequiresField, resolveDataWriteBindings } from './data-write-bindings'
 import { resolveDatasourceValue } from './datasource-values'
 import { design } from './design'
+import {
+  effectFailureCases,
+  effectOutcomeWords,
+  invocationFailureCases,
+  invokedEffect,
+  isRootEffectInvocation,
+  unhandledOutcomeCases,
+} from './effect-outcomes'
 import { guardBranches } from './guards'
 import { injectionArgumentName } from './injections'
 import {
@@ -84,6 +92,12 @@ export const ASTUtils = {
   storeOfDatasource,
   resolveDatasourceValue,
   design,
+  effectFailureCases,
+  effectOutcomeWords,
+  invocationFailureCases,
+  invokedEffect,
+  isRootEffectInvocation,
+  unhandledOutcomeCases,
   injectionArgumentName,
   layoutEntryValues,
   layoutTermValue,
@@ -122,6 +136,8 @@ export namespace ASTUtils {
   export type ArgumentBindingDiagnostic = import('./argument-bindings').ArgumentBindingDiagnostic
   export type CommandSlot = import('./commands').CommandSlot
   export type ParsedShortcut = import('./commands').ParsedShortcut
+  export type EffectDeclaration = import('./effect-outcomes').EffectDeclaration
+  export type EffectInvocation = import('./effect-outcomes').EffectInvocation
   export type DataWriteBindingDiagnostic = import('./data-write-bindings').DataWriteBindingDiagnostic
   export type DataWriteBindingPair = import('./data-write-bindings').DataWriteBindingPair
   export type DataWriteBindingResult = import('./data-write-bindings').DataWriteBindingResult
