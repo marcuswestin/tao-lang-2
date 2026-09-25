@@ -24,12 +24,13 @@ Describe('validator: phrases', () => {
   )
 
   Test(
-    'accepts a parameterless phrase called with explicit empty parentheses',
-    accepts(
+    'rejects a parameterless phrase called with explicit empty parentheses',
+    rejects(
       phraseApp(
         'render Text(DocumentGone())',
         'phrase DocumentGone = "That document is gone."',
       ),
+      PhrasesValidator.messages.phraseCallOnParameterless('DocumentGone'),
     ),
   )
 

@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
-import { parseCodeWithErrors, testParseCode } from './test-parse'
+import { parseCodeWithErrors, testParseCode, testParseSyntax } from './test-parse'
 
 Describe('parser: phrases', () => {
   Test('parses a single-form phrase, a parameterless phrase, and a plural phrase', async () => {
@@ -66,8 +66,11 @@ Describe('parser: phrases', () => {
     Expect(interpolation.expression.target.ref).toBe(parameter)
   })
 
-  Test('accepts a zero-argument call for a parameterless phrase, alongside its bare reference', async () => {
-    const result = await testParseCode(`
+  // A parameterless phrase's zero-argument call form parses (it shares its call shape with a
+  // phrase that does take arguments, per the grammar's one-call-rule design) but the validator
+  // rejects it: Tao keeps one spelling per construct, so it is referenced only bare (validator test).
+  Test('parses a zero-argument call for a parameterless phrase as a function call expression', async () => {
+    const result = await testParseSyntax(`
       phrase DocumentGone = "That document is gone."
       view Main() {
         render Text(DocumentGone())

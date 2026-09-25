@@ -12,7 +12,6 @@ Describe('compiler: phrases', () => {
         render Stack() {
           Text(WeekTitle("Monday"))
           Text(DocumentGone)
-          Text(DocumentGone())
           Text(ItemCount(3))
         }
       }
@@ -29,8 +28,8 @@ Describe('compiler: phrases', () => {
     // A parameterless phrase compiles to a callable returning its plain text value directly.
     Expect(code).toContain('_Scope.DocumentGone = TR.Function(() => {')
     Expect(code).toContain('return TR.Value("That document is gone.")')
-    // Its bare reference and its zero-argument call form compile identically.
-    Expect(code.match(/TR\.Call\(_Scope\.DocumentGone\)/g)).toHaveLength(2)
+    // Its bare reference compiles to a zero-argument call of that callable.
+    Expect(code).toContain('TR.Call(_Scope.DocumentGone)')
 
     // A plural phrase compiles to TR.Plural keyed by its declared categories.
     Expect(code).toContain('_Scope.ItemCount = TR.Function(')

@@ -195,9 +195,10 @@ Text(DocumentGone)
 ```
 
 Its optional parameter list is a typed hole list, parenthesized exactly as a function's; a phrase
-with no holes omits the parentheses entirely. A parameterless phrase is referenced by bare name, as
-a `let` value is, and — because it shares its call shape with a phrase that does take arguments —
-its explicit zero-argument call form (`DocumentGone()`) is also accepted.
+with no holes omits the parentheses entirely. Tao keeps one spelling per construct: a parameterless
+phrase is a value, referenced only by bare name as a `let` value is. Its call shape is shared with a
+phrase that does take arguments, but the validator rejects an explicit zero-argument call
+(`DocumentGone()`) on a parameterless phrase.
 
 A phrase's body is either one interpolated string, or plural forms separated by `/`, each
 `<category> "<string>"` with the CLDR categories `zero`, `one`, `two`, `few`, `many`, `other`.

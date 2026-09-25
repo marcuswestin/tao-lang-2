@@ -34,6 +34,7 @@ const messages = {
     `Phrase '${name}' receives parameter '${label}' more than once.`,
   phraseLabelType: (name: string, label: string, expected: string, actual: string) =>
     `Labeled argument '${label}:' of phrase '${name}' expects ${expected}, got ${actual}.`,
+  phraseCallOnParameterless: (name: string) => `\`${name}\` takes no values; write it without parentheses.`,
 } as const
 
 export const PhrasesValidator = {
@@ -92,6 +93,12 @@ function validatePhraseCall(call: AST.FunctionCallExpression, ctx: ValidationCon
   const resolved = ASTUtils.resolveFunctionInvocation(call)
   const phrase = resolved.function
   if (!phrase || !AST.isPhraseDeclaration(phrase)) {
+    return
+  }
+  // Tao keeps one spelling per construct: a parameterless phrase is a value, referenced bare
+  // (`DocumentGone`), never called (`DocumentGone()`).
+  if (AST.parametersOf(phrase).length === 0) {
+    ctx.error(call, messages.phraseCallOnParameterless(phrase.name))
     return
   }
   for (const diagnostic of resolved.diagnostics) {
