@@ -12,7 +12,7 @@ const ATTRIBUTION_WARNING =
 const IDENTITY_WARNING =
   'This commit message names an agent identity. Work products here — commit messages included — name none. The commit is not blocked. A path or a harness product read as an identity is a false positive of this check.'
 const DETACHED_HEAD_WARNING =
-  'This worktree is on a detached HEAD, so a commit made here belongs to no branch. Name one first: git switch -c feat/<name>'
+  'This worktree is on a detached HEAD, so a commit made here belongs to no branch. Name one first: ./agent start-branch feat/<name>'
 
 const WORK_BRANCH = /^(?:feat|dev)\/.+/
 
@@ -58,7 +58,7 @@ export function branchWarnings(branch: string | undefined): string[] {
   }
   if (!WORK_BRANCH.test(branch)) {
     return [
-      `Branch \`${branch}\` is not a \`feat/<name>\` or \`dev/<name>\` branch. Work branches here take one of those two prefixes: git switch -c feat/<name>`,
+      `Branch \`${branch}\` is not a \`feat/<name>\` or \`dev/<name>\` branch. Start a feature branch with ./agent start-branch feat/<name>.`,
     ]
   }
   return []

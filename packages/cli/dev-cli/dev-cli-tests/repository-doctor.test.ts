@@ -93,7 +93,7 @@ Describe('repository doctor', () => {
     const report = doctorReport(facts({ branch: undefined }))
 
     Expect(check(report, 'worktree')?.status).toBe('warn')
-    Expect(check(report, 'worktree')?.remediation).toContain('git switch -c feat/<name>')
+    Expect(check(report, 'worktree')?.remediation).toContain('./agent start-branch feat/<name>')
     Expect(report.status).toBe('warn')
     Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(0)
   })
@@ -363,7 +363,7 @@ Describe('repository doctor', () => {
 
     Expect(lines.some(line => line.startsWith('PASS  '))).toBe(true)
     Expect(lines.find(line => line.startsWith('WARN  worktree'))).toContain(
-      '\n       Name a branch before committing: git switch -c feat/<name>',
+      '\n       Name a branch before committing: ./agent start-branch feat/<name>',
     )
   })
 

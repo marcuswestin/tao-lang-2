@@ -402,6 +402,60 @@ export const MergeMainCommand = {
   },
 } as const
 
+/** Start a new feature branch at freshly fetched origin/main after proving checkout writes safe. */
+export const StartBranchCommand = {
+  async run(
+    name: string,
+    options: Pick<FinalizeOptions, 'repositoryRoot'> = {},
+    dependencies: FinalizeDependencies = defaultDependencies,
+  ): Promise<void> {
+    const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+    if (!name.startsWith('feat/') || name === 'feat/') {
+      Errors.throwUserInput(`start-branch requires a feat/* branch name; got '${name}'.`)
+    }
+    const validName = await dependencies.run('git', {
+      args: ['check-ref-format', '--branch', name],
+      cwd: root,
+      stdio: 'pipe',
+    })
+    if (validName.exitCode !== 0) {
+      Errors.throwUserInput(`Invalid feature branch name: ${name}.`)
+    }
+    await assertCleanWorktree(dependencies, root, 'start-branch')
+    const existing = await dependencies.run('git', {
+      args: ['show-ref', '--verify', '--quiet', `refs/heads/${name}`],
+      cwd: root,
+      stdio: 'pipe',
+    })
+    if (existing.exitCode === 0) {
+      Errors.throwUserInput(`Feature branch '${name}' already exists.`)
+    }
+    if (existing.exitCode !== 1) {
+      assertCommandSucceeded(existing)
+    }
+    await git(dependencies, root, ['fetch', '--quiet', REMOTE, MAIN_BRANCH])
+    const mainSha = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
+    const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
+    const diff = await git(dependencies, root, ['diff', '--name-only', '--no-renames', headSha, mainSha])
+    const blocked = await unwritablePaths(dependencies, root, diff.stdout.trim().split('\n').filter(Boolean))
+    if (blocked.length > 0) {
+      Errors.throwHostEnvironment(
+        `Starting '${name}' from origin/main would write paths this shell may not:\n`
+          + blocked.map(path => `- ${path}`).join('\n')
+          + `\nThe checkout and HEAD are untouched; run \`./agent unsandboxed start-branch ${name}\`.`,
+      )
+    }
+    await git(dependencies, root, ['switch', '--no-track', '-c', name, mainSha])
+    const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
+    if (status !== '') {
+      Errors.throwHostEnvironment(
+        `Git switched to '${name}' but left a dirty checkout. Inspect these paths before continuing:\n${status.trimEnd()}`,
+      )
+    }
+    dependencies.writeLine(`Started '${name}' from origin/main (${shortSha(mainSha)}).`)
+  },
+} as const
+
 /**
  * The agent landing runs with host access, so its unlocked message preparation is restricted to the
  * one repository-owned artifact for this branch. The lower-level merge command keeps its explicit
@@ -659,7 +713,8 @@ async function integrateMain(
     lines.push(`PLAN  Merge ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
     return { headSha: branchHead, integratedNow: false, mainSha }
   }
-  const blocked = await undeniablePaths(dependencies, root, branchHead, mainSha)
+  const incoming = await git(dependencies, root, ['diff', '--name-only', `${branchHead}...${mainSha}`])
+  const blocked = await unwritablePaths(dependencies, root, incoming.stdout.trim().split('\n').filter(Boolean))
   if (blocked.length > 0) {
     Errors.throwUserInput(deniedIntegrationReport(blocked, command))
   }
@@ -731,7 +786,7 @@ async function mergeTreeConflicts(
 const WRITE_PROBE_PREFIX = '.finalize-write-probe-'
 
 /**
- * undeniablePaths returns the directories and files `main` would write that this process cannot,
+ * unwritablePaths returns the directories and files a checkout would write that this process cannot,
  * empty when the merge can complete. A sandboxed shell write-protects part of the worktree —
  * `agents/skills` among them, which 77 of `main`'s last 100 commits touch — and `git merge` discovers
  * that partway through, leaving a tree with no `MERGE_HEAD`, no unmerged entries, and modifications
@@ -744,14 +799,11 @@ const WRITE_PROBE_PREFIX = '.finalize-write-probe-'
  * directory probe alone misses a protected file inside a writable directory, which is how
  * `.claude/settings.json` is protected, so every existing file main changes is opened for writing too.
  */
-async function undeniablePaths(
+async function unwritablePaths(
   dependencies: FinalizeDependencies,
   root: string,
-  branchHead: string,
-  mainSha: string,
+  paths: readonly string[],
 ): Promise<string[]> {
-  const incoming = await git(dependencies, root, ['diff', '--name-only', `${branchHead}...${mainSha}`])
-  const paths = incoming.stdout.trim().split('\n').filter(Boolean)
   const directories = new Set<string>()
   for (const path of paths) {
     directories.add(await nearestExistingDirectory(dependencies, root, FS.dirname(path)))
