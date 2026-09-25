@@ -51,3 +51,4 @@ prefix_rule(pattern=["./agent","unsandboxed","remote","heads"], decision="allow"
 prefix_rule(pattern=["./agent","unsandboxed","remote","exists"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","processes","list"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","processes","started"], decision="allow", justification="Repository-approved host command.")
+prefix_rule(pattern=["./agent","unsandboxed","start-branch"], decision="allow", justification="Repository-approved host command.")

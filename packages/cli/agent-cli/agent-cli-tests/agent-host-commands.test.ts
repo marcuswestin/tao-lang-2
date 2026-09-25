@@ -61,6 +61,7 @@ const expected = [
   'remote exists',
   'processes list',
   'processes started',
+  'start-branch',
 ]
 
 Describe('agent host command permissions', () => {
@@ -112,6 +113,7 @@ Describe('agent host command permissions', () => {
       command: 'xcrun',
       fixedArgs: ['simctl', 'list', 'devices'],
     })
+    Expect(hostCommandTarget(['start-branch'])).toEqual({ command: './dev', fixedArgs: ['start-branch'] })
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 42] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun simctl list devices'] })).toThrow()
