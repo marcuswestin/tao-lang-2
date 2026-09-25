@@ -3,6 +3,7 @@ import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import { TestActionStubs } from './TR-action-test-stubs'
 import {
   actionFailureCaseName,
+  actionTestStubContext,
   captureActionContinuation,
   deferDetached,
   existingTransactionResource,
@@ -432,7 +433,7 @@ class TR {
         try {
           const stubbedCase = options.testStubKey === undefined
             ? undefined
-            : TestActionStubs.failureFor(options.testStubKey)
+            : TestActionStubs.failureFor(actionTestStubContext(), options.testStubKey)
           if (stubbedCase !== undefined) {
             const declared = failures.find(failure => actionFailureCaseName(failure.case) === stubbedCase)
             RuntimeAssert(declared !== undefined, 'validated foreign action test stub names a declared failure')
