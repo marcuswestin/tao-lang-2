@@ -11,8 +11,7 @@ declaration through `Design`; render specs resolve its styles and merge layout p
 `background`, `border`, `ink`, `line`, `radius`, `size`, and `weight` visual entries into the
 existing native root. Static validation owns duplicates, reserved names, references, cycles, colors,
 tags, conditions, and uniquely resolvable app design selection. Parameterized entries, environment
-values other than `Scheme`, the `when Screen` condition, and the clause-list casing rule are decided
-but not implemented. `rules { }` is deferred past MVP, as are `tao design` commands, screenshot
+values other than `Scheme`, and the `when Screen` condition are decided but not implemented. `rules { }` is deferred past MVP, as are `tao design` commands, screenshot
 comparison, design lockfiles, and AI-assisted design iteration.
 
 ## Implemented First Slice
@@ -48,7 +47,8 @@ The implemented visual heads are `background <token>`, `border <token>`, `ink <t
 its color and the minimal slice supplies width `1`. `bg` and `fg` are accepted legacy spellings of
 `background` and `ink` and draw a warning; one style spelling the same property both ways is an
 error. Colors and bundles written directly in `design { }`, outside the typed blocks, are the
-deprecated flat catalog: still accepted, with one warning per design. Style expansion preserves
+deprecated flat catalog: still accepted, with one warning per design. `tao fix` rewrites both into
+the decided form, and `tao check` reports unmigrated source as noncanonical. Style expansion preserves
 source order; later occurrences replace the same semantic clause while unrelated layout and style
 clauses remain. Resolution uses the Design selected by the mounted app occurrence — there is no
 global design registry — so two mounted apps may resolve the same style name independently.
@@ -172,14 +172,14 @@ lowercase style, and a state is an ordinary condition. Element defaults cover th
 elements (`Text`, `TextInput`, `FormButton`, `Checkbox`, `Progress`, …) and the surfaces the
 runtime draws itself, which it reads from the mounted design by name — for example `AppSurface`,
 `NavigationHost`, `NavigationContent`, `NavigationHeader`, `NavigationTitle`, `NavigationTabs`,
-`NavigationTab`, `NavigationTabActive`, `NavigationChromeButton`, `ModalSurface`, `ToastSurface`,
-`Hint`, and `Overview`. An app may override any of them without owning the runtime layer.
+`NavigationTab`, `NavigationChromeButton`, `ModalSurface`, `ToastSurface`, `Hint`, and `Overview`.
+An app may override any of them without owning the runtime layer. The active tab takes its look
+from `NavigationTab` itself, through `when selected`.
 
-**Decided, not implemented — the clause-list casing rule** (2026-09-23): a clause list names only
-lowercase styles; an element default applies by element and is never named in a clause list; design
-names are lowercase; and a Capitalized word in a clause list is a value. Today the validator does
-not enforce it, and `NavigationTabActive [NavigationTab, …]` names one default inside another
-because the runtime picks one of the two per tab.
+**The clause-list casing rule — implemented.** A clause list names only lowercase styles; an
+element default applies by element and is never named in a clause list; design names are lowercase;
+and a Capitalized word in a clause list is a value. Naming an element default in a clause list, or
+giving a design value a Capitalized name, is a compile error.
 
 `patterns { }` is not carried forward: a named arrangement with slots is an ordinary `view` placing
 `@@content`.
@@ -188,8 +188,9 @@ because the runtime picks one of the two per tab.
 
 Design conditions are ordinary postfix `when` expressions, the same shapes as conditional styling
 (§9). Implemented: `when Scheme is Light|Dark`, the interaction states `when pressed`,
-`when focused`, and `when hovered`, and `when <Region> is active` for named-region focus. Any other
-condition is a validation error that lists these.
+`when focused`, and `when hovered`, `when selected` for the element its host marks as the current
+choice (today the active navigation tab), and `when <Region> is active` for named-region focus. Any
+other condition is a validation error that lists these.
 
 **Decided, not implemented:** the remaining environment values — `Contrast`, `Motion`, `TextScale`,
 `Screen`, `Platform`, `Pointer`, `Direction`, `Locale` — read-only reactive values that adaptation

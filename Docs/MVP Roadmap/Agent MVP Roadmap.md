@@ -365,9 +365,10 @@ Work with an existing plan that needs implementation rather than decision: the d
 keyboard and accessibility ledgers, the navigation follow-ups, `tao test` hardening, and the
 shell-completion tail. Each is a plan-and-execute task on its own.
 
-- Design system status (2026-09-23): the `bg`/`fg` and flat-catalog deprecations landed; typed
-  style values are the next slice; `rules { }` and all rule checks are deferred past MVP. The plan's
-  "Typed style values" and "Design rules — deferred past MVP" sections carry the detail.
+- Design system status (2026-09-25): the `bg`/`fg` and flat-catalog deprecations landed; the
+  WordFlower "DESIGN VALUES" tranche is in progress (casing rule as errors, `selected`, `color`
+  parameters, `tao fix` migration); `rules { }` and all rule checks are deferred past MVP. The plan's
+  "Design values tranche" and "Design rules — deferred past MVP" sections carry the detail.
 
 ### A15 — Studio's simulated-user lane — **done**
 

@@ -143,7 +143,8 @@ recipes and variants, and a state is an ordinary `when` condition. The structure
 - **Landed 2026-09-22** (`merged/design-system-mvp-5-7-44b3e6`): `bg`/`fg` warn in favour of
   `background`/`ink`; a design keeping colors or bundles outside the typed blocks draws one warning;
   `tao create` and the starters write only the typed form.
-- **Next: typed style values**, below, with the clause-list casing rule that makes them unambiguous.
+- **In progress: the design values tranche**, below — the casing rule, `selected`, `color`
+  parameters, and the `tao fix` migration.
 
 Exit criteria: every §13 construct the MVP keeps is implemented, and every one it drops is recorded
 as deferred.
@@ -172,55 +173,58 @@ Exit criteria: docs, examples, test apps, and roadmap agree on the shipped deter
 
 The phased tooling and rollout work this step prepares is laid out in full below.
 
-## Typed style values (next slice, 2026-09-23)
+## Design values tranche (in progress, 2026-09-25)
 
-Let a style value travel as an ordinary Tao value — a view parameter, state, an action parameter,
-or the right side of `set` — while every value a clause can receive stays named in source.
+WordFlower `2 - Next` holds the contract (`WordFlower.tao-next` header, "DESIGN VALUES"). It finishes
+the MVP design surface in four decision groups, recorded in `Decisions.md` §13:
 
-```tao
-view Badge(Label text, Tint color default accent) [background Tint, pad sm] {
-   render Text(Label) [ink onAccent]
-}
+1. **The clause-list casing rule is a compile error.** A reserved lowercase word is a clause head,
+   any other lowercase word is a design name (a style in entry position, a color or size in value
+   position), and a Capitalized word is a value. Naming an element default in a clause list, or
+   giving a design value a Capitalized name, is an error. The only violations were
+   `NavigationTabActive [NavigationTab, …]` in WordFlower and both starters.
+2. **`selected` is an interaction condition.** The navigation host supplies it for the active tab,
+   so `NavigationTab` carries the active look and `NavigationTabActive` is retired. Selection is
+   otherwise not a tracked state today: a loop row's `on select` presents a detail and keeps no
+   selected state, so rows do not get `selected` in this tranche.
+3. **A `color` parameter carries a design color as a value**, forced by the documents list:
 
-scene Inbox() {
-   Title "Inbox"
-   state Alert is color = accent
-   action Escalate() {
-      set Alert = danger
+   ```tao
+   view StatusBadge(Label text, Tint color default inkMuted) {
+      render Row() [gapSmall] {
+         Box() [statusDot, background Tint]
+         Text(Label) [caption]
+   }  }
+
+   loop Documents / Document {
+      Col() [card, gapSmall] {
+         Text(Document.Title) [sectionTitle]
+         if Document.Final is Final {
+            StatusBadge("Final", Tint: accent)
+         }
+         if Document.Final is Draft {
+            StatusBadge("Draft")
+      }  }
+      on select -> { present DocumentScreen(Document) }
    }
-   render Col() [card, background Alert] {
-      Badge("New", Tint: Alert)
-      FormButton("Escalate") {
-         on press Escalate
-}  }  }
-```
+   ```
 
-- **Reading a clause list** (the §13 casing rule, decided 2026-09-23): a reserved lowercase word is
-  a clause head, any other lowercase word is a design name (a style in entry position, a color or
-  size in value position), and a Capitalized word is a value. Element defaults are never named in a
-  clause list, design names are never Capitalized, and a value is never lowercase inside one.
-- **A style value is a reference to a design name**, resolved against the mounted design at render,
-  so `Alert` follows light and dark and whichever design is mounted. It never becomes a hex value in
-  product code.
-- **Values originate only from design names.** No `color(Input)` conversion and no entity field
-  reaches a clause, so the set of values any clause can receive stays finite and listed in source —
-  the property the deferred rule analysis depends on.
-- Today none of the casing rule is enforced: `colors { Brand #fff }`, `render Col() [Hint]`, and
-  `view Lower(indent number)` all check clean. `NavigationTabActive [NavigationTab, …]` (WordFlower
-  `Design.tao:87`, `:153`; both starters) names an element default in a clause list because the
-  runtime picks one of the two defaults per tab (`TR-navigation-mounts.tsx:819`); it becomes one
-  `NavigationTab` default with an active-tab condition.
-- The length type is the `size` unit family already decided in §2 (`Decisions.md:145`), sharing its
-  word with the font-size clause the way the `sizes { }` block does.
-- **No forcing feature in the MVP app** (`Process.md` principle 2): a scan of all three WordFlower
-  tiers (2026-09-24) found no view rendered with different tints, no per-item color, and no
-  user-chosen accent; its only conditional style is `border accent when FocusBar is active`
-  (`Apps/WordFlower/1 - Current/@ui/Focus.tao:50`). The only real forcing case in the repository is
-  Skillet's per-aisle color (`Apps/Tao Future/Skillet/Shared.tao-revolution:100`), which forces
-  §13's parameterized entries (`aisle(Aisle)`) rather than typed values.
-- Open: whether the slice proceeds without a forcing feature, whether a `style` type ships, the
-  active-tab condition word (`selected` is unused anywhere; `is active` already means named-region
-  focus), and the severity of casing violations while existing source migrates.
+   The dot sits inside the badge, where a caller's clauses cannot reach (R9 keeps a root's inner
+   renders private), so its color has to travel as a value. A value is a reference to a design
+   name, resolved against the mounted design at render, so it follows light and dark. Every value
+   starts as a design name — no `color(Input)` conversion and no entity field reaches a clause — so
+   the set of colors a clause can receive stays listed in source, the property the deferred rule
+   analysis needs. `size` parameters (the §2 `size` family, `Decisions.md:145`), `color` state,
+   `set`, and aliases are not forced by any MVP feature and wait for one; a `style` type is not
+   planned.
+4. **`tao fix` migrates legacy design source**: `bg`/`fg` become `background`/`ink`, and flat design
+   entries move into `colors { }` and `styles { }`. Because `tao check` reports anything `tao fix`
+   would change as noncanonical, WordFlower is migrated in the same change.
+
+Earlier finding, kept for the record: before this tranche no WordFlower tier needed a color passed
+as a value (2026-09-24 scan); the documents list's status badge is the product feature added to
+force it. Skillet's per-aisle color (`Apps/Tao Future/Skillet/Shared.tao-revolution:100`) forces
+§13's parameterized entries, a separate post-MVP capability.
 
 ## Design rules — deferred past MVP (notes, 2026-09-22/23)
 
