@@ -49,6 +49,25 @@ const STDLIB_DIRECTORY = 'stdlib'
 const HOST_DIRECTORY = 'host'
 
 /**
+ * RUNTIME_DIRECTORY is where a Tao CLI tree carries `@tao/runtime`, a created project's link target.
+ * The resource root is laid out as such a tree, so the path is the same inside it.
+ */
+const RUNTIME_DIRECTORY = 'modules/@tao/runtime'
+
+/**
+ * SHARED_CORE_DIRECTORY is where the `@shared/core` sources sit inside the resource root. The
+ * stdlib's data-provider sidecars import them, so Metro has to find them beside the runtime.
+ */
+const SHARED_CORE_DIRECTORY = 'shared/core'
+
+/**
+ * HOST_DEPENDENCIES_DIRECTORY is where an installed Tao resolves its host's dependencies: beside the
+ * binary rather than inside the resource tree, because a new payload replaces that tree whole and
+ * 400 MB of packages should not go with it.
+ */
+const HOST_DEPENDENCIES_DIRECTORY = 'host'
+
+/**
  * installedProbe caches a found installed root. Only a hit is cached: the binary's entry point
  * unpacks the resources before anything reads them, and a miss remembered from before that unpack
  * would outlive it. The environment variable is deliberately not cached either, because a test that
@@ -60,8 +79,11 @@ let installedProbe: string | undefined
 export const TaoResources = {
   COMPLETION_STAMP,
   DECLARED_ROOT_ENV,
+  HOST_DEPENDENCIES_DIRECTORY,
   HOST_DIRECTORY,
   INSTALLED_DIRECTORY,
+  RUNTIME_DIRECTORY,
+  SHARED_CORE_DIRECTORY,
   STDLIB_DIRECTORY,
   declaredRoot,
   installedDirectory,

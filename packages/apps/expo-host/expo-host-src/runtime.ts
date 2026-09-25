@@ -5,6 +5,7 @@ import { expoUpdateArtifacts, proveReleaseBundle } from './release-bundle-proof'
 import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 export { DesktopHost } from './desktop-host'
 
+export { HostDependencies } from './host-dependencies'
 export {
   type ExpoUpdateArtifact,
   type ExpoUpdateArtifacts,
