@@ -23,6 +23,11 @@ export const TestsFormatter = {
     f.oneSpaceAfter('run')
   },
 
+  ActionFailureStubStep(f) {
+    f.oneSpaceAfter('action', 'fails')
+    f.oneSpaceBefore('fails')
+  },
+
   /** PressTextStep formats selector-targeted press steps. */
   PressTextStep(f) {
     f.oneSpaceAfter('press')

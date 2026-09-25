@@ -7,6 +7,13 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
 //
+// EFFECTS. A saved document can be shared as Markdown through a foreign action. The action names
+// Offline, TooLarge, and cancellation outcomes, and its call site handles success, Offline, other
+// declared rejections, and unexpected errors with `when do`. Tao journeys stub declared failures; a success
+// journey runs the platform share handoff. A local share works offline; Offline handles only an
+// explicit network failure reported by a chosen share destination. The MVP omits Revolution's
+// format picker and queued case.
+//
 // DESIGN VALUES. The design language finishes its MVP surface: a clause list reads by case, the
 // active navigation tab is a condition, and a color travels as a value where a view tints something
 // inside itself.

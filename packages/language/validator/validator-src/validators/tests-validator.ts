@@ -53,6 +53,11 @@ export const testValidationMessages = {
   deviceDimensions: 'Test device dimensions must be positive whole numbers.',
   fixtureAppBinding: (fixture: string, entity: string, app: string) =>
     `Fixture '${fixture}' creates '${entity}', which app '${app}' does not bind.`,
+  actionStubPlacement: 'An action failure stub is allowed only directly in a test check.',
+  actionStubBeforeRun: 'An action failure stub must appear before run.',
+  actionStubForeign: (name: string) => `Action '${name}' must be foreign to use a test failure stub.`,
+  actionStubCase: (name: string, caseName: string) => `Action '${name}' does not declare failure case '${caseName}'.`,
+  actionStubDuplicate: (name: string) => `Action '${name}' has more than one failure stub in this check.`,
 } as const
 
 const validateRunPlacement = validateStepPlacement(testValidationMessages.runPlacement)
@@ -71,6 +76,7 @@ const validateNarrowPlacement = validateStepPlacement(testValidationMessages.nar
 /** testValidationChecks validates v0 Tao test declarations and steps. */
 export const testValidationChecks = {
   [AST.TestDeclaration.$type]: validateTest,
+  [AST.ActionFailureStubStep.$type]: validateActionFailureStub,
   [AST.RunStep.$type]: validateRunPlacement,
   [AST.PressTextStep.$type]: [validatePressPlacement, validateSelector],
   [AST.TagPressStep.$type]: validatePressPlacement,
@@ -151,8 +157,28 @@ function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
 
 function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): void {
   for (const statement of check.block.statements) {
-    if (!AST.isCheckStep(statement)) {
+    if (!AST.isCheckStep(statement) && !AST.isActionFailureStubStep(statement)) {
       ctx.error(statement, testValidationMessages.checkBlock(AST.testDisplayName(check)))
+    }
+  }
+  const stubbed = new Set<AST.ActionDeclaration>()
+  let seenRun = false
+  for (const statement of check.block.statements) {
+    if (AST.isRunStep(statement)) {
+      seenRun = true
+    }
+    if (!AST.isActionFailureStubStep(statement)) {
+      continue
+    }
+    if (seenRun) {
+      ctx.error(statement, testValidationMessages.actionStubBeforeRun)
+    }
+    const action = statement.action.ref
+    if (action && stubbed.has(action)) {
+      ctx.error(statement, testValidationMessages.actionStubDuplicate(action.name))
+    }
+    if (action) {
+      stubbed.add(action)
     }
   }
   const runSteps = check.block.statements.filter(AST.isRunStep)
@@ -227,6 +253,24 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
     if (!hasRun) {
       ctx.error(step, testValidationMessages.expectationBeforeRun)
     }
+  }
+}
+
+function validateActionFailureStub(step: AST.ActionFailureStubStep, ctx: ValidationContext): void {
+  if (!AST.isTestDeclaration(blockOwner(step))) {
+    ctx.error(step, testValidationMessages.actionStubPlacement)
+    return
+  }
+  const action = step.action.ref
+  if (!action) {
+    return
+  }
+  if (!action.foreign) {
+    ctx.error(step, testValidationMessages.actionStubForeign(action.name))
+    return
+  }
+  if (!action.foreign.failures.some(failure => failure.case.ref?.name === step.case)) {
+    ctx.error(step, testValidationMessages.actionStubCase(action.name, step.case))
   }
 }
 

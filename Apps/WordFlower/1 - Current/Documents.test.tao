@@ -1,3 +1,4 @@
+use ExportDocument from @ui
 use WordFlower from ./
 
 test "WordFlower documents" {
@@ -209,5 +210,75 @@ test "WordFlower documents" {
       // because they share the command.
       expect toolbar command "Finish document" disabled
       expect checkbox #markFinal checked
+   }
+   test "shares a saved document as Markdown" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      press toolbar command "Export document"
+      expect text "Share a Markdown copy of the saved document."
+      press #export
+      expect text "Ready to share"
+      press #closeExport
+   }
+   test "reports an offline export at its named outcome" {
+      action ExportDocument fails Offline
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      press toolbar command "Export document"
+      press #export
+      expect text "Exporting needs a connection."
+   }
+   test "reports a large export through rejected" {
+      action ExportDocument fails TooLarge
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      press toolbar command "Export document"
+      press #export
+      expect text "This document is too long to export."
+   }
+   test "leaves a cancelled export quiet" {
+      action ExportDocument fails Cancelled
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      press toolbar command "Export document"
+      press #export
+      expect missing text "Ready to share"
+      expect missing text "Exporting needs a connection."
    }
 }

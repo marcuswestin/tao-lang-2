@@ -342,7 +342,7 @@ Exercise `when do` (Decisions §5): a call site that runs a verb, contains its f
 happens next. The verb is a native action that writes a draft and then calls a foreign `Export` whose
 sibling `Export.ts` ends each call the way its `Mode` argument says.
 
-**Belongs here:** `saved` after the verb finishes, keeping its writes; a declared case the site names;
+**Belongs here:** a check-scoped declared-case failure stub that bypasses `Export.ts`; `saved` after the verb finishes, keeping its writes; a declared case the site names;
 `rejected -> Problem` catching a declared case the site does not name, with the declared sentence; `error
 -> Message` for a case the verb never declared, with the provider's own sentence; the verb's own write
 rolled back while the caller's earlier write survives; a verb's contract reached through a plain `do`.

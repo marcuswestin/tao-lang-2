@@ -11,6 +11,7 @@ export const StatementsCompiler = {
       AliasDeclaration: value => Compile.AliasDeclaration(value, options),
       AppDeclaration: value => Compile.App(value, options),
       ActionDeclaration: Compile.ActionDeclaration,
+      ActionFailureStubStep: Compile.ActionFailureStubStep,
       AsyncActionStatement: Compile.AsyncActionStatement,
       AdvanceStep: Compile.AdvanceStep,
       BackTestStep: Compile.BackTestStep,

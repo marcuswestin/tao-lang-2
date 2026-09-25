@@ -8,6 +8,8 @@ use FormButton from @tao/ui/basic
 // value, and a dismissed responder answers `none` rather than requiring a second enum case.
 type ConfirmResult is one of Confirmed
 
+type ExportFailure is one of Offline, TooLarge, Cancelled
+
 // A phrase is named copy: its plural forms choose by the count, so the outline never reads
 // "1 paragraphs".
 phrase ParagraphCount(Count number) = one "{ Count } paragraph" / other "{ Count } paragraphs"
@@ -16,8 +18,14 @@ phrase ParagraphCount(Count number) = one "{ Count } paragraph" / other "{ Count
 // The presented entry guards entity availability; the editor below assumes an available document.
 workspace
 scene DocumentScreen(Document) {
+   command Export() {
+      Title "Export document"
+      Description "Shares the saved document as Markdown."
+      Icon "square.and.arrow.up"
+      do -> { present ExportPanel(Document) as sheet }
+   }
    Title Document.Title
-   Toolbar { Finish }
+   Toolbar { Finish, Export }
    render Col() [grow] {
       // The screen names the one case it words itself; loading, unauthorized, and error go to the net.
       guard Document {
@@ -33,6 +41,38 @@ view WordCountLabel(Value text) {
 }
 
 type DocumentInput is Document { Title, Body }
+
+// The TypeScript sidecar hands a Markdown copy to the platform share sheet. The app records the
+// failure cases here so an export site can distinguish a missing connection from other rejections.
+workspace
+action ExportDocument(Document) fails Offline "Exporting needs a connection." fails TooLarge "This document is too long to export." fails Cancelled "" from ./Export.ts
+
+view ExportPanel(Document) {
+   action RunExport() {
+      when do ExportDocument(Document) {
+         saved -> { present ExportNotice("Ready to share") as toast (Key: "document-export", Duration: 3.s) }
+         Offline -> { present ExportNotice("Exporting needs a connection.") as toast (Key: "document-export", Duration: 5.s) }
+         Cancelled -> { }
+         rejected -> Problem { present ExportNotice(Problem) as toast (Key: "document-export", Duration: 5.s) }
+         error -> Message { present ExportNotice(Message) as toast (Key: "document-export", Duration: 5.s) }
+   }  }
+   render Col() [panel, formWidth] {
+      Text("Export { Document.Title }") [sectionTitle]
+      TextMultiline("Share a Markdown copy of the saved document.") [body]
+
+      #export
+      FormButton("Share Markdown") {
+         on press RunExport
+      }
+
+      #closeExport
+      FormButton("Close") [buttonSecondary] {
+         on press -> { dismiss }
+}  }  }
+
+view ExportNotice(Message text) {
+   render TextMultiline(Message) [body]
+}
 
 view DocumentEditor(Document) {
    state Input = copy Document as DocumentInput

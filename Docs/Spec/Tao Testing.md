@@ -198,6 +198,22 @@ rerender or remove it. Nested selectors and expectations remain inside the selec
 
 ## Actions, assertions, and deterministic state
 
+A check can force one declared failure case for a foreign action before `run`:
+
+```tao
+test "export fails offline" {
+   action Export fails Offline
+   run ExportApp
+   press #export
+   expect text "Waiting for a connection"
+}
+```
+
+The named action must be foreign and must declare the named failure with `fails Case "sentence"`.
+The stub lasts for this check only, uses that declared sentence, and bypasses the TypeScript
+implementation on every invocation. A second check starts without it. A check may stub each
+foreign action once. Return-value stubs and return-valued actions are not implemented.
+
 Executable steps run in source order:
 
 - `press`, `enter`, and `submit` deliver the corresponding native event to one matched control;

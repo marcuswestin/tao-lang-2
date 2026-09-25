@@ -266,6 +266,7 @@ async function checkForPlan(
     name: check.name,
     source: check.source,
     steps: check.steps,
+    actionFailureStubs: check.actionFailureStubs,
     ...(check.device === undefined ? {} : { device: check.device }),
     ...(check.fixture === undefined ? {} : { fixture: check.fixture }),
   }
