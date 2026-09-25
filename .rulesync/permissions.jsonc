@@ -171,10 +171,10 @@
           "*.expo.dev",
           "*.expo.io",
           "exp.host",
-          // React Native's CocoaPods integration downloads the Hermes iOS artifact from Maven
-          // during the native-module compiler proof. The command still requires explicit host
-          // review or an opt-in unsandboxed session; this network rule does not grant a host escape.
+          // React Native's CocoaPods integration downloads iOS artifacts from Maven and its
+          // artifact CDN during native builds. These network rules do not grant a host escape.
           "repo1.maven.org",
+          "repo.reactnative.dev",
           "cache.nixos.org",
           "*.cachix.org",
           "*.anthropic.com",
