@@ -45,6 +45,8 @@ type FakeRepository = {
   existingDirectories?: string[]
   /** Worktree-relative directories a write is denied in, as the sandbox denies `agents/skills`. */
   unwritableDirectories?: string[]
+  /** Existing files a write is denied to inside a writable directory, as `.claude/settings.json` is. */
+  unwritableFiles?: string[]
   /** Paths `git merge-tree` reports, which it can answer even when the merge itself cannot run. */
   mergeTreeConflicts?: string[]
   featureCommits?: Array<{ body: string; subject: string }>
@@ -159,8 +161,10 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     directories.map(directory => FS.resolvePath(directory, '/repo'))
 
   const dependencies: FinalizeDependencies = {
+    canWriteFile: async path => !resolvedIn(repository.unwritableFiles ?? []).includes(path),
     exists: async path =>
-      states.has(path) || files.has(path) || resolvedIn(repository.existingDirectories ?? []).includes(path),
+      states.has(path) || files.has(path)
+      || resolvedIn([...(repository.existingDirectories ?? []), ...(repository.unwritableFiles ?? [])]).includes(path),
     findGreenTree: async (_root, wanted, acceptedLanes, options = {}) => {
       for (const lane of acceptedLanes) {
         const record = greenTreeRecords.get(lane)
@@ -309,6 +313,23 @@ Describe('finalize', () => {
     Expect(message.includes('./agent unsandboxed merge-main')).toBe(true)
     Expect(message.includes('then finalize again')).toBe(true)
     // The merge must never have been attempted; that is the whole point of probing first.
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
+  })
+
+  Test('refuses for a protected file inside a writable directory, which a directory probe misses', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['.claude/settings.json', '.claude/hooks.md', 'agents/skills/delegation/SKILL.md'],
+      existingDirectories: ['.claude', 'agents/skills/delegation'],
+      unwritableDirectories: ['agents/skills'],
+      unwritableFiles: ['.claude/settings.json', 'agents/skills/delegation/SKILL.md'],
+    })
+
+    const message = String(await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(e => e))
+
+    Expect(message.includes('would write 2 paths')).toBe(true)
+    Expect(message.includes('- .claude/settings.json')).toBe(true)
+    Expect(message.includes('- agents/skills/delegation\n')).toBe(true)
+    Expect(message.includes('.claude/hooks.md')).toBe(false)
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
   })
 
@@ -973,6 +994,7 @@ Describe('finalize', () => {
       await gitCommand(featureRoot, ['commit', '--quiet', '-m', 'Add the disposable finalize fixture'])
 
       const dependencies: FinalizeDependencies = {
+        canWriteFile: async () => true,
         exists: FS.exists,
         findGreenTree: async () => undefined,
         key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),

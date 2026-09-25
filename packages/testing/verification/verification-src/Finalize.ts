@@ -102,6 +102,8 @@ export type FinalizeCommandRunner = (command: string, spec: CLI.CommandSpec) => 
 
 /** FinalizeDependencies isolates process, filesystem, verification, and clock effects for testing. */
 export type FinalizeDependencies = {
+  /** Whether this process may write an existing file, found by opening it without changing it. */
+  canWriteFile: (path: string) => Promise<boolean>
   exists: (path: string) => Promise<boolean>
   findGreenTree: (
     repositoryRoot: string,
@@ -123,6 +125,15 @@ export type FinalizeDependencies = {
 }
 
 const defaultDependencies: FinalizeDependencies = {
+  canWriteFile: async path => {
+    try {
+      // Append mode writes nothing on open, so an existing file's bytes and times are untouched.
+      await (await FS.openAppend(path)).close()
+      return true
+    } catch {
+      return false
+    }
+  },
   exists: FS.exists,
   findGreenTree: GreenTree.find,
   key: GreenTree.key,
@@ -580,7 +591,7 @@ async function integrateMain(
     lines.push(`PLAN  Merge ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
     return { headSha: branchHead, integratedNow: false, mainSha }
   }
-  const blocked = await undeniableDirectories(dependencies, root, branchHead, mainSha)
+  const blocked = await undeniablePaths(dependencies, root, branchHead, mainSha)
   if (blocked.length > 0) {
     Errors.throwUserInput(deniedIntegrationReport(blocked, command))
   }
@@ -652,31 +663,42 @@ async function mergeTreeConflicts(
 const WRITE_PROBE_PREFIX = '.finalize-write-probe-'
 
 /**
- * undeniableDirectories returns the directories `main` would write that this process cannot, empty
- * when the merge can complete. A sandboxed shell write-protects part of the worktree — `agents/skills`
- * among them, which 77 of `main`'s last 100 commits touch — and `git merge` discovers that partway
- * through, leaving a tree with no `MERGE_HEAD`, no unmerged entries, and modifications nobody made
- * (DEVENV-111). Refusing before the merge starts is the difference between an instruction and a mess.
+ * undeniablePaths returns the directories and files `main` would write that this process cannot,
+ * empty when the merge can complete. A sandboxed shell write-protects part of the worktree —
+ * `agents/skills` among them, which 77 of `main`'s last 100 commits touch — and `git merge` discovers
+ * that partway through, leaving a tree with no `MERGE_HEAD`, no unmerged entries, and modifications
+ * nobody made (DEVENV-111). Refusing before the merge starts is the difference between an instruction
+ * and a mess.
  *
  * The test is an actual write rather than a list of protected prefixes, because the list belongs to
  * the harness rather than to this repository: it is not in `.rulesync/permissions.jsonc`, it is not
- * in the generated settings, and a copy kept here would rot silently the first time it changed.
+ * in the generated settings, and a copy kept here would rot silently the first time it changed. A
+ * directory probe alone misses a protected file inside a writable directory, which is how
+ * `.claude/settings.json` is protected, so every existing file main changes is opened for writing too.
  */
-async function undeniableDirectories(
+async function undeniablePaths(
   dependencies: FinalizeDependencies,
   root: string,
   branchHead: string,
   mainSha: string,
 ): Promise<string[]> {
   const incoming = await git(dependencies, root, ['diff', '--name-only', `${branchHead}...${mainSha}`])
+  const paths = incoming.stdout.trim().split('\n').filter(Boolean)
   const directories = new Set<string>()
-  for (const path of incoming.stdout.trim().split('\n').filter(Boolean)) {
+  for (const path of paths) {
     directories.add(await nearestExistingDirectory(dependencies, root, FS.dirname(path)))
   }
   const blocked: string[] = []
   for (const directory of [...directories].sort()) {
     if (!await canWriteInto(dependencies, FS.resolvePath(directory, root))) {
       blocked.push(directory === '' ? '.' : directory)
+    }
+  }
+  for (const path of [...paths].sort()) {
+    const file = FS.resolvePath(path, root)
+    const insideBlocked = blocked.some(directory => directory === '.' || path.startsWith(`${directory}/`))
+    if (!insideBlocked && await dependencies.exists(file) && !await dependencies.canWriteFile(file)) {
+      blocked.push(path)
     }
   }
   return blocked
@@ -711,7 +733,7 @@ async function canWriteInto(dependencies: FinalizeDependencies, directory: strin
 
 /** deniedIntegrationReport says what the merge would half-write, and how to do it where it works. */
 function deniedIntegrationReport(blocked: readonly string[], command: IntegratingCommand): string {
-  return `Integrating ${MAIN_BRANCH} would write ${blocked.length} director${blocked.length === 1 ? 'y' : 'ies'} `
+  return `Integrating ${MAIN_BRANCH} would write ${blocked.length} path${blocked.length === 1 ? '' : 's'} `
     + `this shell may not, so the merge would stop partway and leave a tree no Git command describes:\n`
     + `${blocked.map(path => `- ${path}`).join('\n')}\n`
     + `Nothing has been changed; ${UNSANDBOXED_MERGE}${command === 'finalize' ? ', then finalize again' : ''}.`
