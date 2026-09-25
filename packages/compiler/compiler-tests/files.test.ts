@@ -290,6 +290,8 @@ Describe('compiler: files and packages', () => {
         Expect(declarationText).toContain(
           'export type SidecarStoreConfig = Readonly<{ readonly "StorageKey": TR.Value<string> }>',
         )
+        Expect(declarationText).toContain('export type MemoryProvider = () => TR.DataProvider')
+        Expect(module.code).toContain('export type MemoryProvider = () => TR.DataProvider')
         Expect(declarationText).toContain(
           'export type SidecarSlotConfig = Readonly<{ '
             + 'readonly hostSlots?: TR.NavHostSlotConfiguration '

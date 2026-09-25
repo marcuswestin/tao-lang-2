@@ -3,6 +3,7 @@ import { AST, codeProjectRoot, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, Errors, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
+import { BridgeMetadata } from './bridge-metadata'
 import { withActionInstrumentation } from './codegen/app/action-control-flow'
 import {
   configurationAliasTargetTypeBindingName,
@@ -553,6 +554,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
             () =>
               withActionInstrumentation(debug, () =>
                 RuntimeGen.TaoFile(file.ast, {
+                  bridgeTypes: BridgeMetadata.typesFor(file.ast),
                   configurationTypes: planned.declarationsPath === undefined
                     ? undefined
                     : RuntimeGen.ConfigurationTypes(file.ast),
@@ -579,7 +581,11 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const declarationsPath = planned.declarationsPath
   const declarations = declarationsPath === undefined ? [] : [emitted(
     declarationsPath,
-    RuntimeGen.ConfigurationDeclarations(file.ast, configurationAliasImportLines(file, declarationsPath, outputPaths)),
+    RuntimeGen.ConfigurationDeclarations(
+      file.ast,
+      configurationAliasImportLines(file, declarationsPath, outputPaths),
+      BridgeMetadata.typesFor(file.ast),
+    ),
   )]
   const injections = planned.injections.map(injection =>
     emitted(injection.relativePath, RuntimeGen.InjectionBoundary(injection.node))

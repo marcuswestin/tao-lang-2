@@ -478,6 +478,18 @@ Tao side and passed as plain JavaScript values; the result is wrapped as a Tao v
 Tao owns the type. A bridged value therefore needs a declared one — a `returns` clause, or a
 `let Name is Type =` ascription — and that declaration is the contract the sidecar must satisfy. The
 compiler copies the named sidecar beside its generated module and imports the export from there.
+`tao check`, `tao compile`, and the development compile refresh a generated `<source>.tao.ts`
+module beside each Tao source with a TypeScript boundary or a configuration declaration. The module
+exports Tao-derived contract types and checks each sidecar's named export with `satisfies`.
+Configuration declarations also export their `<Declaration>Config` type there. It is ignored by Git;
+authors edit the Tao declaration and handwritten sidecar, and may import its generated types if
+useful. Compiled Tao modules and their
+configuration declaration companions export the same contract types for copied sidecars. `tao check`
+also runs TypeScript over the generated modules and their sidecars, reporting a missing export or a
+parameter or result mismatch as an error. The check includes the callable arity, so a function with
+too few or too many parameters cannot silently satisfy a call boundary. Tao fills defaulted foreign
+action and view parameters before invoking the sidecar, so its TypeScript signature receives every
+declared parameter. Action-valued foreign arguments retain an invokable runtime action value.
 
 An explicitly action-typed bare export is the effectful form of the same boundary:
 
@@ -504,6 +516,9 @@ The module exports the matching function name. `fails` clauses declare what a na
 statements would infer. `runs latest` is valid only on a foreign action and retains at most the newest
 not-yet-started argument set while one call is in flight; the detailed transaction and skipped-call
 contract is specified in [Tao Actions](Tao%20Actions.md).
+The generated bridge contract checks its plain JavaScript parameter types and `void` or promised
+`void` completion. Entity parameters are structural records of their declared fields.
+Configuration implementation factories are checked against the declared nav or datasource protocol.
 
 A view may publish the same typed boundary directly:
 

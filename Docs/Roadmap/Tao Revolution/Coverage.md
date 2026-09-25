@@ -100,7 +100,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Copy extraction, words, `tao words check` (§14)             | WordFlower · all copy + one locale                                            | Post-MVP | —                         |
 | Measurement phrases (§14)                                   | Skillet · metric/imperial amounts                                             | Post-MVP | —                         |
 | TypeScript boundary: from, fails (§15)                      | WordFlower · build stamp, document export; @tao/text; @tao/time               | MVP      | in Current[^3]            |
-| Bridge metadata module (§15)                                | WordFlower · type-checked TypeScript behind `from`                            | MVP      | —                         |
+| Bridge metadata module (§15)                                | WordFlower · type-checked TypeScript behind `from`                            | MVP      | in Current                |
 | Foreign views (`accepts content … from ./X.tsx`) (§15)      | **none — for the Developer**                                                  | TBD      | —                         |
 | Foreign `runs latest` scheduling (§8, §15)                  | **none — for the Developer**                                                  | TBD      | —                         |
 | Render failure containment and recovery (§15)               | **none — for the Developer** (no author surface; it is runtime policy)        | MVP      | —                         |

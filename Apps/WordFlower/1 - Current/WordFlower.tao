@@ -7,6 +7,11 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
 //
+// BRIDGE METADATA. The build stamp and Markdown export sidecars import their generated, source-
+// adjacent Tao contract types. Tao writes those ignored modules during compilation and checks the
+// handwritten implementations in `tao check`; authors may use the type-only imports for editor
+// feedback without maintaining a second contract.
+//
 // TEST WORLD CONTROLS. The document journeys use a fresh StarterWorkspace fixture on a phone.
 // A test-only WordFlower variant binds CloudKit so offline edits, failed writes, retry, and
 // reconnect use that provider's per-row recovery contract. The hosted InstantDB variant saves

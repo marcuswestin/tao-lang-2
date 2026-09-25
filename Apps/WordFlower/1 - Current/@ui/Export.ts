@@ -1,6 +1,5 @@
 import { Share } from 'react-native'
-
-type ExportableDocument = Readonly<{ Title: string; Body: string }>
+import type { ExportDocument as ExportDocumentContract } from './Documents.tao'
 
 class ExportFailure extends Error {
   constructor(readonly caseName: 'TooLarge' | 'Offline' | 'Cancelled', message: string) {
@@ -11,7 +10,7 @@ class ExportFailure extends Error {
 const MAX_MARKDOWN_LENGTH = 1_000_000
 
 /** Share the saved document as Markdown after checking the platform message size. */
-export async function ExportDocument(document: ExportableDocument): Promise<void> {
+export const ExportDocument: ExportDocumentContract = async document => {
   const markdown = `# ${document.Title}\n\n${document.Body}\n`
   if (markdown.length > MAX_MARKDOWN_LENGTH) {
     throw new ExportFailure('TooLarge', 'This document is too long to export.')
