@@ -794,8 +794,15 @@ async function canWriteInto(dependencies: FinalizeDependencies, directory: strin
   } catch {
     return false
   }
-  // A probe that cannot be removed is worse than one never written, so its failure is not swallowed.
-  await dependencies.removeFile(probe)
+  try {
+    await dependencies.removeFile(probe)
+  } catch (error) {
+    Errors.throwHostEnvironment(
+      `The write probe could not be removed: ${probe}. `
+        + 'Remove this empty directory with rmdir from a normal Terminal, then rerun the command. '
+        + `Cleanup failed: ${Errors.asError(error).message}`,
+    )
+  }
   return true
 }
 

@@ -53,6 +53,7 @@ const expected = [
   'remote exists',
   'processes list',
   'processes started',
+  'start-branch',
 ]
 
 Describe('agent host command permissions', () => {

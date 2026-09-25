@@ -47,6 +47,8 @@ type FakeRepository = {
   unwritableDirectories?: string[]
   /** Existing files a write is denied to inside a writable directory, as `.claude/settings.json` is. */
   unwritableFiles?: string[]
+  /** Simulate a managed shell that creates a probe directory but cannot remove it. */
+  probeRemovalError?: string
   /** Paths `git merge-tree` reports, which it can answer even when the merge itself cannot run. */
   mergeTreeConflicts?: string[]
   featureCommits?: Array<{ body: string; subject: string }>
@@ -206,6 +208,9 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       states.set(path, structuredClone(value))
     },
     removeFile: async path => {
+      if (repository.probeRemovalError !== undefined) {
+        Errors.throwHostEnvironment(`${repository.probeRemovalError}: rmdir '${path}'`)
+      }
       files.delete(path)
     },
     writeLine: line => lines.push(line),
@@ -332,6 +337,21 @@ Describe('finalize', () => {
     Expect(message.includes('- .claude/settings.json')).toBe(true)
     Expect(message.includes('- agents/skills/delegation\n')).toBe(true)
     Expect(message.includes('.claude/hooks.md')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
+  })
+
+  Test('reports an unremovable write probe with its leftover path and recovery', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['Docs/Roadmap/plan.md'],
+      existingDirectories: ['Docs/Roadmap'],
+      probeRemovalError: 'EFAULT',
+    })
+
+    const failure = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(error => error)
+    const report = Errors.formatForUser(failure)
+
+    Expect(report).toContain(fake.probePaths[0]!)
+    Expect(report).toContain('remove')
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
   })
 

@@ -118,7 +118,7 @@
     "pods install", "pods spec",
     "android devices", "android state", "android emulators", "android boot", "android ensure",
     "remote fetch", "remote refs", "remote heads", "remote exists",
-    "processes list", "processes started",
+    "processes list", "processes started", "start-branch",
   ],
   "claudecode": {
     "autoCompactWindow": 272000,

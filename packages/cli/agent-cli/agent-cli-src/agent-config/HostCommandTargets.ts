@@ -52,6 +52,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'remote exists': { command: 'git', fixedArgs: ['ls-remote', '--exit-code', 'origin'] },
   'processes list': { command: 'ps', fixedArgs: ['-axo', 'pid=,ppid=,lstart=,command='], argsPolicy: 'none' },
   'processes started': { command: 'ps', fixedArgs: ['-o', 'lstart=', '-p'], argsPolicy: 'pid' },
+  'start-branch': { command: './dev', fixedArgs: ['start-branch'] },
 }
 
 /** A named operation has a fixed implementation; suffix argv passes through without a shell. */
