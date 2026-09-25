@@ -51,6 +51,9 @@ in
     # GNU coreutils for `timeout`, which repository scripts and agents use to bound a run.
     pkgs.coreutils
     pkgs.dprint
+    # `./agent open-pr` and `companion-host-publish` drive GitHub through gh; pinning it here gives
+    # every checkout the same version rather than whatever each machine installed, if any.
+    pkgs.gh
     pkgs.git
     pkgs.just
     pkgs.ripgrep

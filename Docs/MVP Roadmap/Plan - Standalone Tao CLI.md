@@ -155,7 +155,7 @@ Metro, Jest, `tsc`, or the user's editor.
   `FS.readFile`. Bun embeds it automatically — verified by formatting an inject fence from the
   binary (F1).
 - The generated TextMate grammar,
-  `packages/ides/ide-extension/…/_gen_syntaxes/tao-lang.tmLanguage.json`, read by Shiki for `tao review`.
+  `packages/ides/ide-extension/…/_gen_syntaxes/tao.tmLanguage.json`, read by Shiki for `tao review`.
   It is embeddable as a text asset once `StudioHighlight` stops resolving it from the Git root.
 
 **Nothing to ship.** The starter plans (`cli-src/create/starter-plans.ts`) and `PROJECT_TSCONFIG`
@@ -465,9 +465,9 @@ first public release; Homebrew, npm, and other platforms are later possibilities
 - **Install script.** `curl -fsSL https://<host>/install.sh | sh` detects platform and
   architecture, downloads `tao-<version>-<target>`, verifies a published SHA-256, installs the shim
   into `~/.tao/bin`, and prints the `PATH` line. A PowerShell twin would be needed for Windows later.
-- **Homebrew tap.** `dev-tao/homebrew-tao` (fallback `tao-lang/homebrew-tao`) with a formula that
+- **Homebrew tap.** `devtao/homebrew-tao` (fallback `tao-lang/homebrew-tao`) with a formula that
   installs the prebuilt binary per platform. The Developer creates the tap repository.
-- **npm wrapper.** `tao` with `optionalDependencies` on `@dev-tao/cli-darwin-arm64` (fallback scope
+- **npm wrapper.** `tao` with `optionalDependencies` on `@devtao/cli-darwin-arm64` (fallback scope
   `@tao-lang`),
   `-darwin-x64`, `-linux-x64`, `-linux-arm64`, `-win32-x64`, each containing only its binary, plus a
   `bin/tao.js` that execs the resolved one. This is the esbuild/swc pattern and is the cheapest

@@ -297,6 +297,10 @@ report-test-stats limit="20":
 finalize check='false' fresh='false' redraft='false':
     ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }}
 
+# Merge current main into this feature branch and nothing else; agents use ./agent unsandboxed merge-main when main writes paths the sandbox protects
+merge-main:
+    ./dev merge-main
+
 # Switch this checkout to your own dev/* branch, creating it from main the first time
 [group('Mine')]
 my-branch name='':

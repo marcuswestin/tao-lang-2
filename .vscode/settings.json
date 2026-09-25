@@ -31,7 +31,7 @@
   "dprint.experimentalLsp": true,
   "dprint.path": ".devenv/profile/bin/dprint",
   "[tao]": {
-    "editor.defaultFormatter": "tao.tao-ide-extension",
+    "editor.defaultFormatter": "devtao.tao",
     "editor.tabSize": 3,
     "editor.insertSpaces": true
   },

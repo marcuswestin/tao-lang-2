@@ -5,6 +5,7 @@ import {
   type FinalizeDependencies,
   type FinalizeState,
   LandCommand,
+  MergeMainCommand,
   prepareForLanding,
 } from '../verification-src/Finalize'
 import {
@@ -44,6 +45,8 @@ type FakeRepository = {
   existingDirectories?: string[]
   /** Worktree-relative directories a write is denied in, as the sandbox denies `agents/skills`. */
   unwritableDirectories?: string[]
+  /** Existing files a write is denied to inside a writable directory, as `.claude/settings.json` is. */
+  unwritableFiles?: string[]
   /** Paths `git merge-tree` reports, which it can answer even when the merge itself cannot run. */
   mergeTreeConflicts?: string[]
   featureCommits?: Array<{ body: string; subject: string }>
@@ -158,8 +161,10 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     directories.map(directory => FS.resolvePath(directory, '/repo'))
 
   const dependencies: FinalizeDependencies = {
+    canWriteFile: async path => !resolvedIn(repository.unwritableFiles ?? []).includes(path),
     exists: async path =>
-      states.has(path) || files.has(path) || resolvedIn(repository.existingDirectories ?? []).includes(path),
+      states.has(path) || files.has(path)
+      || resolvedIn([...(repository.existingDirectories ?? []), ...(repository.unwritableFiles ?? [])]).includes(path),
     findGreenTree: async (_root, wanted, acceptedLanes, options = {}) => {
       for (const lane of acceptedLanes) {
         const record = greenTreeRecords.get(lane)
@@ -306,9 +311,27 @@ Describe('finalize', () => {
     const message = String(failure)
     Expect(message.includes('agents/skills/delegation')).toBe(true)
     Expect(message.includes('packages/dev/dev-src')).toBe(false)
-    Expect(message.includes('Nothing has been changed.')).toBe(true)
-    Expect(message.includes('as a top-level command')).toBe(true)
+    Expect(message.includes('Nothing has been changed')).toBe(true)
+    Expect(message.includes('./agent unsandboxed merge-main')).toBe(true)
+    Expect(message.includes('then finalize again')).toBe(true)
     // The merge must never have been attempted; that is the whole point of probing first.
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
+  })
+
+  Test('refuses for a protected file inside a writable directory, which a directory probe misses', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['.claude/settings.json', '.claude/hooks.md', 'agents/skills/delegation/SKILL.md'],
+      existingDirectories: ['.claude', 'agents/skills/delegation'],
+      unwritableDirectories: ['agents/skills'],
+      unwritableFiles: ['.claude/settings.json', 'agents/skills/delegation/SKILL.md'],
+    })
+
+    const message = String(await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(e => e))
+
+    Expect(message.includes('would write 2 paths')).toBe(true)
+    Expect(message.includes('- .claude/settings.json')).toBe(true)
+    Expect(message.includes('- agents/skills/delegation\n')).toBe(true)
+    Expect(message.includes('.claude/hooks.md')).toBe(false)
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
   })
 
@@ -973,6 +996,7 @@ Describe('finalize', () => {
       await gitCommand(featureRoot, ['commit', '--quiet', '-m', 'Add the disposable finalize fixture'])
 
       const dependencies: FinalizeDependencies = {
+        canWriteFile: async () => true,
         exists: FS.exists,
         findGreenTree: async () => undefined,
         isSymbolicLink: FS.isSymbolicLink,
@@ -1176,6 +1200,61 @@ Describe('landing preparation', () => {
     await Expect(prepareForLanding({ repositoryRoot: '/repo' }, dirty.dependencies))
       .rejects.toThrow('stray.ts')
     Expect(dirty.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+  })
+})
+
+Describe('merge-main', () => {
+  Test('merges main and stops there: no lane, no merge message, no state file', async () => {
+    const fake = fakeDependencies()
+    const outcome = await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(outcome.mergedNow).toBe(true)
+    Expect(fake.lines.some(line => line.includes('Merged main'))).toBe(true)
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'log')).toBe(false)
+    Expect(fake.states.size).toBe(0)
+  })
+
+  Test('reports a branch that already contains main without merging', async () => {
+    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
+    const outcome = await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(outcome.mergedNow).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'merge')).toBe(false)
+  })
+
+  Test('refuses where it cannot finish, and names itself unsandboxed as the way through', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['agents/skills/delegation/SKILL.md'],
+      existingDirectories: ['agents/skills/delegation'],
+      unwritableDirectories: ['agents/skills'],
+    })
+
+    const message = String(await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(e => e))
+
+    Expect(message.includes('./agent unsandboxed merge-main')).toBe(true)
+    Expect(message.includes('finalize')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
+  })
+
+  Test('leaves a conflict for the author to resolve and commit', async () => {
+    const fake = fakeDependencies({ conflictOnMerge: true })
+
+    const message = String(await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(e => e))
+
+    Expect(message.includes('conflicted.ts')).toBe(true)
+    Expect(message.includes('commit the merge')).toBe(true)
+    Expect(fake.calls.some(call => ['reset', 'checkout', 'commit'].includes(call.args[0]!))).toBe(false)
+  })
+
+  Test('refuses a detached HEAD or a dirty worktree in its own name', async () => {
+    const detached = fakeDependencies({ branch: '' })
+    await Expect(MergeMainCommand.run({ repositoryRoot: '/repo' }, detached.dependencies))
+      .rejects.toThrow('merge-main requires a feat/* branch')
+
+    const dirty = fakeDependencies({ status: ' M tracked.ts\n' })
+    await Expect(MergeMainCommand.run({ repositoryRoot: '/repo' }, dirty.dependencies))
+      .rejects.toThrow('merge-main refuses to guess')
   })
 })
 

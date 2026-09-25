@@ -104,6 +104,8 @@ export type FinalizeCommandRunner = (command: string, spec: CLI.CommandSpec) => 
 
 /** FinalizeDependencies isolates process, filesystem, verification, and clock effects for testing. */
 export type FinalizeDependencies = {
+  /** Whether this process may write an existing file, found by opening it without changing it. */
+  canWriteFile: (path: string) => Promise<boolean>
   exists: (path: string) => Promise<boolean>
   findGreenTree: (
     repositoryRoot: string,
@@ -127,6 +129,15 @@ export type FinalizeDependencies = {
 }
 
 const defaultDependencies: FinalizeDependencies = {
+  canWriteFile: async path => {
+    try {
+      // Append mode writes nothing on open, so an existing file's bytes and times are untouched.
+      await (await FS.openAppend(path)).close()
+      return true
+    } catch {
+      return false
+    }
+  },
   exists: FS.exists,
   findGreenTree: GreenTree.find,
   isSymbolicLink: FS.isSymbolicLink,
@@ -169,6 +180,13 @@ type MainIntegration = {
   integratedNow: boolean
   mainSha: string
 }
+
+/** The commands that integrate main, which word a failure's next step differently. */
+type IntegratingCommand = 'finalize' | 'merge-main'
+
+/** The one recovery for a merge the sandbox would half-write, named wherever that failure is reported. */
+const UNSANDBOXED_MERGE =
+  'run `./agent unsandboxed merge-main`, which makes this merge on the host, where those paths are writable'
 
 type VerificationOutcome = {
   at: string
@@ -221,10 +239,10 @@ export const FinalizeCommand = {
     const lines: string[] = []
     const remaining: string[] = []
 
-    const branch = await assertOnFeatureBranch(dependencies, root)
-    await assertCleanWorktree(dependencies, root)
+    const branch = await assertOnFeatureBranch(dependencies, root, 'finalize')
+    await assertCleanWorktree(dependencies, root, 'finalize')
 
-    const integration = await integrateMain(dependencies, root, check, lines)
+    const integration = await integrateMain(dependencies, root, check, lines, 'finalize')
     const verification = await verifyTree(dependencies, root, check, lines)
 
     const statePath = FS.resolvePath(`.artifacts/merge/${branch}.state.json`, root)
@@ -328,7 +346,7 @@ export const LandCommand = {
           + 'workflow when a person has explicitly chosen and confirmed that exception.',
       )
     }
-    const branch = await assertOnFeatureBranch(dependencies, root)
+    const branch = await assertOnFeatureBranch(dependencies, root, 'land')
     const messageFile = await assertCanonicalLandingMessageFile(
       dependencies,
       root,
@@ -358,6 +376,29 @@ export const LandCommand = {
       skipVerifyFull: options.skipVerifyFull === true,
     })
     return { lines: [...preparation.lines, ...merge.lines], mode: merge.mode === 'dry-run' ? 'dry-run' : 'executed' }
+  },
+} as const
+
+/**
+ * MergeMainCommand integrates current main into this feature branch and does nothing else: no lane,
+ * no merge message. Most of main's commits write paths a harness write-protects against shell
+ * commands (`agents/skills`, `.claude/settings.json`), so inside a sandbox this refuses before
+ * starting, exactly as `finalize` does. Run as `./agent unsandboxed merge-main`, the same integration
+ * completes on the host, which is the one sanctioned way for an agent to bring such a main in
+ * without landing.
+ */
+export const MergeMainCommand = {
+  async run(
+    options: Pick<FinalizeOptions, 'repositoryRoot'> = {},
+    dependencies: FinalizeDependencies = defaultDependencies,
+  ): Promise<{ lines: string[]; mergedNow: boolean }> {
+    const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+    const lines: string[] = []
+    await assertOnFeatureBranch(dependencies, root, 'merge-main')
+    await assertCleanWorktree(dependencies, root, 'merge-main')
+    const integration = await integrateMain(dependencies, root, false, lines, 'merge-main')
+    writeLines(dependencies, lines)
+    return { lines, mergedNow: integration.integratedNow }
   },
 } as const
 
@@ -431,8 +472,8 @@ export async function prepareForLanding(
   const lines: string[] = []
   const remaining: string[] = []
 
-  const branch = await assertOnFeatureBranch(dependencies, root)
-  await assertCleanWorktree(dependencies, root)
+  const branch = await assertOnFeatureBranch(dependencies, root, 'land')
+  await assertCleanWorktree(dependencies, root, 'land')
 
   const mainSha = await readMainSha(dependencies, root, lines)
   const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
@@ -564,7 +605,11 @@ function keptMessageDefect(source: string): string {
   }
 }
 
-async function assertOnFeatureBranch(dependencies: FinalizeDependencies, root: string): Promise<string> {
+async function assertOnFeatureBranch(
+  dependencies: FinalizeDependencies,
+  root: string,
+  command: string,
+): Promise<string> {
   const branchResult = await dependencies.run('git', {
     args: ['symbolic-ref', '--quiet', '--short', 'HEAD'],
     cwd: root,
@@ -575,16 +620,16 @@ async function assertOnFeatureBranch(dependencies: FinalizeDependencies, root: s
   }
   const branch = branchResult.exitCode === 0 ? branchResult.stdout.trim() : ''
   if (!branch.startsWith('feat/')) {
-    Errors.throwUserInput(`finalize requires a feat/* branch; this worktree is on '${branch || 'detached HEAD'}'.`)
+    Errors.throwUserInput(`${command} requires a feat/* branch; this worktree is on '${branch || 'detached HEAD'}'.`)
   }
   return branch
 }
 
-async function assertCleanWorktree(dependencies: FinalizeDependencies, root: string): Promise<void> {
+async function assertCleanWorktree(dependencies: FinalizeDependencies, root: string, command: string): Promise<void> {
   const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
   if (status !== '') {
     Errors.throwUserInput(
-      `The worktree is not clean; finalize refuses to guess what to do with it. Dirty paths:\n${status.trimEnd()}`,
+      `The worktree is not clean; ${command} refuses to guess what to do with it. Dirty paths:\n${status.trimEnd()}`,
     )
   }
 }
@@ -598,6 +643,7 @@ async function integrateMain(
   root: string,
   check: boolean,
   lines: string[],
+  command: IntegratingCommand,
 ): Promise<MainIntegration> {
   const mainSha = await readMainSha(dependencies, root, lines)
   const branchHead = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
@@ -613,15 +659,17 @@ async function integrateMain(
     lines.push(`PLAN  Merge ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
     return { headSha: branchHead, integratedNow: false, mainSha }
   }
-  const blocked = await undeniableDirectories(dependencies, root, branchHead, mainSha)
+  const blocked = await undeniablePaths(dependencies, root, branchHead, mainSha)
   if (blocked.length > 0) {
-    Errors.throwUserInput(deniedIntegrationReport(blocked))
+    Errors.throwUserInput(deniedIntegrationReport(blocked, command))
   }
 
   const wouldConflict = await mergeTreeConflicts(dependencies, root, branchHead, mainSha)
   const merge = await dependencies.run('git', { args: ['merge', '--no-edit', mainSha], cwd: root, stdio: 'pipe' })
   if (merge.exitCode !== 0 || merge.error !== undefined || merge.signal !== null) {
-    Errors.throwUserInput(failedIntegrationReport(merge, wouldConflict, await unmergedPaths(dependencies, root)))
+    Errors.throwUserInput(
+      failedIntegrationReport(merge, wouldConflict, await unmergedPaths(dependencies, root), command),
+    )
   }
   const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
   lines.push(`PASS  Merged ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
@@ -683,31 +731,42 @@ async function mergeTreeConflicts(
 const WRITE_PROBE_PREFIX = '.finalize-write-probe-'
 
 /**
- * undeniableDirectories returns the directories `main` would write that this process cannot, empty
- * when the merge can complete. A sandboxed shell write-protects part of the worktree — `agents/skills`
- * among them, which 77 of `main`'s last 100 commits touch — and `git merge` discovers that partway
- * through, leaving a tree with no `MERGE_HEAD`, no unmerged entries, and modifications nobody made
- * (DEVENV-111). Refusing before the merge starts is the difference between an instruction and a mess.
+ * undeniablePaths returns the directories and files `main` would write that this process cannot,
+ * empty when the merge can complete. A sandboxed shell write-protects part of the worktree —
+ * `agents/skills` among them, which 77 of `main`'s last 100 commits touch — and `git merge` discovers
+ * that partway through, leaving a tree with no `MERGE_HEAD`, no unmerged entries, and modifications
+ * nobody made (DEVENV-111). Refusing before the merge starts is the difference between an instruction
+ * and a mess.
  *
  * The test is an actual write rather than a list of protected prefixes, because the list belongs to
  * the harness rather than to this repository: it is not in `.rulesync/permissions.jsonc`, it is not
- * in the generated settings, and a copy kept here would rot silently the first time it changed.
+ * in the generated settings, and a copy kept here would rot silently the first time it changed. A
+ * directory probe alone misses a protected file inside a writable directory, which is how
+ * `.claude/settings.json` is protected, so every existing file main changes is opened for writing too.
  */
-async function undeniableDirectories(
+async function undeniablePaths(
   dependencies: FinalizeDependencies,
   root: string,
   branchHead: string,
   mainSha: string,
 ): Promise<string[]> {
   const incoming = await git(dependencies, root, ['diff', '--name-only', `${branchHead}...${mainSha}`])
+  const paths = incoming.stdout.trim().split('\n').filter(Boolean)
   const directories = new Set<string>()
-  for (const path of incoming.stdout.trim().split('\n').filter(Boolean)) {
+  for (const path of paths) {
     directories.add(await nearestExistingDirectory(dependencies, root, FS.dirname(path)))
   }
   const blocked: string[] = []
   for (const directory of [...directories].sort()) {
     if (!await canWriteInto(dependencies, FS.resolvePath(directory, root))) {
       blocked.push(directory === '' ? '.' : directory)
+    }
+  }
+  for (const path of [...paths].sort()) {
+    const file = FS.resolvePath(path, root)
+    const insideBlocked = blocked.some(directory => directory === '.' || path.startsWith(`${directory}/`))
+    if (!insideBlocked && await dependencies.exists(file) && !await dependencies.canWriteFile(file)) {
+      blocked.push(path)
     }
   }
   return blocked
@@ -741,12 +800,11 @@ async function canWriteInto(dependencies: FinalizeDependencies, directory: strin
 }
 
 /** deniedIntegrationReport says what the merge would half-write, and how to do it where it works. */
-function deniedIntegrationReport(blocked: readonly string[]): string {
-  return `Integrating ${MAIN_BRANCH} would write ${blocked.length} director${blocked.length === 1 ? 'y' : 'ies'} `
+function deniedIntegrationReport(blocked: readonly string[], command: IntegratingCommand): string {
+  return `Integrating ${MAIN_BRANCH} would write ${blocked.length} path${blocked.length === 1 ? '' : 's'} `
     + `this shell may not, so the merge would stop partway and leave a tree no Git command describes:\n`
     + `${blocked.map(path => `- ${path}`).join('\n')}\n`
-    + `Nothing has been changed. Run \`git merge ${REMOTE}/${MAIN_BRANCH}\` yourself as a top-level `
-    + 'command — the sandbox exclusion reaches it there but not inside finalize — and finalize again.'
+    + `Nothing has been changed; ${UNSANDBOXED_MERGE}${command === 'finalize' ? ', then finalize again' : ''}.`
 }
 
 /** unmergedPaths reads the conflicts a merge actually recorded, which a denied merge never wrote. */
@@ -770,11 +828,12 @@ function failedIntegrationReport(
   merge: { stderr?: string },
   wouldConflict: readonly string[],
   unmerged: readonly string[],
+  command: IntegratingCommand,
 ): string {
   const list = (paths: readonly string[]): string => paths.map(path => `- ${path}`).join('\n')
   if (unmerged.length > 0) {
-    return `Integrating ${MAIN_BRANCH} conflicted; resolve it by hand and finalize again. `
-      + `Conflicting paths:\n${list(unmerged)}`
+    return `Integrating ${MAIN_BRANCH} conflicted; resolve it by hand and `
+      + `${command === 'finalize' ? 'finalize again' : 'commit the merge'}. Conflicting paths:\n${list(unmerged)}`
   }
   const reason = (merge.stderr ?? '').trim()
   return `Integrating ${MAIN_BRANCH} did not complete, and it is not a conflict: the merge recorded no `
@@ -783,9 +842,8 @@ function failedIntegrationReport(
     + (wouldConflict.length === 0
       ? 'Nothing would have conflicted.\n'
       : `These paths would conflict:\n${list(wouldConflict)}\n`)
-    + `Run \`git merge ${MAIN_BRANCH}\` yourself as a top-level command and resolve it there. A `
-    + 'sandboxed shell denies the writes this merge needs under the paths the policy protects, and a '
-    + 'grandchild `git` inherits a sandbox that its top-level command is excluded from (DEVENV-111).'
+    + 'A sandboxed shell denies the writes this merge needs under the paths the policy protects '
+    + `(DEVENV-111). Once the worktree is back to its last commit, ${UNSANDBOXED_MERGE}.`
 }
 
 async function localMainSha(dependencies: FinalizeDependencies, root: string): Promise<string> {
