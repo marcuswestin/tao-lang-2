@@ -3,6 +3,8 @@ import { HCI, Switch } from '@shared'
 type DevLoopControlKey = 'a' | 'c' | 'd' | 'e' | 'f' | 'i' | 'p' | 'q' | 'r' | 's' | 't' | 'v' | 'w' | 'x'
 
 export type DevLoopControl = {
+  /** checkoutOnly marks a control that works only when the loop runs from a Tao source checkout. */
+  checkoutOnly?: true
   key: DevLoopControlKey
   label: string
 }
@@ -43,12 +45,23 @@ export const DEV_LOOP_CONTROLS: DevLoopControl[] = [
   { key: 'i', label: 'open iOS simulator' },
   { key: 'a', label: 'open Android' },
   { key: 's', label: 'switch app' },
-  { key: 'c', label: 'clean Tao checkout, install deps, and reload (source checkout)' },
-  { key: 'f', label: 'fix Tao checkout (source checkout)' },
-  { key: 't', label: 'test Tao checkout (source checkout)' },
-  { key: 'v', label: 'verify Tao checkout (source checkout)' },
-  { key: 'e', label: 'install IDE extension (source checkout)' },
+  { key: 'c', label: 'clean Tao checkout, install deps, and reload (source checkout)', checkoutOnly: true },
+  { key: 'f', label: 'fix Tao checkout (source checkout)', checkoutOnly: true },
+  { key: 't', label: 'test Tao checkout (source checkout)', checkoutOnly: true },
+  { key: 'v', label: 'verify Tao checkout (source checkout)', checkoutOnly: true },
+  { key: 'e', label: 'install IDE extension (source checkout)', checkoutOnly: true },
 ]
+
+let checkoutControlsShown = true
+
+/**
+ * visibleDevLoopControls is the key list a reporter shows. The checkout's own controls appear only
+ * while the loop runs from a Tao source checkout, because anywhere else, an installed Tao included,
+ * pressing one only says it needs a checkout.
+ */
+export function visibleDevLoopControls(): DevLoopControl[] {
+  return DEV_LOOP_CONTROLS.filter(control => checkoutControlsShown || control.checkoutOnly !== true)
+}
 
 const errorLinePattern = /\berrors?\b|\bfailed\b|\bfailure\b|\bfatal\b|\bexception\b|^\s*[✖✘×]/i
 // Case-sensitive on purpose: `EADDRINUSE` is an error and `Experimental` is not, and the two differ
@@ -103,7 +116,7 @@ export function lineDevLoopReporter(): DevLoopReporter {
       }
     },
     printDevLoopControls: () => {
-      HCI.writeLine(`\n${DEV_LOOP_CONTROLS.map(formatDevLoopControl).join('\n')}`)
+      HCI.writeLine(`\n${visibleDevLoopControls().map(formatDevLoopControl).join('\n')}`)
     },
     recordFailure: (streamName, message) => fallbackDevLoopLog(streamName, message, 'error'),
     start: () => undefined,
@@ -140,6 +153,10 @@ export const DevLoopOutput = {
     activeReporter.logDevLoop(streamName, message, kind),
   printDevLoopControls: () => activeReporter.printDevLoopControls(),
   recordFailure: (streamName: string, message: string) => activeReporter.recordFailure(streamName, message),
+  /** showCheckoutControls says whether this loop runs from a Tao source checkout, for the key list. */
+  showCheckoutControls: (shown: boolean) => {
+    checkoutControlsShown = shown
+  },
   start: () => activeReporter.start(),
   writeDevLoopOutput: (streamName: string, outputStream: 'stderr' | 'stdout', chunk: string | Buffer) =>
     activeReporter.writeDevLoopOutput(streamName, outputStream, chunk),

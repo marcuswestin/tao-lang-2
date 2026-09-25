@@ -6,6 +6,7 @@ import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 export { DesktopHost } from './desktop-host'
 
 export { HostDependencies } from './host-dependencies'
+export { ManagedNode, type NodeManifest } from './managed-node'
 export {
   type ExpoUpdateArtifact,
   type ExpoUpdateArtifacts,

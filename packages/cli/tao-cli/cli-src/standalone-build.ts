@@ -38,8 +38,8 @@ const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
  * standalone plan removes its line when it lands, so a release cannot overstate the binary.
  */
 const KNOWN_GAPS = [
-  '`tao dev` does not run from the standalone binary yet; use a checkout for the dev loop.',
-  '`tao test` does not run from the standalone binary yet; `tao create` needs `--skip-tests`.',
+  '`tao dev` serves the web target from the standalone binary; the iOS Simulator and Android do not open from it yet.',
+  '`tao review` is not in the standalone binary.',
   'The binary is not signed or notarized yet.',
 ] as const
 
@@ -49,8 +49,9 @@ const COPIED_TREES = [
   // their declarations the project identity every compiled app's navigation is keyed on.
   { source: 'packages/apps/stdlib', within: ['@tao', 'Project.tao'], target: TaoResources.STDLIB_DIRECTORY },
   { source: 'packages/apps/expo-host', within: ['.'], target: TaoResources.HOST_DIRECTORY },
-  // The stdlib's data-provider sidecars import `@shared/core`, which Metro resolves by path.
-  { source: 'packages/shared/shared-src/core', within: ['.'], target: TaoResources.SHARED_CORE_DIRECTORY },
+  // The stdlib's data-provider sidecars import `@shared/core`, which Metro resolves by path, and the
+  // journey harness `tao test` runs under Jest imports the rest of `@shared`.
+  { source: 'packages/shared/shared-src', within: ['.'], target: TaoResources.SHARED_SOURCE_DIRECTORY },
 ] as const
 
 /** HOST_MANIFEST is the host's own manifest, which names workspace packages an install cannot reach. */
@@ -58,6 +59,15 @@ const HOST_MANIFEST = 'packages/apps/expo-host/package.json'
 
 /** HOST_DEPENDENCY_ROOTS are where the repository's install puts the host's resolved dependencies. */
 const HOST_DEPENDENCY_ROOTS = ['packages/apps/expo-host/node_modules', 'node_modules'] as const
+
+/**
+ * DEV_SERVER_TOOLING is what `expo start` refuses to run without once a project has TypeScript
+ * files. Inside the repository it resolves from the root install; an installed host carries it.
+ */
+const DEV_SERVER_TOOLING = ['typescript', '@types/react'] as const
+
+/** NODE_DOWNLOADS is where Node's official release tarballs and their checksum lists are published. */
+const NODE_DOWNLOADS = 'https://nodejs.org/dist'
 
 /** BASE_TSCONFIG is the repository-wide compiler configuration the host's tsconfig extends. */
 const BASE_TSCONFIG = 'packages/tsconfig.base.json'
@@ -93,7 +103,7 @@ async function buildRelease(version: string, releasesOption: string | undefined)
   const target = hostTarget()
   const directory = FS.resolvePath(`${RELEASE_ROOT}/v${version}`, repoRoot)
   const binary = FS.resolvePath(`${BUILD_ROOT}/standalone/tao-${version}`, repoRoot)
-  await buildBinary(binary, version)
+  await buildBinary(binary, { releases, version })
 
   await FS.remove(directory)
   const asset = `tao-${target}.gz`
@@ -125,8 +135,11 @@ async function buildRelease(version: string, releasesOption: string | undefined)
   )
 }
 
-/** buildBinary stages and packs the resource payload, then compiles the binary around it. */
-async function buildBinary(outfile: string, releaseVersion?: string): Promise<void> {
+/**
+ * buildBinary stages and packs the resource payload, then compiles the binary around it. A release
+ * build also stamps in its version and where its releases are published.
+ */
+async function buildBinary(outfile: string, release?: { releases: string; version: string }): Promise<void> {
   assertBunCanCompile()
   const repoRoot = Repo.getRoot()
   const staging = FS.resolvePath(`${BUILD_ROOT}/standalone/${TaoResources.INSTALLED_DIRECTORY}`, repoRoot)
@@ -140,15 +153,20 @@ async function buildBinary(outfile: string, releaseVersion?: string): Promise<vo
   }
   await TaoAppModules.packageRuntime(staging, FS.resolvePath('packages/apps/runtime', repoRoot))
   await makeHostInstallable(repoRoot, FS.resolvePath(TaoResources.HOST_DIRECTORY, staging))
+  await recordManagedNode(repoRoot, staging)
   const fileCount = await packTree(staging, archive)
   HCI.logProcessInfo('standalone', `Packed ${fileCount} resource files into ${FS.relativePath(repoRoot, archive)}.`)
 
-  // `tao-version.ts` declares this global and nothing else defines it.
-  const stamp = releaseVersion === undefined
-    ? []
-    : ['--define', `TAO_RELEASE_VERSION=${JSON.stringify(releaseVersion)}`]
+  // `tao-version.ts` and `tao-cli.ts` declare these globals and nothing else defines them.
+  const stamp = release === undefined ? [] : [
+    '--define',
+    `TAO_RELEASE_VERSION=${JSON.stringify(release.version)}`,
+    '--define',
+    `TAO_RELEASES_URL=${JSON.stringify(release.releases)}`,
+  ]
+  const defines = ['--define', 'TAO_STANDALONE=true', ...stamp]
   await CLI.mustRun(Platform.runtimeProcess.execPath, {
-    args: ['build', '--compile', ...stamp, '--outfile', FS.resolvePath(outfile, repoRoot), ENTRY_POINT, archive],
+    args: ['build', '--compile', ...defines, '--outfile', FS.resolvePath(outfile, repoRoot), ENTRY_POINT, archive],
     cwd: repoRoot,
     stdio: 'inherit',
   })
@@ -172,6 +190,9 @@ async function makeHostInstallable(repoRoot: string, stagedHost: string): Promis
       dependencies[name] = await installedVersion(repoRoot, name)
     }
   }
+  for (const name of DEV_SERVER_TOOLING) {
+    dependencies[name] = await installedVersion(repoRoot, name)
+  }
   await FS.writeJson(FS.resolvePath('package.json', stagedHost), {
     name: manifest.name,
     private: true,
@@ -194,6 +215,34 @@ async function makeHostInstallable(repoRoot: string, stagedHost: string): Promis
   await CLI.mustRun(Platform.runtimeProcess.execPath, {
     args: ['install', '--lockfile-only', '--cwd', stagedHost],
     cwd: repoRoot,
+  })
+}
+
+/**
+ * recordManagedNode names the Node an installed Tao downloads for `tao test`: the version the
+ * repository's own devenv profile runs its tests under, and that tarball's SHA-256 as nodejs.org
+ * publishes it. Recording the hash here rather than trusting the list at install time means a
+ * download is checked against what the release was built with.
+ */
+async function recordManagedNode(repoRoot: string, staging: string): Promise<void> {
+  const devenvNode = FS.resolvePath('.devenv/profile/bin/node', repoRoot)
+  const node = await FS.isFile(devenvNode) ? devenvNode : 'node'
+  const version = (await CLI.mustRun(node, { args: ['--version'] })).stdout.trim().replace(/^v/, '')
+  const file = `node-v${version}-${hostTarget()}.tar.gz`
+  const release = `${NODE_DOWNLOADS}/v${version}`
+  const response = await fetch(`${release}/SHASUMS256.txt`)
+  if (!response.ok) {
+    Errors.throwHostEnvironment(`Could not read ${release}/SHASUMS256.txt (HTTP ${response.status}).`)
+  }
+  const line = (await response.text()).split('\n').find(entry => entry.endsWith(`  ${file}`))
+  const sha256 = line?.split(/\s+/)[0]
+  if (sha256 === undefined || !/^[0-9a-f]{64}$/.test(sha256)) {
+    return Errors.throwHostEnvironment(`${release}/SHASUMS256.txt lists no SHA-256 for ${file}.`)
+  }
+  await FS.writeJson(FS.resolvePath(TaoResources.MANAGED_NODE_MANIFEST, staging), {
+    sha256,
+    url: `${release}/${file}`,
+    version,
   })
 }
 

@@ -126,8 +126,10 @@ gunzip -c "$staging/$asset" > "$staging/tao"
 rm -f "$staging/$asset" "$staging/$asset.sha256"
 chmod 755 "$staging/tao"
 
-# The binary confirms the selected version and unpacks the resources it carries beside it.
-version="$("$staging/tao" --version)" || fail "the downloaded binary did not run."
+# The binary confirms the selected version and unpacks the resources it carries beside it. It is asked
+# from `/` with no version named, so a project pin in the current directory cannot hand the check to
+# another installed release.
+version="$(cd / && unset TAO_VERSION && "$staging/tao" --version)" || fail "the downloaded binary did not run."
 if [ "$version" != "$requested" ]; then
   fail "asked for $requested, but the download is $version."
 fi

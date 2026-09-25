@@ -5,6 +5,12 @@
  */
 declare const TAO_RELEASE_VERSION: string | undefined
 
+/**
+ * TAO_RELEASES_URL is the GitHub Releases page a release build was published to, defined the same
+ * way, so the version shim and `tao check-for-updates` know where other versions live.
+ */
+declare const TAO_RELEASES_URL: string | undefined
+
 /** DEVELOPMENT is what Tao run from source reports, since no release number describes it. */
 const DEVELOPMENT = 'development'
 
@@ -15,9 +21,15 @@ const DEVELOPMENT = 'development'
 export const TaoVersion = {
   DEVELOPMENT,
   current,
+  releases,
 } as const
 
 /** current returns the stamped release version, or `development` when Tao runs from source. */
 function current(): string {
   return typeof TAO_RELEASE_VERSION === 'string' ? TAO_RELEASE_VERSION : DEVELOPMENT
+}
+
+/** releases returns where this release's versions are published, or undefined for a development build. */
+function releases(): string | undefined {
+  return typeof TAO_RELEASES_URL === 'string' ? TAO_RELEASES_URL : undefined
 }
