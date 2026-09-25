@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, HCI, Json } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
+import { CompanionIdentity } from '../prebuilt-host/CompanionIdentity'
 import { Android, type AndroidSession } from './android'
 import { ExpoConfig, expoSdkMajor, type ExpoSessionConfig } from './expo-config'
 import { detectLanIPv4 } from './lan-host'
@@ -101,7 +102,10 @@ export function physicalIosUnsupportedMessage(device: IosPhysicalDevice): string
   return `Cannot open this Tao app on ${device.name}: Expo Go on iPhone now requires an Expo account signed in both on the phone and in the terminal running Metro, and Tao runs Metro under its own Expo home, so that sign-in never reaches it. Run this app on ${device.name} through the Tao Companion development build instead: \`${COMPANION_INSTALL_COMMAND} device="${device.name}"\` once from a Tao checkout with Xcode, then open the app from Tao Studio's Device popover.`
 }
 
-/** openPhysicalDevice opens compatible Android phones and truthfully rejects generic physical iOS. */
+/**
+ * openPhysicalDevice opens the app on a connected Android phone, in a compatible prebuilt Companion
+ * or else Expo Go, and truthfully rejects a physical iPhone, which Expo Go no longer serves.
+ */
 export async function openPhysicalDevice(
   config: ExpoSessionConfig = ExpoConfig,
   metro: ExpoMetroSession = ExpoMetro,
@@ -114,7 +118,7 @@ export async function openPhysicalDevice(
   if (iosDevices.length === 0 && androidSerials.length === 0) {
     DevLoopOutput.logDevLoop(
       'dev',
-      `No connected physical device. Connect an Android phone — this loop sideloads the SDK ${taoSdkMajor} Expo Go onto it — or use an iOS Simulator. A physical iPhone or iPad runs a Tao app through the Tao Companion development build (\`${COMPANION_INSTALL_COMMAND}\`), not through Expo Go.`,
+      `No connected physical device. Connect an Android phone — this loop installs a compatible prebuilt Tao Companion onto it, or else the SDK ${taoSdkMajor} Expo Go — or use an iOS Simulator. A physical iPhone or iPad runs a Tao app through the Tao Companion development build (\`${COMPANION_INSTALL_COMMAND}\`), not through Expo Go.`,
       'warn',
     )
     return false
@@ -142,8 +146,7 @@ export async function openPhysicalDevice(
   }
 
   const host = await (dependencies.detectLanHost ?? detectLanIPv4)()
-  const lanUrl = expoGoUrl(host, config.EXPO_PORT)
-  return await openAndroidExpoGo(config, android, serial, lanUrl)
+  return await openAndroidPhone(config, android, serial, host)
 }
 
 /**
@@ -229,22 +232,32 @@ async function listAndroidPhysicalDevices(android: AndroidSession): Promise<stri
   }
 }
 
-async function openAndroidExpoGo(
+/**
+ * An Android phone opens the app in the runtime prepared for it, as an emulator does: a compatible
+ * prebuilt Companion, or else Expo Go. Over USB, `adb reverse` gives the phone Metro on its own
+ * loopback; when that fails, the phone has to reach Metro at the Mac's LAN address instead.
+ */
+async function openAndroidPhone(
   config: ExpoSessionConfig,
   android: AndroidSession,
   serial: string,
-  lanUrl: string,
+  lanHost: string,
 ): Promise<boolean> {
+  const lanUrl = expoGoUrl(lanHost, config.EXPO_PORT)
   try {
-    await android.ensureExpoGoOnSerial(serial)
+    await android.prepareRuntimeOnSerial(serial)
     const reversed = await android.reverseMetroPort(serial)
-    const url = reversed ? config.EXPO_GO_URL : lanUrl
-    await android.openExpoGoOnSerial(serial, url)
+    const runtime = await android.openRuntimeOnSerial(
+      serial,
+      reversed ? config.EXPO_GO_URL : lanUrl,
+      reversed ? '127.0.0.1' : lanHost,
+    )
+    DevLoopOutput.logDevLoop('dev', `opened ${serial}${runtime === 'companion' ? ` (${CompanionIdentity.name})` : ''}`)
     return true
   } catch (error) {
     DevLoopOutput.logDevLoop(
       'dev',
-      `Could not open Expo Go on ${serial}: ${Errors.formatForUser(error)}. Try ${lanUrl} in Expo Go.`,
+      `Could not open this app on ${serial}: ${Errors.formatForUser(error)}. Try ${lanUrl} in Expo Go.`,
       'warn',
     )
     return false

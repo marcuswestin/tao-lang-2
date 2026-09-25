@@ -135,8 +135,11 @@ export function delegationIssues(sources: DelegationSources): string[] {
     if (env['CLAUDE_CODE_SUBAGENT_MODEL'] !== claudeTiers.get('standard')) {
       issues.push('.rulesync/permissions.jsonc must set CLAUDE_CODE_SUBAGENT_MODEL to the Claude standard tier.')
     }
-    if (env['ANTHROPIC_DEFAULT_OPUS_MODEL'] !== cursorTiers.get('deep')) {
-      issues.push('.rulesync/permissions.jsonc must map opus to the Cursor deep-tier model.')
+    if (env['ANTHROPIC_DEFAULT_OPUS_MODEL'] !== undefined) {
+      issues.push(
+        '.rulesync/permissions.jsonc must not pin the opus alias with ANTHROPIC_DEFAULT_OPUS_MODEL; '
+          + 'unpinned, it follows each install to the newest Opus.',
+      )
     }
     if (env['CLAUDE_CODE_SUBAGENT_MODEL_FORCE'] !== undefined) {
       issues.push('.rulesync/permissions.jsonc must not force the Claude subagent default over explicit models.')

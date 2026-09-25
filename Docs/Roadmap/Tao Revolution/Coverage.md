@@ -21,7 +21,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Convertible unit families, dimensional arithmetic (§2)      | Hearth · a search radius in km; Skillet · step timers and total time          | Post-MVP | —                         |
 | Entities, relations, yes/no poles (§2)                      | WordFlower · workspaces, documents, paragraphs                                | MVP      | partially in Current      |
 | `relation` trait for a differently-named relation (§2)      | Skillet · `Person (relation Accounts)`; Wayfare · `Seats`                     | Post-MVP | —                         |
-| `required` completeness, `Incomplete`, `Problems` (§2)      | WordFlower · workspace and document forms                                     | MVP      | partially in Current[^16] |
+| `required` completeness, `Incomplete`, `Problems` (§2)      | WordFlower · workspace and document forms                                     | MVP      | in Current[^16]           |
 | `validate` and `refuse when` (§2)                           | WordFlower · document and workspace rules                                     | Post-MVP | —                         |
 | Cross-row validate, lowered per write path (§2)             | Skillet · a kitchen needs an owner; Wayfare · a trip needs an owner           | Post-MVP | —                         |
 | `together` as one fact (§2)                                 | Skillet · an amount never syncs without its unit                              | Post-MVP | —                         |
@@ -40,7 +40,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Guard default, effect outcomes (§5)                         | WordFlower · document availability                                            | MVP      | partially in Current      |
 | Outcome vocabulary incl. `queued` (§5)                      | Wayfare · saving a stop with no network                                       | Post-MVP | —                         |
 | Queries: filters, ordering, limits (§6)                     | WordFlower · drafts, finished documents, paragraphs                           | MVP      | in Current                |
-| Entity-declared search consumed by a query (§6)             | WordFlower · find in a workspace; Skillet · find anything                     | MVP      | —                         |
+| Entity-declared search consumed by a query (§6)             | WordFlower · find in a workspace; Skillet · find anything                     | MVP      | in Current                |
 | Grouped queries retaining their source rows (§6)            | Skillet · a folded shopping line one tick buys; Hearth · the same fold        | Post-MVP | —                         |
 | Presence (§6)                                               | Skillet · two cooks on one recipe; Wayfare · two planners on one stop         | Post-MVP | —                         |
 | Editing: write-through + drafts (§7)                        | WordFlower · title/body editing                                               | MVP      | partially in Current      |
@@ -226,7 +226,7 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     with `CacheFor` and journeys bind a deterministic stub adapter through an ordinary app variant.
 
 [^16]: `required` and the `Incomplete` and `Problems` it derives on rows and projections are in the
-    language, with `create … with`, and the Write Rules test app proves them. WordFlower does not
-    use them yet; its MVP rules are `required` alone on `Workspace.Name` and `Document.Title`, shown
-    through the stdlib `Problems(Input.Problems)` view, since `validate` and `refuse when` were
-    deferred to Post-MVP on 2026-09-25.
+    language, with `create … with`, and the Write Rules test app proves them. WordFlower's workspace
+    form and document editor use them through the stdlib `Problems(Input.Problems)` view; its MVP
+    rules are `required` alone on `Workspace.Name` and `Document.Title`, since `validate` and
+    `refuse when` were deferred to Post-MVP on 2026-09-25.

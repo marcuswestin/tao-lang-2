@@ -2,7 +2,7 @@ use InstantDB from @tao/data/providers/instantdb
 use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav from @tao/nav
 use CountWords, Join from @tao/text
 use Interval from @tao/time
-use Checkbox, Col, FormButton, Image, Panes, Placeholder, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput from @tao/ui
+use Checkbox, Col, FormButton, Image, Panes, Placeholder, Problems, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput from @tao/ui
 
 // WordFlower/MVP is the malleable full target for the v1 release: everything Tao must cover to call
 // itself shipped, written with the syntax decisions settled so far (see `../2 - Next`). It is
@@ -220,7 +220,7 @@ let StarterPrompt = WritingPrompt {
 type ConfirmResult is one of Confirmed
 
 data Workspaces / Workspace {
-   Name text (title)
+   Name text (required "Name this workspace", title)
    CreatedAt time (default now)
    Pinned yes / no // demonstrative declaration; the product does not use it yet
    Documents (relation Documents, owned)
@@ -230,8 +230,8 @@ data Workspaces / Workspace {
 }
 
 data Documents / Document {
-   Title text (title)
-   Body text (default "")
+   Title text (required "Name this document", search, title)
+   Body text (default "", search)
    Final yes / Draft no
    Public yes / Private no (default Public) // demonstrative declaration; the product does not use it yet
    CreatedAt time (default now)
@@ -360,19 +360,19 @@ view TagSummary(Tags PromptTags) {
 // A declaration that fills host-facing chrome is a `scene`, and a scene is presented rather than
 // composed inline. `Title`, `Toolbar`, and `Header` live on `scene` alone, so a view that is only
 // ever composed cannot declare chrome nothing reads.
+type WorkspaceInput is Workspace { Name }
+
 scene WorkspaceList() {
    Title "WordFlower"
-   state WorkspaceName = ""
+   state Input = WorkspaceInput { Name: "" }
    query Workspaces { }
    action AddWorkspace() {
-      if WorkspaceName is empty {
+      if Input.Incomplete {
          present WorkspaceNameNotice() as overlay
       }
-      check WorkspaceName is not empty
-      create Workspace {
-         Name: WorkspaceName
-      }
-      set WorkspaceName = ""
+      check not Input.Incomplete
+      create Workspace with Input
+      set Input = WorkspaceInput { Name: "" }
    }
    render ScrollView() [screen] {
       Col() [width max 720, centered, gap 10] {
@@ -386,11 +386,12 @@ scene WorkspaceList() {
             }
          }
          #workspaceName
-         TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Novel") {
+         TextInput(Value: Input.Name, Label: "Workspace name", Placeholder: "Novel") {
             on submit AddWorkspace
          }
+         Problems(Input.Problems) [validation]
          #addWorkspace
-         FormButton("Add workspace", Icon: "plus", Disabled: WorkspaceName is empty) {
+         FormButton("Add workspace", Icon: "plus", Disabled: Input.Incomplete) {
             on press AddWorkspace
          }
          #activateWorkspaceTab
@@ -449,12 +450,15 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
    Title Workspace.Name
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
+   state Find = ""
    let SectionLabel = "Drafts"
    query Drafts from Workspace.Documents {
       where is Draft
+      search Find
    }
    query FinishedDocuments from Workspace.Documents {
       where is Final
+      search Find
    }
    // An `action` is private: it carries no `Title`, `Description`, or `Summary` and is never
    // surfaced. The command is the discoverable verb, so the words a person reads live there.
@@ -523,6 +527,10 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
          #addDocument
          FormButton("Add document", Disabled: DocumentTitle is empty) {
             on press AddDocument
+         }
+         #findDocuments
+         TextInput(Value: Find, Label: "Find in this workspace", Placeholder: "Title or words") {
+            on submit -> { } // the lists narrow as the term changes; there is nothing to submit
          }
          // Panes uses a horizontal row only when, after gaps, every child can receive at least 320
          // logical pixels; otherwise it preserves source order in a vertical stack.
@@ -724,7 +732,7 @@ view DocumentEditor(Document) {
       update Document { Final: Value }
    }
    action SaveDocument() {
-      check Input.Title is not empty
+      check not Input.Incomplete
       set PreviousTitle = Document.Title
       set PreviousBody = Document.Body
       update Document with Input
@@ -766,6 +774,7 @@ view DocumentEditor(Document) {
       TextInput(Value: Input.Title, Label: "Document title", Placeholder: "Document title") {
          on submit SaveDocument
       }
+      Problems(Input.Problems) [validation]
       #documentBody
       TextInput(Value: Input.Body, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
          on submit SaveDocument

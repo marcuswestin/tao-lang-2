@@ -54,6 +54,11 @@ export const dataValidationMessages = {
   duplicateOrder: 'A query may declare only one order clause.',
   duplicateLimit: 'A query may declare only one limit clause.',
   limitCount: 'A query limit must be a whole number of at least 1.',
+  duplicateSearch: 'A query may declare only one search clause.',
+  searchTermType: (actual: string) => `Query search term must be text, got ${actual}.`,
+  missingSearchField: (entity: string) =>
+    `Entity '${entity}' has no '(search)' field; mark a text field '(search)' to use 'search' in a query.`,
+  searchFieldKind: (field: string) => `Only text data fields can declare 'search', not '${field}'.`,
   uniqueFieldKind: (field: string) => `Only primitive data fields can declare 'unique', not '${field}'.`,
   duplicateUniqueField: (entity: string) =>
     `Entity '${entity}' declares more than one unique field; one field is the reconciliation key.`,
@@ -181,6 +186,15 @@ function validateEntityField(
   if (field.primitive !== 'text') {
     for (const trait of titles) {
       ctx.error(trait, dataValidationMessages.titleFieldKind(field.name))
+    }
+  }
+  const searches = traits.filter(trait => trait.search)
+  for (const duplicate of searches.slice(1)) {
+    ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'search'))
+  }
+  if (field.primitive !== 'text') {
+    for (const trait of searches) {
+      ctx.error(trait, dataValidationMessages.searchFieldKind(field.name))
     }
   }
   if (field.primitive || field.boolean) {
@@ -346,8 +360,22 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
     }
   }
   const fields = Type.dataFields(entity)
+  const searches = clauses.filter(AST.isSearchClause)
+  for (const duplicate of searches.slice(1)) {
+    ctx.error(duplicate, dataValidationMessages.duplicateSearch)
+  }
+  for (const search of searches) {
+    const termType = Type.ofExpression(search.term)
+    if (termType.kind !== 'unresolved' && !(termType.kind === 'primitive' && termType.primitive === 'text')) {
+      ctx.error(search.term, dataValidationMessages.searchTermType(Type.displayName(termType)))
+    }
+    const searchable = fields.some(field => (field.traits?.traits ?? []).some(trait => trait.search))
+    if (!searchable) {
+      ctx.error(search, dataValidationMessages.missingSearchField(Type.dataEntityName(entity)))
+    }
+  }
   for (const clause of clauses) {
-    if (AST.isLimitClause(clause)) {
+    if (AST.isLimitClause(clause) || AST.isSearchClause(clause)) {
       continue
     }
     if (AST.isBooleanWhereClause(clause)) {

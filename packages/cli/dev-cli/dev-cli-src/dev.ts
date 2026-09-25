@@ -443,6 +443,25 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('model-audit')
+    .description('Report where the delegation routing table lags the models this machine runs, and measure context.')
+    .option('--days <count>', 'How many days of transcripts to read.', '7')
+    .option('--until <time>', 'End the window here instead of now, to measure the period before a change.')
+    .option('--json', 'Print the structured report instead of prose.')
+    .option('--brief', 'Print one line only when routing looks behind, over the last day; silent otherwise.')
+    .action(async (options: { brief?: boolean; days?: string; json?: boolean; until?: string } = {}) => {
+      const { ModelAuditCommand } = await import('@agent-cli/delegation/ModelAuditCommand')
+      Platform.runtimeProcess.exit(
+        await ModelAuditCommand.run({
+          brief: options.brief === true,
+          days: parseOptionalPositiveInteger(options.days, '--days'),
+          json: options.json === true,
+          until: options.until,
+        }),
+      )
+    })
+
+  commands
     .command('simplify-audit')
     .description('Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs.')
     .option('--json', 'Print the full structured report instead of the summary tables.')

@@ -21,9 +21,9 @@ const COMMAND_PREFIXES = new Set(['sudo', 'command', 'time', 'nice', 'env', 'exe
 /**
  * `./agent` and `just` subcommands whose exit status is the whole point of running them, beyond the
  * `verify*` and `test*` families matched by prefix. Everything else `./agent help` lists — `board`,
- * `doctor`, `delegation-report`, `report-test-stats`, `simplify-audit`, `capabilities` — is a report
- * whose output is the product, where filtering is ordinary work and the status is incidental. That
- * split is why the pipe rule denies in one place and warns in the other.
+ * `doctor`, `delegation-report`, `model-audit`, `report-test-stats`, `simplify-audit`, `capabilities`
+ * — is a report whose output is the product, where filtering is ordinary work and the status is
+ * incidental. That split is why the pipe rule denies in one place and warns in the other.
  */
 const GATE_SUBCOMMANDS = new Set(['check', 'finalize', 'fix', 'fmt', 'setup'])
 

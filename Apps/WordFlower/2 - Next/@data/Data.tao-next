@@ -1,7 +1,9 @@
 // The data catalog used by the app's Local datasource.
 workspace
 data Workspaces / Workspace { // the plural collection, then the singular entity it stores
-   Name text (title) // the one field that names a workspace to a person
+   // `title` names a workspace to a person; `required` marks it unfinished until it has a name,
+   // without ever blocking a write.
+   Name text (required "Name this workspace", title)
    // Modifiers take values: `now` is a runtime default sampled separately for each create.
    CreatedAt time (default now)
    Pinned yes / no // without an explicit default, a yes/no field defaults to no
@@ -13,8 +15,8 @@ data Workspaces / Workspace { // the plural collection, then the singular entity
 
 workspace
 data Documents / Document {
-   Title text (title)
-   Body text (default "")
+   Title text (required "Name this document", search, title) // `search`: a query's `search` reads it
+   Body text (default "", search)
    Final yes / Draft no // an optional no-case alias name
    Public yes / Private no (default Public) // an explicit default may select either case
    CreatedAt time (default now)
