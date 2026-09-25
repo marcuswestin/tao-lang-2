@@ -49,15 +49,15 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
   const stagingPackageRoot = await FS.mkTmpDir('tao-ide-extension-build-')
   const stagingGeneratedRoot = FS.resolvePath('_gen_ide-extension', stagingPackageRoot)
   const generatedTaoTextMateGrammar = FS.resolvePath(
-    'ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+    'ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json',
     packageRoot,
   )
   const stagingTaoTextMateGrammar = FS.resolvePath(
-    'ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+    'ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json',
     stagingPackageRoot,
   )
   const taoTextMateGrammarOverlay = FS.resolvePath(
-    'ide-extension-syntaxes/tao-lang.tmLanguage.overlay.json',
+    'ide-extension-syntaxes/tao.tmLanguage.overlay.json',
     packageRoot,
   )
   const formatterPackageRoot = FS.resolvePath('..', Bun.resolveSync('tao-formatter/package.json', packageRoot))

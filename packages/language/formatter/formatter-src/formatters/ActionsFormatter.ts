@@ -117,6 +117,11 @@ export const ActionsFormatter = {
     }
   },
 
+  /** CheckStatement separates the keyword from its boolean condition. */
+  CheckStatement(f) {
+    f.oneSpaceAfter('check')
+  },
+
   /** IfActionStatement separates its boolean condition from its one-sided body. */
   IfActionStatement(f) {
     f.oneSpaceAfter('if')

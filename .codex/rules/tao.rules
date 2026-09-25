@@ -3,6 +3,7 @@
 
 prefix_rule(pattern=["./agent","unsandboxed","land"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","finalize"], decision="allow", justification="Repository-approved host command.")
+prefix_rule(pattern=["./agent","unsandboxed","merge-main"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","landed"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","capabilities"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","open-pr"], decision="allow", justification="Repository-approved host command.")
@@ -19,6 +20,7 @@ prefix_rule(pattern=["./agent","unsandboxed","studio"], decision="allow", justif
 prefix_rule(pattern=["./agent","unsandboxed","studio-native"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","local-instantdb","start"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","local-instantdb","stop"], decision="allow", justification="Repository-approved host command.")
+prefix_rule(pattern=["./agent","unsandboxed","companion-host-build"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","simulators","list"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","simulators","boot"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","simulators","run"], decision="allow", justification="Repository-approved host command.")

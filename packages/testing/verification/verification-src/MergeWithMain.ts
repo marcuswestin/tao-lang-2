@@ -508,6 +508,12 @@ export const MergeWithMainCommand = {
       }
       return await abortMerge(dependencies, options.abortSnapshot)
     }
+    if (options.skipAll !== true && options.skipVerify === true && options.skipVerifyFull === true) {
+      Errors.throwUserInput(
+        '--skip-verify-full and --skip-verify cannot be combined directly because that would run no '
+          + 'verification without confirmation. Use --skip-all to require the explicit interactive confirmation.',
+      )
+    }
 
     const preflight = await inspectMergePreflight(options, dependencies)
     if (options.dryRun === true) {

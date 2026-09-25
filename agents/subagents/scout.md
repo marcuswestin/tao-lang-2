@@ -10,12 +10,12 @@ codexcli:
   sandbox_mode: read-only
   nickname_candidates: [Sweep, Locate, Trace, Inventory, Survey, Sightline]
 claudecode:
-  model: sonnet
+  model: opus
   effort: medium
   permissionMode: plan
   tools: Bash, Read, Skill
 cursor:
-  model: claude-sonnet-5
+  model: claude-opus-5-5
   readonly: true
 ---
 

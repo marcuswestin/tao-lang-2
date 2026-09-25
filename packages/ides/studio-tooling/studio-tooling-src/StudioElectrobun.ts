@@ -11,7 +11,7 @@ import {
 } from './StudioElectrobunAppSource'
 
 export const defaultStudioAppName = 'Tao Studio'
-export const defaultStudioBundleIdentifier = 'dev.tao-lang.studio'
+export const defaultStudioBundleIdentifier = 'com.devtao.studio'
 const defaultVersion = '0.0.1'
 
 /** Re-exported: the native canary and its behavioral regression both call this directly. */

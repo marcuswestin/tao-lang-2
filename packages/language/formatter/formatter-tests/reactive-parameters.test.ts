@@ -19,4 +19,17 @@ Describe('formatter: reactive parameters', () => {
       `,
     ),
   )
+
+  Test(
+    'formats creates and updates from a projected input with one space around with',
+    formats(
+      'action Save(){create Note  with   Input update Note   with Input}',
+      `
+        action Save() {
+           create Note with Input
+           update Note with Input
+        }
+      `,
+    ),
+  )
 })

@@ -164,6 +164,14 @@ export const DataCompiler = {
 
   CreateStatement(create: AST.CreateStatement): Compiled {
     const entity = resolveRef(create.entity)
+    if (create.source) {
+      return gen`TR.Data.CreateWith(
+        ${catalogScopeOf(entity)},
+        ${gen.jsLiteral(Type.dataEntityName(entity))},
+        ${Compile.Expression(create.source)},
+      )`
+    }
+    Assert.defined(create.block, 'validated create has a write block or input source')
     const bindings = ASTUtils.resolveDataWriteBindings(entity, create.block.fields, true)
     Assert(bindings.diagnostics.length === 0, 'validated create has no field-binding diagnostics')
     return gen`TR.Data.Create(

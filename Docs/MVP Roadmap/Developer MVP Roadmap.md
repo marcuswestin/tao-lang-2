@@ -21,19 +21,25 @@ Run down this list before the first public push. Each item points at the entry t
       public release; `P24`).
 - [ ] **No login name or home directory in the generated harness config** (`P17`, `P18`): the
       Watchman socket rule in `.claude/settings.json` and `.codex/config.toml`.
-- [ ] **Review every public identifier before it is claimed.** Most cannot be changed once
-      published or once users depend on them. As they stand:
-  - The domain: `tao-lang.dev` (`updates.tao-lang.dev`, the `dev.tao-lang.*` bundle prefixes) and
-    `tao-lang.org` (`updates.tao-lang.org`, the iCloud podspec) are both in use — pick one.
-  - The VS Code extension: publisher `tao`, name `tao-ide-extension`
-    (`packages/ides/ide-extension/package.json`), and the Open VSX namespace.
-  - The npm names: `tao-cli`, `tao-runtime`, `tao-stdlib`, and the other packages are unscoped
-    today; decide between those names and a scope, and check each is free.
-  - The companion apps: iOS bundle ID `dev.tao-lang.studio.companion`, Android package
-    `dev.tao_lang.studio.companion`, URL scheme `taostudiocompanion`
-    (`packages/ides/studio-companion-app/app.json`), and the store listing names.
-  - Anything else claimed on a registry or store before release: the Homebrew formula, the GitHub
-    organization, the macOS Studio app's bundle ID.
+- [ ] **Register the public identifiers.** Most cannot be changed once published or once users
+      depend on them. **Decided 2026-09-24, revised 2026-09-25:** the domain is `devtao.com`, and
+      every other namespace prefers Dev Tao — `devtao` as an identifier, `Dev Tao` in prose — with
+      Tao Lang (`Tao Lang`, `tao-lang`, `tao_lang`) as the fallback where the first is taken. The
+      repository already uses these names; what remains is claiming them:
+  - The domain `devtao.com`, and `updates.devtao.com` for the update server `tao ship` defaults to.
+  - The reverse-domain prefix `com.devtao`: the companion app `com.devtao.studio.companion` on iOS
+    and Android, its iCloud container `iCloud.com.devtao.studio.companion` with Push Notifications,
+    the macOS Studio app `com.devtao.studio`, and `tao ship`'s default namespace for new apps. The
+    URL scheme `taostudiocompanion` and the store listing names stay to be chosen.
+  - The GitHub organization `devtao` (fallback `tao-lang`), which also names the Homebrew tap
+    `devtao/homebrew-tao`.
+  - The VS Code and Open VSX publisher `devtao` (fallback `tao-lang`), which
+    `packages/ides/ide-extension/package.json` already names. The extension itself is named `tao`,
+    after the language id, the `.tao` extension, and the `source.tao` grammar scope, so its ID is
+    `devtao.tao`.
+  - The npm scope `@devtao` (fallback `@tao-lang`) for the CLI's platform packages; `tao-cli`,
+    `tao-runtime`, `tao-stdlib`, and the other packages are unscoped today — decide between those
+    names and the scope, and check each is free.
 
 ## Decide first — these block the release path
 
@@ -208,7 +214,7 @@ the release.
 ### R11 — Hosted services for the release
 
 Three services are already implied: Tao's own update service (implemented, unhosted), a hosted
-InstantDB application for the WordFlower demo (`A16`), and later the Tao Lang servers the companion
+InstantDB application for the WordFlower demo (`A16`), and later the Dev Tao servers the companion
 app's membership model assumes.
 
 - Blocks: `A16`, and any demo of sync or over-the-air updates.
@@ -285,3 +291,5 @@ The apps follow §1 and use only `file` and `public`. The other one this pass re
   `Decisions.md` and the implementation already chose. Take the nine as a decision round when the
   first tranche reaches one of them, rather than deciding ten spellings with no code pressing on
   them.
+- **Decided 2026-09-25:** §1 now names the five visibility modifiers the implementation carries.
+  The nine spellings wait until a tranche forces one.

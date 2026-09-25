@@ -423,6 +423,11 @@ export function traitIsTitle(trait: AST.Trait): boolean {
   return trait.word === 'title'
 }
 
+/** traitIsRequired identifies `required "<sentence>"`: completeness that never blocks a write. */
+export function traitIsRequired(trait: AST.Trait): trait is AST.Trait & { sentence: string } {
+  return trait.sentence !== undefined
+}
+
 /** loopSelectHandlers returns the direct row-selection handlers declared by one loop. */
 export function loopSelectHandlers(loop: AST.ForStatement): AST.LoopSelectHandler[] {
   return loop.block.statements.filter(AST.isLoopSelectHandler)

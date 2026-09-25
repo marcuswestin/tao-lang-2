@@ -10,12 +10,12 @@ codexcli:
   sandbox_mode: read-only
   nickname_candidates: [Source, Citation, Reference, Upstream, Corroborate, Provenance]
 claudecode:
-  model: sonnet
+  model: opus
   effort: medium
   permissionMode: plan
   tools: WebSearch, WebFetch, Read, Bash, ToolSearch
 cursor:
-  model: claude-sonnet-5
+  model: claude-opus-5-5
   readonly: true
 ---
 

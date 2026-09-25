@@ -141,7 +141,8 @@ function validateEntityField(
   field: AST.EntityDataField,
   ctx: ValidationContext,
 ): void {
-  if (['Id', 'WritesQueued', 'WritesFailed', 'WriteError', 'CanRetryWrites'].includes(field.name)) {
+  const reserved = ['Id', 'WritesQueued', 'WritesFailed', 'WriteError', 'CanRetryWrites', 'Incomplete', 'Problems']
+  if (reserved.includes(field.name)) {
     ctx.error(field, dataValidationMessages.reservedField(entity.singularName, field.name))
   }
   const traits = field.traits?.traits ?? []
@@ -155,6 +156,9 @@ function validateEntityField(
   const owned = traits.filter(trait => trait.owned)
   for (const duplicate of owned.slice(1)) {
     ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'owned'))
+  }
+  for (const duplicate of traits.filter(AST.traitIsRequired).slice(1)) {
+    ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'required'))
   }
   const uniques = traits.filter(trait => trait.unique)
   for (const duplicate of uniques.slice(1)) {

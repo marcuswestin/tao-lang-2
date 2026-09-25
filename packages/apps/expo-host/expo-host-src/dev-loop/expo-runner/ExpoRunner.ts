@@ -24,6 +24,12 @@ export type ExpoServerOptions = {
   command?: {
     argsPrefix?: readonly string[]
     executable: string
+    /**
+     * The start arguments open with the package name `bunx` runs. A launcher whose prefix already
+     * names Expo's own script sets this, and the name is dropped rather than read by Expo as the
+     * project root.
+     */
+    namesExpoScript?: boolean
   }
   /** Extra environment for the Expo CLI process, such as the dev data facts `app.config.js` reads. */
   env?: Readonly<Record<string, string>>

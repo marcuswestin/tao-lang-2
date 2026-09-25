@@ -5,11 +5,17 @@ const nodePath = require('node:path')
 // Metro config loads as plain CJS, so keep these Node platform calls local.
 const config = getDefaultConfig(__dirname)
 const runtimeToolchainSourceRoot = process.env.TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT || __dirname
-const repositoryNodeModules = nodePath.resolve(runtimeToolchainSourceRoot, '..', '..', '..', 'node_modules')
+// Inside the repository these three sit where the package layout puts them relative to this host.
+// An installed Tao has no repository around its host, so it names each one explicitly instead
+// (`RuntimeToolchainPaths.installedExpoEnvironment`).
+const repositoryNodeModules = process.env.TAO_HOST_DEPENDENCY_ROOT
+  || nodePath.resolve(runtimeToolchainSourceRoot, '..', '..', '..', 'node_modules')
 const installedNodeModules = nodeFs.realpathSync(repositoryNodeModules)
 const runtimeToolchainNodeModules = nodeFs.realpathSync(nodePath.resolve(__dirname, 'node_modules'))
-const runtimeSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', 'runtime', 'TaoRuntime-src')
-const sharedCoreSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', '..', 'shared', 'shared-src', 'core')
+const runtimeSourceRoot = process.env.TAO_RUNTIME_SOURCE_ROOT
+  || nodePath.resolve(runtimeToolchainSourceRoot, '..', 'runtime', 'TaoRuntime-src')
+const sharedCoreSourceRoot = process.env.TAO_SHARED_CORE_SOURCE_ROOT
+  || nodePath.resolve(runtimeToolchainSourceRoot, '..', '..', 'shared', 'shared-src', 'core')
 
 // A Studio session bundles from a fresh, disposable copy of this project, which Metro keys its file
 // map by: no later session can ever read that map back. Left in the OS temp directory it is a couple

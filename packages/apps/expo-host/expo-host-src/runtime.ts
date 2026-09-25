@@ -5,6 +5,8 @@ import { expoUpdateArtifacts, proveReleaseBundle } from './release-bundle-proof'
 import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 export { DesktopHost } from './desktop-host'
 
+export { HostDependencies } from './host-dependencies'
+export { ManagedNode, type NodeManifest } from './managed-node'
 export {
   type ExpoUpdateArtifact,
   type ExpoUpdateArtifacts,
@@ -490,21 +492,63 @@ function StudioBrowserApp() {
     if (TaoStudioPreviewBootstrap?.cell !== true) return
     let cancelled = false
     setBootstrapError(undefined)
+    TR.Studio.Diagnostics.record('publication', String(TaoStudioPublication.compileRevision))
     const bootstrapPath = TaoStudioPreviewBootstrap.sessionId === undefined
       ? '/api/preview/cell/bootstrap'
       : '/sessions/' + encodeURIComponent(TaoStudioPreviewBootstrap.sessionId) + '/api/preview/cell/bootstrap'
     const url = new URL(bootstrapPath, TaoStudioPreviewBootstrap.parentOrigin)
     url.searchParams.set('previewInstanceId', TaoStudioPreviewBootstrap.previewInstanceId)
-    void fetch(url).then(async response => {
+    TR.Studio.Diagnostics.record('bootstrap-request', String(TaoStudioPublication.compileRevision))
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+    let olderAttempts = 0
+    const load = async () => {
+      const response = await fetch(url)
       if (!response.ok) TR.Errors.failHost('Tao Studio cell bootstrap was rejected (' + response.status + ').')
       const nextCell = await response.json()
-      if (!cancelled && runtimeMatchesPublication(nextCell, TaoStudioPublication)) {
+      if (cancelled) return
+      const outcome = TR.Studio.Bootstrap.reconcile(nextCell, TaoStudioPublication, newerRevision => {
+        const retry = TR.Studio.Bootstrap.nextPublicationReload(window.location.href, newerRevision)
+        if (retry === undefined) {
+          TR.Errors.failHost('Tao Studio preview could not load publication revision ' + newerRevision + '.')
+          return
+        }
+        TR.Studio.Diagnostics.record('publication-reload-scheduled', String(newerRevision)
+          + '/' + String(retry.attempt))
+        retryTimer = setTimeout(() => {
+          if (!cancelled) window.location.replace(retry.url)
+        }, Math.min(200 * retry.attempt, 1_000))
+      })
+      TR.Studio.Diagnostics.record('bootstrap-response', String(nextCell?.identity?.compileRevision)
+        + '/' + String(nextCell?.identity?.cellRevision) + '/' + outcome)
+      if (outcome === 'matched') {
+        const cleanUrl = TR.Studio.Bootstrap.clearPublicationRetry(window.location.href)
+        if (cleanUrl !== window.location.href) {
+          window.history.replaceState(window.history.state, '', cleanUrl)
+        }
         setAppliedRuntime({ cell: nextCell, manifest: TaoStudioManifest, publication: TaoStudioPublication })
+      } else if (outcome === 'older') {
+        const delayMs = TR.Studio.Bootstrap.olderRetryDelay(++olderAttempts)
+        if (delayMs === undefined) {
+          TR.Errors.failHost('Tao Studio cell bootstrap did not catch up to publication revision '
+            + TaoStudioPublication.compileRevision + '.')
+          return
+        }
+        TR.Studio.Diagnostics.record('bootstrap-retry-server', String(TaoStudioPublication.compileRevision))
+        retryTimer = setTimeout(() => { void load().catch(fail) }, delayMs)
+      } else if (outcome === 'incompatible') {
+        TR.Errors.failHost('Tao Studio cell bootstrap did not match this preview.')
       }
-    }).catch(error => {
+    }
+    const fail = (error: unknown) => {
+      TR.Studio.Diagnostics.record('bootstrap-error', String(error))
       if (!cancelled) setBootstrapError(error)
-    })
-    return () => { cancelled = true }
+    }
+    void load().catch(fail)
+    return () => {
+      cancelled = true
+      if (retryTimer !== undefined) clearTimeout(retryTimer)
+      TR.Studio.Diagnostics.record('bootstrap-superseded', String(TaoStudioPublication.compileRevision))
+    }
   }, [TaoStudioPublication.compileRevision])
   React.useEffect(() => {
     if (TaoStudioPreviewBootstrap?.cell !== true || typeof window === 'undefined') return
@@ -515,6 +559,8 @@ function StudioBrowserApp() {
         || !isRuntimeUpdate(event.data, TaoStudioPreviewBootstrap, TaoStudioPublication)
       ) return
       setBootstrapError(undefined)
+      TR.Studio.Diagnostics.record('runtime-update', String(event.data.runtime.identity?.compileRevision)
+        + '/' + String(event.data.runtime.identity?.cellRevision))
       const next = {
         cell: event.data.runtime,
         manifest: TaoStudioManifest,
@@ -638,13 +684,6 @@ function studioCellRuntime(runtime: any, manifest: any) {
     },
     ...(dataState === undefined ? {} : { seed: dataState }),
   } as any
-}
-
-function runtimeMatchesPublication(runtime: any, publication: any) {
-  const identity = runtime?.identity
-  return identity?.appName === publication.appName
-    && identity?.compileRevision === publication.compileRevision
-    && identity?.project === publication.project
 }
 
 function isRuntimeUpdate(value: any, bootstrap: any, publication: any) {

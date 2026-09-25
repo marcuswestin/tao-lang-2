@@ -1,7 +1,8 @@
-import { devLoopOutputKind } from '@expo-host/dev-loop/DevLoopOutput'
+import { DevLoopOutput, devLoopOutputKind } from '@expo-host/dev-loop/DevLoopOutput'
 import { createDevLoopExpoSession } from '@expo-host/dev-loop/expo-dev-loop'
 import {
   createAndroid,
+  emulatorExitMessage,
   expoGoSupportsSdk,
   expoGoVersionFromPackageInfo,
 } from '@expo-host/dev-loop/expo-runner/android'
@@ -31,7 +32,7 @@ import Commands from '@expo-host/dev-loop/keyboard-input/Commands'
 import Run from '@expo-host/dev-loop/Run'
 import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
-import { createServer } from 'node:net'
+import { connect, createServer } from 'node:net'
 
 Describe('Expo dev-loop output severity', () => {
   Test('reads a child process line by its text, not by the stream it chose', () => {
@@ -262,6 +263,21 @@ Describe('Expo dev-loop command helpers', () => {
     Expect(`${captured.stdout}${captured.stderr}`).toContain('requires a Tao source checkout')
   })
 
+  Test('lists the source-checkout controls only when the loop runs from a checkout', async () => {
+    try {
+      DevLoopOutput.showCheckoutControls(false)
+      const outside = await withCapturedOutput(() => Commands.printControls())
+      DevLoopOutput.showCheckoutControls(true)
+      const inside = await withCapturedOutput(() => Commands.printControls())
+
+      Expect(outside.stdout).toContain('reload app')
+      Expect(outside.stdout).not.toContain('source checkout')
+      Expect(inside.stdout).toContain('verify Tao checkout (source checkout)')
+    } finally {
+      DevLoopOutput.showCheckoutControls(true)
+    }
+  })
+
   Test('keeps child-process output as the useful dev-loop failure', () => {
     const error = new Errors.CommandExecutionError({
       args: ['compile', 'App.tao'],
@@ -284,6 +300,39 @@ Describe('Expo dev-loop command helpers', () => {
       'Error: Cannot find module ./publicFolder',
       'Expo exited with code=1.',
     ].join('\n'))
+  })
+
+  // `bunx` takes the package name first; an installed Tao's launcher already names Expo's script,
+  // and Expo reads a stray `expo` as its project root.
+  Test('drops the package name only for a launcher that already names Expo’s script', async () => {
+    const firstArgument = async (namesExpoScript: boolean): Promise<string> => {
+      const root = await mkTestDir('tao-expo-launcher-args-')
+      const argsPath = FS.resolvePath('args.txt', root)
+      const server = new ExpoServer(root, createExpoConfig(49_154), async () => {}, {
+        command: {
+          argsPrefix: ['-c', 'printf "%s\\n" "$@" > "$0"', argsPath],
+          executable: '/bin/sh',
+          namesExpoScript,
+        },
+        logRoot: root,
+        runtimeToolchainSourceRoot: root,
+        stopTimeoutMs: 25,
+      })
+      try {
+        await server.start()
+        for (let attempt = 0; attempt < 200 && !await FS.isFile(argsPath); attempt += 1) {
+          await Time.sleep(10)
+        }
+        await Time.sleep(20)
+        return (await FS.readText(argsPath)).split('\n')[0] ?? ''
+      } finally {
+        await server.stop().catch(() => undefined)
+        await FS.remove(root)
+      }
+    }
+
+    Expect(await firstArgument(false)).toBe('expo')
+    Expect(await firstArgument(true)).toBe('start')
   })
 
   Test('stops the complete Expo subprocess tree when Metro outlives its launcher', async () => {
@@ -393,6 +442,22 @@ Describe('Expo dev-loop port helpers', () => {
       await new Promise<void>((resolve, reject) => {
         blocker.close(error => error ? reject(error) : resolve())
       })
+    }
+  })
+
+  // A dev client that retries Metro's port connects to the reservation long before Expo starts.
+  Test('drops a client that connects to a reserved port, so releasing it does not wait', async () => {
+    const session = await createDevLoopExpoSession(0)
+    const client = connect({ host: '127.0.0.1', port: session.config.EXPO_PORT })
+    const dropped = new Promise<void>(resolve => client.once('close', () => resolve()))
+    client.on('error', () => {})
+    try {
+      // Only a connection the reservation has accepted can hold its `close` open, so the reservation
+      // dropping it comes first. A reservation that kept it would time this test out at either wait.
+      await dropped
+      await session.releasePortReservation()
+    } finally {
+      client.destroy()
     }
   })
 
@@ -587,10 +652,11 @@ en7: flags=8863
     const android = createAndroid(config, {} as ExpoMetroSession, { requireAdb: async () => {} })
     const opened: string[] = []
     android.listPhysicalDevices = async () => ['ANDROID-A', 'ANDROID-B']
-    android.ensureExpoGoOnSerial = async () => {}
+    android.prepareRuntimeOnSerial = async () => {}
     android.reverseMetroPort = async () => true
-    android.openExpoGoOnSerial = async serial => {
+    android.openRuntimeOnSerial = async serial => {
       opened.push(serial)
+      return 'expo-go'
     }
     const result = await openPhysicalDevice(
       config,
@@ -608,6 +674,61 @@ en7: flags=8863
     Expect(result).toBe(true)
     Expect(opened).toEqual(['ANDROID-B'])
   })
+
+  Test('names why an emulator exited before booting, from the last line of its log', () => {
+    const qtRefusal = [
+      'INFO         | Android emulator version 36.6.5.0 (build_id 15221694) (CL:N/A)',
+      'Incompatible processor. This Qt build requires the following features:',
+      '    neon',
+    ].join('\n')
+
+    Expect(emulatorExitMessage(qtRefusal, '/tmp/emulator.log')).toBe(
+      'Android emulator exited before it booted: Incompatible processor. This Qt build requires the following'
+        + " features: neon That check fails when a sandboxed shell hides the CPU's features; start the emulator"
+        + ' from an ordinary shell. Its log is /tmp/emulator.log.',
+    )
+    Expect(emulatorExitMessage('INFO | starting\nFATAL | AVD is locked\n', '/tmp/emulator.log')).toBe(
+      'Android emulator exited before it booted: FATAL | AVD is locked. Its log is /tmp/emulator.log.',
+    )
+    Expect(emulatorExitMessage('', '/tmp/emulator.log')).toBe(
+      'Android emulator exited before it booted, leaving nothing in /tmp/emulator.log.',
+    )
+  })
+
+  Test(
+    'opens a phone in its prepared runtime on its own loopback when USB reverses Metro, and at the LAN address otherwise',
+    async () => {
+      const config = createExpoConfig(8_099)
+      const android = createAndroid(config, {} as ExpoMetroSession, { requireAdb: async () => {} })
+      const opens: { expoGoUrl: string; metroHost: string; serial: string }[] = []
+      let reversed = true
+      android.listPhysicalDevices = async () => ['PHONE-1']
+      android.prepareRuntimeOnSerial = async () => {}
+      android.reverseMetroPort = async () => reversed
+      android.openRuntimeOnSerial = async (serial, expoGoUrl, metroHost) => {
+        opens.push({ expoGoUrl, metroHost, serial })
+        return 'companion'
+      }
+      const open = () =>
+        withCapturedOutput(() =>
+          openPhysicalDevice(config, { waitForMetro: async () => {} } as unknown as ExpoMetroSession, android, {
+            detectLanHost: async () => '192.168.1.20',
+            listIosDevices: async () => [],
+          })
+        )
+
+      const overUsb = await open()
+      reversed = false
+      const overLan = await open()
+
+      Expect(overUsb.stdout).toContain('opened PHONE-1 (Tao Companion)')
+      Expect(opens).toEqual([
+        { expoGoUrl: config.EXPO_GO_URL, metroHost: '127.0.0.1', serial: 'PHONE-1' },
+        { expoGoUrl: 'exp://192.168.1.20:8099', metroHost: '192.168.1.20', serial: 'PHONE-1' },
+      ])
+      Expect(overLan.result).toBe(true)
+    },
+  )
 
   Test('accepts only Android Expo Go clients from the configured SDK generation', () => {
     const packageInfo = `

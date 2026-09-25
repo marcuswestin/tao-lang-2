@@ -30,6 +30,23 @@ const studioProtocolVersion = TaoStudioProtocolVersions.protocolVersion
 const studioSourceActionVersion = TaoStudioProtocolVersions.sourceActionVersion
 const studioRenderSelector = '[data-tao-studio]'
 
+type StudioPreviewDiagnostic = { at: number; detail?: string; stage: string }
+type StudioPreviewDiagnosticHost = typeof globalThis & {
+  __taoStudioPreviewDiagnostics?: StudioPreviewDiagnostic[]
+}
+
+function recordStudioPreviewStage(stage: string, detail?: string): void {
+  if (requireReactNativeRuntime().Platform?.OS !== 'web') {
+    return
+  }
+  const host = globalThis as StudioPreviewDiagnosticHost
+  const events = host.__taoStudioPreviewDiagnostics ??= []
+  events.push({ at: Date.now(), ...(detail === undefined ? {} : { detail }), stage })
+  if (events.length > 60) {
+    events.splice(0, events.length - 60)
+  }
+}
+
 /** StudioPreviewConfig is the explicit trusted context for one generated preview instance. */
 export type StudioPreviewConfig = {
   appName: string
@@ -277,8 +294,74 @@ function previewErrorMessage(error: unknown): string {
   return typeof error === 'string' ? error : String(error)
 }
 
+type StudioBootstrapIdentity = Readonly<{ appName: string; compileRevision: number; project: string }>
+const maxStudioBootstrapRetries = 30
+const publicationRetryParameter = 'taoStudioPublicationRetry'
+const publicationRetryRevisionParameter = 'taoStudioPublicationRetryRevision'
+
+function nextStudioPublicationReload(
+  currentUrl: string,
+  revision: number,
+): { attempt: number; url: string } | undefined {
+  const url = new URL(currentUrl)
+  const previousRevision = Number(url.searchParams.get(publicationRetryRevisionParameter))
+  const attempts = previousRevision === revision
+    ? Number(url.searchParams.get(publicationRetryParameter) ?? '0')
+    : 0
+  if (!Number.isInteger(attempts) || attempts < 0 || attempts >= maxStudioBootstrapRetries) {
+    return undefined
+  }
+  const attempt = attempts + 1
+  url.searchParams.set(publicationRetryParameter, String(attempt))
+  url.searchParams.set(publicationRetryRevisionParameter, String(revision))
+  return { attempt, url: url.toString() }
+}
+
+function clearStudioPublicationRetry(currentUrl: string): string {
+  const url = new URL(currentUrl)
+  url.searchParams.delete(publicationRetryParameter)
+  url.searchParams.delete(publicationRetryRevisionParameter)
+  return url.toString()
+}
+
+function olderStudioBootstrapRetryDelay(attempt: number): number | undefined {
+  return Number.isInteger(attempt) && attempt > 0 && attempt <= maxStudioBootstrapRetries
+    ? Math.min(200 * attempt, 1_000)
+    : undefined
+}
+
+/** A reloaded frame can receive a newer cell before Metro serves its matching publication. */
+function reconcileStudioCellBootstrap(
+  runtime: { identity?: Partial<StudioBootstrapIdentity> } | null | undefined,
+  publication: StudioBootstrapIdentity,
+  onNewerPublication: (revision: number) => void,
+): 'matched' | 'older' | 'newer' | 'incompatible' {
+  const identity = runtime?.identity
+  if (
+    identity?.appName !== publication.appName || identity.project !== publication.project
+    || typeof identity.compileRevision !== 'number'
+  ) {
+    return 'incompatible'
+  }
+  if (identity.compileRevision === publication.compileRevision) {
+    return 'matched'
+  }
+  if (identity.compileRevision < publication.compileRevision) {
+    return 'older'
+  }
+  onNewerPublication(identity.compileRevision)
+  return 'newer'
+}
+
 /** StudioPreview exposes the opt-in generated preview bridge. */
 export const StudioPreview = {
+  Bootstrap: {
+    clearPublicationRetry: clearStudioPublicationRetry,
+    nextPublicationReload: nextStudioPublicationReload,
+    olderRetryDelay: olderStudioBootstrapRetryDelay,
+    reconcile: reconcileStudioCellBootstrap,
+  },
+  Diagnostics: { record: recordStudioPreviewStage },
   ErrorBoundary: StudioPreviewErrorBoundary,
   Failure: StudioPreviewFailure,
   Pending: StudioPreviewPending,
@@ -310,6 +393,12 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
   React.useEffect(() => {
     let active = true
     const artifact = pending.current
+    recordStudioPreviewStage(
+      'replay-effect-start',
+      artifact === undefined
+        ? 'no replay'
+        : artifact.domains.map(domain => domain.domain).join(','),
+    )
     if (artifact === undefined) {
       setReady(true)
       return () => {
@@ -317,13 +406,17 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
       }
     }
     setReady(false)
-    void restoreRuntimeCapture(artifact).then(
+    void restoreRuntimeCapture(artifact, (domain, stage) => {
+      recordStudioPreviewStage(`replay-domain-${stage}`, domain)
+    }).then(
       () => {
+        recordStudioPreviewStage(active ? 'replay-ready' : 'replay-completed-after-superseded')
         if (active) {
           setReady(true)
         }
       },
       replayError => {
+        recordStudioPreviewStage('replay-error', previewErrorMessage(replayError))
         if (active) {
           setError(replayError)
         }
@@ -331,6 +424,7 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
     )
     return () => {
       active = false
+      recordStudioPreviewStage('replay-effect-superseded')
     }
   }, [replayKey])
   if (error !== undefined) {

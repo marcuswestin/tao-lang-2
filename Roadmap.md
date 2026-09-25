@@ -191,7 +191,7 @@ tests written in Tao, green in Current, for every construct introduced.
 - [ ] Build the Tao Studio companion app
   - Decided 2026-09-02. A Tao-published phone app for an improved development experience, paired
     with Tao Studio, and for pre-release testing and feedback by members a developer invites to
-    their project on the Tao Lang servers, each with an account there. A `tao ship` flag of its
+    their project on the Dev Tao servers, each with an account there. A `tao ship` flag of its
     own delivers through it once it exists; plain `tao ship` and `--beta` are the store motions.
     The implementation plan now includes trivial LAN/relay pairing, the everyday native-device
     development loop, spoken and recorded user-story journeys, an iPad pen-and-touch workbench that

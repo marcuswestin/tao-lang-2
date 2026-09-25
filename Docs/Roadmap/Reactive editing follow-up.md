@@ -14,7 +14,8 @@ status. The implementation can ship independently of the deferred work below.
    and explicit retry is unsupported; zero counts do not prove remote synchronization.
 2. **Server-enforced validation.** Decide how authoritative validation is declared, enforced by each
    provider, and reported back to forms and actions. Do not present client-only checks as backend
-   guarantees. This remains deferred; projected input types introduce no validation schema.
+   guarantees. This remains deferred; projected input types carry `required` completeness (§2)
+   but no validation schema.
 3. **External acceptance.** Exercise the native mutable-input callback lifecycle on a device and
    granular recovery against live CloudKit, including failure, relaunch, retry, and concurrent edits.
    Runtime regressions and Tao journeys cover the local contract, not those external services.

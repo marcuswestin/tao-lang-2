@@ -105,12 +105,13 @@
   // Named argv prefixes accepted by ./agent unsandboxed, and the only host rules generated for
   // the supported harnesses. HostCommandTargets implements tool operations; plain commands stay sandboxed.
   "agentHostCommands": [
-    "land", "finalize", "landed", "capabilities", "open-pr", "fix-agent-config",
+    "land", "finalize", "merge-main", "landed", "capabilities", "open-pr", "fix-agent-config",
     "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
     "native-module-check",
     "prepare-release studio", "prepare-release ide-extension",
     "app-dev", "studio", "studio-native",
     "local-instantdb start", "local-instantdb stop",
+    "companion-host-build",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators open-url", "simulators uninstall", "simulators open",
     "devices list", "devices apps", "devices launch",
@@ -122,6 +123,7 @@
     "processes list", "processes started",
   ],
   "claudecode": {
+    "autoCompactWindow": 272000,
     "sandbox": {
       "enabled": true,
       "excludedCommands": [],
@@ -199,6 +201,8 @@
     // hooks.jsonc, because `env` values here are literal and cannot extend the existing PATH.
     "env": {
       "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+      "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+      "CLAUDE_CODE_SUBAGENT_MODEL": "opus",
     },
     // Deliberately not set here: `env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`. It scrubs only
     // Anthropic and cloud-provider credentials from subprocess environments, and in exchange

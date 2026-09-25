@@ -9,6 +9,7 @@ import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-
 const expected = [
   'land',
   'finalize',
+  'merge-main',
   'landed',
   'capabilities',
   'open-pr',
@@ -25,6 +26,7 @@ const expected = [
   'studio-native',
   'local-instantdb start',
   'local-instantdb stop',
+  'companion-host-build',
   'simulators list',
   'simulators boot',
   'simulators run',
@@ -68,7 +70,7 @@ Describe('agent host command permissions', () => {
     Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
-    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(11))
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(12))
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
       permissions: { allow: string[] }
@@ -112,6 +114,14 @@ Describe('agent host command permissions', () => {
     Expect(() => agentHostCommands({ agentHostCommands: ['./tao dev'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun  simctl'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun *'] })).toThrow()
+  })
+
+  Test('runs CocoaPods under a UTF-8 locale, which it needs to read podspecs', () => {
+    // An agent's host shell carries no LANG, and `pod install` then fails normalizing an
+    // ASCII-8BIT string before it reads a single pod.
+    for (const operation of [['pods', 'install'], ['pods', 'spec']]) {
+      Expect(hostCommandTarget(operation)?.env).toEqual({ LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' })
+    }
   })
 
   Test('removes stale Claude host rules when the canonical list changes', () => {
