@@ -757,8 +757,9 @@ overlap with `A3` and `A8`.
 
 ## Remaining work
 
-As of 2026-09-25, with slices 1–5, 7, 8, and the `tao review` part of 9 on `main`, this is what
-stands between `A2` and done, in the order to take it:
+As of 2026-09-25, with slices 1–5, 7, 8, and the `tao review` part of 9 on `main`, the
+clean-machine acceptance passed for the current web commands. This is what stands between `A2` and
+done, in the order to take it:
 
 1. **The iOS Simulator and Android from an installed `tao dev`.** `run-targets.ts:114` and
    `android.ts:236,484` resolve the runtime toolchain through the repository and throw outside a
@@ -769,10 +770,7 @@ stands between `A2` and done, in the order to take it:
    verification on 2026-09-25 but has not yet opened a Simulator from an installed binary; the
    acceptance's failure check should match any `did not open ` line, because a Companion link is not
    an `exp://` one. Android's `android.ts:257` takes the same fix.
-2. **The clean-machine gate** of implementation decision 10: the acceptance run inside a fresh,
-   vanilla macOS `tart` virtual machine, to catch a dependency on something the development Mac
-   already has. It needs `tart` installed and a macOS image of tens of GB.
-3. **Moving `tao test` onto `bun test`**, which removes the managed Node, decided 2026-09-25 over
+2. **Moving `tao test` onto `bun test`**, which removes the managed Node, decided 2026-09-25 over
    running Jest under Bun (uncertainty 1). The journeys need little of Jest itself — `describe`,
    `test`, `expect`, and one setup file mocking `expo-clipboard`, `expo-haptics`, and `Share` —
    and most of `jest-expo`: its Babel transform of React Native's Flow-typed sources, platform
@@ -784,7 +782,7 @@ stands between `A2` and done, in the order to take it:
    then move `jest.*` calls to runner-neutral names and remove Jest, including from the
    repository's own `expo-host` tests. Unproven: nobody has published React Native Testing Library
    running under `bun test`, so a spike on one starter's journeys comes first.
-4. **`tao ship` without Node.** A spike on 2026-09-25 ran the iOS chain from an installed release
+3. **`tao ship` without Node.** A spike on 2026-09-25 ran the iOS chain from an installed release
    with no Node on `PATH`: `expo prebuild` succeeds under the binary acting as Bun, despite Expo's
    documentation asking for Node; `pod install` and a Release `xcodebuild` for the Simulator,
    JavaScript bundle included, succeed when a two-line `node` script that runs
@@ -794,7 +792,7 @@ stands between `A2` and done, in the order to take it:
    `pod install` and `xcodebuild` and name it as `NODE_BINARY` in `ios/.xcode.env.local`; and pass
    `RuntimeToolchainPaths.expoEnvironment()` to all three, because Metro otherwise climbs to
    repository paths that do not exist in an install. Signing, export, and upload were not run, and
-   the spike's Mac also had a Node elsewhere, so the clean-machine gate is what proves none leaks.
+   the spike's Mac also had a Node elsewhere, so a later clean-machine ship acceptance must prove none leaks.
    Android builds call `node` from Gradle and have not been tried.
 
    _In progress 2026-09-25._ The installed pipeline now starts Expo prebuild and export and
@@ -803,16 +801,16 @@ stands between `A2` and done, in the order to take it:
    prebuild, export, and fingerprint with `PATH=/usr/bin:/bin`. Unit coverage proves the bridge's
    command plan and files. CocoaPods, the Simulator build, signing, and upload remain unproved on
    this branch. The standalone host still lacks the iCloud config plugin, now listed in release gaps.
-5. **Signing and notarization, and the Foundation Models helper**, both waiting on the Developer ID
+4. **Signing and notarization, and the Foundation Models helper**, both waiting on the Developer ID
    certificate; `tao dev` is then re-checked under the hardened runtime (uncertainty 5).
-6. **A test for downloading a missing pinned release interactively**, the one slice-8 path no test
+5. **A test for downloading a missing pinned release interactively**, the one slice-8 path no test
    covers, because neither the acceptance nor an agent sandbox has a terminal to answer the question
    (`DEVENV-082`). A pseudo-terminal harness or an injectable prompt would cover it.
 
    _Covered on this branch 2026-09-25._ The test injects the prompt and release bytes, checks a
    refusal and a bad checksum, observes the version query from `/` without `TAO_VERSION`, and
    verifies that installing a pin leaves `bin/tao` unchanged.
-7. **Publishing `0.4.0`**, waiting on the public repository, its GitHub Releases (`R11`), and the
+6. **Publishing `0.4.0`**, waiting on the public repository, its GitHub Releases (`R11`), and the
    licence (`R1`).
 
 Meanwhile about half of all verification-lane runs fail on tests that spawn `git` and hang for their
@@ -837,7 +835,7 @@ landing this work needs.
    setup, which reuses `jest-expo`'s native-module definitions (Expo SDK 56 and later) but moves the
    journeys off Jest. The Vitest React Native projects themselves require Node, and Expo documents
    only Jest. **Decided 2026-09-25:** Bun's own runner, with a harness Tao owns (Remaining work,
-   item 3); the two Jest-under-Bun experiments are dropped.
+   item 2); the two Jest-under-Bun experiments are dropped.
 2. **Is a `bun install`-resolved host reproducible enough for `tao ship`?** `ship-fingerprints`
    hashes the runtime. Settle by installing the same lockfile twice on different machines and
    comparing the fingerprint.
@@ -937,8 +935,10 @@ above; where the two disagree, these are later and win.
     specific to the app-launched process. The guest then exposed a separate release blocker: the
     Nix-provided Bun compiler embedded its `/nix/store` ICU path in both the release and acceptance
     executables. The builder now compiles with a SHA-pinned official Bun 1.4.2 binary and rejects
-    non-system dynamic library paths; the guest acceptance uses the same compiler. The fixed gate
-    still needs a complete guest run before clean-machine acceptance can be claimed.
+    non-system dynamic library paths; the guest acceptance uses the same compiler. A third run from
+    Terminal.app passed the full acceptance in the vanilla guest on 2026-09-25: SSH was ready in 15
+    seconds, acceptance passed in 66 seconds, and the gate completed in 86 seconds. Its retained logs
+    are under `.artifacts/standalone-vm/tao-acceptance-1790362625-11421/logs/`.
 
     **Tart host troubleshooting.** Tart's installer notes that macOS gives VM addresses a default
     DHCP lease of 86,400 seconds. This gate uses Tart's default network, even though `softnet` is

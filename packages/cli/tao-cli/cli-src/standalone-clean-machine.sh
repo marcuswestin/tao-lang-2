@@ -155,6 +155,7 @@ if [ -z "$address" ] || ! /usr/bin/expect "$expect_script" "$address" '/usr/bin/
 fi
 printf 'Clean-machine: guest SSH ready in %ss\n' "$(($(date +%s) - boot_started))"
 
+printf 'Clean-machine: SSH password is supplied automatically; no input is needed.\n'
 if ! step 'run standalone acceptance in the vanilla guest' \
   /usr/bin/expect "$expect_script" "$address" '/bin/sh "/Volumes/My Shared Files/tao-input/run.sh"' \
   2>&1 | tee "$logs/acceptance.log"; then
