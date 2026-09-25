@@ -293,6 +293,23 @@ Exercise the type system through a small UI that passes typed values into views.
 
 **Does not belong here:** grammar edge cases without type-system meaning; layout, styling, navigation, data, or action behavior beyond what type coverage needs; stdlib runtime coverage; invalid or intentionally failing cases.
 
+## Read Net
+
+Exercise the read net: the runtime's handling of the exceptional read cases a render guard leaves
+unnamed, and a project's file-level `guard default` replacing it case by case. Two projects share
+the folder so their nets can differ: `ReadNetApp` replaces `missing`, and `Runtime Default/`'s
+`RuntimeDefaultApp` replaces `loading` and `error` and leaves `missing` to the runtime.
+
+**Belongs here:** a bare `guard Subject` over an entity and a query; a deleted row reaching the net
+as `missing`; the project's override rendering at the guarding site; a guard that names `missing`
+winning over the net; the runtime's `missing` sentence where the project's net does not replace it;
+a deleted handle keeping `.Id` inside a site's own `missing` handler.
+
+**Does not belong here:** `loading`, `unauthorized`, and `error` rendered through a journey, which
+Memory cannot produce on demand and the runtime package tests prove; read-net diagnostics
+(placement, cases, one per project, a bare guard over text), which are package tests; action guards;
+write outcomes.
+
 ## Phrases
 
 Exercise `phrase` declarations: named copy with typed holes and CLDR plural forms (Decisions §14).

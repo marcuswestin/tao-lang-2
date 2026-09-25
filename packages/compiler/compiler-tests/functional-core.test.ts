@@ -1,4 +1,5 @@
-import { Describe, Expect, Test } from '@shared/test'
+import { Workspace } from '@compiler/workspace'
+import { Describe, Expect, fence, Test, tsFence, withTaoFiles } from '@shared/test'
 import { TestCompiler as Compiler } from './test-compile'
 
 Describe('compiler: functional core', () => {
@@ -117,6 +118,62 @@ Describe('compiler: functional core', () => {
     Expect(code).toContain('["missing", _TaoCasePayload =>')
     Expect(code).toContain('["unauthorized", _TaoCasePayload =>')
     Expect(code.match(/TR\.If\(/g)).toHaveLength(4)
+  })
+
+  Test('hands unnamed exceptional cases to the read net the app carries', async () => {
+    const compiled = await Compiler.compileCode(`
+      app NetApp { view Main }
+      guard default {
+        loading -> Text("Opening…")
+        error -> Message { Text(Message) }
+      }
+      data Documents / Document { Title text }
+      view Main() {
+        query Documents { }
+        render Stack() {
+          guard Documents
+          Text("Ready")
+        }
+      }
+      view Stack() { render inject Content @@content \`\`\`ts\nreturn Content\n\`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+    `)
+
+    const code = compiled.files[0]?.code ?? ''
+    Expect(code).toContain('_Scope._TaoReadNet = TR.ReadNet({')
+    Expect(code).toContain('"loading": (_ViewProps, _TaoCasePayload) =>')
+    Expect(code).toContain('_Scope.Message = _TaoCasePayload')
+    Expect(code).toContain('readNet: () => _Scope._TaoReadNet,')
+    Expect(code).toMatch(
+      /TR\.GuardRender\(_Scope\.Documents\.evaluate\(\), \[\s*\], \(\) => <>[\s\S]*<\/>, _ViewProps\.__tao\)/,
+    )
+  })
+
+  Test('carries a sibling file read net into every app module', async () => {
+    await withTaoFiles(
+      'tao-compiler-read-net-',
+      {
+        'Project.tao': `project { id "compiler-read-net" name "Compiler read net" }`,
+        'Main.tao': `
+          app NetApp { view Home }
+          view Home() { render inject ${tsFence} return null ${fence} }
+        `,
+        'Net.tao': `
+          guard default { missing -> { Gone() } }
+          view Gone() { render inject ${tsFence} return null ${fence} }
+        `,
+      },
+      async paths => {
+        const compiled = await Workspace.compile(paths['Main.tao'])
+        const app = compiled.files.find(file => file.relativePath === 'App.tsx')?.code ?? ''
+        const net = compiled.files.find(file => file.relativePath === 'modules/Net.tao.tsx')?.code ?? ''
+
+        Expect(app).toContain("import { _TaoReadNet } from './modules/Net.tao'")
+        Expect(app).toContain("TR.Use(_Scope, '_TaoReadNet', () => _TaoReadNet)")
+        Expect(app).toContain('readNet: () => _Scope._TaoReadNet,')
+        Expect(net).toContain('export const _TaoReadNet = _Scope._TaoReadNet')
+      },
+    )
   })
 
   Test('keeps a matched guard inside its action block while caller execution continues', async () => {

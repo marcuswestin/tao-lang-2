@@ -232,11 +232,11 @@ Describe('parser: syntax diagnostics', () => {
   })
 
   Test('states a repetition that matched nothing at all', async () => {
-    const errors = await syntaxErrors('view Main() {\n  guard Thing { }\n}\n')
+    const errors = await syntaxErrors('guard default { }\n')
 
     Expect(errors[0]).toEqual({
       kind: 'EarlyExitException',
-      message: 'Expected a guard case here, but found `}`.',
+      message: 'Expected a guard default case here, but found `}`.',
     })
   })
 
