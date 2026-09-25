@@ -94,11 +94,28 @@ export async function withTaoFixture(
 ): Promise<void> {
   await withoutInheritedNoCache(async () => {
     // CLI tests exercise project-root detection; give each fixture its own root outside this Git checkout.
-    await withTaoFiles('tao-cli-test', files, (_paths, rootDir) => testsFunction(rootDir), {
+    await withTaoFiles('tao-cli-test', files, async (_paths, rootDir) => {
+      await withTaoHome(rootDir, () => testsFunction(rootDir))
+    }, {
       location: 'host',
       verbatim: true,
     })
   })
+}
+
+/** withTaoHome keeps a CLI fixture's machine state inside its own writable test root. */
+export async function withTaoHome<T>(rootDir: string, run: () => Promise<T>): Promise<T> {
+  const previousHome = Platform.runtimeProcess.env['TAO_HOME']
+  Platform.runtimeProcess.env['TAO_HOME'] = FS.resolvePath('.tao', rootDir)
+  try {
+    return await run()
+  } finally {
+    if (previousHome === undefined) {
+      delete Platform.runtimeProcess.env['TAO_HOME']
+    } else {
+      Platform.runtimeProcess.env['TAO_HOME'] = previousHome
+    }
+  }
 }
 
 /** withoutInheritedNoCache runs one fixture with the lane's cache opt-out out of the way, then restores it. */

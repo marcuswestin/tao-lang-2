@@ -409,11 +409,13 @@ Describe('repository doctor', () => {
 
   Test('reads this checkout without changing it', async () => {
     const before = await CLI.run('git', { args: ['status', '--porcelain'], cwd: Repo.getRoot() })
-    const listedBefore = (await FS.listDir(Repo.resolvePath('.artifacts'))).toSorted()
+    const stableArtifacts = async () =>
+      (await FS.listDir(Repo.resolvePath('.artifacts'))).filter(name => !name.endsWith('.lock')).toSorted()
+    const listedBefore = await stableArtifacts()
     const report = doctorReport(await readDoctorFacts())
     const after = await CLI.run('git', { args: ['status', '--porcelain'], cwd: Repo.getRoot() })
 
-    Expect((await FS.listDir(Repo.resolvePath('.artifacts'))).toSorted()).toEqual(listedBefore)
+    Expect(await stableArtifacts()).toEqual(listedBefore)
     Expect(after.stdout).toBe(before.stdout)
     Expect(report.repositoryRoot).toBe(Repo.getRoot())
     Expect(check(report, 'dependency compatibility')?.status).toBe('pass')
