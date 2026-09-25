@@ -359,6 +359,14 @@ equals MVP.
 - Scope: `R5` defers the authority cluster to the later app expansion. `R6` leaves the three runtime
   contracts experimental at 0.x launch; settle each when a forcing slice reaches it.
 - Context: `Coverage.md`'s tier column, `Apps/WordFlower/README.md` tranche mechanics.
+- Scope settled in the 2026-09-25 decision rounds (`Coverage.md` carries the tiers): MVP ships
+  `required` forms with `create … with` and `Problems(…)`, `check`, `when do` with `saved` /
+  `rejected` / `error` and declared-case branches plus the unhandled-failure warning, the
+  runtime-supplied `guard default`, query `search`, plural `phrase`s, the bridge metadata module, a
+  document export behind `fails`, and the test world's `on`/`with`, `network`, `wait for sync`,
+  and `datasource fails after`. Deferred: `validate` and `refuse when`, `queued`, `group by`,
+  preferences with `Me` and `@tao/auth`, copy extraction and `words`, clock and collaborator
+  controls, and multi-target interaction. Action-level `guard` is retired in favour of `check`.
 - The reactive editing implementation has a separate [deferred follow-up](../Roadmap/Reactive%20editing%20follow-up.md):
   snapshot-provider mutation recovery, authoritative validation decisions, and live-provider/device
   acceptance. These are not implied by the implemented projected inputs and writable parameters.
