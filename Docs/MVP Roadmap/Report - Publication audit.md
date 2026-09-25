@@ -357,6 +357,9 @@ about.
   by name, from `packages/testing/verification/verification-src/WatchmanHealth.ts` (the doctor path
   cited above has moved). What remains is recorded in
   [DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START](<../Roadmap/Developer environment upgrades/DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START.md>).
+- **Follow-up (2026-09-25):** The rule is gone from both sandboxes: Codex could only be given it
+  as an absolute path naming a login (see `P18`), so file-watching dev loops run on the host
+  through named operations instead, and the doctor treats a sandbox without Watchman as expected.
 
 ### P18 — Absolute `/Users/ro/…` paths in a generated harness config — Medium
 
@@ -385,6 +388,14 @@ Three test files also embed absolute paths, but only one is personal:
   worktree, and task creation failed before its setup hook could run. The config is tracked again so
   the startup profile exists at checkout time. Its two absolute socket entries are still specific to
   the machine that generated it; setup refreshes them for another machine and that diff needs review.
+- **Follow-up (2026-09-25):** The tracked config names no login. The generator gives Codex only
+  socket paths that are absolute in the source and name no one: the Watchman rule left both
+  sandboxes, since file-watching dev loops now run on the host (`./agent unsandboxed app-dev`,
+  `studio`, `studio-native`), and Docker keeps only `/var/run/docker.sock`, the login-free link
+  Docker Desktop creates and Codex follows, beside the host operations `local-instantdb start` and
+  `stop`. The shared Git directory is written home-relative (`~/code/tao-lang-2/.git`), so it holds
+  for any login whose clone sits at that path. The test that no tracked harness file names a home
+  directory covers `.codex/config.toml` again.
 
 ### P19 — `local.properties` — Low, already handled
 

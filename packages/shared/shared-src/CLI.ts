@@ -102,6 +102,21 @@ export function isSandboxDenial(result: SandboxDenialOutcome): boolean {
   return SANDBOX_DENIAL.test(output || fallback)
 }
 
+/**
+ * Only a variable a harness sets *because* the command is sandboxed belongs here: Claude Code's
+ * sandboxed shell sets `SANDBOX_RUNTIME` and Codex's sets `CODEX_SANDBOX`. Claude Code also sets
+ * `CLAUDE_CODE_TMPDIR` in every session, sandboxed or not, so keying on it reported every agent as
+ * sandboxed.
+ */
+const SANDBOX_SIGNALS: readonly string[] = ['SANDBOX_RUNTIME', 'CODEX_SANDBOX']
+
+/** inAgentSandbox reports whether this process runs under an agent harness's sandbox policy. */
+export function inAgentSandbox(
+  env: Readonly<Record<string, string | undefined>> = Platform.runtimeProcess.env,
+): boolean {
+  return SANDBOX_SIGNALS.some(name => (env[name] ?? '') !== '')
+}
+
 /** CommandCloseResult records process close status. */
 export type CommandCloseResult = {
   exitCode: number | null
