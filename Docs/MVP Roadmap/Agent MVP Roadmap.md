@@ -316,8 +316,11 @@ from the development loop, which no virtualization approach can do.
      dev-loop documentation so no command or message offers Expo Go as a Tao app runtime. Verify
      both cache-hit and fresh-download launches, missing-host and failed-install messages, and the
      Android USB-reverse and LAN cases before declaring the retirement done.
+- CI host-build workflow (2026-09-25; hosted run still unproved): relevant pull requests check the
+  Companion's native-kit parity and build Android on `ubuntu-24.04` and iOS Simulator on `macos-26`.
+  It does not publish a host; the first hosted result must establish that both runners can build it.
 - Remaining: the first published host and a live download once the repository is public; proving
-  physical Android on a phone; the physical-iPhone invitation beta; building hosts in CI; and
+  physical Android on a phone; the physical-iPhone invitation beta; live CI host-build proof; and
   retiring the Expo Go lanes as each is covered. The entitlements need the iCloud container and push
   enabled on the app id before a device build signs. The account-dependent device build and release
   proof are parked until the near-release pass (`R12`); simulator and Android work can continue.

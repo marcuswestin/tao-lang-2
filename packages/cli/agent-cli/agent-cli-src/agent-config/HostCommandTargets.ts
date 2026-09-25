@@ -62,6 +62,8 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'processes list': { command: 'ps', fixedArgs: ['-axo', 'pid=,ppid=,lstart=,command='], argsPolicy: 'none' },
   'processes started': { command: 'ps', fixedArgs: ['-o', 'lstart=', '-p'], argsPolicy: 'pid' },
   'start-branch': { command: './dev', fixedArgs: ['start-branch'] },
+  // Trust only this checkout's .envrc, from the worktree root selected by ./agent.
+  'direnv allow': { command: 'direnv', fixedArgs: ['allow'], argsPolicy: 'none' },
 }
 
 /** A named operation has a fixed implementation; suffix argv passes through without a shell. */

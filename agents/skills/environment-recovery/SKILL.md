@@ -28,6 +28,8 @@ behind it.
   worktree repairs itself by being used; `dev-automation` owns how each harness reaches it.
 - In a linked worktree `./agent` reuses the primary checkout's pinned profile, or prints the
   fallback itself (`direnv allow && direnv exec . ./agent setup`) when it finds none.
+- When direnv blocks this checkout's `.envrc` and the sandbox denies its allowlist write, review the
+  file and run `./agent unsandboxed direnv allow`. Trust stays an explicit per-worktree action.
 - The session-start hook puts `.devenv/profile/bin` on each tool shell's PATH — call `bun`,
   `bunx`, `dprint`, `just`, and `node` directly. Exports do not persist between tool calls, so if
   `which bun` shows a shell without it, prefix the affected invocation with
