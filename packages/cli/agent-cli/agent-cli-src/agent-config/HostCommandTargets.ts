@@ -10,6 +10,14 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
   'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
   'app-dev': { command: './tao', fixedArgs: ['dev'], server: true },
+  // Dev loops that watch files run on the host, where Watchman and the OS file-event service are
+  // reachable; no agent sandbox is given Watchman's per-login socket.
+  'studio': { command: './dev', fixedArgs: ['studio'], server: true },
+  'studio-native': { command: './dev', fixedArgs: ['studio-native'], server: true },
+  // The local InstantDB stack is Docker Compose; running its two recipes on the host keeps the Docker
+  // socket, which is root-equivalent, out of every agent sandbox.
+  'local-instantdb start': { command: 'just', fixedArgs: ['start-local-instantdb'], argsPolicy: 'none' },
+  'local-instantdb stop': { command: 'just', fixedArgs: ['stop-local-instantdb'], argsPolicy: 'none' },
   'simulators list': { command: 'xcrun', fixedArgs: ['simctl', 'list', 'devices'] },
   'simulators boot': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
   'simulators run': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },

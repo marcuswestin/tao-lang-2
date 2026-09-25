@@ -109,7 +109,8 @@
     "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
     "native-module-check",
     "prepare-release studio", "prepare-release ide-extension",
-    "app-dev",
+    "app-dev", "studio", "studio-native",
+    "local-instantdb start", "local-instantdb stop",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators open-url", "simulators uninstall", "simulators open",
     "devices list", "devices apps", "devices launch",
@@ -133,9 +134,8 @@
           { "path": "~/.config/gh", "mode": "deny" },
         ],
       },
-      // Caches the pinned toolchain writes outside the worktree. Expo's native-module cache,
-      // Hutch's launcher root, and Watchman's state directory are as much part of the dev loop
-      // as Bun's and Gradle's: without them Studio, native Studio, and file watching all fail.
+      // Caches the pinned toolchain writes outside the worktree. Expo's native-module cache and
+      // Hutch's launcher root are as much part of the dev loop as Bun's and Gradle's.
       "filesystem": {
         "allowWrite": [
           "~/.bun",
@@ -144,19 +144,18 @@
           "~/.android",
           "~/.expo",
           "~/.hutch",
-          "~/.local/state/watchman",
           "~/Library/Caches",
         ],
       },
       "network": {
         "allowLocalBinding": true,
-        // Watchman's client reaches its server through `<login>-state/sock` under this directory,
-        // named after whoever runs it. Claude Code and Codex both render a socket entry as a
-        // Seatbelt `subpath` rule, so the directory covers every login without naming one; the
-        // rule matches the resolved path, so a link planted here reaches no other socket.
+        // Watchman is deliberately absent. Its socket sits under each developer's home directory,
+        // and Codex accepts only an absolute socket path, which would put a login in the tracked
+        // config; an agent sandbox also refuses OS file watching outright. So file-watching dev
+        // loops run on the host (`./agent unsandboxed app-dev` or `studio`), and sandboxed tests
+        // and builds crawl the tree without Watchman.
         "allowUnixSockets": [
           "/nix/var/nix/daemon-socket/socket",
-          "~/.local/state/watchman",
         ],
         "allowedDomains": [
           "registry.npmjs.org",
