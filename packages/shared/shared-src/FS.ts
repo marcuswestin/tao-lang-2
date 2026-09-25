@@ -211,6 +211,20 @@ export async function readTextPrefix(inputPath: string, maxBytes: number): Promi
   }
 }
 
+/** Read at most maxBytes from the end of a UTF-8 file, without loading the rest. The first line may be partial. */
+export async function readTextSuffix(inputPath: string, maxBytes: number): Promise<string> {
+  const handle = await nodeFs.open(inputPath, 'r')
+  try {
+    const { size } = await handle.stat()
+    const length = Math.min(size, maxBytes)
+    const bytes = Buffer.alloc(length)
+    const { bytesRead } = await handle.read(bytes, 0, length, size - length)
+    return bytes.subarray(0, bytesRead).toString('utf8')
+  } finally {
+    await handle.close()
+  }
+}
+
 /** readTextSync reads UTF-8 text for synchronous compiler and validator passes. */
 export function readTextSync(inputPath: string): string {
   return nodeReadFileSync(inputPath, 'utf8')

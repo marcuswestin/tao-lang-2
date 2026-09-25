@@ -287,8 +287,12 @@ from the development loop, which no virtualization approach can do.
   build and opens the app in it. Publishing zips it beside the Android host on the same release.
   Proven with HNReader on an iPhone 17 simulator; the first, unsigned build carried no entitlements
   and CloudKit aborted it, which the build now refuses.
-- Remaining: the first published host and a live download once the repository is public; physical
-  Android through the Companion; the physical-iPhone invitation beta; building hosts in CI; and
+- Landed 2026-09-25, physical Android: `tao dev`'s phone path prepares a phone the way it prepares an
+  emulator, installing a compatible Companion only when the phone's copy differs, and reaches Metro
+  over `adb reverse` on the phone's own loopback, or at the Mac's LAN address when that fails.
+  Unit-tested only; the Developer asked for it to land before a device run.
+- Remaining: the first published host and a live download once the repository is public; proving
+  physical Android on a phone; the physical-iPhone invitation beta; building hosts in CI; and
   retiring the Expo Go lanes as each is covered. The entitlements need the iCloud container and push
   enabled on the app id before a device build signs. The account-dependent device build and release
   proof are parked until the near-release pass (`R12`); simulator and Android work can continue.
@@ -360,6 +364,14 @@ equals MVP.
 - Scope: `R5` defers the authority cluster to the later app expansion. `R6` leaves the three runtime
   contracts experimental at 0.x launch; settle each when a forcing slice reaches it.
 - Context: `Coverage.md`'s tier column, `Apps/WordFlower/README.md` tranche mechanics.
+- Scope settled in the 2026-09-25 decision rounds (`Coverage.md` carries the tiers): MVP ships
+  `required` forms with `create … with` and `Problems(…)`, `check`, `when do` with `saved` /
+  `rejected` / `error` and declared-case branches plus the unhandled-failure warning, the
+  runtime-supplied `guard default`, query `search`, plural `phrase`s, the bridge metadata module, a
+  document export behind `fails`, and the test world's `on`/`with`, `network`, `wait for sync`,
+  and `datasource fails after`. Deferred: `validate` and `refuse when`, `queued`, `group by`,
+  preferences with `Me` and `@tao/auth`, copy extraction and `words`, clock and collaborator
+  controls, and multi-target interaction. Action-level `guard` is retired in favour of `check`.
 - The reactive editing implementation has a separate [deferred follow-up](../Roadmap/Reactive%20editing%20follow-up.md):
   snapshot-provider mutation recovery, authoritative validation decisions, and live-provider/device
   acceptance. These are not implied by the implemented projected inputs and writable parameters.

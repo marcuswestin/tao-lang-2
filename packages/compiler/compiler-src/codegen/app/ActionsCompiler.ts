@@ -159,6 +159,7 @@ export const ActionsCompiler = {
       AsyncActionStatement: Compile.AsyncActionStatement,
       CreateStatement: Compile.CreateStatement,
       AskStatement: Compile.AskStatement,
+      CheckStatement: Compile.CheckStatement,
       ContextualPresentStatement: Compile.ContextualPresentStatement,
       DeleteStatement: Compile.DeleteStatement,
       RetryStatement: Compile.RetryStatement,
@@ -179,8 +180,13 @@ export const ActionsCompiler = {
 
   /** ActionBlockBody compiles one callback-owned action block. */
   ActionBlockBody(block: AST.ActionBlock | undefined): Compiled {
-    if (!actionInstrumentationEnabled() || !block) {
-      return gen.list(block?.statements ?? [], statement =>
+    // Every caller declares the continuation before the body; an empty body must still read it,
+    // or a generated app compiled with unused-local checks rejects `on submit -> { }`.
+    if (!block || block.statements.length === 0) {
+      return gen`void _TaoActionContinuation`
+    }
+    if (!actionInstrumentationEnabled()) {
+      return gen.list(block.statements, statement =>
         gen`
         TR.ResumeActionContinuation(_TaoActionContinuation)
         ${Compile.ActionStatement(statement)}
@@ -277,6 +283,11 @@ export const ActionsCompiler = {
       )
     }
     ])) return`
+  },
+
+  /** CheckStatement ends its action's callback when the validated condition is false. */
+  CheckStatement(statement: AST.CheckStatement): Compiled {
+    return gen`if (TR.Check(${Compile.Expression(statement.condition)})) return`
   },
 
   /** IfActionStatement lazily executes one action sub-block without terminating its caller. */

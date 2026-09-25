@@ -90,6 +90,10 @@ export const DataFormatter = {
     f.oneSpaceAfter('where', 'is')
   },
 
+  SearchClause(f) {
+    f.oneSpaceAfter('search')
+  },
+
   OrderClause(f) {
     f.oneSpaceAfter('order', 'by')
   },
@@ -100,6 +104,7 @@ export const DataFormatter = {
 
   CreateStatement(f) {
     f.oneSpaceAfter('create')
+    f.oneSpaceAround('with')
   },
 
   UpdateStatement(f) {

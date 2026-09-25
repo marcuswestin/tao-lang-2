@@ -213,7 +213,11 @@ export const ExpressionsCompiler = {
     }])`
   },
 
-  /** FunctionCallExpression invokes a Tao pure function with owner-bound arguments. */
+  /**
+   * FunctionCallExpression invokes a pure function or named copy with owner-bound arguments; both
+   * share this one call shape (Decisions §14). A parameterless phrase's zero-argument call form
+   * (`DocumentGone()`) compiles the same way as its bare reference (`ValueDeclarationReference`).
+   */
   FunctionCallExpression(expression: AST.FunctionCallExpression): Compiled {
     const resolved = ASTUtils.resolveFunctionInvocation(expression)
     const fn = resolved.function
@@ -338,6 +342,8 @@ export const ExpressionsCompiler = {
       DatasourceDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       NavDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
+      // A phrase compiles to a callable `TR.Function`; a bare reference is its zero-argument call.
+      PhraseDeclaration: phrase => gen`TR.Call(${gen.scopeName(phrase)})`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
       ViewDeclaration: view => Compile.ViewValue(view),
     })
@@ -853,11 +859,36 @@ function compileMemberPath(root: Compiled, rootType: ASTUtils.TaoType, members: 
       current = { kind: 'primitive', primitive: constructed }
       continue
     }
+    const completenessFields = Type.completenessFieldsOf(current)
+    const completenessType = completenessFields && Type.completenessMemberType(member)
+    if (completenessFields && completenessType) {
+      flushPlainMembers()
+      compiled = compileCompletenessMember(compiled, member, completenessFields)
+      current = completenessType
+      continue
+    }
     plainMembers.push(member)
     current = Type.atMemberPath(current, [member])
   }
   flushPlainMembers()
   return compiled
+}
+
+/**
+ * `Incomplete` and `Problems` read a row's or projection's `required` fields. Which fields carry a
+ * sentence is known here, so it is compiled in rather than carried by every runtime value.
+ */
+function compileCompletenessMember(
+  compiled: Compiled,
+  member: string,
+  fields: readonly ASTUtils.DataFieldDefinition[],
+): Compiled {
+  const required = fields.flatMap(field => {
+    const sentence = Type.requiredSentence(field)
+    return sentence === undefined ? [] : [gen`[${gen.jsLiteral(field.name)}, ${gen.jsLiteral(sentence)}]`]
+  })
+  const helper = member === 'Incomplete' ? 'Incomplete' : 'Problems'
+  return gen`TR.${helper}(${compiled}, [${gen.join(required, field => field)}])`
 }
 
 /**

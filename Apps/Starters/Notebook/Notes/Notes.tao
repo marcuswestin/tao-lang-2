@@ -9,7 +9,7 @@ scene NoteList() {
    state NewTitle = ""
    query Notes { }
    action AddNote() {
-      guard NewTitle empty
+      check NewTitle is not empty
       create Note {
          Title: NewTitle
       }
@@ -75,7 +75,7 @@ scene NoteDetail(Note) {
    state TitleDraft = Note.Title
    state BodyDraft = Note.Body
    action SaveNote() {
-      guard TitleDraft empty
+      check TitleDraft is not empty
       update Note {
          Title: TitleDraft
          Body: BodyDraft

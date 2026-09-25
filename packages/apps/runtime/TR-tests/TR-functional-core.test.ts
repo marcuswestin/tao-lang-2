@@ -62,6 +62,17 @@ Describe('TR functional core', () => {
     TR.If(TR.Value(false), () => ifRuns++)
     TR.If(TR.Value(true), () => ifRuns++)
     Expect(ifRuns).toBe(1)
+    // A check reports a stop whenever its validated boolean is not true.
+    Expect(TR.Check(TR.Value(true))).toBe(false)
+    Expect(TR.Check(TR.Value(false))).toBe(true)
+    // A required field is missing when it reads as none or as an empty text or list.
+    const required = [['Title', 'Name it'], ['Tags', 'Tag it'], ['Due', 'Date it'], ['Count', 'Count it']] as const
+    const draft = TR.Value({ Title: '', Tags: [], Due: null, Count: 0 })
+    Expect(TR.Problems(draft, required).jsValue).toEqual(['Name it', 'Tag it', 'Date it'])
+    Expect(TR.Incomplete(draft, required).jsValue).toBe(true)
+    const done = TR.Value({ Title: 'Ready', Tags: ['one'], Due: 1, Count: 0 })
+    Expect(TR.Problems(done, required).jsValue).toEqual([])
+    Expect(TR.Incomplete(done, required).jsValue).toBe(false)
 
     const query = [] as unknown as unknown[] & { Loading: boolean; Error: string }
     Object.defineProperties(query, {

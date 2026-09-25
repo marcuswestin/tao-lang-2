@@ -274,6 +274,11 @@ function eventSortKey(record: string): { time: string; rank: number } {
   }
 }
 
+/**
+ * currentProfilePins names the profiles that pin a Claude Code model. Only Claude Code's `Agent`
+ * tool reaches the spawn hook, so a Codex pin says nothing about a logged spawn; most profiles leave
+ * Codex on its `[agents]` default and would otherwise read as an unknown selection.
+ */
 async function currentProfilePins(root: string): Promise<Set<string>> {
   const directory = FS.resolvePath(SUBAGENTS_DIRECTORY, root)
   const pins = new Set<string>()
@@ -285,10 +290,7 @@ async function currentProfilePins(root: string): Promise<Set<string>> {
       continue
     }
     const document = parseAgentFrontmatter(name, await FS.readText(FS.resolvePath(name, directory)))
-    if (
-      document.name !== undefined && document.sections['claudecode']?.['model'] !== undefined
-      && document.sections['codexcli']?.['model'] !== undefined
-    ) {
+    if (document.name !== undefined && document.sections['claudecode']?.['model'] !== undefined) {
       pins.add(document.name)
     }
   }

@@ -113,6 +113,23 @@ Describe('functional core formatter', () => {
   )
 
   Test(
+    'formats a check early exit as one statement line',
+    formats(
+      `view Main(){state Name="" action Add(){check   Name is not empty set Name=""}render Stack()}`,
+      `
+        view Main() {
+           state Name = ""
+           action Add() {
+              check Name is not empty
+              set Name = ""
+           }
+           render Stack()
+        }
+      `,
+    ),
+  )
+
+  Test(
     'formats grouped entity availability guards and their error payload',
     formats(
       `view DocumentScreen(Document){render Stack(){guard Document{loading->{Text("Loading")}missing->{Text("Missing")}unauthorized->{Text("Unauthorized")}error->Message{Text(Message)}}DocumentEditor(Document)}}`,
@@ -125,6 +142,26 @@ Describe('functional core formatter', () => {
                  unauthorized -> { Text("Unauthorized") }
                  error -> Message { Text(Message) }
               }
+              DocumentEditor(Document)
+        }  }
+      `,
+    ),
+  )
+
+  Test(
+    'formats a bare guard and the file-level read net',
+    formats(
+      `guard   default{loading->Spinner()missing->{Text("Gone")}error->Message{Text(Message)}}\nview DocumentScreen(Document){render Stack(){guard   Document\nDocumentEditor(Document)}}`,
+      `
+        guard default {
+           loading -> Spinner()
+           missing -> { Text("Gone") }
+           error -> Message { Text(Message) }
+        }
+
+        view DocumentScreen(Document) {
+           render Stack() {
+              guard Document
               DocumentEditor(Document)
         }  }
       `,

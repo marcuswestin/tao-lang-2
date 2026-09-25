@@ -1,7 +1,7 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
-import { FinalizeCommand, LandCommand } from '@verification/Finalize'
+import { FinalizeCommand, LandCommand, MergeMainCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
 import { GreenTree } from '@verification/GreenTree'
 import { LandingLock } from '@verification/LandingLock'
@@ -413,6 +413,19 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('merge-main')
+    .description('Merge current main into this feature branch, and nothing else; no lane, no merge message.')
+    .action(async () => {
+      try {
+        await MergeMainCommand.run()
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('capabilities')
     .description('Report which host capabilities this agent environment can use without changing anything.')
     .option('--json', 'Print a versioned structured report.')
@@ -427,6 +440,25 @@ await runWithCommands(commands => {
     .action(async (options: { json?: boolean } = {}) => {
       const { DelegationReportCommand } = await import('@agent-cli/delegation/DelegationReportCommand')
       Platform.runtimeProcess.exit(await DelegationReportCommand.run({ json: options.json === true }))
+    })
+
+  commands
+    .command('model-audit')
+    .description('Report where the delegation routing table lags the models this machine runs, and measure context.')
+    .option('--days <count>', 'How many days of transcripts to read.', '7')
+    .option('--until <time>', 'End the window here instead of now, to measure the period before a change.')
+    .option('--json', 'Print the structured report instead of prose.')
+    .option('--brief', 'Print one line only when routing looks behind, over the last day; silent otherwise.')
+    .action(async (options: { brief?: boolean; days?: string; json?: boolean; until?: string } = {}) => {
+      const { ModelAuditCommand } = await import('@agent-cli/delegation/ModelAuditCommand')
+      Platform.runtimeProcess.exit(
+        await ModelAuditCommand.run({
+          brief: options.brief === true,
+          days: parseOptionalPositiveInteger(options.days, '--days'),
+          json: options.json === true,
+          until: options.until,
+        }),
+      )
     })
 
   commands

@@ -39,6 +39,7 @@ import {
   withBrowserHistoryEntry,
 } from './TR-navigation-value'
 import { requireReactNativeRuntime } from './TR-react-native'
+import type { TaoReadNet } from './TR-read-net'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import type { TaoProps } from './TR-TaoProps'
 import { Clock } from './TR-units'
@@ -105,6 +106,7 @@ export class RuntimeAppDefinition implements Subscription {
   >()
   private descriptorMounts = new Map<TaoConfiguredNavigation, TaoNavigationValue>()
   private designValue: TaoDesign | undefined
+  private readNetValue: TaoReadNet | undefined
   private readonly changes = runtimeRevisionStore()
   private readonly navigationLanes = new WeakMap<TaoNavigationValue, TaoNavigationValue>()
   private readonly navigationLaneRecords = new Map<TaoNavigationValue, NavigationLaneRecord>()
@@ -171,6 +173,11 @@ export class RuntimeAppDefinition implements Subscription {
   /** design lazily resolves this mounted app's declaration-local design without a global registry. */
   get design(): TaoDesign | undefined {
     return this.designValue ??= this.definition.design?.()
+  }
+
+  /** readNet is the project's `guard default`, resolved after generated module initialization. */
+  get readNet(): TaoReadNet | undefined {
+    return this.readNetValue ??= this.definition.readNet?.()
   }
 
   attachBrowserHistory(driver: BrowserNavigationHistoryDriver): () => void {

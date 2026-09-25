@@ -196,6 +196,7 @@ export class Type {
       ActionDeclaration: typeOfParameterizedDeclaration,
       CommandDeclaration: typeOfParameterizedDeclaration,
       FunctionDeclaration: typeOfParameterizedDeclaration,
+      PhraseDeclaration: typeOfParameterizedDeclaration,
       ViewDeclaration: typeOfParameterizedDeclaration,
       undefined: unresolvedType,
     })
@@ -465,6 +466,51 @@ export class Type {
       return primitiveType('text')
     }
     return Units.ratioToBase(family, member) === undefined ? undefined : primitiveType('number')
+  }
+
+  /** requiredSentence returns the sentence a field's `required` trait states, when it has one. */
+  static requiredSentence(field: DataFieldDefinition): string | undefined {
+    return (field.traits?.traits ?? []).find(AST.traitIsRequired)?.sentence
+  }
+
+  /**
+   * completenessFieldsOf returns the fields whose `required` sentences a value's `Incomplete` and
+   * `Problems` read: an entity row's own fields, or the ones a projection selected. Any other type
+   * has no completeness members.
+   */
+  static completenessFieldsOf(type: TaoType): readonly DataFieldDefinition[] | undefined {
+    if (type.kind === 'entity') {
+      return Type.dataFields(type.entity)
+    }
+    return type.kind === 'item' && type.item?.projectedEntity ? type.item.dataFields ?? [] : undefined
+  }
+
+  /**
+   * isCompletenessMember is whether reading `member` on `type` is a derived completeness read. Such a
+   * member is computed from the `required` fields, never stored, so it is not a writable path.
+   */
+  static isCompletenessMember(type: TaoType, member: string): boolean {
+    return Type.completenessFieldsOf(type) !== undefined && Type.completenessMemberType(member) !== undefined
+  }
+
+  /** completenessMemberDepth returns how many members a path reads up to a completeness member. */
+  static completenessMemberDepth(root: TaoType, members: readonly string[]): number | undefined {
+    let type = root
+    for (const [index, member] of members.entries()) {
+      if (Type.isCompletenessMember(type, member)) {
+        return index + 1
+      }
+      type = Type.atMemberPath(type, [member])
+    }
+    return undefined
+  }
+
+  /** completenessMemberType resolves `Incomplete` and `Problems`, which `required` derives (§2). */
+  static completenessMemberType(member: string): TaoType | undefined {
+    if (member === 'Incomplete') {
+      return primitiveType('boolean')
+    }
+    return member === 'Problems' ? { kind: 'list', element: primitiveType('text') } : undefined
   }
 
   /** entityBuiltinMemberType resolves the runtime write-status members available on every entity. */
@@ -897,6 +943,10 @@ function memberType(current: TaoType, member: string): TaoType | undefined {
   if (family) {
     return Type.unitMemberType(family, member)
   }
+  const completeness = Type.completenessFieldsOf(current) && Type.completenessMemberType(member)
+  if (completeness) {
+    return completeness
+  }
   if (current.kind === 'entity') {
     if (member === 'Id') {
       return primitiveType('text')
@@ -986,7 +1036,7 @@ class TypeResolutionContext {
           : unresolvedType()
       },
       WhenExpression: when => this.whenExpressionType(when),
-      FunctionCallExpression: call => call.function.ref ? this.ofFunctionReturn(call.function.ref) : unresolvedType(),
+      FunctionCallExpression: call => this.functionCallExpressionType(call),
       InterpolatedString: () => primitiveType('text'),
       ListLiteral: list => this.listLiteralType(list),
       MemberAccessExpression: access => this.ofMemberAccess(access),
@@ -1083,6 +1133,7 @@ class TypeResolutionContext {
         declaration.value ? this.ofExpression(declaration.value) : primitiveType('datasource'),
       DesignDeclaration: () => primitiveType('design'),
       NavDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('nav'),
+      PhraseDeclaration: () => primitiveType('text'),
       StateDeclaration: state => this.stateDeclarationType(state),
       ViewDeclaration: declaration => primitiveType(declaration.scene ? 'scene' : 'view'),
       undefined: unresolvedType,
@@ -1114,6 +1165,15 @@ class TypeResolutionContext {
         writable: parameterRequiresWritable(parameter),
       })),
     )
+  }
+
+  /** A call's target links to a pure function or a phrase; a phrase always returns text. */
+  private functionCallExpressionType(call: AST.FunctionCallExpression): TaoType {
+    const target = call.function.ref
+    if (!target) {
+      return unresolvedType()
+    }
+    return AST.isPhraseDeclaration(target) ? primitiveType('text') : this.ofFunctionReturn(target)
   }
 
   ofFunctionReturn(declaration: AST.FunctionDeclaration): TaoType {
