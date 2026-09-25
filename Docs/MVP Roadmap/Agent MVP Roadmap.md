@@ -82,9 +82,11 @@ is `private`. Nobody outside the repository can install Tao.
   index, and install script, ready to publish once the repository is public. Installed through
   `curl | sh`, the binary creates a project with its tests, then checks, compiles, tests, builds for
   web, and serves web from `tao dev` outside any checkout, and each project it creates runs under
-  the release that made it; `just standalone-cli-acceptance` proves all of that. Still absent: the
-  iOS Simulator and Android from `tao dev`, the Foundation Models helper (it needs the Developer ID
-  certificate), signing and notarization, and the `tart` virtual-machine gate.
+  the release that made it; `just standalone-cli-acceptance` proves all of that. The plan's
+  "Remaining work" orders what is still absent: the iOS Simulator and Android from `tao dev`, the
+  `tart` virtual-machine gate, removing the managed Node, signing and notarization with the
+  Foundation Models helper (both need the Developer ID certificate), a test for the interactive
+  download of a pinned release, and publishing.
 - First-release shape: a signed, notarized macOS arm64 `bun build --compile` binary; the
   files the CLI reads at runtime (stdlib, runtime sources, starters, grammar) either embedded or
   unpacked to a versioned directory; the Expo host and its `node_modules` downloaded per Tao version

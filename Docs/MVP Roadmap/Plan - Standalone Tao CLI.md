@@ -550,7 +550,7 @@ from the text above:
 replacing `packages/apps/expo-host/_gen_tao-app`. Done when two projects compile against one
 shared host install.
 
-_Built 2026-09-24, not yet landed._ `just standalone-cli-acceptance` now installs a release
+_Landed 2026-09-25._ `just standalone-cli-acceptance` now installs a release
 through `curl | sh` into a throwaway home and runs `tao build --web` in two created projects, from
 the binary, with only system tools on `PATH`: the first build installs the host, the second reuses
 it. The whole run takes about 25 s.
@@ -613,7 +613,7 @@ iCloud-backed app from the binary will not find it; that belongs with shipping f
 `tao dev` runs a created project on web and on the iOS Simulator from a binary on a machine with no
 checkout. This is the biggest slice; it may need splitting once the seam is drawn.
 
-_Web built 2026-09-24, not yet landed; iOS still open._ Most of this slice had already happened on
+_Web landed 2026-09-25; iOS still open._ Most of this slice had already happened on
 `main`: `tao dev` generates its host under the project's `.tao/dev/runtime`, keeps Expo's log and
 dev data in the project, watches only the project outside a checkout, and gates the checkout-only
 keys (`c`, `f`, `t`, `v`, `e`). What remained for web, now done:
@@ -628,6 +628,8 @@ keys (`c`, `f`, `t`, `v`, `e`). What remained for web, now done:
   fetches the web bundle, and checks it contains the app. Inside an agent sandbox, which refuses
   FSEvents, Metro needs Watchman, so `TAO_ACCEPTANCE_WATCHMAN` names a `watchman` binary for that
   run; a person's terminal needs neither.
+- Outside a checkout the key list leaves out the five checkout-only keys rather than listing keys
+  that only refuse.
 
 Still open for iOS: `run-targets.ts:114` calls `Repo.resolvePath(RUNTIME_TOOLCHAIN_PATH)` whenever
 the Simulator opens, which throws outside a checkout; `RuntimeToolchainPaths.packageRoot` is the
@@ -641,7 +643,7 @@ Expo's script with the same `expo`-first arguments and may hit the same project-
 `tao create`'s post-create test run work outside the repository. Done when `tao create` without
 `--skip-tests` finishes green on a clean machine.
 
-_Built 2026-09-24, not yet landed._ `just standalone-cli-acceptance` now runs `tao test` from the
+_Landed 2026-09-25._ `just standalone-cli-acceptance` now runs `tao test` from the
 installed binary and requires Jest's `Tests: N passed`, and creates its second project without
 `--skip-tests`; with a cold host install and Node download it takes about 40 s.
 
@@ -704,7 +706,7 @@ public repository. What it settled:
 resolve-and-exec, `tao check-for-updates`, and `tao create` writing the pin. Implementation decision 3
 replaced the `tao install <version>` and `tao update` this slice first named.
 
-_Built 2026-09-24, not yet landed._ `just standalone-cli-acceptance` checks the pin `tao create`
+_Landed 2026-09-25._ `just standalone-cli-acceptance` checks the pin `tao create`
 writes, that `tao +<v>` and `TAO_VERSION` reach that release, that a missing release names its install
 command, and that `check-for-updates` reads the listing.
 
@@ -736,7 +738,7 @@ command, and that `check-for-updates` reads the listing.
 (needs the Developer ID certificate), removal of `tao review` and its Studio graph from the first
 binary, and an honest statement of whatever is still absent. `tao review` may return later.
 
-_`tao review` removal built 2026-09-24, not yet landed; the helper waits on the certificate._ The
+_`tao review` removal landed 2026-09-25; the helper waits on the certificate._ The
 standalone build defines `TAO_STANDALONE`, and `tao-cli.ts` registers `review` only when it is
 undefined, so the bundler drops the command and its import; a checkout keeps it. The acceptance
 checks the installed `tao --help` offers no `review`, and the release notes list it among what the
@@ -750,13 +752,50 @@ Slices 1–5, first-release parts of 7–9, and the macOS payload are the standa
 Slice 6 and the other-platform and other-channel parts of 7 wait for later releases. Work can
 overlap with `A3` and `A8`.
 
+## Remaining work
+
+As of 2026-09-25, with slices 1–5, 7, 8, and the `tao review` part of 9 on `main`, this is what
+stands between `A2` and done, in the order to take it:
+
+1. **The iOS Simulator and Android from an installed `tao dev`.** `run-targets.ts:114` and
+   `android.ts:236,484` resolve the runtime toolchain through the repository and throw outside a
+   checkout; `RuntimeToolchainPaths.packageRoot` is the replacement. The files belong to the
+   device-loop work (`A4`, `A9`), so this is coordinated with it. Web alone does not meet `A2`'s
+   "create through dev" for a language whose apps are mobile apps.
+2. **The clean-machine gate** of implementation decision 10: the acceptance run inside a fresh,
+   vanilla macOS `tart` virtual machine, to catch a dependency on something the development Mac
+   already has. It needs `tart` installed and a macOS image of tens of GB.
+3. **Removing the managed Node**: uncertainty 1 below, with two small experiments to run before
+   choosing a route.
+4. **Signing and notarization, and the Foundation Models helper**, both waiting on the Developer ID
+   certificate; `tao dev` is then re-checked under the hardened runtime (uncertainty 5).
+5. **A test for downloading a missing pinned release interactively**, the one slice-8 path no test
+   covers, because neither the acceptance nor an agent sandbox has a terminal to answer the question
+   (`DEVENV-082`). A pseudo-terminal harness or an injectable prompt would cover it.
+6. **Publishing `0.4.0`**, waiting on the public repository, its GitHub Releases (`R11`), and the
+   licence (`R1`).
+
+Meanwhile about half of all verification-lane runs fail on tests that spawn `git` and hang for their
+whole timeout (`DEVENV-TESTS-THAT-SPAWN-GIT-HANG-THEIR-WHOLE-TIMEOUT-IN-LANES`), which slows every
+landing this work needs.
+
 ## Uncertain, and how to settle it
 
 1. **Can Jest run under bun once the ESM-only dependencies leave its graph?** Try a
    `moduleNameMapper` or transform for `@noble/*` in `jest.tao-test.config.cjs`, or break
    `TR-studio-device-*` out of `TR.ts`'s eager graph, and re-run
    `tao test Apps/Starters/Notebook` with the binary as the runner. A day's work and it removes the
-   managed Node entirely.
+   managed Node entirely. **Researched 2026-09-25:** nothing public runs the real Jest under Bun;
+   Bun hosts only its own Jest-compatible runner, and the request to support the Jest CLI
+   (oven-sh/bun#4562) closed without a plan. The `@noble/*` failure has two candidate causes: Jest
+   documents `require()` of an ES module only from Node 24.9, and under `BUN_BE_BUN` it may not see
+   a Node version that qualifies; and those packages reach Jest untransformed. Two experiments
+   settle it: transform `@noble/(hashes|curves|ciphers)` through babel-jest (a `transform` entry and
+   `transformIgnorePatterns`) and rerun under Bun, and log the `process.versions.node` Jest sees
+   there. The Node-free alternative is Bun's own runner with the community `bun-test-react-native`
+   setup, which reuses `jest-expo`'s native-module definitions (Expo SDK 56 and later) but moves the
+   journeys off Jest. The Vitest React Native projects themselves require Node, and Expo documents
+   only Jest.
 2. **Is a `bun install`-resolved host reproducible enough for `tao ship`?** `ship-fingerprints`
    hashes the runtime. Settle by installing the same lockfile twice on different machines and
    comparing the fingerprint.
