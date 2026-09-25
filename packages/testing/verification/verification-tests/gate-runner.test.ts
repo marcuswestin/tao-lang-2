@@ -240,6 +240,47 @@ Describe('repository gate runner', () => {
     }
   })
 
+  Test('a lane paused for landing priority holds neither GUI nor prepare', async () => {
+    const root = await mkTestDir('tao-gate-runner-priority-')
+    const registryRoot = FS.resolvePath('registry', root)
+    const priority = await MachineLanes.beginLandingPriority(registryRoot)
+    Expect(priority).toBeDefined()
+    const started: string[] = []
+    const pending = runGates({
+      gates: ['studio-smoke-native', '_fix-just-fmt'],
+      jobs: 2,
+      registryRoot,
+      repositoryRoot: root,
+      runGate: async name => {
+        started.push(name)
+        return { exitCode: 0, output: '' }
+      },
+    })
+    try {
+      await until(async () => (await MachineLanes.activeLanes(registryRoot)).length === 1, {
+        description: 'the paused gate lane to register',
+      })
+      Expect(started).toEqual([])
+      const gui = await MachineLanes.tryAcquireResource({ name: 'gui', registryRoot, repositoryRoot: root })
+      const prepare = await MachineLanes.tryAcquireResource({
+        name: 'verify-prepare',
+        registryRoot: FS.resolvePath('.artifacts/verify/prepare-lock', root),
+        repositoryRoot: root,
+      })
+      Expect(gui).toBeDefined()
+      Expect(prepare).toBeDefined()
+      await gui?.release()
+      await prepare?.release()
+      await priority?.release()
+      Expect((await pending).status).toBe('passed')
+      Expect(started.toSorted()).toEqual(['_fix-just-fmt', 'studio-smoke-native'])
+    } finally {
+      await priority?.release()
+      await pending.catch(() => undefined)
+      await FS.remove(root)
+    }
+  })
+
   Test('writes a JSON summary artifact when one is requested', async () => {
     const root = await mkTestDir('tao-gate-runner-json-')
     try {
