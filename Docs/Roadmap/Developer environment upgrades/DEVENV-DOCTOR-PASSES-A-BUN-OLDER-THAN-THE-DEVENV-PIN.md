@@ -35,6 +35,13 @@
     moves nixpkgs can fetch the Android SDK and NDK the profile carries, so it may take minutes.
   - The session-start hook builds or links that profile. It already runs outside the Bash sandbox
     (`.rulesync/hooks.jsonc`), where the Nix daemon is reachable; the sandbox cannot connect to it.
+    Why, found 2026-09-24: `.rulesync/permissions.jsonc` already allows
+    `/nix/var/nix/daemon-socket/socket`, but that path is a link to
+    `/private/var/run/nix-daemon.socket`, and the sandbox matches a socket rule against the resolved
+    path, so the entry has never taken effect (`nix store info` fails with `Operation not
+    permitted`). Allowing the resolved path would let an agent build its own worktree's profile
+    inside the sandbox, with no hook and no person, and repair a stale one mid-session; whether a
+    full devenv build then succeeds sandboxed is untested.
   - Setup asserts, on every run, that the Bun on the profile's `PATH` is the one the worktree's own
     `devenv.nix` pins, and fails naming whose profile is stale. Doctor reports the same check.
   - **Mid-session gap.** A branch that merges a toolchain change mid-session keeps its old profile

@@ -77,11 +77,16 @@ is `private`. Nobody outside the repository can install Tao.
 
 - Plan: `Plan - Standalone Tao CLI.md` beside this file answers the shape below with measured
   evidence, a nine-slice sequence, and the first-release decisions.
-- Progress: slices 1, 2, and 7 have landed. `just standalone-cli-release <version>` builds an
-  unsigned macOS arm64 release with its checksum, index, and install script, ready to publish once
-  the repository is public. Installed through `curl | sh`, the binary creates, checks, and compiles
-  a project outside any checkout; `just standalone-cli-acceptance` proves that much. `tao dev` and
-  `tao test` do not yet work from it.
+- Progress: slices 1–5, 7, and 8 have landed, and the binary leaves out `tao review` (slice 9).
+  `just standalone-cli-release <version>` builds an unsigned macOS arm64 release with its checksum,
+  index, and install script, ready to publish once the repository is public. Installed through
+  `curl | sh`, the binary creates a project with its tests, then checks, compiles, tests, builds for
+  web, and serves web from `tao dev` outside any checkout, and each project it creates runs under
+  the release that made it; `just standalone-cli-acceptance` proves all of that. The plan's
+  "Remaining work" orders what is still absent: the iOS Simulator and Android from `tao dev`, the
+  `tart` virtual-machine gate, removing the managed Node, signing and notarization with the
+  Foundation Models helper (both need the Developer ID certificate), a test for the interactive
+  download of a pinned release, and publishing.
 - First-release shape: a signed, notarized macOS arm64 `bun build --compile` binary; the
   files the CLI reads at runtime (stdlib, runtime sources, starters, grammar) either embedded or
   unpacked to a versioned directory; the Expo host and its `node_modules` downloaded per Tao version

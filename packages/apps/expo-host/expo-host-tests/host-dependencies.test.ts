@@ -13,6 +13,9 @@ Describe('HostDependencies', () => {
       Expect(host.installs).toEqual([host.installRoot])
       Expect(await FS.readText(FS.resolvePath('bun.lock', host.installRoot))).toBe('lock one\n')
       Expect(await FS.isFile(FS.resolvePath('package.json', host.installRoot))).toBe(true)
+      // Jest resolves from the host's own files, so the install is linked beside them.
+      Expect(await FS.realPath(FS.resolvePath('node_modules', host.hostFiles)))
+        .toBe(await FS.realPath(FS.resolvePath('node_modules', host.installRoot)))
     })
   })
 

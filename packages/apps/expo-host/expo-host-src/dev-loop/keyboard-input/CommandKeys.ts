@@ -1,6 +1,6 @@
 import { Errors } from '@shared'
 import CommandRunner from '../CommandRunner'
-import { DevLoopOutput } from '../DevLoopOutput'
+import { DEV_LOOP_CONTROLS, DevLoopOutput } from '../DevLoopOutput'
 import type { ExpoRunnerSession } from '../expo-runner/ExpoRunner'
 import Run from '../Run'
 import Commands, { type CommandKey } from './Commands'
@@ -75,7 +75,9 @@ const COMMAND_HANDLERS = {
   s: context => context.selectApp(),
 } satisfies Record<ActionCommandKey, CommandHandler>
 
-const REPOSITORY_COMMAND_KEYS: readonly string[] = ['c', 'f', 't', 'v', 'e']
+const REPOSITORY_COMMAND_KEYS: readonly string[] = DEV_LOOP_CONTROLS
+  .filter(control => control.checkoutOnly === true)
+  .map(control => control.key)
 
 async function cleanInstallDepsAndReload(context: CommandKeyContext): Promise<boolean | void> {
   await context.stopServices()

@@ -28,6 +28,11 @@ function starvationAdjustedTimeoutMs(budgetMs) {
 
 function createRuntimeJestConfig(options) {
   const dependencyRoot = process.env.TAO_TEST_NODE_MODULES_ROOT ?? '<rootDir>/node_modules'
+  // Inside the repository the runtime and `@shared` sit where the package layout puts them relative
+  // to this host. An installed Tao has no repository around its host, so it names both instead
+  // (`RuntimeToolchainPaths.expoEnvironment`), as it does for `metro.config.cjs`.
+  const runtimeSourceRoot = process.env.TAO_RUNTIME_SOURCE_ROOT ?? '<rootDir>/../runtime/TaoRuntime-src'
+  const sharedSourceRoot = process.env.TAO_SHARED_SOURCE_ROOT ?? '<rootDir>/../../shared/shared-src'
   return {
     preset: 'jest-expo',
     cacheDirectory: process.env.TAO_TEST_JEST_CACHE_DIRECTORY ?? defaultCacheDirectory,
@@ -49,15 +54,15 @@ function createRuntimeJestConfig(options) {
     // and resolve. A config that generates test files elsewhere adds that directory to this list.
     roots: options.roots ?? ['<rootDir>/expo-host-tests', '<rootDir>/expo-host-src'],
     moduleNameMapper: {
-      '^@runtime/TR$': '<rootDir>/../runtime/TaoRuntime-src/TR.ts',
-      '^@tao/runtime$': '<rootDir>/../runtime/TaoRuntime-src/TR.ts',
-      '^@tao/runtime/core$': '<rootDir>/../runtime/TaoRuntime-src/core/RuntimeCore.ts',
-      '^@runtime/(.*)$': '<rootDir>/../runtime/TaoRuntime-src/$1',
+      '^@runtime/TR$': `${runtimeSourceRoot}/TR.ts`,
+      '^@tao/runtime$': `${runtimeSourceRoot}/TR.ts`,
+      '^@tao/runtime/core$': `${runtimeSourceRoot}/core/RuntimeCore.ts`,
+      '^@runtime/(.*)$': `${runtimeSourceRoot}/$1`,
       '^@expo-host$': '<rootDir>/expo-host-src/runtime.ts',
       '^@expo-host/(.*)$': '<rootDir>/expo-host-src/$1',
-      '^@shared$': '<rootDir>/../../shared/shared-src/shared.ts',
-      '^@shared/core$': '<rootDir>/../../shared/shared-src/core/shared-core.ts',
-      '^@shared/test$': '<rootDir>/../../shared/shared-src/testing/Test-Jest.ts',
+      '^@shared$': `${sharedSourceRoot}/shared.ts`,
+      '^@shared/core$': `${sharedSourceRoot}/core/shared-core.ts`,
+      '^@shared/test$': `${sharedSourceRoot}/testing/Test-Jest.ts`,
       '^(\\.{1,2}/.*)\\.js$': '$1',
       '^@jest/globals$': `${dependencyRoot}/@jest/globals`,
       '^@babel/runtime/(.*)$': `${dependencyRoot}/@babel/runtime/$1`,

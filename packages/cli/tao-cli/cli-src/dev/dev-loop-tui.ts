@@ -1,12 +1,12 @@
 import { type ColumnLayout, DashboardGrid, OutputText, type TerminalSize } from '@cli-kit'
 import {
-  DEV_LOOP_CONTROLS,
   type DevLoopControl,
   type DevLoopOutputKind,
   devLoopOutputKind,
   type DevLoopReporter,
   type DevLoopReporterHandle,
   fallbackDevLoopLog,
+  visibleDevLoopControls,
 } from '@expo-host/dev-loop/DevLoopOutput'
 import { HCI, Platform, Switch } from '@shared'
 import { Box, render, Text, useWindowSize } from 'ink'
@@ -198,7 +198,7 @@ export function createInkDevLoopReporter(): DevLoopReporter {
       return
     }
     HCI.writeLine(`
-${DEV_LOOP_CONTROLS.map(formatDevLoopControl).join('\n')}`)
+${visibleDevLoopControls().map(formatDevLoopControl).join('\n')}`)
   }
 
   function appendDevLoopLine(streamName: string, text: string, kind: DevLoopOutputKind): void {
@@ -318,7 +318,7 @@ function DevLoopControlsFooter(props: { lines: readonly string[]; width: number 
 
 function footerOutputLines(state: DevLoopOutputState, width: number): string[] {
   const text = state.prompt
-    ?? DEV_LOOP_CONTROLS.map(control => `${control.key} ${control.label}`).join(' | ')
+    ?? visibleDevLoopControls().map(control => `${control.key} ${control.label}`).join(' | ')
   return OutputText.wrapLine(text, Math.max(1, width))
 }
 
