@@ -199,24 +199,6 @@ export function browserProbeSource(previewUrl: string): string {
   return browserProbeTemplate.replace(browserProbePreviewPlaceholder, JSON.stringify(previewUrl))
 }
 
-/** Give the native shell a finite chance to flush its embedded service before exiting. */
-async function settleStudioQuitCleanup(
-  cleanup: Promise<void>,
-  timeoutMs: number,
-): Promise<'complete' | 'timed-out'> {
-  let timeout: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([
-      cleanup.then(() => 'complete' as const),
-      new Promise<'timed-out'>(resolve => {
-        timeout = setTimeout(() => resolve('timed-out'), timeoutMs)
-      }),
-    ])
-  } finally {
-    if (timeout !== undefined) clearTimeout(timeout)
-  }
-}
-
 /** Emitted unchanged into Electrobun; tests execute its returned script against a small renderer DOM. */
 export function hostControlScript(request: unknown): string {
   return '(() => {'
@@ -928,4 +910,22 @@ export function mainSource(): string {
       return url
     }
   `)
+}
+
+/** Give the native shell a finite chance to flush its embedded service before exiting. */
+async function settleStudioQuitCleanup(
+  cleanup: Promise<void>,
+  timeoutMs: number,
+): Promise<'complete' | 'timed-out'> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      cleanup.then(() => 'complete' as const),
+      new Promise<'timed-out'>(resolve => {
+        timeout = setTimeout(() => resolve('timed-out'), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout)
+  }
 }
