@@ -95,7 +95,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Automations, notifications, levels (§12)                    | Skillet · timers, meal reminders                                              | Post-MVP | —                         |
 | Design system: blocks, styles, screens (§13)                | Skillet, Hearth, Wayfare · one design each, and WordFlower's own              | MVP      | pending                   |
 | Container conditions (§13)                                  | **none — for the Developer**                                                  | Post-MVP | —                         |
-| Plural phrases (§14)                                        | WordFlower · paragraph and document counts                                    | MVP      | —                         |
+| Plural phrases (§14)                                        | WordFlower · the outline's paragraph count                                    | MVP      | in Current                |
 | Copy extraction, words, `tao words check` (§14)             | WordFlower · all copy + one locale                                            | Post-MVP | —                         |
 | Measurement phrases (§14)                                   | Skillet · metric/imperial amounts                                             | Post-MVP | —                         |
 | TypeScript boundary: from, fails (§15)                      | WordFlower · build stamp, document export; @tao/text; @tao/time               | MVP      | partially in Current[^3]  |

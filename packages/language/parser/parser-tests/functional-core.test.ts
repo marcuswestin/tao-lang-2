@@ -163,6 +163,57 @@ Describe('parser: functional core', () => {
     Expect(withElse.entry.document.parseResult.parserErrors.length).toBeGreaterThan(0)
   })
 
+  Test('parses a bare render guard before the render it protects', async () => {
+    const result = await testParseCode(`
+      data Documents / Document { Title text }
+      view Main(Document) {
+        render Stack() {
+          guard Document
+          Text(Document.Title)
+        }
+      }
+      view Stack() { render inject Content @@content \`\`\`ts\nreturn Content\n\`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+    `)
+
+    const main = result.entry.ast.statements.find(statement =>
+      AST.isViewDeclaration(statement) && statement.name === 'Main'
+    )
+    Expect.Is(main, AST.isViewDeclaration)
+    const render = AST.blockStatementOf(main, { find: AST.isRenderStatement })
+    const [guard, text] = AST.statementsOf(render.block)
+    Expect.Is(guard, AST.isGuardRenderStatement)
+    Expect(guard.caseBlock).toBeUndefined()
+    Expect(guard.single).toBeUndefined()
+    Expect.Is(text, AST.isViewRender)
+  })
+
+  Test('parses the file-level read net with block, payload, and bare render handlers', async () => {
+    const result = await testParseCode(`
+      guard default {
+        loading -> Spinner()
+        missing -> { Text("This is gone") }
+        error -> Message { Text(Message) }
+      }
+      view Spinner() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+    `)
+
+    const net = result.entry.ast.statements.find(AST.isGuardDefaultStatement)
+    Expect.Is(net, AST.isGuardDefaultStatement)
+    Expect(AST.isTopLevelStatement(net)).toBe(true)
+    Expect(net.branches.map(branch => branch.case)).toEqual(['loading', 'missing', 'error'])
+    const [loading, missing, error] = net.branches
+    Expect.Is(loading?.render, AST.isViewRender)
+    Expect(loading?.render?.view.$refText).toBe('Spinner')
+    Expect(missing?.block?.statements).toHaveLength(1)
+    const errorText = error?.block?.statements[0]
+    Expect.Is(errorText, AST.isViewRender)
+    const errorMessage = AST.argumentsOf(errorText)[0]?.value
+    Expect.Is(errorMessage, AST.isValueReference)
+    Expect(errorMessage.target.ref).toBe(error?.payload)
+  })
+
   Test('parses and links scalar expressions inside interpolated strings', async () => {
     const result = await testParseCode(`
       let Name = "Ada"

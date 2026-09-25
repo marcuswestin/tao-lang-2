@@ -647,11 +647,44 @@ Text(Document.Title)
 ```
 
 `loading`, `missing`, `unauthorized`, and `error -> Message` are the exceptional entity cases. If
-none matches, the entity is available and execution or rendering falls through to the statements
+none applies, the entity is available and execution or rendering falls through to the statements
 after the guard. A matched action guard skips the rest of its action block; a matched render guard
 renders its branch instead of the rest of its enclosing render block. A deleted handle becomes
 `missing` while retaining `.Id`. Memory and Local currently produce loading, missing, and error;
 `unauthorized` is the implemented provider-neutral case reserved for a provider that can report it.
+
+### The read net
+
+A render guard never lets an exceptional case fall through. An exceptional case it does not name
+goes to the read net, which renders instead of the rest of the enclosing render block exactly as a
+matched branch would. A bare guard names no case, so every exceptional case goes to the net:
+
+```tao
+guard Document
+DocumentEditor(Document)
+```
+
+The runtime always supplies the net: an activity indicator for `loading`, "This is gone" for
+`missing`, "You don't have access to this" for `unauthorized`, and the message for `error`, in the
+app's `Spinner` and `Text` element defaults. A file-level `guard default` replaces only the cases
+it names, for every app in the project:
+
+```tao
+guard default {
+   loading -> Spinner()
+   missing -> { Text("This is gone") }
+   error -> Message { Text(Message) }
+}
+```
+
+Its cases are `loading`, `missing`, `unauthorized`, and `error -> Message`; a handler is a render
+block or one bare render. A project declares at most one; the compiler loads it from any file an
+app's files reach, including a sibling in the same folder. It renders at the guard that reached it,
+with that guard's design and navigation context. The net covers query subjects too, for their
+`loading` and `error`. Content cases — `empty`, `refreshing`, `stale`, `true`, and `false` — never
+reach the net; emptiness is content, not failure. A bare guard over a subject with no exceptional
+cases (text, a list, a yes/no value) is an error. Action guards are unchanged: an unnamed case still
+falls through.
 
 ## Deterministic provider-state tests
 
