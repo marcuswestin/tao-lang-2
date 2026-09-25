@@ -152,6 +152,37 @@ test "WordFlower workspaces" {
       }
       expect text "No finished documents"
    }
+   test "labels each document in a workspace's list as a draft or final" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Opening scene" into #newDocumentTitle
+      submit #newDocumentTitle
+      enter "Closing scene" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[2] {
+         expect text "Closing scene"
+         press #finish
+      }
+      press "Workspace"
+      select #chooseWorkspace[1] {
+         press "Home"
+      }
+      // The documents list mixes drafts and finished work, so each row carries its own status badge.
+      select #workspaceDocuments[1] {
+         expect text "Opening scene"
+         expect text "Draft"
+         expect missing text "Final"
+      }
+      select #workspaceDocuments[2] {
+         expect text "Closing scene"
+         expect text "Final"
+         expect missing text "Draft"
+      }
+   }
    test "finds documents in a workspace by the word prefixes of their titles" {
       run WordFlower
       enter "Home" into #workspaceName

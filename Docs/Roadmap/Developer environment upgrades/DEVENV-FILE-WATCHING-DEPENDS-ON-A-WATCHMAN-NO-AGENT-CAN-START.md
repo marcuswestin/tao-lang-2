@@ -54,7 +54,9 @@
     fix is not to nest checkouts inside a watched one.
 - **Workaround:** Run dev loops through the host operations above. `./agent doctor` names a stopped
   server (the exact start command, using the primary checkout's client so the LaunchAgent survives
-  worktree cleanup) and an enclosing watch root (the `watch-del` to run once
+  worktree cleanup) as a warning, because sandboxed tests and builds can crawl without it while host
+  dev loops can use OS watching. Studio starts Watchman when needed. A missing client remains a
+  failure. The doctor also names an enclosing watch root (the `watch-del` to run once
   `debug-get-subscriptions` shows no dev server on it), and reports a sandbox without Watchman as
   expected. Studio's launch check releases an enclosing watch nothing subscribes to by itself.
 - **Proposed change:** Done in part. `WorktreeCreate`/`WorktreeRemove` hooks
@@ -80,4 +82,5 @@
   prints the start command rather than writing to the host; enclosing roots detected), then
   worktrees placed beside the checkout and idle enclosing watches released; on 2026-09-25, the
   Watchman socket removed from every sandbox and the per-user Docker path from Codex's config, in
-  favour of named host operations for Studio and the local InstantDB stack.
+  favour of named host operations for Studio and the local InstantDB stack. The stopped-server
+  doctor result was then amended to a warning; Studio starts Watchman when needed.

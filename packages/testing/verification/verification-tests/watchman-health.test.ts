@@ -59,10 +59,10 @@ Describe('Watchman health', () => {
     Expect(watchman?.remediation).not.toContain('shutdown-server')
   })
 
-  Test('fails a stopped server with a start command that survives worktree cleanup', () => {
+  Test('warns about a stopped server with a start command that survives worktree cleanup', () => {
     const watchman = check({ server: { state: 'not-running' } }, 'watchman')
 
-    Expect(watchman?.status).toBe('fail')
+    Expect(watchman?.status).toBe('warn')
     Expect(watchman?.detail).toContain('fall back to crawling')
     Expect(watchman?.remediation).toContain('/clone/.devenv/profile/bin/watchman version')
   })

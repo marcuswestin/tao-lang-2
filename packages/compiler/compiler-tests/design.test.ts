@@ -236,6 +236,30 @@ Describe('compiler: minimal design', () => {
     Expect(code).toContain('kind: "inline"')
   })
 
+  Test('lowers a color value to its design name and a clause value read to the live value', async () => {
+    const compiled = await TestCompiler.compileCode(`
+      use StackNav from @tao/nav
+      workspace design Theme {
+        colors {
+          accent #2f6b4f { 20 #cfe3d8 }
+          ink #111
+          inkDark #eee
+          schemeInk when Scheme is Dark inkDark / not ink
+        }
+      }
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      scene Main() { Title "Main" render Badge(Tint: accent.20) }
+      view Badge(Tint color default schemeInk) { render Surface() [background Tint when pressed] }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `)
+
+    const code = compiled.code.replace(/\s+/g, ' ')
+    // The value is the name, never its hex, so the mounted design resolves it and Scheme reaches it.
+    Expect(code).toContain('Tint={TR.Readonly(TR.Alias(() => TR.Value("accent.20")))}')
+    Expect(code).toContain('_Scope.Tint = _ViewProps.Tint ?? TR.Readonly(TR.Alias(() => TR.Value("schemeInk")))')
+    Expect(code).toContain('TR.Design.Spec([["bg", _Scope.Tint.evaluate().jsValue, "when", "pressed"]])')
+  })
+
   Test('does not rewrite a bare design member name as a visual alias', async () => {
     const compiled = await TestCompiler.compileCode(`
       use StackNav from @tao/nav

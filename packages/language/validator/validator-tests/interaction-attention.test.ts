@@ -44,7 +44,7 @@ Describe('validator: interaction attention', () => {
         Commands { Finish, Duplicate }
         hide Delete
         render Leaf() [fill when pressed, hug when focused, compress when hovered,
-          centered when Scheme is Dark]
+          rigid when selected, centered when Scheme is Dark]
       }
     `),
   )

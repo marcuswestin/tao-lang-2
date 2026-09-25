@@ -9,9 +9,9 @@
 // the other files ([screen], [title], [body]); landing their resolver last avoided restyling the
 // primitives twice.
 //
-// The absorbed flat tokens and named bundles remain compatibility forcing. Studio Slice 6 adds the
-// explicitly exercised structured subset below; it does not imply that every Decisions §13 construct
-// has landed.
+// The DESIGN VALUES tranche moved the absorbed flat catalog into the typed blocks with `tao fix`.
+// Every entry below is written in the decided form; it does not imply that every Decisions §13
+// construct has landed.
 // ============================================================================================
 // A design declaration is ordinary Tao source, subject to the same visibility, imports, and
 // validation as everything else. An app selects one with its `Design` property. `#...` lexes as
@@ -22,28 +22,28 @@
 // to the current runtime's compatible `bg` and `fg` representation.
 folder
 design WordFlowerDesign {
-   // A warm paper palette keeps the writing surface quiet while the green accent gives actions and
-   // selection a recognizable WordFlower voice.
-   canvas #f4f2ec
-   surface #fffdf8
-   surfaceRaised #ffffff
-   ink #172019
-   inkMuted #647067
-   accent #3f7657
-   accentStrong #28563d
-   accentSoft #e1ede4
-   line #d9e0da
-   danger #a43d3d
-   dangerSoft #f8e6e3
-   onAccent #ffffff
-   canvasDark #101612
-   surfaceRaisedDark #202a22
-   inkDark #edf3ee
-   lineDark #34453a
-
-   // Slice 6 forces the decided structured surface through WordFlower's real app default while
-   // the remaining absorbed flat catalog migrates incrementally.
    colors {
+      // A warm paper palette keeps the writing surface quiet while the green accent gives actions and
+      // selection a recognizable WordFlower voice.
+      canvas #f4f2ec
+      surface #fffdf8
+      surfaceRaised #ffffff
+      ink #172019
+      inkMuted #647067
+      accent #3f7657
+      accentStrong #28563d
+      accentSoft #e1ede4
+      line #d9e0da
+      danger #a43d3d
+      dangerSoft #f8e6e3
+      onAccent #ffffff
+      canvasDark #101612
+      surfaceRaisedDark #202a22
+      inkDark #edf3ee
+      lineDark #34453a
+
+      // A family and derived colors: `schemeAccent.20` is a shade, and the scheme entries resolve
+      // per frame from the person's light or dark setting.
       schemeAccent accent {
          20 accentSoft,
          60 accentStrong
@@ -69,122 +69,124 @@ design WordFlowerDesign {
       schemeCard [background schemeCanvas, ink schemeInk, radius designMd, pad designMd, gap designSm]
       Hint [background accentStrong, ink onAccent, radius designSm, pad designSm, weight 700]
       Overview [background surfaceRaised, ink schemeInk, border line, radius designMd, pad designMd, gap designSm]
+      statusDot [width 8, height 8, radius 4]
+
+      // Capitalized bundles are defaults for linked stdlib elements. The navigation bundles are
+      // consumed by Tao's portable/web host so product chrome and content use one mounted design.
+      Text [ink ink, ink inkDark when Scheme is Dark]
+      TextInput [background surfaceRaised, background surfaceRaisedDark when Scheme is Dark, border line, border lineDark when Scheme is Dark, ink ink, ink inkDark when Scheme is Dark, radius 12, size 16]
+      FormButton [background accentStrong, background accent when pressed, border accentStrong when focused, ink onAccent, ink ink when hovered, radius 12, weight 700]
+      Checkbox [ink ink]
+      Progress [background line, ink accent, radius 999]
+      NavigationHost [background canvas, background canvasDark when Scheme is Dark]
+      NavigationContent [background canvas, background canvasDark when Scheme is Dark]
+      NavigationHeader [background surfaceRaised, background surfaceRaisedDark when Scheme is Dark, border line, border lineDark when Scheme is Dark]
+      NavigationTitle [size 18, weight 700, ink ink, ink inkDark when Scheme is Dark]
+      NavigationTabs [gap 6, pad 6, background surfaceRaised, border line]
+      NavigationTab [pad 10, radius 10, ink inkMuted, weight 600, background accentSoft when selected, ink accentStrong when selected]
+      NavigationChromeButton [pad 8, radius 8, ink accentStrong, weight 600]
+      ModalSurface [background surfaceRaised, border line]
+      ToastSurface [background surfaceRaised, border line, ink ink]
+
+      // Product bundles describe hierarchy rather than individual screens. Later entries at a render
+      // site remain free to tune layout without respelling the palette or type scale.
+      screen [fill, content top stretch, pad 24, background canvas, background canvasDark when Scheme is Dark]
+      hero [gap 8, pad 24, radius 20, background accentSoft, border line]
+      display [size 40, line 46, weight 700, ink ink]
+      eyebrow [size 13, line 18, weight 700, ink accentStrong]
+      title [size 28, line 34, weight 700, ink ink]
+      sectionTitle [size 20, line 26, weight 700, ink ink]
+      body [size 16, line 24, ink inkMuted]
+      caption [size 14, line 20, ink inkMuted]
+      validation [size 14, line 20, weight 600, ink danger]
+      panel [gap 14, pad 20, radius 18, background surfaceRaised, border line]
+      card [gap 10, pad 16, radius 14, background surface, border line]
+      subtlePanel [gap 10, pad 16, radius 14, background accentSoft]
+      buttonSecondary [background surfaceRaised, border line, ink accentStrong]
+      buttonDanger [background dangerSoft, border danger, ink danger]
+      grow [fill]
+      gapWide [gap 20]
+      claimDouble [claim 2]
+      readableWidth [width max 720]
+      gapMedium [gap 10]
+      formWidth [width max 420]
+      centeredLayout [centered]
+      gapSmall [gap 8]
+      alignRight [content right]
+      padMedium [pad 12]
+      spreadCenter [content spread center]
+      gapTight [gap 6]
+      workspaceWidth [width max 960]
+      gapSection [gap 24]
+      illustrationWidth [width 160]
    }
-
-   // Capitalized bundles are defaults for linked stdlib elements. The navigation bundles are
-   // consumed by Tao's portable/web host so product chrome and content use one mounted design.
-   Text [ink ink, ink inkDark when Scheme is Dark]
-   TextInput [background surfaceRaised, background surfaceRaisedDark when Scheme is Dark, border line, border lineDark when Scheme is Dark, ink ink, ink inkDark when Scheme is Dark, radius 12, size 16]
-   FormButton [bg accentStrong, bg accent when pressed, border accentStrong when focused, fg onAccent, fg ink when hovered, radius 12, weight 700]
-   Checkbox [fg ink]
-   Progress [bg line, fg accent, radius 999]
-   NavigationHost [background canvas, background canvasDark when Scheme is Dark]
-   NavigationContent [background canvas, background canvasDark when Scheme is Dark]
-   NavigationHeader [background surfaceRaised, background surfaceRaisedDark when Scheme is Dark, border line, border lineDark when Scheme is Dark]
-   NavigationTitle [size 18, weight 700, ink ink, ink inkDark when Scheme is Dark]
-   NavigationTabs [gap 6, pad 6, bg surfaceRaised, border line]
-   NavigationTab [pad 10, radius 10, fg inkMuted, weight 600]
-   NavigationTabActive [NavigationTab, bg accentSoft, fg accentStrong]
-   NavigationChromeButton [pad 8, radius 8, fg accentStrong, weight 600]
-   ModalSurface [bg surfaceRaised, border line]
-   ToastSurface [bg surfaceRaised, border line, fg ink]
-
-   // Product bundles describe hierarchy rather than individual screens. Later entries at a render
-   // site remain free to tune layout without respelling the palette or type scale.
-   screen [fill, content top stretch, pad 24, background canvas, background canvasDark when Scheme is Dark]
-   hero [gap 8, pad 24, radius 20, bg accentSoft, border line]
-   display [size 40, line 46, weight 700, fg ink]
-   eyebrow [size 13, line 18, weight 700, fg accentStrong]
-   title [size 28, line 34, weight 700, fg ink]
-   sectionTitle [size 20, line 26, weight 700, fg ink]
-   body [size 16, line 24, fg inkMuted]
-   caption [size 14, line 20, fg inkMuted]
-   validation [size 14, line 20, weight 600, fg danger]
-   panel [gap 14, pad 20, radius 18, bg surfaceRaised, border line]
-   card [gap 10, pad 16, radius 14, bg surface, border line]
-   subtlePanel [gap 10, pad 16, radius 14, bg accentSoft]
-   buttonSecondary [bg surfaceRaised, border line, fg accentStrong]
-   buttonDanger [bg dangerSoft, border danger, fg danger]
-   grow [fill]
-   gapWide [gap 20]
-   claimDouble [claim 2]
-   readableWidth [width max 720]
-   gapMedium [gap 10]
-   formWidth [width max 420]
-   centeredLayout [centered]
-   gapSmall [gap 8]
-   alignRight [content right]
-   padMedium [pad 12]
-   spreadCenter [content spread center]
-   gapTight [gap 6]
-   workspaceWidth [width max 960]
-   gapSection [gap 24]
-   illustrationWidth [width 160]
 }
 
 // The dark design is a complete mounted catalog, not a collection of call-site overrides. Keeping
 // the same semantic bundle names means every WordFlower screen and portable host can switch as one.
 folder
 design WordFlowerDarkDesign {
-   canvas #101612
-   surface #18201a
-   surfaceRaised #202a22
-   ink #edf3ee
-   inkMuted #a7b4aa
-   accent #8fbea0
-   accentStrong #b2d6bd
-   accentSoft #26382c
-   line #34453a
-   danger #ef9189
-   dangerSoft #412724
-   onAccent #102016
-   Text [ink ink]
-   TextInput [background surfaceRaised, border line, ink ink, radius 12, size 16]
-   FormButton [bg accentStrong, fg onAccent, radius 12, weight 700]
-   Checkbox [fg ink]
-   Progress [bg line, fg accent, radius 999]
-   AppSurface [bg canvas]
-   NavigationHost [bg canvas]
-   NavigationContent [bg canvas]
-   NavigationHeader [bg surface, border line]
-   NavigationTitle [size 18, weight 700, fg ink]
-   NavigationTabs [gap 6, pad 6, bg surface, border line]
-   NavigationTab [pad 10, radius 10, fg inkMuted, weight 600]
-   NavigationTabActive [NavigationTab, bg accentSoft, fg accentStrong]
-   NavigationChromeButton [pad 8, radius 8, fg accentStrong, weight 600]
-   ModalSurface [bg surfaceRaised, border line]
-   ToastSurface [bg surfaceRaised, border line, fg ink]
+   colors {
+      canvas #101612
+      surface #18201a
+      surfaceRaised #202a22
+      ink #edf3ee
+      inkMuted #a7b4aa
+      accent #8fbea0
+      accentStrong #b2d6bd
+      accentSoft #26382c
+      line #34453a
+      danger #ef9189
+      dangerSoft #412724
+      onAccent #102016
+   }
    styles {
       Hint [background accentStrong, ink onAccent, radius 8, pad 8, weight 700]
       Overview [background surfaceRaised, ink ink, border line, radius 12, pad 12, gap 8]
+      statusDot [width 8, height 8, radius 4]
+      Text [ink ink]
+      TextInput [background surfaceRaised, border line, ink ink, radius 12, size 16]
+      FormButton [background accentStrong, ink onAccent, radius 12, weight 700]
+      Checkbox [ink ink]
+      Progress [background line, ink accent, radius 999]
+      AppSurface [background canvas]
+      NavigationHost [background canvas]
+      NavigationContent [background canvas]
+      NavigationHeader [background surface, border line]
+      NavigationTitle [size 18, weight 700, ink ink]
+      NavigationTabs [gap 6, pad 6, background surface, border line]
+      NavigationTab [pad 10, radius 10, ink inkMuted, weight 600, background accentSoft when selected, ink accentStrong when selected]
+      NavigationChromeButton [pad 8, radius 8, ink accentStrong, weight 600]
+      ModalSurface [background surfaceRaised, border line]
+      ToastSurface [background surfaceRaised, border line, ink ink]
+      screen [fill, content top stretch, pad 24, background canvas]
+      hero [gap 8, pad 24, radius 20, background accentSoft, border line]
+      display [size 40, line 46, weight 700, ink ink]
+      eyebrow [size 13, line 18, weight 700, ink accentStrong]
+      title [size 28, line 34, weight 700, ink ink]
+      sectionTitle [size 20, line 26, weight 700, ink ink]
+      body [size 16, line 24, ink inkMuted]
+      caption [size 14, line 20, ink inkMuted]
+      validation [size 14, line 20, weight 600, ink danger]
+      panel [gap 14, pad 20, radius 18, background surfaceRaised, border line]
+      card [gap 10, pad 16, radius 14, background surface, border line]
+      subtlePanel [gap 10, pad 16, radius 14, background accentSoft]
+      buttonSecondary [background surface, border line, ink accentStrong]
+      buttonDanger [background dangerSoft, border danger, ink danger]
+      grow [fill]
+      gapWide [gap 20]
+      claimDouble [claim 2]
+      readableWidth [width max 720]
+      gapMedium [gap 10]
+      formWidth [width max 420]
+      centeredLayout [centered]
+      gapSmall [gap 8]
+      alignRight [content right]
+      padMedium [pad 12]
+      spreadCenter [content spread center]
+      gapTight [gap 6]
+      workspaceWidth [width max 960]
+      gapSection [gap 24]
+      illustrationWidth [width 160]
    }
-   screen [fill, content top stretch, pad 24, bg canvas]
-   hero [gap 8, pad 24, radius 20, bg accentSoft, border line]
-   display [size 40, line 46, weight 700, fg ink]
-   eyebrow [size 13, line 18, weight 700, fg accentStrong]
-   title [size 28, line 34, weight 700, fg ink]
-   sectionTitle [size 20, line 26, weight 700, fg ink]
-   body [size 16, line 24, fg inkMuted]
-   caption [size 14, line 20, fg inkMuted]
-   validation [size 14, line 20, weight 600, fg danger]
-   panel [gap 14, pad 20, radius 18, bg surfaceRaised, border line]
-   card [gap 10, pad 16, radius 14, bg surface, border line]
-   subtlePanel [gap 10, pad 16, radius 14, bg accentSoft]
-   buttonSecondary [bg surface, border line, fg accentStrong]
-   buttonDanger [bg dangerSoft, border danger, fg danger]
-   grow [fill]
-   gapWide [gap 20]
-   claimDouble [claim 2]
-   readableWidth [width max 720]
-   gapMedium [gap 10]
-   formWidth [width max 420]
-   centeredLayout [centered]
-   gapSmall [gap 8]
-   alignRight [content right]
-   padMedium [pad 12]
-   spreadCenter [content spread center]
-   gapTight [gap 6]
-   workspaceWidth [width max 960]
-   gapSection [gap 24]
-   illustrationWidth [width 160]
 }

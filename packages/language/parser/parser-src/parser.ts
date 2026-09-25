@@ -212,6 +212,7 @@ function createServices(options: CreateParserContextOptions & { packages: Packag
   const shared = Langium.inject(
     Langium.createDefaultSharedCoreModule(options.langiumContext ?? Langium.NodeFileSystem),
     AST.GeneratedSharedModule,
+    taoSharedModule(),
   )
   const language = Langium.inject(
     Langium.createDefaultCoreModule({ shared }),
@@ -225,6 +226,7 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
   const shared = Langium.inject(
     Langium.createDefaultSharedModule(options.langiumContext ?? Langium.NodeFileSystem),
     AST.GeneratedSharedModule,
+    taoSharedModule(),
   )
   const language = Langium.inject(
     Langium.createDefaultModule({ shared }),
@@ -233,6 +235,31 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
     lspModule(options),
   )
   return registerLanguage(shared, language)
+}
+
+/** Relink color reads when an app edit changes which design supplies them. */
+class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
+  protected override shouldRelink(document: Langium.LangiumDocument, changedUris: Set<string>): boolean {
+    if (super.shouldRelink(document, changedUris)) {
+      return true
+    }
+    if (changedUris.size === 0 || !AST.isTaoFile(document.parseResult.value)) {
+      return false
+    }
+    return AST.streamAllContents(document.parseResult.value).some(node =>
+      (AST.isValueReference(node) || AST.isMemberAccessExpression(node))
+      && AST.isDesignColorPosition(node)
+      && AST.isDesignColor(node.target.ref)
+    )
+  }
+}
+
+function taoSharedModule() {
+  return {
+    workspace: {
+      DocumentBuilder: (services: Langium.LangiumSharedCoreServices) => new TaoDocumentBuilder(services),
+    },
+  }
 }
 
 /** taoLanguageModule declares the services Tao overrides or adds on a Langium language container. */
