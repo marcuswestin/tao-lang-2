@@ -786,12 +786,16 @@ view WorkspaceNameNotice() {
 scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
    Title Workspace.Name
    state DocumentTitle = ""
+   state Find = ""
    let SectionLabel = "Drafts"
+   // `search` narrows over the entity's `(search)` fields the way keyboard narrowing does.
    query Drafts from Workspace.Documents {
       where is Draft
+      search Find
    }
    query FinishedDocuments from Workspace.Documents {
       where is Final
+      search Find
    }
    // A command is a configured value: its slots are parameters, and its block holds metadata members
    // and exactly one `do`. This one is declared in the scene because it closes over that scene's own
@@ -843,6 +847,8 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
             empty -> { Text("Document title is required") }
             otherwise -> { Text(DocumentTitle) }
          }
+         #findDocuments
+         TextInput(Value: Find, Label: "Find in this workspace", Placeholder: "Title or words")
          #addDocument
          FormButton("Add document", Disabled: DocumentTitle is empty) {
             on press AddDocument

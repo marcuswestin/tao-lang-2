@@ -115,11 +115,16 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
    Title Workspace.Name
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
+   state Find = ""
+   // `search` keeps the rows whose `(search)` fields match the term the way keyboard narrowing
+   // does, word prefixes in order; a blank term keeps every row.
    query Drafts from Workspace.Documents {
       where is Draft // filters by boolean case name, mirroring `update Document { Final }`
+      search Find
    }
    query FinishedDocuments from Workspace.Documents {
       where is Final
+      search Find
    }
    action SaveWorkspace() {
       check WorkspaceNameDraft is not empty
@@ -191,6 +196,9 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
                FormButton("Add document", Disabled: DocumentTitle is empty) {
                   on press AddDocument
          }  }  }
+
+         #findDocuments
+         TextInput(Value: Find, Label: "Find in this workspace", Placeholder: "Title or words")
          // `Panes` lays its children side by side when the container is wide enough and stacks them
          // otherwise. Children size themselves with the ordinary layout clauses.
          Panes() [gapWide] {

@@ -230,8 +230,8 @@ data Workspaces / Workspace {
 }
 
 data Documents / Document {
-   Title text (required "Name this document", title)
-   Body text (default "")
+   Title text (required "Name this document", search, title)
+   Body text (default "", search)
    Final yes / Draft no
    Public yes / Private no (default Public) // demonstrative declaration; the product does not use it yet
    CreatedAt time (default now)
@@ -450,12 +450,15 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
    Title Workspace.Name
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
+   state Find = ""
    let SectionLabel = "Drafts"
    query Drafts from Workspace.Documents {
       where is Draft
+      search Find
    }
    query FinishedDocuments from Workspace.Documents {
       where is Final
+      search Find
    }
    // An `action` is private: it carries no `Title`, `Description`, or `Summary` and is never
    // surfaced. The command is the discoverable verb, so the words a person reads live there.
@@ -525,6 +528,8 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
          FormButton("Add document", Disabled: DocumentTitle is empty) {
             on press AddDocument
          }
+         #findDocuments
+         TextInput(Value: Find, Label: "Find in this workspace", Placeholder: "Title or words")
          // Panes uses a horizontal row only when, after gaps, every child can receive at least 320
          // logical pixels; otherwise it preserves source order in a vertical stack.
          Panes() [gap 16] {
