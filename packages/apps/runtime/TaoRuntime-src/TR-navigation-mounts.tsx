@@ -816,7 +816,8 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
                 {
                   __tao: {
                     ...taoProps,
-                    designDefault: item.key === this.activeKey ? 'NavigationTabActive' : 'NavigationTab',
+                    designDefault: 'NavigationTab',
+                    selected: item.key === this.activeKey,
                   },
                   action: {
                     invoke: () => {

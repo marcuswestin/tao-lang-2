@@ -93,7 +93,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Places provider, nearby search (§11, §17)                   | Skillet · which shop is nearest; Hearth · errands on a map                    | Post-MVP | —                         |
 | Offline closure (§11)                                       | Skillet · a kept kitchen; Wayfare · the map around saved places               | TBD      | —                         |
 | Automations, notifications, levels (§12)                    | Skillet · timers, meal reminders                                              | Post-MVP | —                         |
-| Design system: blocks, styles, screens (§13)                | Skillet, Hearth, Wayfare · one design each, and WordFlower's own              | MVP      | pending                   |
+| Design system: blocks, styles, screens (§13)                | Skillet, Hearth, Wayfare · one design each, and WordFlower's own              | MVP      | partially in Current[^17] |
 | Container conditions (§13)                                  | **none — for the Developer**                                                  | Post-MVP | —                         |
 | Plural phrases (§14)                                        | WordFlower · the outline's paragraph count                                    | MVP      | in Current                |
 | Copy extraction, words, `tao words check` (§14)             | WordFlower · all copy + one locale                                            | Post-MVP | —                         |
@@ -230,3 +230,7 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     form and document editor use them through the stdlib `Problems(Input.Problems)` view; its MVP
     rules are `required` alone on `Workspace.Name` and `Document.Title`, since `validate` and
     `refuse when` were deferred to Post-MVP on 2026-09-25.
+
+[^17]: Typed design blocks, styles, element defaults, interaction conditions, and `color` view
+    parameters are in Current. `screens { }` declares breakpoints, but `when Screen` remains
+    unimplemented; parameterized colors and design rules are outside the MVP slice.

@@ -717,6 +717,55 @@ Describe('TR.Views sketch elements', () => {
   })
 })
 
+Describe('TR navigation selection tabs', () => {
+  Test('resolves the NavigationTab `when selected` entries on the active tab alone', () => {
+    const design = TR.Design.Declaration({
+      name: 'Tabs',
+      tokens: { accentSoft: '#e1ede4', accentStrong: '#28563d', inkMuted: '#647067' },
+      bundles: {
+        NavigationTab: TR.Design.Spec([
+          ['radius', 10],
+          ['fg', 'inkMuted'],
+          ['bg', 'accentSoft', 'when', 'selected'],
+          ['fg', 'accentStrong', 'when', 'selected'],
+        ]),
+      },
+    })
+    const home = TR.Navigation.View({ name: 'Tab home', render: () => null })
+    const settings = TR.Navigation.View({ name: 'Tab settings', render: () => null })
+    const selection = TR.Navigation.Mount(TR.Navigation.Configure(
+      TR.Navigation.Declaration('Styled tabs', TR.NavKind.Selection()),
+      {
+        Display: TR.Value('tabs'),
+        Initial: TR.Value('@home'),
+        '@home': { Content: home, Label: TR.Value('Home') },
+        '@settings': { Content: settings, Label: TR.Value('Settings') },
+      },
+    ))
+    const app = TR.Navigation.App({
+      name: 'Styled tabs app',
+      auxiliaries: () => ({}),
+      design: () => design,
+      navigator: () => selection,
+    })
+    const tabStyles = () => {
+      const surface = selection.renderSurface({ app }) as RuntimeElement
+      const [tabList] = (surface.props['content'] as RuntimeElement).props['children'] as RuntimeElement[]
+      return (tabList!.props['children'] as RuntimeElement[]).map(fragment => {
+        const tab = renderRuntimeElement(fragment.props['children'] as RuntimeElement)
+        return flattenStyle((tab.props['merged'] as { props?: { style?: unknown } }).props?.style)
+      })
+    }
+    const idle = { borderRadius: 10, color: '#647067' }
+    const selected = { backgroundColor: '#e1ede4', borderRadius: 10, color: '#28563d' }
+
+    Expect(tabStyles()).toEqual([selected, idle])
+    Expect(selection.activate('settings')).toBe(true)
+    Expect(tabStyles()).toEqual([idle, selected])
+    TR.Navigation.beginTest()
+  })
+})
+
 Describe('TR navigation pointer events', () => {
   Test('keeps host and overlay surfaces pointer-transparent through native styles', () => {
     const surface = NavigationSurface({
