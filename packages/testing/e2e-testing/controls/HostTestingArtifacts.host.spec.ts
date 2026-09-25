@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { FS } from '@shared'
+import { FS, Repo } from '@shared'
 import { HostTestingArtifacts } from '../HostTestingArtifacts'
 
 const runIds = [
@@ -9,7 +9,7 @@ const runIds = [
 ]
 
 test('normal successful runs remove builds and retain bounded proof outputs', async () => {
-  const root = await FS.mkTmpDir('tao-host-artifacts-')
+  const root = await Repo.mkScratchDir('tao-host-artifacts-')
   let now = Date.parse('2026-09-23T12:00:00.000Z')
   const dependencies = { isAlive: () => false, now: () => new Date(now), pid: 123 }
   try {
@@ -35,7 +35,7 @@ test('normal successful runs remove builds and retain bounded proof outputs', as
 })
 
 test('retains an explicitly prepared artifact through ordinary successful maintenance', async () => {
-  const root = await FS.mkTmpDir('tao-host-artifacts-')
+  const root = await Repo.mkScratchDir('tao-host-artifacts-')
   let now = Date.parse('2026-09-23T12:00:00.000Z')
   const dependencies = { isAlive: () => false, now: () => new Date(now), pid: 123 }
   try {
@@ -58,7 +58,7 @@ test('retains an explicitly prepared artifact through ordinary successful mainte
 })
 
 test('keeps only the two most recent failed runs for diagnosis', async () => {
-  const root = await FS.mkTmpDir('tao-host-artifacts-')
+  const root = await Repo.mkScratchDir('tao-host-artifacts-')
   let now = Date.parse('2026-09-23T12:00:00.000Z')
   const dependencies = { isAlive: () => false, now: () => new Date(now), pid: 123 }
   try {
@@ -79,7 +79,7 @@ test('keeps only the two most recent failed runs for diagnosis', async () => {
 })
 
 test('keeps live work and reclaims an interrupted run only after owner death and grace', async () => {
-  const root = await FS.mkTmpDir('tao-host-artifacts-')
+  const root = await Repo.mkScratchDir('tao-host-artifacts-')
   let now = Date.parse('2026-09-23T12:00:00.000Z')
   let alive = true
   const dependencies = { isAlive: () => alive, now: () => new Date(now), pid: 123 }
@@ -100,7 +100,7 @@ test('keeps live work and reclaims an interrupted run only after owner death and
 })
 
 test('preserves legacy directories without ownership evidence', async () => {
-  const root = await FS.mkTmpDir('tao-host-artifacts-')
+  const root = await Repo.mkScratchDir('tao-host-artifacts-')
   const dependencies = { isAlive: () => false, now: () => new Date('2026-09-23'), pid: 123 }
   try {
     await FS.mkdir(FS.resolvePath(runIds[0]!, root))
@@ -112,7 +112,7 @@ test('preserves legacy directories without ownership evidence', async () => {
 })
 
 test('reclaims an interrupted allocation using its independent receipt', async () => {
-  const root = await FS.mkTmpDir('tao-host-artifacts-')
+  const root = await Repo.mkScratchDir('tao-host-artifacts-')
   let now = Date.parse('2026-09-23T12:00:00.000Z')
   const dependencies = { isAlive: () => false, now: () => new Date(now), pid: 123 }
   try {
@@ -130,7 +130,7 @@ test('reclaims an interrupted allocation using its independent receipt', async (
 })
 
 test('uses the newer sidecar when completion was interrupted before the local receipt update', async () => {
-  const root = await FS.mkTmpDir('tao-host-artifacts-')
+  const root = await Repo.mkScratchDir('tao-host-artifacts-')
   let now = Date.parse('2026-09-23T12:00:00.000Z')
   const dependencies = { isAlive: () => true, now: () => new Date(now), pid: 123 }
   try {

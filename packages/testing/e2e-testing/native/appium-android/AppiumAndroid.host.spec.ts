@@ -8,7 +8,7 @@ import type {
   HostTarget,
 } from '@host-control'
 import { expect, test } from '@playwright/test'
-import { Errors, FS } from '@shared'
+import { Errors, FS, Repo } from '@shared'
 import type { HostJourney } from '../../journey/HostJourney'
 import {
   androidTargetLeaseName,
@@ -49,7 +49,7 @@ test('declares the isolated UiAutomator2 APK, emulator, and fenced-port capabili
 })
 
 test('uses the canonical Android target lease name and consumes a preheld emulator lease', async () => {
-  const root = await FS.mkTmpDir('tao-appium-android-preheld-')
+  const root = await Repo.mkScratchDir('tao-appium-android-preheld-')
   await FS.writeFile(FS.resolvePath('host.apk', root), new Uint8Array([1]))
   const leases = new FakeLeases()
   const emulator = target('emulator-5554')
@@ -66,7 +66,7 @@ test('uses the canonical Android target lease name and consumes a preheld emulat
 })
 
 test('leases each emulator and port, observes semantic targets, relaunches, records screenshots, and cleans up', async () => {
-  const root = await FS.mkTmpDir('tao-appium-android-')
+  const root = await Repo.mkScratchDir('tao-appium-android-')
   await FS.writeFile(FS.resolvePath('host.apk', root), new Uint8Array([1]))
   const leases = new FakeLeases()
   const receipts = new FakeReceipts()
@@ -126,7 +126,7 @@ test('leases each emulator and port, observes semantic targets, relaunches, reco
 })
 
 test('preserves scoped Tao selection when Android flattens visual children in its accessibility tree', async () => {
-  const root = await FS.mkTmpDir('tao-appium-android-flattened-')
+  const root = await Repo.mkScratchDir('tao-appium-android-flattened-')
   await FS.writeFile(FS.resolvePath('host.apk', root), new Uint8Array([1]))
   const client = new FakeClient('flattened')
   client.session.flattenScopedHierarchy = true
@@ -150,7 +150,7 @@ test('preserves scoped Tao selection when Android flattens visual children in it
 })
 
 test('does not release emulator or port leases after an ambiguous failed-open deletion', async () => {
-  const root = await FS.mkTmpDir('tao-appium-android-ambiguous-')
+  const root = await Repo.mkScratchDir('tao-appium-android-ambiguous-')
   await FS.writeFile(FS.resolvePath('host.apk', root), new Uint8Array([1]))
   const leases = new FakeLeases()
   const receipts = new FakeReceipts('open')
@@ -169,7 +169,7 @@ test('does not release emulator or port leases after an ambiguous failed-open de
 })
 
 test('runs Clockwork through its authored readiness and records only its terminal fault assertion', async () => {
-  const root = await FS.mkTmpDir('tao-appium-android-proof-')
+  const root = await Repo.mkScratchDir('tao-appium-android-proof-')
   const host = new ProofController()
   host.failHostReadyLookup = true
   const receipt = await runAppiumAndroidHostProof({
@@ -251,7 +251,7 @@ test('treats a duplicate HNReader assertion that fails before relaunch as an inc
 })
 
 test('writes a target-retention receipt when opening a session leaves a live driver behind', async () => {
-  const root = await FS.mkTmpDir('tao-appium-android-retained-open-')
+  const root = await Repo.mkScratchDir('tao-appium-android-retained-open-')
   try {
     const receipt = await runAppiumAndroidHostProof({
       artifactRoot: root,
@@ -270,7 +270,7 @@ test('writes a target-retention receipt when opening a session leaves a live dri
 })
 
 test('waits for HNReader native control receipt before continuing the journey', async () => {
-  const root = await FS.mkTmpDir('tao-appium-android-control-')
+  const root = await Repo.mkScratchDir('tao-appium-android-control-')
   const host = new ProofController()
   const receipt = await runAppiumAndroidHostProof({
     artifactRoot: root,
@@ -297,7 +297,7 @@ test('waits for HNReader native control receipt before continuing the journey', 
 })
 
 test('waits for a positive assertion to appear after a native transition', async () => {
-  const root = await FS.mkTmpDir('tao-appium-android-transition-')
+  const root = await Repo.mkScratchDir('tao-appium-android-transition-')
   const host = new ProofController()
   host.delayedText = '2 opened'
   host.delayedTextAttemptsRemaining = 2

@@ -1082,7 +1082,7 @@ async function withGateway(
   use: (env: Env) => Promise<void>,
 ): Promise<void> {
   const project = await openProject('Garden', 'tao-studio-device-', options.source)
-  const trustRoot = await mkTestDir(FS.resolvePath('tao-studio-device-trust-', FS.tmpdir()))
+  const trustRoot = await mkTestDir('tao-studio-device-trust-')
   const sessions = new Map<string, StudioDeviceGatewaySessionRef>()
   sessions.set('first_session', {
     previewUrl: 'http://127.0.0.1:8081',
@@ -1131,7 +1131,7 @@ async function openProject(
   compile: { failNext: boolean }
   session: StudioProjectSession
 }> {
-  const root = await mkTestDir(FS.resolvePath(prefix, FS.tmpdir()))
+  const root = await mkTestDir(prefix, { location: 'host' })
   await FS.writeText(
     FS.resolvePath('Project.tao', root),
     `project { id "tao-studio-device-${appName.toLowerCase()}" name "${appName}" }`,

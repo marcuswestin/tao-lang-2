@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { emulatorExitMessage } from '../expo-host-src/dev-loop/expo-runner/android'
 import { EmulatorLogs } from '../expo-host-src/dev-loop/expo-runner/EmulatorLogs'
 
@@ -12,7 +12,7 @@ const runIds = [
 
 Describe('Android emulator launch logs', () => {
   Test('isolates a later failed launch from an earlier processor refusal', async () => {
-    const root = await FS.mkTmpDir('tao-emulator-logs-test-')
+    const root = await mkTestDir('tao-emulator-logs-test-')
     const dependencies = fakeDependencies()
     try {
       const first = await EmulatorLogs.begin(root, dependencies)
@@ -29,7 +29,7 @@ Describe('Android emulator launch logs', () => {
   })
 
   Test('retains an exact live child but retires a dead child even after PID reuse', async () => {
-    const root = await FS.mkTmpDir('tao-emulator-logs-test-')
+    const root = await mkTestDir('tao-emulator-logs-test-')
     const dependencies = fakeDependencies()
     try {
       const first = await EmulatorLogs.begin(root, dependencies)
@@ -54,7 +54,7 @@ Describe('Android emulator launch logs', () => {
   })
 
   Test('reclaims an interrupted allocation after grace while preserving uncertain live work', async () => {
-    const root = await FS.mkTmpDir('tao-emulator-logs-test-')
+    const root = await mkTestDir('tao-emulator-logs-test-')
     const dependencies = fakeDependencies()
     try {
       const interrupted = await EmulatorLogs.begin(root, dependencies)
@@ -74,7 +74,7 @@ Describe('Android emulator launch logs', () => {
   })
 
   Test('keeps only the newest two dead failures and removes completed boot logs', async () => {
-    const root = await FS.mkTmpDir('tao-emulator-logs-test-')
+    const root = await mkTestDir('tao-emulator-logs-test-')
     const dependencies = fakeDependencies()
     try {
       const failures = []

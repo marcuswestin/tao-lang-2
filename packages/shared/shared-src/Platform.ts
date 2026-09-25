@@ -141,6 +141,11 @@ export function onProcessSignal(signal: ProcessSignal, listener: () => void): ()
   return () => process.off(signal, listener)
 }
 
+/** onProcessExit registers synchronous cleanup for resources a normal process exit must retire. */
+export function onProcessExit(listener: () => void): void {
+  process.once('exit', listener)
+}
+
 /** readStdinText resolves the full text piped to this process on stdin, or '' when stdin is a live terminal. */
 export async function readStdinText(): Promise<string> {
   return process.stdin.isTTY ? '' : await Bun.stdin.text()

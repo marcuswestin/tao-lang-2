@@ -4,7 +4,7 @@
 // handler, the mode gate, the two cloud gates, and the approval round trip that runs across two HTTP calls.
 import { loadSemanticSnapshot, Workspace } from '@compiler/workspace'
 import { FS } from '@shared'
-import { Deferred, Describe, Expect, Test, until } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { AgentChatProvider } from '../studio-src/agent-chat/AgentChatProvider'
 import { conversationForTesting } from '../studio-src/agent-chat/AgentChatServer'
@@ -79,7 +79,7 @@ function scripted(turns: readonly Turn[]): MockLanguageModelV3 {
  * The source really is parsed, so the snapshot the tools see is the one Tao would build. Without that a
  * proposal cannot resolve a declaration and the round trip proves nothing.
  */
-const ROOT = FS.resolvePath(`agent-chat-${process.pid}`, process.env['TMPDIR'] ?? '/tmp')
+const ROOT = await mkTestDir('agent-chat-')
 
 let parsedOnce: Promise<{ files: unknown[]; diagnostics: unknown[] }> | undefined
 
@@ -87,7 +87,6 @@ function parsed(): Promise<{ files: unknown[]; diagnostics: unknown[] }> {
   // One workspace for the whole file: opening the same root twice in a process is a known hazard, and every
   // test here wants the same source anyway.
   parsedOnce ??= (async () => {
-    await FS.mkdir(ROOT)
     await FS.writeText(FS.resolvePath(PATH, ROOT), SOURCE)
     const workspace = await Workspace.open(ROOT)
     return await workspace.validate(PATH) as unknown as { files: unknown[]; diagnostics: unknown[] }

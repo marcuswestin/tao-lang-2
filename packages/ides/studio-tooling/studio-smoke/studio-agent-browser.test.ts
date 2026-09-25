@@ -1,4 +1,4 @@
-import { Errors, FS, Platform, Time } from '@shared'
+import { Errors, FS, Platform, Repo, Time } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   AgentChatProvider,
@@ -92,9 +92,10 @@ class BrowserAgentModel {
 }
 
 Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome', async () => {
-  const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT'] ?? FS.tmpdir()
+  const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
+    ?? Repo.resolvePath('.artifacts/studio-smoke')
   await FS.mkdir(artifactParent)
-  const projectRoot = await mkTestDir('tao-studio-agent-browser-')
+  const projectRoot = await mkTestDir('tao-studio-agent-browser-', { location: 'host' })
   const sourcePath = FS.resolvePath('AgentBrowser.tao', projectRoot)
   const model = new BrowserAgentModel()
   const provider = new AgentChatProvider({}, model as never)

@@ -197,5 +197,5 @@ async function expectFreshBuildForIneligibleCheckpoint(
     Expect(terminal.outputText()).toContain('Ship Notes 1.2.3 (202609021406)')
     Expect(terminal.outputText()).toContain('Archive and sign')
     Expect(terminal.outputText()).not.toContain('Resume uploaded')
-  })
+  }, { location: 'host' })
 }

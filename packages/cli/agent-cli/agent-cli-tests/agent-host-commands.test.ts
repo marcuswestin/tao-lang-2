@@ -1,5 +1,5 @@
 import { FS, Repo } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { AgentConfigFreshness } from '../agent-cli-src/agent-config/AgentConfigFreshness'
 import {
   agentHostCommands,
@@ -202,7 +202,7 @@ Describe('agent host command permissions', () => {
   })
 
   Test('a pristine Rulesync render removes a tool absent from the permission source', async () => {
-    const root = await FS.mkTmpDir('tao-permission-removal-')
+    const root = await mkTestDir('tao-permission-removal-')
     try {
       await FS.writeText(
         FS.resolvePath('.rulesync/rulesync.jsonc', root),

@@ -1,5 +1,5 @@
 import { Errors, FS } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   enclosingWatchRoot,
   readWatchmanServer,
@@ -101,7 +101,7 @@ Describe('Watchman health', () => {
   Test('tells a denied socket from a missing or abandoned one by whether the socket file exists', async () => {
     // A sandbox denial and a missing socket fail with the same code, so a real denial cannot be
     // staged here; the classification is what is under test, and the connection is injected.
-    const directory = await FS.mkTmpDir('tao-watchman-')
+    const directory = await mkTestDir('tao-watchman-')
     const present = FS.resolvePath('present.sock', directory)
     await FS.writeText(present, '')
     const failing = (code: string) => () =>

@@ -1,5 +1,5 @@
 import { FS, Repo } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   type AgentDocument,
   DELEGATION_SKILL_PATH,
@@ -87,7 +87,7 @@ Describe('delegation profiles', () => {
   })
 
   Test('leaves a tree that is not this repository alone', async () => {
-    Expect(await readDelegationIssues(await FS.mkTmpDir('delegation-empty'))).toEqual([])
+    Expect(await readDelegationIssues(await mkTestDir('delegation-empty'))).toEqual([])
   })
 
   Test('rejects a name that does not match the file', () => {

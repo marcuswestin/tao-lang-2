@@ -1,5 +1,5 @@
 import { CLI, FS, Platform, Repo } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { createWorktree, removeWorktree, siblingWorktreeRoot } from '../agent-cli-src/agent-hooks/WorktreePlacement'
 
 const GIT_IDENTITY = ['-c', 'user.name=Test', '-c', 'user.email=test@example.com']
@@ -10,7 +10,7 @@ async function git(cwd: string, ...args: string[]): Promise<CLI.CommandResult> {
 
 /** withCheckout runs `body` against a fresh repository with one commit, in a directory of its own. */
 async function withCheckout(body: (primary: string, parent: string) => Promise<void>): Promise<void> {
-  const parent = await FS.realPath(await FS.mkTmpDir('tao-worktree-placement-'))
+  const parent = await mkTestDir('tao-worktree-placement-')
   const primary = FS.resolvePath('repo', parent)
   try {
     await FS.mkdir(primary)
