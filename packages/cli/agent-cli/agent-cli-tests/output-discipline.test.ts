@@ -193,7 +193,6 @@ Describe('output discipline', () => {
     Expect(refusalFor('./dev land')).toContain('./agent unsandboxed land')
     Expect(refusalFor('./dev merge-with-main')).toContain('./agent unsandboxed land')
     Expect(isAllowed('just land-barrier')).toEqual(true)
-    Expect(isAllowed('just landing-broker-teardown')).toEqual(true)
   })
 
   Test('leaves a `just` recipe `./agent` does not expose, and land-unlock, which keeps its own rule', () => {

@@ -115,7 +115,7 @@
 | `9cfef39f` | 2026-09-21 | Update dependency advisories and detect stale installed links               | Reviewed: advisory remains open       | Standalone, publication |
 | `17b43ce6` | 2026-09-21 | Ship Tao skills with newly created projects                                 | Reviewed: no surviving finding        | Standalone, publication |
 | `375e0db2` | 2026-09-21 | Keep worktree session setup quiet on success                                | Reviewed: no surviving finding        | Landing, governance     |
-| `cd0a2b34` | 2026-09-21 | Read landed archive refs through the landing broker                         | Reviewed: no surviving finding        | Landing, governance     |
+| `cd0a2b34` | 2026-09-21 | Read landed archive refs through the former host helper                     | Reviewed: no surviving finding        | Landing, governance     |
 | `1d46e1e3` | 2026-09-21 | Give the language-service bench budgets it fails on                         | Reviewed: no surviving finding        | CLI, workspace, tests   |
 | `8f2b05dd` | 2026-09-21 | Record Tao CLI implementation sequence                                      | Reviewed: no surviving finding        | Standalone, publication |
 | `7e3007db` | 2026-09-21 | Record the ask scrim and sheet-overlay findings from the simulator          | Reviewed: later completed             | Studio, Companion       |
