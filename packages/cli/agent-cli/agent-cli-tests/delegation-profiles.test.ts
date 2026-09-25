@@ -11,10 +11,11 @@ import {
 } from '../agent-cli-src/delegation/DelegationProfiles'
 
 const skillSource = [
-  '| Tier | Claude Code `model` | Codex CLI `model` | Cursor `model` | Relative token cost |',
-  '| --- | --- | --- | --- | --- |',
-  '| fast | `haiku` | `gpt-5.6-luna` | `composer-2.5` | 1 |',
-  '| deep | `opus` | `gpt-5.6-sol` | `claude-opus-5` | 5 |',
+  '| Tier | Claude Code `model` | Codex CLI `model` | Cursor `model` |',
+  '| --- | --- | --- | --- |',
+  '| fast | `haiku` | `gpt-6-luna` | `composer-2.5` |',
+  '| standard | `opus` | `gpt-6-sol` | `claude-opus-5-5` |',
+  '| deep | `opus` | `gpt-6-sol` | `claude-opus-5-5` |',
 ].join('\n')
 
 const readOnlyEverywhere = {
@@ -43,9 +44,9 @@ Describe('delegation profiles', () => {
     const document = parseAgentFrontmatter(path, await FS.readText(FS.resolvePath(path, Repo.getRoot())))
 
     Expect(document.name).toEqual('scout')
-    Expect(document.sections['claudecode']).toMatchObject({ model: 'sonnet', permissionMode: 'plan' })
+    Expect(document.sections['claudecode']).toMatchObject({ model: 'opus', permissionMode: 'plan' })
     Expect(document.sections['codexcli']?.['sandbox_mode']).toEqual('read-only')
-    Expect(document.sections['cursor']).toMatchObject({ model: 'claude-sonnet-5', readonly: 'true' })
+    Expect(document.sections['cursor']).toMatchObject({ model: 'claude-opus-5-5', readonly: 'true' })
     Expect(document.description?.startsWith('Read-only Tao repository explorer.')).toEqual(true)
     Expect(document.description?.includes('Use proactively')).toEqual(true)
   })
@@ -54,10 +55,12 @@ Describe('delegation profiles', () => {
     const source = await FS.readText(FS.resolvePath(DELEGATION_SKILL_PATH, Repo.getRoot()))
 
     Expect([...tierModels(source, 'claude').keys()]).toEqual(['fast', 'standard', 'deep', 'frontier'])
+    Expect(tierModels(source, 'claude').get('standard')).toEqual('opus')
     Expect(tierModels(source, 'claude').get('deep')).toEqual('opus')
-    Expect(tierModels(source, 'codex').get('fast')).toEqual('gpt-5.6-luna')
-    Expect(tierModels(source, 'codex').get('standard')).toEqual('gpt-5.6-terra')
-    Expect(tierModels(source, 'cursor').get('deep')).toEqual('claude-opus-5')
+    Expect(tierModels(source, 'codex').get('fast')).toEqual('gpt-6-luna')
+    Expect(tierModels(source, 'codex').get('standard')).toEqual('gpt-6-sol')
+    Expect(tierModels(source, 'cursor').get('standard')).toEqual('claude-opus-5-5')
+    Expect(tierModels(source, 'cursor').get('deep')).toEqual('claude-opus-5-5')
   })
 
   Test('accepts the profiles this repository ships', async () => {
@@ -96,10 +99,10 @@ Describe('delegation profiles', () => {
     Expect(issuesFor(profile({
       sections: {
         ...readOnlyEverywhere,
-        claudecode: { model: 'sonnet', permissionMode: 'plan', tools: 'Bash, Read, Skill' },
+        claudecode: { model: 'unknown-model', permissionMode: 'plan', tools: 'Bash, Read, Skill' },
       },
     }))).toEqual([
-      `agents/subagents/scout.md names Claude Code model 'sonnet', which no tier in ${DELEGATION_SKILL_PATH} offers.`,
+      `agents/subagents/scout.md names Claude Code model 'unknown-model', which no tier in ${DELEGATION_SKILL_PATH} offers.`,
     ])
   })
 
@@ -108,9 +111,23 @@ Describe('delegation profiles', () => {
       sections: {
         ...readOnlyEverywhere,
         claudecode: { model: 'opus', permissionMode: 'plan', tools: 'Bash, Read, Skill' },
-        cursor: { model: 'claude-opus-5[effort=high,context=300k]', readonly: 'true' },
+        cursor: { model: 'claude-opus-5-5[effort=high,context=300k]', readonly: 'true' },
       },
     }))).toEqual([])
+  })
+
+  Test('keeps the Claude default and opus alias aligned without forcing profile pins', () => {
+    const env = {
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'claude-opus-5-5',
+      CLAUDE_CODE_SUBAGENT_MODEL: 'opus',
+    }
+    Expect(delegationIssues({ claudeEnv: env, profiles: [profile()], skills: [], skillSource })).toEqual([])
+    Expect(delegationIssues({
+      claudeEnv: { ...env, CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' },
+      profiles: [profile()],
+      skills: [],
+      skillSource,
+    })).toEqual(['.rulesync/permissions.jsonc must not force the Claude subagent default over explicit models.'])
   })
 
   Test('rejects a profile that names no tools, because it would inherit every tool schema', () => {
