@@ -6,8 +6,8 @@ notes after each completed pass; Git history is the longer record.
 
 ## Current status
 
-- **Reviewed through:** `a996fc512826c18f214f4c873eca2a486cf2ea84` on local `main` (2026-09-25). The [September 2026 repository review](<September 2026 repository review.md>) retains the historical 142-landing ledger through `ff4f017c` and separately disposes all 21 newer first-parent landings. Four read-only units and independent challenges checked repair integration and current behavior. The review branch has integrated this main tip; the locked landing gate and archive ref remain unproved.
-- **Outcome:** The review branch carries the earlier fixes plus focused corrections for a host-test receipt interruption, a released-port test race, an inherited host marker, a false-green admission measurement, and direct CocoaPods locale propagation. Focused tests passed, including the host controls after a deliberate mutation failed. Current `main` still retains old host-test output; two Jest entrypoints lack aggregate or direct-run bounds. The newer emulator-exit change can read an earlier launch's reason from its shared append-only log and needs a per-launch log after integration. Old shared and receipt-less state was preserved because ownership/liveness was not established.
+- **Reviewed through:** `7af6064174487e54c17c0737b8f91dd8d3bd4275` on local `main` (2026-09-25). The [September 2026 repository review](<September 2026 repository review.md>) retains the historical 142-landing ledger through `ff4f017c` and separately disposes all 24 newer first-parent landings. Four read-only units and independent challenges checked repair integration and current behavior. The review branch has integrated this main tip; the locked landing gate and archive ref remain unproved.
+- **Outcome:** The review branch carries the earlier fixes plus focused corrections for a host-test receipt interruption, a released-port test race, an inherited host marker, a false-green admission measurement, direct CocoaPods locale propagation, stale Android emulator exit logs, Studio publication recovery, standalone installer home paths, and the Claude model warning. Focused tests passed, including the host controls after a deliberate mutation failed. Current `main` still retains old host-test output; managed Jest identities and direct Jest lack aggregate bounds and do not follow `TAO_HOME`. Old shared and receipt-less state was preserved because ownership/liveness was not established. Emulator and Studio fixes have no real host acceptance in this pass.
 - **Security follow-up:** The current Bun audit still reports one moderate `uuid` advisory with no affected caller found in its installed `xcode` parent; the [dependency advisory follow-up](<Dependency advisory follow-up.md>) keeps its owner and September 28 review date. The pinned Nixpkgs input still needs upstream-patch comparison and Linux closure. Standalone and Companion release downloads need an authenticity decision and signing inputs before public distribution.
 
 ## Consider next time
@@ -16,9 +16,9 @@ notes after each completed pass; Git history is the longer record.
   Check each entry's evidence, impact, dependencies, acceptance, and live branch owner against
   current `main` and the [archive](<Developer environment upgrades archive.md>); reproduce candidates,
   defer owned or blocked work, and take only a few high-impact items with achievable acceptance checks.
-- Start after `a996fc51` or the newer first-parent boundary established during landing. Repair the
-  [emulator exit-log defect](<Developer environment upgrades/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>)
-  in this pass before landing; later passes should check whether its acceptance holds under real host use.
+- Start after `7af60641` or the newer first-parent boundary established during landing. Check the
+  [emulator log repair](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>)
+  under real host use when available.
 - Recheck `uuid`, the Appium transitive pins, and Linux Nixpkgs in
   [Dependency advisory follow-up](<Dependency advisory follow-up.md>). Use real host or device evidence
   before claiming native, Cloud, signing, distribution, or installed-binary acceptance.
@@ -26,6 +26,10 @@ notes after each completed pass; Git history is the longer record.
   `~/.cache/tao/jest-standalone`, `$TMPDIR/jest_dx`, `$TMPDIR/tao-test-runs`, and `.artifacts/host-testing`
   across relevant worktrees. Give every owner-unknown root an explicit disposition. Bound managed
   identities and direct Jest with lease-aware normal-operation cleanup; preserve active state.
+- Recheck that `TAO_HOME` moves the managed and direct Jest caches after deciding how to account
+  for existing leased roots. The installed Claude Code 2.1.267 needs an approved host update to
+  run configured Opus 5.5 standard and deep profiles; the shared Bun 1.3.13 profile needs its
+  already tracked reload before standalone-binary acceptance.
 - Include a quick dependency-advisory check in every security review. Inspect dependency changes
   against primary sources: run [`bun audit`](https://bun.sh/docs/pm/cli/audit) for the Bun graph and
   inspect `devenv.lock` changes against the [Nixpkgs security tracker](https://tracker.security.nixos.org/)

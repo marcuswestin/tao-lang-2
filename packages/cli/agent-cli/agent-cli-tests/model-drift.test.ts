@@ -31,7 +31,8 @@ Describe('model drift', () => {
     ).toContain('gpt-6-sol is absent')
   })
 
-  Test('warns when an installed Claude Code cannot run the configured deep model', () => {
-    Expect(modelDriftWarnings({ ...configured, claudeVersion: '2.1.267' })[0]).toContain('predates Opus 5.5')
+  Test('warns when an installed Claude Code cannot run standard or deep subagents', () => {
+    Expect(modelDriftWarnings({ ...configured, claudeVersion: '2.1.267' })[0])
+      .toContain('standard and deep Claude Code subagents')
   })
 })

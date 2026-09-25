@@ -225,65 +225,68 @@ retention policy still need resolution. The tracked `uuid` advisory remains open
 - **Next repair slice:** The remediation section records fixes made after this initial review; `verify-changed` and `verify --complete` passed on the repair tree. Review the merge message before any authorized landing. The Jest cache and older unmarked host-test roots remain separate lifecycle work.
 - **Boundary for the next recurring pass:** start after `ff4f017ceb100c39c7d55bec8c228ef967097be4`, inspect these findings' repair commits, and revisit the tracked `uuid`/Nixpkgs advisories and temporary-state budgets. Do not infer any external acceptance from this static pass.
 
-## September 24–25 continuation — main through `a996fc512826c18f214f4c873eca2a486cf2ea84`
+## September 24–25 continuation — main through `7af6064174487e54c17c0737b8f91dd8d3bd4275`
 
 The earlier boundary is confirmed by first-parent ancestry and counts: 142 landings in the
 September 7–22 window, including 61 after the accepted `5e352643` catch-up, through
-`ff4f017ceb100c39c7d55bec8c228ef967097be4`. This continuation reviewed the 21 newer
+`ff4f017ceb100c39c7d55bec8c228ef967097be4`. This continuation reviewed the 24 newer
 first-parent landings once each against the current `main` tree. Four distinct read-only
 review units covered host operations, temporary state, release/device/dependencies, and
 Studio/runtime; different reviewers challenged the surviving findings. The September 7–22
 commit reviews above were not repeated.
 
-| Landing | Disposition against `a996fc51` |
-| --- | --- |
-| `1c073062` | Release checklist accepted; later domain decision refined its identifier inventory. |
-| `482ffec8` | Prebuilt-host download accepted functionally; artifact authenticity remains a prepublication concern. |
-| `174e49a5` | File-watching placement accepted; its temporary removal of tracked Codex config was fixed by `0080044c`. |
-| `62d25e81` | Simulator Companion route accepted; simulator proof does not cover a physical installation. |
-| `24dc2360` | Standalone CLI release preparation accepted; unsigned install remains prepublication work. |
-| `e0814ac1` | Landing-friction record accepted; missing-config portion later consolidated by `e667b5a9`. |
-| `e667b5a9` | Deduplication accepted when landed; `0080044c` later left two now-stale active entries. |
-| `17e51655` | Physical-iPhone hosted-sync acceptance accepted as development-build evidence, not distribution proof. |
-| `0080044c` | Tracked Codex config repairs the fresh-worktree failure; two ledger entries need archival after clean integration proof. |
-| `a1cdad93` | Host landing accepted apart from a conditional inherited-sandbox-marker rejection. |
-| `0b4b8052` | Host wrapper accepted; later named-target dispatch in `f4c8114d` supersedes raw passthrough. |
-| `7a74afbf` | Per-identity Jest cache bound accepted; aggregate identities and direct-Jest fallback remain unbounded. |
-| `4cd16848` | Temporary-state review requirement accepted; this pass records the specific roots it exposed. |
-| `f4c8114d` | Named host operations accepted; the wrapper retains the marker rejection from `a1cdad93`. |
-| `533f7fa1` | Studio delay proof accepted; loading now precedes the latency assertion. |
-| `c098cb17` | Studio/IDE release preparation accepted; account, signing, marketplace and installed-product gates remain external. |
-| `2e9414bc` | `devtao.com` identifier move accepted; account/domain registration remains external. |
-| `24eb8d4a` | Release fixture name matches the new bundle identifier; no surviving finding. |
-| `cdcefefc` | Pagination and early exit handling work, but the fixed append-only emulator log can give a prior launch's reason. Five pages is a documented discovery limit, not proof every compatible host is reachable. |
-| `c4b62744` | Named CocoaPods dispatch gains the UTF-8 locale, but direct native-module-check and ship paths omitted it; this branch repairs both. Simulator-host pod install is not full device acceptance. |
-| `a996fc51` | Recurring-pass selection of open developer-environment work accepted; the handoff retains its shortlist and ownership check. No implementation behavior changed. |
+| Landing    | Disposition against `7af60641`                                                                                                                                                                                                          |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `1c073062` | Release checklist accepted; later domain decision refined its identifier inventory.                                                                                                                                                     |
+| `482ffec8` | Prebuilt-host download accepted functionally; artifact authenticity remains a prepublication concern.                                                                                                                                   |
+| `174e49a5` | File-watching placement accepted; its temporary removal of tracked Codex config was fixed by `0080044c`.                                                                                                                                |
+| `62d25e81` | Simulator Companion route accepted; simulator proof does not cover a physical installation.                                                                                                                                             |
+| `24dc2360` | Standalone CLI release preparation accepted; unsigned install remains prepublication work.                                                                                                                                              |
+| `e0814ac1` | Landing-friction record accepted; missing-config portion later consolidated by `e667b5a9`.                                                                                                                                              |
+| `e667b5a9` | Deduplication accepted when landed; `0080044c` later left two now-stale active entries.                                                                                                                                                 |
+| `17e51655` | Physical-iPhone hosted-sync acceptance accepted as development-build evidence, not distribution proof.                                                                                                                                  |
+| `0080044c` | Tracked Codex config repairs the fresh-worktree failure; two ledger entries need archival after clean integration proof.                                                                                                                |
+| `a1cdad93` | Host landing accepted apart from a conditional inherited-sandbox-marker rejection.                                                                                                                                                      |
+| `0b4b8052` | Host wrapper accepted; later named-target dispatch in `f4c8114d` supersedes raw passthrough.                                                                                                                                            |
+| `7a74afbf` | Per-identity Jest cache bound accepted; aggregate identities and direct-Jest fallback remain unbounded.                                                                                                                                 |
+| `4cd16848` | Temporary-state review requirement accepted; this pass records the specific roots it exposed.                                                                                                                                           |
+| `f4c8114d` | Named host operations accepted; the wrapper retains the marker rejection from `a1cdad93`.                                                                                                                                               |
+| `533f7fa1` | Studio delay proof accepted; loading now precedes the latency assertion.                                                                                                                                                                |
+| `c098cb17` | Studio/IDE release preparation accepted; account, signing, marketplace and installed-product gates remain external.                                                                                                                     |
+| `2e9414bc` | `devtao.com` identifier move accepted; account/domain registration remains external.                                                                                                                                                    |
+| `24eb8d4a` | Release fixture name matches the new bundle identifier; no surviving finding.                                                                                                                                                           |
+| `cdcefefc` | Pagination and early exit handling work, but the fixed append-only emulator log can give a prior launch's reason. Five pages is a documented discovery limit, not proof every compatible host is reachable.                             |
+| `c4b62744` | Named CocoaPods dispatch gains the UTF-8 locale, but direct native-module-check and ship paths omitted it; this branch repairs both. Simulator-host pod install is not full device acceptance.                                          |
+| `a996fc51` | Recurring-pass selection of open developer-environment work accepted; the handoff retains its shortlist and ownership check. No implementation behavior changed.                                                                        |
+| `1b258896` | Studio stale-preview recovery needed per-publication retry accounting and a terminal bound for older bootstrap responses; this branch repairs both and stops writing success-only diagnostics. Real Studio acceptance remains external. |
+| `7f5f3e4a` | Delegation selection and observed-model reporting accepted, but the old-CLI warning understated its effect on standard profiles; this branch corrects it. Host CLI 2.1.267 remains below Opus 5.5's minimum.                            |
+| `7af60641` | Standalone Expo host installation and checkout-free web build accepted after this branch aligns installer `TAO_HOME`/XDG handling with runtime. Packaged installation remains external; Jest cache relocation is open.                  |
 
 ### Pending September repair recheck
 
-Every repair recorded above remains applicable at `a996fc51`; none was superseded by a
+Every repair recorded above remains applicable at `7af60641`; none was superseded by a
 newer main fix. The branch's proposed repairs were checked against current source and
 their focused regressions. Main integration must retain the later named host dispatch
 alongside the branch's agent bootstrap change.
 
-| Original finding | Disposition on the review branch |
-| --- | --- |
-| Web-server traversal and bind exposure | Containment and loopback repair valid; this continuation removes its test's port race. |
-| Alternate landing message paths | Restricted path repair valid. |
-| Connected phone Save can wait forever | Absolute deadline repair valid. |
-| Combined verification-skip flags | Rejection repair valid. |
-| Untouched generated landing draft | Author-edit requirement valid. |
-| Admission reuses a prior summary | Fresh-run check valid; this continuation also rejects failed current runs and baselines. |
-| Admission provisioning loses cleanup leftovers | Error and leftover preservation valid. |
-| Native podspec discovery misses grouped packages | Functional repair valid; helper duplication with `PackageGraph` is a later consolidation option. |
-| Cached package realpath survives symlink retarget | Build/update invalidation repair valid. |
-| Studio Lens samples cross assigned cells | Assignment identity reset repair valid. |
-| Agent bootstrap misses `cli-kit` imports | Full source-glob repair valid; preserve it when merging named host dispatch. |
-| Doctor accepts Bun below standalone minimum | Immediate 1.4.2 repair valid; shared-pin drift remains tracked. |
-| Shipped skill misstates bare `tao dev` | Source and starter-copy correction valid. |
-| Ledger status truncation | Single-line status and lint repair valid. |
-| Queued-landing entry remains active | Archive valid; this continuation restores its date and current command guidance. |
-| CLI build/clean status is stale | Landed-status correction valid. |
+| Original finding                                  | Disposition on the review branch                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Web-server traversal and bind exposure            | Containment and loopback repair valid; this continuation removes its test's port race.           |
+| Alternate landing message paths                   | Restricted path repair valid.                                                                    |
+| Connected phone Save can wait forever             | Absolute deadline repair valid.                                                                  |
+| Combined verification-skip flags                  | Rejection repair valid.                                                                          |
+| Untouched generated landing draft                 | Author-edit requirement valid.                                                                   |
+| Admission reuses a prior summary                  | Fresh-run check valid; this continuation also rejects failed current runs and baselines.         |
+| Admission provisioning loses cleanup leftovers    | Error and leftover preservation valid.                                                           |
+| Native podspec discovery misses grouped packages  | Functional repair valid; helper duplication with `PackageGraph` is a later consolidation option. |
+| Cached package realpath survives symlink retarget | Build/update invalidation repair valid.                                                          |
+| Studio Lens samples cross assigned cells          | Assignment identity reset repair valid.                                                          |
+| Agent bootstrap misses `cli-kit` imports          | Full source-glob repair valid; preserve it when merging named host dispatch.                     |
+| Doctor accepts Bun below standalone minimum       | Immediate 1.4.2 repair valid; shared-pin drift remains tracked.                                  |
+| Shipped skill misstates bare `tao dev`            | Source and starter-copy correction valid.                                                        |
+| Ledger status truncation                          | Single-line status and lint repair valid.                                                        |
+| Queued-landing entry remains active               | Archive valid; this continuation restores its date and current command guidance.                 |
+| CLI build/clean status is stale                   | Landed-status correction valid.                                                                  |
 
 ### Findings, evidence, and disposition
 
@@ -319,16 +322,36 @@ alongside the branch's agent bootstrap change.
 - **New main landing:** `cdcefefc` improves release discovery and ends a newly started
   emulator's boot wait when its process exits. Its fixed `$TMPDIR/tao-android-emulator.log`
   is opened for append, and the diagnostic searches all lines for `Incompatible processor`.
-  A later launch can therefore report an earlier launch's processor failure. This is a
-  source-confirmed P2 diagnostic error, not a measured second launch; use a per-launch log
-  with bounded cleanup after integration. The
-  [emulator exit-log entry](<Developer environment upgrades/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>)
-  tracks that remaining repair. The five-page release search cap is an explicit
+  A later launch can therefore report an earlier launch's processor failure. This was a
+  source-confirmed P2 diagnostic error, not a measured second launch. The branch now uses an
+  owned log per launch, an exact child-process identity where available, and bounded retirement
+  of dead runs. Focused controls covered distinct failures, live and reused PIDs, interruption,
+  and retention; the [archived emulator entry](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>)
+  records the repair and the unmeasured real-host limit. The five-page release search cap is an explicit
   request-budget limit; no compatible host beyond that cap was observed. `c4b62744` passes
   UTF-8 locale variables through named CocoaPods dispatch without dropping inherited `PATH`,
   but the direct pod invocations in native-module-check and `tao ship` still lacked them.
   This branch now supplies the same locale on those paths; both focused regressions failed
   before the correction and passed after it. No live direct-pod host run was performed.
+- **Three later main landings:** `1b258896` recovers a Studio preview from publication skew,
+  but its URL retry count persisted across successful recoveries and its older-bootstrap poll
+  had no bound. Different reviewers confirmed both against current `main`. This branch scopes
+  the reload count to a target revision, clears it on a match, and caps server catch-up attempts;
+  focused policy and generated-host type-check controls passed. A newly added success diagnostic
+  retained one JSON per real-app smoke under `.artifacts/user/studio/launches/browser`; the
+  success-only write was removed, while timeout evidence remains. These are source-confirmed
+  paths; neither repeated skew nor disk growth was measured on a real Studio host. `7f5f3e4a`
+  routes standard and deep Claude profiles to Opus 5.5, but warned only about deep reviewers on
+  an old CLI. The branch fixes that warning. `./agent doctor` measured host Claude Code 2.1.267,
+  below the configured 2.1.280 minimum; no Claude subagent acceptance ran. `7af60641` made
+  standalone `tao build --web` work outside a checkout but let its shell installer accept relative
+  `TAO_HOME`/XDG paths that runtime rejects or ignores. Two focused tests failed before the
+  installer alignment and passed after it. No packaged installation was run.
+- **New cache contract:** `7af60641` says `TAO_HOME` relocates every machine-wide cache, while
+  managed and direct Jest still choose the login home. This is a source-confirmed contract gap,
+  with no isolated `TAO_HOME` run or safe migration of existing leased roots. The
+  [aggregate and direct-run cache entry](<Developer environment upgrades/DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND.md>)
+  retains its disposition alongside the measured size above.
 - **Release authenticity:** The standalone installer fetches executable and checksum from
   one mutable release before execution; prebuilt Companion download trusts an unsigned
   compatibility manifest and byte count, while publication permits asset replacement.
@@ -341,13 +364,19 @@ alongside the branch's agent bootstrap change.
   call in that parent. The [advisory register](<Dependency advisory follow-up.md>) remains
   open for September 28. The pinned Nixpkgs glibc input still lacks a fresh Linux closure
   and upstream-patch comparison. No manifest, version, or lockfile was changed.
+- **Host prerequisites:** `./agent doctor` measured Bun 1.3.13 below the repository minimum
+  1.4.2 in the shared primary-checkout profile; the doctor now fails with its reload guidance.
+  The [existing Bun profile entry](<Developer environment upgrades/DEVENV-DOCTOR-PASSES-A-BUN-OLDER-THAN-THE-DEVENV-PIN.md>)
+  and [Claude minimum entry](<Developer environment upgrades/DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM.md>)
+  record the external host actions. Neither an unlisted host update nor a version change was made.
 
 ### Integration state
 
-The new review branch was created at the prior review tip `98a82c8a`. Its checkout switch
-could not replace protected `.codex/rules/tao.rules`, leaving that generated file dirty.
-A read-only merge preview names three document conflicts in the two developer-environment
-indexes and this recurring-pass handoff. The original review worktree, its index, and branch
-were untouched. Source fixes in this continuation have focused proof, but main integration,
-the full landing gate, and a landed archive ref are not yet established. The protected-path
-write needs a Developer-approved host operation before the branch can be made clean and landed.
+The new review branch was created at the prior review tip `98a82c8a`, leaving the original
+review worktree, index, and branch untouched. The Developer committed the protected generated
+rules change in this worktree. The branch integrated `main` through `7af60641`, resolved the
+developer-environment index and handoff conflicts, and retained both the historical archived
+Jest entry and the distinct current aggregate/direct-run entry. Focused controls passed for the
+new emulator, installer, Studio retry, and warning repairs. The locked broad gate and landed
+archive ref remain to be established;
+host/device, packaged installation, and publication acceptance are outside this pass.

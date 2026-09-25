@@ -19,7 +19,9 @@
   checkout's, built on 2026-09-22 from `dev/ro` at `071101d1` (2026-09-21), which predates the pin;
   its `bin/bun` is 1.3.13. `./agent doctor` printed `PASS  bun: 1.3.13` and `this checkout is
   usable`, and the slice-2 landing's `verify-full` ran on that Bun. A 1.4.2 Bun was already in the
-  Nix store.
+  Nix store. On 2026-09-25, after the branch's doctor repair, `./agent doctor` measured the same
+  1.3.13 profile and correctly failed with a `direnv reload` instruction. The profile prerequisite
+  remains external to this review branch.
 - **Workaround:** Bring the primary checkout past the pin and reload its profile (`direnv reload`,
   unsandboxed), or give one worktree its own profile by running `direnv allow && direnv exec .
   ./agent setup` in it from an ordinary terminal. `standalone-build.ts` refuses a Bun older than
