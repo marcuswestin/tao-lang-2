@@ -77,7 +77,7 @@ Describe('test world provider stand-in', () => {
   Test('offline snapshot saves preserve every armed fault until an online matching write', async () => {
     TestWorld.begin()
     try {
-      const connection = TestWorld.connection(false, undefined, undefined, true)
+      const connection = TestWorld.connection(false, undefined, undefined, 'remote')
       await connection.save(empty)
       TestWorld.failAfter('create', 'Note', 'first rejection')
       TestWorld.failAfter('update', 'Note', 'second rejection')
@@ -93,6 +93,27 @@ Describe('test world provider stand-in', () => {
           )
         ),
       ).rejects.toThrow('second rejection')
+    } finally {
+      TestWorld.end()
+    }
+  })
+
+  Test('an offline iCloud snapshot stays local but cannot claim remote upload completion', async () => {
+    TestWorld.begin()
+    try {
+      const connection = TestWorld.connection(false, 'icloud-document', undefined, 'deferred')
+      await connection.save(empty)
+      TestWorld.network('offline')
+      await connection.save(withNote)
+      Expect(await connection.load()).toBe(withNote)
+      await Expect(TestWorld.waitForSync()).rejects.toThrow('network is offline')
+      connection.close?.()
+      await Expect(TestWorld.waitForSync()).rejects.toThrow('network is offline')
+      TestWorld.network('online')
+      const reopened = TestWorld.connection(false, 'icloud-document', undefined, 'deferred')
+      Expect(await reopened.load()).toBe(withNote)
+      Expect(() => TestWorld.preflightWaitForSync()).toThrow('Cannot confirm iCloud upload completion')
+      await Expect(TestWorld.waitForSync()).rejects.toThrow('Cannot confirm iCloud upload completion')
     } finally {
       TestWorld.end()
     }
@@ -160,7 +181,7 @@ Describe('test world provider stand-in', () => {
         connect: () => Errors.throwUnexpected('Real provider must not connect in a behavior test.'),
       })
       const remote = TR.Data.Declaration('Remote', {
-        testNetwork: true,
+        testNetwork: 'remote',
         connect: () => Errors.throwUnexpected('Real provider must not connect in a behavior test.'),
       })
       TR.Data.BindConfigured(schema, TR.Data.Configure(local, { StorageKey: 'same' }))

@@ -1,4 +1,4 @@
-use TestWorldApp from ./
+use TestWorldApp, TestWorldDevApp, TestWorldICloudApp from ./
 
 test "Test world controls" {
    test "queues an offline granular write and syncs on reconnect" {
@@ -37,5 +37,21 @@ test "Test world controls" {
       press #retry
       wait for sync
       expect text "Failed 0"
+   }
+   test "keeps an iCloud snapshot locally through reconnect" {
+      run TestWorldICloudApp
+      network offline
+      enter "Offline iCloud" into #draft
+      press #add
+      expect text "Offline iCloud"
+      network online
+      expect text "Offline iCloud"
+   }
+   test "shows a Dev server save error while offline" {
+      run TestWorldDevApp
+      network offline
+      enter "Offline Dev" into #draft
+      press #add
+      expect text "Could not save data: Network is offline."
    }
 }

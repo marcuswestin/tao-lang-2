@@ -112,7 +112,7 @@ export function bindConfiguredDataSchema(
     let declaration = declarations.get(source.declaration)
     if (declaration === undefined) {
       const granular = source.declaration.provider.testWriteRecovery === true
-      const networkDependent = source.declaration.provider.testNetwork === true || granular
+      const networkMode = source.declaration.provider.testNetwork ?? (granular ? 'remote' : 'local')
       const providerIdentity = source.declaration.canonicalIdentity?.canonical
         ?? `instance:${testValueIdentity(source.declaration.identity)}`
       // Fixtures can create rows before the app binds its provider. Carry those rows into the
@@ -131,7 +131,7 @@ export function bindConfiguredDataSchema(
                 testConfigurationKey(context.configuration),
               ]),
               initialSnapshot,
-              networkDependent,
+              networkMode,
             )
             initialSnapshot = undefined
             return connection

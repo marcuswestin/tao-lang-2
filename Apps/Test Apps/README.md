@@ -373,10 +373,11 @@ the still-deferred `as <account>` and `expect refused` controls.
 
 Exercise Decisions §16's network, sync, and datasource fault controls with rendered Tao journeys.
 
-**Belongs here:** a granular provider stand-in queues an offline write, syncs it on reconnect,
-reports an injected failed write, and retries that record. Data MVP proves that Memory saves while
-offline and shows an injected snapshot save error through `guard … error`; runtime tests cover a
-network-dependent snapshot provider's offline error.
+**Belongs here:** a granular CloudKit stand-in queues an offline write, syncs it on reconnect,
+reports an injected failed write, and retries that record. ICloud keeps an offline snapshot locally
+through reconnect, but its protocol cannot confirm remote upload completion for `wait for sync`;
+Dev shows a remote save error while offline. Data MVP proves that Memory
+saves offline and shows an injected snapshot save error through `guard … error`.
 
 **Does not belong here:** live CloudKit or InstantDB transport acceptance, account policy, and
 atomic backend rejection. Those need provider and device evidence.

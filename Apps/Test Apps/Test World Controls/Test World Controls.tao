@@ -1,4 +1,6 @@
 use CloudKit from @tao/data/providers/cloudkit
+use Dev from @tao/data/providers/dev
+use ICloud from @tao/data/providers/icloud
 use StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
@@ -8,6 +10,22 @@ app TestWorldApp {
       Initial Main
    }
    Datasource CloudKit { }
+}
+
+app TestWorldICloudApp {
+   Name "Test World iCloud"
+   Navigator StackNav {
+      Initial Main
+   }
+   Datasource ICloud { }
+}
+
+app TestWorldDevApp {
+   Name "Test World Dev"
+   Navigator StackNav {
+      Initial Main
+   }
+   Datasource Dev { }
 }
 
 data Notes / Note {
@@ -25,6 +43,10 @@ scene Main() {
       set Draft = ""
    }
    render Col() {
+      guard Notes {
+         error -> Message { Text(Message) }
+      }
+
       #draft
       TextInput(Value: Draft, Label: "Title") {
          on submit Add

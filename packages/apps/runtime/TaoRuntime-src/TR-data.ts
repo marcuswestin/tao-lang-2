@@ -199,8 +199,8 @@ export type TaoDataProviderContext = Readonly<{
 /** TaoDataProvider is the clean package boundary implemented by Local, Memory, and remote providers. */
 export type TaoDataProvider = {
   connect(context: TaoDataProviderContext): TaoDataConnection
-  /** Test stand-ins honor network offline for providers whose saves need remote transport. */
-  testNetwork?: true
+  /** Test stand-ins model remote saves or local snapshots awaiting background upload. */
+  testNetwork?: 'deferred' | 'remote'
   /** Declares that this provider supports recorded per-write recovery in behavior tests. */
   testWriteRecovery?: true
   /**

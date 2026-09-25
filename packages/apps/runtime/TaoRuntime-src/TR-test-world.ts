@@ -4,8 +4,14 @@ import { UserInputError } from './TR-errors'
 
 type Failure = { entity: string; message: string; operation: 'create' | 'delete' | 'update' }
 type Pending = { entity: string; id: string; message?: string; operation: Failure['operation']; sequence: number }
-type TestState = { pending: Pending[]; stored?: string }
-type TestConnection = TaoDataConnection & { failure?: string; notify(): void; pending: Pending[] }
+type TestState = { pending: Pending[]; stored?: string; uploadPending?: boolean }
+type TestConnection = TaoDataConnection & {
+  failure?: string
+  networkMode: 'deferred' | 'local' | 'remote'
+  notify(): void
+  pending: Pending[]
+  state: TestState
+}
 
 let online = true
 const failures: Failure[] = []
@@ -31,7 +37,12 @@ export const TestWorld = {
   network(mode: 'offline' | 'online'): void {
     online = mode === 'online'
     if (online) {
+      // A locally accepted iCloud document continues uploading even if its app connection closed.
+      for (const state of states.values()) {
+        state.uploadPending = false
+      }
       for (const connection of connections) {
+        connection.state.uploadPending = false
         for (
           const submission of new Set(
             connection.pending.filter(write => write.message === undefined)
@@ -50,17 +61,27 @@ export const TestWorld = {
   isSnapshotConnection(connection: TaoDataConnection): boolean {
     return connections.has(connection as TestConnection) && connection.writes === undefined
   },
+  preflightWaitForSync(): void {
+    if ([...connections].some(connection => connection.networkMode === 'deferred')) {
+      throw new UserInputError(
+        'Cannot confirm iCloud upload completion: wait for sync is unavailable for this datasource.',
+      )
+    }
+  },
   async waitForSync(): Promise<void> {
     const pending = [...connections].flatMap(connection => connection.pending)
     const snapshotFailure = [...connections].find(connection => connection.failure !== undefined)?.failure
     if (snapshotFailure !== undefined) {
       throw new UserInputError(`Sync failed: ${snapshotFailure}`)
     }
+    const uploadPending = [...states.values(), ...[...connections].map(connection => connection.state)]
+      .some(state => state.uploadPending === true)
+    if (!online && (pending.length > 0 || uploadPending)) {
+      throw new UserInputError('Cannot wait for sync while the network is offline.')
+    }
+    this.preflightWaitForSync()
     if (pending.length === 0) {
       return
-    }
-    if (!online) {
-      throw new UserInputError('Cannot wait for sync while the network is offline.')
     }
     const failed = pending.find(write => write.message !== undefined)
     if (failed !== undefined) {
@@ -74,7 +95,7 @@ export const TestWorld = {
     granular = false,
     storageKey?: string,
     initialSnapshot?: string,
-    networkDependent = granular,
+    networkMode: 'deferred' | 'local' | 'remote' = granular ? 'remote' : 'local',
   ): TaoDataConnection {
     const state = storageKey === undefined
       ? { pending: [] as Pending[], stored: undefined as string | undefined }
@@ -123,13 +144,15 @@ export const TestWorld = {
       },
       load: () => state.stored,
       notify,
+      networkMode,
       pending,
+      state,
       referenceToken: reference => reference.id,
       resolveReference: reference => reference.token,
       save(snapshot, intents) {
         const changed = changedRows(state.stored, snapshot, intents)
         if (!granular) {
-          if (!online && networkDependent) {
+          if (!online && networkMode === 'remote') {
             connection.failure = 'Network is offline.'
             throw new UserInputError(connection.failure)
           }
@@ -139,11 +162,14 @@ export const TestWorld = {
             throw new UserInputError(message)
           }
           state.stored = snapshot
+          if (!online && networkMode === 'deferred') {
+            state.uploadPending = true
+          }
           connection.failure = undefined
           return
         }
         state.stored = snapshot
-        const delayed = !online && networkDependent
+        const delayed = !online && networkMode === 'remote'
         const message = delayed ? undefined : takeFailure(changed)
         if (delayed || message !== undefined) {
           const submission = ++sequence

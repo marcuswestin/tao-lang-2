@@ -75,6 +75,9 @@ export async function runTestCheck(suiteName: string, check: TestCompiler.Check)
     }
     applyDeviceViewport(app.screen, app.device)
     await settleData()
+    if (containsWaitForSync(check.steps)) {
+      TR.Data.TestWorld.preflightWaitForSync()
+    }
     observeJourneyRenders(app.screen, renders)
     for (const step of check.steps) {
       await runStep(app, step)
@@ -113,6 +116,10 @@ export async function runTestCheck(suiteName: string, check: TestCompiler.Check)
   }
   Assert.defined(observation, 'completed Tao check has an observation')
   return observation
+}
+
+function containsWaitForSync(steps: readonly TestCompiler.Step[]): boolean {
+  return steps.some(step => step.kind === 'waitForSync' || (step.kind === 'select' && containsWaitForSync(step.steps)))
 }
 
 /** observeJourneyRenders reads test-only generated props from the live React tree, never static source coverage. */
