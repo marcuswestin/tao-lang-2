@@ -387,6 +387,38 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.ForEach(_Scope.Drafts.evaluate()')
   })
 
+  Test('compiles a query search clause and its entity (search) fields', async () => {
+    const compiled = await Compiler.compileCode(`
+      use Memory from @tao/data/providers/memory
+      use StackNav from @tao/nav
+      data Documents / Document {
+        Title text (search, title)
+        Body text (default "", search)
+        Owner text (default "")
+      }
+      app Notes {
+        Name "Notes"
+        Navigator StackNav { Initial Main }
+        Datasource Memory { }
+      }
+      scene Main() {
+        Title "Main"
+        state Find = ""
+        query Documents as Found {
+          search Find
+          order by Title
+        }
+        render Text(Found.Count)
+      }
+      view Text(Value number) { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.code).toContain('search: () => _Scope.Find.evaluate()')
+    // Only Title and Body declare `(search)`; Owner does not, so the flag appears exactly twice.
+    Expect(compiled.code.match(/search: true,/g)).toHaveLength(2)
+    Expect(compiled.code).toContain('order: {')
+  })
+
   Test('partitions collections into one catalog per datasource an app binds', async () => {
     const compiled = await Compiler.compileCode(`
       use Local from @tao/data/providers/local

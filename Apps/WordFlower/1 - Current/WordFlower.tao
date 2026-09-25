@@ -6,6 +6,13 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
 //
+// WRITE RULES. `required "<sentence>"` states completeness: it never blocks a write, and it derives
+// `Incomplete` and `Problems` on a row and on every projection that selects the field. A form for a
+// new row edits a projection (`type WorkspaceInput is Workspace { Name }`), `create Workspace with
+// Input` writes it, and the stdlib `Problems(Input.Problems)` lists what is still missing, in the
+// order the entity states its rules and nothing once the input is complete. `validate` and `refuse
+// when` are Post-MVP.
+//
 // CHECK. `check <boolean>` is an action's early exit: when the expression is false, the rest of that
 // action is skipped. Nothing fails, nothing is reported, and a caller that reached it through `do`
 // carries on. It is a statement in actions only; `guard` stays the view-side construct and tests a
