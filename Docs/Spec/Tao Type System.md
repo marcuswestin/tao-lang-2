@@ -479,10 +479,11 @@ Tao owns the type. A bridged value therefore needs a declared one — a `returns
 `let Name is Type =` ascription — and that declaration is the contract the sidecar must satisfy. The
 compiler copies the named sidecar beside its generated module and imports the export from there.
 `tao check`, `tao compile`, and the development compile refresh a generated `<source>.tao.ts`
-module beside each Tao source with a TypeScript boundary. The module exports Tao-derived contract
-types and checks each sidecar's named export with `satisfies`. Configuration declarations also export
-their `<Declaration>Config` type there. It is ignored by Git; authors edit the Tao declaration and
-handwritten sidecar, and may import its generated types if useful. Compiled Tao modules and their
+module beside each Tao source with a TypeScript boundary or a configuration declaration. The module
+exports Tao-derived contract types and checks each sidecar's named export with `satisfies`.
+Configuration declarations also export their `<Declaration>Config` type there. It is ignored by Git;
+authors edit the Tao declaration and handwritten sidecar, and may import its generated types if
+useful. Compiled Tao modules and their
 configuration declaration companions export the same contract types for copied sidecars. `tao check`
 also runs TypeScript over the generated modules and their sidecars, reporting a missing export or a
 parameter or result mismatch as an error. The check includes the callable arity, so a function with

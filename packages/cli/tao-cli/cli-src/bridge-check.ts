@@ -50,8 +50,9 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
       skipLibCheck: true,
       strict: true,
       target: 'ES2022',
-      typeRoots,
-      types: ambientTypes,
+      // A project tsconfig may declare its own ambient types and roots. Let its inheritance
+      // resolve those; standalone projects without a tsconfig use the installed host types.
+      ...(inheritedConfig === undefined ? { typeRoots, types: ambientTypes } : {}),
       ...(inheritedConfig === repositoryConfig ? { rootDir: checkoutRoot } : {}),
     },
     files: modules,

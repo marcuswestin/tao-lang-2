@@ -158,17 +158,19 @@ export function Register(callback: TR.ActionValue<[TR.Value<string>]>): void { v
   Test('checks configuration implementation and bare action exports', async () => {
     await withTaoFixture({
       ...checkedProjectFile,
-      'Main.tao': `type Memory is datasource with {
+      'Main.tao': `public type Memory is datasource with {
    provider MemoryProvider from ./Memory.ts
 }
 type CustomMemory is Memory with { }
 let OpenUrl is action(text) = OpenUrl from ./OpenUrl.ts
 `,
       'Memory.ts': `import type TR from '@tao/runtime'
-import type { MemoryConfig } from './Main.tao'
+import type { MemoryConfig, CustomMemoryConfig } from './Main.tao'
 export function MemoryProvider(): TR.DataProvider {
    const configuration: MemoryConfig = {}
+   const extended: CustomMemoryConfig = {}
    void configuration
+   void extended
    throw Error('test')
 }
 `,
@@ -180,6 +182,7 @@ export function MemoryProvider(): TR.DataProvider {
       const metadata = await FS.readText(FS.resolvePath('Main.tao.ts', root))
       Expect(metadata).toContain('Sidecar2.MemoryProvider satisfies MemoryProvider')
       Expect(metadata).toContain('export type MemoryConfig =')
+      Expect(metadata).toContain('export type CustomMemoryConfig =')
       Expect(metadata.split('MemoryProvider satisfies MemoryProvider').length).toBe(2)
       Expect(metadata).toContain('unknown as 1 satisfies Parameters<typeof Sidecar1.OpenUrl>')
       await FS.writeText(FS.resolvePath('OpenUrl.ts', root), 'export function OpenUrl(): number { return 1 }\n')
@@ -189,6 +192,36 @@ export function MemoryProvider(): TR.DataProvider {
           diagnostic.message.includes('TypeScript bridge:')
         ),
       ).toBe(true)
+    })
+  })
+
+  Test('exports inherited configuration types from a source without its own sidecar', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'Main.tao': `public type Memory is datasource with {
+   provider MemoryProvider from ./Memory.ts
+}
+`,
+      'Derived.tao': `use Memory from ./Main.tao
+type Extended is Memory with { }
+`,
+      'Memory.ts': `import type TR from '@tao/runtime'
+import type { ExtendedConfig } from './Derived.tao'
+export function MemoryProvider(): TR.DataProvider {
+   const configuration: ExtendedConfig = {}
+   void configuration
+   throw Error('test')
+}
+`,
+    }, async root => {
+      const results = await runCheck(root)
+      Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
+        .toEqual([])
+      Expect(await FS.readText(FS.resolvePath('Derived.tao.ts', root)))
+        .toContain('export type ExtendedConfig =')
+      await FS.remove(FS.resolvePath('Derived.tao.ts', root))
+      await runCheck(root)
+      Expect(await FS.isFile(FS.resolvePath('Derived.tao.ts', root))).toBe(true)
     })
   })
 
@@ -241,13 +274,21 @@ export const Echo = (callbacks: Array<TR.ActionValue<[TR.Value<string>]>>) => ca
     await withTaoFixture({
       ...checkedProjectFile,
       'Main.tao': functionSource,
-      'tsconfig.json': JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@local/*': ['./Local/*'] } } }),
+      'tsconfig.json': JSON.stringify({
+        compilerOptions: {
+          baseUrl: '.',
+          paths: { '@local/*': ['./Local/*'] },
+          typeRoots: ['./node_modules/@types'],
+          types: ['project'],
+        },
+      }),
+      'node_modules/@types/project/index.d.ts': 'declare const BUILD_LABEL: string\n',
       'Local/Suffix.ts': 'export const suffix = "!"\n',
       'Words.ts': `import type { TextProps } from 'react-native'
 import { suffix } from '@local/Suffix'
 export function CountWords(value: string): number {
    const props: TextProps = { children: value }
-   return String(props.children).length + suffix.length
+   return String(props.children).length + suffix.length + BUILD_LABEL.length
 }
 `,
     }, async root => {

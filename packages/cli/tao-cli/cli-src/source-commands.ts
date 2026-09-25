@@ -189,7 +189,13 @@ async function missingBridgeMetadata(entryFiles: readonly string[]): Promise<boo
       continue
     }
     const source = await FS.readText(path)
-    if (/\bfrom\s+\S+\.tsx?\b/.test(source)) {
+    // Configuration types also get source metadata, including derived and package aliases.
+    // This is a conservative cache guard; parsing decides whether the module is actually emitted.
+    if (
+      /\bfrom\s+\S+\.tsx?\b/.test(source)
+      || /\btype\s+\w+\s+is\s+(?:nav|datasource|\w+\s+with\s*\{)/.test(source)
+      || /\btype\s+\w+\s*=\s*\w+\.\w+/.test(source)
+    ) {
       return true
     }
   }
