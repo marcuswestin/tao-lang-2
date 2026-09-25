@@ -44,6 +44,7 @@ export const StatementsCompiler = {
       PressTextStep: Compile.PressTextStep,
       PressWordStep: Compile.PressWordStep,
       InteractionWordStep: Compile.InteractionWordStep,
+      PhraseDeclaration: Compile.PhraseDeclaration,
       PressToolbarCommandStep: Compile.PressToolbarCommandStep,
       TagPressStep: Compile.TagPressStep,
       ProjectDeclaration: Compile.ProjectDeclaration,

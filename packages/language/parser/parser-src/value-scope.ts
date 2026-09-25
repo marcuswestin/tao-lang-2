@@ -235,6 +235,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       scope = this.createScopeForParameters(owningFunction, scope, reference)
     }
 
+    const owningPhrase = AST.findOwningPhrase(reference)
+    if (owningPhrase) {
+      scope = this.createScopeForParameters(owningPhrase, scope, reference)
+    }
+
     const owningAction = AST.findOwningAction(reference)
     if (owningAction) {
       scope = this.createScopeForParameters(owningAction, scope, reference)
@@ -435,8 +440,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScopeForNodes(target ? AST.renderSlotDeclarationsOf(target) : [])
   }
 
+  /** A call resolves a pure function or named copy; both share the one call shape (Decisions §14). */
   private createFunctionScope(call: AST.FunctionCallExpression): Langium.Scope {
-    return this.createDeclarationScope(call, AST.isFunctionDeclaration)
+    return this.createDeclarationScope(call, AST.isCallableDeclaration)
   }
 
   private createAppViewScope(node: AST.AppView): Langium.Scope {
