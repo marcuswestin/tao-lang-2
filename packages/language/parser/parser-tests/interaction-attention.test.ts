@@ -46,7 +46,7 @@ Describe('parser: interaction attention', () => {
     const result = await testParseCode(`
       view Leaf() { render inject \`\`\`ts return null \`\`\` }
       view Conditions() {
-        render Leaf() [opacity 80 when pressed, border accent when focused, color ink when hovered,
+        render Leaf() [opacity 80 when pressed, border accent when focused, fg ink when hovered,
           background panel when Sidebar is active, foreground ink when Scheme is Dark]
       }
     `)

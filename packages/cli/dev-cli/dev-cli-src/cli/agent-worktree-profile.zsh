@@ -177,5 +177,5 @@ function tao_warn_on_detached_head() {
   git -C "$worktree_dir" rev-parse --verify --quiet HEAD >/dev/null 2>&1 || return 0
   git -C "$worktree_dir" symbolic-ref --quiet HEAD >/dev/null 2>&1 && return 0
   echo "This worktree is on a detached HEAD; commits made here belong to no branch." >&2
-  echo "Name a branch before committing: git switch -c feat/<name>" >&2
+  echo "Name a branch before committing: ./agent start-branch feat/<name>" >&2
 }

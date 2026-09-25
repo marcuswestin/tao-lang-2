@@ -77,6 +77,14 @@
       "Bash(./agent unsandboxed prepare-release ide-extension *)",
       "Bash(./agent unsandboxed app-dev)",
       "Bash(./agent unsandboxed app-dev *)",
+      "Bash(./agent unsandboxed studio)",
+      "Bash(./agent unsandboxed studio *)",
+      "Bash(./agent unsandboxed studio-native)",
+      "Bash(./agent unsandboxed studio-native *)",
+      "Bash(./agent unsandboxed local-instantdb start)",
+      "Bash(./agent unsandboxed local-instantdb start *)",
+      "Bash(./agent unsandboxed local-instantdb stop)",
+      "Bash(./agent unsandboxed local-instantdb stop *)",
       "Bash(./agent unsandboxed companion-host-build)",
       "Bash(./agent unsandboxed companion-host-build *)",
       "Bash(./agent unsandboxed simulators list)",
@@ -138,7 +146,15 @@
       "Bash(./agent unsandboxed processes list)",
       "Bash(./agent unsandboxed processes list *)",
       "Bash(./agent unsandboxed processes started)",
-      "Bash(./agent unsandboxed processes started *)"
+      "Bash(./agent unsandboxed processes started *)",
+      "Bash(./agent unsandboxed start-branch)",
+      "Bash(./agent unsandboxed start-branch *)"
+    ],
+    "ask": [
+      "Bash(./agent land-unlock --force*)",
+      "Bash(./dev land-unlock --force*)",
+      "Bash(just land-unlock --force*)",
+      "mcp__ccd_session_mgmt__send_message"
     ],
     "deny": [
       "Bash(bun install *)",
@@ -147,12 +163,6 @@
       "Read(~/.aws/**)",
       "Read(~/.config/gh/**)",
       "Read(~/.ssh/**)"
-    ],
-    "ask": [
-      "Bash(./agent land-unlock --force*)",
-      "Bash(./dev land-unlock --force*)",
-      "Bash(just land-unlock --force*)",
-      "mcp__ccd_session_mgmt__send_message"
     ]
   },
   "sandbox": {
@@ -188,6 +198,14 @@
       "./agent unsandboxed prepare-release ide-extension *",
       "./agent unsandboxed app-dev",
       "./agent unsandboxed app-dev *",
+      "./agent unsandboxed studio",
+      "./agent unsandboxed studio *",
+      "./agent unsandboxed studio-native",
+      "./agent unsandboxed studio-native *",
+      "./agent unsandboxed local-instantdb start",
+      "./agent unsandboxed local-instantdb start *",
+      "./agent unsandboxed local-instantdb stop",
+      "./agent unsandboxed local-instantdb stop *",
       "./agent unsandboxed companion-host-build",
       "./agent unsandboxed companion-host-build *",
       "./agent unsandboxed simulators list",
@@ -249,7 +267,9 @@
       "./agent unsandboxed processes list",
       "./agent unsandboxed processes list *",
       "./agent unsandboxed processes started",
-      "./agent unsandboxed processes started *"
+      "./agent unsandboxed processes started *",
+      "./agent unsandboxed start-branch",
+      "./agent unsandboxed start-branch *"
     ],
     "filesystem": {
       "allowWrite": [
@@ -259,15 +279,13 @@
         "~/.android",
         "~/.expo",
         "~/.hutch",
-        "~/.local/state/watchman",
         "~/Library/Caches"
       ]
     },
     "network": {
       "allowLocalBinding": true,
       "allowUnixSockets": [
-        "/nix/var/nix/daemon-socket/socket",
-        "~/.local/state/watchman"
+        "/nix/var/nix/daemon-socket/socket"
       ],
       "allowedDomains": [
         "registry.npmjs.org",

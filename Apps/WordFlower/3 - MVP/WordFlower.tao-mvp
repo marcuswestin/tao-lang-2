@@ -74,23 +74,30 @@ project {
    license MIT
 }
 
-// Design starts with flat tokens plus named clause bundles that render sites apply like direct
-// layout clauses. Bundles and inline clauses resolve left to right, with the last same-clause value
-// winning; incompatible surviving clause categories remain invalid.
+// Design is typed blocks: `colors { }` names values, and `styles { }` holds lowercase styles a render
+// site opts into beside Capitalized element defaults. Styles and inline clauses resolve left to
+// right, with the last same-clause value winning; incompatible surviving clause categories remain
+// invalid.
 design WordFlowerDesign {
-   paper #f6f7f3
-   ink #121826
-   inkMuted #5b6472
-   accent #2f6b4f
-   line #d9dcd4
-
-   screen [fill, content top stretch, pad 16, bg paper]
-   title [size 28, weight 700, fg ink]
-   body [size 16, line 22, fg inkMuted]
-   panel [pad 12, radius 8, bg paper, border line]
-   FormButton [bg accent, bg paper when pressed, border accent when focused, fg ink, fg accent when hovered]
-   Hint [bg accent, fg paper, radius 8, pad 8, weight 700]
-   Overview [bg paper, fg ink, border line, radius 12, pad 12, gap 8]
+   colors {
+      paper #f6f7f3
+      ink #121826
+      inkMuted #5b6472
+      accent #2f6b4f
+      line #d9dcd4
+   }
+   styles {
+      screen [fill, content top stretch, pad 16, background paper]
+      title [size 28, weight 700, ink ink]
+      body [size 16, line 22, ink inkMuted]
+      panel [pad 12, radius 8, background paper, border line]
+      statusDot [width 8, height 8, radius 4]
+      FormButton [background accent, background paper when pressed, border accent when focused, ink ink, ink accent when hovered]
+      // The active tab takes its look from the same default, through the host-supplied `selected`.
+      NavigationTab [pad 10, radius 10, ink inkMuted, ink accent when selected]
+      Hint [background accent, ink paper, radius 8, pad 8, weight 700]
+      Overview [background paper, ink ink, border line, radius 12, pad 12, gap 8]
+   }
 }
 
 // A configured nav binding is an immutable descriptor, not a mounted instance or exposed state.
@@ -224,6 +231,9 @@ let StarterPrompt = WritingPrompt {
 
 // One-case enums are nominal types; a dismissed responder answers `none`.
 type ConfirmResult is one of Confirmed
+
+// A phrase is named copy whose plural forms choose by the count.
+phrase ParagraphCount(Count number) = one "{ Count } paragraph" / other "{ Count } paragraphs"
 
 data Workspaces / Workspace {
    Name text (required "Name this workspace", title)
@@ -657,6 +667,14 @@ view EmptyInspector() {
    render Text("No inspector selected")
 }
 
+// A status label led by a dot in the caller's color. The dot sits inside the badge, where a caller's
+// clauses cannot reach, so its color travels as a `color` value.
+view StatusBadge(Label text, Tint color default inkMuted) {
+   render Row() [gap 8] {
+      Box() [statusDot, background Tint]
+      Text(Label)
+}  }
+
 workspace
 view FileTree(Workspace) {
    query Documents from Workspace.Documents { }
@@ -673,6 +691,12 @@ view FileTree(Workspace) {
             FormButton(Document.Title) {
                // Relative @documents resolves to the nearest unique pane and reveals it.
                on press -> { present DocumentScreen(Document) in @documents }
+            }
+            if Document.Final is Final {
+               StatusBadge("Final", Tint: accent)
+            }
+            if Document.Final is Draft {
+               StatusBadge("Draft")
             }
             #openRooted
             FormButton("Rooted") {
@@ -842,7 +866,7 @@ view ParagraphInspector(Paragraph) {
 view DocumentInfo(Document) {
    render Col() [gap 6, pad 10] {
       Text(Document.Title)
-      Text("{ Document.Paragraphs.Count } paragraphs")
+      Text(ParagraphCount(Document.Paragraphs.Count))
       #dismissInfo
       FormButton("Dismiss") {
          on press -> { dismiss }

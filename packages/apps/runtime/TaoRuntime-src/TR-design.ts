@@ -125,7 +125,23 @@ export const DesignControls = {
   },
 
   resolve,
+  withSelected,
 } as const
+
+/**
+ * withSelected answers the bare `selected` condition from what the element's host marked, and every
+ * other condition from the occurrence's interaction state. An element no host marks is never selected.
+ */
+function withSelected(
+  interaction: TaoDesignCondition | undefined,
+  selected: boolean | undefined,
+): TaoDesignCondition | undefined {
+  if (selected === undefined) {
+    return interaction
+  }
+  return (subject, value) =>
+    subject === 'selected' && value === undefined ? selected : interaction?.(subject, value) === true
+}
 
 class RuntimeDesign implements TaoDesign {
   readonly bundles: Readonly<Record<string, TaoDesignSpec>>

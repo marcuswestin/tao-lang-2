@@ -93,7 +93,7 @@ Describe('repository doctor', () => {
     const report = doctorReport(facts({ branch: undefined }))
 
     Expect(check(report, 'worktree')?.status).toBe('warn')
-    Expect(check(report, 'worktree')?.remediation).toContain('git switch -c feat/<name>')
+    Expect(check(report, 'worktree')?.remediation).toContain('./agent start-branch feat/<name>')
     Expect(report.status).toBe('warn')
     Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(0)
   })
@@ -105,7 +105,7 @@ Describe('repository doctor', () => {
     Expect(report.status).toBe('warn')
   })
 
-  Test('fails a checkout whose Watchman does not answer, because the fallback dies with EMFILE', () => {
+  Test('warns when Watchman is not running, and names the fallback that follows', () => {
     const report = doctorReport(facts({
       watchman: {
         clientVersion: '2026.01.19.00',
@@ -114,9 +114,9 @@ Describe('repository doctor', () => {
       },
     }))
 
-    Expect(check(report, 'watchman')?.status).toBe('fail')
-    Expect(check(report, 'watchman')?.detail).toContain('EMFILE')
-    Expect(report.status).toBe('fail')
+    Expect(check(report, 'watchman')?.status).toBe('warn')
+    Expect(check(report, 'watchman')?.detail).toContain('fall back to crawling')
+    Expect(report.status).toBe('warn')
   })
 
   Test('fails an incomplete dependency graph with a repair command', () => {
@@ -363,7 +363,7 @@ Describe('repository doctor', () => {
 
     Expect(lines.some(line => line.startsWith('PASS  '))).toBe(true)
     Expect(lines.find(line => line.startsWith('WARN  worktree'))).toContain(
-      '\n       Name a branch before committing: git switch -c feat/<name>',
+      '\n       Name a branch before committing: ./agent start-branch feat/<name>',
     )
   })
 

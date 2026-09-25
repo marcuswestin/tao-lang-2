@@ -16,11 +16,19 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
    * These answers and package boundary paths depend on the current documents and file system.
    * `Parser.parse` replaces every document it builds, which retires use statements; that is why
    * their keys are held weakly. The editor instead updates documents in place and relinks the ones
-   * a change may have moved, so both caches are dropped when an update starts and again when any
+   * a change may have moved, so these caches are dropped when an update starts and again when any
    * build finishes parsing, which is after the last syntax tree is replaced and before the first
    * reference is linked against it.
    */
   private useTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, AST.Declaration[]>()
+
+  /**
+   * The design colors each file's project mounts, the outer layer of every design color name in that
+   * file. It reads every project file's apps, so without this each lowercase argument and default paid
+   * for the project walk again. It depends on the same documents a use target does and is forgotten
+   * at the same moments.
+   */
+  private mountedColors = new WeakMap<AST.TaoFile, readonly AST.DesignColor[]>()
 
   constructor(
     private readonly coreServices: Langium.LangiumCoreServices,
@@ -29,6 +37,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     super(coreServices)
     const forgetBuildCaches = (): void => {
       this.useTargets = new WeakMap()
+      this.mountedColors = new WeakMap()
       const packages = this.packages as BuildCacheResolver
       packages.clearPhysicalPathCache?.()
     }
@@ -49,7 +58,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       if (AST.isDataWriteField(context.container.$container)) {
         return this.createDataWriteValueScope(context.container)
       }
-      return this.createValueScope(context.container)
+      return this.createValueScope(context.container, this.createDesignColorScope(context))
     }
     if (context.property === 'target' && AST.isRefinementExpression(context.container)) {
       return this.createPatchBaseScope(context.container)
@@ -58,7 +67,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createConfigurationReferenceScope(context.container)
     }
     if (context.property === 'target' && AST.isMemberAccessExpression(context.container)) {
-      return this.createValueScope(context.container)
+      return this.createValueScope(context.container, this.createDesignColorScope(context))
     }
     if (context.property === 'case' && AST.isBooleanWhereClause(context.container)) {
       return this.createBooleanWhereScope(context.container)
@@ -195,6 +204,51 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       [root, ...projectFiles.filter(file => file !== root)]
         .flatMap(file => file.statements.filter(AST.isAppDeclaration)),
     )
+  }
+
+  /**
+   * A design color name is a value only as an argument or a parameter default, where a `color` may be
+   * expected (Decisions §13). It is resolved against the designs this project's apps mount, as the
+   * outermost layer, so any Tao value of the same name shadows it; the argument binding and the
+   * default's declared type then decide whether a `color` was expected there. Design names are
+   * lowercase and values are Capitalized, so only a lowercase name pays for the project walk.
+   *
+   * A name links when any mounted design declares it; the validator then requires every mounted
+   * design to declare it. A shade (`accent.20`) links to a color whose family declares that shade
+   * wherever one exists, so whether it types as a `color` never depends on which design came first.
+   */
+  private createDesignColorScope(context: Langium.ReferenceInfo): Langium.Scope | undefined {
+    if (!/^[a-z]/.test(context.reference.$refText) || !AST.isDesignColorPosition(context.container)) {
+      return undefined
+    }
+    const root = AST.findRoot(context.container)
+    if (!AST.isTaoFile(root)) {
+      return undefined
+    }
+    const colors = this.mountedDesignColors(root)
+    const shade = AST.isMemberAccessExpression(context.container) ? context.container.shade : undefined
+    if (shade === undefined) {
+      return this.createScopeForNodes(colors)
+    }
+    const shaded = colors.filter(color => AST.isDesignColorEntry(color) && AST.designColorShade(color, shade))
+    return this.createScopeForNodes([...shaded, ...colors])
+  }
+
+  private mountedDesignColors(root: AST.TaoFile): readonly AST.DesignColor[] {
+    const known = this.mountedColors.get(root)
+    if (known !== undefined) {
+      return known
+    }
+    const workspaceFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
+      .map(document => document.parseResult.value)
+      .filter(AST.isTaoFile)
+    const projectFiles = this.packages.projectSourceFiles({
+      fromFilePath: AST.getDocument(root).uri.path,
+      workspaceFiles,
+    })
+    const colors = AST.mountedDesigns(projectFiles).flatMap(AST.designColorsOf)
+    this.mountedColors.set(root, colors)
+    return colors
   }
 
   private createValueScope(reference: AST.Node, outer?: Langium.Scope): Langium.Scope {
@@ -920,7 +974,7 @@ function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
     }
     if (
       (AST.isGuardActionBranch(current) || AST.isGuardRenderBranch(current) || AST.isWhenRenderBranch(current)
-        || AST.isGuardDefaultBranch(current))
+        || AST.isWhenDoOutcome(current) || AST.isGuardDefaultBranch(current))
       && current.payload
     ) {
       carriers.push({ kind: 'payload', payload: current.payload })

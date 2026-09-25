@@ -46,11 +46,27 @@ Likewise, a color token or bundle declared directly in the design body outside `
 Bundles and direct clauses expand left to right. The last entry for one semantic slot wins, while
 unrelated style and layout remain. This makes `[card, gap 20]` a safe layout override of a bundle.
 
+An entry may end in one condition: `when pressed`, `when focused`, `when hovered`, `when selected`
+(the element its host marks as the current choice, such as the active navigation tab), or
+`when Scheme is Light|Dark`. A conditioned entry applies only while its condition holds.
+
 To restyle without changing layout, edit color token values and visual entries in `Design.tao`.
 Keep `fill`, `content`, sizing, spacing, and view structure unchanged. Element defaults such as
-`Text`, `TextInput`, `FormButton`, `Checkbox`, and navigation host names are ordinary bundle names
-used automatically by those standard views, declared inside `styles { }` alongside lowercase bundles.
+`Text`, `TextInput`, `FormButton`, `Checkbox`, and navigation host names are Capitalized entries in
+`styles { }` that those standard views apply automatically. A clause list never names one — not at a
+render site and not inside another style — so a default that needs another's clauses restates them,
+and a state such as the active tab is a condition on the same default:
+`NavigationTab [pad 10, ink inkMuted, background accentSoft when selected]`. Colors, sizes, text
+styles, and screens are always lowercase; a Capitalized one is an error.
 
-Semantic/nested tokens, component or pattern recipes, design rules, shadows, opacity, focus rings,
+When a view tints something inside itself, which a caller's clauses cannot reach, give it a `color`
+parameter: `view StatusBadge(Label text, Tint color default inkMuted)`, whose body writes
+`Box() [dot, background Tint]`, called as `StatusBadge("Final", Tint: accent)`. A lowercase word in a
+clause list is a design name and a Capitalized word reads a value, so `background Tint` uses the
+parameter. A `color` value is only ever a design color name (including a shade such as
+`accent.20`) or another `color` parameter — never text, a number, or data — and `color` is only a
+view parameter's type, not state.
+
+Semantic tokens, component or pattern recipes, design rules, shadows, opacity, focus rings,
 platform blocks, container queries, screenshot comparison, lockfiles, and `tao design` commands are
 unavailable. Do not invent their syntax.

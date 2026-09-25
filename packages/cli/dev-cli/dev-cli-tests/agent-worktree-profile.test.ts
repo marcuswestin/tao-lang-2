@@ -221,7 +221,7 @@ Describe('agent worktree profile bootstrap', () => {
 
       Expect(detached.exitCode).toBe(0)
       Expect(detached.stderr).toContain('detached HEAD')
-      Expect(detached.stderr).toContain('git switch -c feat/<name>')
+      Expect(detached.stderr).toContain('./agent start-branch feat/<name>')
     } finally {
       await FS.remove(testRoot)
     }

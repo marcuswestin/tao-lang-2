@@ -256,8 +256,8 @@ function header(): string[] {
     '# Git metadata writes outside the worktree are routed through Auto-review.',
     '#',
     '# Tracked so a new worktree has its permission profile before setup or session hooks run.',
-    '# Unix socket entries must be absolute; setup refreshes those machine-specific values.',
-    '# Review any resulting config diff before committing it on another machine.',
+    '# It names no login: Codex accepts only absolute Unix socket paths, so a home-relative socket',
+    '# in the canonical rules is left out here and reached through a named host operation instead.',
     '#',
     `# Generated with .codex/rules/tao.rules by \`./agent setup\` from ${PERMISSIONS_SOURCE}`,
     `# and ${PROFILES_SOURCE}. Edit those canonical files, not either generated Codex output:`,
@@ -338,25 +338,28 @@ function networkSection(
 }
 
 function unixSocketSection(profile: string, sockets: readonly string[], comments: readonly string[] = []): string[] {
-  if (sockets.length === 0) {
+  const portable = codexSockets(sockets)
+  if (portable.length === 0) {
     return []
   }
   return [
     ...comments,
     `[permissions.${profile}.network.unix_sockets]`,
-    ...[...new Set(sockets.map(codexSocketPath))].map(socket => `${quote(socket)} = "allow"`),
+    ...portable.map(socket => `${quote(socket)} = "allow"`),
   ]
 }
 
 /**
- * Codex requires Unix sockets to be absolute even though filesystem rules accept `~`: its own
- * config reference documents `permissions.<name>.network.unix_sockets.<path>` as taking "an
- * absolute Unix socket path", and `codex sandbox` refuses to start ("invalid
- * network.allow_unix_sockets") given a literal `~/...` entry there (verified 2026-09-22). Keep
- * this expansion; do not switch it to emit the source's `~`-relative form.
+ * codexSockets keeps the socket paths Codex can be given in a tracked file: absolute ones that name
+ * no login. Codex accepts nothing else here — a `~/`, `$HOME`, or relative entry, even read from
+ * the config file, stops its network proxy from starting (`invalid network.allow_unix_sockets`,
+ * measured on Codex 0.155.1) — and expanding `~` would write one developer's home directory into
+ * the tracked config. A home-relative socket therefore reaches Claude Code only; Codex gets it
+ * through a login-free system path such as `/var/run/docker.sock`, which it follows to the
+ * per-user socket, or through a named host operation that runs outside the sandbox.
  */
-function codexSocketPath(path: string): string {
-  return path === '~' ? FS.homeDir() : path.startsWith('~/') ? FS.resolvePath(path.slice(2), FS.homeDir()) : path
+function codexSockets(sockets: readonly string[]): string[] {
+  return [...new Set(sockets.filter(path => !path.startsWith('~')))]
 }
 
 /**

@@ -1,7 +1,9 @@
 import { FS, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { runFix } from '../cli-src/source-commands'
+import type { InPlace } from '../cli-src/in-place-files'
+import { runCheck, runFix } from '../cli-src/source-commands'
 import {
+  checkedProjectFile,
   packageAwareCliFixedSource,
   packageAwareCliFixture,
   packageAwareCliMainPath,
@@ -173,6 +175,72 @@ Describe('tao fix', () => {
 
       Expect(results).toEqual([{ path, status: 'changed' }])
       Expect(await FS.readText(path)).toBe('view Generated() { }\n')
+    })
+  })
+
+  Test('migrates legacy design source so check then reports it canonical without legacy warnings', async () => {
+    const legacyDesignCodes = ['design-check-flat-catalog', 'design-check-legacy-visual-head']
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'App.tao': Text.stripIndent(`
+        use Text from @tao/ui
+
+        app MyApp {
+           Design AppDesign
+           view MainView
+        }
+
+        design AppDesign {
+           // The palette stays quiet.
+           paper #fffdf8
+           inkColor #172019
+           card [gap 8, fg inkColor]
+        }
+
+        view MainView() [bg paper] {
+           render Text("hi") [card, bg paper]
+        }
+      `),
+    }, async rootDir => {
+      const path = FS.resolvePath('App.tao', rootDir)
+      const legacyCodes = (results: readonly InPlace.Result[]) =>
+        results.flatMap(result => result.diagnostics ?? []).map(diagnostic => diagnostic.code)
+          .filter(code => code !== undefined && legacyDesignCodes.includes(code))
+
+      const before = await runCheck(rootDir)
+      Expect(statusByFile(before, rootDir)).toEqual({ 'App.tao': 'changed', 'Project.tao': 'unchanged' })
+      Expect(new Set(legacyCodes(before))).toEqual(new Set(legacyDesignCodes))
+
+      Expect(statusByFile(await runFix(rootDir), rootDir)).toEqual({ 'App.tao': 'changed', 'Project.tao': 'unchanged' })
+      Expect(await FS.readText(path)).toBe(`${
+        Text.stripIndent(`
+        use Text from @tao/ui
+
+        app MyApp {
+           Design AppDesign
+           view MainView
+        }
+
+        design AppDesign {
+           colors {
+              // The palette stays quiet.
+              paper #fffdf8
+              inkColor #172019
+           }
+           styles {
+              card [gap 8, ink inkColor]
+           }
+        }
+
+        view MainView() [background paper] {
+           render Text("hi") [card, background paper]
+        }
+      `)
+      }\n`)
+
+      const after = await runCheck(rootDir)
+      Expect(statusByFile(after, rootDir)).toEqual({ 'App.tao': 'unchanged', 'Project.tao': 'unchanged' })
+      Expect(after.flatMap(result => result.diagnostics ?? [])).toEqual([])
     })
   })
 
