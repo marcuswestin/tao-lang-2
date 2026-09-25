@@ -14,12 +14,20 @@
   Codex source rejects the bypass when `has_denied_read_restrictions()` is true. The default profile
   now has no read denies, and the generated host rules cover only the wrapper prefixes in
   `.rulesync/permissions.jsonc`.
-- **Workaround:** Keep the host prefix list narrow and review repository code it invokes. Do not
-  treat the wrapper as a credential sandbox.
-- **Proposed change:** Prove a separate host runner can deny credential paths while retaining
-  CoreSimulator, Xcode, and CocoaPods access. Move credential-bearing operations such as push to
-  fixed broker operations that run no editable repository code. Support streaming, cancellation,
-  the pinned toolchain, and worktree validation before replacing the current wrapper.
+- **Workaround:** Use only the named `./agent unsandboxed` operations from `agentHostCommands` and
+  review repository code they invoke. The default Codex workspace profile has no credential read
+  denies; the `AGENTS.md` instruction alone prevents agents from reading those paths.
+- **Proposed change:** Keep `./agent unsandboxed` as the front end, but route it to a host runner: a
+  LaunchAgent in the Developer's login session reached over an allowlisted Unix socket. Accept only
+  allowlisted operations, verify that the requested directory is a worktree of this repository, and
+  run each operation under its own `sandbox-exec` profile. These profiles must deny the credential
+  paths while allowing CoreSimulator, Xcode, and devices. Keep credential use in fixed broker
+  operations that run no repository code, such as push, release upload, and `gh` calls. Recreate the
+  devenv `PATH` and caches for each command, stream output, and support cancellation of long-running
+  commands such as `./tao dev` and Metro. Add Docker only as an opt-in entry.
+  `feat/landing-agent-permissions` has prior art for a broker `land` operation with streaming and
+  cancellation, but that broker runs the landing inside the credential-holding process; separate
+  repository code execution from credential operations in this design.
 - **Dependencies:** A host sandbox profile that can deny credential reads while native tools work.
 - **Acceptance:** A default Codex task and Claude Code session can land and boot a simulator while
   credential reads fail inside both harnesses and every host-runner command.

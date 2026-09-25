@@ -225,6 +225,9 @@ let StarterPrompt = WritingPrompt {
 // One-case enums are nominal types; a dismissed responder answers `none`.
 type ConfirmResult is one of Confirmed
 
+// A phrase is named copy whose plural forms choose by the count.
+phrase ParagraphCount(Count number) = one "{ Count } paragraph" / other "{ Count } paragraphs"
+
 data Workspaces / Workspace {
    Name text (required "Name this workspace", title)
    CreatedAt time (default now)
@@ -842,7 +845,7 @@ view ParagraphInspector(Paragraph) {
 view DocumentInfo(Document) {
    render Col() [gap 6, pad 10] {
       Text(Document.Title)
-      Text("{ Document.Paragraphs.Count } paragraphs")
+      Text(ParagraphCount(Document.Paragraphs.Count))
       #dismissInfo
       FormButton("Dismiss") {
          on press -> { dismiss }

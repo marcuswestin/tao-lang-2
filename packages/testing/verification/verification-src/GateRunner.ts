@@ -22,7 +22,7 @@ import {
   type MachineResourceLease,
 } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
-import { buildSummary, type GateResult, type GateSummary, skippedResult } from './RunSummary'
+import { buildSummary, describesTimeout, type GateResult, type GateSummary, skippedResult } from './RunSummary'
 import { RunTimings } from './RunTimings'
 import { TaoAppSharedRun } from './TaoAppSharedRun'
 import { TestLedger } from './TestLedger'
@@ -262,6 +262,14 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       .filter(state => (state.node.resources ?? []).includes(GateCatalog.GUI_RESOURCE))
       .map(state => state.name),
   )
+  // Only the full lanes stop early. Iteration lanes keep collecting every failure, while a landing
+  // releases its lock after a failure that neither contention retry nor known-flake tolerance can
+  // clear. Read the flake ledger at the first failure, not before a possibly long machine wait, and
+  // use that same snapshot for the early decision and final verdict.
+  const failFast = location.lane === 'verify-full' || location.lane === 'verify-full-sandbox'
+  let toleratedPromise: ReturnType<typeof TestLedger.tolerated> | undefined
+  const toleratedSnapshot = () => toleratedPromise ??= TestLedger.tolerated(location.repositoryRoot)
+  const testByName = new Map((testPlan?.states ?? []).map(state => [state.name, state]))
   // Every worktree on this machine reserves against the same CPUs. Registration puts this lane in
   // the machine-wide queue; admission is whole-lane and in arrival order, so a lane either runs at
   // its full requested width or waits with a printed position — it is never thinned to a slot or
@@ -341,6 +349,26 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       },
       runNode,
       slotBroker: machineLane,
+      stopOnFailure: failFast
+        ? async state => {
+          // A timeout may be confirmed under isolation after this graph drains. Do not stop on the
+          // process exit alone when its output says a nested test or host wait timed out.
+          if (
+            state.failure?.kind === 'timeout'
+            || state.failure?.kind === 'interrupted'
+            || describesTimeout(state.reason ?? '')
+            || describesTimeout(state.fullOutput)
+          ) {
+            return false
+          }
+          const test = testByName.get(state.name)
+          if (test === undefined) {
+            return true
+          }
+          await TestRunner.observationsFor([test], location.repositoryRoot)
+          return !FlakeTolerance.apply([test], await toleratedSnapshot()).nodes.has(test.name)
+        }
+        : undefined,
     })
     if (prepareNames.size > 0 && finishedPrepare.size < prepareNames.size) {
       // An interrupted or dependency-skipped prepare phase never emitted its last completion.
@@ -397,7 +425,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     ? FlakeTolerance.empty()
     : FlakeTolerance.apply(
       testPlan.states.filter(state => states.some(candidate => candidate.name === state.name)),
-      await TestLedger.tolerated(location.repositoryRoot),
+      await toleratedSnapshot(),
     )
   const schedule = WorkSchedule.report(result)
   const summary = buildSummary({
@@ -419,6 +447,15 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       node: flake.node,
     })),
   })
+  if (result.haltedBy !== undefined) {
+    const notRun = states.filter(state => state.failure?.kind === 'fail-fast').length
+    summary.warnings = [
+      ...summary.warnings,
+      `verification stopped after definite failure in ${result.haltedBy}; ${notRun} ${
+        notRun === 1 ? 'check' : 'checks'
+      } not run`,
+    ]
+  }
   for (const excluded of proved.excluded) {
     summary.warnings = [...summary.warnings, GreenTree.describeExclusion(excluded)]
   }
@@ -476,9 +513,12 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   }
   if (testPlan !== undefined && !result.interrupted && observations.length > 0) {
     await TestLedger.recordRun({
-      // A node skipped on an earlier proof did not run here, so this is not the complete pass the
-      // retry ledger keys its full-run boundary on, however complete the selection was.
-      fullRun: testPlan.fullRun && testPlan.states.every(state => states.some(other => other.name === state.name)),
+      // A node skipped on an earlier proof or stopped after a failure did not run here, so this is
+      // not the complete pass the retry ledger keys its full-run boundary on.
+      fullRun: testPlan.fullRun
+        && testPlan.states.every(state =>
+          states.some(other => other.name === state.name && (other.status === 'passed' || other.status === 'failed'))
+        ),
       observations,
       repositoryRoot: location.repositoryRoot,
       startedAt,

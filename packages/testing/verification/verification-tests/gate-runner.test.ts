@@ -66,6 +66,50 @@ async function busyRegistryRoot(laneCount = 1): Promise<string> {
 }
 
 Describe('repository gate runner', () => {
+  Test('full verification stops after a definite failure and keeps a complete diagnostic record', async () => {
+    const root = await mkTestDir('tao-gate-runner-fail-fast-')
+    const started: string[] = []
+    try {
+      const summary = await runGates({
+        gates: ['first', 'second'],
+        jobs: 1,
+        lane: 'verify-full',
+        logRoot: FS.resolvePath('logs', root),
+        machineLoadAverage: IDLE_MACHINE,
+        registryRoot: FS.resolvePath('registry', root),
+        repositoryRoot: root,
+        runGate: async name => {
+          started.push(name)
+          return { exitCode: name === 'first' ? 1 : 0, output: name === 'first' ? 'definite failure' : '' }
+        },
+      })
+
+      Expect(started).toEqual(['first'])
+      Expect(summary.status).toBe('failed')
+      Expect(summary.firstFailure?.name).toBe('first')
+      Expect(summary.firstFailure?.output).toContain('definite failure')
+      Expect(summary.gates.find(gate => gate.name === 'second')?.reason)
+        .toBe('not run after definite failure: first')
+      Expect(summary.warnings).toContain('verification stopped after definite failure in first; 1 check not run')
+      Expect(await FS.exists(FS.resolvePath('logs/summary.json', root))).toBe(true)
+      Expect(await FS.readText(FS.resolvePath('logs/first.log', root))).toContain('definite failure')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('full verification keeps admitting checks after a timeout that may recover on retry', async () => {
+    const { started, summary } = await run(['first', 'second'], {
+      first: { exitCode: 1, output: 'timed out after 5000ms' },
+    }, { jobs: 1, lane: 'verify-full' })
+
+    Expect(started.slice(0, 2)).toEqual(['first', 'second'])
+    Expect(summary.gates.find(gate => gate.name === 'second')?.status).toBe('passed')
+    Expect(summary.warnings.some(warning => warning.startsWith('verification stopped after definite failure'))).toBe(
+      false,
+    )
+  })
+
   Test('reports every gate with its status, cost, and log path', async () => {
     const { summary } = await run(['_repo-lint', '_typecheck'], {})
 
