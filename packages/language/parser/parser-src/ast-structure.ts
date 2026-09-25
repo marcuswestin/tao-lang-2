@@ -224,6 +224,31 @@ export function scenarioSteps(scenario: AST.ScenarioDeclaration): AST.ScenarioSt
   return scenario.block.steps
 }
 
+/** findOwningTest returns the nearest test containing `node`, if any, excluding `node` itself. */
+export function findOwningTest(node: AST.Node): AST.TestDeclaration | undefined {
+  return findAncestor(node, AST.isTestDeclaration, false)
+}
+
+/**
+ * effectiveTestClause resolves one test's device/fixture clause over its nearest ancestor test's,
+ * walking up through however many tests it is nested inside. A nested test that repeats the clause
+ * overrides every ancestor's; one that does not inherits the nearest ancestor that does.
+ */
+export function effectiveTestClause<ClauseT extends AST.TestHeadClause>(
+  test: AST.TestDeclaration,
+  predicate: (clause: AST.TestHeadClause) => clause is ClauseT,
+): ClauseT | undefined {
+  let current: AST.TestDeclaration | undefined = test
+  while (current) {
+    const own = current.headClauses.find(predicate)
+    if (own) {
+      return own
+    }
+    current = findOwningTest(current)
+  }
+  return undefined
+}
+
 /** effectiveScenarioClause resolves one entry clause over the matching group default. */
 export function effectiveScenarioClause<ClauseT extends AST.ScenarioClause>(
   scenario: AST.ScenarioDeclaration,

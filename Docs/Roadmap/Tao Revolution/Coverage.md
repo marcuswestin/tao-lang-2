@@ -103,7 +103,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Foreign views (`accepts content … from ./X.tsx`) (§15)      | **none — for the Developer**                                                  | TBD      | —                         |
 | Foreign `runs latest` scheduling (§8, §15)                  | **none — for the Developer**                                                  | TBD      | —                         |
 | Render failure containment and recovery (§15)               | **none — for the Developer** (no author surface; it is runtime policy)        | MVP      | —                         |
-| Fixtures, tests, query assertions (§16)                     | WordFlower · behavior tests                                                   | MVP      | partially in Current      |
+| Fixtures, tests, query assertions (§16)                     | WordFlower · behavior tests                                                   | MVP      | partially in Current[^18] |
 | Fault injection (§16)                                       | WordFlower · sync failure journey                                             | MVP      | pending — regressed[^1]   |
 | Sidecar stubs by declared case (§16)                        | Skillet · the import journey's two outcomes                                   | Post-MVP | —                         |
 | World controls: network, sync, relaunch (§16)               | WordFlower · offline edits that sync on reconnect                             | MVP      | partially in Current      |
@@ -234,3 +234,9 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
 [^17]: Typed design blocks, styles, element defaults, interaction conditions, and `color` view
     parameters are in Current. `screens { }` declares breakpoints, but `when Screen` remains
     unimplemented; parameterized colors and design rules are outside the MVP slice.
+
+[^18]: Test App journeys now exercise `on` and `with`, including a fixture split across a bound
+    datasource and device-local data. Device width is observed at the harness level because Tao
+    tests cannot select a layout direction. `through` fixture bindings remain unexecuted, and the
+    synthetic viewport applies one layout pass. WordFlower adoption and the remaining world controls
+    are separate tranches.

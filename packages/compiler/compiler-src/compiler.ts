@@ -912,9 +912,14 @@ function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string):
   if (entities.length === 0 && directUserPaths.size === 0) {
     return undefined
   }
+  const stores = ASTUtils.planDataStores(entities, datasources)
+  const seedsSyncedRows = stores.stores.some(store => store.kind !== 'device' && store.collections.length > 0)
   const userPaths = new Set([
     ...directUserPaths,
-    ...pathsOf(file => AST.appValueDeclarationsInFile(file.ast).some(appUsesDatasource)),
+    // Every app root seeds the project's synced stores when a test or Studio fixture is mounted,
+    // including an app that leaves its datasource at the default. A project with only local-only
+    // rows does not need the empty synced catalog in those roots.
+    ...pathsOf(file => seedsSyncedRows && AST.appValueDeclarationsInFile(file.ast).length > 0),
   ])
   const ownerPath = sourceFiles.find(file => file.ast.statements.some(AST.isEntityDataDeclaration))?.path ?? entryPath
   // Both catalogs are emitted by one owner file, so a project that mixes stores still has a single
@@ -929,7 +934,7 @@ function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string):
     localOnly: entities.some(Type.dataEntityIsLocalOnly),
     localUserPaths,
     ownerPath,
-    stores: ASTUtils.planDataStores(entities, datasources),
+    stores,
     userPaths,
   }
 }
@@ -953,28 +958,6 @@ function fileUsesDataCatalog(file: ParsedFile): boolean {
     return true
   }
   return AST.streamAllContents(file.ast).some(node => AST.isEntityQueryDeclaration(node) || AST.isCreateStatement(node))
-}
-
-function appUsesDatasource(app: AST.AppValueDeclaration): boolean {
-  const seen = new Set<AST.AppValueDeclaration>()
-  let current: AST.AppValueDeclaration | undefined = app
-  while (current && !seen.has(current)) {
-    seen.add(current)
-    if (
-      AST.streamAllContents(current).some(node =>
-        (AST.isAppProperty(node) || AST.isConfigurationEntry(node)) && node.name === 'Datasource'
-      )
-    ) {
-      return true
-    }
-    const expression: AST.Expression | undefined = current.value
-    if (!expression || (!AST.isRefinementExpression(expression) && !AST.isValueReference(expression))) {
-      return false
-    }
-    const target: AST.RefinementBaseDeclaration | undefined = expression.target.ref
-    current = AST.isConcreteAppValueDeclaration(target) ? target : undefined
-  }
-  return false
 }
 
 function addResolvedImport(imports: ResolvedImports, sourcePath: string, binding: string): void {

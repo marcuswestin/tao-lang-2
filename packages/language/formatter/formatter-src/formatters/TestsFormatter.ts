@@ -6,6 +6,18 @@ export const TestsFormatter = {
     f.oneSpaceAfter('test')
   },
 
+  /** TestDeviceClause formats `on phone`, matching `ScenarioDeviceClause`'s own spelling. */
+  TestDeviceClause(f) {
+    f.oneSpaceAfter('on')
+    f.oneSpaceAround('x')
+    f.oneSpaceBetweenProperties('device', 'width')
+  },
+
+  /** TestFixtureClause formats `with FixtureName`. */
+  TestFixtureClause(f) {
+    f.oneSpaceAfter('with')
+  },
+
   /** RunStep formats `run AppName`. */
   RunStep(f) {
     f.oneSpaceAfter('run')
