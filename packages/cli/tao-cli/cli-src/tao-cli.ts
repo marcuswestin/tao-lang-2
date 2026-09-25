@@ -5,6 +5,7 @@ import { Diagnostic, Errors, FS, HCI, Platform } from '@shared'
 import type { Command as BaseCommand } from 'commander'
 import * as DiagnosticReport from './diagnostic-report'
 import type { InPlace } from './in-place-files'
+import { TaoVersion } from './tao-version'
 
 type InPlaceLabels = {
   /** changed labels per-file and summary output, e.g. `formatted`. */
@@ -17,17 +18,12 @@ type InPlaceLabels = {
   failOnChanged?: boolean
 }
 
-await runTaoCliWhenExecutedDirectly(import.meta)
-
-type ExecutableImportMeta = ImportMeta & {
-  main?: boolean
-}
-
-async function runTaoCliWhenExecutedDirectly(meta: ExecutableImportMeta): Promise<void> {
-  // Bun sets import.meta.main only for directly executed modules; tests import this file without running the CLI.
-  if (meta.main === true) {
-    await runTaoCli()
-  }
+// Bun sets import.meta.main only for directly executed modules; tests import this file without
+// running the CLI. It must be read here, not passed along as `import.meta`: a compiled binary shares
+// one runtime `import.meta` among every module in its bundle, so only a direct read is rewritten to
+// this module's own answer, and the standalone entry that imports this file would run it twice.
+if (import.meta.main) {
+  await runTaoCli()
 }
 
 /** runTaoCli runs the Tao CLI for the provided argv. */
@@ -39,6 +35,7 @@ function createCommands(): Command {
   const commands = new Command()
     .name('tao')
     .description('Tao language CLI.')
+    .version(TaoVersion.current(), '-v, --version', 'Print the Tao release this is, or `development` from source.')
 
   commands
     .command('create')

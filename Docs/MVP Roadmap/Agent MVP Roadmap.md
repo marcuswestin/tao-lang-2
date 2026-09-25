@@ -77,6 +77,11 @@ is `private`. Nobody outside the repository can install Tao.
 
 - Plan: `Plan - Standalone Tao CLI.md` beside this file answers the shape below with measured
   evidence, a nine-slice sequence, and the first-release decisions.
+- Progress: slices 1, 2, and 7 have landed. `just standalone-cli-release <version>` builds an
+  unsigned macOS arm64 release with its checksum, index, and install script, ready to publish once
+  the repository is public. Installed through `curl | sh`, the binary creates, checks, and compiles
+  a project outside any checkout; `just standalone-cli-acceptance` proves that much. `tao dev` and
+  `tao test` do not yet work from it.
 - First-release shape: a signed, notarized macOS arm64 `bun build --compile` binary; the
   files the CLI reads at runtime (stdlib, runtime sources, starters, grammar) either embedded or
   unpacked to a versioned directory; the Expo host and its `node_modules` downloaded per Tao version
@@ -87,7 +92,8 @@ is `private`. Nobody outside the repository can install Tao.
 - Context: `packages/cli/tao-cli`, `packages/apps/expo-host` (the `_gen_tao-app` host and its
   dependency set), `tao`, `Docs/Spec/Tao Packages.md` on the CLI-bundled `@tao/*` modules.
 - Waits on: nothing to start; public GitHub Releases hosting (`R11`), the final licence (`R1`), and
-  macOS signing and notarization must be ready before publication.
+  macOS signing and notarization must be ready before publication. The credential-dependent build
+  and hosted acceptance are parked until the near-release pass (`R12`).
 - Done: a person with no Bun, Node, nix, or repository checkout installs `tao` with one command and
   runs `tao create` through `tao dev` on a clean machine.
 
@@ -174,9 +180,19 @@ of whether a new language feels real.
 
 - Shape: packaging, versioning, and publication to the VS Code Marketplace and Open VSX, with the
   extension resolving a `tao` from the user's machine rather than a repository path.
+- Packaging progress: the VSIX carries a minified, bundled language server and standard library,
+  its own README, and the repository licence. The editor/CLI version relationship still needs to
+  follow the standalone CLI work. On 2026-09-24, host preparation installed the `0.0.1` VSIX in an
+  isolated VS Code profile and confirmed `tao.tao-ide-extension@0.0.1` was listed. Opening a `.tao`
+  file in that profile and both marketplace releases remain unproved.
+- Release workflow progress: `./agent unsandboxed prepare-release ide-extension` packages and checks a clean VS Code
+  installation; `just ide-extension-release-publish` uploads the same VSIX to both registries. Publication
+  still needs editor activation acceptance, publisher accounts, and the final licence before use.
 - Context: `packages/ides/ide-extension`, the **Polish the IDE MVP** entry in `Roadmap.md`.
 - Waits on: The Developer creates the publisher accounts and the app-safe licence structure is settled (`R1`).
-  Both marketplaces are in the first public-release scope (`R12`).
+  Both marketplaces are in the first public-release scope, but their account-dependent publication
+  and listing checks are parked until the near-release pass (`R12`). Local VSIX and editor checks
+  can continue.
 - Done: `ext install` on a clean machine gives working Tao editing.
 
 ### A7 — Feedback intake
@@ -248,9 +264,28 @@ from the development loop, which no virtualization approach can do.
   CloudKit) and push entitlements `tao-icloud` asks for. `.github/workflows/pull-request.yml` proves
   the pull-request trigger with a job that verifies nothing, and `./agent open-pr` pushes a branch,
   opens or reuses its pull request, and watches the pushed commit's checks to a verdict.
-- Remaining: the Android side of the Companion shell, the host compatibility check, `tao dev`
-  obtaining and launching a host, building and publishing hosts, and the proofs on each lane. The
-  entitlements need the iCloud container and push enabled on the app id before a device build signs.
+- Landed 2026-09-22, the Android emulator lane: `just companion-host-build` builds the Companion as
+  a debug APK into `.artifacts/hosts/<version>-<kit digest>/android/` beside a `tao-host.json` naming its native
+  kit, and `tao dev --android` installs a host whose kit covers its own and opens the app in it in
+  place of Expo Go, passing over any other host by name. Compatibility is the manifest's kit, never
+  the cache path. Proven with HNReader on the `Tao_Pixel_API_36` emulator.
+- Landed 2026-09-23, distribution (`R7`): `just companion-host-publish` puts a built host on a
+  prerelease tagged `companion-host-<version>-<kit digest>`, and when no cached host fits, `tao dev`
+  lists those releases without signing in and downloads the newest whose kit covers its own into
+  the Tao home's `hosts/` (`~/.local/share/tao/hosts` by default). The download is proven against a
+  fake GitHub only: until the repository is public
+  the listing answers 404, and `tao dev` says so and uses Expo Go.
+- Landed 2026-09-23, the iOS Simulator lane: `just companion-host-build --platform ios-simulator`
+  builds the Companion for both simulator architectures, signed ad hoc so its entitlements are
+  embedded, and `tao dev --ios` installs a compatible host unless the simulator already has that
+  build and opens the app in it. Publishing zips it beside the Android host on the same release.
+  Proven with HNReader on an iPhone 17 simulator; the first, unsigned build carried no entitlements
+  and CloudKit aborted it, which the build now refuses.
+- Remaining: the first published host and a live download once the repository is public; physical
+  Android through the Companion; the physical-iPhone invitation beta; building hosts in CI; and
+  retiring the Expo Go lanes as each is covered. The entitlements need the iCloud container and push
+  enabled on the app id before a device build signs. The account-dependent device build and release
+  proof are parked until the near-release pass (`R12`); simulator and Android work can continue.
 
 ### A10 — Publication hygiene audit — **done**
 
@@ -346,8 +381,15 @@ consecutive green runs were re-established on 2026-09-20, which closed DEVENV-04
 
 ### A16 — A reachable datasource for the public demo
 
-WordFlower's InstantDB datasource points at `localhost:9020`, which no tester's phone can reach, so
-the sync demo cannot be shown to anyone outside this machine.
+`WordFlowerInstantDB` now selects an Instant Cloud datasource with a hard-coded app ID;
+`WordFlowerLocalInstantDB` preserves the `localhost:9020` fixture for development. Hosted app
+existence is confirmed. On 2026-09-22, a direct Expo web export of the hosted variant loaded an
+empty library, created a disposable workspace, retained it after reload, and delivered a second
+workspace to a second browser origin without reload. On 2026-09-23, the development build ran
+`WordFlowerInstantDB` on a connected iPhone: a phone-created workspace (`P923A`) appeared in an
+independent browser client, and a browser-created workspace (`B923A`) appeared on the phone after
+the app was relaunched. This accepts live hosted sync on a physical device; TestFlight installation
+and distribution remain separate release checks.
 
 - Uses local Instant for development and Instant Cloud for the production demo (`R11`). Cloud
   onboarding requires an existing account because new signups are closed, and the production demo

@@ -22,6 +22,8 @@ import {
   Platform,
   Repo,
   Switch,
+  TaoHome,
+  TaoResources,
   TaoStdlib,
   Text,
   Time,
@@ -1364,6 +1366,139 @@ Describe('TaoStdlib', () => {
     })
   })
 })
+
+Describe('TaoHome', () => {
+  // The install script spells the same rule in shell; these pin the paths it must agree with.
+  Test('defaults to ~/.local/share/tao', () => {
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: undefined }, () => {
+      Expect(TaoHome.root()).toBe('/Users/someone/.local/share/tao')
+      Expect(TaoHome.resolve('hosts')).toBe('/Users/someone/.local/share/tao/hosts')
+    })
+  })
+
+  Test('honours XDG_DATA_HOME, and ignores a relative one as the specification asks', () => {
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: '/data' }, () => {
+      Expect(TaoHome.root()).toBe('/data/tao')
+    })
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: 'data' }, () => {
+      Expect(TaoHome.root()).toBe('/Users/someone/.local/share/tao')
+    })
+  })
+
+  Test('takes TAO_HOME over everything, and refuses a relative one', () => {
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: '/opt/tao', XDG_DATA_HOME: '/data' }, () => {
+      Expect(TaoHome.root()).toBe('/opt/tao')
+    })
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: 'tao', XDG_DATA_HOME: undefined }, () => {
+      Expect(() => TaoHome.root()).toThrow('TAO_HOME must be an absolute path')
+    })
+  })
+})
+
+Describe('TaoResources', () => {
+  Test('names no root inside a checkout, so every reader keeps its own layout', async () => {
+    await withDeclaredResourceRoot(undefined, () => {
+      Expect(TaoResources.declaredRoot()).toBeUndefined()
+      Expect(TaoResources.resolve('stdlib')).toBeUndefined()
+    })
+  })
+
+  Test('resolves a path inside the declared root', async () => {
+    const root = await tmpDir()
+    await withDeclaredResourceRoot(root, () => {
+      Expect(TaoResources.declaredRoot()).toBe(root)
+      Expect(TaoResources.resolve('host/package.json')).toBe(FS.resolvePath('host/package.json', root))
+    })
+  })
+
+  // Same reason the stdlib variable refuses one: a relative root is read against the process's
+  // current directory and hashed against something else, so it names two trees.
+  Test('refuses a relative declared root', async () => {
+    await withDeclaredResourceRoot('resources', () => {
+      Expect(() => TaoResources.declaredRoot()).toThrow('must be an absolute path')
+    })
+  })
+
+  // The stdlib variable still wins, so a test or a packaged Studio can redirect an installed binary.
+  Test('yields to the stdlib variable when both name a root', async () => {
+    const resources = await tmpDir()
+    const stdlib = await tmpDir()
+    await withDeclaredResourceRoot(resources, async () => {
+      await withDeclaredStdlibRoot(stdlib, () => {
+        Expect(TaoStdlib.declaredRoot()).toBe(stdlib)
+      })
+    })
+  })
+
+  Test('supplies the stdlib root when the stdlib variable is unset', async () => {
+    const resources = await tmpDir()
+    await withDeclaredResourceRoot(resources, async () => {
+      await withDeclaredStdlibRoot(undefined, () => {
+        Expect(TaoStdlib.declaredRoot()).toBe(FS.resolvePath(TaoResources.STDLIB_DIRECTORY, resources))
+      })
+    })
+  })
+
+  // The regression this pairing exists to prevent. A resource root may move the stdlib without the
+  // stdlib variable being set at all, and an identity that stayed `<absent>` across that move would
+  // let a compile built against one stdlib be reused against another.
+  Test('reaches the identity, so a moved resource root cannot reuse a foreign compile', async () => {
+    const resources = await tmpDir()
+    const stdlibRoot = FS.resolvePath(TaoResources.STDLIB_DIRECTORY, resources)
+    await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', stdlibRoot), 'public view Text(Value text) { }\n')
+
+    const unset = await withDeclaredResourceRoot(undefined, () => TaoStdlib.declaredRootIdentity())
+    const declared = await withDeclaredResourceRoot(resources, () => TaoStdlib.declaredRootIdentity())
+    Expect(declared).not.toBe(unset)
+
+    await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', stdlibRoot), 'public view Text(Value text) { }\n// edit\n')
+    const edited = await withDeclaredResourceRoot(resources, () => TaoStdlib.declaredRootIdentity())
+
+    Expect(edited).not.toBe(declared)
+  })
+})
+
+/**
+ * withEnvironment sets or unsets variables for one synchronous check and restores them. It is
+ * synchronous on purpose: with no await between the set and the restore, two uses cannot overlap.
+ */
+function withEnvironment(values: Record<string, string | undefined>, run: () => void): void {
+  const env = Platform.runtimeProcess.env
+  const previous = Object.fromEntries(Object.keys(values).map(name => [name, env[name]]))
+  const assign = (entries: Record<string, string | undefined>) => {
+    for (const [name, value] of Object.entries(entries)) {
+      if (value === undefined) {
+        delete env[name]
+      } else {
+        env[name] = value
+      }
+    }
+  }
+  assign(values)
+  try {
+    run()
+  } finally {
+    assign(previous)
+  }
+}
+
+async function withDeclaredResourceRoot<T>(value: string | undefined, run: () => Promise<T> | T): Promise<T> {
+  const previous = Platform.runtimeProcess.env[TaoResources.DECLARED_ROOT_ENV]
+  if (value === undefined) {
+    delete Platform.runtimeProcess.env[TaoResources.DECLARED_ROOT_ENV]
+  } else {
+    Platform.runtimeProcess.env[TaoResources.DECLARED_ROOT_ENV] = value
+  }
+  try {
+    return await run()
+  } finally {
+    if (previous === undefined) {
+      delete Platform.runtimeProcess.env[TaoResources.DECLARED_ROOT_ENV]
+    } else {
+      Platform.runtimeProcess.env[TaoResources.DECLARED_ROOT_ENV] = previous
+    }
+  }
+}
 
 async function withDeclaredStdlibRoot<T>(value: string | undefined, run: () => Promise<T> | T): Promise<T> {
   const previous = Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV]

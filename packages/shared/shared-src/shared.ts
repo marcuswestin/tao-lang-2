@@ -22,6 +22,8 @@ import { ProjectDevSession } from './ProjectDevSession'
 import * as Repo from './Repo'
 import * as SecretsFile from './SecretsFile'
 import { TaoFiles } from './TaoFiles'
+import { TaoHome } from './TaoHome'
+import { TaoResources } from './TaoResources'
 import { TaoStdlib } from './TaoStdlib'
 import { TaoTestProtocol } from './TaoTestProtocol'
 
@@ -56,6 +58,8 @@ export {
   SecretsFile,
   Switch,
   TaoFiles,
+  TaoHome,
+  TaoResources,
   TaoStdlib,
   TaoTestProtocol,
   Text,

@@ -9,14 +9,14 @@
 - **Evidence:** `Platform.spawnSync('ps', { args: ['-axo', 'pid=,ppid=,lstart=,command='] })` returns
   `status: undefined` with `error: EPERM: operation not permitted, posix_spawn 'ps'`, and the same for
   `/bin/ps`, while the identical `ps` invocation typed into the sandboxed shell succeeds: the Seatbelt
-  policy denies the exec to the child, not the shape of the command. `AGENTS.md` already blesses that
-  exact fixed `ps` shape for an agent to run directly. Consequently `processTable()` in
+  policy denies the exec to the child, not the shape of the command. At the time, `AGENTS.md` allowed
+  that fixed `ps` shape directly; agents now use `./agent unsandboxed processes list`. Consequently `processTable()` in
   `packages/shared/shared-src/ProcessTree.ts` returns an empty list in a sandboxed lane, which makes the
   non-Darwin branch of `descendantProcesses` unusable and untestable there; on Darwin the libproc path
   (`/usr/lib/libproc.dylib` through `bun:ffi`) supplies both child PIDs and process-start identity,
   which is the stronger reason it is primary.
-- **Workaround:** Rely on the Darwin libproc path, and run a process-listing probe directly in the shell
-  rather than through repository code.
+- **Workaround:** Rely on the Darwin libproc path; an agent can inspect the host process table with
+  `./agent unsandboxed processes list` instead of invoking `ps` directly.
 - **Proposed change:** Either allow `/bin/ps` for child processes in `.rulesync/permissions.jsonc`'s
   sandbox policy, or document `processTable` as a non-Darwin-only path so no lane depends on it here.
 - **Since recorded (2026-09-19):** the second half is done and the cost of not doing it was measured.
@@ -35,7 +35,8 @@
   spelling `ps … 2>/dev/null | rg <pid>` renders a denial as empty output — byte-identical to "that
   process is gone" — so an agent judging a lock owner's liveness can conclude the opposite of the
   truth. Until this is fixed, prove the tool works (`ps -axo pid= | wc -l` returning a plausible
-  count) and never suppress its stderr before trusting silence. This does **not** apply to the
+  count) and never suppress its stderr before trusting silence. The current named process probe
+  performs the whole-table command on the host. This does **not** apply to the
   landing lock: that lock is held by a worktree and is deliberately never liveness-checked, and
   scoped holds use `Platform.processIsAlive` rather than a `ps` subprocess — see `DEVENV-114`.
 - **Dependencies:** `.rulesync/permissions.jsonc` owns the sandbox policy. DEVENV-030 and DEVENV-060 own

@@ -71,17 +71,17 @@ Test(
       const latencyMs = 1_800
       await applyCellNetwork(browser, 'cellA', { latencyMs, outcome: 'normal' })
       const delayedSrcA = await cellIframeSrc(browser, 'cellA')
-      let loadingSeenAt: number | undefined
+      // Rows from the previous preview can still be observed after the iframe source changes.
+      // Require this reload's loading state before accepting rows as the delayed result.
+      // A final-state check before that transition can make this test pass without testing latency.
+      await waitForPreviewText(browser, delayedSrcA, text => text.includes('Loading items'))
+      const loadingSeenAt = Date.now()
       const loadedAfterDelay = await Time.pollUntil(async () => {
         const text = await browser!.evaluateInFrame<string>(delayedSrcA, `document.body?.textContent ?? ''`)
-        if (loadingSeenAt === undefined && text.includes('Loading items')) {
-          loadingSeenAt = Date.now()
-        }
         return text.includes('Alpha item') && text.includes('Beta item')
       }, { intervalMs: 50, timeoutMs: 20_000 })
       Expect(loadedAfterDelay).toBe(true)
-      Expect(loadingSeenAt).toBeDefined()
-      Expect(Date.now() - loadingSeenAt!).toBeGreaterThanOrEqual(latencyMs - 250)
+      Expect(Date.now() - loadingSeenAt).toBeGreaterThanOrEqual(latencyMs - 250)
 
       // (b) Offline: the cell shows its offline state, and the write action nested inside the loaded
       // list is not even reachable — the network condition only gates the query's remote fill, never

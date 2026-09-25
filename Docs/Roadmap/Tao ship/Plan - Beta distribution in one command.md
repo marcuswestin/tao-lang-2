@@ -104,8 +104,10 @@ uses local Xcode and App Store Connect, while OTA uses Tao's Expo-protocol updat
 - WordFlower already declares what the command derives from: `project { id "wordflower" name
   "WordFlower" … }`, `app WordFlower { Name … Datasource DeviceStore }`, and the sync variant
   `app WordFlowerInstantDB = WordFlower with { Name "WordFlower - InstantDB" Datasource
-  WordFlowerInstantDBStore }`. Its InstantDB datasource points at `localhost:9020`, so the first
-  real beta needs a hosted Instant app id; the local stack is not reachable from a tester's phone.
+  WordFlowerInstantDBStore }`. Its datasource uses Instant Cloud and the existing app ID; the
+  separate `WordFlowerLocalInstantDB` variant keeps the local fixture for development. The hosted
+  app and live phone-to-browser/browser-to-phone sync were confirmed through a development build on
+  2026-09-23. TestFlight installation and beta distribution remain untested.
 - The release bundle proof rejects Studio markers before native packaging.
 - The previous repository ran a development client on physical devices with `expo prebuild` and
   `expo run:ios --device`, and pinned `eas-cli` as a dependency. Its `app.json` is a usable
@@ -232,7 +234,7 @@ exists for this automation is fastlane, whose `match`, `gym`, `pilot`, and `deli
 same four steps in Ruby over Apple's private session where the public API stops. Slice 1 uses
 the Apple tooling directly because the four steps are short and typed, and keeps fastlane as
 the documented fallback if a step proves brittle. Slice 2's update server is Tao's own, on the
-Tao Lang servers.
+Dev Tao servers.
 
 ### What the developer provides
 
@@ -286,9 +288,10 @@ developer still clicks the activation email; and the hosted InstantDB app for th
 WordFlowerInstantDB acceptance run. For that run the Developer provided the app id
 `9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f` on 2026-09-02 and allows the implementer any action on
 it, including deleting its data. It is the id the repository already seeds into the local
-InstantDB stack, so the implementer first confirms it exists on the hosted service at
-https://www.instantdb.com/dash and otherwise creates a hosted app and records that id in the
-lock; a phone on TestFlight cannot reach `localhost:9020`. Not needed at all: an Expo account.
+InstantDB stack and uses for the hosted demo variant, so the implementer first confirms it exists
+on the hosted service at https://www.instantdb.com/dash and otherwise creates a hosted app and
+updates the source app ID; a phone on TestFlight cannot reach the local variant's `localhost:9020`.
+Not needed at all: an Expo account.
 
 Xcode cannot create the App Store Connect API key: keys exist only on the App Store Connect
 website, under Users and Access, Integrations, Team Keys, and an Admin makes them. Xcode's own
@@ -812,7 +815,7 @@ Each has a recommended default so slice 1 can start on the ruling alone.
 5. **The Expo Go bridge.** Settled on 2026-09-02: not built; `--beta` is TestFlight, not a
    companion-app delivery path.
 6. **The Tao Studio companion app.** Settled on 2026-09-02: build it, for the development
-   experience first and for pre-release testing by invited project members with Tao Lang
+   experience first and for pre-release testing by invited project members with Dev Tao
    accounts. See _The Tao Studio companion app_.
 
 ## Precedent: accepted project metadata
@@ -871,7 +874,7 @@ the design lock's contract rather than inventing one:
 **Direction settled, 2026-09-02.** The Developer decided to create a Tao Studio companion app. It exists
 for an improved development experience first, paired with Tao Studio while developing, and
 also for pre-release testing and feedback by members a developer has invited to their project
-on the Tao Lang servers, where every member must have created an account. The sections below
+on the Dev Tao servers, where every member must have created an account. The sections below
 are the assessment that preceded the decision and the design rules it carries; the program
 itself is opened in `Roadmap.md`. Its dedicated product and implementation plan is
 `../Tao Studio companion app/Plan - Tao Studio companion app.md`.
@@ -929,7 +932,7 @@ shape described, with two cautions:
   TestFlight's external group and public link, up to ten thousand testers, while App Store
   review runs, and keep the native surface stable so the shell needs few releases.
 
-**Design rules the decision carries.** Projects and membership on the Tao Lang servers as the
+**Design rules the decision carries.** Projects and membership on the Dev Tao servers as the
 only access model, with an account required of every member; no public sharing surface of any
 kind; compiled bundles only, never a compilation path on the device, matching the repository's
 standing production posture; the Studio native-device canvas as the first customer; and a

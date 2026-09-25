@@ -4,15 +4,13 @@ import { DeveloperBranchCommand, SyncMainCommand } from '@verification/Developer
 import { FinalizeCommand, LandCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
 import { GreenTree } from '@verification/GreenTree'
-import { landingBrokerIsReady } from '@verification/landing-broker/LandingBrokerClient'
-import { LandingBrokerInstaller } from '@verification/landing-broker/LandingBrokerInstaller'
 import { LandingLock } from '@verification/LandingLock'
 import { landedReport, MergeWithMainCommand } from '@verification/MergeWithMain'
 import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/RunSummary'
 import { TestRunner } from '@verification/TestRunner'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
-import { readAgentCapabilities } from './doctor/AgentCapabilities'
+import { readAgentCapabilities, unavailableLandingCapabilities } from './doctor/AgentCapabilities'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
@@ -72,6 +70,15 @@ type MergeCommandOptions = {
 
 /** Help shared by every command that runs a work graph, so the modes are described once. */
 const OUTPUT_OPTION_HELP = 'Output mode: tui, lines, or quiet. Defaults to tui on a terminal and quiet in a pipe.'
+
+async function runReleaseAction(action: () => Promise<void>): Promise<void> {
+  try {
+    await action()
+  } catch (error) {
+    HCI.writeErrorLine(Errors.formatForUser(error))
+    Platform.runtimeProcess.exit(1)
+  }
+}
 
 /** Repository development CLI behind `./dev`: package tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
@@ -168,14 +175,10 @@ await runWithCommands(commands => {
       try {
         if (options.dryRun !== true && options.skipVerifyFull !== true) {
           const host = await readAgentCapabilities()
-          const missing = host.checks.filter(check =>
-            ['Watchman socket', 'CoreSimulator service'].includes(check.name)
-            && check.status !== 'available'
-          )
-          if (host.sandboxDetected || missing.length > 0) {
+          const missing = unavailableLandingCapabilities(host)
+          if (missing.length > 0) {
             Errors.throwHostEnvironment(
               'Landing needs a host-capable unsandboxed shell before entering the ready queue. '
-                + (host.sandboxDetected ? 'This shell is sandboxed. ' : '')
                 + missing.map(check => `${check.name}: ${check.detail}. `).join('')
                 + 'Run `./agent capabilities` for details, then run `./agent land` in an approved '
                 + 'unsandboxed session. Do not retry the host gate inside this sandbox.',
@@ -352,25 +355,6 @@ await runWithCommands(commands => {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
       }
-    })
-
-  commands
-    .command('landing-broker-install')
-    .description('Install or update the host-owned GitHub landing broker for this repository.')
-    .action(async () => {
-      await runExitCommand(async () => {
-        await LandingBrokerInstaller.install()
-        return 0
-      })
-    })
-
-  commands
-    .command('landing-broker-status')
-    .description('Check whether the host-owned GitHub landing broker is available.')
-    .action(async () => {
-      const ready = await landingBrokerIsReady()
-      HCI.writeLine(ready ? 'PASS  Tao landing broker is ready.' : 'FAIL  Tao landing broker is not available.')
-      Platform.runtimeProcess.exit(ready ? 0 : 1)
     })
 
   commands
@@ -640,6 +624,7 @@ await runWithCommands(commands => {
     .option('--app <path>', 'Built .app bundle, for signature and notarization checks.')
     .option('--dmg <path>', 'Built disk image, for the mount check.')
     .option('--release-base-url <url>', 'The HTTPS host installed copies fetch updates from.')
+    .option('--first-release', 'No earlier published release exists in this channel, so no patch is expected.')
     .option('--allow-unverified', 'Succeed even when a gate could not be checked on this machine.')
     .action(
       async (
@@ -648,6 +633,7 @@ await runWithCommands(commands => {
           app?: string
           artifactsRoot: string
           dmg?: string
+          firstRelease?: boolean
           payloadRoot: string
           releaseBaseUrl?: string
         },
@@ -659,6 +645,7 @@ await runWithCommands(commands => {
             appPath: options.app,
             artifactsRoot: options.artifactsRoot,
             diskImagePath: options.dmg,
+            firstRelease: options.firstRelease === true,
             payloadRoot: options.payloadRoot,
             releaseBaseUrl: options.releaseBaseUrl,
           }),
@@ -722,6 +709,47 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('companion-host-build')
+    .description(
+      'Build the Tao Companion as a prebuilt host into .artifacts/hosts, which tao dev installs on an emulator or simulator in place of Expo Go.',
+    )
+    .option('--platform <platform>', 'android, or ios-simulator for an iOS Simulator host.', 'android')
+    .option('--abi <abis>', 'Comma-separated Android ABIs to build; arm64-v8a,x86_64 by default.')
+    .action(async (options: { abi?: string; platform: string }) => {
+      try {
+        if (options.platform !== 'android' && options.platform !== 'ios-simulator') {
+          Errors.throwUserInput(`--platform takes android or ios-simulator, not ${options.platform}.`)
+        }
+        const { runCompanionHostBuild } = await import('@studio-tooling/CompanionHostBuild')
+        const architectures = options.abi?.split(',').map(abi => abi.trim()).filter(Boolean)
+        Platform.runtimeProcess.exit(
+          await runCompanionHostBuild({
+            platform: options.platform,
+            ...(architectures === undefined ? {} : { architectures }),
+          }),
+        )
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('companion-host-publish')
+    .description(
+      'Publish every host built for the Tao Companion as it stands to its GitHub release, where tao dev downloads it.',
+    )
+    .action(async () => {
+      try {
+        const { runCompanionHostPublish } = await import('@studio-tooling/CompanionHostBuild')
+        Platform.runtimeProcess.exit(await runCompanionHostPublish())
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('studio-native')
     .description(
       'Launch Tao Studio in its local Electrobun shell. When another session holds the native host, offers to stop it and proceed.',
@@ -758,7 +786,7 @@ await runWithCommands(commands => {
     .description('Build Tao Studio release artifacts with Electrobun and Hutch.')
     .option('--output-root <path>', 'Application bundle output root.', '.artifacts/build/studio-native')
     .option('--app-name <name>', 'Application display and bundle name.', 'Tao Studio')
-    .option('--bundle-identifier <id>', 'macOS application bundle identifier.', 'dev.tao-lang.studio')
+    .option('--bundle-identifier <id>', 'macOS application bundle identifier.', 'com.devtao.studio')
     .option('--channel <channel>', 'Electrobun release channel: canary or stable.', 'stable')
     .option('--hutch <path>', 'Explicit Hutch executable path.', 'hutch')
     .option('--node <path>', 'Standalone Node executable to bundle; Nix Node is relocated when needed.')
@@ -787,6 +815,72 @@ await runWithCommands(commands => {
         HCI.logProcessError('studio-native', Errors.formatForLog(error))
         Platform.runtimeProcess.exit(1)
       }
+    })
+
+  commands
+    .command('prepare-release')
+    .description('Prepare a Studio or IDE extension release locally; does not publish.')
+    .argument('<target>', 'studio or ide-extension.')
+    .option('--repo <owner/name>', 'Public GitHub repository for Studio release assets.')
+    .option('--version <version>', 'Three-part Studio version (defaults to 0.0.1).')
+    .action(async (target: string, options: { repo?: string; version?: string }) => {
+      await runReleaseAction(async () => {
+        const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+        if (target === 'studio') {
+          if (options.repo === undefined) {
+            Errors.throwUserInput('Studio preparation needs --repo owner/name.')
+          }
+          await ReleaseWorkflow.prepareStudio(options.repo, options.version ?? '0.0.1')
+        } else if (target === 'ide-extension') {
+          if (options.repo !== undefined || options.version !== undefined) {
+            Errors.throwUserInput('IDE extension preparation takes no --repo or --version.')
+          }
+          await ReleaseWorkflow.prepareIde()
+        } else {
+          Errors.throwUserInput('Expected release target studio or ide-extension.')
+        }
+      })
+    })
+
+  commands
+    .command('release-studio-prepare')
+    .description('Build and locally validate a signed Studio release for a GitHub Releases host.')
+    .requiredOption('--repo <owner/name>', 'Public GitHub repository that will hold Studio releases.')
+    .option('--version <version>', 'Three-part Studio version.', '0.0.1')
+    .action(async (options: { repo: string; version: string }) => {
+      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+      await runReleaseAction(async () => await ReleaseWorkflow.prepareStudio(options.repo, options.version))
+    })
+
+  commands
+    .command('release-studio-publish')
+    .description('Upload prepared Studio artifacts to GitHub and verify public downloads.')
+    .requiredOption('--repo <owner/name>', 'Public GitHub repository that will hold Studio releases.')
+    .action(async (options: { repo: string }) => {
+      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+      await runReleaseAction(async () => await ReleaseWorkflow.publishStudio(options.repo))
+    })
+
+  commands
+    .command('release-ide-prepare')
+    .description('Package the VSIX and prove it installs into an isolated VS Code profile.')
+    .action(async () => {
+      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+      await runReleaseAction(async () => await ReleaseWorkflow.prepareIde())
+    })
+
+  commands
+    .command('release-ide-publish')
+    .description('Publish the prepared VSIX to Marketplace, Open VSX, or both.')
+    .option('--target <target>', 'all, marketplace, or open-vsx.', 'all')
+    .action(async (options: { target: string }) => {
+      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+      await runReleaseAction(async () => {
+        if (options.target !== 'all' && options.target !== 'marketplace' && options.target !== 'open-vsx') {
+          Errors.throwUserInput('Expected --target all, marketplace, or open-vsx.')
+        }
+        await ReleaseWorkflow.publishIde(options.target)
+      })
     })
 
   commands

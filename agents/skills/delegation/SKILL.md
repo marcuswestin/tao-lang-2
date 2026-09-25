@@ -26,7 +26,7 @@ Three to five concurrent agents is the working range; beyond that you become the
 
 ## Messaging another agent
 
-A subagent you spawned is yours to talk to: its return, and continuing it with `SendMessage` to correct it, extend its task, or reuse its context, never need approval. Every other exchange waits for the Developer's approval in the current request: writing to another Claude session on this machine or in the cloud, to a teammate's agent, and any relay that reaches an agent they did not point you at. `SendMessage` reaches those too and the harness cannot tell them apart, so the rule holds where no gate exists — a brief that tells a subagent to go message a third agent is the same message sent one remove away.
+A subagent you spawned is yours to talk to: its return, and continuing it with `SendMessage` to correct it, extend its task, or reuse its context, never need approval. Every other exchange waits for the Developer's approval in the current request: writing to another agent session on this machine or in the cloud, to a teammate's agent, and any relay that reaches an agent they did not point you at. `SendMessage` reaches those too and the harness cannot tell them apart, so the rule holds where no gate exists — a brief that tells a subagent to go message a third agent is the same message sent one remove away.
 
 For those, ask when the exchange buys something a subagent of your own would not: name the recipient, what you would send, and what it unblocks, as one question the Developer can answer yes or no. An approval covers that message, not the exchange it opens; the next one asks again. Between asking and hearing back, do the rest of the task — a pending message is not a reason to idle.
 
@@ -43,14 +43,14 @@ Work is routed to a tier, spelled per harness in one table, so a model release c
 | Adversarial review, architectural judgment, root-cause dead ends           | deep                                        | xhigh  |
 | Language semantics, decisions that are expensive to reverse                | frontier                                    | xhigh  |
 
-| Tier     | Claude Code `model` | Codex CLI `model` | Cursor `model`     | Relative token cost |
-| -------- | ------------------- | ----------------- | ------------------ | ------------------- |
-| fast     | `haiku`             | `gpt-5.6-luna`    | `composer-2.5`     | 1                   |
-| standard | `sonnet`            | `gpt-5.6-terra`   | `claude-sonnet-5`  | 2                   |
-| deep     | `opus`              | `gpt-5.6-sol`     | `claude-opus-5`    | 5                   |
-| frontier | `fable`             | `gpt-6-astra`     | `claude-fable-5-1` | 10                  |
+| Tier     | Claude Code `model` | Codex CLI `model` | Cursor `model`     |
+| -------- | ------------------- | ----------------- | ------------------ |
+| fast     | `haiku`             | `gpt-6-luna`      | `composer-2.5`     |
+| standard | `opus`              | `gpt-6-sol`       | `claude-opus-5-5`  |
+| deep     | `opus`              | `gpt-6-sol`       | `claude-opus-5-5`  |
+| frontier | `fable`             | `gpt-6-astra`     | `claude-fable-5-1` |
 
-Cost is the Claude family's per-token ratio, which is why the default is not the top tier. Claude Code and Codex accept `low`/`medium`/`high`/`xhigh` for effort (`effort` in a Claude subagent profile, `model_reasoning_effort` in Codex's); Cursor carries it inside the model string, as `claude-opus-5[effort=high]`. `repo-lint` rejects a profile naming a model no row offers, and the Codex `[agents]` defaults are generated from the standard row, so a model release is one edit here plus a regeneration.
+Effort is separate from tier. `repo-lint` checks profile pins against this table; Codex `[agents]` defaults come from the standard row. See [model routing](references/model-routing.md) for precedence, availability, effort syntax, and completed-task measurement.
 
 Downward is the usual direction: a deep or frontier orchestrator almost never lets a subagent inherit its model, so say the tier explicitly. Upward, a standard or deep orchestrator escalates one hard question to `oracle` — a root cause that survived two attempts, a costly design fork, a diagnosis you keep circling — read-only, no mandate to fix; name the frontier tier on the call if you are already there, since `oracle` defaults to deep. Effort is separate from tier: a stronger model at low effort beats a weaker one at high effort for judgment, and loses for breadth.
 
@@ -62,9 +62,11 @@ The table decides: when a task matches a row, take it and say which tier you cho
 
 The agent sees the brief and nothing else. Every brief carries: **goal** and why it matters; **what is already known** — paths, findings, things ruled out; **decisions already made**, so it does not silently re-decide them; **boundaries** — paths it owns, must not touch, and whether it may write; **return format** and length; and a **stop condition** — what "done" is and what to do when the answer is not there.
 
+Resume an agent when its earlier context helps the next question; start fresh when its history is large and unrelated. Review each parallel implementation wave's diff before the next wave or integration, and keep whole-diff review before landing.
+
 For an agent you launch into this worktree, the `subagentStart` hook gives every Claude Code and Codex subagent the repository's standing rules (worktree root, `rg`, no Git index changes, no ledger edits, no agent identity), so a brief does not repeat them; a Cursor brief still does.
 
-A brief the Developer asks you to print takes none of that worktree boilerplate: they paste it into a fresh agent that gets a worktree of its own, sharing nothing with this session — not this worktree's path, not its branch, not its uncommitted edits, not its `.artifacts/`. A request to print, paste, or hand over a prompt is always that kind; only an agent you launch through the harness yourself is the other. So: name no worktree path and never say where to run — pointing it at `…/.claude/worktrees/<name>` sends it to edit a tree that belongs to somebody else, which the rule against `cd` guards. Say what it starts from — `main`, or a named commit — rather than your own state, and carry every finding into the brief as a `file:line` that survives a clean checkout, along with reproductions runnable from one; a scratch fixture or a generated tree you built here does not exist for it. Exclusive path ownership still belongs in the brief but buys something different, since separate worktrees cannot corrupt each other's writes: the hazard is the merge and any shared ledger allocating IDs, where two branches taking the next `DEVENV` number collide silently and `_repo-lint` catches it. Its branch, its gates, and its merge message are its own, so say which it should reach — no integration owner is watching it.
+A brief the Developer asks you to print takes none of that worktree boilerplate: they paste it into a fresh agent that gets a worktree of its own, sharing nothing with this session — not this worktree's path, not its branch, not its uncommitted edits, not its `.artifacts/`. A request to print, paste, or hand over a prompt is always that kind; only an agent you launch through the harness yourself is the other. So: name no worktree path and never say where to run — pointing it at `…/worktrees/<name>` sends it to edit a tree that belongs to somebody else, which the rule against `cd` guards. Say what it starts from — `main`, or a named commit — rather than your own state, and carry every finding into the brief as a `file:line` that survives a clean checkout, along with reproductions runnable from one; a scratch fixture or a generated tree you built here does not exist for it. Exclusive path ownership still belongs in the brief but buys something different, since separate worktrees cannot corrupt each other's writes: the hazard is the merge and any shared ledger allocating IDs, where two branches taking the next `DEVENV` number collide silently and `_repo-lint` catches it. Its branch, its gates, and its merge message are its own, so say which it should reach — no integration owner is watching it.
 
 ## The return contract and what you do with it
 

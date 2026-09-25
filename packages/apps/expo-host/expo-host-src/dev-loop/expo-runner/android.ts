@@ -1,13 +1,18 @@
 import { CLI, Errors, FS, Platform, Repo, Text, Time } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
+import { companionDevClientUrl, CompanionIdentity } from '../prebuilt-host/CompanionIdentity'
+import { nativeKitOf } from '../prebuilt-host/HostManifest'
+import { type HostSearch, obtainCompatibleHost, type PrebuiltHost } from '../prebuilt-host/PrebuiltHosts'
 import { EXPO_SDK_VERSION, ExpoConfig, expoSdkMajor, type ExpoSessionConfig } from './expo-config'
 import { createExpoMetro, ExpoMetro, type ExpoMetroSession } from './metro'
 
 const EXPO_GO_APP_ID = 'host.exp.exponent'
 /**
- * Android is the platform where Expo Go still serves Tao: Expo publishes an APK for each SDK
- * generation outside the Play Store, and this loop sideloads the one matching `EXPO_SDK_VERSION`.
- * The phone lane Expo closed is iOS, and `physical-device.ts` says why.
+ * An emulator opens Tao apps in the prebuilt Tao Companion when a compatible build of it is at
+ * hand — one whose manifest carries this Tao's whole native kit — and in Expo Go otherwise. Expo Go
+ * still serves Android: Expo publishes an APK for each SDK generation outside the Play Store, and
+ * this loop sideloads the one matching `EXPO_SDK_VERSION`. The phone lane Expo closed is iOS, and
+ * `physical-device.ts` says why; the Companion replaces Expo Go lane by lane as its builds exist.
  */
 const EXPO_GO_SDK_VERSION = EXPO_SDK_VERSION
 const EXPO_VERSIONS_URL = 'https://api.expo.dev/v2/versions/latest'
@@ -28,13 +33,20 @@ const androidAdbMissingMessage = 'Android adb CLI not found. Run direnv allow so
 export type AndroidSession = ReturnType<typeof createAndroid>
 
 export type AndroidCompatibilityDependencies = {
+  /** Finds a prebuilt host able to run this Tao's app host; the default searches the caches, then releases. */
+  findPrebuiltHost?: () => Promise<HostSearch>
   findRunningEmulator?: typeof findRunningEmulator
+  installCompanion?: (serial: string, host: PrebuiltHost) => Promise<void>
   installExpoGo?: (serial: string) => Promise<void>
+  installedCompanionMatches?: (serial: string, host: PrebuiltHost) => Promise<boolean>
   installedExpoGoVersion?: typeof installedExpoGoVersion
   isEmulatorBooted?: typeof isEmulatorBooted
   requireAdb?: () => Promise<void>
   reverseMetroPort?: typeof reverseMetroPort
 }
+
+/** AndroidRuntime is the app a prepared device opens Tao apps in. */
+type AndroidRuntime = 'companion' | 'expo-go'
 
 /** createAndroid binds Android Expo helpers to one Expo session. */
 export function createAndroid(
@@ -42,14 +54,24 @@ export function createAndroid(
   metro: ExpoMetroSession = createExpoMetro(config),
   compatibility: AndroidCompatibilityDependencies = {},
 ) {
+  // A device keeps the runtime it was prepared with for the session, so the open that follows
+  // preparation cannot land in Expo Go after a Companion was installed for it, or the reverse.
+  const runtimes = new Map<string, AndroidRuntime>()
+  const prepare = async (serial: string): Promise<void> => {
+    runtimes.set(serial, await prepareRuntimeOnSerial(config, serial, compatibility))
+  }
   return {
     ensureEmulator,
     ensureExpoGo: () => ensureExpoGo(compatibility),
     ensureExpoGoOnSerial: (serial: string) => ensureExpoGoOnSerial(serial, compatibility),
+    ensureRuntime: async () => {
+      await (compatibility.requireAdb ?? requireAdb)()
+      await prepare(await requireBootedEmulator())
+    },
     listPhysicalDevices,
-    openExpoGo: (url: string = config.EXPO_GO_URL) => openExpoGo(config, metro, url),
     openExpoGoOnSerial: (serial: string, url: string = config.EXPO_GO_URL) => openExpoGoOnSerial(serial, url),
-    prepareAvailableExpoGo: () => prepareAvailableExpoGo(config, compatibility),
+    openRuntime: (expoGoUrl: string = config.EXPO_GO_URL) => openRuntime(config, metro, runtimes, expoGoUrl),
+    prepareAvailableRuntime: () => prepareAvailableRuntime(config, compatibility, prepare),
     reverseMetroPort: (serial: string) => reverseMetroPort(config, serial),
   }
 }
@@ -109,8 +131,7 @@ async function ensureEmulator(): Promise<void> {
     DevLoopOutput.logDevLoop('dev', `Android emulator ${runningSerial} is starting.`)
     await waitForBootedEmulator(logPath)
   } else {
-    await startEmulator(avdName, logPath)
-    await waitForBootedEmulator(logPath)
+    await waitForBootedEmulator(logPath, await startEmulator(avdName, logPath))
   }
 }
 
@@ -153,9 +174,10 @@ async function listPhysicalDevices(): Promise<string[]> {
   return (await listAdbDevices()).filter(serial => !serial.startsWith('emulator-'))
 }
 
-async function prepareAvailableExpoGo(
+async function prepareAvailableRuntime(
   config: ExpoSessionConfig,
   compatibility: AndroidCompatibilityDependencies,
+  prepare: (serial: string) => Promise<void>,
 ): Promise<boolean> {
   await (compatibility.requireAdb ?? requireAdb)()
   const serial = await (compatibility.findRunningEmulator ?? findRunningEmulator)()
@@ -164,14 +186,14 @@ async function prepareAvailableExpoGo(
     return false
   }
   // A newcomer opening Android from `tao dev` has no `./dev` to run first, so this path installs the
-  // matching client itself; `ensureExpoGoOnSerial` announces the download. A failure leaves Android
-  // skipped with its reason rather than ending the dev loop.
+  // runtime itself and announces what it installs. A failure leaves Android skipped with its reason
+  // rather than ending the dev loop.
   try {
-    await ensureExpoGoOnSerial(serial, compatibility)
+    await prepare(serial)
   } catch (error) {
     DevLoopOutput.logDevLoop(
       'dev',
-      `Could not install an Expo Go for SDK ${EXPO_GO_SDK_VERSION} on ${serial}: ${Errors.formatForUser(error)}`,
+      `Could not prepare ${serial} to run this app: ${Errors.formatForUser(error)}`,
       'warn',
     )
     return false
@@ -180,13 +202,121 @@ async function prepareAvailableExpoGo(
   return true
 }
 
-/** openExpoGo opens Expo Go on the booted Android emulator once Metro is ready. */
-async function openExpoGo(
+/**
+ * prepareRuntimeOnSerial installs the runtime this device will open Tao apps in: the newest
+ * prebuilt Companion whose manifest carries this Tao's native kit, or else a matching Expo Go.
+ * Every host it passed over is named with its reason, since a host that exists but does not fit is
+ * the one fact a developer expecting the Companion needs.
+ */
+async function prepareRuntimeOnSerial(
+  config: ExpoSessionConfig,
+  serial: string,
+  compatibility: AndroidCompatibilityDependencies,
+): Promise<AndroidRuntime> {
+  const search = await (compatibility.findPrebuiltHost ?? (() => findPrebuiltHostFor(config)))()
+  for (const reason of search.refused) {
+    DevLoopOutput.logDevLoop('dev', `Passed over the prebuilt host at ${reason}.`, 'warn')
+  }
+  if (search.host !== undefined) {
+    await ensureCompanionOnSerial(serial, search.host, compatibility)
+    return 'companion'
+  }
+  try {
+    await ensureExpoGoOnSerial(serial, compatibility)
+  } catch (error) {
+    Errors.throwUserInput(
+      `Could not install an Expo Go for SDK ${EXPO_GO_SDK_VERSION} on ${serial}: ${Errors.formatForUser(error)}`,
+    )
+  }
+  return 'expo-go'
+}
+
+async function findPrebuiltHostFor(config: ExpoSessionConfig): Promise<HostSearch> {
+  return await obtainCompatibleHost('android', await nativeKitOf(Repo.resolvePath(config.RUNTIME_TOOLCHAIN_PATH)))
+}
+
+async function ensureCompanionOnSerial(
+  serial: string,
+  host: PrebuiltHost,
+  compatibility: AndroidCompatibilityDependencies,
+): Promise<void> {
+  const described = `${CompanionIdentity.name} ${host.manifest.hostVersion}`
+  if (await (compatibility.installedCompanionMatches ?? installedCompanionMatches)(serial, host)) {
+    DevLoopOutput.logDevLoop('dev', `${described} is already installed on ${serial}.`)
+    return
+  }
+  DevLoopOutput.logDevLoop('dev', `Installing ${described} on ${serial} from ${FS.displayPath(host.directory)}.`)
+  await (compatibility.installCompanion ?? installCompanion)(serial, host)
+}
+
+/**
+ * The installed Companion matches a host exactly when its APK is byte-for-byte the host's binary:
+ * Android keeps the installed APK, so hashing both ends answers without trusting a version string
+ * that a rebuild from changed native code would leave untouched.
+ */
+async function installedCompanionMatches(serial: string, host: PrebuiltHost): Promise<boolean> {
+  const path = await CLI.run('adb', {
+    args: ['-s', serial, 'shell', 'pm', 'path', '--user', EXPO_ADB_USER, CompanionIdentity.androidPackage],
+  })
+  const installedApk = /^package:(\S+)$/mu.exec(path.stdout)?.[1]
+  if (path.error !== undefined || path.exitCode !== 0 || installedApk === undefined) {
+    return false
+  }
+  const digest = await CLI.run('adb', { args: ['-s', serial, 'shell', 'sha256sum', installedApk] })
+  const installedDigest = digest.stdout.trim().split(/\s+/u)[0]
+  return digest.error === undefined && digest.exitCode === 0
+    && installedDigest === Platform.sha256Hex(await FS.readFile(host.binaryPath))
+}
+
+async function installCompanion(serial: string, host: PrebuiltHost): Promise<void> {
+  await CLI.mustRun('adb', {
+    args: ['-s', serial, 'install', '-r', '-d', '--user', EXPO_ADB_USER, host.binaryPath],
+    stdio: 'inherit',
+  })
+}
+
+/**
+ * openRuntime opens the app in the runtime prepared for the booted emulator once Metro is ready,
+ * and answers which one that was. The Companion reaches Metro through the `adb reverse` of its
+ * port, so its link names the emulator's own loopback address.
+ */
+async function openRuntime(
   config: ExpoSessionConfig,
   metro: ExpoMetroSession,
-  url: string,
-): Promise<void> {
-  await openExpoGoWhenMetroIsReady(config, metro, url)
+  runtimes: ReadonlyMap<string, AndroidRuntime>,
+  expoGoUrl: string,
+): Promise<AndroidRuntime> {
+  await metro.waitForMetro()
+  const serial = await requireBootedEmulator()
+  await reverseMetroPort(config, serial)
+  if (runtimes.get(serial) === 'companion') {
+    await openCompanionOnSerial(serial, companionDevClientUrl({ host: '127.0.0.1', port: config.EXPO_PORT }))
+    return 'companion'
+  }
+  await openExpoGoOnSerial(serial, expoGoUrl)
+  return 'expo-go'
+}
+
+async function openCompanionOnSerial(serial: string, url: string): Promise<void> {
+  DevLoopOutput.logDevLoop('dev', `Opening ${url} in ${CompanionIdentity.name} on ${serial}.`)
+  await CLI.mustRun('adb', {
+    args: [
+      '-s',
+      serial,
+      'shell',
+      'am',
+      'start',
+      '-a',
+      'android.intent.action.VIEW',
+      '-d',
+      // `adb shell` hands its words to the device's shell, where an unquoted `&` or `?` in the
+      // link would split or glob the command.
+      `'${url}'`,
+      '-p',
+      CompanionIdentity.androidPackage,
+    ],
+    stdio: 'inherit',
+  })
 }
 
 async function requireCommand(command: string, missingMessage: string): Promise<void> {
@@ -272,9 +402,11 @@ async function isEmulatorBooted(serial: string): Promise<boolean> {
   return !result.error && result.exitCode === 0 && result.stdout.trim() === '1'
 }
 
-async function startEmulator(avdName: string, logPath: string): Promise<void> {
+/** startEmulator starts the emulator detached and answers whether that process has since exited. */
+async function startEmulator(avdName: string, logPath: string): Promise<() => boolean> {
   DevLoopOutput.logDevLoop('dev', `Starting Android emulator ${avdName}.`)
   const logFile = await FS.openAppend(logPath)
+  let exited = false
   try {
     const emulator = CLI.start('emulator', {
       args: ['-avd', avdName, '-memory', String(ANDROID_EMULATOR_MEMORY_MB), '-netdelay', 'none', '-netspeed', 'full'],
@@ -282,24 +414,55 @@ async function startEmulator(avdName: string, logPath: string): Promise<void> {
       stdio: ['ignore', logFile.fd, logFile.fd],
       unref: true,
     })
+    emulator.onceClose(() => {
+      exited = true
+    })
     emulator.onceError(error =>
       DevLoopOutput.logDevLoop('dev', `Failed to start Android emulator: ${error.message}`, 'error')
     )
   } finally {
     await logFile.close()
   }
+  return () => exited
 }
 
-async function waitForBootedEmulator(logPath: string): Promise<void> {
+/**
+ * waitForBootedEmulator waits for an emulator to finish booting. An emulator this loop started that
+ * exits first ends the wait at once with the reason its log gives, rather than after the whole boot
+ * timeout with none.
+ */
+async function waitForBootedEmulator(logPath: string, exited: () => boolean = () => false): Promise<void> {
   const serial = await Time.pollUntil(async () => {
     const candidate = await findRunningEmulator()
     return candidate && await isEmulatorBooted(candidate) ? candidate : undefined
-  }, { intervalMs: EMULATOR_BOOT_POLL_MS, timeoutMs: EMULATOR_BOOT_TIMEOUT_MS })
+  }, { intervalMs: EMULATOR_BOOT_POLL_MS, stop: exited, timeoutMs: EMULATOR_BOOT_TIMEOUT_MS })
   if (serial !== undefined) {
     DevLoopOutput.logDevLoop('dev', `Android emulator ${serial} is booted.`)
     return
   }
+  if (exited()) {
+    Errors.throwUserInput(emulatorExitMessage(await FS.readText(logPath).catch(() => ''), logPath))
+  }
   Errors.throwUserInput(`Android emulator did not finish booting. Check ${logPath}.`)
+}
+
+/**
+ * emulatorExitMessage names why an emulator exited before booting, from the last line its log holds.
+ * Qt's processor check is the one worth explaining: a sandboxed shell hides the CPU's features, so
+ * an Apple silicon Mac reads as lacking NEON, and the emulator only starts from an ordinary shell.
+ */
+export function emulatorExitMessage(logText: string, logPath: string): string {
+  const lines = logText.split(/\r?\n/u).map(line => line.trim()).filter(line => line.length > 0)
+  const processorCheck = lines.findIndex(line => line.startsWith('Incompatible processor'))
+  if (processorCheck !== -1) {
+    return `Android emulator exited before it booted: ${lines.slice(processorCheck).join(' ')} That check fails `
+      + `when a sandboxed shell hides the CPU's features; start the emulator from an ordinary shell. Its log is ${logPath}.`
+  }
+  const reason = lines.at(-1)
+  if (reason === undefined) {
+    return `Android emulator exited before it booted, leaving nothing in ${logPath}.`
+  }
+  return `Android emulator exited before it booted: ${reason}. Its log is ${logPath}.`
 }
 
 async function requireBootedEmulator(): Promise<string> {
@@ -383,17 +546,6 @@ async function getExpoGoApkUrl(): Promise<string> {
     Errors.throwUserInput(`Expo Go APK URL not found for SDK ${EXPO_GO_SDK_VERSION}.`)
   }
   return url
-}
-
-async function openExpoGoWhenMetroIsReady(
-  config: ExpoSessionConfig,
-  metro: ExpoMetroSession,
-  url: string,
-): Promise<void> {
-  await metro.waitForMetro()
-  const serial = await requireBootedEmulator()
-  await reverseMetroPort(config, serial)
-  await openExpoGoOnSerial(serial, url)
 }
 
 async function openExpoGoOnSerial(serial: string, url: string): Promise<void> {

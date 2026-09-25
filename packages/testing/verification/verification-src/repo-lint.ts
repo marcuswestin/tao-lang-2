@@ -63,7 +63,7 @@ function wordFlowerAbsorbedParityIssues(directory: WordFlowerDirectory): string[
 }
 
 function isWordFlowerParityFile(file: SourceFile): boolean {
-  return file.path !== '.tao-project/lock.jsonc'
+  return file.path !== '.tao-project/lock.jsonc' && !file.path.startsWith('.tao/')
 }
 
 function currentWordFlowerPath(path: string): string {
@@ -478,10 +478,10 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:355',
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:368',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:128',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:284',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:312',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:319',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:387',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:389',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:417',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:424',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:492',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:205',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:930',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:935',
@@ -492,9 +492,9 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1408',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1450',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1476',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:57',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:79',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:356',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:82',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:104',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:381',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
   'packages/ides/studio/studio-tests/studio-client.test.ts:627',
   'packages/ides/studio/studio-tests/studio-client.test.ts:3301',
@@ -508,7 +508,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:84',
   'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:107',
   'packages/cli/agent-cli/agent-cli-tests/claude-profiles-generation.test.ts:87',
-  'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:560',
+  'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:559',
   'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx:260',
   'packages/apps/runtime/TR-tests/TR-async.test.ts:43',
   'packages/apps/runtime/TR-tests/TR-async.test.ts:57',
@@ -1243,7 +1243,12 @@ async function readWordFlowerDirectory(repoRoot: string): Promise<WordFlowerDire
 
 async function readDirectoryFiles(directoryPath: string): Promise<SourceFile[]> {
   const files: SourceFile[] = []
-  for await (const path of FS.walk(directoryPath, { includeHidden: true })) {
+  for await (
+    const path of FS.walk(directoryPath, {
+      excludeDirectory: name => name === '.tao',
+      includeHidden: true,
+    })
+  ) {
     const bytes = await FS.readFile(path)
     files.push({
       bytes,

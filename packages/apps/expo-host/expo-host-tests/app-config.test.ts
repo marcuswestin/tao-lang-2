@@ -55,7 +55,7 @@ const shipManifest: ShipManifest = {
     channel: 'wordflower-instantdb',
     runtimeFingerprint: 'native-fingerprint-1',
     runtimeVersion: 'native-fingerprint-1',
-    url: 'https://updates.tao-lang.org/v1/wordflower-instantdb',
+    url: 'https://updates.devtao.com/v1/wordflower-instantdb',
   },
   version: '1.2.3',
 }
@@ -121,7 +121,7 @@ Describe('Expo ship host configuration', () => {
       updates: {
         enabled: true,
         requestHeaders: { 'expo-channel-name': 'wordflower-instantdb' },
-        url: 'https://updates.tao-lang.org/v1/wordflower-instantdb',
+        url: 'https://updates.devtao.com/v1/wordflower-instantdb',
       },
       extra: {
         retained: true,

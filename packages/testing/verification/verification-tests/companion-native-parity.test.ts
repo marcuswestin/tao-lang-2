@@ -1,3 +1,4 @@
+import { shipsNativeCode } from '@expo-host/dev-loop/prebuilt-host/HostManifest'
 import { FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PackageGraph } from '../verification-src/PackageGraph'
@@ -8,14 +9,9 @@ import { PackageGraph } from '../verification-src/PackageGraph'
  * cleanly: it crashes at require time, inside a shell nobody can edit on the spot. So every
  * dependency of the generated host that ships native code must be installed in the Companion too,
  * at the exact version the host pins. "Ships native code" is detected from the resolved package
- * directory rather than a hard-coded list, so a future native dependency trips this the moment it
- * is added to the host, not whenever someone remembers to update an allowlist.
- *
- * An `ios/` or `android/` directory alone is not a safe signal: `jest-expo` carries both, holding
- * nothing but a `jest-preset.js` for that platform's test config, and flags as a false positive if
- * their mere presence counts. The real signal is a native build file inside: a `.podspec` (at the
- * package root or under `ios/`, where the RN and Expo modules installed here put theirs) or an
- * `android/build.gradle`, or the Expo autolinking marker `expo-module.config.json`.
+ * directory by `shipsNativeCode`, the same rule a prebuilt host's manifest is built with, rather than
+ * a hard-coded list, so a future native dependency trips this the moment it is added to the host,
+ * not whenever someone remembers to update an allowlist.
  */
 
 const HOST_PACKAGE_PATH = 'packages/apps/expo-host/package.json'
@@ -25,21 +21,6 @@ type Manifest = { dependencies?: Record<string, string>; name?: string }
 
 async function readManifest(path: string, repositoryRoot: string): Promise<Manifest> {
   return FS.readJson<Manifest>(FS.resolvePath(path, repositoryRoot))
-}
-
-/** shipsNativeCode reports whether a resolved package directory carries a native build file. */
-async function shipsNativeCode(packageDirectory: string): Promise<boolean> {
-  return await FS.isFile(FS.resolvePath('expo-module.config.json', packageDirectory))
-    || await FS.isFile(FS.resolvePath('android/build.gradle', packageDirectory))
-    || await hasPodspec(packageDirectory)
-    || await hasPodspec(FS.resolvePath('ios', packageDirectory))
-}
-
-async function hasPodspec(directory: string): Promise<boolean> {
-  if (!await FS.isDirectory(directory)) {
-    return false
-  }
-  return (await FS.listDir(directory)).some(name => name.toLowerCase().endsWith('.podspec'))
 }
 
 /**

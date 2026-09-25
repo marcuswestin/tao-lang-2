@@ -1,9 +1,13 @@
 /// <reference path="./better-opn.d.ts" />
 
-import { CLI, Errors, Platform, Time } from '@shared'
+import { CLI, Errors, Platform, Repo, Time } from '@shared'
 import betterOpen from 'better-opn'
 import { DevLoopOutput } from '../DevLoopOutput'
 import { presentIosSimulator } from '../IosSimulatorPresentation'
+import { companionDevClientUrl, CompanionIdentity } from '../prebuilt-host/CompanionIdentity'
+import { nativeKitOf } from '../prebuilt-host/HostManifest'
+import { obtainCompatibleHost } from '../prebuilt-host/PrebuiltHosts'
+import { prepareSimulatorCompanion } from '../prebuilt-host/SimulatorCompanion'
 import type { AndroidSession } from './android'
 import { expoSdkMajor, type ExpoSessionConfig } from './expo-config'
 import type { ExpoMetroSession } from './metro'
@@ -45,14 +49,12 @@ export function createExpoTargets(
   }
 }
 
-/** openAndroid asks Expo to open the current app on Android, launching an emulator when Expo can. */
+/** openAndroid opens the current app on Android, launching an emulator and installing its runtime. */
 async function openAndroid(context: ExpoTargetContext): Promise<boolean> {
   try {
     await context.android.ensureEmulator()
-    await context.android.ensureExpoGo()
-    const endpoint = await context.metro.expoOpenEndpoint('android')
-    await openPreparedAndroid(context, context.metro.endpointUrl(endpoint))
-    DevLoopOutput.logDevLoop('dev', `opened Android${context.metro.formatOpenedRuntime(endpoint)}`)
+    await context.android.ensureRuntime()
+    await openPreparedAndroidAndSay(context)
     return true
   } catch (error) {
     DevLoopOutput.logDevLoop('dev', `Could not open Android: ${Errors.formatForUser(error)}`, 'warn')
@@ -68,14 +70,15 @@ async function openWeb(context: ExpoTargetContext): Promise<boolean> {
   )
 }
 
-/** openIosSimulator asks Expo to open the current app on iOS, launching a simulator when Expo can. */
+/**
+ * openIosSimulator opens the current app on an iOS Simulator, booting one when needed: in a
+ * compatible prebuilt Companion when one is at hand, installed first if the simulator lacks that
+ * build, and otherwise through Expo's own link, which Expo Go answers.
+ */
 async function openIosSimulator(
   context: ExpoTargetContext,
   shouldStop: () => boolean = () => false,
 ): Promise<boolean> {
-  const link = context.metro.endpointUrl(await context.metro.expoOpenEndpoint('ios'))
-    ?? await context.metro.expoLink('ios')
-    ?? context.config.EXPO_GO_URL
   const simulator = await ensureIosSimulator(context.config, shouldStop)
   if (!simulator) {
     return false
@@ -83,13 +86,44 @@ async function openIosSimulator(
   if (shouldStop()) {
     return false
   }
+  const inCompanion = await prepareCompanionOnSimulator(context, simulator)
+  const link = inCompanion
+    ? companionDevClientUrl({ host: '127.0.0.1', port: context.config.EXPO_PORT })
+    : context.metro.endpointUrl(await context.metro.expoOpenEndpoint('ios'))
+      ?? await context.metro.expoLink('ios')
+      ?? context.config.EXPO_GO_URL
   const result = await CLI.run('xcrun', { args: ['simctl', 'openurl', simulator.udid, link] })
   if (result.exitCode === 0 && result.error === undefined) {
-    DevLoopOutput.logDevLoop('dev', `opened iOS Simulator (${simulator.name})`)
+    DevLoopOutput.logDevLoop(
+      'dev',
+      `opened iOS Simulator (${simulator.name}${inCompanion ? `, ${CompanionIdentity.name}` : ''})`,
+    )
     return true
   }
   DevLoopOutput.logDevLoop('dev', simulatorOpenFailure(simulator.name, link, result), 'warn')
   return false
+}
+
+/** A Companion that cannot be installed leaves the simulator on Expo Go, saying why, not the dev loop stopped. */
+async function prepareCompanionOnSimulator(context: ExpoTargetContext, simulator: IosSimulator): Promise<boolean> {
+  try {
+    return await prepareSimulatorCompanion(simulator.udid, simulator.name, {
+      findPrebuiltHost: async () =>
+        await obtainCompatibleHost(
+          'ios-simulator',
+          await nativeKitOf(Repo.resolvePath(context.config.RUNTIME_TOOLCHAIN_PATH)),
+        ),
+    })
+  } catch (error) {
+    DevLoopOutput.logDevLoop(
+      'dev',
+      `Could not install ${CompanionIdentity.name} on ${simulator.name}; opening in Expo Go: ${
+        Errors.formatForUser(error)
+      }`,
+      'warn',
+    )
+    return false
+  }
 }
 
 /**
@@ -141,19 +175,28 @@ async function openStartupTargets(
   }))
 }
 
-/** openPreparedAndroid opens the current Expo app on a prepared Android emulator. */
+/** openPreparedAndroid opens the current app in the runtime prepared on the Android emulator. */
 async function openPreparedAndroid(context: ExpoTargetContext, url?: string): Promise<void> {
-  await context.android.openExpoGo(url)
+  await context.android.openRuntime(url)
 }
 
 async function openAvailableAndroid(context: ExpoTargetContext): Promise<boolean> {
-  if (await context.android.prepareAvailableExpoGo()) {
-    const endpoint = await context.metro.expoOpenEndpoint('android')
-    await openPreparedAndroid(context, context.metro.endpointUrl(endpoint))
-    DevLoopOutput.logDevLoop('dev', `opened Android${context.metro.formatOpenedRuntime(endpoint)}`)
+  if (await context.android.prepareAvailableRuntime()) {
+    await openPreparedAndroidAndSay(context)
     return true
   }
   return false
+}
+
+async function openPreparedAndroidAndSay(context: ExpoTargetContext): Promise<void> {
+  const endpoint = await context.metro.expoOpenEndpoint('android')
+  const runtime = await context.android.openRuntime(context.metro.endpointUrl(endpoint))
+  DevLoopOutput.logDevLoop(
+    'dev',
+    `opened Android${
+      runtime === 'companion' ? ` (${CompanionIdentity.name})` : context.metro.formatOpenedRuntime(endpoint)
+    }`,
+  )
 }
 
 async function ensureIosSimulator(

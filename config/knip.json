@@ -45,6 +45,8 @@
       "entry": [
         "agent-cli-src/agent-dev.ts",
         "agent-cli-src/cli/agent-help.ts",
+        "agent-cli-src/cli/agent-host-command-check.ts",
+        "agent-cli-src/cli/agent-host-dispatch.ts",
         "agent-cli-src/agent-hooks/ShellHabitsEntry.ts",
         "agent-cli-src/agent-hooks/SubagentBriefEntry.ts",
         "agent-cli-src/agent-hooks/GitHooksEntry.ts",

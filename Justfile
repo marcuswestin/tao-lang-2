@@ -33,18 +33,18 @@ github-setup:
     gh auth setup-git --hostname github.com
     git remote set-url origin https://github.com/marcuswestin/tao-lang-2.git
     git ls-remote --exit-code origin refs/heads/main >/dev/null
-    ./dev landing-broker-install
     printf 'GitHub HTTPS authentication is ready for %s.\n' "$(git remote get-url origin)"
 
-# Install or update the credential-isolated landing service for this repository
+# Remove an obsolete local Tao landing LaunchAgent after direct landing has been verified
 [group('Setup')]
-landing-setup:
-    ./dev landing-broker-install
-
-# Check the credential-isolated landing service without performing a GitHub operation
-[group('Setup')]
-landing-status:
-    ./dev landing-broker-status
+landing-broker-teardown:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    label='com.tao-lang.landing-broker'
+    plist="$HOME/Library/LaunchAgents/${label}.plist"
+    launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+    rm -f "$plist"
+    printf 'Removed obsolete %s LaunchAgent if present.\n' "$label"
 
 # Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
 [group('Setup')]
@@ -108,6 +108,16 @@ studio-companion-install device="":
 studio-companion-simulator simulator="":
     ./dev studio-companion-install --simulator "{{ simulator }}"
 
+# Build the Tao Companion as a prebuilt host (--platform ios-simulator for the simulator); tao dev opens apps in it
+[group('Run')]
+companion-host-build *ARGS:
+    ./dev companion-host-build {{ ARGS }}
+
+# Publish the built Companion hosts to their GitHub release, where tao dev downloads them; needs gh
+[group('Run')]
+companion-host-publish:
+    ./dev companion-host-publish
+
 # Run the opt-in real-host testing prototype; does not run or replace the existing suites
 [group('Host proofs')]
 test-host *ARGS:
@@ -170,14 +180,44 @@ studio-release-check payload_root=".artifacts/build/studio-native/service-stage/
 
 # Build signed/notarized Tao Studio artifacts through Electrobun and Hutch
 [group('Ship')]
-studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native":
-    ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
+studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native" version="0.0.1":
+    ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}" --version "{{ version }}"
 
-# Build a standalone Tao binary for this host after generating its parser
+# Build signed Studio artifacts and check the app, DMG, update metadata, and isolated payload before upload
+[group('Ship')]
+studio-release-prepare repo version="0.0.1":
+    ./dev release-studio-prepare --repo "{{ repo }}" --version "{{ version }}"
+
+# Upload the prepared Studio artifacts to a public GitHub Release and verify public download bytes
+[group('Ship')]
+studio-release-publish repo:
+    ./dev release-studio-publish --repo "{{ repo }}"
+
+# Package the IDE extension and prove the VSIX installs in a clean VS Code profile
+[group('Ship')]
+ide-extension-release-prepare:
+    ./dev release-ide-prepare
+
+# Publish the prepared VSIX to both registries; pass open-vsx or marketplace to retry one after a partial failure
+[group('Ship')]
+ide-extension-release-publish target="all":
+    ./dev release-ide-publish --target "{{ target }}"
+
+# Build a standalone Tao binary for this host, with its runtime resources embedded, after generating its parser
 [group('Ship')]
 standalone-cli-build: _parser-gen
-    mkdir -p .artifacts/build
-    bun build --compile --outfile .artifacts/build/tao packages/cli/tao-cli/cli-src/tao-cli.ts
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts .artifacts/build/tao
+
+# Build the files one standalone Tao release publishes, and print the command that publishes them
+[group('Ship')]
+standalone-cli-release version: _parser-gen
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
+
+# Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, compile, and build --compile-only work with no Bun or Node on PATH
+[group('Ship')]
+standalone-cli-acceptance: _parser-gen
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
+    bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
 
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]
@@ -267,11 +307,11 @@ my-branch name='':
 my-sync:
     ./dev sync-main
 
-# Hand the merge conflicts in this checkout to an agent, which resolves them, verifies, and commits
+# Hand the merge conflicts in this checkout to an agent (claude or codex), which resolves them, verifies, and commits
 [group('Mine')]
-my-resolve *ARGS:
+my-resolve agent='claude' *ARGS:
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then printf 'No conflicted files: there is nothing to resolve.\n'; exit 1; fi
-    claude {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
+    {{ if agent == "claude" { "claude" } else if agent == "codex" { "codex" } else { error("my-resolve takes claude or codex") } }} {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
 
 # Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
 [group('Mine')]
@@ -432,7 +472,7 @@ simplify-audit *ARGS:
 bench iterations="10":
     bun run packages/cli/dev-cli/dev-cli-src/performance/language-performance.ts "{{ iterations }}"
 
-# Measure machine-wide lane admission against DEVENV-094's bar; needs a quiet machine and an unsandboxed shell. --provision <count> makes and removes its own checkouts
+# Measure machine-wide lane admission against DEVENV-094's bar; agents use ./agent unsandboxed admission-experiment on a quiet machine. --provision <count> makes and removes its own checkouts
 [group('Report')]
 admission-experiment *ARGS:
     bun run packages/cli/dev-cli/dev-cli-src/performance/admission-experiment.ts {{ ARGS }}
@@ -588,9 +628,10 @@ _compile-word-flower-app: _parser-gen
 _ide-extension-build: _parser-gen
     cd packages/ides/ide-extension && bun esbuild.config.ts
 
-_ide-extension-package: _ide-extension-build
+_ide-extension-package: _parser-gen
     mkdir -p .artifacts/build
-    cd packages/ides/ide-extension && bunx @vscode/vsce package --allow-missing-repository --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
+    cd packages/ides/ide-extension && bun esbuild.config.ts --minify
+    cd packages/ides/ide-extension && bunx @vscode/vsce package --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
 
 _tao-check: _parser-gen
     ./tao check

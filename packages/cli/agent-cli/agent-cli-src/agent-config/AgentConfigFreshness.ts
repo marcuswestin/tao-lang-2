@@ -1,5 +1,6 @@
 import { FS } from '@shared'
 import { generate } from 'rulesync'
+import { generateClaudeHostSettings } from './AgentHostCommands'
 import { ClaudeProfilesGenerator } from './ClaudeProfilesGenerator'
 import { CodexConfigGenerator } from './CodexConfigGenerator'
 
@@ -12,7 +13,8 @@ const RULESYNC_OUTPUTS = [
   { features: ['hooks'], path: '.codex/hooks.json', target: 'codexcli' },
 ] as const
 
-const STALE_DETAIL = 'is stale against its `.rulesync/` source; run `./agent setup` and commit the result.'
+const STALE_DETAIL =
+  'is stale against its `.rulesync/` source; run `./agent setup`, and commit the result if the file is tracked.'
 
 /** renderedOutputs collects what a generator would write, keyed by repository-relative path. */
 async function renderedOutputs(
@@ -50,6 +52,14 @@ async function rulesyncOutputs(root: string): Promise<Map<string, string>> {
         silent: true,
         targets: [output.target],
       })
+      if (output.target === 'claudecode') {
+        await FS.mkdir(FS.resolvePath('.rulesync', scratch))
+        await FS.copyFile(
+          FS.resolvePath('.rulesync/permissions.jsonc', root),
+          FS.resolvePath('.rulesync/permissions.jsonc', scratch),
+        )
+        await generateClaudeHostSettings(scratch)
+      }
       outputs.set(output.path, await FS.readText(regenerated))
     }
   } finally {

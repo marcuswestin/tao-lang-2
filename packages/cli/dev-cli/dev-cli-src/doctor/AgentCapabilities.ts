@@ -17,6 +17,8 @@ export type CapabilityReport = {
   version: 1
 }
 
+const LANDING_REQUIRED_CAPABILITIES = new Set(['Watchman socket', 'CoreSimulator service'])
+
 export type ProbeResult = {
   error?: unknown
   exitCode: number | null
@@ -43,7 +45,8 @@ const FAILED_CORE_SIMULATOR_SERVICE =
   /CoreSimulatorService connection became invalid|simdiskimaged (?:crashed|is not responding)|failed to initialize simulator runtime/i
 
 /**
- * Only a variable a harness sets *because* the command is sandboxed belongs here. Claude Code sets
+ * Only a variable a harness sets *because* the command is sandboxed belongs here: Claude Code's
+ * sandboxed shell sets `SANDBOX_RUNTIME` and Codex's sets `CODEX_SANDBOX`. Claude Code also sets
  * `CLAUDE_CODE_TMPDIR` in every session, sandboxed or not, so keying on it reported every agent as
  * sandboxed and made the report's one host-policy signal say nothing.
  */
@@ -55,7 +58,7 @@ const PROBES: readonly CapabilityProbe[] = [
     command: 'ps',
     display: 'ps -axo pid=,ppid=,lstart=,command=',
     name: 'process table',
-    remediation: 'Run the displayed read-only whole-table shape directly when the active harness can broker it.',
+    remediation: 'Run ./agent unsandboxed processes list for the read-only whole-table view.',
   },
   {
     args: ['-0', String(Platform.runtimeProcess.pid)],
@@ -72,11 +75,12 @@ const PROBES: readonly CapabilityProbe[] = [
     successfulExitCodes: [0, 1],
   },
   {
-    args: ['version'],
+    // Never spawns a server, and never lets the client answer for one that is absent or denied.
+    args: ['--no-spawn', '--no-local', 'watch-list'],
     command: 'watchman',
-    display: 'watchman version',
+    display: 'watchman --no-spawn --no-local watch-list',
     name: 'Watchman socket',
-    remediation: 'Use tao-workspace or another Tao profile carrying the canonical Watchman socket.',
+    remediation: 'Run ./agent doctor: it tells a denied socket from a stopped server and names the fix for each.',
   },
   {
     args: ['store', 'info', '--store', 'daemon'],
@@ -90,7 +94,8 @@ const PROBES: readonly CapabilityProbe[] = [
     command: 'xcrun',
     display: 'xcrun simctl list devices --json available',
     name: 'CoreSimulator service',
-    remediation: 'After a runtime install, restart macOS, open Device Hub once, then retry the displayed command.',
+    remediation:
+      'After a runtime install, restart macOS, open Device Hub once, then retry ./agent unsandboxed simulators list --json available.',
   },
   {
     args: ['ps', '--format', '{{.ID}}'],
@@ -126,6 +131,11 @@ export function classifyCapability(probe: CapabilityProbe, result: ProbeResult):
 /** detectSandbox reports whether this command runs under a harness sandbox policy. */
 function detectSandbox(env: Readonly<Record<string, string | undefined>>): boolean {
   return SANDBOX_SIGNALS.some(name => (env[name] ?? '') !== '')
+}
+
+/** Required probes, rather than an inherited harness marker, decide whether landing can run host gates. */
+export function unavailableLandingCapabilities(report: CapabilityReport): readonly CapabilityCheck[] {
+  return report.checks.filter(check => LANDING_REQUIRED_CAPABILITIES.has(check.name) && check.status !== 'available')
 }
 
 /** readAgentCapabilities probes host seams without editing files, opening apps, or signalling processes. */

@@ -7,6 +7,39 @@ here they wait on.
 Each entry states the question, what it blocks, the options as they stand, and a marked
 recommendation. A recommendation is a starting position for the decision, never the decision.
 
+## Release checklist — before the repository goes public
+
+Run down this list before the first public push. Each item points at the entry that owns it.
+
+- [ ] **Revoke the App Store Connect API key.** Untracking the WordFlower ship lock (`P15`,
+      2026-09-22) removed it from the tree, not from history. Revoke the key its `keyId` names and
+      issue a replacement for `tao ship`; the issuer ID, app ID, and TestFlight group IDs are
+      identifiers, not credentials, and cannot be rotated.
+- [ ] **Re-run the full-history credential scan** (`P22`, clean as of 2026-09-20) over the history
+      being pushed, and revoke anything it finds.
+- [ ] **Apply the app-safe licence structure** (`R1`, decided 2026-09-22 to land before the first
+      public release; `P24`).
+- [ ] **No login name or home directory in the generated harness config** (`P17`, `P18`): the
+      Watchman socket rule in `.claude/settings.json` and `.codex/config.toml`.
+- [ ] **Register the public identifiers.** Most cannot be changed once published or once users
+      depend on them. **Decided 2026-09-24:** the domain is `devtao.com`, and every other namespace
+      prefers Dev Tao (`Dev Tao`, `dev-tao`, and `dev_tao` only where a hyphen is not allowed), with
+      Tao Lang (`Tao Lang`, `tao-lang`, `tao_lang`) as the fallback where the first is taken. The
+      repository already uses the domain's names; what remains is claiming them:
+  - The domain `devtao.com`, and `updates.devtao.com` for the update server `tao ship` defaults to.
+  - The reverse-domain prefix `com.devtao`: the companion app `com.devtao.studio.companion` on iOS
+    and Android, its iCloud container `iCloud.com.devtao.studio.companion` with Push Notifications,
+    the macOS Studio app `com.devtao.studio`, and `tao ship`'s default namespace for new apps. The
+    URL scheme `taostudiocompanion` and the store listing names stay to be chosen.
+  - The GitHub organization `dev-tao` (fallback `tao-lang`), which also names the Homebrew tap
+    `dev-tao/homebrew-tao`.
+  - The VS Code and Open VSX publisher `dev-tao` (fallback `tao-lang`) for `tao-ide-extension`;
+    `packages/ides/ide-extension/package.json` still names the placeholder publisher `tao` until the
+    account exists.
+  - The npm scope `@dev-tao` (fallback `@tao-lang`) for the CLI's platform packages; `tao-cli`,
+    `tao-runtime`, `tao-stdlib`, and the other packages are unscoped today — decide between those
+    names and the scope, and check each is free.
+
 ## Decide first — these block the release path
 
 ### R1 — The license
@@ -74,12 +107,8 @@ committed `secrets/secrets.jsonc`.
   prerequisites under every option and they are now the only blocking work.
 - Apply the audit's `P1`, `P2`, and `P7`–`P10` findings through that public-audience edit. The
   mandatory `P15`–`P18` and `P24` fixes above remain separate prerequisites.
-- [ ] **Before the first public push, invalidate what history still exposes.** Untracking the
-      WordFlower ship lock (`P15`, 2026-09-22) removed it from the tree, not from history. Revoke the App
-      Store Connect API key its `keyId` names and issue a replacement for `tao ship`; the issuer ID, app
-      ID, and TestFlight group IDs are identifiers, not credentials, and cannot be rotated. Then re-run
-      the audit's full-history credential scan (`P22`, clean as of 2026-09-20) over the history being
-      pushed, and revoke anything it finds.
+- The key rotation and the history re-scan these prerequisites leave open are on the release
+  checklist at the top of this document.
 
 ### R3 — Launch timing, positioning, and the stability promise
 
@@ -141,6 +170,9 @@ that host the companion app itself, and does one host serve several Tao versions
 - **Decided 2026-09-22:** the companion app is the shared host, with infrequent native-shell
   releases and an explicit compatibility check against the Tao bundle. One host is not built for
   every Tao version. The first public-release companion is an invitation beta (`R12`).
+- **Decided 2026-09-23:** prebuilt hosts are published as release assets on the public repository's
+  GitHub Releases, beside the CLI's (`R11`), and `tao dev` downloads them without authentication.
+  Until the repository is public, hosts reach a machine by being built in its checkout.
 
 ### R8 — Where builds run, and where signing happens
 
@@ -181,7 +213,7 @@ the release.
 ### R11 — Hosted services for the release
 
 Three services are already implied: Tao's own update service (implemented, unhosted), a hosted
-InstantDB application for the WordFlower demo (`A16`), and later the Tao Lang servers the companion
+InstantDB application for the WordFlower demo (`A16`), and later the Dev Tao servers the companion
 app's membership model assumes.
 
 - Blocks: `A16`, and any demo of sync or over-the-air updates.
@@ -207,6 +239,14 @@ extension. Studio is the most impressive and the least finished.
   launch. Offer the companion host as an invitation beta, with physical-device acceptance still to
   prove. Defer `tao review` from the first standalone CLI binary; excluding its imported Studio
   graph requires a packaging slice.
+- **Decided 2026-09-24:** defer build and distribution acceptance that needs release accounts,
+  signing certificates, notarization credentials, or an authorized physical device until the
+  near-release pass. Do not run certificate-dependent Studio or CLI signing and notarization,
+  physical-iPhone Companion builds, hosted-binary or installed-update proofs, or marketplace
+  publication checks as current branch or landing gates. Keep their guarded commands available;
+  revisit and complete the release-required proofs before declaring the first public release
+  ready. Ordinary tests, local packaging, simulator checks, and credential-free editor acceptance
+  continue.
 
 ### R13 — The standalone CLI's remaining questions
 

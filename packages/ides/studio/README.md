@@ -5,6 +5,8 @@ Studio _is_ as an implemented product contract; this package README owns the ope
 around it — launch modes, ports, artifact roots, manifests, diagnostics, smoke lanes, and release
 steps. Launch, doctor, smoke, and packaging commands live in `packages/ides/studio-tooling` and the
 Justfile; they are documented here because they are how this package is exercised.
+Commands below are the human developer menu. An agent runs a host operation only through a listed
+`./agent unsandboxed` name; an unlisted Studio operation needs a named entry before agent use.
 
 ## Launch modes
 
@@ -52,7 +54,7 @@ separate device gateway.
 
    Both run Expo prebuild as needed and `expo run:ios --device <target> --no-bundler` from the
    companion package, and neither starts a Metro. A device needs Xcode, CocoaPods (from the devenv
-   profile), a signing identity for the fixed bundle id `dev.tao-lang.studio.companion`, and an
+   profile), a signing identity for the fixed bundle id `com.devtao.studio.companion`, and an
    unlocked screen. A simulator needs none of that: name any available one, or omit the name for the
    booted one, and the tooling boots it first. Xcode 27 presents simulators inside Device Hub; older
    Xcodes use Simulator.app. If Expo cannot bring that host forward because macOS automation is
@@ -85,8 +87,9 @@ Networking: the phone must reach the Mac's LAN address that Expo advertises (the
 an active `169.254.*` cable interface is offered as another candidate but must succeed from the
 phone. `localhost` is never sent to a device. A denied Local Network permission, a captive portal,
 a VPN interface, or a firewall shows up as a named diagnostic in the popover rather than a hang.
-`xcrun devicectl` talks to CoreDevice over XPC that an agent sandbox denies, so run Studio from an
-ordinary shell when a device is involved. A simulator avoids all of this, which makes it the target
+`xcrun devicectl` talks to CoreDevice over XPC that an agent sandbox denies. A person can run Studio
+from an ordinary shell when a device is involved; an agent needs a named `./agent unsandboxed`
+Studio launch operation before it can run that host workflow. A simulator avoids all of this, which makes it the target
 to reach for when the question is whether the app renders rather than how it behaves on real
 hardware.
 
@@ -483,15 +486,42 @@ It opens visible native Studio and records these results in a separate report:
 
 ## Release
 
-Building a signed, notarized release needs credentials this repository never holds.
+The 2026-09-24 `R12` decision parks the signed build, notarization, hosted download, and installed
+update checks until the near-release pass. They are not current branch or landing gates. Keep the
+guarded commands below available for that pass; do not weaken their checks. Local Studio tests and
+credential-free simulator work continue. A public release still requires these proofs.
+
+Building a signed, notarized release needs credentials this repository never holds. Agents can run
+the preparation command with host access; publication remains a separate operator step. The
+release recipes target a **public GitHub Releases repository** and stable updates only:
+
+```bash
+./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
+# Inspect the local artifacts and release report before making them public.
+just studio-release-publish OWNER/REPO
+```
+
+The preparation command builds with the embedded update URL
+`https://github.com/OWNER/REPO/releases/latest/download`, discovers the built `.app` and `.dmg`,
+runs `studio-release-check`, and records the artifact hashes. It checks GitHub release history so a
+first release can correctly have no differential patch; later releases still require one. The second
+refuses a changed source commit, changed files, unsigned or unverified artifacts, or a private
+repository. It creates a draft
+`studio-vVERSION` release, uploads every file from the build's `artifacts/` directory without
+renaming it, publishes the release, and downloads each file anonymously to compare its hash.
+If publication stops after creating a draft, the same command resumes it; if the release is already
+public, it verifies the hosted files without replacing them. Studio and CLI downloads can share the
+public Tao Lang repository. GitHub has one `latest` release per repository, so each CLI-only release
+must use `--latest=false`: Studio's updater reads Studio files from that repository's `latest`
+download URL. The CLI install script can select the highest stable `vVERSION` release from GitHub's
+release list and download its assets by tag. Studio releases are explicitly marked latest by the
+publication command.
+
+The existing `just studio-package` and `just studio-release-check` remain available as lower-level
+diagnostics. Their manual equivalent is:
 
 ```bash
 just studio-package https://releases.example.com/tao-studio stable
-```
-
-Then validate what was built, without publishing anything:
-
-```bash
 just studio-release-check .artifacts/build/studio-native/service-stage/payload .artifacts/build/studio-native/project/artifacts --app "<built>.app" --dmg "<built>.dmg" --release-base-url https://releases.example.com/tao-studio
 ```
 
@@ -499,7 +529,8 @@ The artifact names are read from the directory the build wrote, never from the c
 name nobody produced cannot pass a check.
 
 The validation reports a standalone payload (no `bunx`, no repository paths, no devenv profile), the
-packaged Node runtime and native library inventory, an HTTPS update manifest, differential updates,
+packaged Node runtime and native library inventory, a valid local update manifest naming an archive
+in the build, an HTTPS release-host setting, differential updates,
 and — through Apple's own tools — deep signing, notarization, and disk image validity. A gate whose
 tool is missing is reported **UNVERIFIED**, never as passed, and an unverified gate **fails the
 command**: a build nobody could confirm was signed is not publishable. `--allow-unverified` exits
@@ -543,17 +574,25 @@ whether each name is set — and none of them belongs in a file that is committe
    `ELECTROBUN_SKIP_NOTARIZATION=1` signs without submitting for notarization, which is useful for a
    local build that will not be distributed.
 
-4. **Set the release host.** `TAO_STUDIO_RELEASE_BASE_URL` — the HTTPS host installed copies fetch
-   updates from. `./dev studio-doctor` confirms it is configured.
+4. **Choose the release repository.** Create a public GitHub repository with a `main` branch. Its
+   latest published release must always carry the stable Studio update files. A dedicated Studio
+   releases repository is simplest. In a shared Tao repository, publish CLI releases with
+   `--latest=false` so the latest release continues to carry Studio updates. GitHub's
+   `latest` URL excludes prereleases, so use another static host for auto-updating canary builds.
+   Log in with `gh auth login` on the release machine. The prepare recipe derives the URL from
+   `OWNER/REPO`; `TAO_STUDIO_RELEASE_BASE_URL` remains available for lower-level builds.
 
 5. **Confirm before building.** `./dev studio-doctor` reports which method is configured, or exactly
    which variables of a partially configured set are missing. It never prints a value.
 
-6. **Build, then validate.** `just studio-package <release-base-url> <channel>`, then
-   `just studio-release-check` as above.
+6. **Prepare and inspect.** Run `just studio-release-prepare OWNER/REPO VERSION` after the final
+   licence structure is settled and the release code is on GitHub's `main`. Review the resulting
+   report and `.artifacts/build/studio-native/project/artifacts/` files.
 
-7. **Publish yourself.** Upload the artifacts and the update manifest to the release host. No command
-   here publishes anything.
+7. **Publish and inspect an installed copy.** Run `just studio-release-publish OWNER/REPO`. It checks
+   public downloads from this machine. Then download the DMG from a separate clean Mac, install and
+   launch Studio, and confirm the first-run behavior before announcing it. The recipe does not
+   substitute for that human clean-machine check.
 
 These variable names are Electrobun's, not Apple's own tooling's; see
 <https://framework.blackboard.sh/electrobun/guides/code-signing/>.
