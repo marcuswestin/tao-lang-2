@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "dev-tao",
+      "name": "tao-lang",
       "devDependencies": {
         "@dprint/json": "0.23.0",
         "@dprint/markdown": "0.23.2",
