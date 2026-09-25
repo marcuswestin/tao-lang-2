@@ -57,8 +57,8 @@ view SkillSyntaxExample() {
 - `//` starts a line comment; `/* ... */` is an inline or block comment.
 
 Layout or design entries may end in implemented conditions: light/dark scheme, `when pressed`,
-`when focused`, `when hovered`, or `when <Region> is active`. Do not invent breakpoint or
-platform-condition syntax.
+`when focused`, `when hovered`, `when selected` (the active navigation tab), or
+`when <Region> is active`. Do not invent breakpoint or platform-condition syntax.
 
 ## Formatting
 

@@ -5,6 +5,7 @@ import {
   readWatchmanServer,
   watchmanChecks,
   type WatchmanFacts,
+  watchmanSocketFromClient,
 } from '../verification-src/WatchmanHealth'
 
 function facts(overrides: Partial<WatchmanFacts> = {}): WatchmanFacts {
@@ -29,20 +30,40 @@ Describe('Watchman health', () => {
     Expect(checks.map(candidate => candidate.status)).toEqual(['pass', 'pass'])
   })
 
-  Test('fails a denied socket and names the sandbox rule rather than a restart', () => {
+  Test('finds the socket from the client, even when a sandbox refuses the client its state directory', () => {
+    const answered = {
+      exitCode: 0,
+      stderr: '',
+      stdout: '{"sockname":"/home/someone/.local/state/watchman/x-state/sock"}',
+    }
+    // Output captured from a sandboxed shell on 2026-09-25, with the login replaced.
+    const refused = {
+      exitCode: 1,
+      stderr: '2026-09-25T11:55:14,519: [] fchmod(/home/someone/.local/state/watchman/x-state, 2700): '
+        + 'Operation not permitted',
+      stdout: '',
+    }
+
+    Expect(watchmanSocketFromClient(answered)).toBe('/home/someone/.local/state/watchman/x-state/sock')
+    Expect(watchmanSocketFromClient(refused)).toBe('/home/someone/.local/state/watchman/x-state/sock')
+    Expect(watchmanSocketFromClient({ exitCode: 1, stderr: 'unrelated failure', stdout: '' })).toBeUndefined()
+  })
+
+  Test('passes a socket the sandbox leaves out by design, and names the host operations', () => {
+    // No agent sandbox is given Watchman's per-login socket: dev loops that watch run on the host.
     const watchman = check({ server: { state: 'denied' } }, 'watchman')
 
-    Expect(watchman?.status).toBe('fail')
-    Expect(watchman?.detail).toContain('sandbox denies')
-    Expect(watchman?.remediation).toContain('.rulesync/permissions.jsonc')
+    Expect(watchman?.status).toBe('pass')
+    Expect(watchman?.detail).toContain('leaves its socket out by design')
+    Expect(watchman?.remediation).toContain('./agent unsandboxed studio')
     Expect(watchman?.remediation).not.toContain('shutdown-server')
   })
 
-  Test('fails a stopped server with a start command that survives worktree cleanup', () => {
+  Test('warns about a stopped server with a start command that survives worktree cleanup', () => {
     const watchman = check({ server: { state: 'not-running' } }, 'watchman')
 
-    Expect(watchman?.status).toBe('fail')
-    Expect(watchman?.detail).toContain('EMFILE')
+    Expect(watchman?.status).toBe('warn')
+    Expect(watchman?.detail).toContain('fall back to crawling')
     Expect(watchman?.remediation).toContain('/clone/.devenv/profile/bin/watchman version')
   })
 
@@ -93,9 +114,11 @@ Describe('Watchman health', () => {
         ),
       )
         .toEqual({ roots: ['/clone'], state: 'answering' })
-      Expect(await readWatchmanServer(present, failing('ENOENT'))).toEqual({ state: 'denied' })
-      Expect(await readWatchmanServer(present, failing('ECONNREFUSED'))).toEqual({ state: 'not-running' })
-      Expect(await readWatchmanServer(FS.resolvePath('absent.sock', directory), failing('ENOENT')))
+      Expect(await readWatchmanServer(present, failing('ENOENT'), false)).toEqual({ state: 'denied' })
+      Expect(await readWatchmanServer(present, failing('ECONNREFUSED'), false)).toEqual({ state: 'not-running' })
+      // Bun reports a sandbox-denied connect as ECONNREFUSED, so inside a sandbox the code cannot decide.
+      Expect(await readWatchmanServer(present, failing('ECONNREFUSED'), true)).toEqual({ state: 'denied' })
+      Expect(await readWatchmanServer(FS.resolvePath('absent.sock', directory), failing('ENOENT'), true))
         .toEqual({ state: 'not-running' })
       Expect(await readWatchmanServer(FS.resolvePath('absent.sock', directory))).toEqual({ state: 'not-running' })
     } finally {

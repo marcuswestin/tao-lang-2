@@ -408,6 +408,12 @@ Work with an existing plan that needs implementation rather than decision: the d
 keyboard and accessibility ledgers, the navigation follow-ups, `tao test` hardening, and the
 shell-completion tail. Each is a plan-and-execute task on its own.
 
+- Design system status (2026-09-25): **MVP done**. The `bg`/`fg` and flat-catalog deprecations,
+  WordFlower "DESIGN VALUES" tranche, casing errors, `selected`, `color` parameters, and `tao fix`
+  migration are implemented. Styles and sizes used by a shared view are checked across every
+  mounted design, including refinements. `rules { }` and rule checks are deferred past MVP. The
+  plan's "Design values tranche" and "Design rules — deferred past MVP" sections carry the detail.
+
 ### A15 — Studio's simulated-user lane — **done**
 
 Closed by `34132956`. The journey ran ten consecutive green runs in a normal terminal and

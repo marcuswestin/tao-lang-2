@@ -282,6 +282,10 @@ export const ExpressionsCompiler = {
   /** MemberAccessExpression compiles a typed item member path into a runtime value wrapper. */
   MemberAccessExpression(reference: AST.MemberAccessExpression): Compiled {
     const target = resolveRef(reference.target)
+    if (reference.shade !== undefined) {
+      Assert(AST.isDesignColorEntry(target), 'validated shade names a design color family member')
+      return compileDesignColorValue(AST.designColorPath(target, reference.shade))
+    }
     const root = Compile.ValueDeclarationReference(target)
     return compileMemberPath(root, Type.ofValueDeclaration(target), reference.members)
   },
@@ -332,6 +336,8 @@ export const ExpressionsCompiler = {
       CasePayload: payload => gen`${gen.scopeName(payload)}.evaluate()`,
       CommandDeclaration: command => gen`${gen.scopeName(command)}.evaluate()`,
       DesignDeclaration: design => gen`${gen.scopeName(design)}.evaluate()`,
+      DesignColorEntry: color => compileDesignColorValue(AST.designColorPath(color)),
+      DesignToken: token => compileDesignColorValue(AST.designColorPath(token)),
       EntityDataField: () => gen`TR.Value(true)`,
       EntityQueryDeclaration: query => gen`${gen.scopeName(query)}.evaluate()`,
       CaseSetCase: caseSetCase =>
@@ -354,6 +360,14 @@ export const ExpressionsCompiler = {
     return compileNavigationDescriptor(view)
   },
 } as const
+
+/**
+ * A `color` value is the design color's name, never its hex: the mounted design resolves it at render,
+ * so a derived color follows `Scheme` and each app that mounts the view reads its own design.
+ */
+function compileDesignColorValue(path: string): Compiled {
+  return gen`TR.Value(${gen.jsLiteral(path)})`
+}
 
 function compileNavigationDescriptor(
   declaration: AST.ViewDeclaration,

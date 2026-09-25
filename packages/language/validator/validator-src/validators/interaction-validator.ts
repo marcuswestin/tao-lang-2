@@ -3,12 +3,12 @@ import { AST } from '@parser'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
-const bareInteractionConditions = ['pressed', 'focused', 'hovered'] as const
+const bareInteractionConditions = ['pressed', 'focused', 'hovered', 'selected'] as const
 const editingShortcuts = new Set(['primary+a', 'primary+c', 'primary+v', 'primary+x', 'primary+z'])
 
 const interactionValidationMessages = {
   condition: (condition: string) =>
-    `Unknown interaction condition '${condition}'; expected when pressed, when focused, when hovered, when <region> is active, or when Scheme is Light|Dark.`,
+    `Unknown interaction condition '${condition}'; expected when pressed, when focused, when hovered, when selected, when <region> is active, or when Scheme is Light|Dark.`,
   unknownRegion: (subject: string) =>
     `'when ${subject} is active' names no visible view in a generated interaction region; the condition can never become true.`,
   duplicateEntityPolicy: (entity: string, hidden: boolean) =>

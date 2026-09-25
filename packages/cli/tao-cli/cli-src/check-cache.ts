@@ -309,7 +309,10 @@ async function treeIdentity(root: string): Promise<string> {
     return TaoStdlib.ABSENT
   }
   const paths = await Repo.filesUnder(root, { excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames })
-  return await FS.filesIdentity(paths.map(path => [FS.relativePath(root, path), path]))
+  // Git lists directory symlinks as entries. They are not files, and reading one raises EISDIR.
+  const files = (await Promise.all(paths.map(async path => await FS.isFile(path) ? path : undefined)))
+    .filter((path): path is string => path !== undefined)
+  return await FS.filesIdentity(files.map(path => [FS.relativePath(root, path), path]))
 }
 
 /**
