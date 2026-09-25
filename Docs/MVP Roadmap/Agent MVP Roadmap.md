@@ -457,3 +457,25 @@ and distribution remain separate release checks.
   needs a migration before Instant Cloud shuts down on August 31, 2027.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`,
   `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`'s "InstantDB" section.
+
+## Project infrastructure
+
+### A17 — In-repository issues with git-bug, synced to GitHub Issues
+
+Open work is spread across roadmap documents, the developer-environment ledger, and GitHub Issues
+once `A7`'s forms start collecting feedback. [git-bug](https://github.com/git-bug/git-bug) keeps
+issues as Git objects inside the repository, so agents and the Developer can file, read, and close
+them offline, from any worktree, through the same `git` they already use, and its GitHub bridge
+imports and exports them against GitHub Issues.
+
+- Step 1 — adopt git-bug for in-repository issues: add it to the managed toolchain (a dependency
+  change the Developer approves by name), expose the everyday operations through `./agent`, and
+  state in the agent guidance when an issue belongs in git-bug rather than a roadmap or ledger
+  entry.
+- Step 2 — sync with GitHub Issues: configure the GitHub bridge so issues visitors file through
+  `A7`'s forms (`R10`) and issues filed in-repository reach each other in both directions, with the
+  credential kept out of the repository and the sync reachable as a named `./agent` operation.
+- Context: `A7` and `R10` for the GitHub side, `A8` for how a tool joins the toolchain,
+  `Docs/Roadmap/Developer environment upgrades.md` for the ledger this may absorb or sit beside.
+- Done: an agent in a fresh worktree can list, file, and close an issue with git-bug, and one filed
+  on GitHub appears locally after a sync and the reverse.
