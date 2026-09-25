@@ -32,10 +32,13 @@ transcript metadata provide them. Spawn hooks do not share an agent ID with star
 transcript observation cannot establish which explicit selection produced it.
 
 `./agent model-audit` compares the table with what this machine ran instead: a Codex id the
-installed catalog supersedes, or no longer offers when the catalog is fresh; a full Claude id
-behind a newer model of its family; and a Claude Code install whose latest request under an alias
-ran an older model than another install ran. It reads every project's transcripts, since an alias
-resolves per install, and also measures the context and compactions of this checkout's sessions;
-`--until` ends the window early, to measure the period before a change. Session start runs its
-one-day form and prints one line only when there is a finding, which `./agent doctor` also shows.
-A finding is the Developer's to act on, never a reason to edit the table unasked.
+installed catalog supersedes; a full Claude id behind a newer model of its family; and a Claude
+Code install whose latest request under an alias ran an older model than another install ran,
+unless its version also ran the newer one, which makes the older model a session's own choice.
+Every Codex install on the machine rewrites the one catalog with the models offered to its own
+version, so an id missing from it is only a note naming the version that fetched it. The audit
+reads every project's transcripts, since an alias resolves per install, and also measures the
+context and compactions of this checkout's sessions; `--until` ends the window early, to measure
+the period before a change. Session start runs its one-day form and prints one line only when
+there is a finding, which `./agent doctor` also shows. A finding is the Developer's to act on,
+never a reason to edit the table unasked.

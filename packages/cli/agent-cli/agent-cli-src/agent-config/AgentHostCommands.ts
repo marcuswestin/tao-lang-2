@@ -6,8 +6,19 @@ export { agentHostCommands } from './HostCommandPolicy'
 const SOURCE = '.rulesync/permissions.jsonc'
 const CLAUDE_SETTINGS = '.claude/settings.json'
 
-/** The top-level settings rulesync renders afresh, rather than merging from the `claudecode` block. */
-const RULESYNC_RENDERED = new Set(['$schema', 'hooks', 'permissions'])
+/**
+ * What rulesync renders afresh rather than merging from the `claudecode` block: a whole setting, or
+ * the keys within one, as in `permissions`, whose rule lists it renders and whose other keys it merges
+ * from `claudecode.permissions`. Those lists also keep a rule for a tool the source's `permission`
+ * block no longer names at all, which the pruning below does not catch.
+ */
+type Rendered = { readonly [key: string]: true | Rendered }
+
+const RULESYNC_RENDERED: Rendered = {
+  $schema: true,
+  hooks: true,
+  permissions: { allow: true, ask: true, deny: true },
+}
 
 type HostCommandSource = { agentHostCommands?: unknown; claudecode?: unknown }
 
@@ -22,25 +33,29 @@ function hostShapes(prefixes: readonly (readonly string[])[]): string[] {
  * rulesync deep-merges the source's `claudecode` block into the settings already on disk, so an
  * object key deleted from the source lives on in the generated file, where the freshness gate —
  * which regenerates over the committed copy — cannot see it. Arrays and values are rendered afresh;
- * only a key the source no longer has needs dropping.
+ * only a key the source no longer has needs dropping. A record the source does not hold as one is
+ * pruned against nothing, keeping only what rulesync renders within it.
  */
 function withoutRemovedKeys(
   rendered: Record<string, unknown>,
   source: Record<string, unknown>,
-  rendersItself: ReadonlySet<string> = new Set(),
+  renders: Rendered = {},
 ): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(rendered).flatMap(([key, value]) => {
-      if (rendersItself.has(key)) {
+      const rendersKey = Object.hasOwn(renders, key) ? renders[key] : undefined
+      if (rendersKey === true) {
         return [[key, value]]
       }
-      if (!Object.hasOwn(source, key)) {
+      if (rendersKey === undefined && !Object.hasOwn(source, key)) {
         return []
       }
       const sourceValue = source[key]
       return [[
         key,
-        Json.isRecord(value) && Json.isRecord(sourceValue) ? withoutRemovedKeys(value, sourceValue) : value,
+        Json.isRecord(value)
+          ? withoutRemovedKeys(value, Json.isRecord(sourceValue) ? sourceValue : {}, rendersKey)
+          : value,
       ]]
     }),
   )
@@ -57,14 +72,19 @@ export function renderClaudeHostSettings(
 ): string {
   const parsed = JSON.parse(content) as Record<string, unknown>
   const settings = (claudecode === undefined ? parsed : withoutRemovedKeys(parsed, claudecode, RULESYNC_RENDERED)) as {
-    permissions: { allow: string[] }
-    sandbox: { excludedCommands: string[] }
+    permissions?: { allow?: string[] }
+    sandbox?: { excludedCommands?: string[] }
   }
   const hostRule = /^Bash\(\.\/agent unsandboxed(?: |\))/u
-  settings.permissions.allow = settings.permissions.allow.filter(rule => !hostRule.test(rule))
   const shapes = hostShapes(prefixes)
-  settings.permissions.allow.push(...shapes.map(shape => `Bash(${shape})`))
-  settings.sandbox.excludedCommands = shapes
+  settings.permissions = {
+    ...settings.permissions,
+    allow: [
+      ...(settings.permissions?.allow ?? []).filter(rule => !hostRule.test(rule)),
+      ...shapes.map(shape => `Bash(${shape})`),
+    ],
+  }
+  settings.sandbox = { ...settings.sandbox, excludedCommands: shapes }
   return `${JSON.stringify(settings, null, 2)}\n`
 }
 

@@ -160,4 +160,29 @@ Describe('agent host command permissions', () => {
       sandbox: { excludedCommands: [], network: { allowedDomains: ['a'] } },
     })
   })
+
+  Test('keeps the permission lists rulesync renders, dropping a permission setting the source removed', () => {
+    const initial = JSON.stringify({
+      permissions: { additionalDirectories: ['../x'], allow: ['Read'], defaultMode: 'plan', deny: ['Read(.env)'] },
+      sandbox: { excludedCommands: [] },
+    })
+    const rendered = JSON.parse(renderClaudeHostSettings(initial, [], {
+      permissions: { additionalDirectories: ['../x'] },
+      sandbox: { excludedCommands: [] },
+    })) as unknown
+
+    Expect(rendered).toEqual({
+      permissions: { additionalDirectories: ['../x'], allow: ['Read'], deny: ['Read(.env)'] },
+      sandbox: { excludedCommands: [] },
+    })
+  })
+
+  Test('still writes the host rules when the source has no sandbox block or allow list', () => {
+    const rendered = JSON.parse(
+      renderClaudeHostSettings(JSON.stringify({ permissions: {}, sandbox: { enabled: true } }), [['land']], {}),
+    ) as { permissions: { allow: string[] }; sandbox: unknown }
+
+    Expect(rendered.permissions.allow).toEqual(['Bash(./agent unsandboxed land)', 'Bash(./agent unsandboxed land *)'])
+    Expect(rendered.sandbox).toEqual({ excludedCommands: ['./agent unsandboxed land', './agent unsandboxed land *'] })
+  })
 })

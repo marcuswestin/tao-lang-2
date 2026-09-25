@@ -72,7 +72,12 @@ function compactionLine(trigger: string, preTokens: number, timestamp: string, c
 
 type Fixture = { claudeDir: string; codexHome: string; repoRoot: string }
 
-type Catalog = { fetchedAt?: string | undefined; slugs: readonly string[] }
+type Catalog = {
+  clientVersion?: string
+  fetchedAt?: string | undefined
+  hidden?: readonly string[]
+  slugs: readonly string[]
+}
 
 /** fixture writes a routing table and a Codex catalog; `null` leaves the catalog out. */
 async function fixture(catalog: Catalog | null = { fetchedAt: FRESH, slugs: CATALOG }): Promise<Fixture> {
@@ -81,8 +86,12 @@ async function fixture(catalog: Catalog | null = { fetchedAt: FRESH, slugs: CATA
   const codexHome = await FS.mkTmpDir('model-audit-codex-')
   if (catalog !== null) {
     await FS.writeJson(FS.resolvePath('models_cache.json', codexHome), {
+      ...(catalog.clientVersion === undefined ? {} : { client_version: catalog.clientVersion }),
       ...(catalog.fetchedAt === undefined ? {} : { fetched_at: catalog.fetchedAt }),
-      models: catalog.slugs.map(slug => ({ slug })),
+      models: [
+        ...catalog.slugs.map(slug => ({ slug, visibility: 'list' })),
+        ...(catalog.hidden ?? []).map(slug => ({ slug, visibility: 'hide' })),
+      ],
     })
   }
   return { claudeDir: await FS.mkTmpDir('model-audit-claude-'), codexHome, repoRoot }
@@ -94,9 +103,15 @@ async function writeSession(claudeDir: string, session: string, lines: readonly 
   return path
 }
 
-async function writeSubagent(claudeDir: string, agentId: string, lines: readonly string[]): Promise<void> {
+/** writeSubagent writes a subagent transcript, under `subagents/` or a workflow directory beneath it. */
+async function writeSubagent(
+  claudeDir: string,
+  agentId: string,
+  lines: readonly string[],
+  within = '',
+): Promise<void> {
   await FS.writeText(
-    FS.resolvePath(`projects/proj/session/subagents/agent-${agentId}.jsonl`, claudeDir),
+    FS.resolvePath(`projects/proj/session/subagents/${within}agent-${agentId}.jsonl`, claudeDir),
     lines.join('\n'),
   )
 }
@@ -124,8 +139,14 @@ Describe('model audit — id parsing', () => {
     Expect(compareVersions([5, 0], [5])).toEqual(0)
   })
 
-  Test('reads a Codex slug as prefix, version, and name, and rejects one without all three', () => {
-    Expect(parseCodexModelId('gpt-5.6-sol')).toEqual({ id: 'gpt-5.6-sol', name: 'sol', prefix: 'gpt', version: 5.6 })
+  Test('reads a Codex slug as prefix, version tuple, and name, and rejects one without all three', () => {
+    Expect(parseCodexModelId('gpt-5.6-sol')).toEqual({
+      id: 'gpt-5.6-sol',
+      name: 'sol',
+      prefix: 'gpt',
+      version: [5, 6],
+    })
+    Expect(parseCodexModelId('gpt-5.10-sol')?.version).toEqual([5, 10])
     Expect(parseCodexModelId('gpt-reserve')).toBeUndefined()
     Expect(parseCodexModelId('gpt-5.5')).toBeUndefined()
   })
@@ -149,13 +170,35 @@ Describe('model audit — codex column', () => {
     ])
   })
 
-  Test('reports an id a fresh catalog no longer offers, once for the tiers sharing it', async () => {
-    const report = await auditModelRouting(
-      options(await fixture({ fetchedAt: FRESH, slugs: ['gpt-6-astra', 'gpt-6-luna'] })),
+  Test('orders a two-digit minor version after a one-digit one', async () => {
+    const paths = await fixture({ slugs: ['gpt-6-astra', 'gpt-6-sol', 'gpt-5.9-luna', 'gpt-5.10-luna'] })
+    await FS.writeText(
+      FS.resolvePath('agents/skills/delegation/SKILL.md', paths.repoRoot),
+      SKILL_SOURCE.replace('`gpt-6-luna`', '`gpt-5.9-luna`'),
     )
 
-    Expect(report.findings).toEqual([
-      "codex tiers standard, deep name 'gpt-6-sol', which the installed Codex catalog no longer offers",
+    Expect((await auditModelRouting(options(paths))).findings).toEqual([
+      "codex tier fast names 'gpt-5.9-luna', superseded by 'gpt-5.10-luna' in the installed catalog",
+    ])
+  })
+
+  Test('never takes a hidden slug for a newer model', async () => {
+    const report = await auditModelRouting(options(await fixture({ hidden: ['gpt-7-astra'], slugs: CATALOG })))
+
+    Expect(report.findings).toEqual([])
+  })
+
+  Test('notes an id a fresh catalog lacks, naming the Codex that fetched it, instead of a finding', async () => {
+    // Every Codex install on a machine rewrites the one catalog with what its own version is offered,
+    // so an older install's list can lack a model the newer one runs.
+    const report = await auditModelRouting(
+      options(await fixture({ clientVersion: '0.154.0', fetchedAt: FRESH, slugs: ['gpt-6-astra', 'gpt-6-luna'] })),
+    )
+
+    Expect(report.findings).toEqual([])
+    Expect(report.notes).toEqual([
+      "codex tiers standard, deep name 'gpt-6-sol', missing from the catalog Codex 0.154.0 last fetched, which "
+      + 'every Codex install on this machine rewrites with its own offer',
     ])
   })
 
@@ -205,6 +248,18 @@ Describe('model audit — claude columns', () => {
     Expect((await auditModelRouting(options(paths))).findings).toEqual([])
   })
 
+  Test('reports nothing for an older model chosen by name on a version that ran the newer one', async () => {
+    const paths = await fixture()
+    await writeSession(paths.claudeDir, 'default', [
+      assistantLine({ model: 'claude-opus-5-5', timestamp: '2026-09-22T09:00:00Z', version: '2.1.281' }),
+    ])
+    await writeSession(paths.claudeDir, 'chosen', [
+      assistantLine({ model: 'claude-opus-5', timestamp: '2026-09-22T10:00:00Z', version: '2.1.281' }),
+    ])
+
+    Expect((await auditModelRouting(options(paths))).findings).toEqual([])
+  })
+
   Test('ignores a transcript untouched since before the window, by its modified time', async () => {
     const paths = await fixture()
     const old = await writeSession(paths.claudeDir, 'old', [
@@ -243,7 +298,7 @@ Describe('model audit — brief', () => {
   Test('looks back one day whatever the window, and carries no measurements', async () => {
     const paths = await fixture()
     await writeSession(paths.claudeDir, 'old', [
-      assistantLine({ model: 'claude-opus-5', timestamp: '2026-09-19T10:00:00Z' }),
+      assistantLine({ model: 'claude-opus-5', timestamp: '2026-09-19T10:00:00Z', version: '2.1.267' }),
     ])
     await writeSession(paths.claudeDir, 'new', [
       assistantLine({ entrypoint: 'claude-desktop', model: 'claude-opus-5-5', timestamp: '2026-09-23T10:00:00Z' }),
@@ -263,7 +318,7 @@ Describe('model audit — brief', () => {
     await writeSession(paths.claudeDir, 'session', [
       // Inside the one-day window by timestamp; only its place before 300KB of padding keeps it out
       // of the brief scan's 256KB tail.
-      assistantLine({ model: 'claude-opus-5', timestamp: '2026-09-22T13:00:00Z' }),
+      assistantLine({ model: 'claude-opus-5', timestamp: '2026-09-22T13:00:00Z', version: '2.1.267' }),
       `padding ${'x'.repeat(300 * 1024)}`,
       assistantLine({ entrypoint: 'claude-desktop', model: 'claude-opus-5-5', timestamp: '2026-09-23T09:00:00Z' }),
     ])
@@ -315,6 +370,20 @@ Describe('model audit — checkout measurements', () => {
     Expect(info?.context.subagents).toEqual({ count: 1, max: 50, p50: 50, p90: 50 })
     Expect(info?.autoCompactWindow).toEqual(1000)
     Expect(info?.context.overAutoCompactWindow).toEqual(1)
+  })
+
+  Test('counts a transcript under a workflow directory as a subagent', async () => {
+    const paths = await fixture()
+    await writeSubagent(paths.claudeDir, 'w1', [
+      assistantLine({ cacheRead: 70, model: 'claude-opus-5-5', timestamp: '2026-09-22T10:00:00Z' }),
+    ], 'workflows/wf_1/')
+
+    Expect((await auditModelRouting(options(paths))).info?.context.subagents).toEqual({
+      count: 1,
+      max: 70,
+      p50: 70,
+      p90: 70,
+    })
   })
 
   Test('counts compactions by trigger with the context each began from', async () => {

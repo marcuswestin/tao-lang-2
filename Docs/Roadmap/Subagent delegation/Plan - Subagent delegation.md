@@ -91,10 +91,10 @@ percentiles; context is uncached input plus cache writes and reads):
 | Measure                      | p50     | p90     | max     | Count  |
 | ---------------------------- | ------- | ------- | ------- | ------ |
 | Main-session context/request | 321,246 | 625,398 | 966,932 | 13,071 |
-| Subagent context/request     | 148,036 | 307,694 | 592,640 | 17,433 |
+| Subagent context/request     | 147,060 | 306,796 | 592,640 | 17,720 |
 | Context before a compaction  | 459,434 | 822,841 | 967,216 | 16     |
 
-10,550 of those 30,504 requests sent more than 272,000 tokens, and 15 of the 16 compactions were
+10,550 of those 30,791 requests sent more than 272,000 tokens, and 15 of the 16 compactions were
 manual. Run the same command over a later seven-day window to compare.
 
 The 2026-09-23 sample supplied a cost-category observation, but no usable baseline for

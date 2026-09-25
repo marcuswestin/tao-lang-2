@@ -3,13 +3,14 @@ import { DELEGATION_SKILL_PATH, tierModels } from './DelegationProfiles'
 
 /**
  * auditModelRouting reports where the delegation routing table has fallen behind the models this
- * machine's harnesses run: a Codex slug the installed catalog superseded or no longer offers, a full
- * Claude id in the `claude` or `cursor` column behind a newer model of its family, and a Claude Code
- * install whose latest request in a family the table names by alias ran an older model than another
- * install ran. Transcripts are read machine-wide, because an alias resolves per install rather than
- * per checkout. The full report also measures the context this checkout's sessions carried and how
- * they compacted, the baseline the compaction-threshold experiment is judged against. It is evidence
- * for the Developer, never a gate.
+ * machine's harnesses run: a Codex slug the installed catalog superseded, a full Claude id in the
+ * `claude` or `cursor` column behind a newer model of its family, and a Claude Code install whose
+ * latest request in a family the table names by alias ran an older model than another install ran.
+ * A Codex slug missing from the catalog is only a note, since every Codex install on the machine
+ * rewrites that one file with what its own version is offered. Transcripts are read machine-wide,
+ * because an alias resolves per install rather than per checkout. The full report also measures the
+ * context this checkout's sessions carried and how they compacted, the baseline the
+ * compaction-threshold experiment is judged against. It is evidence for the Developer, never a gate.
  */
 
 /** How far back `--brief` looks, whatever `--days` says: it runs at every session start. */
@@ -61,21 +62,29 @@ export function compareVersions(left: readonly number[], right: readonly number[
   return 0
 }
 
-export type CodexModelId = { id: string; name: string; prefix: string; version: number }
+/**
+ * parseVersion reads the leading dotted numbers of a version, such as a Claude Code `2.1.281`.
+ * Undefined when there are none.
+ */
+function parseVersion(text: string): number[] | undefined {
+  return /^\d+(\.\d+)*/.exec(text)?.[0].split('.').map(Number)
+}
+
+export type CodexModelId = { id: string; name: string; prefix: string; version: readonly number[] }
 
 /**
- * parseCodexModelId reads `<prefix>-<version>-<name>` (`gpt-5.6-sol` is gpt, 5.6, sol). Undefined for
- * a slug without that shape, such as `gpt-reserve` or `gpt-5.5`, which the audit can still find
- * missing from a catalog but never superseded.
+ * parseCodexModelId reads `<prefix>-<version>-<name>` (`gpt-5.6-sol` is gpt, 5.6, sol), the version as
+ * a tuple so that 5.10 follows 5.9. Undefined for a slug without that shape, such as `gpt-reserve`
+ * or `gpt-5.5`, which the audit can still find missing from a catalog but never superseded.
  */
 export function parseCodexModelId(id: string): CodexModelId | undefined {
   const [prefix, versionText, ...nameParts] = id.split('-')
   if (
-    prefix === undefined || versionText === undefined || nameParts.length === 0 || !/^\d+(\.\d+)?$/.test(versionText)
+    prefix === undefined || versionText === undefined || nameParts.length === 0 || !/^\d+(\.\d+)*$/.test(versionText)
   ) {
     return undefined
   }
-  return { id, name: nameParts.join('-'), prefix, version: Number(versionText) }
+  return { id, name: nameParts.join('-'), prefix, version: versionText.split('.').map(Number) }
 }
 
 type TranscriptKind = 'main' | 'subagent'
@@ -97,8 +106,8 @@ type ClaudeActivity = { compactions: Compaction[]; requests: ClaudeRequest[] }
 
 /**
  * findClaudeTranscripts lists every transcript this machine's Claude Code has written, in every
- * project: a main session is `projects/<project>/<session>.jsonl`, a subagent is
- * `projects/<project>/<session>/subagents/agent-<id>.jsonl`.
+ * project: a main session is `projects/<project>/<session>.jsonl`, and a subagent is any transcript
+ * beneath `projects/<project>/<session>/subagents/`, a workflow's included under `workflows/<id>/`.
  */
 async function findClaudeTranscripts(claudeDir: string): Promise<Array<{ kind: TranscriptKind; path: string }>> {
   const projectsDir = FS.resolvePath('projects', claudeDir)
@@ -121,10 +130,8 @@ async function findClaudeTranscripts(claudeDir: string): Promise<Array<{ kind: T
       if (!(await FS.isDirectory(subagentsDir))) {
         continue
       }
-      for (const subagent of await FS.listDir(subagentsDir)) {
-        if (subagent.endsWith('.jsonl')) {
-          transcripts.push({ kind: 'subagent', path: FS.resolvePath(subagent, subagentsDir) })
-        }
+      for await (const subagent of FS.walk(subagentsDir, { extensions: ['.jsonl'] })) {
+        transcripts.push({ kind: 'subagent', path: subagent })
       }
     }
   }
@@ -297,7 +304,9 @@ function newestByFamily(requests: readonly ClaudeRequest[]): Map<string, ClaudeM
  * aliasLagFindings covers each bare family the `claude` column names, such as `opus`. An install
  * resolves an alias to the newest model of the family it knows, so an entrypoint whose latest request
  * in the family ran an older model than another install ran in the window is an install behind the
- * machine. An entrypoint that has since updated and run the newer model reports nothing.
+ * machine. An entrypoint that has since updated and run the newer model reports nothing, and neither
+ * does one whose Claude Code version is at or past a version that ran the newer model: that install
+ * knows the newer model, so its session chose the older one by name.
  */
 function aliasLagFindings(claudeTable: ReadonlyMap<string, string>, requests: readonly ClaudeRequest[]): string[] {
   const newest = newestByFamily(requests)
@@ -308,15 +317,32 @@ function aliasLagFindings(claudeTable: ReadonlyMap<string, string>, requests: re
       continue
     }
     const latestByEntrypoint = new Map<string, { parsed: ClaudeModelId; request: ClaudeRequest }>()
+    let knownFrom: number[] | undefined
     for (const request of requests) {
       const parsed = parseClaudeModelId(request.model)
+      if (parsed?.family !== alias) {
+        continue
+      }
       const latest = latestByEntrypoint.get(request.entrypoint)
-      if (parsed?.family === alias && (latest === undefined || request.timeMs > latest.request.timeMs)) {
+      if (latest === undefined || request.timeMs > latest.request.timeMs) {
         latestByEntrypoint.set(request.entrypoint, { parsed, request })
       }
+      const version = parseVersion(request.ccVersion)
+      if (
+        version !== undefined && compareVersions(parsed.version, newestModel.version) === 0
+        && (knownFrom === undefined || compareVersions(version, knownFrom) < 0)
+      ) {
+        knownFrom = version
+      }
+    }
+    const knowsNewest = (request: ClaudeRequest): boolean => {
+      const version = parseVersion(request.ccVersion)
+      return version !== undefined && knownFrom !== undefined && compareVersions(version, knownFrom) >= 0
     }
     const lagging = [...latestByEntrypoint.values()]
-      .filter(({ parsed }) => compareVersions(parsed.version, newestModel.version) < 0)
+      .filter(({ parsed, request }) =>
+        compareVersions(parsed.version, newestModel.version) < 0 && !knowsNewest(request)
+      )
       .sort((left, right) => left.request.entrypoint.localeCompare(right.request.entrypoint))
     for (const { request } of lagging) {
       findings.push(
@@ -349,31 +375,54 @@ function explicitIdFindings(
   return findings
 }
 
-type CodexCatalog = { fetchedAtMs?: number; path: string; slugs: string[] }
+type CodexCatalog = {
+  /** The Codex version that fetched the catalog, whose offer it lists. */
+  clientVersion?: string
+  fetchedAtMs?: number
+  /** Slugs the picker shows; a hidden one is offered but never a newer choice. */
+  listed: string[]
+  path: string
+  slugs: string[]
+}
 
 /**
- * codexFindings compares each Codex id with the installed catalog. A slug with the same prefix and
- * name at a higher version supersedes it however old the catalog is. An id missing from the catalog
- * is reported only from a fresh one, since a stale catalog predates whatever the table moved to.
+ * codexFindings reports each Codex id a listed slug with the same prefix and name at a higher version
+ * supersedes, however old the catalog is: whichever install fetched it, that model exists.
  */
-function codexFindings(codexTable: ReadonlyMap<string, string>, catalog: CodexCatalog, fresh: boolean): string[] {
-  const offered = new Set(catalog.slugs)
-  const parsedCatalog = catalog.slugs.flatMap(slug => parseCodexModelId(slug) ?? [])
+function codexFindings(codexTable: ReadonlyMap<string, string>, catalog: CodexCatalog): string[] {
+  const parsedCatalog = catalog.listed.flatMap(slug => parseCodexModelId(slug) ?? [])
   const findings: string[] = []
   for (const [id, tiers] of tiersByModel(codexTable)) {
     const parsed = parseCodexModelId(id)
     // Matched by prefix and name rather than exact id, so a replacement that renumbered the
     // version — `gpt-6-astra` to `gpt-7-astra` — is named instead of reported as missing.
     const newer = parsed === undefined ? undefined : parsedCatalog
-      .filter(model => model.prefix === parsed.prefix && model.name === parsed.name && model.version > parsed.version)
-      .sort((left, right) => right.version - left.version)[0]
+      .filter(model =>
+        model.prefix === parsed.prefix && model.name === parsed.name
+        && compareVersions(model.version, parsed.version) > 0
+      )
+      .sort((left, right) => compareVersions(right.version, left.version))[0]
     if (newer !== undefined) {
       findings.push(`${tierPhrase('codex', tiers)} '${id}', superseded by '${newer.id}' in the installed catalog`)
-    } else if (fresh && !offered.has(id)) {
-      findings.push(`${tierPhrase('codex', tiers)} '${id}', which the installed Codex catalog no longer offers`)
     }
   }
   return findings
+}
+
+/**
+ * codexMissingNotes names each Codex id a fresh catalog does not offer. It is a note rather than a
+ * finding: every Codex install on the machine rewrites the one catalog with what its own version is
+ * offered, so an id missing from it may be one an older install was never offered.
+ */
+function codexMissingNotes(codexTable: ReadonlyMap<string, string>, catalog: CodexCatalog): string[] {
+  const offered = new Set(catalog.slugs)
+  const fetcher = catalog.clientVersion === undefined ? 'Codex' : `Codex ${catalog.clientVersion}`
+  return [...tiersByModel(codexTable)]
+    .filter(([id]) => !offered.has(id))
+    .map(([id, tiers]) =>
+      `${tierPhrase('codex', tiers)} '${id}', missing from the catalog ${fetcher} last fetched, which every `
+      + 'Codex install on this machine rewrites with its own offer'
+    )
 }
 
 /** readCodexCatalog makes a missing or unreadable catalog a note: Codex writes it, not the table. */
@@ -387,13 +436,18 @@ async function readCodexCatalog(codexHome: string): Promise<{ catalog?: CodexCat
     return { note: `${path} is not a model catalog, so the codex column was not checked` }
   }
   const fetchedAtMs = typeof parsed['fetched_at'] === 'string' ? Date.parse(parsed['fetched_at']) : Number.NaN
+  const models = parsed['models'].flatMap(model =>
+    Json.isRecord(model) && typeof model['slug'] === 'string'
+      ? [{ hidden: model['visibility'] === 'hide', slug: model['slug'] }]
+      : []
+  )
   return {
     catalog: {
+      clientVersion: typeof parsed['client_version'] === 'string' ? parsed['client_version'] : undefined,
       fetchedAtMs: Number.isNaN(fetchedAtMs) ? undefined : fetchedAtMs,
+      listed: models.filter(model => !model.hidden).map(model => model.slug),
       path,
-      slugs: parsed['models'].flatMap(model =>
-        Json.isRecord(model) && typeof model['slug'] === 'string' ? [model['slug']] : []
-      ),
+      slugs: models.map(model => model.slug),
     },
   }
 }
@@ -499,6 +553,7 @@ export async function auditModelRouting(options: ModelAuditOptions): Promise<Mod
   }
   const activity = await collectClaudeActivity(options.claudeDir, sinceMs, untilMs, brief)
   const codex = await readCodexCatalog(options.codexHome)
+  const codexTable = tierModels(skillSource, 'codex')
   const fetchedAtMs = codex.catalog?.fetchedAtMs
   const fresh = fetchedAtMs !== undefined && fetchedAtMs <= options.nowMs
     && options.nowMs - fetchedAtMs <= CATALOG_MAX_AGE_MS
@@ -506,12 +561,14 @@ export async function auditModelRouting(options: ModelAuditOptions): Promise<Mod
     notes.push(codex.note)
   } else if (!fresh) {
     notes.push('the Codex catalog is undated or more than three days old, so a missing codex id was not reported')
+  } else if (codex.catalog !== undefined) {
+    notes.push(...codexMissingNotes(codexTable, codex.catalog))
   }
 
   const claudeTable = tierModels(skillSource, 'claude')
   const report: ModelAuditReport = {
     findings: [
-      ...(codex.catalog === undefined ? [] : codexFindings(tierModels(skillSource, 'codex'), codex.catalog, fresh)),
+      ...(codex.catalog === undefined ? [] : codexFindings(codexTable, codex.catalog)),
       ...aliasLagFindings(claudeTable, activity.requests),
       ...explicitIdFindings('claude', claudeTable, activity.requests),
       ...explicitIdFindings('cursor', tierModels(skillSource, 'cursor'), activity.requests),
