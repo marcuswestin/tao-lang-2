@@ -233,6 +233,7 @@ export function mainSource(): string {
 
     ${multiWindowProbeResult.toString()}
     ${hostControlWindowMatches.toString()}
+    ${settleStudioQuitCleanup.toString()}
     ${hostControlScript.toString()}
 
     const externalStudioUrl = process.env.TAO_STUDIO_URL
@@ -828,30 +829,36 @@ export function mainSource(): string {
     }
 
     Electrobun.events.on('before-quit', event => {
-      GlobalShortcut.unregisterAll()
-      hostControlServer?.stop()
-      hostControlServer = undefined
-      hostControlReloads.clear()
-      hostControlReadyWindows.clear()
-      for (const waiters of hostControlReadyWaiters.values()) {
-        for (const resolve of waiters) resolve()
+      try {
+        GlobalShortcut.unregisterAll()
+        hostControlServer?.stop()
+        hostControlServer = undefined
+        hostControlReloads.clear()
+        hostControlReadyWindows.clear()
+        for (const waiters of hostControlReadyWaiters.values()) {
+          for (const resolve of waiters) resolve()
+        }
+        hostControlReadyWaiters.clear()
+        for (const pending of hostControlRequests.values()) {
+          clearTimeout(pending.timeout)
+          pending.reject(new Error('Studio semantic control closed with the native shell.'))
+        }
+        hostControlRequests.clear()
+      } catch (error) {
+        console.error('Studio native cleanup failed during quit:', error)
       }
-      hostControlReadyWaiters.clear()
-      for (const pending of hostControlRequests.values()) {
-        clearTimeout(pending.timeout)
-        pending.reject(new Error('Studio semantic control closed with the native shell.'))
-      }
-      hostControlRequests.clear()
       if (packagedService === undefined || quitAfterCleanup) return
       event.response = { allow: false }
-      quitting ??= packagedService.stop()
-      void quitting.then(
-        () => {
+      if (quitting !== undefined) return
+      quitting = Promise.resolve().then(() => packagedService.stop())
+      void settleStudioQuitCleanup(quitting, 10_000).then(
+        result => {
+          if (result === 'timed-out') console.error('Studio service cleanup timed out during quit.')
           quitAfterCleanup = true
           Utils.quit()
         },
         error => {
-          showNativeError(error)
+          console.error('Studio service cleanup failed during quit:', error)
           quitAfterCleanup = true
           Utils.quit()
         },
@@ -903,4 +910,24 @@ export function mainSource(): string {
       return url
     }
   `)
+}
+
+/** Give the native shell a finite chance to flush its embedded service before exiting. */
+async function settleStudioQuitCleanup(
+  cleanup: Promise<void>,
+  timeoutMs: number,
+): Promise<'complete' | 'timed-out'> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      cleanup.then(() => 'complete' as const),
+      new Promise<'timed-out'>(resolve => {
+        timeout = setTimeout(() => resolve('timed-out'), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout)
+    }
+  }
 }

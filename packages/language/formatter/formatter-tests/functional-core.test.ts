@@ -149,6 +149,26 @@ Describe('functional core formatter', () => {
   )
 
   Test(
+    'formats a bare guard and the file-level read net',
+    formats(
+      `guard   default{loading->Spinner()missing->{Text("Gone")}error->Message{Text(Message)}}\nview DocumentScreen(Document){render Stack(){guard   Document\nDocumentEditor(Document)}}`,
+      `
+        guard default {
+           loading -> Spinner()
+           missing -> { Text("Gone") }
+           error -> Message { Text(Message) }
+        }
+
+        view DocumentScreen(Document) {
+           render Stack() {
+              guard Document
+              DocumentEditor(Document)
+        }  }
+      `,
+    ),
+  )
+
+  Test(
     'formats positional action callback signatures compactly',
     formats(
       `view Field(Change action ( text,number ),Submit action ( )){render Text("Field")}`,

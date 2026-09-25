@@ -1,7 +1,7 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen, ReadNetBinding, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { activeDataStorePlan } from './data-store-context'
 import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
@@ -102,6 +102,7 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       ? gen`design: () => ${design},`
       : gen.noop()
   }
+      ${options.readNet ? gen`readNet: () => ${gen.scopeName({ name: ReadNetBinding })},` : gen.noop()}
       auxiliaries: () => ({
         ${crossModuleBase ? gen`...${baseReference}.definition.auxiliaries(),` : gen.noop()}
         ${
@@ -210,6 +211,7 @@ function compileStudioSubjects(
         ),
         design: () => ${gen.Name(appDefinition)}.design,
         name: ${gen.Name(appDefinition)}.definition.name,
+        readNet: () => ${gen.Name(appDefinition)}.readNet,
         navigator: () =>
           TR.Navigation.Configure(
             TR.Navigation.Declaration(

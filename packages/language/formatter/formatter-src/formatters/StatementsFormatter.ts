@@ -93,6 +93,22 @@ export const StatementsFormatter = {
     }
   },
 
+  /** GuardDefaultStatement puts each read net case on one indented line. */
+  GuardDefaultStatement(f) {
+    f.oneSpaceAfter('guard')
+    f.oneSpaceAfter('default')
+    f.indentedBraceBlock(f.node.branches)
+    f.lineSeparatedList(f.node.branches)
+  },
+
+  /** GuardDefaultBranch spaces its arrow against a bare render, an error payload, or a block. */
+  GuardDefaultBranch(f) {
+    f.oneSpaceBefore('->')
+    if (f.node.payload !== undefined || f.node.render !== undefined) {
+      f.oneSpaceAfter('->')
+    }
+  },
+
   /** EventHandler formats control configuration as `on event Action` or an inline handler. */
   EventHandler(f) {
     f.oneSpaceAfter('on')
@@ -120,6 +136,7 @@ export const StatementsFormatter = {
 function isConditionalBranch(container: AST.Node | undefined): boolean {
   return container !== undefined
     && (AST.isGuardRenderBranch(container)
+      || AST.isGuardDefaultBranch(container)
       || AST.isWhenRenderBranch(container)
       || AST.isWhenRenderOtherwise(container))
 }
