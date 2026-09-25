@@ -59,9 +59,12 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
         ).join(', ') ?? ''
       }) => ${typescriptType(result)}`
       : typescriptType(result)
+    const actionValue = result.kind === 'primitive' && result.primitive === 'action'
     contracts.push({
       ...(AST.isFunctionCallExpression(expression)
         ? { arity: String(expression.argumentList?.arguments.length ?? 0) }
+        : actionValue
+        ? { arity: String(result.parameters.length), result: 'void | Promise<void>' }
         : {}),
       exportName,
       path: bridge.path,
@@ -72,13 +75,12 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
     if (action.foreign === undefined) {
       continue
     }
+    // The compiler fills Tao defaults before invoking the handwritten implementation.
     const parameters = AST.parametersOf(action).map((parameter, index) =>
-      `arg${index}${parameter.defaultValue === undefined ? '' : '?'}: ${typescriptType(Type.ofParameter(parameter))}`
+      `arg${index}: ${foreignActionParameterType(Type.ofParameter(parameter))}`
     )
-    const required = AST.parametersOf(action).filter(parameter => parameter.defaultValue === undefined).length
-    const arity = Array.from({ length: parameters.length - required + 1 }, (_, index) => required + index).join(' | ')
     contracts.push({
-      arity,
+      arity: String(parameters.length),
       exportName: action.name,
       path: action.foreign.path,
       result: 'void | Promise<void>',
@@ -90,11 +92,15 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
     if (foreign === undefined) {
       continue
     }
-    const parameters = AST.parametersOf(view).map(parameter =>
-      `${JSON.stringify(Type.parameterName(parameter))}${parameter.defaultValue === undefined ? '' : '?'}: ${
-        viewParameterType(Type.ofParameter(parameter))
+    // Tao fills defaults before passing props to the handwritten component.
+    const parameters = AST.parametersOf(view).map(parameter => {
+      const value = viewParameterType(Type.ofParameter(parameter))
+      return `${JSON.stringify(Type.parameterName(parameter))}: ${
+        parameter.mutable
+          ? `{ value: ${value}; change: (next: ${value}) => void | Promise<void> }`
+          : value
       }`
-    )
+    })
     const slots = foreign.slots.length === 0
       ? []
       : [`Slots: { ${foreign.slots.map(slot => `${JSON.stringify(slot.name)}: any`).join('; ')} }`]
@@ -103,7 +109,33 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
     contracts.push({
       exportName: view.name,
       path: foreign.path,
-      type: `(props: { ${props.join('; ')} }) => unknown`,
+      type: `(props: { ${props.join('; ')} }) => ReturnType<typeof TR.VisualNativeRoot>`,
+    })
+  }
+  for (const declaration of file.statements.filter(AST.isConfigurableDeclaration)) {
+    if (declaration.aliasTarget !== undefined) {
+      continue
+    }
+    const primitive = AST.configurationPrimitiveOf(declaration)
+    if (primitive !== 'nav' && primitive !== 'datasource') {
+      continue
+    }
+    const implementation = AST.configurationImplementationOf(declaration)
+    if (implementation?.path === undefined) {
+      continue
+    }
+    let owner: AST.Node | undefined = implementation
+    while (owner !== undefined && owner !== declaration) {
+      owner = owner.$container
+    }
+    if (owner !== declaration) {
+      continue
+    }
+    contracts.push({
+      arity: '0',
+      exportName: implementation.exportName,
+      path: implementation.path,
+      type: `() => ${primitive === 'nav' ? 'TR.NavKind' : 'TR.DataProvider'}`,
     })
   }
   return contracts
@@ -147,7 +179,11 @@ function typescriptType(type: ASTUtils.TaoType, seen = new Set<AST.EntityDataDec
       }
       return 'unknown'
     },
-    list: type => `${typescriptType(type.element ?? { kind: 'unresolved' }, seen)}[]`,
+    list: type => {
+      const element = type.element ?? { kind: 'unresolved' }
+      const rendered = typescriptType(element, seen)
+      return `${element.kind === 'union' ? `(${rendered})` : rendered}[]`
+    },
     union: type => type.members.map(member => typescriptType(member, seen)).join(' | '),
     entity: type => {
       if (seen.has(type.entity)) {
@@ -179,11 +215,20 @@ function typescriptType(type: ASTUtils.TaoType, seen = new Set<AST.EntityDataDec
 /** View action parameters retain the runtime's invokable action and reactive argument wrappers. */
 function viewParameterType(type: ASTUtils.TaoType): string {
   if (type.kind === 'primitive' && type.primitive === 'action') {
-    return `TR.ActionValue<[${
-      type.parameters.map(parameter => `TR.Value<${typescriptType(parameter.type)}>`).join(', ')
-    }]>`
+    return runtimeActionType(type)
   }
   return typescriptType(type)
+}
+
+function foreignActionParameterType(type: ASTUtils.TaoType): string {
+  return type.kind === 'primitive' && type.primitive === 'action' ? runtimeActionType(type) : typescriptType(type)
+}
+
+function runtimeActionType(type: Extract<ASTUtils.TaoType, { kind: 'primitive'; primitive: 'action' }>): string {
+  const parameters = type.parameters.map(parameter =>
+    `TR.Value<${typescriptType(parameter.type)}>${parameter.optional ? '?' : ''}`
+  )
+  return `TR.ActionValue<[${parameters.join(', ')}]>`
 }
 
 function itemActionType(type: Extract<ASTUtils.TaoType, { kind: 'primitive'; primitive: 'action' }>): string {
@@ -201,6 +246,8 @@ function moduleFor(contracts: readonly BridgeContract[], file: AST.TaoFile): str
   if (
     contracts.some(contract => contract.type.includes('TR.ActionValue<') || contract.type.includes('TR.Value<'))
     || caseSets.length > 0
+    || contracts.some(contract => contract.type.includes('TR.NavKind') || contract.type.includes('TR.DataProvider'))
+    || contracts.some(contract => contract.type.includes('TR.VisualNativeRoot'))
   ) {
     lines.push("import type TR from '@tao/runtime'")
   }

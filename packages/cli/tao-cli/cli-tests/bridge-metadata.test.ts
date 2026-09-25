@@ -78,4 +78,111 @@ action ExportDocument(Document) from ./Export.ts
       ).toBe(true)
     })
   })
+
+  Test('checks the complete sidecar signature after Tao fills action defaults', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'Main.tao': 'action Save(Body text, Title text default "Untitled") from ./Save.ts\n',
+      'Save.ts': 'export function Save(body: string, title: string): void { void body; void title }\n',
+    }, async root => {
+      const results = await runCheck(root)
+      const errors = results.flatMap(result => result.diagnostics ?? [])
+        .filter(diagnostic => diagnostic.severity === 'error')
+      Expect(errors).toEqual([])
+      const metadata = await FS.readText(FS.resolvePath('Main.tao.ts', root))
+      Expect(metadata).toContain('export type Save = (arg0: string, arg1: string) => void | Promise<void>')
+      Expect(metadata).toContain('unknown as 2 satisfies Parameters<typeof Sidecar.Save>')
+    })
+  })
+
+  Test('checks mutable view props, filled defaults, and rendered output', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'Main.tao': 'view Editor(mutable Value text, Label text default "Draft") from ./Editor.tsx\n',
+      'Editor.tsx': `export function Editor(props: {
+        Value: { value: string; change(next: string): void }
+        Label: string
+      }) { return props.Label }
+`,
+    }, async root => {
+      const good = await runCheck(root)
+      Expect(good.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
+        .toEqual([])
+      const metadata = await FS.readText(FS.resolvePath('Main.tao.ts', root))
+      Expect(metadata).toContain('"Value": { value: string; change: (next: string) => void | Promise<void> }')
+      Expect(metadata).toContain('"Label": string')
+      Expect(metadata).toContain('=> ReturnType<typeof TR.VisualNativeRoot>')
+      await FS.writeText(FS.resolvePath('Editor.tsx', root), 'export function Editor() { return { invalid: true } }\n')
+      const wrong = await runCheck(root)
+      Expect(
+        wrong.flatMap(result => result.diagnostics ?? []).some(diagnostic =>
+          diagnostic.message.includes('TypeScript bridge:')
+        ),
+      ).toBe(true)
+    })
+  })
+
+  Test('parenthesizes union list elements in the sidecar contract', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'Main.tao': `type Mixed is text | number
+function Echo(Values list of Mixed) returns list of Mixed {
+   return Echo(Values) from ./Echo.ts
+}
+`,
+      'Echo.ts': 'export const Echo = (values: (string | number)[]): (string | number)[] => values\n',
+    }, async root => {
+      const results = await runCheck(root)
+      Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
+        .toEqual([])
+      Expect(await FS.readText(FS.resolvePath('Main.tao.ts', root))).toContain('(string | number)[]')
+    })
+  })
+
+  Test('checks foreign action callback values as invokable runtime actions', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'Main.tao': 'action Register(Callback action(text)) from ./Register.ts\n',
+      'Register.ts': `import type TR from '@tao/runtime'
+export function Register(callback: TR.ActionValue<[TR.Value<string>]>): void { void callback.invoke }
+`,
+    }, async root => {
+      const results = await runCheck(root)
+      Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
+        .toEqual([])
+      Expect(await FS.readText(FS.resolvePath('Main.tao.ts', root)))
+        .toContain('arg0: TR.ActionValue<[TR.Value<string>]>')
+    })
+  })
+
+  Test('checks configuration implementation and bare action exports', async () => {
+    await withTaoFixture({
+      ...checkedProjectFile,
+      'Main.tao': `type Memory is datasource with {
+   provider MemoryProvider from ./Memory.ts
+}
+type CustomMemory is Memory with { }
+let OpenUrl is action(text) = OpenUrl from ./OpenUrl.ts
+`,
+      'Memory.ts': `import type TR from '@tao/runtime'
+export function MemoryProvider(): TR.DataProvider { throw Error('test') }
+`,
+      'OpenUrl.ts': 'export function OpenUrl(url: string): void { void url }\n',
+    }, async root => {
+      const good = await runCheck(root)
+      Expect(good.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
+        .toEqual([])
+      const metadata = await FS.readText(FS.resolvePath('Main.tao.ts', root))
+      Expect(metadata).toContain('Sidecar2.MemoryProvider satisfies MemoryProvider')
+      Expect(metadata.split('MemoryProvider satisfies MemoryProvider').length).toBe(2)
+      Expect(metadata).toContain('unknown as 1 satisfies Parameters<typeof Sidecar1.OpenUrl>')
+      await FS.writeText(FS.resolvePath('OpenUrl.ts', root), 'export function OpenUrl(): number { return 1 }\n')
+      const wrong = await runCheck(root)
+      Expect(
+        wrong.flatMap(result => result.diagnostics ?? []).some(diagnostic =>
+          diagnostic.message.includes('TypeScript bridge:')
+        ),
+      ).toBe(true)
+    })
+  })
 })

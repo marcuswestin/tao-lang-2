@@ -9,6 +9,11 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
   await TaoAppModules.ensureProject(workspaceRoot)
   const projectConfig = FS.resolvePath('tsconfig.json', workspaceRoot)
   const checkoutRoot = FS.resolvePath('../../../..', import.meta.dir)
+  const resourceRoot = TaoResources.declaredRoot()
+  const hostModules = resourceRoot === undefined
+    ? FS.resolvePath('node_modules', checkoutRoot)
+    : FS.resolvePath(`../${TaoResources.HOST_DEPENDENCIES_DIRECTORY}/node_modules`, resourceRoot)
+  const runtimeRoot = TaoAppModules.runtimeRoot()
   const repositoryConfig = FS.resolvePath('packages/tsconfig.base.json', checkoutRoot)
   const inheritedConfig = await FS.isFile(projectConfig)
     ? projectConfig
@@ -27,16 +32,21 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
       module: 'ESNext',
       moduleResolution: 'bundler',
       noEmit: true,
+      noPropertyAccessFromIndexSignature: false,
+      ...(inheritedConfig === undefined
+        ? { paths: { '@tao/runtime': [FS.resolvePath('TaoRuntime-src/TR.ts', runtimeRoot)] } }
+        : {}),
       skipLibCheck: true,
       strict: true,
       target: 'ES2022',
+      typeRoots: [FS.resolvePath('@types', hostModules), FS.resolvePath('node_modules/@types', runtimeRoot)],
+      types: ['bun', 'node', 'react'],
       ...(inheritedConfig === repositoryConfig ? { rootDir: checkoutRoot } : {}),
     },
     files: modules,
     include: [],
   }
   await FS.writeJson(configPath, config)
-  const resourceRoot = TaoResources.declaredRoot()
   const tsc = resourceRoot === undefined
     ? FS.resolvePath('../../../../node_modules/typescript/bin/tsc', import.meta.dir)
     : FS.resolvePath(`../${TaoResources.HOST_DEPENDENCIES_DIRECTORY}/node_modules/typescript/bin/tsc`, resourceRoot)

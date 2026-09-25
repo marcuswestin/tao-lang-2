@@ -484,7 +484,9 @@ types and checks each sidecar's named export with `satisfies`. It is ignored by 
 Tao declaration and handwritten sidecar, and may import its generated types if useful. `tao check`
 also runs TypeScript over the generated modules and their sidecars, reporting a missing export or a
 parameter or result mismatch as an error. The check includes the callable arity, so a function with
-too few or too many parameters cannot silently satisfy a call boundary.
+too few or too many parameters cannot silently satisfy a call boundary. Tao fills defaulted foreign
+action and view parameters before invoking the sidecar, so its TypeScript signature receives every
+declared parameter. Action-valued foreign arguments retain an invokable runtime action value.
 
 An explicitly action-typed bare export is the effectful form of the same boundary:
 
@@ -513,6 +515,7 @@ not-yet-started argument set while one call is in flight; the detailed transacti
 contract is specified in [Tao Actions](Tao%20Actions.md).
 The generated bridge contract checks its plain JavaScript parameter types and `void` or promised
 `void` completion. Entity parameters are structural records of their declared fields.
+Configuration implementation factories are checked against the declared nav or datasource protocol.
 
 A view may publish the same typed boundary directly:
 
