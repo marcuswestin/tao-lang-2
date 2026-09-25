@@ -106,13 +106,13 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
    * already have fixed, and the exit code rides on them, so a workspace with any error is never
    * stamped and is always checked from source.
    */
-  const cleared = new Map<string, readonly CheckCacheDiagnostic[]>()
+  const cleared = new Map<string, { diagnostics: readonly CheckCacheDiagnostic[]; metadataPaths: readonly string[] }>()
   for (const [workspaceRoot, partition] of partitions) {
     const replayed = await cache?.reuse(workspaceRoot, partition.entryFiles)
-    if (replayed !== undefined && !await missingBridgeMetadata(partition.entryFiles)) {
-      partition.replayed = replayed
+    if (replayed !== undefined) {
+      partition.replayed = replayed.diagnostics
       options.onWorkspace?.({ resolution: 'replayed', workspaceRoot })
-      mergeDiagnostics(diagnosticsByFile, replayedDiagnostics(workspaceRoot, replayed))
+      mergeDiagnostics(diagnosticsByFile, replayedDiagnostics(workspaceRoot, replayed.diagnostics))
       continue
     }
     options.onWorkspace?.({ resolution: 'checked', workspaceRoot })
@@ -125,15 +125,19 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
         ? await workspace.validateFiles(partition.entryFiles)
         : await workspace.validateParsedFiles([...parsedFiles.values()])
       const diagnostics = [...validation.diagnostics]
+      let modules: string[] = []
       if (!Diagnostics.hasError(diagnostics)) {
         const localFiles = validation.files.filter(file => FS.pathIsWithin(file.path, workspaceRoot))
-        const modules = await BridgeMetadata.write(localFiles)
+        modules = await BridgeMetadata.write(localFiles)
         diagnostics.push(...await checkBridgeModules(workspaceRoot, modules))
       }
       mergeDiagnostics(diagnosticsByFile, indexDiagnostics(diagnostics))
       if (!Diagnostics.hasError(diagnostics)) {
         // Offered for stamping, and withdrawn below by any file this workspace cannot report clean.
-        cleared.set(workspaceRoot, recordableWarnings(workspaceRoot, diagnostics))
+        cleared.set(workspaceRoot, {
+          diagnostics: recordableWarnings(workspaceRoot, diagnostics),
+          metadataPaths: modules,
+        })
       }
     }
   }
@@ -176,30 +180,10 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
 
   if (cache !== undefined) {
     await cache.commit(
-      [...cleared].map(([workspaceRoot, diagnostics]) => ({ diagnostics, workspaceRoot })),
+      [...cleared].map(([workspaceRoot, record]) => ({ ...record, workspaceRoot })),
     )
   }
   return results
-}
-
-/** A deleted generated module invalidates an otherwise reusable clean check. */
-async function missingBridgeMetadata(entryFiles: readonly string[]): Promise<boolean> {
-  for (const path of entryFiles) {
-    if (await FS.isFile(`${path}.ts`)) {
-      continue
-    }
-    const source = await FS.readText(path)
-    // Configuration types also get source metadata, including derived and package aliases.
-    // This is a conservative cache guard; parsing decides whether the module is actually emitted.
-    if (
-      /\bfrom\s+\S+\.tsx?\b/.test(source)
-      || /\btype\s+\w+\s+is\s+(?:nav|datasource|\w+\s+with\s*\{)/.test(source)
-      || /\btype\s+\w+\s*=\s*\w+\.\w+/.test(source)
-    ) {
-      return true
-    }
-  }
-  return false
 }
 
 /**
