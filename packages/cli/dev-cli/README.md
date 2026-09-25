@@ -342,7 +342,8 @@ to the ordinary landing handler; the generated harness rules allow only the name
 `.rulesync/permissions.jsonc`. Landing uses a single lease-checked
 `git push --atomic` for main, the archive, and feature-branch deletion. The host process runs
 repository code with normal filesystem and GitHub credential access. After a direct landing is
-confirmed, a person can remove an older installed LaunchAgent with `just landing-broker-teardown`.
+confirmed, a person can remove an older installed landing broker, including its LaunchAgent,
+executable, configuration, and logs, with `just landing-broker-teardown`.
 
 Nothing verifies the same bytes twice. When an agent has already run `verify --complete`, the
 `verify-full` the merge runs at that same tree skips every gate that run recorded and executes only

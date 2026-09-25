@@ -35,16 +35,25 @@ github-setup:
     git ls-remote --exit-code origin refs/heads/main >/dev/null
     printf 'GitHub HTTPS authentication is ready for %s.\n' "$(git remote get-url origin)"
 
-# Remove an obsolete local Tao landing LaunchAgent after direct landing has been verified
+# Remove the obsolete local Tao landing broker after direct landing has been verified
 [group('Setup')]
 landing-broker-teardown:
     #!/usr/bin/env bash
     set -euo pipefail
     label='com.tao-lang.landing-broker'
+    service="gui/$(id -u)/$label"
     plist="$HOME/Library/LaunchAgents/${label}.plist"
-    launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
-    rm -f "$plist"
-    printf 'Removed obsolete %s LaunchAgent if present.\n' "$label"
+    broker_root="$HOME/Library/Application Support/Tao/landing-broker"
+    broker_logs="$HOME/Library/Logs/Tao"
+    launchctl bootout "$service" 2>/dev/null || true
+    if launchctl print "$service" >/dev/null 2>&1; then
+      printf 'Could not stop %s; its files were left intact.\n' "$label" >&2
+      exit 1
+    fi
+    rm -f -- "$plist" "$broker_logs/landing-broker.err.log" "$broker_logs/landing-broker.out.log"
+    rm -rf -- "$broker_root"
+    rmdir "$broker_logs" "$HOME/Library/Application Support/Tao" 2>/dev/null || true
+    printf 'Removed obsolete %s service, files, and logs if present.\n' "$label"
 
 # Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
 [group('Setup')]
