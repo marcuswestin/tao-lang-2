@@ -2,9 +2,15 @@ use Workspaces from @data
 use WordFlowerDrawerNavigator, WordFlowerNavigator, WordFlowerTabsNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
+use Spinner, TextMultiline from @tao/ui
 use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
-// Tranche status: absorbed
+// Tranche status: open
+//
+// READ NET. Every app has a read net for the exceptional read cases a guard site does not name:
+// loading, missing, unauthorized, and error. The runtime supplies it; a file-level `guard default`
+// restyles it case by case, as WordFlower does for loading and error. A bare `guard Subject` sends
+// every exceptional case to the net, and a site names only the cases it treats specially.
 //
 // SEARCH. A field marked `(search)` is part of its entity's search corpus, and a query's
 // `search <term>` keeps the rows whose search fields match the term with the matcher keyboard
@@ -542,6 +548,14 @@ project {
    DefaultApp WordFlower
    remote none
    license MIT
+}
+
+// The read net: a guard site that does not name an exceptional read case sends it here. The runtime
+// supplies every case; WordFlower restyles loading and error and keeps the runtime's missing and
+// unauthorized sentences.
+guard default {
+   loading -> Spinner()
+   error -> Message { TextMultiline("Could not load this: { Message }") [body] }
 }
 
 // The app is rooted in a view: the shell, which lays the navigator and the focus bar out as ordinary

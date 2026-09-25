@@ -56,8 +56,8 @@ scene WorkspaceList() {
             Text("WordFlower") [display]
             TextMultiline(WordFlowerTagline) [body]
          }
+         // The home screen titles its own load failure; loading goes to the app's read net.
          guard Workspaces {
-            loading -> { Spinner() }
             error -> Message {
                Text("Could not load WordFlower") [title]
                TextMultiline(Message) [body]
@@ -157,14 +157,9 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
             TextMultiline("Workspace: { Workspace.Name }") [caption]
             TextMultiline("Shape the space, then keep the words moving.") [body]
          }
-         guard Drafts { // a guard takes exactly one subject; guard each query separately
-            loading -> { Spinner() }
-            error -> Message { TextMultiline("Could not load documents: { Message }") [body] }
-         }
-         guard FinishedDocuments {
-            loading -> { Spinner() }
-            error -> Message { TextMultiline("Could not load documents: { Message }") [body] }
-         }
+         // A guard takes exactly one subject; a bare guard sends every exceptional case to the net.
+         guard Drafts
+         guard FinishedDocuments
          Panes() [gapWide] {
             Col() [panel] {
                Text("WORKSPACE DETAILS") [eyebrow]
