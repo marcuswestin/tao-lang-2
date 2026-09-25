@@ -796,11 +796,22 @@ stands between `A2` and done, in the order to take it:
    repository paths that do not exist in an install. Signing, export, and upload were not run, and
    the spike's Mac also had a Node elsewhere, so the clean-machine gate is what proves none leaks.
    Android builds call `node` from Gradle and have not been tried.
+
+   _In progress 2026-09-25._ The installed pipeline now starts Expo prebuild and export and
+   Expo's fingerprint script through the Tao binary; it prepares a version-owned `node` bridge
+   for CocoaPods and Xcode and supplies the installed Metro paths. A scratch 0.0.0 release ran
+   prebuild, export, and fingerprint with `PATH=/usr/bin:/bin`. Unit coverage proves the bridge's
+   command plan and files. CocoaPods, the Simulator build, signing, and upload remain unproved on
+   this branch. The standalone host still lacks the iCloud config plugin, now listed in release gaps.
 5. **Signing and notarization, and the Foundation Models helper**, both waiting on the Developer ID
    certificate; `tao dev` is then re-checked under the hardened runtime (uncertainty 5).
 6. **A test for downloading a missing pinned release interactively**, the one slice-8 path no test
    covers, because neither the acceptance nor an agent sandbox has a terminal to answer the question
    (`DEVENV-082`). A pseudo-terminal harness or an injectable prompt would cover it.
+
+   _Covered on this branch 2026-09-25._ The test injects the prompt and release bytes, checks a
+   refusal and a bad checksum, observes the version query from `/` without `TAO_VERSION`, and
+   verifies that installing a pin leaves `bin/tao` unchanged.
 7. **Publishing `0.4.0`**, waiting on the public repository, its GitHub Releases (`R11`), and the
    licence (`R1`).
 
@@ -905,6 +916,17 @@ above; where the two disagree, these are later and win.
 10. **Clean-machine acceptance** runs in three tiers: a throwaway `$HOME` with a scrubbed `PATH`
     inside the ordinary test suite, a local `tart` virtual machine as the gate before publication,
     and the `macos-26` GitHub runner as a regression gate once the public repository exists.
+
+    _Gate implementation in progress 2026-09-25._ The local driver clones a disposable
+    `macos-tahoe-vanilla` VM, boots it headless, mounts only the release and the existing acceptance
+    compiled for the guest as read-only inputs, and writes guest step logs to a host mount. It uses
+    SSH because [Tart's guest agent](https://tart.run/blog/2025/06/01/bridging-the-gaps-with-the-tart-guest-agent/)
+    is included in non-vanilla images only. The [vanilla image](https://github.com/cirruslabs/macos-image-templates)
+    has no added software; the guest checks for Homebrew and Xcode tools before testing. The same acceptance driver
+    passed locally as a compiled executable, and a 0.0.0 release passed host acceptance in about
+    50 seconds. The VM gate has not run: Tart and the large image are absent, and installation,
+    image pull, and the named host permission require the Developer's approval. No VM duration or
+    hidden dependency finding is claimed yet.
 
 ## Deferred approaches worth revisiting
 

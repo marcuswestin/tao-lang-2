@@ -41,6 +41,7 @@ export const RuntimeToolchainPaths = {
   expoCommand,
   expoEnvironment,
   installedExpoLauncher,
+  nodeScriptCommand,
 } as const
 
 /** dependencyRoot is the `node_modules` a run of the host resolves packages from. */
@@ -89,7 +90,12 @@ type ExpoCommand = { args: string[]; command: string; env: Record<string, string
  * with only Tao on it has no Node; `x --bun` does not reach that far in a compiled binary.
  */
 function expoCommand(runtimeRoot: string, args: readonly string[]): ExpoCommand {
-  const script = FS.resolvePath('node_modules/.bin/expo', runtimeRoot)
+  return nodeScriptCommand(runtimeRoot, 'expo', args)
+}
+
+/** Run a host CLI script with the Tao binary when the installed host has no Node. */
+function nodeScriptCommand(runtimeRoot: string, name: string, args: readonly string[]): ExpoCommand {
+  const script = FS.resolvePath(`node_modules/.bin/${name}`, runtimeRoot)
   if (resourceRoot === undefined) {
     return { args: [...args], command: script, env: {} }
   }

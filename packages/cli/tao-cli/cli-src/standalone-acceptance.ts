@@ -28,6 +28,10 @@ const PROXY_ENV = ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https
 /** The release files a GitHub release carries; `release.json` and the notes are not the installer's. */
 const INSTALLER_FILES = ['tao-darwin-arm64.gz', 'tao-darwin-arm64.gz.sha256', 'install.sh'] as const
 
+/** A VM run mounts this directory from the host so guest output survives VM deletion. */
+const ACCEPTANCE_LOG_DIR = Platform.runtimeProcess.env['TAO_ACCEPTANCE_LOG_DIR']
+let shellStep = 0
+
 try {
   const release = Platform.runtimeProcess.argv[2]
   if (release === undefined) {
@@ -203,6 +207,9 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
   } finally {
     dev.kill('SIGTERM')
     await dev.waitForClose()
+    if (ACCEPTANCE_LOG_DIR !== undefined) {
+      await FS.writeText(FS.resolvePath('dev-loop.log', ACCEPTANCE_LOG_DIR), output)
+    }
   }
 }
 
@@ -250,11 +257,21 @@ async function newcomerEnvironment(
  */
 function newcomerShell(environment: Platform.ProcessEnv) {
   return async (cwd: string, script: string): Promise<string> => {
+    const startedAt = Date.now()
     const result = await CLI.run('/bin/sh', {
       args: ['-c', script],
       cwd,
       env: environment,
     })
+    if (ACCEPTANCE_LOG_DIR !== undefined) {
+      const name = `step-${String(++shellStep).padStart(2, '0')}.log`
+      await FS.writeText(
+        FS.resolvePath(name, ACCEPTANCE_LOG_DIR),
+        `cwd: ${cwd}\ncommand: ${script}\nexit: ${result.exitCode}\nms: ${
+          Date.now() - startedAt
+        }\n\n${result.stdout}${result.stderr}`,
+      )
+    }
     if (result.exitCode !== 0) {
       Errors.throwUnexpected(`\`${script}\` failed (exit ${result.exitCode}):\n${result.stdout}${result.stderr}`)
     }

@@ -1,3 +1,4 @@
+import { RuntimeToolchainPaths } from '@expo-host'
 import { AST, Parser } from '@parser'
 import { CLI, Errors, FS, Json, Repo } from '@shared'
 import { shipInputHash } from './ship-model'
@@ -9,10 +10,15 @@ export async function runtimeFingerprint(runtimeRoot: string, runner: CommandRun
   // ship.json contains the current build number, commit, and marketing version. Those values do not
   // change native compatibility and must not make a later copy-only update look incompatible.
   await FS.remove(FS.resolvePath('_gen_tao-app/ship.json', runtimeRoot))
-  const command = FS.resolvePath('node_modules/.bin/fingerprint', runtimeRoot)
-  const result = await runner(command, {
-    args: ['fingerprint:generate', '--platform', 'ios'],
+  const command = RuntimeToolchainPaths.nodeScriptCommand(runtimeRoot, 'fingerprint', [
+    'fingerprint:generate',
+    '--platform',
+    'ios',
+  ])
+  const result = await runner(command.command, {
+    args: command.args,
     cwd: runtimeRoot,
+    env: command.env,
   })
   if (result.error || result.exitCode !== 0) {
     Errors.throwHostEnvironment(`Expo could not compute the iOS runtime fingerprint: ${result.stderr.trim()}`)

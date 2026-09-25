@@ -1,4 +1,4 @@
-import Runtime, { RuntimeToolchainPaths, type ShipManifest as RuntimeShipManifest } from '@expo-host'
+import Runtime, { HostDependencies, RuntimeToolchainPaths, type ShipManifest as RuntimeShipManifest } from '@expo-host'
 import { CLI, Errors, FS, HCI, Platform } from '@shared'
 import { createAppStoreConnectToken } from './app-store-connect-auth'
 import { type AppStoreBuild, AppStoreConnectClient } from './app-store-connect-client'
@@ -87,6 +87,9 @@ async function executePreparedShipRun(
   }
   const runtimeRoot = dependencies.runtimeRoot ?? RuntimeToolchainPaths.packageRoot
   const runner = dependencies.commandRunner ?? CLI.mustRun
+  if (options.update || !prepared.reuseBuild) {
+    await HostDependencies.ensure()
+  }
   let activePrepared = prepared
   let entry = activePrepared.entry
   const releaseNotesFromCommit = prepared.reuseBuild
@@ -513,9 +516,18 @@ async function exportAndProve(
 ): Promise<string> {
   const exportRoot = FS.resolvePath('.artifacts/ship/export', runtimeRoot)
   await FS.remove(exportRoot)
-  await runner(FS.resolvePath('node_modules/.bin/expo', runtimeRoot), {
-    args: ['export', '--platform', 'ios', '--output-dir', exportRoot, '--clear'],
+  const expo = RuntimeToolchainPaths.expoCommand(runtimeRoot, [
+    'export',
+    '--platform',
+    'ios',
+    '--output-dir',
+    exportRoot,
+    '--clear',
+  ])
+  await runner(expo.command, {
+    args: expo.args,
     cwd: runtimeRoot,
+    env: expo.env,
     prefixedOutput: { logFile, processName: 'expo', terminal: logFile === undefined },
   })
   await Runtime.proveReleaseBundle(exportRoot)

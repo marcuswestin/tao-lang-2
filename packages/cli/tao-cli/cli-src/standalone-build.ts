@@ -39,6 +39,7 @@ const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
  */
 const KNOWN_GAPS = [
   '`tao dev` serves the web target from the standalone binary; the iOS Simulator and Android do not open from it yet.',
+  '`tao ship` cannot prebuild an iCloud-backed app from the standalone binary because its host lacks the tao-icloud config plugin.',
   '`tao review` is not in the standalone binary.',
   'The binary is not signed or notarized yet.',
 ] as const
