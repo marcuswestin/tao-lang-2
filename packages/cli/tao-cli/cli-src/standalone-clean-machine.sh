@@ -10,7 +10,13 @@ input="$root/input"
 logs="$root/logs"
 release="$(pwd)/.artifacts/release/v0.0.0"
 expect_script='packages/cli/tao-cli/cli-src/standalone-clean-machine.expect'
-bun_bin="${TAO_STANDALONE_BUN:-bun}"
+if [ -n "${TAO_STANDALONE_BUN:-}" ]; then
+  bun_bin="$TAO_STANDALONE_BUN"
+elif [ -x .devenv/profile/bin/bun ]; then
+  bun_bin="$(pwd)/.devenv/profile/bin/bun"
+else
+  bun_bin=bun
+fi
 portable_bun_script='packages/cli/tao-cli/cli-src/standalone-bun.sh'
 audit=0
 case "${1:-}" in
@@ -72,6 +78,7 @@ if ! command -v "$bun_bin" >/dev/null; then
   exit 1
 fi
 version=$("$bun_bin" --version)
+printf 'Clean-machine: using Bun %s from %s\n' "$version" "$bun_bin"
 IFS=. read -r major minor patch <<< "$version"
 if (( major < 1 || (major == 1 && minor < 4) || (major == 1 && minor == 4 && patch < 2) )); then
   printf 'Bun 1.4.2 or newer is required to compile a runnable macOS release; found %s.\n' "$version" >&2
