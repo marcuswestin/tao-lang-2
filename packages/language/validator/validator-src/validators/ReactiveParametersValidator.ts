@@ -62,7 +62,9 @@ function reportWritableMutationTarget(
   if (!(target.copy || ASTUtils.parameterRequiresWritable(target))) {
     ctx.error(mutation, reactiveParametersValidationMessages.readonlyTarget(Type.parameterName(target)))
   }
-  if (mutation.members.length > 0 && !ordinaryWritableItemPath(target, mutation.members)) {
+  // A path through a completeness member has its own, more specific diagnostic (StateValidator).
+  const derived = Type.completenessMemberDepth(Type.ofValueDeclaration(target), mutation.members) !== undefined
+  if (mutation.members.length > 0 && !derived && !ordinaryWritableItemPath(target, mutation.members)) {
     ctx.error(mutation, reactiveParametersValidationMessages.writablePath)
   }
 }
@@ -161,7 +163,7 @@ function reportWritableArgument(
 function ordinaryWritableItemPath(target: AST.MutableDeclaration, members: readonly string[]): boolean {
   let type = Type.ofValueDeclaration(target)
   for (const member of members) {
-    if (type.kind !== 'item') {
+    if (type.kind !== 'item' || Type.isCompletenessMember(type, member)) {
       return false
     }
     type = Type.atMemberPath(type, [member])

@@ -467,6 +467,51 @@ export class Type {
     return Units.ratioToBase(family, member) === undefined ? undefined : primitiveType('number')
   }
 
+  /** requiredSentence returns the sentence a field's `required` trait states, when it has one. */
+  static requiredSentence(field: DataFieldDefinition): string | undefined {
+    return (field.traits?.traits ?? []).find(AST.traitIsRequired)?.sentence
+  }
+
+  /**
+   * completenessFieldsOf returns the fields whose `required` sentences a value's `Incomplete` and
+   * `Problems` read: an entity row's own fields, or the ones a projection selected. Any other type
+   * has no completeness members.
+   */
+  static completenessFieldsOf(type: TaoType): readonly DataFieldDefinition[] | undefined {
+    if (type.kind === 'entity') {
+      return Type.dataFields(type.entity)
+    }
+    return type.kind === 'item' && type.item?.projectedEntity ? type.item.dataFields ?? [] : undefined
+  }
+
+  /**
+   * isCompletenessMember is whether reading `member` on `type` is a derived completeness read. Such a
+   * member is computed from the `required` fields, never stored, so it is not a writable path.
+   */
+  static isCompletenessMember(type: TaoType, member: string): boolean {
+    return Type.completenessFieldsOf(type) !== undefined && Type.completenessMemberType(member) !== undefined
+  }
+
+  /** completenessMemberDepth returns how many members a path reads up to a completeness member. */
+  static completenessMemberDepth(root: TaoType, members: readonly string[]): number | undefined {
+    let type = root
+    for (const [index, member] of members.entries()) {
+      if (Type.isCompletenessMember(type, member)) {
+        return index + 1
+      }
+      type = Type.atMemberPath(type, [member])
+    }
+    return undefined
+  }
+
+  /** completenessMemberType resolves `Incomplete` and `Problems`, which `required` derives (§2). */
+  static completenessMemberType(member: string): TaoType | undefined {
+    if (member === 'Incomplete') {
+      return primitiveType('boolean')
+    }
+    return member === 'Problems' ? { kind: 'list', element: primitiveType('text') } : undefined
+  }
+
   /** entityBuiltinMemberType resolves the runtime write-status members available on every entity. */
   static entityBuiltinMemberType(member: string): TaoType | undefined {
     if (member === 'WritesQueued' || member === 'WritesFailed') {
@@ -896,6 +941,10 @@ function memberType(current: TaoType, member: string): TaoType | undefined {
   const family = primitiveUnitFamily(current)
   if (family) {
     return Type.unitMemberType(family, member)
+  }
+  const completeness = Type.completenessFieldsOf(current) && Type.completenessMemberType(member)
+  if (completeness) {
+    return completeness
   }
   if (current.kind === 'entity') {
     if (member === 'Id') {

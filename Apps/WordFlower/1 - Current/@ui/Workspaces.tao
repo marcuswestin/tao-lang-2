@@ -33,9 +33,10 @@ scene WorkspaceList() {
    state WorkspaceName = ""
    query Workspaces { }
    action AddWorkspace() {
-      guard WorkspaceName empty -> { // a match runs its handler and skips the rest of this action
+      if WorkspaceName is empty {
          present WorkspaceNameNotice() as overlay
       }
+      check WorkspaceName is not empty // a false check skips the rest of this action
       create Workspace {
          Name: WorkspaceName
       }
@@ -119,7 +120,7 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
       where is Final
    }
    action SaveWorkspace() {
-      guard WorkspaceNameDraft empty
+      check WorkspaceNameDraft is not empty
       update Workspace {
          Name: WorkspaceNameDraft
    }  }
@@ -134,7 +135,7 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
    }
    Toolbar { Save }
    action AddDocument() {
-      guard DocumentTitle empty
+      check DocumentTitle is not empty
       create Document {
          Title: DocumentTitle
          Workspace // unlabeled arguments bind by type; the entity matches the relation field
