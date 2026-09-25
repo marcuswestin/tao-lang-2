@@ -324,7 +324,8 @@ enclosing condition into the checked expression instead.
 
 ### Block-scoped guards
 
-A guard has exactly one subject and either one case or a case block:
+A guard has exactly one subject and either one case or a case block. A render guard may also name
+no case at all:
 
 ```tao
 guard Draft empty
@@ -333,7 +334,12 @@ guard Documents {
    loading -> { Text("Loading…") }
    error -> Message { Text(Message) }
 }
+
+guard Document
 ```
+
+A single declared case (a name rather than a built-in case word) needs its `->` or handler, so it
+reads apart from the render that follows a bare guard.
 
 On a match, the optional handler runs and the remainder of that guard's enclosing block is skipped.
 Statements or render siblings before it remain. A guard inside a called action stops only that
@@ -343,7 +349,11 @@ skips only later siblings in the same render block.
 
 An entity subject additionally supports `loading`, `missing`, `unauthorized`, and `error -> Message`.
 If the runtime reports none of those exceptional cases, execution falls through with the live
-entity handle:
+entity handle. A render guard hands an exceptional case it does not name — every one, for a bare
+guard — to the read net instead of falling through; the net is always present and a project's
+`guard default` restyles it case by case (`Tao Data.md`, "The read net"). A bare guard therefore
+needs a subject that has exceptional cases: an entity or a query. An action guard still falls
+through on an unnamed case:
 
 ```tao
 guard Document {

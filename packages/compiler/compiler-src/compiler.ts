@@ -29,7 +29,7 @@ import {
   withInlineInjectionBindings,
 } from './codegen/app/injection-plan'
 import { RuntimeGen } from './codegen/app/RuntimeGen'
-import { LocalDataBindings } from './codegen/codegen-util'
+import { LocalDataBindings, ReadNetBinding } from './codegen/codegen-util'
 import {
   compileStudioPreviewManifest,
   type StudioPreviewManifest,
@@ -264,6 +264,8 @@ function compileValidatedInput(
   const identityProjects = declarationIdentityProjects(validationResult.files, context)
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
   const dataCatalog = planDataCatalog(sourceFiles, entryPath)
+  // Validation allows one `guard default` per project, and every app in the project carries it.
+  const readNetOwnerPath = sourceFiles.find(file => file.ast.statements.some(AST.isGuardDefaultStatement))?.path
   const studioViews = studio
     ? sourceFiles.flatMap(file =>
       file.ast.statements.filter(AST.isScenarioGroupDeclaration).flatMap(group =>
@@ -287,6 +289,7 @@ function compileValidatedInput(
   const compiledFiles = sourceFiles.flatMap(file =>
     compileSourceFile(file, {
       dataCatalog,
+      readNetOwnerPath,
       sourceByPath,
       outputPaths,
       packagesContext: context.packagesContext,
@@ -438,6 +441,8 @@ function planOutputPaths(
 
 type CompileSourceFileOptions = {
   dataCatalog: DataCatalogPlan | undefined
+  /** readNetOwnerPath is the file declaring the project's `guard default`, when there is one. */
+  readNetOwnerPath: string | undefined
   sourceByPath: Map<string, ParsedFile>
   outputPaths: PlannedOutputs
   packagesContext: Packages.Context
@@ -454,6 +459,7 @@ type CompileSourceFileOptions = {
 function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile[] {
   const {
     dataCatalog,
+    readNetOwnerPath,
     sourceByPath,
     outputPaths,
     packagesContext,
@@ -496,6 +502,13 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       addResolvedImport(imports, dataCatalog.ownerPath, binding)
     }
   }
+  // Every app carries the project's read net, so a module declaring an app reads it from its owner.
+  const ownsReadNet = readNetOwnerPath === file.path
+  if (
+    readNetOwnerPath !== undefined && !ownsReadNet && AST.appValueDeclarationsInFile(file.ast).length > 0
+  ) {
+    addResolvedImport(imports, readNetOwnerPath, ReadNetBinding)
+  }
   const planned = outputPaths.bySourcePath.get(file.path)
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
   const importLines = [
@@ -518,6 +531,9 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     .filter(declarationEmitsRuntimeBinding)
     .filter(declarationVisibleOutsideFile)
     .map((declaration: AST.Declaration) => exportedBinding(runtimeBindingName(declaration)))
+  if (ownsReadNet) {
+    exportedBindings.push(exportedBinding(ReadNetBinding))
+  }
   if (ownsDataCatalog) {
     exportedBindings.push(...syncedCatalogBindings(dataCatalog).map(exportedBinding))
     if (dataCatalog.localOnly) {
@@ -545,6 +561,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                   importLines,
                   localDataCatalog: usesLocalDataCatalog,
                   journeyObservations,
+                  readNet: readNetOwnerPath !== undefined,
                   scopeBindings,
                   exportedBindings,
                   selectedAppDatasourceConfiguration,

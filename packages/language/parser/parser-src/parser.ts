@@ -523,6 +523,9 @@ async function loadReferencedDocuments(
 // Only a sibling that actually declares something `folder`-visible is pulled in, so a project that
 // does not use the marker keeps exactly the document set its `use` statements describe.
 const folderDeclarationPattern = /^[ \t]*folder[ \t\r\n]/m
+// The project's `guard default` covers every app without being named by any of them, so a sibling
+// declaring it is pulled in the same way.
+const readNetDeclarationPattern = /^[ \t]*guard[ \t]+default\b/m
 
 /** SiblingScanCache memoizes one load's per-directory folder-sibling scans. */
 type SiblingScanCache = Map<string, Promise<string[]>>
@@ -546,7 +549,8 @@ async function folderSiblingPathsIn(directory: string): Promise<string[]> {
     .map(name => FS.resolvePath(name, directory))
   const paths: string[] = []
   for (const path of candidates) {
-    if (folderDeclarationPattern.test(await FS.readText(path))) {
+    const source = await FS.readText(path)
+    if (folderDeclarationPattern.test(source) || readNetDeclarationPattern.test(source)) {
       paths.push(path)
     }
   }

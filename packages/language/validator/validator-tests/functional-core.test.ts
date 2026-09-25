@@ -8,6 +8,7 @@ import {
   accepts,
   app,
   rejects,
+  rejectsFiles,
   stubContainer,
   stubView,
   testValidateCode,
@@ -246,6 +247,109 @@ Describe('validator: functional core', () => {
         ${runtimeViews}
       `,
       FunctionalCoreValidator.messages.invalidCase('refreshing', 'an entity subject'),
+    ),
+  )
+
+  Test(
+    'accepts bare guards over entity and query subjects and a file-level read net',
+    accepts(`
+      guard default {
+        loading -> Text("Opening…")
+        missing -> { Text("Gone") }
+        error -> Message { Text(Message) }
+      }
+      data Documents / Document { Title text }
+      view Main(Document) {
+        query Documents as Recent { }
+        render Stack(){
+          guard Document
+          guard Recent
+          Text(Document.Title)
+        }
+      }
+      ${runtimeViews}
+    `),
+  )
+
+  Test(
+    'rejects a bare guard over a subject whose cases are all content',
+    rejects(
+      `
+        view Main(Title text) {
+          render Stack(){
+            guard Title
+            Text(Title)
+          }
+        }
+        ${runtimeViews}
+      `,
+      FunctionalCoreValidator.messages.bareGuardSubject,
+    ),
+  )
+
+  Test(
+    'rejects an empty guard case block in favor of the bare guard',
+    rejects(
+      `
+        data Documents / Document { Title text }
+        view Main(Document) {
+          render Stack(){ guard Document { } }
+        }
+        ${runtimeViews}
+      `,
+      FunctionalCoreValidator.messages.emptyGuardCases,
+    ),
+  )
+
+  Test(
+    'rejects read net cases that are content, repeated, or carry a message outside error',
+    rejects(
+      `
+        guard default {
+          empty -> { Text("Nothing yet") }
+          rejected -> { Text("Refused") }
+          loading -> { Text("One") }
+          loading -> { Text("Two") }
+          missing -> Message { Text(Message) }
+        }
+        ${runtimeViews}
+      `,
+      FunctionalCoreValidator.messages.guardDefaultCase('empty'),
+      FunctionalCoreValidator.messages.guardDefaultCase('rejected'),
+      FunctionalCoreValidator.messages.duplicateCase('loading'),
+      FunctionalCoreValidator.messages.invalidCasePayload,
+    ),
+  )
+
+  Test(
+    'rejects a read net declared inside a view',
+    rejects(
+      `
+        view Main() {
+          render Stack(){
+            guard default { loading -> { Text("Loading") } }
+          }
+        }
+        ${runtimeViews}
+      `,
+      FunctionalCoreValidator.messages.guardDefaultPlacement,
+    ),
+  )
+
+  Test(
+    'rejects a second read net anywhere in the project',
+    rejectsFiles(
+      {
+        'Main.tao': `
+          use Other from ./Other
+          guard default { loading -> { Other() } }
+        `,
+        'Other.tao': `
+          guard default { missing -> { Other() } }
+          workspace view Other() { render inject \`\`\`ts\nreturn null\n\`\`\` }
+        `,
+      },
+      FunctionalCoreValidator.messages.guardDefaultDuplicate,
     ),
   )
 

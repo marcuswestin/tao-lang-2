@@ -1,4 +1,4 @@
-import { ASTUtils, Type } from '@ast-utils'
+import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
@@ -13,6 +13,14 @@ const messages = {
   checkCondition: '`check` requires a boolean condition.',
   checkPlacement:
     '`check` stops its whole action, so it belongs in the action itself, not inside an `if` or `guard` block.',
+  bareGuardSubject:
+    "A bare `guard` sends its subject's exceptional cases to the read net, so its subject must be an entity or a query.",
+  emptyGuardCases: 'A `guard` case block names at least one case; to send every case to the read net, drop the braces.',
+  guardDefaultCase: (name: string) =>
+    `\`guard default\` handles only loading, missing, unauthorized, and error; '${name}' is not one of them.`,
+  guardDefaultDuplicate:
+    'A project declares at most one `guard default`, and this one is not the only one; keep one and delete the others.',
+  guardDefaultPlacement: '`guard default` covers every app in the project, so it is declared at file level.',
   conditionalBranch: '`when` branches must produce compatible value types.',
   compactWhenSubject: 'The compact `when Subject Value / label Value` form requires a yes/no subject.',
   compactWhenLabel: (label: string, expected: string) =>
@@ -76,8 +84,10 @@ export const FunctionalCoreValidator = {
     },
     [AST.GuardRenderStatement.$type]: (statement, ctx) => {
       validateSubjectCases(statement.subject, ASTUtils.guardBranches(statement), ctx)
+      validateReadNetReach(statement, ctx)
       validateRenderControlPlacement(statement, ctx)
     },
+    [AST.GuardDefaultStatement.$type]: validateGuardDefault,
     [AST.GuardActionStatement.$type]: (statement, ctx) => {
       validateSubjectCases(statement.subject, ASTUtils.guardBranches(statement), ctx)
     },
@@ -339,6 +349,80 @@ function validateSubjectCases(
       ctx.error(branch.payload, messages.invalidCasePayload)
     }
   }
+}
+
+/**
+ * A bare guard hands its subject's exceptional cases to the read net, so a subject that has none — a
+ * text, list, or yes/no value, whose cases are content — would guard nothing. An empty case block is
+ * the same guard spelled with braces it does not need.
+ */
+function validateReadNetReach(statement: AST.GuardRenderStatement, ctx: ValidationContext): void {
+  if (statement.caseBlock) {
+    if (statement.caseBlock.branches.length === 0) {
+      ctx.error(statement.caseBlock, messages.emptyGuardCases)
+    }
+    return
+  }
+  if (statement.single) {
+    return
+  }
+  const category = subjectCaseCategory(statement.subject)
+  if (category !== 'unresolved' && category !== 'unsupported' && readNetCases(category).size === 0) {
+    ctx.error(statement.subject, messages.bareGuardSubject)
+  }
+}
+
+/** The read net's cases: the exceptional ones, which are exactly those carrying no content. */
+const readNetCaseNames: ReadonlySet<string> = new Set(['loading', 'missing', 'unauthorized', 'error'])
+
+function readNetCases(category: SubjectCaseCategory): ReadonlySet<string> {
+  return new Set([...allowedCases(category)].filter(caseName => readNetCaseNames.has(caseName)))
+}
+
+/**
+ * `guard default` is the one file-level override of the runtime's read net, so it names only net
+ * cases, each at most once, carries a message only on `error`, and exists once per project.
+ */
+function validateGuardDefault(statement: AST.GuardDefaultStatement, ctx: ValidationContext): void {
+  if (!AST.isTaoFile(statement.$container)) {
+    ctx.error(statement, messages.guardDefaultPlacement)
+  }
+  const seen = new Set<string>()
+  for (const branch of statement.branches) {
+    if (seen.has(branch.case)) {
+      ctx.error(branch, messages.duplicateCase(branch.case))
+    }
+    seen.add(branch.case)
+    if (!readNetCaseNames.has(branch.case)) {
+      ctx.error(branch, messages.guardDefaultCase(branch.case))
+    }
+    if (branch.payload && branch.case !== 'error') {
+      ctx.error(branch.payload, messages.invalidCasePayload)
+    }
+  }
+  if (projectGuardDefaults(statement, ctx).length > 1) {
+    ctx.error(statement, messages.guardDefaultDuplicate)
+  }
+}
+
+/** projectGuardDefaults lists every `guard default` in the project that declares `statement`. */
+function projectGuardDefaults(
+  statement: AST.GuardDefaultStatement,
+  ctx: ValidationContext,
+): AST.GuardDefaultStatement[] {
+  const projectRootOf = (node: AST.Node) =>
+    Packages.projectRootForPath(ctx.packagesContext.index, AST.getDocument(node).uri.path)
+  const byProject = ctx.memo('functional-core.guardDefaultsByProject', () => {
+    const index = new Map<string | undefined, AST.GuardDefaultStatement[]>()
+    for (const file of ctx.projectFiles ?? ctx.workspaceFiles) {
+      for (const net of file.statements.filter(AST.isGuardDefaultStatement)) {
+        const root = projectRootOf(net)
+        index.set(root, [...index.get(root) ?? [], net])
+      }
+    }
+    return index
+  })
+  return byProject.get(projectRootOf(statement)) ?? [statement]
 }
 
 type SubjectCaseCategory = 'boolean' | 'entity' | 'list' | 'query' | 'text' | 'unresolved' | 'unsupported'

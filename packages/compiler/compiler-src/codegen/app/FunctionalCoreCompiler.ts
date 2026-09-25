@@ -1,7 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen, ReadNetBinding } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileDeclarationIdentity } from './declaration-identity'
 
@@ -141,7 +141,32 @@ export const FunctionalCoreCompiler = {
     }
       ], () => <>
         ${Compile.RenderBlockFragments(remaining, options)}
-      </>)}
+      </>, _ViewProps.__tao)}
+    `
+  },
+
+  /**
+   * GuardDefaultStatement binds the project's read net. Each handler renders at whichever guard
+   * reached the net, so it takes that guard's view props as its own and binds `error`'s message.
+   */
+  GuardDefaultStatement(statement: AST.GuardDefaultStatement, options: CodegenOptions = {}): Compiled {
+    return gen`
+      ${gen.scopeName({ name: ReadNetBinding })} = TR.ReadNet({
+        ${
+      gen.list(
+        statement.branches,
+        branch =>
+          gen`${gen.jsLiteral(branch.case)}: (_ViewProps, _TaoCasePayload) => TR.BlockScope(_Scope, _Scope => {
+          ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
+          ${
+            branch.block
+              ? Compile.RenderBlockBody(branch.block, options)
+              : gen`return <>${Compile.RenderFragmentStatement(requiredRender(branch), options)}</>`
+          }
+        }),`,
+      )
+    }
+      })
     `
   },
 
@@ -188,6 +213,12 @@ export const FunctionalCoreCompiler = {
     }`
   },
 } as const
+
+/** A read net handler without a block is, by the grammar, one bare render. */
+function requiredRender(branch: AST.GuardDefaultBranch): AST.ViewRender {
+  Assert.defined(branch.render, 'parsed read net handler has a block or a render')
+  return branch.render
+}
 
 function functionRuntimeParameterName(index: number): Compiled {
   return gen.Name({ name: `_TaoFunctionArg${index}` })

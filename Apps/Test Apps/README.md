@@ -292,3 +292,20 @@ Exercise the type system through a small UI that passes typed values into views.
 **Belongs here:** text, number, and list literals; custom type declarations for primitive, list, and item shapes; typed constructors and invocation type-fixing; item member access; `let` bindings whose inferred types are used as arguments; nested render-block `let` shadowing while captured outer references keep their value; argument binding by type, including out-of-order; inject arguments exposing typed values inside injected TS.
 
 **Does not belong here:** grammar edge cases without type-system meaning; layout, styling, navigation, data, or action behavior beyond what type coverage needs; stdlib runtime coverage; invalid or intentionally failing cases.
+
+## Read Net
+
+Exercise the read net: the runtime's handling of the exceptional read cases a render guard leaves
+unnamed, and a project's file-level `guard default` replacing it case by case. Two projects share
+the folder so their nets can differ: `ReadNetApp` replaces `missing`, and `Runtime Default/`'s
+`RuntimeDefaultApp` replaces `loading` and `error` and leaves `missing` to the runtime.
+
+**Belongs here:** a bare `guard Subject` over an entity and a query; a deleted row reaching the net
+as `missing`; the project's override rendering at the guarding site; a guard that names `missing`
+winning over the net; the runtime's `missing` sentence where the project's net does not replace it;
+a deleted handle keeping `.Id` inside a site's own `missing` handler.
+
+**Does not belong here:** `loading`, `unauthorized`, and `error` rendered through a journey, which
+Memory cannot produce on demand and the runtime package tests prove; read-net diagnostics
+(placement, cases, one per project, a bare guard over text), which are package tests; action guards;
+write outcomes.
