@@ -95,12 +95,18 @@ percentiles; context is uncached input plus cache writes and reads):
 | Context before a compaction  | 459,434 | 822,841 | 967,216 | 16     |
 
 10,550 of those 30,791 requests sent more than 272,000 tokens, and 15 of the 16 compactions were
-manual. Run the same command over a later seven-day window to compare.
+manual. The first full seven-day window after the routing audit and compaction setting landed ends
+2026-10-02 16:17:37Z (`d1dcbe36` landed on 2026-09-25 at 16:17:37Z). On or after that time, run
+`./agent model-audit --until 2026-10-02T16:17:37Z` and compare main and subagent context per request
+(count, p50, p90, max), context before compaction, requests over 272,000 tokens, and manual versus
+automatic compactions with the baseline above. Check when each sampled checkout actually picked up
+the setting before attributing a change to it.
 
 The 2026-09-23 sample supplied a cost-category observation, but no usable baseline for
 completed-task cost, post-compaction re-reads, or quality. Collect those values for comparable
-completed tasks under this threshold,
-including retries and reviewer work. For each task, separate cached reads, cache writes, uncached
+completed tasks under this threshold, including retries and reviewer work. The model audit does not
+provide a completed-task denominator, cost categories, plan usage, or quality evidence; collect these
+separately. For each task, separate cached reads, cache writes, uncached
 input, and output in an API-equivalent estimate, and record plan usage separately. Compare the
 same task types with the earlier setting where evidence permits, along with elapsed time, rework,
 and accepted review findings. Revert the threshold if cost per successfully completed task rises,

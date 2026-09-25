@@ -1,4 +1,5 @@
 import { FS, Json, Text } from '@shared'
+import { generate } from 'rulesync'
 import { agentHostCommands } from './HostCommandPolicy'
 
 export { agentHostCommands } from './HostCommandPolicy'
@@ -9,8 +10,8 @@ const CLAUDE_SETTINGS = '.claude/settings.json'
 /**
  * What rulesync renders afresh rather than merging from the `claudecode` block: a whole setting, or
  * the keys within one, as in `permissions`, whose rule lists it renders and whose other keys it merges
- * from `claudecode.permissions`. Those lists also keep a rule for a tool the source's `permission`
- * block no longer names at all, which the pruning below does not catch.
+ * from `claudecode.permissions`. Rulesync also merges old rules for tools the source no longer
+ * names; the pristine render below replaces those lists after pruning.
  */
 type Rendered = { readonly [key: string]: true | Rendered }
 
@@ -21,12 +22,35 @@ const RULESYNC_RENDERED: Rendered = {
 }
 
 type HostCommandSource = { agentHostCommands?: unknown; claudecode?: unknown }
+type PermissionLists = { allow?: string[]; ask?: string[]; deny?: string[] }
+const PERMISSION_LIST_KEYS = new Set(['allow', 'ask', 'deny'])
 
 function hostShapes(prefixes: readonly (readonly string[])[]): string[] {
   return prefixes.flatMap(prefix => [
     `./agent unsandboxed ${prefix.join(' ')}`,
     `./agent unsandboxed ${prefix.join(' ')} *`,
   ])
+}
+
+/** Rulesync renders these lists without inherited rules only when the output directory is empty. */
+async function pristinePermissionLists(root: string): Promise<PermissionLists> {
+  const scratch = await FS.mkTmpDir('tao-agent-permissions-')
+  try {
+    await generate({
+      configPath: '.rulesync/rulesync.jsonc',
+      features: ['permissions'],
+      inputRoot: root,
+      outputRoots: [scratch],
+      silent: true,
+      targets: ['claudecode'],
+    })
+    const settings = JSON.parse(await FS.readText(FS.resolvePath(CLAUDE_SETTINGS, scratch))) as {
+      permissions?: PermissionLists
+    }
+    return settings.permissions ?? {}
+  } finally {
+    await FS.remove(scratch)
+  }
 }
 
 /**
@@ -69,11 +93,20 @@ export function renderClaudeHostSettings(
   content: string,
   prefixes: readonly (readonly string[])[],
   claudecode?: Record<string, unknown>,
+  pristineLists?: PermissionLists,
 ): string {
   const parsed = JSON.parse(content) as Record<string, unknown>
   const settings = (claudecode === undefined ? parsed : withoutRemovedKeys(parsed, claudecode, RULESYNC_RENDERED)) as {
-    permissions?: { allow?: string[] }
+    permissions?: PermissionLists & Record<string, unknown>
     sandbox?: { excludedCommands?: string[] }
+  }
+  if (pristineLists !== undefined) {
+    settings.permissions = {
+      ...Object.fromEntries(
+        Object.entries(settings.permissions ?? {}).filter(([key]) => !PERMISSION_LIST_KEYS.has(key)),
+      ),
+      ...pristineLists,
+    }
   }
   const hostRule = /^Bash\(\.\/agent unsandboxed(?: |\))/u
   const shapes = hostShapes(prefixes)
@@ -100,6 +133,7 @@ export async function generateClaudeHostSettings(root: string, writeText = FS.wr
     current,
     commands,
     Json.isRecord(source.claudecode) ? source.claudecode : undefined,
+    await pristinePermissionLists(root),
   )
   if (next !== current) {
     await writeText(path, next)
