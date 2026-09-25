@@ -3,11 +3,10 @@ import * as FS from './FS'
 import * as Platform from './Platform'
 
 /**
- * TaoHome owns the one directory Tao keeps machine-wide state in: installed versions, the `tao` link
- * on `PATH`, downloaded hosts, and caches. Every writer resolves it here, so relocating it with
- * `TAO_HOME` relocates all of it rather than whichever pieces happened to read the variable. The
- * install script (`standalone-install.sh`) spells the same rule in shell, because it runs before
- * any Tao binary exists; the two must agree.
+ * TaoHome owns Tao's machine-wide installed state and reusable caches. Every writer resolves them
+ * here, so relocating with `TAO_HOME` moves both rather than whichever pieces happened to read
+ * the variable. The install script (`standalone-install.sh`) spells the installed-state rule in
+ * shell because it runs before any Tao binary exists; the two must agree on that path.
  *
  * Project state is not here. A project's builds, sessions, and generated hosts stay under its own
  * `.tao/`, so deleting a project deletes them and no project reaches into another.
@@ -19,9 +18,14 @@ const DECLARED_ROOT_ENV = 'TAO_HOME'
 /** XDG_DATA_HOME_ENV is the base-directory variable the default honours. */
 const XDG_DATA_HOME_ENV = 'XDG_DATA_HOME'
 
+/** XDG_CACHE_HOME_ENV locates disposable machine-wide caches by default. */
+const XDG_CACHE_HOME_ENV = 'XDG_CACHE_HOME'
+
 /** TaoHome owns the machine-wide Tao directory and how it is found. */
 export const TaoHome = {
   DECLARED_ROOT_ENV,
+  cacheResolve,
+  cacheRoot,
   resolve,
   root,
 } as const
@@ -53,4 +57,25 @@ function root(): string {
 /** resolve names a path inside the Tao home. */
 function resolve(relativePath: string): string {
   return FS.resolvePath(relativePath, root())
+}
+
+/**
+ * cacheRoot keeps reusable, disposable data out of the OS temporary directory. An explicit
+ * TAO_HOME relocates caches alongside installed state; otherwise the XDG cache convention applies.
+ */
+function cacheRoot(): string {
+  const env = Platform.runtimeProcess.env
+  if (env[DECLARED_ROOT_ENV]) {
+    return FS.resolvePath('cache', root())
+  }
+  const cacheHome = env[XDG_CACHE_HOME_ENV]
+  const base = cacheHome !== undefined && FS.isAbsolute(cacheHome)
+    ? cacheHome
+    : FS.resolvePath('.cache', env['HOME'] ?? FS.homeDir())
+  return FS.resolvePath('tao', base)
+}
+
+/** cacheResolve names one disposable path under Tao's cache root. */
+function cacheResolve(relativePath: string): string {
+  return FS.resolvePath(relativePath, cacheRoot())
 }
