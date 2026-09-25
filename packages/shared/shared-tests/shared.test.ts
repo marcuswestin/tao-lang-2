@@ -132,6 +132,31 @@ Describe('FS', () => {
     Expect(await FS.exists(directory)).toBe(false)
   })
 
+  Test('the Bun test runner removes fixtures across test files even when one fails', async () => {
+    const suiteRoot = await mkTestDir('tao-test-runner-cleanup-')
+    cleanupPaths.push(suiteRoot)
+    const testModule = FS.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts', Repo.getRoot())
+    const fixturePaths = ['first.test.ts', 'second.test.ts'].map(name => FS.resolvePath(name, suiteRoot))
+    for (const fixturePath of fixturePaths) {
+      await FS.writeText(
+        fixturePath,
+        `import { Expect, mkTestDir, Test } from ${JSON.stringify(testModule)};\n`
+          + `Test('fixture', async () => { const directory = await mkTestDir('tao-test-worker-cleanup-'); `
+          + `process.stdout.write('FIXTURE=' + directory + '\\n'); `
+          + `${FS.basename(fixturePath) === 'second.test.ts' ? 'Expect(false).toBe(true);' : ''} });\n`,
+      )
+    }
+    const result = await CLI.run('bun', { args: ['test', ...fixturePaths], cwd: Repo.getRoot() })
+    const fixtures = [...result.stdout.matchAll(/FIXTURE=(\S+)/gu)].map(match => match[1]!)
+
+    Expect(result.exitCode).toBe(1)
+    Expect(fixtures).toHaveLength(2)
+    cleanupPaths.push(...fixtures)
+    for (const fixture of fixtures) {
+      Expect(await FS.exists(fixture)).toBe(false)
+    }
+  })
+
   Test('a fixture can explicitly use host temp when it must be visible outside Git ignores', async () => {
     const directory = await mkTestDir('tao-host-test-fixture-', { location: 'host' })
     cleanupPaths.push(directory)

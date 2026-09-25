@@ -4,6 +4,7 @@ import * as Text from '../core/Text'
 import * as FS from '../FS'
 import * as Platform from '../Platform'
 import * as Repo from '../Repo'
+import { runCleanups } from './TestCleanup'
 import { testOverrideSlot } from './TestOverride'
 
 /** AfterEach wraps the active test runner's afterEach hook. */
@@ -42,17 +43,47 @@ export function MockModule(specifier: string, factory: () => unknown): void {
   getTestRuntime().mockModule(specifier, factory)
 }
 
-/** Test wraps the active test runner's test case API. */
-export const Test = createTestRunnerFunction('test')
+/** Test wraps each case in its own fixture lifetime, including concurrently running cases. */
+export const Test = ((...args: any[]) => {
+  const callbackIndex = args.findIndex((arg, index) => index > 0 && typeof arg === 'function')
+  if (callbackIndex >= 0) {
+    const callback = args[callbackIndex] as (...callbackArgs: any[]) => unknown
+    args[callbackIndex] = (...callbackArgs: any[]) =>
+      temporaryDirectoryScope.run(new Set<string>(), async () => {
+        let failure: unknown
+        try {
+          return await callback(...callbackArgs)
+        } catch (error) {
+          failure = error
+          throw error
+        } finally {
+          const directories = [...(temporaryDirectoryScope.current() ?? [])]
+          await runCleanups(
+            failure,
+            directories.map(directory => ({
+              label: directory,
+              run: async () => {
+                await FS.remove(directory)
+                temporaryDirectories.delete(directory)
+              },
+            })),
+            { channel: 'test-fixture', subject: 'test directory' },
+          )
+        }
+      })
+  }
+  return getTestRuntime().test(...args)
+}) as TestRunnerFunction
 let temporaryProjectSequence = 0
 const temporaryDirectories = new Set<string>()
+const temporaryDirectoryScope = Platform.createAsyncContext<Set<string>>()
 let exitCleanupRegistered = false
 
 /**
  * mkTestDir creates a unique directory in this worktree's ignored scratch. Use `location: 'host'`
- * only when a test needs its fixture outside this worktree's Git ignore boundary. Normal process
- * exit removes directories tests did not remove themselves. An interrupted run leaves scratch for
- * a later owner-reviewed clean.
+ * only when a test needs its fixture outside this worktree's Git ignore boundary. The test runner
+ * removes directories tests did not remove themselves; normal process exit is a second chance.
+ * An interrupted run leaves scratch for a later owner-reviewed clean.
  */
 export async function mkTestDir(prefix: string, options: { location?: 'host' | 'worktree' } = {}): Promise<string> {
   Assert.input(
@@ -62,6 +93,7 @@ export async function mkTestDir(prefix: string, options: { location?: 'host' | '
   const useHost = options.location === 'host'
   const path = await FS.realPath(await (useHost ? FS.mkTmpDir(prefix) : Repo.mkScratchDir(prefix)))
   temporaryDirectories.add(path)
+  temporaryDirectoryScope.current()?.add(path)
   if (!exitCleanupRegistered) {
     exitCleanupRegistered = true
     Platform.onProcessExit(() => {

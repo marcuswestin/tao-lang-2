@@ -4,7 +4,7 @@
 // handler, the mode gate, the two cloud gates, and the approval round trip that runs across two HTTP calls.
 import { loadSemanticSnapshot, Workspace } from '@compiler/workspace'
 import { FS } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, Test, until } from '@shared/test'
+import { AfterAll, Deferred, Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { AgentChatProvider } from '../studio-src/agent-chat/AgentChatProvider'
 import { conversationForTesting } from '../studio-src/agent-chat/AgentChatServer'
@@ -80,6 +80,7 @@ function scripted(turns: readonly Turn[]): MockLanguageModelV3 {
  * proposal cannot resolve a declaration and the round trip proves nothing.
  */
 const ROOT = await mkTestDir('agent-chat-')
+AfterAll(async () => await FS.remove(ROOT))
 
 let parsedOnce: Promise<{ files: unknown[]; diagnostics: unknown[] }> | undefined
 
