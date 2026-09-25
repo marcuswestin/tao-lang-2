@@ -90,12 +90,12 @@ stop-local-instantdb:
 
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
-studio project="Apps/HNReader":
+studio project="Apps/HNReader": _parser-gen
     ./dev studio "{{ project }}"
 
 # Launch Tao Studio in its local Electrobun shell; offers to stop another session holding the native host
 [group('Run')]
-studio-native project="Apps/HNReader":
+studio-native project="Apps/HNReader": _parser-gen
     ./dev studio-native "{{ project }}"
 
 # Install the Tao Companion development build on a connected iPhone or iPad, once per native change
@@ -296,6 +296,10 @@ report-test-stats limit="20":
 [arg('redraft', long='redraft', value='true')]
 finalize check='false' fresh='false' redraft='false':
     ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }}
+
+# Merge current main into this feature branch and nothing else; agents use ./agent unsandboxed merge-main when main writes paths the sandbox protects
+merge-main:
+    ./dev merge-main
 
 # Switch this checkout to your own dev/* branch, creating it from main the first time
 [group('Mine')]

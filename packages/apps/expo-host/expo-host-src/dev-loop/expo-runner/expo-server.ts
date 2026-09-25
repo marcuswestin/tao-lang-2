@@ -43,8 +43,11 @@ export class ExpoServer {
     await FS.mkdir(FS.dirname(logPath))
     this.logFile = await FS.openAppend(logPath)
     const launcher = this.options.command ?? { executable: 'bunx' }
+    const startArgs = launcher.namesExpoScript === true && this.config.EXPO_START_ARGS[0] === 'expo'
+      ? this.config.EXPO_START_ARGS.slice(1)
+      : this.config.EXPO_START_ARGS
     this.child = startStudioProcessTree(launcher.executable, {
-      args: [...(launcher.argsPrefix ?? []), ...this.config.EXPO_START_ARGS],
+      args: [...(launcher.argsPrefix ?? []), ...startArgs],
       cwd: this.runtimeRoot,
       env: {
         ...this.config.EXPO_START_ENV,

@@ -152,6 +152,14 @@ Exercise settled writable and copied parameters through ordinary controls and ac
 
 **Does not belong here:** parameter grammar and diagnostic cases, runtime transaction internals, entity-field projection, or native callback lifecycle. Those belong to language, runtime, and WordFlower coverage respectively.
 
+## Write Rules
+
+Exercise `required` completeness and the writes that consume it through an ordinary form.
+
+**Belongs here:** `required "<sentence>"` deriving `Incomplete` and `Problems` on a stored row and on a projection that selects the field; a projection that leaves a required field out never reporting it; a projection-backed form disabling its submit while incomplete; `check` stopping an action on an incomplete input; `create Entity with Input` creating a row from a projected item; and a row written incomplete that reads complete after an update.
+
+**Does not belong here:** `validate` and store-side rejection, which are not implemented; diagnostic cases for the completeness members and `create … with`, which belong to package tests; and a stdlib view that presents `Problems`, whose spelling is undecided.
+
 ## Data MVP
 
 Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.

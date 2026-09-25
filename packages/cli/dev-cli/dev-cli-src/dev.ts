@@ -1,7 +1,7 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
-import { FinalizeCommand, LandCommand } from '@verification/Finalize'
+import { FinalizeCommand, LandCommand, MergeMainCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
 import { GreenTree } from '@verification/GreenTree'
 import { LandingLock } from '@verification/LandingLock'
@@ -167,7 +167,7 @@ await runWithCommands(commands => {
     .command('land')
     .description('Land this feature branch: prepare unlocked, then integrate, verify, squash and push under one lock.')
     .option('--dry-run', 'Report readiness and the plan, and change nothing.')
-    .option('--message-file <path>', 'Override .artifacts/merge/<branch>.msg.')
+    .option('--message-file <path>', 'Must name the canonical .artifacts/merge/<branch>.msg file.')
     .option('--redraft', 'Replace an existing merge message with a fresh mechanical draft before landing.')
     .option('--skip-verify', 'Skip the staged-squash just verify --complete pass.')
     .option('--skip-verify-full', 'Skip just verify-full; the staged squash then gets just verify --complete.')
@@ -406,6 +406,19 @@ await runWithCommands(commands => {
           redraft: options.redraft === true,
         })
         Platform.runtimeProcess.exit(outcome.ok ? 0 : 1)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('merge-main')
+    .description('Merge current main into this feature branch, and nothing else; no lane, no merge message.')
+    .action(async () => {
+      try {
+        await MergeMainCommand.run()
+        Platform.runtimeProcess.exit(0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)

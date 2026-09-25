@@ -9,6 +9,7 @@ import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-
 const expected = [
   'land',
   'finalize',
+  'merge-main',
   'landed',
   'capabilities',
   'open-pr',
@@ -21,6 +22,7 @@ const expected = [
   'prepare-release studio',
   'prepare-release ide-extension',
   'app-dev',
+  'companion-host-build',
   'simulators list',
   'simulators boot',
   'simulators run',
@@ -64,7 +66,7 @@ Describe('agent host command permissions', () => {
     Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
-    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(11))
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(12))
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
       permissions: { allow: string[] }

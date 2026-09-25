@@ -277,7 +277,7 @@ scene BookList() {
    state NewTitle = ""
    query Books { }
    action AddBook() {
-      guard NewTitle empty
+      check NewTitle is not empty
       create Book {
          Title: NewTitle
       }
@@ -312,8 +312,8 @@ scene BookList() {
   in both directions, so typing updates it with no handler of your own.
 - **`action AddBook()`** groups what happens on an event. `on press AddBook` and `on submit AddBook`
   both run it, so Enter in the field and the button do the same thing.
-- **`guard NewTitle empty`** with no branch body is an early exit: if the title is empty, the action
-  stops there.
+- **`check NewTitle is not empty`** is the action's early exit: if the title is empty, the action
+  stops there and nothing is created. (`guard`, below, is the view-side construct.)
 - **`create Book { Title: NewTitle }`** writes a row. `Author`, `Finished`, and `AddedAt` all have
   defaults, so naming `Title` is enough.
 - **`Disabled: NewTitle is empty`** — `is empty` tests text, lists, and queries.
@@ -354,7 +354,7 @@ scene BookScreen(Book) {
    state TitleDraft = Book.Title
    state AuthorDraft = Book.Author
    action Save() {
-      guard TitleDraft empty
+      check TitleDraft is not empty
       update Book {
          Title: TitleDraft
          Author: AuthorDraft
@@ -505,7 +505,7 @@ scene BookList() {
       where is Finished
    }
    action AddBook() {
-      guard NewTitle empty
+      check NewTitle is not empty
       create Book {
          Title: NewTitle
       }
@@ -689,7 +689,7 @@ scene BookList() {
       where is Finished
    }
    action AddBook() {
-      guard NewTitle empty
+      check NewTitle is not empty
       create Book {
          Title: NewTitle
       }
@@ -743,7 +743,7 @@ scene BookScreen(Book) {
    state TitleDraft = Book.Title
    state AuthorDraft = Book.Author
    action Save() {
-      guard TitleDraft empty
+      check TitleDraft is not empty
       update Book {
          Title: TitleDraft
          Author: AuthorDraft

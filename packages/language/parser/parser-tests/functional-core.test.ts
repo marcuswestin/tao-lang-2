@@ -101,6 +101,7 @@ Describe('parser: functional core', () => {
         state Result = Confirmed
         action Close() {
           if Result is Confirmed { }
+          check Result is Confirmed
         }
         render Stack() {
           guard Document {
@@ -130,6 +131,9 @@ Describe('parser: functional core', () => {
     Expect.Is(actionIf, AST.isIfActionStatement)
     Expect.Is(actionIf.condition, AST.isCaseTestExpression)
     Expect(actionIf.condition.declaredCase?.ref).toBe(AST.caseSetCasesOf(enumDeclaration)[0])
+    const actionCheck = close.block!.statements.find(AST.isCheckStatement)
+    Expect.Is(actionCheck, AST.isCheckStatement)
+    Expect.Is(actionCheck.condition, AST.isCaseTestExpression)
 
     const render = AST.blockStatementOf(main, { find: AST.isRenderStatement })
     Expect.Is(render, AST.isRenderStatement)

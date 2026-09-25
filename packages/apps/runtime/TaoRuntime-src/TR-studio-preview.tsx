@@ -295,6 +295,40 @@ function previewErrorMessage(error: unknown): string {
 }
 
 type StudioBootstrapIdentity = Readonly<{ appName: string; compileRevision: number; project: string }>
+const maxStudioBootstrapRetries = 30
+const publicationRetryParameter = 'taoStudioPublicationRetry'
+const publicationRetryRevisionParameter = 'taoStudioPublicationRetryRevision'
+
+function nextStudioPublicationReload(
+  currentUrl: string,
+  revision: number,
+): { attempt: number; url: string } | undefined {
+  const url = new URL(currentUrl)
+  const previousRevision = Number(url.searchParams.get(publicationRetryRevisionParameter))
+  const attempts = previousRevision === revision
+    ? Number(url.searchParams.get(publicationRetryParameter) ?? '0')
+    : 0
+  if (!Number.isInteger(attempts) || attempts < 0 || attempts >= maxStudioBootstrapRetries) {
+    return undefined
+  }
+  const attempt = attempts + 1
+  url.searchParams.set(publicationRetryParameter, String(attempt))
+  url.searchParams.set(publicationRetryRevisionParameter, String(revision))
+  return { attempt, url: url.toString() }
+}
+
+function clearStudioPublicationRetry(currentUrl: string): string {
+  const url = new URL(currentUrl)
+  url.searchParams.delete(publicationRetryParameter)
+  url.searchParams.delete(publicationRetryRevisionParameter)
+  return url.toString()
+}
+
+function olderStudioBootstrapRetryDelay(attempt: number): number | undefined {
+  return Number.isInteger(attempt) && attempt > 0 && attempt <= maxStudioBootstrapRetries
+    ? Math.min(200 * attempt, 1_000)
+    : undefined
+}
 
 /** A reloaded frame can receive a newer cell before Metro serves its matching publication. */
 function reconcileStudioCellBootstrap(
@@ -321,7 +355,12 @@ function reconcileStudioCellBootstrap(
 
 /** StudioPreview exposes the opt-in generated preview bridge. */
 export const StudioPreview = {
-  Bootstrap: { reconcile: reconcileStudioCellBootstrap },
+  Bootstrap: {
+    clearPublicationRetry: clearStudioPublicationRetry,
+    nextPublicationReload: nextStudioPublicationReload,
+    olderRetryDelay: olderStudioBootstrapRetryDelay,
+    reconcile: reconcileStudioCellBootstrap,
+  },
   Diagnostics: { record: recordStudioPreviewStage },
   ErrorBoundary: StudioPreviewErrorBoundary,
   Failure: StudioPreviewFailure,

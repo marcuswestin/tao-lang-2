@@ -1,11 +1,11 @@
 {
-  "name": "tao-ide-extension",
+  "name": "tao",
   "displayName": "Tao Lang",
   "version": "0.0.1",
   "license": "AGPL-3.0-only",
   "private": true,
   "description": "Tao language support: syntax highlighting, diagnostics, formatting, and source actions",
-  "publisher": "tao",
+  "publisher": "devtao",
   "repository": {
     "type": "git",
     "url": "https://github.com/marcuswestin/tao-lang-2.git",
@@ -20,7 +20,7 @@
     "LICENSE",
     "README.md",
     "_gen_ide-extension/",
-    "ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json",
+    "ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json",
     "language-configuration.json",
     "package.json"
   ],
@@ -34,10 +34,10 @@
     "grammars": [
       {
         "language": "tao",
-        "scopeName": "source.tao-lang",
-        "path": "./ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json",
+        "scopeName": "source.tao",
+        "path": "./ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json",
         "embeddedLanguages": {
-          "meta.embedded.block.ts.tao-lang": "typescriptreact"
+          "meta.embedded.block.ts.tao": "typescriptreact"
         }
       }
     ],

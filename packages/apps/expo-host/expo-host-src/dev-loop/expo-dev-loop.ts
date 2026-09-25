@@ -63,6 +63,7 @@ async function runDevLoopWithActiveReporter(
   const repoRoot = toolchainRepo ?? selection.projectRoot
   const repositoryControlsAvailable = toolchainRepo !== undefined
     && FS.pathIsWithin(selection.projectRoot, toolchainRepo)
+  DevLoopOutput.showCheckoutControls(repositoryControlsAvailable)
   const { appName, appPath } = selection
   const stateRoot = FS.resolvePath('.tao/dev', selection.projectRoot)
   const runtime = await DevRuntime.prepare(selection.projectRoot)
@@ -80,8 +81,11 @@ async function runDevLoopWithActiveReporter(
     await devData.stop().catch(() => {})
     throw error
   }
+  // An installed Tao has no `bunx` and no Node, so it runs Expo under itself; a checkout keeps `bunx`.
+  const installedLauncher = RuntimeToolchainPaths.installedExpoLauncher(runtime.root)
   const expoServer = expo.createServer(runtime.root, {
-    env: devDataEnvironment(devData.port, devDataApp, devData.capability),
+    command: installedLauncher,
+    env: { ...installedLauncher?.env, ...devDataEnvironment(devData.port, devDataApp, devData.capability) },
     logRoot: FS.resolvePath('logs', stateRoot),
     runtimeToolchainSourceRoot: runtime.sourceRoot,
   })

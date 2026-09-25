@@ -32,6 +32,10 @@ export const JUST_COMMANDS = [
   // mid-write all look like failure. An agent that guesses re-lands work already on `main`.
   'landed',
   'ledger-index',
+  // Most of main's commits write paths a harness write-protects against shell commands, so a
+  // sandboxed merge stops partway. This is the merge alone, reachable unsandboxed by name, without
+  // the lane and message work `finalize` adds or the push `land` adds.
+  'merge-main',
   'model-audit',
   'native-module-check',
   // Pushes the branch, opens or reuses its pull request, and stays attached to stream its checks —

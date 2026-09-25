@@ -10,6 +10,11 @@ const messages = {
   binaryComparable: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
   binaryCompatible: (operator: string) => `Operator '${operator}' requires compatible values on both sides.`,
   binaryNumeric: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
+  actionGuardRetired:
+    '`guard` in an action is retired: use `check <condition>` to stop the action, or `if` to branch. `guard` stays the view-side construct.',
+  checkCondition: '`check` requires a boolean condition.',
+  checkPlacement:
+    '`check` stops its whole action, so it belongs in the action itself, not inside an `if` or `guard` block.',
   conditionalBranch: '`when` branches must produce compatible value types.',
   compactWhenSubject: 'The compact `when Subject Value / label Value` form requires a yes/no subject.',
   compactWhenLabel: (label: string, expected: string) =>
@@ -77,10 +82,13 @@ export const FunctionalCoreValidator = {
     },
     [AST.GuardActionStatement.$type]: (statement, ctx) => {
       validateSubjectCases(statement.subject, ASTUtils.guardBranches(statement), ctx)
+      // §8 keeps `guard` for views; an action stops with `check`. Retired with a warning for now.
+      ctx.warning(statement, messages.actionGuardRetired)
     },
     [AST.IfActionStatement.$type]: (statement, ctx) => {
       validateIfCondition(statement.condition, ctx)
     },
+    [AST.CheckStatement.$type]: validateCheck,
     [AST.IfFunctionStatement.$type]: (statement, ctx) => {
       validateIfCondition(statement.condition, ctx)
     },
@@ -291,6 +299,21 @@ function validateIfCondition(condition: AST.Expression, ctx: ValidationContext):
   const type = Type.ofExpression(condition)
   if (type.kind !== 'unresolved' && !isPrimitive(type, 'boolean')) {
     ctx.error(condition, messages.ifCondition)
+  }
+}
+
+/**
+ * A false check returns from the callback that owns its block. An `if` or `guard` case compiles to a
+ * nested callback, so a check there would skip only that sub-block while the action carried on.
+ */
+function validateCheck(statement: AST.CheckStatement, ctx: ValidationContext): void {
+  const type = Type.ofExpression(statement.condition)
+  if (type.kind !== 'unresolved' && !isPrimitive(type, 'boolean')) {
+    ctx.error(statement.condition, messages.checkCondition)
+  }
+  const owner = statement.$container.$container
+  if (AST.isIfActionStatement(owner) || AST.isGuardActionBranch(owner)) {
+    ctx.error(statement, messages.checkPlacement)
   }
 }
 

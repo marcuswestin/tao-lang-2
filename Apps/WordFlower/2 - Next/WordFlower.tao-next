@@ -6,6 +6,12 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
 //
+// CHECK. `check <boolean>` is an action's early exit: when the expression is false, the rest of that
+// action is skipped. Nothing fails, nothing is reported, and a caller that reached it through `do`
+// carries on. It is a statement in actions only; `guard` stays the view-side construct and tests a
+// data object's availability, never a boolean. A notice that explains the stop is an ordinary `if`
+// before the `check`, as `AddWorkspace` shows.
+//
 // REACTIVE EDITING. Input projections and explicit copies produce ordinary local values.
 // Writable view/action parameters share storage; copy parameters detach explicitly. Native
 // mutable inputs write through generated Tao actions. On granular sync providers, document write

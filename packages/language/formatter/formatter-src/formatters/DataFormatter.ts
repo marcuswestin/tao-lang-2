@@ -100,6 +100,7 @@ export const DataFormatter = {
 
   CreateStatement(f) {
     f.oneSpaceAfter('create')
+    f.oneSpaceAround('with')
   },
 
   UpdateStatement(f) {

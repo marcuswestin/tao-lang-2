@@ -11,15 +11,15 @@ const CONFIG = {
   languages: [{
     fileExtensions: ['tao'],
     grammar: './parser-grammar/tao-grammar.langium',
-    id: 'tao-lang',
-    textMate: { out: '../../ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json' },
+    id: 'tao',
+    textMate: { out: '../../ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json' },
   }],
   out: './parser-src/_gen_tao-parser',
   projectName: 'TaoLang',
 }
 
 const GENERATED = [
-  'packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+  'packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json',
   'packages/language/parser/parser-src/_gen_tao-parser/ast.ts',
   'packages/language/parser/parser-src/_gen_tao-parser/grammar.ts',
 ]
@@ -76,7 +76,7 @@ Describe('parser generate staleness stamp', () => {
       Expect(
         await FS.isFile(
           FS.resolvePath(
-            'packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+            'packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json',
             root,
           ),
         ),

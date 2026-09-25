@@ -236,7 +236,6 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     )
     const afterReset = await browser.evaluate<Readonly<{ loads: number }>>('window.__taoFastRefreshFrameProbe')
     Expect(afterReset.loads).toBeGreaterThan(0)
-    await writePreviewDiagnostics(browser, studio, previewUrl, 'scenario-reset-passed')
     Expect(browser.browserFailures()).toEqual([])
   } finally {
     await browser?.close()

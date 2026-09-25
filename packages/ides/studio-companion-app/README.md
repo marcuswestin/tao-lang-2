@@ -87,6 +87,9 @@ just companion-host-build --platform ios-simulator  # needs Xcode and an unsandb
 just companion-host-publish                         # needs gh signed in
 ```
 
+CocoaPods, `xcodebuild`, and Gradle all need the host, so an agent runs the build as the named host
+operation `./agent unsandboxed companion-host-build [--platform ios-simulator] [--abi <abi>]`.
+
 For Android, Expo prebuilds the `android/` project here and Gradle assembles a debug APK. For the
 iOS Simulator, CocoaPods and `xcodebuild` build a debug app for both simulator architectures, signed
 ad hoc: the simulator reads an app's entitlements from a section Xcode writes only while signing, and

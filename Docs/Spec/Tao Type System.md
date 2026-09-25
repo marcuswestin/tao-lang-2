@@ -281,8 +281,8 @@ when Ready {
 `otherwise` is required for every supported `when`; it is always exhaustive. Value branches must
 have compatible results. Exact boolean cases preserve ordinary boolean conditionals. Query subjects
 add mutually exclusive `loading`, `error -> Message`, and ready `empty` cases. Render branches use
-blocks. This tranche did not introduce an action-statement `when`; actions use guards and one-sided
-`if`.
+blocks. This tranche did not introduce an action-statement `when`; actions use `check`, one-sided
+`if`, and guards.
 
 ### One-sided `if`
 
@@ -297,6 +297,33 @@ if Result is Confirmed {
 It never takes `else`. A conditional with two or more outcomes is modeled by exhaustive `when` in
 the contexts where `when` is supported. `Value is <Case>` can appear anywhere a boolean expression
 is accepted; the declaration-linked case must belong to that value.
+
+### Action early exit: `check`
+
+`check` takes one boolean condition and is a statement in actions only:
+
+```tao
+action AddWorkspace() {
+   if WorkspaceName is empty {
+      present WorkspaceNameNotice() as overlay
+   }
+   check WorkspaceName is not empty
+   create Workspace { Name: WorkspaceName }
+}
+```
+
+When the condition is false, the rest of the action is skipped. Nothing fails and no failure report
+is published; statements before the `check` stand. A `check` inside an action reached through
+`do Callee()` stops only that callee, and the caller continues after the `do`. An inline handler
+such as `on press -> { … }` and an `async { … }` block are actions of their own, so a `check` there
+stops that handler or block.
+
+`guard` in an action is retired in favour of `check` and `if`: it still runs as described under
+_Block-scoped guards_, but every use draws a warning naming them, ahead of becoming an error.
+
+A `check` may not appear inside an action's `if` block or `guard` case: those compile to nested
+blocks, where an early exit would skip only the nested block while the action carried on. Fold the
+enclosing condition into the checked expression instead.
 
 ### Block-scoped guards
 

@@ -149,7 +149,7 @@ function ordinaryWritableItemPath(target: AST.ValueDeclaration | undefined, memb
   }
   let type = Type.ofValueDeclaration(target)
   for (const member of members) {
-    if (type.kind !== 'item') {
+    if (type.kind !== 'item' || Type.isCompletenessMember(type, member)) {
       return false
     }
     type = Type.atMemberPath(type, [member])
