@@ -17,6 +17,8 @@ prefix_rule(pattern=["./agent","unsandboxed","prepare-release","studio"], decisi
 prefix_rule(pattern=["./agent","unsandboxed","prepare-release","ide-extension"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","app-dev"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","companion-host-build"], decision="allow", justification="Repository-approved host command.")
+prefix_rule(pattern=["./agent","unsandboxed","standalone-cli-vm-setup"], decision="allow", justification="Repository-approved host command.")
+prefix_rule(pattern=["./agent","unsandboxed","standalone-cli-clean-machine"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","simulators","list"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","simulators","boot"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","simulators","run"], decision="allow", justification="Repository-approved host command.")

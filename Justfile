@@ -219,6 +219,11 @@ standalone-cli-acceptance: _parser-gen
     bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
     bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
 
+# Build a 0.0.0 release and run its acceptance in a fresh vanilla macOS Tart VM, retaining guest logs
+[group('Ship')]
+standalone-cli-clean-machine: _parser-gen
+    bash packages/cli/tao-cli/cli-src/standalone-clean-machine.sh
+
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]
 [positional-arguments]

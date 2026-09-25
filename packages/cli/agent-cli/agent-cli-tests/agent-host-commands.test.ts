@@ -23,6 +23,8 @@ const expected = [
   'prepare-release ide-extension',
   'app-dev',
   'companion-host-build',
+  'standalone-cli-vm-setup',
+  'standalone-cli-clean-machine',
   'simulators list',
   'simulators boot',
   'simulators run',

@@ -917,16 +917,19 @@ above; where the two disagree, these are later and win.
     inside the ordinary test suite, a local `tart` virtual machine as the gate before publication,
     and the `macos-26` GitHub runner as a regression gate once the public repository exists.
 
-    _Gate implementation in progress 2026-09-25._ The local driver clones a disposable
+    _Gate implementation in progress 2026-09-25._ `./agent unsandboxed
+    standalone-cli-clean-machine` builds the release and runs a local driver that clones a disposable
     `macos-tahoe-vanilla` VM, boots it headless, mounts only the release and the existing acceptance
     compiled for the guest as read-only inputs, and writes guest step logs to a host mount. It uses
     SSH because [Tart's guest agent](https://tart.run/blog/2025/06/01/bridging-the-gaps-with-the-tart-guest-agent/)
     is included in non-vanilla images only. The [vanilla image](https://github.com/cirruslabs/macos-image-templates)
     has no added software; the guest checks for Homebrew and Xcode tools before testing. The same acceptance driver
     passed locally as a compiled executable, and a 0.0.0 release passed host acceptance in about
-    50 seconds. The VM gate has not run: Tart and the large image are absent, and installation,
-    image pull, and the named host permission require the Developer's approval. No VM duration or
-    hidden dependency finding is claimed yet.
+    50 seconds. The Developer approved installing Tart and its image on 2026-09-25, and the named
+    host operations are generated. The VM gate has not run because this task's existing sandbox
+    still rejects the newly added host operations; a fresh task must load those rules before
+    `./agent unsandboxed standalone-cli-vm-setup` and the clean-machine command can run. No VM
+    duration or hidden dependency finding is claimed yet.
 
 ## Deferred approaches worth revisiting
 

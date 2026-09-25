@@ -10,6 +10,7 @@ input="$root/input"
 logs="$root/logs"
 release="$(pwd)/.artifacts/release/v0.0.0"
 expect_script='packages/cli/tao-cli/cli-src/standalone-clean-machine.expect'
+bun_bin="${TAO_STANDALONE_BUN:-bun}"
 created=0
 started=0
 vm_pid=''
@@ -55,19 +56,27 @@ if ! command -v tart >/dev/null; then
   printf 'Tart is required for the clean-machine gate.\n' >&2
   exit 1
 fi
-if [ ! -f "$release/release.json" ]; then
-  printf 'Build the 0.0.0 release before running the clean-machine gate.\n' >&2
+if ! command -v "$bun_bin" >/dev/null; then
+  printf 'Bun is required to build the 0.0.0 release: %s\n' "$bun_bin" >&2
   exit 1
 fi
-version=$(bun --version)
+version=$("$bun_bin" --version)
 IFS=. read -r major minor patch <<< "$version"
 if (( major < 1 || (major == 1 && minor < 4) || (major == 1 && minor == 4 && patch < 2) )); then
   printf 'Bun 1.4.2 or newer is required to compile a runnable macOS release; found %s.\n' "$version" >&2
   exit 1
 fi
 
+if ! step 'build the 0.0.0 release' "$bun_bin" run \
+  packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0 \
+  > "$logs/release.log" 2>&1; then
+  cat "$logs/release.log" >&2
+  exit 1
+fi
+cat "$logs/release.log"
+
 cp -R "$release" "$input/release/"
-if ! step 'compile the existing acceptance for the guest' bun build --compile \
+if ! step 'compile the existing acceptance for the guest' "$bun_bin" build --compile \
   packages/cli/tao-cli/cli-src/standalone-acceptance.ts --outfile "$input/acceptance" \
   > "$logs/compile.log" 2>&1; then
   cat "$logs/compile.log" >&2
@@ -93,8 +102,8 @@ for tool in /opt/homebrew/bin/brew /opt/homebrew/bin/node /opt/homebrew/bin/bun 
     exit 1
   fi
 done
-if /usr/bin/xcode-select -p >/dev/null 2>&1; then
-  echo 'The vanilla guest unexpectedly has Xcode tools selected.' >&2
+if [ -d /Library/Developer/CommandLineTools ] || [ -d /Applications/Xcode.app ]; then
+  echo 'The vanilla guest unexpectedly has Xcode tools installed.' >&2
   exit 1
 fi
 exec '/Volumes/My Shared Files/tao-input/acceptance' \
