@@ -262,6 +262,16 @@ data Documents / Document {
    commands hide Delete
 }
 
+// The same seeded graph used by Current's phone export journeys.
+folder fixture StarterWorkspace {
+   Novel = create Workspace { Name: "Novel" }
+   Opening = create Document {
+      Workspace: Novel
+      Title: "Opening"
+      Body: "The first line."
+   }
+}
+
 data Paragraphs / Paragraph {
    Text text
    Ordering number

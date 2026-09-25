@@ -1,4 +1,4 @@
-use Workspaces from @data
+use Documents, Workspaces from @data
 use WordFlowerDrawerNavigator, WordFlowerNavigator, WordFlowerTabsNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
@@ -7,12 +7,9 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
 //
-// EFFECTS. A saved document can be shared as Markdown through a foreign action. The action names
-// Offline, TooLarge, and cancellation outcomes, and its call site handles success, Offline, other
-// declared rejections, and unexpected errors with `when do`. Tao journeys stub declared failures; a success
-// journey runs the platform share handoff. A local share works offline; Offline handles only an
-// explicit network failure reported by a chosen share destination. The MVP omits Revolution's
-// format picker and queued case.
+// TEST DEVICE AND FIXTURE. Document journeys pin a phone viewport, while export journeys inherit
+// the same seeded Novel workspace and Opening document from StarterWorkspace. Each check receives
+// its own fresh graph. The StudioWorkspace scenario fixture stays independent for existing previews.
 //
 // DESIGN VALUES. The design language finishes its MVP surface: a clause list reads by case, the
 // active navigation tab is a condition, and a color travels as a value where a view tints something
@@ -623,6 +620,16 @@ guard default {
 fixture StudioWorkspace {
    Novel = create Workspace {
       Name: "Novel"
+}  }
+
+folder fixture StarterWorkspace {
+   Novel = create Workspace {
+      Name: "Novel"
+   }
+   Opening = create Document {
+      Workspace: Novel
+      Title: "Opening"
+      Body: "The first line."
 }  }
 
 scenarios WorkspaceRow "states" {
