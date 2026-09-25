@@ -61,6 +61,24 @@ Describe('HostDependencies', () => {
       Expect(host.installs).toHaveLength(1)
     })
   })
+
+  Test('repairs a stamped host with missing packages once across concurrent callers', async () => {
+    await withHost(async host => {
+      await HostDependencies.ensureIn(host, approved)
+      await FS.remove(FS.resolvePath('node_modules', host.installRoot))
+
+      await Promise.all([HostDependencies.ensureIn(host, approved), HostDependencies.ensureIn(host, approved)])
+
+      Expect(host.installs).toHaveLength(2)
+      Expect(await FS.isFile(FS.resolvePath('node_modules/jest/package.json', host.installRoot))).toBe(true)
+
+      await FS.remove(FS.resolvePath('node_modules/jest', host.installRoot))
+      await HostDependencies.ensureIn(host, approved)
+
+      Expect(host.installs).toHaveLength(3)
+      Expect(await FS.isFile(FS.resolvePath('node_modules/jest/package.json', host.installRoot))).toBe(true)
+    })
+  })
 })
 
 const approved = { environment: { [HostDependencies.CONSENT_ENV]: 'yes' }, interactive: false }
@@ -85,7 +103,8 @@ async function withHost(run: (host: FakeHost) => Promise<void>): Promise<void> {
       installs,
       async install(installRoot) {
         installs.push(installRoot)
-        await FS.mkdir(FS.resolvePath('node_modules', installRoot))
+        await FS.writeText(FS.resolvePath('node_modules/expo/package.json', installRoot), '{}\n')
+        await FS.writeText(FS.resolvePath('node_modules/jest/package.json', installRoot), '{}\n')
       },
     })
   } finally {
