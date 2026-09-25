@@ -120,7 +120,7 @@
     "pods install", "pods spec",
     "android devices", "android state", "android emulators", "android boot", "android ensure",
     "remote fetch", "remote refs", "remote heads", "remote exists",
-    "processes list", "processes started", "start-branch",
+    "processes list", "processes started", "start-branch", "direnv allow",
   ],
   "claudecode": {
     "autoCompactWindow": 272000,
@@ -171,10 +171,10 @@
           "*.expo.dev",
           "*.expo.io",
           "exp.host",
-          // React Native's CocoaPods integration downloads the Hermes iOS artifact from Maven
-          // during the native-module compiler proof. The command still requires explicit host
-          // review or an opt-in unsandboxed session; this network rule does not grant a host escape.
+          // React Native's CocoaPods integration downloads iOS artifacts from Maven and its
+          // artifact CDN during native builds. These network rules do not grant a host escape.
           "repo1.maven.org",
+          "repo.reactnative.dev",
           "cache.nixos.org",
           "*.cachix.org",
           "*.anthropic.com",

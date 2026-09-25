@@ -148,7 +148,9 @@
       "Bash(./agent unsandboxed processes started)",
       "Bash(./agent unsandboxed processes started *)",
       "Bash(./agent unsandboxed start-branch)",
-      "Bash(./agent unsandboxed start-branch *)"
+      "Bash(./agent unsandboxed start-branch *)",
+      "Bash(./agent unsandboxed direnv allow)",
+      "Bash(./agent unsandboxed direnv allow *)"
     ],
     "ask": [
       "Bash(./agent land-unlock --force*)",
@@ -269,7 +271,9 @@
       "./agent unsandboxed processes started",
       "./agent unsandboxed processes started *",
       "./agent unsandboxed start-branch",
-      "./agent unsandboxed start-branch *"
+      "./agent unsandboxed start-branch *",
+      "./agent unsandboxed direnv allow",
+      "./agent unsandboxed direnv allow *"
     ],
     "filesystem": {
       "allowWrite": [
@@ -300,6 +304,7 @@
         "*.expo.io",
         "exp.host",
         "repo1.maven.org",
+        "repo.reactnative.dev",
         "cache.nixos.org",
         "*.cachix.org",
         "*.anthropic.com",
