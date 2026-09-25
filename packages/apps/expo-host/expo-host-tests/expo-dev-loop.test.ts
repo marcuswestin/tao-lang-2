@@ -652,10 +652,11 @@ en7: flags=8863
     const android = createAndroid(config, {} as ExpoMetroSession, { requireAdb: async () => {} })
     const opened: string[] = []
     android.listPhysicalDevices = async () => ['ANDROID-A', 'ANDROID-B']
-    android.ensureExpoGoOnSerial = async () => {}
+    android.prepareRuntimeOnSerial = async () => {}
     android.reverseMetroPort = async () => true
-    android.openExpoGoOnSerial = async serial => {
+    android.openRuntimeOnSerial = async serial => {
       opened.push(serial)
+      return 'expo-go'
     }
     const result = await openPhysicalDevice(
       config,
@@ -693,6 +694,41 @@ en7: flags=8863
       'Android emulator exited before it booted, leaving nothing in /tmp/emulator.log.',
     )
   })
+
+  Test(
+    'opens a phone in its prepared runtime on its own loopback when USB reverses Metro, and at the LAN address otherwise',
+    async () => {
+      const config = createExpoConfig(8_099)
+      const android = createAndroid(config, {} as ExpoMetroSession, { requireAdb: async () => {} })
+      const opens: { expoGoUrl: string; metroHost: string; serial: string }[] = []
+      let reversed = true
+      android.listPhysicalDevices = async () => ['PHONE-1']
+      android.prepareRuntimeOnSerial = async () => {}
+      android.reverseMetroPort = async () => reversed
+      android.openRuntimeOnSerial = async (serial, expoGoUrl, metroHost) => {
+        opens.push({ expoGoUrl, metroHost, serial })
+        return 'companion'
+      }
+      const open = () =>
+        withCapturedOutput(() =>
+          openPhysicalDevice(config, { waitForMetro: async () => {} } as unknown as ExpoMetroSession, android, {
+            detectLanHost: async () => '192.168.1.20',
+            listIosDevices: async () => [],
+          })
+        )
+
+      const overUsb = await open()
+      reversed = false
+      const overLan = await open()
+
+      Expect(overUsb.stdout).toContain('opened PHONE-1 (Tao Companion)')
+      Expect(opens).toEqual([
+        { expoGoUrl: config.EXPO_GO_URL, metroHost: '127.0.0.1', serial: 'PHONE-1' },
+        { expoGoUrl: 'exp://192.168.1.20:8099', metroHost: '192.168.1.20', serial: 'PHONE-1' },
+      ])
+      Expect(overLan.result).toBe(true)
+    },
+  )
 
   Test('accepts only Android Expo Go clients from the configured SDK generation', () => {
     const packageInfo = `

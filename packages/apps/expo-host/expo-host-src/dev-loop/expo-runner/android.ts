@@ -72,7 +72,10 @@ export function createAndroid(
     listPhysicalDevices,
     openExpoGoOnSerial: (serial: string, url: string = config.EXPO_GO_URL) => openExpoGoOnSerial(serial, url),
     openRuntime: (expoGoUrl: string = config.EXPO_GO_URL) => openRuntime(config, metro, runtimes, expoGoUrl),
+    openRuntimeOnSerial: (serial: string, expoGoUrl: string, metroHost: string) =>
+      openRuntimeOnSerial(config, runtimes, serial, expoGoUrl, metroHost),
     prepareAvailableRuntime: () => prepareAvailableRuntime(config, compatibility, prepare),
+    prepareRuntimeOnSerial: prepare,
     reverseMetroPort: (serial: string) => reverseMetroPort(config, serial),
   }
 }
@@ -311,8 +314,23 @@ async function openRuntime(
   await metro.waitForMetro()
   const serial = await requireBootedEmulator()
   await reverseMetroPort(config, serial)
+  return await openRuntimeOnSerial(config, runtimes, serial, expoGoUrl, '127.0.0.1')
+}
+
+/**
+ * openRuntimeOnSerial opens the app on one device in the runtime it was prepared with: the Companion
+ * through its development-client link to Metro at `metroHost`, or Expo Go at `expoGoUrl`. A device
+ * whose Metro port is reversed reaches Metro on its own loopback; any other needs the Mac's address.
+ */
+async function openRuntimeOnSerial(
+  config: ExpoSessionConfig,
+  runtimes: ReadonlyMap<string, AndroidRuntime>,
+  serial: string,
+  expoGoUrl: string,
+  metroHost: string,
+): Promise<AndroidRuntime> {
   if (runtimes.get(serial) === 'companion') {
-    await openCompanionOnSerial(serial, companionDevClientUrl({ host: '127.0.0.1', port: config.EXPO_PORT }))
+    await openCompanionOnSerial(serial, companionDevClientUrl({ host: metroHost, port: config.EXPO_PORT }))
     return 'companion'
   }
   await openExpoGoOnSerial(serial, expoGoUrl)
