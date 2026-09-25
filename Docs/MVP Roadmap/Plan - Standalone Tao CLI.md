@@ -925,8 +925,9 @@ above; where the two disagree, these are later and win.
     is included in non-vanilla images only. The [vanilla image](https://github.com/cirruslabs/macos-image-templates)
     has no added software; the guest checks for Homebrew and Xcode tools before testing. The same acceptance driver
     passed locally as a compiled executable, and a 0.0.0 release passed host acceptance in about
-    50 seconds. The Developer approved installing Tart and its image on 2026-09-25, and the named
-    host operations are generated. The VM gate has not run because this task's existing sandbox
+    50 seconds. The Developer approved installing Tart and its image on 2026-09-25. The named
+    setup operation trusts Tart's `softnet` dependency formula individually before installing Tart;
+    Homebrew rejects the dependency otherwise. The VM gate has not run because this task's existing sandbox
     still rejects the newly added host operations; a fresh task must load those rules before
     `./agent unsandboxed standalone-cli-vm-setup` and the clean-machine command can run. No VM
     duration or hidden dependency finding is claimed yet.

@@ -224,6 +224,13 @@ standalone-cli-acceptance: _parser-gen
 standalone-cli-clean-machine: _parser-gen
     bash packages/cli/tao-cli/cli-src/standalone-clean-machine.sh
 
+# Trust Tart's required tap formula and install Tart for the clean-machine gate
+[group('Ship')]
+standalone-cli-vm-setup:
+    brew tap cirruslabs/cli
+    brew trust --formula cirruslabs/cli/softnet
+    brew install cirruslabs/cli/tart
+
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]
 [positional-arguments]

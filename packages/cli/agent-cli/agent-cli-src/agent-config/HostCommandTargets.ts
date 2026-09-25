@@ -22,7 +22,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   // sequence; naming the whole build keeps an agent from stitching it together from lower-level
   // operations and a hand-written placement step.
   'companion-host-build': { command: './dev', fixedArgs: ['companion-host-build'] },
-  'standalone-cli-vm-setup': { command: 'brew', fixedArgs: ['install', 'cirruslabs/cli/tart'], argsPolicy: 'none' },
+  'standalone-cli-vm-setup': { command: 'just', fixedArgs: ['standalone-cli-vm-setup'], argsPolicy: 'none' },
   'standalone-cli-clean-machine': { command: 'just', fixedArgs: ['standalone-cli-clean-machine'], argsPolicy: 'none' },
   'simulators list': { command: 'xcrun', fixedArgs: ['simctl', 'list', 'devices'] },
   'simulators boot': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
