@@ -44,14 +44,6 @@ export type ReadCapabilitiesDependencies = {
 const FAILED_CORE_SIMULATOR_SERVICE =
   /CoreSimulatorService connection became invalid|simdiskimaged (?:crashed|is not responding)|failed to initialize simulator runtime/i
 
-/**
- * Only a variable a harness sets *because* the command is sandboxed belongs here: Claude Code's
- * sandboxed shell sets `SANDBOX_RUNTIME` and Codex's sets `CODEX_SANDBOX`. Claude Code also sets
- * `CLAUDE_CODE_TMPDIR` in every session, sandboxed or not, so keying on it reported every agent as
- * sandboxed and made the report's one host-policy signal say nothing.
- */
-const SANDBOX_SIGNALS: readonly string[] = ['SANDBOX_RUNTIME', 'CODEX_SANDBOX']
-
 const PROBES: readonly CapabilityProbe[] = [
   {
     args: ['-axo', 'pid=,ppid=,lstart=,command='],
@@ -80,7 +72,9 @@ const PROBES: readonly CapabilityProbe[] = [
     command: 'watchman',
     display: 'watchman --no-spawn --no-local watch-list',
     name: 'Watchman socket',
-    remediation: 'Run ./agent doctor: it tells a denied socket from a stopped server and names the fix for each.',
+    // Agent sandboxes leave Watchman's per-login socket out by design; a denial there is expected.
+    remediation:
+      'Run file-watching dev loops on the host with ./agent unsandboxed app-dev or ./agent unsandboxed studio.',
   },
   {
     args: ['store', 'info', '--store', 'daemon'],
@@ -102,7 +96,8 @@ const PROBES: readonly CapabilityProbe[] = [
     command: 'docker',
     display: "docker ps --format '{{.ID}}'",
     name: 'Docker daemon',
-    remediation: 'Select tao-local-services only while working with the local InstantDB stack.',
+    remediation:
+      'Start and stop the local InstantDB stack with ./agent unsandboxed local-instantdb start or stop, on the host.',
   },
 ]
 
@@ -128,11 +123,6 @@ export function classifyCapability(probe: CapabilityProbe, result: ProbeResult):
   }
 }
 
-/** detectSandbox reports whether this command runs under a harness sandbox policy. */
-function detectSandbox(env: Readonly<Record<string, string | undefined>>): boolean {
-  return SANDBOX_SIGNALS.some(name => (env[name] ?? '') !== '')
-}
-
 /** Required probes, rather than an inherited harness marker, decide whether landing can run host gates. */
 export function unavailableLandingCapabilities(report: CapabilityReport): readonly CapabilityCheck[] {
   return report.checks.filter(check => LANDING_REQUIRED_CAPABILITIES.has(check.name) && check.status !== 'available')
@@ -154,7 +144,7 @@ export async function readAgentCapabilities(
   return {
     checks,
     repositoryRoot: Repo.getRoot(),
-    sandboxDetected: detectSandbox(dependencies.env ?? Platform.runtimeProcess.env),
+    sandboxDetected: CLI.inAgentSandbox(dependencies.env),
     version: 1,
   }
 }
