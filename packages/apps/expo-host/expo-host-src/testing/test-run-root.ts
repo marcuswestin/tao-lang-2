@@ -1,4 +1,4 @@
-import { Assert, Errors, FS, Json, Platform } from '@shared'
+import { Assert, Errors, FS, Json, Platform, TaoHome } from '@shared'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import { TestHarnessFiles } from './test-harness-files'
 import { TestRunId } from './test-run-id'
@@ -74,6 +74,28 @@ const RETAINED_CACHE_BYTES = 256 * 1024 * 1024
  */
 const RETAINED_CACHE_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
+/** RETAINED_HOST_RUN_BYTES bounds generated roots across runtime identities in Tao's cache. */
+const RETAINED_HOST_RUN_BYTES = 4 * 1024 * 1024 * 1024
+
+/** RETAINED_HOST_RUN_FILES bounds inode-heavy test roots across runtime identities. */
+const RETAINED_HOST_RUN_FILES = 250_000
+
+/** HOST_OWNER_DIRECTORY_NAME holds per-process receipts for readers and writers of one identity. */
+const HOST_OWNER_DIRECTORY_NAME = '.owners'
+
+/** HOST_OWNER_FILE_NAME matches the per-process receipts this module publishes. */
+const HOST_OWNER_FILE_NAME = /^([0-9]+)\.json$/
+
+/** A queued prepare/shard/finalize handoff stays protected for at least a day after its last use. */
+const HOST_IDENTITY_GRACE_MS = 24 * 60 * 60 * 1000
+
+/** Aggregate scans are spaced out because a developer may retain many generated modules. */
+const HOST_AGGREGATE_SCAN_INTERVAL_MS = 60 * 60 * 1000
+
+const HOST_LIFECYCLE_DIRECTORY_NAME = '.lifecycle'
+const HOST_AGGREGATE_SCAN_FILE_NAME = 'last-scan.json'
+const HOST_RETIRED_DIRECTORY_NAME = 'retired'
+
 /**
  * COMPILED_STORE_DIRECTORY_NAME names the content-addressed store of compiled apps beside a
  * category's run roots. The leading dot keeps it out of `RUN_ROOT_NAME` and `CATEGORY_NAME`.
@@ -128,10 +150,12 @@ export const TestRunRoot = {
   lookup,
   MANIFEST_FILE_NAME,
   open,
+  pruneHostAggregate,
   prune,
   publish,
   RETAINED_CACHE_AGE_MS,
   RETAINED_CACHE_BYTES,
+  RETAINED_HOST_RUN_BYTES,
 } as const
 
 type FoundRunRoot = {
@@ -160,11 +184,14 @@ type CacheEntry = {
 }
 
 const startupPrunes = new Map<string, Promise<void>>()
+const registeredHostIdentities = new Map<string, number>()
 
 /** create makes a fresh run root for one harness run, pruning stale roots once per process first. */
 async function create(category: string, options: TestRunRootOptions = {}): Promise<string> {
   const generatedRoot = resolveGeneratedRoot(options)
+  await registerHostOwner(generatedRoot, options)
   await pruneAtStartup(generatedRoot)
+  await maybePruneHostAggregate(generatedRoot, options)
   const runRoot = FS.resolvePath(`${requireCategory(category)}/${TestRunId.create()}`, generatedRoot)
   await FS.mkdir(runRoot)
   return runRoot
@@ -291,6 +318,7 @@ async function lookup(
   options: TestRunRootOptions = {},
 ): Promise<CachedRun | undefined> {
   const generatedRoot = resolveGeneratedRoot(options)
+  await registerHostOwner(generatedRoot, options)
   const categoryRoot = FS.resolvePath(requireCategory(category), generatedRoot)
   const entry = await readCacheEntry(cacheEntryPath(categoryRoot, fingerprint))
   if (entry === undefined) {
@@ -316,6 +344,7 @@ async function open(
   options: TestRunRootOptions = {},
 ): Promise<CachedRun | undefined> {
   const generatedRoot = resolveGeneratedRoot(options)
+  await registerHostOwner(generatedRoot, options)
   const categoryRoot = FS.resolvePath(requireCategory(category), generatedRoot)
   const path = FS.resolvePath(runRoot)
   const manifestPath = FS.resolvePath(MANIFEST_FILE_NAME, path)
@@ -330,6 +359,7 @@ async function open(
     }
   }
   await markUsed(path)
+  await maybePruneHostAggregate(generatedRoot, options)
   return { manifestPath, runRoot: path }
 }
 
@@ -349,6 +379,7 @@ async function publish(
   options: TestRunRootOptions = {},
 ): Promise<boolean> {
   const generatedRoot = resolveGeneratedRoot(options)
+  await registerHostOwner(generatedRoot, options)
   const categoryRoot = FS.resolvePath(requireCategory(category), generatedRoot)
   const path = FS.resolvePath(runRoot)
   // The index names its roots relative to the category it lives in, so a root belonging to another
@@ -754,7 +785,368 @@ function resolveGeneratedRoot(options: TestRunRootOptions = {}): string {
 /** A stable per-runtime cache outside managed worktrees, where directory moves are permitted. */
 function hostGeneratedRoot(runtimePackageRoot: string): string {
   const identity = FS.contentIdentity([FS.resolvePath(runtimePackageRoot)]).slice(0, 16)
-  return FS.resolvePath(`tao-test-runs/${identity}/${DIRECTORY_NAME}`, FS.tmpdir())
+  return TaoHome.cacheResolve(`test-runs/${identity}/${DIRECTORY_NAME}`)
+}
+
+function usesHostRoot(options: TestRunRootOptions): boolean {
+  const runtimePackageRoot = options.runtimePackageRoot ?? RuntimeToolchainPaths.packageRoot
+  return resolveGeneratedRoot(options) === hostGeneratedRoot(runtimePackageRoot)
+}
+
+/** registerHostOwner records this process before it opens or creates generated output. */
+async function registerHostOwner(generatedRoot: string, options: TestRunRootOptions): Promise<void> {
+  if (!usesHostRoot(options)) {
+    return
+  }
+  const identityRoot = FS.dirname(generatedRoot)
+  const hostRunsRoot = FS.dirname(identityRoot)
+  const lastRegistration = registeredHostIdentities.get(identityRoot)
+  if (lastRegistration !== undefined && Date.now() - lastRegistration < 30_000) {
+    return
+  }
+  const ownerRoot = FS.resolvePath(HOST_OWNER_DIRECTORY_NAME, identityRoot)
+  const pid = Platform.runtimeProcess.pid
+  const receipt = { pid, updatedAt: new Date().toISOString(), version: 1 }
+  const processStartedAt = ownProcessStartedAt()
+  if (processStartedAt !== undefined) {
+    Object.assign(receipt, { processStartedAt })
+  }
+  const path = FS.resolvePath(`${pid}.json`, ownerRoot)
+  const staged = `${path}.${Platform.randomUUID()}.tmp`
+  await FS.mkdir(hostRunsRoot)
+  await FS.withFileMutationLock(FS.resolvePath('.lifecycle', hostRunsRoot), hostRunsRoot, async () => {
+    await FS.mkdir(ownerRoot)
+    try {
+      await FS.writeJson(staged, receipt)
+      await FS.move(staged, path)
+      registeredHostIdentities.set(identityRoot, Date.now())
+    } finally {
+      await removeQuietly(staged)
+    }
+  })
+}
+
+async function maybePruneHostAggregate(generatedRoot: string, options: TestRunRootOptions): Promise<void> {
+  if (usesHostRoot(options)) {
+    await pruneHostAggregate(FS.dirname(FS.dirname(generatedRoot)), FS.dirname(generatedRoot))
+  }
+}
+
+/** pruneHostAggregate bounds Tao-owned generated roots while preserving every possible reader. */
+async function pruneHostAggregate(
+  hostRunsRoot: string,
+  protectedIdentityRoot?: string,
+  retainedBytes = RETAINED_HOST_RUN_BYTES,
+  force = false,
+  retainedFiles = RETAINED_HOST_RUN_FILES,
+): Promise<void> {
+  const root = FS.resolvePath(hostRunsRoot)
+  await FS.mkdir(root)
+  const lifecycleRoot = FS.resolvePath(HOST_LIFECYCLE_DIRECTORY_NAME, root)
+  await FS.mkdir(lifecycleRoot)
+  const retiredRoot = FS.resolvePath(HOST_RETIRED_DIRECTORY_NAME, lifecycleRoot)
+  await FS.mkdir(retiredRoot)
+  if (await FS.isSymbolicLink(retiredRoot)) {
+    return
+  }
+  await cleanupRetiredAggregate(retiredRoot)
+  const scanPath = FS.resolvePath(HOST_AGGREGATE_SCAN_FILE_NAME, lifecycleRoot)
+  const shouldScan = await FS.withFileMutationLock(
+    FS.resolvePath(HOST_LIFECYCLE_DIRECTORY_NAME, root),
+    root,
+    async () => {
+      const lastScan = await readAggregateScan(scanPath)
+      if (!force && lastScan !== undefined && Date.now() - lastScan < HOST_AGGREGATE_SCAN_INTERVAL_MS) {
+        return false
+      }
+      await FS.writeJson(scanPath, { at: new Date().toISOString(), version: 1 })
+      return true
+    },
+  )
+  if (!shouldScan) {
+    return
+  }
+  // Size and age discovery walks the potentially large corpus without blocking new owner leases.
+  const candidates = await discoverAggregateIdentities(root, Date.now())
+  const retired = await FS.withFileMutationLock(
+    FS.resolvePath(HOST_LIFECYCLE_DIRECTORY_NAME, root),
+    root,
+    async () => await evictAggregateIdentities(root, candidates, protectedIdentityRoot, retainedBytes, retainedFiles),
+  )
+  for (const path of retired) {
+    await removeQuietly(path)
+  }
+  await cleanupRetiredAggregate(retiredRoot)
+}
+
+async function readAggregateScan(path: string): Promise<number | undefined> {
+  try {
+    const scan = await FS.readJson<unknown>(path)
+    if (Json.isRecord(scan) && scan['version'] === 1 && typeof scan['at'] === 'string') {
+      const at = Date.parse(scan['at'])
+      return Number.isFinite(at) ? at : undefined
+    }
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+type AggregateIdentity = {
+  bytes: number
+  files: number
+  generatedRootModifiedMs: number
+  identityModifiedMs: number
+  lastUsed: number
+  path: string
+  reclaimable: boolean
+}
+
+async function discoverAggregateIdentities(
+  root: string,
+  now: number,
+): Promise<AggregateIdentity[]> {
+  if (!await FS.isDirectory(root)) {
+    return []
+  }
+  const identities: AggregateIdentity[] = []
+  for (const name of await listDirectory(root)) {
+    const identityRoot = FS.resolvePath(name, root)
+    const generatedRoot = FS.resolvePath(DIRECTORY_NAME, identityRoot)
+    const ownerRoot = FS.resolvePath(HOST_OWNER_DIRECTORY_NAME, identityRoot)
+    if (
+      !/^[0-9a-f]{16}$/.test(name)
+      || await FS.isSymbolicLink(identityRoot)
+      || await FS.isSymbolicLink(generatedRoot)
+      || await FS.isSymbolicLink(ownerRoot)
+      || !await FS.isDirectory(generatedRoot)
+    ) {
+      continue
+    }
+    const hasReceipts = await FS.isDirectory(ownerRoot)
+    const ownership = await inspectHostOwners(ownerRoot)
+    const identityModifiedMs = await FS.modifiedTimeMs(identityRoot).catch(() => now)
+    let lastUsed = identityModifiedMs
+    lastUsed = Math.max(lastUsed, ownership.lastUsed)
+    lastUsed = Math.max(lastUsed, await newestRunActivity(generatedRoot, lastUsed))
+    const size = await directorySize(identityRoot)
+    if (size === undefined) {
+      // A partial measurement cannot be used to justify evicting this or another identity.
+      return []
+    }
+    lastUsed = Math.max(lastUsed, size.latestModified)
+    const names = await listDirectory(identityRoot)
+    const reclaimable = hasReceipts
+      && ownership.hasReceipt
+      && !ownership.possiblyLive
+      && now - lastUsed >= HOST_IDENTITY_GRACE_MS
+      && !names.some(child => child !== DIRECTORY_NAME && child !== HOST_OWNER_DIRECTORY_NAME)
+    identities.push({
+      ...size,
+      generatedRootModifiedMs: await FS.modifiedTimeMs(generatedRoot).catch(() => now),
+      identityModifiedMs,
+      lastUsed,
+      path: identityRoot,
+      reclaimable,
+    })
+  }
+  return identities
+}
+
+async function evictAggregateIdentities(
+  root: string,
+  candidates: readonly AggregateIdentity[],
+  protectedIdentityRoot: string | undefined,
+  retainedBytes: number,
+  retainedFiles: number,
+): Promise<string[]> {
+  let totalBytes = 0
+  let totalFiles = 0
+  const retired: string[] = []
+  for (const identity of candidates) {
+    totalBytes += identity.bytes
+    totalFiles += identity.files
+  }
+  const ordered = candidates.toSorted((left, right) => left.lastUsed - right.lastUsed)
+  for (const identity of ordered) {
+    if (totalBytes <= retainedBytes && totalFiles <= retainedFiles) {
+      break
+    }
+    if (!identity.reclaimable || identity.path === protectedIdentityRoot) {
+      continue
+    }
+    const generatedRoot = FS.resolvePath(DIRECTORY_NAME, identity.path)
+    const ownerRoot = FS.resolvePath(HOST_OWNER_DIRECTORY_NAME, identity.path)
+    if (
+      !await FS.isDirectory(generatedRoot)
+      || await FS.isSymbolicLink(identity.path)
+      || await FS.isSymbolicLink(generatedRoot)
+      || await FS.isSymbolicLink(ownerRoot)
+    ) {
+      continue
+    }
+    const ownership = await inspectHostOwners(ownerRoot)
+    const currentIdentityModifiedMs = await FS.modifiedTimeMs(identity.path).catch(() => Date.now())
+    const currentGeneratedRootModifiedMs = await FS.modifiedTimeMs(generatedRoot).catch(() => Date.now())
+    const recentActivity = Math.max(currentIdentityModifiedMs, ownership.lastUsed)
+    if (
+      ownership.possiblyLive
+      || !ownership.hasReceipt
+      || recentActivity > identity.lastUsed
+      || currentIdentityModifiedMs !== identity.identityModifiedMs
+      || currentGeneratedRootModifiedMs !== identity.generatedRootModifiedMs
+      || Date.now() - recentActivity < HOST_IDENTITY_GRACE_MS
+    ) {
+      continue
+    }
+    const names = await listDirectory(identity.path)
+    if (names.some(child => child !== DIRECTORY_NAME && child !== HOST_OWNER_DIRECTORY_NAME)) {
+      continue
+    }
+    const retiredRoot = FS.resolvePath(
+      HOST_RETIRED_DIRECTORY_NAME,
+      FS.resolvePath(HOST_LIFECYCLE_DIRECTORY_NAME, root),
+    )
+    const retiredPath = FS.resolvePath(
+      `${FS.basename(identity.path)}-${Date.now()}-${Platform.randomUUID()}`,
+      retiredRoot,
+    )
+    try {
+      await FS.move(identity.path, retiredPath)
+    } catch {
+      continue
+    }
+    retired.push(retiredPath)
+    totalBytes -= identity.bytes
+    totalFiles -= identity.files
+  }
+  return retired
+}
+
+async function cleanupRetiredAggregate(retiredRoot: string): Promise<void> {
+  if (!await FS.isDirectory(retiredRoot) || await FS.isSymbolicLink(retiredRoot)) {
+    return
+  }
+  for (const name of await listDirectory(retiredRoot)) {
+    if (!/^[0-9a-f]{16}-[0-9]+-[0-9a-f-]{36}$/.test(name)) {
+      continue
+    }
+    const path = FS.resolvePath(name, retiredRoot)
+    if (await FS.isDirectory(path) && !await FS.isSymbolicLink(path)) {
+      await removeQuietly(path)
+    }
+  }
+}
+
+async function inspectHostOwners(
+  ownerRoot: string,
+): Promise<{ hasReceipt: boolean; lastUsed: number; possiblyLive: boolean }> {
+  let lastUsed = 0
+  let possiblyLive = false
+  let hasReceipt = false
+  for (const ownerName of await listDirectory(ownerRoot)) {
+    const ownerPath = FS.resolvePath(ownerName, ownerRoot)
+    const ownerMatch = HOST_OWNER_FILE_NAME.exec(ownerName)
+    if (ownerMatch === null || await FS.isSymbolicLink(ownerPath)) {
+      possiblyLive = true
+      continue
+    }
+    let owner: unknown
+    try {
+      owner = await FS.readJson<unknown>(ownerPath)
+    } catch {
+      possiblyLive = true
+      continue
+    }
+    if (
+      !Json.isRecord(owner) || typeof owner['pid'] !== 'number' || !Number.isInteger(owner['pid'])
+      || owner['pid'] !== Number(ownerMatch[1])
+      || typeof owner['updatedAt'] !== 'string' || owner['version'] !== 1
+    ) {
+      possiblyLive = true
+      continue
+    }
+    const updatedAt = Date.parse(owner['updatedAt'])
+    if (!Number.isFinite(updatedAt)) {
+      possiblyLive = true
+      continue
+    }
+    hasReceipt = true
+    lastUsed = Math.max(lastUsed, updatedAt)
+    if (ownerIsLive(owner)) {
+      possiblyLive = true
+    }
+  }
+  return { hasReceipt, lastUsed, possiblyLive }
+}
+
+async function directorySize(
+  root: string,
+): Promise<{ bytes: number; files: number; latestModified: number } | undefined> {
+  let total = 0
+  let files = 0
+  let latestModified = 0
+  try {
+    for await (const path of FS.walk(root, { includeHidden: true })) {
+      total += await FS.byteSize(path)
+      latestModified = Math.max(latestModified, await FS.modifiedTimeMs(path))
+      files += 1
+    }
+  } catch {
+    return undefined
+  }
+  return { bytes: total, files, latestModified }
+}
+
+function ownerIsLive(owner: Record<string, unknown>): boolean {
+  const pid = owner['pid']
+  if (typeof pid !== 'number' || !Platform.processIsAlive(pid)) {
+    return false
+  }
+  const recordedStart = owner['processStartedAt']
+  const actualStart = processStartedAt(pid)
+  return typeof recordedStart !== 'string' || actualStart === undefined || actualStart === recordedStart
+}
+
+function ownProcessStartedAt(): string | undefined {
+  return processStartedAt(Platform.runtimeProcess.pid)
+}
+
+function processStartedAt(pid: number): string | undefined {
+  try {
+    const result = Platform.spawnSync('ps', {
+      args: ['-o', 'lstart=', '-p', String(pid)],
+      env: { ...Platform.runtimeProcess.env, LC_ALL: 'C', TZ: 'UTC' },
+    })
+    const startedAt = result.stdout?.toString().trim() ?? ''
+    return result.status === 0 && startedAt.length > 0 ? startedAt : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** newestRunActivity starts the 24-hour handoff grace from a root's most recent use. */
+async function newestRunActivity(generatedRoot: string, fallback: number): Promise<number> {
+  let newest = fallback
+  for (const [category, roots] of await findRunRootsByCategory(generatedRoot)) {
+    for (const runRoot of roots) {
+      newest = Math.max(newest, runRoot.activeMs)
+    }
+    if (category === '') {
+      continue
+    }
+    const cacheRoot = FS.resolvePath(CACHE_DIRECTORY_NAME, FS.resolvePath(category, generatedRoot))
+    for (const name of await listDirectory(cacheRoot)) {
+      const entry = CACHE_ENTRY_NAME.test(name)
+        ? await readCacheEntry(FS.resolvePath(name, cacheRoot))
+        : undefined
+      const usedAt = entry === undefined ? NaN : Date.parse(entry.usedAt)
+      if (Number.isFinite(usedAt)) {
+        newest = Math.max(newest, usedAt)
+      }
+    }
+  }
+  return newest
 }
 
 function requireCategory(category: string): string {

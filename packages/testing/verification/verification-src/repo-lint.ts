@@ -584,6 +584,11 @@ const NODE_IMPORT_ALLOWLIST = [
   // Node-loaded configuration and Expo config plugins cannot use the ESM shared wrappers.
   'packages/apps/expo-host/app-config.cjs:1',
   'packages/apps/expo-host/jest.shared.config.cjs:1',
+  // Jest loads its direct-cache coordinator before TypeScript shared wrappers are available.
+  'packages/apps/expo-host/jest-direct-cache.cjs:2',
+  'packages/apps/expo-host/jest-direct-cache.cjs:3',
+  'packages/apps/expo-host/jest-direct-cache.cjs:4',
+  'packages/apps/expo-host/jest-direct-cache.cjs:5',
   'packages/apps/expo-host/app-config.cjs:2',
   'packages/apps/expo-host/metro.config.cjs:2',
   'packages/apps/expo-host/metro.config.cjs:3',

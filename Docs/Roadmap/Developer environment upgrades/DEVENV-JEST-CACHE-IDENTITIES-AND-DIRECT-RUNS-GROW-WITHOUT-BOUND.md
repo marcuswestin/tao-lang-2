@@ -1,6 +1,14 @@
 # DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND — Jest cache identities and direct runs grow without bound
 
-- **Status:** Candidate
+- **Status:** In progress
+- **Update, 2026-09-25:** This branch adds a new owner-managed cache namespace with
+  aggregate limits for transform identities, preserves the old namespace without
+  migration or deletion, and routes the cache through `TaoHome` for `TAO_HOME`/XDG
+  relocation. Direct Jest gets a separate bounded cache with setup/teardown leases;
+  a focused runtime Jest suite measured 6.8 seconds uncached, 6.2 seconds cold,
+  and 1.3 seconds warm. These are two-test measurements, not whole-gate timings.
+  Focused lifecycle controls pass. Cross-process lock contention and real
+  interrupted-run recovery remain to be exercised before this entry can close.
 - **Section:** External
 - **Area:** Test infrastructure
 - **Impact:** The managed `tao test` cache enforces 25,000 files and 256 MiB per
