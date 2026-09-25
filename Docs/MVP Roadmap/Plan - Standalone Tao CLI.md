@@ -727,8 +727,7 @@ command, and that `check-for-updates` reads the listing.
   version for it and the shim.
 - **Asking a download its version** happens from `/` with no version named, in the install script and
   the shim alike, because asked from inside a pinned project the new binary would hand the question
-  to the pinned release. The install script also refuses a relative `TAO_HOME` and ignores a relative
-  `XDG_DATA_HOME`, as `TaoHome` does.
+  to the pinned release.
 - **A `tao dev` hang the acceptance found**, in a checkout too: the dev loop reserves Metro's port
   during the first compile, and a simulator or emulator dev client retrying 8081 connects to that
   reservation. `server.close` then waited on the connection forever, so Expo never started. The
