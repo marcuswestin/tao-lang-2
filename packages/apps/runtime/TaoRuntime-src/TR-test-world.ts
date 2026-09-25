@@ -70,7 +70,12 @@ export const TestWorld = {
       connection.pending.length = 0
     }
   },
-  connection(granular = false, storageKey?: string, initialSnapshot?: string): TaoDataConnection {
+  connection(
+    granular = false,
+    storageKey?: string,
+    initialSnapshot?: string,
+    networkDependent = granular,
+  ): TaoDataConnection {
     const state = storageKey === undefined
       ? { pending: [] as Pending[], stored: undefined as string | undefined }
       : states.get(storageKey) ?? { pending: [] as Pending[], stored: initialSnapshot }
@@ -124,7 +129,7 @@ export const TestWorld = {
       save(snapshot, intents) {
         const changed = changedRows(state.stored, snapshot, intents)
         if (!granular) {
-          if (!online) {
+          if (!online && networkDependent) {
             connection.failure = 'Network is offline.'
             throw new UserInputError(connection.failure)
           }
@@ -138,8 +143,9 @@ export const TestWorld = {
           return
         }
         state.stored = snapshot
-        const message = online ? takeFailure(changed) : undefined
-        if (!online || message !== undefined) {
+        const delayed = !online && networkDependent
+        const message = delayed ? undefined : takeFailure(changed)
+        if (delayed || message !== undefined) {
           const submission = ++sequence
           for (const write of changed) {
             pending.push({ ...write, sequence: submission, ...(message !== undefined ? { message } : {}) })

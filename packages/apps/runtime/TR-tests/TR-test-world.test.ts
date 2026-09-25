@@ -77,7 +77,7 @@ Describe('test world provider stand-in', () => {
   Test('offline snapshot saves preserve every armed fault until an online matching write', async () => {
     TestWorld.begin()
     try {
-      const connection = TestWorld.connection()
+      const connection = TestWorld.connection(false, undefined, undefined, true)
       await connection.save(empty)
       TestWorld.failAfter('create', 'Note', 'first rejection')
       TestWorld.failAfter('update', 'Note', 'second rejection')
@@ -111,7 +111,7 @@ Describe('test world provider stand-in', () => {
         testWriteRecovery: true,
         connect: () => Errors.throwUnexpected('Real provider must not connect in a behavior test.'),
       })
-      const first = TR.Data.Configure(granular, { StorageKey: 'first' })
+      const first = TR.Data.Configure(granular, { Container: 'original', StorageKey: 'first' })
       TR.Data.BindConfigured(schema, first)
       await TR.Data.Settle(schema)
       TestWorld.failAfter('create', 'Note', 'first failed')
@@ -119,7 +119,11 @@ Describe('test world provider stand-in', () => {
       await TR.Data.Settle(schema)
       Expect(TR.Data.Read(schema.query({ entity: 'Note', filters: [] })[0], 'CanRetryWrites')).toBe(true)
 
-      TR.Data.BindConfigured(schema, TR.Data.Patch(first, { Revision: 2 }))
+      TR.Data.BindConfigured(schema, TR.Data.Patch(first, { Container: 'different' }))
+      await TR.Data.Settle(schema)
+      Expect(schema.query({ entity: 'Note', filters: [] })).toHaveLength(0)
+
+      TR.Data.BindConfigured(schema, first)
       await TR.Data.Settle(schema)
       Expect(TR.Data.Read(schema.query({ entity: 'Note', filters: [] })[0], 'CanRetryWrites')).toBe(true)
 
@@ -134,12 +138,47 @@ Describe('test world provider stand-in', () => {
       const snapshot = TR.Data.Declaration('Snapshot', {
         connect: () => Errors.throwUnexpected('Real provider must not connect in a behavior test.'),
       })
-      TR.Data.BindConfigured(schema, TR.Data.Configure(snapshot, { StorageKey: 'third' }))
+      TR.Data.BindConfigured(schema, TR.Data.Configure(snapshot, { StorageKey: 'second' }))
       await TR.Data.Settle(schema)
+      Expect(schema.query({ entity: 'Note', filters: [] })).toHaveLength(0)
       TR.Data.Create(schema, 'Note', { Title: TR.Value('Third') })
       await TR.Data.Settle(schema)
       Expect(TR.Data.Read(schema.query({ entity: 'Note', filters: [] })[0], 'CanRetryWrites')).toBe(false)
     } finally {
+      TR.Data.endTest()
+    }
+  })
+
+  Test('local snapshots save offline while remote snapshots report an offline error', async () => {
+    TR.Data.beginTest()
+    try {
+      const schema = TR.Data.Schema({
+        name: 'SnapshotNetworkCapability',
+        entities: { Note: { collection: 'Notes', fields: { Title: { kind: 'text' } } } },
+      })
+      const local = TR.Data.Declaration('Local', {
+        connect: () => Errors.throwUnexpected('Real provider must not connect in a behavior test.'),
+      })
+      const remote = TR.Data.Declaration('Remote', {
+        testNetwork: true,
+        connect: () => Errors.throwUnexpected('Real provider must not connect in a behavior test.'),
+      })
+      TR.Data.BindConfigured(schema, TR.Data.Configure(local, { StorageKey: 'same' }))
+      await TR.Data.Settle(schema)
+      TestWorld.network('offline')
+      TR.Data.Create(schema, 'Note', { Title: TR.Value('Saved locally') })
+      await TR.Data.Settle(schema)
+      Expect(schema.query({ entity: 'Note', filters: [] })).toHaveLength(1)
+
+      TR.Data.BindConfigured(schema, TR.Data.Configure(remote, { StorageKey: 'same' }))
+      await TR.Data.Settle(schema)
+      Expect(schema.query({ entity: 'Note', filters: [] })).toHaveLength(0)
+      TR.Data.Create(schema, 'Note', { Title: TR.Value('Not saved remotely') })
+      await TR.Data.Settle(schema)
+      Expect((schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }).Error)
+        .toContain('Network is offline')
+    } finally {
+      TestWorld.network('online')
       TR.Data.endTest()
     }
   })

@@ -403,7 +403,8 @@ the encoding and the storage keys themselves stay with the runtime's persisted-s
 
 Before every check, the runner installs a fresh in-memory provider stand-in, so no step reads or
 mutates durable provider data. Snapshot providers use whole-snapshot saves: an offline or rejected
-save puts the datasource into an error state visible through `guard … error`. A provider that
+save by a network-dependent provider puts the datasource into an error state visible through
+`guard … error`; local Memory and Local saves continue offline. A provider that
 declares per-write recovery gets an isolated stand-in with queued, failed, and retryable records;
 `WritesQueued`, `WritesFailed`, `WriteError`, and `retry` retain that provider's capability. A
 fill-capable provider still binds for query fills (see `Tao Data.md`). The shipped Memory declaration in
@@ -415,9 +416,9 @@ Driving a provider into `loading`, `error`, or `ready` from a test step is retir
 The states those steps reached return through `network offline|online`, `wait for sync`, and
 `datasource fails after create|update|delete <Entity> "message"`. Each declared failure waits for the
 next provider attempt containing the named row operation. An offline granular write stays queued and
-its matching failure fires on reconnect; an offline snapshot save leaves the failure armed. `wait for
-sync` succeeds when no writes remain pending and reports
-an offline or failed sync rather than pretending it completed. Each check starts online with no
+its matching failure fires on reconnect; an offline network-dependent snapshot save leaves the
+failure armed. `wait for sync` succeeds when no writes remain pending and reports an offline or
+failed sync rather than pretending it completed. Each check starts online with no
 injection, regardless of the prior check. These controls are in-process journey behavior; host
 adapters preflight and reject them until they implement equivalent capabilities.
 

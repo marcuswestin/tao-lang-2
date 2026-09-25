@@ -29,6 +29,7 @@ const snapshotQuery = (entityId: string) =>
 /** InstantDBProvider synchronizes full datasource snapshots through the InstantDB client SDK. */
 export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.DataProvider {
   return {
+    testNetwork: true,
     connect: context => {
       const appId = requiredConfigurationText(providerName, context, 'AppId')
       const apiURI = optionalConfigurationText(providerName, context, 'ApiURI')
