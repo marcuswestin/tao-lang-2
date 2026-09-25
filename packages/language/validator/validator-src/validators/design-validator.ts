@@ -220,10 +220,16 @@ function validateDesignClause(clause: AST.LayoutClause, node: AST.Node, ctx: Val
     // leaving expansion and property warnings to the actual app occurrence: those depend on which
     // same-named private bundle supplies the style.
     for (const design of designs) {
-      validateDesignLayoutReferences(sizeEntries, design, designSizeNames(design), ctx)
+      const sizes = designSizeNames(design)
+      validateDesignLayoutReferences(sizeEntries, design, sizes, ctx)
+      const tokens = designColorNames(design)
       const bundles = designSpecMembers(design)
       for (const entry of designEntries) {
-        if (isVisualEntry(entry) || isElementDefaultReference(entry)) {
+        if (isVisualEntry(entry)) {
+          validateVisualEntry(entry, design, tokens, ctx, sizes)
+          continue
+        }
+        if (isElementDefaultReference(entry)) {
           continue
         }
         const values = ASTUtils.layoutEntryValues(entry)

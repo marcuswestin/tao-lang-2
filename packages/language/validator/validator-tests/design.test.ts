@@ -636,6 +636,21 @@ Describe('validator: minimal design', () => {
   )
 
   Test(
+    'requires a shared visual color in every mounted design',
+    rejects(
+      `
+      workspace design Light { colors { accent #fff } }
+      workspace design Dark { colors { other #000 } }
+      app LightApp { view Main Design Light }
+      app DarkApp { view Main Design Dark }
+      view Main() { render Surface() [background accent] }
+      ${surfaceView}
+    `,
+      messages.unknownToken('Dark', 'accent'),
+    ),
+  )
+
+  Test(
     'requires a shared style in a design mounted by an app refinement',
     rejects(
       `

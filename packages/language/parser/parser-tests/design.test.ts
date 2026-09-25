@@ -491,6 +491,25 @@ Describe('parser: color values', () => {
     Expect(declarations[0]).toBe(parameter)
   })
 
+  Test('renames a color parameter through its clause value', async () => {
+    const { services } = Parser.createLspContext()
+    const doc = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
+      colorSource,
+      URI.file('/colors/RenameParameter.tao'),
+    )
+    services.shared.workspace.LangiumDocuments.addDocument(doc)
+    await services.shared.workspace.DocumentBuilder.build([doc], { eagerLinking: true })
+    const offset = colorSource.lastIndexOf('background Tint') + 'background '.length + 1
+    const rename = services.language.lsp.RenameProvider
+    Expect(rename).toBeDefined()
+    const edit = await rename!.rename(doc, {
+      newName: 'Tone',
+      position: doc.textDocument.positionAt(offset),
+      textDocument: { uri: doc.uri.toString() },
+    })
+    Expect(applyRename(doc, edit)).toBe(colorSource.replaceAll('Tint', 'Tone'))
+  })
+
   Test('renames a shade through a color argument', async () => {
     const { services } = Parser.createLspContext()
     const source =

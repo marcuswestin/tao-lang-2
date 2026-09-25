@@ -35,12 +35,87 @@ export class TaoReferences extends Langium.DefaultReferences {
     options: Langium.FindReferencesOptions,
   ): Langium.Stream<Langium.ReferenceDescription> {
     const defaultRefs = super.findReferences(targetNode, options)
+    if (AST.isParameterDeclaration(targetNode)) {
+      return defaultRefs.concat(this.findColorParameterReferences(targetNode, options))
+    }
     const name = designMemberName(targetNode)
     if (!name) {
       return defaultRefs
     }
     const designRefs = this.findDesignMemberReferences(targetNode, name, options)
     return defaultRefs.concat(designRefs)
+  }
+
+  private findColorParameterReferences(
+    targetNode: AST.ParameterDeclaration,
+    options: Langium.FindReferencesOptions,
+  ): Langium.ReferenceDescription[] {
+    const targetDoc = AST.getDocument(targetNode)
+    const name = targetNode.inlineType?.name
+    if (
+      !name || !AST.isPrimitiveTypeReference(targetNode.inlineType?.type)
+      || targetNode.inlineType.type.primitive !== 'color'
+    ) {
+      return []
+    }
+    const targetPath = this.nodeLocator.getAstNodePath(targetNode)
+    const refs: Langium.ReferenceDescription[] = []
+    const add = (sourceNode: AST.Node, segment: Langium.CstNode): void => {
+      const sourceDoc = AST.getDocument(sourceNode)
+      refs.push({
+        local: sourceDoc.uri.toString() === targetDoc.uri.toString(),
+        segment: {
+          end: segment.end,
+          length: segment.length,
+          offset: segment.offset,
+          range: segment.range,
+        },
+        sourcePath: this.nodeLocator.getAstNodePath(sourceNode),
+        sourceUri: sourceDoc.uri,
+        targetPath,
+        targetUri: targetDoc.uri,
+      })
+    }
+    if (
+      options.includeDeclaration && (!options.documentUri
+        || options.documentUri.toString() === targetDoc.uri.toString())
+    ) {
+      const segment = Langium.GrammarUtils.findNodeForProperty(targetNode.inlineType.$cstNode, 'name')
+      if (segment) {
+        add(targetNode, segment)
+      }
+    }
+    const owner = AST.findOwningView(targetNode)
+    const docs = options.documentUri
+      ? [this.documents.getDocument(options.documentUri)].filter(
+        (doc): doc is Langium.LangiumDocument => doc !== undefined,
+      )
+      : Array.from(this.documents.all)
+    for (const doc of docs) {
+      const file = doc.parseResult.value
+      if (!AST.isTaoFile(file)) {
+        continue
+      }
+      for (const node of AST.streamAllContents(file)) {
+        if (
+          AST.isLayoutWord(node) && node.$cstNode
+          && colorClauseParameterFromCstNode(node.$cstNode) === targetNode
+        ) {
+          add(node, node.$cstNode)
+        }
+        if (
+          owner && AST.isArgument(node) && node.label === name
+          && AST.isRender(node.$container?.$container)
+          && node.$container.$container.view?.ref === owner
+        ) {
+          const segment = Langium.GrammarUtils.findNodeForProperty(node.$cstNode, 'label')
+          if (segment) {
+            add(node, segment)
+          }
+        }
+      }
+    }
+    return refs
   }
 
   private findDesignDeclarations(sourceCstNode: Langium.CstNode): Langium.AstNode[] {
