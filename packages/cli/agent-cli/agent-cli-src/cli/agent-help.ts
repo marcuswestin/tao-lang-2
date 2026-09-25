@@ -107,6 +107,7 @@ Examples:
   ./agent unsandboxed studio Apps/HNReader
   ./agent unsandboxed local-instantdb start
   ./agent unsandboxed pods install <ios-directory>
+  ./agent unsandboxed direnv allow
   ./agent setup --refresh-lockfile
 
 unsandboxed accepts only named argv prefixes in .rulesync/permissions.jsonc's agentHostCommands.

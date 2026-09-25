@@ -316,8 +316,19 @@ from the development loop, which no virtualization approach can do.
      dev-loop documentation so no command or message offers Expo Go as a Tao app runtime. Verify
      both cache-hit and fresh-download launches, missing-host and failed-install messages, and the
      Android USB-reverse and LAN cases before declaring the retirement done.
+- CI host-build workflow (2026-09-25; hosted run still unproved): relevant pull requests check the
+  Companion's native-kit parity and build Android on `ubuntu-24.04` and iOS Simulator on `macos-26`.
+  It does not publish a host; the first hosted result must establish that both runners can build it.
+- Local host proof 2026-09-25 from `68a36b1a`: after `./agent unsandboxed direnv allow`, the named
+  `companion-host-build --platform ios-simulator` operation completed with `** BUILD SUCCEEDED **`
+  and wrote `Tao Companion.app` and `tao-host.json` to
+  `.artifacts/hosts/1.0.0-6449773e3a7a/ios-simulator/`. CocoaPods used shared React Native tarballs,
+  so a separate fresh download fetched the exact 0.86.3 dependencies debug artifact from Maven:
+  18,746,275 bytes, SHA-256 `fa019419384f6f859655fec80b2d20736bb0441bb911cb1944b91719322ae512`,
+  byte-identical to the cached tarball. This proves local build and artifact network access; hosted
+  CI and a published-host download remain unproved.
 - Remaining: the first published host and a live download once the repository is public; proving
-  physical Android on a phone; the physical-iPhone invitation beta; building hosts in CI; and
+  physical Android on a phone; the physical-iPhone invitation beta; live CI host-build proof; and
   retiring the Expo Go lanes as each is covered. The entitlements need the iCloud container and push
   enabled on the app id before a device build signs. The account-dependent device build and release
   proof are parked until the near-release pass (`R12`); simulator and Android work can continue.

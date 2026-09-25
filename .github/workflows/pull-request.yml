@@ -1,10 +1,8 @@
 name: Pull request
 
-# The first half of Tao's continuous integration: the GitHub side of the wiring, proven on its own
-# before any lane runs here. It deliberately verifies nothing. Tao's gates need the devenv profile
-# and, for the iOS lanes, a macOS image that is built elsewhere; until that image exists this
-# workflow only shows that a pull request reaches Actions, checks out the repository, and reports a
-# result. `./agent land` remains the gate that decides whether work is fit to land.
+# This placeholder only proves the pull-request trigger and checkout. The separate companion-hosts
+# workflow builds native hosts and checks kit parity for host-related changes. `./agent land` remains
+# the gate that decides whether the full repository is fit to land.
 
 on:
   pull_request:

@@ -62,6 +62,7 @@ const expected = [
   'processes list',
   'processes started',
   'start-branch',
+  'direnv allow',
 ]
 
 Describe('agent host command permissions', () => {
@@ -114,6 +115,11 @@ Describe('agent host command permissions', () => {
       fixedArgs: ['simctl', 'list', 'devices'],
     })
     Expect(hostCommandTarget(['start-branch'])).toEqual({ command: './dev', fixedArgs: ['start-branch'] })
+    Expect(hostCommandTarget(['direnv', 'allow'])).toEqual({
+      command: 'direnv',
+      fixedArgs: ['allow'],
+      argsPolicy: 'none',
+    })
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 42] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun simctl list devices'] })).toThrow()
