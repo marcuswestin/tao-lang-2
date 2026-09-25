@@ -554,7 +554,7 @@ Describe('Studio device routes', () => {
     const calls: unknown[] = []
     const gateway = fakeGateway(status, calls)
     const launchInfo = {
-      bundleIdentifier: 'dev.tao-lang.studio.companion',
+      bundleIdentifier: 'com.devtao.studio.companion',
       candidates: ['192.168.1.20'],
       diagnostics: [],
       hosts: [{ id: 'dev-1', installed: true, kind: 'device' as const, name: 'example-phone' }],

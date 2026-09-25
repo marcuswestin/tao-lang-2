@@ -191,7 +191,7 @@ Describe('Tao runtime app generation', () => {
         channel: 'release-variant',
         runtimeFingerprint: 'native-fingerprint-1',
         runtimeVersion: 'native-fingerprint-1',
-        url: 'https://updates.tao-lang.org/v1/release-variant',
+        url: 'https://updates.devtao.com/v1/release-variant',
       },
       version: '1.2.3',
     }
@@ -320,7 +320,8 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain('previousIdentity.compileRevision === nextIdentity.compileRevision')
         Expect(stableRoot).toContain('previousIdentity.cellRevision === nextIdentity.cellRevision')
         Expect(stableRoot).toContain('previousIdentity.manifestRevision === nextIdentity.manifestRevision')
-        Expect(stableRoot).toContain('runtimeMatchesPublication(nextCell, TaoStudioPublication)')
+        Expect(stableRoot).toContain('TR.Studio.Bootstrap.reconcile(nextCell, TaoStudioPublication, newerRevision => {')
+        Expect(stableRoot).toContain('window.location.replace(nextUrl.toString())')
         Expect(stableRoot).toContain('<TR.Studio.Pending />')
         Expect(stableRoot).toContain('<TR.Studio.Failure error={bootstrapError} />')
         Expect(stableRoot).toContain('<TR.Studio.ErrorBoundary resetKey={[')

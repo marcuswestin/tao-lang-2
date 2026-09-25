@@ -10,11 +10,11 @@ codexcli:
   sandbox_mode: workspace-write
   nickname_candidates: [Slice, Workstream, Owner, Build, Seam, Increment]
 claudecode:
-  model: sonnet
+  model: opus
   effort: high
   tools: Bash, Read, Edit, Write, Skill, Monitor, ToolSearch
 cursor:
-  model: claude-sonnet-5
+  model: claude-opus-5-5
   readonly: false
 ---
 

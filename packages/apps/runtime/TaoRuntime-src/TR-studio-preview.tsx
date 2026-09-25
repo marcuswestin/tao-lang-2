@@ -30,6 +30,23 @@ const studioProtocolVersion = TaoStudioProtocolVersions.protocolVersion
 const studioSourceActionVersion = TaoStudioProtocolVersions.sourceActionVersion
 const studioRenderSelector = '[data-tao-studio]'
 
+type StudioPreviewDiagnostic = { at: number; detail?: string; stage: string }
+type StudioPreviewDiagnosticHost = typeof globalThis & {
+  __taoStudioPreviewDiagnostics?: StudioPreviewDiagnostic[]
+}
+
+function recordStudioPreviewStage(stage: string, detail?: string): void {
+  if (requireReactNativeRuntime().Platform?.OS !== 'web') {
+    return
+  }
+  const host = globalThis as StudioPreviewDiagnosticHost
+  const events = host.__taoStudioPreviewDiagnostics ??= []
+  events.push({ at: Date.now(), ...(detail === undefined ? {} : { detail }), stage })
+  if (events.length > 60) {
+    events.splice(0, events.length - 60)
+  }
+}
+
 /** StudioPreviewConfig is the explicit trusted context for one generated preview instance. */
 export type StudioPreviewConfig = {
   appName: string
@@ -277,8 +294,35 @@ function previewErrorMessage(error: unknown): string {
   return typeof error === 'string' ? error : String(error)
 }
 
+type StudioBootstrapIdentity = Readonly<{ appName: string; compileRevision: number; project: string }>
+
+/** A reloaded frame can receive a newer cell before Metro serves its matching publication. */
+function reconcileStudioCellBootstrap(
+  runtime: { identity?: Partial<StudioBootstrapIdentity> } | null | undefined,
+  publication: StudioBootstrapIdentity,
+  onNewerPublication: (revision: number) => void,
+): 'matched' | 'older' | 'newer' | 'incompatible' {
+  const identity = runtime?.identity
+  if (
+    identity?.appName !== publication.appName || identity.project !== publication.project
+    || typeof identity.compileRevision !== 'number'
+  ) {
+    return 'incompatible'
+  }
+  if (identity.compileRevision === publication.compileRevision) {
+    return 'matched'
+  }
+  if (identity.compileRevision < publication.compileRevision) {
+    return 'older'
+  }
+  onNewerPublication(identity.compileRevision)
+  return 'newer'
+}
+
 /** StudioPreview exposes the opt-in generated preview bridge. */
 export const StudioPreview = {
+  Bootstrap: { reconcile: reconcileStudioCellBootstrap },
+  Diagnostics: { record: recordStudioPreviewStage },
   ErrorBoundary: StudioPreviewErrorBoundary,
   Failure: StudioPreviewFailure,
   Pending: StudioPreviewPending,
@@ -310,6 +354,12 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
   React.useEffect(() => {
     let active = true
     const artifact = pending.current
+    recordStudioPreviewStage(
+      'replay-effect-start',
+      artifact === undefined
+        ? 'no replay'
+        : artifact.domains.map(domain => domain.domain).join(','),
+    )
     if (artifact === undefined) {
       setReady(true)
       return () => {
@@ -317,13 +367,17 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
       }
     }
     setReady(false)
-    void restoreRuntimeCapture(artifact).then(
+    void restoreRuntimeCapture(artifact, (domain, stage) => {
+      recordStudioPreviewStage(`replay-domain-${stage}`, domain)
+    }).then(
       () => {
+        recordStudioPreviewStage(active ? 'replay-ready' : 'replay-completed-after-superseded')
         if (active) {
           setReady(true)
         }
       },
       replayError => {
+        recordStudioPreviewStage('replay-error', previewErrorMessage(replayError))
         if (active) {
           setError(replayError)
         }
@@ -331,6 +385,7 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
     )
     return () => {
       active = false
+      recordStudioPreviewStage('replay-effect-superseded')
     }
   }, [replayKey])
   if (error !== undefined) {

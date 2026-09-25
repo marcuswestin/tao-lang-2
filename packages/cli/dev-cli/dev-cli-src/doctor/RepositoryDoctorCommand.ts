@@ -1,3 +1,4 @@
+import { readModelDriftWarnings } from '@agent-cli/delegation/ModelDrift'
 import { HCI, Switch } from '@shared'
 import {
   type EnvironmentFingerprint,
@@ -10,6 +11,7 @@ import {
   exitCodeFor,
   formatCheck,
   readDoctorFacts,
+  worstStatus,
 } from '@verification/RepositoryDoctor'
 
 /** RunDoctorOptions selects the output shape; the diagnosis itself never differs. */
@@ -69,7 +71,13 @@ async function runRepositoryDoctor(options: RunDoctorOptions = {}): Promise<numb
     // that it can; a fingerprint needs none of that.
     return writeFingerprint(await environmentFingerprintOf())
   }
-  const report = doctorReport(await readDoctorFacts())
+  const base = doctorReport(await readDoctorFacts())
+  const modelWarnings = await readModelDriftWarnings(base.repositoryRoot).catch(() => [])
+  const checks = [
+    ...base.checks,
+    ...modelWarnings.map(detail => ({ detail, name: 'agent model drift', status: 'warn' as const })),
+  ]
+  const report: DoctorReport = { ...base, checks, status: worstStatus(checks) }
   writeReport(report, options)
   return exitCodeFor(report.status)
 }
