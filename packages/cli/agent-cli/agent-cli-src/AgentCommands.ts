@@ -36,6 +36,7 @@ export const JUST_COMMANDS = [
   // sandboxed merge stops partway. This is the merge alone, reachable unsandboxed by name, without
   // the lane and message work `finalize` adds or the push `land` adds.
   'merge-main',
+  'model-audit',
   'native-module-check',
   // Pushes the branch, opens or reuses its pull request, and stays attached to stream its checks —
   // the one command both the Developer and an agent run to get GitHub's own CI signal without a

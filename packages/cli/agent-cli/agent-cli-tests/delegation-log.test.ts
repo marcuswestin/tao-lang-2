@@ -168,6 +168,23 @@ Describe('delegation log', () => {
     Expect(summary.completed).toEqual(1)
   })
 
+  Test('reads a profile that pins only a Claude Code model as its own default', async () => {
+    const root = await FS.mkTmpDir('delegation-pins')
+    const events = FS.resolvePath(DELEGATION_EVENTS_PATH, root)
+    await FS.mkdir(events)
+    await FS.mkdir(FS.resolvePath('agents/subagents', root))
+    await FS.writeText(
+      FS.resolvePath('agents/subagents/scout.md', root),
+      ['---', 'name: scout', 'codexcli:', '  sandbox_mode: read-only', 'claudecode:', '  model: opus', '---', ''].join(
+        '\n',
+      ),
+    )
+    await FS.writeText(FS.resolvePath('a-spawn.json', events), logLine('spawn', '2026-09-17T10:00:00Z', spawn('scout')))
+
+    const summary = await readDelegationLog(root)
+    Expect(summary.profiles[0]?.selections['profile default']).toEqual(1)
+  })
+
   Test('extracts a resolved model from bounded transcript metadata and tolerates a missing file', async () => {
     const root = await FS.mkTmpDir('delegation-models')
     const events = FS.resolvePath(DELEGATION_EVENTS_PATH, root)

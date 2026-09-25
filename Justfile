@@ -466,6 +466,11 @@ capabilities *ARGS:
 delegation-report *ARGS:
     ./dev delegation-report {{ ARGS }}
 
+# Report where the delegation routing table lags the models this machine runs, and measure context
+[group('Report')]
+model-audit *ARGS:
+    ./dev model-audit {{ ARGS }}
+
 # Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs
 [group('Report')]
 simplify-audit *ARGS:

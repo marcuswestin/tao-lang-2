@@ -1,4 +1,4 @@
-import { readModelDriftWarnings } from '@agent-cli/delegation/ModelDrift'
+import { ModelAuditCommand } from '@agent-cli/delegation/ModelAuditCommand'
 import { HCI, Switch } from '@shared'
 import {
   type EnvironmentFingerprint,
@@ -72,10 +72,10 @@ async function runRepositoryDoctor(options: RunDoctorOptions = {}): Promise<numb
     return writeFingerprint(await environmentFingerprintOf())
   }
   const base = doctorReport(await readDoctorFacts())
-  const modelWarnings = await readModelDriftWarnings(base.repositoryRoot).catch(() => [])
+  const modelFindings = await ModelAuditCommand.briefFindings(base.repositoryRoot).catch(() => [])
   const checks = [
     ...base.checks,
-    ...modelWarnings.map(detail => ({ detail, name: 'agent model drift', status: 'warn' as const })),
+    ...modelFindings.map(detail => ({ detail, name: 'agent model routing', status: 'warn' as const })),
   ]
   const report: DoctorReport = { ...base, checks, status: worstStatus(checks) }
   writeReport(report, options)
