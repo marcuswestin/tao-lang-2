@@ -168,7 +168,8 @@ Describe('prebuilt host search', () => {
 })
 
 Describe('prebuilt host releases', () => {
-  const RELEASES_URL = 'https://api.github.com/repos/tao/tao/releases?per_page=30'
+  const RELEASES_URL = 'https://api.github.com/repos/tao/tao/releases?per_page=30&page=1'
+  const RELEASES_PAGE_2_URL = 'https://api.github.com/repos/tao/tao/releases?per_page=30&page=2'
   // One byte per character, so the string's length is the asset's size in bytes.
   const APK = 'a prebuilt Companion'
 
@@ -272,6 +273,37 @@ Describe('prebuilt host releases', () => {
       Expect(search.result.host?.binaryPath).toBe(FS.resolvePath('Tao Companion.app', directory))
       Expect(await FS.readText(FS.resolvePath('Tao Companion.app/Info.plist', directory))).toBe('<plist/>')
       Expect((await FS.listDir(directory)).toSorted()).toEqual(['Tao Companion.app', 'tao-host.json'])
+    })
+  })
+
+  Test('reads past a full page of other releases to reach a host, and stops at a short page', async () => {
+    // CLI and Studio releases share the list, so thirty of them can push every host off page one.
+    await withHostDirectory(async hostsRoot => {
+      const served: string[] = []
+      const cliReleases = Array.from(
+        { length: 30 },
+        (_, index) => ({ assets: [], draft: false, tag_name: `v0.1.${index}` }),
+      )
+      const fetch = fakeGitHub({
+        [RELEASES_URL]: cliReleases,
+        [RELEASES_PAGE_2_URL]: [release('companion-host-1.0.0-match', 'https://dl/match')],
+        'https://dl/match/tao-host-android.json': hostManifest({}),
+        'https://dl/match/tao-companion-android.apk': APK,
+      }, served)
+
+      const search = await withCapturedOutput(() =>
+        downloadCompatibleHost('android', {}, { fetch, hostsRoot, repository: 'tao/tao' })
+      )
+      const none = await downloadCompatibleHost('ios-simulator', {}, { fetch, hostsRoot, repository: 'tao/tao' })
+
+      Expect(search.result.host).toBeDefined()
+      Expect(none.host).toBeUndefined()
+      Expect(served.filter(url => url.includes('/releases?'))).toEqual([
+        RELEASES_URL,
+        RELEASES_PAGE_2_URL,
+        RELEASES_URL,
+        RELEASES_PAGE_2_URL,
+      ])
     })
   })
 

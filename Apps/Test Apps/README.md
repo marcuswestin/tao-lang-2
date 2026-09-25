@@ -152,6 +152,14 @@ Exercise settled writable and copied parameters through ordinary controls and ac
 
 **Does not belong here:** parameter grammar and diagnostic cases, runtime transaction internals, entity-field projection, or native callback lifecycle. Those belong to language, runtime, and WordFlower coverage respectively.
 
+## Write Rules
+
+Exercise `required` completeness and the writes that consume it through an ordinary form.
+
+**Belongs here:** `required "<sentence>"` deriving `Incomplete` and `Problems` on a stored row and on a projection that selects the field; a projection that leaves a required field out never reporting it; a projection-backed form disabling its submit while incomplete; `check` stopping an action on an incomplete input; `create Entity with Input` creating a row from a projected item; and a row written incomplete that reads complete after an update.
+
+**Does not belong here:** `validate` and store-side rejection, which are Post-MVP; diagnostic cases for the completeness members and `create … with`, which belong to package tests; and the stdlib `Problems(…)` view, which WordFlower's forms prove.
+
 ## Data MVP
 
 Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.
@@ -284,3 +292,17 @@ Exercise the type system through a small UI that passes typed values into views.
 **Belongs here:** text, number, and list literals; custom type declarations for primitive, list, and item shapes; typed constructors and invocation type-fixing; item member access; `let` bindings whose inferred types are used as arguments; nested render-block `let` shadowing while captured outer references keep their value; argument binding by type, including out-of-order; inject arguments exposing typed values inside injected TS.
 
 **Does not belong here:** grammar edge cases without type-system meaning; layout, styling, navigation, data, or action behavior beyond what type coverage needs; stdlib runtime coverage; invalid or intentionally failing cases.
+
+## Search
+
+Exercise the query `search` clause: multi-field text search over an entity's `(search)` fields,
+matched with the same attention matcher keyboard narrowing and the command palette use.
+
+**Belongs here:** rows narrowing as a term is entered; a term matching a row only through its
+second `(search)` field; every row returned on a blank term; a field without `(search)` never
+matching. Schema and query diagnostics — a query search term that is not text, a query search
+clause over an entity with no `(search)` field, and `(search)` on a non-text field — are package
+tests, not journeys.
+
+**Does not belong here:** relevance ranking, which is explicitly not decided; `group by`, which is
+Post-MVP; remote providers; navigation or WordFlower product behavior.

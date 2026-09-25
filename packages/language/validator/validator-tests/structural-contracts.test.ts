@@ -633,6 +633,47 @@ Describe('validator: declaration contracts', () => {
     ),
   )
 
+  Test(
+    'accepts a query search term beside ordering',
+    accepts(queryApp(
+      'query Documents { search "bread" order by Title }',
+      'data Documents / Document { Title text (search) }',
+    )),
+  )
+
+  Test(
+    'rejects duplicate query search clauses',
+    rejects(
+      queryApp(
+        'query Documents { search "a" search "b" }',
+        'data Documents / Document { Title text (search) }',
+      ),
+      dataValidationMessages.duplicateSearch,
+    ),
+  )
+
+  Test(
+    'rejects a query search term that is not text',
+    rejects(
+      queryApp(
+        'query Documents { search 5 }',
+        'data Documents / Document { Title text (search) }',
+      ),
+      dataValidationMessages.searchTermType('number'),
+    ),
+  )
+
+  Test(
+    'rejects a query search over an entity with no (search) field',
+    rejects(
+      queryApp(
+        'query Documents { search "a" }',
+        'data Documents / Document { Title text }',
+      ),
+      dataValidationMessages.missingSearchField('Document'),
+    ),
+  )
+
   Test('reports exactly one tailored diagnostic for a module-level query', async () => {
     const result = await testValidateCodeWithErrors(`
       data Workspaces / Workspace { Name text }
@@ -751,6 +792,27 @@ Describe('validator: declaration contracts', () => {
     rejects(
       'data Recipes / Recipe { Title text (title) Subtitle text (title) }',
       dataValidationMessages.duplicateTitleField('Recipe'),
+    ),
+  )
+
+  Test(
+    'accepts search on a text field',
+    accepts('data Recipes / Recipe { Title text (search) Servings number }'),
+  )
+
+  Test(
+    'rejects search on a non-text field',
+    rejects(
+      'data Recipes / Recipe { Servings number (search) }',
+      dataValidationMessages.searchFieldKind('Servings'),
+    ),
+  )
+
+  Test(
+    'rejects duplicate search modifiers',
+    rejects(
+      'data Recipes / Recipe { Title text (search, search) }',
+      dataValidationMessages.duplicateModifier('Title', 'search'),
     ),
   )
 

@@ -159,6 +159,7 @@ export const ActionsCompiler = {
       AsyncActionStatement: Compile.AsyncActionStatement,
       CreateStatement: Compile.CreateStatement,
       AskStatement: Compile.AskStatement,
+      CheckStatement: Compile.CheckStatement,
       ContextualPresentStatement: Compile.ContextualPresentStatement,
       DeleteStatement: Compile.DeleteStatement,
       RetryStatement: Compile.RetryStatement,
@@ -277,6 +278,11 @@ export const ActionsCompiler = {
       )
     }
     ])) return`
+  },
+
+  /** CheckStatement ends its action's callback when the validated condition is false. */
+  CheckStatement(statement: AST.CheckStatement): Compiled {
+    return gen`if (TR.Check(${Compile.Expression(statement.condition)})) return`
   },
 
   /** IfActionStatement lazily executes one action sub-block without terminating its caller. */

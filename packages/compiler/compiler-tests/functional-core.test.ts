@@ -24,6 +24,10 @@ Describe('compiler: functional core', () => {
           guard Ready true -> { toggle Ready }
           toggle Ready
         }
+        action Confirm() {
+          check Ready
+          toggle Ready
+        }
         render Stack(){
           when HasCount(2) {
             true -> {
@@ -46,6 +50,7 @@ Describe('compiler: functional core', () => {
     Expect(compiled.files[0]?.code).toContain('TR.WhenCase(')
     Expect(compiled.files[0]?.code).toContain('TR.WhenCaseRender(')
     Expect(compiled.files[0]?.code).toContain('if (await TR.GuardAction(')
+    Expect(compiled.files[0]?.code).toContain('if (TR.Check(')
     Expect(compiled.files[0]?.code).toContain('TR.Toggle(')
     Expect(compiled.files[0]?.code).toContain('if (TR.Binary(')
   })

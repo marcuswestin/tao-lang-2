@@ -22,9 +22,9 @@ export namespace Packages {
     index: Index
     stdlibRoot: string
     /**
-     * Symlink-resolved paths this context has already asked the file system about. It lives exactly
-     * as long as `index` beside it, which is the same kind of snapshot: neither notices a package
-     * directory or a symlink that appears after the context was created.
+     * Symlink-resolved paths the current workspace build has already asked the file system about.
+     * Document lifecycle events clear candidate paths before linking can reuse them, while stable
+     * paths remain shared across every reference resolved within one build.
      */
     physicalPaths: Map<string, string>
   }
@@ -78,9 +78,16 @@ export namespace Packages {
     workspaceFilePaths: ReadonlySet<string>
   }
 
+  type BuildCacheResolver = PackageResolver & {
+    clearPhysicalPathCache(): void
+  }
+
   /** createResolver creates a parser package resolver backed by this package context. */
   export function createResolver(context: Context): PackageResolver {
-    return {
+    const resolver: BuildCacheResolver = {
+      clearPhysicalPathCache() {
+        context.physicalPaths.clear()
+      },
       async intrinsicFilePaths() {
         const prelude = FS.resolvePath('@tao/Prelude.tao', context.stdlibRoot)
         const stdlibProject = FS.resolvePath('Project.tao', context.stdlibRoot)
@@ -116,6 +123,7 @@ export namespace Packages {
         })
       },
     }
+    return resolver
   }
 
   async function ancestorProjectFile(root: string): Promise<string | undefined> {
@@ -641,8 +649,8 @@ export namespace Packages {
   }
 
   /**
-   * physicalPath resolves a path's symlinks once per context. Asked afresh each time it was two
-   * `realpath` calls per question: about 450,000 for a 13-file app, and 88% of an uncached
+   * physicalPath resolves a path's symlinks once per workspace build. Asked afresh each time it was
+   * two `realpath` calls per question: about 450,000 for a 13-file app, and 88% of an uncached
    * `tao check`. A path that does not resolve is not remembered, because an unsaved editor buffer
    * fails today and has to succeed once it is written.
    */

@@ -515,6 +515,12 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       typeName = Type.displayName(current)
       continue
     }
+    const completeness = Type.completenessFieldsOf(current) && Type.completenessMemberType(member)
+    if (completeness) {
+      current = completeness
+      typeName = Type.displayName(current)
+      continue
+    }
     if (current.kind === 'entity') {
       if (member === 'Id') {
         current = { kind: 'primitive', primitive: 'text' }

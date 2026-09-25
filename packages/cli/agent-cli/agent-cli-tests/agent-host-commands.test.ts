@@ -9,6 +9,7 @@ import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-
 const expected = [
   'land',
   'finalize',
+  'merge-main',
   'landed',
   'capabilities',
   'open-pr',
@@ -21,6 +22,7 @@ const expected = [
   'prepare-release studio',
   'prepare-release ide-extension',
   'app-dev',
+  'companion-host-build',
   'simulators list',
   'simulators boot',
   'simulators run',
@@ -64,7 +66,7 @@ Describe('agent host command permissions', () => {
     Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
-    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(11))
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(12))
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
       permissions: { allow: string[] }
@@ -110,6 +112,14 @@ Describe('agent host command permissions', () => {
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun *'] })).toThrow()
   })
 
+  Test('runs CocoaPods under a UTF-8 locale, which it needs to read podspecs', () => {
+    // An agent's host shell carries no LANG, and `pod install` then fails normalizing an
+    // ASCII-8BIT string before it reads a single pod.
+    for (const operation of [['pods', 'install'], ['pods', 'spec']]) {
+      Expect(hostCommandTarget(operation)?.env).toEqual({ LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' })
+    }
+  })
+
   Test('removes stale Claude host rules when the canonical list changes', () => {
     const initial = JSON.stringify({
       permissions: { allow: ['Bash(./agent *)', 'Bash(./agent unsandboxed board)'] },
@@ -128,5 +138,53 @@ Describe('agent host command permissions', () => {
       './agent unsandboxed land',
       './agent unsandboxed land *',
     ])
+  })
+
+  Test('drops a Claude setting the source no longer has, which rulesync would merge back', () => {
+    const initial = JSON.stringify({
+      $schema: 'schema',
+      env: { KEPT: '1', REMOVED: '1' },
+      hooks: { SessionStart: [] },
+      permissions: { allow: [] },
+      removed: true,
+      sandbox: { excludedCommands: [], network: { allowedDomains: ['a'], allowLocalBinding: true } },
+    })
+    const rendered = JSON.parse(renderClaudeHostSettings(initial, [], {
+      env: { KEPT: '1' },
+      sandbox: { excludedCommands: [], network: { allowedDomains: ['a'] } },
+    })) as unknown
+
+    Expect(rendered).toEqual({
+      $schema: 'schema',
+      env: { KEPT: '1' },
+      hooks: { SessionStart: [] },
+      permissions: { allow: [] },
+      sandbox: { excludedCommands: [], network: { allowedDomains: ['a'] } },
+    })
+  })
+
+  Test('keeps the permission lists rulesync renders, dropping a permission setting the source removed', () => {
+    const initial = JSON.stringify({
+      permissions: { additionalDirectories: ['../x'], allow: ['Read'], defaultMode: 'plan', deny: ['Read(.env)'] },
+      sandbox: { excludedCommands: [] },
+    })
+    const rendered = JSON.parse(renderClaudeHostSettings(initial, [], {
+      permissions: { additionalDirectories: ['../x'] },
+      sandbox: { excludedCommands: [] },
+    })) as unknown
+
+    Expect(rendered).toEqual({
+      permissions: { additionalDirectories: ['../x'], allow: ['Read'], deny: ['Read(.env)'] },
+      sandbox: { excludedCommands: [] },
+    })
+  })
+
+  Test('still writes the host rules when the source has no sandbox block or allow list', () => {
+    const rendered = JSON.parse(
+      renderClaudeHostSettings(JSON.stringify({ permissions: {}, sandbox: { enabled: true } }), [['land']], {}),
+    ) as { permissions: { allow: string[] }; sandbox: unknown }
+
+    Expect(rendered.permissions.allow).toEqual(['Bash(./agent unsandboxed land)', 'Bash(./agent unsandboxed land *)'])
+    Expect(rendered.sandbox).toEqual({ excludedCommands: ['./agent unsandboxed land', './agent unsandboxed land *'] })
   })
 })

@@ -1,7 +1,7 @@
 use Documents, Duplicate, Finish, Workspaces from @data
 use SlotNav from @tao/nav
 use Join from @tao/text
-use Col, Image, Panes, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Col, Image, Panes, Problems, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 use DocumentScreen from ./
 
@@ -25,22 +25,28 @@ type WritingPrompt is {
    PromptSubtitle text? // an item field may be absent; reading it yields `none`
 }
 
+// A projection selects the fields a form edits and carries their `required` sentences, so the form
+// knows it is unfinished before any row exists.
+type WorkspaceInput is Workspace { Name }
+
 // The workspace area. Every renderable declaration is a `view`; whether one composes inline in a
 // render tree or enters the presentation tree is decided at each use site, never on the head.
 workspace
 scene WorkspaceList() {
    Title "WordFlower"
-   state WorkspaceName = ""
+   state Input = WorkspaceInput {
+      Name: ""
+   }
    query Workspaces { }
    action AddWorkspace() {
-      guard WorkspaceName empty -> { // a match runs its handler and skips the rest of this action
+      if Input.Incomplete {
          present WorkspaceNameNotice() as overlay
       }
-      create Workspace {
-         Name: WorkspaceName
-      }
-      set WorkspaceName = ""
-   }
+      check not Input.Incomplete // a false check skips the rest of this action
+      create Workspace with Input
+      set Input = WorkspaceInput {
+         Name: ""
+   }  }
    // `ScrollView` scrolls its content; `width max` keeps a readable column on a wide screen, and
    // `centered` places that column in the middle of the available space.
    render ScrollView() [screen] {
@@ -63,20 +69,17 @@ scene WorkspaceList() {
                TextMultiline("Give this collection a name. You can change it whenever the writing takes a new shape.") [body]
 
                #workspaceName
-               TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Home") {
+               TextInput(Value: Input.Name, Label: "Workspace name", Placeholder: "Home") {
                   on change -> NewWorkspaceName { // an explicit handler replaces the default binding
-                     set WorkspaceName = NewWorkspaceName
+                     set Input.Name = NewWorkspaceName
                   }
                   on submit AddWorkspace
                }
-               // In a render, a matched guard shows its handler and skips the rest of its ENCLOSING BLOCK
-               Text(when WorkspaceName {
-                  empty -> "Workspace name is required"
-                  otherwise -> "Ready to create { WorkspaceName }"
-               }) [validation]
+               // The unfinished fields' `required` sentences, and nothing once the input is complete.
+               Problems(Input.Problems) [validation]
 
                #addWorkspace
-               FormButton("Add workspace", Disabled: WorkspaceName is empty) {
+               FormButton("Add workspace", Disabled: Input.Incomplete) {
                   on press AddWorkspace
                }
 
@@ -119,7 +122,7 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
       where is Final
    }
    action SaveWorkspace() {
-      guard WorkspaceNameDraft empty
+      check WorkspaceNameDraft is not empty
       update Workspace {
          Name: WorkspaceNameDraft
    }  }
@@ -134,7 +137,7 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
    }
    Toolbar { Save }
    action AddDocument() {
-      guard DocumentTitle empty
+      check DocumentTitle is not empty
       create Document {
          Title: DocumentTitle
          Workspace // unlabeled arguments bind by type; the entity matches the relation field

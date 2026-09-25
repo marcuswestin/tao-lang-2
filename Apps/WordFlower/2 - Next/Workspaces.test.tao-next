@@ -45,7 +45,7 @@ test "WordFlower workspaces" {
          text "Starter prompt: Morning pages"
          text "Try writing for 10 minutes"
          text "Tagged: daily, warmup"
-         text "Workspace name is required"
+         text "Name this workspace" // Name's `required` sentence, through the form's projection
       }
       expect #workspaceName {
          placeholder "Home"
@@ -54,10 +54,12 @@ test "WordFlower workspaces" {
       press #addWorkspace // disabled while the draft is empty, so nothing happens
       expect missing text "A workspace needs a name"
       submit #workspaceName
-      expect text "A workspace needs a name" // the empty-name guard presents an overlay notice
+      expect text "A workspace needs a name" // the `if` presents a notice; the `check` stops the create
       press #dismissNotice
       expect missing text "A workspace needs a name"
       expect text "No workspaces yet"
+      enter "Home" into #workspaceName
+      expect missing text "Name this workspace" // the input is complete, so it lists no problems
    }
    test "uses live workspaces and preserves covered screen state" {
       run WordFlower

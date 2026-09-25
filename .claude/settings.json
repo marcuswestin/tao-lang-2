@@ -51,6 +51,8 @@
       "Bash(./agent unsandboxed land *)",
       "Bash(./agent unsandboxed finalize)",
       "Bash(./agent unsandboxed finalize *)",
+      "Bash(./agent unsandboxed merge-main)",
+      "Bash(./agent unsandboxed merge-main *)",
       "Bash(./agent unsandboxed landed)",
       "Bash(./agent unsandboxed landed *)",
       "Bash(./agent unsandboxed capabilities)",
@@ -75,6 +77,8 @@
       "Bash(./agent unsandboxed prepare-release ide-extension *)",
       "Bash(./agent unsandboxed app-dev)",
       "Bash(./agent unsandboxed app-dev *)",
+      "Bash(./agent unsandboxed companion-host-build)",
+      "Bash(./agent unsandboxed companion-host-build *)",
       "Bash(./agent unsandboxed simulators list)",
       "Bash(./agent unsandboxed simulators list *)",
       "Bash(./agent unsandboxed simulators boot)",
@@ -158,6 +162,8 @@
       "./agent unsandboxed land *",
       "./agent unsandboxed finalize",
       "./agent unsandboxed finalize *",
+      "./agent unsandboxed merge-main",
+      "./agent unsandboxed merge-main *",
       "./agent unsandboxed landed",
       "./agent unsandboxed landed *",
       "./agent unsandboxed capabilities",
@@ -182,6 +188,8 @@
       "./agent unsandboxed prepare-release ide-extension *",
       "./agent unsandboxed app-dev",
       "./agent unsandboxed app-dev *",
+      "./agent unsandboxed companion-host-build",
+      "./agent unsandboxed companion-host-build *",
       "./agent unsandboxed simulators list",
       "./agent unsandboxed simulators list *",
       "./agent unsandboxed simulators boot",
@@ -315,7 +323,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh\" > /dev/null"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh\""
           }
         ]
       }
@@ -390,6 +398,8 @@
     ]
   },
   "env": {
-    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
-  }
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "opus"
+  },
+  "autoCompactWindow": 272000
 }

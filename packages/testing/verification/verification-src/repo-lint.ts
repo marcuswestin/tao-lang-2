@@ -95,6 +95,8 @@ export type LedgerEntry = {
   name: string
   /** The entry's own `**Status:**`, or an empty string when the file states none. */
   status: string
+  /** Whether Status continues on another physical line, which the index cannot represent. */
+  statusMultiline?: boolean
   /** The entry's own `# DEVENV-... — Title` heading text, without the leading `# `, or `''` when absent. */
   heading?: string
   /** The entry's own `**Section:**`; meaningful only for an entry that lives in the open directory. */
@@ -176,6 +178,11 @@ export function developerEnvironmentLedgerIssues(open: LedgerSide, archived: Led
         continue
       }
       byId.set(id, [...byId.get(id) ?? [], `${linkPrefix}${entry.name}`])
+      if (entry.statusMultiline === true) {
+        issues.push(
+          `${linkPrefix}${entry.name} must keep \`**Status:**\` on one physical line; move detail to an update field.`,
+        )
+      }
       if (ARCHIVED_STATUSES.has(entry.status) !== archiveSide) {
         issues.push(
           archiveSide
@@ -478,10 +485,10 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:355',
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:368',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:128',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:284',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:312',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:319',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:387',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:388',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:416',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:423',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:491',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:205',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:930',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:935',
@@ -492,9 +499,9 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1408',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1450',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1476',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:57',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:79',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:356',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:108',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:130',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:407',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
   'packages/ides/studio/studio-tests/studio-client.test.ts:627',
   'packages/ides/studio/studio-tests/studio-client.test.ts:3301',
@@ -1211,6 +1218,7 @@ async function readLedgerSide(repoRoot: string, entriesDirectory: string, indexP
       name,
       section: source.match(/^- \*\*Section:\*\* (.*)$/m)?.[1]?.trim() ?? '',
       status: source.match(/^- \*\*Status:\*\* (.*)$/m)?.[1]?.trim() ?? '',
+      statusMultiline: /^- \*\*Status:\*\* [^\n]*\n[ \t]{2,}\S/m.test(source),
     })
   }
   const index = FS.resolvePath(indexPath, repoRoot)

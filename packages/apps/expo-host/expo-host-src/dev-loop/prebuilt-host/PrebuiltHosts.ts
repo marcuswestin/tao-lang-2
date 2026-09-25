@@ -14,8 +14,8 @@ import { downloadCompatibleHost, taoHostsRoot } from './HostReleases'
  * Where `tao dev` finds a prebuilt host, and which one it takes. Hosts are cached as
  * `<root>/<hostKey>/<platform>/`, a binary beside its manifest, but the path is only where one was
  * put: a host is taken because its manifest's native kit covers the kit this Tao computes for
- * itself, never because of the directory it sits in. The roots are Tao's own home — `$TAO_HOME`, or
- * `~/.tao` — where downloaded hosts land, and, inside a Tao checkout, the hosts that checkout built.
+ * itself, never because of the directory it sits in. The roots are the Tao home's `hosts/`
+ * (`TaoHome`), where downloaded hosts land, and, inside a Tao checkout, the hosts that checkout built.
  */
 
 /** CHECKOUT_HOSTS_PATH is where a Tao checkout's own host builds land, relative to its root. */

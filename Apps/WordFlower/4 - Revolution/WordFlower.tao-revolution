@@ -3,7 +3,7 @@ use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav f
 use primary from @tao/keys
 use CountWords, Join from @tao/text
 use Interval from @tao/time
-use Checkbox, Col, FormButton, Icon, Image, Panes, Placeholder, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Checkbox, Col, FormButton, Icon, Image, Panes, Placeholder, Problems, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use Editor as ProseEditor from @prose // imports may be renamed locally
 
 // WordFlower/Revolution is the tier beyond the v1 release: functionality Tao eventually intends to
@@ -683,38 +683,41 @@ view TagSummary(Tags PromptTags) {
 // Workspaces
 // ---------------------------------------------------------------------------------------------
 
+// A projection selects the fields a form edits and carries their `required` sentences.
+type WorkspaceInput is Workspace { Name }
+
 // A declaration that fills host-facing chrome is a `scene`, and a scene is presented rather than
 // composed inline. `Title`, `Toolbar`, and `Header` live on `scene` alone, so a view that is only
 // ever composed cannot declare chrome nothing reads.
 scene WorkspaceList() {
    Title "WordFlower"
-   state WorkspaceName = ""
+   state Input = WorkspaceInput { Name: "" }
    query Workspaces {
       order by Pinned descending // what the Pin command is for; the entity's CreatedAt breaks ties
    }
    // An `action` is private: it carries no `Title`, `Description`, or `Summary` and is never
    // surfaced. `check` is the action's early exit — `guard` is the view-side construct and tests a
-   // data object's availability, never a boolean.
+   // data object's availability, never a boolean. The form edits a projection, which carries Name's
+   // `required` sentence; `validate` stays the store's own rule and rejects the write regardless.
    action AddWorkspace() {
-      if WorkspaceName is empty {
+      if Input.Incomplete {
          present WorkspaceNameNotice() as overlay
       }
-      check WorkspaceName is not empty
-      create Workspace {
-         Name: WorkspaceName
-      }
-      set WorkspaceName = ""
+      check not Input.Incomplete
+      create Workspace with Input
+      set Input = WorkspaceInput { Name: "" }
    }
    render ScrollView() [screen] {
       Col() [width max column, centered, gap sm] {
          Text("WordFlower") [title]
          Text(Tagline) [body]
          #workspaceName
-         TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Novel") {
+         TextInput(Value: Input.Name, Label: "Workspace name", Placeholder: "Novel") {
             on submit AddWorkspace
          }
+         Problems(Input.Problems) [validation]
          #addWorkspace
-         FormButton("Add workspace", Icon: "plus", Disabled: WorkspaceName is empty) {
+         FormButton("Add workspace", Icon: "plus", Disabled: Input.Incomplete) {
             on press AddWorkspace
          }
          #activateWorkspaceTab
@@ -1013,7 +1016,7 @@ view DocumentEditor(Document) {
    action SaveDocument() runs single {
       set PreviousTitle = Document.Title
       set PreviousBody = Document.Body
-      check Input.Title is not empty
+      check not Input.Incomplete
       update Document with Input
       set SaveCount += 1
       // A keyed toast replaces the same key instead of stacking.
@@ -1049,6 +1052,7 @@ view DocumentEditor(Document) {
       TextInput(Value: Input.Title, Label: "Document title", Placeholder: "Document title") {
          on submit SaveDocument
       }
+      Problems(Input.Problems) [validation]
       #documentBody
       TextInput(Value: Input.Body, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
          on submit SaveDocument
