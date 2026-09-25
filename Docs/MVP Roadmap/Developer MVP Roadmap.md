@@ -291,3 +291,5 @@ The apps follow §1 and use only `file` and `public`. The other one this pass re
   `Decisions.md` and the implementation already chose. Take the nine as a decision round when the
   first tranche reaches one of them, rather than deciding ten spellings with no code pressing on
   them.
+- **Decided 2026-09-25:** §1 now names the five visibility modifiers the implementation carries.
+  The nine spellings wait until a tranche forces one.
