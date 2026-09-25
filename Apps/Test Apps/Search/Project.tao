@@ -1,0 +1,5 @@
+project {
+   id "search"
+   name "Search"
+   version "0.1.0"
+}
