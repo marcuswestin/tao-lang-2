@@ -224,14 +224,33 @@ export namespace Packages {
     return { declarations: new Map() }
   }
 
+  /** ContainingProjectRootOptions overrides the temp-directory boundary; production leaves it unset. */
+  export type ContainingProjectRootOptions = {
+    /** temporaryRoot stands in for the OS temp directory. Tests point this at a fixture directory. */
+    temporaryRoot?: string
+  }
+
   /**
    * containingProjectRoot finds the nearest ancestor directory that directly declares a project.
    * Pass a `sweep` when resolving many paths at once so they share the memo.
+   *
+   * The climb never treats the OS temp directory itself as a project root and stops there, the same
+   * way it stops at `.git`. A stray project-declaring `.tao` file left directly in the temp directory
+   * by an unrelated process would otherwise make every fixture beneath it, however deeply nested,
+   * resolve its workspace root to the whole temp directory — see `temporaryClimbBoundary`.
    */
-  export async function containingProjectRoot(start: string, sweep?: ProjectRootSweep): Promise<string | undefined> {
+  export async function containingProjectRoot(
+    start: string,
+    sweep?: ProjectRootSweep,
+    options?: ContainingProjectRootOptions,
+  ): Promise<string | undefined> {
     const memo = sweep ?? createProjectRootSweep()
+    const boundary = await temporaryClimbBoundary(options?.temporaryRoot)
     let directory = start
     while (true) {
+      if (boundary.has(directory)) {
+        return undefined
+      }
       if (await declaresProject(memo, directory)) {
         return directory
       }
@@ -244,6 +263,18 @@ export namespace Packages {
       }
       directory = parent
     }
+  }
+
+  /**
+   * temporaryClimbBoundary resolves the OS temp directory both as reported and with symlinks
+   * resolved, since macOS reports `/tmp` while resolving it to `/private/tmp`, and `$TMPDIR` itself
+   * can be a symlinked `/var/folders/…` path. `start` may be given in either spelling, so both must
+   * be recognized to stop the climb there.
+   */
+  async function temporaryClimbBoundary(temporaryRoot?: string): Promise<ReadonlySet<string>> {
+    const root = FS.resolvePath(temporaryRoot ?? FS.tmpdir())
+    const realRoot = await FS.realPath(root).catch(() => root)
+    return new Set([root, realRoot])
   }
 
   /**

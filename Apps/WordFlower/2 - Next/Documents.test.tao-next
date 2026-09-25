@@ -18,7 +18,7 @@ test "WordFlower documents" {
          text "Workspace: Home"
          text "Words: 0"
          text "Saves this session: 0"
-         text "Paragraphs: 0"
+         text "0 paragraphs" // the phrase's `other` form
          text "Goal: 10 paragraphs"
       }
       expect #editDocumentTitle input value "Draft the intro"
@@ -33,9 +33,11 @@ test "WordFlower documents" {
       expect toolbar command "Finish document" enabled
       expect checkbox #markFinal unchecked
       enter "" into #editDocumentTitle
+      expect text "Name this document" // the edited copy is incomplete; the saved row is not
       submit #editDocumentTitle
       expect text "Saved title: Draft the intro"
       enter "Polish the intro" into #editDocumentTitle
+      expect missing text "Name this document"
       enter "Set the scene with intent" into #editDocumentBody
       expect text "Words: 5" // a field binding keeps the local copy reactive
       expect text "Saved title: Draft the intro" // editing has not written the entity
@@ -124,13 +126,13 @@ test "WordFlower documents" {
          press #edit
       }
       submit #newParagraph // the empty-text `check` skips the create
-      expect text "Paragraphs: 0"
+      expect text "0 paragraphs"
       enter "It began at sea." into #newParagraph
       submit #newParagraph
       // The statement after `async` clears the input without awaiting the write.
       expect #newParagraph input value ""
       expect {
-         text "Paragraphs: 1"
+         text "1 paragraph" // the phrase's `one` form
          text "It began at sea."
       }
       select #paragraphs[1] {

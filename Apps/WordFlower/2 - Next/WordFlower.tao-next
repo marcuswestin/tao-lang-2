@@ -2,9 +2,32 @@ use Workspaces from @data
 use WordFlowerDrawerNavigator, WordFlowerNavigator, WordFlowerTabsNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
+use Spinner, TextMultiline from @tao/ui
 use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
+//
+// PHRASES. A `phrase` is named copy that returns text: one sentence with typed holes, or plural
+// forms (`one`, `other`, and the other CLDR categories, `other` required) chosen by its one number
+// parameter. The outline's count reads "1 paragraph" and "0 paragraphs". Extracting copy for
+// translation and `words` blocks are Post-MVP.
+//
+// READ NET. Every app has a read net for the exceptional read cases a guard site does not name:
+// loading, missing, unauthorized, and error. The runtime supplies it; a file-level `guard default`
+// restyles it case by case, as WordFlower does for loading and error. A bare `guard Subject` sends
+// every exceptional case to the net, and a site names only the cases it treats specially.
+//
+// SEARCH. A field marked `(search)` is part of its entity's search corpus, and a query's
+// `search <term>` keeps the rows whose search fields match the term with the matcher keyboard
+// narrowing uses: locale-aware word prefixes, in order. A blank term keeps every row; the query's
+// order and limit apply afterwards. Grouping (`group by`) is Post-MVP.
+//
+// WRITE RULES. `required "<sentence>"` states completeness: it never blocks a write, and it derives
+// `Incomplete` and `Problems` on a row and on every projection that selects the field. A form for a
+// new row edits a projection (`type WorkspaceInput is Workspace { Name }`), `create Workspace with
+// Input` writes it, and the stdlib `Problems(Input.Problems)` lists what is still missing, in the
+// order the entity states its rules and nothing once the input is complete. `validate` and `refuse
+// when` are Post-MVP.
 //
 // CHECK. `check <boolean>` is an action's early exit: when the expression is false, the rest of that
 // action is skipped. Nothing fails, nothing is reported, and a caller that reached it through `do`
@@ -563,6 +586,14 @@ app WordFlowerInstantDB = WordFlower with {
 app WordFlowerLocalInstantDB = WordFlower with {
    Name "WordFlower - Local InstantDB"
    Datasource WordFlowerLocalInstantDBStore
+}
+
+// The read net: a guard site that does not name an exceptional read case sends it here. The runtime
+// supplies every case; WordFlower restyles loading and error and keeps the runtime's missing and
+// unauthorized sentences.
+guard default {
+   loading -> Spinner()
+   error -> Message { TextMultiline("Could not load this: { Message }") [body] }
 }
 
 fixture StudioWorkspace {

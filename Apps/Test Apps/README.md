@@ -158,7 +158,7 @@ Exercise `required` completeness and the writes that consume it through an ordin
 
 **Belongs here:** `required "<sentence>"` deriving `Incomplete` and `Problems` on a stored row and on a projection that selects the field; a projection that leaves a required field out never reporting it; a projection-backed form disabling its submit while incomplete; `check` stopping an action on an incomplete input; `create Entity with Input` creating a row from a projected item; and a row written incomplete that reads complete after an update.
 
-**Does not belong here:** `validate` and store-side rejection, which are not implemented; diagnostic cases for the completeness members and `create … with`, which belong to package tests; and a stdlib view that presents `Problems`, whose spelling is undecided.
+**Does not belong here:** `validate` and store-side rejection, which are Post-MVP; diagnostic cases for the completeness members and `create … with`, which belong to package tests; and the stdlib `Problems(…)` view, which WordFlower's forms prove.
 
 ## Data MVP
 
@@ -292,3 +292,46 @@ Exercise the type system through a small UI that passes typed values into views.
 **Belongs here:** text, number, and list literals; custom type declarations for primitive, list, and item shapes; typed constructors and invocation type-fixing; item member access; `let` bindings whose inferred types are used as arguments; nested render-block `let` shadowing while captured outer references keep their value; argument binding by type, including out-of-order; inject arguments exposing typed values inside injected TS.
 
 **Does not belong here:** grammar edge cases without type-system meaning; layout, styling, navigation, data, or action behavior beyond what type coverage needs; stdlib runtime coverage; invalid or intentionally failing cases.
+
+## Read Net
+
+Exercise the read net: the runtime's handling of the exceptional read cases a render guard leaves
+unnamed, and a project's file-level `guard default` replacing it case by case. Two projects share
+the folder so their nets can differ: `ReadNetApp` replaces `missing`, and `Runtime Default/`'s
+`RuntimeDefaultApp` replaces `loading` and `error` and leaves `missing` to the runtime.
+
+**Belongs here:** a bare `guard Subject` over an entity and a query; a deleted row reaching the net
+as `missing`; the project's override rendering at the guarding site; a guard that names `missing`
+winning over the net; the runtime's `missing` sentence where the project's net does not replace it;
+a deleted handle keeping `.Id` inside a site's own `missing` handler.
+
+**Does not belong here:** `loading`, `unauthorized`, and `error` rendered through a journey, which
+Memory cannot produce on demand and the runtime package tests prove; read-net diagnostics
+(placement, cases, one per project, a bare guard over text), which are package tests; action guards;
+write outcomes.
+
+## Phrases
+
+Exercise `phrase` declarations: named copy with typed holes and CLDR plural forms (Decisions §14).
+
+**Belongs here:** a single-form phrase with a typed hole; a parameterless phrase referenced by bare
+name; a plural phrase selecting `one` or `other` by its number parameter as the count changes
+through `0`, `1`, and `2`, rendered through the running `Text` view.
+
+**Does not belong here:** copy extraction, `words` blocks, and measurement forms, which are
+post-MVP; parser, validator, formatter, and compiler diagnostics, which are package tests; runtime
+locale-selection coverage across CLDR categories, which the runtime package tests own.
+
+## Search
+
+Exercise the query `search` clause: multi-field text search over an entity's `(search)` fields,
+matched with the same attention matcher keyboard narrowing and the command palette use.
+
+**Belongs here:** rows narrowing as a term is entered; a term matching a row only through its
+second `(search)` field; every row returned on a blank term; a field without `(search)` never
+matching. Schema and query diagnostics — a query search term that is not text, a query search
+clause over an entity with no `(search)` field, and `(search)` on a non-text field — are package
+tests, not journeys.
+
+**Does not belong here:** relevance ranking, which is explicitly not decided; `group by`, which is
+Post-MVP; remote providers; navigation or WordFlower product behavior.

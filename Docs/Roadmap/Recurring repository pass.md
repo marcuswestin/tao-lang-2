@@ -35,9 +35,6 @@ notes after each completed pass; Git history is the longer record.
   inspect `devenv.lock` changes against the [Nixpkgs security tracker](https://tracker.security.nixos.org/)
   and affected upstream notices. Add other dependency systems when they appear. Recheck the Appium
   transitive pins when Base Driver permits `morgan@1.12.0` and run installed-link health after lock changes.
-- Check the delegation routing table against official model availability, harness precedence, and
-  current input, cache-read, cache-write, and output pricing. Compare completed-task cost and review
-  quality before changing a tier; an API-equivalent estimate is not a plan or subscription bill.
 
 ## Run a pass
 
@@ -55,11 +52,16 @@ notes after each completed pass; Git history is the longer record.
    worktree and machine-wide accumulation, and distinguish active state from abandoned output. For
    each material source, design and verify a bounded cleanup path in normal agent operations; do not
    remove another live run's files or rely solely on a one-time purge.
-5. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
+5. Check model routing: run `./agent model-audit`, then compare the delegation routing table with
+   official model availability, harness precedence, and current input, cache-read, cache-write, and
+   output pricing. Weigh completed-task cost and review quality before recommending a tier change,
+   since an API-equivalent estimate is not a plan or subscription bill; the change itself is the
+   Developer's choice, never a silent switch.
+6. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
    from host or external acceptance that was not exercised. For each unresolved dependency advisory,
    keep a short live record of its disposition, owner, review-by date, and primary evidence; close
    it explicitly when resolved.
-6. When the approved work is complete, replace **Current status** and **Consider next time** with the
+7. When the approved work is complete, replace **Current status** and **Consider next time** with the
    new reviewed-through commit, a brief account of what actually ran, material omissions, the outcome,
    and only the few notes that would help the next orchestrator.
 
