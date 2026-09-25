@@ -927,8 +927,12 @@ above; where the two disagree, these are later and win.
     passed locally as a compiled executable, and a 0.0.0 release passed host acceptance in about
     50 seconds. The Developer approved installing Tart and its image on 2026-09-25. The named
     setup operation trusts Tart's `softnet` dependency formula individually before installing Tart;
-    Homebrew rejects the dependency otherwise. A completed VM result has not yet been recorded;
-    no VM duration or hidden dependency finding is claimed yet.
+    Homebrew rejects the dependency otherwise. The first VM run on 2026-09-25 cloned the vanilla
+    image in 1,241 seconds. `tart run` stayed alive and `tart ip` returned `192.168.64.2`, but SSH
+    returned `No route to host` throughout the 240-second boot deadline. The guest acceptance did
+    not start; no hidden dependency finding is claimed. Its logs remain under
+    `.artifacts/standalone-vm/tao-acceptance-1790359337-42764/logs/`. The driver now streams clone
+    and acceptance output to both the terminal and log, and reports SSH wait progress every 15 seconds.
 
     **Tart host troubleshooting.** Tart's installer notes that macOS gives VM addresses a default
     DHCP lease of 86,400 seconds. This gate uses Tart's default network, even though `softnet` is

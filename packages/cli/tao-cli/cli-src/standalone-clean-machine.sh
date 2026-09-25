@@ -111,11 +111,9 @@ exec '/Volumes/My Shared Files/tao-input/acceptance' \
 GUEST
 
 created=1
-if ! step 'clone vanilla macOS' tart clone "$image" "$name" > "$logs/clone.log" 2>&1; then
-  cat "$logs/clone.log" >&2
+if ! step 'clone vanilla macOS' tart clone "$image" "$name" 2>&1 | tee "$logs/clone.log"; then
   exit 1
 fi
-cat "$logs/clone.log"
 printf 'Clean-machine: booting %s headless...\n' "$name"
 boot_started=$(date +%s)
 tart run --no-graphics --dir="tao-input:$input:ro" --dir="tao-logs:$logs" "$name" > "$logs/boot.log" 2>&1 &
@@ -124,27 +122,39 @@ started=1
 
 address=''
 deadline=$(($(date +%s) + 240))
+last_wait_report=$boot_started
 while [ "$(date +%s)" -lt "$deadline" ]; do
   if ! kill -0 "$vm_pid" 2>/dev/null; then
     printf 'Clean-machine: guest exited during boot; see %s\n' "$logs/boot.log" >&2
     exit 1
   fi
   address=$(tart ip "$name" 2>/dev/null || true)
-  if [ -n "$address" ] && /usr/bin/expect "$expect_script" "$address" '/usr/bin/true' > "$logs/ssh-ready.log" 2>&1; then
+  if [ -n "$address" ] && /usr/bin/expect "$expect_script" "$address" '/usr/bin/true' >> "$logs/ssh-ready.log" 2>&1; then
     break
+  fi
+  now=$(date +%s)
+  if (( now - last_wait_report >= 15 )); then
+    if [ -n "$address" ]; then
+      printf 'Clean-machine: waiting for guest SSH at %s (%ss elapsed); see %s\n' \
+        "$address" "$((now - boot_started))" "$logs/ssh-ready.log"
+    else
+      printf 'Clean-machine: waiting for guest IP (%ss elapsed)...\n' "$((now - boot_started))"
+    fi
+    last_wait_report=$now
   fi
   sleep 3
 done
 if [ -z "$address" ] || ! /usr/bin/expect "$expect_script" "$address" '/usr/bin/true' >> "$logs/ssh-ready.log" 2>&1; then
   printf 'Clean-machine: guest SSH did not become ready; see %s\n' "$logs" >&2
+  if [ -f "$logs/ssh-ready.log" ]; then
+    tail -n 4 "$logs/ssh-ready.log" >&2
+  fi
   exit 1
 fi
 printf 'Clean-machine: guest SSH ready in %ss\n' "$(($(date +%s) - boot_started))"
 
 if ! step 'run standalone acceptance in the vanilla guest' \
   /usr/bin/expect "$expect_script" "$address" '/bin/sh "/Volumes/My Shared Files/tao-input/run.sh"' \
-  > "$logs/acceptance.log" 2>&1; then
-  cat "$logs/acceptance.log" >&2
+  2>&1 | tee "$logs/acceptance.log"; then
   exit 1
 fi
-cat "$logs/acceptance.log"
