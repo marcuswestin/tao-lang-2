@@ -26,6 +26,7 @@ import { InteractionValidator } from './validators/interaction-validator'
 import { InvocationsValidator } from './validators/invocations-validator'
 import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
+import { PhrasesValidator } from './validators/phrases-validator'
 import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
 import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
 import { ReactiveParametersValidator } from './validators/ReactiveParametersValidator'
@@ -60,6 +61,7 @@ const nodeValidationChecks = NodeValidation.compile(
     typeValidationChecks,
     InvocationsValidator.checks,
     FunctionalCoreValidator.checks,
+    PhrasesValidator.checks,
     dataValidationChecks,
     DesignValidator.checks,
     colorValueValidationChecks,

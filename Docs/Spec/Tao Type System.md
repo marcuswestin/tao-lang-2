@@ -182,6 +182,33 @@ Calls use the same non-positional owner binder as other invocations. Parameters 
 declared return type must accept the expression result, and the body cannot read reactive state or
 perform actions, data writes, presentation, asks, or injection.
 
+### Phrases
+
+A phrase is named copy that returns text (Decisions §14). It is a top-level declaration, used
+wherever a text value is:
+
+```tao
+phrase ItemCount(Count number) = one "{ Count } item" / other "{ Count } items"
+phrase WeekTitle(Day text) = "Week of { Day }"
+phrase DocumentGone = "That document is gone."
+
+Text(ItemCount(Paragraphs.Count))
+Text(DocumentGone)
+```
+
+Its optional parameter list is a typed hole list, parenthesized exactly as a function's; a phrase
+with no holes omits the parentheses entirely. Tao keeps one spelling per construct: a parameterless
+phrase is a value, referenced only by bare name as a `let` value is. Its call shape is shared with a
+phrase that does take arguments, but the validator rejects an explicit zero-argument call
+(`DocumentGone()`) on a parameterless phrase.
+
+A phrase's body is either one interpolated string, or plural forms separated by `/`, each
+`<category> "<string>"` with the CLDR categories `zero`, `one`, `two`, `few`, `many`, `other`.
+`other` is required and each category may appear at most once. A plural phrase selects a form by
+its number parameter, which must be exactly one `number`-typed parameter. Selection uses
+`Intl.PluralRules` for the running locale, falling back to `other` when the locale's category has
+no declared form; the locale defaults to English when the runtime has none to offer.
+
 ### Action callback contracts and control events
 
 `action()` accepts no values; `action(text)` accepts one text value; further inputs are
@@ -283,8 +310,8 @@ when Ready {
 `otherwise` is required for every supported `when`; it is always exhaustive. Value branches must
 have compatible results. Exact boolean cases preserve ordinary boolean conditionals. Query subjects
 add mutually exclusive `loading`, `error -> Message`, and ready `empty` cases. Render branches use
-blocks. This tranche did not introduce an action-statement `when`; actions use guards and one-sided
-`if`.
+blocks. This tranche did not introduce an action-statement `when`; actions use `check`, one-sided
+`if`, and guards.
 
 ### One-sided `if`
 
@@ -300,9 +327,37 @@ It never takes `else`. A conditional with two or more outcomes is modeled by exh
 the contexts where `when` is supported. `Value is <Case>` can appear anywhere a boolean expression
 is accepted; the declaration-linked case must belong to that value.
 
+### Action early exit: `check`
+
+`check` takes one boolean condition and is a statement in actions only:
+
+```tao
+action AddWorkspace() {
+   if WorkspaceName is empty {
+      present WorkspaceNameNotice() as overlay
+   }
+   check WorkspaceName is not empty
+   create Workspace { Name: WorkspaceName }
+}
+```
+
+When the condition is false, the rest of the action is skipped. Nothing fails and no failure report
+is published; statements before the `check` stand. A `check` inside an action reached through
+`do Callee()` stops only that callee, and the caller continues after the `do`. An inline handler
+such as `on press -> { … }` and an `async { … }` block are actions of their own, so a `check` there
+stops that handler or block.
+
+`guard` in an action is retired in favour of `check` and `if`: it still runs as described under
+_Block-scoped guards_, but every use draws a warning naming them, ahead of becoming an error.
+
+A `check` may not appear inside an action's `if` block or `guard` case: those compile to nested
+blocks, where an early exit would skip only the nested block while the action carried on. Fold the
+enclosing condition into the checked expression instead.
+
 ### Block-scoped guards
 
-A guard has exactly one subject and either one case or a case block:
+A guard has exactly one subject and either one case or a case block. A render guard may also name
+no case at all:
 
 ```tao
 guard Draft empty
@@ -311,7 +366,12 @@ guard Documents {
    loading -> { Text("Loading…") }
    error -> Message { Text(Message) }
 }
+
+guard Document
 ```
+
+A single declared case (a name rather than a built-in case word) needs its `->` or handler, so it
+reads apart from the render that follows a bare guard.
 
 On a match, the optional handler runs and the remainder of that guard's enclosing block is skipped.
 Statements or render siblings before it remain. A guard inside a called action stops only that
@@ -321,7 +381,11 @@ skips only later siblings in the same render block.
 
 An entity subject additionally supports `loading`, `missing`, `unauthorized`, and `error -> Message`.
 If the runtime reports none of those exceptional cases, execution falls through with the live
-entity handle:
+entity handle. A render guard hands an exceptional case it does not name — every one, for a bare
+guard — to the read net instead of falling through; the net is always present and a project's
+`guard default` restyles it case by case (`Tao Data.md`, "The read net"). A bare guard therefore
+needs a subject that has exceptional cases: an entity or a query. An action guard still falls
+through on an unnamed case:
 
 ```tao
 guard Document {

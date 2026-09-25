@@ -58,3 +58,30 @@ Test('semantic snapshot records projected input fields as bulk update writes', a
     Expect(writes).toEqual(['field:Document.Title', 'field:Document.Body'])
   })
 })
+
+Test('semantic snapshot records projected input fields as create writes', async () => {
+  await withTaoFiles('tao-studio-semantic-projected-create-', {
+    'App.tao': `
+      use Text from @tao/ui
+      data Notes / Note { Title text Topic text Summary text (default "") }
+      type NoteInput is Note { Title, Topic }
+      app Demo { view Main }
+      view Main() {
+        state Input = NoteInput { Title: "", Topic: "" }
+        action Add() { create Note with Input }
+        render Text("Main")
+      }
+    `,
+  }, async (paths, root) => {
+    const workspace = await Workspace.open(root)
+    const validation = await workspace.validate(paths['App.tao'])
+    Expect(validation.diagnostics).toEqual([])
+
+    const snapshot = buildSemanticSnapshot(root, 'Demo', validation.files, validation.diagnostics)
+    const writes = snapshot.edges
+      .filter(edge => edge.from === 'action:Main.Add' && edge.rel === 'writes')
+      .map(edge => edge.to)
+
+    Expect(writes).toEqual(['field:Note.Title', 'field:Note.Topic'])
+  })
+})

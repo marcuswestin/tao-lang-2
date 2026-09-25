@@ -120,6 +120,7 @@ import {
   type TaoWritableState,
   usePersistedState,
 } from './TR-persisted-state'
+import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue } from './TR-reactive'
 import {
@@ -135,6 +136,7 @@ import {
   useParameterCell,
   writablePath,
 } from './TR-reactive-values'
+import { ReadNet, readNetCases, renderReadNet } from './TR-read-net'
 import {
   captureRuntime,
   registerRuntimeCaptureDomain,
@@ -208,6 +210,15 @@ class TR {
     return new RuntimeValue(parts.map(part => part.evaluate().jsValue).map(value => value ?? '').join(''))
   }
 
+  /**
+   * Plural selects one of a phrase's CLDR-category forms for the running locale, falling back to
+   * `other` when that category has no form. `locale` defaults to English when the caller has none
+   * to offer.
+   */
+  static Plural(count: TR.Evaluable, forms: TR.PluralForms, locale?: string): TR.Value<string> {
+    return selectPluralForm(count.evaluate().jsValue, forms, locale).evaluate()
+  }
+
   /** Enum creates declaration-owned case identities and registers their stable persistence names. */
   static Enum(
     declaration: TR.DeclarationIdentity,
@@ -232,6 +243,21 @@ class TR {
   /** If evaluates a validated boolean once and lazily runs its one-sided body when true. */
   static If<ResultT>(condition: TR.Evaluable, body: () => ResultT): ResultT | undefined {
     return condition.evaluate().jsValue === true ? body() : undefined
+  }
+
+  /** Check evaluates a validated boolean once and reports whether its action must stop. */
+  static Check(condition: TR.Evaluable): boolean {
+    return condition.evaluate().jsValue !== true
+  }
+
+  /** Incomplete reports whether any `required` field of a row or projected value is missing. */
+  static Incomplete(root: TR.Evaluable, required: readonly TR.RequiredField[]): TR.Value<boolean> {
+    return TR.Value(missingRequiredFields(root, required).length > 0)
+  }
+
+  /** Problems lists the `required` sentences of a row's or projected value's missing fields. */
+  static Problems(root: TR.Evaluable, required: readonly TR.RequiredField[]): TR.Value<string[]> {
+    return TR.Value(missingRequiredFields(root, required).map(([, sentence]) => sentence))
   }
 
   /** WhenCase evaluates one subject once and selects one mutually exclusive value case. */
@@ -266,15 +292,32 @@ class TR {
     return isPromiseLike(matched.result) ? Promise.resolve(matched.result).then(() => true) : true
   }
 
-  /** GuardRender renders a matching handler or the untouched remainder of the enclosing block. */
+  /**
+   * GuardRender renders a matching handler, the read net for an exceptional case no handler names,
+   * or the untouched remainder of the enclosing block. `siteProps` are the guarding view's own, so
+   * the net renders where the guard stands and finds the mounted app's `guard default`.
+   */
   static GuardRender(
     subject: TR.Evaluable,
     branches: readonly TR.CaseBranch<React.ReactNode>[],
     remaining: () => React.ReactNode,
+    siteProps?: TR.TaoProps,
   ): React.ReactNode {
-    const matched = firstMatchedBranch(subject.evaluate().jsValue, branches)
-    return matched ? matched.result : remaining()
+    const value = subject.evaluate().jsValue
+    const matched = firstMatchedBranch(value, branches)
+    if (matched) {
+      return matched.result
+    }
+    const exceptional = readNetCases
+      .map(caseName => ({ caseName, match: matchSubjectCase(value, caseName) }))
+      .find(({ match }) => match.matched)
+    return exceptional
+      ? renderReadNet(exceptional.caseName, new RuntimeValue(exceptional.match.payload), siteProps)
+      : remaining()
   }
+
+  /** ReadNet freezes the handlers a project's compiled `guard default` replaces. */
+  static readonly ReadNet = ReadNet
 
   /** Member reads item fields and the built-in Count collection and text member. */
   static Member(root: TR.Evaluable, path: readonly string[]): TR.MemberValue<any> {
@@ -1129,12 +1172,18 @@ namespace TR {
   export type CaseBranch<ResultT> = readonly [string, (payload: TR.Value<any>) => ResultT]
   /** Function declares a runtime Tao pure function. */
   export type Function = RuntimeFunction
+  /** PluralCategory declares the CLDR plural categories a compiled phrase's forms may carry. */
+  export type PluralCategory = TaoPluralCategory
+  /** PluralForms is a compiled phrase's category-to-value table passed to `TR.Plural`. */
+  export type PluralForms = TaoPluralForms<TR.Evaluable>
   /** State declares a runtime Tao state wrapper. */
   export type State<T> = RuntimeState<T> | TaoWritableState<T>
   /** Writable is a state or parameter lens that may be the target of generated mutation. */
   export type Writable<T> = Pick<TaoWritable<T>, 'evaluate' | 'set'>
   /** MemberValue is read-only by default and carries mutation methods only for writable roots. */
   export type MemberValue<T> = TR.Value<T> & Partial<TR.Writable<T>>
+  /** RequiredField pairs a field a `required` trait names with the sentence the trait states. */
+  export type RequiredField = readonly [field: string, sentence: string]
   /** NativeMutationLease is the mutation callback supplied to a mounted native implementation. */
   export type NativeMutationLease<T> = import('./TR-reactive-values').NativeMutationLease<T>
   /** Value declares a runtime Tao value wrapper. */
@@ -1388,6 +1437,20 @@ function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
 
 const isCountableValue = (value: unknown): value is string | unknown[] =>
   Array.isArray(value) || typeof value === 'string'
+
+/**
+ * A `required` field is missing when it reads as none, or as text or a list that `is empty` would
+ * match. Declaration order is kept, so `Problems` reads the way the entity states its rules.
+ */
+function missingRequiredFields(
+  root: TR.Evaluable,
+  required: readonly TR.RequiredField[],
+): readonly TR.RequiredField[] {
+  return required.filter(([field]) => {
+    const value = TR.Member(root, [field]).evaluate().jsValue
+    return value === null || value === undefined || (isCountableValue(value) && value.length === 0)
+  })
+}
 
 function queryStatus(
   value: unknown,

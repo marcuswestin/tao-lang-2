@@ -115,7 +115,8 @@ function validateInferredReturnType(
 function validateFunctionCall(call: AST.FunctionCallExpression, ctx: ValidationContext): void {
   const resolved = ASTUtils.resolveFunctionInvocation(call)
   const fn = resolved.function
-  if (!fn) {
+  // A call shares its one shape with a phrase call (Decisions §14); phrases-validator owns those.
+  if (!fn || !AST.isFunctionDeclaration(fn)) {
     return
   }
   for (const diagnostic of resolved.diagnostics) {

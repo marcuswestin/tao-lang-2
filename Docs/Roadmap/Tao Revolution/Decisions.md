@@ -40,12 +40,16 @@ use Button, TextField from @design-kit
 use Recipe as SharedRecipe from ../Sharing
 ```
 
-- **Two visibility modifiers and no others**: `file` narrows a declaration to its source file;
-  `public` widens it past the folder or package boundary.
+- **Five visibility modifiers, narrowest first**, and a declaration carries the narrowest that works:
+  `file` (the default) keeps it to its source file; `folder` reaches the rest of its folder with no
+  `use` line; `package` reaches the rest of its package; `workspace` reaches any file in the
+  workspace but never a consumer of a published workspace; `public` reaches those consumers.
+  _(Amended 2026-09-25: this read "two modifiers and no others" while §8 and the implementation
+  carried five; the five stand.)_
 
 ```swift
 file function Slugify(Title text) returns text { … }   // only this file may call it
-public data Households / Household { … }               // other folders and packages may reference it
+public data Households / Household { … }               // consumers of the published workspace may reference it
 ```
 
 - **Each app has the same file decomposition**, so the security story is reviewable on one page:
@@ -748,6 +752,33 @@ on press -> { do LeaveKitchen(MyMembership) }   // silent on rejection — nothi
 - **Data-write outcomes belong to the document** under the reactive-editing amendment (§7).
   Ordinary input values have no entity lifecycle. Backend validation remains deferred.
 
+_(Amended 2026-09-25, in the MVP decision rounds.)_ The outcome vocabulary and the net as they ship:
+
+- **`saved`, `rejected`, and `error` are the outcomes; `queued` waits for the first app that needs a
+  durable outbox (Wayfare).** `saved` means the effect finished on this device. Whether its writes
+  reached the provider is the row's to say (`WritesQueued`, §7), wherever the row is shown, so an
+  action never stays open while a device is offline.
+- **A declared failure case refines `rejected`.** A site may name one of the effect's `fail` or
+  `fails` cases; the named case handles only itself, and `rejected -> Problem` catches every other
+  declared case with its sentence. `error -> Message` is anything the effect never declared:
+
+```swift
+when do ExportDocument(Document, Format: Format) {
+   saved    -> { present Notice("Exported") as toast }
+   Offline  -> { set RetryWhenOnline = yes }
+   rejected -> Problem { present Notice(Problem) as toast }
+}
+```
+
+- **An unhandled failure stays silent, and the compiler says so.** A root invocation of an effect
+  whose failure contract is not empty, with no site outcome covering its declared cases, draws a
+  warning naming the cases and pointing at `when do`. The contract counts the cases an effect's own
+  `fail` and `fails` declare and those of the effects it reaches through a plain `do`.
+- **The net is always present; an app restyles it case by case.** The runtime supplies `loading`,
+  `missing`, `unauthorized`, and `error -> Message`. A file-level `guard default { … }` replaces
+  only the cases it names and covers every app in the project. A bare `guard Subject` sends every
+  exceptional case to the net; `guard Subject { … }` sends the cases it does not name.
+
 - **Availability is a state, not an empty collection.** Loading, missing, unauthorized, and error
   are distinct from "there are zero rows":
 
@@ -904,6 +935,26 @@ Projection types contain the selected fields and their types, without entity ide
 `without` excludes named fields. Field paths into writable ordinary items are writable and preserve
 siblings. `update Document with Input` writes every supplied field by name and preserves omitted
 fields; it has no implicit dirty tracking or baseline. Explicit field updates remain available.
+
+_(Amended 2026-09-24, in the write-rules dialogue.)_ **A projection also carries the `required`
+sentences of the fields it selects**, so `Input.Incomplete` and `Input.Problems` read before any row
+exists, exactly as they would on a row (§2). **`create Entity with Input` creates a row from a
+projected input**, mirroring `update … with`; the projection must cover every field a create must
+supply. This is how a form for a new row is written now that entity drafts are retired:
+
+```tao
+type WorkspaceInput is Workspace { Name }
+
+scene WorkspaceList() {
+   state Input = WorkspaceInput { Name: "" }
+   action AddWorkspace() {
+      check not Input.Incomplete
+      create Workspace with Input
+      set Input = WorkspaceInput { Name: "" }
+   }
+   render FormButton("Add workspace", Disabled: Input.Incomplete) { on press AddWorkspace }
+}
+```
 
 ### Document write outcomes
 
@@ -1954,10 +2005,13 @@ design SkilletDesign {
   `color` value; inside, `background Tint` reads it, resolved against the mounted design at render
   so it follows the scheme and whichever design is mounted. Every value starts as a design name — no
   conversion from text or data reaches a clause — so the set of colors a clause can receive stays
-  listed in source. A name, with its shade, must exist in every design the project's apps mount,
-  refinements included, or it is a compile error naming the design that lacks it. WordFlower's document status badge forces it: the badge tints a dot inside
-  itself, which a caller's clauses cannot reach. `size` parameters, `color` state, and aliases wait
-  for a feature that forces them.
+  listed in source. `color` is a keyword and only a view parameter's type; a design name is a color
+  only when used directly as an argument or parameter default, not inside an arbitrary `when`
+  expression. A name, with its shade, must exist in every design the project's apps mount,
+  refinements included, or it is a compile error naming the design that lacks it. The same
+  every-design rule applies to style references. WordFlower's document status badge forces it: the
+  badge tints a dot inside itself, which a caller's clauses cannot reach. `size` parameters,
+  `color` state, and aliases wait for a feature that forces them.
 - **Generated interaction affordances use ordinary element defaults** (KEY-D13). `Hint` styles an anchored
   key-and-label affordance and `Overview` styles the generated overview, verb, and palette surfaces;
   an app may override either in `styles { }` without declaring or owning those runtime layers.
@@ -2422,7 +2476,8 @@ scenarios Recipe "devices" {
   perceptual quality — "does meaning survive without colour", "does this layout read well
   mirrored" — is _QA_: humans reviewing the scenario gallery, with the pseudolocale and RTL
   scenarios as standing review states. The language never encodes a QA judgement as an assertion,
-  because a failing "test" no machine can actually evaluate teaches people to ignore red.
+  because a failing "test" no machine can actually evaluate teaches people to ignore red. A journey
+  does not assert a rendered color; compiler and runtime tests prove color lowering and resolution.
 
 ---
 

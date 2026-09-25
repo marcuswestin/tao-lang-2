@@ -298,7 +298,7 @@ scene ${listScene(entity)}() {
    state ${draft} = ""
    query ${entity.plural} { }
    action Add${singular}() {
-      guard ${draft} empty
+      check ${draft} is not empty
       create ${singular} {
          ${title.name}: ${draft}
       }
@@ -370,7 +370,7 @@ scene ${detailScene(entity)}(${singular}) {
    Title ${singular}.${title.name}
 ${draftStates.join('\n')}
    action Save${singular}() {
-      guard ${title.name}Draft empty
+      check ${title.name}Draft is not empty
       update ${singular} {
 ${saveUpdates.join('\n')}
       }

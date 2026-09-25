@@ -212,6 +212,7 @@ function createServices(options: CreateParserContextOptions & { packages: Packag
   const shared = Langium.inject(
     Langium.createDefaultSharedCoreModule(options.langiumContext ?? Langium.NodeFileSystem),
     AST.GeneratedSharedModule,
+    taoSharedModule(),
   )
   const language = Langium.inject(
     Langium.createDefaultCoreModule({ shared }),
@@ -225,6 +226,7 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
   const shared = Langium.inject(
     Langium.createDefaultSharedModule(options.langiumContext ?? Langium.NodeFileSystem),
     AST.GeneratedSharedModule,
+    taoSharedModule(),
   )
   const language = Langium.inject(
     Langium.createDefaultModule({ shared }),
@@ -233,6 +235,31 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
     lspModule(options),
   )
   return registerLanguage(shared, language)
+}
+
+/** Relink color reads when an app edit changes which design supplies them. */
+class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
+  protected override shouldRelink(document: Langium.LangiumDocument, changedUris: Set<string>): boolean {
+    if (super.shouldRelink(document, changedUris)) {
+      return true
+    }
+    if (changedUris.size === 0 || !AST.isTaoFile(document.parseResult.value)) {
+      return false
+    }
+    return AST.streamAllContents(document.parseResult.value).some(node =>
+      (AST.isValueReference(node) || AST.isMemberAccessExpression(node))
+      && AST.isDesignColorPosition(node)
+      && AST.isDesignColor(node.target.ref)
+    )
+  }
+}
+
+function taoSharedModule() {
+  return {
+    workspace: {
+      DocumentBuilder: (services: Langium.LangiumSharedCoreServices) => new TaoDocumentBuilder(services),
+    },
+  }
 }
 
 /** taoLanguageModule declares the services Tao overrides or adds on a Langium language container. */
@@ -523,6 +550,9 @@ async function loadReferencedDocuments(
 // Only a sibling that actually declares something `folder`-visible is pulled in, so a project that
 // does not use the marker keeps exactly the document set its `use` statements describe.
 const folderDeclarationPattern = /^[ \t]*folder[ \t\r\n]/m
+// The project's `guard default` covers every app without being named by any of them, so a sibling
+// declaring it is pulled in the same way.
+const readNetDeclarationPattern = /^[ \t]*guard[ \t]+default\b/m
 
 /** SiblingScanCache memoizes one load's per-directory folder-sibling scans. */
 type SiblingScanCache = Map<string, Promise<string[]>>
@@ -546,7 +576,8 @@ async function folderSiblingPathsIn(directory: string): Promise<string[]> {
     .map(name => FS.resolvePath(name, directory))
   const paths: string[] = []
   for (const path of candidates) {
-    if (folderDeclarationPattern.test(await FS.readText(path))) {
+    const source = await FS.readText(path)
+    if (folderDeclarationPattern.test(source) || readNetDeclarationPattern.test(source)) {
       paths.push(path)
     }
   }

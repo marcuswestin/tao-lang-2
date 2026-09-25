@@ -3,7 +3,9 @@ import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { installTaoSkills } from 'tao-skills'
 import { TaoAppModules } from '../app-modules'
+import { writeToolchainPin } from '../ship-lock'
 import { runFix } from '../source-commands'
+import { TaoVersion } from '../tao-version'
 import { findTaoTestFiles } from '../test-command'
 import { buildCreationBrief, type BuildCreationBriefOptions, type CreationBrief } from './creation-brief'
 import {
@@ -118,6 +120,12 @@ export async function runCreate(description: string, options: CreateCommandOptio
   await writeCreationFiles(directory, files)
   const installedSkills = await installTaoSkills(directory)
   await TaoAppModules.ensureProject(directory)
+  // A release pins the project to itself, so it keeps running under the Tao that made it until
+  // someone moves the pin; a development build has no release to pin.
+  const version = TaoVersion.current()
+  if (version !== TaoVersion.DEVELOPMENT) {
+    await writeToolchainPin(directory, version)
+  }
   await runFix(directory, { cwd })
   const problems = await validateProject(directory)
   if (problems.length > 0) {

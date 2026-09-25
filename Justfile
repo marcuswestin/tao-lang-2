@@ -90,12 +90,12 @@ stop-local-instantdb:
 
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
-studio project="Apps/HNReader":
+studio project="Apps/HNReader": _parser-gen
     ./dev studio "{{ project }}"
 
 # Launch Tao Studio in its local Electrobun shell; offers to stop another session holding the native host
 [group('Run')]
-studio-native project="Apps/HNReader":
+studio-native project="Apps/HNReader": _parser-gen
     ./dev studio-native "{{ project }}"
 
 # Install the Tao Companion development build on a connected iPhone or iPad, once per native change
@@ -297,6 +297,10 @@ report-test-stats limit="20":
 finalize check='false' fresh='false' redraft='false':
     ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }}
 
+# Merge current main into this feature branch and nothing else; agents use ./agent unsandboxed merge-main when main writes paths the sandbox protects
+merge-main:
+    ./dev merge-main
+
 # Switch this checkout to your own dev/* branch, creating it from main the first time
 [group('Mine')]
 my-branch name='':
@@ -462,6 +466,11 @@ capabilities *ARGS:
 delegation-report *ARGS:
     ./dev delegation-report {{ ARGS }}
 
+# Report where the delegation routing table lags the models this machine runs, and measure context
+[group('Report')]
+model-audit *ARGS:
+    ./dev model-audit {{ ARGS }}
+
 # Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs
 [group('Report')]
 simplify-audit *ARGS:
@@ -541,7 +550,7 @@ verify-changed no_cache='false': _deps
 # host — the native shell and the canary, which contend on the window server — declare `gui` in the
 # catalog and take a machine-wide lease for exactly as long as they run. Everything else here is
 # headless and parallel-safe, so refusing the whole lane priced six gates at the cost of two.
-# Verify everything plus the browser, native and bundle lanes. --no-cache ignores a recorded green tree
+# Verify everything plus browser, native and bundle lanes; stop starting checks after a definite failure. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-full no_cache='false': _deps

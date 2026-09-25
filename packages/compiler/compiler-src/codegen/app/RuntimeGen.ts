@@ -12,6 +12,7 @@ type TaoFileCompileOptions = {
   scopeBindings?: string[]
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
   projectRoot?: string
+  readNet?: boolean
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName?: string
   studioDataCatalog?: boolean

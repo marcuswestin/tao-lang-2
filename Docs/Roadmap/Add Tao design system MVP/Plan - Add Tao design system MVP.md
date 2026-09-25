@@ -153,8 +153,8 @@ as deferred.
 
 Decided: there is no `tao design check` (§16). Design diagnostics are ordinary `tao check`
 diagnostics, and rule diagnostics are warnings (2026-09-23). The `rules { }` checks themselves are
-deferred past MVP — see "Design rules — deferred past MVP". Still open: whether `tao fix` migrates
-`bg`/`fg` and the flat catalog automatically.
+deferred past MVP — see "Design rules — deferred past MVP". `tao fix` migrates `bg`/`fg` and the
+flat catalog automatically; `tao check` reports unmigrated source as noncanonical.
 
 ### 7. Close the MVP and plan the next design phase
 
@@ -173,19 +173,30 @@ Exit criteria: docs, examples, test apps, and roadmap agree on the shipped deter
 
 The phased tooling and rollout work this step prepares is laid out in full below.
 
+`tao create` writes an authored `Design.tao`, so its first app already has a palette, element
+defaults, and named styles. A manually written app that omits `Design` can still render stdlib views
+with their built-in layout: primitive containers and text use React Native's unthemed appearance,
+published native controls use the platform's own chrome (or a portable fallback), and controls such
+as `TextInput` and `Progress` retain their fixed runtime styling. It cannot use named colors or
+styles, and the runtime invents no replacement palette. The result works, but looks sparse and
+platform-native until the author mounts a design.
+
 ## Design values tranche (absorbed, 2026-09-25)
 
 WordFlower `2 - Next` held the contract (`WordFlower.tao-next` header, "DESIGN VALUES"); `1 - Current`
 now matches it and both read absorbed. It finishes the MVP design surface in four decision groups,
-recorded in `Decisions.md` §13. Choices the implementation made where the contract was silent:
+recorded in `Decisions.md` §13. The Developer confirmed the implementation's remaining choices on
+2026-09-25:
 `color` is rejected everywhere except a view parameter; a design name counts as a `color` only
 directly as an argument or a default (not inside a `when` passed as one); a name and its shade must
 exist in every design the project's apps mount, refinements included (after review found the check
 depended on app order); `color` is now a keyword, and Studio refuses it and Capitalized names for new
-colors, sizes, and forks. Not built: go-to-definition from `background Tint` to its parameter, a
-journey step that asserts a rendered color, rename of a shade across `Tint: accent.20` arguments,
-and relinking a view's color arguments when an app's `Design` changes. Style-reference checks
-(`selectedWorkspaceDesigns` in `design-validator.ts`) still ignore designs set by refinement.
+colors, sizes, and forks. Studio's suggested fork name lowercases an element name (`Card` becomes
+`cardVariant`). Editor references now cover go-to-definition from `background Tint` to its
+parameter, shade rename across `Tint: accent.20` arguments, and relinking a shared view's color
+arguments when an app's `Design` changes. Style references now require every mounted design,
+including refinements, to declare the style. Journeys stay at observable functionality rather than
+asserting a rendered color; compiler and runtime tests cover the color itself.
 
 1. **The clause-list casing rule is a compile error.** A reserved lowercase word is a clause head,
    any other lowercase word is a design name (a style in entry position, a color or size in value
@@ -402,10 +413,10 @@ warn Settings screen uses 6 radius values; theme defines 4
 Safe fixes should be reviewable and small:
 
 ```text
-- Replace raw spacing 16 with space.lg
-- Replace "#ffffff" with bg.surface
-- Add minTap 44 to icon-only buttons
-- Convert repeated card styles into recipe Card.raised
+- Replace raw spacing 16 with a named size
+- Replace "#ffffff" with `background surface`
+- Apply a declared `tap min 48` to icon-only buttons
+- Convert repeated card clauses into the `cardRaised` style
 ```
 
 Rendered checks, screenshot baselines, AI critique, design diff, and visual iteration should wait until the deterministic source/runtime model exists.

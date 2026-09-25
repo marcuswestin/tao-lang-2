@@ -2,6 +2,10 @@ import { Langium } from './langium-exports'
 import type { PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
 
+type BuildCacheResolver = PackageResolver & {
+  clearPhysicalPathCache?: () => void
+}
+
 /** ValueScopeProvider resolves value references through Tao binding and parameter visibility. */
 export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   /**
@@ -9,12 +13,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
    * statement above it, and each answer filters the whole workspace, so without this the link phase
    * costs references times imports times documents.
    *
-   * An answer depends on which documents the workspace holds, so it may outlive nothing that changes
-   * them. `Parser.parse` replaces every document it builds, which retires their use statements and
-   * these entries with them; that is why the keys are held weakly. The editor instead updates
-   * documents in place and relinks the ones a change may have moved, so the table is dropped when
-   * an update starts and again when any build finishes parsing, which is after the last syntax tree
-   * is replaced and before the first reference is linked against it.
+   * These answers and package boundary paths depend on the current documents and file system.
+   * `Parser.parse` replaces every document it builds, which retires use statements; that is why
+   * their keys are held weakly. The editor instead updates documents in place and relinks the ones
+   * a change may have moved, so these caches are dropped when an update starts and again when any
+   * build finishes parsing, which is after the last syntax tree is replaced and before the first
+   * reference is linked against it.
    */
   private useTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, AST.Declaration[]>()
 
@@ -31,13 +35,15 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     private readonly packages: PackageResolver,
   ) {
     super(coreServices)
-    const forgetWorkspaceAnswers = (): void => {
+    const forgetBuildCaches = (): void => {
       this.useTargets = new WeakMap()
       this.mountedColors = new WeakMap()
+      const packages = this.packages as BuildCacheResolver
+      packages.clearPhysicalPathCache?.()
     }
     const builder = coreServices.shared.workspace.DocumentBuilder
-    builder.onUpdate(forgetWorkspaceAnswers)
-    builder.onBuildPhase(Langium.DocumentState.Parsed, forgetWorkspaceAnswers)
+    builder.onUpdate(forgetBuildCaches)
+    builder.onBuildPhase(Langium.DocumentState.Parsed, forgetBuildCaches)
   }
 
   /** getScope returns Tao values visible to a value reference. */
@@ -283,6 +289,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       scope = this.createScopeForParameters(owningFunction, scope, reference)
     }
 
+    const owningPhrase = AST.findOwningPhrase(reference)
+    if (owningPhrase) {
+      scope = this.createScopeForParameters(owningPhrase, scope, reference)
+    }
+
     const owningAction = AST.findOwningAction(reference)
     if (owningAction) {
       scope = this.createScopeForParameters(owningAction, scope, reference)
@@ -483,8 +494,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScopeForNodes(target ? AST.renderSlotDeclarationsOf(target) : [])
   }
 
+  /** A call resolves a pure function or named copy; both share the one call shape (Decisions §14). */
   private createFunctionScope(call: AST.FunctionCallExpression): Langium.Scope {
-    return this.createDeclarationScope(call, AST.isFunctionDeclaration)
+    return this.createDeclarationScope(call, AST.isCallableDeclaration)
   }
 
   private createAppViewScope(node: AST.AppView): Langium.Scope {
@@ -961,7 +973,8 @@ function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
       carriers.push({ kind: 'action-block', block: current })
     }
     if (
-      (AST.isGuardActionBranch(current) || AST.isGuardRenderBranch(current) || AST.isWhenRenderBranch(current))
+      (AST.isGuardActionBranch(current) || AST.isGuardRenderBranch(current) || AST.isWhenRenderBranch(current)
+        || AST.isGuardDefaultBranch(current))
       && current.payload
     ) {
       carriers.push({ kind: 'payload', payload: current.payload })

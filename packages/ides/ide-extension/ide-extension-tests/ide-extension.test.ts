@@ -45,11 +45,11 @@ Describe('Tao IDE extension smoke', () => {
         'new extension bytes',
       )
       await FS.writeText(
-        FS.resolvePath('ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json', stagingPackageRoot),
+        FS.resolvePath('ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json', stagingPackageRoot),
         'new grammar bytes',
       )
       await FS.writeText(FS.resolvePath('extension/main.cjs', generatedRoot), 'old extension bytes')
-      await FS.writeText(FS.resolvePath('tao-lang.tmLanguage.json', syntaxRoot), 'old grammar bytes')
+      await FS.writeText(FS.resolvePath('tao.tmLanguage.json', syntaxRoot), 'old grammar bytes')
       await FS.writeText(FS.resolvePath('stale.json', syntaxRoot), 'old stale bytes')
       const before = await persistentOutputIdentity([generatedRoot, syntaxRoot])
       let injected = false
@@ -71,25 +71,29 @@ Describe('Tao IDE extension smoke', () => {
 
   Test('merges Tao syntax highlighting with embedded TypeScript fences', async () => {
     const generatedGrammar = await FS.readJson<Record<string, unknown>>(
-      FS.resolvePath('../ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json', import.meta.dir),
+      FS.resolvePath('../ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json', import.meta.dir),
     )
     const overlayGrammar = await FS.readJson<Record<string, unknown>>(
-      FS.resolvePath('../ide-extension-syntaxes/tao-lang.tmLanguage.overlay.json', import.meta.dir),
+      FS.resolvePath('../ide-extension-syntaxes/tao.tmLanguage.overlay.json', import.meta.dir),
     )
     const merged = mergeTaoTextMateGrammar(generatedGrammar, overlayGrammar)
 
-    Expect(JSON.stringify(merged)).toContain('meta.embedded.block.ts.tao-lang')
+    // TextMate convention names a language's root scope and every token's suffix after its short
+    // language id, which is `tao` here as it is for VS Code's language and the `.tao` extension.
+    Expect(merged['scopeName']).toBe('source.tao')
+    Expect(JSON.stringify(merged)).not.toContain('tao-lang')
+    Expect(JSON.stringify(merged)).toContain('meta.embedded.block.ts.tao')
     Expect(JSON.stringify(merged)).toContain('source.tsx')
-    Expect(JSON.stringify(merged)).toContain('meta.template.expression.tao-lang')
-    Expect(JSON.stringify(merged)).toContain('constant.character.escape.tao-lang')
-    Expect(JSON.stringify(merged)).toContain('constant.numeric.tao-lang')
-    Expect(JSON.stringify(merged)).toContain('constant.other.tag.tao-lang')
-    Expect(JSON.stringify(merged)).toContain('constant.other.color.tao-lang')
+    Expect(JSON.stringify(merged)).toContain('meta.template.expression.tao')
+    Expect(JSON.stringify(merged)).toContain('constant.character.escape.tao')
+    Expect(JSON.stringify(merged)).toContain('constant.numeric.tao')
+    Expect(JSON.stringify(merged)).toContain('constant.other.tag.tao')
+    Expect(JSON.stringify(merged)).toContain('constant.other.color.tao')
     // A keyed name, a declared name, and a referenced type each carry their own scope so a theme
     // can tell `@home`, `WordFlowerNavigator`, and `SelectionNav` apart.
-    Expect(JSON.stringify(merged)).toContain('entity.other.attribute-name.tao-lang')
-    Expect(JSON.stringify(merged)).toContain('entity.name.function.tao-lang')
-    Expect(JSON.stringify(merged)).toContain('entity.name.type.tao-lang')
+    Expect(JSON.stringify(merged)).toContain('entity.other.attribute-name.tao')
+    Expect(JSON.stringify(merged)).toContain('entity.name.function.tao')
+    Expect(JSON.stringify(merged)).toContain('entity.name.type.tao')
     Expect(mergeTaoTextMateGrammar(merged, overlayGrammar)).toEqual(merged)
   })
 
@@ -106,7 +110,7 @@ Describe('Tao IDE extension smoke', () => {
       'Tao: Move Renders Last',
     ])
     Expect(packageJson.contributes.grammars[0]?.embeddedLanguages).toEqual({
-      'meta.embedded.block.ts.tao-lang': 'typescriptreact',
+      'meta.embedded.block.ts.tao': 'typescriptreact',
     })
   })
 

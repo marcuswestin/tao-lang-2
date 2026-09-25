@@ -6,6 +6,7 @@ import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 export { DesktopHost } from './desktop-host'
 
 export { HostDependencies } from './host-dependencies'
+export { ManagedNode, type NodeManifest } from './managed-node'
 export {
   type ExpoUpdateArtifact,
   type ExpoUpdateArtifacts,
@@ -499,31 +500,41 @@ function StudioBrowserApp() {
     url.searchParams.set('previewInstanceId', TaoStudioPreviewBootstrap.previewInstanceId)
     TR.Studio.Diagnostics.record('bootstrap-request', String(TaoStudioPublication.compileRevision))
     let retryTimer: ReturnType<typeof setTimeout> | undefined
+    let olderAttempts = 0
     const load = async () => {
       const response = await fetch(url)
       if (!response.ok) TR.Errors.failHost('Tao Studio cell bootstrap was rejected (' + response.status + ').')
       const nextCell = await response.json()
       if (cancelled) return
       const outcome = TR.Studio.Bootstrap.reconcile(nextCell, TaoStudioPublication, newerRevision => {
-        const nextUrl = new URL(window.location.href)
-        const attempts = Number(nextUrl.searchParams.get('taoStudioPublicationRetry') ?? '0')
-        if (!Number.isInteger(attempts) || attempts >= 30) {
+        const retry = TR.Studio.Bootstrap.nextPublicationReload(window.location.href, newerRevision)
+        if (retry === undefined) {
           TR.Errors.failHost('Tao Studio preview could not load publication revision ' + newerRevision + '.')
+          return
         }
-        nextUrl.searchParams.set('taoStudioPublicationRetry', String(attempts + 1))
         TR.Studio.Diagnostics.record('publication-reload-scheduled', String(newerRevision)
-          + '/' + String(attempts + 1))
+          + '/' + String(retry.attempt))
         retryTimer = setTimeout(() => {
-          if (!cancelled) window.location.replace(nextUrl.toString())
-        }, Math.min(200 * (attempts + 1), 1_000))
+          if (!cancelled) window.location.replace(retry.url)
+        }, Math.min(200 * retry.attempt, 1_000))
       })
       TR.Studio.Diagnostics.record('bootstrap-response', String(nextCell?.identity?.compileRevision)
         + '/' + String(nextCell?.identity?.cellRevision) + '/' + outcome)
       if (outcome === 'matched') {
+        const cleanUrl = TR.Studio.Bootstrap.clearPublicationRetry(window.location.href)
+        if (cleanUrl !== window.location.href) {
+          window.history.replaceState(window.history.state, '', cleanUrl)
+        }
         setAppliedRuntime({ cell: nextCell, manifest: TaoStudioManifest, publication: TaoStudioPublication })
       } else if (outcome === 'older') {
+        const delayMs = TR.Studio.Bootstrap.olderRetryDelay(++olderAttempts)
+        if (delayMs === undefined) {
+          TR.Errors.failHost('Tao Studio cell bootstrap did not catch up to publication revision '
+            + TaoStudioPublication.compileRevision + '.')
+          return
+        }
         TR.Studio.Diagnostics.record('bootstrap-retry-server', String(TaoStudioPublication.compileRevision))
-        retryTimer = setTimeout(() => { void load().catch(fail) }, 200)
+        retryTimer = setTimeout(() => { void load().catch(fail) }, delayMs)
       } else if (outcome === 'incompatible') {
         TR.Errors.failHost('Tao Studio cell bootstrap did not match this preview.')
       }

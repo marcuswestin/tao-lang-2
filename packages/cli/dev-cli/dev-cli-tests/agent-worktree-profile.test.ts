@@ -424,6 +424,52 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
+  Test('rebuilds the agent when an imported CLI-kit source changes', async () => {
+    const testRoot = await mkTestDir('tao-agent-cli-kit-freshness-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const commandLog = FS.resolvePath('commands.log', testRoot)
+      const buildRoot = FS.resolvePath('.artifacts/build/agent-dev', fixture.worktree)
+      const outputText = FS.resolvePath('packages/cli/cli-kit/cli-kit-src/OutputText.ts', fixture.worktree)
+      await copyBootstrapScripts(fixture.worktree)
+      await writeBootstrapBun(FS.resolvePath('bin/bun', testRoot))
+      await Promise.all([
+        FS.mkdir(FS.resolvePath('node_modules', fixture.worktree)),
+        FS.writeText(FS.resolvePath('package.json', fixture.worktree), '{}'),
+        FS.writeText(FS.resolvePath('bun.lock', fixture.worktree), ''),
+        FS.writeText(FS.resolvePath('packages/cli/agent-cli/package.json', fixture.worktree), '{}'),
+        FS.writeText(FS.resolvePath('packages/cli/cli-kit/package.json', fixture.worktree), '{}'),
+        FS.writeText(FS.resolvePath('packages/cli/dev-cli/package.json', fixture.worktree), '{}'),
+        FS.writeText(FS.resolvePath('packages/shared/package.json', fixture.worktree), '{}'),
+        FS.writeText(outputText, 'export const OutputText = {}\n'),
+        FS.writeText(FS.resolvePath('agent-dev.js', buildRoot), ''),
+        FS.writeText(FS.resolvePath('dev-deps.stamp', buildRoot), ''),
+        FS.writeText(FS.resolvePath('agent-dev.stamp', buildRoot), ''),
+      ])
+      const stamp = FS.resolvePath('agent-dev.stamp', buildRoot)
+      await FS.setModifiedTimeMs(stamp, Date.now() + 10_000)
+
+      const unchanged = await CLI.run(FS.resolvePath('agent', fixture.worktree), {
+        args: ['help'],
+        env: { ...fixture.env, TAO_TEST_COMMAND_LOG: commandLog },
+      })
+      Expect(unchanged.exitCode).toBe(0)
+      Expect((await FS.readText(commandLog)).split('\n').some(command => command.startsWith('build '))).toBe(false)
+
+      await FS.writeText(outputText, 'export const OutputText = { changed: true }\n')
+      await FS.setModifiedTimeMs(outputText, Date.now() + 20_000)
+      const changed = await CLI.run(FS.resolvePath('agent', fixture.worktree), {
+        args: ['help'],
+        env: { ...fixture.env, TAO_TEST_COMMAND_LOG: commandLog },
+      })
+
+      Expect(changed.exitCode).toBe(0)
+      Expect((await FS.readText(commandLog)).split('\n').some(command => command.startsWith('build '))).toBe(true)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
   Test('does not publish the shared install stamp after ./dev installation fails', async () => {
     const testRoot = await mkTestDir('tao-dev-agent-install-stamp-failure-')
     try {

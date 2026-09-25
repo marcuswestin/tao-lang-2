@@ -214,11 +214,29 @@ function validateDesignClause(clause: AST.LayoutClause, node: AST.Node, ctx: Val
     validateVisualEntry(entry, undefined, undefined, ctx)
   }
 
-  const designs = selectedWorkspaceDesigns(ctx)
+  const designs = mountedWorkspaceDesigns(ctx)
   if (designs.length > 1) {
-    // A source file can participate in multiple mounted apps. Name resolution is deliberately
-    // deferred in this case so identical private bundle names stay app-occurrence-local. The
-    // mounted-design runtime checks the effective result for the actual app occurrence.
+    // A shared view can render under every mounted design. Check names against each design, while
+    // leaving expansion and property warnings to the actual app occurrence: those depend on which
+    // same-named private bundle supplies the style.
+    for (const design of designs) {
+      validateDesignLayoutReferences(sizeEntries, design, designSizeNames(design), ctx)
+      const bundles = designSpecMembers(design)
+      for (const entry of designEntries) {
+        if (isVisualEntry(entry) || isElementDefaultReference(entry)) {
+          continue
+        }
+        const values = ASTUtils.layoutEntryValues(entry)
+        if (values.length === 1 && !bundles.has(String(values[0] ?? ''))) {
+          ctx.error(entry, designValidationMessages.unknownBundle(design.name, String(values[0] ?? '')))
+        }
+      }
+    }
+    for (const entry of designEntries) {
+      if (!isVisualEntry(entry) && ASTUtils.layoutEntryValues(entry).length !== 1) {
+        ctx.error(entry, designValidationMessages.malformedVisual(entryText(entry)))
+      }
+    }
     return
   }
   const design = designs[0]
@@ -461,15 +479,15 @@ function validateEffectiveConflicts(entries: readonly AST.LayoutEntry[], ctx: Va
 }
 
 /**
- * selectedWorkspaceDesigns collects the designs the apps in this build select. Which app selects a
+ * mountedWorkspaceDesigns collects the designs the apps in this build mount. Which app mounts a
  * design belongs to the project, not to what one entry imports: a package file under `@ui/` imports
  * no app, so on its own entry graph every tagged render looked like one with no design mounted at
  * all. Project identity is batched for the same reason; see `Workspace.validateFiles`.
  */
-function selectedWorkspaceDesigns(ctx: ValidationContext): AST.DesignDeclaration[] {
+function mountedWorkspaceDesigns(ctx: ValidationContext): AST.DesignDeclaration[] {
   return ctx.memo(
-    'design-validator.selectedWorkspaceDesigns',
-    () => AST.selectedDesigns(ctx.projectFiles ?? ctx.workspaceFiles),
+    'design-validator.mountedWorkspaceDesigns',
+    () => AST.mountedDesigns(ctx.projectFiles ?? ctx.workspaceFiles),
   )
 }
 

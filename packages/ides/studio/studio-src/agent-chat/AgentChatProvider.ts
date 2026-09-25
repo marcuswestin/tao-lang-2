@@ -10,21 +10,22 @@ import type { LanguageModel } from 'ai'
 
 /**
  * Every hosted provider the chat can answer with. Each is chosen per session in the panel; the default
- * models are each vendor's standard tier, and each can be overridden from the environment Studio runs in.
+ * models are each vendor's standard tier in the routing table of `agents/skills/delegation/SKILL.md`,
+ * which a test holds them to, and each can be overridden from the environment Studio runs in.
  */
 const PROVIDERS = {
   anthropic: {
     create: (apiKey: string, model: string): LanguageModel => createAnthropic({ apiKey })(model),
     keyVariable: 'ANTHROPIC_API_KEY',
     label: 'Anthropic',
-    model: 'claude-sonnet-5',
+    model: 'claude-opus-5-5',
     modelVariable: 'TAO_STUDIO_AGENT_ANTHROPIC_MODEL',
   },
   openai: {
     create: (apiKey: string, model: string): LanguageModel => createOpenAI({ apiKey })(model),
     keyVariable: 'OPENAI_API_KEY',
     label: 'OpenAI',
-    model: 'gpt-5.6-terra',
+    model: 'gpt-6-sol',
     modelVariable: 'TAO_STUDIO_AGENT_OPENAI_MODEL',
   },
 } as const

@@ -1,5 +1,5 @@
-import { Diagnostic, FS, Platform } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { CLI, Diagnostic, FS, Platform, Repo } from '@shared'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { CheckCache } from '../cli-src/check-cache'
 import { type CheckWorkspaceOutcome, runCheck } from '../cli-src/source-commands'
 import { withTaoFixture } from './test-cli-files'
@@ -43,6 +43,42 @@ async function checkedWorkspaces(
 }
 
 Describe('tao check per-workspace stamp', () => {
+  Test('checks a no-project temp file without entering an unreadable sibling', async () => {
+    const rootDir = await mkTestDir('tao-check-unreadable-sibling-')
+    const deniedRoot = FS.resolvePath('denied', rootDir)
+    try {
+      const appPath = FS.resolvePath('fixture/App.tao', rootDir)
+      await FS.writeText(appPath, CANONICAL_VIEW)
+      await FS.writeText(FS.resolvePath('Secret.txt', deniedRoot), 'private\n')
+      await FS.chmod(deniedRoot, 0o000)
+      await Expect(FS.listDir(deniedRoot)).rejects.toThrow()
+
+      const results = await runCheck(appPath)
+      const app = results.find(result => result.path === appPath)
+      Expect(app?.error).toBeUndefined()
+      Expect(app?.diagnostics?.some(Diagnostic.isError)).toBe(true)
+    } finally {
+      await FS.chmod(deniedRoot, 0o700).catch(() => {})
+      await FS.remove(rootDir)
+    }
+  })
+
+  Test('checks a standalone file at a Git root containing a directory symlink', async () => {
+    await withTaoFixture(
+      { 'App.tao': CANONICAL_VIEW, 'linked/Sidecar.ts': 'export const value = 1\n' },
+      async rootDir => {
+        await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: rootDir })
+        const linkPath = FS.resolvePath('directory-link', rootDir)
+        await FS.symlink('linked', linkPath)
+        Expect(await Repo.filesUnder(rootDir)).toContain(linkPath)
+        Expect(await CheckCache.open({ repositoryRoot: rootDir })).toBeDefined()
+        const results = await runCheck('App.tao', { cwd: rootDir, cache: { repositoryRoot: rootDir } })
+
+        Expect(results.map(result => FS.relativePath(rootDir, result.path))).toContain('App.tao')
+      },
+    )
+  })
+
   Test('checks every workspace cold and replays every workspace warm', async () => {
     await withTaoFixture(TWO_WORKSPACES, async rootDir => {
       Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })

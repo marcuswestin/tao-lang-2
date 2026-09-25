@@ -24,7 +24,7 @@ type TaoTextMateGrammar = Record<string, unknown> & {
 }
 
 const maximumHighlightLength = 1_000_000
-const taoLanguageName = 'tao-lang'
+const taoLanguageName = 'tao'
 const taoThemeName = 'github-dark'
 let highlighterPromise: Promise<HighlighterCore> | undefined
 
@@ -100,18 +100,17 @@ function createHighlighter(): Promise<HighlighterCore> {
 
 async function createHighlighterWithShiki(): Promise<HighlighterCore> {
   const grammar = await FS.readJson<TaoTextMateGrammar>(Repo.resolvePath(
-    'packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+    'packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json',
   ))
   Assert(
-    grammar.scopeName === 'source.tao-lang',
-    'the generated Tao TextMate grammar to declare the source.tao-lang scope',
+    grammar.scopeName === 'source.tao',
+    'the generated Tao TextMate grammar to declare the source.tao scope',
     { scopeName: grammar.scopeName },
   )
   return await createHighlighterCore({
     engine: createJavaScriptRegexEngine(),
     langs: [{
       ...(grammar as unknown as LanguageRegistration),
-      aliases: ['tao'],
       embeddedLangs: ['tsx'],
       name: taoLanguageName,
     }, tsxLanguage],

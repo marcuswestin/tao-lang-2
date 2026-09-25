@@ -18,6 +18,10 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
   'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
   'app-dev': { command: './tao', fixedArgs: ['dev'], server: true },
+  // CocoaPods, xcodebuild, and Gradle each need the host, and the build runs all three as one
+  // sequence; naming the whole build keeps an agent from stitching it together from lower-level
+  // operations and a hand-written placement step.
+  'companion-host-build': { command: './dev', fixedArgs: ['companion-host-build'] },
   'simulators list': { command: 'xcrun', fixedArgs: ['simctl', 'list', 'devices'] },
   'simulators boot': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
   'simulators run': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },

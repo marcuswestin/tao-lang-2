@@ -9,7 +9,7 @@ scene RecipeList() {
    state NewTitle = ""
    query Recipes { }
    action AddRecipe() {
-      guard NewTitle empty
+      check NewTitle is not empty
       create Recipe {
          Title: NewTitle
       }
@@ -76,7 +76,7 @@ scene RecipeDetail(Recipe) {
    state TitleDraft = Recipe.Title
    state StepsDraft = Recipe.Steps
    action SaveRecipe() {
-      guard TitleDraft empty
+      check TitleDraft is not empty
       update Recipe {
          Title: TitleDraft
          Steps: StepsDraft

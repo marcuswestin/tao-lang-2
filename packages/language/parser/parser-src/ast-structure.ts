@@ -311,6 +311,7 @@ export type ImportableValueDeclaration =
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
+  | AST.PhraseDeclaration
   | AST.ViewDeclaration
 
 /** importableValueDeclarationsInFile returns file-level value declarations visible to other files. */
@@ -423,6 +424,11 @@ export function traitIsTitle(trait: AST.Trait): boolean {
   return trait.word === 'title'
 }
 
+/** traitIsRequired identifies `required "<sentence>"`: completeness that never blocks a write. */
+export function traitIsRequired(trait: AST.Trait): trait is AST.Trait & { sentence: string } {
+  return trait.sentence !== undefined
+}
+
 /** loopSelectHandlers returns the direct row-selection handlers declared by one loop. */
 export function loopSelectHandlers(loop: AST.ForStatement): AST.LoopSelectHandler[] {
   return loop.block.statements.filter(AST.isLoopSelectHandler)
@@ -507,6 +513,7 @@ export function isImportableValueDeclaration(node: AST.Node): node is Importable
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
     || AST.isDesignDeclaration(node)
+    || AST.isPhraseDeclaration(node)
     || AST.isViewDeclaration(node)
 }
 
@@ -1075,6 +1082,11 @@ export function actionFailuresOf(action: AST.ActionDeclaration): AST.FailStateme
 /** findOwningFunction returns the pure function declaration that owns `node`, if any. */
 export function findOwningFunction(node: AST.Node): AST.FunctionDeclaration | undefined {
   return findAncestor(node, AST.isFunctionDeclaration)
+}
+
+/** findOwningPhrase returns the phrase declaration that owns `node`, if any. */
+export function findOwningPhrase(node: AST.Node): AST.PhraseDeclaration | undefined {
+  return findAncestor(node, AST.isPhraseDeclaration)
 }
 
 /** findOwningActionBlock returns the named or inline action block that owns `node`, if any. */

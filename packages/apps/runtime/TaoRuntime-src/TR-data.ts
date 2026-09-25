@@ -52,6 +52,8 @@ export type TaoDataField = {
   /** referenceField is the target entity's unique field, the value a reference stores. */
   referenceField?: string
   relation?: string
+  /** search marks a text field a query's `search` clause matches a term against. */
+  search?: boolean
   /** store names the store a reference's target lives in, among the stores its project links. */
   store?: string
   /** title marks the one text field that names a row to a person: a label of last resort. */
@@ -96,6 +98,12 @@ export type TaoQueryPlan = {
     direction: 'asc' | 'desc'
     field: string
   }
+  /**
+   * search is the query's own reactive term, matched against every `(search)` field the same
+   * way keyboard narrowing and the command palette match: locale-aware word-prefix subsequence.
+   * It is evaluated locally over the store for every provider, never offered to a fill connection.
+   */
+  search?: () => Evaluable
 }
 
 /** TaoQueryDescriptor is the serializable shape of one active query offered to a fill connection. */
@@ -444,6 +452,16 @@ export const DataControls = {
 
   Create(schema: RuntimeDataSchema, entity: string, fields: Record<string, Evaluable>): void {
     schema.create(entity, evaluatedFields(fields))
+  },
+
+  /** CreateWith creates one row from every own field of a projected input item. */
+  CreateWith(schema: RuntimeDataSchema, entity: string, input: Evaluable): void {
+    const fields = input.evaluate().jsValue
+    RuntimeAssert.input(
+      fields !== null && typeof fields === 'object' && !Array.isArray(fields),
+      'Data create expects an input item.',
+    )
+    schema.create(entity, Object.fromEntries(Object.entries(fields)))
   },
 
   Update(row: Evaluable, fields: Record<string, Evaluable>): void {

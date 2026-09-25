@@ -620,6 +620,37 @@ Describe('validator: minimal design', () => {
   )
 
   Test(
+    'requires a shared style and layout size in every directly mounted design',
+    rejects(
+      `
+      workspace design Light { sizes { sm 8.px } styles { panel [pad sm] } }
+      workspace design Dark { styles { other [pad 8] } }
+      app LightApp { view Main Design Light }
+      app DarkApp { view Main Design Dark }
+      view Main() { render Surface() [panel, gap sm] }
+      ${surfaceView}
+    `,
+      messages.unknownBundle('Dark', 'panel'),
+      messages.unknownSize('Dark', 'sm'),
+    ),
+  )
+
+  Test(
+    'requires a shared style in a design mounted by an app refinement',
+    rejects(
+      `
+      workspace design Light { styles { panel [pad 8] } }
+      workspace design Dark { styles { other [pad 8] } }
+      app Demo { view Main Design Light }
+      app DemoDark = Demo with { Design Dark }
+      view Main() { render Surface() [panel] }
+      ${surfaceView}
+    `,
+      messages.unknownBundle('Dark', 'panel'),
+    ),
+  )
+
+  Test(
     'rejects incompatible claim and rigid effects that both remain effective',
     rejects(
       designApp(

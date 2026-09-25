@@ -26,7 +26,8 @@ to attack rather than the whole unit.
 ## Run it and reconcile
 
 Fan out three to five at a time, each agent read-only, each with one unit and `delegation`'s
-repository boilerplate; keep a finished agent working by handing it the next unit. Ask every reviewer
+repository boilerplate; give the next unit a fresh agent, since units are independent and a reused
+agent re-reads its previous unit's whole history on every request. Ask every reviewer
 for the same finding shape: severity, `file:line`, what breaks, and the smallest fix — a finding
 without evidence is a question, not a result. Reviewers report to you and never to each other.
 

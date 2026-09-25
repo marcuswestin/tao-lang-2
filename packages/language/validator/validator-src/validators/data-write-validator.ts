@@ -26,6 +26,10 @@ export const dataWriteValidationMessages = {
   rowTarget: (operation: string) => `${operation} expects a row handle produced by a Tao query.`,
   updateInput: (entity: string) => `Update of '${entity}' expects an input item copied from that entity.`,
   updateInputField: (entity: string, field: string) => `Update of '${entity}' cannot write projected field '${field}'.`,
+  createInput: (entity: string) => `Create of '${entity}' expects an input item projected from that entity.`,
+  createInputField: (entity: string, field: string) => `Create of '${entity}' cannot write projected field '${field}'.`,
+  createInputMissing: (entity: string, field: string) =>
+    `Create of '${entity}' needs field '${field}', which its input item does not project.`,
 } as const
 
 export const dataWriteValidationChecks = {
@@ -40,8 +44,47 @@ export const dataWriteValidationChecks = {
 } satisfies NodeValidationChecks
 
 function validateCreate(create: AST.CreateStatement, ctx: ValidationContext): void {
-  if (create.entity.ref) {
-    validateWriteFields(create.entity.ref, create.block.fields, ctx, { requireAll: true })
+  const entity = create.entity.ref
+  if (!entity) {
+    return
+  }
+  if (create.block) {
+    validateWriteFields(entity, create.block.fields, ctx, { requireAll: true })
+    return
+  }
+  if (create.source) {
+    validateCreateInput(entity, create.source, ctx)
+  }
+}
+
+/**
+ * `create Entity with Input` writes the input's projected fields, so the projection must be of that
+ * entity, carry no to-many relation, and cover every field a `create { }` would have to supply.
+ */
+function validateCreateInput(
+  entity: ASTUtils.DataEntityDefinition,
+  input: AST.Expression,
+  ctx: ValidationContext,
+): void {
+  const source = Type.ofExpression(input)
+  if (source.kind === 'unresolved') {
+    return
+  }
+  const name = Type.dataEntityName(entity)
+  if (Type.projectedEntityOf(source) !== entity) {
+    ctx.error(input, dataWriteValidationMessages.createInput(name))
+    return
+  }
+  const projected = new Set(source.kind === 'item' ? source.item?.dataFields ?? [] : [])
+  for (const field of projected) {
+    if (Type.dataFieldType(field).kind === 'list') {
+      ctx.error(input, dataWriteValidationMessages.createInputField(name, field.name))
+    }
+  }
+  for (const field of Type.dataFields(entity).filter(ASTUtils.createRequiresField)) {
+    if (!projected.has(field)) {
+      ctx.error(input, dataWriteValidationMessages.createInputMissing(name, field.name))
+    }
   }
 }
 

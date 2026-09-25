@@ -35,7 +35,7 @@ export function siblingWorktreeRoot(primaryCheckout: string): string {
 }
 
 /** primaryCheckout is the checkout whose `.git` every worktree of `cwd`'s repository shares. */
-async function primaryCheckout(cwd: string, git: Git): Promise<string> {
+export async function primaryCheckout(cwd: string, git: Git = runGit): Promise<string> {
   const common = await git(['rev-parse', '--path-format=absolute', '--git-common-dir'], cwd)
   const commonDir = common.stdout.trim()
   if (common.exitCode !== 0 || FS.basename(commonDir) !== '.git') {

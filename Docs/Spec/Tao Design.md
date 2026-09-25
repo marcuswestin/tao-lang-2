@@ -61,8 +61,9 @@ hexadecimal `#RGB`, `#RGBA`, `#RRGGBB`, or `#RRGGBBAA`, case-insensitively.
 At a render site, names that are not built-in layout or visual heads are style references. When the
 enclosing source has one statically selected Design, validation resolves those references and their
 cycles there. A renderable app with no Design cannot use design terms. If several app values can
-mount the same shared visual with different Designs, validation preserves the reference and each
-mounted app resolves it against its own declaration at runtime.
+mount the same shared visual with different Designs, including app refinements, validation requires
+each design to declare the referenced styles and sizes; each mounted app then resolves its own
+declaration at runtime.
 
 ## Goals
 
@@ -205,8 +206,9 @@ a derived color follows `Scheme`. Every value starts as a design name: text, num
 conversions never become a `color`, so the colors any clause can receive stay listed in source.
 Diagnostics cover a value of the wrong type, a Capitalized word that names no value, a color value
 standing alone as an entry (it needs a clause head), an unknown shade, and a name or shade missing
-from any design the project's apps mount. `color` is only a view
-parameter's type; `size` parameters, `color` state, `set`, and aliases wait for a feature that
+from any design the project's apps mount. `color` is a keyword and only a view parameter's type; a
+design color name counts as a value only directly as an argument or default. `size` parameters,
+`color` state, `set`, and aliases wait for a feature that
 forces them.
 
 ### Conditions — partly implemented

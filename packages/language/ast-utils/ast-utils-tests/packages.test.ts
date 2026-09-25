@@ -1,4 +1,5 @@
 import { Packages } from '@ast-utils'
+import { Parser, URI } from '@parser'
 import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 
@@ -215,6 +216,52 @@ Describe('Tao package discovery', () => {
     }
   })
 
+  Test('rechecks a cached package candidate after a workspace build', async () => {
+    const root = await mkTestDir('tao-packages-retargeted-symlink-')
+    try {
+      const projectRoot = FS.resolvePath('Project', root)
+      const packageRoot = FS.resolvePath('@data', projectRoot)
+      const inside = FS.resolvePath('Inside', packageRoot)
+      const outside = FS.resolvePath('Outside', root)
+      const linked = FS.resolvePath('linked', packageRoot)
+      const linkedFile = FS.resolvePath('Value.tao', linked)
+      await FS.writeText(FS.resolvePath('Project.tao', projectRoot), 'project { id "project" name "Project" }')
+      await FS.writeText(FS.resolvePath('Value.tao', inside), 'public let Value = "inside"')
+      await FS.writeText(FS.resolvePath('Value.tao', outside), 'public let Value = "outside"')
+      await FS.symlink(inside, linked)
+      const context = await Packages.createContext(projectRoot)
+      const resolution = Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', projectRoot),
+        importPath: '@data/linked',
+      })
+      const workspaceFilePaths = new Set([linkedFile])
+
+      Expect(Packages.targetMatches(context, resolution, {
+        filePath: linkedFile,
+        workspaceFilePaths,
+      })).toBe(true)
+
+      await FS.remove(linked)
+      await FS.symlink(outside, linked)
+      const parser = Parser.createContext({ packages: Packages.createResolver(context) })
+      // Instantiate the scope provider before the build phase it observes.
+      void parser.services.language.references.ScopeProvider
+      const document = parser.services.shared.workspace.LangiumDocumentFactory.fromString(
+        '',
+        URI.file(FS.resolvePath('Main.tao', projectRoot)),
+      )
+      parser.services.shared.workspace.LangiumDocuments.addDocument(document)
+      await parser.services.shared.workspace.DocumentBuilder.build([document], { eagerLinking: true })
+
+      Expect(Packages.targetMatches(context, resolution, {
+        filePath: linkedFile,
+        workspaceFilePaths,
+      })).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('asks the file system only about files an import names, and never remembers a miss', async () => {
     const root = await mkTestDir('tao-packages-physical-paths-')
     try {
@@ -354,6 +401,37 @@ Describe('Tao package discovery', () => {
       })
     } finally {
       await FS.remove(root)
+    }
+  })
+
+  Test('never climbs past the temp-directory boundary to a project declared there', async () => {
+    const boundary = await mkTestDir('tao-packages-temp-boundary-')
+    try {
+      await FS.writeText(FS.resolvePath('Stray.tao', boundary), 'project { id "stray" name "Stray" }')
+      const fixture = FS.resolvePath('fixture', boundary)
+      await FS.writeText(FS.resolvePath('Main.tao', fixture), '')
+
+      const found = await Packages.containingProjectRoot(fixture, undefined, { temporaryRoot: boundary })
+
+      Expect(found).toBeUndefined()
+    } finally {
+      await FS.remove(boundary)
+    }
+  })
+
+  Test('still finds a project declared in a subdirectory of the temp-directory boundary', async () => {
+    const boundary = await mkTestDir('tao-packages-temp-boundary-nested-')
+    try {
+      const projectRoot = FS.resolvePath('project', boundary)
+      await FS.writeText(FS.resolvePath('Project.tao', projectRoot), 'project { id "project" name "Project" }')
+      const nested = FS.resolvePath('screens', projectRoot)
+      await FS.writeText(FS.resolvePath('Main.tao', nested), '')
+
+      const found = await Packages.containingProjectRoot(nested, undefined, { temporaryRoot: boundary })
+
+      Expect(found).toBe(projectRoot)
+    } finally {
+      await FS.remove(boundary)
     }
   })
 

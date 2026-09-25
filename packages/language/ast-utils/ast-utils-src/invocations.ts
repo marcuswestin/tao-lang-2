@@ -64,10 +64,14 @@ export type ResolvedActionInvocation = {
   diagnostics: ArgumentBindingDiagnostic[]
 }
 
-/** ResolvedFunctionInvocation declares one pure-function call and its owner-bound arguments. */
+/**
+ * ResolvedFunctionInvocation declares one call's owner-bound arguments. Its target links to a pure
+ * function or a phrase (Decisions §14); both share the one call shape, so callers branch on which
+ * declaration kind actually linked.
+ */
 export type ResolvedFunctionInvocation = {
   invocation: AST.FunctionCallExpression
-  function?: AST.FunctionDeclaration
+  function?: AST.CallableDeclaration
   pairs: RenderInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
 }

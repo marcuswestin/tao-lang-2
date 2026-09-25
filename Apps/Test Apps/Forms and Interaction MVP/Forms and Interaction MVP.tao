@@ -27,7 +27,7 @@ scene MainView() {
       set Completed = Value
    }
    action Submit() {
-      guard Draft empty
+      check Draft is not empty
       set Submitted = Draft
       set SubmissionCount += 1
       set Submitting = true

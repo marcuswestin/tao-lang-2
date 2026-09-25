@@ -17,6 +17,17 @@ records the stale-link reproduction and repair.
 At each review, record the new evidence and either close the item or set a new review date and
 owner. A review date schedules reassessment; it does not claim the advisory is fixed.
 
+### 2026-09-24 review
+
+`bun audit --json` still reports one moderate record: `uuid@7.0.3` through
+`@expo/config-plugins@57.0.9 → xcode@3.0.1`. The official advisory still limits the
+affected methods to `v3`/`v5`/`v6` with caller-owned buffers, while that installed
+`xcode` parent calls `uuid.v4()` without one. The record remains unresolved, with no
+reachable affected call demonstrated; the Developer remains its owner and September 28
+its review date. `devenv.lock` still pins `73c703c22422b8951895a960959dbbaca7296492`.
+The Nixpkgs tracker was checked, but no updated patch comparison or Linux closure was
+available; the same owner and review date remain. No dependency or lockfile changed.
+
 ## Bun/npm graph
 
 - **Remaining: `uuid@7.0.3` through `@expo/config-plugins → xcode@3.0.1`.**

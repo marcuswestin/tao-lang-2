@@ -71,7 +71,23 @@ export async function provisionWorktrees(
     }
     return { repositoryRoots: created, runRoot }
   } catch (error) {
-    await removeWorktrees({ repositoryRoots: created, runRoot }, dependencies)
+    let left: readonly string[]
+    try {
+      left = await removeWorktrees({ repositoryRoots: created, runRoot }, dependencies)
+    } catch (cleanupError) {
+      return Errors.throwHostEnvironment(
+        `${Errors.messageOf(error)} Cleanup also failed: ${Errors.messageOf(cleanupError)}. `
+          + `Inspect this experiment's worktrees under ${runRoot} before retrying.`,
+        { cause: error },
+      )
+    }
+    if (left.length > 0) {
+      return Errors.throwHostEnvironment(
+        `${Errors.messageOf(error)} Cleanup could not remove ${left.join(', ')}. `
+          + 'Inspect these experiment worktrees before retrying.',
+        { cause: error },
+      )
+    }
     throw error
   }
 }

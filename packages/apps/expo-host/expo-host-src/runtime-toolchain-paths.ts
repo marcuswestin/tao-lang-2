@@ -28,9 +28,19 @@ export const RuntimeToolchainPaths = {
     ? undefined
     : FS.resolvePath(`../${TaoResources.HOST_DEPENDENCIES_DIRECTORY}`, resourceRoot),
 
+  /**
+   * managedNode is where an installed Tao keeps the Node `tao test` runs under and the manifest that
+   * names it, or undefined inside a checkout, whose devenv profile provides Node.
+   */
+  managedNode: resourceRoot === undefined ? undefined : {
+    installRoot: FS.resolvePath(`../${TaoResources.MANAGED_NODE_DIRECTORY}`, resourceRoot),
+    manifest: FS.resolvePath(TaoResources.MANAGED_NODE_MANIFEST, resourceRoot),
+  },
+
   dependencyRoot,
   expoCommand,
   expoEnvironment,
+  installedExpoLauncher,
 } as const
 
 /** dependencyRoot is the `node_modules` a run of the host resolves packages from. */
@@ -39,8 +49,9 @@ function dependencyRoot(): string {
 }
 
 /**
- * expoEnvironment is what an installed Tao hands Expo so `metro.config.cjs` finds each location it
- * would otherwise climb the repository to reach. Inside a checkout it is empty.
+ * expoEnvironment is what an installed Tao hands the host's tools so `metro.config.cjs` and
+ * `jest.shared.config.cjs` find each location they would otherwise climb the repository to reach.
+ * Inside a checkout it is empty.
  */
 function expoEnvironment(): Record<string, string> {
   if (resourceRoot === undefined) {
@@ -50,7 +61,23 @@ function expoEnvironment(): Record<string, string> {
     TAO_HOST_DEPENDENCY_ROOT: dependencyRoot(),
     TAO_RUNTIME_SOURCE_ROOT: FS.resolvePath(`${TaoResources.RUNTIME_DIRECTORY}/TaoRuntime-src`, resourceRoot),
     TAO_SHARED_CORE_SOURCE_ROOT: FS.resolvePath(TaoResources.SHARED_CORE_DIRECTORY, resourceRoot),
+    TAO_SHARED_SOURCE_ROOT: FS.resolvePath(TaoResources.SHARED_SOURCE_DIRECTORY, resourceRoot),
   }
+}
+
+/**
+ * installedExpoLauncher is how the dev loop starts Expo from an installed Tao: the binary acting as
+ * Bun on Expo's script, with the locations Metro needs. It is undefined inside a checkout, where the
+ * dev loop keeps launching Expo through `bunx` as it always has.
+ */
+function installedExpoLauncher(
+  runtimeRoot: string,
+): { argsPrefix: string[]; env: Record<string, string>; executable: string; namesExpoScript: true } | undefined {
+  if (resourceRoot === undefined) {
+    return undefined
+  }
+  const expo = expoCommand(runtimeRoot, [])
+  return { argsPrefix: expo.args, env: expo.env, executable: expo.command, namesExpoScript: true }
 }
 
 /** ExpoCommand is one Expo CLI invocation: what to run, with which arguments and extra environment. */

@@ -37,6 +37,13 @@
     sandbox, Node's recursive watch held a constant ~12 descriptors whether it watched 0 or 500
     files. Metro 0.84.5's no-Watchman path is one such watch per watch folder (`NativeWatcher`), so
     inside a sandbox Watchman is the only file watching there is.
+  - The cause, found 2026-09-24: the sandbox denies the `mach-lookup` of `com.apple.FSEvents`, the
+    service every macOS FSEvents watcher reaches `fseventsd` through, and libuv reports the failed
+    `FSEventStreamStart` as `EMFILE` (openai/codex#15698, Homebrew/brew#24017). Bun 1.3.14 moved
+    macOS `fs.watch` onto FSEvents for single files as well as directories, so where Bun 1.3.13
+    still received a single-file edit inside the sandbox through kqueue, Bun 1.4.2 receives nothing.
+    Outside the sandbox on macOS 27.0, Bun 1.3.13, Bun 1.4.2, and Node 24 all delivered events for
+    an in-place edit, a new file, and a rename-over save, so neither Bun nor macOS lost them.
   - Metro's watch folders include the whole repository `node_modules` (`metro.config.cjs:38-46`:
     108,661 files, 18,722 directories, 5,118 symlinks here), and Metro needs it visible through
     Watchman to hash what it resolves. So `.watchmanconfig` must never ignore a Metro watch folder:
@@ -57,7 +64,12 @@
   worktrees, and background sessions, not for the desktop app's worktree sessions, which made most
   of the 19 nested worktrees measured here; an open harness issue (anthropics/claude-code#36205)
   reports subagent worktrees ignoring the hooks; and worktrees already nested stay where they are
-  until they are removed. Confirm the desktop case on one new session once this lands.
+  until they are removed. Confirm the desktop case on one new session once this lands. Also open,
+  and chosen by the Developer on 2026-09-24 over polling: let sandboxed commands watch natively by
+  adding `"allowMachLookup": ["com.apple.FSEvents"]` to the Claude Code sandbox's `network` block in
+  `.rulesync/permissions.jsonc` (Claude Code's `sandbox.network.allowMachLookup`). Codex's sandbox
+  has no equivalent setting while openai/codex#15698 is open, so Codex agents keep needing Watchman
+  or polling. Until this lands, `DebouncedWatcher` polls on macOS under Bun 1.4.2 or later.
 - **Dependencies:** None.
 - **Acceptance:** A fresh worktree under a watched primary checkout gets its own watch without a
   person's intervention, and a stopped server is either restarted without a person or reported by
