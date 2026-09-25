@@ -47,6 +47,7 @@ import {
   endNavigationRestorationTest,
 } from './TR-navigation-restoration'
 import { RuntimeNavigationValue } from './TR-navigation-value'
+import type { TaoReadNet } from './TR-read-net'
 import { type TaoProps, TaoPropsControls } from './TR-TaoProps'
 
 export { testNavKind } from './TR-navigation-conformance'
@@ -101,6 +102,8 @@ export type TaoAppDefinition = {
   design?(): TaoDesign | undefined
   name: string
   navigator(): TaoNavigationInput
+  /** The project's `guard default`, which every app in the project carries when one is declared. */
+  readNet?(): TaoReadNet | undefined
   restoration?: TaoAppRestorationDefinition
   useSetup?(): void
 }
