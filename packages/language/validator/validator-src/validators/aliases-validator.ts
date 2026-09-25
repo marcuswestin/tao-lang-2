@@ -22,6 +22,7 @@ type NamedFileValueDeclaration =
   | AST.DatasourceDeclaration
   | AST.FixtureDeclaration
   | AST.FunctionDeclaration
+  | AST.PhraseDeclaration
   | AST.ViewDeclaration
 type NamedTypeDeclaration = AST.PrimitiveDeclaration | AST.TypeDeclaration | AST.ConfigurableDeclaration
 type NamedDeclaration = NamedValueDeclaration | NamedTypeDeclaration
@@ -49,6 +50,7 @@ export const AliasesValidator = {
     [AST.ForStatement.$type]: reportReservedRuntimeName,
     [AST.AskStatement.$type]: reportReservedRuntimeName,
     [AST.FunctionDeclaration.$type]: reportReservedRuntimeName,
+    [AST.PhraseDeclaration.$type]: reportReservedRuntimeName,
     [AST.ParameterDeclaration.$type]: reportReservedRuntimeName,
     [AST.EntityQueryDeclaration.$type]: reportReservedRuntimeName,
     [AST.CaseSetCase.$type]: reportReservedRuntimeName,
@@ -265,5 +267,6 @@ function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclarati
     || AST.isDatasourceDeclaration(node)
     || AST.isFixtureDeclaration(node)
     || AST.isFunctionDeclaration(node)
+    || AST.isPhraseDeclaration(node)
     || AST.isViewDeclaration(node)
 }

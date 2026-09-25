@@ -196,6 +196,7 @@ export class Type {
       ActionDeclaration: typeOfParameterizedDeclaration,
       CommandDeclaration: typeOfParameterizedDeclaration,
       FunctionDeclaration: typeOfParameterizedDeclaration,
+      PhraseDeclaration: typeOfParameterizedDeclaration,
       ViewDeclaration: typeOfParameterizedDeclaration,
       undefined: unresolvedType,
     })
@@ -1035,7 +1036,7 @@ class TypeResolutionContext {
           : unresolvedType()
       },
       WhenExpression: when => this.whenExpressionType(when),
-      FunctionCallExpression: call => call.function.ref ? this.ofFunctionReturn(call.function.ref) : unresolvedType(),
+      FunctionCallExpression: call => this.functionCallExpressionType(call),
       InterpolatedString: () => primitiveType('text'),
       ListLiteral: list => this.listLiteralType(list),
       MemberAccessExpression: access => this.ofMemberAccess(access),
@@ -1132,6 +1133,7 @@ class TypeResolutionContext {
         declaration.value ? this.ofExpression(declaration.value) : primitiveType('datasource'),
       DesignDeclaration: () => primitiveType('design'),
       NavDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('nav'),
+      PhraseDeclaration: () => primitiveType('text'),
       StateDeclaration: state => this.stateDeclarationType(state),
       ViewDeclaration: declaration => primitiveType(declaration.scene ? 'scene' : 'view'),
       undefined: unresolvedType,
@@ -1163,6 +1165,15 @@ class TypeResolutionContext {
         writable: parameterRequiresWritable(parameter),
       })),
     )
+  }
+
+  /** A call's target links to a pure function or a phrase; a phrase always returns text. */
+  private functionCallExpressionType(call: AST.FunctionCallExpression): TaoType {
+    const target = call.function.ref
+    if (!target) {
+      return unresolvedType()
+    }
+    return AST.isPhraseDeclaration(target) ? primitiveType('text') : this.ofFunctionReturn(target)
   }
 
   ofFunctionReturn(declaration: AST.FunctionDeclaration): TaoType {
