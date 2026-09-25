@@ -105,7 +105,7 @@ Describe('repository doctor', () => {
     Expect(report.status).toBe('warn')
   })
 
-  Test('fails a checkout whose Watchman is not running, and names the fallback that follows', () => {
+  Test('warns when Watchman is not running, and names the fallback that follows', () => {
     const report = doctorReport(facts({
       watchman: {
         clientVersion: '2026.01.19.00',
@@ -114,9 +114,9 @@ Describe('repository doctor', () => {
       },
     }))
 
-    Expect(check(report, 'watchman')?.status).toBe('fail')
+    Expect(check(report, 'watchman')?.status).toBe('warn')
     Expect(check(report, 'watchman')?.detail).toContain('fall back to crawling')
-    Expect(report.status).toBe('fail')
+    Expect(report.status).toBe('warn')
   })
 
   Test('fails an incomplete dependency graph with a repair command', () => {
