@@ -32,6 +32,7 @@ const selectedOutlineIdentities = new WeakMap<TestInstance, string>()
  * unmount that ends the check — must reach the instance that is live now.
  */
 type RunningApp = {
+  readonly device: TestCompiler.Device | undefined
   readonly modulePath: string
   screen: RuntimeApp.Screen
 }
@@ -66,7 +67,12 @@ export async function runTestCheck(suiteName: string, check: TestCompiler.Check)
     TR.Navigation.beginTest()
     // Every check starts from the same instant and moves only when the journey says so.
     TR.Clock.beginTest()
-    app = { modulePath: check.app.modulePath, screen: await launchApp(check.app.modulePath) }
+    app = {
+      device: check.device,
+      modulePath: check.app.modulePath,
+      screen: await launchApp(check.app.modulePath, check.fixture),
+    }
+    applyDeviceViewport(app.screen, app.device)
     await settleData()
     observeJourneyRenders(app.screen, renders)
     for (const step of check.steps) {
@@ -200,9 +206,17 @@ function journeyTestingLibraryEvent(event: TaoJourneyEvent): string {
     : 'focus'
 }
 
-/** launchApp mounts one generated app module and waits out the host's own launch reads. */
-async function launchApp(modulePath: string): Promise<RuntimeApp.Screen> {
-  const screen = renderCompiledApp({ testAppPath: modulePath })
+/**
+ * launchApp mounts one generated app module and waits out the host's own launch reads. `fixture`
+ * seeds the app's store before this launch's first render, through the same Studio-preview seeding
+ * seam a scenario's fixture already materializes through; omit it on a relaunch, whose whole point is
+ * that the device's stored data survives untouched rather than being seeded again.
+ */
+async function launchApp(modulePath: string, fixture?: TestCompiler.Fixture): Promise<RuntimeApp.Screen> {
+  const screen = renderCompiledApp(
+    { testAppPath: modulePath },
+    fixture ? { cell: fixtureCell(fixture) } : {},
+  )
   await act(async () => {
     // The host reads navigation restoration before exposing the initial semantic tree.
     await Promise.resolve()
@@ -210,6 +224,43 @@ async function launchApp(modulePath: string): Promise<RuntimeApp.Screen> {
     await new Promise<void>(resolve => queueMicrotask(resolve))
   })
   return screen
+}
+
+/** fixtureCell wraps one compiled fixture's rows in the cell shape `TR.Studio.Environment.Host` mounts. */
+function fixtureCell(fixture: TestCompiler.Fixture): TR.StudioCellRuntime {
+  return {
+    environment: {
+      network: { mode: 'online' },
+      scheme: { requested: 'system' },
+      version: 1,
+    },
+    fixture: { accounts: [], creates: fixture.creates },
+    scenario: { kind: 'app', prepare: [], subjectId: '' },
+  }
+}
+
+/**
+ * applyDeviceViewport gives every layout-observing view in the tree the `on <device>` viewport once
+ * after launch, the one initial layout pass a real device of that size would give it. It is not a
+ * cascading layout engine — a view nested under a narrower sibling still only sees this full width —
+ * so it proves the device for a check's top-level adaptive layout rather than for arbitrary depth.
+ * Exported because the test language itself has no selector for a chosen layout direction (§_Tao
+ * Testing.md_'s non-goals): the harness proof for `on <device>` reads this same rendered style.
+ */
+export function applyDeviceViewport(screen: RuntimeApp.Screen, device: TestCompiler.Device | undefined): void {
+  if (!device) {
+    return
+  }
+  const layout = { height: device.height, width: device.width }
+  for (
+    const instance of screen.UNSAFE_root.findAll((node: TestInstance) => typeof node.props['onLayout'] === 'function')
+  ) {
+    // A real layout event reaches every listener through React Native's own synthetic wrapping,
+    // which still carries a `persist` no-op; `fireEvent` hands the handler exactly what is passed
+    // here, so a bare `nativeEvent` breaks any listener — React Navigation's chrome among them —
+    // that calls `event.persist()` the way a real one always answers.
+    fireEvent(instance, 'layout', { nativeEvent: { layout }, persist: () => {} })
+  }
 }
 
 /**
@@ -239,6 +290,7 @@ async function relaunchStep(app: RunningApp, step: Extract<TestCompiler.Step, { 
   // hands the next journey a device nobody has used.
   await TR.Persisted.beginLaunch()
   app.screen = await launchApp(app.modulePath)
+  applyDeviceViewport(app.screen, app.device)
 }
 
 function assertNavigationTitle(
