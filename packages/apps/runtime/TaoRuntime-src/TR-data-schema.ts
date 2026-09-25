@@ -50,6 +50,7 @@ import {
   UserInputError,
 } from './TR-errors'
 import RuntimeSwitch from './TR-switch'
+import { TestWorld } from './TR-test-world'
 import { Clock } from './TR-units'
 
 type DeleteTarget = { entity: string; id: string }
@@ -995,7 +996,9 @@ export class RuntimeDataSchema {
     }
     return RuntimeSwitch<DataStatus, TaoEntityAvailability>(this.status, {
       error: () =>
-        this.errorRecoverable && this.failedSaveSequence === undefined && metadata.generation === this.generation
+        this.errorRecoverable
+          && (!TestWorld.isSnapshotConnection(this.connection) || this.failedSaveSequence === undefined)
+          && metadata.generation === this.generation
           && this.storedRow(metadata.entity, metadata.id)
           ? { status: 'available' }
           : { message: this.error, status: 'error' },

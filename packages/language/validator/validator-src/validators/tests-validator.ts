@@ -1,6 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch } from '@shared'
+import { FS, Switch } from '@shared'
 import { type NodeValidationCheck, type NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
@@ -33,6 +33,9 @@ export const testValidationMessages = {
   networkPlacement: 'Network steps are only allowed inside test blocks.',
   syncPlacement: 'Wait for sync steps are only allowed inside test blocks.',
   datasourceFailurePlacement: 'Datasource failure steps are only allowed inside test blocks.',
+  unknownDatasourceFailureEntity: (name: string) => `Datasource failure names unknown data entity '${name}'.`,
+  unboundDatasourceFailureEntity: (name: string, app: string) =>
+    `Datasource failure names '${name}', which app '${app}' does not bind.`,
   narrowPlacement: 'Narrow steps are only allowed inside test blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
@@ -104,7 +107,7 @@ export const testValidationChecks = {
   [AST.AdvanceStep.$type]: [validateAdvancePlacement, validateAdvanceDuration],
   [AST.NetworkTestStep.$type]: validateNetworkPlacement,
   [AST.WaitForSyncStep.$type]: validateSyncPlacement,
-  [AST.DatasourceFailureStep.$type]: validateDatasourceFailurePlacement,
+  [AST.DatasourceFailureStep.$type]: [validateDatasourceFailurePlacement, validateDatasourceFailureTarget],
   [AST.ExpectCheckboxStateStep.$type]: validateExpectationPlacement,
   [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector],
   [AST.ExpectNavigationTitleStep.$type]: [
@@ -131,6 +134,45 @@ function validateAdvanceDuration(step: AST.AdvanceStep, ctx: ValidationContext):
   }
   if (nanoseconds < 0) {
     ctx.error(step, testValidationMessages.advanceNegative)
+  }
+}
+
+/** Faults name a real entity in the running app's store, even from a sidecar that cannot import it. */
+function validateDatasourceFailureTarget(step: AST.DatasourceFailureStep, ctx: ValidationContext): void {
+  const check = AST.findOwningTest(step)
+  const app = check?.block.statements.find(AST.isRunStep)?.app.ref
+  if (!app) {
+    return
+  }
+  const appPath = AST.getDocument(app).uri.path
+  const projectRoot = ctx.workspaceFiles
+    .filter(file => file.statements.some(AST.isProjectDeclaration))
+    .map(file => FS.dirname(AST.getDocument(file).uri.path))
+    .filter(directory => FS.pathIsWithin(appPath, directory))
+    .toSorted((left, right) => right.length - left.length)[0] ?? FS.dirname(appPath)
+  const files = ctx.workspaceFiles.filter(file => FS.pathIsWithin(AST.getDocument(file).uri.path, projectRoot))
+  const collections = files.flatMap(file => file.statements.filter(AST.isEntityDataDeclaration))
+  const entity = collections.find(candidate => candidate.singularName === step.entity)
+  if (!entity) {
+    ctx.error(step, testValidationMessages.unknownDatasourceFailureEntity(step.entity))
+    return
+  }
+  const plan = ASTUtils.planDataStores(
+    collections,
+    files.flatMap(file => file.statements.filter(AST.isDatasourceDeclaration)),
+  )
+  const store = ASTUtils.storeOfCollection(plan, entity)
+  const bindings = ASTUtils.appBoundDatasources(app)
+  if (store?.kind === 'device' || bindings.length === 0) {
+    return
+  }
+  const bound = bindings.some(binding =>
+    binding.declaration === undefined
+      ? store?.kind === 'default'
+      : store?.datasources.includes(binding.declaration)
+  )
+  if (!bound) {
+    ctx.error(step, testValidationMessages.unboundDatasourceFailureEntity(step.entity, app.name))
   }
 }
 

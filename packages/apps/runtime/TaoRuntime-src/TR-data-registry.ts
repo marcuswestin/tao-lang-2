@@ -1,5 +1,5 @@
 import { RuntimeAssert } from './TR-assert'
-import type { TaoConfiguredDatasource, TaoDataSchema } from './TR-data'
+import type { TaoConfiguredDatasource, TaoDataSchema, TaoDatasourceDeclaration } from './TR-data'
 import { entityHandle, metadataOf, type TaoEntityReferenceSnapshot } from './TR-data-entity'
 import { UserInputError } from './TR-errors'
 import { runtimeListeners } from './TR-listeners'
@@ -8,7 +8,8 @@ import { TestWorld } from './TR-test-world'
 export type DataStatus = 'error' | 'loading' | 'ready' | 'unauthorized'
 
 let testMode = false
-const granularTestBindings = new Set<TaoDataSchema>()
+let testDeclarations = new WeakMap<TaoDataSchema, WeakMap<TaoDatasourceDeclaration, TaoDatasourceDeclaration>>()
+let testBoundSchemas = new WeakSet<TaoDataSchema>()
 const schemas = new Set<TaoDataSchema>()
 const globalListeners = runtimeListeners()
 let globalRevision = 0
@@ -57,20 +58,49 @@ export function bindConfiguredDataSchema(
     // production mount, so the runtime-owned validation runs here even though the provider is
     // never connected under test.
     schema.validateConfigured(source, storageName)
-    if (source.declaration.provider.testWriteRecovery === true) {
-      if (!granularTestBindings.has(schema)) {
-        granularTestBindings.add(schema)
-        schema.configure(TestWorld.connection(true), 'test')
-      }
+    // Query-driven fills still bind their deterministic adapter. Other providers bind a stand-in
+    // under the same configuration and storage key, so a patch or provider switch really rebinds.
+    if (source.declaration.provider.fills !== undefined) {
+      schema.bindConfigured(source, storageName)
+      testBoundSchemas.add(schema)
       return
     }
-    // A snapshot provider stays replaced by the fresh test Memory store. A fill-capable provider
-    // binds anyway: fills are how a query-driven datasource has any rows at all, and determinism
-    // is the running app variant's responsibility — a test runs the variant whose adapter is a
-    // deterministic stub, never the network (Decisions §11, §16).
-    if (source.declaration.provider.fills === undefined) {
-      return
+    let declarations = testDeclarations.get(schema)
+    if (declarations === undefined) {
+      declarations = new WeakMap()
+      testDeclarations.set(schema, declarations)
     }
+    let declaration = declarations.get(source.declaration)
+    if (declaration === undefined) {
+      const granular = source.declaration.provider.testWriteRecovery === true
+      // Fixtures can create rows before the app binds its provider. Carry those rows into the
+      // first stand-in connection; later configuration changes use the selected store's state.
+      let initialSnapshot = testBoundSchemas.has(schema) ? undefined : schema.captureSnapshot()
+      declaration = Object.freeze({
+        ...source.declaration,
+        provider: {
+          connect: context => {
+            const connection = TestWorld.connection(
+              granular,
+              JSON.stringify([context.schema.name, context.storageKey]),
+              initialSnapshot,
+            )
+            initialSnapshot = undefined
+            return connection
+          },
+        },
+      })
+      declarations.set(source.declaration, declaration)
+    }
+    const testDeclaration = declaration
+    const testSource: TaoConfiguredDatasource = Object.freeze({
+      ...source,
+      declaration: testDeclaration,
+      evaluate: () => testSource,
+    })
+    schema.bindConfigured(testSource, storageName)
+    testBoundSchemas.add(schema)
+    return
   }
   schema.bindConfigured(source, storageName)
 }
@@ -145,7 +175,8 @@ export function revision(): number {
 export function beginTest(): void {
   testMode = true
   TestWorld.begin()
-  granularTestBindings.clear()
+  testDeclarations = new WeakMap()
+  testBoundSchemas = new WeakSet()
   for (const schema of schemas) {
     schema.configure(TestWorld.connection(), 'test')
   }

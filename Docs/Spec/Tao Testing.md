@@ -413,8 +413,10 @@ key/instance-boundary, ordering, and rejection conformance used by other provide
 
 Driving a provider into `loading`, `error`, or `ready` from a test step is retired (Decisions §16).
 The states those steps reached return through `network offline|online`, `wait for sync`, and
-`datasource fails after create|update|delete <Entity> "message"`. A failure matches the next save
-containing the named row operation. `wait for sync` succeeds when no writes remain pending and reports
+`datasource fails after create|update|delete <Entity> "message"`. Each declared failure waits for the
+next provider attempt containing the named row operation. An offline granular write stays queued and
+its matching failure fires on reconnect; an offline snapshot save leaves the failure armed. `wait for
+sync` succeeds when no writes remain pending and reports
 an offline or failed sync rather than pretending it completed. Each check starts online with no
 injection, regardless of the prior check. These controls are in-process journey behavior; host
 adapters preflight and reject them until they implement equivalent capabilities.

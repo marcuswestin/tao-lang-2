@@ -4,7 +4,8 @@ import { withCompiledTestPlan } from './test-compile'
 Describe('compiler: test world controls', () => {
   Test('compiles provider controls as ordered source-linked steps', async () => {
     await withCompiledTestPlan('tao-test-world-plan-', {
-      'Main.tao': `app Demo { view Main } view Main() { render inject \`\`\`ts return null \`\`\` }`,
+      'Main.tao':
+        `app Demo { view Main } view Main() { render inject \`\`\`ts return null \`\`\` } data Notes / Note { Title text }`,
       'Main.test.tao': `
         use Demo from ./
         test "Demo" { test "controls" {

@@ -3,42 +3,52 @@ import type { TaoSyncWriteRecovery } from './TR-data-sync'
 import { UserInputError } from './TR-errors'
 
 type Failure = { entity: string; message: string; operation: 'create' | 'delete' | 'update' }
-type Pending = { entity: string; id: string; message?: string; sequence: number }
+type Pending = { entity: string; id: string; message?: string; operation: Failure['operation']; sequence: number }
+type TestState = { pending: Pending[]; stored?: string }
 type TestConnection = TaoDataConnection & { failure?: string; notify(): void; pending: Pending[] }
 
 let online = true
-let failure: Failure | undefined
+const failures: Failure[] = []
 let sequence = 0
 const connections = new Set<TestConnection>()
+const states = new Map<string, TestState>()
 
 /** TestWorld is the per-journey provider stand-in, isolated from installed provider transport. */
 export const TestWorld = {
   begin(): void {
     online = true
-    failure = undefined
+    failures.length = 0
     sequence = 0
     connections.clear()
+    states.clear()
   },
   end(): void {
     connections.clear()
-    failure = undefined
+    failures.length = 0
+    states.clear()
     online = true
   },
   network(mode: 'offline' | 'online'): void {
     online = mode === 'online'
     if (online) {
       for (const connection of connections) {
-        connection.pending.splice(
-          0,
-          connection.pending.length,
-          ...connection.pending.filter(write => write.message !== undefined),
-        )
-        connection.notify()
+        for (
+          const submission of new Set(
+            connection.pending.filter(write => write.message === undefined)
+              .map(write => write.sequence),
+          )
+        ) {
+          settleSubmission(connection, submission)
+        }
       }
     }
   },
   failAfter(operation: Failure['operation'], entity: string, message: string): void {
-    failure = { entity, message, operation }
+    failures.push({ entity, message, operation })
+  },
+  /** A failed save is guarded as error only for the isolated snapshot test stand-in. */
+  isSnapshotConnection(connection: TaoDataConnection): boolean {
+    return connections.has(connection as TestConnection) && connection.writes === undefined
   },
   async waitForSync(): Promise<void> {
     const pending = [...connections].flatMap(connection => connection.pending)
@@ -60,9 +70,14 @@ export const TestWorld = {
       connection.pending.length = 0
     }
   },
-  connection(granular = false): TaoDataConnection {
-    let stored: string | undefined
-    const pending: Pending[] = []
+  connection(granular = false, storageKey?: string, initialSnapshot?: string): TaoDataConnection {
+    const state = storageKey === undefined
+      ? { pending: [] as Pending[], stored: undefined as string | undefined }
+      : states.get(storageKey) ?? { pending: [] as Pending[], stored: initialSnapshot }
+    if (storageKey !== undefined) {
+      states.set(storageKey, state)
+    }
+    const pending = state.pending
     const listeners = new Set<() => void>()
     const notify = () => {
       for (const listener of listeners) {
@@ -76,8 +91,7 @@ export const TestWorld = {
         }
         const submission = pending.find(write => write.entity === entity && write.id === id)?.sequence
         if (submission !== undefined) {
-          pending.splice(0, pending.length, ...pending.filter(write => write.sequence !== submission))
-          notify()
+          settleSubmission(connection, submission)
         }
       },
       status(entity, id) {
@@ -99,40 +113,36 @@ export const TestWorld = {
       },
     }
     const connection: TestConnection = {
-      load: () => stored,
+      close: () => {
+        connections.delete(connection)
+      },
+      load: () => state.stored,
       notify,
       pending,
       referenceToken: reference => reference.id,
       resolveReference: reference => reference.token,
       save(snapshot, intents) {
-        const changed = changedRows(stored, snapshot, intents)
-        const matched = changed.find(write =>
-          failure !== undefined
-          && write.entity === failure.entity && write.operation === failure.operation
-        )
-        const message = matched === undefined ? undefined : failure?.message
-        if (matched !== undefined) {
-          failure = undefined
-        }
-        if (!granular && (!online || message !== undefined)) {
-          connection.failure = message ?? 'Network is offline.'
-          throw new UserInputError(connection.failure)
-        }
-        stored = snapshot
+        const changed = changedRows(state.stored, snapshot, intents)
         if (!granular) {
+          if (!online) {
+            connection.failure = 'Network is offline.'
+            throw new UserInputError(connection.failure)
+          }
+          const message = takeFailure(changed)
+          if (message !== undefined) {
+            connection.failure = message
+            throw new UserInputError(message)
+          }
+          state.stored = snapshot
           connection.failure = undefined
+          return
         }
-        if (granular) {
+        state.stored = snapshot
+        const message = online ? takeFailure(changed) : undefined
+        if (!online || message !== undefined) {
           const submission = ++sequence
           for (const write of changed) {
-            if (!online || matched !== undefined) {
-              pending.push({
-                entity: write.entity,
-                id: write.id,
-                sequence: submission,
-                ...(message !== undefined ? { message } : {}),
-              })
-            }
+            pending.push({ ...write, sequence: submission, ...(message !== undefined ? { message } : {}) })
           }
           notify()
         }
@@ -143,6 +153,30 @@ export const TestWorld = {
     return connection
   },
 } as const
+
+function takeFailure(changed: readonly Pick<Pending, 'entity' | 'operation'>[]): string | undefined {
+  const index = failures.findIndex(rule =>
+    changed.some(write => write.entity === rule.entity && write.operation === rule.operation)
+  )
+  return index < 0 ? undefined : failures.splice(index, 1)[0]!.message
+}
+
+function settleSubmission(connection: TestConnection, submission: number): void {
+  const writes = connection.pending.filter(write => write.sequence === submission)
+  const message = takeFailure(writes)
+  if (message === undefined) {
+    connection.pending.splice(
+      0,
+      connection.pending.length,
+      ...connection.pending.filter(write => write.sequence !== submission),
+    )
+  } else {
+    for (const write of writes) {
+      write.message = message
+    }
+  }
+  connection.notify()
+}
 
 function changedRows(
   before: string | undefined,
