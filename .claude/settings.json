@@ -146,7 +146,9 @@
       "Bash(./agent unsandboxed processes list)",
       "Bash(./agent unsandboxed processes list *)",
       "Bash(./agent unsandboxed processes started)",
-      "Bash(./agent unsandboxed processes started *)"
+      "Bash(./agent unsandboxed processes started *)",
+      "Bash(./agent unsandboxed start-branch)",
+      "Bash(./agent unsandboxed start-branch *)"
     ],
     "deny": [
       "Bash(bun install *)",
@@ -265,7 +267,9 @@
       "./agent unsandboxed processes list",
       "./agent unsandboxed processes list *",
       "./agent unsandboxed processes started",
-      "./agent unsandboxed processes started *"
+      "./agent unsandboxed processes started *",
+      "./agent unsandboxed start-branch",
+      "./agent unsandboxed start-branch *"
     ],
     "filesystem": {
       "allowWrite": [
