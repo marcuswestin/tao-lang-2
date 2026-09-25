@@ -63,7 +63,9 @@ function wordFlowerAbsorbedParityIssues(directory: WordFlowerDirectory): string[
 }
 
 function isWordFlowerParityFile(file: SourceFile): boolean {
-  return file.path !== '.tao-project/lock.jsonc' && !file.path.startsWith('.tao/')
+  return file.path !== '.tao-project/lock.jsonc'
+    && !file.path.startsWith('.tao/')
+    && !file.path.endsWith('.tao.ts')
 }
 
 function currentWordFlowerPath(path: string): string {

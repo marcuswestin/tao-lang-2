@@ -115,7 +115,7 @@ async function treeIdentity(root: string): Promise<string> {
       includeHidden: true,
     })
   ) {
-    if (!path.endsWith(EXCLUDED_SUFFIX)) {
+    if (!path.endsWith(EXCLUDED_SUFFIX) && !path.endsWith('.tao.ts')) {
       entries.push([FS.relativePath(root, path), path])
     }
   }

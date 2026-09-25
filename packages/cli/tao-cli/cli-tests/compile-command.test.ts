@@ -10,6 +10,27 @@ const source = `
 `
 
 Describe('tao compile app selection', () => {
+  Test('refreshes source-adjacent bridge metadata during compilation', async () => {
+    await withTaoFiles('tao-compile-bridge-', {
+      'Main.tao': `app Demo { view Main }
+view Main() { render inject \`\`\`ts return null \`\`\` }
+function CountWords(Value text) returns number {
+   return CountWords(Value) from ./Words.ts
+}
+`,
+      'Words.ts': 'export const CountWords = (value: string): number => value.length\n',
+    }, async paths => {
+      const sourcePath = paths['Main.tao']!
+      const runtimePackageRoot = FS.resolvePath('runtime', FS.dirname(sourcePath))
+      await runCompile(sourcePath, { runtimePackageRoot })
+      const metadataPath = `${sourcePath}.ts`
+      Expect(await FS.readText(metadataPath)).toContain('Sidecar.CountWords satisfies CountWords')
+      await FS.remove(metadataPath)
+      await runCompile(sourcePath, { runtimePackageRoot })
+      Expect(await FS.isFile(metadataPath)).toBe(true)
+    })
+  })
+
   Test('fails actionably without a selection in a noninteractive process', async () => {
     await withTaoFiles('tao-compile-selection-', { 'Apps.tao': source }, async paths => {
       await Expect(runCompile(paths['Apps.tao']!, { interactive: false })).rejects.toThrow(

@@ -338,6 +338,7 @@ _bench-check:
         file('.tao-project/lock.jsonc', '{ "ship": true }'),
         file('.tao/sessions/owner.json', '{ "owner": "studio" }'),
         file('.tao/sessions/session.json', '{ "status": "active" }'),
+        file('@ui/View.tao.ts', 'generated bridge metadata'),
       ],
       [file('WordFlower.tao-next', absorbed)],
     ))).toEqual([])
