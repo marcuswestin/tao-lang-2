@@ -1,6 +1,6 @@
 use Documents, Finish, Paragraphs from @data
 use CountWords from @tao/text
-use Checkbox, Col, Panes, Problems, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Checkbox, Col, Panes, Problems, Progress, Row, ScrollView, Spacer, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
 // Shared values, types, and the typed-injection escape hatch.
@@ -15,13 +15,11 @@ scene DocumentScreen(Document) {
    Title Document.Title
    Toolbar { Finish }
    render Col() [grow] {
+      // The screen names the one case it words itself; loading, unauthorized, and error go to the net.
       guard Document {
-         loading -> { Spinner() }
          missing -> {
             TextMultiline("Document { Document.Id } no longer exists.") [body] // a handle keeps its Id
-         }
-         error -> Message { TextMultiline("The document could not be loaded: { Message }") [body] }
-      }
+      }  }
       DocumentEditor(Document)
 }  }
 
@@ -135,10 +133,7 @@ view DocumentEditor(Document) {
       Col() [panel] {
          Text("OUTLINE") [eyebrow]
          Text("Paragraphs: { Paragraphs.Count }") [sectionTitle]
-         guard Paragraphs {
-            loading -> { Spinner() }
-            error -> Message { TextMultiline("Could not load paragraphs: { Message }") [body] }
-         }
+         guard Paragraphs
 
          // `Progress` takes a fraction between 0 and 1.
          Progress(Value: GoalFraction(Paragraphs.Count))
