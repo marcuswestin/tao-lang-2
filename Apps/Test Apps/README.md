@@ -310,6 +310,18 @@ Memory cannot produce on demand and the runtime package tests prove; read-net di
 (placement, cases, one per project, a bare guard over text), which are package tests; action guards;
 write outcomes.
 
+## Phrases
+
+Exercise `phrase` declarations: named copy with typed holes and CLDR plural forms (Decisions §14).
+
+**Belongs here:** a single-form phrase with a typed hole; a parameterless phrase referenced by bare
+name; a plural phrase selecting `one` or `other` by its number parameter as the count changes
+through `0`, `1`, and `2`, rendered through the running `Text` view.
+
+**Does not belong here:** copy extraction, `words` blocks, and measurement forms, which are
+post-MVP; parser, validator, formatter, and compiler diagnostics, which are package tests; runtime
+locale-selection coverage across CLDR categories, which the runtime package tests own.
+
 ## Search
 
 Exercise the query `search` clause: multi-field text search over an entity's `(search)` fields,

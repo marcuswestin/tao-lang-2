@@ -120,6 +120,7 @@ import {
   type TaoWritableState,
   usePersistedState,
 } from './TR-persisted-state'
+import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue } from './TR-reactive'
 import {
@@ -207,6 +208,15 @@ class TR {
   /** Interpolate concatenates Tao values, rendering absence as an empty string. */
   static Interpolate(parts: readonly TR.Evaluable[]): TR.Value<string> {
     return new RuntimeValue(parts.map(part => part.evaluate().jsValue).map(value => value ?? '').join(''))
+  }
+
+  /**
+   * Plural selects one of a phrase's CLDR-category forms for the running locale, falling back to
+   * `other` when that category has no form. `locale` defaults to English when the caller has none
+   * to offer.
+   */
+  static Plural(count: TR.Evaluable, forms: TR.PluralForms, locale?: string): TR.Value<string> {
+    return selectPluralForm(count.evaluate().jsValue, forms, locale).evaluate()
   }
 
   /** Enum creates declaration-owned case identities and registers their stable persistence names. */
@@ -1162,6 +1172,10 @@ namespace TR {
   export type CaseBranch<ResultT> = readonly [string, (payload: TR.Value<any>) => ResultT]
   /** Function declares a runtime Tao pure function. */
   export type Function = RuntimeFunction
+  /** PluralCategory declares the CLDR plural categories a compiled phrase's forms may carry. */
+  export type PluralCategory = TaoPluralCategory
+  /** PluralForms is a compiled phrase's category-to-value table passed to `TR.Plural`. */
+  export type PluralForms = TaoPluralForms<TR.Evaluable>
   /** State declares a runtime Tao state wrapper. */
   export type State<T> = RuntimeState<T> | TaoWritableState<T>
   /** Writable is a state or parameter lens that may be the target of generated mutation. */
