@@ -529,7 +529,9 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
             on press AddDocument
          }
          #findDocuments
-         TextInput(Value: Find, Label: "Find in this workspace", Placeholder: "Title or words")
+         TextInput(Value: Find, Label: "Find in this workspace", Placeholder: "Title or words") {
+            on submit -> { } // the lists narrow as the term changes; there is nothing to submit
+         }
          // Panes uses a horizontal row only when, after gaps, every child can receive at least 320
          // logical pixels; otherwise it preserves source order in a vertical stack.
          Panes() [gap 16] {

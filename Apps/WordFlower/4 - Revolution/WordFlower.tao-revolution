@@ -848,7 +848,9 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
             otherwise -> { Text(DocumentTitle) }
          }
          #findDocuments
-         TextInput(Value: Find, Label: "Find in this workspace", Placeholder: "Title or words")
+         TextInput(Value: Find, Label: "Find in this workspace", Placeholder: "Title or words") {
+            on submit -> { } // the lists narrow as the term changes; there is nothing to submit
+         }
          #addDocument
          FormButton("Add document", Disabled: DocumentTitle is empty) {
             on press AddDocument

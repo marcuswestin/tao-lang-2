@@ -198,7 +198,9 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
          }  }  }
 
          #findDocuments
-         TextInput(Value: Find, Label: "Find in this workspace", Placeholder: "Title or words")
+         TextInput(Value: Find, Label: "Find in this workspace", Placeholder: "Title or words") {
+            on submit -> { } // the lists narrow as the term changes; there is nothing to submit
+         }
          // `Panes` lays its children side by side when the container is wide enough and stacks them
          // otherwise. Children size themselves with the ordinary layout clauses.
          Panes() [gapWide] {

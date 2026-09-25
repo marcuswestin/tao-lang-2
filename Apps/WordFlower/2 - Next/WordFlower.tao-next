@@ -4,7 +4,7 @@ use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
 use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
-// Tranche status: open
+// Tranche status: absorbed
 //
 // SEARCH. A field marked `(search)` is part of its entity's search corpus, and a query's
 // `search <term>` keeps the rows whose search fields match the term with the matcher keyboard
