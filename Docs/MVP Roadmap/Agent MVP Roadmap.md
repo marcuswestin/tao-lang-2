@@ -408,6 +408,11 @@ equals MVP.
   and `datasource fails after`. Deferred: `validate` and `refuse when`, `queued`, `group by`,
   preferences with `Me` and `@tao/auth`, copy extraction and `words`, clock and collaborator
   controls, and multi-target interaction. Action-level `guard` is retired in favour of `check`.
+- Language tranche status (2026-09-25): the settled language subset above is implemented, tested in
+  Tao journeys, absorbed by WordFlower Current, and landed. This includes the Markdown export's
+  declared failures, provider-faithful test world controls, and checked TypeScript bridge contracts.
+  A13 remains open for the other MVP rows that `Coverage.md` still marks partial, pending, or absent;
+  these in-process journeys do not establish live-provider, device Share-sheet, or release acceptance.
 - The reactive editing implementation has a separate [deferred follow-up](../Roadmap/Reactive%20editing%20follow-up.md):
   snapshot-provider mutation recovery, authoritative validation decisions, and live-provider/device
   acceptance. These are not implied by the implemented projected inputs and writable parameters.
