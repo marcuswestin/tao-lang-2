@@ -4,7 +4,7 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { createUpdateService } from 'tao-update-server'
 import { TaoUpdateClient } from '../cli-src/tao-update-client'
 
-const baseUrl = 'https://updates.tao-lang.dev'
+const baseUrl = 'https://updates.devtao.com'
 const fixtureHashes = {
   bundle: 'lNbXzvK7mvafG8gVkYeQwcc7qC-YPWbLY59pUcspXyo',
   'image-content-hash': 'D0Y2x49l02OezloGS1rnU-NAhhShT7GKtNdUDSwkhUM',

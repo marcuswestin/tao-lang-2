@@ -234,7 +234,7 @@ exists for this automation is fastlane, whose `match`, `gym`, `pilot`, and `deli
 same four steps in Ruby over Apple's private session where the public API stops. Slice 1 uses
 the Apple tooling directly because the four steps are short and typed, and keeps fastlane as
 the documented fallback if a step proves brittle. Slice 2's update server is Tao's own, on the
-Tao Lang servers.
+Dev Tao servers.
 
 ### What the developer provides
 
@@ -815,7 +815,7 @@ Each has a recommended default so slice 1 can start on the ruling alone.
 5. **The Expo Go bridge.** Settled on 2026-09-02: not built; `--beta` is TestFlight, not a
    companion-app delivery path.
 6. **The Tao Studio companion app.** Settled on 2026-09-02: build it, for the development
-   experience first and for pre-release testing by invited project members with Tao Lang
+   experience first and for pre-release testing by invited project members with Dev Tao
    accounts. See _The Tao Studio companion app_.
 
 ## Precedent: accepted project metadata
@@ -874,7 +874,7 @@ the design lock's contract rather than inventing one:
 **Direction settled, 2026-09-02.** The Developer decided to create a Tao Studio companion app. It exists
 for an improved development experience first, paired with Tao Studio while developing, and
 also for pre-release testing and feedback by members a developer has invited to their project
-on the Tao Lang servers, where every member must have created an account. The sections below
+on the Dev Tao servers, where every member must have created an account. The sections below
 are the assessment that preceded the decision and the design rules it carries; the program
 itself is opened in `Roadmap.md`. Its dedicated product and implementation plan is
 `../Tao Studio companion app/Plan - Tao Studio companion app.md`.
@@ -932,7 +932,7 @@ shape described, with two cautions:
   TestFlight's external group and public link, up to ten thousand testers, while App Store
   review runs, and keep the native surface stable so the shell needs few releases.
 
-**Design rules the decision carries.** Projects and membership on the Tao Lang servers as the
+**Design rules the decision carries.** Projects and membership on the Dev Tao servers as the
 only access model, with an account required of every member; no public sharing surface of any
 kind; compiled bundles only, never a compilation path on the device, matching the repository's
 standing production posture; the Studio native-device canvas as the first customer; and a

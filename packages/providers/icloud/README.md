@@ -37,8 +37,8 @@ for the entitlements — the ship pipeline does so from the manifest's `icloud` 
 iOS Simulator, sign the simulator into an iCloud account and use _Features › Trigger iCloud Sync_
 to push changes between simulators.
 
-After changing a native module, run `just native-module-check` from an ordinary host shell, or with
-explicit review from an agent session whose sandbox cannot reach Xcode's host services. It
+After changing a native module, run `just native-module-check` from an ordinary host shell or
+`./agent unsandboxed native-module-check` from an agent session. It
 prebuilds an isolated Expo host, installs its pods, verifies every `packages/*/ios/*.podspec` target
 is linked into the generated Pods project, and compiles each target for the iOS Simulator with
 signing disabled. The command is intentionally separate from routine verification because a clean

@@ -7,7 +7,7 @@ import { DELEGATION_SKILL_PATH, tierModels } from '../agent-cli-src/delegation/D
 
 const canonicalRules = `{
   // Canonical rules with the comments and trailing commas JSONC allows.
-  "agentHostCommands": ["land", "xcrun simctl list devices"],
+  "agentHostCommands": ["land", "simulators list"],
   "permission": {
     "bash": {
       "ps -o pid=,command= -p *": "allow",
@@ -170,8 +170,17 @@ Describe('Codex config generation', () => {
 
     Expect(rendered.split('\n').filter(line => line.startsWith('prefix_rule('))).toEqual([
       'prefix_rule(pattern=["./agent","unsandboxed","land"], decision="allow", justification="Repository-approved host command.")',
-      'prefix_rule(pattern=["./agent","unsandboxed","xcrun","simctl","list","devices"], decision="allow", justification="Repository-approved host command.")',
+      'prefix_rule(pattern=["./agent","unsandboxed","simulators","list"], decision="allow", justification="Repository-approved host command.")',
     ])
+  })
+
+  Test('grants host access to each local release preparation target without admitting other targets', async () => {
+    const source = await FS.readText(Repo.resolvePath('.rulesync/permissions.jsonc'))
+    const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(source))
+
+    Expect(rendered).toContain('pattern=["./agent","unsandboxed","prepare-release","studio"], decision="allow"')
+    Expect(rendered).toContain('pattern=["./agent","unsandboxed","prepare-release","ide-extension"], decision="allow"')
+    Expect(rendered).not.toContain('pattern=["./agent","unsandboxed","prepare-release"], decision="allow"')
   })
 
   Test('grants both harnesses the same caches outside the worktree', () => {
@@ -230,8 +239,8 @@ Describe('Codex config generation', () => {
       await FS.writeText(
         FS.resolvePath('.rulesync/permissions.jsonc', root),
         canonicalRules.replace(
-          '"agentHostCommands": ["land", "xcrun simctl list devices"]',
-          '"agentHostCommands": ["land", "xcrun simctl boot"]',
+          '"agentHostCommands": ["land", "simulators list"]',
+          '"agentHostCommands": ["land", "simulators boot"]',
         ),
       )
       await Expect(CodexConfigGenerator.generate({

@@ -1,4 +1,9 @@
 const os = require('node:os')
+// The Tao CLI passes its bounded cache directory explicitly. A direct Jest invocation gets a
+// checkout-scoped cache too, instead of writing into the machine-wide jest_dx directory.
+const defaultCacheDirectory = `${os.homedir()}/.cache/tao/jest-standalone/${
+  Buffer.from(__dirname).toString('base64url')
+}`
 
 // The per-journey budget an uncontended machine keeps. A Tao journey compiles and renders a whole
 // app, so its floor sits far above Jest's five-second default.
@@ -25,6 +30,7 @@ function createRuntimeJestConfig(options) {
   const dependencyRoot = process.env.TAO_TEST_NODE_MODULES_ROOT ?? '<rootDir>/node_modules'
   return {
     preset: 'jest-expo',
+    cacheDirectory: process.env.TAO_TEST_JEST_CACHE_DIRECTORY ?? defaultCacheDirectory,
     // Generated Tao apps may live outside the package's ancestor chain. Resolve workspace packages
     // from this runtime package's installed links.
     modulePaths: ['<rootDir>/node_modules'],

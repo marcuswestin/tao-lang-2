@@ -17,6 +17,8 @@
  * rule wrongly catches; `HookOverrides` records each use so the rules can be tuned against what
  * actually misfires rather than against argument. */
 
+import { FS, Repo } from '@shared'
+import { agentHostCommands } from '../agent-config/HostCommandPolicy'
 import { EXPOSED_RECIPES } from '../AgentCommands'
 import { isGateInvocation, OUTPUT_FILTERS } from './ShellHabits'
 
@@ -70,8 +72,25 @@ const gatePipeRefusal = (gate: string): string =>
   + '`.artifacts/logs/agent/<command>/latest.log`, so there is nothing left to filter for. Run it '
   + 'plain, or capture it: `cmd > out 2>&1; echo "EXIT=$?"`.'
 
+/** Use the canonical host list to redirect a raw Just recipe to its named host entry. */
+function isNamedHostRecipe(agentCommand: string): boolean {
+  const sourcePath = Repo.tryResolvePath('.rulesync/permissions.jsonc')
+  if (sourcePath === undefined) {
+    return agentCommand === 'land'
+  }
+  try {
+    const source = Bun.JSONC.parse(FS.readTextSync(sourcePath)) as { agentHostCommands?: unknown }
+    return agentHostCommands(source).some(prefix => prefix.length === 1 && prefix[0] === agentCommand)
+  } catch {
+    // A broken hook must not block unrelated shell work. Keep the landing route explicit.
+    return agentCommand === 'land'
+  }
+}
+
 const justRecipeRefusal = (recipe: string, agentCommand: string): string => {
-  const entry = agentCommand === 'land' ? './agent unsandboxed land' : `./agent ${agentCommand}`
+  const entry = isNamedHostRecipe(agentCommand)
+    ? `./agent unsandboxed ${agentCommand}`
+    : `./agent ${agentCommand}`
   return `\`just ${recipe}\` is reachable through \`${entry}\`, which captures the run, bounds `
     + 'its output, names the failing tests instead of a raw dump, and logs the full output at '
     + `\`.artifacts/logs/agent/${agentCommand}/latest.log\`. Run that instead.`

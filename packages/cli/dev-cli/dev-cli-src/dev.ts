@@ -71,6 +71,15 @@ type MergeCommandOptions = {
 /** Help shared by every command that runs a work graph, so the modes are described once. */
 const OUTPUT_OPTION_HELP = 'Output mode: tui, lines, or quiet. Defaults to tui on a terminal and quiet in a pipe.'
 
+async function runReleaseAction(action: () => Promise<void>): Promise<void> {
+  try {
+    await action()
+  } catch (error) {
+    HCI.writeErrorLine(Errors.formatForUser(error))
+    Platform.runtimeProcess.exit(1)
+  }
+}
+
 /** Repository development CLI behind `./dev`: package tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
   commands.name('dev')
@@ -615,6 +624,7 @@ await runWithCommands(commands => {
     .option('--app <path>', 'Built .app bundle, for signature and notarization checks.')
     .option('--dmg <path>', 'Built disk image, for the mount check.')
     .option('--release-base-url <url>', 'The HTTPS host installed copies fetch updates from.')
+    .option('--first-release', 'No earlier published release exists in this channel, so no patch is expected.')
     .option('--allow-unverified', 'Succeed even when a gate could not be checked on this machine.')
     .action(
       async (
@@ -623,6 +633,7 @@ await runWithCommands(commands => {
           app?: string
           artifactsRoot: string
           dmg?: string
+          firstRelease?: boolean
           payloadRoot: string
           releaseBaseUrl?: string
         },
@@ -634,6 +645,7 @@ await runWithCommands(commands => {
             appPath: options.app,
             artifactsRoot: options.artifactsRoot,
             diskImagePath: options.dmg,
+            firstRelease: options.firstRelease === true,
             payloadRoot: options.payloadRoot,
             releaseBaseUrl: options.releaseBaseUrl,
           }),
@@ -774,7 +786,7 @@ await runWithCommands(commands => {
     .description('Build Tao Studio release artifacts with Electrobun and Hutch.')
     .option('--output-root <path>', 'Application bundle output root.', '.artifacts/build/studio-native')
     .option('--app-name <name>', 'Application display and bundle name.', 'Tao Studio')
-    .option('--bundle-identifier <id>', 'macOS application bundle identifier.', 'dev.tao-lang.studio')
+    .option('--bundle-identifier <id>', 'macOS application bundle identifier.', 'com.devtao.studio')
     .option('--channel <channel>', 'Electrobun release channel: canary or stable.', 'stable')
     .option('--hutch <path>', 'Explicit Hutch executable path.', 'hutch')
     .option('--node <path>', 'Standalone Node executable to bundle; Nix Node is relocated when needed.')
@@ -803,6 +815,72 @@ await runWithCommands(commands => {
         HCI.logProcessError('studio-native', Errors.formatForLog(error))
         Platform.runtimeProcess.exit(1)
       }
+    })
+
+  commands
+    .command('prepare-release')
+    .description('Prepare a Studio or IDE extension release locally; does not publish.')
+    .argument('<target>', 'studio or ide-extension.')
+    .option('--repo <owner/name>', 'Public GitHub repository for Studio release assets.')
+    .option('--version <version>', 'Three-part Studio version (defaults to 0.0.1).')
+    .action(async (target: string, options: { repo?: string; version?: string }) => {
+      await runReleaseAction(async () => {
+        const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+        if (target === 'studio') {
+          if (options.repo === undefined) {
+            Errors.throwUserInput('Studio preparation needs --repo owner/name.')
+          }
+          await ReleaseWorkflow.prepareStudio(options.repo, options.version ?? '0.0.1')
+        } else if (target === 'ide-extension') {
+          if (options.repo !== undefined || options.version !== undefined) {
+            Errors.throwUserInput('IDE extension preparation takes no --repo or --version.')
+          }
+          await ReleaseWorkflow.prepareIde()
+        } else {
+          Errors.throwUserInput('Expected release target studio or ide-extension.')
+        }
+      })
+    })
+
+  commands
+    .command('release-studio-prepare')
+    .description('Build and locally validate a signed Studio release for a GitHub Releases host.')
+    .requiredOption('--repo <owner/name>', 'Public GitHub repository that will hold Studio releases.')
+    .option('--version <version>', 'Three-part Studio version.', '0.0.1')
+    .action(async (options: { repo: string; version: string }) => {
+      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+      await runReleaseAction(async () => await ReleaseWorkflow.prepareStudio(options.repo, options.version))
+    })
+
+  commands
+    .command('release-studio-publish')
+    .description('Upload prepared Studio artifacts to GitHub and verify public downloads.')
+    .requiredOption('--repo <owner/name>', 'Public GitHub repository that will hold Studio releases.')
+    .action(async (options: { repo: string }) => {
+      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+      await runReleaseAction(async () => await ReleaseWorkflow.publishStudio(options.repo))
+    })
+
+  commands
+    .command('release-ide-prepare')
+    .description('Package the VSIX and prove it installs into an isolated VS Code profile.')
+    .action(async () => {
+      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+      await runReleaseAction(async () => await ReleaseWorkflow.prepareIde())
+    })
+
+  commands
+    .command('release-ide-publish')
+    .description('Publish the prepared VSIX to Marketplace, Open VSX, or both.')
+    .option('--target <target>', 'all, marketplace, or open-vsx.', 'all')
+    .action(async (options: { target: string }) => {
+      const { ReleaseWorkflow } = await import('./release/ReleaseWorkflow')
+      await runReleaseAction(async () => {
+        if (options.target !== 'all' && options.target !== 'marketplace' && options.target !== 'open-vsx') {
+          Errors.throwUserInput('Expected --target all, marketplace, or open-vsx.')
+        }
+        await ReleaseWorkflow.publishIde(options.target)
+      })
     })
 
   commands

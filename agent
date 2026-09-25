@@ -48,9 +48,10 @@ if [[ "$HOST_COMMAND_REQUESTED" == true ]]; then
     echo 'FAIL  ./agent unsandboxed is still running inside a sandbox; the host command was not started.' >&2
     exit 1
   fi
-  if [[ "$HOST_COMMAND_KIND" == external ]]; then
+  if [[ "$HOST_COMMAND_KIND" == named ]]; then
     cd "$SCRIPT_DIR"
-    exec "$@"
+    exec bun "$AGENT_CLI_PACKAGE_DIR/agent-cli-src/cli/agent-host-dispatch.ts" \
+      "$SCRIPT_DIR/.rulesync/permissions.jsonc" "$@"
   fi
 fi
 mkdir -p "$BUILD_DIR" "$AGENT_TEMP_DIR"
@@ -94,7 +95,7 @@ function ensure_agent_build() {
   tao_run_with_lock "$BUILD_LOCK" 30 build_agent_if_needed
 }
 
-# Every `./agent` call bootstraps through the shared dependency owner before building the CLI.
+# Every repository workflow call bootstraps through the shared dependency owner before building the CLI.
 # `./agent setup` is the one public dependency command and continues into the Justfile setup recipe
 # for an explicit health proof plus generated harness adapters.
 tao_warn_on_detached_head "$SCRIPT_DIR"

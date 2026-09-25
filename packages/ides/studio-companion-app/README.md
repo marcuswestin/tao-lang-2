@@ -3,8 +3,8 @@
 The Expo development build that renders a Tao project on a real iPhone or iPad while Tao Studio runs
 on the Mac, and the prebuilt host `tao dev` opens emulator and simulator apps in. It is a shell: a Metro
 server serves the bundle, and nothing in this package knows which one. Its identity (`Tao
-Companion`, `tao-studio-companion`, `taostudiocompanion://`, `dev.tao-lang.studio.companion` on iOS
-and `dev.tao_lang.studio.companion` on Android, which admits no hyphen) is fixed in
+Companion`, `tao-studio-companion`, `taostudiocompanion://`, and `com.devtao.studio.companion`, the
+reverse of Tao's domain devtao.com, on both iOS and Android) is fixed in
 `packages/apps/expo-host/expo-host-src/dev-loop/prebuilt-host/CompanionIdentity.ts`; `app.json`
 repeats the same values and a test keeps them equal.
 
@@ -14,6 +14,10 @@ and `tao dev`'s Metro server runs under a repository-local Expo home directory t
 own `expo login` session in `~/.expo` never reaches, so that login can never be satisfied. Physical
 Android keeps using Expo Go, and so do the Android emulator and the iOS Simulator until a host for
 them is built or downloaded (below).
+
+The `just` commands below are for a person at a host terminal. Agents use a listed
+`./agent unsandboxed` operation for host work; a companion build or publish needs a named entry
+before agent use.
 
 ## What the shell carries
 
@@ -31,7 +35,7 @@ Its entitlements are the ones Tao is experimenting with: `app.json` applies the 
 with both iCloud services, which grants iCloud Documents, CloudKit, the ubiquity containers, and the
 `aps-environment` that CloudKit's silent pushes need. The container is derived from this shell's own
 bundle identifier, so **a Tao app run in the Companion reads and writes
-`iCloud.dev.tao-lang.studio.companion`, never the container the app itself declares** — iCloud
+`iCloud.com.devtao.studio.companion`, never the container the app itself declares** — iCloud
 container identifiers admit no wildcard, so no host binary can lend an app its own. That is
 sufficient for exercising the iCloud code paths in development and is not a substitute for running
 the app's own build.

@@ -213,7 +213,7 @@ retention policy still need resolution. The tracked `uuid` advisory remains open
 ## Temporary state and dependency checks
 
 - **Host-testing output:** A read-only size inventory found about 31 GB across 234 `.artifacts/host-testing/<run-id>` directories in one worktree. The oldest and newest top-level modification times observed were September 19 and 20. `HostTestingCommand.runHostTesting` creates a unique root per invocation and has no finish or later-run retention path; generated app builds and web exports live beneath it. [DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND](<Developer environment upgrades/DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND.md>) records a normal-operation lifecycle fix. The worktree may still belong to another active task; nothing was removed.
-- **Jest:** `$TMPDIR/jest_dx` occupied about 2.1 GB on September 23. The existing [DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND](<Developer environment upgrades/DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND.md>) already owns the missing bound and proposes a repository-owned cache directory with age-based retirement. Its size is current evidence, not a second ledger issue.
+- **Jest:** `$TMPDIR/jest_dx` occupied about 2.1 GB on September 23. The [original cache entry](<Developer environment upgrades/Archive/DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND.md>) owned the missing per-checkout bound and was archived after its repair. Its size here is historical evidence; the newer aggregate and direct-run gap is tracked separately below.
 - **Other roots:** `$TMPDIR/tao-test-runs` occupied about 115 MB over four identity directories; `.android/avd` in the large worktree occupied about 4.2 GB. These warrant owner/liveness checks before any cleanup. User and vendor caches were measured only to locate buildup, not claimed as Tao-owned output.
 - **Bun/npm:** `bun audit` against frozen `bun.lock` reported one moderate [`uuid` buffer-bounds advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq). The [dependency advisory follow-up](<Dependency advisory follow-up.md>) records the prior call-site analysis and a September 28 review date. This pass made no dependency change and did not close the advisory.
 - **Nixpkgs:** `devenv.lock` still pins `nixpkgs-src` at `73c703c22422b8951895a960959dbbaca7296492`; its [glibc derivation](https://raw.githubusercontent.com/NixOS/nixpkgs/73c703c22422b8951895a960959dbbaca7296492/pkgs/development/libraries/glibc/common.nix) uses 2.42-61. The [Nixpkgs security tracker](https://tracker.security.nixos.org/) and later upstream patch remain the primary comparison sources. No fresh Linux closure or host acceptance was obtained, so the existing follow-up remains open.
@@ -225,17 +225,17 @@ retention policy still need resolution. The tracked `uuid` advisory remains open
 - **Next repair slice:** The remediation section records fixes made after this initial review; `verify-changed` and `verify --complete` passed on the repair tree. Review the merge message before any authorized landing. The Jest cache and older unmarked host-test roots remain separate lifecycle work.
 - **Boundary for the next recurring pass:** start after `ff4f017ceb100c39c7d55bec8c228ef967097be4`, inspect these findings' repair commits, and revisit the tracked `uuid`/Nixpkgs advisories and temporary-state budgets. Do not infer any external acceptance from this static pass.
 
-## September 24 continuation — main through `c4b627440f98508977bd2c4a8b6ef5860c4d6ffc`
+## September 24–25 continuation — main through `a996fc512826c18f214f4c873eca2a486cf2ea84`
 
 The earlier boundary is confirmed by first-parent ancestry and counts: 142 landings in the
 September 7–22 window, including 61 after the accepted `5e352643` catch-up, through
-`ff4f017ceb100c39c7d55bec8c228ef967097be4`. This continuation reviewed the 20 newer
+`ff4f017ceb100c39c7d55bec8c228ef967097be4`. This continuation reviewed the 21 newer
 first-parent landings once each against the current `main` tree. Four distinct read-only
 review units covered host operations, temporary state, release/device/dependencies, and
 Studio/runtime; different reviewers challenged the surviving findings. The September 7–22
 commit reviews above were not repeated.
 
-| Landing | Disposition against `c4b62744` |
+| Landing | Disposition against `a996fc51` |
 | --- | --- |
 | `1c073062` | Release checklist accepted; later domain decision refined its identifier inventory. |
 | `482ffec8` | Prebuilt-host download accepted functionally; artifact authenticity remains a prepublication concern. |
@@ -257,10 +257,11 @@ commit reviews above were not repeated.
 | `24eb8d4a` | Release fixture name matches the new bundle identifier; no surviving finding. |
 | `cdcefefc` | Pagination and early exit handling work, but the fixed append-only emulator log can give a prior launch's reason. Five pages is a documented discovery limit, not proof every compatible host is reachable. |
 | `c4b62744` | Named CocoaPods dispatch gains the UTF-8 locale, but direct native-module-check and ship paths omitted it; this branch repairs both. Simulator-host pod install is not full device acceptance. |
+| `a996fc51` | Recurring-pass selection of open developer-environment work accepted; the handoff retains its shortlist and ownership check. No implementation behavior changed. |
 
 ### Pending September repair recheck
 
-Every repair recorded above remains applicable at `c4b62744`; none was superseded by a
+Every repair recorded above remains applicable at `a996fc51`; none was superseded by a
 newer main fix. The branch's proposed repairs were checked against current source and
 their focused regressions. Main integration must retain the later named host dispatch
 alongside the branch's agent bootstrap change.
@@ -291,7 +292,9 @@ alongside the branch's agent bootstrap change.
   `jest-standalone` held about 1.18–1.19 GiB in ten identities. The managed implementation
   enforces 25,000 files/256 MiB only inside one runtime-path identity and has no parent-level
   retirement; direct Jest chooses a persistent path without entering that lifecycle. Those are
-  confirmed P2 lifecycle gaps, not measured growth rates. The legacy shared `$TMPDIR/jest_dx`
+  confirmed P2 lifecycle gaps, not measured growth rates. The
+  [aggregate and direct-run cache entry](<Developer environment upgrades/DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND.md>)
+  tracks them separately from the archived per-checkout fix. The legacy shared `$TMPDIR/jest_dx`
   held 13.03 GiB/760,998 files, and `$TMPDIR/tao-test-runs` 763 MiB/137,778 files; neither
   owner nor safe deletion was established. No shared state was removed.
 - **Measured host artifacts:** A separate worktree still held 31.3 GiB across 234 old

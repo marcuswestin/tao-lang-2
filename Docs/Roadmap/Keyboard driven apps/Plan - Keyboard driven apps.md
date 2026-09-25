@@ -507,7 +507,7 @@ each retired spelling finds only archived or explicitly historical text.
 ## QA the landed project
 
 1. Run `./agent verify` and expect every suite to pass; use `./tao test Apps` for the wider app-only lane.
-2. Run `./tao dev "Apps/WordFlower/1 - Current" --app WordFlower` and create `Home` and `Projects`.
+2. Run `./agent unsandboxed app-dev "Apps/WordFlower/1 - Current" --app WordFlower` and create `Home` and `Projects`.
 3. Click the app page once (not the address bar or developer tools). With no input engaged, type
    `pro`: the narrowing surface shows the query, `Projects` is targeted, and it does not open until
    Enter. A prefix with no match says `No matching targets`.
@@ -519,7 +519,7 @@ each retired spelling finds only archived or explicitly historical text.
 6. Start a focus session, use Cmd/Ctrl+P to pause it, navigate, and relaunch; confirm the bar and
    session persist. With no active session, that chord remains available to the browser.
 7. With keyboard and a screen reader, focus selectable rows and confirm focus moves Tao's target
-   without selecting. Then run `./tao dev "Apps/Test Apps/Navigation" --app NavigationMVPApp` and
+   without selecting. Then run `./agent unsandboxed app-dev "Apps/Test Apps/Navigation" --app NavigationMVPApp` and
    spot-check Back-only and `Header false`.
 
 ## Remaining decided implementation
