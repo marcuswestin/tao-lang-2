@@ -32,6 +32,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 ## Safety
 
 - Other agents and the Developer may change this worktree concurrently. Preserve changes you did not make and adapt around them.
+- Keep task-specific scratch and generated output in this worktree unless a tool's cache, host, or isolation contract needs another location. Record each external directory you create or direct a tool to create, with its path, owner, purpose, and cleanup condition in a task-local note under `.artifacts/`. Remove only owned inactive output; before finishing or archiving the task, tell the Developer which external directories remain and whether they need cleanup.
 - For an authorized change task, stage and commit only exact reviewed paths this task changed; never sweep unrelated work into the index. Unstaging, resetting, or stashing work still needs the Developer's explicit request.
 - Commit only from a named `feat/<name>` branch, never from detached HEAD; the pre-commit hook warns.
 - `git-workflow` owns branching, worktrees, squashing, merging, and history rewriting; read it before any merge.
