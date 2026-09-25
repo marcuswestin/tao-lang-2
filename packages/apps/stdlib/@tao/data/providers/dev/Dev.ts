@@ -83,6 +83,7 @@ const scriptUrlPattern = /^(?:https?|wss?):\/\/(\[[^\]]+\]|[^/:?#]+)(?::(\d+))?/
 /** DevProvider syncs full datasource snapshots through the Tao dev server's data service. */
 export function DevProvider(loadHost: () => DevDataHost = nativeDevDataHost): TR.DataProvider {
   return {
+    testNetwork: 'remote',
     connect: context => createDevDataConnection(loadHost(), context.storageKey),
   }
 }

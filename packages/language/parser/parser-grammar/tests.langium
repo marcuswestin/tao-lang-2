@@ -52,7 +52,7 @@ type CheckStep = RunStep | PressTextStep | TagPressStep | PressWordStep | Intera
     | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep
     | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep
     | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep
-    | PressToolbarCommandStep;
+    | PressToolbarCommandStep | NetworkTestStep | WaitForSyncStep | DatasourceFailureStep;
 
 RunStep:
     'run' app=[AppValueDeclaration:ID];
@@ -145,6 +145,15 @@ RelaunchStep:
 // `advance` moves it by a duration, firing every callback that falls due, in order.
 AdvanceStep:
     'advance' duration=Expression;
+
+NetworkTestStep:
+    'network' mode=('offline' | 'online');
+
+WaitForSyncStep:
+    {infer WaitForSyncStep} 'wait' 'for' 'sync';
+
+DatasourceFailureStep:
+    'datasource' 'fails' 'after' operation=('create' | 'update' | 'delete') entity=ID message=STRING;
 
 TestSelector returns string:
     'text' | 'label' | 'placeholder';

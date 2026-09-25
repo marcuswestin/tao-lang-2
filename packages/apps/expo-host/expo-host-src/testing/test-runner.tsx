@@ -75,6 +75,9 @@ export async function runTestCheck(suiteName: string, check: TestCompiler.Check)
     }
     applyDeviceViewport(app.screen, app.device)
     await settleData()
+    if (containsWaitForSync(check.steps)) {
+      TR.Data.TestWorld.preflightWaitForSync()
+    }
     observeJourneyRenders(app.screen, renders)
     for (const step of check.steps) {
       await runStep(app, step)
@@ -115,6 +118,10 @@ export async function runTestCheck(suiteName: string, check: TestCompiler.Check)
   return observation
 }
 
+function containsWaitForSync(steps: readonly TestCompiler.Step[]): boolean {
+  return steps.some(step => step.kind === 'waitForSync' || (step.kind === 'select' && containsWaitForSync(step.steps)))
+}
+
 /** observeJourneyRenders reads test-only generated props from the live React tree, never static source coverage. */
 function observeJourneyRenders(screen: RuntimeApp.Screen, renders: Map<string, JourneyRenderObservation>): void {
   for (const instance of screen.UNSAFE_root.findAll(() => true)) {
@@ -149,6 +156,15 @@ async function runStep(
   const screen = app.screen
   await Switch.kind<TestCompiler.Step, void | Promise<void>>(step, {
     advance: advance => advanceStep(advance),
+    network: async network => {
+      await act(async () => TR.Data.TestWorld.network(network.mode))
+    },
+    waitForSync: async () => {
+      await TR.Data.TestWorld.waitForSync()
+    },
+    datasourceFailure: step => {
+      TR.Data.TestWorld.failAfter(step.operation, step.entity, step.message)
+    },
     back: back => backStep(back),
     enter: enter => enterStep(screen, enter, resolveScope()),
     expect: expectation => assertExpectation(screen, expectation, resolveScope()),
@@ -605,6 +621,9 @@ function selectedRow(
 function formatStep(step: TestCompiler.Step): string {
   return Switch.kind<TestCompiler.Step, string>(step, {
     advance: advance => `advance ${advance.milliseconds}ms`,
+    network: step => `network ${step.mode}`,
+    waitForSync: () => 'wait for sync',
+    datasourceFailure: step => `datasource fails after ${step.operation} ${step.entity} "${step.message}"`,
     back: () => 'back',
     enter: enter => `enter "${enter.value}" into ${enter.selector} "${enter.target}"`,
     expect: expectation =>

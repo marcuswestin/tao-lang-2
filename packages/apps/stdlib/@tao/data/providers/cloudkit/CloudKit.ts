@@ -40,6 +40,8 @@ export function CloudKitProvider(
   loadStorage: () => TR.KeyValueStorage = asyncStorage,
 ): TR.DataProvider {
   return {
+    testNetwork: 'remote',
+    testWriteRecovery: true,
     connect: context => {
       // Validate before touching the native side, as the sibling providers do.
       const container = optionalConfigurationText(providerName, context, 'Container')

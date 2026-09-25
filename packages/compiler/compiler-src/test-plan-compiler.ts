@@ -222,6 +222,15 @@ type TaoTestStep =
   | TaoTestRelaunchStep
   | TaoTestSelectStep
   | TaoTestSubmitStep
+  | { kind: 'network'; mode: 'offline' | 'online'; source: TaoTestSourceLocation }
+  | { kind: 'waitForSync'; source: TaoTestSourceLocation }
+  | {
+    kind: 'datasourceFailure'
+    operation: 'create' | 'delete' | 'update'
+    entity: string
+    message: string
+    source: TaoTestSourceLocation
+  }
 
 /** TaoTestDevice declares the viewport preset an `on <device>` clause pins for a check. */
 type TaoTestDevice = {
@@ -418,6 +427,15 @@ function compileInputValueExpectation(expectation: AST.ExpectInputValueStep): Ta
 function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   return Switch.type(step, {
     AdvanceStep: compileAdvanceStep,
+    NetworkTestStep: step => ({ kind: 'network', mode: step.mode, source: sourceLocation(step) }),
+    WaitForSyncStep: step => ({ kind: 'waitForSync', source: sourceLocation(step) }),
+    DatasourceFailureStep: step => ({
+      kind: 'datasourceFailure',
+      operation: step.operation,
+      entity: step.entity,
+      message: step.message,
+      source: sourceLocation(step),
+    }),
     BackTestStep: compileBackTestStep,
     RelaunchStep: compileRelaunchStep,
     EnterTextStep: compileEnterTextStep,
