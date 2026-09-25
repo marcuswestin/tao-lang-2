@@ -7,9 +7,10 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
 //
-// TEST DEVICE AND FIXTURE. Document journeys pin a phone viewport, while export journeys inherit
-// the same seeded Novel workspace and Opening document from StarterWorkspace. Each check receives
-// its own fresh graph. The StudioWorkspace scenario fixture stays independent for existing previews.
+// BRIDGE METADATA. The build stamp and Markdown export sidecars import their generated, source-
+// adjacent Tao contract types. Tao writes those ignored modules during compilation and checks the
+// handwritten implementations in `tao check`; authors may use the type-only imports for editor
+// feedback without maintaining a second contract.
 //
 // DESIGN VALUES. The design language finishes its MVP surface: a clause list reads by case, the
 // active navigation tab is a condition, and a color travels as a value where a view tints something
