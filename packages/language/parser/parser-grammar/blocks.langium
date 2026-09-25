@@ -75,7 +75,7 @@ AppBlockDiagnosticStatement:
 // level parses far enough for the validator to explain the unsupported shape. It is deliberately
 // absent from every declaration/export/runtime-binding union: queries are local view statements.
 Declaration:
-    PrimitiveDeclaration | AppDeclaration | ViewDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration | DesignDeclaration | FixtureDeclaration;
+    PrimitiveDeclaration | AppDeclaration | ViewDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | PhraseDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration | DesignDeclaration | FixtureDeclaration;
 
 // File statements are the declarations accepted directly by Tao source files.
 type FileStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration;
@@ -86,9 +86,9 @@ ViewStatement returns Statement:
 type Statement = AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | CallerContentStatement | CommandDeclaration | DeclarationSlotFill | ViewCommandExclusion | InteractionWordStep;
 type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | EntityDataField | CaseSetCase | AskStatement;
 type MutableDeclaration = StateDeclaration | ParameterDeclaration;
-type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration | FixtureDeclaration;
-type EmittingRuntimeBinding = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
-type ParameterizedDeclaration = ViewDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration;
+type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | PhraseDeclaration | EntityDataDeclaration | DesignDeclaration | FixtureDeclaration;
+type EmittingRuntimeBinding = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | PhraseDeclaration | EntityDataDeclaration | DesignDeclaration;
+type ParameterizedDeclaration = ViewDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | PhraseDeclaration;
 type BlockStatementOwner = AppDeclaration | ProjectDeclaration | ViewDeclaration | Render | ActionDeclaration | ActionExpression | ForStatement;
 type CaseDeclaration = CaseSetCase | EntityDataField;
 // OwnedBlockStatement includes test steps and other context-only statements for generic block traversal.

@@ -46,6 +46,7 @@ import {
 import { resolveItemPropertyBindings } from './item-property-bindings'
 import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
+import { isPluralCategory, phraseIsPlural, phraseNumberParameters, pluralCategories } from './phrases'
 import { literalExpression, parameterRequiresWritable, writableExpression } from './reactive-parameters'
 import { referencedNames } from './references'
 import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './render-targets'
@@ -103,6 +104,10 @@ export const ASTUtils = {
   resolveRenderInvocation,
   resolveRenderTarget,
   rootAppValue,
+  isPluralCategory,
+  phraseIsPlural,
+  phraseNumberParameters,
+  pluralCategories,
 } as const
 
 export namespace ASTUtils {
@@ -141,6 +146,7 @@ export namespace ASTUtils {
   export type RenderTarget = import('./render-targets').RenderTarget
   export type ResolvedActionInvocation = import('./invocations').ResolvedActionInvocation
   export type ResolvedActionTarget = import('./invocations').ResolvedActionTarget
+  export type PluralCategory = import('./phrases').PluralCategory
   export type ResolvedFunctionInvocation = import('./invocations').ResolvedFunctionInvocation
   export type ResolvedRenderInvocation = import('./invocations').ResolvedRenderInvocation
   export type TaoType = import('./Type').TaoType
