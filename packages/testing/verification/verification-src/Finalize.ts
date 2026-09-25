@@ -436,8 +436,8 @@ export const StartBranchCommand = {
     await git(dependencies, root, ['fetch', '--quiet', REMOTE, MAIN_BRANCH])
     const mainSha = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
     const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
-    const diff = await git(dependencies, root, ['diff', '--name-only', '--no-renames', headSha, mainSha])
-    const blocked = await unwritablePaths(dependencies, root, diff.stdout.trim().split('\n').filter(Boolean))
+    const diff = await git(dependencies, root, ['diff', '--name-only', '--no-renames', '-z', headSha, mainSha])
+    const blocked = await unwritablePaths(dependencies, root, diff.stdout.split('\0').filter(Boolean))
     if (blocked.length > 0) {
       Errors.throwHostEnvironment(
         `Starting '${name}' from origin/main would write paths this shell may not:\n`
@@ -713,8 +713,8 @@ async function integrateMain(
     lines.push(`PLAN  Merge ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
     return { headSha: branchHead, integratedNow: false, mainSha }
   }
-  const incoming = await git(dependencies, root, ['diff', '--name-only', `${branchHead}...${mainSha}`])
-  const blocked = await unwritablePaths(dependencies, root, incoming.stdout.trim().split('\n').filter(Boolean))
+  const incoming = await git(dependencies, root, ['diff', '--name-only', '-z', `${branchHead}...${mainSha}`])
+  const blocked = await unwritablePaths(dependencies, root, incoming.stdout.split('\0').filter(Boolean))
   if (blocked.length > 0) {
     Errors.throwUserInput(deniedIntegrationReport(blocked, command))
   }
@@ -787,7 +787,7 @@ const WRITE_PROBE_PREFIX = '.finalize-write-probe-'
 
 /**
  * unwritablePaths returns the directories and files a checkout would write that this process cannot,
- * empty when the merge can complete. A sandboxed shell write-protects part of the worktree —
+ * empty when the checkout can complete. A sandboxed shell write-protects part of the worktree —
  * `agents/skills` among them, which 77 of `main`'s last 100 commits touch — and `git merge` discovers
  * that partway through, leaving a tree with no `MERGE_HEAD`, no unmerged entries, and modifications
  * nobody made (DEVENV-111). Refusing before the merge starts is the difference between an instruction

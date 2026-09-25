@@ -142,7 +142,13 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       return result(args, spec.cwd, repository.conflictOnMerge === true ? 'conflicted.ts\n' : '')
     }
     if (args[0] === 'diff' && args[1] === '--name-only') {
-      return result(args, spec.cwd, (repository.diffPaths ?? []).join('\n'))
+      return result(
+        args,
+        spec.cwd,
+        args.includes('-z')
+          ? (repository.diffPaths ?? []).map(path => `${path}\0`).join('')
+          : (repository.diffPaths ?? []).join('\n'),
+      )
     }
     if (args[0] === 'log' && args[1] === '--no-merges') {
       const RECORD_SEPARATOR = ''
@@ -363,7 +369,7 @@ Describe('finalize', () => {
     const report = Errors.formatForUser(failure)
 
     Expect(report).toContain(fake.probePaths[0]!)
-    Expect(report).toContain('remove')
+    Expect(report).toContain('rmdir from a normal Terminal')
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
   })
 
@@ -1325,6 +1331,21 @@ Describe('start-branch', () => {
         === 'switch --no-track -c feat/next mainsha00000000000000000000000000000000000'
     )).toBe(true)
     Expect(fake.lines.some(line => line.includes("Started 'feat/next' from origin/main"))).toBe(true)
+  })
+
+  Test('probes a pathname containing a newline as one protected file', async () => {
+    const protectedPath = '.claude/odd\nname.json'
+    const fake = fakeDependencies({
+      diffPaths: [protectedPath],
+      existingDirectories: ['.claude'],
+      unwritableFiles: [protectedPath],
+    })
+
+    const failure = await StartBranchCommand.run('feat/next', { repositoryRoot: '/repo' }, fake.dependencies)
+      .catch(error => error)
+
+    Expect(Errors.formatForUser(failure)).toContain(protectedPath)
+    Expect(fake.calls.some(call => call.args[0] === 'switch')).toBe(false)
   })
 
   Test('requires a clean worktree and a new valid feat branch before fetching', async () => {
