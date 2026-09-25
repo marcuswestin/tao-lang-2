@@ -40,7 +40,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Guard default, effect outcomes (§5)                         | WordFlower · document availability                                            | MVP      | partially in Current      |
 | Outcome vocabulary incl. `queued` (§5)                      | Wayfare · saving a stop with no network                                       | Post-MVP | —                         |
 | Queries: filters, ordering, limits (§6)                     | WordFlower · drafts, finished documents, paragraphs                           | MVP      | in Current                |
-| Entity-declared search consumed by a query (§6)             | WordFlower · find in a workspace; Skillet · find anything                     | MVP      | —                         |
+| Entity-declared search consumed by a query (§6)             | WordFlower · find in a workspace; Skillet · find anything                     | MVP      | in Current                |
 | Grouped queries retaining their source rows (§6)            | Skillet · a folded shopping line one tick buys; Hearth · the same fold        | Post-MVP | —                         |
 | Presence (§6)                                               | Skillet · two cooks on one recipe; Wayfare · two planners on one stop         | Post-MVP | —                         |
 | Editing: write-through + drafts (§7)                        | WordFlower · title/body editing                                               | MVP      | partially in Current      |
