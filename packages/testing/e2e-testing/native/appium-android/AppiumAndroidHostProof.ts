@@ -166,6 +166,9 @@ function appiumAndroidJourneyAdapter(
         await Switch.kind(operation, {
           advance: async next =>
             await advanceNativeClock(session, control, runId, next.milliseconds, appName === 'HNReaderStub'),
+          network: unsupportedJourneyOperation,
+          waitForSync: unsupportedJourneyOperation,
+          datasourceFailure: unsupportedJourneyOperation,
           back: unsupportedJourneyOperation,
           enter: unsupportedJourneyOperation,
           expect: async next =>

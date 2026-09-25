@@ -40,6 +40,9 @@ function browserJourneyAdapter(page: Page, configuration: { runId: string; seed:
     ],
     async execute(operation) {
       await Switch.kind(operation, {
+        network: unsupportedBrowserJourneyOperation,
+        waitForSync: unsupportedBrowserJourneyOperation,
+        datasourceFailure: unsupportedBrowserJourneyOperation,
         advance: async operation => {
           const beforeAdvance = await hostSnapshot(page)
           const afterAdvance = await advanceHostClock(page, configuration.runId, operation.milliseconds)

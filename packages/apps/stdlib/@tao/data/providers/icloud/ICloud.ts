@@ -17,6 +17,7 @@ const providerName = 'ICloud'
  */
 export function ICloudProvider(loadDocuments: () => ICloudDocuments = nativeDocuments): TR.DataProvider {
   return {
+    testNetwork: 'deferred',
     connect: context => {
       const container = optionalConfigurationText(providerName, context, 'Container')
       const documents = loadDocuments()

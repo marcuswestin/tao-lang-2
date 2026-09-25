@@ -7,9 +7,10 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
 //
-// TEST DEVICE AND FIXTURE. Document journeys pin a phone viewport, while export journeys inherit
-// the same seeded Novel workspace and Opening document from StarterWorkspace. Each check receives
-// its own fresh graph. The StudioWorkspace scenario fixture stays independent for existing previews.
+// TEST WORLD CONTROLS. The document journeys use a fresh StarterWorkspace fixture on a phone.
+// A test-only WordFlower variant binds CloudKit so offline edits, failed writes, retry, and
+// reconnect use that provider's per-row recovery contract. The hosted InstantDB variant saves
+// snapshots and does not claim queued per-row writes.
 //
 // DESIGN VALUES. The design language finishes its MVP surface: a clause list reads by case, the
 // active navigation tab is a condition, and a color travels as a value where a view tints something

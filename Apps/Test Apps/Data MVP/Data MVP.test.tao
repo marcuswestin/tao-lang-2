@@ -44,4 +44,18 @@ test "Data MVP" {
       expect missing text "Related task"
       expect text "No workspaces yet"
    }
+   test "saves Memory rows while offline" {
+      run DataMVPApp
+      network offline
+      enter "Offline" into #workspaceName
+      press #addWorkspace
+      expect text "Offline"
+   }
+   test "shows a declared snapshot save failure" {
+      run DataMVPApp
+      datasource fails after create Workspace "save was rejected"
+      enter "Rejected" into #workspaceName
+      press #addWorkspace
+      expect text "Could not save data: save was rejected"
+   }
 }

@@ -62,6 +62,9 @@ export type HostJourneyCapability =
   | 'select'
   | 'submit'
   | 'textInput'
+  | 'network'
+  | 'waitForSync'
+  | 'datasourceFailure'
 
 /** HostJourneyAdapter is the narrow vendor-neutral seam for browser, native, and device drivers. */
 export type HostJourneyAdapter = Readonly<{
@@ -164,6 +167,9 @@ function requirementsForSteps(steps: readonly TestStep[]): readonly HostJourneyR
 function capabilityFor(step: TestStep): HostJourneyCapability {
   return Switch.kind(step, {
     advance: () => 'advanceTime',
+    network: () => 'network',
+    waitForSync: () => 'waitForSync',
+    datasourceFailure: () => 'datasourceFailure',
     back: () => 'back',
     enter: () => 'textInput',
     expect: () => 'assertText',
