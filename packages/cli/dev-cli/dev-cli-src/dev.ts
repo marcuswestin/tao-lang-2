@@ -1,7 +1,7 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
-import { FinalizeCommand, LandCommand } from '@verification/Finalize'
+import { FinalizeCommand, LandCommand, MergeMainCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
 import { GreenTree } from '@verification/GreenTree'
 import { LandingLock } from '@verification/LandingLock'
@@ -406,6 +406,19 @@ await runWithCommands(commands => {
           redraft: options.redraft === true,
         })
         Platform.runtimeProcess.exit(outcome.ok ? 0 : 1)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('merge-main')
+    .description('Merge current main into this feature branch, and nothing else; no lane, no merge message.')
+    .action(async () => {
+      try {
+        await MergeMainCommand.run()
+        Platform.runtimeProcess.exit(0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)

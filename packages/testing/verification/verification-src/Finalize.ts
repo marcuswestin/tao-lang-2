@@ -164,6 +164,13 @@ type MainIntegration = {
   mainSha: string
 }
 
+/** The commands that integrate main, which word a failure's next step differently. */
+type IntegratingCommand = 'finalize' | 'merge-main'
+
+/** The one recovery for a merge the sandbox would half-write, named wherever that failure is reported. */
+const UNSANDBOXED_MERGE =
+  'run `./agent unsandboxed merge-main`, which makes this merge on the host, where those paths are writable'
+
 type VerificationOutcome = {
   at: string
   lane: string
@@ -215,10 +222,10 @@ export const FinalizeCommand = {
     const lines: string[] = []
     const remaining: string[] = []
 
-    const branch = await assertOnFeatureBranch(dependencies, root)
-    await assertCleanWorktree(dependencies, root)
+    const branch = await assertOnFeatureBranch(dependencies, root, 'finalize')
+    await assertCleanWorktree(dependencies, root, 'finalize')
 
-    const integration = await integrateMain(dependencies, root, check, lines)
+    const integration = await integrateMain(dependencies, root, check, lines, 'finalize')
     const verification = await verifyTree(dependencies, root, check, lines)
 
     const statePath = FS.resolvePath(`.artifacts/merge/${branch}.state.json`, root)
@@ -337,6 +344,29 @@ export const LandCommand = {
   },
 } as const
 
+/**
+ * MergeMainCommand integrates current main into this feature branch and does nothing else: no lane,
+ * no merge message. Most of main's commits write paths a harness write-protects against shell
+ * commands (`agents/skills`, `.claude/settings.json`), so inside a sandbox this refuses before
+ * starting, exactly as `finalize` does. Run as `./agent unsandboxed merge-main`, the same integration
+ * completes on the host, which is the one sanctioned way for an agent to bring such a main in
+ * without landing.
+ */
+export const MergeMainCommand = {
+  async run(
+    options: Pick<FinalizeOptions, 'repositoryRoot'> = {},
+    dependencies: FinalizeDependencies = defaultDependencies,
+  ): Promise<{ lines: string[]; mergedNow: boolean }> {
+    const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+    const lines: string[] = []
+    await assertOnFeatureBranch(dependencies, root, 'merge-main')
+    await assertCleanWorktree(dependencies, root, 'merge-main')
+    const integration = await integrateMain(dependencies, root, false, lines, 'merge-main')
+    writeLines(dependencies, lines)
+    return { lines, mergedNow: integration.integratedNow }
+  },
+} as const
+
 /** LandingPreparation is everything settled before the lock is taken. */
 export type LandingPreparation = {
   branch: string
@@ -362,8 +392,8 @@ export async function prepareForLanding(
   const lines: string[] = []
   const remaining: string[] = []
 
-  const branch = await assertOnFeatureBranch(dependencies, root)
-  await assertCleanWorktree(dependencies, root)
+  const branch = await assertOnFeatureBranch(dependencies, root, 'land')
+  await assertCleanWorktree(dependencies, root, 'land')
 
   const mainSha = await readMainSha(dependencies, root, lines)
   const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
@@ -495,7 +525,11 @@ function keptMessageDefect(source: string): string {
   }
 }
 
-async function assertOnFeatureBranch(dependencies: FinalizeDependencies, root: string): Promise<string> {
+async function assertOnFeatureBranch(
+  dependencies: FinalizeDependencies,
+  root: string,
+  command: string,
+): Promise<string> {
   const branchResult = await dependencies.run('git', {
     args: ['symbolic-ref', '--quiet', '--short', 'HEAD'],
     cwd: root,
@@ -506,16 +540,16 @@ async function assertOnFeatureBranch(dependencies: FinalizeDependencies, root: s
   }
   const branch = branchResult.exitCode === 0 ? branchResult.stdout.trim() : ''
   if (!branch.startsWith('feat/')) {
-    Errors.throwUserInput(`finalize requires a feat/* branch; this worktree is on '${branch || 'detached HEAD'}'.`)
+    Errors.throwUserInput(`${command} requires a feat/* branch; this worktree is on '${branch || 'detached HEAD'}'.`)
   }
   return branch
 }
 
-async function assertCleanWorktree(dependencies: FinalizeDependencies, root: string): Promise<void> {
+async function assertCleanWorktree(dependencies: FinalizeDependencies, root: string, command: string): Promise<void> {
   const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
   if (status !== '') {
     Errors.throwUserInput(
-      `The worktree is not clean; finalize refuses to guess what to do with it. Dirty paths:\n${status.trimEnd()}`,
+      `The worktree is not clean; ${command} refuses to guess what to do with it. Dirty paths:\n${status.trimEnd()}`,
     )
   }
 }
@@ -530,6 +564,7 @@ async function integrateMain(
   root: string,
   check: boolean,
   lines: string[],
+  command: IntegratingCommand,
 ): Promise<MainIntegration> {
   const mainSha = await readMainSha(dependencies, root, lines)
   const branchHead = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
@@ -547,13 +582,15 @@ async function integrateMain(
   }
   const blocked = await undeniableDirectories(dependencies, root, branchHead, mainSha)
   if (blocked.length > 0) {
-    Errors.throwUserInput(deniedIntegrationReport(blocked))
+    Errors.throwUserInput(deniedIntegrationReport(blocked, command))
   }
 
   const wouldConflict = await mergeTreeConflicts(dependencies, root, branchHead, mainSha)
   const merge = await dependencies.run('git', { args: ['merge', '--no-edit', mainSha], cwd: root, stdio: 'pipe' })
   if (merge.exitCode !== 0 || merge.error !== undefined || merge.signal !== null) {
-    Errors.throwUserInput(failedIntegrationReport(merge, wouldConflict, await unmergedPaths(dependencies, root)))
+    Errors.throwUserInput(
+      failedIntegrationReport(merge, wouldConflict, await unmergedPaths(dependencies, root), command),
+    )
   }
   const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
   lines.push(`PASS  Merged ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
@@ -673,12 +710,11 @@ async function canWriteInto(dependencies: FinalizeDependencies, directory: strin
 }
 
 /** deniedIntegrationReport says what the merge would half-write, and how to do it where it works. */
-function deniedIntegrationReport(blocked: readonly string[]): string {
+function deniedIntegrationReport(blocked: readonly string[], command: IntegratingCommand): string {
   return `Integrating ${MAIN_BRANCH} would write ${blocked.length} director${blocked.length === 1 ? 'y' : 'ies'} `
     + `this shell may not, so the merge would stop partway and leave a tree no Git command describes:\n`
     + `${blocked.map(path => `- ${path}`).join('\n')}\n`
-    + `Nothing has been changed. Run \`git merge ${REMOTE}/${MAIN_BRANCH}\` yourself as a top-level `
-    + 'command — the sandbox exclusion reaches it there but not inside finalize — and finalize again.'
+    + `Nothing has been changed; ${UNSANDBOXED_MERGE}${command === 'finalize' ? ', then finalize again' : ''}.`
 }
 
 /** unmergedPaths reads the conflicts a merge actually recorded, which a denied merge never wrote. */
@@ -702,11 +738,12 @@ function failedIntegrationReport(
   merge: { stderr?: string },
   wouldConflict: readonly string[],
   unmerged: readonly string[],
+  command: IntegratingCommand,
 ): string {
   const list = (paths: readonly string[]): string => paths.map(path => `- ${path}`).join('\n')
   if (unmerged.length > 0) {
-    return `Integrating ${MAIN_BRANCH} conflicted; resolve it by hand and finalize again. `
-      + `Conflicting paths:\n${list(unmerged)}`
+    return `Integrating ${MAIN_BRANCH} conflicted; resolve it by hand and `
+      + `${command === 'finalize' ? 'finalize again' : 'commit the merge'}. Conflicting paths:\n${list(unmerged)}`
   }
   const reason = (merge.stderr ?? '').trim()
   return `Integrating ${MAIN_BRANCH} did not complete, and it is not a conflict: the merge recorded no `
@@ -715,9 +752,8 @@ function failedIntegrationReport(
     + (wouldConflict.length === 0
       ? 'Nothing would have conflicted.\n'
       : `These paths would conflict:\n${list(wouldConflict)}\n`)
-    + `Run \`git merge ${MAIN_BRANCH}\` yourself as a top-level command and resolve it there. A `
-    + 'sandboxed shell denies the writes this merge needs under the paths the policy protects, and a '
-    + 'grandchild `git` inherits a sandbox that its top-level command is excluded from (DEVENV-111).'
+    + 'A sandboxed shell denies the writes this merge needs under the paths the policy protects '
+    + `(DEVENV-111). Once the worktree is back to its last commit, ${UNSANDBOXED_MERGE}.`
 }
 
 async function localMainSha(dependencies: FinalizeDependencies, root: string): Promise<string> {
