@@ -8,6 +8,7 @@ import {
   markExternalEffect,
   resumeActionContinuation,
   runAction,
+  skippedActionRun,
   type TaoActionContinuation,
   type TaoDeclaredFailure,
   transactionResource,
@@ -958,7 +959,7 @@ class RuntimeActionValue<Args extends any[] = any[]> {
 type LatestActionInvocation<Args extends any[]> = {
   args: Args
   reject(error: unknown): void
-  resolve(): void
+  resolve(outcome?: typeof skippedActionRun): void
   run(args: Args): void | Promise<void>
 }
 
@@ -968,16 +969,17 @@ class LatestActionInvocations<Args extends any[]> {
   #pending: LatestActionInvocation<Args> | undefined
 
   invoke(args: Args, run: (args: Args) => void | Promise<void>): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+    // A superseded call resolves with the skip marker, so a `when do` can tell it never ran.
+    return new Promise<void | typeof skippedActionRun>((resolve, reject) => {
       const invocation = { args, reject, resolve, run }
       if (!this.#active) {
         this.#active = true
         void this.#execute(invocation)
         return
       }
-      this.#pending?.resolve()
+      this.#pending?.resolve(skippedActionRun)
       this.#pending = invocation
-    })
+    }) as Promise<void>
   }
 
   async #execute(invocation: LatestActionInvocation<Args>): Promise<void> {

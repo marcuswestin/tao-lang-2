@@ -39,4 +39,20 @@ Describe('compiler: effect outcomes', () => {
     )
     Expect(code).toContain('_Scope.Run = TR.Action(async () =>')
   })
+  Test('marks a dynamic verb contract unknown rather than empty', async () => {
+    const compiled = await Compiler.compileCode(`
+      app OutcomeApp { view Main }
+      view Main() {
+        state Failure = ""
+        action Run(Callback action()) {
+          when do Callback() { rejected -> Problem { set Failure = Problem } }
+        }
+        render Label("Ready")
+      }
+      view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+    `)
+    const code = compiled.code.replace(/\s+/g, ' ')
+
+    Expect(code).toContain('{ name: "Callback", declared: null, }')
+  })
 })

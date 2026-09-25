@@ -234,7 +234,7 @@ export const ActionsCompiler = {
       Compile.ActionArguments(invocation)
     }), {
       name: ${gen.jsLiteral(effectOutcomeName(statement))},
-      declared: [${gen.join(ASTUtils.invocationFailureCases(statement), failureCase => gen.jsLiteral(failureCase))}],
+      declared: ${compileEffectContract(statement)},
     }, [
       ${
       gen.list(
@@ -368,6 +368,17 @@ function positionalArguments(
     const argument = argumentsByParameter.get(parameter)
     return argument ? Compile.Argument(argument) : gen`undefined`
   })
+}
+
+/**
+ * compileEffectContract lists the verb's effective failure cases, or `null` when the verb is dynamic
+ * and its contract is unknown here; the runtime then reads any declared failure as `rejected`.
+ */
+function compileEffectContract(statement: AST.WhenDoStatement): Compiled {
+  if (!ASTUtils.invokedEffect(statement)) {
+    return gen`null`
+  }
+  return gen`[${gen.join(ASTUtils.invocationFailureCases(statement), failureCase => gen.jsLiteral(failureCase))}]`
 }
 
 /** effectOutcomeName is the verb name a failure message falls back to when nothing says more. */

@@ -13,13 +13,17 @@ type TransactionResource<ValueT> = {
   rollbackCommit?(value: ValueT): void
   describe?(value: ValueT): readonly TaoDebugPendingWrite[]
   savepoint?(value: ValueT): () => void
+  /** reset puts an overlay with its own savepoint back to how it was created. */
+  reset?: () => void
   value: ValueT
 }
 
 /**
  * TaoResourceSavepoint captures one overlay so a contained `when do` failure can put it back. It
  * returns the restore. An overlay that changes nothing in place below its own fields needs none: the
- * default copies those fields and restores them.
+ * default copies those fields and restores them, and a default overlay first touched after the
+ * savepoint is dropped. An overlay that supplies its own savepoint is instead reset to how it was
+ * created, because it may carry something a restore must keep, such as a monotonic id counter.
  */
 type TaoResourceSavepoint<ValueT> = (value: ValueT) => () => void
 
@@ -75,15 +79,17 @@ class ActionTransaction {
       return existing.value
     }
     const value = create()
-    this.resources.set(key, { commit, describe, prepare, rollbackCommit, savepoint, value })
+    const reset = savepoint?.(value)
+    this.resources.set(key, { commit, describe, prepare, reset, rollbackCommit, savepoint, value })
     return value
   }
 
   /**
-   * savepoint captures every overlay and the commit effects queued so far, and returns the restore.
-   * Restoring drops an overlay the savepoint did not see, so a resource first touched after it reads
-   * its committed value again, and drops the commit effects queued after it. External effects that
-   * already ran stay recorded: they happened, and a retry must still know it.
+   * savepoint captures every overlay and the commit effects and detached `async` work queued so far,
+   * and returns the restore. Restoring drops or resets an overlay the savepoint did not see, so a
+   * resource first touched after it reads its committed value again, and drops the commit effects and
+   * detached work queued after it. External effects that already ran stay recorded: they happened, and a retry must
+   * still know it.
    */
   savepoint(): () => void {
     const restores = [...this.resources.values()].map(resource =>
@@ -91,9 +97,15 @@ class ActionTransaction {
     )
     const keys = new Set(this.resources.keys())
     const afterCommit = this.afterCommit.length
+    const detached = this.detached.length
     return () => {
-      for (const key of [...this.resources.keys()]) {
-        if (!keys.has(key)) {
+      for (const [key, resource] of [...this.resources]) {
+        if (keys.has(key)) {
+          continue
+        }
+        if (resource.reset) {
+          resource.reset()
+        } else {
           this.resources.delete(key)
         }
       }
@@ -101,6 +113,7 @@ class ActionTransaction {
         restore()
       }
       this.afterCommit.length = afterCommit
+      this.detached.length = detached
     }
   }
 
@@ -399,6 +412,12 @@ function runJoinedAction(
 async function enqueueDetached(body: () => PromiseLike<unknown>): Promise<void> {
   await runAction('async', [], body)
 }
+
+/**
+ * skippedActionRun is what a `runs latest` call settles with when a newer call replaced it before it
+ * started. It never ran, so it neither finished nor failed.
+ */
+export const skippedActionRun: unique symbol = Symbol('tao.skippedActionRun')
 
 /** isPromiseLike tells a suspended action body from one that finished synchronously. */
 export function isPromiseLike(value: unknown): value is PromiseLike<unknown> {

@@ -235,15 +235,21 @@ so `check` is rejected inside one as it is inside `if` and `guard`. There is no 
 A failure the site names no outcome for leaves exactly as a plain `do` failure would: it aborts the root
 and publishes the root's report. A handled failure publishes no report. External effects that already ran
 cannot be undone, so they stay recorded and still make a later report ineligible for retry. A `respond`
-queued by the rolled-back verb is dropped with its writes.
+or `async` block queued by the rolled-back verb is dropped with its writes. Row ids stay monotonic: a row
+the rolled-back verb created never lends its id to a later row. A `runs latest` call that a newer call
+superseded never ran, so it runs no outcome at all.
+
+When the verb is dynamic — an action-typed parameter — its contract is unknown at the site. No case can be
+named there; any declared failure it raises runs `rejected`, and only an undeclared throw runs `error`.
 
 A verb's effective failure contract is the cases its own `fail` or `fails` declare, plus those of every
 verb it reaches through a plain `do`, transitively and cycle-safe, minus those a `when do` inside it
-handles. A `when do` that names `rejected` handles every declared case.
+handles. A `when do` that names `rejected` handles every declared case. An `async` block is a boundary:
+it runs as its own root after the action returns, so nothing inside it joins the action's contract.
 
 An unhandled failure stays silent at runtime, but the compiler warns at a root invocation whose effective
 contract is not covered: a view event handler (`on press Verb` or a `do` in `on press -> { … }`), an
-`on select` handler, or a command's `do` clause. The warning names the cases and points at `when do`; at a
+`on select` handler, a command's `do` clause, or a `do` directly inside an `async` block. The warning names the cases and points at `when do`; at a
 root `when do` it names the cases the site leaves unhandled. A `do` inside another action is not a root —
 its cases join that action's contract instead.
 

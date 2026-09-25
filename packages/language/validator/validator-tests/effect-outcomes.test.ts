@@ -2,7 +2,7 @@ import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { EffectOutcomesValidator } from '../validator-src/validators/effect-outcomes-validator'
 import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalCoreValidator'
-import { app, rejects, stubContainer, stubView, testValidateCode } from './test-validate'
+import { app, rejects, stubContainer, stubView, testValidateCode, validationErrorMessages } from './test-validate'
 
 const messages = EffectOutcomesValidator.messages
 
@@ -38,14 +38,21 @@ function outcomesApp(body: string, extra = ''): string {
   return app(`state Failure = "" ${body}`, `${declarations}${extra}`)
 }
 
-async function warnings(source: string): Promise<string[]> {
+async function validated(source: string): Promise<{ errors: string[]; warnings: string[] }> {
   const result = await testValidateCode(source)
-  return Diagnostics.messages(result.diagnostics.filter(diagnostic => diagnostic.severity === 'warning'))
+  return {
+    errors: validationErrorMessages(result),
+    warnings: Diagnostics.messages(result.diagnostics.filter(diagnostic => diagnostic.severity === 'warning')),
+  }
+}
+
+async function warnings(source: string): Promise<string[]> {
+  return (await validated(source)).warnings
 }
 
 Describe('validator: effect outcomes', () => {
   Test('accepts saved, a declared case, rejected, and error with their payloads', async () => {
-    const found = await warnings(outcomesApp(`
+    const found = await validated(outcomesApp(`
       render Stack() {
         Button() {
           on press -> {
@@ -59,7 +66,7 @@ Describe('validator: effect outcomes', () => {
         }
       }
     `))
-    Expect(found).toEqual([])
+    Expect(found).toEqual({ errors: [], warnings: [] })
   })
 
   Test(
@@ -118,7 +125,7 @@ Describe('validator: effect outcomes', () => {
   )
 
   Test('accepts a case the verb reaches through a plain do', async () => {
-    const found = await warnings(outcomesApp(`
+    const found = await validated(outcomesApp(`
       render Stack() {
         Button() {
           on press -> {
@@ -131,7 +138,7 @@ Describe('validator: effect outcomes', () => {
         }
       }
     `))
-    Expect(found).toEqual([])
+    Expect(found).toEqual({ errors: [], warnings: [] })
   })
 
   Test('warns at an unhandled root invocation and names every case', async () => {
@@ -201,4 +208,54 @@ Describe('validator: effect outcomes', () => {
       messages.unhandledFailure('`ExportDocument`', ['Offline', 'TooLarge']),
     ])
   })
+  Test('keeps an async block out of the enclosing action contract', async () => {
+    const found = await warnings(outcomesApp(
+      `
+        render Stack() {
+          Button() { on press Deferred }
+        }
+      `,
+      'action Deferred() { async { when do ExportDocument(Format: "pdf") { rejected -> { } } } }',
+    ))
+    Expect(found).toEqual([])
+  })
+
+  Test(
+    'rejects naming an async-only case at a caller that can never catch it',
+    rejects(
+      outcomesApp(
+        `
+          action Run() {
+            when do Deferred() { Offline -> { } }
+          }
+          render Text("Ready")
+        `,
+        'action Deferred() { async { do ExportDocument(Format: "pdf") } }',
+      ),
+      messages.unknownOutcome('Offline', '`Deferred`'),
+    ),
+  )
+
+  Test('warns at a plain do directly inside an async block, which runs as its own root', async () => {
+    const found = await warnings(outcomesApp(`
+      action Run() {
+        async { do ExportDocument(Format: "pdf") }
+      }
+      render Text("Ready")
+    `))
+    Expect(found).toEqual([messages.unhandledFailure('`ExportDocument`', ['Offline', 'TooLarge'])])
+  })
+
+  Test(
+    'rejects a named case for a dynamic verb, whose contract is unknown',
+    rejects(
+      outcomesApp(`
+        action Run(Callback action()) {
+          when do Callback() { Offline -> { } }
+        }
+        render Text("Ready")
+      `),
+      messages.unknownOutcome('Offline', 'this action'),
+    ),
+  )
 })

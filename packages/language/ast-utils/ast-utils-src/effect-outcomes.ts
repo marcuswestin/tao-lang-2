@@ -15,7 +15,14 @@ export type EffectInvocation =
 /** The three outcomes every `when do` may name, beside the cases its verb declares. */
 export const effectOutcomeWords = ['saved', 'rejected', 'error'] as const
 
-type EffectBody = AST.ActionDeclaration | AST.ActionExpression | AST.EventHandler | AST.LoopSelectHandler
+// An `async` block is a body of its own: it runs as a separate root after its caller returns, so
+// nothing it does reaches the caller's contract, and no `when do` at the caller could catch it.
+type EffectBody =
+  | AST.ActionDeclaration
+  | AST.ActionExpression
+  | AST.EventHandler
+  | AST.LoopSelectHandler
+  | AST.AsyncActionStatement
 
 /**
  * effectFailureCases is an effect's effective failure contract, as case names in declaration order:
@@ -91,15 +98,15 @@ export function unhandledOutcomeCases(
 
 /**
  * isRootEffectInvocation reports a site whose failure no Tao caller can observe: one written directly
- * in a view event handler, an `on select` handler, or a command's `do` clause. A `do` inside another
- * action is not a root; its cases flow into that action's contract instead.
+ * in a view event handler, an `on select` handler, an `async` block, or a command's `do` clause. A
+ * `do` inside another action is not a root; its cases flow into that action's contract instead.
  */
 export function isRootEffectInvocation(invocation: EffectInvocation): boolean {
   if (AST.isEventHandler(invocation) || AST.isLoopSelectHandler(invocation) || AST.isCommandDoClause(invocation)) {
     return true
   }
   const body = effectBodyOf(invocation)
-  return AST.isEventHandler(body) || AST.isLoopSelectHandler(body)
+  return AST.isEventHandler(body) || AST.isLoopSelectHandler(body) || AST.isAsyncActionStatement(body)
     || (AST.isActionExpression(body) && AST.isCommandDoClause(body.$container))
 }
 
@@ -109,7 +116,7 @@ function effectBodyOf(node: AST.Node): EffectBody | undefined {
   while (current) {
     if (
       AST.isActionDeclaration(current) || AST.isActionExpression(current)
-      || AST.isEventHandler(current) || AST.isLoopSelectHandler(current)
+      || AST.isEventHandler(current) || AST.isLoopSelectHandler(current) || AST.isAsyncActionStatement(current)
     ) {
       return current
     }
