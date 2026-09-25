@@ -66,6 +66,13 @@ export function trimBlankLines(text: string): string {
     .join('\n')
 }
 
+/** closeBraceOffset returns the offset of the `}` that closes a braced node, or its end when it has none. */
+export function closeBraceOffset(text: string, node: AST.Node): number {
+  const nodeEnd = node.$cstNode!.end
+  const closeOffset = text.lastIndexOf('}', nodeEnd - 1)
+  return closeOffset === -1 ? nodeEnd : closeOffset
+}
+
 function endOfLine(text: string, offset: number): number {
   const newlineIndex = text.indexOf('\n', offset)
   return newlineIndex === -1 ? text.length : newlineIndex
