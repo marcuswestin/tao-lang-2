@@ -66,7 +66,7 @@ Describe('Tao expo-updates service client', () => {
             fileExtension: '.png',
             hash: 'asset-hash',
             key: 'icon',
-            url: 'https://updates.tao-lang.dev/assets/asset-hash.png',
+            url: 'https://updates.devtao.com/assets/asset-hash.png',
           }],
           dataSchemaFingerprint: 'schema-1',
           extra: { tao: { commit: 'abc123' } },
@@ -74,7 +74,7 @@ Describe('Tao expo-updates service client', () => {
             contentType: 'application/javascript',
             hash: 'launch-hash',
             key: 'launch',
-            url: 'https://updates.tao-lang.dev/assets/launch-hash.js',
+            url: 'https://updates.devtao.com/assets/launch-hash.js',
           },
           message: 'Clarify the empty state.',
           metadata: { channel: 'wordflower-instantdb' },
@@ -88,7 +88,7 @@ Describe('Tao expo-updates service client', () => {
         'content-type': 'application/json',
       },
       method: 'POST',
-      url: 'https://updates.tao-lang.dev/v1/apps/wordflower/channels/wordflower-instantdb/updates',
+      url: 'https://updates.devtao.com/v1/apps/wordflower/channels/wordflower-instantdb/updates',
     }])
   })
 
@@ -97,7 +97,7 @@ Describe('Tao expo-updates service client', () => {
       contentType: 'application/javascript',
       hash: 'launch-hash',
       key: 'launch',
-      url: 'https://updates.tao-lang.dev/assets/launch-hash.js',
+      url: 'https://updates.devtao.com/assets/launch-hash.js',
     }
     const recorded = recordedFetch([Http.jsonResponse(uploaded)])
 
@@ -120,7 +120,7 @@ Describe('Tao expo-updates service client', () => {
         'tao-asset-key': 'launch',
       },
       method: 'PUT',
-      url: 'https://updates.tao-lang.dev/v1/apps/wordflower/assets/launch-hash',
+      url: 'https://updates.devtao.com/v1/apps/wordflower/assets/launch-hash',
     }])
   })
 
@@ -224,7 +224,7 @@ Describe('Tao expo-updates service client', () => {
         'expo-runtime-version': 'native-1',
       },
       method: 'GET',
-      url: 'https://updates.tao-lang.dev/v1/apps/wordflower/manifest',
+      url: 'https://updates.devtao.com/v1/apps/wordflower/manifest',
     })
   })
 
@@ -273,7 +273,7 @@ Describe('Tao expo-updates service client', () => {
       launchAsset: {
         contentType: 'application/javascript',
         key: 'launch',
-        url: 'http://updates.tao-lang.dev/launch.js',
+        url: 'http://updates.devtao.com/launch.js',
       },
       runtimeVersion: 'native-1',
     })).rejects.toThrow('absolute HTTPS URL')
@@ -284,7 +284,7 @@ Describe('Tao expo-updates service client', () => {
 function updateClient(fetch: TaoUpdateFetch): TaoUpdateClient {
   return new TaoUpdateClient({
     authorizationToken: () => 'update-admin.jwt',
-    baseUrl: 'https://updates.tao-lang.dev',
+    baseUrl: 'https://updates.devtao.com',
     fetch,
   })
 }
@@ -308,7 +308,7 @@ function publication(
         fileExtension: '.png',
         hash: 'asset-hash',
         key: 'icon',
-        url: 'https://updates.tao-lang.dev/assets/asset-hash.png',
+        url: 'https://updates.devtao.com/assets/asset-hash.png',
       }],
       createdAt,
       extra: { tao: { commit: 'abc123' } },
@@ -317,7 +317,7 @@ function publication(
         contentType: 'application/javascript',
         hash: 'launch-hash',
         key: 'launch',
-        url: 'https://updates.tao-lang.dev/assets/launch-hash.js',
+        url: 'https://updates.devtao.com/assets/launch-hash.js',
       },
       metadata: { channel: 'wordflower-instantdb' },
       runtimeVersion: overrides.runtimeVersion ?? 'native-1',

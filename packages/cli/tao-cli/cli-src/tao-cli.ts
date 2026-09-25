@@ -7,6 +7,14 @@ import * as DiagnosticReport from './diagnostic-report'
 import type { InPlace } from './in-place-files'
 import { TaoVersion } from './tao-version'
 
+/**
+ * TAO_STANDALONE is defined as `true` when `standalone-build.ts` compiles the distributable binary,
+ * and is never declared anywhere else; from source it does not exist, so it is read through
+ * `typeof`. It is read where it matters rather than through a module, so the bundler can drop what
+ * a standalone binary leaves out.
+ */
+declare const TAO_STANDALONE: true | undefined
+
 type InPlaceLabels = {
   /** changed labels per-file and summary output, e.g. `formatted`. */
   changed: string
@@ -161,30 +169,48 @@ function createCommands(): Command {
     })
 
   commands
-    .command('review')
-    .argument('[path]', 'Tao project directory to capture in Studio.', '.')
-    .option('--app <name>', 'Select a named app within the project.')
-    .option('--against <review>', 'Compare with an earlier review.json manifest.')
-    .option('--output <directory>', 'Write the immutable review artifact to this new directory.')
-    .description('Capture every Studio scenario as a portable web visual review.')
-    .action(async (path: string, options: { against?: string; app?: string; output?: string }) => {
+    .command('check-for-updates')
+    .description('Say whether a newer Tao release is published, and how to install it.')
+    .action(async () => {
       try {
-        const { runStudioReview } = await import('tao-studio-tooling/studio-review')
-        const result = await runStudioReview(path, {
-          against: options.against,
-          appName: options.app,
-          artifactRoot: options.output,
-        })
-        const counts = Object.entries(result.statusCounts)
-          .filter(([, count]) => count > 0)
-          .map(([status, count]) => `${count} ${status}`)
-          .join(', ')
-        HCI.writeSuccess(`Captured Tao visual review: ${FS.displayPath(result.reportPath)} (${counts})\n`)
+        const { runCheckForUpdates } = await import('./check-for-updates')
+        await runCheckForUpdates()
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.setExitCode(1)
       }
     })
+
+  // The standalone binary leaves `tao review` out, because it reaches the whole Studio graph, which
+  // the first release does not ship (`R12`). Its build defines this global, and the bundler then drops
+  // the branch and the import inside it.
+  if (typeof TAO_STANDALONE === 'undefined') {
+    commands
+      .command('review')
+      .argument('[path]', 'Tao project directory to capture in Studio.', '.')
+      .option('--app <name>', 'Select a named app within the project.')
+      .option('--against <review>', 'Compare with an earlier review.json manifest.')
+      .option('--output <directory>', 'Write the immutable review artifact to this new directory.')
+      .description('Capture every Studio scenario as a portable web visual review.')
+      .action(async (path: string, options: { against?: string; app?: string; output?: string }) => {
+        try {
+          const { runStudioReview } = await import('tao-studio-tooling/studio-review')
+          const result = await runStudioReview(path, {
+            against: options.against,
+            appName: options.app,
+            artifactRoot: options.output,
+          })
+          const counts = Object.entries(result.statusCounts)
+            .filter(([, count]) => count > 0)
+            .map(([status, count]) => `${count} ${status}`)
+            .join(', ')
+          HCI.writeSuccess(`Captured Tao visual review: ${FS.displayPath(result.reportPath)} (${counts})\n`)
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      })
+  }
 
   commands
     .command('compile')

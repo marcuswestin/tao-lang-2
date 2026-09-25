@@ -5,6 +5,7 @@ import {
   type FinalizeDependencies,
   type FinalizeState,
   LandCommand,
+  MergeMainCommand,
   prepareForLanding,
 } from '../verification-src/Finalize'
 import {
@@ -44,6 +45,8 @@ type FakeRepository = {
   existingDirectories?: string[]
   /** Worktree-relative directories a write is denied in, as the sandbox denies `agents/skills`. */
   unwritableDirectories?: string[]
+  /** Existing files a write is denied to inside a writable directory, as `.claude/settings.json` is. */
+  unwritableFiles?: string[]
   /** Paths `git merge-tree` reports, which it can answer even when the merge itself cannot run. */
   mergeTreeConflicts?: string[]
   featureCommits?: Array<{ body: string; subject: string }>
@@ -158,8 +161,10 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     directories.map(directory => FS.resolvePath(directory, '/repo'))
 
   const dependencies: FinalizeDependencies = {
+    canWriteFile: async path => !resolvedIn(repository.unwritableFiles ?? []).includes(path),
     exists: async path =>
-      states.has(path) || files.has(path) || resolvedIn(repository.existingDirectories ?? []).includes(path),
+      states.has(path) || files.has(path)
+      || resolvedIn([...(repository.existingDirectories ?? []), ...(repository.unwritableFiles ?? [])]).includes(path),
     findGreenTree: async (_root, wanted, acceptedLanes, options = {}) => {
       for (const lane of acceptedLanes) {
         const record = greenTreeRecords.get(lane)
@@ -176,6 +181,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       }
       return undefined
     },
+    isSymbolicLink: async () => false,
     key: async () => ({ toolchain: FAKE_TOOLCHAIN, treeHash: `tree-of-${headAfterMerge}` }),
     makeProbeDirectory: async prefix => {
       if (resolvedIn(repository.unwritableDirectories ?? []).some(directory => prefix.startsWith(`${directory}/`))) {
@@ -193,6 +199,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       }
       return states.get(path) as ValueT
     },
+    realPath: async path => path,
     readText: async (path: string) => files.get(path) ?? '',
     run: runner,
     writeJson: async (path, value) => {
@@ -304,9 +311,27 @@ Describe('finalize', () => {
     const message = String(failure)
     Expect(message.includes('agents/skills/delegation')).toBe(true)
     Expect(message.includes('packages/dev/dev-src')).toBe(false)
-    Expect(message.includes('Nothing has been changed.')).toBe(true)
-    Expect(message.includes('as a top-level command')).toBe(true)
+    Expect(message.includes('Nothing has been changed')).toBe(true)
+    Expect(message.includes('./agent unsandboxed merge-main')).toBe(true)
+    Expect(message.includes('then finalize again')).toBe(true)
     // The merge must never have been attempted; that is the whole point of probing first.
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
+  })
+
+  Test('refuses for a protected file inside a writable directory, which a directory probe misses', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['.claude/settings.json', '.claude/hooks.md', 'agents/skills/delegation/SKILL.md'],
+      existingDirectories: ['.claude', 'agents/skills/delegation'],
+      unwritableDirectories: ['agents/skills'],
+      unwritableFiles: ['.claude/settings.json', 'agents/skills/delegation/SKILL.md'],
+    })
+
+    const message = String(await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(e => e))
+
+    Expect(message.includes('would write 2 paths')).toBe(true)
+    Expect(message.includes('- .claude/settings.json')).toBe(true)
+    Expect(message.includes('- agents/skills/delegation\n')).toBe(true)
+    Expect(message.includes('.claude/hooks.md')).toBe(false)
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
   })
 
@@ -971,12 +996,15 @@ Describe('finalize', () => {
       await gitCommand(featureRoot, ['commit', '--quiet', '-m', 'Add the disposable finalize fixture'])
 
       const dependencies: FinalizeDependencies = {
+        canWriteFile: async () => true,
         exists: FS.exists,
         findGreenTree: async () => undefined,
+        isSymbolicLink: FS.isSymbolicLink,
         key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),
         makeProbeDirectory: FS.mkTmpDir,
         now: () => new Date('2026-09-17T12:00:00.000Z'),
         readJson: FS.readJson,
+        realPath: FS.realPath,
         readText: FS.readText,
         removeFile: FS.remove,
         run: async (command, spec) =>
@@ -1056,6 +1084,21 @@ Describe('landing preparation', () => {
     Expect(changedHead.ok).toBe(false)
   })
 
+  Test('does not turn an untouched generated draft into author review on a later landing', async () => {
+    const fake = fakeDependencies()
+    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+    const path = '/repo/.artifacts/merge/feat/example.msg'
+
+    const untouched = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(untouched.ok).toBe(false)
+    Expect(untouched.remaining[0]).toContain('generated draft has not been edited by its author')
+
+    fake.files.set(path, 'Land the example workflow\n\n- Add the example workflow.\n')
+    const edited = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(edited.ok).toBe(true)
+  })
+
   Test('accepts an updated kept message without an out-of-lock finalize', async () => {
     const fake = fakeDependencies()
     const path = '/repo/.artifacts/merge/feat/example.msg'
@@ -1105,6 +1148,49 @@ Describe('landing preparation', () => {
     Expect(fake.calls.some(call => call.args[0] === 'update-ref')).toBe(false)
   })
 
+  Test('rejects an alternate agent landing message before redraft can read or write it', async () => {
+    const fake = fakeDependencies()
+    const outside = '/private/tmp/host-owned.msg'
+    fake.files.set(outside, 'Keep this host file.\n')
+
+    await Expect(LandCommand.run({
+      messageFile: outside,
+      redraft: true,
+      repositoryRoot: '/repo',
+    }, fake.dependencies)).rejects.toThrow('only accepts its canonical merge message')
+
+    Expect(fake.files.get(outside)).toBe('Keep this host file.\n')
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+  })
+
+  Test('rejects symlinked and physically escaped canonical landing messages before preparation', async () => {
+    const symlinked = fakeDependencies()
+    symlinked.dependencies.isSymbolicLink = async path => path === '/repo/.artifacts/merge'
+    await Expect(LandCommand.run({ repositoryRoot: '/repo' }, symlinked.dependencies))
+      .rejects.toThrow('crosses a symbolic link')
+    Expect(symlinked.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+
+    const escaped = fakeDependencies()
+    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+    escaped.files.set(messagePath, 'Land it\n\n- Do the thing.\n')
+    escaped.dependencies.realPath = async path => path === messagePath ? '/private/tmp/escaped.msg' : path
+    await Expect(LandCommand.run({ repositoryRoot: '/repo' }, escaped.dependencies))
+      .rejects.toThrow('resolves outside the repository')
+    Expect(escaped.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+  })
+
+  Test('rejects the two noninteractive verification skips before inspecting the repository', async () => {
+    const fake = fakeDependencies()
+
+    await Expect(LandCommand.run({
+      repositoryRoot: '/repo',
+      skipVerify: true,
+      skipVerifyFull: true,
+    }, fake.dependencies)).rejects.toThrow('cannot combine --skip-verify-full with --skip-verify')
+
+    Expect(fake.calls).toEqual([])
+  })
+
   Test('refuses a branch that is not feat/* or a dirty worktree, before anything else', async () => {
     const detached = fakeDependencies({ branch: '' })
     await Expect(prepareForLanding({ repositoryRoot: '/repo' }, detached.dependencies))
@@ -1114,6 +1200,61 @@ Describe('landing preparation', () => {
     await Expect(prepareForLanding({ repositoryRoot: '/repo' }, dirty.dependencies))
       .rejects.toThrow('stray.ts')
     Expect(dirty.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+  })
+})
+
+Describe('merge-main', () => {
+  Test('merges main and stops there: no lane, no merge message, no state file', async () => {
+    const fake = fakeDependencies()
+    const outcome = await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(outcome.mergedNow).toBe(true)
+    Expect(fake.lines.some(line => line.includes('Merged main'))).toBe(true)
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'log')).toBe(false)
+    Expect(fake.states.size).toBe(0)
+  })
+
+  Test('reports a branch that already contains main without merging', async () => {
+    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
+    const outcome = await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(outcome.mergedNow).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'merge')).toBe(false)
+  })
+
+  Test('refuses where it cannot finish, and names itself unsandboxed as the way through', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['agents/skills/delegation/SKILL.md'],
+      existingDirectories: ['agents/skills/delegation'],
+      unwritableDirectories: ['agents/skills'],
+    })
+
+    const message = String(await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(e => e))
+
+    Expect(message.includes('./agent unsandboxed merge-main')).toBe(true)
+    Expect(message.includes('finalize')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
+  })
+
+  Test('leaves a conflict for the author to resolve and commit', async () => {
+    const fake = fakeDependencies({ conflictOnMerge: true })
+
+    const message = String(await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(e => e))
+
+    Expect(message.includes('conflicted.ts')).toBe(true)
+    Expect(message.includes('commit the merge')).toBe(true)
+    Expect(fake.calls.some(call => ['reset', 'checkout', 'commit'].includes(call.args[0]!))).toBe(false)
+  })
+
+  Test('refuses a detached HEAD or a dirty worktree in its own name', async () => {
+    const detached = fakeDependencies({ branch: '' })
+    await Expect(MergeMainCommand.run({ repositoryRoot: '/repo' }, detached.dependencies))
+      .rejects.toThrow('merge-main requires a feat/* branch')
+
+    const dirty = fakeDependencies({ status: ' M tracked.ts\n' })
+    await Expect(MergeMainCommand.run({ repositoryRoot: '/repo' }, dirty.dependencies))
+      .rejects.toThrow('merge-main refuses to guess')
   })
 })
 

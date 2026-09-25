@@ -97,6 +97,8 @@ export type AdmissionExperimentDependencies = {
   cpuCount: () => number
   loadAverage: () => number
   now: () => Date
+  /** The physical summary path, so a prior run's `latest` link cannot impersonate this run. */
+  latestSummaryPath: (lane: string, repositoryRoot: string) => Promise<string | undefined>
   readJson: <ValueT>(path: string) => Promise<ValueT>
   run: (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
 }
@@ -106,6 +108,10 @@ const defaultDependencies: AdmissionExperimentDependencies = {
   cpuCount: Platform.cpuCount,
   loadAverage: Platform.loadAverage,
   now: () => new Date(),
+  latestSummaryPath: async (lane, repositoryRoot) =>
+    await FS.realPath(
+      FS.resolvePath(`.artifacts/logs/${lane}/latest/summary.json`, repositoryRoot),
+    ).catch(() => undefined),
   readJson: FS.readJson,
   run: CLI.run,
 }
@@ -199,6 +205,7 @@ export async function runAdmissionExperiment(
     // A phase with an unmeasured lane has no numbers worth judging, so it can never meet the bar.
     acceptanceMet: contentionRatio <= 1.5
       && trial.falseReds === 0
+      && baseline.falseReds === 0
       && trial.unmeasured === 0
       && baseline.unmeasured === 0,
     admittedLanes: MachineLanes.ADMITTED_LANES,
@@ -217,6 +224,7 @@ async function runLane(
   dependencies: AdmissionExperimentDependencies,
 ): Promise<AdmissionLaneOutcome> {
   const startedAt = dependencies.now()
+  const previousSummaryPath = await dependencies.latestSummaryPath(lane, repositoryRoot)
   // `--no-cache` because a recorded green tree would let a lane finish without doing the work, and a
   // lane that skipped its work measures nothing about how the machine shares itself.
   // No `TAO_OUTPUT_MODE` here, deliberately. Setting it to `quiet` seemed harmless and was not:
@@ -230,7 +238,11 @@ async function runLane(
     cwd: repositoryRoot,
   })
   const wallMs = dependencies.now().getTime() - startedAt.getTime()
-  const summary = await readLaneSummary(lane, repositoryRoot, dependencies)
+  const currentSummaryPath = await dependencies.latestSummaryPath(lane, repositoryRoot)
+  const summary = currentSummaryPath !== undefined && currentSummaryPath !== previousSummaryPath
+    ? await readLaneSummary(lane, repositoryRoot, dependencies)
+    : undefined
+  const commandFailed = result.exitCode !== 0 || result.error !== undefined || result.signal !== null
 
   return {
     failedGates: (summary?.gates ?? [])
@@ -243,7 +255,7 @@ async function runLane(
     startedAt: startedAt.toISOString(),
     // The lane's own elapsed time excludes process startup, which is what the bar is about; the
     // wall time is kept when the lane wrote no summary at all, which is itself a result.
-    status: summary?.status ?? (result.exitCode === 0 ? 'passed' : 'failed'),
+    status: commandFailed ? 'failed' : summary?.status ?? 'failed',
     wallMs: summary?.elapsedMs ?? wallMs,
   }
 }
@@ -273,7 +285,7 @@ function phaseOf(
   const earliest = byCompletion.slice(0, Math.max(1, firstCompletions))
 
   return {
-    falseReds: outcomes.filter(outcome => outcome.failedGates.length > 0).length,
+    falseReds: outcomes.filter(outcome => outcome.status !== 'passed').length,
     unmeasured: outcomes.filter(outcome => !outcome.measured).length,
     firstCompletionsMedianMs: summarizeSamples(earliest.map(outcome => outcome.wallMs)).medianMs,
     outcomes,
@@ -299,7 +311,7 @@ export function renderAdmissionReport(report: AdmissionReport): string {
     + `p95 ${seconds(report.trial.summary.p95Ms)}`,
     `  peak load: ${report.baseline.peakLoadAverage} alone, ${report.trial.peakLoadAverage} contended`,
     `  contention ratio: ${report.contentionRatio.toFixed(2)}x against a 1.5x bar`,
-    `  lanes with a failing gate: ${report.trial.falseReds} contended, ${report.baseline.falseReds} alone`,
+    `  failed lanes: ${report.trial.falseReds} contended, ${report.baseline.falseReds} alone`,
   ]
   if (report.trial.unmeasured > 0 || report.baseline.unmeasured > 0) {
     lines.push(
@@ -312,6 +324,8 @@ export function renderAdmissionReport(report: AdmissionReport): string {
       lines.push(`  NO RUN ${FS.basename(outcome.repositoryRoot)}: wrote no summary`)
     } else if (outcome.failedGates.length > 0) {
       lines.push(`  FAIL ${FS.basename(outcome.repositoryRoot)}: ${outcome.failedGates.join(', ')}`)
+    } else if (outcome.status !== 'passed') {
+      lines.push(`  FAIL ${FS.basename(outcome.repositoryRoot)}: lane failed without a failing-gate detail`)
     }
   }
   lines.push(report.acceptanceMet ? '  ACCEPTANCE MET' : '  ACCEPTANCE NOT MET')

@@ -1,4 +1,4 @@
-import { RuntimeToolchainPaths } from '@expo-host'
+import { HostDependencies, ManagedNode, RuntimeToolchainPaths } from '@expo-host'
 import { RuntimeTesting } from '@expo-host/testing/runtime-testing'
 import { AST, Langium, Parser } from '@parser'
 import { CLI, Errors, FS, HCI, Json, Platform, Repo, TaoTestProtocol } from '@shared'
@@ -415,7 +415,10 @@ async function validateAndCompileTaoTests(
   testPaths: readonly string[],
   runtimeRoot: string,
 ): Promise<CompiledTaoTests | ValidationFailed> {
-  if (Platform.runtimeProcess.env['TAO_TEST_IN_PROCESS'] === 'true') {
+  // An installed binary carries its worker entrypoint only inside itself, where no worker process
+  // can load it, so it compiles in this process as the packaged Studio runner does.
+  const installed = RuntimeToolchainPaths.hostInstallRoot !== undefined
+  if (installed || Platform.runtimeProcess.env['TAO_TEST_IN_PROCESS'] === 'true') {
     return await validateAndCompileTaoTestsInProcess(testPaths, runtimeRoot)
   }
   const groups = [...groupPathsByDirectory(testPaths).values()]
@@ -556,6 +559,9 @@ async function runCompiledTaoTests(
     compiled.runRoot,
     namePattern,
   )
+  // An installed Tao resolves the host's packages, Jest among them, on first use and links them beside
+  // the host's files, where Jest looks; inside a checkout this does nothing.
+  await HostDependencies.ensure()
   const result = await RuntimeTesting.JestTransformCache.run(
     runtimeRoot,
     async cacheDirectory =>
@@ -574,6 +580,8 @@ async function runCompiledTaoTests(
         ],
         cwd: runtimeRoot,
         env: {
+          // Where an installed Tao keeps the runtime and `@shared` sources Jest maps its aliases to.
+          ...RuntimeToolchainPaths.expoEnvironment(),
           [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath,
           [RuntimeTesting.TestHarnessFiles.ENTRYPOINTS_ENV]: entrypoints.directory,
           [RuntimeTesting.JestTransformCache.ENV]: cacheDirectory,
@@ -830,6 +838,11 @@ async function testNodePath(): Promise<string> {
   const explicitNode = Platform.runtimeProcess.env['TAO_TEST_NODE_PATH']
   if (explicitNode !== undefined) {
     return explicitNode
+  }
+  // An installed Tao runs Jest under the Node its release names, downloaded once for its version.
+  const managedNode = await ManagedNode.ensure()
+  if (managedNode !== undefined) {
+    return managedNode
   }
   // `tao test` also runs against fixtures outside any Git worktree, where the repository's
   // pinned devenv Node cannot be located. Fall back to the Node on PATH instead of failing.

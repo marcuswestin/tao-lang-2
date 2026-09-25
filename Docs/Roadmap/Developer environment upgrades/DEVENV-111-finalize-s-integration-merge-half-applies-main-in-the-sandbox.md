@@ -37,8 +37,17 @@
   and eight `agents/skills/**` files, leaving them at the previous tip. Nothing reports it as a
   failure — the switch says `Switched to a new branch` — yet `repo-lint` then calls the settings
   stale and two `agent-cli` tests fail on its old host-command rules, so `verify-changed` and
-  `finalize` stay red until a host-side restore. No named `./agent unsandboxed` operation performs
-  that restore. Seen on `feat/wordflower-check`.
+  `finalize` stay red until a host-side restore. `merge-main` below covers merging; starting a branch
+  still has no named `./agent unsandboxed` operation. Seen on `feat/wordflower-check`.
+- **Partly addressed, 2026-09-25:** the hand-off is now a named approval boundary rather than a raw
+  `git merge`. `./agent merge-main` runs finalize's integration alone, with no lane and no message,
+  and `./agent unsandboxed merge-main` runs it on the host, so both finalize's and merge-main's
+  refusals name that one command. Proven by merging five `main` commits that wrote `agents/skills`
+  and `.claude/settings.json` into a branch: the sandboxed form refused untouched, the unsandboxed
+  form merged cleanly. The probe also missed a protected file inside a writable directory, which is
+  how `.claude/settings.json` is protected; it now opens every existing incoming file in append
+  mode, which writes nothing, and refuses on a denial. **What remains** is the 2026-09-21 follow-up:
+  a probe directory the sandbox will not let finalize remove still ends in an unexplained error.
 - **Area:** Verification and landing
 - **Impact:** `./agent finalize` run from a sandboxed agent shell leaves the worktree in a state no
   Git command describes. Its integration merge is denied partway on the paths the sandbox
@@ -70,8 +79,9 @@
   sandbox-denied and classifier-denied — confirmed 2026-09-21 on
   `feat/ripgrep-replace-flag-issue-970ab2`, where `checkout -f`, `git merge` and even a
   path-scoped `git restore` were all refused as irreversible local destruction, and the tagged stash
-  was not; then run `git merge origin/main` yourself as a top-level command and resolve by hand. `git merge-tree --write-tree HEAD
-  origin/main` is a read-only way to learn what actually conflicts before touching anything.
+  was not; then run `./agent unsandboxed merge-main` and resolve any conflict by hand. `git
+  merge-tree --write-tree HEAD origin/main` is a read-only way to learn what actually conflicts
+  before touching anything.
 - **Proposed change:** Run the integration merge the way a top-level `git merge` already runs — the
   policy exclusion exists precisely because this operation writes sandbox-protected paths — or detect
   the denial and say so instead of calling it a conflict. Independently, a failed integration should

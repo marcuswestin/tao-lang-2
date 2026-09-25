@@ -24,7 +24,7 @@ Describe('tao ship Apple command pipeline', () => {
       args: ['install', '--ansi'],
       command: 'pod',
       cwd: `${runtimeRoot}/ios`,
-      env: { CP_HOME_DIR: `${runtimeRoot}/.artifacts/cocoapods` },
+      env: { CP_HOME_DIR: `${runtimeRoot}/.artifacts/cocoapods`, LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' },
     })
     Expect(plan.archive.args).toEqual([
       '-workspace',

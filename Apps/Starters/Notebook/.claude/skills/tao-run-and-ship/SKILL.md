@@ -8,9 +8,10 @@ description: Run Tao apps through Expo, use Studio and visual review, and ship t
 ## Run locally
 
 Run `tao dev [path]`. Tao discovers runnable apps, selects the only app or prompts when several are
-present, compiles it, starts Metro on port 8081 or another available port, watches source, and opens
-available Expo targets. Use `--app <Name>` for an unambiguous noninteractive selection. Install Expo
-Go or the appropriate development client on a target before opening its Metro link.
+present, compiles it, starts Metro on port 8081 or another available port, and watches source. Bare
+`tao dev` opens no target; pass `--ios`, `--android`, `--web`, or `--desktop` to open the selected
+targets. Use `--app <Name>` for an unambiguous noninteractive selection. Install Expo Go or the
+appropriate development client on a target before opening its Metro link.
 
 The interactive dashboard reports compile, Metro, device, and runtime output. Fix the first Tao
 diagnostic with `tao fix`/`tao check`; restart only when the dashboard says the host needs it.

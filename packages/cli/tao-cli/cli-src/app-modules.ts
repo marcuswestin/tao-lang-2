@@ -61,7 +61,7 @@ export const TaoAppModules = {
     if (FS.existsSync(FS.resolvePath('TaoRuntime-src/TR.ts', sibling))) {
       return sibling
     }
-    const bundled = FS.resolvePath('modules/@tao/runtime', cliPackageRoot)
+    const bundled = FS.resolvePath(TaoResources.RUNTIME_DIRECTORY, cliPackageRoot)
     if (FS.existsSync(FS.resolvePath('TaoRuntime-src/TR.ts', bundled))) {
       return bundled
     }
@@ -80,7 +80,7 @@ export const TaoAppModules = {
     if (!await FS.isFile(FS.resolvePath('TaoRuntime-src/TR.ts', source))) {
       return Errors.throwHostEnvironment(`Cannot package @tao/runtime: ${source} has no TaoRuntime-src/TR.ts.`)
     }
-    const destination = FS.resolvePath('modules/@tao/runtime', cliPackageRoot)
+    const destination = FS.resolvePath(TaoResources.RUNTIME_DIRECTORY, cliPackageRoot)
     const temporary = `${destination}.tmp-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
     try {
       await FS.copyDirectory(FS.resolvePath('TaoRuntime-src', source), FS.resolvePath('TaoRuntime-src', temporary))

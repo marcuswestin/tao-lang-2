@@ -213,7 +213,7 @@ standalone-cli-build: _parser-gen
 standalone-cli-release version: _parser-gen
     bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
 
-# Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, and compile work with no Bun or Node on PATH
+# Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, compile, and build --compile-only work with no Bun or Node on PATH
 [group('Ship')]
 standalone-cli-acceptance: _parser-gen
     bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
@@ -296,6 +296,10 @@ report-test-stats limit="20":
 [arg('redraft', long='redraft', value='true')]
 finalize check='false' fresh='false' redraft='false':
     ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }}
+
+# Merge current main into this feature branch and nothing else; agents use ./agent unsandboxed merge-main when main writes paths the sandbox protects
+merge-main:
+    ./dev merge-main
 
 # Switch this checkout to your own dev/* branch, creating it from main the first time
 [group('Mine')]

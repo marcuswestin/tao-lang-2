@@ -41,15 +41,21 @@ The hooks and the "ask the Developer" clause exist to make the first months of t
 are temporary by design.
 
 `./agent delegation-report` answers four questions: which profiles are actually used, whether callers
-name a tier or inherit one, what effort the subagents ran at, and how long they took. An inherited
-model is the signal worth watching, because the guidance asks for an explicit tier and inheritance is
-how the expensive default returns.
+name a model or leave selection to a profile, harness default, or inheritance, what effort the
+subagents ran at, and how long they took. It shows resolved models only when a hook or bounded
+transcript metadata establishes one. An omitted spawn model is not itself evidence of inheritance.
 
 The report reconciles events rather than trusting any one of them. Only the spawning call knows the
 model and the brief; only the subagent's own start and stop carry the id that bounds a duration; and
 `effort` means different things on the two — the caller's on a spawn, since the subagent has not
 started, and the subagent's on a stop. Where a field never arrives the report says so instead of
-inferring it.
+inferring it. Spawn and start events have no shared agent ID, so the report cannot attribute a
+resolved model to one spawn; startup drift warnings use local model metadata and installed harness
+version until that seam has supported correlation.
+
+On 2026-09-25 the Developer chose Opus 5.5 for the standard Claude Code and Cursor tiers as
+well as deep. The routing table owns the active models; completed-task measurements will determine
+whether this choice improves cost and quality in practice.
 
 Ask the Developer when the routing table has no row for the work and confidence between two tiers is low, when
 the frontier tier or a long run is at stake, or when the log already shows the pattern — a task like
@@ -60,6 +66,26 @@ Calibration ends when the evidence says the table is right: roughly twenty logge
 several tasks, with no correction from the Developer and no routing-table edit forced by a miss. At that point
 delete the "ask the Developer" clause from the skill, remove the three delegation hooks from
 `.rulesync/hooks.jsonc`, and keep `./agent delegation-report` only if the log still earns its cost.
+
+### Compaction threshold experiment
+
+Claude Code [supports](https://code.claude.com/docs/en/model-config) `autoCompactWindow` values from
+100,000 to 1,000,000 tokens. A local Rulesync generation check confirmed that
+`claudecode.autoCompactWindow: 272000` reaches `.claude/settings.json`. Enabled on 2026-09-24 as a
+reversible experiment at the Developer's request; 272,000 is the local Codex model catalog's
+listed context window, not a verified Codex compaction trigger or an established cost improvement.
+On a native one-million-token Claude model, it could compact substantially earlier than the
+documented default near 967,000 tokens.
+
+The 2026-09-23 sample of 19 Claude subagent transcripts supplies a cost-category observation, but
+no usable baseline for compaction count or `preTokens`, completed-task cost, post-compaction
+re-reads, or quality. Collect those values for comparable completed tasks under this threshold,
+including retries and reviewer work. For each task, separate cached reads, cache writes, uncached
+input, and output in an API-equivalent estimate, and record plan usage separately. Compare the
+same task types with the earlier setting where evidence permits, along with elapsed time, rework,
+and accepted review findings. Revert the threshold if cost per successfully completed task rises,
+re-reads or compactions rise without a quality gain, or quality falls. Keep it only if completed-task
+evidence shows a gain without weaker review.
 
 ### Record
 

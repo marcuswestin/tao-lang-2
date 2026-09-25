@@ -45,6 +45,10 @@ async function reservePort(port: number): Promise<PortReservation | undefined> {
   return await new Promise<PortReservation | undefined>((resolve, reject) => {
     const server = createServer()
     server.unref()
+    // Nothing serves here yet, so a client that connects is dropped at once. Holding its socket open
+    // would keep `close` waiting on it, and a dev client or emulator that retries 8081 would then stop
+    // Expo from ever starting.
+    server.on('connection', socket => socket.destroy())
     server.once('error', error => {
       if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
         resolve(undefined)

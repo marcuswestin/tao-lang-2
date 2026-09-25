@@ -1,4 +1,4 @@
-import Runtime, { RuntimeToolchainPaths } from '@expo-host'
+import Runtime, { HostDependencies, RuntimeToolchainPaths } from '@expo-host'
 import { CLI, Errors, FS, HCI, Platform } from '@shared'
 import { buildDesktopApp } from './desktop-build'
 import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
@@ -316,17 +316,21 @@ async function exportWeb(
     }
     await FS.copyFile(source, FS.resolvePath(file, runtimeRoot))
   }
-  const modules = FS.resolvePath('node_modules', toolchainRoot)
+  // An installed Tao resolves its host's packages on first use; inside a checkout this does nothing.
+  await HostDependencies.ensure()
+  const modules = RuntimeToolchainPaths.dependencyRoot()
   if (!await FS.isDirectory(modules)) {
     Errors.throwHostEnvironment(`Tao's Expo host dependencies are not installed at ${modules}.`)
   }
   await FS.symlink(modules, FS.resolvePath('node_modules', runtimeRoot))
   await Runtime.generateApp(appPath, { appName, runtimePackageRoot: runtimeRoot })
-  const result = await CLI.run(FS.resolvePath('node_modules/.bin/expo', runtimeRoot), {
-    args: ['export', '--platform', 'web', '--output-dir', siteRoot],
+  const expo = RuntimeToolchainPaths.expoCommand(runtimeRoot, ['export', '--platform', 'web', '--output-dir', siteRoot])
+  const result = await CLI.run(expo.command, {
+    args: expo.args,
     cwd: runtimeRoot,
     env: {
       ...Platform.runtimeProcess.env,
+      ...expo.env,
       CI: '1',
       EXPO_NO_DOTENV: '1',
       TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: toolchainRoot,
@@ -363,18 +367,44 @@ async function finishWebArtifact(siteRoot: string): Promise<string> {
   await FS.writeText(
     FS.resolvePath('serve.ts', parent),
     [
-      'const site = new URL("./site/", import.meta.url)',
+      'import { realpath } from "node:fs/promises"',
+      'import { isAbsolute, relative, resolve, sep } from "node:path"',
+      'import { fileURLToPath } from "node:url"',
+      '',
+      'const site = fileURLToPath(new URL("./site/", import.meta.url))',
+      'const realSite = await realpath(site)',
       'const port = Number(Bun.env.PORT ?? 8080)',
-      'Bun.serve({ port, async fetch(request) {',
+      'const server = Bun.serve({ hostname: "127.0.0.1", port, async fetch(request) {',
       '  const url = new URL(request.url)',
-      '  let path = decodeURIComponent(url.pathname)',
-      '  if (path.includes("\\0") || path.split("/").includes("..")) return new Response("Bad path", { status: 400 })',
+      '  let path = decodePath(url.pathname)',
+      '  if (path === undefined || path.includes("\\0")) return new Response("Bad path", { status: 400 })',
       '  if (path.endsWith("/")) path += "index.html"',
-      '  const file = Bun.file(new URL("." + path, site))',
+      '  const candidate = resolve(site, "." + path)',
+      '  if (!isWithin(candidate, site)) return new Response("Bad path", { status: 400 })',
+      '  let filePath: string',
+      '  try { filePath = await realpath(candidate) } catch { return new Response("Not found", { status: 404 }) }',
+      '  if (!isWithin(filePath, realSite)) return new Response("Bad path", { status: 400 })',
+      '  const file = Bun.file(filePath)',
       '  if (await file.exists()) return new Response(file)',
       '  return new Response("Not found", { status: 404 })',
       '} })',
-      'globalThis.console["log"](`Serving http://localhost:${port}`)',
+      'globalThis.console["log"](`Serving http://localhost:${server.port}`)',
+      '',
+      'function decodePath(path: string): string | undefined {',
+      '  for (let attempt = 0; attempt < 32; attempt++) {',
+      '    try {',
+      '      const decoded = decodeURIComponent(path)',
+      '      if (decoded === path) return decoded',
+      '      path = decoded',
+      '    } catch { return undefined }',
+      '  }',
+      '  return undefined',
+      '}',
+      '',
+      'function isWithin(path: string, root: string): boolean {',
+      '  const pathFromRoot = relative(root, path)',
+      '  return pathFromRoot === "" || (!isAbsolute(pathFromRoot) && pathFromRoot !== ".." && !pathFromRoot.startsWith(".." + sep))',
+      '}',
       '',
     ].join('\n'),
   )

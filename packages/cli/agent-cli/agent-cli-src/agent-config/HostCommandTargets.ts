@@ -1,15 +1,27 @@
 export type HostCommandTarget = {
   argsPolicy?: 'none' | 'pid'
   command: string
+  /** Environment the tool needs whatever shell dispatches it, merged over the inherited one. */
+  env?: Readonly<Record<string, string>>
   fixedArgs: readonly string[]
   server?: boolean
 }
+
+/**
+ * CocoaPods refuses to read podspecs under a non-UTF-8 locale, failing with an `ASCII-8BIT`
+ * normalization error, and the shell an agent's host operation runs in carries no `LANG`.
+ */
+const UTF8_LOCALE = { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' } as const
 
 /** Implementations for named host operations. Permissions still come solely from agentHostCommands. */
 export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> = {
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
   'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
   'app-dev': { command: './tao', fixedArgs: ['dev'], server: true },
+  // CocoaPods, xcodebuild, and Gradle each need the host, and the build runs all three as one
+  // sequence; naming the whole build keeps an agent from stitching it together from lower-level
+  // operations and a hand-written placement step.
+  'companion-host-build': { command: './dev', fixedArgs: ['companion-host-build'] },
   'simulators list': { command: 'xcrun', fixedArgs: ['simctl', 'list', 'devices'] },
   'simulators boot': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
   'simulators run': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
@@ -27,8 +39,8 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'xcode build-project': { command: 'xcodebuild', fixedArgs: ['-project'] },
   'xcode build-workspace': { command: 'xcodebuild', fixedArgs: ['-workspace'] },
   'xcode export-archive': { command: 'xcodebuild', fixedArgs: ['-exportArchive'] },
-  'pods install': { command: 'pod', fixedArgs: ['install'] },
-  'pods spec': { command: 'pod', fixedArgs: ['ipc', 'spec'] },
+  'pods install': { command: 'pod', env: UTF8_LOCALE, fixedArgs: ['install'] },
+  'pods spec': { command: 'pod', env: UTF8_LOCALE, fixedArgs: ['ipc', 'spec'] },
   'android devices': { command: 'adb', fixedArgs: ['devices'], argsPolicy: 'none' },
   'android state': { command: 'adb', fixedArgs: ['get-state'], argsPolicy: 'none' },
   'android emulators': { command: 'emulator', fixedArgs: ['-list-avds'], argsPolicy: 'none' },
