@@ -12,7 +12,7 @@ const messages = {
   binaryNumeric: (operator: string) => `Operator '${operator}' requires number values on both sides.`,
   checkCondition: '`check` requires a boolean condition.',
   checkPlacement:
-    '`check` stops its whole action, so it belongs in the action itself, not inside an `if` or `guard` block.',
+    '`check` stops its whole action, so it belongs in the action itself, not inside an `if`, `guard`, or `when do` block.',
   conditionalBranch: '`when` branches must produce compatible value types.',
   compactWhenSubject: 'The compact `when Subject Value / label Value` form requires a yes/no subject.',
   compactWhenLabel: (label: string, expected: string) =>
@@ -299,8 +299,9 @@ function validateIfCondition(condition: AST.Expression, ctx: ValidationContext):
 }
 
 /**
- * A false check returns from the callback that owns its block. An `if` or `guard` case compiles to a
- * nested callback, so a check there would skip only that sub-block while the action carried on.
+ * A false check returns from the callback that owns its block. An `if` block, a `guard` case, or a
+ * `when do` outcome compiles to a nested callback, so a check there would skip only that sub-block
+ * while the action carried on.
  */
 function validateCheck(statement: AST.CheckStatement, ctx: ValidationContext): void {
   const type = Type.ofExpression(statement.condition)
@@ -308,7 +309,7 @@ function validateCheck(statement: AST.CheckStatement, ctx: ValidationContext): v
     ctx.error(statement.condition, messages.checkCondition)
   }
   const owner = statement.$container.$container
-  if (AST.isIfActionStatement(owner) || AST.isGuardActionBranch(owner)) {
+  if (AST.isIfActionStatement(owner) || AST.isGuardActionBranch(owner) || AST.isWhenDoOutcome(owner)) {
     ctx.error(statement, messages.checkPlacement)
   }
 }

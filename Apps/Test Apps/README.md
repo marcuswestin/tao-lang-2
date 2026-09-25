@@ -292,3 +292,18 @@ Exercise the type system through a small UI that passes typed values into views.
 **Belongs here:** text, number, and list literals; custom type declarations for primitive, list, and item shapes; typed constructors and invocation type-fixing; item member access; `let` bindings whose inferred types are used as arguments; nested render-block `let` shadowing while captured outer references keep their value; argument binding by type, including out-of-order; inject arguments exposing typed values inside injected TS.
 
 **Does not belong here:** grammar edge cases without type-system meaning; layout, styling, navigation, data, or action behavior beyond what type coverage needs; stdlib runtime coverage; invalid or intentionally failing cases.
+
+## Effect Outcomes
+
+Exercise `when do` (Decisions §5): a call site that runs a verb, contains its failure, and names what
+happens next. The verb is a native action that writes a draft and then calls a foreign `Export` whose
+sibling `Export.ts` ends each call the way its `Mode` argument says.
+
+**Belongs here:** `saved` after the verb finishes, keeping its writes; a declared case the site names;
+`rejected -> Problem` catching a declared case the site does not name, with the declared sentence; `error
+-> Message` for a case the verb never declared, with the provider's own sentence; the verb's own write
+rolled back while the caller's earlier write survives; a verb's contract reached through a plain `do`.
+
+**Does not belong here:** the unhandled-failure warning, unknown or duplicate outcomes, and `check`
+placement, which are validator tests; `queued`, which is post-MVP; Studio's failure reports for an
+unhandled failure, which the runtime tests own.

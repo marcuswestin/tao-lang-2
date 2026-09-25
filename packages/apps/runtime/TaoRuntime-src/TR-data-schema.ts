@@ -1150,6 +1150,19 @@ export class RuntimeDataSchema {
         }
       },
       overlay => describeDataOverlay(overlay),
+      // Writes replace `working` and its row lists rather than editing them, so a shallow copy is
+      // the savepoint; only the id counter and the intent map change in place.
+      overlay => {
+        const working = { ...overlay.working }
+        const intents = new Map(overlay.intents)
+        return () => {
+          overlay.working = working
+          overlay.intents.clear()
+          for (const [key, intent] of intents) {
+            overlay.intents.set(key, intent)
+          }
+        }
+      },
     )
   }
 

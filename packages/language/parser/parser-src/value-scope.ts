@@ -913,7 +913,8 @@ function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
       carriers.push({ kind: 'action-block', block: current })
     }
     if (
-      (AST.isGuardActionBranch(current) || AST.isGuardRenderBranch(current) || AST.isWhenRenderBranch(current))
+      (AST.isGuardActionBranch(current) || AST.isGuardRenderBranch(current) || AST.isWhenRenderBranch(current)
+        || AST.isWhenDoOutcome(current))
       && current.payload
     ) {
       carriers.push({ kind: 'payload', payload: current.payload })

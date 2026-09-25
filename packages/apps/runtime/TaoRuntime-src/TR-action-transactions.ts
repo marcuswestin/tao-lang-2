@@ -12,8 +12,16 @@ type TransactionResource<ValueT> = {
   prepare?(value: ValueT): void
   rollbackCommit?(value: ValueT): void
   describe?(value: ValueT): readonly TaoDebugPendingWrite[]
+  savepoint?(value: ValueT): () => void
   value: ValueT
 }
+
+/**
+ * TaoResourceSavepoint captures one overlay so a contained `when do` failure can put it back. It
+ * returns the restore. An overlay that changes nothing in place below its own fields needs none: the
+ * default copies those fields and restores them.
+ */
+type TaoResourceSavepoint<ValueT> = (value: ValueT) => () => void
 
 /** TaoDebugPendingWrite is one write a transaction will publish at commit, beside its committed value. */
 export type TaoDebugPendingWrite = Readonly<{
@@ -60,14 +68,40 @@ class ActionTransaction {
     prepare?: (value: ValueT) => void,
     rollbackCommit?: (value: ValueT) => void,
     describe?: (value: ValueT) => readonly TaoDebugPendingWrite[],
+    savepoint?: TaoResourceSavepoint<ValueT>,
   ): ValueT {
     const existing = this.resources.get(key) as TransactionResource<ValueT> | undefined
     if (existing) {
       return existing.value
     }
     const value = create()
-    this.resources.set(key, { commit, describe, prepare, rollbackCommit, value })
+    this.resources.set(key, { commit, describe, prepare, rollbackCommit, savepoint, value })
     return value
+  }
+
+  /**
+   * savepoint captures every overlay and the commit effects queued so far, and returns the restore.
+   * Restoring drops an overlay the savepoint did not see, so a resource first touched after it reads
+   * its committed value again, and drops the commit effects queued after it. External effects that
+   * already ran stay recorded: they happened, and a retry must still know it.
+   */
+  savepoint(): () => void {
+    const restores = [...this.resources.values()].map(resource =>
+      (resource.savepoint ?? shallowSavepoint)(resource.value)
+    )
+    const keys = new Set(this.resources.keys())
+    const afterCommit = this.afterCommit.length
+    return () => {
+      for (const key of [...this.resources.keys()]) {
+        if (!keys.has(key)) {
+          this.resources.delete(key)
+        }
+      }
+      for (const restore of restores) {
+        restore()
+      }
+      this.afterCommit.length = afterCommit
+    }
   }
 
   /** pendingWrites describes every write this transaction would publish at commit. */
@@ -104,6 +138,13 @@ class ActionTransaction {
 
   rollback(): void {
     // Overlays are private until commit, so a body failure has no published resource to undo.
+  }
+}
+
+function shallowSavepoint<ValueT>(value: ValueT): () => void {
+  const fields = { ...value }
+  return () => {
+    Object.assign(value as object, fields)
   }
 }
 
@@ -359,7 +400,8 @@ async function enqueueDetached(body: () => PromiseLike<unknown>): Promise<void> 
   await runAction('async', [], body)
 }
 
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+/** isPromiseLike tells a suspended action body from one that finished synchronously. */
+export function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
   return typeof value === 'object'
     && value !== null
     && 'then' in value
@@ -374,8 +416,17 @@ export function transactionResource<ValueT>(
   prepare?: (value: ValueT) => void,
   rollbackCommit?: (value: ValueT) => void,
   describe?: (value: ValueT) => readonly TaoDebugPendingWrite[],
+  savepoint?: TaoResourceSavepoint<ValueT>,
 ): ValueT | undefined {
-  return activeTransaction?.resource(key, create, commit, prepare, rollbackCommit, describe)
+  return activeTransaction?.resource(key, create, commit, prepare, rollbackCommit, describe, savepoint)
+}
+
+/**
+ * takeActionSavepoint marks the active transaction's private overlays before a contained `when do`
+ * invocation and returns what puts them back. Outside a transaction there is nothing to restore.
+ */
+export function takeActionSavepoint(): () => void {
+  return activeTransaction?.savepoint() ?? (() => {})
 }
 
 /**

@@ -58,6 +58,7 @@ import {
   type TaoDesign,
   type TaoDesignSpec,
 } from './TR-design'
+import { runEffectOutcome, type TaoEffectContract } from './TR-effect-outcomes'
 import {
   captureArguments,
   latestFailureCapture,
@@ -464,6 +465,22 @@ class TR {
     ...args: Args
   ): void | Promise<void> {
     return action.evaluate().jsValue.invokeJoined(...args)
+  }
+
+  /**
+   * WhenDo runs one verb as `Do` does but contains its failure at this site: the verb's own writes
+   * roll back, and the outcome the site names runs with the selected user message.
+   */
+  static WhenDo(
+    invoke: () => void | Promise<void>,
+    contract: TaoEffectContract,
+    outcomes: readonly TR.CaseBranch<unknown>[],
+  ): unknown {
+    return runEffectOutcome(
+      invoke,
+      contract,
+      outcomes.map(([outcome, body]) => [outcome, (message: string) => body(new RuntimeValue(message))]),
+    )
   }
 
   /** Set updates a Tao state value. */
