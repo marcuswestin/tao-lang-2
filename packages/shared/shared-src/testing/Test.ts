@@ -2,6 +2,9 @@ import { Assert } from '../core/Assert'
 import { throwUserInput } from '../core/Errors'
 import * as Text from '../core/Text'
 import * as FS from '../FS'
+import * as Platform from '../Platform'
+import * as Repo from '../Repo'
+import { runCleanups } from './TestCleanup'
 import { testOverrideSlot } from './TestOverride'
 
 /** AfterEach wraps the active test runner's afterEach hook. */
@@ -40,21 +43,75 @@ export function MockModule(specifier: string, factory: () => unknown): void {
   getTestRuntime().mockModule(specifier, factory)
 }
 
-/** Test wraps the active test runner's test case API. */
-export const Test = createTestRunnerFunction('test')
+/** Test wraps each case in its own fixture lifetime, including concurrently running cases. */
+export const Test = ((...args: any[]) => {
+  const callbackIndex = args.findIndex((arg, index) => index > 0 && typeof arg === 'function')
+  if (callbackIndex >= 0) {
+    const callback = args[callbackIndex] as (...callbackArgs: any[]) => unknown
+    args[callbackIndex] = (...callbackArgs: any[]) =>
+      temporaryDirectoryScope.run(new Set<string>(), async () => {
+        let failure: unknown
+        try {
+          return await callback(...callbackArgs)
+        } catch (error) {
+          failure = error
+          throw error
+        } finally {
+          const directories = [...(temporaryDirectoryScope.current() ?? [])]
+          await runCleanups(
+            failure,
+            directories.map(directory => ({
+              label: directory,
+              run: async () => {
+                await FS.remove(directory)
+                temporaryDirectories.delete(directory)
+              },
+            })),
+            { channel: 'test-fixture', subject: 'test directory' },
+          )
+        }
+      })
+  }
+  return getTestRuntime().test(...args)
+}) as TestRunnerFunction
 let temporaryProjectSequence = 0
+const temporaryDirectories = new Set<string>()
+const temporaryDirectoryScope = Platform.createAsyncContext<Set<string>>()
+let exitCleanupRegistered = false
 
 /**
- * mkTestDir creates a unique temporary directory under the host temp directory. The canonical path
- * is returned because the host temp directory is a symlink on macOS: a test that builds a path from
- * the uncanonical one and compares it with a path the code under test resolved would never match.
+ * mkTestDir creates a unique directory in this worktree's ignored scratch. Use `location: 'host'`
+ * only when a test needs its fixture outside this worktree's Git ignore boundary. The test runner
+ * removes directories tests did not remove themselves; normal process exit is a second chance.
+ * An interrupted run leaves scratch for a later owner-reviewed clean.
  */
-export async function mkTestDir(prefix: string): Promise<string> {
-  return await FS.realPath(await FS.mkTmpDir(FS.resolvePath(prefix, FS.tmpdir())))
+export async function mkTestDir(prefix: string, options: { location?: 'host' | 'worktree' } = {}): Promise<string> {
+  Assert.input(
+    prefix.length > 0 && FS.basename(prefix) === prefix && prefix !== '.' && prefix !== '..',
+    `Test directory prefix must be one name: ${JSON.stringify(prefix)}.`,
+  )
+  const useHost = options.location === 'host'
+  const path = await FS.realPath(await (useHost ? FS.mkTmpDir(prefix) : Repo.mkScratchDir(prefix)))
+  temporaryDirectories.add(path)
+  temporaryDirectoryScope.current()?.add(path)
+  if (!exitCleanupRegistered) {
+    exitCleanupRegistered = true
+    Platform.onProcessExit(() => {
+      for (const directory of temporaryDirectories) {
+        try {
+          FS.removeSync(directory)
+        } catch {
+          // An interrupted cleanup leaves worktree scratch for the next explicit clean.
+        }
+      }
+    })
+  }
+  return path
 }
 
 /** WithTaoFilesOptions: `verbatim` writes sources as given, with no indent stripping and no synthesized project. */
 export type WithTaoFilesOptions = {
+  location?: 'host' | 'worktree'
   verbatim?: boolean
 }
 
@@ -65,7 +122,7 @@ export async function withTaoFiles<const Files extends Record<string, string>>(
   testFunction: (paths: { [Path in keyof Files]: string }, rootDir: string) => Promise<void> | void,
   options: WithTaoFilesOptions = {},
 ): Promise<void> {
-  const rootDir = await mkTestDir(prefix)
+  const rootDir = await mkTestDir(prefix, options)
   const paths = {} as { [Path in keyof Files]: string }
 
   try {

@@ -491,16 +491,16 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:416',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:423',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:491',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:205',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:930',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:935',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:940',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:965',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1204',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1225',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1408',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1450',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1476',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:206',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:931',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:936',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:941',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:966',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1205',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1226',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1409',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1451',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1477',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:108',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:130',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:407',
@@ -634,7 +634,6 @@ const PROCESS_ACCESS_ALLOWLIST = [
   // Studio's environment reads close with its own sweep onto `Platform.runtimeProcess`.
   'packages/ides/studio/studio-src/agent-chat/AgentChatProvider.ts',
   'packages/ides/studio/studio-src/agent-chat/AgentChatServer.ts',
-  'packages/ides/studio/studio-tests/studio-agent-chat-server.test.ts',
 ]
 
 /** The Electrobun main is emitted text that runs where no Tao module is loaded. */
@@ -769,6 +768,22 @@ export function conventionRuleIssues(
   return rule.allowlistBySite === true
     ? conventionSiteIssues(scanned, matches, allowlist, rule.staleDetail)
     : conventionIssues(scanned, matches, allowlist, rule.staleDetail)
+}
+
+const TEST_SOURCE_PATH_PATTERN = /(?:\.test\.[cm]?[jt]sx?|\.host\.spec\.[jt]s|\.jest-test\.[jt]sx?)$/u
+const DIRECT_TEST_TEMP_DIRECTORY_PATTERN = /\b(?:FS\.mkTmpDir|(?:nodeFs|fs)\.mkdtemp(?:Sync)?)\s*\(/gu
+
+/** testScratchConventionIssues keeps test-created directories on the shared lifecycle. */
+export function testScratchConventionIssues(files: readonly SourceFile[]): string[] {
+  return files
+    .filter(file => TEST_SOURCE_PATH_PATTERN.test(file.path) || file.path.includes('/studio-smoke/'))
+    .flatMap(file =>
+      [...file.source.matchAll(DIRECT_TEST_TEMP_DIRECTORY_PATTERN)].map(match =>
+        `${file.path}:${lineNumber(file.source, match.index)} creates a test directory directly; `
+        + 'use `mkTestDir` for fixtures or `Repo.mkScratchDir` for host specs.'
+      )
+    )
+    .sort()
 }
 
 /**
@@ -1114,6 +1129,7 @@ export async function repoLintIssues(
     file.path.startsWith('packages/') && (file.path.endsWith('.ts') || file.path.endsWith('.tsx'))
   )
   issues.push(...duplicateDescribeTitleIssues(packageFiles.filter(file => file.path.endsWith('.test.ts'))))
+  issues.push(...testScratchConventionIssues(packageFiles))
   for (const [name, rule] of Object.entries(CONVENTION_RULES)) {
     const files = name === 'rawError' || name === 'nodeImport' ? executableFiles : packageFiles
     issues.push(...conventionRuleIssues(rule, files))

@@ -1,5 +1,5 @@
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
-import { Expect, runCleanups, Test } from '@shared/test'
+import { Expect, mkTestDir, runCleanups, Test } from '@shared/test'
 import { openStudioPreviewSession } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from '../studio-tooling-src/StudioPreviewRuntime'
@@ -32,7 +32,7 @@ Test('generated keyboard navigation works in a real browser', async () => {
   let primaryFailure: unknown
   try {
     await FS.mkdir(artifactRoot)
-    exportRoot = await FS.mkTmpDir('tao-keyboard-navigation-export-')
+    exportRoot = await mkTestDir('tao-keyboard-navigation-export-')
     runtime = await StudioPreviewRuntime.create(
       runtimeToolchainRoot,
       FS.resolvePath('runtime', artifactRoot),
@@ -216,7 +216,7 @@ Test('generated WordFlower keyboard navigation works in a real browser', async (
   let primaryFailure: unknown
   try {
     await FS.mkdir(artifactRoot)
-    exportRoot = await FS.mkTmpDir('tao-wordflower-keyboard-export-')
+    exportRoot = await mkTestDir('tao-wordflower-keyboard-export-')
     runtime = await StudioPreviewRuntime.create(
       runtimeToolchainRoot,
       FS.resolvePath('runtime', artifactRoot),

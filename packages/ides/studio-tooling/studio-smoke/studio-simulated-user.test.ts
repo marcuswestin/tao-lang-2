@@ -1,4 +1,4 @@
-import { Errors, FS, Platform, Time } from '@shared'
+import { Errors, FS, Platform, Repo, Time } from '@shared'
 import { Expect, mkTestDir, runCleanups, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
@@ -67,7 +67,8 @@ Test('sketch persistence evidence requires catalog-only rectangle mutation', () 
 // The browser branch is the full editor/preview journey in the `verify-full` graph. The native branch
 // validates the unattended Electrobun capability probe; it does not repeat the browser journey.
 Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {
-  const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT'] ?? FS.tmpdir()
+  const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
+    ?? Repo.resolvePath('.artifacts/studio-smoke')
   let browser: StudioCdp | undefined
   let native: StartedStudioNative | undefined
   let preview: ReturnType<typeof startPreviewServer> | undefined
@@ -81,9 +82,9 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     await FS.mkdir(artifactParent)
     // The smoke artifact root normally lives under the repository's ignored `.artifacts` tree.
     // Project discovery intentionally honors Git ignores, so keep the synthetic project outside it.
-    projectRoot = await mkTestDir('tao-studio-simulated-user-')
+    projectRoot = await mkTestDir('tao-studio-simulated-user-', { location: 'host' })
     // Generated runtime state is disposable; durable screenshots and browser logs use artifactParent.
-    previewRuntimeRoot = await FS.mkTmpDir('tao-studio-simulated-runtime-')
+    previewRuntimeRoot = await Repo.mkScratchDir('tao-studio-simulated-runtime-')
     const sourcePath = FS.resolvePath('Smoke.tao', projectRoot)
     await FS.writeText(sourcePath, initialSource)
     // The real compile lane refuses a project without checked-in identity.

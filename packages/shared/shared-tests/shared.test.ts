@@ -116,6 +116,86 @@ Describe('Time', () => {
 })
 
 Describe('FS', () => {
+  Test('temporary test directories default to worktree scratch and leave no normal-run residue', async () => {
+    const source = FS.resolvePath('packages/shared/shared-src/testing/Test.ts', Repo.getRoot())
+    const script = `import { mkTestDir } from ${JSON.stringify(source)};`
+      + ` const directory = await mkTestDir('tao-test-exit-cleanup-');`
+      + ` process.stdout.write(directory);`
+    const result = await CLI.run(Platform.runtimeProcess.execPath, {
+      args: ['-e', script],
+      cwd: Repo.getRoot(),
+    })
+
+    Expect(result.exitCode).toBe(0)
+    const directory = result.stdout.trim()
+    Expect(FS.pathIsWithin(directory, Repo.resolvePath('.artifacts/scratch'))).toBe(true)
+    Expect(await FS.exists(directory)).toBe(false)
+  })
+
+  Test('the Bun test runner removes fixtures across test files even when one fails', async () => {
+    const suiteRoot = await mkTestDir('tao-test-runner-cleanup-')
+    cleanupPaths.push(suiteRoot)
+    const testModule = FS.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts', Repo.getRoot())
+    const fixturePaths = ['first.test.ts', 'second.test.ts'].map(name => FS.resolvePath(name, suiteRoot))
+    for (const fixturePath of fixturePaths) {
+      await FS.writeText(
+        fixturePath,
+        `import { Expect, mkTestDir, Test } from ${JSON.stringify(testModule)};\n`
+          + `Test('fixture', async () => { const directory = await mkTestDir('tao-test-worker-cleanup-'); `
+          + `process.stdout.write('FIXTURE=' + directory + '\\n'); `
+          + `${FS.basename(fixturePath) === 'second.test.ts' ? 'Expect(false).toBe(true);' : ''} });\n`,
+      )
+    }
+    const result = await CLI.run('bun', { args: ['test', ...fixturePaths], cwd: Repo.getRoot() })
+    const fixtures = [...result.stdout.matchAll(/FIXTURE=(\S+)/gu)].map(match => match[1]!)
+
+    Expect(result.exitCode).toBe(1)
+    Expect(fixtures).toHaveLength(2)
+    cleanupPaths.push(...fixtures)
+    for (const fixture of fixtures) {
+      Expect(await FS.exists(fixture)).toBe(false)
+    }
+  })
+
+  Test('a fixture can explicitly use host temp when it must be visible outside Git ignores', async () => {
+    const directory = await mkTestDir('tao-host-test-fixture-', { location: 'host' })
+    cleanupPaths.push(directory)
+
+    Expect(FS.pathIsWithin(await FS.realPath(directory), await FS.realPath(FS.tmpdir()))).toBe(true)
+    Expect(FS.pathIsWithin(directory, Repo.resolvePath('.artifacts/scratch'))).toBe(false)
+  })
+
+  Test('an absolute fixture prefix cannot silently move a test to host temp', async () => {
+    await Expect(mkTestDir(FS.resolvePath('tao-host-test-fixture-', FS.tmpdir())))
+      .rejects.toThrow('Test directory prefix must be one name')
+  })
+
+  Test('standalone tools fall back to host temp outside a Git checkout', async () => {
+    const outside = await mkTestDir('tao-standalone-scratch-', { location: 'host' })
+    cleanupPaths.push(outside)
+    const source = FS.resolvePath('packages/shared/shared-src/Repo.ts', Repo.getRoot())
+    const script = `import * as Repo from ${JSON.stringify(source)};`
+      + ` const directory = await Repo.mkScratchDirOrHost('tao-standalone-tool-');`
+      + ` process.stdout.write(directory);`
+    const result = await CLI.run(Platform.runtimeProcess.execPath, { args: ['-e', script], cwd: outside })
+    const directory = result.stdout.trim()
+
+    Expect(result.exitCode).toBe(0)
+    Expect(directory.length).toBeGreaterThan(0)
+    cleanupPaths.push(directory)
+    Expect(FS.pathIsWithin(await FS.realPath(directory), await FS.realPath(FS.tmpdir()))).toBe(true)
+  })
+
+  Test('discovers an explicitly requested scratch project without exposing it in repository scans', async () => {
+    const directory = await mkTestDir('tao-scratch-discovery-')
+    cleanupPaths.push(directory)
+    const fixture = FS.resolvePath('Source.tao', directory)
+    await FS.writeText(fixture, 'app Source { view Main }')
+
+    Expect(await Repo.filesUnder(directory)).toContain(fixture)
+    Expect(await Repo.filesUnder(Repo.getRoot())).not.toContain(fixture)
+  })
+
   Test('resolves repo-relative paths from the Git root', async () => {
     const repoRoot = Repo.resolvePath()
     const sharedPath = FS.resolvePath(`${repoRoot}/packages/shared`)
@@ -1555,7 +1635,8 @@ async function withDeclaredStdlibRoot<T>(value: string | undefined, run: () => P
 }
 
 async function tmpDir() {
-  const dir = await mkTestDir('tao-shared-test-')
+  // Several Repo tests here deliberately exercise paths outside any Git worktree.
+  const dir = await mkTestDir('tao-shared-test-', { location: 'host' })
   cleanupPaths.push(dir)
   return dir
 }
@@ -1574,7 +1655,7 @@ async function directoryFileSetsIdentity(roots: readonly string[]): Promise<stri
 }
 
 async function untrackedTmpDir() {
-  return await mkTestDir('tao-shared-test-')
+  return await mkTestDir('tao-shared-test-', { location: 'host' })
 }
 
 const stripAnsi = Text.stripAnsi

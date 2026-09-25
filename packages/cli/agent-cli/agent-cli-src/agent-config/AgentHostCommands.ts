@@ -1,4 +1,4 @@
-import { FS, Json, Text } from '@shared'
+import { FS, Json, Repo, Text } from '@shared'
 import { generate } from 'rulesync'
 import { agentHostCommands } from './HostCommandPolicy'
 
@@ -34,7 +34,7 @@ function hostShapes(prefixes: readonly (readonly string[])[]): string[] {
 
 /** Rulesync renders these lists without inherited rules only when the output directory is empty. */
 async function pristinePermissionLists(root: string): Promise<PermissionLists> {
-  const scratch = await FS.mkTmpDir('tao-agent-permissions-')
+  const scratch = await Repo.mkScratchDir('tao-agent-permissions-', root)
   try {
     await generate({
       configPath: '.rulesync/rulesync.jsonc',

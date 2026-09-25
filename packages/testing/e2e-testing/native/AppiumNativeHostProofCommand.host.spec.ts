@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { Errors, FS } from '@shared'
+import { Errors, FS, Repo } from '@shared'
 import {
   androidShellUrl,
   appiumFault,
@@ -53,7 +53,7 @@ test('retains the real target lease when a proof receipt reports an ambiguous fa
 })
 
 test('attempts Appium server close, uninstall, and target release independently while preserving every failure', async () => {
-  const artifactRoot = await FS.mkTmpDir('tao-appium-cleanup-')
+  const artifactRoot = await Repo.mkScratchDir('tao-appium-cleanup-')
   const events: string[] = []
   try {
     const failures = await cleanupAppiumNativeHostProof({
@@ -102,7 +102,7 @@ function source(
 }
 
 test('retains a target lease when driver cleanup was ambiguous', async () => {
-  const artifactRoot = await FS.mkTmpDir('tao-appium-retained-target-')
+  const artifactRoot = await Repo.mkScratchDir('tao-appium-retained-target-')
   const events: string[] = []
   try {
     const failures = await cleanupAppiumNativeHostProof({

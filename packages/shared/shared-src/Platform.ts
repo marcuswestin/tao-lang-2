@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import {
   type ChildProcess,
   spawn as spawnProcess,
@@ -13,6 +14,18 @@ import { throwUnexpected } from './core/Errors'
 
 export type ProcessEnv = NodeJS.ProcessEnv
 export type ProcessSignal = NodeJS.Signals
+
+/** createAsyncContext keeps task-owned state separate across concurrent asynchronous work. */
+export function createAsyncContext<Value>(): {
+  current: () => Value | undefined
+  run: <Result>(value: Value, work: () => Result) => Result
+} {
+  const storage = new AsyncLocalStorage<Value>()
+  return {
+    current: () => storage.getStore(),
+    run: (value, work) => storage.run(value, work),
+  }
+}
 
 /** cpuCount returns the number of CPUs available to this process. */
 export function cpuCount(): number {
@@ -139,6 +152,11 @@ export function spawnSync(command: string, options: SpawnSyncOptions = {}): Spaw
 export function onProcessSignal(signal: ProcessSignal, listener: () => void): () => void {
   process.on(signal, listener)
   return () => process.off(signal, listener)
+}
+
+/** onProcessExit registers synchronous cleanup for resources a normal process exit must retire. */
+export function onProcessExit(listener: () => void): void {
+  process.once('exit', listener)
 }
 
 /** readStdinText resolves the full text piped to this process on stdin, or '' when stdin is a live terminal. */

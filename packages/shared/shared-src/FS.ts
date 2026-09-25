@@ -3,6 +3,7 @@ import {
   existsSync as nodeExistsSync,
   readFileSync as nodeReadFileSync,
   realpathSync as nodeRealpathSync,
+  rmSync as nodeRmSync,
 } from 'node:fs'
 import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
@@ -111,6 +112,11 @@ function normalizePathPart(part: string): string {
  */
 export async function mkTmpDir(prefix: string): Promise<string> {
   return nodeFs.mkdtemp(nodePath.isAbsolute(prefix) ? prefix : nodePath.join(nodeOs.tmpdir(), prefix))
+}
+
+/** removeSync is for process-exit cleanup, when there is no event loop to await. */
+export function removeSync(path: string): void {
+  nodeRmSync(path, { force: true, recursive: true })
 }
 
 /** catching runs `check`, returning `fallback` instead of throwing when it fails. */

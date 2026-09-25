@@ -1,5 +1,5 @@
 import * as CLI from './CLI'
-import { throwHostEnvironment } from './core/Errors'
+import { throwHostEnvironment, throwUserInput } from './core/Errors'
 import * as FS from './FS'
 import { runtimeProcess } from './Platform'
 
@@ -48,6 +48,30 @@ export function resolvePath(inputPath = '.', cwd?: string): string {
   return FS.resolvePath(inputPath, getRoot(cwd))
 }
 
+/**
+ * mkScratchDir creates an owned temporary directory inside this worktree. Bootstrap installers
+ * alone use `.artifacts/tmp`, which `just clean-scratch` may empty while tests are running.
+ */
+export async function mkScratchDir(prefix: string, repositoryRoot = getRoot()): Promise<string> {
+  assertScratchPrefix(prefix)
+  const root = FS.resolvePath('.artifacts/scratch', repositoryRoot)
+  await FS.mkdir(root)
+  return await FS.mkTmpDir(FS.resolvePath(prefix, root))
+}
+
+/** mkScratchDirOrHost keeps standalone product tools usable when no Git worktree exists. */
+export async function mkScratchDirOrHost(prefix: string): Promise<string> {
+  assertScratchPrefix(prefix)
+  const root = tryGetRoot()
+  return root === undefined ? await FS.mkTmpDir(prefix) : await mkScratchDir(prefix, root)
+}
+
+function assertScratchPrefix(prefix: string): void {
+  if (prefix.length === 0 || FS.basename(prefix) !== prefix || prefix === '.' || prefix === '..') {
+    throwUserInput(`Scratch directory prefix must be one name: ${JSON.stringify(prefix)}.`)
+  }
+}
+
 /** tryGetRoot returns the Git worktree root for `cwd`, or undefined outside a worktree. */
 export function tryGetRoot(cwd = runtimeProcess.cwd()): string | undefined {
   try {
@@ -63,7 +87,7 @@ export function tryResolvePath(inputPath = '.', cwd?: string): string | undefine
   return root === undefined ? undefined : FS.resolvePath(inputPath, root)
 }
 
-/** filesUnder returns files under a path using Git ignore rules when the path is in a Git worktree. */
+/** filesUnder honors Git ignores in a worktree, except inside explicitly requested scratch projects. */
 export async function filesUnder(inputPath: string, options: FilesUnderOptions = {}): Promise<string[]> {
   const root = FS.resolvePath(inputPath)
   if (await FS.isFile(root)) {
@@ -75,6 +99,11 @@ export async function filesUnder(inputPath: string, options: FilesUnderOptions =
 
   const gitSearchRoot = await realPathOrInput(root)
   const gitRoot = tryGetRoot(gitSearchRoot)
+  // Tests create real projects here. Git ignores the parent `.artifacts` directory, but a caller
+  // asking for one scratch project must still see its contents. A scan of the repo root keeps Git ignores.
+  if (gitRoot !== undefined && FS.pathIsWithin(gitSearchRoot, FS.resolvePath('.artifacts/scratch', gitRoot))) {
+    return await filesystemFilesUnder(root, options)
+  }
   if (gitRoot !== undefined) {
     return (await gitFilesUnder(gitRoot, gitSearchRoot, options))
       .map(path => restoreInputPath(path, gitSearchRoot, root))

@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { FS, Platform, Repo } from '@shared'
 import { context } from 'esbuild'
 import { writeMergedTaoTextMateGrammar } from './ide-extension-src/syntax/textmate-grammar'
 
@@ -46,7 +46,7 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
   const repositoryRoot = FS.resolvePath('../../..', packageRoot)
   const watch = options.watch ?? Platform.runtimeProcess.argv.includes('--watch')
   const minify = options.minify ?? Platform.runtimeProcess.argv.includes('--minify')
-  const stagingPackageRoot = await FS.mkTmpDir('tao-ide-extension-build-')
+  const stagingPackageRoot = await Repo.mkScratchDir('tao-ide-extension-build-', repositoryRoot)
   const stagingGeneratedRoot = FS.resolvePath('_gen_ide-extension', stagingPackageRoot)
   const generatedTaoTextMateGrammar = FS.resolvePath(
     'ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json',

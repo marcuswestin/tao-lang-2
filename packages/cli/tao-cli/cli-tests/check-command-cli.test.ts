@@ -119,7 +119,7 @@ Describe('tao check CLI', () => {
       ...checkedProjectFile,
       'App.tao': 'view Main() {\n   render NoSuchView()\n}\n',
     }, async rootDir => {
-      const cwd = await mkTestDir('tao-cli-shallow-cwd-')
+      const cwd = await mkTestDir('tao-cli-shallow-cwd-', { location: 'host' })
       const previousCwd = Platform.runtimeProcess.cwd()
       try {
         Platform.runtimeProcess.chdir(cwd)

@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Json, Platform, Time } from '@shared'
+import { CLI, Errors, FS, Json, Platform, Repo, Time } from '@shared'
 import { Buffer } from 'node:buffer'
 
 type CdpResponse = {
@@ -127,7 +127,7 @@ export class StudioCdp {
 
   static async launchChrome(options: StudioCdpOptions = {}): Promise<StudioCdp> {
     const chromePath = await findChromePath()
-    const userDataRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-chrome-', FS.tmpdir()))
+    const userDataRoot = await Repo.mkScratchDirOrHost('tao-studio-chrome-')
     const startupOutput: string[] = []
     const command = CLI.start(chromePath, {
       args: [
