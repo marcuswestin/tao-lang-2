@@ -1,6 +1,6 @@
 # Decisions — Tao development, build, ship, and clean
 
-Status: **decided product behavior; bare `tao dev` implemented; web/desktop build and clean implemented on `feat/tao-cli-builds-and-clean`, pending integration**. These decisions were made in the
+Status: **decided product behavior; bare `tao dev`, web/desktop build, and clean landed on `main`; later ship and native slices remain planned**. These decisions were made in the
 September 2026 CLI workflow dialogue. They supersede conflicting _forward-looking_ command designs
 in `Docs/MVP Roadmap/Plan - Standalone Tao CLI.md` and
 `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`; much of the remaining contract
@@ -212,7 +212,7 @@ follow-up work; the landing report must say plainly that visible runtime behavio
 proved. Do not infer from this exception that mocked Apple responses prove TestFlight, signing, or
 App Store acceptance.
 
-Slice 2 verification on this branch: a real Clockwork Expo web export served HTTP 200 through its
+Slice 2 verification before landing: a real Clockwork Expo web export served HTTP 200 through its
 artifact launcher; a real Electrobun command produced a `.app` containing the site and Bun runtime;
 the combined web/desktop invocation retained both results; and selective `tao clean` was exercised
 with both No and default Yes. A visible `.app` window and Metro-backed desktop Fast Refresh remain

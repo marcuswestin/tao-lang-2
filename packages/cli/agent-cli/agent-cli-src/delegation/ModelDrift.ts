@@ -29,7 +29,7 @@ export function modelDriftWarnings(facts: ModelDriftFacts): string[] {
     && compareVersion(facts.claudeVersion, '2.1.280') < 0
   ) {
     warnings.push(
-      `Claude Code ${facts.claudeVersion} predates Opus 5.5 support (2.1.280); update the installed CLI before relying on deep reviewers.`,
+      `Claude Code ${facts.claudeVersion} predates Opus 5.5 support (2.1.280); update the installed CLI before relying on standard and deep Claude Code subagents.`,
     )
   }
 

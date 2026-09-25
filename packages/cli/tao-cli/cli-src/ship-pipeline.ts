@@ -70,7 +70,7 @@ export function planShipPipeline(input: ShipPipelineInput): ShipPipelinePlan {
       command: 'pod',
       args: ['install', '--ansi'],
       cwd: FS.resolvePath('ios', input.runtimeRoot),
-      env: { CP_HOME_DIR: cocoaPodsHome },
+      env: { CP_HOME_DIR: cocoaPodsHome, LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' },
     },
     archive: {
       command: 'xcodebuild',
