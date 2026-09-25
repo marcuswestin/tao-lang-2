@@ -1,5 +1,13 @@
+use CloudKit from @tao/data/providers/cloudkit
 use ExportDocument from @ui
 use StarterWorkspace, WordFlower from ./
+
+// WordFlower's hosted InstantDB variant saves snapshots. CloudKit supplies the per-row write
+// recovery that this sync journey exercises, while the test world replaces its host transport.
+app WordFlowerSyncTest = WordFlower with {
+   Name "WordFlower Sync Test"
+   Datasource CloudKit { }
+}
 
 test "WordFlower documents" on phone {
    test "edits a document on its own live destination" {
@@ -271,5 +279,44 @@ test "WordFlower export" on phone with StarterWorkspace {
       press #export
       expect missing text "Ready to share"
       expect missing text "Exporting needs a connection."
+   }
+}
+
+test "WordFlower sync" on phone with StarterWorkspace {
+   test "keeps an offline edit and syncs it on reconnect" {
+      run WordFlowerSyncTest
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      select #drafts[1] {
+         press #edit
+      }
+      network offline
+      enter "An offline revision." into #editDocumentBody
+      press #saveDocument
+      expect text "Saved body: An offline revision."
+      expect text "Waiting to sync"
+      network online
+      wait for sync
+      expect missing text "Waiting to sync"
+      relaunch
+      expect text "Saved body: An offline revision."
+   }
+   test "reports a rejected sync and retries the document write" {
+      run WordFlowerSyncTest
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      select #drafts[1] {
+         press #edit
+      }
+      datasource fails after update Document "Server rejected the document."
+      enter "A revised opening." into #editDocumentBody
+      press #saveDocument
+      expect text "Saved body: A revised opening."
+      expect text "Server rejected the document."
+      press #retryDocument
+      wait for sync
+      expect missing text "Server rejected the document."
    }
 }

@@ -105,10 +105,10 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Foreign `runs latest` scheduling (§8, §15)                  | **none — for the Developer**                                                  | TBD      | —                         |
 | Render failure containment and recovery (§15)               | **none — for the Developer** (no author surface; it is runtime policy)        | MVP      | —                         |
 | Fixtures, tests, query assertions (§16)                     | WordFlower · behavior tests                                                   | MVP      | partially in Current[^18] |
-| Fault injection (§16)                                       | Test World Controls · injected save failure; WordFlower · sync failure       | MVP      | in Current; app pending[^1] |
+| Fault injection (§16)                                       | Test World Controls · injected save failure; WordFlower · sync failure        | MVP      | in Current[^1]            |
 | Foreign action failure stubs by declared case (§16)         | WordFlower · export outcomes; Test Apps · Effect Outcomes check isolation     | MVP      | in Current                |
 | Foreign action value-return stubs (§16)                     | Skillet · the import journey's success value                                  | Post-MVP | —                         |
-| World controls: network, sync, relaunch (§16)               | Test World Controls · offline queue and reconnect; WordFlower · offline edits | MVP      | in Current; app pending   |
+| World controls: network, sync, relaunch (§16)               | Test World Controls · offline queue and reconnect; WordFlower · offline edits | MVP      | in Current                |
 | World controls: clock, collaborators (§16)                  | Skillet · a timer that outlives the window; Wayfare · a live conflict         | Post-MVP | —                         |
 | Scenarios, pseudolocale, review gallery (§16)               | WordFlower · scenario set                                                     | TBD      | partially in Current      |
 | Sketch placeholders and flexible space (§16)                | WordFlower · the Placeholder journey                                          | MVP      | in Current                |
@@ -204,11 +204,12 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     adapters, the Help layer, multi-target behavior, broader custom actions,
     and real-device assistive-technology validation.
 
-[^1]: The dialect migration tranche retired `data <status>` (Decisions §16). Data MVP now reaches
-    snapshot save error through network and fault controls, while Test World Controls exercises the
-    granular queue and retry path. Skillet's WordFlower journey remains to be graduated with the
-    decided spelling (`datasource fails after create Membership "…"`); the current checks do not
-    prove its backend transaction atomicity.
+[^1]: The dialect migration tranche retired `data <status>` (Decisions §16). Data MVP reaches
+    snapshot save error through fault injection. Test World Controls and WordFlower
+    exercise a granular provider's offline queue, injected failure, and retry; WordFlower uses a
+    test-only CloudKit variant because its hosted InstantDB variant saves snapshots. Skillet's
+    Membership failure journey remains to be graduated and backend transaction atomicity remains
+    outside these in-process tests.
 
 [^14]: HNReader binds a query-driven feed store beside a CloudKit store for bookmarks, and a patch on
     the bound name gives the shipped app its own bookmarks storage key without forking the

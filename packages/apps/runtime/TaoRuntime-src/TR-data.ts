@@ -274,7 +274,13 @@ function useConfiguredProviderBinding(
   // The wrapped declaration must be stable across renders: the app root reconstructs the
   // configured value per render, and bindConfigured treats a new declaration object as a full
   // rebind. Only `source.declaration` and the studio overlay are stable inputs.
-  const studioProvider = StudioEnvironmentControls.useProvider(source.declaration.provider)
+  const requestedStudioProvider = StudioEnvironmentControls.useProvider(source.declaration.provider)
+  // A Tao check uses the Studio fixture seeding seam, but snapshot providers get their behavior
+  // from the provider-faithful test world. The Studio overlay would erase their recovery/network
+  // capabilities. Fill providers still need its cell-local persistence and controlled fills.
+  const studioProvider = isDataTestMode() && source.declaration.provider.fills === undefined
+    ? source.declaration.provider
+    : requestedStudioProvider
   const declaration = React.useMemo<TaoDatasourceDeclaration>(() =>
     studioProvider === source.declaration.provider
       ? source.declaration
