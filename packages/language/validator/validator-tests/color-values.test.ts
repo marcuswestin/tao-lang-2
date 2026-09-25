@@ -47,6 +47,84 @@ Describe('validator: color values', () => {
     Expect(validationErrorMessages(result)).toEqual([])
   })
 
+  Test('links a color only one mounted design declares and names each design that lacks it', async () => {
+    const result = await Validator.validateCode(`
+      use StackNav from @tao/nav
+      ${themeDesign('Light')}
+      ${themeDesign('Dark', 'glow #ffcc00')}
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Light }
+      app DemoDark = Demo with { Name "Demo Dark" Design Dark }
+      scene Main() { Title "Main" render Badge("Final", Tint: glow) }
+      view Glowing(Tint color default glow) { render Surface() [background Tint] }
+      ${colorViews}
+    `)
+
+    // The name resolves through the refined app's design, so neither use reads as unknown; each is
+    // then an error because `Light`, which the base app mounts, lacks it.
+    Expect(validationErrorMessages(result)).toEqual([
+      colorMessages.missingDesignColor('Light', 'glow', 'Main'),
+      colorMessages.missingDesignColor('Light', 'glow', 'Glowing'),
+    ])
+  })
+
+  Test('accepts a color that only a design mounted through a refinement declares', async () => {
+    const result = await Validator.validateCode(`
+      use StackNav from @tao/nav
+      ${themeDesign('Dark', 'glow #ffcc00')}
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } }
+      app DemoDark = Demo with { Name "Demo Dark" Design Dark }
+      scene Main() { Title "Main" render Swatch(Tint: glow) }
+      view Swatch(Tint color default glow) { render Surface() [background Tint] }
+      view Surface() {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+    `)
+
+    // The views carry no named style: which design a style entry is checked against is the design
+    // validator's own selection, which does not yet see a refinement.
+    Expect(validationErrorMessages(result)).toEqual([])
+  })
+
+  for (const order of [['First', 'Second'], ['Second', 'First']] as const) {
+    Test(
+      `rejects a shade one mounting design lacks whichever app is declared first (${order.join(', ')})`,
+      async () => {
+        const apps = {
+          First: 'app First { Name "First" Navigator StackNav { Initial Main } Design Plain }',
+          Second: 'app Second { Name "Second" Navigator StackNav { Initial Main } Design Rich }',
+        }
+        const result = await Validator.validateCode(`
+        use StackNav from @tao/nav
+        workspace design Plain {
+          colors {
+            accent #2f6b4f
+            inkMuted #6b7280
+          }
+          styles { dot [width 8] }
+        }
+        workspace design Rich {
+          colors {
+            accent #2f6b4f { 20 #cfe3d8 }
+            inkMuted #6b7280
+          }
+          styles { dot [width 8] }
+        }
+        ${apps[order[0]]}
+        ${apps[order[1]]}
+        scene Main() { Title "Main" render StatusBadge() }
+        view StatusBadge() { render Badge("Soft", Tint: accent.20) }
+        ${colorViews}
+      `)
+
+        Expect(validationErrorMessages(result)).toEqual([
+          colorMessages.missingDesignColor('Plain', 'accent.20', 'StatusBadge'),
+        ])
+      },
+    )
+  }
+
   Test(
     'rejects a text or number literal where a color is expected',
     rejects(
@@ -137,10 +215,11 @@ Describe('validator: color values', () => {
   })
 })
 
-function themeDesign(name: string): string {
+function themeDesign(name: string, extraColors = ''): string {
   return `
     workspace design ${name} {
       colors {
+        ${extraColors}
         accent #2f6b4f { 20 #cfe3d8 }
         inkMuted #6b7280
         ink #111111

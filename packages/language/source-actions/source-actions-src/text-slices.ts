@@ -5,6 +5,8 @@ export type StatementSlice<StatementT extends AST.Node = AST.Node> = {
   statement: StatementT
   /** leading holds comment lines between the previous statement and this one. */
   leading: string
+  /** blankLineBefore says whether a blank line set this statement, or its leading comments, apart from the last. */
+  blankLineBefore: boolean
   /** body holds the statement source from its first to its last token, extended to the line end. */
   body: string
 }
@@ -27,9 +29,11 @@ export function statementSlices<StatementT extends AST.Node>(
     const cstNode = statement.$cstNode!
     const nextStart = statements[index + 1]?.$cstNode!.offset
     const bodyEnd = statementBodyEnd(text, cstNode.end, nextStart ?? regionEnd)
+    const gap = text.slice(sliceStart, cstNode.offset)
     slices.push({
       statement,
-      leading: trimBlankLines(text.slice(sliceStart, cstNode.offset)),
+      leading: trimBlankLines(gap),
+      blankLineBefore: startsWithBlankLine(gap),
       body: text.slice(cstNode.offset, bodyEnd).trimEnd(),
     })
     sliceStart = bodyEnd
@@ -45,11 +49,11 @@ export function sliceText(slice: StatementSlice): string {
 /** TextPiece declares one reassembled source chunk and whether a blank line belongs above it. */
 export type TextPiece = {
   text: string
-  /** blankBefore keeps a blank line above comment-led pieces; the formatter preserves it. */
+  /** blankBefore keeps a blank line above the piece; the formatter preserves it. */
   blankBefore: boolean
 }
 
-/** assemblePieces joins reassembled source pieces, leaving a blank line above comment-led pieces. */
+/** assemblePieces joins reassembled source pieces, leaving a blank line above each piece that asks for one. */
 export function assemblePieces(pieces: readonly TextPiece[]): string {
   return pieces
     .filter(piece => piece.text !== '')
@@ -64,6 +68,17 @@ export function trimBlankLines(text: string): string {
     .map(line => line.trimEnd())
     .filter(line => line.trim() !== '')
     .join('\n')
+}
+
+/**
+ * startsWithBlankLine returns whether the source between two statements has a blank line before its
+ * first comment, or before the next statement when there is no comment. The gap's first line is the
+ * rest of the previous statement's line, and its last line is the indentation of what follows.
+ */
+export function startsWithBlankLine(gap: string): boolean {
+  const lines = gap.split('\n').slice(1)
+  const firstContent = lines.findIndex(line => line.trim() !== '')
+  return (firstContent === -1 ? lines.length - 1 : firstContent) > 0
 }
 
 /** closeBraceOffset returns the offset of the `}` that closes a braced node, or its end when it has none. */

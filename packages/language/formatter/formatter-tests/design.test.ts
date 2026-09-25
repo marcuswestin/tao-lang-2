@@ -20,6 +20,47 @@ Describe('formatter: minimal design', () => {
   )
 
   Test(
+    'keeps one blank line an author left between design members and entries, and adds none',
+    formats(
+      `workspace
+design Theme {
+   colors {
+      paper #fff
+      ink #111
+
+
+      accent #0a0
+   }
+
+   styles {
+      card [background paper]
+      panel [background paper]
+
+      title [ink ink]
+   }
+}`,
+      `
+        workspace
+        design Theme {
+           colors {
+              paper #fff
+              ink #111
+
+              accent #0a0
+           }
+
+           styles {
+              card [background paper]
+              panel [background paper]
+
+              title [ink ink]
+           }
+        }
+      `,
+    ),
+  )
+
+  Test(
     'formats a declaration header clause and a clearing term like a render clause',
     formats(
       `workspace

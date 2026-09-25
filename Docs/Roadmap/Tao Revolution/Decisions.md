@@ -1954,7 +1954,8 @@ design SkilletDesign {
   `color` value; inside, `background Tint` reads it, resolved against the mounted design at render
   so it follows the scheme and whichever design is mounted. Every value starts as a design name — no
   conversion from text or data reaches a clause — so the set of colors a clause can receive stays
-  listed in source. WordFlower's document status badge forces it: the badge tints a dot inside
+  listed in source. A name, with its shade, must exist in every design the project's apps mount,
+  refinements included, or it is a compile error naming the design that lacks it. WordFlower's document status badge forces it: the badge tints a dot inside
   itself, which a caller's clauses cannot reach. `size` parameters, `color` state, and aliases wait
   for a feature that forces them.
 - **Generated interaction affordances use ordinary element defaults** (KEY-D13). `Hint` styles an anchored

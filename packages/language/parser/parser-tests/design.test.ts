@@ -482,6 +482,44 @@ Describe('parser: color values', () => {
       "No value or design color named 'acent' is in scope.",
     ])
   })
+
+  for (const plainFirst of [true, false]) {
+    Test(`links a shade to the color that declares it (${plainFirst ? 'plain' : 'rich'} app first)`, async () => {
+      const apps = [
+        'app First { view Main Design Plain }',
+        'app Second { view Main Design Rich }',
+      ]
+      const parsed = await testParseCode(`
+        workspace design Plain { colors { accent #2f6b4f } }
+        workspace design Rich { colors { accent #2f6b4f { 20 #cfe3d8 } } }
+        ${(plainFirst ? apps : apps.toReversed()).join('\n')}
+        view Main() { render Badge(Tint: accent.20) }
+        view Badge(Tint color) { }
+      `)
+
+      const argument = AST.streamAllContents(parsed.entry.ast).find(AST.isArgument)?.value
+      Expect.Is(argument, AST.isMemberAccessExpression)
+      Expect.Is(argument.target.ref, AST.isDesignColorEntry)
+      Expect(AST.designColorShade(argument.target.ref, 20)).toBeDefined()
+    })
+  }
+
+  Test('links a color that only a design mounted through a refinement declares', async () => {
+    const parsed = await testParseCode(`
+      workspace design Light { colors { accent #2f6b4f } }
+      workspace design Dark { colors { glow #ffcc00 } }
+      app Demo { view Main Design Light }
+      app DemoDark = Demo with { Design Dark }
+      view Main() { render Badge(Tint: glow) }
+      view Badge(Tint color) { }
+    `)
+
+    Expect(AST.mountedDesigns([parsed.entry.ast]).map(design => design.name)).toEqual(['Dark', 'Light'])
+    const argument = AST.streamAllContents(parsed.entry.ast).find(AST.isArgument)?.value
+    Expect.Is(argument, AST.isValueReference)
+    Expect.Is(argument.target.ref, AST.isDesignColorEntry)
+    Expect(argument.target.ref.name).toBe('glow')
+  })
 })
 
 type RenameEdit = { changes?: Record<string, readonly Langium.TextEdit[]> } | null | undefined

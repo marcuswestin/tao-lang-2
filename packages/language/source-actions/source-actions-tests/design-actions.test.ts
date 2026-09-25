@@ -1,5 +1,6 @@
 import { Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { moveFlatCatalogIntoBlocks } from '../source-actions-src/design-actions'
 import SourceActions from '../source-actions-src/source-actions'
 import { parseDocument, parseRawDocument, sourceActionOptionsFor } from './test-source-actions'
 
@@ -17,6 +18,20 @@ function fixes(source: string, expected: string): () => Promise<void> {
 
     Expect(fixed).toBe(`${Text.stripIndent(expected)}\n`)
     Expect(await fixText(fixed)).toBe(fixed)
+  }
+}
+
+/**
+ * migrates returns a test callback asserting the flat-catalog migration's own text, before the
+ * formatter runs, line for line with indentation ignored: the migration decides which blank lines
+ * survive, and the formatter decides the indentation.
+ */
+function migrates(source: string, expected: string): () => Promise<void> {
+  const unindented = (text: string) => text.split('\n').map(line => line.trim()).join('\n')
+  return async () => {
+    const migrated = moveFlatCatalogIntoBlocks(await parseDocument(source))
+
+    Expect(unindented(migrated ?? '')).toBe(unindented(`${Text.stripIndent(expected)}\n`))
   }
 }
 
@@ -130,6 +145,38 @@ Describe('fixSource legacy visual heads', () => {
 })
 
 Describe('fixSource flat design catalog', () => {
+  Test(
+    'keeps the blank lines that group flat members through the move and formatting',
+    fixes(
+      `
+        design AppDesign {
+           paper #fffdf8
+           ink #172019
+
+           accent #3f7657
+           card [pad 12, bg paper]
+
+           panel [pad 20, bg paper]
+        }
+      `,
+      `
+        design AppDesign {
+           colors {
+              paper #fffdf8
+              ink #172019
+
+              accent #3f7657
+           }
+           styles {
+              card [pad 12, background paper]
+
+              panel [pad 20, background paper]
+           }
+        }
+      `,
+    ),
+  )
+
   Test(
     'moves flat colors and styles into new typed blocks where the first of each stood',
     fixes(
@@ -296,5 +343,116 @@ Describe('fixSource flat design catalog', () => {
          render Text("hi") [ink ink]
       }
     `),
+  )
+})
+
+Describe('moveFlatCatalogIntoBlocks blank-line grouping', () => {
+  Test(
+    'keeps one blank line wherever the source grouped members without a comment',
+    migrates(
+      `
+        design AppDesign {
+           paper #fffdf8
+           ink #172019
+
+
+           accent #3f7657
+           card [pad 12]
+
+           panel [pad 8]
+        }
+      `,
+      `
+        design AppDesign {
+           colors {
+              paper #fffdf8
+              ink #172019
+
+              accent #3f7657
+           }
+           styles {
+              card [pad 12]
+
+              panel [pad 8]
+           }
+        }
+      `,
+    ),
+  )
+
+  Test(
+    'keeps blank lines between typed blocks it does not move, and above a trailing comment',
+    migrates(
+      `
+        design AppDesign {
+           colors {
+              paper #fffdf8
+           }
+
+           sizes {
+              gutter 8.px
+           }
+
+           text {
+              body [size 16]
+           }
+           card [pad gutter]
+
+           // A trailing note keeps its blank line.
+        }
+      `,
+      `
+        design AppDesign {
+           colors {
+              paper #fffdf8
+           }
+
+           sizes {
+              gutter 8.px
+           }
+
+           text {
+              body [size 16]
+           }
+           styles {
+              card [pad gutter]
+           }
+
+           // A trailing note keeps its blank line.
+        }
+      `,
+    ),
+  )
+
+  Test(
+    'keeps a blank line above a moved member that lands in an existing block',
+    migrates(
+      `
+        design AppDesign {
+           colors {
+              paper #fffdf8
+           }
+           styles {
+              card [pad 12]
+           }
+
+           ink #172019
+           panel [pad 8]
+        }
+      `,
+      `
+        design AppDesign {
+           colors {
+              paper #fffdf8
+
+              ink #172019
+           }
+           styles {
+              card [pad 12]
+              panel [pad 8]
+           }
+        }
+      `,
+    ),
   )
 })

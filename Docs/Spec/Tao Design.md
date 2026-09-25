@@ -204,7 +204,8 @@ A caller passes a design color name, `StatusBadge("Final", Tint: accent)`, inclu
 a derived color follows `Scheme`. Every value starts as a design name: text, numbers, data, and
 conversions never become a `color`, so the colors any clause can receive stay listed in source.
 Diagnostics cover a value of the wrong type, a Capitalized word that names no value, a color value
-standing alone as an entry (it needs a clause head), and an unknown shade. `color` is only a view
+standing alone as an entry (it needs a clause head), an unknown shade, and a name or shade missing
+from any design the project's apps mount. `color` is only a view
 parameter's type; `size` parameters, `color` state, `set`, and aliases wait for a feature that
 forces them.
 

@@ -179,10 +179,13 @@ WordFlower `2 - Next` held the contract (`WordFlower.tao-next` header, "DESIGN V
 now matches it and both read absorbed. It finishes the MVP design surface in four decision groups,
 recorded in `Decisions.md` §13. Choices the implementation made where the contract was silent:
 `color` is rejected everywhere except a view parameter; a design name counts as a `color` only
-directly as an argument or a default (not inside a `when` passed as one); where several designs can
-mount a view a name must exist in at least one, and each app resolves it against its own; `color` is
-now a keyword. Not built: go-to-definition from `background Tint` to its parameter, and a journey
-step that asserts a rendered color.
+directly as an argument or a default (not inside a `when` passed as one); a name and its shade must
+exist in every design the project's apps mount, refinements included (after review found the check
+depended on app order); `color` is now a keyword, and Studio refuses it and Capitalized names for new
+colors, sizes, and forks. Not built: go-to-definition from `background Tint` to its parameter, a
+journey step that asserts a rendered color, rename of a shade across `Tint: accent.20` arguments,
+and relinking a view's color arguments when an app's `Design` changes. Style-reference checks
+(`selectedWorkspaceDesigns` in `design-validator.ts`) still ignore designs set by refinement.
 
 1. **The clause-list casing rule is a compile error.** A reserved lowercase word is a clause head,
    any other lowercase word is a design name (a style in entry position, a color or size in value

@@ -3,6 +3,7 @@ import {
   assemblePieces,
   closeBraceOffset,
   sliceText,
+  startsWithBlankLine,
   type StatementSlice,
   statementSlices,
   type TextPiece,
@@ -32,6 +33,7 @@ export function renameLegacyVisualHeads(document: AST.Document): string | undefi
  * `colors { }` block and its flat styles into its `styles { }` block, or undefined when no design has
  * a flat member. Moved members append to an existing block in source order, carrying their leading
  * comment lines; a design without the block gets one where its first flat member of that kind stood.
+ * A member that followed a blank line, moved or not, keeps one blank line above it.
  */
 export function moveFlatCatalogIntoBlocks(document: AST.Document): string | undefined {
   const text = document.textDocument.getText()
@@ -90,15 +92,15 @@ function flatCatalogEdit(text: string, design: AST.DesignDeclaration): TextEdit[
     if (moved.length === 0) {
       continue
     }
-    const entries = assemblePieces(moved.map(commentLedPiece))
-    const commentLed = moved[0]!.leading !== ''
+    const entries = assemblePieces(moved.map(memberPiece))
+    const blankBefore = memberPiece(moved[0]!).blankBefore
     landings.set(
       (existing ?? moved[0]!).statement,
       existing === undefined
-        ? { text: `${block.keyword} {\n${entries}\n}`, blankBefore: commentLed }
+        ? { text: `${block.keyword} {\n${entries}\n}`, blankBefore }
         : {
-          ...commentLedPiece(existing),
-          text: appendToBlock(text, existing, { text: entries, blankBefore: commentLed }),
+          ...memberPiece(existing),
+          text: appendToBlock(text, existing, { text: entries, blankBefore }),
         },
     )
   }
@@ -107,13 +109,14 @@ function flatCatalogEdit(text: string, design: AST.DesignDeclaration): TextEdit[
       ? [landings.get(slice.statement)!]
       : isFlatMember(slice.statement)
       ? []
-      : [commentLedPiece(slice)]
+      : [memberPiece(slice)]
   )
-  const trailing = trimBlankLines(text.slice(end, bodyEnd))
+  const trailing = text.slice(end, bodyEnd)
+  const trailingPiece = { text: trimBlankLines(trailing), blankBefore: startsWithBlankLine(trailing) }
   return [{
     start: bodyStart,
     end: bodyEnd,
-    text: `\n${assemblePieces([...pieces, { text: trailing, blankBefore: false }])}\n`,
+    text: `\n${assemblePieces([...pieces, trailingPiece])}\n`,
   }]
 }
 
@@ -121,14 +124,17 @@ function isFlatMember(member: AST.DesignMember): boolean {
   return flatCatalogBlocks.some(block => block.isFlatMember(member))
 }
 
-/** commentLedPiece returns a slice's text, keeping a blank line above it when comments lead it. */
-function commentLedPiece(slice: StatementSlice<AST.DesignMember>): TextPiece {
-  return { text: sliceText(slice), blankBefore: slice.leading !== '' }
+/**
+ * memberPiece returns a slice's text, keeping a blank line above it when the source had one there or
+ * when comments lead it, so the migration never collapses the author's grouping.
+ */
+function memberPiece(slice: StatementSlice<AST.DesignMember>): TextPiece {
+  return { text: sliceText(slice), blankBefore: slice.blankLineBefore || slice.leading !== '' }
 }
 
 /**
  * appendToBlock returns an existing typed block's slice text with `entries` added before its closing
- * brace, keeping a blank line above comment-led entries when the block already holds something.
+ * brace, keeping a blank line above entries that ask for one when the block already holds something.
  */
 function appendToBlock(text: string, block: StatementSlice<AST.DesignMember>, entries: TextPiece): string {
   const blockText = sliceText(block)

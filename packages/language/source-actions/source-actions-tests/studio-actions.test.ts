@@ -11,7 +11,7 @@ import SourceActions, {
   type StudioSnapSketchToFlowPatchRequest,
   type StudioSourcePatchRequest,
 } from '../source-actions-src/source-actions'
-import { parseDocument, parseRawDocument } from './test-source-actions'
+import { parseDocument, parseRawDocument, sourceActionOptionsFor } from './test-source-actions'
 
 Describe('Studio source-action patch bus', () => {
   Test('inserts a current-dialect component and returns a full-document versioned edit', async () => {
@@ -663,6 +663,137 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).toContain('Text [size 18]')
     Expect(patch.content).toContain('render Text("First")')
     Expect(patch.content).not.toContain('Text("First") [size 18]')
+  })
+
+  Test('lands new colors and element defaults of a design without typed blocks as canonical source', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+
+      design Theme { }
+
+      view MainView() {
+         render Text("First") [size 18, background #c00]
+      }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+
+    const colored = await SourceActions.applyStudioPatch(document, {
+      entry: ['background', '#c00'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName: 'danger' },
+      renderId: id,
+    })
+    Expect(colored.content).toContain('design Theme {\n   colors {\n      danger #c00\n   }\n}')
+    Expect(colored.content).toContain('Text("First") [size 18, background danger]')
+    await expectCanonical(colored.content)
+
+    const defaulted = await SourceActions.applyStudioPatch(document, {
+      entry: ['size', 18],
+      kind: 'set-style-entry',
+      landing: { elementName: 'Text', kind: 'element-default' },
+      renderId: id,
+    })
+    Expect(defaulted.content).toContain('design Theme {\n   styles {\n      Text [size 18]\n   }\n}')
+    await expectCanonical(defaulted.content)
+  })
+
+  Test('lands new colors and forks of a flat design in typed blocks, leaving flat members as written', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { ink #111 body [ink ink, size 14] }
+      view MainView() { render Text("First") [body, size 18, background #c00] }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+
+    const colored = await SourceActions.applyStudioPatch(document, {
+      entry: ['background', '#c00'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName: 'danger' },
+      renderId: id,
+    })
+    Expect(colored.content).toContain('   ink #111\n')
+    Expect(colored.content).toContain('   colors {\n      danger #c00\n   }\n')
+
+    const recolored = await SourceActions.applyStudioPatch(document, {
+      entry: ['background', '#c00'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName: 'ink' },
+      renderId: id,
+    })
+    Expect(recolored.content).toContain('   ink #c00\n')
+    Expect(recolored.content).not.toContain('colors {')
+
+    const forked = await SourceActions.applyStudioPatch(document, {
+      entry: ['size', 18],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'body', kind: 'style-bundle', mode: 'fork' },
+      renderId: id,
+    })
+    Expect(forked.content).toContain('   body [ink ink, size 14]\n')
+    Expect(forked.content).toContain('   styles {\n      bodyVariant [ink ink, size 18]\n   }\n')
+    Expect(forked.content).toContain('Text("First") [bodyVariant, background #c00]')
+  })
+
+  Test('refuses a Capitalized or keyword name for a new color, size, or fork', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { colors { ink #111 } styles { card [pad 4] } }
+      view MainView() { render Text("First") [card, pad 12, background #c00] }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+    const color = (tokenName: string): StudioSourcePatchRequest => ({
+      entry: ['background', '#c00'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName },
+      renderId: id,
+    })
+    const size = (tokenName: string): StudioSourcePatchRequest => ({
+      entry: ['pad', 12],
+      kind: 'set-style-entry',
+      landing: { kind: 'size-token', tokenName },
+      renderId: id,
+    })
+    const fork = (forkName: string): StudioSourcePatchRequest => ({
+      entry: ['pad', 12],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'card', forkName, kind: 'style-bundle', mode: 'fork' },
+      renderId: id,
+    })
+
+    await Expect(SourceActions.applyStudioPatch(document, color('Danger'))).rejects.toThrow(
+      "Studio color token names start with a lowercase letter; use 'danger' instead of 'Danger'.",
+    )
+    await Expect(SourceActions.applyStudioPatch(document, color('color'))).rejects.toThrow(
+      "Studio color token name 'color' is a Tao keyword; choose another name.",
+    )
+    await Expect(SourceActions.applyStudioPatch(document, size('CardPad'))).rejects.toThrow(
+      "Studio size token names start with a lowercase letter; use 'cardPad' instead of 'CardPad'.",
+    )
+    await Expect(SourceActions.applyStudioPatch(document, size('when'))).rejects.toThrow(
+      "Studio size token name 'when' is a Tao keyword; choose another name.",
+    )
+    await Expect(SourceActions.applyStudioPatch(document, fork('Special'))).rejects.toThrow(
+      "Studio forked style bundle names start with a lowercase letter; use 'special' instead of 'Special'.",
+    )
+    await Expect(SourceActions.applyStudioPatch(document, fork('color'))).rejects.toThrow(
+      "Studio forked style bundle name 'color' is a Tao keyword; choose another name.",
+    )
+    // A keyword prefix is still a name.
+    Expect((await SourceActions.applyStudioPatch(document, color('colorful'))).content).toContain('colorful #c00')
+  })
+
+  Test('names a default fork of a Capitalized style as a lowercase style', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { styles { Card [pad 4] } }
+      view MainView() { render Text("First") [Card, pad 12] }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      entry: ['pad', 12],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'Card', kind: 'style-bundle', mode: 'fork' },
+      renderId: renderId(requireRenderByText(document, 'Text("First")')),
+    })
+
+    Expect(patch.content).toContain('cardVariant [pad 12]')
+    Expect(patch.content).toContain('Text("First") [cardVariant]')
   })
 
   Test('accepts exactly the current Studio layout vocabulary', async () => {
@@ -2441,6 +2572,12 @@ Describe('Studio canvas-mode source actions', () => {
     Expect(patch.content.indexOf('Row()')).toBeLessThan(patch.content.indexOf('#studio_rect_00720031'))
   })
 })
+
+/** expectCanonical asserts that `tao check` finds edited source canonical: every source fix leaves it unchanged. */
+async function expectCanonical(content: string): Promise<void> {
+  const document = await parseRawDocument(content)
+  Expect(await SourceActions.fixSource(document, await sourceActionOptionsFor(document))).toBe(content)
+}
 
 function source(text: string): string {
   return `${Text.stripIndent(text)}\n`
