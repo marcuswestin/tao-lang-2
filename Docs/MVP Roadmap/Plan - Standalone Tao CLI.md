@@ -940,6 +940,16 @@ above; where the two disagree, these are later and win.
     seconds, acceptance passed in 66 seconds, and the gate completed in 86 seconds. Its retained logs
     are under `.artifacts/standalone-vm/tao-acceptance-1790362625-11421/logs/`.
 
+    The opt-in `just standalone-cli-clean-machine-audit` runs the same acceptance
+    with metadata inventories of the guest's writable macOS Data volume before installation and
+    after the tests. It retains the temporary projects until the second snapshot, writes
+    `filesystem-before.json`, `filesystem-after.json`, `filesystem-diff.json`, and a bounded
+    `filesystem-diff.txt` in that run's `logs/`, then deletes the VM as usual. The scanner does not
+    enter other mounted volumes, records unreadable paths, and compares metadata rather than file
+    contents; macOS background writes and files created and deleted between snapshots remain
+    limitations. This audit variant has not yet been run in a Tart guest. The SSH readiness loop now
+    requires two successful probes and retries a transient second failure within its boot deadline.
+
     **Tart host troubleshooting.** Tart's installer notes that macOS gives VM addresses a default
     DHCP lease of 86,400 seconds. This gate uses Tart's default network, even though `softnet` is
     installed as a dependency, so repeated disposable VM runs could exhaust available leases.

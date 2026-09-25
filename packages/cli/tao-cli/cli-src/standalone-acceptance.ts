@@ -142,7 +142,11 @@ async function accept(release: string): Promise<void> {
         + ' serving web, outside a checkout.',
     )
   } finally {
-    await FS.remove(root)
+    // The audit snapshots the projects and temporary home after acceptance returns. The VM is
+    // disposable, so it owns removal after the second snapshot instead of this process.
+    if (Platform.runtimeProcess.env['TAO_ACCEPTANCE_AUDIT_FILESYSTEM'] !== '1') {
+      await FS.remove(root)
+    }
   }
 }
 

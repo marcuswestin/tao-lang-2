@@ -224,6 +224,11 @@ standalone-cli-acceptance: _parser-gen
 standalone-cli-clean-machine: _parser-gen
     bash packages/cli/tao-cli/cli-src/standalone-clean-machine.sh
 
+# Run clean-machine acceptance with before/after metadata snapshots of the guest's writable macOS Data volume
+[group('Ship')]
+standalone-cli-clean-machine-audit: _parser-gen
+    bash packages/cli/tao-cli/cli-src/standalone-clean-machine.sh --audit
+
 # Trust Tart's required tap formula and install Tart for the clean-machine gate
 [group('Ship')]
 standalone-cli-vm-setup:

@@ -12,6 +12,16 @@ release="$(pwd)/.artifacts/release/v0.0.0"
 expect_script='packages/cli/tao-cli/cli-src/standalone-clean-machine.expect'
 bun_bin="${TAO_STANDALONE_BUN:-bun}"
 portable_bun_script='packages/cli/tao-cli/cli-src/standalone-bun.sh'
+audit=0
+case "${1:-}" in
+  '') ;;
+  --audit) audit=1 ;;
+  *) printf 'Usage: %s [--audit]\n' "$0" >&2; exit 2 ;;
+esac
+if [ "$#" -gt 1 ]; then
+  printf 'Usage: %s [--audit]\n' "$0" >&2
+  exit 2
+fi
 created=0
 started=0
 vm_pid=''
@@ -86,6 +96,16 @@ if ! step 'compile the existing acceptance for the guest' "$portable_bun" build 
 fi
 cat "$logs/compile.log"
 
+if [ "$audit" -eq 1 ]; then
+  if ! step 'compile the filesystem auditor for the guest' "$portable_bun" build --compile \
+    packages/cli/tao-cli/cli-src/standalone-filesystem-audit.ts --outfile "$input/filesystem-audit" \
+    > "$logs/audit-compile.log" 2>&1; then
+    cat "$logs/audit-compile.log" >&2
+    exit 1
+  fi
+  cat "$logs/audit-compile.log"
+fi
+
 cat > "$input/run.sh" <<'GUEST'
 #!/bin/sh
 set -eu
@@ -108,8 +128,24 @@ if [ -d /Library/Developer/CommandLineTools ] || [ -d /Applications/Xcode.app ];
   echo 'The vanilla guest unexpectedly has Xcode tools installed.' >&2
   exit 1
 fi
-exec '/Volumes/My Shared Files/tao-input/acceptance' \
-  '/Volumes/My Shared Files/tao-input/release/v0.0.0'
+auditor='/Volumes/My Shared Files/tao-input/filesystem-audit'
+audit_logs='/Volumes/My Shared Files/tao-logs'
+if [ -x "$auditor" ]; then
+  "$auditor" snapshot /System/Volumes/Data "$audit_logs/filesystem-before.json"
+  export TAO_ACCEPTANCE_AUDIT_FILESYSTEM=1
+fi
+if '/Volumes/My Shared Files/tao-input/acceptance' \
+  '/Volumes/My Shared Files/tao-input/release/v0.0.0'; then
+  acceptance_status=0
+else
+  acceptance_status=$?
+fi
+if [ -x "$auditor" ]; then
+  "$auditor" snapshot /System/Volumes/Data "$audit_logs/filesystem-after.json"
+  "$auditor" compare "$audit_logs/filesystem-before.json" "$audit_logs/filesystem-after.json" \
+    "$audit_logs/filesystem-diff.json" "$audit_logs/filesystem-diff.txt"
+fi
+exit "$acceptance_status"
 GUEST
 
 created=1
@@ -125,6 +161,7 @@ started=1
 address=''
 deadline=$(($(date +%s) + 240))
 last_wait_report=$boot_started
+ready_streak=0
 while [ "$(date +%s)" -lt "$deadline" ]; do
   if ! kill -0 "$vm_pid" 2>/dev/null; then
     printf 'Clean-machine: guest exited during boot; see %s\n' "$logs/boot.log" >&2
@@ -132,7 +169,12 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
   fi
   address=$(tart ip "$name" 2>/dev/null || true)
   if [ -n "$address" ] && /usr/bin/expect "$expect_script" "$address" '/usr/bin/true' >> "$logs/ssh-ready.log" 2>&1; then
-    break
+    ready_streak=$((ready_streak + 1))
+    if [ "$ready_streak" -ge 2 ]; then
+      break
+    fi
+  else
+    ready_streak=0
   fi
   now=$(date +%s)
   if (( now - last_wait_report >= 15 )); then
@@ -146,7 +188,7 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
   fi
   sleep 3
 done
-if [ -z "$address" ] || ! /usr/bin/expect "$expect_script" "$address" '/usr/bin/true' >> "$logs/ssh-ready.log" 2>&1; then
+if [ "$ready_streak" -lt 2 ]; then
   printf 'Clean-machine: guest SSH did not become ready; see %s\n' "$logs" >&2
   if [ -f "$logs/ssh-ready.log" ]; then
     tail -n 4 "$logs/ssh-ready.log" >&2
@@ -156,8 +198,12 @@ fi
 printf 'Clean-machine: guest SSH ready in %ss\n' "$(($(date +%s) - boot_started))"
 
 printf 'Clean-machine: SSH password is supplied automatically; no input is needed.\n'
+ssh_timeout=600
+if [ "$audit" -eq 1 ]; then
+  ssh_timeout=1800
+fi
 if ! step 'run standalone acceptance in the vanilla guest' \
-  /usr/bin/expect "$expect_script" "$address" '/bin/sh "/Volumes/My Shared Files/tao-input/run.sh"' \
+  /usr/bin/expect "$expect_script" "$address" '/bin/sh "/Volumes/My Shared Files/tao-input/run.sh"' "$ssh_timeout" \
   2>&1 | tee "$logs/acceptance.log"; then
   exit 1
 fi
