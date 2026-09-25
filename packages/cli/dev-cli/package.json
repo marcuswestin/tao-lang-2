@@ -1,0 +1,23 @@
+{
+  "name": "tao-dev-cli",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "module": "dev-cli-src/dev.ts",
+  "exports": {
+    ".": "./dev-cli-src/dev.ts"
+  },
+  "dependencies": {
+    "tao-agent-cli": "workspace:*",
+    "tao-cli-kit": "workspace:*",
+    "tao-e2e-testing": "workspace:*",
+    "tao-expo-host": "workspace:*",
+    "tao-shared": "workspace:*",
+    "tao-studio-tooling": "workspace:*",
+    "tao-verification": "workspace:*"
+  },
+  "devDependencies": {
+    "tao-compiler": "workspace:*",
+    "tao-formatter": "workspace:*"
+  }
+}

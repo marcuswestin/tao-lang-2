@@ -8,11 +8,11 @@ import type { TestLedgerStore } from './TestLedger'
  * is what the test gate used to measure. Splitting them into items of a few seconds each is what
  * turns that sum into the machine's own width.
  *
- * Nothing here is hand-written. The shard count comes from two things this checkout already records
+ * Once measured, the shard count comes from two things this checkout records
  * — how long the suite took (`RunTimings`) and what each of its files costs relative to the others
  * (`TestLedger`) — so a suite that grows re-shards itself on the next run and a hand-written count
- * can never go stale. A checkout with no history shards nothing and runs each suite whole, which is
- * exactly the old behavior.
+ * can never go stale. A few suites with measured large cold runs start with a conservative split
+ * until this checkout has its own duration; every other cold suite runs whole.
  *
  * Sharding is not free: every shard pays the suite's process startup again. That declared cost is
  * what caps the count, and the rule is that **no shard may be mostly startup** — a shard must do at
@@ -34,9 +34,20 @@ export type ShardPlan = {
   /** One line naming the measurements that produced this count, for the run summary. */
   reason: string
   suite: string
+  /**
+   * Set only when a suite runs whole because the planner had nothing to plan with, never when it
+   * ran whole on a measurement. The two read alike in `reason` and mean opposite things: a suite
+   * under the floor is one shard because that is cheapest, while a suite with no recorded duration
+   * is one shard because its history is missing — which is what a renamed suite looks like, and
+   * what cost this repository a silent 40s a lane when the package restructure changed every suite
+   * id at once. A caller warns on this; nothing should warn on the others.
+   */
+  unshardedCause?: 'no-recorded-duration'
 }
 
 export type PlanShardsOptions = {
+  /** Initial split for a measured-heavy suite before this checkout has a trustworthy duration. */
+  coldShardCount?: number
   /**
    * The units this suite can be split across, in any order; the plan sorts them. Usually its test
    * files, but a suite whose runner takes directories — the Tao behavior tests take app roots —
@@ -77,7 +88,15 @@ function planShards(options: PlanShardsOptions): ShardPlan {
     return whole('one unit')
   }
   if (options.measuredMs === undefined) {
-    return whole('no recorded duration yet')
+    const count = Math.min(files.length, Math.max(1, options.coldShardCount ?? 1))
+    if (count > 1) {
+      return {
+        reason: `${count} initial shards: no recorded duration yet`,
+        shards: packFiles(files, options.fileCostMs, count),
+        suite: options.suite,
+      }
+    }
+    return { ...whole('no recorded duration yet'), unshardedCause: 'no-recorded-duration' }
   }
   if (options.measuredMs < MIN_SHARDABLE_MS) {
     return whole(`${formatSeconds(options.measuredMs)} measured, under the ${formatSeconds(MIN_SHARDABLE_MS)} floor`)

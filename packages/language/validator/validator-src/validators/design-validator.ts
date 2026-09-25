@@ -10,6 +10,9 @@ const visualHeads = new Set<string>(ASTUtils.design.visualHeads)
 const colorHeads = new Set<string>(ASTUtils.design.colorHeads)
 const builtInHeads = new Set<string>([...ASTUtils.design.visualHeads, ...ASTUtils.design.layoutHeads])
 
+/** legacyVisualSpellings names the decided canonical spelling for each accepted legacy visual head. */
+const legacyVisualSpellings: Readonly<Record<string, string>> = { bg: 'background', fg: 'ink' }
+
 const cssHexColor = /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i
 const taoTag = /^#[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -27,6 +30,11 @@ const designValidationMessages = {
     `Design entries '${first}' and '${second}' set the same visual property.`,
   exploration: (entry: string) =>
     `Inline design exploration '${entry}' must be promoted to a token, style bundle, or element default for release.`,
+  flatCatalog: (design: string, count: number) =>
+    `Design '${design}' has ${count} flat ${
+      count === 1 ? 'entry' : 'entries'
+    } outside its typed blocks; move colors into 'colors { }' and bundles into 'styles { }'.`,
+  legacyVisualHead: (legacy: string, canonical: string) => `'${legacy}' is the legacy spelling of '${canonical}'.`,
   malformedColor: (value: string) => `Design color '${value}' must use exactly 3, 4, 6, or 8 hexadecimal digits.`,
   malformedTag: (value: string) =>
     `Tag '${value}' must start with a letter or underscore and contain only letters, digits, or underscores.`,
@@ -36,6 +44,7 @@ const designValidationMessages = {
     `Design screen '${name}' must use an increasing px threshold; only the last may omit it.`,
   invalidSize: (name: string) => `Design size '${name}' must resolve from px/rem values in the same unit family.`,
   missingMountedDesign: (entry: string) => `Design entry '${entry}' requires an app Design selection.`,
+  noneWithTrailingTerms: (entry: string) => `'none' must be the last term in design entry '${entry}'.`,
   placeholderShipping: 'Placeholder ships as an empty box in release.',
   precedingStyleProperty: (property: string, entry: string) =>
     `Style property '${property}' was already declared by '${entry}'.`,
@@ -60,18 +69,20 @@ export const DesignValidator = {
     [AST.TagPressStep.$type]: validateTaggedTestStep,
     [AST.TagStatement.$type]: validateTag,
     [AST.TagSubmitStep.$type]: validateTaggedTestStep,
+    [AST.ViewDeclaration.$type]: validateViewDeclarationDesign,
   } satisfies NodeValidationChecks,
   messages: designValidationMessages,
 }
 
 function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: ValidationContext): void {
   validateUniqueBlocks(design, ctx)
+  validateFlatCatalog(design, ctx)
   const namedMembers = designNamedMembers(design)
   const members = new Map<string, AST.Node>()
   for (const member of namedMembers) {
     if (members.has(member.name)) {
       // The compiled design is one keyed map, so the later member simply replaces the earlier one and
-      // nothing can reach it again. Static validation owns duplicates (Docs/Spec/Tao Design - WIP.md).
+      // nothing can reach it again. Static validation owns duplicates (Docs/Spec/Tao Design.md).
       ctx.error(member.node, designValidationMessages.duplicateMember(member.name), {
         code: designValidationCodes.duplicateMember,
       })
@@ -98,7 +109,7 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
   validateScreens(design, ctx)
   // A bundle named after a built-in clause can never be reached: TR-design.ts answers the built-in
   // head before it ever looks a bundle up, and text and style entries compile into the same bundle
-  // map. Static validation owns reserved names (Docs/Spec/Tao Design - WIP.md), so this is an error.
+  // map. Static validation owns reserved names (Docs/Spec/Tao Design.md), so this is an error.
   for (const member of design.block.members) {
     if (AST.isDesignBundle(member) && builtInHeads.has(member.name)) {
       ctx.error(member, designValidationMessages.reservedBundle(member.name), {
@@ -116,6 +127,7 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
   }
   for (const bundle of bundles.values()) {
     validateEntries(bundle.spec.entries, design, tokens, sizes, bundles, ctx)
+    warnLegacyVisualHeads(bundle.spec.entries, ctx)
     validateRedundantStyleProperties(bundle.spec, bundles, ctx, design)
   }
   validateBundleCycles(design, bundles, ctx)
@@ -151,10 +163,23 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   if (!clause) {
     return
   }
+  validateDesignClause(clause, render, ctx)
+}
+
+/** validateViewDeclarationDesign runs the same design checks a render site's clause gets over a declaration's public header clause. */
+function validateViewDeclarationDesign(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+  const clause = view.layoutClause
+  if (!clause) {
+    return
+  }
+  validateDesignClause(clause, view, ctx)
+}
+
+function validateDesignClause(clause: AST.LayoutClause, node: AST.Node, ctx: ValidationContext): void {
   // Snap writes measured `width` and `height` into Studio-owned generated views by design (FS-D11);
   // those inferred sizes are not explorations a person forgot to promote. A shipping Placeholder in
   // that same tree is exactly what FS-D2 warns about, so that warning is never suppressed there.
-  if (!isStudioGeneratedSource(render, ctx)) {
+  if (!isStudioGeneratedSource(node, ctx)) {
     for (const entry of clause.entries.filter(isInlineDesignExploration)) {
       ctx.warning(entry, designValidationMessages.exploration(entryText(entry)), {
         code: designValidationCodes.exploration,
@@ -167,6 +192,7 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
     return
   }
 
+  warnLegacyVisualHeads(designEntries, ctx)
   for (const entry of designEntries.filter(isVisualEntry)) {
     validateVisualEntry(entry, undefined, undefined, ctx)
   }
@@ -211,9 +237,9 @@ function isTestSource(render: AST.Render): boolean {
   return Packages.isTestSourcePath(AST.getDocument(render).uri.path)
 }
 
-function isStudioGeneratedSource(render: AST.Render, ctx: ValidationContext): boolean {
+function isStudioGeneratedSource(node: AST.Node, ctx: ValidationContext): boolean {
   const studioGeneratedRoot = FS.resolvePath('@/studio', ctx.packagesContext.index.projectRoot)
-  return FS.pathIsWithin(AST.getDocument(render).uri.path, studioGeneratedRoot)
+  return FS.pathIsWithin(AST.getDocument(node).uri.path, studioGeneratedRoot)
 }
 
 function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {
@@ -283,6 +309,14 @@ function validateVisualEntry(
   }
   const [head, ...terms] = conditioned
   const name = String(head)
+  // `none` clears the visual head's slot outright (Decisions §R9); it needs no token, size, or
+  // design lookup, and nothing may follow it.
+  if (terms[0] === 'none') {
+    if (terms.length > 1) {
+      ctx.error(entry, designValidationMessages.noneWithTrailingTerms(entryText(entry)))
+    }
+    return
+  }
   if (colorHeads.has(name)) {
     const token = terms.length === 1 && typeof terms[0] === 'string' ? terms[0] : undefined
     if (!token) {
@@ -428,6 +462,33 @@ function selectedWorkspaceDesigns(ctx: ValidationContext): AST.DesignDeclaration
     }
     return [...designs]
   })
+}
+
+/**
+ * validateFlatCatalog warns once per declaration when it has any pre-typed-block member (a
+ * `DesignToken` or `DesignBundle` directly under the design body, outside `colors {}`/`styles {}`).
+ * One warning per declaration, not per entry: WordFlower alone carries roughly a hundred of them.
+ */
+function validateFlatCatalog(design: AST.DesignDeclaration, ctx: ValidationContext): void {
+  const flatMembers = design.block.members.filter(member => AST.isDesignToken(member) || AST.isDesignBundle(member))
+  if (flatMembers.length === 0) {
+    return
+  }
+  ctx.warning(design, designValidationMessages.flatCatalog(design.name, flatMembers.length), {
+    code: designValidationCodes.flatCatalog,
+  })
+}
+
+/** warnLegacyVisualHeads warns, anchored on the head term, for every entry spelled with a legacy visual head. */
+function warnLegacyVisualHeads(entries: readonly AST.LayoutEntry[], ctx: ValidationContext): void {
+  for (const entry of entries.filter(isVisualEntry)) {
+    const canonical = legacyVisualSpellings[entryHead(entry)]
+    if (canonical !== undefined) {
+      ctx.warning(entry.head, designValidationMessages.legacyVisualHead(entryHead(entry), canonical), {
+        code: designValidationCodes.legacyVisualHead,
+      })
+    }
+  }
 }
 
 function validateUniqueBlocks(design: AST.DesignDeclaration, ctx: ValidationContext): void {
@@ -624,7 +685,10 @@ function layoutSizeReferences(entry: AST.LayoutEntry): string[] {
     : head === 'width' || head === 'height'
     ? (terms[0] === 'max' ? terms.slice(1, 2) : terms.slice(0, 1))
     : []
-  return candidates.filter((value): value is string => typeof value === 'string' && value !== 'fill')
+  // `none` clears the slot outright and never names a design size, however it lands positionally.
+  return candidates.filter((value): value is string =>
+    typeof value === 'string' && value !== 'fill' && value !== 'none'
+  )
 }
 
 function designValuePath(path: AST.DesignValuePath): string {
@@ -651,6 +715,7 @@ function requiresDesignLookup(entry: AST.LayoutEntry): boolean {
     const head = String(values[0])
     return values.length === 2
       && typeof values[1] === 'string'
+      && values[1] !== 'none'
       && !values[1].startsWith('#')
       && !(head === 'weight' && ['bold', 'medium', 'regular', 'semibold'].includes(values[1]))
   }

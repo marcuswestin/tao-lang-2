@@ -15,9 +15,9 @@ import { CLI, Errors, FS, HCI, Platform, Repo, TaoStdlib } from '@shared'
  * `./tao compile` is the published product surface, which is why the stamp lives here rather than
  * in the CLI: a user compiling their own project gets a compile, and this repository's build gets a
  * repository build stamp on top of it. `packages/testing/verification` does not depend on
- * `tao-cli` (`tao-cli` depends on `tao-dev`, which depends on this package, so the reverse would
- * cycle), so the compile is delegated as a child process rather than imported; on a stamp miss the
- * ~2.7s of compiling dwarfs the spawn, and on a hit nothing is spawned at all.
+ * `tao-cli` (`tao-cli` depends on `tao-dev-cli`, which depends on this package, so the reverse
+ * would cycle), so the compile is delegated as a child process rather than imported; on a stamp
+ * miss the ~2.7s of compiling dwarfs the spawn, and on a hit nothing is spawned at all.
  */
 
 /**
@@ -31,7 +31,7 @@ const STAMP_PATH = '.artifacts/compile-app-stamp.json'
  * stale, never as an error. Raise this whenever the set of inputs or the way they are hashed
  * changes, or a stamp written under the old scheme is honoured against inputs it never covered.
  */
-const STAMP_VERSION = 2
+const STAMP_VERSION = 3
 
 /** Where `./tao compile` writes the generated app, relative to the repository root. */
 const DEFAULT_OUTPUT_ROOT = 'packages/apps/expo-host/_gen_tao-app'
@@ -82,8 +82,8 @@ export const COMPILE_INPUT_FILES: readonly string[] = [
   'packages/language/validator/package.json',
 ]
 
-/** Directories no input walk descends: installed dependencies and Git's own store. */
-const EXCLUDED_INPUT_DIRECTORIES = new Set(['node_modules', '.git'])
+/** Installed dependencies, Git state, and generated Tao dev output cannot change source compilation. */
+const EXCLUDED_INPUT_DIRECTORIES = new Set(['node_modules', '.git', '.tao'])
 
 /**
  * TypeScript's incremental build state is rewritten by every typecheck without any source changing.

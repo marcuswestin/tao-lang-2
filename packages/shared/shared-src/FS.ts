@@ -160,6 +160,27 @@ export function realPathSync(inputPath: string): string {
   return nodeRealpathSync(inputPath)
 }
 
+/**
+ * resolvePackageDirectory finds the real directory of the package a bare import of `packageName`
+ * reaches from `fromDirectory`, walking up `node_modules` directories the way Node does and through
+ * a workspace symlink; undefined when it is not installed. It reads the directories rather than
+ * resolving `<name>/package.json`, which a package's `exports` map is free to hide.
+ */
+export async function resolvePackageDirectory(packageName: string, fromDirectory: string): Promise<string | undefined> {
+  let directory = resolvePath(fromDirectory)
+  for (;;) {
+    const candidate = nodePath.join(directory, 'node_modules', packageName)
+    if (await isFile(nodePath.join(candidate, 'package.json'))) {
+      return await realPath(candidate)
+    }
+    const parent = nodePath.dirname(directory)
+    if (parent === directory) {
+      return undefined
+    }
+    directory = parent
+  }
+}
+
 /** isEmptyDirectory checks whether a directory contains any entries. */
 export async function isEmptyDirectory(inputPath: string): Promise<boolean> {
   if (!await isDirectory(inputPath)) {
@@ -176,6 +197,18 @@ export async function isEmptyDirectory(inputPath: string): Promise<boolean> {
 /** readText reads a UTF-8 file. */
 export async function readText(inputPath: string): Promise<string> {
   return nodeFs.readFile(inputPath, 'utf8')
+}
+
+/** Read at most maxBytes from the start of a UTF-8 file, without loading the rest. */
+export async function readTextPrefix(inputPath: string, maxBytes: number): Promise<string> {
+  const handle = await nodeFs.open(inputPath, 'r')
+  try {
+    const bytes = Buffer.alloc(maxBytes)
+    const { bytesRead } = await handle.read(bytes, 0, maxBytes, 0)
+    return bytes.subarray(0, bytesRead).toString('utf8')
+  } finally {
+    await handle.close()
+  }
 }
 
 /** readTextSync reads UTF-8 text for synchronous compiler and validator passes. */

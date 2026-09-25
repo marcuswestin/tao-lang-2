@@ -10,9 +10,9 @@
  * fires only when all of them are `skipped`, so one always-`passed` stand-in disabled it outright:
  * a typo in `just test "<name>"` ran no test anywhere and reported green.
  *
- * `tao-cli` and `tao-dev` cannot import each other — `tao-cli` depends on `tao-dev`, so the
- * dependency only runs one way — and both depend on this package, which is why the sentence the
- * one prints and the other reads is spelled here once instead of twice.
+ * `tao-cli` and `tao-dev-cli`'s repository test runner cannot import each other, and both depend
+ * on this package, which is why the sentence the one prints and the other reads is spelled here
+ * once instead of twice.
  */
 
 /**

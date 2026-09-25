@@ -554,10 +554,10 @@ Describe('Studio device routes', () => {
     const calls: unknown[] = []
     const gateway = fakeGateway(status, calls)
     const launchInfo = {
-      bundleIdentifier: 'dev.tao-lang.studio.companion',
+      bundleIdentifier: 'com.devtao.studio.companion',
       candidates: ['192.168.1.20'],
       diagnostics: [],
-      hosts: [{ id: 'dev-1', installed: true, kind: 'device' as const, name: 'roPhone' }],
+      hosts: [{ id: 'dev-1', installed: true, kind: 'device' as const, name: 'example-phone' }],
       installCommand: 'just studio-companion-install',
       metroPort: 8081,
       scheme: 'taostudiocompanion',
@@ -570,7 +570,7 @@ Describe('Studio device routes', () => {
       },
       async open(input) {
         calls.push(['open', input])
-        return { hostName: 'roPhone', launched: true, url: launchInfo.url }
+        return { hostName: 'example-phone', launched: true, url: launchInfo.url }
       },
     }
     const options = { deviceGateway: gateway, deviceLauncher: launcher }
@@ -588,7 +588,11 @@ Describe('Studio device routes', () => {
         { capture: { domains: [{ domain: 'data', value: { workspaces: 1 } }], version: 1 } },
       ],
       ['/api/device/launch', undefined, launchInfo],
-      ['/api/device/launch/open', { hostId: 'dev-1' }, { hostName: 'roPhone', launched: true, url: launchInfo.url }],
+      ['/api/device/launch/open', { hostId: 'dev-1' }, {
+        hostName: 'example-phone',
+        launched: true,
+        url: launchInfo.url,
+      }],
     ]
     for (const [pathname, body, result] of expected) {
       const response = await call(options, pathname, body)
@@ -657,7 +661,7 @@ Describe('Studio device routes', () => {
       const connected: StudioDeviceStatus = {
         ...status,
         connection: {
-          device: { model: 'iPhone17,1', name: 'roPhone', os: 'iOS 26' },
+          device: { model: 'iPhone17,1', name: 'example-phone', os: 'iOS 26' },
           fingerprint: 'ffff ffff ffff ffff',
           state: 'connected',
           transport: 'lan',

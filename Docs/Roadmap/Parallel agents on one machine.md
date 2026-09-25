@@ -61,7 +61,7 @@ anyway:
    `studio-native-host` lease means a second worktree's native Studio lane fails immediately with
    `native-host-busy`, naming the holder, instead of timing out. What is missing is coverage: each
    simulator UDID, the Android emulator, the window server across worktrees, the local InstantDB
-   stack. `packages/dev/README.md` lists those as "not arbitrated across worktrees", which is
+   stack. `packages/cli/dev-cli/README.md` lists those as "not arbitrated across worktrees", which is
    accurate and is the gap.
 
 ## A one-file run should not queue behind fifteen batch lanes
@@ -206,7 +206,7 @@ registered on this machine for the whole measurement window, and the same unchan
 worktrees are idle, and neither is blocked on code:
 
 - A single-lane `verify --complete` before-and-after pair. The components are measured (see the
-  numbers above and in `packages/dev/README.md`) and the schedule report gives the packing loss —
+  numbers above and in `packages/cli/dev-cli/README.md`) and the schedule report gives the packing loss —
   0.0% at three lanes, 8.2% at five — but there is no single-lane wall time for the lane as a whole.
 - A `just verify-full` before-and-after pair, unsandboxed. The lane is reachable from an agent
   session: a browser smoke passes from one in 5.5s, so DEVENV-015's Chrome registration failure is
@@ -260,6 +260,6 @@ machine is theirs by load average, not by lane count.
   building the one-graph verification scheduler.
 - 2026-09-18 thirteen-lane reading and 2026-09-19 zero-lane-at-load-22.2 reading, taken during the
   second attempt at the acceptance measurements.
-- `packages/dev/README.md` for what is shared today and what is not.
+- `packages/cli/dev-cli/README.md` for what is shared today and what is not.
 - `Developer environment upgrades.md`, DEVENV-015 (Chrome registration) and DEVENV-066 to DEVENV-069
   (the runaway-process class, sandboxed `ps`, cross-worktree edit interference).

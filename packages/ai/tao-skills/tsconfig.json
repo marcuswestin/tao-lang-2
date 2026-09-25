@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "include": [
+    "skills-src/**/*",
+    "skills-tests/**/*"
+  ],
+  "compilerOptions": {
+    "allowArbitraryExtensions": true,
+    "allowImportingTsExtensions": true,
+    "composite": false,
+    "declaration": false,
+    "incremental": false,
+    "noEmit": true,
+    "types": [
+      "bun",
+      "node"
+    ]
+  }
+}

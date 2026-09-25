@@ -166,6 +166,18 @@ Describe('test shard counts', () => {
     Expect(TestShards.suiteOf('dev')).toBe('dev')
   })
 
+  Test('uses a bounded initial split only until a suite has local timing history', () => {
+    const files = Array.from({ length: 10 }, (_, index) => `file-${index}.test.ts`)
+    const cold = plan({ coldShardCount: 4, files })
+    const measured = plan({ coldShardCount: 4, files, measuredMs: 8_000 })
+
+    Expect(cold.shards.length).toBe(4)
+    Expect(allFiles(cold.shards)).toEqual(files.toSorted())
+    Expect(cold.reason).toBe('4 initial shards: no recorded duration yet')
+    Expect(measured.shards.length).toBe(2)
+    Expect(plan({ coldShardCount: 4, files: files.slice(0, 1) }).shards.length).toBe(1)
+  })
+
   Test('plans the same shards twice, whatever order the files arrive in', () => {
     const files = ['a', 'b', 'c', 'd', 'e', 'f'].map(name => `packages/demo/demo-tests/${name}.test.ts`)
     // Equal costs make the file-name tiebreak the only thing that can order the packing.
@@ -198,6 +210,48 @@ Describe('test shard counts', () => {
       ['packages/demo/demo-tests/c.test.ts'],
       ['packages/demo/demo-tests/d.test.ts'],
     ])
+  })
+})
+
+/**
+ * A suite can run whole for two opposite reasons, and they read alike in `reason`: because a
+ * measurement said one shard is cheapest, or because there was no measurement at all. Only the
+ * second is worth a word to anyone, so only the second carries a cause. This is the distinction the
+ * package restructure needed and did not have: every suite id changed at once, every suite lost its
+ * recorded duration, and every one of them ran whole while the lane printed an ordinary green.
+ */
+Describe('a suite that ran whole for want of a measurement', () => {
+  Test('marks a suite with no recorded duration, so a lane can say the sharding was lost', () => {
+    const files = Array.from({ length: 12 }, (_, index) => `packages/demo/demo-tests/f${index}.test.ts`)
+
+    const result = plan({ files, measuredMs: undefined })
+
+    Expect(result.shards.length).toBe(1)
+    Expect(result.unshardedCause).toBe('no-recorded-duration')
+  })
+
+  Test('leaves every measured reason for running whole unmarked', () => {
+    const files = Array.from({ length: 12 }, (_, index) => `packages/demo/demo-tests/f${index}.test.ts`)
+
+    // Under the published 8.0s floor: one shard because splitting costs more than it saves.
+    Expect(plan({ files, measuredMs: 5_000 }).unshardedCause).toBeUndefined()
+    // Declared unshardable: a deliberate catalog decision, not missing data.
+    Expect(plan({ files, measuredMs: 40_000, shardable: false }).unshardedCause).toBeUndefined()
+    // A single unit cannot be split however long it took.
+    Expect(plan({ files: [files[0] as string], measuredMs: 40_000 }).unshardedCause).toBeUndefined()
+  })
+
+  Test('does not mark a suite it actually sharded', () => {
+    const files = Array.from({ length: 12 }, (_, index) => `packages/demo/demo-tests/f${index}.test.ts`)
+
+    const result = plan({
+      fileCostMs: costsOf(files.map(file => ({ costMs: 1_000, file }))),
+      files,
+      measuredMs: 40_000,
+    })
+
+    Expect(result.shards.length).toBeGreaterThan(1)
+    Expect(result.unshardedCause).toBeUndefined()
   })
 })
 

@@ -21,7 +21,7 @@ Implementation branch: `feat/repository-foundations`.
   license payload, distribution format, and external-consumer contract.
 - Keep standalone validator/compiler convenience calls fresh. Repeated callers explicitly own a
   reusable session; no hidden process-global language-service state is introduced.
-- The dev command removals are intentional user-visible subtraction directed by Ro. Package naming and
+- The dev command removals are intentional user-visible subtraction directed by the Developer. Package naming and
   exports are user-visible developer surfaces; preserve compatibility where it does not preserve the
   old dependency leak.
 

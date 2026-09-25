@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { Errors, FS, Platform } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import { LandingLock, LandingLockBusyError, LandingLockUnreadableError } from '../verification-src/LandingLock'
 import { MachineLanes } from '../verification-src/MachineLanes'
@@ -57,6 +57,79 @@ Describe('landing lock', () => {
     Expect((await LandingLock.inspect(root))?.holder).toBe(TWO)
   })
 
+  Test('hands ready landings FIFO turns ahead of a newly started broad lane', async () => {
+    const root = await mkTestDir('landing-lock-ready-queue')
+    const active = await acquire(root, ONE)
+    const first = LandingLock.acquire({
+      label: 'first landing',
+      landing: true,
+      registryRoot: root,
+      repositoryRoot: TWO,
+      waitTimeoutMs: 10_000,
+    })
+    const third = '/worktree/three'
+    const queuePath = FS.resolvePath('.landing-queue.json', root)
+    await until(async () => await FS.exists(queuePath) && (await FS.readJson<unknown[]>(queuePath)).length === 1, {
+      description: 'first ready landing registration',
+      intervalMs: 5,
+      timeoutMs: 10_000,
+    })
+    const second = LandingLock.acquire({
+      label: 'second landing',
+      landing: true,
+      registryRoot: root,
+      repositoryRoot: third,
+      waitTimeoutMs: 10_000,
+    })
+    await until(async () => await FS.exists(queuePath) && (await FS.readJson<unknown[]>(queuePath)).length === 2, {
+      description: 'second ready landing registration',
+      intervalMs: 5,
+      timeoutMs: 10_000,
+    })
+    await LandingLock.release({ registryRoot: root, repositoryRoot: ONE, token: active.token! })
+    const lane = await LandingLock.acquire({
+      label: 'verify',
+      registryRoot: root,
+      repositoryRoot: ONE,
+      waitTimeoutMs: 0,
+    }).then(() => undefined, (error: unknown) => error)
+    Expect(lane).toBeInstanceOf(LandingLockBusyError)
+    const firstHold = await first
+    Expect(firstHold.record.holder).toBe(TWO)
+    await LandingLock.release({ registryRoot: root, repositoryRoot: TWO, token: firstHold.token! })
+    const secondHold = await second
+    Expect(secondHold.record.holder).toBe(third)
+    await LandingLock.release({ registryRoot: root, repositoryRoot: third, token: secondHold.token! })
+  })
+
+  Test('prunes an interrupted ready waiter without reclaiming the active lock', async () => {
+    const root = await mkTestDir('landing-lock-dead-waiter')
+    await FS.writeJson(FS.resolvePath('.landing-queue.json', root), [
+      { holder: ONE, label: 'ready landing', pid: 0, token: 'dead' },
+    ])
+    const hold = await acquire(root, TWO)
+    Expect(hold.acquired).toBe(true)
+  })
+
+  Test("removes a failed queued preparation without releasing another worktree's lock", async () => {
+    const root = await mkTestDir('landing-lock-queue-failure')
+    const active = await acquire(root, ONE)
+    const error = await LandingLock.acquire({
+      label: 'queued landing',
+      landing: true,
+      onQueueWait: async () => {
+        Errors.throwUserInput('merge conflict')
+      },
+      registryRoot: root,
+      repositoryRoot: TWO,
+      waitTimeoutMs: 10_000,
+    }).then(() => undefined, (caught: unknown) => caught)
+    Expect((error as Error).message).toBe('merge conflict')
+    Expect(await LandingLock.inspectQueue(root)).toHaveLength(0)
+    Expect((await LandingLock.inspect(root))?.holder).toBe(ONE)
+    await LandingLock.release({ registryRoot: root, repositoryRoot: ONE, token: active.token! })
+  })
+
   Test('reports the holder as soon as another worktree has to wait', async () => {
     const root = await mkTestDir('landing-lock-wait-report')
     const first = await acquire(root, ONE, 'verify from one')
@@ -77,10 +150,12 @@ Describe('landing lock', () => {
       await until(() => reports.length > 0, {
         description: 'the landing-lock waiter to identify the holder',
         intervalMs: 5,
-        timeoutMs: 200,
+        timeoutMs: 30_000,
       })
       Expect(reports[0]?.holder).toBe(ONE)
-      Expect(reports[0]?.waitedMs).toBeLessThan(1_000)
+      // The bound proves the wait was reported, not that it was fast: `waitedMs` is a real cross-process
+      // lock waiter's own clock, and the budget is for a host whose load average is in the tens.
+      Expect(reports[0]?.waitedMs).toBeLessThan(10_000)
       Expect(reports[0]?.message).toContain("WAIT  Landing lock held by 'verify from one' in /worktree/one")
       Expect(reports[0]?.message).toContain('This command will start when the lock is released.')
     } finally {

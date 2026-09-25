@@ -10,8 +10,8 @@
 - **Evidence:** `script -q /dev/null ./dev gates _repo-lint --lane verdict-demo --output lines` fails
   with `script: openpty: Operation not permitted`; the identical command in an unsandboxed shell
   allocates the pty and renders `[32mverdict-demo: PASSED in 363ms[0m`.
-- **Workaround:** Re-run the one command unsandboxed, which the sandbox policy already allows on an
-  explicit retry.
+- **Workaround:** A person can rerun the command from an ordinary terminal. An agent may use only a
+  named `./agent unsandboxed` operation; an unlisted terminal probe needs a new approved operation.
 - **Proposed change:** Either permit `openpty` in the sandbox policy, or give the work-graph commands
   a way to be told they are addressing a terminal — `resolveMode` already accepts an injected
   `outputIsTerminal`, so an env key beside `TAO_OUTPUT_MODE` would make the colored path reachable

@@ -241,6 +241,8 @@ export {
   type StudioViewport,
 } from './StudioPreviewManifest'
 
+export { previewCompatibilitySignature } from './StudioPreviewCompatibility'
+
 export {
   type StudioCellReconfigureRequest,
   type StudioCellRuntime,

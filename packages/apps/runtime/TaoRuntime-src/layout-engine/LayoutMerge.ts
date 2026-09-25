@@ -1,3 +1,4 @@
+import { UserInputError } from '../TR-errors'
 import RuntimeSwitch from '../TR-switch'
 import { LayoutTerms } from './LayoutTerms'
 import type {
@@ -10,9 +11,13 @@ import type {
   TaoLayoutEntryOfHead,
   TaoLayoutMergeSpec,
   TaoLayoutPhysicalSpacingSide,
+  TaoLayoutSpacingAmount,
   TaoLayoutSpacingEntry,
   TaoLayoutSpacingSide,
 } from './LayoutTypes'
+
+// The heads whose slot `none` can clear. Every other head names a keyword, not a value.
+const clearableHeads = new Set<TaoLayoutEntryHead>(['gap', 'height', 'margin', 'pad', 'width'])
 
 /** LayoutMerge overlays caller layout entries onto default layout entries by semantic slot. */
 export const LayoutMerge = {
@@ -51,6 +56,7 @@ function mergeEntry(
   overlayEntry: TaoLayoutEntry,
   direction: TaoLayoutDirection | undefined,
 ): void {
+  assertClearableSlot(overlayEntry)
   return RuntimeSwitch<TaoLayoutEntryHead, void>(overlayEntry[0], {
     aligned: () => replaceEntries(entries, overlayEntry, ['aligned', 'centered']),
     centered: () => replaceEntries(entries, overlayEntry, ['aligned', 'centered']),
@@ -81,12 +87,32 @@ function replaceEntries(
   overlayEntry: TaoLayoutEntry,
   replacedHeads: readonly TaoLayoutEntryHead[],
 ): void {
+  removeEntries(entries, replacedHeads)
+  entries.push(overlayEntry)
+}
+
+function removeEntries(entries: TaoLayoutEntry[], removedHeads: readonly TaoLayoutEntryHead[]): void {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
-    if (replacedHeads.includes(entries[index]![0])) {
+    if (removedHeads.includes(entries[index]![0])) {
       entries.splice(index, 1)
     }
   }
-  entries.push(overlayEntry)
+}
+
+/**
+ * `none` clears the slot its head names, and only a head that names a value has one to clear. The
+ * validator settles this before compiling; the guard stays an `if` because merging runs on every
+ * render and a RuntimeAssert would join this message for every entry that never needed it.
+ */
+function assertClearableSlot(entry: TaoLayoutEntry): void {
+  if (clearableHeads.has(entry[0])) {
+    return
+  }
+  for (let index = 1; index < entry.length; index += 1) {
+    if (entry[index] === 'none') {
+      throw new UserInputError(`Layout clause '${entry.join(' ')}' cannot clear a slot with 'none'.`, { entry })
+    }
+  }
 }
 
 function replaceWithFill(entries: TaoLayoutEntry[], overlayEntry: TaoLayoutEntry): void {
@@ -178,6 +204,12 @@ function contentEntryFromSlots(slots: ContentSlots): TaoLayoutContentEntry {
     : ['content', terms[0]!, terms[1]!]
 }
 
+/**
+ * Spacing merges side by side rather than whole entries, so `pad horizontal none` clears two sides
+ * of an earlier `pad 12` and leaves the other two, and a later `pad left 4` sets a cleared side
+ * again. A cleared side stays in the entry as `none`: the layer that set it may be resolved on
+ * another link, and only the final lowering knows the slot is settled.
+ */
 function mergeSpacingEntry<HeadT extends 'margin' | 'pad'>(
   entries: TaoLayoutEntry[],
   overlayEntry: TaoLayoutSpacingEntry<HeadT>,
@@ -198,9 +230,9 @@ function mergeSpacingEntry<HeadT extends 'margin' | 'pad'>(
 }
 
 function spacingSides(entry: TaoLayoutSpacingEntry): SpacingSides {
-  const firstTerm = entry[1]
-  if (typeof firstTerm === 'number') {
-    return { bottom: firstTerm, left: firstTerm, right: firstTerm, top: firstTerm }
+  if (entry.length === 2) {
+    const amount = entry[1]
+    return { bottom: amount, left: amount, right: amount, top: amount }
   }
 
   const sides: SpacingSides = {}
@@ -216,11 +248,17 @@ function spacingEntry<HeadT extends 'margin' | 'pad'>(
   head: HeadT,
   sides: SpacingSides,
 ): TaoLayoutSpacingEntry<HeadT> {
-  return [head, ...spacingTerms(sides)] as unknown as TaoLayoutSpacingEntry<HeadT>
+  const physicalSides = ['top', 'right', 'bottom', 'left'] as const
+  return physicalSides.every(side => sides[side] === 'none')
+    ? [head, 'none'] as unknown as TaoLayoutSpacingEntry<HeadT>
+    : [head, ...spacingTerms(sides, physicalSides)] as unknown as TaoLayoutSpacingEntry<HeadT>
 }
 
-function spacingTerms(sides: SpacingSides): (TaoLayoutSpacingSide | number)[] {
-  return (['top', 'right', 'bottom', 'left'] as const).flatMap(side => {
+function spacingTerms(
+  sides: SpacingSides,
+  physicalSides: readonly TaoLayoutPhysicalSpacingSide[],
+): (TaoLayoutSpacingAmount | TaoLayoutSpacingSide)[] {
+  return physicalSides.flatMap(side => {
     const amount = sides[side]
     return amount === undefined ? [] : [side, amount]
   })
@@ -235,4 +273,4 @@ type ContentSlots = {
   main?: TaoLayoutContentTerm
 }
 
-type SpacingSides = Partial<Record<TaoLayoutPhysicalSpacingSide, number>>
+type SpacingSides = Partial<Record<TaoLayoutPhysicalSpacingSide, TaoLayoutSpacingAmount>>

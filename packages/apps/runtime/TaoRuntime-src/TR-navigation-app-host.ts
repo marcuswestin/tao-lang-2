@@ -21,6 +21,7 @@ import type { Subscription } from './TR-navigation-state'
 import { NavigationBackAffordance, navigationHostStyle } from './TR-navigation-surfaces'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
+import { WindowLayer, WindowLayerProvider, WindowLayerRegistry } from './TR-window-layer'
 
 export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
   return createElement(
@@ -56,6 +57,8 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   React.useSyncExternalStore(DataControls.subscribeAll, DataControls.revision, DataControls.revision)
   usePlatformBack(props.app)
   const runtime = requireReactNativeRuntime()
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
+  const [windowLayer] = React.useState(() => new WindowLayerRegistry())
   const appTaoProps = { ...props.__tao, app: props.app }
   const focusedAuxiliary = auxiliaries.findLast(auxiliary => auxiliary.historyDepth() > 0)
   const navigatorTaoProps = {
@@ -109,30 +112,50 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   // A navigator that hands the window to a native surface gets true window bounds; every other
   // navigator renders inside the app's safe-area scroll frame, exactly as before.
   const ownsWindow = navigator.ownsWindowSurface()
-  const content = createElement(
+  const mainContent = createElement(
     React.Fragment,
-    { key: 'levels' },
+    { key: 'main' },
     props.app.canGoBack && (focusedAuxiliary !== undefined || !navigator.ownsBackAffordance())
       ? createElement(AppBackAffordance, { inset: ownsWindow, target: props.app })
       : null,
     navigator.render(navigatorTaoProps),
-    ...auxiliaries.map(auxiliary =>
-      auxiliary.render({
-        ...appTaoProps,
-        navigationHostActive: auxiliary === focusedAuxiliary,
-      })
-    ),
   )
+  // A genuine app auxiliary (`@window`) is its own surface, independent of the main navigator: one
+  // may hand its window to a native surface while the other does not, so each decides its own
+  // AppSurfaceFrame rather than sharing the main navigator's verdict.
+  const auxiliaryContent = auxiliaries.map(auxiliary => {
+    const rendered = auxiliary.render({
+      ...appTaoProps,
+      navigationHostActive: auxiliary === focusedAuxiliary,
+    })
+    return auxiliary.ownsWindowSurface()
+      ? rendered
+      : createElement(AppSurfaceFrame, { taoProps: appTaoProps }, rendered)
+  })
   const hostProps = interactionMeasurements.bindRoot({
     children: [
       ownsWindow
-        ? content
-        : createElement(AppSurfaceFrame, { key: 'content', taoProps: appTaoProps }, content),
+        ? mainContent
+        : createElement(AppSurfaceFrame, { key: 'content', taoProps: appTaoProps }, mainContent),
+      ...auxiliaryContent,
+      // The root window's layer: an ask dims the whole window from here, above the content and the
+      // auxiliaries and beneath the toasts, which stay readable over a dimmed screen.
+      createElement(WindowLayer, { key: 'app-window-layer', registry: windowLayer }),
       React.Children.count(toasts) > 0
         ? createElement(runtime.View, {
           children: toasts,
           key: 'app-toasts',
-          style: toastLayerStyle,
+          // The layer stretches edge to edge (background); its own padding keeps a toast off the
+          // home indicator and any side notch (content), growing the fixed base padding by the live
+          // safe-area inset the same way every other floating Tao surface does.
+          style: [
+            toastLayerStyle,
+            {
+              paddingBottom: toastLayerBottomPadding + insets.bottom,
+              paddingLeft: toastLayerHorizontalPadding + insets.left,
+              paddingRight: toastLayerHorizontalPadding + insets.right,
+            },
+          ],
         })
         : null,
       createElement(InteractionLayersHost, { key: 'interaction-layers', taoProps: appTaoProps }),
@@ -142,7 +165,7 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     style: navigationAppHostStyle,
     tabIndex: runtime.Platform?.OS === 'web' ? 0 : undefined,
   })
-  return createElement(runtime.View, hostProps)
+  return createElement(WindowLayerProvider, { registry: windowLayer }, createElement(runtime.View, hostProps))
 }
 
 type TaoAppHostKeyEvent =
@@ -297,10 +320,10 @@ const toastLayerStyle = {
   alignItems: 'center',
   bottom: 0,
   left: 0,
-  paddingBottom: 24,
-  paddingHorizontal: 16,
   pointerEvents: 'box-none',
   position: 'absolute',
   right: 0,
   zIndex: 2,
 } as const
+const toastLayerBottomPadding = 24
+const toastLayerHorizontalPadding = 16

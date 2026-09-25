@@ -22,6 +22,8 @@ import {
   Platform,
   Repo,
   Switch,
+  TaoHome,
+  TaoResources,
   TaoStdlib,
   Text,
   Time,
@@ -48,7 +50,9 @@ Describe('Time', () => {
         waits.push(ms)
         now += ms
       },
-      timeoutMs: 100,
+      // `now`/`sleep` are injected fakes, so this budget is denominated in fake ms with no real wall
+      // time spent.
+      timeoutMs: 100, // budget-ok: fake clock, no real wall time.
     })
 
     Expect(result).toBe(0)
@@ -63,6 +67,7 @@ Describe('Time', () => {
     }, {
       intervalMs: 10,
       stop: () => true,
+      // budget-ok: `stop` fires on the first check, so no real wall time is spent waiting on this budget.
       timeoutMs: 100,
     })
 
@@ -84,7 +89,9 @@ Describe('Time', () => {
         waits.push(ms)
         now += ms
       },
-      timeoutMs: 25,
+      // `now`/`sleep` are injected fakes, so this budget is denominated in fake ms with no real wall
+      // time spent.
+      timeoutMs: 25, // budget-ok: fake clock, no real wall time.
     })
 
     Expect(result).toBeUndefined()
@@ -372,7 +379,7 @@ Describe('FS', () => {
       Expect(
         await Time.pollUntil(async () => await FS.exists(FS.resolvePath('entered-first', root)), {
           intervalMs: 5,
-          timeoutMs: 2_000,
+          timeoutMs: 30_000,
         }),
       ).toBe(true)
       second = run('second', secondSource, false)
@@ -682,7 +689,7 @@ Describe('HCI', () => {
   })
 
   Test('asks for text with validation', async () => {
-    const streams = fakeTerminal(' \nRo\n')
+    const streams = fakeTerminal(' \nthe Developer\n')
 
     const value = await HCI.askText({
       message: 'Name',
@@ -690,7 +697,7 @@ Describe('HCI', () => {
       ...streams,
     })
 
-    Expect(value).toBe('Ro')
+    Expect(value).toBe('the Developer')
     Expect(streams.outputText()).toContain('Required')
   })
 
@@ -777,7 +784,9 @@ Describe('HCI', () => {
   })
 
   Test('uses defaults or rejects in non-interactive mode', async () => {
-    await Expect(HCI.askText({ message: 'Name', interactive: false, defaultValue: 'Ro' })).resolves.toBe('Ro')
+    await Expect(HCI.askText({ message: 'Name', interactive: false, defaultValue: 'the Developer' })).resolves.toBe(
+      'the Developer',
+    )
     await Expect(HCI.askConfirm({ message: 'Continue', interactive: false, defaultValue: false })).resolves.toBe(false)
     await Expect(
       HCI.askChoice({
@@ -993,6 +1002,47 @@ Describe('Repo', () => {
       })).map(path => FS.relativePath(root, path))
 
       Expect(files).toEqual(['MVP-4/valid.tao'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  // A listing answers from one discovery what `filesUnder` and `directoriesUnder` answer from one
+  // discovery each, so every option has to filter to the same set either way.
+  Test('answers every file and directory question from one listing as the per-question calls do', async () => {
+    const root = await untrackedTmpDir()
+    try {
+      await FS.writeText(FS.resolvePath('Project.tao', root), '')
+      await FS.writeText(FS.resolvePath('@data/Data.tao', root), '')
+      await FS.writeText(FS.resolvePath('@data/nested/Notes.ts', root), '')
+      await FS.writeText(FS.resolvePath('@empty/README.md', root), '')
+      await FS.writeText(FS.resolvePath('.hidden/@secret/Hidden.tao', root), '')
+      await FS.writeText(FS.resolvePath('node_modules/@scoped/Dep.tao', root), '')
+      const listing = await Repo.listUnder(root)
+      const questions = [
+        {},
+        { extensions: ['.tao'] },
+        { excludeDirectoryNames: ['node_modules'], extensions: ['.tao'] },
+        { excludeDirectoryNames: ['node_modules', 'nested'] },
+      ] as const
+
+      for (const options of questions) {
+        Expect(listing.files(options)).toEqual(await Repo.filesUnder(root, options))
+      }
+      for (const options of [{}, { namePrefix: '@' }] as const) {
+        Expect(listing.directories(options)).toEqual(await Repo.directoriesUnder(root, options))
+      }
+      Expect(listing.directories({ namePrefix: '@' }).map(path => FS.relativePath(root, path))).toEqual([
+        '@data',
+        '@empty',
+        'node_modules/@scoped',
+      ])
+      Expect(
+        listing.files({ excludeDirectoryNames: ['node_modules'], extensions: ['.tao'] }).map(path =>
+          FS.relativePath(root, path)
+        ),
+      )
+        .toEqual(['@data/Data.tao', 'Project.tao'])
     } finally {
       await FS.remove(root)
     }
@@ -1316,6 +1366,139 @@ Describe('TaoStdlib', () => {
     })
   })
 })
+
+Describe('TaoHome', () => {
+  // The install script spells the same rule in shell; these pin the paths it must agree with.
+  Test('defaults to ~/.local/share/tao', () => {
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: undefined }, () => {
+      Expect(TaoHome.root()).toBe('/Users/someone/.local/share/tao')
+      Expect(TaoHome.resolve('hosts')).toBe('/Users/someone/.local/share/tao/hosts')
+    })
+  })
+
+  Test('honours XDG_DATA_HOME, and ignores a relative one as the specification asks', () => {
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: '/data' }, () => {
+      Expect(TaoHome.root()).toBe('/data/tao')
+    })
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: undefined, XDG_DATA_HOME: 'data' }, () => {
+      Expect(TaoHome.root()).toBe('/Users/someone/.local/share/tao')
+    })
+  })
+
+  Test('takes TAO_HOME over everything, and refuses a relative one', () => {
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: '/opt/tao', XDG_DATA_HOME: '/data' }, () => {
+      Expect(TaoHome.root()).toBe('/opt/tao')
+    })
+    withEnvironment({ HOME: '/Users/someone', TAO_HOME: 'tao', XDG_DATA_HOME: undefined }, () => {
+      Expect(() => TaoHome.root()).toThrow('TAO_HOME must be an absolute path')
+    })
+  })
+})
+
+Describe('TaoResources', () => {
+  Test('names no root inside a checkout, so every reader keeps its own layout', async () => {
+    await withDeclaredResourceRoot(undefined, () => {
+      Expect(TaoResources.declaredRoot()).toBeUndefined()
+      Expect(TaoResources.resolve('stdlib')).toBeUndefined()
+    })
+  })
+
+  Test('resolves a path inside the declared root', async () => {
+    const root = await tmpDir()
+    await withDeclaredResourceRoot(root, () => {
+      Expect(TaoResources.declaredRoot()).toBe(root)
+      Expect(TaoResources.resolve('host/package.json')).toBe(FS.resolvePath('host/package.json', root))
+    })
+  })
+
+  // Same reason the stdlib variable refuses one: a relative root is read against the process's
+  // current directory and hashed against something else, so it names two trees.
+  Test('refuses a relative declared root', async () => {
+    await withDeclaredResourceRoot('resources', () => {
+      Expect(() => TaoResources.declaredRoot()).toThrow('must be an absolute path')
+    })
+  })
+
+  // The stdlib variable still wins, so a test or a packaged Studio can redirect an installed binary.
+  Test('yields to the stdlib variable when both name a root', async () => {
+    const resources = await tmpDir()
+    const stdlib = await tmpDir()
+    await withDeclaredResourceRoot(resources, async () => {
+      await withDeclaredStdlibRoot(stdlib, () => {
+        Expect(TaoStdlib.declaredRoot()).toBe(stdlib)
+      })
+    })
+  })
+
+  Test('supplies the stdlib root when the stdlib variable is unset', async () => {
+    const resources = await tmpDir()
+    await withDeclaredResourceRoot(resources, async () => {
+      await withDeclaredStdlibRoot(undefined, () => {
+        Expect(TaoStdlib.declaredRoot()).toBe(FS.resolvePath(TaoResources.STDLIB_DIRECTORY, resources))
+      })
+    })
+  })
+
+  // The regression this pairing exists to prevent. A resource root may move the stdlib without the
+  // stdlib variable being set at all, and an identity that stayed `<absent>` across that move would
+  // let a compile built against one stdlib be reused against another.
+  Test('reaches the identity, so a moved resource root cannot reuse a foreign compile', async () => {
+    const resources = await tmpDir()
+    const stdlibRoot = FS.resolvePath(TaoResources.STDLIB_DIRECTORY, resources)
+    await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', stdlibRoot), 'public view Text(Value text) { }\n')
+
+    const unset = await withDeclaredResourceRoot(undefined, () => TaoStdlib.declaredRootIdentity())
+    const declared = await withDeclaredResourceRoot(resources, () => TaoStdlib.declaredRootIdentity())
+    Expect(declared).not.toBe(unset)
+
+    await FS.writeText(FS.resolvePath('@tao/ui/Views.tao', stdlibRoot), 'public view Text(Value text) { }\n// edit\n')
+    const edited = await withDeclaredResourceRoot(resources, () => TaoStdlib.declaredRootIdentity())
+
+    Expect(edited).not.toBe(declared)
+  })
+})
+
+/**
+ * withEnvironment sets or unsets variables for one synchronous check and restores them. It is
+ * synchronous on purpose: with no await between the set and the restore, two uses cannot overlap.
+ */
+function withEnvironment(values: Record<string, string | undefined>, run: () => void): void {
+  const env = Platform.runtimeProcess.env
+  const previous = Object.fromEntries(Object.keys(values).map(name => [name, env[name]]))
+  const assign = (entries: Record<string, string | undefined>) => {
+    for (const [name, value] of Object.entries(entries)) {
+      if (value === undefined) {
+        delete env[name]
+      } else {
+        env[name] = value
+      }
+    }
+  }
+  assign(values)
+  try {
+    run()
+  } finally {
+    assign(previous)
+  }
+}
+
+async function withDeclaredResourceRoot<T>(value: string | undefined, run: () => Promise<T> | T): Promise<T> {
+  const previous = Platform.runtimeProcess.env[TaoResources.DECLARED_ROOT_ENV]
+  if (value === undefined) {
+    delete Platform.runtimeProcess.env[TaoResources.DECLARED_ROOT_ENV]
+  } else {
+    Platform.runtimeProcess.env[TaoResources.DECLARED_ROOT_ENV] = value
+  }
+  try {
+    return await run()
+  } finally {
+    if (previous === undefined) {
+      delete Platform.runtimeProcess.env[TaoResources.DECLARED_ROOT_ENV]
+    } else {
+      Platform.runtimeProcess.env[TaoResources.DECLARED_ROOT_ENV] = previous
+    }
+  }
+}
 
 async function withDeclaredStdlibRoot<T>(value: string | undefined, run: () => Promise<T> | T): Promise<T> {
   const previous = Platform.runtimeProcess.env[TaoStdlib.DECLARED_ROOT_ENV]

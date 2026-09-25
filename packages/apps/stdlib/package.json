@@ -1,5 +1,6 @@
 {
   "name": "tao-stdlib",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "module": "stdlib-src/stdlib.ts",
@@ -7,9 +8,9 @@
     ".": "./stdlib-src/stdlib.ts"
   },
   "dependencies": {
-    "@instantdb/react-native": "1.0.22",
     "@react-native-async-storage/async-storage": "2.2.0",
     "tao-icloud": "workspace:*",
+    "tao-instantdb": "workspace:*",
     "tao-shared": "workspace:*"
   }
 }

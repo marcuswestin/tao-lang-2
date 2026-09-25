@@ -10,12 +10,38 @@ import {
   publishStudioJourneyReplayResult,
   publishStudioScheme,
   replayStudioJourney,
+  resolvedStudioStyle,
   StudioPreview,
   type StudioPreviewConfig,
   type StudioPreviewElement,
   type StudioPreviewHost,
 } from '../TaoRuntime-src/TR-studio-preview'
 import { Clock } from '../TaoRuntime-src/TR-units'
+
+Describe('Studio cell publication bootstrap', () => {
+  Test('requests a fresh iframe bundle when the registered cell is newer than its publication', () => {
+    const reloads: number[] = []
+    const publication = { appName: 'Demo', compileRevision: 3, project: '/demo' }
+    const runtime = { identity: { ...publication, compileRevision: 4 } }
+    const outcome = StudioPreview.Bootstrap.reconcile(runtime, publication, revision => reloads.push(revision))
+    Expect(outcome).toBe('newer')
+    Expect(reloads).toEqual([4])
+  })
+
+  Test('applies only a matching cell and does not reload for an older response', () => {
+    const reloads: number[] = []
+    const publication = { appName: 'Demo', compileRevision: 4, project: '/demo' }
+    const reconcile = (revision: number) =>
+      StudioPreview.Bootstrap.reconcile(
+        { identity: { ...publication, compileRevision: revision } },
+        publication,
+        newer => reloads.push(newer),
+      )
+    Expect(reconcile(3)).toBe('older')
+    Expect(reconcile(4)).toBe('matched')
+    Expect(reloads).toEqual([])
+  })
+})
 
 type Listener = (event: unknown) => void
 
@@ -969,6 +995,28 @@ Describe('Studio preview runtime bridge', () => {
     Expect(fake.overlays.length).toBe(0)
     cleanup()
   })
+})
+
+Test('reads bounded resolved CSS from the matching committed browser node', () => {
+  const target = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
+  const other = renderElement('/project/Main.tao', 30, 40, { height: 20, left: 0, top: 0, width: 20 })
+  const { host } = previewHost([other, target])
+  host.window.getComputedStyle = element => ({
+    getPropertyValue: property => element === target && property === 'color' ? ' rgb(3, 4, 5) ' : '',
+  })
+  Expect(resolvedStudioStyle(host, { end: 20, kind: 'render', sourcePath: '/project/Main.tao', start: 10 }))
+    .toEqual({ color: 'rgb(3, 4, 5)' })
+})
+
+Test('does not attribute one repeated row style to every instance', () => {
+  const first = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
+  const second = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 20, top: 0, width: 20 })
+  const { host } = previewHost([first, second])
+  host.window.getComputedStyle = element => ({
+    getPropertyValue: property => property === 'color' ? element === first ? 'red' : 'blue' : '',
+  })
+  Expect(resolvedStudioStyle(host, { end: 20, kind: 'render', sourcePath: '/project/Main.tao', start: 10 }))
+    .toBeUndefined()
 })
 
 function renderElement(

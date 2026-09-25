@@ -7,8 +7,8 @@ implementation lands. Where a language change is involved, the tranche first wri
 spelling into `Apps/WordFlower/2 - Next`, then reconciles Tao Revolution decisions and executable
 specifications as that vertical slice lands.
 
-Status: **product discovery closed** (FS-D1–FS-D20, Ro, 2026-09-02). The two L1 spellings called out
-as open by FS-D7 and FS-D10 were settled by Ro on 2026-09-03 and are recorded below. Later tranche
+Status: **product discovery closed** (FS-D1–FS-D20, the Developer, 2026-09-02). The two L1 spellings called out
+as open by FS-D7 and FS-D10 were settled by the Developer on 2026-09-03 and are recorded below. Later tranche
 spellings remain tranche decisions rather than implementation choices.
 
 Terminology: a **sketch** is what Figma calls a frame. `frame` remains the interaction system's
@@ -144,7 +144,7 @@ The following rulings are recorded verbatim from the project requirement authori
 > **FS-D5 — Rendering the rectangles.** The language direction is a positioned container, working
 > name `Canvas`, whose direct children carry an offset clause, working name `at x y`, with Studio's
 > own Tao client as the forcing feature. It is decided through the tranche process; its spelling is
-> settled with Ro in `2 - Next` before that tranche starts. Until it lands, Studio draws rectangles
+> settled with the Developer in `2 - Next` before that tranche starts. Until it lands, Studio draws rectangles
 > as a TypeScript overlay in the matrix view. Tao rendering must land before the companion slice.
 
 > **FS-D6 — What travels with a view.** Declarations that relate only to the view, its `scenarios`

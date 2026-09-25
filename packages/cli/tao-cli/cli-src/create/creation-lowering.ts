@@ -186,41 +186,45 @@ function designFile(plan: CreationPlan, names: ProjectNames): string {
   return `// The design: a palette, element defaults, and the bundles the scenes apply at render sites.
 folder
 design ${names.design} {
-   canvas ${colors.canvas}
-   surface ${colors.surface}
-   ink ${colors.ink}
-   inkMuted ${colors.inkMuted}
-   accent ${colors.accent}
-   accentStrong ${colors.accentStrong}
-   accentSoft ${colors.accentSoft}
-   line ${colors.line}
-   danger ${colors.danger}
-   dangerSoft ${colors.dangerSoft}
-   onAccent ${colors.onAccent}
+   colors {
+      canvas ${colors.canvas}
+      surface ${colors.surface}
+      ink ${colors.ink}
+      inkMuted ${colors.inkMuted}
+      accent ${colors.accent}
+      accentStrong ${colors.accentStrong}
+      accentSoft ${colors.accentSoft}
+      line ${colors.line}
+      danger ${colors.danger}
+      dangerSoft ${colors.dangerSoft}
+      onAccent ${colors.onAccent}
+   }
 
-   Text [ink ink]
-   TextInput [background surface, border line, ink ink, radius 12, size 16]
-   FormButton [bg accentStrong, bg accent when pressed, fg onAccent, radius 12, weight 700]
-   Checkbox [fg ink]
-   NavigationHost [background canvas]
-   NavigationContent [background canvas]
-   NavigationHeader [background surface, border line]
-   NavigationTitle [size 18, weight 700, ink ink]
-   NavigationTabs [gap 6, pad 6, bg surface, border line]
-   NavigationTab [pad 10, radius 10, fg inkMuted, weight 600]
-   NavigationTabActive [NavigationTab, bg accentSoft, fg accentStrong]
-   NavigationChromeButton [pad 8, radius 8, fg accentStrong, weight 600]
+   styles {
+      Text [ink ink]
+      TextInput [background surface, border line, ink ink, radius 12, size 16]
+      FormButton [background accentStrong, background accent when pressed, ink onAccent, radius 12, weight 700]
+      Checkbox [ink ink]
+      NavigationHost [background canvas]
+      NavigationContent [background canvas]
+      NavigationHeader [background surface, border line]
+      NavigationTitle [size 18, weight 700, ink ink]
+      NavigationTabs [gap 6, pad 6, background surface, border line]
+      NavigationTab [pad 10, radius 10, ink inkMuted, weight 600]
+      NavigationTabActive [NavigationTab, background accentSoft, ink accentStrong]
+      NavigationChromeButton [pad 8, radius 8, ink accentStrong, weight 600]
 
-   screen [fill, content top stretch, pad 24, background canvas]
-   column [width max 720, gap 16]
-   eyebrow [size 13, line 18, weight 700, fg accentStrong]
-   sectionTitle [size 20, line 26, weight 700, fg ink]
-   body [size 16, line 24, fg inkMuted]
-   caption [size 14, line 20, fg inkMuted]
-   panel [gap 14, pad 20, radius 18, bg surface, border line]
-   card [gap 10, pad 16, radius 14, bg surface, border line]
-   buttonSecondary [bg surface, border line, fg accentStrong]
-   buttonDanger [bg dangerSoft, border danger, fg danger]
+      screen [fill, content top stretch, pad 24, background canvas]
+      column [width max 720, gap 16]
+      eyebrow [size 13, line 18, weight 700, ink accentStrong]
+      sectionTitle [size 20, line 26, weight 700, ink ink]
+      body [size 16, line 24, ink inkMuted]
+      caption [size 14, line 20, ink inkMuted]
+      panel [gap 14, pad 20, radius 18, background surface, border line]
+      card [gap 10, pad 16, radius 14, background surface, border line]
+      buttonSecondary [background surface, border line, ink accentStrong]
+      buttonDanger [background dangerSoft, border danger, ink danger]
+   }
 }
 `
 }

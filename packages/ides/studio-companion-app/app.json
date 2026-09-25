@@ -7,7 +7,7 @@
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "bundleIdentifier": "dev.tao-lang.studio.companion",
+      "bundleIdentifier": "com.devtao.studio.companion",
       "supportsTablet": true,
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Tao Studio on your Mac renders the app you are editing. Tao Companion uses the local network to load that app from Studio and keep it in sync while you work.",
@@ -18,6 +18,9 @@
           "NSAllowsLocalNetworking": true
         }
       }
+    },
+    "android": {
+      "package": "com.devtao.studio.companion"
     },
     "updates": {
       "enabled": false
@@ -30,6 +33,15 @@
           "ios": {
             "enableSceneSupport": true
           }
+        }
+      ],
+      [
+        "tao-icloud",
+        {
+          "services": [
+            "CloudDocuments",
+            "CloudKit"
+          ]
         }
       ],
       "./plugins/with-ios-fmt-compat.cjs"

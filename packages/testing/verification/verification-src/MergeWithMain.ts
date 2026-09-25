@@ -1,12 +1,7 @@
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
-import {
-  inspectLandingRemote,
-  type LandingBrokerInspection,
-  type LandingBrokerPush,
-  pushLandingRemote,
-} from './landing-broker/LandingBrokerClient'
 import { LandingLock, LandingLockBusyError, type LandingPhaseName } from './LandingLock'
 import { MachineLanes, MachineResourceBusyError, type MachineResourceLease } from './MachineLanes'
+import { extractLaneReport } from './RunSummary'
 
 const SNAPSHOT_VERSION = 1
 const LANDING_RESOURCE_NAME = 'merge-with-main-landing'
@@ -160,7 +155,11 @@ export type MergeCommandRunner = (
 
 /** MergeWithMainDependencies isolates process, filesystem, terminal, and clock effects for testing. */
 export type MergeWithMainDependencies = {
-  acquireLease: typeof MachineLanes.acquireResource
+  acquireLease: (
+    options: Parameters<typeof MachineLanes.acquireResource>[0] & {
+      onQueueWait?: () => Promise<void>
+    },
+  ) => Promise<MachineResourceLease>
   askConfirm: (message: string) => Promise<boolean>
   /** Report which phase of the landing the lock is being spent on. Never throws; see `LandingLock`. */
   beginPhase: (repositoryRoot: string, name: LandingPhaseName) => Promise<void>
@@ -170,14 +169,12 @@ export type MergeWithMainDependencies = {
   endPhases: (repositoryRoot: string) => Promise<void>
   exists: (path: string) => Promise<boolean>
   isInteractive: () => boolean
-  inspectRemote?: (repositoryRoot: string, branches: readonly string[]) => Promise<LandingBrokerInspection | undefined>
   move: (fromPath: string, toPath: string) => Promise<void>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   readText: (path: string) => Promise<string>
   remove: (path: string) => Promise<void>
   run: MergeCommandRunner
-  pushRemote?: (repositoryRoot: string, push: LandingBrokerPush) => Promise<LandingBrokerInspection | undefined>
   writeJson: (path: string, value: unknown) => Promise<void>
   writeLine: (line: string, kind?: 'success') => void
   writeText: (path: string, value: string) => Promise<void>
@@ -207,14 +204,12 @@ const defaultDependencies: MergeWithMainDependencies = {
   },
   exists: FS.exists,
   isInteractive: HCI.isInteractive,
-  inspectRemote: inspectLandingRemote,
   move: FS.move,
   now: () => new Date(),
   readJson: FS.readJson,
   readText: FS.readText,
   remove: FS.remove,
   run: CLI.run,
-  pushRemote: pushLandingRemote,
   writeJson: FS.writeJson,
   writeLine: (line, kind) => {
     if (kind === 'success') {
@@ -242,10 +237,8 @@ function archiveName(branch: string): string {
  * twice in a single session.
  *
  * The archive ref is the fact. `merge-with-main` pushes `merged/<name>` as part of a successful
- * landing and at no other time, so the ref exists if and only if the branch landed. This reads the
- * local remote-tracking ref after a fetch rather than asking the remote directly: `git ls-remote`
- * authenticates, and credential paths are denied inside the agent sandbox, so the question an agent
- * most needs to ask would be answerable only outside it.
+ * landing and at no other time, so the ref exists if and only if the branch landed. Query the
+ * remote directly; a failed query must not look like an absent archive.
  */
 export async function landedReport(
   branch?: string,
@@ -260,15 +253,8 @@ export async function landedReport(
     )
   }
   const archive = archiveName(named)
-  // A fetch keeps the answer current; a remote that cannot be reached still leaves the last known
-  // refs readable, so the check degrades to "as of the last fetch" rather than failing outright.
-  await dependencies.run('git', { args: ['fetch', 'origin', '--quiet'], cwd: root, stdio: 'pipe' })
-  const result = await dependencies.run('git', {
-    args: ['for-each-ref', '--format=%(refname:short)', `refs/remotes/origin/${archive}`],
-    cwd: root,
-    stdio: 'pipe',
-  })
-  return { archive, branch: named, landed: (result.stdout ?? '').trim().length > 0 }
+  const remote = await remoteHeads(dependencies, root, [archive])
+  return { archive, branch: named, landed: remote.refs.has(archive) }
 }
 
 /** currentBranch names this worktree's branch, or undefined on a detached HEAD. */
@@ -535,24 +521,38 @@ export const MergeWithMainCommand = {
     // lock from the first ref it touches to the last, with a `finally` that gives the lock back
     // whichever way the transaction ends. Nothing between two commands waits on an agent any more:
     // that gap — not the merge, which measured 2-94s — is what held the lock for 36-44 minutes.
-    const lease = await acquireLandingLease(dependencies, preflight)
+    const acquisition = await acquireLandingLease(dependencies, preflight)
+    const lease = acquisition.lease
     try {
-      const snapshot = await createSnapshot(preflight, dependencies)
+      // Queue-side merges change HEAD, and another landing may move main during the wait. Refresh
+      // the preflight whenever either ref changed; an uncontended landing avoids a second remote
+      // query (and preserves the same evidence its existing tests exercise).
+      const currentHead = (await git(dependencies, preflight.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
+      const currentMain = (await git(dependencies, preflight.featureRoot, ['rev-parse', `refs/heads/${MAIN_BRANCH}`]))
+        .stdout.trim()
+      const lockedPreflight = !acquisition.waited && currentHead === preflight.branchHead
+          && currentMain === preflight.mainHead
+        ? preflight
+        : await inspectMergePreflight(options, dependencies)
+      if (lockedPreflight.branch !== preflight.branch) {
+        Errors.throwUserInput('The feature branch changed while waiting for its landing turn.')
+      }
+      const snapshot = await createSnapshot(lockedPreflight, dependencies)
       writeLines(dependencies, [
-        ...preflight.warnings.map(warning => `WARN  ${warning}`),
-        `PASS  Landing lock held for ${preflight.branch}; every step below runs inside it.`,
+        ...lockedPreflight.warnings.map(warning => `WARN  ${warning}`),
+        `PASS  Landing lock held for ${lockedPreflight.branch}; every step below runs inside it.`,
         `PASS  Safety snapshot: ${snapshot.snapshotPath}`,
       ])
 
       await stabilizeAndVerify(snapshot, options, dependencies)
       await verifyLandingSubject(snapshot, options, dependencies)
-      await beginPhase(preflight.featureRoot, 'push', dependencies)
-      await landSquash(snapshot, preflight, dependencies)
+      await beginPhase(lockedPreflight.featureRoot, 'push', dependencies)
+      await landSquash(snapshot, lockedPreflight, dependencies)
       await pushArchiveAndPreserve(snapshot, dependencies)
 
       const completed = [
-        `PASS  Merged '${preflight.branch}' into main and archived it as ${archiveName(preflight.branch)}.`,
-        `PASS  Preserved the clean invoking worktree at ${preflight.featureRoot} on detached HEAD; `
+        `PASS  Merged '${lockedPreflight.branch}' into main and archived it as ${archiveName(lockedPreflight.branch)}.`,
+        `PASS  Preserved the clean invoking worktree at ${lockedPreflight.featureRoot} on detached HEAD; `
         + 'archive its owning task when you are ready to remove it.',
       ]
       writeLines(dependencies, completed, 'success')
@@ -619,28 +619,59 @@ async function beginPhase(
 async function acquireLandingLease(
   dependencies: MergeWithMainDependencies,
   preflight: MergePreflight,
-): Promise<MachineResourceLease> {
+): Promise<{ lease: MachineResourceLease; waited: boolean }> {
+  let checkedAt = 0
+  let waited = false
+  const onQueueWait = async () => {
+    waited = true
+    const now = Date.now()
+    if (now - checkedAt < 15_000) {
+      return
+    }
+    checkedAt = now
+    await remoteHeads(dependencies, preflight.featureRoot, [MAIN_BRANCH])
+    await runChecked(dependencies, 'git', ['fetch', '--prune', REMOTE], preflight.featureRoot)
+    const current = (await git(dependencies, preflight.featureRoot, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`]))
+      .stdout.trim()
+    if (current.length === 0) {
+      Errors.throwHostEnvironment(`Remote '${REMOTE}' stopped reporting main.`)
+    }
+    const head = (await git(dependencies, preflight.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
+    const ancestor = await dependencies.run('git', {
+      args: ['merge-base', '--is-ancestor', current, head],
+      cwd: preflight.featureRoot,
+    })
+    if (ancestor.exitCode === 0) {
+      return
+    }
+    if (ancestor.exitCode !== 1) {
+      assertCommandSucceeded(ancestor)
+    }
+    const merged = await dependencies.run('git', {
+      args: ['merge', '--no-edit', current],
+      cwd: preflight.featureRoot,
+      stdio: 'pipe',
+    })
+    if (merged.exitCode !== 0) {
+      Errors.throwUserInput(
+        `Merging main while queued conflicted. This landing left the ready queue without taking `
+          + 'the lock. Resolve the conflict, commit the merge, then run `./agent land` again.',
+      )
+    }
+    dependencies.writeLine(
+      `PASS  Refreshed queued branch with main at ${shortSha(current)}; full verification waits for the lock.`,
+    )
+  }
   const request = async (waitTimeoutMs: number) =>
     await dependencies.acquireLease({
       command: `merge-with-main ${preflight.branch}`,
       name: LANDING_RESOURCE_NAME,
       repositoryRoot: preflight.featureRoot,
       waitTimeoutMs,
+      onQueueWait,
     })
-  try {
-    return await request(0)
-  } catch (error) {
-    if (!(error instanceof MachineResourceBusyError)) {
-      throw error
-    }
-    const owner = error.owner
-    writeLines(dependencies, [
-      `WARN  Landing lease held by '${owner.command}' in ${owner.repositoryRoot} (PID ${owner.pid}), `
-      + `held for ${describeHeldFor(owner.startedAt, dependencies.now())}.`,
-      'WARN  Waiting for it; this landing starts as soon as that one ends.',
-    ])
-    return await request(LEASE_WAIT_TIMEOUT_MS)
-  }
+  const lease = await request(LEASE_WAIT_TIMEOUT_MS)
+  return { lease, waited }
 }
 
 /**
@@ -656,13 +687,14 @@ async function acquireLandingLease(
  * right, so it must not queue behind itself, and the release must leave that lock held because the
  * agent took it deliberately and returns it itself.
  */
-const acquireLandingLock: typeof MachineLanes.acquireResource = async options => {
+const acquireLandingLock: MergeWithMainDependencies['acquireLease'] = async options => {
   const repositoryRoot = options.repositoryRoot
   const hold = await LandingLock.acquire({
     label: options.command,
     // Marks the hold a landing rather than a lane, which is what makes the board's phase report
     // meaningful and what stops new diff-scoped lanes being admitted beside it.
     landing: true,
+    ...(options.onQueueWait === undefined ? {} : { onQueueWait: options.onQueueWait }),
     // Without this a landing blocked behind an abandoned lock says nothing for the whole six-hour
     // wait. Nothing will break the lock for it, so saying who holds it, repeatedly, is the only
     // way the wait ever reaches a person.
@@ -713,16 +745,6 @@ const acquireLandingLock: typeof MachineLanes.acquireResource = async options =>
       })
     },
   }
-}
-
-/** Report how long a lease has been held, in the coarsest unit that still says something useful. */
-function describeHeldFor(startedAt: string, now: Date): string {
-  const elapsedMs = Math.max(0, now.getTime() - Date.parse(startedAt))
-  const minutes = Math.floor(elapsedMs / 60_000)
-  if (minutes < 1) {
-    return `${Math.max(1, Math.round(elapsedMs / 1_000))}s`
-  }
-  return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h${minutes % 60}m`
 }
 
 /** Report whether the feature branch's `just verify-full` pass is skipped, and by which flag. */
@@ -905,15 +927,7 @@ async function stabilizeAndVerify(
       // in two as soon as `GateRunner` can say when it does.
       await beginPhase(snapshot.featureRoot, 'repository tests', dependencies)
       const verifiedHead = (await git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
-      await runAndSnapshot(
-        snapshot,
-        'just',
-        ['verify-full'],
-        snapshot.featureRoot,
-        'feature-verified',
-        dependencies,
-        { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
-      )
+      await runVerificationLane(snapshot, ['verify-full'], 'feature-verified', dependencies)
       if (
         snapshot.currentFeatureHead !== verifiedHead
         || snapshot.currentFeatureStatus !== ''
@@ -929,7 +943,7 @@ async function stabilizeAndVerify(
     }
 
     const remoteMain = (
-      await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH], snapshot.remoteTransport)
+      await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH])
     ).refs.get(MAIN_BRANCH)
     if (!remoteMain) {
       Errors.throwHostEnvironment(`Remote '${REMOTE}' stopped reporting refs/heads/main.`)
@@ -999,7 +1013,7 @@ async function integrateMain(
         + 'landing released the landing lock and stopped. Nothing was pushed and main was not moved.\n'
         + `Conflicting paths:\n${unmerged.map(path => `- ${path}`).join('\n')}\n`
         + 'Resolve them here, unlocked — the machine is free for everyone else while you do — commit the '
-        + 'merge with `git commit --no-edit`, and run `./dev land` again. The landing re-integrates '
+        + 'merge with `git commit --no-edit`, and run `./agent land` again. The landing re-integrates '
         + 'whatever main has become by then, so nothing you do now has to anticipate it.',
     )
   }
@@ -1033,31 +1047,13 @@ async function runBarrier(
     )
     return
   }
-  await runAndSnapshot(
-    snapshot,
-    'just',
-    [LAND_BARRIER_LANE],
-    snapshot.featureRoot,
-    snapshot.phase,
-    dependencies,
-    { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
-  )
+  await runVerificationLane(snapshot, [LAND_BARRIER_LANE], snapshot.phase, dependencies)
 }
 
 async function refreshRemoteMain(
   snapshot: MergeSnapshot,
   dependencies: MergeWithMainDependencies,
 ): Promise<string> {
-  if (snapshot.remoteTransport === 'broker') {
-    const inspection = await dependencies.inspectRemote?.(snapshot.featureRoot, [MAIN_BRANCH])
-    const main = inspection?.refs.get(MAIN_BRANCH)
-    if (main === undefined) {
-      Errors.throwHostEnvironment(
-        "The Tao landing broker stopped answering. Run 'just landing-setup' in a normal terminal and retry.",
-      )
-    }
-    return main
-  }
   await runChecked(dependencies, 'git', ['fetch', '--prune', REMOTE], snapshot.featureRoot, true)
   return (await git(dependencies, snapshot.featureRoot, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
 }
@@ -1089,15 +1085,7 @@ async function verifyLandingSubject(
     await advanceSnapshot(snapshot, 'main-verified', dependencies)
   } else if (stagedVerifySkip === undefined) {
     // Nothing has verified this branch yet, so this is where it happens.
-    await runAndSnapshot(
-      snapshot,
-      'just',
-      ['verify', '--complete'],
-      snapshot.featureRoot,
-      'main-verified',
-      dependencies,
-      { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
-    )
+    await runVerificationLane(snapshot, ['verify', '--complete'], 'main-verified', dependencies)
   } else {
     writeLines(dependencies, [
       `WARN  Skipped just verify --complete on feature tree ${shortSha(featureTree)} because `
@@ -1308,93 +1296,69 @@ async function pushRemoteRefs(
   snapshot: MergeSnapshot,
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
-  if (snapshot.remoteTransport === 'broker') {
-    const landedHead = snapshot.landedHead
-    if (landedHead === undefined) {
-      Errors.throwUnexpected('The landing snapshot has no squash commit to push.')
-    }
-    const pushed = await dependencies.pushRemote?.(snapshot.featureRoot, {
-      branch: snapshot.branch,
-      expectedRemoteFeatureHead: snapshot.remoteFeatureHead ?? null,
-      expectedRemoteMainHead: snapshot.remoteMainHead,
-      featureHead: snapshot.currentFeatureHead,
-      landedHead,
-    })
-    if (pushed === undefined) {
-      Errors.throwHostEnvironment(
-        "The Tao landing broker stopped answering. Run 'just landing-setup' in a normal terminal and retry.",
-      )
-    }
-    if (
-      pushed.refs.get(MAIN_BRANCH) !== landedHead
-      || pushed.refs.get(archiveName(snapshot.branch)) !== snapshot.currentFeatureHead
-      || snapshot.remoteFeatureHead !== undefined && pushed.refs.has(snapshot.branch)
-    ) {
-      Errors.throwHostEnvironment('The landing broker returned refs that do not match the requested landing.')
-    }
+  const landedHead = snapshot.landedHead
+  if (landedHead === undefined) {
+    Errors.throwUnexpected('The landing snapshot has no squash commit to push.')
+  }
+  const archive = archiveName(snapshot.branch)
+  const args = [
+    'push',
+    '--porcelain',
+    '--atomic',
+    `--force-with-lease=refs/heads/${MAIN_BRANCH}:${snapshot.remoteMainHead}`,
+    `--force-with-lease=refs/heads/${archive}:`,
+  ]
+  if (snapshot.remoteFeatureHead !== undefined) {
+    args.push(`--force-with-lease=refs/heads/${snapshot.branch}:${snapshot.remoteFeatureHead}`)
+  }
+  args.push(
+    REMOTE,
+    `${landedHead}:refs/heads/${MAIN_BRANCH}`,
+    `${snapshot.currentFeatureHead}:refs/heads/${archive}`,
+  )
+  if (snapshot.remoteFeatureHead !== undefined) {
+    args.push(`:refs/heads/${snapshot.branch}`)
+  }
+  const pushed = await dependencies.run('git', {
+    args,
+    cwd: snapshot.featureRoot,
+    stdio: 'stream',
+  })
+  // The process result can be lost after the remote accepts an atomic push. Inspect every affected
+  // ref before deciding whether the landing succeeded or a retry can safely begin before the push.
+  const observed = (await remoteHeads(
+    dependencies,
+    snapshot.featureRoot,
+    [MAIN_BRANCH, archive, snapshot.branch],
+  )).refs
+  const fullyLanded = observed.get(MAIN_BRANCH) === landedHead
+    && observed.get(archive) === snapshot.currentFeatureHead
+    && (snapshot.remoteFeatureHead === undefined || !observed.has(snapshot.branch))
+  if (fullyLanded) {
     await advanceSnapshot(snapshot, 'pushed', dependencies)
     await advanceSnapshot(snapshot, 'archived', dependencies)
     return
   }
-
-  const pushMain = await dependencies.run('git', {
-    args: [
-      'push',
-      REMOTE,
-      `--force-with-lease=refs/heads/${MAIN_BRANCH}:${snapshot.remoteMainHead}`,
-      `${MAIN_BRANCH}:${MAIN_BRANCH}`,
-    ],
-    cwd: snapshot.featureRoot,
-    stdio: 'stream',
-  })
-  if (pushMain.exitCode !== 0 || pushMain.error !== undefined || pushMain.signal !== null) {
-    const observedMain = (
-      await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH], 'direct')
-    ).refs.get(MAIN_BRANCH)
-    if (observedMain === snapshot.currentMainHead) {
-      // A transport can report failure after the remote accepted the update. The exact remote ref
-      // is stronger evidence than the process result, so recovery must stay on the irreversible side.
-      await advanceSnapshot(snapshot, 'pushed', dependencies)
-    } else if (observedMain !== undefined && observedMain !== snapshot.remoteMainHead) {
-      // The force-with-lease proves this push changed nothing. Restore the reversible phase so the
-      // guarded abort may remove only the local squash commit before a fresh preflight.
+  const noLandingRefsChanged = observed.get(archive) === undefined
+    && observed.get(snapshot.branch) === snapshot.remoteFeatureHead
+    && observed.get(MAIN_BRANCH) !== landedHead
+  if (pushed.exitCode !== 0 || pushed.error !== undefined || pushed.signal !== null) {
+    if (noLandingRefsChanged) {
       snapshot.phase = 'committed'
       await persistSnapshot(snapshot, dependencies)
       Errors.throwHostEnvironment(
-        `${REMOTE}/main moved to ${shortSha(observedMain)} before the verified squash could be pushed. `
-          + `The remote was not changed; abort this snapshot with ./dev merge-with-main --abort ${snapshot.snapshotPath}, `
+        `The atomic remote push changed no landing refs; ${REMOTE}/main is at `
+          + `${shortSha(observed.get(MAIN_BRANCH) ?? '')}. `
+          + `Abort this snapshot with ./dev merge-with-main --abort ${snapshot.snapshotPath}, `
           + 'then merge current main into the feature branch, verify, and retry.',
       )
-    } else {
-      assertCommandSucceeded(pushMain)
     }
-  } else {
-    await advanceSnapshot(snapshot, 'pushed', dependencies)
+    assertCommandSucceeded(pushed)
   }
-
-  const archive = archiveName(snapshot.branch)
-  await runChecked(
-    dependencies,
-    'git',
-    ['push', REMOTE, `--force-with-lease=refs/heads/${archive}:`, `${snapshot.branch}:refs/heads/${archive}`],
-    snapshot.featureRoot,
-    true,
+  Errors.throwHostEnvironment(
+    'The atomic push returned, but remote main, archive, and feature refs do not match the landing. '
+      + `Inspect the remote refs and snapshot ${snapshot.snapshotPath} before recovery.`,
   )
-  if (snapshot.remoteFeatureHead !== undefined) {
-    await runChecked(
-      dependencies,
-      'git',
-      [
-        'push',
-        REMOTE,
-        `--force-with-lease=refs/heads/${snapshot.branch}:${snapshot.remoteFeatureHead}`,
-        `:refs/heads/${snapshot.branch}`,
-      ],
-      snapshot.featureRoot,
-      true,
-    )
-  }
-  await advanceSnapshot(snapshot, 'archived', dependencies)
 }
 
 async function abortMerge(
@@ -1604,27 +1568,14 @@ async function remoteHeads(
   dependencies: MergeWithMainDependencies,
   cwd: string,
   branches: readonly string[],
-  requiredTransport?: RemoteTransport,
 ): Promise<{ refs: Map<string, string>; transport: RemoteTransport }> {
-  if (requiredTransport !== 'direct') {
-    const broker = await dependencies.inspectRemote?.(cwd, branches)
-    if (broker !== undefined) {
-      return { refs: new Map(broker.refs), transport: 'broker' }
-    }
-    if (requiredTransport === 'broker') {
-      Errors.throwHostEnvironment(
-        "The Tao landing broker is unavailable. Run 'just landing-setup' in a normal terminal and retry.",
-      )
-    }
-  }
   const result = await dependencies.run('git', {
     args: ['ls-remote', '--heads', REMOTE, ...branches.map(branch => `refs/heads/${branch}`)],
     cwd,
   })
   if (CLI.isSandboxDenial(result)) {
     Errors.throwHostEnvironment(
-      `The sandbox denied merge-with-main's query of remote '${REMOTE}'. `
-        + "Install the credential-isolated service with 'just landing-setup' in a normal terminal, then retry.",
+      `The sandbox denied merge-with-main's query of remote '${REMOTE}'. Run this command with ./agent unsandboxed.`,
       {
         cause: new Errors.CommandExecutionError(result),
         details: { command: result.command, stderr: result.stderr },
@@ -1686,12 +1637,18 @@ async function runAndSnapshot(
   dependencies: MergeWithMainDependencies,
   options: {
     mutation?: 'feature' | 'none'
+    onOutput?: CLI.CommandSpec['onOutput']
     stdio?: CLI.CommandStdio
   } = {},
 ): Promise<CLI.CommandResult> {
   const mutation = options.mutation ?? 'none'
   await assertExpectedLocalState(snapshot, dependencies)
-  const result = await dependencies.run(command, { args, cwd, stdio: options.stdio ?? 'stream' })
+  const result = await dependencies.run(command, {
+    args,
+    cwd,
+    stdio: options.stdio ?? 'stream',
+    ...(options.onOutput === undefined ? {} : { onOutput: options.onOutput }),
+  })
   const succeeded = result.exitCode === 0 && result.error === undefined && result.signal === null
   if (!succeeded) {
     await captureFailedMutation(snapshot, mutation, dependencies)
@@ -1711,6 +1668,98 @@ async function runAndSnapshot(
   await persistSnapshot(snapshot, dependencies)
   assertCommandSucceeded(result)
   return result
+}
+
+/**
+ * runVerificationLane runs one of this landing's own `just` verification lanes — full verify, the
+ * cheap-gate barrier, or the staged verify — the way `runAndSnapshot` always has for a human at a
+ * terminal, and differently for a non-interactive one.
+ *
+ * `stdio: 'stream'` used to run either way: an interactive caller wants the lane's live progress, but
+ * a non-interactive one — an agent's landing, most of the time — got the exact same flood forwarded
+ * to its own stdout as the lane ran, ending on nothing more than `Command failed: just verify-full`
+ * once it failed, with no test name in sight. `pipe` still captures every byte; a non-interactive
+ * caller is shown only the lane's own verdict, its `Failed:` block, and where its logs live —
+ * `extractLaneReport` reads them back out of the captured output — printed once when the lane finishes
+ * and, on failure, repeated from the thrown error's own captured output so the last screen a reader
+ * sees still names the tests.
+ *
+ * `mergedOutputCapture` is read first, not `result.stdout` alone: a `just` spawn error, a `Recipe …
+ * does not exist`, or a sandbox denial writes to stderr, which nothing above this read, so a
+ * genuinely failed lane could print nothing before the generic `Command failed: just verify-full`.
+ * The interactive branch returns before any of this runs, so its `stdio: 'inherit'` path is
+ * unchanged byte for byte.
+ */
+async function runVerificationLane(
+  snapshot: MergeSnapshot,
+  args: readonly string[],
+  successPhase: MergePhase,
+  dependencies: MergeWithMainDependencies,
+): Promise<CLI.CommandResult> {
+  if (dependencies.isInteractive()) {
+    return await runAndSnapshot(snapshot, 'just', args, snapshot.featureRoot, successPhase, dependencies, {
+      stdio: 'inherit',
+    })
+  }
+  const capture = mergedOutputCapture()
+  try {
+    const result = await runAndSnapshot(snapshot, 'just', args, snapshot.featureRoot, successPhase, dependencies, {
+      onOutput: capture.onOutput,
+      stdio: 'pipe',
+    })
+    writeLines(dependencies, laneReportLines(mergedLaneOutput(capture, result), result.error))
+    return result
+  } catch (error) {
+    if (error instanceof Errors.CommandExecutionError) {
+      writeLines(dependencies, laneReportLines(mergedLaneOutput(capture, error.result), error.result.error))
+    }
+    throw error
+  }
+}
+
+/**
+ * mergedOutputCapture collects a lane's stdout and stderr as bytes actually arrive, so a caller that
+ * only inspects the finished `CommandResult` afterward still sees them close to interleaved, the way
+ * a terminal would have shown them, rather than every stdout byte before every stderr one.
+ */
+function mergedOutputCapture(): { onOutput: NonNullable<CLI.CommandSpec['onOutput']>; read: () => string } {
+  const chunks: string[] = []
+  return {
+    onOutput: (_stream, chunk) => {
+      chunks.push(chunk.toString('utf8'))
+    },
+    read: () => chunks.join(''),
+  }
+}
+
+/**
+ * mergedLaneOutput prefers the bytes `mergedOutputCapture` actually saw arrive, in that order. A
+ * runner that never wires `onOutput` through — every test double in this file, and any future one —
+ * still gets both streams, just concatenated rather than interleaved: acceptable next to the silence
+ * this replaces.
+ */
+function mergedLaneOutput(
+  capture: { read: () => string },
+  result: Pick<CLI.CommandResult, 'stderr' | 'stdout'>,
+): string {
+  const captured = capture.read()
+  if (captured.length > 0) {
+    return captured
+  }
+  return result.stderr.length === 0 ? result.stdout : `${result.stdout}\n${result.stderr}`
+}
+
+/**
+ * laneReportLines is what a non-interactive landing shows for a nested lane: its own structured
+ * verdict when the merged output matched one, the same short raw tail every other failed log's
+ * reader gets when it did not, and — either way — the spawn error the `just` invocation itself
+ * failed with, when there was one. A pure spawn failure (the binary missing, a sandbox denial before
+ * the child ever wrote a byte) leaves the merged output empty, so the spawn error is the one thing
+ * that keeps this from printing nothing at all.
+ */
+function laneReportLines(output: string, spawnError: Error | undefined): string[] {
+  const lines = extractLaneReport(output)
+  return spawnError === undefined ? lines : [...lines, `Spawn error: ${spawnError.message}`]
 }
 
 async function captureFailedMutation(

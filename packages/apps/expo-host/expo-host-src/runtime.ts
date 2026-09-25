@@ -3,7 +3,9 @@ import { AST } from '@parser'
 import { Assert, FS } from '@shared'
 import { expoUpdateArtifacts, proveReleaseBundle } from './release-bundle-proof'
 import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
+export { DesktopHost } from './desktop-host'
 
+export { HostDependencies } from './host-dependencies'
 export {
   type ExpoUpdateArtifact,
   type ExpoUpdateArtifacts,
@@ -36,6 +38,8 @@ export type GenerateAppOptions = {
   preview?: GeneratePreviewOptions
   /** publicationHooks exposes file-operation failure seams for transactional publication tests. */
   publicationHooks?: Pick<FS.SynchronizeDirectoryFileSetsOptions, 'beforeMove' | 'beforeRemove'>
+  /** journeyObservations emits test-harness-only render source locators without enabling Studio preview behavior. */
+  journeyObservations?: boolean
   runtimePackageRoot?: string
   ship?: ShipManifest
   validationMode?: 'development' | 'release'
@@ -119,6 +123,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       // A Studio preview carries debugger gates so a breakpoint can pause it. Nothing else does:
       // an app built for a device or a test run compiles exactly as it did before.
       debug: opts.preview !== undefined,
+      journeyObservations: opts.journeyObservations === true,
       studio: opts.preview !== undefined,
       validationMode: opts.validationMode,
     }
@@ -486,21 +491,53 @@ function StudioBrowserApp() {
     if (TaoStudioPreviewBootstrap?.cell !== true) return
     let cancelled = false
     setBootstrapError(undefined)
+    TR.Studio.Diagnostics.record('publication', String(TaoStudioPublication.compileRevision))
     const bootstrapPath = TaoStudioPreviewBootstrap.sessionId === undefined
       ? '/api/preview/cell/bootstrap'
       : '/sessions/' + encodeURIComponent(TaoStudioPreviewBootstrap.sessionId) + '/api/preview/cell/bootstrap'
     const url = new URL(bootstrapPath, TaoStudioPreviewBootstrap.parentOrigin)
     url.searchParams.set('previewInstanceId', TaoStudioPreviewBootstrap.previewInstanceId)
-    void fetch(url).then(async response => {
+    TR.Studio.Diagnostics.record('bootstrap-request', String(TaoStudioPublication.compileRevision))
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+    const load = async () => {
+      const response = await fetch(url)
       if (!response.ok) TR.Errors.failHost('Tao Studio cell bootstrap was rejected (' + response.status + ').')
       const nextCell = await response.json()
-      if (!cancelled && runtimeMatchesPublication(nextCell, TaoStudioPublication)) {
+      if (cancelled) return
+      const outcome = TR.Studio.Bootstrap.reconcile(nextCell, TaoStudioPublication, newerRevision => {
+        const nextUrl = new URL(window.location.href)
+        const attempts = Number(nextUrl.searchParams.get('taoStudioPublicationRetry') ?? '0')
+        if (!Number.isInteger(attempts) || attempts >= 30) {
+          TR.Errors.failHost('Tao Studio preview could not load publication revision ' + newerRevision + '.')
+        }
+        nextUrl.searchParams.set('taoStudioPublicationRetry', String(attempts + 1))
+        TR.Studio.Diagnostics.record('publication-reload-scheduled', String(newerRevision)
+          + '/' + String(attempts + 1))
+        retryTimer = setTimeout(() => {
+          if (!cancelled) window.location.replace(nextUrl.toString())
+        }, Math.min(200 * (attempts + 1), 1_000))
+      })
+      TR.Studio.Diagnostics.record('bootstrap-response', String(nextCell?.identity?.compileRevision)
+        + '/' + String(nextCell?.identity?.cellRevision) + '/' + outcome)
+      if (outcome === 'matched') {
         setAppliedRuntime({ cell: nextCell, manifest: TaoStudioManifest, publication: TaoStudioPublication })
+      } else if (outcome === 'older') {
+        TR.Studio.Diagnostics.record('bootstrap-retry-server', String(TaoStudioPublication.compileRevision))
+        retryTimer = setTimeout(() => { void load().catch(fail) }, 200)
+      } else if (outcome === 'incompatible') {
+        TR.Errors.failHost('Tao Studio cell bootstrap did not match this preview.')
       }
-    }).catch(error => {
+    }
+    const fail = (error: unknown) => {
+      TR.Studio.Diagnostics.record('bootstrap-error', String(error))
       if (!cancelled) setBootstrapError(error)
-    })
-    return () => { cancelled = true }
+    }
+    void load().catch(fail)
+    return () => {
+      cancelled = true
+      if (retryTimer !== undefined) clearTimeout(retryTimer)
+      TR.Studio.Diagnostics.record('bootstrap-superseded', String(TaoStudioPublication.compileRevision))
+    }
   }, [TaoStudioPublication.compileRevision])
   React.useEffect(() => {
     if (TaoStudioPreviewBootstrap?.cell !== true || typeof window === 'undefined') return
@@ -511,11 +548,20 @@ function StudioBrowserApp() {
         || !isRuntimeUpdate(event.data, TaoStudioPreviewBootstrap, TaoStudioPublication)
       ) return
       setBootstrapError(undefined)
-      setAppliedRuntime({
+      TR.Studio.Diagnostics.record('runtime-update', String(event.data.runtime.identity?.compileRevision)
+        + '/' + String(event.data.runtime.identity?.cellRevision))
+      const next = {
         cell: event.data.runtime,
         manifest: TaoStudioManifest,
         publication: TaoStudioPublication,
-      })
+      }
+      // A new cell object here rebuilds the provider overlay below (studioCellRuntime, then
+      // TR.Studio.Environment.Host) and clears its committed data and handles, so it can only be
+      // safe together with a subtree remount. The ErrorBoundary below remounts on exactly these four
+      // values, so an update whose tuple repeats what is already applied must not replace the
+      // previous object: keeping the previous reference is what keeps the memoized cell — and so the
+      // provider overlay — from rebuilding without a remount to justify it.
+      setAppliedRuntime((previous: any) => sameRuntimeIdentity(previous, next) ? previous : next)
     }
     window.addEventListener('message', receiveRuntime)
     return () => window.removeEventListener('message', receiveRuntime)
@@ -629,13 +675,6 @@ function studioCellRuntime(runtime: any, manifest: any) {
   } as any
 }
 
-function runtimeMatchesPublication(runtime: any, publication: any) {
-  const identity = runtime?.identity
-  return identity?.appName === publication.appName
-    && identity?.compileRevision === publication.compileRevision
-    && identity?.project === publication.project
-}
-
 function isRuntimeUpdate(value: any, bootstrap: any, publication: any) {
   const identity = value?.identity
   const runtimeIdentity = value?.runtime?.identity
@@ -652,6 +691,22 @@ function isRuntimeUpdate(value: any, bootstrap: any, publication: any) {
     && runtimeIdentity?.compileRevision === identity.compileRevision
     && runtimeIdentity?.manifestRevision === identity.manifestRevision
     && runtimeIdentity?.project === identity.project
+}
+
+/**
+ * sameRuntimeIdentity compares the same values \`TR.Studio.ErrorBoundary resetKey\` remounts on:
+ * compileRevision, cellRevision, and manifestRevision. previewInstanceId is the fourth resetKey
+ * value but is not part of either side here — \`isRuntimeUpdate\` already requires it to equal this
+ * tab's fixed bootstrap value before a message reaches this comparison, so it cannot discriminate.
+ */
+function sameRuntimeIdentity(previous: any, next: any) {
+  const previousIdentity = previous?.cell?.identity
+  const nextIdentity = next?.cell?.identity
+  return previousIdentity !== undefined
+    && nextIdentity !== undefined
+    && previousIdentity.compileRevision === nextIdentity.compileRevision
+    && previousIdentity.cellRevision === nextIdentity.cellRevision
+    && previousIdentity.manifestRevision === nextIdentity.manifestRevision
 }
 
 function studioPreviewBootstrap(href: string) {

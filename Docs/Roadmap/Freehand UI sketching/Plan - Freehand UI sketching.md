@@ -97,7 +97,7 @@ Current. Studio journey proves a cell replays its prefix and remains interactive
 **Reconcile.** `Decisions.md` §9 and §16, `Docs/Spec/Tao Studio.md`, `Tao Testing.md`, `Tao Layout and
 UI.md`, the stdlib/package catalog, `Coverage.md`, and all WordFlower tiers at absorption.
 
-**Open before starting.** None. Ro settled both items on 2026-09-03: phase steps are
+**Open before starting.** None. The Developer settled both items on 2026-09-03: phase steps are
 `press down <selector>`, `press up <selector>`, and `hover <selector>` over the existing
 text/label/placeholder/`#tag` selector family; focus is tag-only as `focus #tag`. `Spacer()` is the
 semantic leaf with implicit `claim 1`, overridable by `[claim N]`.
@@ -435,7 +435,7 @@ decision.
 
 ## Figma-at-home strides
 
-Adopted 2026-09-04, with Ro's rulings recorded in this section's "Decisions" below; implementation in
+Adopted 2026-09-04, with the Developer's rulings recorded in this section's "Decisions" below; implementation in
 progress. It builds on the landed foundation of `feat/freehand-ui-sketching-implementation` and does
 not reopen FS-D1–FS-D20 or reorder the FS-D20 sequence above. It names the first strides that make
 Studio feel like home to a person fluent in Figma: the reflexes they bring with them (keys, selection,
@@ -466,7 +466,7 @@ the transactional Unsnap and typed flow actions, the Slice 3 Feed server foundat
 roadmap's first two targets (Record journey, `tao review`).
 
 Browser evidence: the simulated smoke lane, the only real-browser proof of Draw and Snap, has
-rejoined `verify-full` (`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it alone). The landing
+rejoined `verify-full` (`just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts` runs it alone). The landing
 and later diagnostics exposed real toolbar, gesture, rerender, interleaved-Snap, editor-ownership,
 source-identity, geometry, and transaction defects. Those product fixes now have focused coverage,
 including a real pointer-release drag-one-in target; no remaining failure has been attributed to the
@@ -673,7 +673,7 @@ undo stack is what Slice 4's cell edits will join.
 
 ### Decisions
 
-Settled by Ro on 2026-09-04, taking the recommendations.
+Settled by the Developer on 2026-09-04, taking the recommendations.
 
 - **A. When to land the branch.** Moot: the foundation landed on `main` as `13d2577c` before this
   plan was adopted.
@@ -686,7 +686,7 @@ Settled by Ro on 2026-09-04, taking the recommendations.
 - **E. Stride order.** 0, 1, 2, 3, 4. Taking Feed first was declined; every later gesture reuses
   selection, keys, and undo.
 
-A decision discovered during implementation joins the next round with Ro; it is not decided silently.
+A decision discovered during implementation joins the next round with the Developer; it is not decided silently.
 
 ### Sizes and dependencies
 
@@ -924,7 +924,7 @@ draft groups) → D (Focus tool, red outline) → G (tool strip, lens merge, ins
 tool) → F (dwell-to-enter insertion). About twelve working days in total; A, B, and G can proceed in
 parallel once C has landed.
 
-### Decisions for Ro
+### Decisions for the Developer
 
 1. Frame size as catalog state with an explicit "Save as scenario size", rather than writing the
    scenario's `Size` on every resize.

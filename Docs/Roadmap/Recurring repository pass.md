@@ -17,8 +17,10 @@ notes after each completed pass; Git history is the longer record.
 - **Outcome and limits:** remediation on `feat/recurring-repository-pass-september-catchup` addresses the confirmed
   CLI false pass, Studio target routing and element identity, Appium input/close races, and developer
   workflow defects. The lock graph resolves Appium's `@xmldom/xmldom@0.9.12`, Expo's compatible
-  `@xmldom/xmldom@0.8.15`, and `morgan@1.12.0`; the other 43 Bun audit records predate this range
-  and remain to triage. The pinned Linux Nixpkgs glibc remains tracker-affected. Agent-config
+  `@xmldom/xmldom@0.8.15`, and `morgan@1.12.0`; 43 other Bun audit records predated this range.
+  Subsequent [dependency advisory follow-up](<Dependency advisory follow-up.md>) on
+  `feat/dependency-advisory-health` reduced those records to one and repaired the stale-link health
+  check. The pinned Linux Nixpkgs input still needs an update and Linux acceptance. Agent-config
   recovery now resolves dprint plugins from installed local packages, including with a cold cache.
   This pass did not establish physical-device, real CloudKit,
   installed-binary OTA, signed Studio, or distribution acceptance. The later `2bc90866` package
@@ -26,14 +28,22 @@ notes after each completed pass; Git history is the longer record.
 
 ## Consider next time
 
+- Shortlist developer-environment work from the generated [open index](<Developer environment upgrades.md>).
+  Check each entry's evidence, impact, dependencies, acceptance, and live branch owner against
+  current `main` and the [archive](<Developer environment upgrades archive.md>); reproduce candidates,
+  defer owned or blocked work, and take only a few high-impact items with achievable acceptance checks.
 - Start after `5e3526439008882a2c15da3e1cbdc44b7976cc91`, reading any new hook override log
   entries before revisiting the 2026-09-21 agent-governance changes. Choose checks from the changes
   and current risks rather than repeating every category.
 - Recheck the Appium transitive pins when its Base Driver publishes `morgan@1.12.0`; remove the
-  override when it can resolve without one. Triage the older Bun audit records and Linux Nixpkgs
-  glibc status. Check dependency installation against the locked graph after version changes; this
-  worktree retained one old transitive link even after setup. Use real host or device evidence before
-  claiming external acceptance.
+  override when it can resolve without one. Follow the remaining `uuid` and Linux Nixpkgs items in
+  [Dependency advisory follow-up](<Dependency advisory follow-up.md>), and use the installed-link
+  health check after lock changes. Use real host or device evidence before claiming external
+  acceptance.
+- Investigate where repository tools and agent workflows create temporary files, and measure the
+  size and age of temporary state across worktrees and relevant machine-wide locations. If there is
+  significant buildup, trace its owner and lifecycle and work out a fix that prevents unbounded
+  accumulation through cleanup during normal agent operations, including failed or interrupted runs.
 - Include a quick dependency-advisory check in every security review. Inspect dependency changes and
   research current advisories or security releases from primary sources:
   - For the Bun/npm graph recorded by `package.json` files and `bun.lock`, run
@@ -44,22 +54,31 @@ notes after each completed pass; Git history is the longer record.
     projects' official security notices.
   - If the repository gains another dependency system, identify its official audit command or
     advisory source during planning and add it here only if future passes will need it.
+- Check the delegation routing table against official model availability, harness precedence, and
+  current input, cache-read, cache-write, and output pricing. Compare completed-task cost and review
+  quality before changing a tier; an API-equivalent estimate is not a plan or subscription bill.
 
 ## Run a pass
 
 1. Create a dedicated worktree and branch from current `main`. Read this document, inspect the
    commits after the recorded boundary, and read the current documents governing the affected
    areas. Account for what the previous pass covered, omitted, and suggested next.
-2. Propose a concise high-level pass to Ro before starting it. Name the checks worth doing now, why
+2. Propose a concise high-level pass to the Developer before starting it. Name the checks worth doing now, why
    they are useful, their commit/package/seam scope, how subagents would divide the work, intentional
-   overlap, and what the pass would leave out. Wait for Ro's comments or approval.
+   overlap, and what the pass would leave out. Wait for the Developer's comments or approval.
 3. After approval, orchestrate the pass with focused subagents. Review assignments may overlap
    commits or paths when different specialties need the same evidence. Keep assessment subagents
    read-only until their findings have been checked and reconciled; use a later implementation phase
    for any accepted fixes included in the approved pass.
-4. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
-   from host or external acceptance that was not exercised.
-5. When the approved work is complete, replace **Current status** and **Consider next time** with the
+4. Check temporary-state growth: identify creation sites and retention rules, measure significant
+   worktree and machine-wide accumulation, and distinguish active state from abandoned output. For
+   each material source, design and verify a bounded cleanup path in normal agent operations; do not
+   remove another live run's files or rely solely on a one-time purge.
+5. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
+   from host or external acceptance that was not exercised. For each unresolved dependency advisory,
+   keep a short live record of its disposition, owner, review-by date, and primary evidence; close
+   it explicitly when resolved.
+6. When the approved work is complete, replace **Current status** and **Consider next time** with the
    new reviewed-through commit, a brief account of what actually ran, material omissions, the outcome,
    and only the few notes that would help the next orchestrator.
 

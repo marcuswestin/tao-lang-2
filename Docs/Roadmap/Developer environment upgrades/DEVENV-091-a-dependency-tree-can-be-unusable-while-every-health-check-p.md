@@ -19,7 +19,8 @@
   `rm -rf node_modules && bun install --frozen-lockfile` did, after which the lane passed 32 of 32.
   The trigger was never identified: nothing in the session ran an install, and DEVENV-084's `--force`
   repair path — the known cause of this symptom — is resolved and was not reached.
-- **Workaround:** `rm -rf node_modules && bun install --frozen-lockfile` from an unsandboxed shell.
+- **Workaround:** Have the Developer run `rm -rf node_modules && bun install --frozen-lockfile` from
+  a normal terminal; there is no named agent host operation for deleting a dependency tree.
   Do not trust `bun install` alone: without the removal it reports success and repairs nothing.
 - **Proposed change:** Make the dependency probe verify a package it can actually resolve rather than
   a stamp — `DependencyHealth` already knows the shape — so `./agent doctor` cannot report

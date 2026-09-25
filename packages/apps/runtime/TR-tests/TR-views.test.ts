@@ -100,7 +100,9 @@ Describe('TR.Views explicit visual props', () => {
     Expect(content.props['children']).toBe('Explicit content')
   })
 
-  Test('resolves private bundles through the mounted app with deterministic precedence', () => {
+  // R9E reversed this: the occurrence's own clauses are private and beat the whole caller chain,
+  // so a caller's `size 20` no longer overrules the root's own `title` bundle.
+  Test('resolves private bundles through the mounted app, the occurrence winning over its caller', () => {
     let designReads = 0
     const design = TR.Design.Declaration({
       name: 'Theme',
@@ -138,7 +140,26 @@ Describe('TR.Views explicit visual props', () => {
 
     Expect(flattenStyle(text.props['style'])).toEqual({
       color: '#ff00ff',
-      fontSize: 20,
+      fontSize: 16,
+      fontWeight: '400',
+    })
+    // A caller still reaches every slot the occurrence leaves open, and the primitive's own runtime
+    // style stays beneath both.
+    const open = renderRuntimeElement(TR.Views.Text(
+      {
+        __tao: {
+          app,
+          designSpec: TR.Design.Spec([['size', 24]]),
+          callerProps: { designSpec: TR.Design.Spec([['size', 20], ['fg', 'accent']]) },
+        },
+        children: 'Title',
+      },
+      { style: { color: '#000000', fontSize: 12, fontWeight: '400' } },
+    ))
+
+    Expect(flattenStyle(open.props['style'])).toEqual({
+      color: '#2f6b4f',
+      fontSize: 24,
       fontWeight: '400',
     })
     // The same mounted app owns one lazy design value even when another primitive resolves it.
@@ -160,6 +181,152 @@ Describe('TR.Views explicit visual props', () => {
 
     Expect(TR.Design.resolve(design, TR.Design.Spec([['size', 20]]), 'Text')).toEqual({
       style: { color: '#123456', fontSize: 20 },
+    })
+  })
+
+  Test('applies a declaration header over the element default and under the caller clauses', () => {
+    const app = styledElementApp(
+      'Declared',
+      { Text: TR.Design.Spec([['size', 10], ['weight', 400]]) },
+      { paper: '#f6f7f3' },
+    )
+    const callerProps: TRType.TaoProps = { app, designSpec: TR.Design.Spec([['size', 20]]) }
+    const declarationProps = TR.DeclarationTaoProps(
+      callerProps,
+      TR.Design.Spec([['size', 16], ['weight', 700], ['bg', 'paper']]),
+    )
+
+    const text = renderRuntimeElement(TR.Views.Text({
+      __tao: TR.TaoProps({ designDefault: 'Text' }, declarationProps),
+      children: 'Declared',
+    }))
+
+    Expect(flattenStyle(text.props['style'])).toEqual({
+      backgroundColor: '#f6f7f3',
+      fontSize: 20,
+      fontWeight: '700',
+    })
+  })
+
+  Test('keeps the render root clauses private, above the header and the caller that cleared them', () => {
+    const app = styledElementApp('Card', {}, { paper: '#f6f7f3', red: '#c0392b' })
+    const callerProps: TRType.TaoProps = { app, designSpec: TR.Design.Spec([['fill'], ['bg', 'none']]) }
+    const declarationProps = TR.DeclarationTaoProps(
+      callerProps,
+      TR.Design.Spec([['hug'], ['pad', 12], ['bg', 'paper']]),
+    )
+
+    const root = renderRuntimeElement(TR.Views.View(
+      {
+        __tao: TR.TaoProps({ designSpec: TR.Design.Spec([['bg', 'red']]) }, declarationProps),
+        children: 'Card body',
+      },
+      { direction: 'column' },
+    ))
+
+    // The caller's `fill` overrules the header's `hug`, and its `bg none` clears the header's paper,
+    // but the root's own `bg red` is private and survives both.
+    Expect(flattenStyle(root.props['style'])).toEqual({
+      alignSelf: 'stretch',
+      backgroundColor: '#c0392b',
+      flexDirection: 'column',
+      flexGrow: 1,
+      padding: 12,
+    })
+  })
+
+  Test('clears an element default, a header and a caller from whichever link wrote the `none`', () => {
+    const app = styledElementApp(
+      'Cleared',
+      { Text: TR.Design.Spec([['bg', 'paper'], ['pad', 12], ['size', 18]]) },
+      { ink: '#121826', paper: '#f6f7f3' },
+    )
+
+    // The site clears the slots its own element default set, one layer below it.
+    const overDefault = renderRuntimeElement(TR.Views.Text({
+      __tao: {
+        app,
+        designDefault: 'Text',
+        designSpec: TR.Design.Spec([['bg', 'none'], ['pad', 'none']]),
+      },
+      children: 'Bare',
+    }))
+
+    Expect(flattenStyle(overDefault.props['style'])).toEqual({ fontSize: 18 })
+
+    // The root's own `none` clears what its caller and the declaration header set, two links up.
+    const callerProps: TRType.TaoProps = { app, designSpec: TR.Design.Spec([['pad', 20], ['bg', 'ink']]) }
+    const declarationProps = TR.DeclarationTaoProps(callerProps, TR.Design.Spec([['bg', 'paper'], ['gap', 6]]))
+    const overCaller = renderRuntimeElement(TR.Views.Text({
+      __tao: TR.TaoProps(
+        { designSpec: TR.Design.Spec([['pad', 'none'], ['bg', 'none'], ['gap', 'none']]) },
+        declarationProps,
+      ),
+      children: 'Bare',
+    }))
+
+    Expect(flattenStyle(overCaller.props['style'])).toEqual({})
+  })
+
+  Test('sets a slot again on a stronger link after a weaker one cleared it', () => {
+    const app = styledElementApp(
+      'Reset',
+      { Text: TR.Design.Spec([['pad', 12]]) },
+      { ink: '#121826', paper: '#f6f7f3' },
+    )
+    const callerProps: TRType.TaoProps = { app, designSpec: TR.Design.Spec([['pad', 'none'], ['bg', 'none']]) }
+
+    const text = renderRuntimeElement(TR.Views.Text({
+      __tao: TR.TaoProps(
+        { designDefault: 'Text', designSpec: TR.Design.Spec([['pad', 4], ['bg', 'ink']]) },
+        callerProps,
+      ),
+      children: 'Reset',
+    }))
+
+    // Side by side, because `pad 4` reopened each side the caller's `pad none` had closed.
+    Expect(flattenStyle(text.props['style'])).toEqual({
+      backgroundColor: '#121826',
+      paddingBottom: 4,
+      paddingLeft: 4,
+      paddingRight: 4,
+      paddingTop: 4,
+    })
+  })
+
+  Test('reports a claim and a rigid that only meet once the whole chain is merged', () => {
+    const app = styledElementApp('Conflicting', { Text: TR.Design.Spec([['claim', 1]]) }, {})
+
+    Expect(() =>
+      renderRuntimeElement(TR.Views.Text({
+        __tao: { app, designDefault: 'Text', designSpec: TR.Design.Spec([['rigid']]) },
+        children: 'Conflicting',
+      }))
+    ).toThrow("Design entries 'claim' and 'rigid' cannot remain effective together.")
+  })
+
+  Test('lets each caller overrule the header of the view it renders, one level apart', () => {
+    const app = styledElementApp('Nested', {}, { paper: '#f6f7f3' })
+    const outerCaller: TRType.TaoProps = { app, designSpec: TR.Design.Spec([['gap', 2]]) }
+    const outerDeclaration = TR.DeclarationTaoProps(outerCaller, TR.Design.Spec([['gap', 8], ['radius', 4]]))
+    const innerCallSite = TR.TaoProps({ designSpec: TR.Design.Spec([['pad', 4]]) }, outerDeclaration)
+    const innerDeclaration = TR.DeclarationTaoProps(innerCallSite, TR.Design.Spec([['pad', 12], ['bg', 'paper']]))
+
+    const root = renderRuntimeElement(TR.Views.View(
+      { __tao: TR.TaoProps({}, innerDeclaration), children: 'Inner body' },
+      { direction: 'column' },
+    ))
+
+    Expect(flattenStyle(root.props['style'])).toEqual({
+      backgroundColor: '#f6f7f3',
+      borderRadius: 4,
+      flexDirection: 'column',
+      gap: 2,
+      // The inner header's `pad 12` merged side by side with the call site's `pad 4`, which won.
+      paddingBottom: 4,
+      paddingLeft: 4,
+      paddingRight: 4,
+      paddingTop: 4,
     })
   })
 

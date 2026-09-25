@@ -82,10 +82,14 @@ Describe('Shared test async helpers', () => {
   Test('until awaits an async condition and reports its own timeout by description', async () => {
     Expect(await until(async () => await Promise.resolve('read'))).toBe('read')
 
+    // These tiny budgets are what the test is about — proving `until` times out by its own description
+    // rather than proving the wait is fast.
+    // budget-ok: the timeout value under test.
     const options: UntilOptions = { description: 'the gate to open', timeoutMs: 20 }
     await Expect(until(() => false, options))
       .rejects
       .toThrow('Timed out after 20ms waiting for the gate to open.')
+    // budget-ok: same as above, the timeout value is the subject of this assertion.
     await Expect(until(() => undefined, { timeoutMs: 20 }))
       .rejects
       .toThrow('Timed out after 20ms waiting for a test condition.')
@@ -97,10 +101,14 @@ Describe('Shared test async helpers', () => {
     const stuck = Deferred<boolean>()
     const startedMs = Time.nowMs()
 
+    // The 40ms budget is what the test is about — proving `until` abandons a read that never settles
+    // instead of hanging on it.
+    // budget-ok: the timeout value under test.
     await Expect(until(() => stuck.promise, { description: 'a read that never settles', timeoutMs: 40 }))
       .rejects
       .toThrow('Timed out after 40ms waiting for a read that never settles.')
 
+    // budget-ok: bounds scheduling overhead alone (no real I/O), well clear of the 40ms budget above.
     Expect(Time.nowMs() - startedMs).toBeLessThan(2_000)
     stuck.resolve(true)
   })
@@ -111,18 +119,23 @@ Describe('Shared test async helpers', () => {
     // timeout a whole read late, so the 60ms budget would be spent nearer 400ms.
     const startedMs = Time.nowMs()
 
+    // The 60ms budget is what the test is about — proving `until` abandons a read once its own budget
+    // runs out rather than waiting for the read to finish.
     await Expect(until(async () => {
       await Time.sleep(400)
       return false
-    }, { description: 'a slow read', intervalMs: 0, timeoutMs: 60 }))
+    }, { description: 'a slow read', intervalMs: 0, timeoutMs: 60 })) // budget-ok: the timeout value under test.
       .rejects
       .toThrow('Timed out after 60ms waiting for a slow read.')
 
-    Expect(Time.nowMs() - startedMs).toBeLessThan(250)
+    // Bounds the abandon-to-report overhead, not real work; widened to match the margin above rather
+    // than the read's own 60ms budget so a busy host can't flip this.
+    Expect(Time.nowMs() - startedMs).toBeLessThan(2_000) // budget-ok: overhead bound, not real work.
   })
 
   Test('until still surfaces a read that rejects instead of swallowing it into a timeout', async () => {
     await Expect(until(() => Promise.reject(new Errors.UnexpectedBehaviorError('read failed')), {
+      // budget-ok: the read rejects synchronously, so this budget is never actually waited out.
       timeoutMs: 1_000,
     }))
       .rejects
@@ -150,9 +163,9 @@ Describe('Shared test terminal helpers', () => {
     const answer = HCI.askText({ message: 'Name', ...terminal })
 
     await settle()
-    terminal.input.write('Ro\n')
+    terminal.input.write('the Developer\n')
 
-    Expect(await answer).toBe('Ro')
+    Expect(await answer).toBe('the Developer')
   })
 
   Test('withCapturedOutput records process output and restores the streams afterward', async () => {

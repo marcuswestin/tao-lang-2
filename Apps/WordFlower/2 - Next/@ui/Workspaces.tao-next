@@ -273,10 +273,11 @@ view NoWorkspacesYet() {
 }  }
 
 // One row of the workspace library. Presenting is legal in any view body, so the row opens its own
-// workspace instead of receiving an `Open action()` from the screen that lists it.
+// workspace instead of receiving an `Open action()` from the screen that lists it. The card look is
+// the row's public default, declared in the header so a list may override it.
 workspace
-view WorkspaceRow(Workspace) {
-   render Col() [card] {
+view WorkspaceRow(Workspace) [card] {
+   render Col() {
       Text(Workspace.Name) [sectionTitle]
       TextMultiline("A quiet place to collect drafts and finished work.") [caption]
 
@@ -291,10 +292,10 @@ view WorkspaceRow(Workspace) {
 }  }  }
 
 // One unfinished document: open it, finish it, or discard it.
-view DraftRow(Document) {
+view DraftRow(Document) [card] {
    Commands { Finish }
    hide Duplicate
-   render Col() [card] {
+   render Col() {
       Text(Document.Title) [sectionTitle]
 
       #edit

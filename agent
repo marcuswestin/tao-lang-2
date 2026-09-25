@@ -7,8 +7,20 @@ emulate zsh
 unsetopt BASH_REMATCH
 set -e
 
+HOST_COMMAND_REQUESTED=false
+if [[ "${1:-}" == unsandboxed ]]; then
+  shift
+  if (( $# == 0 )); then
+    echo 'Usage: ./agent unsandboxed <command> [args...]' >&2
+    exit 2
+  fi
+  HOST_COMMAND_REQUESTED=true
+fi
+
 SCRIPT_DIR="${0:A:h}"
-DEV_PACKAGE_DIR="$SCRIPT_DIR/packages/dev"
+AGENT_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/agent-cli"
+DEV_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/dev-cli"
+CLI_KIT_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/cli-kit"
 SHARED_PACKAGE_DIR="$SCRIPT_DIR/packages/shared"
 BUILD_DIR="$SCRIPT_DIR/.artifacts/build/agent-dev"
 AGENT_TEMP_DIR="$SCRIPT_DIR/.artifacts/tmp"
@@ -16,9 +28,9 @@ BUILD_OUTPUT="$BUILD_DIR/agent-dev.js"
 BUILD_STAMP="$BUILD_DIR/agent-dev.stamp"
 BUILD_LOCK="$BUILD_DIR/agent-dev.lock"
 DEVENV_PROFILE="$SCRIPT_DIR/.devenv/profile"
-DEPENDENCY_SCRIPT="$DEV_PACKAGE_DIR/dev-src/cli/ensure-dependencies.zsh"
+DEPENDENCY_SCRIPT="$DEV_CLI_PACKAGE_DIR/dev-cli-src/cli/ensure-dependencies.zsh"
 
-source "$DEV_PACKAGE_DIR/dev-src/cli/agent-worktree-profile.zsh"
+source "$DEV_CLI_PACKAGE_DIR/dev-cli-src/cli/agent-worktree-profile.zsh"
 
 function enter_devenv_if_needed() {
   tao_activate_devenv_profile "$SCRIPT_DIR" "$DEVENV_PROFILE" && return
@@ -29,6 +41,19 @@ function enter_devenv_if_needed() {
 }
 
 enter_devenv_if_needed
+if [[ "$HOST_COMMAND_REQUESTED" == true ]]; then
+  HOST_COMMAND_KIND="$(bun "$AGENT_CLI_PACKAGE_DIR/agent-cli-src/cli/agent-host-command-check.ts" \
+    "$SCRIPT_DIR/.rulesync/permissions.jsonc" "$@")" || exit $?
+  if [[ -n "${CODEX_SANDBOX:-}" ]] || ! ps -axo pid=,ppid=,lstart=,command= >/dev/null 2>&1; then
+    echo 'FAIL  ./agent unsandboxed is still running inside a sandbox; the host command was not started.' >&2
+    exit 1
+  fi
+  if [[ "$HOST_COMMAND_KIND" == named ]]; then
+    cd "$SCRIPT_DIR"
+    exec bun "$AGENT_CLI_PACKAGE_DIR/agent-cli-src/cli/agent-host-dispatch.ts" \
+      "$SCRIPT_DIR/.rulesync/permissions.jsonc" "$@"
+  fi
+fi
 mkdir -p "$BUILD_DIR" "$AGENT_TEMP_DIR"
 BUN_TEMP_DIR="$(tao_bun_temp_dir "$AGENT_TEMP_DIR")"
 
@@ -37,11 +62,13 @@ function needs_build() {
   [[ ! -f "$BUILD_STAMP" ]] && return 0
 
   for source_path in \
-    "$DEV_PACKAGE_DIR"/dev-src/**/*.ts(N) \
+    "$AGENT_CLI_PACKAGE_DIR"/agent-cli-src/**/*.ts(N) \
+    "$CLI_KIT_PACKAGE_DIR"/cli-kit-src/RunWithCommands.ts(N) \
     "$SHARED_PACKAGE_DIR"/shared-src/**/*.ts(N) \
     "$SCRIPT_DIR"/package.json \
     "$SCRIPT_DIR"/bun.lock \
-    "$DEV_PACKAGE_DIR"/package.json \
+    "$AGENT_CLI_PACKAGE_DIR"/package.json \
+    "$CLI_KIT_PACKAGE_DIR"/package.json \
     "$SHARED_PACKAGE_DIR"/package.json
   do
     [[ "$source_path" -nt "$BUILD_STAMP" ]] && return 0
@@ -51,7 +78,7 @@ function needs_build() {
 }
 
 function build_agent() {
-  if ! build_output="$(TMPDIR="$BUN_TEMP_DIR" bun build --cwd "$DEV_PACKAGE_DIR" dev-src/agent-dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
+  if ! build_output="$(TMPDIR="$BUN_TEMP_DIR" bun build --cwd "$AGENT_CLI_PACKAGE_DIR" agent-cli-src/agent-dev.ts --target bun --outfile "$BUILD_OUTPUT" 2>&1)"; then
     echo "$build_output" >&2
     exit 1
   fi
@@ -68,7 +95,7 @@ function ensure_agent_build() {
   tao_run_with_lock "$BUILD_LOCK" 30 build_agent_if_needed
 }
 
-# Every `./agent` call bootstraps through the shared dependency owner before building the CLI.
+# Every repository workflow call bootstraps through the shared dependency owner before building the CLI.
 # `./agent setup` is the one public dependency command and continues into the Justfile setup recipe
 # for an explicit health proof plus generated harness adapters.
 tao_warn_on_detached_head "$SCRIPT_DIR"
@@ -80,7 +107,8 @@ if [[ "${1:-}" == fix-agent-config ]]; then
   zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --no-install
 elif [[ "${1:-}" == setup && "${2:-}" == --refresh-lockfile ]]; then
   zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --refresh-lockfile
-  set -- setup
+  tao_agent_command_args "$@"
+  set -- "${reply[@]}"
 elif needs_build; then
   zsh "$DEPENDENCY_SCRIPT" "$SCRIPT_DIR" --health
 else

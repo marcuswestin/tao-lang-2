@@ -33,12 +33,18 @@ const layoutHeads = [
 
 const styleValueHeads = new Set<string>([...visualHeads, 'gap', 'height', 'margin', 'pad', 'width'])
 
-/** isInlineDesignExploration is true only for a raw unnamed number or hex on a style key. */
+/**
+ * isInlineDesignExploration is true only for a raw unnamed nonzero number or hex on a style key.
+ * `pad 0` stays an ordinary "set to zero" and `none` stays the clearing keyword (never a string
+ * starting with `#`), so neither counts toward the release lint (Decisions §R9).
+ */
 function isInlineDesignExploration(values: readonly (number | string)[]): boolean {
   const head = values[0]
   return typeof head === 'string'
     && styleValueHeads.has(head)
-    && values.slice(1).some(value => typeof value === 'number' || (typeof value === 'string' && value.startsWith('#')))
+    && values.slice(1).some(value =>
+      (typeof value === 'number' && value !== 0) || (typeof value === 'string' && value.startsWith('#'))
+    )
 }
 
 /** canonicalVisualHead maps decided source aliases onto the current runtime ABI. */

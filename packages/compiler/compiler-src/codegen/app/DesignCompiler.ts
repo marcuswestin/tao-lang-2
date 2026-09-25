@@ -126,6 +126,8 @@ function designSpecSource(spec: AST.LayoutClause): Compiled {
     ? 'style'
     : AST.isDesignBundle(owner)
     ? 'legacy-style'
+    : AST.isViewDeclaration(owner)
+    ? 'declaration'
     : 'inline'
   return gen`{
     kind: ${gen.jsLiteral(kind)},

@@ -114,7 +114,7 @@ against the current runtime; do not import unrelated safe-area, keyboard, or nat
 - Branch `feat/<name>`; never commit from detached HEAD. Fifteen-plus worktrees share this repo and
   other agents work concurrently — preserve changes you did not make.
 - `Docs/Archive/` is frozen.
-- Ask Ro on language semantics, roadmap priority, and ambiguous product behavior. Resolve routine
+- Ask the Developer on language semantics, roadmap priority, and ambiguous product behavior. Resolve routine
   implementation choices from repository evidence.
 
 ## What a plan should be explicit about

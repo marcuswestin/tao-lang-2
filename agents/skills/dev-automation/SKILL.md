@@ -1,12 +1,15 @@
 ---
 name: dev-automation
 description: >-
-  Change Tao developer automation, including packages/dev, ./agent, ./dev, ./tao, Justfile recipes, command help, or repository workflow output.
+  Change Tao developer automation, including packages/cli/dev-cli, packages/cli/agent-cli, ./agent, ./dev, ./tao, Justfile recipes, command help, or repository workflow output.
 ---
 
 # Dev Automation
 
 - Keep common workflow definitions and human developer commands in `Justfile`; keep shell entrypoints and the `./tao` wrapper thin.
+- Keep agent-only host operations named in `HostCommandTargets.ts`, permitted by the single
+  `agentHostCommands` list in `.rulesync/permissions.jsonc`, and invoked as `./agent unsandboxed <operation>`.
+  Add a host operation only for a repository-used shape; regenerate both harnesses with `./agent setup`.
 - Keep one setup entry, `./agent setup`, and route every harness through it: Worktrunk's blocking `pre-start` hook as `direnv allow && direnv exec . ./agent setup` (`.config/wt.toml`), the Claude Code and Codex `SessionStart` hooks (one source, `.rulesync/hooks.jsonc`, with harness-neutral commands), and Cursor's blocking worktree setup (`.cursor/worktrees.json` and its script). Trust, dependencies, and generated agent adapters must exist before a harness reads them; when setup changes, update the comments that cross-reference each other in all four places.
 - Never name a Bun install backend — `environment-recovery` says why. Bun's macOS default clones whole directories and installs fine in a linked worktree.
 - Keep `./agent` able to reuse the primary checkout's pinned devenv profile in linked worktrees where sandboxing hides `.envrc`; never fall back to an unpinned host Node. `direnv allow && direnv exec . ./agent setup` remains the fallback when no shared profile exists.
@@ -19,8 +22,9 @@ description: >-
 - `just test <target>` resolves its one optional positional by existence, not by shape: a path on disk, else a test-name pattern. It prints the reading it chose; never remove that line.
 - Scope and test-name filter compose rather than replace each other: `TestRunRequest` carries a `kind` that chooses the suites and a `pattern` that filters the tests inside them, so `just test "<name>"` stays the fast changed scope and `just test-all "<name>"` is the same filter over every suite. Never add a request kind that means "a pattern", and never let a filtered run be recorded as a complete one, for the retry ledger or the timings store.
 - Keep `./tao`, `Justfile`, and `./dev` distinct rather than collapsing them to one spelling: `./tao` is the published CLI and product surface for developers who prefer their own editor, the `Justfile` is the human menu of common tasks, and `./dev` holds what belongs in TypeScript rather than a recipe.
+- `dev-cli` may import `agent-cli`; `agent-cli` never imports `dev-cli` back. Both build on `cli-kit` and `verification`, never the other way.
 - Keep the Justfile the definition point for which gates belong to `check` and `verify`; `./dev gates` owns running them and reporting the one verification summary. Its help states how to declare a lane's deliberately unrun gates.
-- `./dev`'s lane commands load Studio and Expo command modules lazily inside their actions, so `gates`, `test`, and `doctor` start in a checkout that has never generated the parser; `repo-lint`'s `devLazyStudioImportIssues` gates a static `./studio/`, `./expo-dev-loop/`, or `@studio` import in `dev.ts` that would take that back.
+- `./dev`'s lane commands load Studio and Expo command modules lazily inside their actions, so `gates`, `test`, and `doctor` start in a checkout that has never generated the parser; `repo-lint`'s `devLazyStudioImportIssues` gates a static `@studio`, `@studio-tooling`, or `@expo-host/dev-loop` import in `dev.ts` that would take that back.
 - `GateCatalog.ts` in `packages/testing/verification` is the one declarative place every scheduling fact lives, for gates and for test suites alike; its type definition documents each field. Adding a gate is one catalog entry plus its name in a lane's Justfile list; a name with no entry runs `just <name>` untuned at cost 1, and an edge whose other end a lane omits is ignored.
 - Ordering is declared once, as file classes, and derived into edges. A node names the classes it `writes` (`just`, `ts`, `tao`, `gen-parser`, `gen-app`) and the ones it `reads`, and a reader waits for the writers of exactly those classes. A recipe-backed node implicitly reads `just`. Do not reintroduce a global barrier over tree-mutating gates.
 - A node that `writes` anything is a prepare node and runs under a per-checkout lock (`verify-prepare` under `.artifacts/verify/prepare-lock`); the read-only phase takes no lock.
@@ -39,4 +43,6 @@ description: >-
 - Keep test selection, ledger, reporting, and merge usage in the `verification-lanes` skill rather than duplicating that workflow here.
 - `just` has no named-argument syntax. `just recipe run_id="local"` passes the literal string `run_id=local` as the recipe's _first positional_ parameter, so a composed recipe silently runs with the wrong arguments. Pass positionals in declaration order.
 - Chrome never synthesizes HTML5 drag-and-drop from `Input.dispatchMouseEvent`. Pointer-driven UI (dividers, resizers) works with mouse events; anything using `dragstart`/`drop` needs drag interception: `Input.setInterceptDrags`, then the payload from `Input.dragIntercepted`, replayed through `Input.dispatchDragEvent`. A mouse-only drag against a drop target fails silently.
-- `agents/skills/` is outside the agent sandbox's write allowlist. Editing a skill needs an unsandboxed shell; a sandboxed write fails with `PermissionError: Operation not permitted`.
+- A task may be unable to rewrite protected generated harness files such as `.codex/rules/tao.rules`.
+  After changing `.rulesync/`, run `./agent setup`; if it reports that protected output is stale,
+  ask the Developer to run that setup once from a normal terminal. An unchanged worktree needs no refresh.

@@ -120,6 +120,8 @@ export type CompileOptions = {
   appDatasourceConfiguration?: Readonly<Record<string, string>>
   /** studio emits preview-only render occurrence metadata into generated Tao props. */
   studio?: boolean
+  /** journeyObservations emits test-harness-only render locators into generated Tao props. */
+  journeyObservations?: boolean
   /** debug instruments every action statement with a debugger gate. */
   debug?: boolean
   /** release promotes only stable release-gate diagnostics; ordinary development warnings stay non-blocking. */
@@ -251,6 +253,7 @@ function compileValidatedInput(
   options: CompileOptions,
 ): CompileResult {
   const studio = options.studio === true
+  const journeyObservations = options.journeyObservations === true
   const entryPath = validationResult.entry.path
   const sourceFiles = validationResult.files.filter(file =>
     file.ast.statements.length === 0
@@ -291,6 +294,7 @@ function compileValidatedInput(
       projectRoot: context.sourceRoot,
       selectedAppDatasourceConfiguration: options.appDatasourceConfiguration,
       selectedAppName: file.path === selectedAppPath ? selectedAppName : undefined,
+      journeyObservations,
       studio,
       studioViews,
       debug: options.debug === true,
@@ -335,6 +339,10 @@ function planOutputPaths(
   }
 
   const bySourcePath = new Map<string, PlannedSourceOutputs>()
+  // One foreign implementation file is one module, however many Tao files name it. The map spans
+  // every file so the second namer imports the first one's copy instead of getting a second copy,
+  // whose module-level state would be a separate instance of the same source at runtime.
+  const sidecarPathBySourcePath = new Map<string, string>()
   for (const file of sourceFiles) {
     const modulePath = modulePathBySourcePath.get(file.path)
     Assert.defined(modulePath, compiledSourceOutputPathMessage, { sourcePath: file.path })
@@ -361,7 +369,6 @@ function planOutputPaths(
         outputPathInDirectory(companionDirectory, `${FS.basename(file.path)}.d.ts`),
         usedOutputPaths,
       )
-    const sidecarPathBySourcePath = new Map<string, string>()
     const sidecarCopies: PlannedSidecarCopy[] = []
     // A sidecar is named relative to the file that declares it, which an imported file may own, so
     // every path resolves against its own declaring document rather than this one.
@@ -438,6 +445,7 @@ type CompileSourceFileOptions = {
   projectRoot: string
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName: string | undefined
+  journeyObservations: boolean
   studio: boolean
   studioViews: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
   debug: boolean
@@ -453,6 +461,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     projectRoot,
     selectedAppDatasourceConfiguration,
     selectedAppName,
+    journeyObservations,
     studio,
     studioViews,
     debug,
@@ -535,6 +544,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                   emitDataCatalog: ownsDataCatalog,
                   importLines,
                   localDataCatalog: usesLocalDataCatalog,
+                  journeyObservations,
                   scopeBindings,
                   exportedBindings,
                   selectedAppDatasourceConfiguration,
@@ -1041,7 +1051,10 @@ function resolveImports(
     }
     return [...sourceByPath.values()]
       .filter(candidate =>
-        Packages.targetMatches(resolution, { filePath: candidate.path, workspaceFilePaths: sourcePaths })
+        Packages.targetMatches(packagesContext, resolution, {
+          filePath: candidate.path,
+          workspaceFilePaths: sourcePaths,
+        })
       )
       .map(candidate => ({
         declarationsNamed: (name: string) =>

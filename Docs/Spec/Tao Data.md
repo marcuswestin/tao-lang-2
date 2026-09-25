@@ -421,8 +421,8 @@ A development build finds the server through the host its bundle loaded from —
 the bundle URL on a device, which is where Expo's dev server already lives — and the port and app
 key the dev server writes into the Expo manifest as `expo.extra.taoDevData`. The wire contract,
 `tao-dev-data-v1`, lives beside the client in `@tao/data/providers/dev/Dev.ts`; the server in
-`packages/dev` mirrors it. `packages/ides/studio/README.md` owns the operational side: ports, the
-storage root, and how to inspect or clear it.
+`packages/apps/expo-host` mirrors it. `packages/ides/studio/README.md` owns the operational side:
+ports, the storage root, and how to inspect or clear it.
 
 ## Queries
 
@@ -633,3 +633,29 @@ Bare `data <status>` steps are retired (Decisions §16). The provider states the
 the world controls — network, sync, and datasource fault injection — which have not landed yet.
 
 See `Tao Testing.md` for selector, row-scope, clock, and isolation rules.
+
+## Editable input items and write recovery
+
+`type DocumentInput is Document { Title, Body }` selects fields; `type DocumentEditable is
+Document without { Owner, CreatedAt }` excludes fields. These are ordinary items, not unsaved
+entity handles. `state Input = copy Document as DocumentInput` detaches editable values.
+`update Document with Input` writes every supplied field by name and preserves omitted fields.
+The existing explicit field block remains available. Both forms retain explicitly supplied fields
+through transaction commit and sync, including values equal to the earlier local snapshot.
+
+Entities expose readonly `WritesQueued`, `WritesFailed`, `WriteError`, and `CanRetryWrites`.
+They summarize unresolved submissions for that row in the mounted datasource. They are not data
+fields, are excluded from projected input types, and are not cross-device operation history.
+Preparatory action errors before submission remain action errors. A loaded row remains readable
+and editable after a provider write failure.
+
+On a sync connection with durable mutation recovery, queued status is published only after local
+checkpoint acceptance. Failures and queued records survive relaunch. `retry Document` selects the oldest
+unresolved failed submission and sends its recorded mutation with its original identity and values;
+it neither reruns the action nor samples the current form. Resolving one submission leaves other
+unresolved submissions visible. The backend still decides whether a submitted write is accepted.
+
+Snapshot-only providers do not currently expose mutation recovery: their status counts are zero,
+`CanRetryWrites` is false, and explicit retry is unsupported. These zero counts do not certify that
+remote storage is up to date. Migrating those providers to durable per-mutation acknowledgement
+is a separate protocol change. Backend validation declarations remain deferred.

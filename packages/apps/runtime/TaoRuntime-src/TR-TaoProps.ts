@@ -72,12 +72,20 @@ export type TaoProps = TaoLayoutProps & {
   scheme?: TaoScheme
   /** studio is private occurrence identity lowered only onto the concrete native root. */
   studio?: TaoStudioIdentity
+  /** journeyObservation is test-only source identity read from the live mounted check tree. */
+  journeyObservation?: TaoJourneyRenderObservation
   /** designSpec preserves one combined render-site clause list until its mounted app resolves it. */
   designSpec?: TaoDesignSpec
   /** designSource locates the concrete clause occurrence without changing Design.Spec's flat ABI. */
   designSource?: TaoDesignSource
   /** designDefault names the linked stdlib element bundle applied before render-site clauses. */
   designDefault?: string
+  /**
+   * declarationSpec holds the public style defaults a view or scene declares in its header clause.
+   * It applies to the occurrence root of every render branch, above the element default and below
+   * the caller's own clauses at the same link.
+   */
+  declarationSpec?: TaoDesignSpec
   /** interaction is private outline metadata lowered onto the concrete native root as its accessible name. */
   interaction?: TaoInteractionProps
   /** testTag is private Tao metadata lowered to the existing concrete native root. */
@@ -85,6 +93,14 @@ export type TaoProps = TaoLayoutProps & {
   /** viewDepth counts generated Tao view frames without inspecting argument identity. */
   viewDepth?: number
 }
+
+type TaoJourneyRenderObservation = Readonly<{
+  end: number
+  renderId: string
+  sourcePath: string
+  sourceVersion: string
+  start: number
+}>
 
 /** TaoAmbientContext is navigation-owned context propagated independently of layout caller props. */
 export type TaoAmbientContext = Pick<TaoProps, 'app' | 'navigation' | 'navigationHostActive' | 'response' | 'scheme'>
@@ -306,15 +322,23 @@ function resolveDesignProps(
   const designSpec = props.designSpec === undefined || props.designSource === undefined
     ? props.designSpec
     : DesignControls.Source(props.designSpec, props.designSource)
-  const resolved = DesignControls.resolve(design, designSpec, props.designDefault, scheme, interactionCondition(props))
+  const condition = interactionCondition(props)
+  // The stdlib element default resolves on its own because it is the weakest authored layer: a
+  // caller's clause overrules the default of the element it reaches. The declaration header and
+  // this link's own clauses resolve together, header first, at this link's own strength.
+  const elementDefault = DesignControls.resolve(design, undefined, props.designDefault, scheme, condition)
+  const resolved = DesignControls.resolve(design, designSpec, undefined, scheme, condition, props.declarationSpec)
   const callerProps = resolveDesignProps(props.callerProps, design, scheme)
   const style = mergeResolvedStyles(props.style, resolved.style)
   return {
     ...props,
     callerProps,
+    declarationSpec: undefined,
     designDefault: undefined,
     designSource: undefined,
     designSpec: undefined,
+    elementDefaultLayout: elementDefault.layout,
+    elementDefaultStyle: elementDefault.style,
     layout: LayoutControls.merge(props.layout, resolved.layout),
     style,
   }

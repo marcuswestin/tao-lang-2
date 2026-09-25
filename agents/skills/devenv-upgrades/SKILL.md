@@ -1,14 +1,14 @@
 ---
 name: devenv-upgrades
 description: >-
-  Choose which reported developer-environment issues to fix next, work them, and archive what was addressed. Use when Ro asks to work on devenv issues, fix the developer environment, clear the DEVENV backlog, pick the next DEVENV entries, or archive the addressed ones.
+  Choose which reported developer-environment issues to fix next, work them, and archive what was addressed. Use when the Developer asks to work on devenv issues, fix the developer environment, clear the DEVENV backlog, pick the next DEVENV entries, or archive the addressed ones.
 ---
 
 # Developer Environment Upgrades
 
 The open backlog is `Docs/Roadmap/Developer environment upgrades.md`; the closed record is
 `Docs/Roadmap/Developer environment upgrades archive.md`. **Both are generated** by
-`just _fix-ledger-index` from the entry files under `Developer environment upgrades/` (and its
+`./agent ledger-index` from the entry files under `Developer environment upgrades/` (and its
 `Archive/`) — never hand-edit either index. This skill owns which entries to take next and how a
 task leaves both halves.
 
@@ -40,10 +40,10 @@ entry. In short: name a new entry after its own title, never a number, and recor
   proposed change is a poor trade however real it is; say so and leave it.
 - Prefer a batch that is genuinely parallel: group entries so no two groups write the same files, and
   hand each group a path list it owns exclusively, per `delegation`'s
-  `references/parallel-implementation.md`. `packages/dev/` internals, the `./tao` CLI, `.rulesync/`
-  permission sources, and `AGENTS.md` with the skills rarely collide; entries touching the same file
-  are one group.
-- Propose a batch of more than two entries to Ro before implementing — the name, the one-line cost,
+  `references/parallel-implementation.md`. `packages/cli/dev-cli/` and `packages/cli/agent-cli/`
+  internals, the `./tao` CLI, `.rulesync/` permission sources, and `AGENTS.md` with the skills
+  rarely collide; entries touching the same file are one group.
+- Propose a batch of more than two entries to the Developer before implementing — the name, the one-line cost,
   and why it is in this batch.
 
 ## Working an entry

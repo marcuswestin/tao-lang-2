@@ -290,7 +290,7 @@ function harness(
   const client = createStudioDeviceClient({
     bootstrap: {
       candidates: ['ws://192.168.1.20:8790/device'],
-      device: { model: 'iPhone', name: 'roPhone', os: 'iOS 26' },
+      device: { model: 'iPhone', name: 'example-phone', os: 'iOS 26' },
       metroPort: 8081,
     },
     handshakeTimeoutMs: 5_000,
@@ -331,7 +331,7 @@ Describe('Studio device client handshake and pairing', () => {
     const hello = connection.hello()
     Expect(run.client.state().phase).toBe('handshaking')
     Expect(hello.metroPort).toBe(8081)
-    Expect(hello.device).toEqual({ model: 'iPhone', name: 'roPhone', os: 'iOS 26' })
+    Expect(hello.device).toEqual({ model: 'iPhone', name: 'example-phone', os: 'iOS 26' })
     Expect(hello.pinnedStudioKey).toBeUndefined()
     Expect(hello.devicePublicKey).toBe(run.storage.record()!.identity.publicKey)
 
@@ -432,7 +432,7 @@ Describe('Studio device client handshake and pairing', () => {
     const run = harness({
       bootstrap: {
         candidates: ['ws://10.0.0.5:8790/device', 'ws://169.254.7.7:8790/device', 'ws://192.168.1.20:8790/device'],
-        device: { model: 'iPhone', name: 'roPhone', os: 'iOS 26' },
+        device: { model: 'iPhone', name: 'example-phone', os: 'iOS 26' },
         metroPort: 8081,
       },
     })
@@ -767,6 +767,18 @@ Describe('Studio device client sealed control plane', () => {
 
     run.client.report('info', 'drawn')
     Expect(session.received()).toEqual([{ level: 'info', message: 'drawn', type: 'device.report' }])
+
+    const lens = Array.from({ length: TaoStudioDeviceProtocol.lensBatchLimit + 1 }, (_, index) => ({
+      actualDurationMs: index + 0.5,
+      causes: [{ kind: 'state' as const }],
+      instanceId: `render-${index}`,
+      occurrence: { end: 20, sourcePath: 'Garden.tao', sourceVersion: 'text-v1', start: 10 },
+      phase: 'update' as const,
+      timestamp: index,
+    }))
+    run.client.lens(lens)
+    const observations = session.received().flatMap(message => (message as { samples?: typeof lens }).samples ?? [])
+    Expect(observations).toEqual(lens)
   })
 
   Test('re-selects the chosen cell after a reconnect instead of the manifest default', async () => {

@@ -4,11 +4,31 @@ import * as AST from './parserASTExport'
 
 /** ValueScopeProvider resolves value references through Tao binding and parameter visibility. */
 export class ValueScopeProvider extends Langium.DefaultScopeProvider {
+  /**
+   * What each use statement resolves to. Every reference in a file asks again for every use
+   * statement above it, and each answer filters the whole workspace, so without this the link phase
+   * costs references times imports times documents.
+   *
+   * An answer depends on which documents the workspace holds, so it may outlive nothing that changes
+   * them. `Parser.parse` replaces every document it builds, which retires their use statements and
+   * these entries with them; that is why the keys are held weakly. The editor instead updates
+   * documents in place and relinks the ones a change may have moved, so the table is dropped when
+   * an update starts and again when any build finishes parsing, which is after the last syntax tree
+   * is replaced and before the first reference is linked against it.
+   */
+  private useTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, AST.Declaration[]>()
+
   constructor(
     private readonly coreServices: Langium.LangiumCoreServices,
     private readonly packages: PackageResolver,
   ) {
     super(coreServices)
+    const forgetUseTargets = (): void => {
+      this.useTargets = new WeakMap()
+    }
+    const builder = coreServices.shared.workspace.DocumentBuilder
+    builder.onUpdate(forgetUseTargets)
+    builder.onBuildPhase(Langium.DocumentState.Parsed, forgetUseTargets)
   }
 
   /** getScope returns Tao values visible to a value reference. */
@@ -17,7 +37,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const isStateTargetReference = context.property === 'target'
       && (AST.isSetStatement(container) || AST.isToggleStatement(container))
     if (isStateTargetReference) {
-      return this.createStateScope(container)
+      return this.createMutableScope(container)
     }
     if (context.property === 'target' && AST.isValueReference(context.container)) {
       if (AST.isDataWriteField(context.container.$container)) {
@@ -132,7 +152,43 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (isAppReference) {
       return this.createRunAppScope(container)
     }
-    return super.getScope(context)
+    if (context.property === 'app' && AST.isProjectDefaultApp(container)) {
+      return this.createProjectDefaultAppScope(container)
+    }
+    if (context.property === 'response' && AST.isViewDeclaration(container)) {
+      return this.createDeclarationScope(container, AST.isTypeDeclaration)
+    }
+    if (context.property === 'dependencies' && AST.isTestDeclaration(container)) {
+      return this.createDeclarationScope(container, AST.isDeclaration)
+    }
+    // No reference is left to Langium's default scope, which offers every top-level declaration of
+    // every loaded document, imports and visibility ignored, and so resolves differently depending
+    // on which files a command happened to load. A reference the grammar gains without a rule above
+    // resolves to nothing and says so, rather than to whatever is loaded.
+    return this.createScopeForNodes([])
+  }
+
+  /**
+   * `DefaultApp Name` names one app declaration from this project, wherever in the project it is
+   * declared; a project declaration imports nothing. The declaring file goes first so that its own
+   * app wins over a same-named one elsewhere in the project.
+   */
+  private createProjectDefaultAppScope(node: AST.ProjectDefaultApp): Langium.Scope {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    const workspaceFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
+      .map(document => document.parseResult.value)
+      .filter(AST.isTaoFile)
+    const projectFiles = this.packages.projectSourceFiles({
+      fromFilePath: AST.getDocument(root).uri.path,
+      workspaceFiles,
+    })
+    return this.createScopeForNodes(
+      [root, ...projectFiles.filter(file => file !== root)]
+        .flatMap(file => file.statements.filter(AST.isAppDeclaration)),
+    )
   }
 
   private createValueScope(reference: AST.Node, outer?: Langium.Scope): Langium.Scope {
@@ -291,7 +347,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScopeForNodes(response ? AST.caseSetCasesOf(response) : [])
   }
 
-  private createStateScope(statement: AST.SetStatement | AST.ToggleStatement): Langium.Scope {
+  private createMutableScope(statement: AST.SetStatement | AST.ToggleStatement): Langium.Scope {
     let scope = this.createScopeForNodes([])
 
     const app = owningAppDeclaration(statement)
@@ -301,6 +357,19 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
     for (const block of AST.ancestorBlocks(statement).reverse()) {
       scope = this.createScopeForNodes(statesOwnedByBlock(block), scope)
+    }
+
+    const view = AST.findOwningView(statement)
+    if (view) {
+      scope = this.createScopeForParameters(view, scope, statement)
+    }
+    const action = AST.findOwningAction(statement)
+    if (action) {
+      scope = this.createScopeForParameters(action, scope, statement)
+    }
+    const fn = AST.findOwningFunction(statement)
+    if (fn) {
+      scope = this.createScopeForParameters(fn, scope, statement)
     }
 
     return scope
@@ -675,7 +744,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const declarations: DeclarationT[] = []
     for (const document of this.coreServices.shared.workspace.LangiumDocuments.all) {
       const path = document.uri.path
-      if (path === currentPath || path.slice(0, path.lastIndexOf('/')) !== currentDirectory) {
+      if (
+        path === currentPath
+        || AST.isTestSidecarPath(path)
+        || path.slice(0, path.lastIndexOf('/')) !== currentDirectory
+      ) {
         continue
       }
       const file = document.parseResult.value
@@ -695,6 +768,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     useStatement: AST.UseStatement | AST.UsePackageStatement,
     currentPath?: string,
   ): AST.Declaration[] {
+    const resolved = this.useTargets.get(useStatement)
+    if (resolved !== undefined) {
+      return resolved
+    }
     const path = currentPath ?? AST.getDocument(useStatement).uri.path
     const allFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
       .map(document => document.parseResult.value)
@@ -704,6 +781,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       workspaceFiles: allFiles,
     })]
     AST.rememberUseTargets(useStatement, declarations)
+    this.useTargets.set(useStatement, declarations)
     return declarations
   }
 }

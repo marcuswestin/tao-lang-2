@@ -141,14 +141,21 @@ FormButton("Save") {
 
 `on press` and `on submit` satisfy `action()` slots. `on change` satisfies `action(text)` and an inline handler may name that text payload after `->`. A named action reference must have the same callback contract. Configuring the same event twice, combining an event with an ordinary argument for the same slot, or using an event on a view without the standard slot is an error.
 
-For a text control with `Value is text, Change action(text)`, omitting `on change` synthesizes the usual two-way update only when the explicitly labeled `Value:` expression directly references writable text `state`:
+For `TextInput(mutable Value text, Change action(text), ...)`, a writable argument shares
+storage with the caller. This includes state, ordinary item fields, and parameters whose writable
+requirement is inferred. Literal arguments instead create storage owned by the mounted control.
 
 ```tao
 state Draft = ""
-TextInput(Value: Draft, Label: "Title")
+TextInput(Value: Draft, Label: "Title") {
+   on submit Save
+}
 ```
 
-Computed values, aliases, parameters, entity fields, and unlabeled arguments are not writable bindings; they require an explicit `on change`. An explicit change handler replaces the synthesized update. Disabled controls suppress their configured native press/change/submit delivery in the runtime.
+Computed values, readonly aliases, and entity fields need an explicit `on change` mapping or a
+copy. An explicit handler receives the proposed value and controls the write; it replaces automatic
+assignment. Disabled controls suppress native press/change/submit delivery. Native mutation
+callbacks are revoked on unmount and execute writes through Tao actions.
 
 `ScrollView` is a scrollable container, `Spinner` is a loading indicator, and `Progress` is a
 progress indicator. Rendering a collection remains language-owned through `loop`; Tao deliberately
@@ -270,6 +277,32 @@ render UserCard() {
 ```
 
 The compiler classifies each entry from syntax and the receiving declaration surface before type matching. A child cannot disappear into a same-typed property when a declaration evolves.
+
+### Declaration Style Defaults
+
+A declaration's style defaults live in a header clause after its parameters and any `responds`,
+on `view` and `scene` alike. The header applies to the occurrence root of every render branch and
+is the declaration's public style surface: a caller's clause replaces a header value, and what a
+`render` inside the body sets stays private, winning over the caller. `none` after a head clears
+that clause rather than setting it:
+
+```tao
+view Card(Title text) [pad 12, background paper] {
+   render Col() [gap 8] {
+      Text(Title)
+      @@content
+   }
+}
+
+render Card("Notes")                          // pad 12, background paper, gap 8
+render Card("Notes") [pad 0, background none] // no padding, no background; gap 8 is the root's, private
+render Card("Notes") [gap 0]                  // still gap 8: the header never declared gap
+```
+
+The resolution order is one left-to-right list — the design's element default, the header, the
+caller — with the later same-clause value replacing the earlier, and the root render's own clauses
+applied last. A caller may give any clause, declared in the header or not; it takes effect unless
+the root privately sets the same slot.
 
 ## Layout Properties
 
@@ -545,6 +578,85 @@ nav-owned absolute layer, and `as toast (Key:, Duration:)` already produces app-
 content. Raw absolute positioning, overflow flags, z-index-like layout, popovers, and portals still
 need design and should not sneak into ordinary layout syntax merely because the runtime has a prop.
 
+### Safe Area And Keyboard Insets
+
+Every compiled app root — and the Studio subject root — renders inside the runtime's universal app
+shell with no source-level opt-in or opt-out. The `app-shell-*` suites in
+`packages/apps/expo-host/expo-host-tests/` prove it for:
+
+- The generated app root itself, and every full-screen navigator surface that does not own its
+  native window (`SlotNav`, a JS-drawn `SelectionNav` bar in `"tabs"` or `"drawer"` display, and an
+  app auxiliary such as `@window`): each is padded exactly once — a fixed 12 logical pixels plus the
+  live safe-area inset on every edge — inside a scroll frame that dismisses the keyboard on drag (iOS)
+  or tap (Android) and never traps a tap on its own content.
+- A navigator that owns its native window (`StackNav`, a native-tab or `"toggle"` `SelectionNav`)
+  frames each of its own screens the same way. Nesting one inside another — a stack held as another
+  stack's or a `SlotNav`'s `Initial` value — insets exactly once, never twice, and an app auxiliary
+  insets independently of whatever the main navigator does with its own window.
+- `ask` renders through the nearest window layer — the app host's for the root window, a native
+  sheet's own for the window it presents — rather than in its navigator's overlay lane, so its
+  scrim dims the whole window whatever navigator asked, and it keeps its centred card off the notch
+  and the home indicator by adding the live safe-area inset itself. The app host's layer sits above
+  the content and the auxiliaries and beneath the toast layer, so a toast stays readable over a
+  dimmed screen. The ask keeps what its presenter's place in the tree gave it: its outline region
+  stays under the presenter's, so attention treats it as the presenter's, and whatever level hides
+  the presenter — a covered stack entry, an inactive selection item — hides the ask too. An ask asked
+  from a navigator no window layer encloses — one mounted outside an app host — draws in that
+  navigator's overlay lane instead, under the lane's own inset rule below.
+- The inline shape of `as sheet` (a runtime without a native modal host) and `as toast` are
+  edge-safe without double-padding: the overlay lane detects whether its enclosing navigator already
+  sits inside an `AppSurfaceFrame` (a navigator that does not own its window) and adds no further
+  inset there — the frame's own padding already reaches the edge — but adds the live safe-area inset
+  itself when the enclosing navigator owns its window, where the overlay lane is a sibling of the
+  per-entry frames and fills the true window directly. A toast is always the second case: it renders
+  as a sibling of the app host's own frame regardless of what the main navigator does, so it always
+  adds the live inset.
+- A `SplitNav` always takes true window bounds and frames each pane itself, so a sidebar and its
+  detail scroll independently: a pane whose navigator frames its own screens is left to it, and
+  every other pane — including one whose `SlotNav` is showing a plain view, read live — gets the
+  split's frame. Every frame inside a pane, the split's own or a nested navigator's, insets only the
+  window edges the pane meets: top and bottom always, left in the first pane, right in the last
+  (decided by the Developer, 2026-09-22). Inside a native tab's screen, the frames a window-owning entry draws
+  take the platform's insets, as the frame the tab would otherwise draw around it does.
+- A frame inside a frame adds no live inset: a window-owning navigator a scene renders inline keeps
+  the fixed 12-pixel gutter around each of its screens, and the safe-area inset comes from the
+  scene's own frame, once.
+- A sheet presented through the platform's native modal host is a separate native window — on iOS a
+  `pageSheet`'s card starts below the status bar, so its own top inset differs from the app's root
+  window — so that presentation nests its own `SafeAreaProvider`, with no `initialMetrics`, and reads
+  insets from that provider rather than the app's. Without `initialMetrics`,
+  `react-native-safe-area-context` seeds a nested provider from its parent provider's insets, so the
+  sheet renders with the root window's insets until the modal's own native measurement lands — not a
+  blank frame. On web, where there is no per-window native measurement, a nested provider measures
+  the document instead, so a web sheet keeps reading the document's insets (normally zero). The
+  presentation also carries its own `KeyboardAvoidingView`, since the root one cannot reach a separate
+  native window either, and resets the "already inset" signal below for its own content, since React
+  context still crosses this window boundary (a `Modal` is a portal, not a separate React tree) even
+  though the modal's window itself was never padded by whatever frame encloses the presenter.
+
+A plain `present … as overlay` (no `ask`, no `as sheet`, no `as toast`) is full-bleed by decision:
+it is the escape hatch for a scrim, a spinner layer, or a custom layer that must reach the window
+edges, so the runtime adds no inset and its content is the author's to inset (`Decisions.md` §10).
+It draws in its navigator's overlay lane, which fills that navigator's own surface — the true window
+under a navigator that owns its window, and the padded content box under one that does not, where
+the lane sits inside the enclosing `AppSurfaceFrame` and so stops short of the window edges by at
+least the frame's own padding. That is the decided behavior, not a gap: an overlay covers the
+navigator that presented it, and only `ask` goes to the window (decided by the Developer, 2026-09-22).
+
+An entry presented while a native sheet is showing — an overlay or an ask from the sheet's own
+content or from a navigator inside it — is hosted by that sheet: it draws in the sheet's window,
+inside the sheet's own overlay lane or window layer, and the sheet stays showing beneath it rather
+than hiding while a later entry tops the presenter's stack (decided by the Developer, 2026-09-22). Back and
+`dismiss` still take the top entry first, and a native dismissal of the sheet itself — swiped down —
+takes the sheet with everything it hosts. A second sheet is never hosted: presented from a sheet it
+replaces that sheet on screen, as before. Without a native modal host the sheet is inline in the
+lane, and a later entry covers it as any overlay covers the one before.
+
+Not yet covered, and not decided by what exists today:
+
+- Android's keyboard resize behavior (`softwareKeyboardLayoutMode` and equivalents) is unset; only
+  the iOS `KeyboardAvoidingView` `behavior` is chosen explicitly.
+
 ## Misc
 
 ### UI Defaults
@@ -562,12 +674,14 @@ These are the layout values of Tao's stdlib containers, and the React Native sty
 - `WrappingRow`: `[content baseline left, compress, hug]`
   - `{ flexDirection: row, justifyContent: flex-start, alignItems: baseline, flexGrow: 0, flexShrink: 1, flexWrap: wrap }`
 
-A caller layout clause overlays the render site's defaults. Named clause bundles and direct clauses
-form one left-to-right list. The last specification of a given clause replaces the earlier value;
-unrelated clauses remain. Bare `fill` is lowered as the two growth and stretch effects described
-above, so a later specialized clause can replace one effect without erasing the other. After
-replacement, the validator rejects a resolved set containing semantically incompatible
-clauses—source order cannot make incompatible categories valid:
+At one site, the design's element default, the declaration's header clause, named clause bundles,
+and direct clauses form one left-to-right list. The last specification of a given clause replaces
+the earlier value; unrelated clauses remain; `none` removes the clause from the list. Bare `fill`
+is lowered as the two growth and stretch effects described above, so a later specialized clause
+can replace one effect without erasing the other. The root render's own clauses are applied after
+the whole caller chain ("Declaration Style Defaults" above). After replacement, the validator
+rejects a resolved set containing semantically incompatible clauses—source order cannot make
+incompatible categories valid:
 
 ```tao
 Row() [content spread center, compress] {
@@ -657,7 +771,6 @@ Some things are known to belong in or near Tao layout, but still need their own 
 - `nudge`: small post-layout movement that does not affect siblings
 - `overlay`: a possible in-layout positioning term, distinct from implemented presentation
   `as overlay`
-- safe-area and keyboard-aware helpers
 - design-token spacing and size values
 - logical direction, such as `start` and `end`
 - aspect ratio
@@ -669,7 +782,8 @@ Some things are known to belong in or near Tao layout, but still need their own 
 The main unresolved ownership questions:
 
 - When does outside spacing belong to the parent, and when does it belong to the child?
-- When can a reusable declaration expose layout of its private internals?
+- When can a reusable declaration expose layout of its private internals? (The header clause —
+  "Declaration Style Defaults" — exposes the occurrence root only; anything deeper stays private.)
 - When do slots and caller content merge layout with the callee?
 
 Those are language-design questions, not things this document should settle by accident.

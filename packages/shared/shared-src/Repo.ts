@@ -84,13 +84,33 @@ export async function filesUnder(inputPath: string, options: FilesUnderOptions =
 
 /** directoriesUnder returns directories under a path by deriving them from discovered files. */
 export async function directoriesUnder(inputPath: string, options: DirectoriesUnderOptions = {}): Promise<string[]> {
-  const root = FS.resolvePath(inputPath)
-  if (!await FS.isDirectory(root)) {
-    return []
-  }
+  return (await listUnder(inputPath)).directories(options)
+}
 
+/**
+ * Listing is one discovery of everything under a root, answering every file and directory question
+ * a caller has from memory with exactly what `filesUnder` and `directoriesUnder` would answer.
+ * Discovery asks Git once; a caller with several questions about one root — opening a workspace
+ * asks five — would otherwise spawn it once per question.
+ */
+export type Listing = {
+  directories(options?: DirectoriesUnderOptions): string[]
+  files(options?: FilesUnderOptions): string[]
+}
+
+/** listUnder discovers everything under a path once, using Git ignore rules when the path is in a worktree. */
+export async function listUnder(inputPath: string): Promise<Listing> {
+  const root = FS.resolvePath(inputPath)
+  const everything = await FS.isDirectory(root) ? await filesUnder(root) : []
+  return {
+    directories: (options = {}) => directoriesAmong(root, everything, options),
+    files: (options = {}) => everything.filter(path => fileMatchesOptions(path, FS.relativePath(root, path), options)),
+  }
+}
+
+function directoriesAmong(root: string, files: readonly string[], options: DirectoriesUnderOptions): string[] {
   const directories = new Set<string>()
-  for (const filePath of await filesUnder(root)) {
+  for (const filePath of files) {
     let directoryPath = FS.dirname(filePath)
     while (FS.pathIsWithin(directoryPath, root) && directoryPath !== root) {
       if (directoryMatches(FS.relativePath(root, directoryPath), directoryPath, options)) {

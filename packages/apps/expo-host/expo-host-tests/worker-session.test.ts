@@ -27,6 +27,22 @@ Describe('test compiler worker session', () => {
     Expect(Errors.messageOf(unknown)).toBe('Something went wrong while compiling Tao tests.')
   })
 
+  Test('reports a generated-directory rename denial as a host failure', () => {
+    // A Node filesystem failure is a plain Error with errno fields, not a Tao error.
+    const denied = Object.assign(Errors.abortError('filesystem operation failed'), {
+      code: 'EPERM',
+      dest: '/checkout/.compiled/hash',
+      path: '/checkout/run/_gen_tao-app',
+      syscall: 'rename',
+    })
+
+    const failure = Protocol.failureFromError(denied)
+    Expect(failure.category).toBe('host')
+    Expect(failure.message).toContain("rename '/checkout/run/_gen_tao-app'")
+    Expect(failure.message).toContain("to '/checkout/.compiled/hash'")
+    Expect(failure.message).toContain('EPERM')
+  })
+
   Test('bounds and sanitizes categorized worker messages and fatal stderr', () => {
     const failure = Protocol.failureFromError(
       new Errors.UserInputError(`bad\u001b[31m\u0000${'x'.repeat(2_000)}`),

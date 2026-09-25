@@ -23,6 +23,7 @@
   },
   "exclude": [
     "Tao Future",
+    "Tao Studio",
     "WordFlower"
   ],
   "include": [

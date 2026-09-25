@@ -3,9 +3,9 @@ set quiet
 WORD_FLOWER_APP := justfile_directory() + "/Apps/WordFlower/1 - Current/WordFlower.tao"
 IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extension.vsix"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
-LOCAL_INSTANTDB_DIR := justfile_directory() + "/config/local-instantdb"
+LOCAL_INSTANTDB_DIR := justfile_directory() + "/packages/services/tao-cloud/tao-cloud-src/local"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary"
+VERIFY_FULL_GATES := "_fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app studio-smoke-simulated-user keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-network-simulation studio-smoke-native studio-canary"
 VERIFY_FULL_SKIPPED := ""
 
 # Print available recipes
@@ -33,18 +33,18 @@ github-setup:
     gh auth setup-git --hostname github.com
     git remote set-url origin https://github.com/marcuswestin/tao-lang-2.git
     git ls-remote --exit-code origin refs/heads/main >/dev/null
-    ./dev landing-broker-install
     printf 'GitHub HTTPS authentication is ready for %s.\n' "$(git remote get-url origin)"
 
-# Install or update the credential-isolated landing service for this repository
+# Remove an obsolete local Tao landing LaunchAgent after direct landing has been verified
 [group('Setup')]
-landing-setup:
-    ./dev landing-broker-install
-
-# Check the credential-isolated landing service without performing a GitHub operation
-[group('Setup')]
-landing-status:
-    ./dev landing-broker-status
+landing-broker-teardown:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    label='com.tao-lang.landing-broker'
+    plist="$HOME/Library/LaunchAgents/${label}.plist"
+    launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+    rm -f "$plist"
+    printf 'Removed obsolete %s LaunchAgent if present.\n' "$label"
 
 # Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
 [group('Setup')]
@@ -108,6 +108,16 @@ studio-companion-install device="":
 studio-companion-simulator simulator="":
     ./dev studio-companion-install --simulator "{{ simulator }}"
 
+# Build the Tao Companion as a prebuilt host (--platform ios-simulator for the simulator); tao dev opens apps in it
+[group('Run')]
+companion-host-build *ARGS:
+    ./dev companion-host-build {{ ARGS }}
+
+# Publish the built Companion hosts to their GitHub release, where tao dev downloads them; needs gh
+[group('Run')]
+companion-host-publish:
+    ./dev companion-host-publish
+
 # Run the opt-in real-host testing prototype; does not run or replace the existing suites
 [group('Host proofs')]
 test-host *ARGS:
@@ -115,33 +125,33 @@ test-host *ARGS:
 
 # Run an explicit slow Studio smoke file in an isolated lane
 [group('Host proofs')]
-studio-smoke test_file="packages/dev/studio-smoke/studio-launch.test.ts" run_id="local":
+studio-smoke test_file="packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts" run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Run an explicit slow Studio shell smoke through Electrobun
 [group('Host proofs')]
-studio-smoke-native test_file="packages/dev/studio-smoke/studio-simulated-user.test.ts" run_id="local":
+studio-smoke-native test_file="packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts" run_id="local":
     ./dev studio-smoke --native --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Prove semantic host control against the owned native Studio shell
 [group('Host proofs')]
 studio-host-control-smoke run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-host-control.test.ts
+    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
 
 # Probe external Studio accessibility and physical input through Appium Mac2
 [group('Host proofs')]
 studio-mac2-acceptance run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-mac2-acceptance.test.ts
+    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
 
 # Prove Studio compile/edit/undo against the real HNReader app
 [group('Host proofs')]
 studio-proof-real-app run_id="local":
-    ./dev studio-smoke --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-real-app.test.ts
+    ./dev studio-smoke --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts
 
 # Export WordFlower and prove its physical keyboard path in real headless Chrome
 [group('Host proofs')]
 keyboard-navigation-smoke run_id="local":
-    ./dev studio-smoke --run-id "{{ run_id }}" --worker 4 packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts
+    ./dev studio-smoke --run-id "{{ run_id }}" --worker 4 packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts
 
 # Run native Tao Studio against a deterministic project and report what it proved
 [group('Host proofs')]
@@ -170,8 +180,44 @@ studio-release-check payload_root=".artifacts/build/studio-native/service-stage/
 
 # Build signed/notarized Tao Studio artifacts through Electrobun and Hutch
 [group('Ship')]
-studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native":
-    ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
+studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL") channel="stable" output_root=".artifacts/build/studio-native" version="0.0.1":
+    ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}" --version "{{ version }}"
+
+# Build signed Studio artifacts and check the app, DMG, update metadata, and isolated payload before upload
+[group('Ship')]
+studio-release-prepare repo version="0.0.1":
+    ./dev release-studio-prepare --repo "{{ repo }}" --version "{{ version }}"
+
+# Upload the prepared Studio artifacts to a public GitHub Release and verify public download bytes
+[group('Ship')]
+studio-release-publish repo:
+    ./dev release-studio-publish --repo "{{ repo }}"
+
+# Package the IDE extension and prove the VSIX installs in a clean VS Code profile
+[group('Ship')]
+ide-extension-release-prepare:
+    ./dev release-ide-prepare
+
+# Publish the prepared VSIX to both registries; pass open-vsx or marketplace to retry one after a partial failure
+[group('Ship')]
+ide-extension-release-publish target="all":
+    ./dev release-ide-publish --target "{{ target }}"
+
+# Build a standalone Tao binary for this host, with its runtime resources embedded, after generating its parser
+[group('Ship')]
+standalone-cli-build: _parser-gen
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts .artifacts/build/tao
+
+# Build the files one standalone Tao release publishes, and print the command that publishes them
+[group('Ship')]
+standalone-cli-release version: _parser-gen
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
+
+# Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, compile, and build --compile-only work with no Bun or Node on PATH
+[group('Ship')]
+standalone-cli-acceptance: _parser-gen
+    bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
+    bun run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
 
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [group('Dev')]
@@ -261,11 +307,11 @@ my-branch name='':
 my-sync:
     ./dev sync-main
 
-# Hand the merge conflicts in this checkout to an agent, which resolves them, verifies, and commits
+# Hand the merge conflicts in this checkout to an agent (claude or codex), which resolves them, verifies, and commits
 [group('Mine')]
-my-resolve *ARGS:
+my-resolve agent='claude' *ARGS:
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then printf 'No conflicted files: there is nothing to resolve.\n'; exit 1; fi
-    claude {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
+    {{ if agent == "claude" { "claude" } else if agent == "codex" { "codex" } else { error("my-resolve takes claude or codex") } }} {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
 
 # Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
 [group('Mine')]
@@ -350,6 +396,10 @@ fix: _parser-gen
 check no_cache='false':
     ./dev gates _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _runtime-pack-check --lane check --green-tree check {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
+# Build a VSIX without installing it, for VS Code packager compatibility checks
+[group('Dev')]
+ide-extension-package: _ide-extension-package
+
 # Run the repository lint on its own
 [group('Dev')]
 lint: _repo-lint
@@ -397,6 +447,11 @@ landed *ARGS:
 reclaim *ARGS:
     ./dev reclaim {{ ARGS }}
 
+# Push this feature branch, open or reuse its pull request against main, then stream its checks
+[group('Dev')]
+open-pr *ARGS:
+    ./dev open-pr {{ ARGS }}
+
 # Report process, socket, simulator, and local-service capabilities without changing anything
 [group('Report')]
 capabilities *ARGS:
@@ -412,15 +467,15 @@ delegation-report *ARGS:
 simplify-audit *ARGS:
     ./dev simplify-audit {{ ARGS }}
 
-# Benchmark cold and steady-state language-service performance
+# Benchmark cold and steady-state language-service performance; fails when a steady-state median passes its budget
 [group('Report')]
 bench iterations="10":
-    bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
+    bun run packages/cli/dev-cli/dev-cli-src/performance/language-performance.ts "{{ iterations }}"
 
-# Measure machine-wide lane admission against DEVENV-094's bar; needs a quiet machine and an unsandboxed shell. --provision <count> makes and removes its own checkouts
+# Measure machine-wide lane admission against DEVENV-094's bar; agents use ./agent unsandboxed admission-experiment on a quiet machine. --provision <count> makes and removes its own checkouts
 [group('Report')]
 admission-experiment *ARGS:
-    bun run packages/dev/dev-src/performance/admission-experiment.ts {{ ARGS }}
+    bun run packages/cli/dev-cli/dev-cli-src/performance/admission-experiment.ts {{ ARGS }}
 
 # Compile a Tao app path relative to the invocation directory into the local runtime host
 [group('Run')]
@@ -437,12 +492,12 @@ install-ide-extension: _ide-extension-package
 # Compile WordFlower, launch an Android emulator, and start the Expo runtime on Android.
 [group('Run')]
 android: _compile-word-flower-app _android-emulator _android-expo-go
-    bun run packages/dev/dev-src/dev.ts expo-android
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts expo-android
 
 # Reclaim bootstrap scratch a failed dependency install abandoned, reporting what it freed
 [group('Setup')]
 clean-scratch:
-    zsh -c 'source "{{ justfile_directory() }}/packages/dev/dev-src/cli/agent-worktree-profile.zsh"; tao_prune_bootstrap_scratch "{{ justfile_directory() }}/.artifacts/tmp" --report'
+    zsh -c 'source "{{ justfile_directory() }}/packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh"; tao_prune_bootstrap_scratch "{{ justfile_directory() }}/.artifacts/tmp" --report'
 
 # Clean run dependencies and build artifacts
 [group('Setup')]
@@ -474,13 +529,13 @@ clean-all: clean-scratch
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify complete='false' no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # Verify narrowed to the suites the branch diff reaches: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-changed no_cache='false': _deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check dead-exports --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full" --green-tree verify-changed verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # This lane no longer refuses to start beside another one. The gates that genuinely cannot share a
 # host — the native shell and the canary, which contend on the window server — declare `gui` in the
@@ -524,13 +579,13 @@ _agent-config:
     ./dev agent-config
 
 _deps:
-    zsh packages/dev/dev-src/cli/ensure-dependencies.zsh "{{ justfile_directory() }}" --health
+    zsh packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh "{{ justfile_directory() }}" --health
 
 _git-hooks:
-    ./packages/dev/dev-src/cli/agent-git-hooks.zsh install
+    ./packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh install
 
 _dependency-health:
-    bun run packages/dev/dev-src/doctor/DependencyHealth.ts
+    bun run packages/testing/verification/verification-src/DependencyHealth.ts
 
 # The three fix steps, each over its own file class, as the verify graph runs them
 _fix-dprint:
@@ -544,7 +599,7 @@ _fix-dprint:
     print -r -- "$out"
     if [[ $code -ne 0 && "$out" == *"Operation not permitted"* ]]; then
       print -u2 -r -- "The sandbox write-protects the paths above, which is why formatting them failed."
-      print -u2 -r -- "Run \`just fix-agent-config\` (excluded from the sandbox) and re-run this gate."
+      print -u2 -r -- "Run \`./agent fix-agent-config\` (excluded from the sandbox) and re-run this gate."
     fi
     [[ $code -eq 0 ]]
     dprint check --incremental=false --allow-no-files "@/**/*" "**/@/**/*"
@@ -573,9 +628,10 @@ _compile-word-flower-app: _parser-gen
 _ide-extension-build: _parser-gen
     cd packages/ides/ide-extension && bun esbuild.config.ts
 
-_ide-extension-package: _ide-extension-build
+_ide-extension-package: _parser-gen
     mkdir -p .artifacts/build
-    cd packages/ides/ide-extension && bunx @vscode/vsce package --allow-missing-repository --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
+    cd packages/ides/ide-extension && bun esbuild.config.ts --minify
+    cd packages/ides/ide-extension && bunx @vscode/vsce package --no-dependencies --out "{{ IDE_EXTENSION_VSIX }}" 1> /dev/null
 
 _tao-check: _parser-gen
     ./tao check
@@ -585,7 +641,7 @@ _dprint-check:
     just --fmt --check
 
 _repo-lint:
-    bun run packages/dev/dev-src/repo-lint-entry.ts
+    bun run packages/cli/dev-cli/dev-cli-src/repo-lint-entry.ts
 
 # TypeScript 7's native compiler, installed under the `typescript-native` npm alias: the same
 # build takes ~2s where `typescript` 5.9 takes ~17s. `typescript` itself stays at 5.9 because the
@@ -598,13 +654,13 @@ _typecheck:
 # suites a verification lane schedules are the same nodes `./dev test` schedules. There is no
 # `_test-changed` recipe for that reason — nothing would ever run it.
 _test PATTERN="":
-    bun run packages/dev/dev-src/dev.ts test "{{ PATTERN }}"
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts test "{{ PATTERN }}"
 
 _android-emulator:
-    bun run packages/dev/dev-src/dev.ts android-emulator
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts android-emulator
 
 _android-expo-go:
-    bun run packages/dev/dev-src/dev.ts android-expo-go
+    bun run packages/cli/dev-cli/dev-cli-src/dev.ts android-expo-go
 
 _parser-gen:
     bun run packages/testing/verification/verification-src/ParserGenerate.ts

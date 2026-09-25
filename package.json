@@ -1,5 +1,6 @@
 {
   "name": "tao-lang",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -7,9 +8,18 @@
     "packages/*/*"
   ],
   "overrides": {
+    "baseline-browser-mapping": "2.11.25",
+    "browserslist": "4.29.0",
     "expo-constants": "57.0.18",
+    "fast-uri": "3.1.6",
+    "form-data": "4.0.6",
+    "hono": "4.13.8",
     "langium": "~4.3.1",
-    "morgan": "1.12.0"
+    "linkify-it": "5.0.2",
+    "morgan": "1.12.0",
+    "qs": "6.16.0",
+    "shell-quote": "1.10.0",
+    "undici": "7.29.0"
   },
   "devDependencies": {
     "@dprint/json": "0.23.0",

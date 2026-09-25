@@ -15,10 +15,11 @@ behind it.
 - Create a worktree at a real path, never one reached through a symlink. `/tmp` resolves to
   `/private/tmp` on macOS and the sandbox sets `$TMPDIR` to the symlink form, so a checkout made
   there is reached by two paths at once: TypeScript resolves imports through both, treats the
-  results as different declarations, and `_typecheck` fails with types that are not assignable to
-  themselves (`Type 'AdvanceStep' is not assignable to type 'AdvanceStep'`) naming no cause.
+  results as different declarations, and `./agent typecheck` fails with types that are not
+  assignable to themselves (`Type 'AdvanceStep' is not assignable to type 'AdvanceStep'`) naming no cause.
 - `./agent doctor`'s `worktree path` check names it. `git worktree move <given> <real>` fixes it,
-  and needs an unsandboxed shell. The rule is the symlink, not the location — worktrees under
+  but has no named host operation: report the exact move and ask the Developer before adding one.
+  The rule is the symlink, not the location — worktrees under
   `/private/tmp` are fine, and a symlinked home or network mount hits the same failure.
 
 ## The devenv profile
@@ -43,31 +44,34 @@ behind it.
   `PermissionDenied: …` or `EEXIST: failed to link package`. `./agent` distinguishes both from a
   denied temporary directory and prints the matching recovery; `./agent doctor` reports the broken
   install and the same remediation. Only the tempdir case is resumable. For either protected-path
-  failure, start an unsandboxed session with `just session-unsandboxed` and run `./agent setup`.
+  failure, report the denied path and exact `./agent setup` retry for the Developer to run from a
+  normal terminal. Do not start `just session-unsandboxed` on your own.
 - Never name a Bun install backend to work around this. `--backend=copyfile` writes every packaged
   file through its own path, making `bun install` unrunnable sandboxed rather than fixing it.
 
 ## Sandbox or host
 
-- `./agent capabilities` distinguishes a sandbox denial from a missing host tool. Reach for it
+- `./agent unsandboxed capabilities` distinguishes a sandbox denial from a missing host tool. Reach for it
   before concluding the host lacks something.
 - Opt-in permission profiles launch as harness sessions — see `just --list`'s Sessions group.
   Codex reads the same profiles as `tao-review`, `tao-native`, `tao-local-services`, and
   `tao-release`, defaulting to `tao-workspace`.
-- On a sandbox violation, retry the command unsandboxed rather than abandoning the task. Never
-  widen the policy to route around one, and never auto-approve a repository script as a host
-  escape.
-- The browser and native UI lanes cannot run inside the managed Bash sandbox. Run them through
-  `./agent studio-smoke` or `./agent studio-proof-real-app`; if the host blocks Chrome there,
-  rerun only with explicit review, and never reuse an existing browser profile.
+- On a sandbox violation, use the failed command's report and `./agent unsandboxed capabilities` to distinguish
+  a host requirement from a broken command. If a write needs host access, tell the Developer the exact
+  operation and why, then pause until the Developer explicitly approves it in the conversation. Tool-level
+  auto-review is not the Developer's approval. Do not try alternate spellings, a host session, or a policy
+  change to route around the denial. `.rulesync/permissions.jsonc` grants only the named
+  `./agent unsandboxed` host commands in default sessions; landing still needs authorization for the named slice.
+- The browser and native UI lanes cannot run inside the managed Bash sandbox. Use
+  `./agent unsandboxed studio-smoke` or `./agent unsandboxed studio-proof-real-app`; if the host
+  blocks Chrome there, rerun only with explicit review, and never reuse an existing browser profile.
 
 ## Processes and ports
 
-- Inspect all processes with the fixed read-only shape `ps -axo pid=,ppid=,lstart=,command=`, one
-  process's start time with `ps -o lstart= -p <pid>`, and one listening port with
-  `lsof -nP -iTCP:<port> -sTCP:LISTEN -t`. Any other `ps` shape fails `operation not permitted`
-  (add it to `.rulesync/permissions.jsonc` if genuinely needed), and every signal stays under
-  review since a wildcard rule cannot validate a PID.
+- Inspect all processes with `./agent unsandboxed processes list`, one process's start time with
+  `./agent unsandboxed processes started <pid>`, and one listening port with sandboxed
+  `lsof -nP -iTCP:<port> -sTCP:LISTEN -t`. Other process probes need the Developer's
+  approval, and every signal stays under review since a prefix cannot validate a PID.
 - Repository code reads process facts through `ProcessTree`, never through `ps`. On macOS it uses
   libproc with no subprocess, so a sandbox denial cannot silently degrade its PID-reuse protection.
 - After review, confirm the PID belongs to the intended task. Send `kill -TERM <pid>` first and

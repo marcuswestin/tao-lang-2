@@ -3,7 +3,7 @@
 ## Status and recommendation
 
 Research and repository inspection on 2026-09-19 support one Tao-owned API for interactive development
-and real-host testing, with target-specific drivers underneath. Ro delegated the recommendation using
+and real-host testing, with target-specific drivers underneath. The Developer delegated the recommendation using
 simplicity, maintainability, ease of use, debugging, and parallel development as the priorities.
 The additive first implementation now lives in `packages/testing/host-control`,
 `packages/testing/playwright-driver`, and `packages/testing/e2e-testing/journey`; existing coverage remains.
@@ -79,7 +79,7 @@ Those are valuable production seams, but not yet one supported external automati
 
 Relevant owners:
 
-- `packages/dev/dev-src/studio/StudioCdp.ts`
+- `packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts`
 - `packages/compiler/compiler-src/codegen/app/TaoPropsCompiler.ts`
 - `packages/apps/runtime/TaoRuntime-src/TR-interaction-outline.ts`
 - `packages/apps/runtime/TaoRuntime-src/TR-studio-device-inspect.ts`

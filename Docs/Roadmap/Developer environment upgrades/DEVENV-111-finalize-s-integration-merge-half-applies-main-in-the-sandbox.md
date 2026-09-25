@@ -26,6 +26,11 @@
   so no harness change can lift a nested `git` out of the sandbox its parent runs in. There is no
   general fix waiting to be written; the only lever is which top-level commands are named approval
   boundaries and excluded, which is what `eabe05bc` did for the landing.
+- **Follow-up, 2026-09-21:** on `feat/tao-skills`, the new write probe itself failed while removing
+  its temporary directory in `Docs/Roadmap` (`EFAULT` from `FS.remove`). Finalize wrapped that as
+  `UnexpectedBehaviorError: Something went wrong.` and never reached its blocked-directory report.
+  A top-level `git merge main` then succeeded without conflicts. The probe cleanup needs to report
+  its path and recovery when removal is denied; the current workaround is the top-level merge.
 - **Area:** Verification and landing
 - **Impact:** `./agent finalize` run from a sandboxed agent shell leaves the worktree in a state no
   Git command describes. Its integration merge is denied partway on the paths the sandbox

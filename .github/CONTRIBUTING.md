@@ -43,7 +43,7 @@ your Xcode version if you have one.
 It contains no file paths, no home directory, no account name, no machine name, and no branch
 name — by construction, not by scrubbing: every value is parsed out of a tool's output and kept
 only if it already reads as a version, a hash, or a plain word, and anything else is dropped.
-`packages/dev/dev-tests/environment-fingerprint.test.ts` holds that to it. Read it before you paste
+`packages/cli/dev-cli/dev-cli-tests/environment-fingerprint.test.ts` holds that to it. Read it before you paste
 it if you would rather check for yourself.
 
 Running `./agent doctor` on its own prints the full diagnosis of your checkout, which *does* name

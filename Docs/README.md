@@ -1,10 +1,12 @@
 # Docs
 
+<!-- Landing workflow smoke test: 2026-09-22. -->
+
 Written material about Tao, in five folders.
 
 - **`MVP Roadmap/`** — what remains before Tao is released to outside developers, split into the
-  work agents can execute (`Agent MVP Roadmap.md`) and the judgments only Ro can make
-  (`Ro MVP Roadmap.md`). It points into `Roadmap/` for per-workstream context and duplicates none of
+  work agents can execute (`Agent MVP Roadmap.md`) and the judgments only the Developer can make
+  (`Developer MVP Roadmap.md`). It points into `Roadmap/` for per-workstream context and duplicates none of
   it.
 - **`Spec/`** — the authoritative contract for what the toolchain implements today. If the code and
   a spec page disagree, one of them is a bug. Operational how-to for a product or package (launch,

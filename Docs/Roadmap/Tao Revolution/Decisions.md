@@ -743,16 +743,10 @@ on press -> { do LeaveKitchen(MyMembership) }   // silent on rejection — nothi
 ```
 
 - **No `conflict` case exists in the net.** The store resolves an ordinary write fieldwise and latest
-  (§11), leaving the app nothing to arbitrate; where a composed draft can genuinely conflict,
-  resolution belongs to the draft's own generated comparison (§7).
-- **An unhandled `save <Draft>` rejection invalidates the draft**, so it shows beside the fields
-  rather than anywhere else. This is the one write outcome with a defined home, because the draft is
-  a place that can hold it:
-
-```swift
-save Edit   // if refused, Edit.Invalid and Edit.Problems carry the sentence beside the field —
-            // no `when` needed at this site for the common case
-```
+  (§11). A composed edit now uses an ordinary copied input (§7); richer conflict comparison remains
+  deferred and has no implicit draft-owned generated UI.
+- **Data-write outcomes belong to the document** under the reactive-editing amendment (§7).
+  Ordinary input values have no entity lifecycle. Backend validation remains deferred.
 
 - **Availability is a state, not an empty collection.** Loading, missing, unauthorized, and error
   are distinct from "there are zero rows":
@@ -867,32 +861,69 @@ hold, which retires the deferred "per-entity datasource scoping" and generalizes
 
 ## 7. Editing
 
-- **One rule, two binding targets.** An input binds either directly to an existing row's field —
-  writing through on keystroke, with validate, together, and access still holding — or to a draft:
+The September 22 reactive-editing amendment replaces the earlier `bind`, entity draft, and
+`save Draft` proposals. Backend validation and its enforcement mapping are deferred; ordinary
+input values do not claim to enforce rules at a server.
 
-```swift
-TextField(Value: bind Recipe.Title)   // direct: every keystroke is a write, checked like any other
+### Reactive parameters and explicit copies
+
+Ordinary parameter types describe values. Reactive reads and writable capability are compiler
+information, not separate public types. Passing writable state shares storage: child writes reach
+its parent, and parent writes reach every reader. A possible write, including one under a conditional
+or through a forwarding view/action, makes that parameter require writable input. A computed value
+or `let` alias remains read-only; the diagnostic belongs at the call that cannot supply that capability.
+
+A literal passed to a mutating view gets storage belonging to that mounted occurrence. Rerendering
+preserves it; two occurrences never share it. `copy T text` on the receiving view parameter instead
+initializes detached occurrence storage from any input. On an action, a copied parameter initializes
+per invocation. Ordinary action inputs remain connected. Copying recursively detaches ordinary items
+and lists while entity references continue to name their original rows.
+
+A native view declares a writable parameter explicitly as `mutable Value text`. Its implementation
+receives a current value and a generated Tao mutation action, not storage it can mutate directly.
+Native callbacks use that action; render-time writes are prohibited, and unmount revokes the callback.
+
+### Plain input values
+
+```tao
+type DocumentInput is Document { Title, Body }
+type DocumentEditable is Document without { Owner, CreatedAt }
+
+view DocumentEditor(Document) {
+   state Input = copy Document as DocumentInput
+   action Store() {
+      update Document with Input
+   }
+   render TextInput(Value: Input.Title) {
+      on submit Store
+   }
+}
 ```
 
-- **Two draft flavours**:
+Projection types contain the selected fields and their types, without entity identity or persistence.
+`without` excludes named fields. Field paths into writable ordinary items are writable and preserve
+siblings. `update Document with Input` writes every supplied field by name and preserves omitted
+fields; it has no implicit dirty tracking or baseline. Explicit field updates remain available.
 
-```swift
-draft New = Recipe for new { Household: MyKitchen }   // does not exist yet — may be incomplete
-draft Edit = Recipe from Recipe                        // a composed edit of an existing row
+### Document write outcomes
 
-TextField(Value: bind New.Title)
-Stepper(Value: bind Edit.Servings)
-save Edit
-```
+Write outcomes belong to the document, shared by every editor of that datasource/entity identity
+within the running app. They summarize all unresolved submissions and failures rather than showing
+only the latest request. These are local operation records, not cross-device operation history.
+Loaded data remains readable and editable after a write fails. Preparatory action failures before
+submission remain action failures.
 
-- A draft **carries the entity's own `validate` and `required`** rather than restating rules: `New`,
-  above, is `New.Incomplete` until `New.Title` is set, because `Recipe.Title` is `(required "…")`.
-- **Conflicts are a draft concern.** A field-by-field comparison component is generated from the
-  entity rather than authored:
+Retry resubmits the recorded mutation and submitted values; it neither reruns the original action
+nor samples today's input. Pending writes and unresolved failures survive restart through local or
+provider records. `queued` means durable acceptance locally. A later successful write clears only
+work it actually resolves or supersedes. Backend rejection/validation policy remains deferred.
 
-```swift
-if Edit.Conflicted { RecipeConflict(Edit) }   // a generated diff, not hand-authored UI
-```
+The initial observation surface is `Document.WritesQueued`, `Document.WritesFailed`,
+`Document.WriteError`, and `Document.CanRetryWrites`. `retry Document` retries the oldest failed
+submission affecting that row. These are readonly runtime members, excluded from input projections.
+The implemented recovery capability belongs to granular sync providers. Snapshot-only providers
+remain explicitly unsupported until their storage protocol can acknowledge individual mutations;
+zero counts on those providers do not establish remote acceptance.
 
 ---
 
@@ -1411,8 +1442,8 @@ Button("Next") { on press -> { set StepNumber += 1 } }
 - **Events attach in the element's own block**:
 
 ```swift
-Button("Save") { on press -> { save Edit } }
-TextField(Value: bind New.Title) { on change -> { } }
+Button("Save") { on press -> { update Document with Input } }
+TextField(Value: Input.Title) { on submit Save }
 ```
 
 - **A ticking clock is a library value, not a language construct.** There is no `clock` declaration,
@@ -1585,6 +1616,17 @@ reveal RecipeScreen(Recipe) in @detail   // a second call with the same Recipe f
   § _Presenting overlays and toasts_ owns its lane, stacking, and Back precedence, and this entry
   records that rather than deciding it. _(Recorded while rewriting
   `Apps/WordFlower/4 - Revolution`, Process step 2.)_
+  **A plain overlay is full-bleed.** Every other presentation pads its content off the safe area
+  without the source asking: `ask`, `as sheet`, and `as toast` are the safe modes. A plain
+  `as overlay` is the escape hatch for a scrim, a spinner layer, or a custom layer that must reach
+  the window edges, so the runtime adds no inset and what it contains is the author's to inset.
+  _(Decided by the Developer, 2026-09-21.)_ **An overlay covers the navigator that presented it**, not the
+  window: its lane fills that navigator's own surface, so under a navigator inside the app frame
+  it reaches the frame's padded box and no further; only `ask` goes to the window. **An entry
+  presented while a sheet is showing stays in the sheet's window** — an overlay or ask from the
+  sheet's content draws inside the sheet, which stays up beneath it; a second sheet replaces the
+  first on screen as before — and a `SplitNav` frames every pane whose content does not frame its
+  own screens, so panes scroll independently. _(Decided by the Developer, 2026-09-22.)_
 
 ```swift
 present JoinKitchen(Code) as sheet
@@ -1778,7 +1820,7 @@ datasource Kitchen = Cloud {
 ```
 
 - **Conflict policy is `Conflicts fieldwise latest`** — independent fields, last write wins, no
-  dialogue owed, above. Composed edits opt out per draft (§7).
+  dialogue owed, above. Copied input items do not implicitly opt out; richer conflict policy remains deferred.
 - **Local-first is provider behaviour, not screen code**: optimistic writes, durable queues,
   synchronization, and tombstones — none of which a screen declares or codes around.
 - **Delete retention is declared** so a mistaken delete can come back: `Deletes tombstones for 30
@@ -1913,6 +1955,14 @@ design SkilletDesign {
 - **No reference marker.** A bare name in a clause list resolves to a style, text style, or design
   value; clause keywords are a closed, reserved set, so a style may not be named `pad` and the
   validator says so at the declaration.
+- **`background` and `ink` are the visual clause heads; `bg` and `fg` are legacy spellings**
+  (decided 2026-09-22). The legacy spellings stay accepted and lower identically, and every use
+  draws a warning naming the decided head, so MVP source is written the way Revolution writes it
+  (Process principle 1). One bundle spelling the same property both ways remains an error.
+- **The flat catalog is deprecated** (decided 2026-09-22). A color or bundle written directly in
+  `design { }`, outside the typed blocks, is still accepted, but its design draws one warning to
+  move colors into `colors { }` and bundles into `styles { }`. `tao create` writes only the typed
+  form.
 - **`patterns { }` is not carried forward.** A named arrangement with slots is an ordinary `view`
   placing `@@content` (§9), and a row pattern like the source designs' `Line` is such a view plus
   element defaults. If a demo finds a need a view cannot meet, it returns.
@@ -1949,6 +1999,24 @@ design SkilletDesign {
   without colour) are stated here as review criteria the gallery surfaces, never as pass/fail.
 - **Adaptation reads the person's settings first** — `Motion`, `Contrast`, `Pointer`, `TextScale` —
   before guessing from hardware.
+- **A declaration's style defaults live in its header clause** (decided 2026-09-22, R9):
+  `view Card(Title text) [pad 12, background paper] { … }`, after the parameters and any `responds`, applied
+  to the occurrence root of every render branch, on `view` and `scene` alike. The header is the
+  declaration's public style surface; what a `render` inside the body sets is private.
+- **Precedence is one left-to-right list: design element default, then the header, then the caller.**
+  The later same-clause value replaces the earlier and unrelated clauses remain — the rule bundles
+  and direct clauses already follow. A caller may give any clause, declared in the header or not.
+- **The root render's own clauses win over that public chain.** `view Card() [hug] { render Col()
+  [background red] { … } }` rendered as `Card() [fill, background none]` fills, and stays red: `hug`
+  was public and the caller replaced it, `background red` was private and the caller cannot reach
+  it. To let a caller
+  change something, declare it in the header.
+- **`none` after a clause head clears it**: `background none`, `border none`, `pad none`,
+  `pad left none`.
+  The merged list ends without that slot, so the element renders as if the clause were never given;
+  a later `pad 8` sets it again. `pad 0` stays "set to zero", and a raw `0` is not inline design
+  exploration for the release check — `none` is the way to remove a clause, `0` a value like any
+  other.
 
 ---
 
@@ -2141,9 +2209,9 @@ contracts do not settle distributed atomicity, automatic retry, or rollback of e
 
 ```swift
 fixture HomeKitchen {
-   account Ro { Name: "Ro", Email: "ro@example.com" }
-   Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Ro)
-   Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Ro
+   account Mira { Name: "Mira", Email: "mira@example.com" }
+   Home = create Household { Name: "Garden Kitchen" } through StartKitchen(Mira)
+   Shakshuka = create Recipe { Household: Home, Title: "Shakshuka", Servings: 4 } for Mira
 }
 ```
 
@@ -2212,7 +2280,7 @@ expect Shakshuka is Private
   test writes _as_ someone and watches the store refuse:
 
 ```swift
-as Ro update Shakshuka { Shared }
+as Mira update Shakshuka { Shared }
 expect refused
 expect Shakshuka is Private
 ```
@@ -2246,7 +2314,7 @@ action FetchRecipe returns { Foo: 1, Bar: ["123", "abc"] }
 - **A preference in a test is an ordinary update, and the device locale is a scenario pin — both
   within the runtime's real capabilities.** `prepare { update Me { Units: Imperial } }` is just data.
   `locale "es"` on a scenario lowers to mocking the localization module (expo-localization) in the
-  Jest environment, which is the standard, supported move — so no account-scoped `set X for Ro`
+  Jest environment, which is the standard, supported move — so no account-scoped `set X for Mira`
   statement exists, and nothing pretends to change the OS.
 - **Pseudolocale is a scenario mode, exactly as the platform does it.** Xcode runs an app in
   Double-Length, Accented, or Right-to-Left _pseudolanguages_ as scheme diagnostics — review modes,
@@ -2349,8 +2417,8 @@ some demo forces it.
 - **Wayfare's tabs**: Trips, Today, Documents, Settings. Documents forces the `files` provider —
   attaching a PDF that stays readable offline — which nothing else does.
 - **Recipe editing is write-through.** Each recipe field stands on its own, which is what
-  write-through is for; the draft-from-row and conflict path is forced instead by Wayfare's stop
-  editing.
+  write-through is for, using explicit data-update actions. Copied input items support composed
+  edits; Wayfare stop editing still motivates a future explicit conflict comparison surface.
 - **Nearby places**: `places near Here within 5.km`, with `Here` capitalized like every live handle
   and the radius an account preference.
 

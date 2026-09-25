@@ -2,7 +2,7 @@
 
 ## Budgets, enforced by `repo-lint`
 
-- Root `AGENTS.md` at most 11,500 characters, `packages/AGENTS.md` 6,000, each `SKILL.md` 12,000,
+- Root `AGENTS.md` at most 12,760 characters, `packages/AGENTS.md` 6,000, each `SKILL.md` 12,000,
   with detail in reference files loaded on demand. Each pass aims to cut total instruction size,
   never to grow it.
 - The budget counts characters, not lines, because these files are long paragraph bullets: a line
@@ -37,13 +37,13 @@ For each mechanical rule pick the enforcement point and delete the sentence:
 | Subagent brief boilerplate                       | subagent-start hook                        |
 | Recovery steps                                   | the failing command's own output           |
 
-New hooks warn. Promoting one to blocking is Ro's decision.
+New hooks warn. Promoting one to blocking is the Developer's decision.
 
 ## Documentation
 
 - One archive, `Docs/Archive/`, grouped as `Plans/`, `Explorations/`, `Reports/`, with a README of
   at most 15 lines on how to add to it. Archived documents are kept, never deleted, and frozen.
 - Archive a roadmap document when its work has landed or it reads as a closed report.
-- Overlapping live explorations merge into one document per topic. Ro signs off the merge list
+- Overlapping live explorations merge into one document per topic. The Developer signs off the merge list
   before any merge.
 - The developer-environment ledger moves only together with the `repo-lint` rule that checks it.

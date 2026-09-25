@@ -2,7 +2,7 @@
 
 Status: **exploration, dialogue open**. The Framing and the sketches are a thousand-mile
 overview of how the decided authority model lands on real providers; the Direction section will
-record what dialogue with Ro settles. Nothing here is language law until it reaches
+record what dialogue with the Developer settles. Nothing here is language law until it reaches
 `Tao Revolution/Decisions.md`, which wins wherever the two collide. The decided model itself —
 §2 secrets and redaction, §3 access rules, §4 the public boundary, §11 identity — is not
 reopened here; the design space is everything between those decisions and a provider that
@@ -176,7 +176,7 @@ accounts      — Name, Photo, preferences, app extensions  (Tao's Account row, 
 
 `use Account from @tao/auth` / `let Me = Account` binds the live signed-in account handle
 (loading / none / available), backed by the datasource's own auth — magic codes first. Fixture
-`account Ro { … }` rows and journey `as Ro …` steps bind test principals through the same seam.
+`account the Developer { … }` rows and journey `as the Developer …` steps bind test principals through the same seam.
 
 ### The emitted rule file
 
@@ -274,9 +274,9 @@ decision, and a seam with `tao ship`'s hosted-runtime story.
 A real app on the InstantDB provider, exercised by behavior tests — the proof the promise
 needs. One Skillet-shaped household, small enough to build early:
 
-1. **Ro starts a kitchen** — `StartKitchen` creates household + owner membership atomically;
+1. **The Developer starts a kitchen** — `StartKitchen` creates household + owner membership atomically;
    the owner invariant holds from the first commit.
-2. **Ro invites by link** — an `Invite` with a fresh `Code secret`; the link renders the
+2. **The Developer invites by link** — an `Invite` with a fresh `Code secret`; the link renders the
    published projection to a signed-out phone.
 3. **Sam joins** — `JoinWithInvite(Code)` on a second account: holder-of-secret authorizes
    marking the invite used and creating the very membership that then protects it. A second
@@ -313,7 +313,7 @@ strongest claims available: the policy layer behaves identically on both sides o
   §15, amended 2026-08-31) — a provider failure selects a declared case and _may carry a
   server-authored sentence_, with the message ladder preferring the server sentence. Remote
   refusals land in that ladder; failure captures structurally exclude secret-bearing fields
-  (already implemented on their side; `secret` gives it a type to key on). Separately, Ro
+  (already implemented on their side; `secret` gives it a type to key on). Separately, the Developer
   deferred the runtime action-transaction contract (Roadmap, 2026-08-31): this program designs
   `transaction … for Me`'s _authority and provider-commit_ semantics and must not treat the
   implemented Studio action overlay as the settled durable-row transaction model.
@@ -356,15 +356,15 @@ strongest claims available: the policy layer behaves identically on both sides o
 8. Anonymous published reads: guest-auth session per link open, or unauthenticated fetch where
    the provider allows it? What does the `SharedRecipeScreen` availability story look like with
    no account at all?
-9. Fixture sign-in over the live provider: what mints test accounts (`account Ro { … }`)
+9. Fixture sign-in over the live provider: what mints test accounts (`account the Developer { … }`)
    against real InstantDB auth — the admin SDK in the test harness, and is that acceptable as a
    harness-only trusted lane?
 10. The demo apps' pre-consolidation deltas (`public publish`, household-projection invites
     that lose the used-vs-mistyped distinction) — consolidated in Process step 3, but slice
     tests written now should use the decided forms.
-11. Fixture seeding: Ro deferred fixture-through-action semantics (Roadmap, 2026-08-31 —
+11. Fixture seeding: The Developer deferred fixture-through-action semantics (Roadmap, 2026-08-31 —
     `through` setup stays fail-closed), yet the decided fixture sketch seeds via
-    `create Household { … } through StartKitchen(Ro)`. Do this program's fixtures seed rows
+    `create Household { … } through StartKitchen(the Developer)`. Do this program's fixtures seed rows
     directly with harness authority (satisfying invariants whole, per §16's "full authority"),
     or does the proof app force the deferred decision?
 

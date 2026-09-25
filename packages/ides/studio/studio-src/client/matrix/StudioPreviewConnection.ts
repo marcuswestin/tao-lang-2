@@ -8,6 +8,7 @@ import type {
 } from '../../StudioPreviewManifest'
 import type {
   StudioJsonObject,
+  StudioLensRenderSample,
   StudioRuntimeCaptureArtifact,
   StudioSourceActionEnvelope,
   StudioSourceActionIdentity,
@@ -42,6 +43,7 @@ export type StudioPreviewConnection = {
   frame?: HTMLElement
   iframe: HTMLIFrameElement
   interactionMode: StudioInteractionMode
+  manifestCompatibilitySignature?: string
   expectedRevision?: number
   origin: string
   previewInstanceId: string
@@ -51,6 +53,8 @@ export type StudioPreviewConnection = {
   journeyRecording?: StudioJourneyRecordingDraft
   journeyRecordingTimeout?: ReturnType<typeof setTimeout>
   journeyReplayStatus?: 'failed' | 'pending' | 'settled'
+  lensNotifyQueued?: boolean
+  lensSamples?: readonly StudioLensRenderSample[]
   replayRuntimeCapture?: (capture: StudioRuntimeCaptureArtifact) => Promise<void>
   runtimeCaptureRequest?: {
     reject: (error: Error) => void

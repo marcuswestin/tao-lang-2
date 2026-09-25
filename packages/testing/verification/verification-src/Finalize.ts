@@ -1,14 +1,13 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
 import { GeneratedEvidence } from './GeneratedEvidence'
 import { type FindOptions, GreenTree, type GreenTreeKey, type GreenTreeMatch } from './GreenTree'
-import { inspectLandingRemote, type LandingBrokerInspection } from './landing-broker/LandingBrokerClient'
 import { MergeWithMainCommand, validateMergeMessage } from './MergeWithMain'
 import { VerificationLanes } from './VerificationLanes'
 
 /*
  * "Finalize and prepare the merge" used to exist only as prose in AGENTS.md and the
  * verification-lanes skill, so an agent replayed the whole sequence from scratch on every re-entry
- * — and a branch re-enters finalization often, driven by Ro's corrections, a red lane, or an
+ * — and a branch re-enters finalization often, driven by the Developer's corrections, a red lane, or an
  * agent's own re-entry after a background job reports. `finalize` makes the sequence a command and
  * records enough evidence to make a re-entry cheap.
  *
@@ -46,6 +45,7 @@ const VERIFY_GENERATED_OUTPUTS = GeneratedEvidence.outputsForGates([
 ])
 const MAX_SUMMARY_LENGTH = 72
 const DRAFT_PREFIX = 'DRAFT: '
+const DRAFT_REVIEW_VERSION = 1
 /** ROADMAP_LEDGER_PATH is the durable developer-environment ledger this brief is itself filed against. */
 const ROADMAP_LEDGER_PATH = 'Docs/Roadmap/Developer environment upgrades.md'
 
@@ -58,6 +58,7 @@ const ROADMAP_LEDGER_PATH = 'Docs/Roadmap/Developer environment upgrades.md'
 const HUMAN_VERIFICATION_PREFIXES: readonly string[] = [
   'Apps/',
   'packages/ides/studio/',
+  'packages/ides/studio-tooling/',
   'packages/providers/icloud/',
   'packages/ides/studio-companion-app/',
   'packages/apps/expo-host/',
@@ -111,7 +112,6 @@ export type FinalizeDependencies = {
   /** The tree-plus-toolchain identity a record must match; see `GreenTree.key`. */
   key: (repositoryRoot: string) => Promise<GreenTreeKey>
   makeProbeDirectory: (prefix: string) => Promise<string>
-  inspectRemote?: (repositoryRoot: string, branches: readonly string[]) => Promise<LandingBrokerInspection | undefined>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   readText: (path: string) => Promise<string>
@@ -125,7 +125,6 @@ export type FinalizeDependencies = {
 const defaultDependencies: FinalizeDependencies = {
   exists: FS.exists,
   findGreenTree: GreenTree.find,
-  inspectRemote: inspectLandingRemote,
   key: GreenTree.key,
   makeProbeDirectory: FS.mkTmpDir,
   now: () => new Date(),
@@ -193,6 +192,13 @@ type MessageOutcome = {
   unconfirmedReason: string
 }
 
+/** Only message review is recorded here; it is never verification or landing evidence. */
+type DraftReviewState = {
+  draftText: string
+  headSha: string
+  version: typeof DRAFT_REVIEW_VERSION
+}
+
 type DraftCommit = {
   body: string
   subject: string
@@ -224,6 +230,7 @@ export const FinalizeCommand = {
       root,
       messageFile,
       priorState,
+      undefined,
       integration.mainSha,
       integration.headSha,
       check,
@@ -364,17 +371,41 @@ export async function prepareForLanding(
   const statePath = FS.resolvePath(`.artifacts/merge/${branch}.state.json`, root)
   const priorState = options.fresh === true ? undefined : await loadState(dependencies, statePath)
   const messageFile = FS.resolvePath(options.messageFile ?? `.artifacts/merge/${branch}.msg`, root)
+  const reviewPath = `${messageFile}.review.json`
+  const draftReview = await loadDraftReview(dependencies, reviewPath)
+  const reviewedDraftHeadSha = draftReview?.headSha === headSha
+      && await dependencies.exists(messageFile)
+      && await dependencies.readText(messageFile) !== draftReview.draftText
+    ? headSha
+    : undefined
   const message = await draftOrKeepMessage(
     dependencies,
     root,
     messageFile,
     priorState,
+    reviewedDraftHeadSha,
     mainSha,
     headSha,
     false,
     options.redraft === true,
     lines,
   )
+  // A kept message for an older HEAD needs a fresh author edit too. Record its current bytes as
+  // the baseline, so that edit can be confirmed on the next land attempt without `finalize`.
+  if (
+    message.decision !== 'kept'
+    || (message.unconfirmedReason !== '' && draftReview?.headSha !== headSha)
+    || (message.malformed !== '' && draftReview?.headSha !== headSha)
+  ) {
+    await dependencies.writeJson(
+      reviewPath,
+      {
+        draftText: await dependencies.readText(messageFile),
+        headSha,
+        version: DRAFT_REVIEW_VERSION,
+      } satisfies DraftReviewState,
+    )
+  }
   remaining.push(...messageRemaining(message, messageFile))
   const advisories = await adviseOnDiff(dependencies, root, mainSha, headSha, branch, lines)
   for (const advisory of advisories) {
@@ -445,7 +476,7 @@ function messageRemaining(message: MessageOutcome, messageFile: string): string[
     ? []
     : [
       `Confirm the kept merge message still describes this branch (${message.unconfirmedReason}), `
-      + `by reading it and re-running finalize: ${path}`,
+      + `by reading and updating it before retrying: ${path}`,
     ]
 }
 
@@ -490,7 +521,7 @@ async function assertCleanWorktree(dependencies: FinalizeDependencies, root: str
 }
 
 /**
- * Integrate main when the branch does not already contain it. The installed broker fetches the
+ * Integrate main when the branch does not already contain it. The remote fetches the
  * fixed GitHub ref and objects without exposing credentials; a direct fetch keeps human shells and
  * machines that have not installed it working, with local main as the final offline fallback.
  */
@@ -530,30 +561,23 @@ async function integrateMain(
 }
 
 /**
- * readMainSha answers "what is main" without changing anything, through the broker where it is
- * installed, a direct fetch where it is not, and the local ref offline. It is separate from
+ * readMainSha answers "what is main" with a direct fetch and the local ref offline. It is separate from
  * integrating because the landing transaction now integrates main itself, under the lock, while the
  * unlocked preparation still needs main's sha to draft a merge message against.
  */
 async function readMainSha(dependencies: FinalizeDependencies, root: string, lines: string[]): Promise<string> {
-  const broker = await dependencies.inspectRemote?.(root, [MAIN_BRANCH])
-  const brokerMain = broker?.refs.get(MAIN_BRANCH)
   let directMain: string | undefined
-  if (brokerMain === undefined) {
-    const fetch = await dependencies.run('git', {
-      args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH],
-      cwd: root,
-      stdio: 'pipe',
-    })
-    if (fetch.exitCode === 0 && fetch.error === undefined && fetch.signal === null) {
-      directMain = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
-    }
+  const fetch = await dependencies.run('git', {
+    args: ['fetch', '--quiet', REMOTE, MAIN_BRANCH],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (fetch.exitCode === 0 && fetch.error === undefined && fetch.signal === null) {
+    directMain = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
   }
-  const mainSha = brokerMain ?? directMain ?? await localMainSha(dependencies, root)
+  const mainSha = directMain ?? await localMainSha(dependencies, root)
   lines.push(
-    brokerMain !== undefined
-      ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} through the landing broker at ${shortSha(mainSha)}.`
-      : directMain !== undefined
+    directMain !== undefined
       ? `PASS  Read ${REMOTE}/${MAIN_BRANCH} at ${shortSha(mainSha)}.`
       : `PASS  ${REMOTE} was unreachable; read the local ${MAIN_BRANCH} branch at ${shortSha(mainSha)} instead.`,
   )
@@ -758,7 +782,7 @@ async function verifyTree(
 
 /**
  * The merge message is the one artifact finalize cannot regenerate: it is what an author wrote and
- * what Ro may have read. So an existing message is never replaced except on an explicit `--redraft`,
+ * what the Developer may have read. So an existing message is never replaced except on an explicit `--redraft`,
  * and a message is drafted only when none exists. Recorded state decides nothing about writing any
  * more — it decides only whether the report can say the kept message is proved to cover this HEAD,
  * or has to hand that judgment to the author. This is deliberately asymmetric: finalize may keep a
@@ -776,6 +800,7 @@ async function draftOrKeepMessage(
   root: string,
   messageFile: string,
   priorState: FinalizeState | undefined,
+  reviewedDraftHeadSha: string | undefined,
   mainSha: string,
   headSha: string,
   check: boolean,
@@ -789,7 +814,7 @@ async function draftOrKeepMessage(
       lines.push(`FAIL  The kept merge message is not one the landing will accept: ${malformed}`)
       return { decision: 'kept', malformed, messageHeadSha: headSha, unconfirmedReason: '' }
     }
-    const unconfirmedReason = keptMessageReason(priorState, headSha)
+    const unconfirmedReason = keptMessageReason(priorState, headSha, reviewedDraftHeadSha)
     lines.push(
       `PASS  Kept the existing merge message; ${
         unconfirmedReason === ''
@@ -827,13 +852,39 @@ async function draftOrKeepMessage(
  * was recorded against an earlier HEAD and the branch has gained commits since. Empty means the
  * record proves it covers this HEAD.
  */
-function keptMessageReason(priorState: FinalizeState | undefined, headSha: string): string {
+function keptMessageReason(
+  priorState: FinalizeState | undefined,
+  headSha: string,
+  reviewedDraftHeadSha: string | undefined,
+): string {
+  if (reviewedDraftHeadSha === headSha) {
+    return ''
+  }
   if (priorState === undefined) {
     return 'nothing records which HEAD it was written for'
   }
   return priorState.messageHeadSha === headSha
     ? ''
     : `the branch has gained commits since it was recorded for ${shortSha(priorState.messageHeadSha)}`
+}
+
+async function loadDraftReview(
+  dependencies: FinalizeDependencies,
+  path: string,
+): Promise<DraftReviewState | undefined> {
+  if (!await dependencies.exists(path)) {
+    return undefined
+  }
+  try {
+    const value = await dependencies.readJson<Partial<DraftReviewState>>(path)
+    return value.version === DRAFT_REVIEW_VERSION
+        && typeof value.headSha === 'string'
+        && typeof value.draftText === 'string'
+      ? value as DraftReviewState
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 async function readFeatureCommits(
@@ -948,9 +999,11 @@ async function adviseOnDiff(
   )
   if (
     diffPaths.some(path =>
-      path.startsWith('packages/dev/')
+      path.startsWith('packages/cli/dev-cli/')
+      || path.startsWith('packages/cli/agent-cli/')
       || path.startsWith('packages/cli/cli-kit/')
       || path.startsWith('packages/testing/verification/')
+      || path.startsWith('packages/ides/studio-tooling/')
       || path === 'Justfile'
     )
     && !roadmapTouched.includes(ROADMAP_LEDGER_PATH)

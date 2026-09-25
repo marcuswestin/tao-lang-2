@@ -2,7 +2,7 @@
   "$schema": "https://github.com/dyoshikawa/rulesync/releases/latest/download/permissions-schema.json",
   // Canonical agent permission rules for this repository. `./agent setup` renders them into
   // .claude/settings.json (via rulesync) plus .codex/config.toml and .codex/rules/tao.rules
-  // (via packages/dev's CodexConfigGenerator). Edit this file, never the generated ones.
+  // (via tao-agent-cli's CodexConfigGenerator). Edit this file, never the generated ones.
   "permission": {
     "bash": {
       // `--force` breaks a lock this session did not necessarily take, on the strength of a dead
@@ -59,46 +59,14 @@
       "git ls-files *": "allow",
       "git remote -v": "allow",
       "git tag --list *": "allow",
-      // The macOS sandbox denies process-table access outright, so every `ps` shape an agent may
-      // run has to be named here and excluded from the sandbox below; anything unlisted fails with
-      // "operation not permitted" rather than with a permission prompt.
-      //
-      // Prefer `ProcessTree` over any of these. On macOS it reads the same facts through libproc
-      // with no subprocess at all, which is why a `ps` denial cannot break it — and why a liveness
-      // check built on `ps` silently lost its start-time comparison in every sandboxed run.
-      //
-      // The whole-table read and the per-PID start time are both read-only. The residual hazard is
-      // the trailing wildcard: `ps -E` prints another same-user process's environment, which can
-      // hold tokens the `read` denies below exist to keep out. Nothing in this repository runs it,
-      // and there is no bash deny rule to forbid it, so it is recorded here as the boundary rather
-      // than hidden. Termination prefixes stay absent entirely.
-      "ps -axo pid=,ppid=,lstart=,command=": "allow",
-      "ps -o lstart= -p *": "allow",
       "lsof -nP -iTCP:* -sTCP:LISTEN -t": "allow",
-      // Read-only device discovery is automatic. Install, shell, boot, erase, and wipe operations
-      // remain approval boundaries and belong to an explicitly selected native workflow.
-      "adb devices *": "allow",
-      "adb get-state *": "allow",
-      "emulator -list-avds": "allow",
-      "xcrun simctl list *": "allow",
-      // Merging runs without a prompt. An agent decides which branch lands on main, and when, on
-      // its own judgment; `verification-lanes` owns where that judgment stops and hands the
-      // landing to Ro. A bare `git push` is the outward-facing step and is deliberately absent
-      // from this list — the landing command does its own pushing, under that same judgment.
-      "git merge *": "allow",
-      // Read-only remote queries, so agents can inspect origin. Pushing stays absent
-      // above by design; the sandbox exclusion below is what lets its prompt succeed.
-      "git fetch origin *": "allow",
-      // Both orders, because git accepts the flag on either side of the remote and a pattern that
-      // matches only one of them is a rule that looks present and is not: `merge-with-main`'s own
-      // preflight runs `git ls-remote --heads origin refs/heads/...`, which `git ls-remote origin *`
-      // cannot match, so the landing command failed inside the sandbox on its own remote query.
-      "git ls-remote origin *": "allow",
-      "git ls-remote --heads origin *": "allow",
     },
     "read": {
       // The previous repository is reference material (see AGENTS.md).
       "~/code/tao-lang/**": "allow",
+      // Claude Code and Codex's read-only review profile enforce these denials. Codex's default
+      // workspace profile omits them: Codex will not honor an explicit host command rule when
+      // any denied-read pattern is active. AGENTS.md still forbids agents from reading them.
       // Not `.env*`: that pattern also matches this repository's own `.envrc`.
       "**/.env": "deny",
       "**/.env.*": "deny",
@@ -123,7 +91,7 @@
     },
     // Messaging a subagent you spawned is always allowed. `SendMessage` cannot tell a subagent from
     // another session by its arguments, so the rule that a message to any other agent or session
-    // is Ro's to approve lives in AGENTS.md and the `delegation` skill; the session-management
+    // is the Developer's to approve lives in AGENTS.md and the `delegation` skill; the session-management
     // tool below only ever reaches another session, so it keeps its gate. As with the force-unlock
     // rules above, Codex gets no equivalent gate, because `CodexConfigGenerator.renderCodexRules`
     // emits only `allow` entries.
@@ -134,83 +102,29 @@
       "*": "ask",
     },
   },
+  // Named argv prefixes accepted by ./agent unsandboxed, and the only host rules generated for
+  // the supported harnesses. HostCommandTargets implements tool operations; plain commands stay sandboxed.
+  "agentHostCommands": [
+    "land", "finalize", "landed", "capabilities", "open-pr", "fix-agent-config",
+    "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
+    "native-module-check",
+    "prepare-release studio", "prepare-release ide-extension",
+    "app-dev",
+    "simulators list", "simulators boot", "simulators run", "simulators app-container",
+    "simulators install", "simulators open-url", "simulators uninstall", "simulators open",
+    "devices list", "devices apps", "devices launch",
+    "xcode version", "xcode setup-status", "xcode sdks", "xcode build-project",
+    "xcode build-workspace", "xcode export-archive",
+    "pods install", "pods spec",
+    "android devices", "android state", "android emulators", "android boot", "android ensure",
+    "remote fetch", "remote refs", "remote heads", "remote exists",
+    "processes list", "processes started",
+  ],
   "claudecode": {
+    "autoCompactWindow": 272000,
     "sandbox": {
       "enabled": true,
-      "excludedCommands": [
-        // These commands need host process or native-service access the sandbox cannot express.
-        // Every entry also has a matching allow rule above; the Codex generator derives the
-        // project-local outside-sandbox rules from that intersection.
-        "ps -axo pid=,ppid=,lstart=,command=",
-        "ps -o lstart= -p *",
-        "adb devices *",
-        "adb get-state *",
-        "emulator -list-avds",
-        "xcrun simctl list *",
-        "gh *",
-        // Git's github.com credential helper is `gh auth git-credential`, which reads
-        // ~/.config/gh — denied below. `gh *` is excluded, but a helper spawned by git
-        // inherits git's sandbox, so networked git fails with a misleading
-        // "could not read Username for 'https://github.com'". These exclusions make direct
-        // top-level Git commands eligible for host review; they cannot lift a nested Git command
-        // such as merge-with-main's own preflight out of the sandbox.
-        "git fetch origin *",
-        "git ls-remote origin *",
-        "git ls-remote --heads origin *",
-        "git push *",
-        // Removing a worktree writes outside this checkout. It still prompts, which is
-        // correct for a command that deletes directories.
-        "git worktree *",
-        // A squash merge, and the reset that aborts one, write the primary checkout's working
-        // tree, which the sandbox denies from a linked worktree. `git merge *` is already allowed
-        // above without a prompt; excluding it is what lets that permission succeed instead of
-        // failing on "Operation not permitted". The reset exclusion is deliberately narrow — only
-        // the two abort shapes — so an unsandboxed `git reset --hard <ref>` never becomes possible
-        // by policy; other reset forms still prompt and still run sandboxed. Which branch lands on
-        // main, and when, is the agent's own judgment; `verification-lanes` owns where that
-        // judgment stops.
-        "git merge *",
-        "git reset --merge",
-        "git reset --hard HEAD",
-        // The landing itself, because none of the entries above can reach inside it. The sandbox
-        // matches the top-level command string, so a landing spawns its Git, its gates, and its
-        // gates' children all sandboxed however many Git exclusions are listed here. What that
-        // costs is not subtle: measured 2026-09-21, `./dev land` sandboxed failed every Studio and
-        // browser gate in 1.5-9.9s — Studio exits before reporting readiness — and the same gates
-        // passed in the same tree moments later unsandboxed. The landing is already an approval
-        // boundary that `verification-lanes` owns and `./dev *` already allows, so naming it here
-        // makes it one reviewed unit rather than a command that half-runs and blames the branch.
-        // `land-unlock --force` keeps its own `ask` rule above; excluding a command from the
-        // sandbox never grants it permission.
-        //
-        // Both spellings of the landing are named, because they are two CLI verbs rather than one:
-        // `land` wraps the lock, the barrier, and then `merge-with-main`, which is also reachable on
-        // its own and is the spelling AGENTS.md uses. Naming only `land` would leave the documented
-        // entry point sandboxed and failing exactly as before. `./agent` has no landing command at
-        // all — `JUST_COMMANDS` in `agent-dev.ts` stops at `land-lock`, `land-unlock` and `landed`,
-        // because an agent proposes a landing rather than making one — so an `./agent land` entry
-        // here would be a rule that looks like coverage and matches nothing.
-        // Formatting and regenerating the agent configuration each harness write-protects against
-        // shell commands. Without this, an unformatted skill file fails `_fix-dprint` outright
-        // (DEVENV-101) and `_agent-config` leaves generated settings stale (DEVENV-062), with no
-        // recovery a Codex agent can reach — `dangerouslyDisableSandbox` is Claude Code's alone.
-        // The recipe takes no paths and writes no content of its own: it formats files already in
-        // the tree and regenerates from `.rulesync`, which is reviewed, so excluding it does not
-        // widen what an agent can put into its own instructions. Keep the recipe that narrow.
-        "./agent fix-agent-config",
-        "./dev agent-config",
-        "just fix-agent-config",
-        "./dev land",
-        "./dev land *",
-        "./dev merge-with-main",
-        "./dev merge-with-main *",
-        "just land",
-        "just land *",
-        "just merge-with-main",
-        "just merge-with-main *",
-        "just my-land",
-        "just my-land *",
-      ],
+      "excludedCommands": [],
       // The `read` deny rules above only bind the file tools. These bind sandboxed shell
       // commands, which would otherwise be able to cat the same files.
       "credentials": {
@@ -237,13 +151,13 @@
       },
       "network": {
         "allowLocalBinding": true,
-        // Watchman's client talks to its server over this socket, and Metro falls back to
-        // watching through the OS without it — which this repository exceeds, so Metro dies
-        // with EMFILE partway through its first bundle. The `<user>-state` segment is
-        // Watchman's own naming; a glob is not matched here, so the path is spelled out.
+        // Watchman's client reaches its server through `<login>-state/sock` under this directory,
+        // named after whoever runs it. Claude Code and Codex both render a socket entry as a
+        // Seatbelt `subpath` rule, so the directory covers every login without naming one; the
+        // rule matches the resolved path, so a link planted here reaches no other socket.
         "allowUnixSockets": [
           "/nix/var/nix/daemon-socket/socket",
-          "~/.local/state/watchman/ro-state/sock",
+          "~/.local/state/watchman",
         ],
         "allowedDomains": [
           "registry.npmjs.org",
@@ -287,6 +201,8 @@
     // hooks.jsonc, because `env` values here are literal and cannot extend the existing PATH.
     "env": {
       "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+      "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+      "CLAUDE_CODE_SUBAGENT_MODEL": "opus",
     },
     // Deliberately not set here: `env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`. It scrubs only
     // Anthropic and cloud-provider credentials from subprocess environments, and in exchange

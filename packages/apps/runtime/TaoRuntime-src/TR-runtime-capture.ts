@@ -102,7 +102,10 @@ export async function captureRuntime(failure?: TaoRuntimeFailure): Promise<TaoRu
 }
 
 /** restoreRuntimeCapture restores known domains and retains the artifact for later registrations. */
-export async function restoreRuntimeCapture(artifact: TaoRuntimeCaptureArtifact): Promise<void> {
+export async function restoreRuntimeCapture(
+  artifact: TaoRuntimeCaptureArtifact,
+  onDomain?: (domain: string, stage: 'restoring' | 'restored' | 'skipped') => void,
+): Promise<void> {
   RuntimeAssert.input(artifact.version === 1, `Unsupported Tao runtime capture version '${artifact.version}'.`)
   pendingReplay = artifact
   // A new artifact is a new seed: whatever the last one put back says nothing about this one.
@@ -113,6 +116,7 @@ export async function restoreRuntimeCapture(artifact: TaoRuntimeCaptureArtifact)
     // earlier domain's restore is still awaited — which is exactly the React-effect churn this
     // guard exists for — and would then be seeded by that path and again by this loop.
     if (!registration?.restore || replayedDomains.has(domain.domain)) {
+      onDomain?.(domain.domain, 'skipped')
       continue
     }
     RuntimeAssert.input(
@@ -121,7 +125,9 @@ export async function restoreRuntimeCapture(artifact: TaoRuntimeCaptureArtifact)
       { domain: domain.domain },
     )
     replayedDomains.add(domain.domain)
+    onDomain?.(domain.domain, 'restoring')
     await registration.restore(json(domain.value, domain.domain))
+    onDomain?.(domain.domain, 'restored')
   }
 }
 

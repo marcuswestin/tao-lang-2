@@ -5,8 +5,6 @@
       "Bash(./agent *)",
       "Bash(./dev *)",
       "Bash(./tao *)",
-      "Bash(adb devices *)",
-      "Bash(adb get-state *)",
       "Bash(bun run *)",
       "Bash(bun test *)",
       "Bash(cd *)",
@@ -14,16 +12,11 @@
       "Bash(direnv exec . *)",
       "Bash(dprint *)",
       "Bash(du *)",
-      "Bash(emulator -list-avds)",
       "Bash(file *)",
       "Bash(git branch --show-current)",
       "Bash(git diff *)",
-      "Bash(git fetch origin *)",
       "Bash(git log *)",
       "Bash(git ls-files *)",
-      "Bash(git ls-remote --heads origin *)",
-      "Bash(git ls-remote origin *)",
-      "Bash(git merge *)",
       "Bash(git remote -v)",
       "Bash(git rev-parse *)",
       "Bash(git show *)",
@@ -37,8 +30,6 @@
       "Bash(lsof -nP -iTCP:* -sTCP:LISTEN -t)",
       "Bash(plutil -lint *)",
       "Bash(plutil -p *)",
-      "Bash(ps -axo pid=,ppid=,lstart=,command=)",
-      "Bash(ps -o lstart= -p *)",
       "Bash(pwd)",
       "Bash(readlink *)",
       "Bash(realpath *)",
@@ -49,14 +40,101 @@
       "Bash(uname *)",
       "Bash(wc *)",
       "Bash(which *)",
-      "Bash(xcrun simctl list *)",
       "Read(~/code/tao-lang/**)",
       "SendMessage",
       "WebFetch",
       "WebSearch",
       "mcp__Claude_Browser__*",
       "mcp__Claude_Code_iOS_Simulator__*",
-      "mcp__claude-in-chrome__*"
+      "mcp__claude-in-chrome__*",
+      "Bash(./agent unsandboxed land)",
+      "Bash(./agent unsandboxed land *)",
+      "Bash(./agent unsandboxed finalize)",
+      "Bash(./agent unsandboxed finalize *)",
+      "Bash(./agent unsandboxed landed)",
+      "Bash(./agent unsandboxed landed *)",
+      "Bash(./agent unsandboxed capabilities)",
+      "Bash(./agent unsandboxed capabilities *)",
+      "Bash(./agent unsandboxed open-pr)",
+      "Bash(./agent unsandboxed open-pr *)",
+      "Bash(./agent unsandboxed fix-agent-config)",
+      "Bash(./agent unsandboxed fix-agent-config *)",
+      "Bash(./agent unsandboxed test-host)",
+      "Bash(./agent unsandboxed test-host *)",
+      "Bash(./agent unsandboxed studio-smoke)",
+      "Bash(./agent unsandboxed studio-smoke *)",
+      "Bash(./agent unsandboxed studio-proof-real-app)",
+      "Bash(./agent unsandboxed studio-proof-real-app *)",
+      "Bash(./agent unsandboxed admission-experiment)",
+      "Bash(./agent unsandboxed admission-experiment *)",
+      "Bash(./agent unsandboxed native-module-check)",
+      "Bash(./agent unsandboxed native-module-check *)",
+      "Bash(./agent unsandboxed prepare-release studio)",
+      "Bash(./agent unsandboxed prepare-release studio *)",
+      "Bash(./agent unsandboxed prepare-release ide-extension)",
+      "Bash(./agent unsandboxed prepare-release ide-extension *)",
+      "Bash(./agent unsandboxed app-dev)",
+      "Bash(./agent unsandboxed app-dev *)",
+      "Bash(./agent unsandboxed simulators list)",
+      "Bash(./agent unsandboxed simulators list *)",
+      "Bash(./agent unsandboxed simulators boot)",
+      "Bash(./agent unsandboxed simulators boot *)",
+      "Bash(./agent unsandboxed simulators run)",
+      "Bash(./agent unsandboxed simulators run *)",
+      "Bash(./agent unsandboxed simulators app-container)",
+      "Bash(./agent unsandboxed simulators app-container *)",
+      "Bash(./agent unsandboxed simulators install)",
+      "Bash(./agent unsandboxed simulators install *)",
+      "Bash(./agent unsandboxed simulators open-url)",
+      "Bash(./agent unsandboxed simulators open-url *)",
+      "Bash(./agent unsandboxed simulators uninstall)",
+      "Bash(./agent unsandboxed simulators uninstall *)",
+      "Bash(./agent unsandboxed simulators open)",
+      "Bash(./agent unsandboxed simulators open *)",
+      "Bash(./agent unsandboxed devices list)",
+      "Bash(./agent unsandboxed devices list *)",
+      "Bash(./agent unsandboxed devices apps)",
+      "Bash(./agent unsandboxed devices apps *)",
+      "Bash(./agent unsandboxed devices launch)",
+      "Bash(./agent unsandboxed devices launch *)",
+      "Bash(./agent unsandboxed xcode version)",
+      "Bash(./agent unsandboxed xcode version *)",
+      "Bash(./agent unsandboxed xcode setup-status)",
+      "Bash(./agent unsandboxed xcode setup-status *)",
+      "Bash(./agent unsandboxed xcode sdks)",
+      "Bash(./agent unsandboxed xcode sdks *)",
+      "Bash(./agent unsandboxed xcode build-project)",
+      "Bash(./agent unsandboxed xcode build-project *)",
+      "Bash(./agent unsandboxed xcode build-workspace)",
+      "Bash(./agent unsandboxed xcode build-workspace *)",
+      "Bash(./agent unsandboxed xcode export-archive)",
+      "Bash(./agent unsandboxed xcode export-archive *)",
+      "Bash(./agent unsandboxed pods install)",
+      "Bash(./agent unsandboxed pods install *)",
+      "Bash(./agent unsandboxed pods spec)",
+      "Bash(./agent unsandboxed pods spec *)",
+      "Bash(./agent unsandboxed android devices)",
+      "Bash(./agent unsandboxed android devices *)",
+      "Bash(./agent unsandboxed android state)",
+      "Bash(./agent unsandboxed android state *)",
+      "Bash(./agent unsandboxed android emulators)",
+      "Bash(./agent unsandboxed android emulators *)",
+      "Bash(./agent unsandboxed android boot)",
+      "Bash(./agent unsandboxed android boot *)",
+      "Bash(./agent unsandboxed android ensure)",
+      "Bash(./agent unsandboxed android ensure *)",
+      "Bash(./agent unsandboxed remote fetch)",
+      "Bash(./agent unsandboxed remote fetch *)",
+      "Bash(./agent unsandboxed remote refs)",
+      "Bash(./agent unsandboxed remote refs *)",
+      "Bash(./agent unsandboxed remote heads)",
+      "Bash(./agent unsandboxed remote heads *)",
+      "Bash(./agent unsandboxed remote exists)",
+      "Bash(./agent unsandboxed remote exists *)",
+      "Bash(./agent unsandboxed processes list)",
+      "Bash(./agent unsandboxed processes list *)",
+      "Bash(./agent unsandboxed processes started)",
+      "Bash(./agent unsandboxed processes started *)"
     ],
     "deny": [
       "Bash(bun install *)",
@@ -76,34 +154,94 @@
   "sandbox": {
     "enabled": true,
     "excludedCommands": [
-      "ps -axo pid=,ppid=,lstart=,command=",
-      "ps -o lstart= -p *",
-      "adb devices *",
-      "adb get-state *",
-      "emulator -list-avds",
-      "xcrun simctl list *",
-      "gh *",
-      "git fetch origin *",
-      "git ls-remote origin *",
-      "git ls-remote --heads origin *",
-      "git push *",
-      "git worktree *",
-      "git merge *",
-      "git reset --merge",
-      "git reset --hard HEAD",
-      "./agent fix-agent-config",
-      "./dev agent-config",
-      "just fix-agent-config",
-      "./dev land",
-      "./dev land *",
-      "./dev merge-with-main",
-      "./dev merge-with-main *",
-      "just land",
-      "just land *",
-      "just merge-with-main",
-      "just merge-with-main *",
-      "just my-land",
-      "just my-land *"
+      "./agent unsandboxed land",
+      "./agent unsandboxed land *",
+      "./agent unsandboxed finalize",
+      "./agent unsandboxed finalize *",
+      "./agent unsandboxed landed",
+      "./agent unsandboxed landed *",
+      "./agent unsandboxed capabilities",
+      "./agent unsandboxed capabilities *",
+      "./agent unsandboxed open-pr",
+      "./agent unsandboxed open-pr *",
+      "./agent unsandboxed fix-agent-config",
+      "./agent unsandboxed fix-agent-config *",
+      "./agent unsandboxed test-host",
+      "./agent unsandboxed test-host *",
+      "./agent unsandboxed studio-smoke",
+      "./agent unsandboxed studio-smoke *",
+      "./agent unsandboxed studio-proof-real-app",
+      "./agent unsandboxed studio-proof-real-app *",
+      "./agent unsandboxed admission-experiment",
+      "./agent unsandboxed admission-experiment *",
+      "./agent unsandboxed native-module-check",
+      "./agent unsandboxed native-module-check *",
+      "./agent unsandboxed prepare-release studio",
+      "./agent unsandboxed prepare-release studio *",
+      "./agent unsandboxed prepare-release ide-extension",
+      "./agent unsandboxed prepare-release ide-extension *",
+      "./agent unsandboxed app-dev",
+      "./agent unsandboxed app-dev *",
+      "./agent unsandboxed simulators list",
+      "./agent unsandboxed simulators list *",
+      "./agent unsandboxed simulators boot",
+      "./agent unsandboxed simulators boot *",
+      "./agent unsandboxed simulators run",
+      "./agent unsandboxed simulators run *",
+      "./agent unsandboxed simulators app-container",
+      "./agent unsandboxed simulators app-container *",
+      "./agent unsandboxed simulators install",
+      "./agent unsandboxed simulators install *",
+      "./agent unsandboxed simulators open-url",
+      "./agent unsandboxed simulators open-url *",
+      "./agent unsandboxed simulators uninstall",
+      "./agent unsandboxed simulators uninstall *",
+      "./agent unsandboxed simulators open",
+      "./agent unsandboxed simulators open *",
+      "./agent unsandboxed devices list",
+      "./agent unsandboxed devices list *",
+      "./agent unsandboxed devices apps",
+      "./agent unsandboxed devices apps *",
+      "./agent unsandboxed devices launch",
+      "./agent unsandboxed devices launch *",
+      "./agent unsandboxed xcode version",
+      "./agent unsandboxed xcode version *",
+      "./agent unsandboxed xcode setup-status",
+      "./agent unsandboxed xcode setup-status *",
+      "./agent unsandboxed xcode sdks",
+      "./agent unsandboxed xcode sdks *",
+      "./agent unsandboxed xcode build-project",
+      "./agent unsandboxed xcode build-project *",
+      "./agent unsandboxed xcode build-workspace",
+      "./agent unsandboxed xcode build-workspace *",
+      "./agent unsandboxed xcode export-archive",
+      "./agent unsandboxed xcode export-archive *",
+      "./agent unsandboxed pods install",
+      "./agent unsandboxed pods install *",
+      "./agent unsandboxed pods spec",
+      "./agent unsandboxed pods spec *",
+      "./agent unsandboxed android devices",
+      "./agent unsandboxed android devices *",
+      "./agent unsandboxed android state",
+      "./agent unsandboxed android state *",
+      "./agent unsandboxed android emulators",
+      "./agent unsandboxed android emulators *",
+      "./agent unsandboxed android boot",
+      "./agent unsandboxed android boot *",
+      "./agent unsandboxed android ensure",
+      "./agent unsandboxed android ensure *",
+      "./agent unsandboxed remote fetch",
+      "./agent unsandboxed remote fetch *",
+      "./agent unsandboxed remote refs",
+      "./agent unsandboxed remote refs *",
+      "./agent unsandboxed remote heads",
+      "./agent unsandboxed remote heads *",
+      "./agent unsandboxed remote exists",
+      "./agent unsandboxed remote exists *",
+      "./agent unsandboxed processes list",
+      "./agent unsandboxed processes list *",
+      "./agent unsandboxed processes started",
+      "./agent unsandboxed processes started *"
     ],
     "filesystem": {
       "allowWrite": [
@@ -121,7 +259,7 @@
       "allowLocalBinding": true,
       "allowUnixSockets": [
         "/nix/var/nix/daemon-socket/socket",
-        "~/.local/state/watchman/ro-state/sock"
+        "~/.local/state/watchman"
       ],
       "allowedDomains": [
         "registry.npmjs.org",
@@ -177,7 +315,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/dev/dev-src/cli/agent-session-start.zsh\" > /dev/null"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh\""
           }
         ]
       }
@@ -188,11 +326,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-output-discipline.zsh\" || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-output-discipline.zsh\" || true"
           },
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-shell-habits.zsh\" 2>/dev/null || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-shell-habits.zsh\" 2>/dev/null || true"
           }
         ]
       },
@@ -201,7 +339,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" spawn > /dev/null 2>&1 || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" spawn > /dev/null 2>&1 || true"
           }
         ]
       }
@@ -211,11 +349,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" start > /dev/null 2>&1 || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" start > /dev/null 2>&1 || true"
           },
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-subagent-brief.zsh\" 2>/dev/null || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-subagent-brief.zsh\" 2>/dev/null || true"
           }
         ]
       }
@@ -225,13 +363,36 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/dev/dev-src/cli/agent-delegation-log.zsh\" stop > /dev/null 2>&1 || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" stop > /dev/null 2>&1 || true"
+          }
+        ]
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "script=packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh && repo_root=\"$(git rev-parse --show-toplevel)\" && { [ -x \"$repo_root/$script\" ] || repo_root=\"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\"; } && \"$repo_root/$script\" create"
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "script=packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh && repo_root=\"$(git rev-parse --show-toplevel)\" && { [ -x \"$repo_root/$script\" ] || repo_root=\"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\"; } && \"$repo_root/$script\" remove"
           }
         ]
       }
     ]
   },
   "env": {
-    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
-  }
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "opus"
+  },
+  "autoCompactWindow": 272000
 }

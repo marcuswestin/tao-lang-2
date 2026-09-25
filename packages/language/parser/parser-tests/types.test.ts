@@ -3,6 +3,33 @@ import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode } from './test-parse'
 
 Describe('parser: types', () => {
+  Test('parses projected input types and typed copies', async () => {
+    const parseResult = await testParseCode(`
+      data Documents / Document { Title text Body text Owner text CreatedAt time }
+      type DocumentInput is Document { Title, Body }
+      type Editable is Document without { Owner, CreatedAt }
+      view Editor(Document) {
+        state Input = copy Document as DocumentInput
+      }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const [input, editable] = parseResult.entry.ast.statements.filter(AST.isTypeDeclaration)
+    Expect.Is(input, AST.isTypeDeclaration)
+    Expect.Is(editable, AST.isTypeDeclaration)
+    Expect.Is(input.type, AST.isProjectedItemTypeExpression)
+    Expect.Is(editable.type, AST.isProjectedItemTypeExpression)
+    Expect(input.type.fields).toEqual(['Title', 'Body'])
+    Expect(editable.type.excludedFields).toEqual(['Owner', 'CreatedAt'])
+    const editor = parseResult.entry.ast.statements.find(AST.isViewDeclaration)
+    Expect.Is(editor, AST.isViewDeclaration)
+    const state = AST.blockStatementOf(editor, 0)
+    Expect.Is(state, AST.isStateDeclaration)
+    Expect.Is(state.value, AST.isCopyExpression)
+    Expect.Is(state.value.type, AST.isNamedTypeReference)
+    Expect(state.value.type.root).toBe('DocumentInput')
+  })
+
   Test('parses type declarations, constructors, lists, and member access', async () => {
     const parseResult = await testParseCode(`
       type Name is text
@@ -136,7 +163,7 @@ Describe('parser: types', () => {
     const parseResult = await testParseCode(`
       type Person is { Name text, Role text }
       type Admin is Person with { Role is "admin", Access number }
-      let Admin = { Name "Ro", Access 3 }
+      let Admin = { Name "the Developer", Access 3 }
       let Renamed = Admin with { Name "Grace" }
       view MainView() { }
     `)

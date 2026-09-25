@@ -19,6 +19,7 @@ const STUDIO_BROWSER_SMOKES = [
   'keyboard-navigation-smoke',
   'studio-dialog-browser',
   'studio-agent-browser',
+  'studio-network-simulation',
 ]
 /** Every Studio smoke gate: the pool members the graph numbers. */
 const STUDIO_SMOKES = [...STUDIO_BROWSER_SMOKES, 'studio-smoke-native']
@@ -264,7 +265,7 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.suiteTuning('apps/expo-host').cost).toBe(2)
     // The developer suite's own tests start child runners and whole lanes, so one of its processes
     // is not one core either; it says so rather than letting the graph assume otherwise.
-    Expect(GateCatalog.suiteTuning('dev').cost).toBe(2)
+    Expect(GateCatalog.suiteTuning('cli/dev-cli').cost).toBe(2)
     Expect(GateCatalog.suiteTuning('language/parser').cost).toBeUndefined()
     Expect(nodeOf('_typecheck').cost).toBe(GateCatalog.TYPECHECK_COST)
     Expect(nodeOf('_tao-check').cost).toBe(GateCatalog.TAO_CHECK_COST)
@@ -278,16 +279,15 @@ Describe('gate catalog metadata', () => {
     Expect(GateCatalog.suiteTuning('tao-apps').budgetEnvKeys).toEqual([GateCatalog.TAO_TEST_BUDGET_KEY])
     Expect(GateCatalog.TAO_TEST_BUDGET_KEY).toBe(WorkGraph.BUDGET_ENV_KEYS.taoTest)
     // Every other runner is bounded by the graph itself — a shard's one slot, or `--maxWorkers`.
-    Expect(GateCatalog.suiteTuning('dev').budgetEnvKeys).toBeUndefined()
+    Expect(GateCatalog.suiteTuning('cli/dev-cli').budgetEnvKeys).toBeUndefined()
     Expect(GateCatalog.suiteTuning('runtime-jest').budgetEnvKeys).toBeUndefined()
-    // Its startup dominates, so it declares the measured startup; a Bun suite starts far faster and
-    // uses the shared default.
-    Expect(GateCatalog.suiteTuning('tao-apps').fixedMs).toBe(6_000)
+    // Shared preparation pays compiler startup once; a shard pays only its warm CLI overhead.
+    Expect(GateCatalog.suiteTuning('tao-apps').fixedMs).toBe(800)
     Expect(GateCatalog.suiteTuning('tao-apps').shardCost).toBe(2)
     // Jest's own pool already parallelizes its whole run, so splitting it only adds startups.
     Expect(GateCatalog.suiteTuning('runtime-jest').shardable).toBe(false)
     Expect(GateCatalog.suiteTuning('tao-apps').shardable).toBeUndefined()
-    Expect(GateCatalog.suiteTuning('dev').fixedMs).toBeUndefined()
+    Expect(GateCatalog.suiteTuning('cli/dev-cli').fixedMs).toBeUndefined()
     Expect(GateCatalog.BUN_SUITE_FIXED_MS).toBe(600)
   })
 
@@ -345,7 +345,7 @@ Describe('gate catalog metadata', () => {
 
     // Dynamic child and generation surfaces remain at the safe default. An unclassified suite does
     // too: reading Tao or generated output during its writer would otherwise permit a torn read.
-    for (const suite of ['dev', 'ides/studio', 'cli/tao-cli', 'unclassified-suite']) {
+    for (const suite of ['cli/dev-cli', 'ides/studio', 'cli/tao-cli', 'unclassified-suite']) {
       Expect(GateCatalog.suiteReads(suite)).toEqual(GateCatalog.DEFAULT_SUITE_READS)
       Expect(GateCatalog.testDependencies(GateCatalog.suiteReads(suite)).toSorted()).toEqual([
         '_compile-word-flower-app',
@@ -409,15 +409,16 @@ Describe('gate catalog metadata', () => {
     }
   })
 
-  Test('gives only the two window-server lanes the gui resource', () => {
+  Test('shares the HNReader project only between the gates that open it', () => {
     Expect(nodeOf('studio-smoke-native').resources).toEqual(['gui'])
-    Expect(nodeOf('studio-canary').resources).toEqual(['gui'])
-    Expect(nodeOf('studio-smoke').resources).toBeUndefined()
+    Expect(nodeOf('studio-canary').resources).toEqual(['gui', 'studio-hnreader-project'])
+    Expect(nodeOf('studio-smoke').resources).toEqual(['studio-hnreader-project'])
     Expect(nodeOf('studio-proof-real-app').resources).toBeUndefined()
     Expect(nodeOf('studio-smoke-simulated-user').resources).toBeUndefined()
     Expect(nodeOf('keyboard-navigation-smoke').resources).toBeUndefined()
     Expect(nodeOf('studio-dialog-browser').resources).toBeUndefined()
     Expect(nodeOf('studio-agent-browser').resources).toBeUndefined()
+    Expect(nodeOf('studio-network-simulation').resources).toBeUndefined()
   })
 
   Test('marks every browser and native UI lane as requiring an unsandboxed host', () => {
@@ -459,7 +460,9 @@ Describe('gate catalog scheduling', () => {
     Expect(workers.toSorted()).toEqual([0, 1, 2])
     Expect(commands.get('studio-smoke-native')?.args).toContain('--native')
     Expect(commands.get('studio-smoke')?.args).not.toContain('--native')
-    Expect(commands.get('studio-smoke')?.args.at(-1)).toBe('packages/dev/studio-smoke/studio-launch.test.ts')
+    Expect(commands.get('studio-smoke')?.args.at(-1)).toBe(
+      'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts',
+    )
   })
 
   Test('runs the generator, then the Tao fixer, then the compile, then the tests', async () => {
@@ -533,16 +536,18 @@ Describe('gate catalog scheduling', () => {
     )).toBe(true)
   })
 
-  Test('keeps the gui lanes exclusive and lets the browser lane overlap either one', async () => {
+  Test('keeps the gui and HNReader lanes exclusive while independent browser lanes overlap', async () => {
     // Each pair fits inside 24 slots. The barrier makes allowed overlap deterministic, while the
     // two gui nodes must still run sequentially because they hold the same resource.
     const guiPair = await runLane(['studio-smoke-native', 'studio-canary'], 24)
     const nativeAndBrowser = await runLane(['studio-smoke-native', 'studio-smoke-simulated-user'], 24, 2)
     const canaryAndBrowser = await runLane(['studio-canary', 'studio-smoke-simulated-user'], 24, 2)
+    const canaryAndLaunch = await runLane(['studio-canary', 'studio-smoke'], 24)
 
     Expect(overlapped(guiPair.overlaps, 'studio-smoke-native', 'studio-canary')).toBe(false)
     Expect(overlapped(nativeAndBrowser.overlaps, 'studio-smoke-native', 'studio-smoke-simulated-user')).toBe(true)
     Expect(overlapped(canaryAndBrowser.overlaps, 'studio-canary', 'studio-smoke-simulated-user')).toBe(true)
+    Expect(overlapped(canaryAndLaunch.overlaps, 'studio-canary', 'studio-smoke')).toBe(false)
   })
 })
 

@@ -2,6 +2,7 @@ import type TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { studioPanelLogs } from '../studio-src/client/app/StudioProductHostState'
 import { StudioPanelBounds, StudioPanelProjection } from '../studio-src/client/StudioPanelProjection'
 import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
 import { StudioSearchHit } from '../studio-src/product-host/StudioPanelRows'
@@ -198,6 +199,20 @@ Describe('Studio structured panel projection', () => {
       Path: row.Path,
     }))
     Expect(html).toContain('Main.tao:2:10')
+  })
+
+  Test('shows connected device lines beside browser lines with a device label', () => {
+    const panels = StudioPanelProjection.project({
+      ...baseInput(),
+      logs: studioPanelLogs(
+        [{ arguments: ['browser ready'], level: 'log', timestamp: 20 }],
+        [{ deviceName: 'the Developer’s iPhone', level: 'warn', message: 'network slow', sequence: 1, timestamp: 10 }],
+      ),
+    })
+    Expect(panels.Drawer.Logs.Rows).toEqual([
+      { Level: 'warn', Message: 'Device the Developer’s iPhone: network slow', Timestamp: 10 },
+      { Level: 'log', Message: 'browser ready', Timestamp: 20 },
+    ])
   })
 
   Test('rejects invalid controller identities before publication', () => {

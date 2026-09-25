@@ -2,7 +2,7 @@
 
 Status: **exploration awaiting dialogue**. This is the thousand-mile overview for the "Bridge React
 Native and Expo APIs into Tao" roadmap item; every sketch is an example to provoke, not a decided
-surface. Rulings from dialogue with Ro land in the Direction section as they settle. Nothing here is
+surface. Rulings from dialogue with the Developer land in the Direction section as they settle. Nothing here is
 language law until it reaches `Tao Revolution/Decisions.md`, which wins wherever the two collide.
 
 ## Framing
@@ -96,7 +96,7 @@ Two readings follow. First, **roughly 55–60% of a hand-written binding is enve
 varies — and 30 hand-copies of it produced zero drift, evidence the pattern is stable enough to
 freeze into an engine. Second, **the remaining 40% is language design, not translation**: which
 native calls make one Tao verb, what the case set is, what honest unavailability looks like. That
-part _should_ be hand-written, because it is exactly the part Ro decides per capability.
+part _should_ be hand-written, because it is exactly the part the Developer decides per capability.
 
 ## The tradeoff, laid out honestly
 

@@ -5,6 +5,7 @@ import {
   type TaoStudioDeviceDescription,
   type TaoStudioDeviceDeviceMessage,
   type TaoStudioDeviceHelloMessage,
+  type TaoStudioDeviceLensSample,
   type TaoStudioDeviceLogEntry,
   type TaoStudioDeviceManifest,
   type TaoStudioDeviceNetworkCondition,
@@ -30,6 +31,8 @@ import {
 } from './StudioDeviceBonjour'
 import type {
   StudioDeviceConnection,
+  StudioDeviceLensSample,
+  StudioDeviceLog,
   StudioDeviceSourceSelection,
   StudioDeviceStatus,
 } from './StudioDeviceStatus'
@@ -124,7 +127,10 @@ type Connection = {
 }
 
 type SessionState = {
+  lensSamples?: StudioDeviceLensSample[]
   listeners: Set<StudioDeviceStatusListener>
+  logs?: StudioDeviceLog[]
+  logSequence?: number
   /** The render a device last tapped, and the counter the workbench uses to act on it once. */
   selection?: StudioDeviceSourceSelection
   pairing?: { expiresAt: Date; timer: ReturnType<typeof setTimeout> }
@@ -223,6 +229,8 @@ export class StudioDeviceGateway {
     const pending = state?.pending?.state === 'pairing' ? state.pending : undefined
     return {
       ...(connection === undefined ? {} : { connection: connectionSnapshot(connection) }),
+      ...(state?.logs === undefined ? {} : { logs: [...state.logs] }),
+      ...(state?.lensSamples === undefined ? {} : { lensSamples: [...state.lensSamples] }),
       gateway: { hosts: this.#hosts, port: this.port, studioFingerprint: this.#store.fingerprint() },
       pairing: {
         ...(state?.pairing === undefined ? {} : { expiresAt: state.pairing.expiresAt.toISOString() }),
@@ -928,6 +936,7 @@ export class StudioDeviceGateway {
     }
     Switch.on(message, 'type', {
       'device.applied': applied => this.#deviceApplied(connection, ref, applied),
+      'device.lens': lens => this.#deviceLens(connection, ref, lens.samples),
       'device.log': logged => this.#deviceLog(connection, logged.entries),
       'device.ping': () => this.#sendSealed(connection, { type: 'studio.pong' }),
       'device.report': reported => this.#deviceReport(connection, ref, reported.level, reported.message),
@@ -946,9 +955,76 @@ export class StudioDeviceGateway {
    */
   #deviceLog(connection: Connection, entries: readonly TaoStudioDeviceLogEntry[]): void {
     const name = deviceText(connection.device?.name ?? 'unknown')
+    const sessionId = connection.ref?.sessionId
+    const state = sessionId === undefined ? undefined : this.#state(sessionId)
     for (const entry of entries) {
-      this.#log(`device ${name} ${entry.level}: ${deviceText(entry.message)}`)
+      const message = deviceText(entry.message)
+      this.#log(`device ${name} ${entry.level}: ${message}`)
+      if (state !== undefined) {
+        state.logSequence = (state.logSequence ?? 0) + 1
+        const logs = state.logs ??= []
+        logs.push({
+          deviceName: name,
+          level: entry.level,
+          message,
+          sequence: state.logSequence,
+          timestamp: entry.timestamp,
+        })
+      }
     }
+    if (state?.logs !== undefined && sessionId !== undefined && entries.length > 0) {
+      state.logs.splice(0, Math.max(0, state.logs.length - 500))
+      this.#emit(sessionId)
+    }
+  }
+
+  /**
+   * Keeps only observations that still describe the active, acknowledged device cell.
+   *
+   * A device can keep rendering an older bundle while a source edit publishes a newer manifest.
+   * Those timings remain true of the phone but cannot explain the current Studio selection, so
+   * dropping them here gives the workbench one fresh observation stream instead of asking every
+   * caller to rediscover assignment and publication freshness.
+   */
+  #deviceLens(
+    connection: Connection,
+    ref: StudioDeviceGatewaySessionRef,
+    samples: readonly TaoStudioDeviceLensSample[],
+  ): void {
+    const assignment = connection.assignment
+    const manifest = ref.session.previewManifest()
+    if (
+      assignment === undefined || manifest === undefined
+      || connection.appliedRevision !== assignment.identity.compileRevision
+    ) {
+      return
+    }
+    const cell = manifest.cells.find(candidate => candidate.cellId === assignment.identity.cellId)
+    if (cell === undefined) {
+      return
+    }
+    const current = StudioPreviewManifest.cellIdentity(manifest, cell)
+    if (
+      current.cellRevision !== assignment.identity.cellRevision
+      || current.compileRevision !== assignment.identity.compileRevision
+      || current.manifestRevision !== assignment.identity.manifestRevision
+    ) {
+      return
+    }
+    const retained = samples.flatMap(sample => {
+      if (manifest.sourceVersions[sample.occurrence.sourcePath] !== sample.occurrence.sourceVersion) {
+        return []
+      }
+      return [{ ...sample, deviceName: deviceText(connection.device?.name ?? 'unknown') }]
+    })
+    if (retained.length === 0) {
+      return
+    }
+    const state = this.#state(ref.sessionId)
+    const observations = state.lensSamples ??= []
+    observations.push(...retained)
+    observations.splice(0, Math.max(0, observations.length - 1_000))
+    this.#emit(ref.sessionId)
   }
 
   #deviceReport(

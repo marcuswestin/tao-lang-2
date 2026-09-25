@@ -3,8 +3,10 @@
 How to run, inspect, and recover Tao Studio during development. `Docs/Spec/Tao Studio.md` owns what
 Studio _is_ as an implemented product contract; this package README owns the operational guide
 around it — launch modes, ports, artifact roots, manifests, diagnostics, smoke lanes, and release
-steps. Launch, doctor, smoke, and packaging commands live in `packages/dev` and the Justfile; they
-are documented here because they are how this package is exercised.
+steps. Launch, doctor, smoke, and packaging commands live in `packages/ides/studio-tooling` and the
+Justfile; they are documented here because they are how this package is exercised.
+Commands below are the human developer menu. An agent runs a host operation only through a listed
+`./agent unsandboxed` name; an unlisted Studio operation needs a named entry before agent use.
 
 ## Launch modes
 
@@ -43,7 +45,7 @@ separate device gateway.
 1. **Install once, and again only when native dependencies or app configuration change:**
 
    ```bash
-   just studio-companion-install device="roPhone"
+   just studio-companion-install device="<name>"
    ```
 
    ```bash
@@ -52,7 +54,7 @@ separate device gateway.
 
    Both run Expo prebuild as needed and `expo run:ios --device <target> --no-bundler` from the
    companion package, and neither starts a Metro. A device needs Xcode, CocoaPods (from the devenv
-   profile), a signing identity for the fixed bundle id `dev.tao-lang.studio.companion`, and an
+   profile), a signing identity for the fixed bundle id `com.devtao.studio.companion`, and an
    unlocked screen. A simulator needs none of that: name any available one, or omit the name for the
    booted one, and the tooling boots it first. Xcode 27 presents simulators inside Device Hub; older
    Xcodes use Simulator.app. If Expo cannot bring that host forward because macOS automation is
@@ -71,16 +73,23 @@ separate device gateway.
    two minutes. Confirm in Studio only when the codes match. The device key then lives in the
    phone's Keychain and the trusted record under the device-trust artifact root, so later launches
    reconnect without a code. **Revoke** removes that trust; a revoked phone must pair again.
-5. **Iterate.** Tao edits compile as usual; Metro Fast Refresh updates the phone and the browser
-   canvas from the same file graph, and the popover shows the compile revision beside the revision the
-   phone acknowledged. The floating **Tao** badge on the phone switches scenarios and reconnects.
+5. **Iterate.** Typing in Studio's editor stays local until **Save**; saved Tao edits compile and
+   publish to the shared Metro graph. Compatible edits retain the browser preview frames; a change
+   to the compiler-authored scenario contract reloads every retained browser frame. A later editor
+   Save waits while the connected phone has not acknowledged the previous compiled revision. If it
+   disconnects, Studio releases that wait after five seconds and marks the phone unsynced. The
+   popover shows the compile revision beside the phone's acknowledgment, and the floating **Tao**
+   badge on the phone switches scenarios and reconnects. Phone-wide scenario reset and compatible
+   phone state retention remain an integration boundary: the current device host keys its cell by
+   compile revision and remounts it on reassignment.
 
 Networking: the phone must reach the Mac's LAN address that Expo advertises (the popover names it);
 an active `169.254.*` cable interface is offered as another candidate but must succeed from the
 phone. `localhost` is never sent to a device. A denied Local Network permission, a captive portal,
 a VPN interface, or a firewall shows up as a named diagnostic in the popover rather than a hang.
-`xcrun devicectl` talks to CoreDevice over XPC that an agent sandbox denies, so run Studio from an
-ordinary shell when a device is involved. A simulator avoids all of this, which makes it the target
+`xcrun devicectl` talks to CoreDevice over XPC that an agent sandbox denies. A person can run Studio
+from an ordinary shell when a device is involved; an agent needs a named `./agent unsandboxed`
+Studio launch operation before it can run that host workflow. A simulator avoids all of this, which makes it the target
 to reach for when the question is whether the app renders rather than how it behaves on real
 hardware.
 
@@ -357,7 +366,7 @@ bun test packages/ides/studio/studio-tests/studio-feed-examples.test.ts packages
 The existing real browser-shell smoke entry point is:
 
 ```bash
-just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts
+just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts
 ```
 
 It must run on a host where Chrome can expose DevTools. Its Draw path creates a 360 by 76 sketch and
@@ -368,10 +377,14 @@ drop, retained-position Unsnap, overlap Cancel/Apply, and source/catalog Undo.
 
 The smoke lane is deliberately outside ordinary test discovery: it is slow and it binds real ports.
 
-Lanes that drive Chrome (`studio-simulated-user.test.ts`, and anything else using `StudioCdp`) need
-an **unsandboxed** shell. Under the agent sandbox Chrome cannot create its socket directory or write
-`Crashpad/settings.dat`, and it exits before exposing DevTools. The failure names Chrome rather than
-the sandbox, so it reads as a browser problem:
+Run the documented host lane for Chrome (`studio-simulated-user.test.ts`, and anything else using
+`StudioCdp`) from an independent desktop terminal. In a managed sandbox, Chrome can fail before
+DevTools exists:
+it has exited with code 21 when its socket directory or `Crashpad/settings.dat` was denied, and it
+has also aborted during macOS `_RegisterApplication` before CDP became available. `Aqua` from
+`launchctl managername` does not distinguish the failing managed context. See
+[DEVENV-015](<../../../Docs/Roadmap/Developer environment upgrades/DEVENV-015-reliable-host-browser-verification.md>)
+for the host evidence and operator action. The earlier socket failure looks like this:
 
 ```
 Chrome exited before exposing DevTools (exit 21, signal none)
@@ -380,7 +393,7 @@ stderr: ... open .../Chrome/Crashpad/settings.dat: Operation not permitted
 ```
 
 ```bash
-just studio-smoke packages/dev/studio-smoke/studio-real-app.test.ts
+just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts
 ```
 
 ```bash
@@ -401,7 +414,7 @@ owned, stops it through the manifest, and confirms nothing is left. It skips wit
 a host that will not report on its own processes, because ownership cannot be established there.
 
 ```bash
-just studio-smoke packages/dev/studio-smoke/studio-launch.test.ts
+just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts
 ```
 
 The other smoke files build a session in-process and do not exercise the CLI.
@@ -434,7 +447,7 @@ and the smoke gates (`studio-smoke`, `studio-proof-real-app`,
 canary are serialized on a `gui` resource so they never overlap each other while the browser lanes
 run beside them. The simulated-user browser lane is an ordinary member of the graph again, and closed
 DEVENV-042 on 2026-09-20 with ten consecutive green normal-terminal runs;
-`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` runs it alone. A failing lane no longer hides the lanes after it — every lane
+`just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts` runs it alone. A failing lane no longer hides the lanes after it — every lane
 appears in the one rollup with its own log. `just studio-smoke`, `just studio-smoke-native`,
 `just studio-proof-real-app`, and `just studio-canary` remain the standalone entry points, and the
 smoke lanes need an unsandboxed shell (Chrome cannot create its socket and Crashpad directories
@@ -442,8 +455,8 @@ under the agent sandbox). Checks that need a person live in `just studio-manual-
 never part of any lane.
 
 The Justfile decides which gates belong to which lane; `./dev gates` runs them and reports, and
-`GateCatalog.ts` in `packages/dev` holds each gate's scheduling shape (dependencies, width,
-resources, timeouts).
+`GateCatalog.ts` in `packages/testing/verification` holds each gate's scheduling shape
+(dependencies, width, resources, timeouts).
 
 ## Native canary
 
@@ -473,15 +486,42 @@ It opens visible native Studio and records these results in a separate report:
 
 ## Release
 
-Building a signed, notarized release needs credentials this repository never holds.
+The 2026-09-24 `R12` decision parks the signed build, notarization, hosted download, and installed
+update checks until the near-release pass. They are not current branch or landing gates. Keep the
+guarded commands below available for that pass; do not weaken their checks. Local Studio tests and
+credential-free simulator work continue. A public release still requires these proofs.
+
+Building a signed, notarized release needs credentials this repository never holds. Agents can run
+the preparation command with host access; publication remains a separate operator step. The
+release recipes target a **public GitHub Releases repository** and stable updates only:
+
+```bash
+./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
+# Inspect the local artifacts and release report before making them public.
+just studio-release-publish OWNER/REPO
+```
+
+The preparation command builds with the embedded update URL
+`https://github.com/OWNER/REPO/releases/latest/download`, discovers the built `.app` and `.dmg`,
+runs `studio-release-check`, and records the artifact hashes. It checks GitHub release history so a
+first release can correctly have no differential patch; later releases still require one. The second
+refuses a changed source commit, changed files, unsigned or unverified artifacts, or a private
+repository. It creates a draft
+`studio-vVERSION` release, uploads every file from the build's `artifacts/` directory without
+renaming it, publishes the release, and downloads each file anonymously to compare its hash.
+If publication stops after creating a draft, the same command resumes it; if the release is already
+public, it verifies the hosted files without replacing them. Studio and CLI downloads can share the
+public Tao Lang repository. GitHub has one `latest` release per repository, so each CLI-only release
+must use `--latest=false`: Studio's updater reads Studio files from that repository's `latest`
+download URL. The CLI install script can select the highest stable `vVERSION` release from GitHub's
+release list and download its assets by tag. Studio releases are explicitly marked latest by the
+publication command.
+
+The existing `just studio-package` and `just studio-release-check` remain available as lower-level
+diagnostics. Their manual equivalent is:
 
 ```bash
 just studio-package https://releases.example.com/tao-studio stable
-```
-
-Then validate what was built, without publishing anything:
-
-```bash
 just studio-release-check .artifacts/build/studio-native/service-stage/payload .artifacts/build/studio-native/project/artifacts --app "<built>.app" --dmg "<built>.dmg" --release-base-url https://releases.example.com/tao-studio
 ```
 
@@ -489,7 +529,8 @@ The artifact names are read from the directory the build wrote, never from the c
 name nobody produced cannot pass a check.
 
 The validation reports a standalone payload (no `bunx`, no repository paths, no devenv profile), the
-packaged Node runtime and native library inventory, an HTTPS update manifest, differential updates,
+packaged Node runtime and native library inventory, a valid local update manifest naming an archive
+in the build, an HTTPS release-host setting, differential updates,
 and — through Apple's own tools — deep signing, notarization, and disk image validity. A gate whose
 tool is missing is reported **UNVERIFIED**, never as passed, and an unverified gate **fails the
 command**: a build nobody could confirm was signed is not publishable. `--allow-unverified` exits
@@ -533,17 +574,25 @@ whether each name is set — and none of them belongs in a file that is committe
    `ELECTROBUN_SKIP_NOTARIZATION=1` signs without submitting for notarization, which is useful for a
    local build that will not be distributed.
 
-4. **Set the release host.** `TAO_STUDIO_RELEASE_BASE_URL` — the HTTPS host installed copies fetch
-   updates from. `./dev studio-doctor` confirms it is configured.
+4. **Choose the release repository.** Create a public GitHub repository with a `main` branch. Its
+   latest published release must always carry the stable Studio update files. A dedicated Studio
+   releases repository is simplest. In a shared Tao repository, publish CLI releases with
+   `--latest=false` so the latest release continues to carry Studio updates. GitHub's
+   `latest` URL excludes prereleases, so use another static host for auto-updating canary builds.
+   Log in with `gh auth login` on the release machine. The prepare recipe derives the URL from
+   `OWNER/REPO`; `TAO_STUDIO_RELEASE_BASE_URL` remains available for lower-level builds.
 
 5. **Confirm before building.** `./dev studio-doctor` reports which method is configured, or exactly
    which variables of a partially configured set are missing. It never prints a value.
 
-6. **Build, then validate.** `just studio-package <release-base-url> <channel>`, then
-   `just studio-release-check` as above.
+6. **Prepare and inspect.** Run `just studio-release-prepare OWNER/REPO VERSION` after the final
+   licence structure is settled and the release code is on GitHub's `main`. Review the resulting
+   report and `.artifacts/build/studio-native/project/artifacts/` files.
 
-7. **Publish yourself.** Upload the artifacts and the update manifest to the release host. No command
-   here publishes anything.
+7. **Publish and inspect an installed copy.** Run `just studio-release-publish OWNER/REPO`. It checks
+   public downloads from this machine. Then download the DMG from a separate clean Mac, install and
+   launch Studio, and confirm the first-run behavior before announcing it. The recipe does not
+   substitute for that human clean-machine check.
 
 These variable names are Electrobun's, not Apple's own tooling's; see
 <https://framework.blackboard.sh/electrobun/guides/code-signing/>.
@@ -552,8 +601,9 @@ These variable names are Electrobun's, not Apple's own tooling's; see
 
 **A blank Studio.** Almost always two React copies in one bundle. `./dev studio-doctor` reports the
 React singleton directly, and `./agent verify` fails on it before Studio can start. The versions the
-installed Expo SDK pins are the contract; `packages/dev` is allowed its own React only because Ink's
-peer range starts above Expo's pin, and its copy never reaches a bundle.
+installed Expo SDK pins are the contract; `packages/cli/cli-kit` and `packages/testing/verification`
+are allowed their own React only because Ink's peer range starts above Expo's pin, and their copy
+never reaches a bundle.
 
 **A stale session URL.** Session IDs are per launch. `./dev studio-ps` distinguishes live launches
 from stale manifests; `./dev studio-stop --all` clears the stale ones — from an ordinary shell, so

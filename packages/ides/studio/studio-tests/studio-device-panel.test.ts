@@ -1,5 +1,7 @@
+import { Errors } from '@shared/core'
 import { Expect, Test, until } from '@shared/test'
 import { StudioApiError, type StudioHandshake } from '../studio-src/client/StudioApiClient'
+import { StudioDeviceCapture } from '../studio-src/client/StudioDeviceCapture'
 import {
   createStudioDevicePanel,
   type StudioDevicePanelApi,
@@ -10,8 +12,9 @@ import { studioShellMarkup } from '../studio-src/client/StudioShell'
 import type { StudioDeviceLaunchInfo } from '../studio-src/device/StudioDeviceLauncher'
 import type { StudioDeviceStatus } from '../studio-src/device/StudioDeviceStatus'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
+import { cellEnvironment } from './test-studio-fixtures'
 
-const phone = { model: 'iPhone 16 Pro', name: 'Ro’s iPhone', os: 'iOS 19.1' }
+const phone = { model: 'iPhone 16 Pro', name: 'the Developer’s iPhone', os: 'iOS 19.1' }
 const phoneKey = 'ZGV2aWNlLXB1YmxpYy1rZXk='
 const tabletKey = 'dGFibGV0LXB1YmxpYy1rZXk='
 const deviceUrl = 'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.4.20%3A8081'
@@ -24,11 +27,11 @@ const idleStatus: StudioDeviceStatus = {
 }
 
 const launchInfo: StudioDeviceLaunchInfo = {
-  bundleIdentifier: 'dev.tao-lang.studio.companion',
+  bundleIdentifier: 'com.devtao.studio.companion',
   candidates: ['192.168.4.20'],
   diagnostics: [],
-  hosts: [{ id: 'host-1', installed: true, kind: 'device', name: 'Ro’s iPhone' }],
-  installCommand: 'just studio-companion-install device="Ro’s iPhone"',
+  hosts: [{ id: 'host-1', installed: true, kind: 'device', name: 'the Developer’s iPhone' }],
+  installCommand: 'just studio-companion-install device="the Developer’s iPhone"',
   metroPort: 8081,
   scheme: 'taostudiocompanion',
   url: deviceUrl,
@@ -48,6 +51,12 @@ const manifest = {
 const handshake: Pick<StudioHandshake, 'compile' | 'previewManifest'> = {
   compile: { appliedRevision: 5, compileRevision: 5, diagnostics: [], message: 'Compiled.', status: 'compiled' },
   previewManifest: manifest,
+}
+
+const unusedCaptureApi = {
+  deviceCapture: async () => ({ error: 'Capture is not available in this test.' }),
+  previewCell: async () => Errors.throwUnexpected('Preview cell is not available in this test.'),
+  reconfigureCell: async () => Errors.throwUnexpected('Reconfigure is not available in this test.'),
 }
 
 Test('Studio device panel model explains a missing gateway and hides device facts', () => {
@@ -107,7 +116,7 @@ Test('Studio device panel model counts down an open pairing window and formats t
   Expect(pending.buttonLabel).toBe('Device · pairing')
   Expect(pending.pairing.pending).toEqual({
     code: '042 917',
-    deviceLabel: 'Ro’s iPhone (iPhone 16 Pro)',
+    deviceLabel: 'the Developer’s iPhone (iPhone 16 Pro)',
     devicePublicKey: phoneKey,
     fingerprint: 'F1',
   })
@@ -131,7 +140,7 @@ Test('Studio device panel model marks a connected device applied or behind the S
     },
   }
   const applied = StudioDevicePanelModel.fromStatus(connected, launchInfo, { compileRevision: 5 })
-  Expect(applied.buttonLabel).toBe('Device · Ro’s iPhone')
+  Expect(applied.buttonLabel).toBe('Device · the Developer’s iPhone')
   Expect(applied.buttonState).toBe('connected')
   Expect(applied.connection).toEqual({
     appliedRevision: 5,
@@ -140,7 +149,7 @@ Test('Studio device panel model marks a connected device applied or behind the S
     lastError: undefined,
     lastReport: 'info: Rendered Home.',
     model: 'iPhone 16 Pro',
-    name: 'Ro’s iPhone',
+    name: 'the Developer’s iPhone',
     os: 'iOS 19.1',
     remoteAddress: '192.168.4.31',
     revision: 'applied',
@@ -154,7 +163,7 @@ Test('Studio device panel model marks a connected device applied or behind the S
     id: 'host-1',
     installed: 'installed',
     kind: 'device',
-    name: 'Ro’s iPhone',
+    name: 'the Developer’s iPhone',
   }])
   Expect(applied.install.installCommand).toBeUndefined()
 
@@ -175,13 +184,13 @@ Test('Studio device panel model marks a connected device applied or behind the S
   Expect(unreported.connection?.revision).toBe('unknown')
   Expect(unreported.connection?.revisionLabel).toBe('not reported — Studio 7')
   Expect(unreported.connection?.lastError).toBe('Bundle failed to load.')
-  Expect(unreported.buttonLabel).toBe('Device · Ro’s iPhone')
+  Expect(unreported.buttonLabel).toBe('Device · the Developer’s iPhone')
 
   const handshaking = StudioDevicePanelModel.fromStatus({
     ...idleStatus,
     connection: { device: phone, fingerprint: 'F1', state: 'handshaking', transport: 'lan' },
   })
-  Expect(handshaking.buttonLabel).toBe('Device · Ro’s iPhone')
+  Expect(handshaking.buttonLabel).toBe('Device · the Developer’s iPhone')
 })
 
 Test('Studio device panel model lists trusted devices, the gateway, and install facts for uninstalled hosts', () => {
@@ -205,7 +214,7 @@ Test('Studio device panel model lists trusted devices, the gateway, and install 
   }, {
     ...launchInfo,
     diagnostics: [{ layer: 'devicectl', message: 'Xcode command line tools are not selected.' }],
-    hosts: [{ id: 'host-1', installed: false, kind: 'device', name: 'Ro’s iPhone' }, {
+    hosts: [{ id: 'host-1', installed: false, kind: 'device', name: 'the Developer’s iPhone' }, {
       id: 'host-2',
       kind: 'simulator',
       name: 'iPhone 17 Pro (iOS 26.5 Simulator)',
@@ -218,7 +227,7 @@ Test('Studio device panel model lists trusted devices, the gateway, and install 
     {
       devicePublicKey: phoneKey,
       fingerprint: 'F1',
-      label: 'Ro’s iPhone (iPhone 16 Pro)',
+      label: 'the Developer’s iPhone (iPhone 16 Pro)',
       lastSeenAt: '2026-09-02T09:58:00.000Z',
       pairedAt: '2026-09-01T18:00:00.000Z',
     },
@@ -236,7 +245,7 @@ Test('Studio device panel model lists trusted devices, the gateway, and install 
     studioFingerprint: 'AB12 CD34 EF56',
   })
   Expect(model.install.hosts).toEqual([
-    { canOpen: false, id: 'host-1', installed: 'not installed', kind: 'device', name: 'Ro’s iPhone' },
+    { canOpen: false, id: 'host-1', installed: 'not installed', kind: 'device', name: 'the Developer’s iPhone' },
     {
       canOpen: true,
       id: 'host-2',
@@ -245,7 +254,7 @@ Test('Studio device panel model lists trusted devices, the gateway, and install 
       name: 'iPhone 17 Pro (iOS 26.5 Simulator)',
     },
   ])
-  Expect(model.install.installCommand).toBe('just studio-companion-install device="Ro’s iPhone"')
+  Expect(model.install.installCommand).toBe('just studio-companion-install device="the Developer’s iPhone"')
   Expect(model.install.diagnostics).toEqual([{
     layer: 'devicectl',
     message: 'Xcode command line tools are not selected.',
@@ -261,12 +270,97 @@ Test('Studio shell places the Device button before Beta ship and a hidden popove
   Expect(markup.indexOf('studio-device-popover')).toBeLessThan(markup.indexOf('class="studio-body"'))
 })
 
+Test('Studio device capture saves an app-bound artifact and restores through a fresh cell identity', async () => {
+  const dom = installFakeDocument()
+  try {
+    const captureManifest = {
+      ...manifest,
+      cells: [{ ...manifest.cells[0]!, environment: cellEnvironment() }],
+      project: { appName: 'Garden', entryPath: 'Garden.tao', root: '/tmp/garden' },
+    } as StudioPreviewManifestV2
+    const artifact = { capturedAt: 42, domains: [], version: 1 as const }
+    const downloads: { name: string; content: string }[] = []
+    const requests: unknown[] = []
+    const identity = {
+      appName: 'Garden',
+      cellId: 'cell-home',
+      cellRevision: 7,
+      compileRevision: 9,
+      manifestRevision: 'latest',
+      project: '/tmp/garden',
+    }
+    const api: StudioDevicePanelApi = {
+      ...unusedCaptureApi,
+      deviceCapture: async () => ({ capture: artifact }),
+      deviceConfirmPairing: async () => ({ accepted: true }),
+      deviceDeclinePairing: async () => ({ declined: true }),
+      deviceLaunch: async () => launchInfo,
+      deviceLaunchOpen: async () => ({ hostName: 'the Developer’s iPhone', launched: true, url: deviceUrl }),
+      deviceOpenPairing: async () => ({ expiresAt: new Date().toISOString() }),
+      deviceReconnect: async () => ({ requested: true }),
+      deviceRevoke: async () => ({ revoked: true }),
+      deviceSelectCell: async () => ({ requested: true }),
+      previewCell: async () => ({ cell: captureManifest.cells[0]!, identity }),
+      reconfigureCell: async body => {
+        requests.push(body)
+        return { cell: captureManifest.cells[0]!, identity }
+      },
+    }
+    const button = dom.element('button') as unknown as HTMLButtonElement
+    const popover = dom.element('section') as unknown as HTMLElement
+    popover.hidden = true
+    const panel = createStudioDevicePanel({
+      api,
+      button,
+      handshake: { ...handshake, previewManifest: captureManifest },
+      popover,
+      downloadCapture: (name, content) => downloads.push({ name, content }),
+    })
+    panel.setStatus({
+      ...idleStatus,
+      connection: { cellId: 'cell-home', device: phone, fingerprint: 'F1', state: 'connected', transport: 'lan' },
+    })
+    panel.open()
+    dom.click(dom.find(popover, 'studio-device-capture')!)
+    await until(() => downloads.length === 1)
+    Expect(downloads[0]!.name).toContain('Garden-home-42.json')
+    const saved = StudioDeviceCapture.parse(JSON.parse(downloads[0]!.content))
+    Expect(saved).toMatchObject({ appName: 'Garden', project: '/tmp/garden', scenarioId: 'home' })
+    await until(() => dom.find(popover, 'studio-device-restore')?.disabled === false)
+    dom.click(dom.find(popover, 'studio-device-restore')!)
+    await until(() => requests.length === 1)
+    Expect(requests[0]).toMatchObject({ ...identity, replay: { capturedAt: 42, version: 1 } })
+    await until(() => dom.find(popover, 'studio-device-remount')?.disabled === false)
+    dom.click(dom.find(popover, 'studio-device-remount')!)
+    await until(() => requests.length === 2)
+    Expect(requests[1]).toEqual(identity)
+    const file = dom.find(popover, 'studio-device-capture-file')!
+    Object.defineProperty(file, 'files', {
+      configurable: true,
+      value: [{ text: async () => JSON.stringify({ ...saved, appName: 'Other' }) }],
+    })
+    file.dispatchEvent({ target: file, type: 'change' })
+    await until(() =>
+      dom.find(popover, 'studio-device-status')?.textContent
+        === 'Choose a device cell from the same app and scenario as this capture.'
+    )
+    Expect(requests).toHaveLength(2)
+    panel.dispose()
+  } finally {
+    dom.restore()
+  }
+})
+
 Test('Studio device panel drives pairing, launch, scenario, and revoke requests through the API', async () => {
   const dom = installFakeDocument()
   try {
     const calls: string[] = []
     let launchDescriptions = 0
     const api: StudioDevicePanelApi = {
+      async deviceCapture() {
+        calls.push('capture')
+        return { error: 'The device is not ready to capture.' }
+      },
       async deviceConfirmPairing(key) {
         calls.push(`confirm:${key}`)
         return { accepted: true }
@@ -281,7 +375,7 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
       },
       async deviceLaunchOpen(hostId, route) {
         calls.push(`open:${hostId}:${route}`)
-        return { hostName: 'Ro’s iPhone', launched: true, url: deviceUrl }
+        return { hostName: 'the Developer’s iPhone', launched: true, url: deviceUrl }
       },
       async deviceOpenPairing() {
         calls.push('pair')
@@ -298,6 +392,12 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
       async deviceSelectCell(cellId) {
         calls.push(`select:${cellId}`)
         return { requested: true }
+      },
+      async previewCell() {
+        Errors.throwUnexpected('No capture selected.')
+      },
+      async reconfigureCell() {
+        Errors.throwUnexpected('No capture selected.')
       },
     }
     const button = dom.element('button') as unknown as HTMLButtonElement
@@ -321,7 +421,7 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
       },
       trusted: [{ device: phone, devicePublicKey: tabletKey, fingerprint: 'F2', pairedAt: '2026-09-01T18:00:00.000Z' }],
     })
-    Expect(button.textContent).toBe('Device · Ro’s iPhone')
+    Expect(button.textContent).toBe('Device · the Developer’s iPhone')
     Expect(popover.hidden).toBe(true)
     Expect(launchDescriptions).toBe(0)
 
@@ -338,16 +438,19 @@ Test('Studio device panel drives pairing, launch, scenario, and revoke requests 
 
     dom.click(dom.find(popover, 'studio-device-trust')!)
     await until(() => calls.includes(`confirm:${phoneKey}`))
-    await until(() => dom.find(popover, 'studio-device-status')?.textContent === 'Trusted Ro’s iPhone (iPhone 16 Pro).')
+    await until(() =>
+      dom.find(popover, 'studio-device-status')?.textContent === 'Trusted the Developer’s iPhone (iPhone 16 Pro).'
+    )
     const lanOpen = dom.find(popover, 'studio-device-open')!
-    Expect(lanOpen.textContent).toBe('Open over LAN')
+    Expect(lanOpen.textContent).toBe('Open this app on device · LAN')
     Expect(lanOpen.parent?.children.find(child => child.dataset['route'] === 'cable')?.textContent).toBe(
-      'Open over cable',
+      'Open this app on device · cable',
     )
     dom.click(lanOpen)
     await until(() => calls.includes('open:host-1:auto'))
     await until(() =>
-      dom.find(popover, 'studio-device-status')?.textContent === 'Opened Tao Companion on Ro’s iPhone over LAN.'
+      dom.find(popover, 'studio-device-status')?.textContent
+        === 'Opened Tao Companion on the Developer’s iPhone over LAN.'
     )
     const cableOpen = dom.find(popover, 'studio-device-open')!.parent?.children.find(
       child => child.dataset['route'] === 'cable',
@@ -397,13 +500,14 @@ Test(
     try {
       let pairAttempts = 0
       const api: StudioDevicePanelApi = {
+        ...unusedCaptureApi,
         deviceConfirmPairing: async () => ({ accepted: true }),
         deviceDeclinePairing: async () => ({ declined: true }),
         deviceLaunch: async () => {
           throw new StudioApiError('Not Implemented', 501)
         },
         deviceLaunchOpen: async () => {
-          throw new StudioApiError('devicectl: Ro’s iPhone is locked.', 500)
+          throw new StudioApiError('devicectl: the Developer’s iPhone is locked.', 500)
         },
         deviceOpenPairing: async () => {
           pairAttempts += 1
@@ -480,10 +584,11 @@ Test('Studio device panel renders the dev-client URL as an SVG QR and copies it 
   try {
     const copied: string[] = []
     const api: StudioDevicePanelApi = {
+      ...unusedCaptureApi,
       deviceConfirmPairing: async () => ({ accepted: true }),
       deviceDeclinePairing: async () => ({ declined: true }),
       deviceLaunch: async () => launchInfo,
-      deviceLaunchOpen: async () => ({ hostName: 'Ro’s iPhone', launched: true, url: deviceUrl }),
+      deviceLaunchOpen: async () => ({ hostName: 'the Developer’s iPhone', launched: true, url: deviceUrl }),
       deviceOpenPairing: async () => ({ expiresAt: new Date().toISOString() }),
       deviceReconnect: async () => ({ requested: true }),
       deviceRevoke: async () => ({ revoked: true }),

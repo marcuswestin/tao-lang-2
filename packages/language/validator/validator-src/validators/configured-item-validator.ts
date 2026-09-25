@@ -164,7 +164,7 @@ type ConfiguredItemBindingState = {
   readonly ctx: ValidationContext
   readonly namedEntries: Map<string, AST.ConfigurationEntry>
   readonly remainingCandidates: Set<ConfiguredItemCandidate>
-  readonly remainingExpected: Set<AST.TypeProperty>
+  readonly remainingExpected: Set<ASTUtils.ItemShapeField>
 }
 
 function validateConfiguredItemBlock(
@@ -194,12 +194,12 @@ function collectConfiguredItemCandidates(
 ): void {
   for (const entry of state.block.entries) {
     if (entry.label && entry.expression) {
-      const expected = item.properties.find(property => property.name === entry.label)
+      const expected = Type.itemFields(item).find(property => property.name === entry.label)
       if (!expected) {
         state.ctx.error(entry, configuredItemValidationMessages.unknownNamedProperty(entry.label))
         continue
       }
-      if (Type.propertyIsFilled(expected)) {
+      if (Type.itemFieldIsFilled(expected)) {
         state.ctx.error(entry, configuredItemValidationMessages.filledProperty(expected.name))
         continue
       }
@@ -208,7 +208,7 @@ function collectConfiguredItemCandidates(
       }
       state.namedEntries.set(entry.label, entry)
       const actual = Type.ofExpression(entry.expression)
-      const expectedType = Type.ofProperty(expected)
+      const expectedType = Type.itemFieldType(expected)
       if (actual.kind !== 'unresolved' && !Type.isCastCompatible(actual, expectedType)) {
         state.ctx.error(
           entry,
@@ -226,8 +226,8 @@ function collectConfiguredItemCandidates(
       state.remainingCandidates.add({ entry, type })
     }
   }
-  for (const property of item.properties) {
-    if (!Type.propertyIsFilled(property) && !state.namedEntries.has(property.name)) {
+  for (const property of Type.itemFields(item)) {
+    if (!Type.itemFieldIsFilled(property) && !state.namedEntries.has(property.name)) {
       state.remainingExpected.add(property)
     }
   }
@@ -236,7 +236,7 @@ function collectConfiguredItemCandidates(
 const configuredItemCandidateType = (candidate: ConfiguredItemCandidate): ASTUtils.TaoType => candidate.type
 
 function bindUnambiguousConfiguredItemCandidates(state: ConfiguredItemBindingState): Set<string> {
-  const duplicateExpected = duplicateTypes([...state.remainingExpected], Type.ofProperty)
+  const duplicateExpected = duplicateTypes([...state.remainingExpected], Type.itemFieldType)
   for (const property of duplicateExpected.values()) {
     state.ctx.error(state.block, configuredItemValidationMessages.duplicatePropertyType(property.name))
   }
@@ -269,7 +269,7 @@ function reportRemainingConfiguredItemCandidates(
       continue
     }
     const matches = [...state.remainingExpected].filter(property =>
-      Type.isAssignable(actual, Type.ofProperty(property))
+      Type.isAssignable(actual, Type.itemFieldType(property))
     )
     if (matches.length > 1) {
       state.ctx.error(
@@ -292,7 +292,7 @@ function reportRemainingConfiguredItemFields(
   for (const property of state.remainingExpected) {
     const matches = [...state.remainingCandidates].filter(candidate =>
       !candidateTypeIsBlocked(configuredItemCandidateType(candidate), blockedCandidateTypes)
-      && Type.isAssignable(configuredItemCandidateType(candidate), Type.ofProperty(property))
+      && Type.isAssignable(configuredItemCandidateType(candidate), Type.itemFieldType(property))
     )
     if (matches.length > 1) {
       state.ctx.error(state.block, configuredItemValidationMessages.ambiguousField(property.name))
@@ -305,7 +305,7 @@ function reportRemainingConfiguredItemFields(
       unresolvedCandidates -= 1
       continue
     }
-    if (!Type.propertyRequiresValue(property)) {
+    if (!Type.itemFieldRequiresValue(property)) {
       continue
     }
     state.ctx.error(state.block, configuredItemValidationMessages.missingProperty(property.name))
@@ -332,13 +332,13 @@ function configuredItemEntryType(
   if (!entry.name || (!entry.block && !entry.value)) {
     return undefined
   }
-  const ownerProperty = item.properties.find(property => property.name === entry.name)
-  if (ownerProperty && Type.propertyIsFilled(ownerProperty)) {
+  const ownerProperty = Type.itemFields(item).find(property => property.name === entry.name)
+  if (ownerProperty && Type.itemFieldIsFilled(ownerProperty)) {
     ctx.error(entry, configuredItemValidationMessages.filledProperty(ownerProperty.name))
     return { kind: 'unresolved' }
   }
   const expected = ownerProperty
-    ? Type.ofProperty(ownerProperty)
+    ? Type.itemFieldType(ownerProperty)
     : Type.visibleDeclaration(entry, entry.name)
     ? Type.ofDefinition(Type.visibleDeclaration(entry, entry.name)!)
     : undefined
@@ -434,12 +434,12 @@ function validateConfiguredConstructorMembers(
       ctx.error(value, configuredItemValidationMessages.memberNotItem(member))
       return false
     }
-    const property = current.item.properties.find(candidate => candidate.name === member)
+    const property = Type.itemFields(current.item).find(candidate => candidate.name === member)
     if (!property) {
       ctx.error(value, configuredItemValidationMessages.unknownMember(ownerName, member))
       return false
     }
-    current = Type.ofProperty(property)
+    current = Type.itemFieldType(property)
     ownerName = `${ownerName}.${member}`
   }
   return true
@@ -464,7 +464,7 @@ function duplicateTypes<T>(values: readonly T[], getType: (value: T) => ASTUtils
 
 function bindConfiguredEntries<T extends { entry: AST.ConfigurationEntry }>(
   candidates: Set<T>,
-  expected: Set<AST.TypeProperty>,
+  expected: Set<ASTUtils.ItemShapeField>,
   { candidateType, matches, blockedCandidateTypes }: {
     candidateType: (candidate: T) => ASTUtils.TaoType
     matches: (actual: ASTUtils.TaoType, expected: ASTUtils.TaoType) => boolean
@@ -476,11 +476,11 @@ function bindConfiguredEntries<T extends { entry: AST.ConfigurationEntry }>(
     if (candidateTypeIsBlocked(actual, blockedCandidateTypes)) {
       continue
     }
-    const matching = [...expected].filter(property => matches(actual, Type.ofProperty(property)))
+    const matching = [...expected].filter(property => matches(actual, Type.itemFieldType(property)))
     if (matching.length === 1) {
       const property = matching[0]!
       const competing = [...candidates].filter(other =>
-        other !== candidate && matches(candidateType(other), Type.ofProperty(property))
+        other !== candidate && matches(candidateType(other), Type.itemFieldType(property))
       )
       if (competing.length === 0) {
         candidates.delete(candidate)

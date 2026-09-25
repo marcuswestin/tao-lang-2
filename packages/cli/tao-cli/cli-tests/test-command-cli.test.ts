@@ -167,15 +167,15 @@ const splittableFixture = {
 /** listEntrypoints lists the Jest entrypoints of the plan a run `width` workers wide generated. */
 async function listEntrypoints(runtimeRoot: string, width: number): Promise<string[]> {
   const found: string[] = []
-  for (const runRoot of await listRunRoots(runtimeRoot)) {
-    const plans = FS.resolvePath(
-      `_gen_tao-app-test/tao-test-command/${runRoot}/${RuntimeTesting.TestHarnessFiles.DIRECTORY_NAME}`,
-      runtimeRoot,
-    )
-    for (const plan of await FS.isDirectory(plans) ? await FS.listDir(plans) : []) {
-      if (plan.startsWith(`${width}-`)) {
-        found.push(...await FS.listDir(FS.resolvePath(plan, plans)))
-      }
+  // Plans live beside the run roots rather than inside one, so that the directory Jest is configured
+  // with does not move from compile to compile.
+  const plans = FS.resolvePath(
+    `_gen_tao-app-test/tao-test-command/${RuntimeTesting.TestHarnessFiles.DIRECTORY_NAME}`,
+    runtimeRoot,
+  )
+  for (const plan of await FS.isDirectory(plans) ? await FS.listDir(plans) : []) {
+    if (plan.startsWith(`${width}-`)) {
+      found.push(...await FS.listDir(FS.resolvePath(plan, plans)))
     }
   }
   return found.toSorted()
@@ -188,6 +188,117 @@ async function listCachedFingerprints(runtimeRoot: string): Promise<string[]> {
 }
 
 Describe('tao test CLI', () => {
+  Test('writes a versioned live-render artifact when Studio requests journey observations', async () => {
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': '' }, async rootDir => {
+      const artifactPath = FS.resolvePath('journey-observations.json', rootDir)
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
+          const result = await runTaoCliForTest([
+            'test',
+            rootDir,
+            '--journey-observations',
+            artifactPath,
+          ])
+
+          Expect(result.exitCode).toBe(0)
+          Expect(await FS.readJson<RuntimeTesting.JourneyObservationsArtifact>(artifactPath)).toEqual({
+            checks: [],
+            format: 'tao-journey-observations',
+            version: 1,
+          })
+        })
+      })
+    })
+  })
+
+  Test('prepares one compiled corpus and runs its disjoint roots without recompiling', async () => {
+    await withTaoFixture({ ...splittableFixture, 'jest-stub.mjs': argvEchoStubSource() }, async rootDir => {
+      const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+      const handoffPath = FS.resolvePath('artifacts/shared-tao-run.json', rootDir)
+      await withRuntimeRoot(runtimeRoot, async () => {
+        await withJestStub(rootDir, async () => {
+          const prepared = await runTaoCliForTest(['test', '--shared-prepare', handoffPath, rootDir])
+          const first = await runTaoCliForTest(['test', '--shared-run', handoffPath, FS.resolvePath('One', rootDir)])
+          const second = await runTaoCliForTest(['test', '--shared-run', handoffPath, FS.resolvePath('Two', rootDir)])
+          const finalized = await runTaoCliForTest(['test', '--shared-finalize', handoffPath])
+          const handoff = await FS.readJson<{ testPaths: readonly string[] }>(handoffPath)
+
+          Expect([prepared.exitCode, first.exitCode, second.exitCode, finalized.exitCode]).toEqual([0, 0, 0, 0])
+          Expect(outputText(prepared)).toContain(COMPILED)
+          Expect(outputText(prepared)).toContain('Prepared shared Tao test run')
+          Expect(handoff.testPaths).toHaveLength(2)
+          Expect(outputText(first)).not.toContain(COMPILED)
+          Expect(outputText(second)).not.toContain(COMPILED)
+          Expect(outputText(first)).toContain('Running shared Tao tests')
+          Expect(outputText(second)).toContain('Running shared Tao tests')
+          Expect(await listRunRoots(runtimeRoot)).toHaveLength(1)
+        })
+      })
+    })
+  })
+
+  Test('fails closed when a shared shard root was not prepared', async () => {
+    await withTaoFixture({ ...splittableFixture, 'jest-stub.mjs': '' }, async rootDir => {
+      const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+      const handoffPath = FS.resolvePath('shared-tao-run.json', rootDir)
+      await withRuntimeRoot(runtimeRoot, async () => {
+        await withJestStub(rootDir, async () => {
+          const prepared = await runTaoCliForTest([
+            'test',
+            '--shared-prepare',
+            handoffPath,
+            FS.resolvePath('One', rootDir),
+          ])
+          const run = await runTaoCliForTest(['test', '--shared-run', handoffPath, FS.resolvePath('Two', rootDir)])
+
+          Expect(prepared.exitCode).toBe(0)
+          Expect(run.exitCode).toBe(1)
+          Expect(outputText(run)).toContain('has no compiled test files under shard root')
+        })
+      })
+    })
+  })
+
+  Test('rejects a shared handoff from another runtime root', async () => {
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': '' }, async rootDir => {
+      const preparedRuntimeRoot = FS.resolvePath('prepared-runtime-root', rootDir)
+      const foreignRuntimeRoot = FS.resolvePath('foreign-runtime-root', rootDir)
+      const handoffPath = FS.resolvePath('shared-tao-run.json', rootDir)
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(preparedRuntimeRoot, async () => {
+          Expect((await runTaoCliForTest(['test', '--shared-prepare', handoffPath, rootDir])).exitCode).toBe(0)
+        })
+        await withRuntimeRoot(foreignRuntimeRoot, async () => {
+          const run = await runTaoCliForTest(['test', '--shared-run', handoffPath, rootDir])
+
+          Expect(run.exitCode).toBe(1)
+          Expect(outputText(run)).toContain('belongs to')
+          Expect(outputText(run)).toContain('not this runtime root')
+        })
+      })
+    })
+  })
+
+  Test('discards an uncached shared run only after its finalizer', async () => {
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': '' }, async rootDir => {
+      const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+      const handoffPath = FS.resolvePath('shared-tao-run.json', rootDir)
+      await withRuntimeRoot(runtimeRoot, async () => {
+        await withJestStub(rootDir, async () => {
+          await withEnv('TAO_TEST_NO_CACHE', 'true', async () => {
+            const prepared = await runTaoCliForTest(['test', '--shared-prepare', handoffPath, rootDir])
+            Expect(prepared.exitCode).toBe(0)
+            Expect(await listRunRoots(runtimeRoot)).toHaveLength(1)
+
+            const finalized = await runTaoCliForTest(['test', '--shared-finalize', handoffPath])
+            Expect(finalized.exitCode).toBe(0)
+            Expect(await listRunRoots(runtimeRoot)).toEqual([])
+          })
+        })
+      })
+    })
+  })
+
   Test('reports no discovered tests without failing', async () => {
     await withTaoFixture({ 'Main.tao': '' }, async (rootDir) => {
       const result = await runTaoCliForTest(['test', rootDir])
@@ -544,6 +655,60 @@ Describe('tao test CLI', () => {
               'shard-2-of-2.jest.tsx',
             ])
           })
+        })
+      })
+    })
+  })
+
+  // Jest hashes its whole configuration into the key of every transform it caches, and the
+  // entrypoint directory is in that configuration. When it sat inside the run root, every compile
+  // moved it and the runner re-transformed React Native and everything else it loads. The compiled
+  // apps are stored by their contents for the same reason: a compile whose output is unchanged hands
+  // the runner the same module paths, and only an edit that changes the output moves them.
+  Test('hands the test runner the same entrypoints and module paths across compiles of unchanged output', async () => {
+    const envStub = [
+      `process.stderr.write(\`entrypoints: \${process.env.${RuntimeTesting.TestHarnessFiles.ENTRYPOINTS_ENV}}\\n\`)`,
+      `process.stderr.write(\`manifest: \${process.env.${RuntimeTesting.TEST_MANIFEST_ENV}}\\n\`)`,
+      `process.stderr.write(\`jest cache: \${process.env.${RuntimeTesting.JestTransformCache.ENV}}\\n\`)`,
+      '',
+    ].join('\n')
+    await withTaoFixture({ ...reportFixture, 'jest-stub.mjs': envStub }, async rootDir => {
+      await withJestStub(rootDir, async () => {
+        const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+        await withRuntimeRoot(runtimeRoot, async () => {
+          const entrypointsOf = (output: string) => /entrypoints: (.+)/.exec(output)?.[1]
+          const jestCacheOf = (output: string) => /jest cache: (.+)/.exec(output)?.[1]
+          const modulePathsOf = async (output: string) => {
+            const manifestPath = /manifest: (.+)/.exec(output)?.[1]
+            Expect(manifestPath).toBeDefined()
+            const manifest = await FS.readJson<RuntimeTesting.TestCompiler.Manifest>(manifestPath!)
+            return manifest.files.flatMap(file =>
+              file.suites.flatMap(suite => suite.checks.map(check => check.app.modulePath))
+            )
+          }
+
+          const first = await runTaoCliForTest(['test', rootDir, '--output', 'lines'])
+          const firstRunRoots = await listRunRoots(runtimeRoot)
+          const firstModules = await modulePathsOf(outputText(first))
+          await FS.writeText(FS.resolvePath('App.tao', rootDir), taoApp('Reported').replace('"Reported"', '"Edited"'))
+          const second = await runTaoCliForTest(['test', rootDir, '--output', 'lines'])
+          const secondModules = await modulePathsOf(outputText(second))
+          const third = await runTaoCliForTest(['test', rootDir, '--output', 'lines'])
+          const thirdModules = await modulePathsOf(outputText(third))
+
+          Expect([first.exitCode, second.exitCode, third.exitCode]).toEqual([0, 0, 0])
+          Expect(await listRunRoots(runtimeRoot)).not.toEqual(firstRunRoots)
+          Expect(entrypointsOf(outputText(first))).toBeDefined()
+          Expect(entrypointsOf(outputText(second))).toBe(entrypointsOf(outputText(first)))
+          Expect(entrypointsOf(outputText(first))).not.toContain('/run-')
+          Expect(jestCacheOf(outputText(first))).toContain('/.cache/tao/jest-transform-cache/')
+          Expect(jestCacheOf(outputText(second))).toBe(jestCacheOf(outputText(first)))
+          Expect(jestCacheOf(outputText(third))).toBe(jestCacheOf(outputText(first)))
+          Expect(firstModules.length).toBeGreaterThan(0)
+          const store = `/${RuntimeTesting.TestRunRoot.COMPILED_STORE_DIRECTORY_NAME}/`
+          Expect(firstModules.every(path => path.includes(store))).toBe(true)
+          Expect(secondModules).not.toEqual(firstModules)
+          Expect(thirdModules).toEqual(secondModules)
         })
       })
     })

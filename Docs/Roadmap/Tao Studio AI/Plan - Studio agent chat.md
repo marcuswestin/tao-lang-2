@@ -11,7 +11,7 @@ and SAI-Q046 onward in this document's own "Implementation record".
 Like its predecessor, this plan does not amend `Docs/Roadmap/Tao Revolution/Decisions.md` and does
 not define a supported Studio or compiler API. The implementation landed on `main` on 2026-09-04 as
 a proof of concept behind the Agent rail panel; it remains disposable, and nothing else in the
-repository may depend on its modules or routes. Ro decides language semantics, roadmap priority, and product behavior; the implementing agent
+repository may depend on its modules or routes. The Developer decides language semantics, roadmap priority, and product behavior; the implementing agent
 decides everything else here from repository evidence and its own judgment.
 
 ## Why a second approach, and why it coexists with the first
@@ -42,7 +42,8 @@ Decisions taken for this slice, to be recorded as SAI-D029 onward once the imple
   defined with `tool()` from JSON Schema or zod, structured stage outputs with `Output.object`, and
   `needsApproval` on every tool that writes. The loop runs in the Studio server process, never in the
   browser client, so credentials and source never pass through the client.
-- Provider choice is configuration, not code. Anthropic is the first provider; the model id is a
+- Provider choice is configuration, not code. Anthropic and OpenAI are both wired, chosen per session
+  in the panel, with `TAO_STUDIO_AGENT_PROVIDER` naming where a session starts; each model id is a
   setting with a sensible default. A community on-device provider for the AI SDK exists and may be
   evaluated for read-only turns, but nothing in this slice depends on it.
 - Sending project source to a hosted model is an explicit, visible, per-session choice in Studio. No
@@ -164,7 +165,7 @@ which inverts where correctness comes from, and which SAI-D024/D025 above genera
 
 ## The three user stories
 
-Ro selected these three, with the caveats recorded under each. They are the acceptance target: each
+The Developer selected these three, with the caveats recorded under each. They are the acceptance target: each
 one is done when a person can do what the story says in Studio, against HNReader and WordFlower,
 without touching source by hand.
 
@@ -176,7 +177,7 @@ without touching source by hand.
 > exact source in Studio. I follow up with "which of that is covered by tests?" and "where does the
 > green come from?"
 
-Ro's caveat: the chat must also answer **advisory and structural** questions, not only relational ones:
+The Developer's caveat: the chat must also answer **advisory and structural** questions, not only relational ones:
 
 - "Give me an overview of what this app does and how it is structured, in terms of files and so on."
 - "What are areas of improvement to tackle next?"
@@ -201,7 +202,7 @@ answers come from the same graph plus the file list and per-file declaration out
 > say "the empty one should say 'Nothing yet' - make that a test," and the agent writes a behavior test
 > that pins it, runs it, and shows it red until I fix the view.
 
-Ro's caveats:
+The Developer's caveats:
 
 - The person describes the scenario they want to develop against or test; Studio works out which
   scenario entries, fixtures, subjects, and environment clauses are required to produce it.
@@ -343,7 +344,7 @@ The phases are a suggested order, not a contract. The implementer should reorder
 when the evidence says to, and should record why in the findings ledger. The suggested order is
 story 1, then story 3, then story 2: story 1 builds the loop and panel cheaply against read-only tools;
 story 3 proves the write-tool pattern and surfaces the Tao-fluency risk early; story 2 adds the most
-Studio-specific tools once that pattern is trusted. Ro is equally happy with story 2 before story 3.
+Studio-specific tools once that pattern is trusted. The Developer is equally happy with story 2 before story 3.
 
 ### Phase 0 - Spike the loop
 
@@ -433,7 +434,7 @@ demonstrated by asking for a state the app cannot reach, with the agent stopping
 - Studio launched from the agent's own sandboxed shell cannot reach a hosted model: egress is limited
   to an allowlist owned by `.rulesync/permissions.jsonc`, and the policy is not to be widened to route
   around a violation. For demonstrations, the person runs Studio from their own terminal with the key
-  set, or Ro decides to allow the provider host. Tests never need the network.
+  set, or the Developer decides to allow the provider host. Tests never need the network.
 - `direnv exec .` fails in a sandboxed shell; use `export PATH="$PWD/.devenv/profile/bin:$PATH"`.
 - The Browser pane's launch entries open Studio on `127.0.0.1`; Studio rejects a `localhost` origin.
 - A blank preview with a clean compile was the bundler's stale file map; the startup ordering fix is on
@@ -474,7 +475,10 @@ model, so the loop's behavior is tested without a network.
 
 **Phase 1, ask.** `readTools` is the whole read surface, and `AgentChatFacts` is what an advisory answer may
 rest on. `AgentChatProvider` holds the two separate gates: a key in the environment, and the person turning
-cloud use on for the session.
+cloud use on for the session. It also holds which vendor answers — Anthropic (`ANTHROPIC_API_KEY`,
+`claude-sonnet-5`) or OpenAI (`OPENAI_API_KEY`, `gpt-5.6-terra`), each model overridable through
+`TAO_STUDIO_AGENT_ANTHROPIC_MODEL` or `TAO_STUDIO_AGENT_OPENAI_MODEL` — and switching vendor turns cloud use
+off again, since consent to send a project to one vendor is not consent to send it to the other.
 
 **Phase 2, build.** Every change is proposed and applied in two steps, and only the applying pauses for
 approval — so the approval card carries the diff rather than the arguments that produced it. `proposeFlag`
@@ -539,7 +543,8 @@ staging and the gate are all tested; whether a real model uses them well is not.
 - whether a model respects `requestCodeChanges` and stops, rather than finding another way;
 - cost and latency per story.
 
-Running these needs Studio started from a terminal with `ANTHROPIC_API_KEY` set, cloud turned on in the panel,
+Running these needs Studio started from a terminal with `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` set, that
+provider chosen and cloud turned on in the panel,
 and someone reading what comes back. That is the next thing to do, and it is the only thing that can settle
 whether this approach works.
 

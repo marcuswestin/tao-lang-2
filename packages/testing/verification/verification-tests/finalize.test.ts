@@ -457,7 +457,7 @@ Describe('finalize', () => {
   Test('keeps an existing merge message when recorded state proves it matches the current HEAD', async () => {
     const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
-    fake.files.set(messagePath, 'Land example\n\n- Hand-edited by Ro.\n')
+    fake.files.set(messagePath, 'Land example\n\n- Hand-edited by the Developer.\n')
     const statePath = '/repo/.artifacts/merge/feat/example.state.json'
     const state: FinalizeState = {
       headSha: 'mainsha00000000000000000000000000000000000',
@@ -481,7 +481,7 @@ Describe('finalize', () => {
 
     const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
 
-    Expect(fake.files.get(messagePath)).toBe('Land example\n\n- Hand-edited by Ro.\n')
+    Expect(fake.files.get(messagePath)).toBe('Land example\n\n- Hand-edited by the Developer.\n')
     Expect(outcome.lines.some(line => line.includes('Kept the existing merge message'))).toBe(true)
     Expect(outcome.lines.some(line => line.includes('3. Merge message: kept — recorded as written for this HEAD')))
       .toBe(true)
@@ -860,6 +860,50 @@ Describe('finalize', () => {
     },
   )
 
+  Test(
+    'reports studio-tooling as both a human-verification path and workflow code the ledger advisory reaches',
+    async () => {
+      // studio-tooling owns Electrobun windows, CDP, and device launch — nothing sandboxed exercises
+      // them — and it is repository workflow code in its own right (MachineLanes, the review command).
+      const fake = fakeDependencies({
+        headSha: 'mainsha00000000000000000000000000000000000',
+        diffPaths: ['packages/ides/studio-tooling/studio-tooling-src/StudioNative.ts'],
+      })
+      const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+      fake.files.set(messagePath, 'Land example\n\n- Add the example workflow\n')
+      const statePath = '/repo/.artifacts/merge/feat/example.state.json'
+      fake.states.set(
+        statePath,
+        {
+          headSha: 'mainsha00000000000000000000000000000000000',
+          mainIntegratedSha: 'mainsha00000000000000000000000000000000000',
+          messageHeadSha: 'mainsha00000000000000000000000000000000000',
+          updatedAt: '2026-09-17T09:00:00.000Z',
+          verifiedAt: '2026-09-17T09:00:00.000Z',
+          verifiedLane: 'verify',
+          verifiedToolchain: FAKE_TOOLCHAIN,
+          verifiedTreeHash: 'tree-of-mainsha00000000000000000000000000000000000',
+          version: 2,
+        } satisfies FinalizeState,
+      )
+      fake.greenTreeRecords.set('verify', {
+        at: '2026-09-17T09:00:00.000Z',
+        generated: FAKE_GENERATED,
+        logRoot: '/logs/verify',
+        toolchain: FAKE_TOOLCHAIN,
+        treeHash: 'tree-of-mainsha00000000000000000000000000000000000',
+      })
+
+      const outcome = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+      Expect(outcome.ok).toBe(true)
+      Expect(outcome.lines.some(line => line.includes('Developer environment upgrades.md'))).toBe(true)
+      Expect(
+        outcome.lines.some(line => line.includes('packages/ides/studio-tooling/studio-tooling-src/StudioNative.ts')),
+      ).toBe(true)
+    },
+  )
+
   Test('reports nothing remaining when every step was already satisfied', async () => {
     const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000', diffPaths: [] })
     const messagePath = '/repo/.artifacts/merge/feat/example.msg'
@@ -989,6 +1033,41 @@ Describe('landing preparation', () => {
     Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
     // But main is still read, because a draft is written against `main..HEAD`.
     Expect(preparation.lines.some(line => line.includes('Read origin/main at'))).toBe(true)
+  })
+
+  Test('accepts an edited draft for the same HEAD without an out-of-lock finalize', async () => {
+    const fake = fakeDependencies()
+    const first = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(first.ok).toBe(false)
+    const path = '/repo/.artifacts/merge/feat/example.msg'
+    fake.files.set(path, 'Land the example workflow\n\n- Add the example workflow.\n')
+
+    const second = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(second.ok).toBe(true)
+    Expect(fake.calls.some(call => call.args[0] === 'merge')).toBe(false)
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+
+    fake.states.set(`${path}.review.json`, {
+      draftText: 'DRAFT: Add the example workflow\n\n- Add the example workflow.\n',
+      headSha: 'oldhead0000000000000000000000000000000000',
+      version: 1,
+    })
+    const changedHead = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(changedHead.ok).toBe(false)
+  })
+
+  Test('accepts an updated kept message without an out-of-lock finalize', async () => {
+    const fake = fakeDependencies()
+    const path = '/repo/.artifacts/merge/feat/example.msg'
+    fake.files.set(path, 'Land the example workflow\n\n- Add the example workflow.\n')
+    const first = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(first.ok).toBe(false)
+    fake.files.set(path, 'Land the example workflow\n\n- Add and validate the example workflow.\n')
+
+    const second = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(second.ok).toBe(true)
+    Expect(fake.calls.some(call => call.args[0] === 'merge')).toBe(false)
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
   })
 
   Test('is ready once the message on disk is recorded against this HEAD', async () => {

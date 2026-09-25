@@ -12,14 +12,14 @@ so that a later reader disagrees with the argument rather than re-running the re
 - Prefer moving a rule into enforcement over stating it better. A refusal arrives at the moment the
   agent is about to get it wrong, names the fix, and costs one turn; prose is read once at session
   start and competes with everything else in the file.
-- A rule that cannot be enforced — judgment, product semantics, what to ask Ro about, how to report —
+- A rule that cannot be enforced — judgment, product semantics, what to ask the Developer about, how to report —
   stays prose. That is what the file is for.
 - Before adding a line, apply the removal test: would an agent make a mistake if this line were not
   here? If a hook would have caught the mistake anyway, the answer is no.
 
 ## Size, and why it is counted in characters
 
-- Budgets are enforced by `repo-lint` from `InstructionBudgets.ts`: root `AGENTS.md` 11,500
+- Budgets are enforced by `repo-lint` from `InstructionBudgets.ts`: root `AGENTS.md` 12,760
   characters, a nested `AGENTS.md` 6,000, each `SKILL.md` 12,000. `references/` files have no budget,
   because they load on demand — that is the whole mechanism the length argument is about.
 - Characters, not lines, because these files are long paragraph bullets. A line budget caps how many
@@ -52,12 +52,12 @@ so that a later reader disagrees with the argument rather than re-running the re
 
 - Include what an agent cannot infer from the repository: commands it could not guess, conventions
   that differ from the obvious default, constraints coming from outside the code (concurrency, the
-  sandbox, Ro's authority), and who owns which decision.
+  sandbox, the Developer's authority), and who owns which decision.
 - Exclude anything readable from the code, routine engineering steps, tutorials, incident history,
   and calibration-period framing.
 - Be wary of values and style prose. It is the category with the least evidence behind it — the one
   practitioner study with a stated method found that "we value clean, well-tested code" changed
-  nothing measurable. Keep what Ro has asked for directly; do not add more on your own initiative.
+  nothing measurable. Keep what the Developer has asked for directly; do not add more on your own initiative.
 
 ## Structure
 

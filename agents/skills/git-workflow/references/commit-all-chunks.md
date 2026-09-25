@@ -1,6 +1,6 @@
 # Commit All Chunks
 
-Commit every current uncommitted change in small self-contained chunks, when Ro explicitly asks to
+Commit every current uncommitted change in small self-contained chunks, when the Developer explicitly asks to
 commit all outstanding changes. Make commits only; do not edit code without separate approval.
 
 - Do not change file contents. Ask before fixing anything discovered during commit preparation.

@@ -16,8 +16,9 @@ Implement language features as vertical slices. Use the same focused feature nam
 - Search `@shared` for an existing helper before adding one, and put a helper two packages need in `@shared` rather than in both. Where a copy must exist because `packages/apps/runtime` imports nothing from `@shared`, name the shared original it mirrors and keep the two in step.
 - Keep each module's public surface focused on one main concept. Export helpers only for real cross-file or package boundaries.
 - Prefer behavior tests.
+- A wall-clock budget in a test is for a busy host, not for a slow condition: `until` defaults to 30s for exactly that reason (`pollUntil` has no default; its `timeoutMs` is required), and `repo-lint`'s `TestBudgetConventions` rejects a shorter explicit `timeoutMs`, a `toBeLessThan`/`toBeLessThanOrEqual` speed assertion on elapsed time, or a `Promise.race` against a bare sleep, unless the line, or a comment-only line above it, carries `// budget-ok: <reason>`.
 - A jest end-to-end test in `expo-host` earns its place only when it needs a native or module override, asserts generated-code shape, or exercises the harness itself. New behavior coverage lands in Tao as a `.test.tao` journey; existing jest suites migrate opportunistically when touched. Do not schedule a wholesale rewrite.
-- `just dead-exports` fails on exports nothing imports and runs in `verify` and `verify-full`; `removing-code` owns the fix pattern.
+- `./agent dead-exports` fails on exports nothing imports and runs in `verify` and `verify-full`; `removing-code` owns the fix pattern.
 
 ## Errors
 

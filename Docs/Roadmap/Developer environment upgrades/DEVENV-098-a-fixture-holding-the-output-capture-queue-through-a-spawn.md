@@ -15,7 +15,12 @@
   with no change to what is asserted. The same shape is still live in two of `main`'s own fixtures:
   `test-runner.test.ts > an exact-file subset does not teach the full-suite timing estimate` runs a
   nested `TestRunner.runTestRequest` inside the capture and timed out at 60s twice including its
-  isolated retry, and `gate-runner.test.ts` captures around `runGates`.
+  isolated retry, and `gate-runner.test.ts` captures around `runGates`. On 2026-09-22, with the
+  gather already outside the capture, the same two fingerprint tests still hit their 120-second bound
+  inside `./agent land`'s `verify-full` while four other agents' gates held the machine at load 22
+  on 18 CPUs; focused, the file ran nine tests in 147ms, and the landing passed on retry at load 3.6.
+  The host probes themselves starve under that load, which is DEVENV-073's and DEVENV-079's territory
+  rather than the capture queue's.
 - **Workaround:** Run the file focused, where nothing else is contending for the queue.
 - **Proposed change:** Do the expensive half before the capture and capture only the printing, which
   usually means splitting a command's gather from its write — `RepositoryDoctorCommand.writeFingerprint`

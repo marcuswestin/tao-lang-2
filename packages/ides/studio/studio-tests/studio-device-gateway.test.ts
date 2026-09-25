@@ -534,6 +534,78 @@ Describe('Studio device gateway sealed control plane', () => {
     })
   })
 
+  Test('delivers trusted device console lines in the session status with a stable sequence', async () => {
+    await withGateway({}, async env => {
+      const device = await pairedDevice(env)
+      const statuses: StudioDeviceStatus[] = []
+      const unsubscribe = env.gateway.subscribe(env.sessionId, status => statuses.push(status))
+      device.sendSealed({
+        entries: [
+          { level: 'info', message: 'ready', timestamp: 100 },
+          { level: 'warn', message: 'slow request', timestamp: 101 },
+        ],
+        type: 'device.log',
+      })
+      const logs = await until(() =>
+        env.gateway.status(env.sessionId).logs?.length === 2
+          ? env.gateway.status(env.sessionId).logs
+          : undefined
+      )
+      Expect(logs).toMatchObject([
+        { deviceName: device.description.name, level: 'info', message: 'ready', sequence: 1, timestamp: 100 },
+        { deviceName: device.description.name, level: 'warn', message: 'slow request', sequence: 2, timestamp: 101 },
+      ])
+      Expect(statuses.at(-1)?.logs).toEqual(logs)
+      unsubscribe()
+    })
+  })
+
+  Test('keeps only acknowledged current-cell Lens samples with the published source version', async () => {
+    await withGateway({}, async env => {
+      const device = await pairedDevice(env)
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      const assigned = await nextAssignedCell(device)
+      device.sendSealed({
+        appliedRevision: assigned.identity.compileRevision,
+        compileRevision: assigned.identity.compileRevision,
+        identity: assigned.identity,
+        type: 'device.applied',
+      })
+      await until(
+        () => env.gateway.status(env.sessionId).connection?.appliedRevision === assigned.identity.compileRevision,
+        { description: 'the assigned device cell acknowledgement' },
+      )
+      const path = 'Garden.tao'
+      const sourceVersion = env.session.previewManifest()!.sourceVersions[path]!
+      const sample = {
+        actualDurationMs: 17.25,
+        causes: [{ kind: 'state' as const }, { entity: 'Story', kind: 'data' as const, schema: 'Stories' }],
+        instanceId: 'phone-render',
+        occurrence: { end: 50, sourcePath: path, sourceVersion, start: 30 },
+        phase: 'update' as const,
+        timestamp: 100,
+      }
+      device.sendSealed({ samples: [sample], type: 'device.lens' })
+      Expect(
+        await until(
+          () => env.gateway.status(env.sessionId).lensSamples?.[0],
+          { description: 'the fresh device Lens observation' },
+        ),
+      ).toEqual({ ...sample, deviceName: device.description.name })
+
+      device.sendSealed({
+        samples: [{
+          ...sample,
+          instanceId: 'stale-render',
+          occurrence: { ...sample.occurrence, sourceVersion: 'old' },
+        }],
+        type: 'device.lens',
+      })
+      await new Promise(resolve => setTimeout(resolve, 10))
+      Expect(env.gateway.status(env.sessionId).lensSamples).toHaveLength(1)
+    })
+  })
+
   Test('detaches a closed project session, its preview instance, and pending capture', async () => {
     await withGateway({}, async env => {
       const device = await pairedDevice(env)
@@ -1144,7 +1216,7 @@ async function pairedDevice(env: Env): Promise<TestDevice> {
 function hello(env: Env, target: { metroPort?: number; sessionId?: string }): Record<string, unknown> {
   const identity = StudioDeviceTrust.generateIdentity()
   return {
-    device: { model: 'iPhone17,1', name: 'roPhone', os: 'iOS 26' },
+    device: { model: 'iPhone17,1', name: 'example-phone', os: 'iOS 26' },
     devicePublicKey: identity.publicKey,
     ephemeralPublicKey: StudioDeviceTrust.generateEphemeral().publicKey,
     ...(Object.keys(target).length === 0 ? { metroPort: env.metroPort } : target),
@@ -1161,7 +1233,7 @@ type Incoming =
 
 /** TestDevice is the phone side of tao-studio-device-v1, written against the trust primitives only. */
 class TestDevice {
-  readonly description = { model: 'iPhone17,1', name: 'roPhone', os: 'iOS 26' }
+  readonly description = { model: 'iPhone17,1', name: 'example-phone', os: 'iOS 26' }
   keys: TaoStudioDeviceSessionKeys | undefined
   lastConfirm: string | undefined
   receiveSeq = 1

@@ -16,8 +16,14 @@ export default defineConfig({
   forbidOnly: true,
   retries: 0,
   workers: 2,
-  timeout: 30_000,
-  expect: { timeout: 5_000 },
+  // Playwright fails a test at whichever of `timeout` and `expect.timeout` elapses first, so holding
+  // them equal let the test's own wall clock cut an `expect(...)` wait off before its own budget did —
+  // the same dead-budget shape `until`'s 30s default hit against the test runner's own per-test
+  // timeout. Kept above `expect.timeout` so a real browser wait gets the full budget below to run out
+  // on its own terms and report what it was waiting for.
+  timeout: 90_000,
+  // A wall-clock budget on a real browser wait is for a busy host, not for a slow condition.
+  expect: { timeout: 30_000 },
   use: {
     baseURL: Platform.runtimeProcess.env['TAO_HOST_TEST_URL'],
     screenshot: 'only-on-failure',

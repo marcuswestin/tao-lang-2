@@ -191,7 +191,7 @@ Describe('Tao runtime app generation', () => {
         channel: 'release-variant',
         runtimeFingerprint: 'native-fingerprint-1',
         runtimeVersion: 'native-fingerprint-1',
-        url: 'https://updates.tao-lang.org/v1/release-variant',
+        url: 'https://updates.devtao.com/v1/release-variant',
       },
       version: '1.2.3',
     }
@@ -308,7 +308,20 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain('setBootstrapError(error)')
         Expect(stableRoot).toContain("value?.type === 'preview-runtime-update'")
         Expect(stableRoot).toContain('event.source !== window.parent')
-        Expect(stableRoot).toContain('runtimeMatchesPublication(nextCell, TaoStudioPublication)')
+        // A same-identity runtime update must not replace the applied cell object (a new cell
+        // object rebuilds the provider overlay without the remount that alone would justify it).
+        // `studio-preview-runtime-dedupe.jest-test.tsx` mirrors this exact comparison to prove the
+        // behavior against real data/provider primitives it cannot reach by importing this module;
+        // an edit here without a matching edit there fails this assertion instead of silently
+        // drifting the two apart.
+        Expect(stableRoot).toContain(
+          'setAppliedRuntime((previous: any) => sameRuntimeIdentity(previous, next) ? previous : next)',
+        )
+        Expect(stableRoot).toContain('previousIdentity.compileRevision === nextIdentity.compileRevision')
+        Expect(stableRoot).toContain('previousIdentity.cellRevision === nextIdentity.cellRevision')
+        Expect(stableRoot).toContain('previousIdentity.manifestRevision === nextIdentity.manifestRevision')
+        Expect(stableRoot).toContain('TR.Studio.Bootstrap.reconcile(nextCell, TaoStudioPublication, newerRevision => {')
+        Expect(stableRoot).toContain('window.location.replace(nextUrl.toString())')
         Expect(stableRoot).toContain('<TR.Studio.Pending />')
         Expect(stableRoot).toContain('<TR.Studio.Failure error={bootstrapError} />')
         Expect(stableRoot).toContain('<TR.Studio.ErrorBoundary resetKey={[')

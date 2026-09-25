@@ -1,12 +1,23 @@
 # Plan - Standalone Tao CLI
 
-The plan for `A2 — A standalone cross-platform tao executable` in `Agent MVP Roadmap.md`. It writes
-no code; it records what the toolchain actually reads at runtime, what was measured rather than
-assumed, the recommended shape, what is still uncertain, the slice sequence, and the questions that
-are Ro's.
+Implementation update (2026-09-22): the first `tao dev` slice now generates its Expo host in the
+selected project's `.tao/dev/runtime`, keeps Expo and dev-data state in that project, and uses a
+shared CLI/Studio owner with retained `.tao/sessions/` records. Bare `tao dev` opens no target.
+The next branch implements local static web exports, local Electrobun `.app` builds, desktop dev
+opening, retained `.tao/builds/` records, and interactive build cleanup; it does not yet package
+or publish the standalone CLI, or implement native builds and shipping.
+The findings below are the historical pre-implementation baseline; packaging and publishing a
+relocatable CLI remain in this standalone program. The decided command behavior is in
+[`../Roadmap/Tao CLI workflows/Decisions - Development build ship and clean.md`](../Roadmap/Tao%20CLI%20workflows/Decisions%20-%20Development%20build%20ship%20and%20clean.md).
+
+The plan for `A2 — A standalone tao executable` in `Agent MVP Roadmap.md`. It writes no code; it
+records what the toolchain actually reads at runtime, what was measured rather than assumed, the
+recommended shape, what is still uncertain, the slice sequence, and the Developer's release decisions. The
+five-target engineering survey below is broader than the decided first release: **macOS arm64, via
+an install script only**. Later targets and channels remain possible, not committed release scope.
 
 Everything under **Findings** was verified on this machine on 2026-09-17 — macOS 27.0 (26A428),
-arm64 — in a scratch directory under `.artifacts/`. The repository's devenv Bun is 1.3.13; F3
+arm64 — in a scratch directory under `.artifacts/`. The repository's devenv Bun was 1.3.13; F3
 explains why every other measurement was taken with an official Bun 1.4.2 instead. Commands and
 numbers are reproduced verbatim so a later reader can tell measurement from opinion.
 
@@ -19,7 +30,7 @@ numbers are reproduced verbatim so a later reader can tell measurement from opin
 - `tao dev` compiles into `packages/apps/expo-host/_gen_tao-app` and runs Metro in that package,
   against that package's `node_modules`.
 - The dev loop it drives is the _repository's_ dev loop: it calls `just`,
-  `bun run packages/dev/dev-src/dev.ts`, and `Repo.resolvePath('tao')`, and anchors Expo's home,
+  `bun run packages/cli/dev-cli/dev-cli-src/dev.ts`, and `Repo.resolvePath('tao')`, and anchors Expo's home,
   log path, and the runtime-toolchain root on the **Git worktree root** (`Repo.getRoot()` shells out
   to `git rev-parse --show-toplevel`).
 
@@ -108,9 +119,8 @@ Across versions, same `hello.ts`, same host:
 | 1.4.0           | invalid       | killed (137)                                                                     |
 | **1.4.2**       | **valid**     | **runs**                                                                         |
 
-Every measurement below was taken with Bun 1.4.2. **Bumping the pinned Bun to ≥ 1.4.2 is a
-precondition for slice 1**, and it is a repository-wide change that has to be verified against the
-existing suites, not a local choice for this work.
+Every measurement below was taken with Bun 1.4.2. **Bumping the pinned Bun to ≥ 1.4.2 was a
+precondition for slice 1**, and the changed profile must be verified against the existing suites.
 
 Re-signing a 1.4.2 binary for notarization works:
 
@@ -118,6 +128,12 @@ Re-signing a 1.4.2 binary for notarization works:
 $ codesign --force --sign - --options runtime tao-bin      # hardened runtime
 $ tao-bin check .                                          # still runs, exit 0
 ```
+
+The 2026-09-22 upgrade also exposed a macOS 27 watcher regression: with the same CLI watch tests,
+Bun 1.3.13 delivered native file-edit events and 1.4.2 did not, including with host access.
+Chokidar polling delivered the edits. Tao's shared debounced watcher therefore uses polling on
+macOS with Bun 1.4.2, preserving `tao test --watch` and the development loop without changing
+the backend for other runtime versions.
 
 ### F4 — What the CLI reads at runtime, and whether it can be embedded
 
@@ -273,6 +289,14 @@ Three installs of that one `package.json` reported 507, 499, and 498 packages. T
 **roughly 500 packages**; the sizes above were measured on the 507-package install, and I did not
 chase where the other two differ.
 
+**Re-measured 2026-09-22 and materially larger.** A clean install of the same `package.json` now
+resolves **744 packages, 398 MB, 39,917 files**. The table above is kept as the original measurement;
+the current figures are these. Two of those packages are release-build tooling the dev loop never
+touches — `hermes-compiler` (48 MB) and `fb-dotslash` (9.1 MB) — because `expo start` serves plain
+JavaScript and the on-device Hermes parses it, so a dev-only host would be roughly 341 MB. That is
+this plan's uncertainty 7 answered with a number. Copying the installed tree takes 5.05 s and
+deleting it 1.43 s.
+
 Largest entries: `hermes-compiler` 48 MB, `@expo` 35 MB, `expo-modules-core` 34 MB, `react-native`
 31 MB, `@react-native` 29 MB, `react-devtools-core` 17 MB, `@babel` 15 MB, `fb-dotslash` 9.1 MB,
 `lightningcss-darwin-arm64` 8.2 MB.
@@ -331,15 +355,15 @@ Not macOS-only, but broken on Windows or outside a checkout:
   `HostEnvironmentError` outside a worktree. On the `tao dev` path it decides the Expo home
   (`.artifacts/cache/expo`), the Expo log path, the runtime-toolchain root, the dev-data root, and
   the Expo Go APK cache.
-- The dev loop calls `just --justfile <repo>/Justfile`, `bun run <repo>/packages/dev/dev-src/dev.ts`,
+- The dev loop calls `just --justfile <repo>/Justfile`, `bun run <repo>/packages/cli/dev-cli/dev-cli-src/dev.ts`,
   and `Repo.resolvePath('tao')`; `DevFileWatcher` watches thirteen repository-root paths beside the
   project root it already watches. This is the repository's own loop, reused by `tao dev`.
   Separating the shipped loop from the repository loop is the largest single piece of work in this
   item, and it is not an OS problem.
 - `tao review` launches Chrome over CDP, so it needs a browser on the host. It is not optional
-  today: `tao-cli.ts` reaches it through `await import('tao-dev/studio-review')`, which pulls
-  Studio, the CDP client, and the rest of the `packages/dev` graph into the binary already measured
-  at 67.8 MB. Leaving it out of a release is a bundling change, not a flag.
+  today: `tao-cli.ts` reaches it through `await import('tao-studio-tooling/studio-review')`, which
+  pulls Studio, the CDP client, and the rest of the `packages/ides/studio-tooling` graph into the
+  binary already measured at 67.8 MB. Leaving it out of a release is a bundling change, not a flag.
 - Android needs a JDK, the SDK, and an emulator image — `A8`'s requirement graph.
 
 Honest platform claim for `R4`: **`create`, `check`, `fmt`, `fix`, `compile`, `test`, and the web
@@ -365,20 +389,19 @@ for signing and notarization and a Windows runner for Authenticode, but not for 
 ### One binary, one Tao home
 
 ```
-~/.tao/                            ($TAO_HOME overrides)
-  bin/tao                          the shim a user puts on PATH
+~/.local/share/tao/                ($TAO_HOME overrides; honours XDG_DATA_HOME)
+  bin/tao                          the shim, symlinked onto PATH by the installer
   versions/<tao-version>/
     tao                            the compiled binary for this version
-    resources/                     unpacked once, ~5 MB
-      stdlib/@tao/**               .tao sources and .ts sidecars
+    resources -> .resources-<hash>/  unpacked on first run, ~4 MB; .tao-resources stamp written last
+      stdlib/@tao/**, Project.tao  .tao sources, .ts sidecars, and the stdlib's project identity
       modules/@tao/runtime/        TaoRuntime-src + package.json
       host/                        runtime-toolchain files, no node_modules
-      grammar/tao-lang.tmLanguage.json
       apple/tao-foundation-models-server   (macOS payload only, later)
     host/node_modules/             resolved once per version, shared by every project
-    node/                          managed Node for `tao test`, if Ro takes that option
+    node/                          the managed Node this version downloads for `tao test`
+  hosts/<version>-<kit>/<platform>/  prebuilt Companion hosts `tao dev` downloads (`A9`)
   cache/                           bun install cache, Expo home, downloads
-  projects/<project-id>/           per-project generated app and Metro caches
 ```
 
 ### One resource root
@@ -426,17 +449,22 @@ currently write to the same place.
 `Repo.resolvePath(...)` to `~/.tao` and the project root. `DevFileWatcher`'s repository watch list
 becomes the project's own source tree when the loop is running outside a checkout.
 
-`tao test` keeps its explicit runner resolution and gains a managed Node (or the harness changes —
-question 1 below). Everything else runs in-process or through the binary.
+`tao test` keeps its explicit runner resolution and gains a managed Node for the first release. A
+harness change can remove that dependency later. Everything else runs in-process or through the
+binary.
 
 ### Distribution
 
+These are the channels evaluated by the survey. Only the install script for macOS arm64 is in the
+first public release; Homebrew, npm, and other platforms are later possibilities.
+
 - **Install script.** `curl -fsSL https://<host>/install.sh | sh` detects platform and
   architecture, downloads `tao-<version>-<target>`, verifies a published SHA-256, installs the shim
-  into `~/.tao/bin`, and prints the `PATH` line. A PowerShell twin for Windows.
-- **Homebrew tap.** `taolang/homebrew-tao` with a formula that installs the prebuilt binary per
-  platform. Ro creates the tap repository.
-- **npm wrapper.** `tao` with `optionalDependencies` on `@tao-lang/cli-darwin-arm64`,
+  into `~/.tao/bin`, and prints the `PATH` line. A PowerShell twin would be needed for Windows later.
+- **Homebrew tap.** `dev-tao/homebrew-tao` (fallback `tao-lang/homebrew-tao`) with a formula that
+  installs the prebuilt binary per platform. The Developer creates the tap repository.
+- **npm wrapper.** `tao` with `optionalDependencies` on `@dev-tao/cli-darwin-arm64` (fallback scope
+  `@tao-lang`),
   `-darwin-x64`, `-linux-x64`, `-linux-arm64`, `-win32-x64`, each containing only its binary, plus a
   `bin/tao.js` that execs the resolved one. This is the esbuild/swc pattern and is the cheapest
   route to `npx tao`. Note that all twenty packages are `private: true` today; what gets published
@@ -463,9 +491,9 @@ third:
 
 `~/.tao/bin/tao` is a shim, not the toolchain. On each invocation it walks up from the working
 directory for `.tao-project/lock.jsonc`, reads `toolchain.version`, and execs
-`~/.tao/versions/<version>/tao`, fetching that version first if it is missing. `TAO_VERSION`
-overrides it; `tao +0.4.1 <command>` is the explicit form. A project with no pin uses the installed
-default, and `tao create` writes the pin it used.
+`~/.tao/versions/<version>/tao`. The pin is exact, and the shim asks before downloading a missing
+version. `TAO_VERSION` overrides the pin; `tao +0.4.1 <command>` is the explicit form. A project
+with no pin uses the installed default, and `tao create` writes the pin it used.
 
 This is rustup's model with the toolchain declaration inside the lock Tao already owns, rather than
 a second file beside it. The shim has to stay fast enough that the exec is invisible; the 66 ms
@@ -476,28 +504,108 @@ that.
 
 Each slice ends somewhere honest — a thing that works, not a refactor that compiles.
 
-**1. A binary that builds and runs.** Bump the devenv Bun to ≥ 1.4.2 — a `devenv.lock` nixpkgs
-update or an explicit `bun.package` override, since nothing pins a version string — and verify the
-existing suites against it (F3 — this is the precondition, it is repository-wide, and it moves every
-worktree on the machine at once). Add a build entry point that runs `_parser-gen` and then
-`bun build --compile` for the host platform. Done when `tao --help`,
-`tao fmt`, `tao check`, and `tao create --ai none --yes --skip-tests` run from the binary outside any
-checkout — which F1 shows is almost true already.
+**1. A binary that builds and runs.** Bump the devenv Bun to ≥ 1.4.2 with a dedicated
+`bun.package` pin so the other toolchain packages stay fixed, and verify the existing suites
+against it (F3). Add a build entry point that runs `_parser-gen` and then `bun build --compile`
+for the host platform. Done when `tao --help`, `tao fmt`, and `tao check` run from the binary
+outside any checkout on a self-contained Tao project. A project created by `tao create` needs the
+runtime module installed on disk, so its acceptance belongs to slice 2.
 
 **2. One resource root.** The `TaoResources` seam, the three anchors plus the grammar path, the
 embedded resource payload, and the unpack-with-verification. Fills
 `packages/cli/tao-cli/modules/@tao/` through the existing `TaoAppModules.packageRuntime`, closing
 `DEVENV-058` — and it must copy rather than link, because `DEVENV-057` records that a directory
 symlink at exactly that path makes `GreenTree.hashTree` exit 128 before any gate runs. Done when
-`tao create` completes and `tao compile` produces a generated app from the binary, outside a
-checkout.
+`tao create --ai none --yes --skip-tests` completes and `tao compile` produces a generated app
+from the binary, outside a checkout.
+
+_Landed 2026-09-22._ `just standalone-cli-acceptance` builds the binary, copies it outside any
+checkout, and runs `create`, `check`, and `compile` with `PATH=/usr/bin:/bin`. Where it departs
+from the text above:
+
+- The payload is one gzipped tar, `tao-resources.tgz`, embedded as a compile entrypoint and found
+  through `Bun.embeddedFiles`. A separate entry, `tao-standalone.ts`, unpacks it beside the binary
+  before importing the CLI, because the anchors resolve as their modules load. The stamp holds the
+  payload's hash, so a binary rebuilt in place replaces the older tree. `resources` is a symlink
+  onto `.resources-<hash>`, because a directory cannot be renamed over a non-empty one: replacing a
+  real directory leaves a moment with no `resources` at all, and a concurrent first run that probed
+  then fell back to `/$bunfs`. The gate caught this under load. Warm startup is 70–90 ms; a first
+  run including the unpack is 0.8 s.
+- The runtime goes to `resources/modules/@tao/runtime`, and the resource root stands in for the CLI
+  package root. The checkout's `packages/cli/tao-cli/modules/@tao/` stays empty.
+- The payload copies each package's files that Git does not ignore, not the curated list in F4:
+  the whole stdlib `@tao/` tree plus `Project.tao`, which gives stdlib declarations their project
+  identity (`compile` fails without it), and every visible Expo host file. That is 261 files and
+  2.4 MB compressed.
+- The grammar path is not converted. Its only reader is `tao review`, which slice 9 removes from
+  the binary; if `tao review` comes back, the grammar joins the payload then.
+- `tao compile` writes to `resources/host/_gen_tao-app` until slice 3 gives each project its own
+  generated app root.
+- Found on the way: a compiled bundle gives every module the entry's runtime `import.meta`, so
+  `tao-cli.ts` passing `import.meta` to a helper saw `main === true` and ran the CLI a second
+  time. Reading `import.meta.main` directly is rewritten per module.
 
 **3. A Tao home and a versioned host.** The `~/.tao` layout, the embedded host lockfile,
 `bun install` through the binary into `versions/<v>/host`, and a per-project generated app root
 replacing `packages/apps/expo-host/_gen_tao-app`. Done when two projects compile against one
 shared host install.
 
-**4. A shipped dev loop.** Cut `@expo-dev-loop` free of `Repo.getRoot()`, `just`,
+_Built 2026-09-24, not yet landed._ `just standalone-cli-acceptance` now installs a release
+through `curl | sh` into a throwaway home and runs `tao build --web` in two created projects, from
+the binary, with only system tools on `PATH`: the first build installs the host, the second reuses
+it. The whole run takes about 25 s.
+
+- `TaoHome` in `@shared` resolves the one home: `TAO_HOME`, else `$XDG_DATA_HOME/tao`, else
+  `~/.local/share/tao`, reading `$HOME` as the install script does. The Companion's downloaded
+  hosts move from `~/.tao/hosts` to its `hosts/`.
+- The per-project generated root already exists on `main`: `tao build --compile-only` writes under
+  the project's `.tao/builds/`, and `tao dev` under `.tao/dev/runtime`. Only the retiring
+  `tao compile` still writes into the host, into the installed version's `resources/host/`.
+- The release build rewrites the staged host so it installs outside the repository (below), adds
+  `@shared/core` to the payload, and resolves the host's `bun.lock` once per release.
+- `HostDependencies.ensure` installs the host's packages beside the resource root, in
+  `versions/<v>/host/node_modules`, on the first command that needs them, with the package cache in
+  the Tao home. It asks a terminal first (decision 6). **Needs the Developer's confirmation:** a run
+  with no terminal is refused with a message unless `TAO_HOST_INSTALL=yes` approves the download
+  ahead of time, a name and behaviour chosen here, not decided.
+- `metro.config.cjs` takes `TAO_HOST_DEPENDENCY_ROOT`, `TAO_RUNTIME_SOURCE_ROOT`, and
+  `TAO_SHARED_CORE_SOURCE_ROOT` in place of its three repository climbs, which stay the defaults, so
+  the repository's own loop is unchanged; `RuntimeToolchainPaths.expoEnvironment` supplies them.
+  `tao build --web` and `--desktop` use them, and run Expo under the binary. `tao dev` (slice 4) and
+  `tao test`'s Jest configuration (slice 5) do not yet.
+
+The prototype that settled the shape, on 2026-09-24, in a scratch directory outside the repository
+with only the compiled binary on `PATH`: `expo export --platform web` bundled a created project's
+app (576 modules, 1.3 MB) in 4 s. What it took, each now implemented:
+
+- **No workspace packages in the installed manifest.** Of the host's five `workspace:*`
+  dependencies, `tao-instantdb` and `tao-compiler` are never reached from the host, `tao-runtime`
+  and `tao-shared` are reached by path rather than by name (`metro.config.cjs:8-12`,
+  `jest.shared.config.cjs:47-53`), and `tao-icloud` is an Expo config plugin that only iCloud
+  release builds name (`app-config.cjs:37`). The prototype dropped all five and pinned the 32
+  remaining dependencies to the versions the repository has installed; `BUN_BE_BUN=1 tao install`
+  then resolved 741 packages, 388 MB, in 12 s from a warm cache, and wrote the `bun.lock` a release
+  would embed. Transitive versions are resolved at release time rather than copied from the
+  repository's lock, so they can drift from what the repository tests.
+- **Expo through `--bun` on its script, not `x --bun`.** In the compiled binary, `BUN_BE_BUN=1 tao x
+  --bun expo` and `tao --bun x expo` both still run the script's `#!/usr/bin/env node` and fail with
+  `env: node: No such file or directory`; `BUN_BE_BUN=1 tao --bun <host>/node_modules/.bin/expo`
+  runs it under the binary. F5's record of `x --bun` working is therefore not reproducible with
+  this layout.
+- **A self-contained `tsconfig.json`.** The host's extends `../../tsconfig.base.json`; outside the
+  repository Expo's TypeScript resolver fails on it with Metro's `Invariant Violation: Failed to
+  collapse`, even with the file copied into place. Inlining the base's compiler options, without
+  its repository `paths`, fixed it.
+- **The runtime and `@shared/core` sources where the Metro config looks.** The config climbs
+  `../runtime/TaoRuntime-src`, `../../shared/shared-src/core`, and `../../../node_modules` from the
+  host. The stdlib's data-provider sidecars import `@shared/core`, which the payload did not carry.
+  The prototype recreated the repository's shape; the implementation names each location instead.
+
+Jest (`tao test`), the dev server, and native targets were not exercised. `tao-icloud`, which an
+iCloud release build names as a config plugin, is not in the installed host, so `tao ship` of an
+iCloud-backed app from the binary will not find it; that belongs with shipping from the binary.
+
+**4. A shipped dev loop.** Cut `@expo-host/dev-loop` free of `Repo.getRoot()`, `just`,
 `bun run dev.ts`, and `Repo.resolvePath('tao')`; drive Expo with `x --bun` through
 `process.execPath`; re-anchor the four repository-relative values `expo-config.ts` and
 `expo-server.ts` hand Expo — `__UNSAFE_EXPO_HOME_DIRECTORY`, `EXPO_LOG_PATH`,
@@ -505,27 +613,57 @@ shared host install.
 `tao dev` runs a created project on web and on the iOS Simulator from a binary on a machine with no
 checkout. This is the biggest slice; it may need splitting once the seam is drawn.
 
-**5. `tao test` off the checkout.** Resolve the runner per Tao version (managed Node, or the harness
-change — question 1), remove the `.devenv/profile/bin` fallbacks in `test-command.ts` and
-`test-compiler/Worker.ts`, and make `tao create`'s post-create test run work outside the repository.
-Done when `tao create` without `--skip-tests` finishes green on a clean machine.
+**5. `tao test` off the checkout.** Resolve the managed Node runner per Tao version, remove the
+`.devenv/profile/bin` fallbacks in `test-command.ts` and `test-compiler/Worker.ts`, and make
+`tao create`'s post-create test run work outside the repository. Done when `tao create` without
+`--skip-tests` finishes green on a clean machine.
 
-**6. Cross-platform correctness.** Windows-aware `commandPath`/`commandOnPath`, junction-or-copy
+**6. Cross-platform correctness (later).** Windows-aware `commandPath`/`commandOnPath`, junction-or-copy
 instead of symlink, `lsof`-free port diagnostics, platform-correct browser opening, and a Linux and
 Windows CI lane running `create`, `check`, `fmt`, `compile`, `test`, and the web `dev` lane.
 
-**7. Release engineering.** Cross-compile all five targets, publish checksums, macOS signing and
-notarization, Windows Authenticode, the install script, the Homebrew tap, and the npm wrapper with
-per-platform optional dependencies.
+**7. Release engineering.** For the first release, build macOS arm64, publish its checksum and
+version index with the binary on GitHub Releases in the public repository, sign and notarize it,
+and publish the install script. Later releases may add the other four targets, Windows signing,
+Homebrew, and an npm wrapper with per-platform optional dependencies.
+
+_Landed 2026-09-23, unpublished._ `just standalone-cli-release 0.4.0` writes one release's files to
+`.artifacts/release/v0.4.0/` and prints the `gh release create` command; publishing waits on the
+public repository. What it settled:
+
+- The binary ships gzipped as `tao-darwin-arm64.gz` (28 MB, from 67 MB), beside its `.sha256`, the
+  install script, `release.json` (version, commit, and each target's asset and hash), and draft
+  notes. The installer finds them under the release's `vVERSION` tag.
+- `tao --version` prints the version the release build stamps in with `--define`, or `development`
+  from source. The install script selects a stable CLI release from the published release listing,
+  confirms the downloaded binary reports that version, and unpacks its resources inside the
+  version's own directory before it is renamed into place.
+- The install script puts the binary in `versions/<version>/`, points `bin/tao` at it until slice
+  8's shim replaces that link, and links `tao` into the first writable directory under `$HOME` on
+  `PATH` that does not hold another `tao`, printing the `PATH` line only when there is none.
+  `TAO_VERSION` pins a release, `TAO_HOME` relocates everything, and `TAO_RELEASES` points at another
+  copy of the releases.
+- `curl` sets no `com.apple.quarantine`, only `com.apple.provenance`, which Gatekeeper does not act
+  on, so an unsigned binary fetched by the install script runs without a Gatekeeper prompt. Signing
+  still matters for a binary someone downloads with a browser.
+- `standalone-install.test.ts` covers the install script in the ordinary suite with a stand-in
+  binary. `just standalone-cli-acceptance` installs a real release through `curl | sh` into a
+  throwaway `$HOME` and runs `create`, `check`, and `compile` from `PATH`. It stays a recipe rather
+  than a suite test while the lanes on this machine run Bun 1.3.13 (see
+  `DEVENV-DOCTOR-PASSES-A-BUN-OLDER-THAN-THE-DEVENV-PIN`), because a binary that Bun builds is killed
+  on launch.
+- The release notes list what the binary cannot do yet from `KNOWN_GAPS` in `standalone-build.ts`,
+  which later slices shorten as they land.
 
 **8. The version pin and the shim.** `toolchain` in `.tao-project/lock.jsonc`, the shim's
 resolve-and-exec, `tao install <version>`, `tao update`, and `tao create` writing the pin.
 
 **9. The macOS payload and the remaining gaps.** The prebuilt, signed Apple Foundation Models helper
-(needs the Developer ID certificate), the `tao review` browser requirement, and an honest statement of whatever
-is still absent.
+(needs the Developer ID certificate), removal of `tao review` and its Studio graph from the first
+binary, and an honest statement of whatever is still absent. `tao review` may return later.
 
-Slices 1–4 are the release-blocking path: they are what `A2`'s _done_ line asks for. Slices 5–9 can
+Slices 1–5, first-release parts of 7–9, and the macOS payload are the standalone release path.
+Slice 6 and the other-platform and other-channel parts of 7 wait for later releases. Work can
 overlap with `A3` and `A8`.
 
 ## Uncertain, and how to settle it
@@ -555,38 +693,124 @@ overlap with `A3` and `A8`.
    other-platform `hermesc` slices (40 MB) are candidates, but pruning a `bun install` result fights
    the package manager. Worth measuring only if first-run time becomes a complaint.
 
-## Questions that are Ro's
+## First-public-release decisions
 
-1. **Does `tao test` ship with a managed Node, or does the harness change?** A managed Node per Tao
-   version is the fastest path and costs roughly 50 MB per version plus a download step; fixing the
-   Jest graph or moving off Jest removes the dependency entirely but is open-ended work.
-   _(Recommendation: managed Node for the first release, harness change as the durable answer.)_
-2. **Expo host by `bun install` from a pinned lockfile, by per-platform archive, or both?** The
-   lockfile needs registry access on first run; the archive needs a host Ro pays for and five
-   artifacts per version. _(Recommendation: lockfile first, archive as the offline fallback.)_
-3. **Which targets are release targets for the first public release?** Five are buildable today.
-   This is `R4`'s platform claim in concrete form.
-4. **Is the version pin exact, and may `tao` download a missing version without asking?** rustup
-   downloads silently; a language toolchain fetching 90 MB unannounced may not be what you want.
-5. **Which distribution channels for the first release?** Install script alone, or script plus
-   Homebrew plus npm. Each is a surface to keep working.
-6. **Which packages become public npm packages, and under what license?** The npm wrapper publishes
-   the toolchain. This is `R1` and `R2` arriving at a concrete list.
-7. **Who hosts the release artifacts, the checksums, and the version index?** `R11` already asks a
-   version of this for the update service; the same answer probably serves both.
-8. **Does the first release include `tao review`?** It needs a local Chrome, which is a real host
-   requirement to put in front of a stranger. Note that leaving it out is not free: it is imported
-   from `tao-cli.ts` today and pulls the whole `packages/dev` graph into the binary, so excluding it
-   is a bundling change with its own slice.
+The Developer settled the plan's eight questions on 2026-09-22. `Developer MVP Roadmap.md` owns the product decisions;
+this list makes their effect on the implementation sequence explicit.
+
+1. Ship `tao test` with a managed Node; consider a Node-free harness after the first release.
+2. Install the Expo host from a pinned lockfile on first use. Registry access is required.
+3. Release the macOS arm64 target only. Linux, Windows, and Intel Mac support come later.
+4. Pin an exact per-project Tao version and ask before downloading a missing version.
+5. Distribute through an install script only. Homebrew and npm wrappers come later.
+6. Do not publish an npm CLI wrapper in the first release. The final app-safe licence structure for
+   the repository and any future public packages must be settled before public publication (`R1`).
+7. Host release binaries, checksums, and the version index on GitHub Releases in the public repo.
+   App OTA updates are separate and deferred from the first release (`R11`).
+8. Leave `tao review` out of the first binary. Its dynamic import pulls in the Studio graph today,
+   so this choice requires a packaging change rather than only hiding the command (`R12`).
+
+## Implementation decisions, 2026-09-22
+
+Settled in the dialogue that opened the implementation. These refine the first-release decisions
+above; where the two disagree, these are later and win.
+
+1. **Slice order** is 2 → 7 → 3 → 4 → 5 → 8 → 9, each its own landing. Release engineering runs
+   second so an installable artifact exists early. Slice 6 leaves the first release under `R4`.
+2. **One root, out of sight**: `~/.local/share/tao/{bin,versions,cache}`, honouring
+   `XDG_DATA_HOME`, with `TAO_HOME` relocating all of it. A project's generated state stays
+   project-local under `.tao/`, as `Decisions - Development build ship and clean.md` already
+   implemented, so the `projects/<project-id>/` entry this plan proposed is withdrawn.
+3. **Toolchain commands**: `tao check-for-updates` is the only public verb. A missing pinned
+   version is fetched by the shim, which asks first. There is no public `tao install` — that name
+   is already the package installer.
+4. **The first release is `0.4.0`**, semver, tagged `v0.4.0`, published unsigned and labelled as
+   needing later slices for `dev` and `test`. Signing and notarization follow on the Developer's machine once
+   the Developer ID certificate exists.
+5. **The install script** is served from the public repository's Releases. It detects whichever
+   user-writable bin directory is already on `PATH`, symlinks the shim there, and prints the `PATH`
+   line only when there is none. It lists published GitHub releases, ignores drafts, prereleases,
+   and non-CLI tags, chooses the highest stable `vVERSION` tag by semantic version, and downloads
+   the binary and checksum by that tag. CLI releases use `--latest=false` so Studio's fixed update
+   URL can keep using the repository's `latest` release.
+6. **The first host install** asks permission before downloading, then shows a progress line naming
+   the one-time cost.
+7. **A pinned version that is not installed** asks when interactive, and when not, fails naming the
+   exact command to run.
+8. **The on-device AI lane** ships absent; `tao create` names the lanes it has and says the
+   on-device one arrives in a later release.
+9. **Dependencies take the simplest shape that works**: `bun install` from the embedded lockfile
+   into the version's own `host/`, and a Node tarball from nodejs.org verified against its published
+   `SHASUMS256.txt` into the version's own `node/`. Everything a version owns lives under that
+   version, so removing a version removes all of it with no sharing and no refcounting. One complete
+   host, not a dev/release split.
+10. **Clean-machine acceptance** runs in three tiers: a throwaway `$HOME` with a scrubbed `PATH`
+    inside the ordinary test suite, a local `tart` virtual machine as the gate before publication,
+    and the `macos-26` GitHub runner as a regression gate once the public repository exists.
+
+## Deferred approaches worth revisiting
+
+Investigated during that dialogue and rejected for the first release. Recorded so they are not
+re-derived from scratch.
+
+- **Ship the host as a read-only disk image** instead of resolving it with `bun install`. `R4`
+  reduces the target set to one platform, which removes `F6`'s objection that per-platform archives
+  mean five artifacts to build, host and version. It would make every user's host bit-identical,
+  which also dissolves uncertainty 2, remove the registry from first run, and replace 39,917 files
+  with one. **Blocker, measured**: Watchman's cookie protocol writes a marker inside each watched
+  root, so the `since`-relative query Metro issues on every rebuild fails on a read-only tree with
+  `synchronization failed: root dir was removed or is inaccessible`, and the watch is then silently
+  dropped. It bites only because `metro.config.cjs` watches `node_modules` itself, and it does that
+  because of Bun's symlink farm and phantom-dependency store — an image we lay out ourselves could
+  ship a flat real tree and remove the reason. Metro's transform cache, Jest's cache and the
+  file-map cache already default outside `node_modules`, and no package in the set has a
+  `postinstall` writing into it, so Watchman was the only writer found. **Measured 2026-09-23**
+  (`.artifacts/tmp/host-image-measurement.sh`, run unsandboxed on a loaded machine): the 397 MB,
+  39,917-file tree becomes a **309 MB** UDZO/APFS image in 36 s, a build-time cost only; it mounts
+  read-only in **3 s**; one `require.resolve('metro')` from a fresh process takes 35–41 ms from the
+  plain tree and 41–62 ms from the mount, mostly process startup. What the image clearly wins is
+  lifecycle: copying the tree took 40 s and deleting it 6 s, against effectively zero for the one
+  file. Still unmeasured, and the number that would decide it: Metro's full crawl and hashing of
+  the host from a mount. macOS now warns that `hdiutil attach -nobrowse -readonly` is deprecated in
+  favour of `diskutil image attach`.
+- **Embed Metro and the Expo CLI and run them in-process.** Technically real — Metro exposes
+  `runMetro`, `runServer` and `loadConfig`, and both of its worker pools have in-band modes, so
+  `maxWorkers: 1` avoids the `jest-worker` fork that would otherwise relaunch the Tao binary as its
+  own transform worker. It does not pay: Metro's own code is about 5 MB, and the bulk of the host is
+  the app dependency graph Metro must read, hash and watch off a real disk.
+  `resolver.resolveRequest` returns paths the file map then stats and hashes, so a path into
+  `/$bunfs` fails at the hash step rather than the resolve step. Embeddable tooling is about 29 MB,
+  since `hermes-compiler`, `fb-dotslash` and `lightningcss` are native binaries. Estimated cost was
+  four to eight engineering weeks plus per-React-Native-release maintenance, a version lock between
+  the Tao binary and the app's React Native, and cold bundles serialised to one core. **The
+  measurement that would overturn it**: trace how much of the app-side closure Metro actually opens
+  during one `expo export`. If that set is small, a curated real tree plus embedded tooling becomes
+  a different proposition.
+- **A dev-only host** of roughly 341 MB, with Hermes and `fb-dotslash` fetched on the first
+  `tao build` or `tao ship`.
+- **One runtime instead of two.** The first release ships Bun inside the binary and downloads a
+  managed Node, but the second runtime exists for exactly one reason: `F5` measured that Metro and
+  the Expo CLI run under the compiled binary with no Node on the machine, and Jest does not. So the
+  reduction to run is to _remove Node_, not to remove Bun — Bun is already inside the binary, while
+  Node is the add-on. Two routes: make Jest run under Bun, which uncertainty 1 puts at about a day's
+  work once the ESM-only dependencies leave its graph, or move `tao test` off Jest onto Bun's own
+  test runner, which is larger but ends with nothing to download for tests at all. Going the other
+  way — a Node-only CLI — would mean giving up `bun build --compile` for Node's less mature
+  single-executable support, a slower start than the 66 ms `F1` measured, and the `x --bun expo`
+  path that drives Metro today.
+- **A third-party Node version manager** — `fnm`, `volta`, `mise`. Each is another thing the user
+  must install, which is the promise `A2` exists to keep, and each manages a namespace the user's
+  own shell manipulates, so a stray `nvm use` or an inherited `.nvmrc` would change what Tao
+  resolves. `nvm` is disqualified outright: it is a shell function, not a binary.
 
 ## Notes for whoever implements this
 
 - A fresh worktree has no `packages/language/parser/parser-src/_gen_tao-parser`, and every Tao command fails
   with a bare `Something went wrong.` until `just _parser-gen` runs. The build entry point in slice 1
   must generate before it compiles, and the diagnostic is worth fixing under `A1`.
-- Bun is not pinned by a version string anywhere in the repository: `devenv.nix` sets
-  `languages.javascript.bun.enable = true` and the version comes from `devenv.lock`'s nixpkgs input.
-  Slice 1's bump is therefore a nixpkgs update or an explicit `bun.package` override, and it moves
-  every worktree on the machine at once. The signing failure it fixes is `DEVENV-096`.
+- Slice 1 pins Bun 1.4.2 through a dedicated `bun-nixpkgs` input and
+  `languages.javascript.bun.package`, leaving the other nixpkgs packages on their existing pin.
+  A worktree sees the new Bun when its devenv profile is refreshed. The signing failure it fixes is
+  `DEVENV-096`.
 - The prototypes behind every measurement here were run in `.artifacts/tmp/standalone-proto/` and
   the session scratchpad, and were removed afterwards.

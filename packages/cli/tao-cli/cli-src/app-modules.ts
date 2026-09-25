@@ -1,7 +1,12 @@
-import { Errors, FS, Platform } from '@shared'
+import { Errors, FS, Platform, TaoResources } from '@shared'
 import { inPlace } from './in-place-files'
 
-const CLI_PACKAGE_ROOT = FS.resolvePath('..', import.meta.dir)
+/**
+ * CLI_PACKAGE_ROOT is the tree that carries this CLI's `modules/@tao/*`. An installed binary's
+ * resource root is laid out as one, because inside the binary `import.meta.dir` names `/$bunfs`,
+ * which no project's TypeScript or Metro can resolve through a link.
+ */
+const CLI_PACKAGE_ROOT = TaoResources.declaredRoot() ?? FS.resolvePath('..', import.meta.dir)
 
 /**
  * PROJECT_TSCONFIG is the TypeScript project `tao create` writes. Sidecar files resolve `@tao/*`
@@ -56,7 +61,7 @@ export const TaoAppModules = {
     if (FS.existsSync(FS.resolvePath('TaoRuntime-src/TR.ts', sibling))) {
       return sibling
     }
-    const bundled = FS.resolvePath('modules/@tao/runtime', cliPackageRoot)
+    const bundled = FS.resolvePath(TaoResources.RUNTIME_DIRECTORY, cliPackageRoot)
     if (FS.existsSync(FS.resolvePath('TaoRuntime-src/TR.ts', bundled))) {
       return bundled
     }
@@ -75,7 +80,7 @@ export const TaoAppModules = {
     if (!await FS.isFile(FS.resolvePath('TaoRuntime-src/TR.ts', source))) {
       return Errors.throwHostEnvironment(`Cannot package @tao/runtime: ${source} has no TaoRuntime-src/TR.ts.`)
     }
-    const destination = FS.resolvePath('modules/@tao/runtime', cliPackageRoot)
+    const destination = FS.resolvePath(TaoResources.RUNTIME_DIRECTORY, cliPackageRoot)
     const temporary = `${destination}.tmp-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
     try {
       await FS.copyDirectory(FS.resolvePath('TaoRuntime-src', source), FS.resolvePath('TaoRuntime-src', temporary))

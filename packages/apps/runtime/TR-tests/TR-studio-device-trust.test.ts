@@ -152,7 +152,7 @@ Describe('Studio device trust primitives', () => {
 
 Describe('Studio device protocol parsers', () => {
   const hello = {
-    device: { model: 'iPhone17,1', name: 'roPhone', os: 'iOS 26.6.1' },
+    device: { model: 'iPhone17,1', name: 'example-phone', os: 'iOS 26.6.1' },
     devicePublicKey: 'a'.repeat(43) + '=',
     ephemeralPublicKey: 'b'.repeat(43) + '=',
     metroPort: 8081,
@@ -216,6 +216,26 @@ Describe('Studio device protocol parsers', () => {
       type: 'device.ping',
     })
     Expect(StudioDeviceProtocol.parseDeviceMessage({ type: 'studio.pong' })).toBeUndefined()
+    const lens = {
+      actualDurationMs: 12.5,
+      causes: [{ kind: 'state' }, { entity: 'Story', kind: 'data', providerWaitMs: 40, schema: 'Stories' }],
+      instanceId: 'render-1',
+      occurrence: { end: 60, sourcePath: '/p/Garden.tao', sourceVersion: 'v1', start: 40 },
+      phase: 'update',
+      timestamp: 1_700_000_000_000,
+    }
+    Expect(StudioDeviceProtocol.parseDeviceMessage({ samples: [lens], type: 'device.lens' })).toEqual({
+      samples: [lens],
+      type: 'device.lens',
+    })
+    Expect(StudioDeviceProtocol.parseDeviceMessage({
+      samples: [{ ...lens, causes: [{ entity: 'Story', kind: 'data', providerWaitMs: -1, schema: 'Stories' }] }],
+      type: 'device.lens',
+    })).toBeUndefined()
+    Expect(StudioDeviceProtocol.parseDeviceMessage({
+      samples: Array.from({ length: TaoStudioDeviceProtocol.lensBatchLimit + 1 }, () => lens),
+      type: 'device.lens',
+    })).toBeUndefined()
 
     const manifest = {
       compileRevision: 3,

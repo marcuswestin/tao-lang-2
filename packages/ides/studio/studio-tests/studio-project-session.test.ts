@@ -1490,6 +1490,79 @@ Test('Studio restores the original Tao source when a captured fixture fails comp
   })
 })
 
+Test(
+  'Studio proposes the exact capture diff without writing, then applies exactly that content and refuses a stale version',
+  async () => {
+    // verbatim: the diff below asserts exact line numbers and text, which indent-stripping would shift.
+    await withTaoFiles('tao-studio-capture-diff-', {
+      'Garden.tao': 'app Garden {\n   view Main\n}\n\nview Main() {\n   render Text("Before")\n}\n',
+    }, async (paths, root) => {
+      const session = await StudioProjectSession.open({
+        async compile() {},
+        entryPath: paths['Garden.tao'],
+        projectRoot: root,
+      })
+      session.registerPreview({ previewInstanceId: 'capture-diff-preview' })
+      const original = await session.readFile('Garden.tao')
+      const envelope = {
+        action: {
+          fixtureName: 'CapturedState',
+          kind: 'insert-captured-fixture',
+          plan: {
+            accounts: [],
+            creates: [{ entity: 'Account', fields: { Name: 'Captured' }, name: 'Account1' }],
+          },
+        },
+        channel: studioProtocolChannel,
+        checkpoint: { id: 'capture-diff', phase: 'single' },
+        identity: {
+          ...session.identity(),
+          path: original.path,
+          previewInstanceId: 'capture-diff-preview',
+          sourceVersion: original.sourceVersion,
+        },
+        protocolVersion: studioProtocolVersion,
+        requestId: 'capture-diff-request',
+        sourceActionVersion: studioSourceActionVersion,
+        type: 'source-action',
+      } as const
+
+      const proposal = await session.proposeSourceAction(envelope)
+
+      // The diff is exactly the added fixture block: nothing about the file's existing lines changes.
+      Expect(proposal.diff).toBe(
+        [
+          '--- Garden.tao',
+          '+++ Garden.tao (proposed)',
+          '@@ -8,0 +9,5 @@',
+          '+fixture CapturedState {',
+          '+   Account1 = create Account {',
+          '+      Name: "Captured"',
+          '+}  }',
+          '+',
+        ].join('\n'),
+      )
+      Expect(proposal.content).toBe(
+        'app Garden {\n   view Main\n}\n\nview Main() {\n   render Text("Before")\n}\n'
+          + '\nfixture CapturedState {\n   Account1 = create Account {\n      Name: "Captured"\n}  }\n',
+      )
+      Expect(await FS.readText(paths['Garden.tao'])).toBe(original.content)
+      Expect((await session.readFile('Garden.tao')).content).toBe(original.content)
+
+      const applied = await session.applySourceAction(envelope)
+
+      Expect(applied.content).toBe(proposal.content)
+      Expect(await FS.readText(paths['Garden.tao'])).toBe(proposal.content)
+
+      await Expect(session.applySourceAction({
+        ...envelope,
+        requestId: 'capture-diff-stale-request',
+      })).rejects.toMatchObject({ code: 'stale-source' })
+      Expect(await FS.readText(paths['Garden.tao'])).toBe(proposal.content)
+    }, { verbatim: true })
+  },
+)
+
 Test('Studio groups a visual gesture into one checkpoint and undoes its exact current source', async () => {
   let compileCount = 0
   await withStudioProject(async session => {

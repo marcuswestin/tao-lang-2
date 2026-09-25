@@ -45,7 +45,7 @@ MockModule('react-native', () =>
   }))
 MockModule('expo-constants', () => ({
   default: {
-    deviceName: 'roPhone',
+    deviceName: 'example-phone',
     expoConfig: {
       extra: { taoStudioDevice: { gatewayPort: 8790, protocol: 'tao-studio-device-v1' } },
       version: '1.0.0',
@@ -73,6 +73,7 @@ const {
   cellIdentityKey,
   clampBadgePosition,
   createNativeStudioDeviceClient,
+  deviceLensSample,
   describeDevice,
   deviceHostPresentation,
   parseScriptUrl,
@@ -86,7 +87,7 @@ const {
   webSocketTransport,
 } = await import('../TaoRuntime-src/TR-studio-device-host')
 
-const device = { model: 'iOS phone', name: 'roPhone', os: 'iOS 26.0' }
+const device = { model: 'iOS phone', name: 'example-phone', os: 'iOS 26.0' }
 const publication = { appName: 'Demo', compileRevision: 7, project: '/project', sourceVersions: {} }
 
 const identity: TaoStudioDeviceCellIdentity = {
@@ -144,8 +145,8 @@ Describe('Studio device host bootstrap', () => {
   Test('describes the device from React Native and Expo facts with plain fallbacks', () => {
     Expect(describeDevice(
       { OS: 'ios', Version: '26.0', constants: { interfaceIdiom: 'phone', osVersion: '26.0', systemName: 'iOS' } },
-      { deviceName: 'roPhone', expoConfig: { version: '1.0.0' } },
-    )).toEqual({ appVersion: '1.0.0', model: 'iOS phone', name: 'roPhone', os: 'iOS 26.0' })
+      { deviceName: 'example-phone', expoConfig: { version: '1.0.0' } },
+    )).toEqual({ appVersion: '1.0.0', model: 'iOS phone', name: 'example-phone', os: 'iOS 26.0' })
     Expect(describeDevice({ OS: 'android', Version: 35 }, undefined)).toEqual({
       model: 'android',
       name: 'iPhone',
@@ -179,7 +180,7 @@ Describe('Studio device host bootstrap', () => {
     const hello = JSON.parse(openedSockets[0]!.sent[0] ?? 'null') as Record<string, unknown>
     Expect(hello['type']).toBe('device.hello')
     Expect(hello['metroPort']).toBe(8081)
-    Expect(hello['device']).toEqual({ appVersion: '1.0.0', model: 'iOS phone', name: 'roPhone', os: 'iOS 26.0' })
+    Expect(hello['device']).toEqual({ appVersion: '1.0.0', model: 'iOS phone', name: 'example-phone', os: 'iOS 26.0' })
     client.stop()
     Expect(openedSockets[0]!.closed?.code).toBe(1000)
   })
@@ -246,6 +247,26 @@ Describe('Studio device host bootstrap', () => {
 })
 
 Describe('Studio device host presentation', () => {
+  Test('attaches only the published source version to a public Lens observation', () => {
+    const sample = {
+      actualDurationMs: 8.5,
+      causes: [{ kind: 'state' as const }, { entity: 'Story', kind: 'data' as const, schema: 'Stories' }],
+      identity: { end: 40, kind: 'render' as const, sourcePath: '/project/App.tao', start: 10 },
+      instanceId: 'native-render',
+      phase: 'update' as const,
+      timestamp: 100,
+    }
+    Expect(deviceLensSample(sample, { '/project/App.tao': 'text-v7' })).toEqual({
+      actualDurationMs: 8.5,
+      causes: sample.causes,
+      instanceId: 'native-render',
+      occurrence: { end: 40, sourcePath: '/project/App.tao', sourceVersion: 'text-v7', start: 10 },
+      phase: 'update',
+      timestamp: 100,
+    })
+    Expect(deviceLensSample(sample, {})).toBeUndefined()
+  })
+
   Test('shows a named overlay for every phase before a cell can render', () => {
     Expect(deviceHostPresentation(state(), publication)).toMatchObject({
       actions: ['reconnect'],

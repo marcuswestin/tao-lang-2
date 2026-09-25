@@ -1,7 +1,7 @@
 # Report - Publication audit
 
 One inventory of what publishing this repository would expose, with a recommendation per entry.
-Serves `Agent MVP Roadmap.md` item `A10`; its findings were the input `Ro MVP Roadmap.md` item `R2`
+Serves `Agent MVP Roadmap.md` item `A10`; its findings were the input `Developer MVP Roadmap.md` item `R2`
 waited on.
 
 **`R2` was decided on 2026-09-20: publish the whole repository**, to make an open-source contributor
@@ -25,7 +25,7 @@ shape and location are recorded.
   history found no credential material. This was the single largest unknown going in, and it is clean.
 - **The real exposure is editorial, not cryptographic.** The agent instruction set, `Roadmap.md`, and
   `Docs/Roadmap/` are candid internal working material — roughly 271,000 words of it — written on the
-  assumption that only Ro and agents would read it. It is unflattering in places and sets
+  assumption that only the Developer and agents would read it. It is unflattering in places and sets
   expectations the product does not yet meet.
 - **Three concrete items should be fixed before any publication**, whichever shape `R2` picks: real
   App Store Connect account identifiers in a committed lock file (`P15`), a hardcoded personal device
@@ -43,20 +43,20 @@ profiles under `agents/subagents/`, the 4 `.rulesync/` sources, and their genera
 (`.claude/settings*.json`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/rules/tao.rules`,
 `.cursor/*`, `.config/wt.toml`).
 
-### P1 — The instruction set names Ro and encodes the working relationship — Medium
+### P1 — The instruction set names the Developer and encodes the working relationship — Medium
 
-`AGENTS.md` refers to Ro 18 times, and skills add 46 more references. It states that "Ro is the
-project lead and language designer", that Ro decides language semantics, roadmap priority, and
-product behavior, and that pushing and merging always stop for Ro. A whole `Response format` section
-— named `Responses to Ro` when this audit was written — prescribes how an agent should talk to Ro:
-lead with the answer, at most three levels of nesting, letter the sub-items Ro may want to address.
+`AGENTS.md` refers to the Developer 18 times, and skills add 46 more references. It states that "the Developer is the
+project lead and language designer", that the Developer decides language semantics, roadmap priority, and
+product behavior, and that pushing and merging always stop for the Developer. A whole `Response format` section
+— named `Responses to the Developer` when this audit was written — prescribes how an agent should talk to the Developer:
+lead with the answer, at most three levels of nesting, letter the sub-items the Developer may want to address.
 
 Published, this tells a reader that Tao is one person's project with agents doing the typing, and it
-publishes Ro's personal communication preferences as repository content. Neither is damaging; both
+publishes the Developer's personal communication preferences as repository content. Neither is damaging; both
 are more intimate than a public repository usually is.
 
 - **Recommendation:** keep the instruction set, but move the `Response format` section out of the
-  published copy — it is the one part that is about Ro rather than about Tao. If `R2` picks a
+  published copy — it is the one part that is about the Developer rather than about Tao. If `R2` picks a
   curated public repository, keep a slimmed `AGENTS.md` there that covers the codebase conventions
   and drop the authority and response-shape sections entirely.
 
@@ -164,12 +164,12 @@ at a glance and is not.
   a curated public repository, check before each sync that `.artifacts/` is excluded at the sync
   boundary too, not only by `.gitignore` — that is the one way these events could escape.
 
-## B. `Roadmap.md` and `Docs/Roadmap/` as Ro's private working material
+## B. `Roadmap.md` and `Docs/Roadmap/` as the Developer's private working material
 
 `Roadmap.md` is 393 lines. `Docs/Roadmap/` is 206 tracked files and roughly 271,000 words, 138 of
 them active and 33 archived.
 
-### P7 — `Roadmap.md`'s `Ro STACK` section — High
+### P7 — `Roadmap.md`'s personal `STACK` section — High
 
 Lines 15–31 are a personal working list, not a roadmap: raise a TUI test timer from 0.5s to 0.1s,
 deep links, "Enable Codex to interact with studio on its own", work through the environment ledger.
@@ -178,11 +178,11 @@ deep links, "Enable Codex to interact with studio on its own", work through the 
 It is undated, unordered, and mixes a one-line chore with a multi-week workstream. It reads as
 someone's notes-to-self, because it is.
 
-- **Recommendation:** do not publish. Move `Ro STACK` into an untracked or separately-tracked private
+- **Recommendation:** do not publish. Move the `STACK` list into an untracked or separately-tracked private
   file before publication. It carries no information a public reader can use and it sets the tone for
   everything after it.
 
-### P8 — `Roadmap.md`'s `Ro's stack` section — High
+### P8 — `Roadmap.md`'s personal backlog section — High
 
 Lines 262–357 are the product and codebase backlog, "unordered", and they are frank in a way that
 will be quoted. Specifics that publish as written: "Roughly two dozen raw `Error`s handed to a
@@ -260,8 +260,8 @@ Frozen by `AGENTS.md`; historical rather than forward-looking, so it sets no exp
 ### P13 — `Docs/Spec/` and `Docs/Tutorials/` — Low
 
 The spec set (9 documents) is the implemented contract and the tutorials are the learning material.
-`Docs/Spec/Tao Design - WIP.md` carries a work-in-progress suffix. One tutorial reference is caught
-separately by `P16`.
+`Docs/Spec/Tao Design.md` carried a work-in-progress suffix; the rename (decision I) resolved it for
+this file. One tutorial reference is caught separately by `P16`.
 
 - **Recommendation:** publish. This is the material `A3` and `A5` are built on. Settle the `- WIP`
   suffix convention before launch — `Roadmap.md` already lists "write down the draft-suffix
@@ -289,14 +289,14 @@ look for what else is unowned.
 `Apps/WordFlower/1 - Current/.tao-project/lock.jsonc` is tracked and contains, for a real accepted
 ship of WordFlower:
 
-| Field                               | What it is                                                                  |
-| ----------------------------------- | --------------------------------------------------------------------------- |
-| `issuerId`                          | The App Store Connect API **issuer ID** — identifies Ro's whole ASC account |
-| `keyId`                             | The ASC API **key ID** (`KSAY…`), naming a specific active API key          |
-| `appStoreAppId`                     | A real App Store application ID                                             |
-| `betaGroups.external` / `.internal` | Real TestFlight beta group UUIDs                                            |
-| `AppId`                             | The InstantDB app id, also the local fixture seed in `Justfile:7`           |
-| `update.serverUrl`                  | `https://updates.tao-lang.dev`, a host Ro operates                          |
+| Field                               | What it is                                                                             |
+| ----------------------------------- | -------------------------------------------------------------------------------------- |
+| `issuerId`                          | The App Store Connect API **issuer ID** — identifies the Developer's whole ASC account |
+| `keyId`                             | The ASC API **key ID** (`KSAY…`), naming a specific active API key                     |
+| `appStoreAppId`                     | A real App Store application ID                                                        |
+| `betaGroups.external` / `.internal` | Real TestFlight beta group UUIDs                                                       |
+| `AppId`                             | The InstantDB app id, also the local fixture seed in `Justfile:7`                      |
+| `update.serverUrl`                  | `https://updates.tao-lang.dev`, a host the Developer operates                          |
 
 None of these is a secret on its own, and the matching `.p8` private key is **not** committed —
 `packages/cli/tao-cli/cli-src/ship-command.ts:335` resolves it from a path outside the repository, and no
@@ -305,7 +305,7 @@ client value by design (`P14`). So this is not a credential leak.
 
 It is still worth removing. `issuerId` and `keyId` are the two halves of ASC authentication that are
 not the key file; publishing them narrows an attacker's problem to obtaining one `.p8`, and they
-identify Ro's Apple developer account permanently, in history, whether or not the file is later
+identify the Developer's Apple developer account permanently, in history, whether or not the file is later
 changed. The TestFlight group UUIDs address real tester cohorts.
 
 - **Recommendation:** stop tracking `.tao-project/lock.jsonc`. It is per-checkout accepted-ship state,
@@ -316,9 +316,9 @@ changed. The TestFlight group UUIDs address real tester cohorts.
 
 ### P16 — `roPhone`, a personal device name, in shipped source and docs — High
 
-Ro's physical iPhone is named on 76 lines across 12 tracked files:
+The Developer's physical iPhone is named on 76 lines across 12 tracked files:
 
-- `packages/dev/dev-src/studio/StudioCompanionDevice.ts:261–262` — in a source comment, as the
+- `packages/ides/studio-tooling/studio-tooling-src/StudioCompanionDevice.ts:261–262` — in a source comment, as the
   worked example of the recipe's argument quoting.
 - `packages/ides/studio/README.md:46` and `Docs/Tutorials/Tao now - two-week walkthrough.md:149` — as the
   documented command a reader is shown: `just studio-companion-install device="roPhone"`.
@@ -332,7 +332,7 @@ right with `device="<name>"`, which shows the fix.
   `<name>` placeholder already used in the companion app README. Leave the test fixtures alone
   if you prefer — they are internal and harmless — but a single rename to something like
   `example-phone` across all 76 lines is cleaner and costs one commit. Worth doing regardless of
-  `R2`, because the README and tutorial cases are simply wrong instructions for anyone but Ro.
+  `R2`, because the README and tutorial cases are simply wrong instructions for anyone but the Developer.
 
 ### P17 — `ro-state` hardcoded in the permission source — Medium
 
@@ -350,6 +350,13 @@ about.
   wildcard segment, or have `./agent setup` render `$USER` into the generated policy. Then
   regenerate with `just _agent-config`. This one is worth fixing whether or not the repository ever
   publishes, because it breaks the second developer.
+- **Disposition (2026-09-22):** Fixed, without a wildcard or a rendered login. Both harnesses turn
+  a socket entry into a Seatbelt `subpath` rule that matches the resolved path, so the source now
+  allows the directory `~/.local/state/watchman`, which covers `<login>-state/sock` for any login
+  and nothing a link planted there points at. A denied or stopped Watchman now fails `./agent doctor`
+  by name, from `packages/testing/verification/verification-src/WatchmanHealth.ts` (the doctor path
+  cited above has moved). What remains is recorded in
+  [DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START](<../Roadmap/Developer environment upgrades/DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START.md>).
 
 ### P18 — Absolute `/Users/ro/…` paths in a generated harness config — Medium
 
@@ -365,6 +372,19 @@ Three test files also embed absolute paths, but only one is personal:
 - **Recommendation:** have the generator emit `~`-relative paths into `.codex/config.toml` as the
   source already does, and change that one test fixture to `/Users/dev/...` to match its neighbours.
   Same commit as `P17`.
+- **Disposition (2026-09-22):** Fixed by no longer tracking `.codex/config.toml`, since the
+  recommendation cannot work: Codex 0.155.1 refuses to start its network proxy on a `~`, `$HOME`,
+  or relative socket entry (`invalid network.allow_unix_sockets[0]`, measured), and accepts only an
+  absolute path, which names a login. `./agent setup` renders the file per machine with absolute paths, and with
+  the clone's own Git directory in place of a hardcoded `~/code/tao-lang-2/.git`. `.codex/hooks.json`
+  and `.codex/rules/tao.rules` stay tracked. The cost is that Codex's first session in a fresh
+  clone runs on its default permissions until that session's start hook has run setup. The personal
+  fixture now uses a neutral path, and a test fails if any tracked harness file names a home
+  directory or a `<login>-state` segment.
+- **Follow-up (2026-09-23):** An untracked config was absent when Codex opened a fresh managed
+  worktree, and task creation failed before its setup hook could run. The config is tracked again so
+  the startup profile exists at checkout time. Its two absolute socket entries are still specific to
+  the machine that generated it; setup refreshes them for another machine and that diff needs review.
 
 ### P19 — `local.properties` — Low, already handled
 
@@ -386,8 +406,10 @@ No other real email address is tracked. Every other address found is an `example
 `example.test`, or `example.invalid` fixture.
 
 - **Recommendation:** decide the pen-name question now, because it is the one finding that history
-  makes irreversible. If "Ro" is meant to be the public identity, set `user.name` and `user.email` to
-  the identity you want before the first public push and accept that history carries the old one — or,
+  makes irreversible. The pen name this audit found in use has since been replaced throughout this
+  repository's prose by "the Developer"; if a single pen name is still meant to be the public
+  identity, set `user.name` and `user.email` to the identity you want before the first public push and
+  accept that history carries the old one — or,
   if it matters enough, rewrite author metadata across the 1,451 commits while the repository is
   still private, which is the only moment that is cheap. Separately, change the
   `Marcus` / `Age 37` example to a neutral name.
@@ -460,7 +482,7 @@ work, and the audience `A3` is written for is precisely that group.
   the toolchain with a permissive runtime and stdlib — is well matched to what the code actually
   does, because the split falls exactly where the Metro resolver does. The audit adds only this: the
   decision must be made **before** the first public push, not after. A permissive relicensing of
-  `packages/apps/runtime` and `packages/apps/stdlib` is trivial while Ro is the sole copyright holder across
+  `packages/apps/runtime` and `packages/apps/stdlib` is trivial while the Developer is the sole copyright holder across
   all 1,451 commits, and becomes a consent-gathering exercise the moment there is a second
   contributor.
 
@@ -510,7 +532,7 @@ What was not examined, and why:
   lockfiles, where a credential is implausible but not impossible.
 - **Semantic sensitivity was judged, not measured.** Sections B and C rest on reading; another reader
   may draw the line elsewhere on `P11`, `P12`, and `P13` in particular.
-- **`Docs/MVP Roadmap/Agent MVP Roadmap.md` and `Ro MVP Roadmap.md`** were first read from commit
+- **`Docs/MVP Roadmap/Agent MVP Roadmap.md` and `Developer MVP Roadmap.md`** were first read from commit
   `e72efab2` before they reached `main`; they now sit beside this report.
 
 Scan date: 2026-09-17. Refreshed twice against a moving `main`: on 2026-09-18 at `90df2153`, which
@@ -521,6 +543,7 @@ Both refreshes re-checked the substantive findings rather than only the numbers.
 Connect identifiers in a tracked lock file), `P16` (`roPhone` on 76 lines across 12 files), `P17`
 (the `ro-state` socket, now at `.rulesync/permissions.jsonc:184`), and `P24` (the truncated,
 unattributed, undeclared license) all still hold exactly as written. Nothing `main` landed has fixed
-any of them, and no new credential material entered the tree.
+any of them, and no new credential material entered the tree. `P17` and `P18` were fixed on
+2026-09-22; see their dispositions.
 
 Repository state: `feat/publication-audit-report-d93f40`.

@@ -5,7 +5,7 @@ slice proposals remain below to preserve how the direction was chosen; this stat
 surface_ describe what landed. External App Store/TestFlight success, an installed OTA, signed or
 notarized Studio, and physical-device acceptance have not been established by repository tests.
 
-**Direction settled, 2026-09-02.** Two spellings, ruled by Ro:
+**Direction settled, 2026-09-02.** Two spellings, ruled by the Developer:
 
 ```bash
 tao ship            # build locally, upload, and submit to App Store review, automating as much as possible
@@ -49,14 +49,14 @@ The research behind this section was done on 2026-09-01 against Expo's and Apple
 documentation; the facts are in `Research - Beta distribution lanes.md` beside this file. The
 lanes, from least to most ceremony:
 
-| Lane                                   | Tester needs                                   | Developer needs                                  | Verdict                                                                                                                                                                                                                                                                                                                                                                                         |
-| -------------------------------------- | ---------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tao dev` + Expo Go on the LAN (today) | Expo Go, same Wi-Fi                            | nothing                                          | Not distribution. Stays the local dev loop.                                                                                                                                                                                                                                                                                                                                                     |
-| EAS Update opened in Expo Go           | Expo Go, a free Expo account in the owning org | an Expo account, nothing from Apple              | **The only zero-Apple-account iOS lane, and a fragile one.** Since 2026-05-12 Expo Go loads updates only for projects the viewer's account or organization owns, so the friend joins the developer's Expo organization as a Viewer. The App Store Expo Go is SDK 54; Expo's SDK 55+ builds have waited on Apple's approval since spring 2026 with no timeline. Works while Tao stays on SDK 54. |
-| EAS internal distribution (ad hoc)     | one-time device registration link, then a URL  | Apple Developer Program, Expo account            | **iOS fallback, Android default.** Every new iPhone costs a device registration and a rebuild; Apple caps registrations at 100 per membership year. Android is just an APK link.                                                                                                                                                                                                                |
-| TestFlight                             | the TestFlight app; an invite or a public link | Apple Developer Program, Expo account            | **iOS default.** No device registration. Internal groups take up to 100 team members with no review; external groups take up to 10,000 with a one-time Beta App Review and a public link. Builds live 90 days.                                                                                                                                                                                  |
-| Google Play internal testing           | a Play account, an opt-in link                 | Play Console (US$25 once, identity verification) | Later. Correct for a store-bound Android app; unnecessary ceremony for a first beta.                                                                                                                                                                                                                                                                                                            |
-| Expo Launch (browser, no terminal)     | as TestFlight                                  | a public GitHub repo                             | Not a fit: Tao owns the command line, and the host is derived, not checked in.                                                                                                                                                                                                                                                                                                                  |
+| Lane                                   | Tester needs                                   | Developer needs                                  | Verdict                                                                                                                                                                                                                                                                                                                                                                  |
+| -------------------------------------- | ---------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tao dev` + Expo Go on the LAN (today) | Expo Go, same Wi-Fi                            | nothing                                          | Not distribution. Stays the local dev loop.                                                                                                                                                                                                                                                                                                                              |
+| EAS Update opened in Expo Go           | Expo Go, a free Expo account in the owning org | an Expo account, nothing from Apple              | **The only zero-Apple-account iOS lane, and a fragile one.** Since 2026-05-12 Expo Go loads updates only for projects the viewer's account or organization owns, so the friend joins the developer's Expo organization as a Viewer. Since 2026-09-03 the iOS App Store build also requires that viewer to be logged in to Expo Go itself, on top of the ownership check. |
+| EAS internal distribution (ad hoc)     | one-time device registration link, then a URL  | Apple Developer Program, Expo account            | **iOS fallback, Android default.** Every new iPhone costs a device registration and a rebuild; Apple caps registrations at 100 per membership year. Android is just an APK link.                                                                                                                                                                                         |
+| TestFlight                             | the TestFlight app; an invite or a public link | Apple Developer Program, Expo account            | **iOS default.** No device registration. Internal groups take up to 100 team members with no review; external groups take up to 10,000 with a one-time Beta App Review and a public link. Builds live 90 days.                                                                                                                                                           |
+| Google Play internal testing           | a Play account, an opt-in link                 | Play Console (US$25 once, identity verification) | Later. Correct for a store-bound Android app; unnecessary ceremony for a first beta.                                                                                                                                                                                                                                                                                     |
+| Expo Launch (browser, no terminal)     | as TestFlight                                  | a public GitHub repo                             | Not a fit: Tao owns the command line, and the host is derived, not checked in.                                                                                                                                                                                                                                                                                           |
 
 Who needs which account is worth stating plainly, because it is the question every beta tester
 asks. On iOS the tester never needs a developer account: TestFlight needs the TestFlight app and
@@ -94,15 +94,20 @@ uses local Xcode and App Store Connect, while OTA uses Tao's Expo-protocol updat
 - Runtime compatibility combines the native fingerprint used as the Expo runtime version with a
   canonical semantic data-schema fingerprint. Publication and rollback must be compatible with
   every supported binary; assets are exported and published as resolvable Expo artifacts.
-- `tao dev` starts Metro with `expo start --host lan` and opens Expo Go on simulators and connected
-  phones. Tao moved to Expo SDK 57 on 2026-09-15, so the physical-iPhone lane can no longer depend
-  on the App Store's SDK 54 Expo Go; it now needs a development build. The build this plan produces
-  is that build's natural ancestor, so slice 4 folds the two together.
+- `tao dev` starts Metro with `expo start --host lan` without opening a target by default; explicit
+  targets and the interactive controls can open supported runtimes. The physical-iPhone lane can no
+  longer depend on the App Store's Expo Go: since 2026-09-03 Expo Go 57 on iOS requires a
+  developer to be logged in to both the Expo CLI and the Expo Go app, and `tao dev`'s Metro server
+  runs under a repository-local Expo home directory that a developer's own `expo login` session
+  never reaches, so that login can never be satisfied. The lane now needs a development build. The
+  build this plan produces is that build's natural ancestor, so slice 4 folds the two together.
 - WordFlower already declares what the command derives from: `project { id "wordflower" name
   "WordFlower" … }`, `app WordFlower { Name … Datasource DeviceStore }`, and the sync variant
   `app WordFlowerInstantDB = WordFlower with { Name "WordFlower - InstantDB" Datasource
-  WordFlowerInstantDBStore }`. Its InstantDB datasource points at `localhost:9020`, so the first
-  real beta needs a hosted Instant app id; the local stack is not reachable from a tester's phone.
+  WordFlowerInstantDBStore }`. Its datasource uses Instant Cloud and the existing app ID; the
+  separate `WordFlowerLocalInstantDB` variant keeps the local fixture for development. The hosted
+  app and live phone-to-browser/browser-to-phone sync were confirmed through a development build on
+  2026-09-23. TestFlight installation and beta distribution remain untested.
 - The release bundle proof rejects Studio markers before native packaging.
 - The previous repository ran a development client on physical devices with `expo prebuild` and
   `expo run:ios --device`, and pinned `eas-cli` as a dependency. Its `app.json` is a usable
@@ -114,7 +119,7 @@ uses local Xcode and App Store Connect, while OTA uses Tao's Expo-protocol updat
 
 ### Command surface
 
-**Settled by Ro on 2026-09-02**, in three refinements, superseding the earlier sketch:
+**Settled by the Developer on 2026-09-02**, in three refinements, superseding the earlier sketch:
 
 ```bash
 tao ship [path] [--app NAME] [--patch | --minor | --major] [--yes] [--ignore-git] [--dry-run]   # App Store
@@ -170,11 +175,11 @@ tao ship [path] ... --update [--rollback]                                       
   are remembered on Apple's side, so a bare `--beta` re-ships to the groups as they stand. The
   command prints who will be notified as part of the action list. Recipient addresses are not
   written into the lock.
-- **Dropped:** Android until Ro reopens it, and Expo entirely, ruled on 2026-09-02: no Expo
+- **Dropped:** Android until the Developer reopens it, and Expo entirely, ruled on 2026-09-02: no Expo
   publishing, no EAS build lane, no EAS Update. Publishing through Expo would reach only members
-  of an Expo organization, only inside the Expo Go shell, and only while Tao stays on the SDK the
-  App Store Expo Go carries, which Expo has been unable to move past since spring; TestFlight
-  with recipients covers the need. Slice 2's update server is therefore Tao's own, on the Tao
+  of an Expo organization, only inside the Expo Go shell, and — since 2026-09-03 — only a viewer
+  who is also logged in to Expo Go itself; TestFlight with recipients covers the need without
+  asking a tester to hold an Expo account or session at all. Slice 2's update server is therefore Tao's own, on the Tao
   Lang servers the companion app needs anyway, speaking the open expo-updates protocol the
   runtime client already implements.
 - **`--update` and `--rollback`.** An update publishes a real Expo bundle and resolvable assets only
@@ -187,7 +192,7 @@ never passed.
 
 ### Build lane: local first
 
-Ro prefers building on the developer's own Mac, and the research supports it. A paid Apple
+The Developer prefers building on the developer's own Mac, and the research supports it. A paid Apple
 Developer Program membership and an Expo account are different things: Apple owns signing, App
 Store Connect, and TestFlight; Expo's EAS is a separate cloud service for builds, submission,
 and updates, with its own account and quota. Nothing in slice 1 needs EAS.
@@ -224,12 +229,12 @@ What EAS would have given, for the record: macOS builders for machines without X
 agents; managed credential custody; a maintained pipeline that tracks Expo SDK versions; a
 submission service; and EAS Update as a server for compiled-bundle updates. It is not faster
 than a warm Apple-silicon Mac, and its free tier meters builds. Local builds are unlimited and
-offline from everything but Apple. Ro ruled Expo out entirely on 2026-09-02. The library that
+offline from everything but Apple. The Developer ruled Expo out entirely on 2026-09-02. The library that
 exists for this automation is fastlane, whose `match`, `gym`, `pilot`, and `deliver` cover the
 same four steps in Ruby over Apple's private session where the public API stops. Slice 1 uses
 the Apple tooling directly because the four steps are short and typed, and keeps fastlane as
 the documented fallback if a step proves brittle. Slice 2's update server is Tao's own, on the
-Tao Lang servers.
+Dev Tao servers.
 
 ### What the developer provides
 
@@ -280,12 +285,13 @@ derives, creates, or dictates everything else.
 Two further items are automated by the tool rather than provided: the developer's own Apple ID
 on the App Store Connect team, which `tao ship` can invite through the API, though the
 developer still clicks the activation email; and the hosted InstantDB app for the
-WordFlowerInstantDB acceptance run. For that run Ro provided the app id
+WordFlowerInstantDB acceptance run. For that run the Developer provided the app id
 `9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f` on 2026-09-02 and allows the implementer any action on
 it, including deleting its data. It is the id the repository already seeds into the local
-InstantDB stack, so the implementer first confirms it exists on the hosted service at
-https://www.instantdb.com/dash and otherwise creates a hosted app and records that id in the
-lock; a phone on TestFlight cannot reach `localhost:9020`. Not needed at all: an Expo account.
+InstantDB stack and uses for the hosted demo variant, so the implementer first confirms it exists
+on the hosted service at https://www.instantdb.com/dash and otherwise creates a hosted app and
+updates the source app ID; a phone on TestFlight cannot reach the local variant's `localhost:9020`.
+Not needed at all: an Expo account.
 
 Xcode cannot create the App Store Connect API key: keys exist only on the App Store Connect
 website, under Users and Access, Integrations, Team Keys, and an Admin makes them. Xcode's own
@@ -535,7 +541,7 @@ code)" — lowered to provider-native rules. So the hosted runtime's job is narr
 the store, enforce the derived rules, evaluate automation schedules, deliver push, answer auth — and
 _not_ run app code. An automation cannot write (§12); it `do`es a transaction, whose authority
 question (§12 gap: what identity does a server-side scheduled `do` carry?) is a real language
-decision this program must put to Ro.
+decision this program must put to the Developer.
 
 Provisioning is a ship-time act: `tao ship` diffs the derived backend (schema, rules, indices,
 automation schedules, push config) against what the service currently runs for that variant, shows
@@ -751,7 +757,7 @@ What people pay for, and why it is defensible:
   production-bundle assertion (no Studio machinery in release builds) is proven by slice 1, landed.
 - **Authority & multiplayer**: the `secret` value type vs deploy-config wording; the InstantDB
   provider's config/auth surface; per-app account semantics. Shared dependencies — collisions
-  get surfaced to Ro, not designed past.
+  get surfaced to the Developer, not designed past.
 - **AI in Tao apps**: hosted agent execution, agent access to production data, on-device model
   entitlements in store builds, and eval runs against shipped model versions are intersections;
   noted here, owned there.
@@ -784,7 +790,7 @@ What people pay for, and why it is defensible:
 - Desktop Electrobun app shipping — signed, notarized, auto-updating — the Studio shell itself as
   first customer.
 
-## Decisions for Ro
+## Decisions for the Developer
 
 Each has a recommended default so slice 1 can start on the ruling alone.
 
@@ -792,12 +798,12 @@ Each has a recommended default so slice 1 can start on the ruling alone.
    TestFlight. `tao publish` stays the package registry's verb. The MVP Justfile's
    `tao build --profile` recipes and the Tao Future Justfiles' `build` and `publish` recipes are
    replaced by `tao ship` recipes.
-2. **Where the identifier facts live.** Settled on 2026-09-02, after the search Ro asked for;
+2. **Where the identifier facts live.** Settled on 2026-09-02, after the search the Developer asked for;
    see _Precedent: accepted project metadata_ below. The ship facts are accepted project metadata
    in the project's `.tao-project/` folder: the `ship` section of one repository-tracked
    `lock.jsonc` that the developer commits,
    written by `tao ship` and never hand-edited, with the bundle identifier rule
-   `<namespace>.<project id>[.<variant>]`. Ro's follow-up ruling the same day: one lock file for
+   `<namespace>.<project id>[.<variant>]`. The Developer's follow-up ruling the same day: one lock file for
    the whole project, sectioned, rather than one file per concern with a shared envelope.
    A `bundle` or `version` fact in the `project` block stays a possible later grammar addition
    for the one or two values a developer authors rather than accepts.
@@ -809,12 +815,12 @@ Each has a recommended default so slice 1 can start on the ruling alone.
 5. **The Expo Go bridge.** Settled on 2026-09-02: not built; `--beta` is TestFlight, not a
    companion-app delivery path.
 6. **The Tao Studio companion app.** Settled on 2026-09-02: build it, for the development
-   experience first and for pre-release testing by invited project members with Tao Lang
+   experience first and for pre-release testing by invited project members with Dev Tao
    accounts. See _The Tao Studio companion app_.
 
 ## Precedent: accepted project metadata
 
-Ro recalled an earlier specification of a per-project metadata directory full of Tao-generated
+The Developer recalled an earlier specification of a per-project metadata directory full of Tao-generated
 data that nobody edits by hand, introduced partly for automatic AI design decisions. The search
 on 2026-09-02 found it in three places, and together they say what decision 2 should be.
 
@@ -865,10 +871,10 @@ the design lock's contract rather than inventing one:
 
 ## The Tao Studio companion app
 
-**Direction settled, 2026-09-02.** Ro decided to create a Tao Studio companion app. It exists
+**Direction settled, 2026-09-02.** The Developer decided to create a Tao Studio companion app. It exists
 for an improved development experience first, paired with Tao Studio while developing, and
 also for pre-release testing and feedback by members a developer has invited to their project
-on the Tao Lang servers, where every member must have created an account. The sections below
+on the Dev Tao servers, where every member must have created an account. The sections below
 are the assessment that preceded the decision and the design rules it carries; the program
 itself is opened in `Roadmap.md`. Its dedicated product and implementation plan is
 `../Tao Studio companion app/Plan - Tao Studio companion app.md`.
@@ -885,14 +891,18 @@ with Tao's runtime baked in: one fixed native binary holding the Tao runtime, th
 kit, and Expo's module set, loading compiled bundles of projects the signed-in account belongs
 to. It is the native-device Studio canvas the Studio v1 exploration already designed, whose
 first verdict was "Expo development build on the LAN, adopt": pairing, the control plane, cell
-assignment, and source actions all ride the same binary. And it removes the SDK 54 dependence
-of the Expo Go bridge, because Tao ships its own shell and updates it on its own schedule. The
+assignment, and source actions all ride the same binary. And it removes the account-login
+dependence of the Expo Go bridge — Expo Go 57 now requires its own signed-in session, which
+`tao dev`'s isolated Expo home directory can never present — because Tao ships its own shell and
+updates it on its own schedule. The
 Studio pairing, the LAN and tunnel development-server lanes, and the compiled-bundle update
 lane all reuse what slices 1 and 2 build; the new pieces are the shell itself, project
 membership, and the invitation flow.
 
 **Does it make sense?** As a developer's tool, strongly. A Tao developer today needs the App
-Store Expo Go on their phone, and Expo has been unable to ship a new one since spring. The Tao
+Store Expo Go on their phone, and since 2026-09-03 that Expo Go requires its own `expo login`
+session that `tao dev`'s isolated Expo home directory can never present to Metro, closing the
+lane on a physical iPhone regardless of SDK. The Tao
 app is the phone lane of `tao dev` and of Studio, under Tao's control, and it is where the
 on-device visual edit mode lives if that ever ships. As a proposed collaboration preview channel it is the Expo Go model
 exactly: the tester installs the Tao app, accepts a project invitation, and runs the app inside
@@ -914,14 +924,15 @@ shape described, with two cautions:
   inside the app, or "share to anyone"; membership stays explicit, revocable, and framed as
   collaboration on a project. Framing and behavior matter as much as the mechanism: the app's
   listing describes a development tool, and the first screen is the developer's own projects.
-- **The review queue is the operational risk.** Expo Go's SDK 55 and later builds have waited
-  on Apple since spring 2026 with no cause published. A Tao app inherits that uncertainty: one
-  Apple account, one review queue, and a shell every Tao developer's phone lane depends on.
+- **The review queue is the operational risk.** Expo Go's SDK 57 build (57.0.9) did reach the App
+  Store, on 2026-09-02, but Apple's queue for a tool this widely used can still take months with
+  no cause published. A Tao app inherits that uncertainty: one Apple account, one review queue,
+  and a shell every Tao developer's phone lane depends on.
   The mitigation Expo used is available to Tao too: distribute the shell to developers through
   TestFlight's external group and public link, up to ten thousand testers, while App Store
   review runs, and keep the native surface stable so the shell needs few releases.
 
-**Design rules the decision carries.** Projects and membership on the Tao Lang servers as the
+**Design rules the decision carries.** Projects and membership on the Dev Tao servers as the
 only access model, with an account required of every member; no public sharing surface of any
 kind; compiled bundles only, never a compilation path on the device, matching the repository's
 standing production posture; the Studio native-device canvas as the first customer; and a

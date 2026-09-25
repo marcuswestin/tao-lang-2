@@ -7,6 +7,7 @@ import { PackageGraph } from './PackageGraph'
 import { RunArtifacts } from './RunArtifacts'
 import { buildSummary, formatVerdict, gateExitCode, toleranceWarnings } from './RunSummary'
 import { RunTimings, type TimingsStore } from './RunTimings'
+import { TaoAppSharedRun } from './TaoAppSharedRun'
 import { TestAdvisory } from './TestAdvisory'
 import { type TestFile, TestLedger, type TestLedgerStore, type TestObservation } from './TestLedger'
 import { type SelectedSuite, TestNodes, type TestNodeState, type TestProcess } from './TestNodes'
@@ -131,7 +132,7 @@ const LANE = 'dev-test'
 /** How much of a failing suite's output a quiet run repeats; the whole of it is in the log file. */
 const QUIET_FAILURE_OUTPUT_LINES = 40
 const PERFORMANCE_CHECKS = 'performance-checks'
-const PERFORMANCE_CHECK_FILE = 'packages/dev/performance-checks/language-performance.test.ts'
+const PERFORMANCE_CHECK_FILE = 'packages/cli/dev-cli/performance-checks/language-performance.test.ts'
 const RUNTIME_JEST = 'runtime-jest'
 const RUNTIME_JEST_TESTS = 'packages/apps/expo-host/expo-host-tests'
 const TAO_APPS = 'tao-apps'
@@ -272,7 +273,7 @@ async function testNodesFor(options: {
   reportRoot?: string
   repositoryRoot: string
   timings?: TimingsStore
-}): Promise<{ plans: readonly ShardPlan[]; states: SuiteState[] }> {
+}): Promise<{ plans: readonly ShardPlan[]; states: SuiteState[]; warnings: readonly string[] }> {
   const { selected } = selectSuites(
     await suiteRegistry(options.repositoryRoot),
     selectionFor(options.prepared),
@@ -285,7 +286,7 @@ async function testNodesFor(options: {
       : Promise.resolve(options.timings),
   ])
   const plan = TestNodes.build({ ledger, proved: options.proved, selected, timings })
-  return { plans: plan.plans, states: plan.states as SuiteState[] }
+  return { plans: plan.plans, states: plan.states as SuiteState[], warnings: plan.warnings }
 }
 
 /** runTests discovers, runs, reports, and records one `./dev test` invocation: every suite, optionally name-filtered. */
@@ -331,7 +332,7 @@ async function printSlowest(limit = 20, repositoryRoot = Shared.Repo.getRoot()):
     .filter(record => !isConcurrentSuite(record.suite))
     .slice(0, Number.isInteger(limit) && limit > 0 ? limit : 20)
   if (records.length === 0) {
-    Shared.HCI.writeLine('No per-test timings recorded yet; run just test first.')
+    Shared.HCI.writeLine('No per-test timings recorded yet; run ./agent test first.')
     return 0
   }
   Shared.HCI.writeLine('Slowest tests:')
@@ -398,13 +399,14 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   }
 
   const mode = options.mode ?? WorkReporter.resolveMode()
-  await RunArtifacts.assignLogPaths(states, location)
+  const graphStates = TaoAppSharedRun.attach(states, location.logRoot, location.repositoryRoot)
+  await RunArtifacts.assignLogPaths(graphStates, location)
   const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = WorkReporter.create({ lane: LANE, logRoot: location.logRoot, mode })
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
 
-  const result = await WorkGraph.run(states, {
+  const result = await WorkGraph.run(graphStates, {
     expectedMs,
     jobs: machineLane.ceiling,
     onEvent: event => liveArtifacts.handle(event),
@@ -417,7 +419,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
       contention: machineLane.report(),
       location,
       machineLane,
-      states,
+      states: graphStates,
     })
   }
 
@@ -470,15 +472,16 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
     lane: LANE,
     logRoot: location.logRoot,
     schedule: WorkSchedule.report(result),
-    states,
+    states: graphStates,
     suiteOf: name => states.find(state => state.name === name)?.suite,
     toleratedFlakes,
   })
   const summaryPath = await RunArtifacts.finishRun({
+    cpuOnly: contention.contended,
     location,
     extraDurations: TestNodes.suiteDurations(states),
-    recordTimings: completeRun(prepared) && !contention.contended,
-    states,
+    recordTimings: completeRun(prepared),
+    states: graphStates,
     summary,
   })
   TestResultSummary.printResultSummary(states, elapsedMs, {
@@ -715,7 +718,7 @@ function taoAppsObservationName(roots: readonly string[]): string {
 function printRetryHonesty(prepared: PreparedRun): void {
   const stamp = prepared.retryStamp ?? 'no recorded full run (cold checkout)'
   Shared.HCI.writeLine(
-    `skipping ${prepared.retryGreenTestCount ?? 0} tests green as of ${stamp} — run 'just test' before merging.`,
+    `skipping ${prepared.retryGreenTestCount ?? 0} tests green as of ${stamp} — run './agent test' before merging.`,
   )
 }
 
@@ -830,8 +833,8 @@ async function testFile(inputPath: string, repositoryRoot = Shared.Repo.getRoot(
     return { file, suite: owner.name }
   }
   throw new Shared.Errors.UserInputError(
-    `Unsupported test file: ${file}. Use 'just test <name>' for package test names, './tao test' for Tao files, or `
-      + "'just studio-smoke' for Studio smoke files.",
+    `Unsupported test file: ${file}. Use './agent test <name>' for package test names, './tao test' for Tao `
+      + "files, or './agent studio-smoke' for Studio smoke files.",
   )
 }
 
@@ -930,8 +933,8 @@ function deadlineFor(tuningArgs: readonly string[]): number {
  * waiting for the rest of the machine. Holding it fixed therefore makes the pass/fail judgment a
  * function of how busy the machine is, which is not a property of the test: the Studio client bundle
  * measures 1.4s in isolation and was killed at Bun's five seconds with four lanes in flight. Raising
- * the bound to a flat sixty seconds, as the suites below do, buys that tolerance by giving up the
- * budget entirely — a test that genuinely regressed to forty seconds would pass in silence.
+ * the bound to a flat two minutes, as the suites below do, buys that tolerance by giving up the
+ * budget entirely — a test that genuinely regressed to eighty seconds would pass in silence.
  *
  * So the budget stays fixed and only the deadline stretches, by the run-queue depth this machine is
  * actually carrying. On a machine this run has to itself the result is the budget itself and nothing
@@ -956,20 +959,25 @@ function starvationAdjustedTimeoutMs(loadAverage: number, cpuCount: number): num
 }
 
 /**
- * The per-test budget an uncontended machine keeps. Above Bun's own 5s default: the extra margin
- * costs nothing on a test that passes and buys headroom on the genuinely slow ones, while the
+ * The per-test budget an uncontended machine keeps, set to clear `TestAsync.until`'s own 30s default
+ * with margin. Below that floor a `until` wait that genuinely times out is killed by Bun's own
+ * anonymous per-test timeout first, so the caller's description in `until`'s error — the property
+ * `TestAsync.ts` documents — never reaches the report. The extra margin above Bun's 5s default costs
+ * nothing on a test that passes and buys headroom on the genuinely slow ones, while the
  * regression-catching property survives because the budget is still fixed rather than waived.
  */
-const TEST_BUDGET_MS = 7_500
+const TEST_BUDGET_MS = 45_000
 /** How far the lagging load average is trusted to under-report the starvation a test is feeling. */
 const LOAD_AVERAGE_LAG_ALLOWANCE = 2
 /**
  * The ceiling, in milliseconds rather than in budgets: past this a deadline is no longer telling a
- * starved test apart from a hung one, and sixty seconds is the bound this repository already accepts
- * as "only a hang trips it". Absolute, so that raising the budget lengthens the deadline a loaded
- * machine gets without also moving the hang guard, which answers a different question.
+ * starved test apart from a hung one. Raised alongside the budget above, so that clearing `until`'s
+ * default with a larger floor does not also shrink the room a starved suite gets before this stops
+ * trusting the load reading — a hang still trips it at two minutes, same as it tripped at one before.
+ * Absolute, so that raising the budget lengthens the deadline a loaded machine gets without also moving
+ * the hang guard, which answers a different question.
  */
-const MAX_TEST_DEADLINE_MS = 60_000
+const MAX_TEST_DEADLINE_MS = 120_000
 
 /**
  * A pattern matching no Tao journey is a user error to someone typing `tao test --name`, and the

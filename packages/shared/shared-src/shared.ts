@@ -16,9 +16,14 @@ import * as FS from './FS'
 import * as HCI from './HCI'
 import * as LocalSocket from './LocalSocket'
 import * as Platform from './Platform'
+import { ProcessListeners } from './ProcessListeners'
 import { ProcessTree } from './ProcessTree'
+import { ProjectDevSession } from './ProjectDevSession'
 import * as Repo from './Repo'
+import * as SecretsFile from './SecretsFile'
 import { TaoFiles } from './TaoFiles'
+import { TaoHome } from './TaoHome'
+import { TaoResources } from './TaoResources'
 import { TaoStdlib } from './TaoStdlib'
 import { TaoTestProtocol } from './TaoTestProtocol'
 
@@ -27,6 +32,8 @@ export type {
   DiagnosticSeverity,
   DiagnosticSource,
 } from './core/shared-core'
+
+export type { ProcessListener } from './ProcessListeners'
 
 export type { ProcessSignalSeams, ProcessTableEntry, TrackedProcess } from './ProcessTree'
 
@@ -44,10 +51,15 @@ export {
   Json,
   LocalSocket,
   Platform,
+  ProcessListeners,
   ProcessTree,
+  ProjectDevSession,
   Repo,
+  SecretsFile,
   Switch,
   TaoFiles,
+  TaoHome,
+  TaoResources,
   TaoStdlib,
   TaoTestProtocol,
   Text,

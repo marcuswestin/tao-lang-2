@@ -131,7 +131,7 @@ exceptions. Final validation of that bookkeeping and the complete commit gate is
 `.artifacts/logs/verify/latest/summary.json`. The last full-lane receipt retains its failed lint status;
 host checks were not repeated after the allowlist/documentation-only follow-up.
 
-Ro authorized completing the review and committing the current milestone in chunks on 2026-09-19.
+The Developer authorized completing the review and committing the current milestone in chunks on 2026-09-19.
 Work is on `feat/real-host-testing-prototype` in the same worktree; no merge, push or new worktree is
 part of this authorization. The [host-control architecture recommendation](Tao%20host%20control%20architecture.md)
 records the researched driver/API direction and candidate next slices. It is a recommendation,
@@ -212,7 +212,7 @@ The succeeding Clockwork run is `2357a8ae-1baf-4fc9-b2fb-f20ed2f2fe24`.
 - Physical attempt `1f44d40b-ae08-43d8-a0d0-5ceab63c2656` discovered the paired iPhone and
   prepared the Release project, but Xcode exited 70 because roPhone was locked and development
   services were unavailable. No physical build/install or UI acceptance was established.
-- After Ro unlocked the phone, `7e6ecbf3-042a-4c3c-bec9-b1dbb61795f6` successfully built and
+- After the Developer unlocked the phone, `7e6ecbf3-042a-4c3c-bec9-b1dbb61795f6` successfully built and
   installed Clockwork on roPhone. `native/physical-install-confirmation.json` independently confirms
   its exact bundle identifier through `devicectl`. The proof correctly remains blocked at
   `physical-ios-ui-driver-unsupported`; installation is not UI acceptance.
@@ -301,28 +301,28 @@ at the top of this document and must not be followed as current setup guidance.
 
 Use the existing worktree `/Users/ro/.codex/worktrees/40f2/tao-lang-2`. All changes are uncommitted;
 the index and branch refs were not changed. Preserve them. Do not commit, stage, merge, or replace
-the worktree until Ro asks. Existing test suites and merge-gate membership are unchanged.
+the worktree until the Developer asks. Existing test suites and merge-gate membership are unchanged.
 
 Read [the prototype README](../../packages/testing/e2e-testing/README.md) and
-[the roadmap](Real-host%20testing%20prototype.md). Ro wants real browser/native/device evidence,
+[the roadmap](Real-host%20testing%20prototype.md). The Developer wants real browser/native/device evidence,
 explicitly registered new tests, and no imported legacy test infrastructure except HNReader as the
 initial existing subject. Clockwork is a new minimal harness fixture.
 
 ## Design intent and working constraints
 
-Ro's priority is testing quality and getting the architecture right, rather than preserving the old
+The Developer's priority is testing quality and getting the architecture right, rather than preserving the old
 test structure or optimizing test orchestration. The current step is an additive proof of concept,
 not permission to delete or replace the old suites. Use real-host acceptance journeys for visible
 behavior, and focused lower-level tests for behavior that is impractical or disproportionately
 expensive to prove through those journeys. Avoid redundant coverage and assertions that merely
 repeat implementation logic.
 
-Ro explicitly authorized implementation with subagents and later requested sharing a host-neutral
+The Developer explicitly authorized implementation with subagents and later requested sharing a host-neutral
 core between the shipped runtime and `@shared`. Keep time/random state per session, control both
 clock reads and scheduling, and avoid process-wide mocks that interfere with parallel tests.
 The present linter is deliberately scoped; it does not yet enforce this throughout the repository.
 
-Use the repository's `decision-rounds` skill for new product/architecture judgments that need Ro;
+Use the repository's `decision-rounds` skill for new product/architecture judgments that need the Developer;
 the accepted scope above does not need reconfirmation. Read delegation/parallel-implementation
 guidance before assigning bounded implementation ownership. Coordinate expensive host runs so
 multiple workers do not contend for the same simulator. Treat returned reports as claims to verify.
@@ -380,7 +380,7 @@ problem. No ordinary-Terminal comparison result has been supplied. No host reboo
 browser permission workaround, or secret-file access was attempted.
 
 1. In a fresh turn with Full access selected, confirm the actual supplied permission policy and run
-   read-only `xcrun simctl list devices available --json`. Judge capabilities from actual results,
+   read-only `./agent unsandboxed simulators list available --json`. Judge capabilities from actual results,
    not just the mode label: the previous session allowed writes under `/` while retaining a sandbox.
    If still blocked, distinguish a task restriction from host failure before retrying or proposing
    a reboot. Use this exact worktree; do not clone or create another worktree, which would omit the

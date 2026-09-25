@@ -17,7 +17,7 @@ are retained as execution history, not current syntax or architecture.
 
 **Decisions taken during implementation**, each already in `Decisions.md`:
 
-- Ro's answers to the T1/T2 open lists: `FrameNav` (later retired); `@left`/`@right` (moot);
+- The Developer's answers to the T1/T2 open lists: `FrameNav` (later retired); `@left`/`@right` (moot);
   horizontal bars win corners (moot); `local only` as the storage-fact spelling; a pushed plain view
   shows Back-only header chrome, and `Header false` on a scene is the explicit opt out of header
   chrome; namespace classification for command members (later superseded by the parameter list);
@@ -36,7 +36,7 @@ are retained as execution history, not current syntax or architecture.
   `expect navigation title` and the `[title]` design bundle (`19f9e3ef`). Rule recorded in
   `packages/AGENTS.md`: no capitalized keywords, and no lowercase keyword a design, layout, or test
   vocabulary already uses.
-- **Retired with the frame** (Ro, 2026-09-03): module-level `query` — but the validator keeps a
+- **Retired with the frame** (the Developer, 2026-09-03): module-level `query` — but the validator keeps a
   diagnostic for one, saying it could be added and nothing strictly prevents it; `TR.Deferred`;
   and special deep merging of keyed configuration items. Keyed patches use the configured-value
   model's ordinary whole-item replacement and must supply a complete item.
@@ -70,12 +70,12 @@ are retained as execution history, not current syntax or architecture.
   override, generated-code shape, or the harness itself is under test. A construct a tranche
   introduces is proven by a Tao test in that tranche — grammar with no observable behavior waits
   for the tranche that makes it observable.
-- Each tranche's **Open before starting** list is settled by Ro in `2 - Next` before the tranche
+- Each tranche's **Open before starting** list is settled by the Developer in `2 - Next` before the tranche
   begins; nothing in it is for the implementer to guess.
 - **`Docs/Roadmap/Tao Revolution/Decisions.md` is authoritative.** The design summary preserves
   rationale, while `Docs/Spec/` describes the implemented contract and follows implementation rather
   than leading it. The tranche that touches an area reconciles all three; `Docs/Archive/`
-  stays frozen unless Ro asks.
+  stays frozen unless the Developer asks.
 
 ## Sequence
 
@@ -318,7 +318,7 @@ view now, so all three lost their forcing feature.
 - **Module-level `query` is removed** from the language: `EntityQueryDeclaration` leaves the
   top-level statement set in `blocks.langium`, the visibility marker on it goes, `TR.Data.ModuleQuery`
   goes, and `Apps/Test Apps/Local Data/`'s third journey and the `Docs/Spec/Tao Data.md` sentence go
-  with it. **The validator keeps a diagnostic** for a `query` at module level (Ro): it says a
+  with it. **The validator keeps a diagnostic** for a `query` at module level (the Developer): it says a
   module-level query is not part of the language today, that it could be added, and that nothing
   strictly prevents it — a door left open, not a wall. `Decisions.md` §6's module-level bullet is
   replaced by a one-line note to the same effect. WordFlower's `CurrentSession` moves into the
@@ -358,7 +358,7 @@ picker fallback; inline input prompt for text/duration slots; required slots in 
 precedence (engaged → modal → item → scene → app → reducer keys), the verb layer with single-letter
 accelerators, the engagement contract (platform editing chords win; Escape; Tab moves to the next
 control in the current scope's render order; Enter by control). **Reserved reducer keys** (settled by
-Ro): arrows, Enter, Escape, Tab, Backspace, Space (narrowing word separator), `.` (verbs), **the
+The Developer): arrows, Enter, Escape, Tab, Backspace, Space (narrowing word separator), `.` (verbs), **the
 unshifted hints key** — `/` on a US layout, reserved by physical key (`event.code === 'Slash'`)
 where the platform reports one and by character otherwise, with `?` accepted as the same key
 shifted — Escape with nothing to clear (overview), `primary + K` (palette — Studio's precedent);
@@ -485,10 +485,10 @@ still describes the retired spellings or the pre-design model.
 exploration ledgers that mention intents, palettes, rails, or focus); `Docs/Spec/*` (the implemented
 contract — updated to what T1–T6 shipped, never ahead of it); `Docs/Tutorials/`; `Docs/README.md`;
 `Roadmap.md`; `Apps/WordFlower/README.md`, `Apps/Tao Future/README.md`, and **the `.tao-revolution`
-sources themselves** — Ro ruled they follow determined decisions before anything merges to `main`, so
+sources themselves** — the Developer ruled they follow determined decisions before anything merges to `main`, so
 `command X = Y() with { … }` and `Key "cmd+n"` there are T7's to respell; every `AGENTS.md` and
 `agents/skills/*/SKILL.md`; the design document itself (its discovery record moves to
-`Docs/Archive/` only if Ro asks).
+`Docs/Archive/` only if the Developer asks).
 
 **Method.** Search for the retired and renamed vocabulary — `intent` as a declaration or concept
 word, `Palette all`, `Rail`, `menu Name { … }` in views, `present … as palette`, `Title` on
@@ -507,7 +507,7 @@ each retired spelling finds only archived or explicitly historical text.
 ## QA the landed project
 
 1. Run `./agent verify` and expect every suite to pass; use `./tao test Apps` for the wider app-only lane.
-2. Run `./tao dev "Apps/WordFlower/1 - Current" --app WordFlower` and create `Home` and `Projects`.
+2. Run `./agent unsandboxed app-dev "Apps/WordFlower/1 - Current" --app WordFlower` and create `Home` and `Projects`.
 3. Click the app page once (not the address bar or developer tools). With no input engaged, type
    `pro`: the narrowing surface shows the query, `Projects` is targeted, and it does not open until
    Enter. A prefix with no match says `No matching targets`.
@@ -519,7 +519,7 @@ each retired spelling finds only archived or explicitly historical text.
 6. Start a focus session, use Cmd/Ctrl+P to pause it, navigate, and relaunch; confirm the bar and
    session persist. With no active session, that chord remains available to the browser.
 7. With keyboard and a screen reader, focus selectable rows and confirm focus moves Tao's target
-   without selecting. Then run `./tao dev "Apps/Test Apps/Navigation" --app NavigationMVPApp` and
+   without selecting. Then run `./agent unsandboxed app-dev "Apps/Test Apps/Navigation" --app NavigationMVPApp` and
    spot-check Back-only and `Header false`.
 
 ## Remaining decided implementation

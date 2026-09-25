@@ -36,6 +36,37 @@ const RUNTIME_JEST = 'runtime-jest'
 const TAO_APPS = 'tao-apps'
 const ALL_APPS = 'Apps'
 
+/**
+ * The apps a changed-files run compiles when it reaches the Tao behaviour tests only through the
+ * package graph rather than through an edit to one of `TAO_APPS_PACKAGES` itself.
+ *
+ * Every language package reaches `cli/tao-cli` eventually, so selecting every app on any transitive
+ * reach made the narrow lane as wide as the full one: measured 2026-09-21, a one-line edit to
+ * `language/ast-utils` ran 89 of `verify`'s 94 nodes and took 75.5s against its 84.1s. What made it
+ * expensive is not the app count but one app — `Apps/WordFlower/1 - Current` is 50.5% of all Tao
+ * source under `Apps/`, and its shard is the whole suite's critical path.
+ *
+ * `Apps/Test Apps` is what the narrow lane runs instead, because that is what those apps are for:
+ * `Apps/Test Apps/AGENTS.md` owns them as the per-feature exercises of the language surface. They
+ * still compile, render and assert through the same pipeline, so a change that breaks compilation
+ * or the runtime contract still fails here. What they do not cover is a whole product app's own
+ * journeys, which is why this is the *iteration* gate's selection and `verify` still runs them all.
+ */
+const LANGUAGE_SAMPLE_APPS = 'Apps/Test Apps'
+/**
+ * Studio's own Tao client is an ordinary `Apps/` entry, but its package suites (`ides/studio`,
+ * `ides/studio-tooling` through the package graph) are its actual behavior proof; `Apps/Tao Studio`
+ * alone only selects the Tao behavior tests, not those suites.
+ */
+const STUDIO_APP_ROOT = 'Apps/Tao Studio'
+const STUDIO_APP_PACKAGE = 'ides/studio'
+/**
+ * The spec-dialect sources Tao discovery deliberately skips (`Apps/WordFlower/README.md` owns the
+ * mapping). No suite reads them, and selecting their root handed `./tao test` a shard root with no
+ * compiled tests — `Apps/Tao Future` holds nothing else — which it refuses.
+ */
+const UNDISCOVERED_TAO_EXTENSIONS = ['.tao-mvp', '.tao-next', '.tao-revolution']
+
 /** Packages whose language-service performance the `performance-checks` suite measures. */
 const LANGUAGE_PERFORMANCE_PACKAGES = new Set([
   'compiler',
@@ -51,19 +82,27 @@ const LANGUAGE_PERFORMANCE_PACKAGES = new Set([
  */
 const TAO_APPS_PACKAGES = new Set(['apps/runtime', 'apps/expo-host', 'apps/stdlib', 'cli/tao-cli'])
 /**
- * Dev-tooling packages `dev` and `testing/verification` reach `cli/tao-cli` through a workflow
- * dependency — a gate catalog, a scheduler — rather than through anything a compiled app ships.
- * Their own changes must not widen a `tao-apps` run to every app, so they are excluded as seeds
- * for `appAffectedPackages` below; `PackageGraph.affected` still visits them as *dependents* of
- * whatever else changed, which is the propagation this exclusion leaves alone. `cli/cli-kit` is
- * not in this set: `tao-cli` ships its `OutputText` helper, which shapes the `Tests:` summary
- * line the repository runner scrapes, so a `cli/cli-kit` change must still select the Tao apps.
+ * Dev-tooling packages `cli/dev-cli`, `cli/agent-cli`, `testing/verification`, and
+ * `ides/studio-tooling` reach `cli/tao-cli` through a workflow dependency — a gate catalog, a
+ * scheduler, the lazy `studio-review` command — rather than through anything a compiled app
+ * ships. Their own changes must not widen a `tao-apps` run to every app, so they are excluded as
+ * seeds for `appAffectedPackages` below; `PackageGraph.affected` still visits them as
+ * *dependents* of whatever else changed, which is the propagation this exclusion leaves alone.
+ * `cli/cli-kit` is not in this set: `tao-cli` ships its `OutputText` helper, which shapes the
+ * `Tests:` summary line the repository runner scrapes, so a `cli/cli-kit` change must still
+ * select the Tao apps.
  */
-const APP_UNAFFECTING_TOOLING_PACKAGES = new Set(['dev', 'testing/verification'])
+const APP_UNAFFECTING_TOOLING_PACKAGES = new Set([
+  'cli/dev-cli',
+  'cli/agent-cli',
+  'testing/verification',
+  'ides/studio-tooling',
+])
 /**
- * Repository workflow files whose behavior the `dev` and `testing/verification` packages' tests
- * are the proof of: `dev` for `./agent`/`./dev` wiring, `testing/verification` for the gate
- * catalog, repo-lint, and test-selection rules that read the Justfile and these entrypoints.
+ * Repository workflow files whose behavior the `cli/dev-cli`, `cli/agent-cli`, and
+ * `testing/verification` packages' tests are the proof of: the CLI packages for `./agent`/`./dev`
+ * wiring, `testing/verification` for the gate catalog, repo-lint, and test-selection rules that
+ * read the Justfile and these entrypoints.
  */
 const WORKFLOW_PATHS = [
   'Justfile',
@@ -222,7 +261,7 @@ function planChangedSuites(
       }
       if (!graph.packages.includes(name)) {
         everything ??= path
-      } else if (name === 'dev' && rest.startsWith('performance-checks/')) {
+      } else if (name === 'cli/dev-cli' && rest.startsWith('performance-checks/')) {
         selected.set(PERFORMANCE_CHECKS, 'changed test file')
       } else if (name === 'apps/expo-host' && /^expo-host-tests\/[^/]+\.jest-test\.tsx?$/.test(rest)) {
         selected.set(RUNTIME_JEST, 'changed test file')
@@ -234,13 +273,20 @@ function planChangedSuites(
       continue
     }
     if (path.startsWith('Apps/')) {
-      if (path.endsWith('.md')) {
+      if (path.endsWith('.md') || UNDISCOVERED_TAO_EXTENSIONS.some(extension => path.endsWith(extension))) {
         continue
       }
       const segments = path.split('/')
       const root = segments.length >= 3 ? `Apps/${segments[1]}` : ALL_APPS
       appPaths.set(root, `${root} changed`)
       appSourcesChanged = true
+      if (root === STUDIO_APP_ROOT) {
+        changedPackages.set(STUDIO_APP_PACKAGE, path)
+      }
+      if (path.endsWith('.ts') || path.endsWith('.tsx')) {
+        // cli/tao-cli owns the Apps/tsconfig.json gate that typechecks every app-local TS module.
+        changedPackages.set('cli/tao-cli', path)
+      }
       continue
     }
     if (path.endsWith('.tao')) {
@@ -249,7 +295,8 @@ function planChangedSuites(
       continue
     }
     if (WORKFLOW_PATHS.includes(path) || WORKFLOW_PREFIXES.some(prefix => path.startsWith(prefix))) {
-      selected.set('dev', 'repository workflow changed')
+      selected.set('cli/dev-cli', 'repository workflow changed')
+      selected.set('cli/agent-cli', 'repository workflow changed')
       selected.set('testing/verification', 'repository workflow changed')
       continue
     }
@@ -281,8 +328,16 @@ function planChangedSuites(
       selected.set(PERFORMANCE_CHECKS, `${name} ${reason}`)
     }
     if (TAO_APPS_PACKAGES.has(name) && appAffectedPackages.has(name) && !appPaths.has(ALL_APPS)) {
-      appPaths.clear()
-      appPaths.set(ALL_APPS, `${name} ${reason}`)
+      // An edit to one of these packages is a change to what every app is compiled by or runs on,
+      // so every app is the honest selection. Arriving here through the graph instead means some
+      // language package changed and this one merely depends on it — true, and true of nearly every
+      // package, which is why it cannot be what widens the run to all sixteen apps.
+      if (changedPackages.has(name)) {
+        appPaths.clear()
+        appPaths.set(ALL_APPS, `${name} ${reason}`)
+      } else if (!appPaths.has(LANGUAGE_SAMPLE_APPS)) {
+        appPaths.set(LANGUAGE_SAMPLE_APPS, `${name} ${reason}, so the language test apps run rather than every app`)
+      }
     }
   }
 

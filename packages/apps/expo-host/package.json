@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.29.7",
-    "@instantdb/react-native": "1.0.22",
     "@jest/globals": "29.7.0",
     "@noble/ciphers": "2.4.0",
     "@noble/curves": "2.4.0",
@@ -22,6 +21,8 @@
     "@react-native-picker/picker": "2.11.4",
     "@react-native-segmented-control/segmented-control": "2.5.7",
     "@testing-library/react-native": "^13.3.3",
+    "better-opn": "^3.0.2",
+    "chokidar": "^5.0.0",
     "expo": "~57.0.23",
     "expo-build-properties": "~57.0.18",
     "expo-clipboard": "~57.0.2",
@@ -41,6 +42,7 @@
     "react-native-web": "~0.21.0",
     "react-test-renderer": "19.2.3",
     "tao-icloud": "workspace:*",
+    "tao-instantdb": "workspace:*",
     "tao-runtime": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-compiler": "workspace:*"
@@ -51,6 +53,7 @@
     "@types/react-dom": "~19.2.0"
   },
   "version": "1.0.0",
+  "license": "AGPL-3.0-only",
   "scripts": {
     "android": "expo run:android",
     "ios": "expo run:ios"

@@ -1,5 +1,6 @@
 {
   "name": "tao-ast-utils",
+  "license": "AGPL-3.0-only",
   "private": true,
   "type": "module",
   "module": "ast-utils-src/ast-utils.ts",

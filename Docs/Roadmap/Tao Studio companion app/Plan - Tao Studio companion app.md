@@ -1,13 +1,18 @@
 # Plan - Tao Studio companion app
 
-Status: product direction settled; the development foundation, Slice 1, and the packet-23 trust and
-rediscovery hardening are implemented in software (protocol, gateway, cross-process trust/revocation,
-native host, authenticated Bonjour, QR/deep-link fallback, companion shell, Studio popover, and install
-tooling) with focused tests. Physical cable/LAN evidence remains separate and unverified here; later
-product slices remain planned. This plans a Tao-published iPhone and iPad companion for Tao Studio:
+Status: product direction settled; the development foundation, Slices 1 and 2, and the packet-23 trust and
+rediscovery hardening are implemented in software. Slice 3's Tao Lens has landed;
+its selected-render browser and physical-device acceptance runs remain to be proved. Physical cable/LAN
+evidence remains separate and unverified here. Slice 4 is deferred until after the public MVP;
+later product slices remain planned. This plans a
+Tao-published iPhone and iPad companion for Tao Studio:
 developer tooling first, then an invited-project beta, feedback, and collaboration client. Product
 interactions here do not adopt new Tao language semantics; new source spelling still follows the
 Revolution decision and WordFlower tranche process.
+
+The initial local development host uses the exact Tao version that serves its Metro bundle. A store
+Companion for invited beta builds remains a tentative path; its update mechanism, native compatibility,
+and App Store acceptance require separate proof.
 
 Implementation handoff (archived, Slice 1 landed): `Docs/Archive/Plans/Prompt - Implement Slice 1.md`.
 
@@ -375,7 +380,7 @@ deterministic-simulation program defines the path from best-effort reproduction 
 
 One story can name several instances and personas:
 
-> On Ro's phone create the document. On Maya's iPad open it, go offline, edit it, then reconnect both.
+> On the Developer's phone create the document. On Maya's iPad open it, go offline, edit it, then reconnect both.
 
 Studio renders a lane per device/account plus one shared provider/world lane. It can pause all devices at a
 barrier, allow deliberate concurrency, partition the network, and assert convergence or authority refusal.
@@ -420,12 +425,12 @@ connected and Wi-Fi off — verify before treating this acceptance line as fully
 ### 2. Everyday development canvas
 
 - Project/app/variant/scenario/persona/revision switching.
-- Fast Refresh, remount, relaunch, checkpoint restore, and capture.
+- Fast Refresh, remount, relaunch, runtime capture, and restore controlled from Studio.
 - Bidirectional selection and one device-originated layout action.
-- Logs, compile/apply state, provider/network controls, and test commands.
+- Logs, compile/apply state, and provider/network controls.
 
-Acceptance: edit Mac to native frame, select both ways, capture/restore WordFlower state, run one journey,
-and report whether compatible state survived refresh.
+Acceptance: edit Mac to native frame, select both ways, capture/restore WordFlower state through Studio,
+and report whether compatible state survived refresh. A device journey is part of Slice 4.
 
 ### 3. Tao Lens and diagnostics
 
@@ -435,10 +440,15 @@ and report whether compatible state survived refresh.
 Acceptance: select one slow render and reach its source, invalidating state/data, resolved style, provider
 wait, and covering journey without manual correlation.
 
-### 4. Record and replay a semantic journey
+### 4. Record and replay a semantic journey (after public MVP)
+
+The Developer deferred this entire slice on 2026-09-22. The saved source shape, expectation authoring,
+unresolved native or foreign step behavior, and draft editing scope remain open decisions for when
+the slice resumes. Its acceptance below is not a public-MVP release gate.
 
 - Live semantic script, editing, expectations, replay, and reviewed test/journey proposal.
 - Preserve unresolved foreign/native steps honestly.
+- Run a journey on the live device renderer with visible step results.
 
 Acceptance: record a five-step WordFlower story on iPhone, remove an incidental step, replay it, and save a
 passing Tao test proposal.

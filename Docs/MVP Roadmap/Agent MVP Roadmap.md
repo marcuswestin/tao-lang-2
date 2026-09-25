@@ -1,8 +1,8 @@
 # Agent MVP Roadmap
 
 Everything that stands between today and a public MVP release and that an agent can execute without
-a new decision from Ro. The companion list of judgments only Ro can make is
-`Ro MVP Roadmap.md` beside this file; items here name the Ro decision they wait on where one exists.
+a new decision from the Developer. The companion list of judgments only the Developer can make is
+`Developer MVP Roadmap.md` beside this file; items here name the Developer decision they wait on where one exists.
 
 The release these items serve: a small number of outside developers — a Hacker News audience — can
 install Tao, build something, and tell us what they wanted. Tao does not need to be complete. It
@@ -15,7 +15,9 @@ An item is marked **done** here only once it is on `main`. Work in progress live
 this document deliberately does not name because they move faster than it does: `./agent board`
 reports every worktree, its branch, and whether it carries a merge message, which is where to look
 before starting an item so two agents do not build the same thing. As of 2026-09-19 that board shows
-branches ready to land for `A1`, `A4`, `A10`, `A11`, and `A12`.
+branches ready to land for `A1`, `A4`, `A10`, `A11`, and `A12`. The `A4` branch named there,
+`feat/expo-go-deprecation-30c509`, never landed and was written against package paths that have
+since moved; its work is superseded rather than pending.
 
 ## Release blockers
 
@@ -68,23 +70,30 @@ language sees.
 - **Done.** The matching bullet under **Build the enforcement and diagnostics surface** in
   `Roadmap.md` is closed with it.
 
-### A2 — A standalone cross-platform `tao` executable
+### A2 — A standalone `tao` executable
 
 Today `tao` is a zsh wrapper around `bun` inside this checkout's devenv profile, and every package
 is `private`. Nobody outside the repository can install Tao.
 
 - Plan: `Plan - Standalone Tao CLI.md` beside this file answers the shape below with measured
-  evidence and a nine-slice sequence, and leaves eight questions to Ro.
-- Shape: `bun build --compile` binaries for macOS, Linux, and Windows on both architectures; the
+  evidence, a nine-slice sequence, and the first-release decisions.
+- Progress: slices 1, 2, and 7 have landed. `just standalone-cli-release <version>` builds an
+  unsigned macOS arm64 release with its checksum, index, and install script, ready to publish once
+  the repository is public. Installed through `curl | sh`, the binary creates, checks, and compiles
+  a project outside any checkout; `just standalone-cli-acceptance` proves that much. `tao dev` and
+  `tao test` do not yet work from it.
+- First-release shape: a signed, notarized macOS arm64 `bun build --compile` binary; the
   files the CLI reads at runtime (stdlib, runtime sources, starters, grammar) either embedded or
   unpacked to a versioned directory; the Expo host and its `node_modules` downloaded per Tao version
-  rather than embedded; Metro and the Expo CLI driven through the binary itself rather than a
-  separate Bun or Node; an installer script, a Homebrew tap, and an npm wrapper; a per-project
-  version pin so a project selects the Tao it was written against.
+  from a pinned lockfile rather than embedded; Metro and the Expo CLI driven through the binary
+  itself rather than a separate Bun; a managed Node for `tao test`; an install script; and an exact
+  per-project version pin that asks before downloading a missing version. Linux, Windows, Intel Mac,
+  Homebrew, and npm distribution are later expansion work. The first binary omits `tao review`.
 - Context: `packages/cli/tao-cli`, `packages/apps/expo-host` (the `_gen_tao-app` host and its
   dependency set), `tao`, `Docs/Spec/Tao Packages.md` on the CLI-bundled `@tao/*` modules.
-- Waits on: nothing to start; the tap repository and what is published come from Ro (`R2`), and the
-  code signing certificates from `R8`, which owns where signing happens.
+- Waits on: nothing to start; public GitHub Releases hosting (`R11`), the final licence (`R1`), and
+  macOS signing and notarization must be ready before publication. The credential-dependent build
+  and hosted acceptance are parked until the near-release pass (`R12`).
 - Done: a person with no Bun, Node, nix, or repository checkout installs `tao` with one command and
   runs `tao create` through `tao dev` on a clean machine.
 
@@ -98,24 +107,47 @@ today, or how to start.
   much more than runs; a short language tour between the tutorial and `Docs/Spec/`; disposition for
   spec pages still marked WIP.
 - Context: `Docs/README.md`, `Docs/Tutorials/`, `Docs/Spec/`, `Docs/Roadmap/Tao Revolution/`.
-- Waits on: Ro approves the pitch and positioning (`R3`), and the repository-publication decision
-  (`R2`) settles which audience the README addresses.
+- Uses the decided 0.x positioning (`R3`) and whole-repository publication with public-audience
+  edits (`R2`).
+- Landed 2026-09-22: the root `README.md` — the Developer's pitch, a first app from the tutorial,
+  the CLI's commands, install (the standalone binary marked as on its way, the checkout path until
+  then), the 0.x promise, a plain statement that Tao is built by its author with coding agents, and
+  the licence. `Docs/Spec/Tao Design.md` lost its WIP suffix, with each unimplemented section marked.
+  The Developer deferred the honest "works today" page and the language tour. Remaining: the one-line
+  install once `A2` ships.
 - Done: a visitor who reads only the README knows what Tao is, whether it fits them, and what to run
   first.
 
-### A4 — Retire Expo Go from the development loop
+### A4 — Retire Expo Go from the phone lane — **done**
 
-Tao moved to Expo SDK 57 on 2026-09-15, and the App Store's Expo Go carries SDK 54, which Expo has
-been unable to move past. `tao dev` still opens Expo Go, so the physical-device lane is broken for
-anyone outside this repository.
+Written on the premise that the App Store's Expo Go was stuck on SDK 54 while Tao had moved to SDK
+57. That premise expired: App Store Expo Go 57.0.9 shipped on 2026-09-02, and Expo publishes SDK 57
+clients for Android and the iOS Simulator as well. The lane that is actually closed to Tao is the
+physical iPhone, for a different reason. Since
+[2026-09-03](https://expo.dev/changelog/expo-go-57-login) Expo Go on iPhone requires an Expo account
+signed in both on the phone and in the terminal serving the bundle, and `expo-config.ts` gives Metro
+a repository-local Expo home, so a developer's own `expo login` never reaches it. Expo's own
+statement that "Login is not required for development builds" is the argument for `A9`.
 
-- Shape: remove or gate the Expo Go paths, point the device loop at the Tao-published development
-  build, and correct every document and message that still promises Expo Go.
+- Shape: refuse the physical iPhone with that reason and name the Companion instead; keep the
+  simulator, emulator and physical-Android Expo Go lanes, which work and need no account, until
+  `A9`'s prebuilt host replaces them; correct every document and message that rests on the SDK-54
+  claim.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` (the lane table and
-  slice 4), `packages/dev/dev-src/expo-dev-loop/`, `packages/ides/studio-companion-app`.
-- Waits on: the host-scope decision (`R7`) for the full prebuilt-host lane; retiring the broken
-  promise does not.
-- Done: no surface offers Expo Go, and the documented device path is one a newcomer can complete.
+  slice 4), `packages/apps/expo-host/expo-host-src/dev-loop/`, `packages/ides/studio-companion-app`.
+- Uses the shared companion host and compatibility-check decision (`R7`); retiring the broken phone
+  promise does not wait on that host's completion. **Decided 2026-09-22:** Expo Go stays on the
+  lanes where it works until the Companion beta exists, so "no surface offers Expo Go" is `A9`'s
+  completion rather than this item's.
+- Done: no surface offers Expo Go where Expo Go cannot work, every message and document gives the
+  real reason rather than the SDK gap, and the phone path a newcomer is pointed at is the one Tao
+  intends to support.
+- Landed 2026-09-22: a physical iPhone is refused with the account-wall reason and the
+  `studio-companion-install` command; the simulator remedy names the SDK it needs; Android installs
+  a matching Expo Go itself and falls back to a skipped lane with its reason if that fails.
+  `EXPO_SDK_VERSION` in `expo-config.ts` is the one SDK pin the loop measures clients against, and a
+  test keeps it equal to the host package's `expo` dependency. The beta-distribution plan and lane
+  research carry a dated correction of the SDK-54 claim.
 
 ## First-hour quality
 
@@ -148,8 +180,19 @@ of whether a new language feels real.
 
 - Shape: packaging, versioning, and publication to the VS Code Marketplace and Open VSX, with the
   extension resolving a `tao` from the user's machine rather than a repository path.
+- Packaging progress: the VSIX carries a minified, bundled language server and standard library,
+  its own README, and the repository licence. The editor/CLI version relationship still needs to
+  follow the standalone CLI work. On 2026-09-24, host preparation installed the `0.0.1` VSIX in an
+  isolated VS Code profile and confirmed `tao.tao-ide-extension@0.0.1` was listed. Opening a `.tao`
+  file in that profile and both marketplace releases remain unproved.
+- Release workflow progress: `./agent unsandboxed prepare-release ide-extension` packages and checks a clean VS Code
+  installation; `just ide-extension-release-publish` uploads the same VSIX to both registries. Publication
+  still needs editor activation acceptance, publisher accounts, and the final licence before use.
 - Context: `packages/ides/ide-extension`, the **Polish the IDE MVP** entry in `Roadmap.md`.
-- Waits on: Ro creates the publisher accounts; the license decision (`R1`) applies here too.
+- Waits on: The Developer creates the publisher accounts and the app-safe licence structure is settled (`R1`).
+  Both marketplaces are in the first public-release scope, but their account-dependent publication
+  and listing checks are parked until the near-release pass (`R12`). Local VSIX and editor checks
+  can continue.
 - Done: `ext install` on a clean machine gives working Tao editing.
 
 ### A7 — Feedback intake
@@ -160,13 +203,12 @@ The point of the release is to learn what people want. Nothing collects that tod
   confused me"; `tao doctor --json` extended into a `tao bug-report` that attaches an environment
   fingerprint (OS, architecture, Tao version, toolchain hashes, Xcode version) so environment-shaped
   reports are diagnosable.
-- Context: `packages/dev` doctor output, `.github/` (absent today).
-- Waits on: the channel decision (`R10`) for where discussion happens; templates and the fingerprint
-  do not wait.
+- Context: `packages/cli/dev-cli` doctor output and the existing `.github/` forms.
+- Uses GitHub Issues and Discussions for early feedback (`R10`).
 - Done: a frustrated visitor has an obvious, low-effort place to say so, and what they send is
   enough to reproduce.
 - Landed: `.github/` carries both issue forms, a discussion form for the open-ended half of each
-  framing, and `CONTRIBUTING.md`; `EnvironmentFingerprint` in `packages/dev` reports OS,
+  framing, and `CONTRIBUTING.md`; `EnvironmentFingerprint` in `packages/cli/dev-cli` reports OS,
   architecture, Tao commit, toolchain versions, toolchain and lockfile hashes, and Xcode where
   present, and `doctor --fingerprint` prints it alone. Nothing personal can reach it: each value is
   parsed out of a tool's output and kept only when it already reads as a version, a hash, or a plain
@@ -174,13 +216,13 @@ The point of the release is to learn what people want. Nothing collects that tod
 - Remaining: the fingerprint is reachable only from a checkout of this repository, because `tao`
   has no `doctor`; `tao bug-report` is deliberately not built, so a visitor who installed a released
   binary has a form to fill but no fingerprint to attach. Revisit once `A2` gives the CLI a shape
-  worth adding a command to. The discussion links point at the default `ideas` and `q-a` categories
-  pending `R10`.
+  worth adding a command to. The discussion links currently point at the default `ideas` and `q-a`
+  categories.
 
 ## Environment reach
 
-Reducing what a developer's machine must already have. The prebuilt-host half of this work waits on
-`R7`; the rest does not.
+Reducing what a developer's machine must already have. The prebuilt-host half follows `R7`'s
+shared-companion decision.
 
 ### A8 — A managed toolchain and a requirements graph
 
@@ -195,36 +237,78 @@ sizes and licenses before it downloads anything.
   acceptance, `xcodebuild -runFirstLaunch`, simulator runtime download) because it cannot be
   automated; every download is pinned per Tao version and checksum-verified; `tao doctor` reports
   the same graph without installing.
-- Context: `packages/dev` doctor, `packages/cli/tao-cli/cli-src/ship-*`, the environment discussion this
+- Context: `packages/cli/dev-cli` doctor, `packages/cli/tao-cli/cli-src/ship-*`, the environment discussion this
   roadmap came out of.
 - Done: `tao run android` on a bare machine explains what it needs, asks, installs it, and works;
   nothing it installs requires `sudo` except the Xcode steps that inherently do.
 
 ### A9 — Prebuilt host apps for simulators and devices
 
-Tao controls its entire native module set, so one prebuilt host per Tao version can run any Tao
-app's bundle: install it on a simulator, emulator, or phone and point it at Metro. This removes the
-native build from the development loop, which no virtualization approach can do.
+Tao controls its native module set, so a compatible prebuilt host can run a Tao app's bundle:
+install it on a simulator, emulator, or phone and point it at Metro. This removes the native build
+from the development loop, which no virtualization approach can do.
 
-- Shape: build and publish host artifacts (iOS simulator app, Android APK, and the companion app
-  for physical iPhones) in Tao's own CI; `tao dev` downloads, installs, and launches the right one.
+- Shape: use the companion app as the shared host, release its native shell infrequently, and check
+  bundle compatibility explicitly. Build the applicable simulator/emulator artifacts in Tao's CI;
+  `tao dev` obtains and launches a compatible host. The physical-iPhone companion is an invitation
+  beta for the first public release.
 - Context: `packages/ides/studio-companion-app` (Slice 1 and 2 records under
   `Docs/Roadmap/Tao Studio companion app/`), `packages/apps/expo-host`.
-- Waits on: `R7` — whether the host is the companion app itself, and how host versions relate to Tao
-  versions.
-- Done: a developer with no Xcode runs a Tao app on an Android emulator and on a physical iPhone.
+- Uses the host-scope decision in `R7`; physical-device acceptance and beta distribution remain
+  implementation and release proofs. Carries the rest of `A4`: the simulator, emulator and
+  physical-Android Expo Go lanes are removed as this host replaces each one.
+- Done: a developer with no Xcode runs a Tao app on an Android emulator and on a physical iPhone,
+  and no surface offers Expo Go.
+- Landed 2026-09-22: the Companion carries every native module an app host can reach, at the same
+  version, which `companion-native-parity.test.ts` enforces, and claims the iCloud (CloudDocuments,
+  CloudKit) and push entitlements `tao-icloud` asks for. `.github/workflows/pull-request.yml` proves
+  the pull-request trigger with a job that verifies nothing, and `./agent open-pr` pushes a branch,
+  opens or reuses its pull request, and watches the pushed commit's checks to a verdict.
+- Landed 2026-09-22, the Android emulator lane: `just companion-host-build` builds the Companion as
+  a debug APK into `.artifacts/hosts/<version>-<kit digest>/android/` beside a `tao-host.json` naming its native
+  kit, and `tao dev --android` installs a host whose kit covers its own and opens the app in it in
+  place of Expo Go, passing over any other host by name. Compatibility is the manifest's kit, never
+  the cache path. Proven with HNReader on the `Tao_Pixel_API_36` emulator.
+- Landed 2026-09-23, distribution (`R7`): `just companion-host-publish` puts a built host on a
+  prerelease tagged `companion-host-<version>-<kit digest>`, and when no cached host fits, `tao dev`
+  lists those releases without signing in and downloads the newest whose kit covers its own into
+  the Tao home's `hosts/` (`~/.local/share/tao/hosts` by default). The download is proven against a
+  fake GitHub only: until the repository is public
+  the listing answers 404, and `tao dev` says so and uses Expo Go.
+- Landed 2026-09-23, the iOS Simulator lane: `just companion-host-build --platform ios-simulator`
+  builds the Companion for both simulator architectures, signed ad hoc so its entitlements are
+  embedded, and `tao dev --ios` installs a compatible host unless the simulator already has that
+  build and opens the app in it. Publishing zips it beside the Android host on the same release.
+  Proven with HNReader on an iPhone 17 simulator; the first, unsigned build carried no entitlements
+  and CloudKit aborted it, which the build now refuses.
+- Remaining: the first published host and a live download once the repository is public; physical
+  Android through the Companion; the physical-iPhone invitation beta; building hosts in CI; and
+  retiring the Expo Go lanes as each is covered. The entitlements need the iCloud container and push
+  enabled on the app id before a device build signs. The account-dependent device build and release
+  proof are parked until the near-release pass (`R12`); simulator and Android work can continue.
 
-### A10 — Publication hygiene audit
+### A10 — Publication hygiene audit — **done**
 
-Whatever becomes public carries the agent instructions, Ro's roadmap notes, machine-specific files,
+Whatever becomes public carries the agent instructions, the Developer's roadmap notes, machine-specific files,
 and a committed `secrets/secrets.jsonc`.
+
+- Landed: `Report - Publication audit.md` beside this file, and on 2026-09-22 the fixes `R2` left
+  mandatory — the WordFlower ship lock untracked and ignored (`P15`; rotating the App Store Connect
+  key it named is the Developer's manual step), `roPhone` and the personal absolute paths gone from
+  docs, comments, and fixtures (`P16`, `P18`), the full AGPL-3.0 text with a copyright holder and
+  `AGPL-3.0-only` declared in every `package.json` (`P24`; SPDX headers wait for `R1`'s split) — and
+  the public-audience edits: the instruction set, the skills, and every document say "the Developer"
+  rather than a name (`P1`), `Roadmap.md`'s personal sections are reworded (`P7`, `P8`), and the
+  README states plainly how Tao is built (`P2`). `P17` — the login name Watchman's socket path puts
+  in the generated harness config — is its own project, since neither harness accepts a
+  user-agnostic socket rule.
 
 - Shape: inventory what would become public and what it reveals; confirm the committed secrets file
   is encrypted and that history holds nothing else; list machine-specific files (`local.properties`,
   named devices in package READMEs) and personal references.
 - Context: the repository root, `.rulesync/`, `agents/`, `Roadmap.md`.
 - Waits on: nothing for the audit; `R2` decides what to do with its findings.
-- Done: Ro has one list of everything a public repository would expose, with a recommendation per
+- Done: The Developer has one list of everything a public repository would expose, with a recommendation per
   entry.
 
 ## Language program
@@ -235,7 +319,7 @@ agent-executable steps.
 ### A11 — Process step 2: rewrite the Revolution tier
 
 WordFlower's `4 - Revolution` re-expressed in the decided dialect, with the `Apps/Tao Future/` apps
-as sibling references. Transcription against a settled decision record, with Ro reviewing the result.
+as sibling references. Transcription against a settled decision record, with the Developer reviewing the result.
 
 - Context: `Docs/Roadmap/Tao Revolution/Decisions.md`, `Process.md` step 2, `Apps/WordFlower/README.md`.
 - Landed: the tier is written to the decisions section by section — §13's `colors`/`sizes`/`text`/
@@ -253,10 +337,10 @@ as sibling references. Transcription against a settled decision record, with Ro 
 ### A12 — Process step 3: consolidate the Tao Future apps
 
 Landed. Skillet, Hearth, and Wayfare read as `Decisions.md` decides, and `Coverage.md` names a
-forcing feature for every capability — four of them `none — for Ro`, which are red flags for step 4
+forcing feature for every capability — four of them `none — for the Developer`, which are red flags for step 4
 rather than contrived features. What remains is not agent work: the ten spellings the port had to
 choose where `Decisions.md` is silent are listed in `Apps/Tao Future/README.md`, and the one place
-where `Decisions.md` still disagrees with itself (two visibility modifiers versus five) waits on Ro
+where `Decisions.md` still disagrees with itself (two visibility modifiers versus five) waits on the Developer
 as `R14`. Step 2's rewrite settled the other one this pass reported, retiring `TabNav` for
 `SelectionNav`.
 
@@ -267,9 +351,12 @@ as `R14`. Step 2's rewrite settled the other one this pass reported, retiring `T
 Process step 5: one tranche at a time, each ending in behavior tests written in Tao, until Current
 equals MVP.
 
-- Waits on: step 4 (`R5`) must settle the authority-cluster scope before the tranche list is known;
-  tranches touching the deferred runtime contracts wait on `R6`.
+- Scope: `R5` defers the authority cluster to the later app expansion. `R6` leaves the three runtime
+  contracts experimental at 0.x launch; settle each when a forcing slice reaches it.
 - Context: `Coverage.md`'s tier column, `Apps/WordFlower/README.md` tranche mechanics.
+- The reactive editing implementation has a separate [deferred follow-up](../Roadmap/Reactive%20editing%20follow-up.md):
+  snapshot-provider mutation recovery, authoritative validation decisions, and live-provider/device
+  acceptance. These are not implied by the implemented projected inputs and writable parameters.
 
 ### A14 — Plans already written
 
@@ -290,9 +377,18 @@ consecutive green runs were re-established on 2026-09-20, which closed DEVENV-04
 
 ### A16 — A reachable datasource for the public demo
 
-WordFlower's InstantDB datasource points at `localhost:9020`, which no tester's phone can reach, so
-the sync demo cannot be shown to anyone outside this machine.
+`WordFlowerInstantDB` now selects an Instant Cloud datasource with a hard-coded app ID;
+`WordFlowerLocalInstantDB` preserves the `localhost:9020` fixture for development. Hosted app
+existence is confirmed. On 2026-09-22, a direct Expo web export of the hosted variant loaded an
+empty library, created a disposable workspace, retained it after reload, and delivered a second
+workspace to a second browser origin without reload. On 2026-09-23, the development build ran
+`WordFlowerInstantDB` on a connected iPhone: a phone-created workspace (`P923A`) appeared in an
+independent browser client, and a browser-created workspace (`B923A`) appeared on the phone after
+the app was relaunched. This accepts live hosted sync on a physical device; TestFlight installation
+and distribution remain separate release checks.
 
-- Waits on: Ro provisions a hosted InstantDB application (`R11`); the wiring and configuration do not.
+- Uses local Instant for development and Instant Cloud for the production demo (`R11`). Cloud
+  onboarding requires an existing account because new signups are closed, and the production demo
+  needs a migration before Instant Cloud shuts down on August 31, 2027.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`,
   `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`'s "InstantDB" section.

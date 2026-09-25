@@ -3,7 +3,7 @@
 // Every relationship carries an `origin`: `compiler` means it came from a resolved cross-reference or
 // declaration structure in the linked AST; `poc-derived` means a name-matching heuristic this PoC
 // applies (documented in `via`). Nothing here is a production graph, identity, or query design.
-import { ASTUtils } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST, type ParsedFile } from '@parser'
 import { type Diagnostic, FS, Switch } from '@shared'
 
@@ -348,7 +348,7 @@ export function buildSemanticSnapshot(
               ? target.target.ref
               : undefined
             const entity = entityOfValue(declaration)
-            for (const field of node.block.fields) {
+            for (const field of (node.block?.fields ?? [])) {
               if (field.label !== undefined) {
                 edge({
                   evidence: src(field),
@@ -360,10 +360,22 @@ export function buildSemanticSnapshot(
                 })
               }
             }
+            const sourceType = node.source ? Type.ofExpression(node.source) : undefined
+            const sourceEntity = sourceType ? Type.projectedEntityOf(sourceType) : undefined
+            for (const field of sourceType?.kind === 'item' ? sourceType.item?.dataFields ?? [] : []) {
+              edge({
+                evidence: src(node.source!),
+                from: actionId,
+                origin: 'compiler',
+                rel: 'writes',
+                to: `field:${sourceEntity?.singularName ?? '?'}.${field.name}`,
+                via: 'update input projection selects this entity field',
+              })
+            }
           } else if (AST.isCreateStatement(node)) {
             const entity = node.entity.ref
             if (entity !== undefined) {
-              for (const field of node.block.fields) {
+              for (const field of (node.block?.fields ?? [])) {
                 if (field.label !== undefined) {
                   edge({
                     evidence: src(field),

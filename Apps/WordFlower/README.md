@@ -63,7 +63,7 @@ If reflecting a Next decision reveals a **contradiction** — the decision canno
 - **`1 - Current/`** — the executable app sources and journey sidecars. `WordFlower.tao` remains the repository's canonical compile entry and fixed-point fixture for parser/validator/formatter tests; the directory as a whole exercises the implemented language surface.
 - **`2 - Next/`** — the sprint contract directory; the `WordFlower.tao-next` header lists the full tranche. A tranche may carry a flat `@tao-next/` scratch package while it develops a self-hosted stdlib contract. At absorption those declarations graduate into `packages/apps/stdlib/@tao`, imports return to their real stdlib paths, and the scratch package is deleted before the directory byte-identity gate arms.
 - **`3 - MVP/WordFlower.tao-mvp`** + test + `Justfile` — the full MVP target: three-level related data, every navigation family, dialogues with `ask`/`respond`, snapshots, `with` app variants, design tokens, a remote provider, functions, and the typed injection escape hatch. Its `Justfile` demonstrates every `tao` CLI capability the MVP release intends to ship.
-- **`4 - Revolution/WordFlower.tao-revolution`** + test + `Justfile` — intended functionality that is explicitly _not_ part of the MVP release, plus a TODO list at the top of the app file naming intended capabilities that do not yet have expressible syntax. Its `Justfile` demonstrates the CLI surface intended beyond the MVP. This tier is written directly to `Docs/Roadmap/Tao Revolution/Decisions.md` rather than to what ships today, so it may lead `2 - Next` and `1 - Current` in spelling; each such lead is a migration the tranche loop owes Current, and `3 - MVP` is derived from these spellings by omission. `4 - Revolution/Open questions.md` records what the decisions do not answer, as questions for Ro rather than invented syntax, and is the tier's fourth file.
+- **`4 - Revolution/WordFlower.tao-revolution`** + test + `Justfile` — intended functionality that is explicitly _not_ part of the MVP release, plus a TODO list at the top of the app file naming intended capabilities that do not yet have expressible syntax. Its `Justfile` demonstrates the CLI surface intended beyond the MVP. This tier is written directly to `Docs/Roadmap/Tao Revolution/Decisions.md` rather than to what ships today, so it may lead `2 - Next` and `1 - Current` in spelling; each such lead is a migration the tranche loop owes Current, and `3 - MVP` is derived from these spellings by omission. `4 - Revolution/Open questions.md` records what the decisions do not answer, as questions for the Developer rather than invented syntax, and is the tier's fourth file.
 
 ## Run and verify
 
@@ -80,19 +80,22 @@ just dev "Apps/WordFlower/1 - Current/WordFlower.tao" WordFlowerInstantDB
 The first three commands are automated verification paths. The final two commands launch the Expo
 development path for interactive use.
 
-`WordFlowerInstantDB` is the experimental synced variant. It expects the repository's local
-InstantDB fixture at `http://localhost:9020`, using its seeded app ID. Start that fixture before
-launching the variant:
+`WordFlowerInstantDB` is the experimental synced demo variant. It uses Instant Cloud with the
+hard-coded app ID in `WordFlower.tao`; it needs no local server. The hosted app must exist in the
+Instant dashboard before using this variant on a device.
+
+For local development, `WordFlowerLocalInstantDB` uses the repository's fixture at
+`http://localhost:9020` with the same seeded app ID. Start that fixture before launching it:
 
 ```sh
 just start-local-instantdb
-just dev "Apps/WordFlower/1 - Current/WordFlower.tao" WordFlowerInstantDB
+just dev "Apps/WordFlower/1 - Current/WordFlower.tao" WordFlowerLocalInstantDB
 ```
 
 Stop the fixture with `just stop-local-instantdb`. Its Docker volumes are preserved, so the next
 start keeps the local database.
 
-The configured `localhost` endpoints work from web and the iOS Simulator. A physical device or
+The local variant's `localhost` endpoints work from web and the iOS Simulator. A physical device or
 Android emulator needs endpoints using an address from which it can reach the Mac. The ordinary
 `WordFlower` app continues to use device-local storage.
 

@@ -19,6 +19,7 @@ import {
   taoJourneyTargetTimeoutMs,
   waitForTaoJourneyTarget,
 } from './TR-studio-journey'
+import { StudioLensHost, type TaoStudioLensRenderSample } from './TR-studio-lens'
 import { TaoStudioProtocolVersions } from './TR-studio-protocol'
 import RuntimeSwitch from './TR-switch'
 import type { TaoStudioIdentity } from './TR-TaoProps'
@@ -28,6 +29,23 @@ const studioProtocolChannel = TaoStudioProtocolVersions.channel
 const studioProtocolVersion = TaoStudioProtocolVersions.protocolVersion
 const studioSourceActionVersion = TaoStudioProtocolVersions.sourceActionVersion
 const studioRenderSelector = '[data-tao-studio]'
+
+type StudioPreviewDiagnostic = { at: number; detail?: string; stage: string }
+type StudioPreviewDiagnosticHost = typeof globalThis & {
+  __taoStudioPreviewDiagnostics?: StudioPreviewDiagnostic[]
+}
+
+function recordStudioPreviewStage(stage: string, detail?: string): void {
+  if (requireReactNativeRuntime().Platform?.OS !== 'web') {
+    return
+  }
+  const host = globalThis as StudioPreviewDiagnosticHost
+  const events = host.__taoStudioPreviewDiagnostics ??= []
+  events.push({ at: Date.now(), ...(detail === undefined ? {} : { detail }), stage })
+  if (events.length > 60) {
+    events.splice(0, events.length - 60)
+  }
+}
 
 /** StudioPreviewConfig is the explicit trusted context for one generated preview instance. */
 export type StudioPreviewConfig = {
@@ -160,6 +178,7 @@ export type StudioPreviewHost = {
   }
   window: {
     addEventListener: StudioPreviewWindowListener
+    getComputedStyle?: (element: StudioPreviewElement) => { getPropertyValue(property: string): string }
     removeEventListener: StudioPreviewWindowListener
   }
 }
@@ -275,8 +294,35 @@ function previewErrorMessage(error: unknown): string {
   return typeof error === 'string' ? error : String(error)
 }
 
+type StudioBootstrapIdentity = Readonly<{ appName: string; compileRevision: number; project: string }>
+
+/** A reloaded frame can receive a newer cell before Metro serves its matching publication. */
+function reconcileStudioCellBootstrap(
+  runtime: { identity?: Partial<StudioBootstrapIdentity> } | null | undefined,
+  publication: StudioBootstrapIdentity,
+  onNewerPublication: (revision: number) => void,
+): 'matched' | 'older' | 'newer' | 'incompatible' {
+  const identity = runtime?.identity
+  if (
+    identity?.appName !== publication.appName || identity.project !== publication.project
+    || typeof identity.compileRevision !== 'number'
+  ) {
+    return 'incompatible'
+  }
+  if (identity.compileRevision === publication.compileRevision) {
+    return 'matched'
+  }
+  if (identity.compileRevision < publication.compileRevision) {
+    return 'older'
+  }
+  onNewerPublication(identity.compileRevision)
+  return 'newer'
+}
+
 /** StudioPreview exposes the opt-in generated preview bridge. */
 export const StudioPreview = {
+  Bootstrap: { reconcile: reconcileStudioCellBootstrap },
+  Diagnostics: { record: recordStudioPreviewStage },
   ErrorBoundary: StudioPreviewErrorBoundary,
   Failure: StudioPreviewFailure,
   Pending: StudioPreviewPending,
@@ -308,6 +354,12 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
   React.useEffect(() => {
     let active = true
     const artifact = pending.current
+    recordStudioPreviewStage(
+      'replay-effect-start',
+      artifact === undefined
+        ? 'no replay'
+        : artifact.domains.map(domain => domain.domain).join(','),
+    )
     if (artifact === undefined) {
       setReady(true)
       return () => {
@@ -315,13 +367,17 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
       }
     }
     setReady(false)
-    void restoreRuntimeCapture(artifact).then(
+    void restoreRuntimeCapture(artifact, (domain, stage) => {
+      recordStudioPreviewStage(`replay-domain-${stage}`, domain)
+    }).then(
       () => {
+        recordStudioPreviewStage(active ? 'replay-ready' : 'replay-completed-after-superseded')
         if (active) {
           setReady(true)
         }
       },
       replayError => {
+        recordStudioPreviewStage('replay-error', previewErrorMessage(replayError))
         if (active) {
           setError(replayError)
         }
@@ -329,6 +385,7 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
     )
     return () => {
       active = false
+      recordStudioPreviewStage('replay-effect-superseded')
     }
   }, [replayKey])
   if (error !== undefined) {
@@ -350,6 +407,19 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
   ].join(':')
   const journeyReplayGate = React.useRef(createTaoJourneyReplayGate())
   const [journeyError, setJourneyError] = React.useState<unknown>()
+  const publishLens = React.useCallback((sample: TaoStudioLensRenderSample) => {
+    const host = browserPreviewHost()
+    const sourceVersion = sourceVersionFor(props.config, sample.identity.sourcePath)
+    if (host !== undefined && sourceVersion !== undefined) {
+      postToStudio(host, props.config, 'preview-lens-render', {
+        sample: {
+          ...sample,
+          resolvedStyle: resolvedStudioStyle(host, sample.identity),
+          sourceVersion,
+        },
+      })
+    }
+  }, [props.config])
   React.useEffect(() => mountStudioPreviewBridge(props.config, undefined, captureFixture), [
     captureFixture,
     props.config,
@@ -388,7 +458,52 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
   if (journeyError !== undefined) {
     return createElement(StudioPreviewFailure, { error: journeyError })
   }
-  return createElement(React.Fragment, null, props.children)
+  return createElement(StudioLensHost, { publish: publishLens }, props.children)
+}
+
+/** Reads the browser's final public CSS values after React commits the selected occurrence. */
+export function resolvedStudioStyle(
+  host: StudioPreviewHost,
+  identity: TaoStudioIdentity,
+): Readonly<Record<string, string>> | undefined {
+  if (host.window.getComputedStyle === undefined) {
+    return undefined
+  }
+  const elements = allRenderTargets(host)
+    .filter(target => renderId(target.identity) === renderId(identity))
+    .map(target => target.element)
+  if (elements.length === 0) {
+    return undefined
+  }
+  const properties = [
+    'background-color',
+    'border-radius',
+    'color',
+    'display',
+    'flex-direction',
+    'font-size',
+    'font-weight',
+    'gap',
+    'line-height',
+    'opacity',
+    'padding-bottom',
+    'padding-left',
+    'padding-right',
+    'padding-top',
+  ]
+  const styles = elements.map(element => {
+    const computed = host.window.getComputedStyle!(element)
+    const values = properties.flatMap(property => {
+      const value = computed.getPropertyValue(property).trim()
+      return value.length > 0 && value.length <= 128 ? [[property, value] as const] : []
+    })
+    return Object.fromEntries(values) as Readonly<Record<string, string>>
+  })
+  const first = styles[0]!
+  return Object.keys(first).length > 0
+      && styles.every(style => properties.every(property => style[property] === first[property]))
+    ? first
+    : undefined
 }
 
 /** replayStudioJourney drives a scenario prefix in the live browser preview through DOM events. */

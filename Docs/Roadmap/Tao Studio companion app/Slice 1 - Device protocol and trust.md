@@ -185,21 +185,21 @@ WS   /events                         gains `device-state` events carrying the st
 ```
 
 `GET /api/device/launch` and `launch/open` are served only when `runStudioDev` injects the
-physical-device launcher from `packages/dev`; a packaged Studio without it answers 501.
+physical-device launcher from `packages/ides/studio-tooling`; a packaged Studio without it answers 501.
 
 ## Module ownership
 
-| Concern                                           | Module                                                                            |
-| ------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Wire types, limits, codes, parsers                | `packages/apps/runtime/TaoRuntime-src/TR-studio-device-protocol.ts`               |
-| Identity, transcript, keys, code, seal/open       | `packages/apps/runtime/TaoRuntime-src/TR-studio-device-trust.ts`                  |
-| Device client state machine and native host       | `TR-studio-device-client.ts`, `TR-studio-device-host.tsx`, `TR.Studio.DeviceHost` |
-| Gateway, trust store, status snapshot             | `packages/ides/studio/studio-src/device/*`                                        |
-| Loopback routes and `device-state` events         | `packages/ides/studio/studio-src/StudioServer.ts`                                 |
-| Workbench button/popover                          | `packages/ides/studio/studio-src/client/StudioDevicePanel.ts`                     |
-| Physical-device discovery, install, open, URL, QR | `packages/dev/dev-src/studio/StudioCompanionDevice.ts`, `StudioDeviceLaunch.ts`   |
-| Companion shell                                   | `packages/ides/studio-companion-app/`                                             |
-| Process wiring and preview-runtime manifest       | `packages/dev/dev-src/studio/StudioDev.ts`, `StudioPreviewRuntime.ts`             |
+| Concern                                           | Module                                                                                              |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Wire types, limits, codes, parsers                | `packages/apps/runtime/TaoRuntime-src/TR-studio-device-protocol.ts`                                 |
+| Identity, transcript, keys, code, seal/open       | `packages/apps/runtime/TaoRuntime-src/TR-studio-device-trust.ts`                                    |
+| Device client state machine and native host       | `TR-studio-device-client.ts`, `TR-studio-device-host.tsx`, `TR.Studio.DeviceHost`                   |
+| Gateway, trust store, status snapshot             | `packages/ides/studio/studio-src/device/*`                                                          |
+| Loopback routes and `device-state` events         | `packages/ides/studio/studio-src/StudioServer.ts`                                                   |
+| Workbench button/popover                          | `packages/ides/studio/studio-src/client/StudioDevicePanel.ts`                                       |
+| Physical-device discovery, install, open, URL, QR | `packages/ides/studio-tooling/studio-tooling-src/StudioCompanionDevice.ts`, `StudioDeviceLaunch.ts` |
+| Companion shell                                   | `packages/ides/studio-companion-app/`                                                               |
+| Process wiring and preview-runtime manifest       | `packages/ides/studio-tooling/studio-tooling-src/StudioDev.ts`, `StudioPreviewRuntime.ts`           |
 
 ## Proof record - 2026-09-03
 
@@ -324,7 +324,7 @@ What the launcher does today is still Wi-Fi-only by construction: `orderMetroHos
 `candidates[0]`, so with Wi-Fi up the cable is never offered. Reaching it means building the URL by
 hand, as that proof did.
 
-**That is now a deliberate default, not an oversight.** Ro's call: a session bound to Wi-Fi survives
+**That is now a deliberate default, not an oversight.** The Developer's call: a session bound to Wi-Fi survives
 plugging and unplugging the cable, while one bound to `169.254.x.x` dies the moment the cable comes
 out — the address is transient and comes back different on the next connection (two measurements an
 hour apart: `169.254.217.159`, then `169.254.61.95`). Preferring the cable would trade a stable

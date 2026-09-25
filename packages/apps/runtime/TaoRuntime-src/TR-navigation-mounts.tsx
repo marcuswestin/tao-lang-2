@@ -1,7 +1,7 @@
 import React from 'react'
 import { Arrays } from './core/RuntimeCore'
 import { accessibilityStateProps } from './TR-accessibility'
-import { AppSurfaceFrame } from './TR-app-shell'
+import { AppSurfaceFrame, AppSurfaceFrameDefaults, type SafeAreaEdge } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
 import { createElement } from './TR-create-element'
 import { UserInputError } from './TR-errors'
@@ -30,6 +30,7 @@ import type {
 } from './TR-navigation-restoration-state'
 import type { PresentableEntry } from './TR-navigation-state'
 import {
+  LevelHiddenContext,
   navigationHostStyle,
   NavigationLevel,
   navigationProps,
@@ -105,6 +106,16 @@ export class RuntimeSplitNav extends RuntimeNavigationValue {
     return createElement(SplitNavSurface, { navigation: this, taoProps })
   }
 
+  /**
+   * ownsWindowSurface: a split always takes true window bounds and frames each pane itself (see
+   * SplitNavSurface), so a sidebar and its detail scroll independently and a pane whose navigator
+   * frames its own screens is never framed twice (decided 2026-09-22). One frame around the whole
+   * split would scroll the panes as one and leave a stack pane's screens with no definite height.
+   */
+  override ownsWindowSurface(): boolean {
+    return true
+  }
+
   protected snapshotRestorationContent(codec: TaoNavigationRestorationCodec): TaoNavigationContentSnapshot {
     return {
       items: Object.fromEntries(
@@ -147,13 +158,21 @@ function SplitNavSurface(props: { navigation: RuntimeSplitNav; taoProps?: TaoPro
   const children: React.ReactNode[] = []
   items.forEach(([key, item], index) => {
     const region = splitPaneRegion(props.navigation.name, key, () => (widths[index] ?? 0) > 0)
+    const content = renderPresentable(item.content, {}, navigationProps(props.taoProps, props.navigation))
+    // Every pane is framed here unless its content frames its own screens — read live, so a pane's
+    // `SlotNav` that presents a plain view is framed while it shows it. Either way a pane meets the
+    // window on its outer side alone: the top and bottom edges always, the left edge in the first
+    // pane, the right edge in the last.
+    const paneContent = createElement(
+      AppSurfaceFrameDefaults.Provider,
+      { edges: splitPaneEdges(index, items.length) },
+      paneOwnsWindow(item.content)
+        ? content
+        : createElement(AppSurfaceFrame, { children: content, taoProps: props.taoProps }),
+    )
     children.push(createElement(runtime.View, {
       ...regionNativeProps(region),
-      children: createElement(
-        OutlineRegionScope,
-        { region },
-        renderPresentable(item.content, {}, navigationProps(props.taoProps, props.navigation)),
-      ),
+      children: createElement(OutlineRegionScope, { region }, paneContent),
       key,
       style: { flexBasis: widths[index], flexGrow: 0, flexShrink: 0 },
     }))
@@ -218,6 +237,19 @@ function SplitNavSurface(props: { navigation: RuntimeSplitNav; taoProps?: TaoPro
     }))
   })
   return createElement(runtime.View, { children, style: { flex: 1, flexDirection: 'row' } })
+}
+
+function paneOwnsWindow(content: TaoSplitNavConfiguration['items'][string]['content']): boolean {
+  return isNavigation(content) && content.ownsWindowSurface()
+}
+
+function splitPaneEdges(index: number, count: number): readonly SafeAreaEdge[] {
+  return [
+    'bottom',
+    'top',
+    ...(index === 0 ? ['left' as const] : []),
+    ...(index === count - 1 ? ['right' as const] : []),
+  ]
 }
 
 function numericWidth(width: SplitWidthBinding): number {
@@ -511,6 +543,19 @@ export class RuntimeSlotNav extends RuntimeNavigationValue {
     }
     // Initial content presents and dismisses through this slot, exactly like presented content.
     return renderPresentable(this.descriptor.config.initial, {}, navigationProps(taoProps, this))
+  }
+
+  /**
+   * ownsWindowSurface delegates to the slot's showing content: `present` only ever hands this slot
+   * a plain view, but `Initial` may be a nested window-owning navigator, and that navigator already
+   * frames its own screens — an enclosing AppSurfaceFrame here would inset its content twice.
+   */
+  override ownsWindowSurface(): boolean {
+    if (this.presented) {
+      return false
+    }
+    const initial = this.descriptor.config.initial
+    return isNavigation(initial) && initial.ownsWindowSurface()
   }
 }
 
@@ -808,6 +853,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
                     entry.arguments,
                     this.entryTaoProps(item, taoProps),
                   ),
+                  fill: isNavigation(entry.presentable) && entry.presentable.ownsWindowSurface(),
                   hidden: item.key !== this.activeKey || index !== item.entries.length - 1,
                   key: `${item.key}-${entry.instanceId}`,
                   region: presentedOccurrenceRegion(this, entry, 'content'),
@@ -854,11 +900,14 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
         ...this.items.map(item =>
           createElement(runtime.View, {
             accessibilityElementsHidden: item !== active,
-            children: this.itemEntryLevels(item, {
-              ...taoProps,
-              navigationBottomInset: toggleBarContentInset(),
-              navigationChrome: item.chrome,
-            }, false),
+            children: createElement(LevelHiddenContext.Provider, {
+              children: this.itemEntryLevels(item, {
+                ...taoProps,
+                navigationBottomInset: toggleBarContentInset(),
+                navigationChrome: item.chrome,
+              }, false),
+              hidden: item !== active,
+            }),
             importantForAccessibility: item === active ? 'auto' : 'no-hide-descendants',
             key: item.key,
             style: item === active ? toggleItemStyle : hiddenToggleItemStyle,
@@ -926,16 +975,23 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
           children: renderPresentable(entry.presentable, entry.arguments, presentableTaoProps),
           fill: ownsWindow,
           hidden: index !== item.entries.length - 1,
-          ...(ownsWindow ? { key: `${item.key}-${entry.instanceId}` } : {}),
           region: presentedOccurrenceRegion(this, entry, 'content'),
         })
-        return ownsWindow ? level : createElement(AppSurfaceFrame, {
-          bottomInset: navigationBottomInset,
-          children: level,
-          key: `${item.key}-${entry.instanceId}`,
-          nativeInsets,
-          taoProps: entryTaoProps,
-        })
+        // A window-owning entry frames its own screens; inside a native screen those frames take
+        // the platform's insets, as the frame this item would otherwise draw around it does.
+        return ownsWindow
+          ? createElement(AppSurfaceFrameDefaults.Provider, {
+            children: level,
+            key: `${item.key}-${entry.instanceId}`,
+            nativeInsets,
+          })
+          : createElement(AppSurfaceFrame, {
+            bottomInset: navigationBottomInset,
+            children: level,
+            key: `${item.key}-${entry.instanceId}`,
+            nativeInsets,
+            taoProps: entryTaoProps,
+          })
       }),
     )
   }

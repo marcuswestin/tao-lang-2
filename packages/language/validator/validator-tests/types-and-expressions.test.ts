@@ -3,6 +3,7 @@ import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import { Diagnostics, FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { dataWriteValidationMessages } from '../validator-src/validators/data-write-validator'
 import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalCoreValidator'
 import { InvocationsValidator } from '../validator-src/validators/invocations-validator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
@@ -20,6 +21,155 @@ import {
 const invocationValidationMessages = InvocationsValidator.messages
 
 Describe('validator: types and expressions', () => {
+  Test(
+    'rejects direct copies of behavior-wrapper values',
+    rejects(
+      app(
+        'let ViewCopy = copy Target\nrender Target()',
+        `
+        view Target() { render Empty() }
+        view NavOwner(Navigation nav) { let NavCopy = copy Navigation render Empty() }
+        ${stubView('Empty')}
+      `,
+      ),
+      typeValidationMessages.copyUnsupportedValue('view'),
+      typeValidationMessages.copyUnsupportedValue('nav'),
+    ),
+  )
+
+  Test(
+    'rejects copy parameters for behavior-wrapper values while allowing actions',
+    rejects(
+      app(
+        'render Wrapper(Target)',
+        `
+        view Target() { render Empty() }
+        view Wrapper(copy Value view) { render Empty() }
+        ${stubView('Empty')}
+      `,
+      ),
+      typeValidationMessages.copyUnsupportedValue('view'),
+    ),
+  )
+
+  Test(
+    'allows direct copies of action atoms',
+    accepts(app('action Save() { }\nlet Snapshot = copy Save\nrender Empty()', stubView('Empty'))),
+  )
+
+  Test(
+    'accepts copied projected inputs and bulk data updates',
+    accepts(`
+      data Documents / Document { Title text Body text Owner text CreatedAt time }
+      type DocumentInput is Document { Title, Body }
+      type DraftFields is { Title text, Body text }
+      app EditorApp { view Main }
+      view Main() { render Empty() }
+      view Editor(Document) {
+        state Input = copy Document as DocumentInput
+        let Draft = DraftFields { Title: "Draft", Body: "" }
+        state FromDraft = copy Draft as DocumentInput
+        let DraftInput = DocumentInput { Title: "Draft", Body: "" }
+        action Save() { update Document with Input }
+        render Empty()
+      }
+      ${stubView('Empty')}
+    `),
+  )
+
+  Test(
+    'accepts entity write-status members',
+    accepts(`
+      data Documents / Document { Title text }
+      app EditorApp { view Main }
+      view Main() { render Empty() }
+      view Editor(Document) {
+        let Queued = Document.WritesQueued
+        let Failed = Document.WritesFailed
+        let Error = Document.WriteError
+        let CanRetry = Document.CanRetryWrites
+        render Empty()
+      }
+      ${stubView('Empty')}
+    `),
+  )
+
+  Test(
+    'rejects invalid projected input fields and bulk updates from another entity',
+    rejects(
+      `
+        data Documents / Document { Title text }
+        data Accounts / Account { Name text }
+        type BadInput is Document { Missing, Missing }
+        type AccountInput is Account { Name }
+      app EditorApp { view Main }
+      view Main() { render Empty() }
+        view Editor(Document, Account) {
+          state Input = copy Account as AccountInput
+          action Save() { update Document with Input }
+          render Empty()
+        }
+        ${stubView('Empty')}
+      `,
+      typeValidationMessages.projectedItemField('Document', 'Missing'),
+      typeValidationMessages.duplicateProjectedItemField('Missing'),
+      "Update of 'Document' expects an input item copied from that entity.",
+    ),
+  )
+
+  Test(
+    'rejects incompatible copy targets and projected input widening',
+    rejects(
+      `
+        data Documents / Document { Title text Body text }
+        type DocumentInput is Document { Title, Body }
+        type TitleInput is Document { Title }
+        app EditorApp { view Main }
+        view Main() { render Empty() }
+        view Editor(Document) {
+          state Scalar = copy "bad" as number
+          state Narrow = copy Document as TitleInput
+          state Wide = copy Narrow as DocumentInput
+          render Empty()
+        }
+        ${stubView('Empty')}
+      `,
+      typeValidationMessages.typeFixIncompatible('number'),
+      typeValidationMessages.copyInputField('DocumentInput', 'Body'),
+    ),
+  )
+
+  Test(
+    'rejects bulk updates that select an inverse relation',
+    rejects(
+      `
+        data Parents / Parent { Children (owned) }
+        data Children / Child { Parent }
+        type ParentInput is Parent { Children }
+        app EditorApp { view Main }
+        view Main() { render Empty() }
+        view Editor(Parent) {
+          state Input = copy Parent as ParentInput
+          action Save() { update Parent with Input }
+          render Empty()
+        }
+        ${stubView('Empty')}
+      `,
+      dataWriteValidationMessages.updateInputField('Parent', 'Children'),
+    ),
+  )
+
+  Test(
+    'rejects retry without a data row target',
+    rejects(
+      app(
+        'let Target = 1 action Save() { retry Target } render Empty()',
+        stubView('Empty'),
+      ),
+      dataWriteValidationMessages.rowTarget('retry'),
+    ),
+  )
+
   Test('infers primitive expression types', async () => {
     await withValidationParse(
       app('', 'let Greeting = "Hello" let Count = 3'),
@@ -128,7 +278,7 @@ Describe('validator: types and expressions', () => {
       `
         type Person is { Name text, Role text is "member" }
         type Admin is Person with { Role is "admin", Access number is 1 }
-        let Admin = { Name "Ro" }
+        let Admin = { Name "the Developer" }
         let Renamed = Admin with { Name "Grace", Access 2 }
       `,
       'render Text(Renamed.Name)',
@@ -154,7 +304,7 @@ Describe('validator: types and expressions', () => {
     rejects(
       typeApp(`
         type Person is { Name text, Kind is "person" }
-        let Person = { Name "Ro" }
+        let Person = { Name "the Developer" }
         let Invalid = Person with { Kind "admin" }
       `),
       typeValidationMessages.filledProperty('Kind'),
@@ -453,7 +603,7 @@ Describe('validator: types and expressions', () => {
       view Target() { action Flip() { toggle Ready } render Empty() }
       ${stubView('Empty')}
     `,
-      "No state named 'Ready' is in scope.",
+      "No state or parameter named 'Ready' is in scope.",
     ),
   )
 

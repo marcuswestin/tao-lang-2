@@ -1,8 +1,40 @@
+const os = require('node:os')
+// The Tao CLI passes its bounded cache directory explicitly. A direct Jest invocation gets a
+// checkout-scoped cache too, instead of writing into the machine-wide jest_dx directory.
+const defaultCacheDirectory = `${os.homedir()}/.cache/tao/jest-standalone/${
+  Buffer.from(__dirname).toString('base64url')
+}`
+
+// The per-journey budget an uncontended machine keeps. A Tao journey compiles and renders a whole
+// app, so its floor sits far above Jest's five-second default.
+const JOURNEY_BUDGET_MS = 30_000
+// Past this a deadline no longer tells a starved journey from a hung one. It sits under the Bun
+// runner's 120s ceiling on purpose: tao test runs Jest inside a Bun test, and the inner bound has
+// to fire first so the journey, not the test around it, is what the report names.
+const MAX_JOURNEY_DEADLINE_MS = 90_000
+
+/**
+ * Jest's deadline is wall time: the work a journey did plus the time it spent off CPU waiting for
+ * the rest of the machine. Held fixed, it judges a journey by how busy the host is — one tutorial
+ * journey ran 50s and was killed at a flat 30s with the load average at 52 on 18 CPUs, and passed
+ * alone. So the budget stays fixed and only the deadline stretches by the run-queue depth, the way
+ * the repository's Bun runner already does (`TestRunner.ts`, `starvationAdjustedTimeoutMs`), with
+ * the same allowance for the one-minute average lagging the load a test is feeling.
+ */
+function starvationAdjustedTimeoutMs(budgetMs) {
+  const observed = os.loadavg()[0] / Math.max(1, os.cpus().length) * 2
+  return Math.min(Math.round(budgetMs * Math.max(observed, 1)), MAX_JOURNEY_DEADLINE_MS)
+}
+
 function createRuntimeJestConfig(options) {
   const dependencyRoot = process.env.TAO_TEST_NODE_MODULES_ROOT ?? '<rootDir>/node_modules'
   return {
     preset: 'jest-expo',
-    testTimeout: options.testTimeout ?? 30_000,
+    cacheDirectory: process.env.TAO_TEST_JEST_CACHE_DIRECTORY ?? defaultCacheDirectory,
+    // Generated Tao apps may live outside the package's ancestor chain. Resolve workspace packages
+    // from this runtime package's installed links.
+    modulePaths: ['<rootDir>/node_modules'],
+    testTimeout: starvationAdjustedTimeoutMs(options.testTimeout ?? JOURNEY_BUDGET_MS),
     testMatch: options.testMatch,
     // Jest builds the file map it discovers tests from by crawling `roots`, and `roots` defaults to
     // `rootDir` — this whole package. `rootDir` also holds `_gen_tao-app-test`, the cache of
@@ -35,6 +67,10 @@ function createRuntimeJestConfig(options) {
       '^react-native$': `${dependencyRoot}/react-native`,
       '^react-native-safe-area-context$': '<rootDir>/expo-host-tests/safe-area-context-mock.tsx',
       '^@react-native-async-storage/async-storage$': '<rootDir>/expo-host-tests/async-storage-mock.ts',
+      // Tao journeys exercise the portable controls. Installed optional native hosts are present
+      // on development machines but cannot provide their device UI through react-test-renderer.
+      '^@(react-native-community/(datetimepicker|slider)|react-native-picker/picker|react-native-segmented-control/segmented-control)$':
+        '<rootDir>/expo-host-tests/optional-native-host-mock.cjs',
     },
     // Bun isolated installs put React Native's ESM Jest setup under node_modules/.bun,
     // outside the path shape handled by jest-expo's default transform allowlist.
@@ -42,4 +78,4 @@ function createRuntimeJestConfig(options) {
   }
 }
 
-module.exports = { createRuntimeJestConfig }
+module.exports = { MAX_JOURNEY_DEADLINE_MS, createRuntimeJestConfig }

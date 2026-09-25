@@ -18,7 +18,7 @@ and are not questions. A fourth looked like one and was not — it is Q9.
 
 **Decided but unused:** `access`, `audience`, `transaction`, `publish`, `presence` (§3, §4).
 
-This is already Ro's tracked decision **R5** in `Docs/MVP Roadmap/Ro MVP Roadmap.md`, whose standing
+This is already the Developer's tracked decision **R5** in `Docs/MVP Roadmap/Developer MVP Roadmap.md`, whose standing
 recommendation is to defer the cluster to the app expansion with Skillet. It is repeated here only
 because it is the one open question that changes what this file contains: if the cluster enters MVP
 through collaborative WordFlower workspaces, the forcing feature lives in this tier and this tier has
@@ -50,7 +50,7 @@ ladder has already leaked into a section that postdates §1.
 This tier is written to §1, which is cheap here because it is one file: the `workspace` and `package`
 markers are gone, only `file` and `public` remain, and everything the test file imports is unmarked
 and therefore folder-visible. That is not cheap in `1 - Current`, where `@ui/`, `@nav/`, and `@data/`
-are real package folders using the wider ladder, so the migration is real and the decision is Ro's.
+are real package folders using the wider ladder, so the migration is real and the decision is the Developer's.
 
 ## Q3 — Which nav kinds are decided?
 

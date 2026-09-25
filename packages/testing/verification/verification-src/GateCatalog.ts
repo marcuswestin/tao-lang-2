@@ -120,6 +120,8 @@ const DEFAULT_METADATA: GateMetadata = { cost: 1, reads: ['gen-app', 'gen-ide', 
 export type SuiteTuning = {
   /** Extra runner arguments: Bun's `--concurrent`, a longer per-test timeout. */
   args?: readonly string[]
+  /** First-run split for a suite whose measured whole-process cost makes a cold serial run expensive. */
+  coldShardCount?: number
   /** Env keys a runner that would otherwise size itself to the machine reads its width from. */
   budgetEnvKeys?: readonly string[]
   /** Width one unsharded process of this suite reserves. */
@@ -154,9 +156,9 @@ const BUN_SUITE_FIXED_MS = 600
 const BUDGET_KEY_TAO_TEST = WorkGraph.BUDGET_ENV_KEYS.taoTest
 
 /**
- * SUITE_TUNING is the suite half of this table. Shard counts are not here: they are derived per
- * checkout from the recorded per-file costs in the test ledger and the recorded suite duration in
- * the timings store, because a hand-written count goes stale the first time a suite grows.
+ * SUITE_TUNING is the suite half of this table. Measured shard counts are derived per checkout from
+ * recorded duration and per-file costs. Only the two expensive suites with verified cold-start
+ * measurements have a fallback width for a new worktree without local timing history.
  */
 const SUITE_TUNING = new Map<string, SuiteTuning>([
   ['compiler', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
@@ -172,21 +174,28 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // reports each test's duration as the time from the file's shared start, so every concurrent
   // suite is bounded that way and the hand-written `--timeout=60000` that used to sit here said
   // only what the flag already implies.
-  ['dev', { args: ['--concurrent'], cost: 2, shardable: false }],
+  ['cli/dev-cli', { args: ['--concurrent'], cost: 2, shardable: false }],
+  ['cli/agent-cli', { args: ['--concurrent'], cost: 2, shardable: false }],
   ['testing/verification', { args: ['--concurrent'], cost: 2, shardable: false }],
+  ['ides/studio-tooling', { args: ['--concurrent'], cost: 2, shardable: false }],
   ['ides/ide-extension', { args: ['--concurrent'], reads: ['gen-ide', 'gen-parser', 'tao', 'ts'] }],
   // expo-host tests spawn full tsc typechecks per test; under parallel suite load these exceed
   // Bun's 5s default per-test timeout, which kills the tsc child and fails the test on its empty
-  // output.
-  [
-    'apps/expo-host',
-    { args: ['--timeout=60000'], cost: 2, reads: ['gen-parser', 'tao', 'ts'], shardCost: 2 },
-  ],
+  // output. That is exactly the case `TestRunner`'s own per-test deadline now stretches for by load,
+  // so a hand-written `--timeout=60000` here would no longer say more than the default already does
+  // — and under enough load it says less, since the computed deadline can pass 60,000 while this one
+  // could not.
+  ['apps/expo-host', { cost: 2, reads: ['gen-parser', 'tao', 'ts'], shardCost: 2 }],
   // Its tests lower and validate whole starter projects, which is seconds of real work per test.
   // Bun's five-second default was calibrated when this suite was one process beside a handful of
   // others; sharded, and beside every other suite in the lane, a healthy test can sit behind other
-  // work for longer than that and be killed for it. The bound is a hang guard, not a budget.
-  ['cli/tao-cli', { args: ['--timeout=60000'] }],
+  // work for longer than that and be killed for it. That is starvation, not a hang, so it is the
+  // computed deadline's question to answer rather than a fixed number chosen once and left behind as
+  // the floor beneath it rose.
+  // A quiet complete run of the pre-rename suite used 13 shards and finished with a 32s longest
+  // shard. An unmeasured new worktree otherwise runs all 47 files in one 100s+ process, and busy
+  // runs cannot teach wall-time history. Start below that measured width until this tree learns.
+  ['cli/tao-cli', { coldShardCount: 8 }],
   ['language/validator', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
 
   // Jest's own worker pool already parallelizes the whole run, so splitting it into single-worker
@@ -197,24 +206,26 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
     'runtime-jest',
     { cost: 3, priority: 4, reads: ['gen-parser', 'tao', 'ts'], shardable: false },
   ],
-  // The Tao behavior tests are a `./tao test` process that loads the language services, validates
-  // and compiles the apps it was given across its own compiler worker pool, and runs one Jest pass.
+  // The Tao behavior tests validate and compile once per lane, then each `./tao test` shard runs
+  // Jest against its own app roots in the shared compiled run.
   // Unlike Jest's, that pool parallelizes the compile and not the run, so the suite does shard, and
   // roots are what `./tao test` takes. Measured: the whole corpus in one process is 49.7s, and the
   // same corpus as two concurrent halves is 27.8s — 44% less wall for 13% more CPU, which is the
-  // trade this scheduling exists to make. `fixedMs` is the measured language-service load
-  // (`./tao test Apps/HNReader`, one journey, is 6.0s) and it is what caps the count; shrinking it
-  // is what the workspace daemon would change, and it would raise the cap as well.
+  // trade this scheduling exists to make. The compile is now one prepare node, so shard startup
+  // is the warm CLI overhead: a 3.58s WordFlower run spent 2.76s in Jest, leaving about 0.8s.
   [
     'tao-apps',
     {
       budgetEnvKeys: [BUDGET_KEY_TAO_TEST],
+      // Two app-root shards cut a measured 49.7s whole run to 27.8s with modest extra CPU. A new
+      // worktree uses that conservative split before it has trustworthy local timing history.
+      coldShardCount: 2,
       cost: 8,
-      fixedMs: 6_000,
+      fixedMs: 800,
       priority: 5,
       reads: ['gen-parser', 'tao', 'ts'],
       serial: false,
-      // One shard still spawns a compiler worker beside its own Jest pass.
+      // One shard runs its own Jest pass against the lane's compiled corpus.
       shardCost: 2,
     },
   ],
@@ -280,6 +291,8 @@ const GUI_PRIORITY = 6
  * edge is free and in-process; the lease is what reaches outside this one lane.
  */
 const GUI_RESOURCE = 'gui'
+/** Both gates open the checked-in HNReader project, which permits one dev-session owner. */
+const HNREADER_PROJECT_RESOURCE = 'studio-hnreader-project'
 
 /** studioLane is the shape every browser or native UI node shares. */
 function studioLane(resources?: readonly string[]): GateMetadata {
@@ -387,29 +400,47 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       },
     ],
 
-    // The browser smokes are parallel-safe on the worker indices the pool hands them; the native
-    // shell and the canary contend on the window server, which is what `gui` names. Each smoke
-    // gate is named for the public recipe that runs the same file by hand.
-    ['studio-smoke', studioSmoke('studio-smoke', 'packages/dev/studio-smoke/studio-launch.test.ts')],
+    // Browser smokes have separate ports and artifacts, but the launch smoke and canary both open
+    // HNReader and must share its project resource. The native shell and canary also contend on
+    // the window server, which is what `gui` names. Each smoke gate is named for its public recipe.
+    [
+      'studio-smoke',
+      studioSmoke('studio-smoke', 'packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts', {
+        resources: [HNREADER_PROJECT_RESOURCE],
+      }),
+    ],
     [
       'studio-proof-real-app',
-      studioSmoke('studio-proof-real-app', 'packages/dev/studio-smoke/studio-real-app.test.ts'),
+      studioSmoke('studio-proof-real-app', 'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts'),
     ],
     [
       'studio-smoke-simulated-user',
-      studioSmoke('studio-smoke-simulated-user', 'packages/dev/studio-smoke/studio-simulated-user.test.ts'),
+      studioSmoke(
+        'studio-smoke-simulated-user',
+        'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
+      ),
     ],
     [
       'keyboard-navigation-smoke',
-      studioSmoke('keyboard-navigation-smoke', 'packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts'),
+      studioSmoke(
+        'keyboard-navigation-smoke',
+        'packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts',
+      ),
     ],
     [
       'studio-dialog-browser',
-      studioSmoke('studio-dialog-browser', 'packages/dev/studio-smoke/studio-dialog-browser.test.ts'),
+      studioSmoke('studio-dialog-browser', 'packages/ides/studio-tooling/studio-smoke/studio-dialog-browser.test.ts'),
     ],
     [
       'studio-agent-browser',
-      studioSmoke('studio-agent-browser', 'packages/dev/studio-smoke/studio-agent-browser.test.ts'),
+      studioSmoke('studio-agent-browser', 'packages/ides/studio-tooling/studio-smoke/studio-agent-browser.test.ts'),
+    ],
+    [
+      'studio-network-simulation',
+      studioSmoke(
+        'studio-network-simulation',
+        'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts',
+      ),
     ],
     // The two `gui` nodes cannot overlap each other, so together they are a ~21s serial floor of
     // their own. They start at t=0 for that reason, ahead of work that can be packed later. `gui` is
@@ -419,10 +450,14 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     [
       'studio-smoke-native',
       {
-        ...studioSmoke('studio-smoke-native', 'packages/dev/studio-smoke/studio-simulated-user.test.ts', {
-          native: true,
-          resources: [GUI_RESOURCE],
-        }),
+        ...studioSmoke(
+          'studio-smoke-native',
+          'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts',
+          {
+            native: true,
+            resources: [GUI_RESOURCE],
+          },
+        ),
         priority: GUI_PRIORITY,
       },
     ],
@@ -431,7 +466,11 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     // takes ~10s. The bound stays so a regression fails the node instead of holding the lane open.
     [
       'studio-canary',
-      { ...studioLane([GUI_RESOURCE]), priority: GUI_PRIORITY, timeoutMs: STUDIO_CANARY_TIMEOUT_MS },
+      {
+        ...studioLane([GUI_RESOURCE, HNREADER_PROJECT_RESOURCE]),
+        priority: GUI_PRIORITY,
+        timeoutMs: STUDIO_CANARY_TIMEOUT_MS,
+      },
     ],
   ])
 }

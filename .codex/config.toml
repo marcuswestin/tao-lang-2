@@ -1,11 +1,15 @@
 # Repo-local filesystem, network, and approval settings for Tao development.
 # Git metadata writes outside the worktree are routed through Auto-review.
 #
+# Tracked so a new worktree has its permission profile before setup or session hooks run.
+# Unix socket entries must be absolute; setup refreshes those machine-specific values.
+# Review any resulting config diff before committing it on another machine.
+#
 # Generated with .codex/rules/tao.rules by `./agent setup` from .rulesync/permissions.jsonc
 # and .rulesync/profiles.jsonc. Edit those canonical files, not either generated Codex output:
 # rulesync's own Codex translator cannot express loopback binding, Unix sockets, or a
 # curated domain allowlist, so this profile is rendered by
-# packages/dev/dev-src/agent-config/CodexConfigGenerator.ts instead.
+# packages/cli/agent-cli/agent-cli-src/agent-config/CodexConfigGenerator.ts instead.
 #
 # The sibling .codex/hooks.json is generated from .rulesync/hooks.jsonc by the same setup and
 # runs `./agent setup` when a session starts, the one setup entry Worktrunk (.config/wt.toml),
@@ -28,7 +32,7 @@ network_proxy = true
 # agents/skills/delegation/SKILL.md, which is the one place this repository spells a model name.
 [agents]
 enabled = true
-default_subagent_model = "gpt-5.6-terra"
+default_subagent_model = "gpt-6-sol"
 default_subagent_reasoning_effort = "medium"
 max_concurrent_threads_per_session = 5
 
@@ -95,14 +99,6 @@ description = "Tao worktree: write the workspace, read the reference repo, reach
 "~/Library/Caches" = "write"
 # The previous repository is reference material only (see AGENTS.md).
 "~/code/tao-lang" = "read"
-"~/.aws/**" = "deny"
-"~/.config/gh/**" = "deny"
-"~/.ssh/**" = "deny"
-
-[permissions.tao-workspace.filesystem.":workspace_roots"]
-# Not `.env*`: that pattern also matches this repository's own `.envrc`.
-"**/.env" = "deny"
-"**/.env.*" = "deny"
 
 [permissions.tao-workspace.network]
 enabled = true
@@ -111,7 +107,7 @@ allow_local_binding = true
 
 [permissions.tao-workspace.network.unix_sockets]
 "/nix/var/nix/daemon-socket/socket" = "allow"
-"/Users/ro/.local/state/watchman/ro-state/sock" = "allow"
+"/Users/ro/.local/state/watchman" = "allow"
 
 # Allowlist-first: shell egress is limited to the hosts Tao's toolchain and research need.
 [permissions.tao-workspace.network.domains]

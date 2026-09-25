@@ -1,13 +1,16 @@
+import { Errors } from '@shared/core'
 import * as QRCode from 'qrcode'
 import type { StudioDeviceLaunchDiagnostic, StudioDeviceLaunchInfo } from '../device/StudioDeviceLauncher'
 import type { StudioDeviceConnectionState, StudioDeviceStatus } from '../device/StudioDeviceStatus'
 import type { StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import { type StudioApiClient, StudioApiError, type StudioCompileState, type StudioHandshake } from './StudioApiClient'
+import { StudioDeviceCapture, type StudioSavedDeviceCapture } from './StudioDeviceCapture'
 
 /** The loopback device routes the panel calls; a test substitutes a fake with the same shape. */
 export type StudioDevicePanelApi = Pick<
   typeof StudioApiClient,
   | 'deviceConfirmPairing'
+  | 'deviceCapture'
   | 'deviceDeclinePairing'
   | 'deviceLaunch'
   | 'deviceLaunchOpen'
@@ -15,6 +18,8 @@ export type StudioDevicePanelApi = Pick<
   | 'deviceReconnect'
   | 'deviceRevoke'
   | 'deviceSelectCell'
+  | 'previewCell'
+  | 'reconfigureCell'
 >
 
 export type StudioDevicePanelOptions = {
@@ -22,6 +27,7 @@ export type StudioDevicePanelOptions = {
   button: HTMLButtonElement
   /** Defaults to `navigator.clipboard`; the panel falls back to selecting the URL text without one. */
   clipboard?: Pick<Clipboard, 'writeText'>
+  downloadCapture?: (name: string, content: string) => void
   handshake: Pick<StudioHandshake, 'compile' | 'previewManifest'>
   onStatusMessage?: (message: string) => void
   popover: HTMLElement
@@ -198,6 +204,7 @@ export function createStudioDevicePanel(options: StudioDevicePanelOptions): Stud
   let busy = false
   let disposed = false
   let qrVisible = false
+  let savedCapture: StudioSavedDeviceCapture | undefined
   let qrSvg: { svg: string; url: string } | undefined
   let countdown: HTMLElement | undefined
   let countdownTimer: ReturnType<typeof setInterval> | undefined
@@ -329,8 +336,8 @@ export function createStudioDevicePanel(options: StudioDevicePanelOptions): Stud
         return openButton
       }
       const openButton = host.kind === 'simulator'
-        ? open('auto', 'Open in simulator')
-        : actions(open('auto', 'Open over LAN'), open('cable', 'Open over cable'))
+        ? open('auto', 'Open this app in simulator')
+        : actions(open('auto', 'Open this app on device · LAN'), open('cable', 'Open this app on device · cable'))
       body.push(row(host.name, host.installed, openButton))
     }
     if (current.install.unavailable === undefined && current.install.hosts.length === 0) {
@@ -352,7 +359,7 @@ export function createStudioDevicePanel(options: StudioDevicePanelOptions): Stud
       }
       body.push(list)
     }
-    return section('Install & open', body)
+    return section('Install & open current app', body)
   }
 
   function renderUrl(current: StudioDevicePanelModel): HTMLElement {
@@ -471,6 +478,20 @@ export function createStudioDevicePanel(options: StudioDevicePanelOptions): Stud
         return 'Reconnect requested; the device dials again.'
       }))
     reconnect.disabled = busy || connection === undefined
+    const remount = actionButton('studio-device-remount', 'Remount scenario', () =>
+      void run(async () => {
+        const selected = status?.connection?.cellId
+        if (selected === undefined || status?.connection?.state !== 'connected') {
+          Errors.throwUserInput('Select a connected device scenario before remounting.')
+        }
+        const runtime = await api.previewCell(selected)
+        if (status?.connection?.cellId !== selected) {
+          Errors.throwUserInput('The device changed scenarios during remount; try again.')
+        }
+        await api.reconfigureCell(runtime.identity)
+        return 'Remounted the current scenario on the device.'
+      }))
+    remount.disabled = busy || connection?.state !== 'connected' || connection.cellId === undefined
     const scenario = document.createElement('select')
     scenario.className = 'studio-device-scenario'
     scenario.setAttribute('aria-label', 'Scenario on device')
@@ -493,7 +514,72 @@ export function createStudioDevicePanel(options: StudioDevicePanelOptions): Stud
         return `Requested ${scenarioOptionLabel(manifest, cellFor(cellId)?.scenarioId, cellId)} on the device.`
       })
     })
-    body.push(actions(reconnect, scenario))
+    body.push(actions(reconnect, remount, scenario))
+    const capture = actionButton('studio-device-capture', 'Capture device state', () =>
+      void run(async () => {
+        const selected = status?.connection?.cellId
+        const currentManifest = manifest
+        const cell = currentManifest?.cells.find(item => item.cellId === selected)
+        if (selected === undefined || currentManifest === undefined || cell === undefined) {
+          Errors.throwUserInput('Select a connected device scenario before capturing state.')
+        }
+        const result = await api.deviceCapture()
+        if (result.error !== undefined) {
+          Errors.throwHostEnvironment(result.error)
+        }
+        if (status?.connection?.cellId !== selected) {
+          Errors.throwUserInput('The device changed scenarios during capture; try again.')
+        }
+        savedCapture = StudioDeviceCapture.save(currentManifest, cell, result.capture)
+        const fileName = `tao-device-${safeFileName(savedCapture.appName)}-${
+          safeFileName(savedCapture.scenarioId)
+        }-${savedCapture.capture.capturedAt}.json`
+        const download = options.downloadCapture ?? downloadCapture
+        download(fileName, JSON.stringify(savedCapture, null, 2))
+        return `Saved device state for ${scenarioOptionLabel(currentManifest, cell.scenarioId, cell.cellId)}.`
+      }))
+    capture.disabled = busy || connection?.state !== 'connected' || connection.cellId === undefined
+    const restore = async (saved: StudioSavedDeviceCapture): Promise<string> => {
+      const selected = status?.connection?.cellId
+      if (selected === undefined || status?.connection?.state !== 'connected' || manifest === undefined) {
+        Errors.throwUserInput('Select a connected device scenario before restoring state.')
+      }
+      const runtime = await api.previewCell(selected)
+      if (status?.connection?.cellId !== selected) {
+        Errors.throwUserInput('The device changed scenarios during restore; try again.')
+      }
+      const configured = StudioDeviceCapture.restore(manifest, runtime.cell, saved)
+      await api.reconfigureCell({ ...runtime.identity, environment: configured.environment, replay: configured.replay })
+      return `Restored device state for ${scenarioOptionLabel(manifest, runtime.cell.scenarioId, selected)}.`
+    }
+    const restoreLast = actionButton('studio-device-restore', 'Restore captured state', () =>
+      void run(async () => {
+        if (savedCapture === undefined) {
+          Errors.throwUserInput('Capture device state first, or load a saved capture file.')
+        }
+        return await restore(savedCapture)
+      }))
+    restoreLast.disabled = busy || connection?.state !== 'connected' || savedCapture === undefined
+    const file = document.createElement('input')
+    file.type = 'file'
+    file.accept = '.json,application/json'
+    file.hidden = true
+    file.className = 'studio-device-capture-file'
+    const load = actionButton('studio-device-load-capture', 'Restore from file…', () => file.click())
+    load.disabled = busy || connection?.state !== 'connected'
+    file.addEventListener('change', () => {
+      const chosen = file.files?.[0]
+      if (chosen === undefined) {
+        return
+      }
+      void run(async () => {
+        const parsed = StudioDeviceCapture.parse(JSON.parse(await chosen.text()))
+        const message = await restore(parsed)
+        savedCapture = parsed
+        return message
+      })
+    })
+    body.push(actions(capture, restoreLast, load, file))
     return section('Connection', body)
   }
 
@@ -715,6 +801,22 @@ function scenarioOptionLabel(
 
 function shortTime(iso: string): string {
   return iso.replace('T', ' ').slice(0, 16)
+}
+
+function safeFileName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'capture'
+}
+
+function downloadCapture(name: string, content: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }))
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = name
+    link.click()
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
 }
 
 /** A rejected fetch or a DOM event carries no `message`, so name the value rather than print `[object Object]`. */
