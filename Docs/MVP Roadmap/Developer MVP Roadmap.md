@@ -33,9 +33,9 @@ Run down this list before the first public push. Each item points at the entry t
     URL scheme `taostudiocompanion` and the store listing names stay to be chosen.
   - The GitHub organization `dev-tao` (fallback `tao-lang`), which also names the Homebrew tap
     `dev-tao/homebrew-tao`.
-  - The VS Code and Open VSX publisher `dev-tao` (fallback `tao-lang`) for `tao-ide-extension`;
-    `packages/ides/ide-extension/package.json` still names the placeholder publisher `tao` until the
-    account exists.
+  - The VS Code and Open VSX publisher `dev-tao` (fallback `tao-lang`) for `tao-ide-extension`,
+    which `packages/ides/ide-extension/package.json` already names, making the extension
+    `dev-tao.tao-ide-extension`.
   - The npm scope `@dev-tao` (fallback `@tao-lang`) for the CLI's platform packages; `tao-cli`,
     `tao-runtime`, `tao-stdlib`, and the other packages are unscoped today — decide between those
     names and the scope, and check each is free.

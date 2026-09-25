@@ -5,7 +5,7 @@
   "license": "AGPL-3.0-only",
   "private": true,
   "description": "Tao language support: syntax highlighting, diagnostics, formatting, and source actions",
-  "publisher": "tao",
+  "publisher": "dev-tao",
   "repository": {
     "type": "git",
     "url": "https://github.com/marcuswestin/tao-lang-2.git",
