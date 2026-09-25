@@ -315,7 +315,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh\" > /dev/null"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh\""
           }
         ]
       }
@@ -390,6 +390,9 @@
     ]
   },
   "env": {
-    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
-  }
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+    "CLAUDE_CODE_SUBAGENT_MODEL": "opus"
+  },
+  "autoCompactWindow": 272000
 }

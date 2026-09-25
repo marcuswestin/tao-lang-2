@@ -1,4 +1,4 @@
-import Runtime, { RuntimeToolchainPaths } from '@expo-host'
+import Runtime, { HostDependencies, RuntimeToolchainPaths } from '@expo-host'
 import { CLI, Errors, FS, HCI, Platform } from '@shared'
 import { buildDesktopApp } from './desktop-build'
 import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
@@ -316,17 +316,21 @@ async function exportWeb(
     }
     await FS.copyFile(source, FS.resolvePath(file, runtimeRoot))
   }
-  const modules = FS.resolvePath('node_modules', toolchainRoot)
+  // An installed Tao resolves its host's packages on first use; inside a checkout this does nothing.
+  await HostDependencies.ensure()
+  const modules = RuntimeToolchainPaths.dependencyRoot()
   if (!await FS.isDirectory(modules)) {
     Errors.throwHostEnvironment(`Tao's Expo host dependencies are not installed at ${modules}.`)
   }
   await FS.symlink(modules, FS.resolvePath('node_modules', runtimeRoot))
   await Runtime.generateApp(appPath, { appName, runtimePackageRoot: runtimeRoot })
-  const result = await CLI.run(FS.resolvePath('node_modules/.bin/expo', runtimeRoot), {
-    args: ['export', '--platform', 'web', '--output-dir', siteRoot],
+  const expo = RuntimeToolchainPaths.expoCommand(runtimeRoot, ['export', '--platform', 'web', '--output-dir', siteRoot])
+  const result = await CLI.run(expo.command, {
+    args: expo.args,
     cwd: runtimeRoot,
     env: {
       ...Platform.runtimeProcess.env,
+      ...expo.env,
       CI: '1',
       EXPO_NO_DOTENV: '1',
       TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: toolchainRoot,

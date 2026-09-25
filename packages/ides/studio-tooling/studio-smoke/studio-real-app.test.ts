@@ -1,4 +1,4 @@
-import { Errors, FS, Platform, Repo, Time } from '@shared'
+import { Errors, FS, HCI, Platform, Repo, Time } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
@@ -121,7 +121,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
       { timeoutMs: 30_000 },
     )
     // The native button renders its title uppercase on web, and innerText reports the transformed text.
-    await waitForPreview(browser, previewUrl, `document.body?.textContent?.includes('Increment') === true`)
+    await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('Increment') === true`)
 
     await browser.evaluate(`(() => {
       const frame = document.querySelector('.studio-preview-cell iframe')
@@ -161,6 +161,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     const movedRevision = await waitForCompileAfter(browser, compileRevision)
     await waitForPreview(
       browser,
+      studio,
       previewUrl,
       `document.body?.innerText.indexOf('First') < document.body?.innerText.indexOf('Third')
         && document.body?.innerText.indexOf('Third') < document.body?.innerText.indexOf('Second')`,
@@ -172,6 +173,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     Expect(await FS.readText(sourcePath)).toBe(movedSource)
     await waitForPreview(
       browser,
+      studio,
       previewUrl,
       `[...document.querySelectorAll('[data-tao-studio]')]
         .some(element => element.textContent?.trim() === '1')`,
@@ -180,6 +182,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     const recoveredRevision = await waitForCompileAfter(browser, movedRevision)
     await waitForPreview(
       browser,
+      studio,
       previewUrl,
       `[...document.querySelectorAll('[data-tao-studio]')]
         .some(element => element.textContent?.trim() === '1')`,
@@ -226,12 +229,14 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     await waitForCompileAfter(browser, recoveredRevision)
     await waitForPreview(
       browser,
+      studio,
       previewUrl,
       `[...document.querySelectorAll('[data-tao-studio]')]
         .some(element => element.textContent?.trim() === '0')`,
     )
     const afterReset = await browser.evaluate<Readonly<{ loads: number }>>('window.__taoFastRefreshFrameProbe')
     Expect(afterReset.loads).toBeGreaterThan(0)
+    await writePreviewDiagnostics(browser, studio, previewUrl, 'scenario-reset-passed')
     Expect(browser.browserFailures()).toEqual([])
   } finally {
     await browser?.close()
@@ -240,7 +245,12 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
   }
 }, 300_000)
 
-async function waitForPreview(browser: StudioCdp, previewUrl: string, expression: string): Promise<void> {
+async function waitForPreview(
+  browser: StudioCdp,
+  studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>>,
+  previewUrl: string,
+  expression: string,
+): Promise<void> {
   let last = ''
   const ready = await Time.pollUntil(async () => {
     try {
@@ -251,11 +261,106 @@ async function waitForPreview(browser: StudioCdp, previewUrl: string, expression
     }
   }, { intervalMs: 100, timeoutMs: 30_000 })
   if (!ready) {
-    const text = await browser.evaluateInFrame<string>(previewUrl, `document.body?.innerText ?? ''`).catch(() => '')
+    const diagnostics = await writePreviewDiagnostics(browser, studio, previewUrl, 'preview-timeout')
     Errors.throwHostEnvironment(
-      `Timed out waiting for Studio preview expression: ${expression}; last=${last}; text=${JSON.stringify(text)}`,
+      `Timed out waiting for Studio preview expression: ${expression}; last=${last}; diagnostics=${diagnostics}`,
     )
   }
+}
+
+async function writePreviewDiagnostics(
+  browser: StudioCdp,
+  studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>>,
+  previewUrl: string,
+  step: string,
+): Promise<string> {
+  const read = async <T>(action: () => Promise<T>): Promise<T | { error: string }> => {
+    try {
+      return await action()
+    } catch (error) {
+      return { error: Errors.messageOf(error) }
+    }
+  }
+  const manifest = await read(async () => {
+    const response = await fetch(`${studio.readiness.sessionUrl}/api/preview/manifest`, {
+      signal: AbortSignal.timeout(2_000),
+    } as RequestInit)
+    const body = await response.json() as { compileRevision?: number; manifestRevision?: string; cells?: unknown[] }
+    return {
+      status: response.status,
+      compileRevision: body.compileRevision,
+      manifestRevision: body.manifestRevision,
+      cells: body.cells,
+    }
+  })
+  const iframe = await read(() =>
+    browser.evaluate<{ src?: string }>(`(() => {
+    const frame = document.querySelector('.studio-preview-cell iframe')
+    const status = document.querySelector('.studio-status')
+    return { exists: frame instanceof HTMLIFrameElement, src: frame?.src,
+      connected: frame?.isConnected, loads: window.__taoFastRefreshFrameProbe?.loads,
+      status: status?.textContent, statusState: status?.getAttribute('data-state') }
+  })()`)
+  )
+  const bootstrap = await read(async () => {
+    if ('error' in iframe || iframe.src === undefined) {
+      return { unavailable: 'iframe source missing' }
+    }
+    const previewInstanceId = new URL(iframe.src).searchParams.get('taoStudioPreviewInstanceId')
+    if (previewInstanceId === null) {
+      return { unavailable: 'preview instance id missing' }
+    }
+    const url = new URL(`${studio.readiness.sessionUrl}/api/preview/cell/bootstrap`)
+    url.searchParams.set('previewInstanceId', previewInstanceId)
+    const response = await fetch(url, { signal: AbortSignal.timeout(2_000) } as RequestInit)
+    const body = await response.json() as { identity?: unknown; replay?: { domains?: { domain: string }[] } }
+    return {
+      status: response.status,
+      identity: body.identity,
+      replayDomains: body.replay?.domains?.map(domain => domain.domain),
+    }
+  })
+  const preview = await read(() =>
+    browser.evaluateInFrame(
+      previewUrl,
+      `(() => ({
+    href: location.href, readyState: document.readyState, text: document.body?.innerText?.slice(0, 2000),
+    stages: window.__taoStudioPreviewDiagnostics ?? [],
+  }))()`,
+      { world: 'page' },
+    )
+  )
+  const diagnostics = {
+    step,
+    manifest,
+    iframe,
+    bootstrap,
+    preview,
+    browserEvents: browser.browserEvents().slice(-80),
+    metroOutput: studio.output().slice(-30_000),
+  }
+  const path = FS.resolvePath(
+    `preview-readiness-${studio.readiness.launchId}-${step}.json`,
+    studio.readiness.artifactRoot,
+  )
+  await FS.writeJson(path, diagnostics)
+  if (step === 'preview-timeout') {
+    HCI.writeErrorLine(`Studio preview ${step} diagnostics: ${path}`)
+    HCI.writeErrorLine(`Studio preview stage summary: ${
+      JSON.stringify({
+        manifest: 'error' in manifest ? manifest : {
+          status: manifest.status,
+          compileRevision: manifest.compileRevision,
+          manifestRevision: manifest.manifestRevision,
+          cells: manifest.cells?.length,
+        },
+        iframe,
+        bootstrap,
+        preview,
+      })
+    }`)
+  }
+  return path
 }
 
 async function waitForCompileAfter(browser: StudioCdp, previousRevision: number): Promise<number> {

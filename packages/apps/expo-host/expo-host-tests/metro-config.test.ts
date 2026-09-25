@@ -1,5 +1,5 @@
-import { Errors, FS, Repo } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Assert, CLI, Errors, FS, Platform, Repo } from '@shared'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 
 type MetroConfig = {
   resolver: {
@@ -119,5 +119,53 @@ Describe('Expo Metro configuration', () => {
         platform: 'web',
       },
     ])
+  })
+
+  // An installed Tao has no repository around its host to climb, so it names each location instead.
+  Test('takes the dependency, runtime, and shared-core locations an installed Tao names', async () => {
+    const root = await mkTestDir('tao-metro-installed-')
+    try {
+      const dependencies = FS.resolvePath('host/node_modules', root)
+      const runtime = FS.resolvePath('resources/modules/@tao/runtime/TaoRuntime-src', root)
+      const sharedCore = FS.resolvePath('resources/shared/core', root)
+      for (const directory of [dependencies, runtime, sharedCore]) {
+        await FS.mkdir(directory)
+      }
+      const probe = `
+        const config = require(${JSON.stringify(Repo.resolvePath('packages/apps/expo-host/metro.config.cjs'))})
+        const context = { originModulePath: '/app/index.ts', resolveRequest: () => ({ filePath: 'fell through' }) }
+        await Bun.write(Bun.stdout, JSON.stringify({
+          runtime: config.resolver.resolveRequest(context, '@tao/runtime', 'web').filePath,
+          sharedCore: config.resolver.resolveRequest(context, '@shared/core', 'web').filePath,
+          watchFolders: config.watchFolders,
+          nodeModulesPaths: config.resolver.nodeModulesPaths,
+        }))`
+      const result = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: ['-e', probe],
+        env: {
+          ...Platform.runtimeProcess.env,
+          TAO_HOST_DEPENDENCY_ROOT: dependencies,
+          TAO_RUNTIME_SOURCE_ROOT: runtime,
+          TAO_SHARED_CORE_SOURCE_ROOT: sharedCore,
+        },
+      })
+      Assert(result.exitCode === 0, 'the Metro config loads with an installed Tao’s locations', result)
+      const loaded = JSON.parse(result.stdout) as {
+        nodeModulesPaths: string[]
+        runtime: string
+        sharedCore: string
+        watchFolders: string[]
+      }
+
+      Expect(loaded.runtime).toBe(FS.resolvePath('TR.ts', runtime))
+      Expect(loaded.sharedCore).toBe(FS.resolvePath('shared-core.ts', sharedCore))
+      const installedDependencies = await FS.realPath(dependencies)
+      Expect(loaded.watchFolders).toContain(installedDependencies)
+      Expect(loaded.watchFolders).toContain(runtime)
+      Expect(loaded.watchFolders).toContain(sharedCore)
+      Expect(loaded.nodeModulesPaths).toContain(installedDependencies)
+    } finally {
+      await FS.remove(root)
+    }
   })
 })

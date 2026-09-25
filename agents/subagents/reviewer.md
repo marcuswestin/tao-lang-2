@@ -6,6 +6,7 @@ description: >-
   across the seams of a parallel fan-out.
 targets: [codexcli, claudecode, cursor]
 codexcli:
+  model: gpt-6-sol
   model_reasoning_effort: xhigh
   sandbox_mode: read-only
   nickname_candidates: [Correctness, Regression, Coverage, Drift, Boundary, Verifier]
@@ -15,7 +16,7 @@ claudecode:
   permissionMode: plan
   tools: Bash, Read, Skill
 cursor:
-  model: claude-opus-5[effort=high]
+  model: claude-opus-5-5[effort=high]
   readonly: true
 ---
 

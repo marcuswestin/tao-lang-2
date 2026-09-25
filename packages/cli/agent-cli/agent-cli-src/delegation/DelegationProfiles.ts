@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Text } from '@shared'
 
 export const SUBAGENTS_DIRECTORY = 'agents/subagents'
 const SKILLS_DIRECTORY = 'agents/skills'
@@ -111,6 +111,7 @@ function baseModel(model: string): string {
 }
 
 type DelegationSources = {
+  claudeEnv?: Record<string, unknown>
   profiles: readonly AgentDocument[]
   skills: readonly AgentDocument[]
   skillSource: string
@@ -119,13 +120,27 @@ type DelegationSources = {
 /** delegationIssues keeps the profiles, the skills, and the routing table saying the same thing. */
 export function delegationIssues(sources: DelegationSources): string[] {
   const issues: string[] = []
+  const claudeTiers = tierModels(sources.skillSource, 'claude')
+  const cursorTiers = tierModels(sources.skillSource, 'cursor')
   const claudeModels = new Set(tierModels(sources.skillSource, 'claude').values())
-  const cursorModels = new Set(tierModels(sources.skillSource, 'cursor').values())
+  const cursorModels = new Set(cursorTiers.values())
   if (claudeModels.size === 0) {
     issues.push(`${DELEGATION_SKILL_PATH} must keep a tier table naming a Claude Code model per tier.`)
   }
   if (sources.profiles.length === 0) {
     issues.push(`${SUBAGENTS_DIRECTORY} holds no profile; the routing table would have nothing to govern.`)
+  }
+  if (sources.claudeEnv !== undefined) {
+    const env = sources.claudeEnv
+    if (env['CLAUDE_CODE_SUBAGENT_MODEL'] !== claudeTiers.get('standard')) {
+      issues.push('.rulesync/permissions.jsonc must set CLAUDE_CODE_SUBAGENT_MODEL to the Claude standard tier.')
+    }
+    if (env['ANTHROPIC_DEFAULT_OPUS_MODEL'] !== cursorTiers.get('deep')) {
+      issues.push('.rulesync/permissions.jsonc must map opus to the Cursor deep-tier model.')
+    }
+    if (env['CLAUDE_CODE_SUBAGENT_MODEL_FORCE'] !== undefined) {
+      issues.push('.rulesync/permissions.jsonc must not force the Claude subagent default over explicit models.')
+    }
   }
 
   for (const profile of sources.profiles) {
@@ -139,6 +154,17 @@ export function delegationIssues(sources: DelegationSources): string[] {
     }
     issues.push(...modelIssues(profile, 'claudecode', 'Claude Code', claudeModels))
     issues.push(...modelIssues(profile, 'cursor', 'Cursor', cursorModels))
+    if (['reviewer', 'oracle', 'architectural-reviewer'].includes(profile.name ?? '')) {
+      if (profile.sections['codexcli']?.['model'] !== tierModels(sources.skillSource, 'codex').get('deep')) {
+        issues.push(`${profile.path} must pin the Codex deep-tier model for review.`)
+      }
+      if (
+        profile.sections['claudecode']?.['model'] !== claudeTiers.get('deep')
+        || baseModel(profile.sections['cursor']?.['model'] ?? '') !== cursorTiers.get('deep')
+      ) {
+        issues.push(`${profile.path} must keep its Claude and Cursor deep-tier reviewer pins.`)
+      }
+    }
     issues.push(...readOnlyDriftIssues(profile))
     issues.push(...toolAllowlistIssues(profile))
   }
@@ -248,7 +274,14 @@ export async function readDelegationIssues(root: string): Promise<string[]> {
     return []
   }
   const skillPath = FS.resolvePath(DELEGATION_SKILL_PATH, root)
+  const permissionsPath = FS.resolvePath('.rulesync/permissions.jsonc', root)
+  const permissions = await FS.isFile(permissionsPath)
+    ? JSON.parse(Text.stripJsonc(await FS.readText(permissionsPath))) as {
+      claudecode?: { env?: Record<string, unknown> }
+    }
+    : undefined
   return delegationIssues({
+    claudeEnv: permissions?.claudecode?.env,
     profiles: await readDocuments(SUBAGENTS_DIRECTORY, undefined, root),
     skills: await readDocuments(SKILLS_DIRECTORY, 'SKILL.md', root),
     skillSource: await FS.isFile(skillPath) ? await FS.readText(skillPath) : '',

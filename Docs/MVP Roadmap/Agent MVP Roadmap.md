@@ -272,7 +272,8 @@ from the development loop, which no virtualization approach can do.
 - Landed 2026-09-23, distribution (`R7`): `just companion-host-publish` puts a built host on a
   prerelease tagged `companion-host-<version>-<kit digest>`, and when no cached host fits, `tao dev`
   lists those releases without signing in and downloads the newest whose kit covers its own into
-  `~/.tao/hosts`. The download is proven against a fake GitHub only: until the repository is public
+  the Tao home's `hosts/` (`~/.local/share/tao/hosts` by default). The download is proven against a
+  fake GitHub only: until the repository is public
   the listing answers 404, and `tao dev` says so and uses Expo Go.
 - Landed 2026-09-23, the iOS Simulator lane: `just companion-host-build --platform ios-simulator`
   builds the Companion for both simulator architectures, signed ad hoc so its entitlements are

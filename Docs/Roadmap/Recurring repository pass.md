@@ -29,7 +29,11 @@ notes after each completed pass; Git history is the longer record.
 - Include a quick dependency-advisory check in every security review. Inspect dependency changes
   against primary sources: run [`bun audit`](https://bun.sh/docs/pm/cli/audit) for the Bun graph and
   inspect `devenv.lock` changes against the [Nixpkgs security tracker](https://tracker.security.nixos.org/)
-  and affected upstream notices. Add other dependency systems when they appear.
+  and affected upstream notices. Add other dependency systems when they appear. Recheck the Appium
+  transitive pins when Base Driver permits `morgan@1.12.0` and run installed-link health after lock changes.
+- Check the delegation routing table against official model availability, harness precedence, and
+  current input, cache-read, cache-write, and output pricing. Compare completed-task cost and review
+  quality before changing a tier; an API-equivalent estimate is not a plan or subscription bill.
 
 ## Run a pass
 
