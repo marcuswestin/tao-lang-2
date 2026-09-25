@@ -1,5 +1,6 @@
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
+import { TestActionStubs } from './TR-action-test-stubs'
 import {
   actionFailureCaseName,
   captureActionContinuation,
@@ -412,7 +413,7 @@ class TR {
     implementation: (...arguments_: any[]) => unknown,
     name: string,
     failures: readonly TaoDeclaredFailure[],
-    options: Readonly<{ requiredArguments?: number; runs?: 'latest' }> = {},
+    options: Readonly<{ requiredArguments?: number; runs?: 'latest'; testStubKey?: string }> = {},
   ): TR.Action<Args> {
     const requiredArguments = options.requiredArguments ?? implementation.length
     return new RuntimeAction(
@@ -429,6 +430,14 @@ class TR {
         )
         markExternalEffect()
         try {
+          const stubbedCase = options.testStubKey === undefined
+            ? undefined
+            : TestActionStubs.failureFor(options.testStubKey)
+          if (stubbedCase !== undefined) {
+            const declared = failures.find(failure => actionFailureCaseName(failure.case) === stubbedCase)
+            RuntimeAssert(declared !== undefined, 'validated foreign action test stub names a declared failure')
+            throw new TaoActionFailure(stubbedCase, declared.sentence)
+          }
           await implementation(...arguments_.map(argument => argument?.evaluate().jsValue))
         } catch (error) {
           if (error instanceof TaoActionFailure) {
@@ -447,6 +456,9 @@ class TR {
       options.runs,
     )
   }
+
+  /** TestActionStubs is the check-scoped foreign action seam used only by the test harness. */
+  static TestActionStubs = TestActionStubs
 
   /** BridgedAction adapts an explicitly action-typed TypeScript export at the ordinary from boundary. */
   static BridgedAction<Args extends TR.Evaluable[]>(

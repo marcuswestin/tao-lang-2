@@ -3,6 +3,7 @@ import { AST, type ParseResult } from '@parser'
 import { Assert, type DiagnosticRange, Diagnostics, Switch } from '@shared'
 import type { ValidationResult } from '@validator'
 import type { CompilerContext } from './compiler'
+import { foreignActionTestStubKey } from './foreign-action-test-stubs'
 
 type TaoTestPlanInput = ParseResult | ValidationResult
 
@@ -17,6 +18,11 @@ type TaoTestRun = {
   appName: string
   appSourcePath: string
   source: TaoTestSourceLocation
+}
+
+type TaoTestActionFailureStub = {
+  actionKey: string
+  caseName: string
 }
 
 /** TaoTestExpectation declares one v0 selector-targeted assertion. */
@@ -255,6 +261,7 @@ type TaoTestCheck = {
   source: TaoTestSourceLocation
   run: TaoTestRun
   steps: TaoTestStep[]
+  actionFailureStubs?: TaoTestActionFailureStub[]
   device?: TaoTestDevice
   fixture?: TaoTestFixture
 }
@@ -318,6 +325,11 @@ function compileCheck(check: AST.TestDeclaration): TaoTestCheck {
     source: sourceLocation(check),
     run: compileRun(run),
     steps,
+    actionFailureStubs: check.block.statements.filter(AST.isActionFailureStubStep).map(stub => {
+      const action = stub.action.ref
+      Assert.defined(action, 'validated action stub references an action')
+      return { actionKey: foreignActionTestStubKey(action), caseName: stub.case }
+    }),
     ...(device === undefined ? {} : { device: compileDevice(device) }),
     ...(fixture === undefined ? {} : { fixture: compileFixture(fixture) }),
   }

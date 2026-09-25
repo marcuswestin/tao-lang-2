@@ -1,6 +1,15 @@
-use EffectOutcomesApp from ./
+use EffectOutcomesApp, Export from ./
 
 test "Effect Outcomes" {
+   test "stubs a declared foreign failure without calling its sidecar" {
+      action Export fails Offline
+      run EffectOutcomesApp
+      press #exportSaved
+      expect {
+         text "Status: Waiting for a connection"
+         text "Draft: Empty"
+         text "Attempts: 1"
+   }  }
    test "runs saved once the verb finishes, keeping its writes" {
       run EffectOutcomesApp
       press #exportSaved

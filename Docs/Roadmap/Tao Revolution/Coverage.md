@@ -105,7 +105,8 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Render failure containment and recovery (§15)               | **none — for the Developer** (no author surface; it is runtime policy)        | MVP      | —                         |
 | Fixtures, tests, query assertions (§16)                     | WordFlower · behavior tests                                                   | MVP      | partially in Current[^18] |
 | Fault injection (§16)                                       | WordFlower · sync failure journey                                             | MVP      | pending — regressed[^1]   |
-| Sidecar stubs by declared case (§16)                        | Skillet · the import journey's two outcomes                                   | Post-MVP | —                         |
+| Foreign action failure stubs by declared case (§16)         | Test Apps · Effect Outcomes checks failure and check isolation                | MVP      | in Current                |
+| Foreign action value-return stubs (§16)                     | Skillet · the import journey's success value                                  | Post-MVP | —                         |
 | World controls: network, sync, relaunch (§16)               | WordFlower · offline edits that sync on reconnect                             | MVP      | partially in Current      |
 | World controls: clock, collaborators (§16)                  | Skillet · a timer that outlives the window; Wayfare · a live conflict         | Post-MVP | —                         |
 | Scenarios, pseudolocale, review gallery (§16)               | WordFlower · scenario set                                                     | TBD      | partially in Current      |

@@ -67,6 +67,7 @@ export async function runTestCheck(suiteName: string, check: TestCompiler.Check)
     TR.Navigation.beginTest()
     // Every check starts from the same instant and moves only when the journey says so.
     TR.Clock.beginTest()
+    TR.TestActionStubs.beginTest(check.actionFailureStubs ?? [])
     app = {
       device: check.device,
       modulePath: check.app.modulePath,
@@ -104,6 +105,7 @@ export async function runTestCheck(suiteName: string, check: TestCompiler.Check)
     observation = completedObservation
     app?.screen.unmount()
     TR.Clock.endTest()
+    TR.TestActionStubs.endTest()
     TR.Navigation.endTest()
     TR.Persisted.endTest()
     TR.Data.endTest()

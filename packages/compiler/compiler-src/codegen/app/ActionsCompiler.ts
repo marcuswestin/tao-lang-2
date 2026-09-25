@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
+import { foreignActionTestStubKey } from '../../foreign-action-test-stubs'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import {
@@ -436,7 +437,8 @@ function compileForeignAction(action: AST.ActionDeclaration): Compiled {
       sentence: ${gen.jsLiteral(failure.sentence)},
     }`)
   }],
-    { ${action.runsLatest ? gen`runs: "latest", ` : gen``}requiredArguments: ${requiredArguments} },
+    { ${action.runsLatest ? gen`runs: "latest", ` : gen``}requiredArguments: ${requiredArguments},
+      testStubKey: ${gen.jsLiteral(foreignActionTestStubKey(action))} },
   )`
 }
 

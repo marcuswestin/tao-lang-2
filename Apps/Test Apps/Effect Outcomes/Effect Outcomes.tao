@@ -10,6 +10,7 @@ app EffectOutcomesApp {
 type ExportFailure is one of Offline, TooLarge
 
 // A foreign verb publishes the failures its TypeScript may raise, each with a fallback sentence.
+folder
 action Export(Mode text) fails Offline "Exporting needs a connection." fails TooLarge "This document is too long to export." from ./Export.ts
 
 scene OutcomesView() {

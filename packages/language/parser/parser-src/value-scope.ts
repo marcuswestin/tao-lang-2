@@ -146,6 +146,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'action' && AST.isFixtureThroughClause(container)) {
       return this.createDeclarationScope(container, AST.isActionDeclaration)
     }
+    if (context.property === 'action' && AST.isActionFailureStubStep(container)) {
+      return this.createDeclarationScope(container, AST.isActionDeclaration)
+    }
     if (context.property === 'account' && AST.isFixtureCreateBinding(container)) {
       return this.createFixtureAccountScope(container)
     }
