@@ -190,10 +190,12 @@ async function prune(root = artifactStore(), dependencies = defaultDependencies)
 
 async function readReceipt(path: string, runId: string): Promise<RunReceipt | undefined> {
   // The sidecar is published first. A killed process can leave a run root before its local copy.
-  for (const receiptPath of [
-    FS.resolvePath(`${RECEIPT_DIRECTORY}/${runId}.json`, FS.dirname(path)),
-    FS.resolvePath(RECEIPT_FILE, path),
-  ]) {
+  for (
+    const receiptPath of [
+      FS.resolvePath(`${RECEIPT_DIRECTORY}/${runId}.json`, FS.dirname(path)),
+      FS.resolvePath(RECEIPT_FILE, path),
+    ]
+  ) {
     const value: unknown = await FS.readJson(receiptPath).catch(() => undefined)
     const receipt = validReceipt(value, runId)
     if (receipt !== undefined) {
