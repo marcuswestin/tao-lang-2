@@ -103,6 +103,9 @@ Also shipped:
 
 - `Image`: displays an image and allows you to size and transform it.
 - `Checkbox`: a checkbox for a two-state value, with a label and disabled state.
+- `Problems(Items)`: a form's unfinished-field sentences, usually `Input.Problems` from a projection
+  (see `Tao Data.md`), one line each; it renders nothing when the list is empty, and its clauses
+  style every line.
 - `Placeholder(Label)`: an explicit unfinished-content leaf. Development renders a labelled hatch;
   release renders no content while preserving the occurrence's declared layout. `tao check` warns
   when ordinary application source still renders one.
