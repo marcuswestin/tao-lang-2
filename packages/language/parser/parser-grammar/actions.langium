@@ -31,7 +31,7 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
+    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
 
 FailStatement:
     'fail' case=[CaseSetCase:ID] sentence=STRING;
@@ -75,6 +75,16 @@ SetOperator returns string:
 // one mechanism, and a command's parameters are its slots.
 DoStatement:
     'do' action=ActionTargetExpression '(' argumentList=ArgumentList? ')';
+
+// `when do` runs its verb exactly as `do` does, but contains the verb's failure at this site and
+// names what happens next. The outcomes are `saved`, `rejected`, `error`, and any case the verb
+// declares; `saved` and `rejected` are validated words rather than keywords, so both stay usable as
+// names elsewhere.
+WhenDoStatement:
+    'when' invocation=DoStatement '{' outcomes+=WhenDoOutcome+ '}';
+
+WhenDoOutcome:
+    case=SubjectCaseName '->' payload=CasePayload? block=ActionBlock;
 
 ActionTargetExpression:
     ActionExpression | NamedActionTarget;

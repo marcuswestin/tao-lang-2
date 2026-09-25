@@ -19,6 +19,7 @@ import { dataValidationChecks, validateDataFile } from './validators/data-valida
 import { validateDatasourceMembership } from './validators/datasource-membership-validator'
 import { declarationSlotValidationChecks } from './validators/declaration-slots-validator'
 import { DesignValidator } from './validators/design-validator'
+import { EffectOutcomesValidator } from './validators/effect-outcomes-validator'
 import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
 import { injectionValidationChecks } from './validators/injections-validator'
 import { InteractionValidator } from './validators/interaction-validator'
@@ -50,6 +51,7 @@ const nodeValidationChecks = NodeValidation.compile(
     projectValidationChecks,
     ViewsValidator.checks,
     ActionsValidator.checks,
+    EffectOutcomesValidator.checks,
     StateValidator.checks,
     ReactiveParametersValidator.checks,
     AliasesValidator.checks,

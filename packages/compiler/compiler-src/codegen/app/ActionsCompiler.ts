@@ -166,6 +166,7 @@ export const ActionsCompiler = {
       DeclarationSlotFill: Compile.DeclarationSlotFill,
       DismissStatement: Compile.DismissStatement,
       DoStatement: Compile.DoStatement,
+      WhenDoStatement: Compile.WhenDoStatement,
       GuardActionStatement: Compile.GuardActionStatement,
       IfActionStatement: Compile.IfActionStatement,
       ReplaceStatement: Compile.ReplaceStatement,
@@ -225,6 +226,32 @@ export const ActionsCompiler = {
   DoStatement(invocation: AST.DoStatement): Compiled {
     const awaitKeyword = actionInvocationRequiresAsync(invocation) ? gen`await ` : gen``
     return gen`${awaitKeyword}TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`
+  },
+
+  /**
+   * WhenDoStatement runs its verb inside the caller's transaction as `do` does, but the runtime
+   * contains the verb's failure at this site and runs the outcome it names. The verb's effective
+   * failure contract travels with it, which is what tells a declared case from an undeclared error.
+   */
+  WhenDoStatement(statement: AST.WhenDoStatement): Compiled {
+    const invocation = statement.invocation
+    return gen`await TR.WhenDo(() => TR.Do(${Compile.Expression(invocation.action)}${
+      Compile.ActionArguments(invocation)
+    }), {
+      name: ${gen.jsLiteral(effectOutcomeName(statement))},
+      declared: ${compileEffectContract(statement)},
+    }, [
+      ${
+      gen.list(
+        statement.outcomes,
+        outcome =>
+          gen`[${gen.jsLiteral(outcome.case)}, async _TaoCasePayload => TR.BlockScope(_Scope, async _Scope => {
+          ${outcome.payload ? gen`${gen.scopeName(outcome.payload)} = _TaoCasePayload` : ''}
+          ${Compile.ActionBlockBody(outcome.block)}
+        })],`,
+      )
+    }
+    ])`
   },
 
   /** FailStatement aborts the joined action transaction with one declared case and sentence. */
@@ -346,6 +373,27 @@ function positionalArguments(
     const argument = argumentsByParameter.get(parameter)
     return argument ? Compile.Argument(argument) : gen`undefined`
   })
+}
+
+/**
+ * compileEffectContract lists the verb's effective failure cases, or `null` when the verb is dynamic
+ * and its contract is unknown here; the runtime then reads any declared failure as `rejected`.
+ */
+function compileEffectContract(statement: AST.WhenDoStatement): Compiled {
+  if (!ASTUtils.invokedEffect(statement)) {
+    return gen`null`
+  }
+  return gen`[${gen.join(ASTUtils.invocationFailureCases(statement), failureCase => gen.jsLiteral(failureCase))}]`
+}
+
+/** effectOutcomeName is the verb name a failure message falls back to when nothing says more. */
+function effectOutcomeName(statement: AST.WhenDoStatement): string {
+  const effect = ASTUtils.invokedEffect(statement)
+  if (effect && !AST.isActionExpression(effect)) {
+    return effect.name
+  }
+  const action = statement.invocation.action
+  return AST.isValueReference(action) ? action.target.$refText : 'action'
 }
 
 function actionInvocationArguments(invocation: AST.DoStatement): Compiled[] {
