@@ -614,6 +614,9 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain(
       'TR.Data.UseConfigured(\n            _Scope._TaoLocalDataCatalog,\n            _Scope._TaoLocalDatasource,\n          )',
     )
+    Expect(compiled.code).toContain(
+      'useTaoGeneratedStudioFixture([_Scope._TaoDataCatalog, _Scope._TaoLocalDataCatalog])',
+    )
     // Reads and writes route to the catalog that stores the entity.
     Expect(compiled.code).toContain('_Scope.CurrentSession = TR.Data.Query(\n      _Scope._TaoLocalDataCatalog,')
     Expect(compiled.code).toContain('_Scope.Notes = TR.Data.Query(\n      _Scope._TaoDataCatalog,')
@@ -659,6 +662,36 @@ Describe('compiler: language lowering', () => {
         'TR.Data.UseConfigured(\n            _Scope._TaoLocalDataCatalog,\n            _Scope._TaoLocalDatasource,\n          )',
       )
       Expect(appModule?.code).not.toContain('_Scope._TaoDataCatalog')
+      Expect(appModule?.code).toContain('useTaoGeneratedStudioFixture([_Scope._TaoLocalDataCatalog])')
+    })
+  })
+
+  Test('imports a synced catalog into an app root that configures no datasource', async () => {
+    await withTaoFiles('tao-fixture-catalog-', {
+      'Project.tao': 'project { id "fixture-catalog-test" name "Fixture catalog test" }',
+      'Catalog.tao': `
+        workspace
+        data Notes / Note { Title text }
+      `,
+      'Board.tao': `
+        use Notes from ./Catalog
+        workspace
+        view Board() {
+          query Notes { }
+          render Label("{ Notes.Count }")
+        }
+        view Label(Value text) { render inject ${tsFence} return null ${fence} }
+      `,
+      'Main.tao': `
+        use Board from ./Board
+        app Notebook { view Board }
+      `,
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao']!)
+      const appModule = result.files.find(file => file.relativePath === 'App.tsx')
+
+      Expect(appModule?.code).toContain("import { _TaoDataCatalog } from './modules/Catalog.tao'")
+      Expect(appModule?.code).toContain('useTaoGeneratedStudioFixture([_Scope._TaoDataCatalog])')
     })
   })
 
