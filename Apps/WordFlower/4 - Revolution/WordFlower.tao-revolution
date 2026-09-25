@@ -200,6 +200,11 @@ design WordFlowerDesign {
                   radius md, weight 700]
       Checkbox [ink ink]
       Progress [background edge, ink accent, radius 999]
+      statusDot [width sm, height sm, radius xs]
+
+      // The active tab takes its look from the same default, through the host-supplied `selected`.
+      NavigationTab [pad sm, radius sm, ink muted, background accent.20 when selected,
+                     ink accent.60 when selected]
 
       // The generated interaction layers are runtime renderings; an app restyles them here without
       // declaring or owning them (KEY-D13).
@@ -555,7 +560,7 @@ command Duplicate(Document) {
 
 command Export(Document) {
    Title "Export document"
-   Description "Writes this document out in a chosen format."
+   Description "Shares the saved document in a chosen format."
    Summary "Export { Document.Title }"
    Icon "square.and.arrow.up"
    Key primary + "e"
@@ -580,11 +585,13 @@ command Delete(Document) {
 // form of its own exists. `implement inject` and the inline fence are retired.
 text BuildStamp = BuildStamp() from ./Shell.ts
 
-// A foreign action has no Tao body and declares its failure cases on the declaration head. A stub in
-// a journey picks a declared case, so renaming one breaks the test at compile time.
-action ExportDocument(Document, Format ExportFormat) returns text
+// A foreign action has no Tao body and declares its failure cases on the declaration head. The MVP
+// shares Markdown; this tier adds format choice without changing the action's outcome vocabulary.
+type ExportFailure is one of Offline, TooLarge, Cancelled
+action ExportDocument(Document, Format ExportFormat)
    fails Offline "Exporting needs a connection."
-   fails Rejected "The export service rejected this document."
+   fails TooLarge "This document is too long to export."
+   fails Cancelled ""
    from ./Export.ts
 
 // A foreign view declares its TypeScript implementation in its head. Tao owns the parameter,
@@ -945,6 +952,15 @@ view EmptyInspector() {
    render Text("Select a paragraph")
 }
 
+// A status label led by a dot in the caller's color. The dot sits inside the badge, where a caller's
+// clauses cannot reach, so its color travels as a `color` value; a Capitalized word in a clause list
+// is a value, so `background Tint` reads it.
+view StatusBadge(Label text, Tint color default muted) {
+   render Row() [gap xs] {
+      Box() [statusDot, background Tint]
+      Text(Label)
+}  }
+
 view FileTree(Workspace) {
    query Documents from Workspace.Documents { }
    render Col() [gap xs, pad sm] {
@@ -957,6 +973,12 @@ view FileTree(Workspace) {
                // Relative @documents resolves to the nearest unique pane; `reveal` focuses an equal
                // mount rather than stacking a second copy of the same product state.
                on press -> { reveal DocumentScreen(Document) in @documents }
+            }
+            if Document.Final is Final {
+               StatusBadge("Final", Tint: accent)
+            }
+            if Document.Final is Draft {
+               StatusBadge("Draft")
             }
             #openRooted
             FormButton("Rooted") {
@@ -1369,18 +1391,19 @@ view ReadingView(Document) {
    }
 }
 
-// A publishing flow: text-literal cases, a duration-typed state, a foreign action that declares its
-// own failure cases, and §5's outcome vocabulary at the calling site. There is no second, write-only
-// net, so a site that fires an effect names the outcomes it treats.
+// An export flow: text-literal format cases, a duration-typed state, a foreign action that declares
+// its own failure cases, and §5's outcome vocabulary at the calling site.
 view ExportPanel(Document) {
    state Format = ExportFormat."markdown"
    state Countdown = 30.s
 
    action RunExport() runs single {
       when do ExportDocument(Document, Format: Format) {
-         saved -> { present Notice("Exported") as toast (Key: "export", Duration: 3.s) }
-         queued -> { present Notice("Saved — it will export when you are back online") as toast (Key: "export", Duration: 3.s) }
+         saved -> { present Notice("Ready to share") as toast (Key: "export", Duration: 3.s) }
+         Offline -> { present Notice("Exporting needs a connection.") as toast (Key: "export", Duration: 5.s) }
+         Cancelled -> { }
          rejected -> Problem { present Notice(Problem) as toast (Key: "export", Duration: 5.s) }
+         error -> Message { present Notice(Message) as toast (Key: "export", Duration: 5.s) }
       }
    }
 

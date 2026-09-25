@@ -5,6 +5,7 @@ import { ActionsValidator } from './validators/ActionsValidator'
 import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
 import { bridgeValidationChecks, validateBridgedSidecarFiles } from './validators/bridge-validator'
+import { colorValueValidationChecks } from './validators/color-values-validator'
 import { commandValidationChecks } from './validators/commands-validator'
 import { completenessValidationChecks } from './validators/completeness-validator'
 import {
@@ -19,6 +20,7 @@ import { dataValidationChecks, validateDataFile } from './validators/data-valida
 import { validateDatasourceMembership } from './validators/datasource-membership-validator'
 import { declarationSlotValidationChecks } from './validators/declaration-slots-validator'
 import { DesignValidator } from './validators/design-validator'
+import { EffectOutcomesValidator } from './validators/effect-outcomes-validator'
 import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
 import { injectionValidationChecks } from './validators/injections-validator'
 import { InteractionValidator } from './validators/interaction-validator'
@@ -50,6 +52,7 @@ const nodeValidationChecks = NodeValidation.compile(
     projectValidationChecks,
     ViewsValidator.checks,
     ActionsValidator.checks,
+    EffectOutcomesValidator.checks,
     StateValidator.checks,
     ReactiveParametersValidator.checks,
     AliasesValidator.checks,
@@ -63,6 +66,7 @@ const nodeValidationChecks = NodeValidation.compile(
     PhrasesValidator.checks,
     dataValidationChecks,
     DesignValidator.checks,
+    colorValueValidationChecks,
     configurationValidationChecks,
     completenessValidationChecks,
     commandValidationChecks,

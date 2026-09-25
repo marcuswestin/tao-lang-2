@@ -10,6 +10,32 @@ const source = `
 `
 
 Describe('tao compile app selection', () => {
+  Test('refreshes source-adjacent bridge metadata during compilation', async () => {
+    await withTaoFiles('tao-compile-bridge-', {
+      'Main.tao': `app Demo { view Main }
+view Main() { render inject \`\`\`ts return null \`\`\` }
+function CountWords(Value text) returns number {
+   return CountWords(Value) from ./Words.ts
+}
+`,
+      'Words.ts': `import type { CountWords as CountWordsContract } from './Main.tao'
+export const CountWords: CountWordsContract = (value) => value.length
+`,
+    }, async paths => {
+      const sourcePath = paths['Main.tao']!
+      const runtimePackageRoot = FS.resolvePath('runtime', FS.dirname(sourcePath))
+      const compiled = await runCompile(sourcePath, { runtimePackageRoot })
+      const metadataPath = `${sourcePath}.ts`
+      Expect(await FS.readText(metadataPath)).toContain('Sidecar.CountWords satisfies CountWords')
+      Expect(await FS.readText(compiled.outputPath)).toContain('export type CountWords = (arg0: string) => number')
+      const copiedSidecar = FS.resolvePath('Words.ts', FS.dirname(compiled.outputPath))
+      Expect(await FS.readText(copiedSidecar)).toContain("from './App'")
+      await FS.remove(metadataPath)
+      await runCompile(sourcePath, { runtimePackageRoot })
+      Expect(await FS.isFile(metadataPath)).toBe(true)
+    })
+  })
+
   Test('fails actionably without a selection in a noninteractive process', async () => {
     await withTaoFiles('tao-compile-selection-', { 'Apps.tao': source }, async paths => {
       await Expect(runCompile(paths['Apps.tao']!, { interactive: false })).rejects.toThrow(

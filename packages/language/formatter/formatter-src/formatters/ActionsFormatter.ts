@@ -8,8 +8,9 @@ export const ActionsFormatter = {
   /** ActionBlock formats action bodies with one indented statement per line. */
   ActionBlock(f) {
     f.oneSpaceBefore('{')
-    // The inline `-> { … }` shapes collapse; a named action, `async`, and control-flow bodies keep
-    // their own lines. A comment inside would swallow the closing braces, so it holds the block open.
+    // The inline `-> { … }` shapes, `when do` outcomes among them, collapse; a named action, `async`,
+    // and control-flow bodies keep their own lines. A comment inside would swallow the closing braces,
+    // so it holds the block open.
     const canUseSingleLineActionBody = isInlineActionBody(f.node.$container)
       && collapsesToOneLine(f.node, f.node.statements)
     if (canUseSingleLineActionBody) {
@@ -135,6 +136,22 @@ export const ActionsFormatter = {
     f.noSpaceBefore(')')
   },
 
+  /** WhenDoStatement puts its invocation on the `when` line and each outcome on its own line. */
+  WhenDoStatement(f) {
+    f.oneSpaceAfter('when')
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(f.node.outcomes)
+    f.lineSeparatedList(f.node.outcomes)
+  },
+
+  /** WhenDoOutcome separates the outcome from its optional message name and its block. */
+  WhenDoOutcome(f) {
+    f.oneSpaceBefore('->')
+    if (f.node.payload !== undefined) {
+      f.oneSpaceAfter('->')
+    }
+  },
+
   /** AskStatement formats its local binding and dialogue invocation. */
   AskStatement(f) {
     f.oneSpaceAfter('let', 'ask')
@@ -157,4 +174,5 @@ function isInlineActionBody(container: AST.Node): boolean {
   return AST.isActionExpression(container)
     || AST.isEventHandler(container)
     || AST.isLoopSelectHandler(container)
+    || AST.isWhenDoOutcome(container)
 }

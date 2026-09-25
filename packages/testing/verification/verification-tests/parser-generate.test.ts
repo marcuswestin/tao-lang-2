@@ -212,12 +212,12 @@ Describe('parser generate staleness stamp', () => {
     }
   })
 
-  Test('regenerates in host-temporary storage while the worktree tree stays in place', async () => {
+  Test('regenerates in worktree scratch while the published tree stays in place', async () => {
     const root = await repository()
     const langium = generator()
     const grammar = FS.resolvePath('packages/language/parser/parser-grammar/views.langium', root)
     const generatedAst = FS.resolvePath('packages/language/parser/parser-src/_gen_tao-parser/ast.ts', root)
-    let generatedOutsideWorktree = false
+    let generatedInScratch = false
     let previousTreeStayedVisible = false
     try {
       await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
@@ -226,7 +226,7 @@ Describe('parser generate staleness stamp', () => {
       Expect(
         await runParserGenerate({
           generate: async parserRoot => {
-            generatedOutsideWorktree = !FS.pathIsWithin(parserRoot, root)
+            generatedInScratch = FS.pathIsWithin(parserRoot, FS.resolvePath('.artifacts/scratch', root))
             previousTreeStayedVisible = await FS.isFile(generatedAst)
             return langium.generate(parserRoot)
           },
@@ -234,7 +234,7 @@ Describe('parser generate staleness stamp', () => {
         }),
       ).toBe(0)
 
-      Expect(generatedOutsideWorktree).toBe(true)
+      Expect(generatedInScratch).toBe(true)
       Expect(previousTreeStayedVisible).toBe(true)
       Expect(await FS.readText(generatedAst)).toBe('generated 2\n')
     } finally {
@@ -721,7 +721,8 @@ Describe('parser generate staleness stamp', () => {
     try {
       await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
 
-      Expect(await FS.listDir(FS.resolvePath('.artifacts', root))).toEqual(['parser-generate-stamp.json'])
+      Expect(await FS.listDir(FS.resolvePath('.artifacts', root))).toEqual(['parser-generate-stamp.json', 'scratch'])
+      Expect(await FS.listDir(FS.resolvePath('.artifacts/scratch', root))).toEqual([])
     } finally {
       await FS.remove(root)
     }

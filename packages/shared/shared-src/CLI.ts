@@ -91,15 +91,36 @@ export type CommandResult = {
 /** SandboxDenialOutcome is the slice of a command result `isSandboxDenial` reads. `error` is kept
  * as broad as `unknown` because a caller's own probe result may carry a caught exception rather
  * than the narrower `Error` a supervised `CLI` command reports. */
-type SandboxDenialOutcome = Pick<CommandResult, 'stderr' | 'stdout'> & { error?: unknown }
+type SandboxDenialOutcome = Pick<CommandResult, 'stderr' | 'stdout'> & {
+  error?: unknown
+  exitCode?: number | null
+}
 
 const SANDBOX_DENIAL = /\b(operation not permitted|permission denied|eperm|eacces|sandbox)\b/i
 
 /** isSandboxDenial recognizes the policy-denial evidence shared by capability and command diagnostics. */
 export function isSandboxDenial(result: SandboxDenialOutcome): boolean {
+  if (result.exitCode === 0 && result.error === undefined) {
+    return false
+  }
   const output = `${result.stderr}\n${result.stdout}`.trim()
   const fallback = result.error instanceof Error ? result.error.message : ''
   return SANDBOX_DENIAL.test(output || fallback)
+}
+
+/**
+ * Only a variable a harness sets *because* the command is sandboxed belongs here: Claude Code's
+ * sandboxed shell sets `SANDBOX_RUNTIME` and Codex's sets `CODEX_SANDBOX`. Claude Code also sets
+ * `CLAUDE_CODE_TMPDIR` in every session, sandboxed or not, so keying on it reported every agent as
+ * sandboxed.
+ */
+const SANDBOX_SIGNALS: readonly string[] = ['SANDBOX_RUNTIME', 'CODEX_SANDBOX']
+
+/** inAgentSandbox reports whether this process runs under an agent harness's sandbox policy. */
+export function inAgentSandbox(
+  env: Readonly<Record<string, string | undefined>> = Platform.runtimeProcess.env,
+): boolean {
+  return SANDBOX_SIGNALS.some(name => (env[name] ?? '') !== '')
 }
 
 /** CommandCloseResult records process close status. */

@@ -1,5 +1,5 @@
-import { FS, Repo } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Repo } from '@shared'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { dueReminders, formatReminders, readDueReminders, REMINDERS_PATH } from '../dev-cli-src/doctor/Reminders'
 
 const SOURCE = [
@@ -38,7 +38,7 @@ Describe('reminders', () => {
   })
 
   Test('treats a checkout with no reminder file as one with nothing due', async () => {
-    Expect(await readDueReminders(await FS.mkTmpDir('reminders-empty'), '2099-01-01')).toEqual([])
+    Expect(await readDueReminders(await mkTestDir('reminders-empty'), '2099-01-01')).toEqual([])
   })
 
   Test('reads the reminders this repository ships, and finds the re-measurement among them', async () => {

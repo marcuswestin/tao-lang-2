@@ -1,7 +1,7 @@
 import { AppiumNoSuchElementError } from '@appium-driver'
 import type { HostAction, HostObservation, HostRevision, HostSession } from '@host-control'
 import { expect, test } from '@playwright/test'
-import { Errors, FS } from '@shared'
+import { Errors, FS, Repo } from '@shared'
 import {
   type AppiumElement,
   type AppiumLease,
@@ -62,7 +62,7 @@ test('allocates collision-free Appium resources for two simulator UDIDs', async 
 test('uses canonical iOS target names and consumes a preheld simulator lease without reacquiring it', async () => {
   const leases = new FakeLeases()
   const target = simulator('SIM-PREHELD')
-  const artifactRoot = await FS.mkTmpDir('tao-appium-preheld-')
+  const artifactRoot = await Repo.mkScratchDir('tao-appium-preheld-')
   expect(iosTargetLeaseName(target)).toBe('ios-simulator:SIM-PREHELD')
   expect(iosTargetLeaseName({
     appId: 'dev.tao.app',
@@ -103,7 +103,7 @@ test('retains target and derived-port leases when an escaped session cannot be d
 })
 
 test('writes immutable screenshot evidence for repeated captures across two sessions', async () => {
-  const artifactRoot = await FS.mkTmpDir('tao-appium-screenshots-')
+  const artifactRoot = await Repo.mkScratchDir('tao-appium-screenshots-')
   const leases = new FakeLeases()
   const first = await open(
     appiumController(new FakeClient('first-screenshot'), leases, simulator('SIM-SHOT-A')),

@@ -1,4 +1,4 @@
-use Workspaces from @data
+use Documents, Workspaces from @data
 use WordFlowerDrawerNavigator, WordFlowerNavigator, WordFlowerTabsNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
@@ -6,6 +6,33 @@ use Spinner, TextMultiline from @tao/ui
 use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
+//
+// BRIDGE METADATA. The build stamp and Markdown export sidecars import their generated, source-
+// adjacent Tao contract types. Tao writes those ignored modules during compilation and checks the
+// handwritten implementations in `tao check`; authors may use the type-only imports for editor
+// feedback without maintaining a second contract.
+//
+// TEST WORLD CONTROLS. The document journeys use a fresh StarterWorkspace fixture on a phone.
+// A test-only WordFlower variant binds CloudKit so offline edits, failed writes, retry, and
+// reconnect use that provider's per-row recovery contract. The hosted InstantDB variant saves
+// snapshots and does not claim queued per-row writes.
+//
+// DESIGN VALUES. The design language finishes its MVP surface: a clause list reads by case, the
+// active navigation tab is a condition, and a color travels as a value where a view tints something
+// inside itself.
+//
+// This tranche decides:
+// - A clause list names only lowercase styles, design names are lowercase, and a Capitalized word in
+//   a clause list is a value. An element default named in a clause list, or a Capitalized design
+//   name, is a compile error
+// - `selected` joins `pressed`, `focused`, and `hovered`; the navigation host supplies it for the
+//   active tab, so `NavigationTab` carries the active look and `NavigationTabActive` is retired
+// - `color` is a view parameter type. A default or an argument is a design color name or another
+//   `color` value, and `background Tint` inside the view reads it, resolved against the mounted
+//   design. `StatusBadge` in @ui/Workspaces forces it: the documents list mixes drafts and finished
+//   work
+// - `tao fix` rewrites `bg`/`fg` to `background`/`ink` and moves flat design entries into the typed
+//   blocks, so this directory's designs are written only in the typed form
 //
 // PHRASES. A `phrase` is named copy that returns text: one sentence with typed holes, or plural
 // forms (`one`, `other`, and the other CLDR categories, `other` required) chosen by its one number
@@ -599,6 +626,16 @@ guard default {
 fixture StudioWorkspace {
    Novel = create Workspace {
       Name: "Novel"
+}  }
+
+folder fixture StarterWorkspace {
+   Novel = create Workspace {
+      Name: "Novel"
+   }
+   Opening = create Document {
+      Workspace: Novel
+      Title: "Opening"
+      Body: "The first line."
 }  }
 
 scenarios WorkspaceRow "states" {

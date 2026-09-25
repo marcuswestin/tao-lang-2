@@ -69,6 +69,9 @@ nav SkillNavigator = SelectionNav {
   `present`, `dismiss`, `ask`, `respond`, or `fail`.
 - `check <condition>` stops the action when the condition is false; it may not sit inside an `if`.
   One-sided `if` conditionally runs a block. `guard` belongs to views; in an action it is retired.
+- `when do Verb(...) { … }` runs a verb that may fail and names what happens: `saved -> { … }`, a case
+  the verb declares (`Offline -> { … }`), `rejected -> Problem { … }` for its other declared cases, and
+  `error -> Message { … }` for anything undeclared. The verb's own writes roll back on failure.
 - Root actions are serialized transactions; nested `do` joins the transaction. TypeScript effects
   cannot roll back. `async { ... }` starts a detached serialized root after its caller finishes.
 - A `command` supplies static `Title`, optional description/label/icon/key/enabled values, and one

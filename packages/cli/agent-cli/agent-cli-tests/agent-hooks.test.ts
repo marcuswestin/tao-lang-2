@@ -52,12 +52,13 @@ const SHELL_CASES: ReadonlyArray<readonly [string, readonly Habit[]]> = [
 const COMMIT_MESSAGE_CASES: ReadonlyArray<readonly [string, string, number]> = [
   ['an ordinary subject', 'Simplify the dispatch tables', 0],
   ['generated paths as subjects', 'Regenerate .codex/hooks.json and .claude/settings.json', 0],
-  ['a human co-author', 'Fix it\n\nCo-Authored-By: Marcus Westin <marcus@example.com>', 0],
+  ['a human co-author', 'Fix it\n\nCo-Authored-By: Marcus Westin <marcus@example.com>', 1],
   ['a generator that is not an agent', 'Generated with the Langium parser generator', 0],
   ['an automated co-author trailer', 'Fix it\n\nCo-Authored-By: A Model <noreply@anthropic.com>', 1],
+  ['co-author text anywhere', 'Document co-authored-by handling', 1],
   ['a generated-with line', 'Fix it\n\nGenerated with Copilot', 1],
   ['the robot marker alone', 'Fix it 🤖', 1],
-  ['an identity in the body', 'Fix it\n\nAsked chatgpt about the parser', 1],
+  ['changed harnesses in the body', 'Update Claude Code and Codex model routing', 0],
   ['commented-out git help', 'Fix it\n# Co-Authored-By: A Model <noreply@anthropic.com>', 0],
 ]
 
@@ -117,7 +118,8 @@ Describe('agent hooks', () => {
         '120,000 files',
         'stage, unstage',
         'developer environment',
-        'no agent identity',
+        'no agent author credit',
+        'no `Co-Authored-By` text',
         'cover every provider in use',
         'Messaging another agent',
       ]
@@ -153,13 +155,13 @@ Describe('agent hooks', () => {
       const commit = await commitChange(
         repository,
         'two',
-        'Change it\n\nCo-Authored-By: A Model <noreply@anthropic.com>',
+        'Change it\n\nCo-Authored-By: Marcus Westin <marcus@example.com>',
       )
 
       // Both hooks speak, the commit lands, and `git commit` reports success.
       Expect(commit.exitCode).toBe(0)
       Expect(commit.stderr).toContain('is not a `feat/<name>` or `dev/<name>` branch')
-      Expect(commit.stderr).toContain('automated attribution trailer')
+      Expect(commit.stderr).toContain('Co-Authored-By text')
       Expect((await git(repository, ['log', '-1', '--format=%s'])).stdout.trim()).toBe('Change it')
     } finally {
       await FS.remove(root)

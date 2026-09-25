@@ -20,11 +20,15 @@ app TaoStudioFiles {
 }
 
 design StudioDesign {
-   panel #090909
-   ink #f4f4f4
-   line #363636
-   Text [ink ink]
-   TextInput [background panel, border line, ink ink]
+   colors {
+      panel #090909
+      ink #f4f4f4
+      line #363636
+   }
+   styles {
+      Text [ink ink]
+      TextInput [background panel, border line, ink ink]
+   }
 }
 
 type StudioServer is datasource with {

@@ -7,6 +7,12 @@ const ENV = 'TAO_TEST_JEST_CACHE_DIRECTORY'
 // checkout keeps the transforms it can reuse; obsolete keys compete for this fixed allowance.
 const MAX_FILES = 25_000
 const MAX_BYTES = 256 * 1024 * 1024
+const MAX_IDENTITIES = 16
+const MAX_TOTAL_FILES = 100_000
+const MAX_TOTAL_BYTES = 1024 * 1024 * 1024
+const IDENTITY_NAME = /^[0-9a-f]{16}$/
+const LAST_USED = 'last-used'
+const SIZE_FILE = 'size.json'
 // A killed CLI may leave Jest running briefly. Keep its lease longer than a normal journey, then
 // reclaim it on a later run. The outer limit also prevents a reused PID from pinning it forever.
 const DEAD_OWNER_GRACE_MS = 60 * 60 * 1000
@@ -18,6 +24,9 @@ type Options = {
   root?: string
   maxFiles?: number
   maxBytes?: number
+  maxIdentities?: number
+  maxTotalFiles?: number
+  maxTotalBytes?: number
 }
 
 /** JestTransformCache owns a bounded, checkout-scoped transform cache for `tao test`. */
@@ -26,7 +35,7 @@ export const JestTransformCache = { ENV, root, run } as const
 /** Keep reusable transforms out of macOS boot-time temp cleanup, scoped by the run-root identity. */
 function root(runtimePackageRoot: string): string {
   const checkoutIdentity = FS.basename(FS.dirname(TestRunRoot.hostGeneratedRoot(runtimePackageRoot)))
-  return TaoHome.resolve(`cache/jest-transform-cache/${checkoutIdentity}`)
+  return TaoHome.cacheResolve(`jest-transform-cache-v2/${checkoutIdentity}`)
 }
 
 /**
@@ -41,24 +50,30 @@ async function run<Value>(
   options: Options = {},
 ): Promise<Value> {
   const cacheRoot = options.root ?? root(runtimePackageRoot)
-  await FS.mkdir(cacheRoot)
-  const canonicalRoot = await FS.realPath(cacheRoot)
+  await FS.mkdir(FS.dirname(cacheRoot))
+  const identitiesRoot = await FS.realPath(FS.dirname(cacheRoot))
+  const canonicalRoot = FS.resolvePath(FS.basename(cacheRoot), identitiesRoot)
   const cacheDirectory = FS.resolvePath('data', canonicalRoot)
   const leasesRoot = FS.resolvePath('leases', canonicalRoot)
-  await FS.mkdir(cacheDirectory)
-  await FS.mkdir(leasesRoot)
   const leasePath = FS.resolvePath(`${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.json`, leasesRoot)
+  // A parent lock covers registration and retirement across every checkout identity. A reader
+  // cannot enter an identity while another process is deciding whether to remove it.
   const locked = async (action: () => Promise<void>) =>
-    await FS.withFileMutationLock(FS.resolvePath('coordination', canonicalRoot), canonicalRoot, action)
+    await FS.withFileMutationLock(FS.resolvePath('coordination', identitiesRoot), identitiesRoot, action)
 
   await locked(async () => {
+    await FS.mkdir(cacheDirectory)
+    await FS.mkdir(leasesRoot)
     const leases = await activeLeases(leasesRoot)
     // A prior process may have died before its final prune. Ordinary runs prune at exit only, so
     // warm runs do not pay for a full cache walk twice.
     if (leases.active === 0 && leases.reclaimed) {
-      await prune(cacheDirectory, options)
+      await recordSize(canonicalRoot, await prune(cacheDirectory, options))
     }
+    // A killed writer may leave more data than the last completed size receipt recorded.
+    await FS.remove(FS.resolvePath(SIZE_FILE, canonicalRoot)).catch(() => {})
     await FS.writeJson(leasePath, { pid: Platform.runtimeProcess.pid })
+    await FS.writeText(FS.resolvePath(LAST_USED, canonicalRoot), `${Date.now()}\n`)
   })
   try {
     return await work(cacheDirectory)
@@ -66,10 +81,84 @@ async function run<Value>(
     await locked(async () => {
       await FS.remove(leasePath)
       if ((await activeLeases(leasesRoot)).active === 0) {
-        await prune(cacheDirectory, options)
+        await recordSize(canonicalRoot, await prune(cacheDirectory, options))
       }
+      await pruneIdentities(identitiesRoot, canonicalRoot, options)
     })
   }
+}
+
+/** Bound all managed identities together, retiring only identities with no possible reader. */
+async function pruneIdentities(identitiesRoot: string, currentRoot: string, options: Options): Promise<void> {
+  const identities: Array<{ path: string; files: number; bytes: number; usedMs: number; active: boolean }> = []
+  for (const name of await FS.listDir(identitiesRoot)) {
+    if (!IDENTITY_NAME.test(name)) {
+      continue
+    }
+    const path = FS.resolvePath(name, identitiesRoot)
+    // Only roots with this version's receipt are ours. In particular, leave preexisting or
+    // manually created directories alone even when they happen to have a matching identity name.
+    const stamp = FS.resolvePath(LAST_USED, path)
+    if (!await FS.isDirectory(path) || await FS.isSymbolicLink(path) || !await FS.isFile(stamp)) {
+      continue
+    }
+    const leases = FS.resolvePath('leases', path)
+    const active = await FS.isDirectory(leases) && (await activeLeases(leases)).active > 0
+    const size = await readSize(path) ?? await measure(FS.resolvePath('data', path))
+    const usedMs = Number((await FS.readText(stamp).catch(() => '0')).trim())
+      || await FS.modifiedTimeMs(path).catch(() => 0)
+    identities.push({ path, ...size, usedMs, active })
+  }
+  let files = identities.reduce((sum, identity) => sum + identity.files, 0)
+  let bytes = identities.reduce((sum, identity) => sum + identity.bytes, 0)
+  let count = identities.length
+  const oldFirst = identities.filter(identity => !identity.active && identity.path !== currentRoot)
+    .sort((left, right) => left.usedMs - right.usedMs || left.path.localeCompare(right.path))
+  for (const identity of oldFirst) {
+    if (
+      count <= (options.maxIdentities ?? MAX_IDENTITIES)
+      && files <= (options.maxTotalFiles ?? MAX_TOTAL_FILES)
+      && bytes <= (options.maxTotalBytes ?? MAX_TOTAL_BYTES)
+    ) {
+      break
+    }
+    await FS.remove(identity.path)
+    count -= 1
+    files -= identity.files
+    bytes -= identity.bytes
+  }
+}
+
+type Size = { files: number; bytes: number }
+
+async function recordSize(identityRoot: string, size: Size): Promise<void> {
+  await FS.writeJson(FS.resolvePath(SIZE_FILE, identityRoot), size)
+}
+
+async function readSize(identityRoot: string): Promise<Size | undefined> {
+  const value = await FS.readJson<unknown>(FS.resolvePath(SIZE_FILE, identityRoot)).catch(() => undefined)
+  if (value === undefined || typeof value !== 'object' || value === null) {
+    return undefined
+  }
+  const size = value as Record<string, unknown>
+  return typeof size['files'] === 'number' && Number.isFinite(size['files']) && size['files'] >= 0
+      && typeof size['bytes'] === 'number' && Number.isFinite(size['bytes']) && size['bytes'] >= 0
+    ? { files: size['files'], bytes: size['bytes'] }
+    : undefined
+}
+
+async function measure(directory: string): Promise<Size> {
+  let files = 0
+  let bytes = 0
+  if (await FS.isDirectory(directory)) {
+    for await (const path of FS.walk(directory, { includeHidden: true })) {
+      if (await FS.isFile(path)) {
+        files += 1
+        bytes += await FS.byteSize(path).catch(() => 0)
+      }
+    }
+  }
+  return { files, bytes }
 }
 
 /** Remove expired leases while protecting active processes and recently orphaned Jest children. */
@@ -94,7 +183,7 @@ async function activeLeases(leasesRoot: string): Promise<{ active: number; recla
 }
 
 /** Evict the oldest transforms until both file count and disk bytes fit the cache budget. */
-async function prune(cacheDirectory: string, options: Options): Promise<void> {
+async function prune(cacheDirectory: string, options: Options): Promise<Size> {
   const files: Array<{ path: string; bytes: number; modifiedMs: number }> = []
   let bytes = 0
   for await (const path of FS.walk(cacheDirectory, { includeHidden: true })) {
@@ -108,7 +197,7 @@ async function prune(cacheDirectory: string, options: Options): Promise<void> {
   const maxFiles = options.maxFiles ?? MAX_FILES
   const maxBytes = options.maxBytes ?? MAX_BYTES
   if (files.length <= maxFiles && bytes <= maxBytes) {
-    return
+    return { files: files.length, bytes }
   }
   files.sort((left, right) => left.modifiedMs - right.modifiedMs || left.path.localeCompare(right.path))
   let count = files.length
@@ -121,6 +210,7 @@ async function prune(cacheDirectory: string, options: Options): Promise<void> {
     bytes -= file.bytes
   }
   await removeEmptyDirectories(cacheDirectory)
+  return { files: count, bytes }
 }
 
 /** Remove Jest's now-empty hash buckets too, so obsolete configurations leave no directory buildup. */

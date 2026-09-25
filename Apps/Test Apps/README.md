@@ -164,7 +164,7 @@ Exercise `required` completeness and the writes that consume it through an ordin
 
 Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.
 
-**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, and stored rows surviving a `relaunch`. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
+**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, stored rows surviving a `relaunch`, and Memory saving while the test network is offline. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
 
 **Does not belong here:** remote providers, credentials, auth, permissions, sync, pagination, or aggregation; navigation or WordFlower product behavior; schema, query, and write diagnostics.
 
@@ -335,3 +335,49 @@ tests, not journeys.
 
 **Does not belong here:** relevance ranking, which is explicitly not decided; `group by`, which is
 Post-MVP; remote providers; navigation or WordFlower product behavior.
+
+## Effect Outcomes
+
+Exercise `when do` (Decisions §5): a call site that runs a verb, contains its failure, and names what
+happens next. The verb is a native action that writes a draft and then calls a foreign `Export` whose
+sibling `Export.ts` ends each call the way its `Mode` argument says.
+
+**Belongs here:** a check-scoped declared-case failure stub that bypasses `Export.ts`; `saved` after the verb finishes, keeping its writes; a declared case the site names;
+`rejected -> Problem` catching a declared case the site does not name, with the declared sentence; `error
+-> Message` for a case the verb never declared, with the provider's own sentence; the verb's own write
+rolled back while the caller's earlier write survives; a verb's contract reached through a plain `do`.
+
+**Does not belong here:** the unhandled-failure warning, unknown or duplicate outcomes, and `check`
+placement, which are validator tests; `queued`, which is post-MVP; Studio's failure reports for an
+unhandled failure, which the runtime tests own.
+
+## Test Device and Fixture
+
+Exercise a behavior test's `on <device>` and `with <fixture>` head clauses (Decisions §16).
+
+**Belongs here:** a `with <fixture>` check starting with synced and device-local fixture rows visible
+before any interaction; a nested test inheriting its parent's `on`/`with` without repeating them; a nested test
+overriding its parent's `on` while still inheriting `with`. `on phone` versus `on tablet` producing a
+stacked versus side-by-side `Panes()` is not provable from this app's tests — the test language
+selects by visible text, label, placeholder, or `#tag`, with no selector for a chosen layout
+direction — so that half of the proof lives in
+`packages/apps/expo-host/expo-host-tests/test-device-fixture-e2e.jest-test.tsx`, which reads the
+rendered style the harness itself produces.
+
+**Does not belong here:** the device and fixture vocabulary reused from Studio scenarios
+(`ScenarioDeviceClause`, `ScenarioFixtureClause`), which Studio's own scenario coverage owns; the
+`network`, `wait for sync`, and `datasource fails after`, which the Test World Controls entry owns;
+the still-deferred `as <account>` and `expect refused` controls.
+
+## Test World Controls
+
+Exercise Decisions §16's network, sync, and datasource fault controls with rendered Tao journeys.
+
+**Belongs here:** a granular CloudKit stand-in queues an offline write, syncs it on reconnect,
+reports an injected failed write, and retries that record. ICloud keeps an offline snapshot locally
+through reconnect, but its protocol cannot confirm remote upload completion for `wait for sync`;
+Dev shows a remote save error while offline. Data MVP proves that Memory
+saves offline and shows an injected snapshot save error through `guard … error`.
+
+**Does not belong here:** live CloudKit or InstantDB transport acceptance, account policy, and
+atomic backend rejection. Those need provider and device evidence.

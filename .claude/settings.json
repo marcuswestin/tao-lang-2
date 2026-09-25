@@ -71,6 +71,12 @@
       "Bash(./agent unsandboxed prepare-release *)",
       "Bash(./agent unsandboxed app-dev)",
       "Bash(./agent unsandboxed app-dev *)",
+      "Bash(./agent unsandboxed studio)",
+      "Bash(./agent unsandboxed studio *)",
+      "Bash(./agent unsandboxed studio-native)",
+      "Bash(./agent unsandboxed studio-native *)",
+      "Bash(./agent unsandboxed local-instantdb)",
+      "Bash(./agent unsandboxed local-instantdb *)",
       "Bash(./agent unsandboxed companion-host-build)",
       "Bash(./agent unsandboxed companion-host-build *)",
       "Bash(./agent unsandboxed standalone-cli-vm-setup)",
@@ -90,7 +96,13 @@
       "Bash(./agent unsandboxed remote)",
       "Bash(./agent unsandboxed remote *)",
       "Bash(./agent unsandboxed processes)",
-      "Bash(./agent unsandboxed processes *)"
+      "Bash(./agent unsandboxed processes *)",
+      "Bash(./agent unsandboxed start-branch)",
+      "Bash(./agent unsandboxed start-branch *)"
+    ],
+    "ask": [
+      "Bash(./agent land-unlock --force*)",
+      "mcp__ccd_session_mgmt__send_message"
     ],
     "deny": [
       "Bash(bun install *)",
@@ -99,10 +111,6 @@
       "Read(~/.aws/**)",
       "Read(~/.config/gh/**)",
       "Read(~/.ssh/**)"
-    ],
-    "ask": [
-      "Bash(./agent land-unlock --force*)",
-      "mcp__ccd_session_mgmt__send_message"
     ]
   },
   "sandbox": {
@@ -138,6 +146,12 @@
       "./agent unsandboxed prepare-release *",
       "./agent unsandboxed app-dev",
       "./agent unsandboxed app-dev *",
+      "./agent unsandboxed studio",
+      "./agent unsandboxed studio *",
+      "./agent unsandboxed studio-native",
+      "./agent unsandboxed studio-native *",
+      "./agent unsandboxed local-instantdb",
+      "./agent unsandboxed local-instantdb *",
       "./agent unsandboxed companion-host-build",
       "./agent unsandboxed companion-host-build *",
       "./agent unsandboxed standalone-cli-vm-setup",
@@ -157,7 +171,9 @@
       "./agent unsandboxed remote",
       "./agent unsandboxed remote *",
       "./agent unsandboxed processes",
-      "./agent unsandboxed processes *"
+      "./agent unsandboxed processes *",
+      "./agent unsandboxed start-branch",
+      "./agent unsandboxed start-branch *"
     ],
     "filesystem": {
       "allowWrite": [
@@ -168,15 +184,13 @@
         "~/.android",
         "~/.expo",
         "~/.hutch",
-        "~/.local/state/watchman",
         "~/Library/Caches"
       ]
     },
     "network": {
       "allowLocalBinding": true,
       "allowUnixSockets": [
-        "/nix/var/nix/daemon-socket/socket",
-        "~/.local/state/watchman"
+        "/nix/var/nix/daemon-socket/socket"
       ],
       "allowedDomains": [
         "registry.npmjs.org",
@@ -191,6 +205,7 @@
         "*.expo.io",
         "exp.host",
         "repo1.maven.org",
+        "repo.reactnative.dev",
         "cache.nixos.org",
         "*.cachix.org",
         "*.anthropic.com",

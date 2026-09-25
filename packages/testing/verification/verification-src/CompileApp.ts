@@ -294,7 +294,7 @@ async function inputFilePaths(root: string): Promise<string[]> {
       includeHidden: true,
     })
   ) {
-    if (!path.endsWith(EXCLUDED_INPUT_SUFFIX)) {
+    if (!path.endsWith(EXCLUDED_INPUT_SUFFIX) && !path.endsWith('.tao.ts')) {
       paths.push(path)
     }
   }

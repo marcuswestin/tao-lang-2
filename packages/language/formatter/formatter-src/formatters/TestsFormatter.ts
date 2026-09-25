@@ -6,9 +6,26 @@ export const TestsFormatter = {
     f.oneSpaceAfter('test')
   },
 
+  /** TestDeviceClause formats `on phone`, matching `ScenarioDeviceClause`'s own spelling. */
+  TestDeviceClause(f) {
+    f.oneSpaceAfter('on')
+    f.oneSpaceAround('x')
+    f.oneSpaceBetweenProperties('device', 'width')
+  },
+
+  /** TestFixtureClause formats `with FixtureName`. */
+  TestFixtureClause(f) {
+    f.oneSpaceAfter('with')
+  },
+
   /** RunStep formats `run AppName`. */
   RunStep(f) {
     f.oneSpaceAfter('run')
+  },
+
+  ActionFailureStubStep(f) {
+    f.oneSpaceAfter('action', 'fails')
+    f.oneSpaceBefore('fails')
   },
 
   /** PressTextStep formats selector-targeted press steps. */
@@ -143,5 +160,19 @@ export const TestsFormatter = {
   /** AdvanceStep spaces its duration after the keyword. */
   AdvanceStep(f) {
     f.oneSpaceAfter('advance')
+  },
+
+  NetworkTestStep(f) {
+    f.oneSpaceAfter('network')
+  },
+
+  WaitForSyncStep(f) {
+    f.oneSpaceAfter('wait', 'for')
+  },
+
+  DatasourceFailureStep(f) {
+    f.oneSpaceAfter('datasource', 'fails', 'after')
+    f.oneSpaceBetweenProperties('operation', 'entity')
+    f.oneSpaceBetweenProperties('entity', 'message')
   },
 } satisfies Partial<FormatHandlers>

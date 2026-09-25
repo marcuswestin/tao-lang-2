@@ -93,7 +93,11 @@ export async function withTaoFixture(
   testsFunction: (rootDir: string) => Promise<void>,
 ): Promise<void> {
   await withoutInheritedNoCache(async () => {
-    await withTaoFiles('tao-cli-test', files, (_paths, rootDir) => testsFunction(rootDir), { verbatim: true })
+    // CLI tests exercise project-root detection; give each fixture its own root outside this Git checkout.
+    await withTaoFiles('tao-cli-test', files, (_paths, rootDir) => testsFunction(rootDir), {
+      location: 'host',
+      verbatim: true,
+    })
   })
 }
 

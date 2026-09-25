@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { Describe, Expect, Test, withCapturedOutput } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import {
   auditModelRouting,
   compareVersions,
@@ -81,9 +81,9 @@ type Catalog = {
 
 /** fixture writes a routing table and a Codex catalog; `null` leaves the catalog out. */
 async function fixture(catalog: Catalog | null = { fetchedAt: FRESH, slugs: CATALOG }): Promise<Fixture> {
-  const repoRoot = await FS.mkTmpDir('model-audit-repo-')
+  const repoRoot = await mkTestDir('model-audit-repo-')
   await FS.writeText(FS.resolvePath('agents/skills/delegation/SKILL.md', repoRoot), SKILL_SOURCE)
-  const codexHome = await FS.mkTmpDir('model-audit-codex-')
+  const codexHome = await mkTestDir('model-audit-codex-')
   if (catalog !== null) {
     await FS.writeJson(FS.resolvePath('models_cache.json', codexHome), {
       ...(catalog.clientVersion === undefined ? {} : { client_version: catalog.clientVersion }),
@@ -94,7 +94,7 @@ async function fixture(catalog: Catalog | null = { fetchedAt: FRESH, slugs: CATA
       ],
     })
   }
-  return { claudeDir: await FS.mkTmpDir('model-audit-claude-'), codexHome, repoRoot }
+  return { claudeDir: await mkTestDir('model-audit-claude-'), codexHome, repoRoot }
 }
 
 async function writeSession(claudeDir: string, session: string, lines: readonly string[]): Promise<string> {

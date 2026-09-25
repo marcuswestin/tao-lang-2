@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Repo } from '@shared'
 import { generate } from 'rulesync'
 import { generateClaudeHostSettings } from './AgentHostCommands'
 import { ClaudeProfilesGenerator } from './ClaudeProfilesGenerator'
@@ -34,7 +34,7 @@ async function renderedOutputs(
 
 async function rulesyncOutputs(root: string): Promise<Map<string, string>> {
   const outputs = new Map<string, string>()
-  const scratch = await FS.mkTmpDir('tao-agent-config-freshness-')
+  const scratch = await Repo.mkScratchDir('tao-agent-config-freshness-', root)
   try {
     for (const output of RULESYNC_OUTPUTS) {
       const committed = FS.resolvePath(output.path, root)
@@ -57,6 +57,10 @@ async function rulesyncOutputs(root: string): Promise<Map<string, string>> {
         await FS.copyFile(
           FS.resolvePath('.rulesync/permissions.jsonc', root),
           FS.resolvePath('.rulesync/permissions.jsonc', scratch),
+        )
+        await FS.copyFile(
+          FS.resolvePath('.rulesync/rulesync.jsonc', root),
+          FS.resolvePath('.rulesync/rulesync.jsonc', scratch),
         )
         await generateClaudeHostSettings(scratch)
       }

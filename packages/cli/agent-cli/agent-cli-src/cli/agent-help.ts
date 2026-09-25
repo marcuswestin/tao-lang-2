@@ -31,6 +31,10 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
     [
       ...justHelpLines(result.stdout, justCommands),
       fallbackLine('tao [args...]', 'Run the Tao CLI inside the sandbox'),
+      fallbackLine(
+        'start-branch <name>',
+        'Start a feat/* branch from fetched origin/main after checking checkout writes',
+      ),
     ],
     hostOperations,
   ))
@@ -104,7 +108,10 @@ Examples:
   ./agent unsandboxed simulators list booted
   ./agent unsandboxed simulators run <device-udid>
   ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios
+  ./agent unsandboxed studio Apps/HNReader
+  ./agent unsandboxed local-instantdb start
   ./agent unsandboxed pods install <ios-directory>
+  ./agent unsandboxed direnv allow
   ./agent setup --refresh-lockfile
 
 unsandboxed accepts only named argv prefixes in .rulesync/permissions.jsonc's agentHostCommands.

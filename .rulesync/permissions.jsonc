@@ -103,7 +103,9 @@
     "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
     "native-module-check",
     "prepare-release studio", "prepare-release ide-extension",
-    "app-dev", "companion-host-build",
+    "app-dev", "studio", "studio-native",
+    "local-instantdb start", "local-instantdb stop",
+    "companion-host-build",
     "standalone-cli-vm-setup", "standalone-cli-clean-machine",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators open-url", "simulators uninstall", "simulators open",
@@ -113,7 +115,7 @@
     "pods install", "pods spec",
     "android devices", "android state", "android emulators", "android boot", "android ensure",
     "remote fetch", "remote refs", "remote heads", "remote exists",
-    "processes list", "processes started",
+    "processes list", "processes started", "start-branch",
   ],
   "claudecode": {
     "autoCompactWindow": 272000,
@@ -129,9 +131,8 @@
           { "path": "~/.config/gh", "mode": "deny" },
         ],
       },
-      // Caches the pinned toolchain writes outside the worktree. Expo's native-module cache,
-      // Hutch's launcher root, and Watchman's state directory are as much part of the dev loop
-      // as Bun's and Gradle's: without them Studio, native Studio, and file watching all fail.
+      // Caches the pinned toolchain writes outside the worktree. Expo's native-module cache and
+      // Hutch's launcher root are as much part of the dev loop as Bun's and Gradle's.
       "filesystem": {
         "allowWrite": [
           "~/.tao",
@@ -141,19 +142,18 @@
           "~/.android",
           "~/.expo",
           "~/.hutch",
-          "~/.local/state/watchman",
           "~/Library/Caches",
         ],
       },
       "network": {
         "allowLocalBinding": true,
-        // Watchman's client reaches its server through `<login>-state/sock` under this directory,
-        // named after whoever runs it. Claude Code and Codex both render a socket entry as a
-        // Seatbelt `subpath` rule, so the directory covers every login without naming one; the
-        // rule matches the resolved path, so a link planted here reaches no other socket.
+        // Watchman is deliberately absent. Its socket sits under each developer's home directory,
+        // and Codex accepts only an absolute socket path, which would put a login in the tracked
+        // config; an agent sandbox also refuses OS file watching outright. So file-watching dev
+        // loops run on the host (`./agent unsandboxed app-dev` or `studio`), and sandboxed tests
+        // and builds crawl the tree without Watchman.
         "allowUnixSockets": [
           "/nix/var/nix/daemon-socket/socket",
-          "~/.local/state/watchman",
         ],
         "allowedDomains": [
           "registry.npmjs.org",
@@ -167,10 +167,10 @@
           "*.expo.dev",
           "*.expo.io",
           "exp.host",
-          // React Native's CocoaPods integration downloads the Hermes iOS artifact from Maven
-          // during the native-module compiler proof. The command still requires explicit host
-          // review or an opt-in unsandboxed session; this network rule does not grant a host escape.
+          // React Native's CocoaPods integration downloads iOS artifacts from Maven and its
+          // artifact CDN during native builds. These network rules do not grant a host escape.
           "repo1.maven.org",
+          "repo.reactnative.dev",
           "cache.nixos.org",
           "*.cachix.org",
           "*.anthropic.com",

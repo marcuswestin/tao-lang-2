@@ -27,9 +27,12 @@ Root `AGENTS.md` owns the hard constraints on branches and the Git index; the wa
   status, reflog, and `ORIG_HEAD`; after the Developer authorizes a reset, run
   `./agent unsandboxed merge-recover --reset-to <full pre-merge SHA>`. That uses `git reset --merge`
   to retain unrelated work where Git can; `--hard` discards tracked edits and needs separate explicit
-  authorization. An authorized `./agent unsandboxed land` performs its own integration under the
-  landing lock. For any other Git operation that half-succeeded, diagnose read-only, report the
-  write needed, and pause for the Developer's explicit approval.
+  authorization. To start a new feature branch from current `origin/main`, run
+  `./agent start-branch feat/<name>`; if its write probe refuses, run
+  `./agent unsandboxed start-branch feat/<name>`. Both require a clean worktree. An authorized
+  `./agent unsandboxed land` performs its own integration under the landing lock. For any other
+  Git operation that half-succeeded, diagnose the exact state read-only, report the write needed,
+  and pause for the Developer's explicit approval.
 
 ## Moving a branch ref
 

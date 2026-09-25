@@ -261,7 +261,7 @@ Describe('Studio browser CDP harness', () => {
   })
 
   Test('captures only a settled DOM element with its page-space clip', async () => {
-    const artifactRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-cdp-element-', FS.tmpdir()))
+    const artifactRoot = await mkTestDir('tao-studio-cdp-element-')
     try {
       const transport = new FakeCdpTransport()
       transport.evaluateResults.push(undefined, { height: 844, width: 390, x: 120, y: 240 })
@@ -295,7 +295,7 @@ Describe('Studio browser CDP harness', () => {
   })
 
   Test('freezes the exact cross-origin preview frame while capturing its viewport', async () => {
-    const artifactRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-cdp-frame-', FS.tmpdir()))
+    const artifactRoot = await mkTestDir('tao-studio-cdp-frame-')
     try {
       const transport = new FakeCdpTransport()
       transport.frameTree = {

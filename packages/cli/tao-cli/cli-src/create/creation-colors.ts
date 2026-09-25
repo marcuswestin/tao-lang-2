@@ -17,6 +17,9 @@ export type DesignColors = {
 
 type Rgb = { r: number; g: number; b: number }
 
+/** MIN_TEXT_CONTRAST is WCAG AA's minimum contrast ratio for body-size text. */
+const MIN_TEXT_CONTRAST = 4.5
+
 /**
  * deriveDesignColors expands canvas, ink, and accent into every token the generated design uses, so a
  * model or an image supplies three colors and the rest stay coherent with them.
@@ -31,7 +34,7 @@ export function deriveDesignColors(palette: CreationPalette): DesignColors {
     canvas: formatHex(canvas),
     surface: formatHex(surface),
     ink: formatHex(ink),
-    inkMuted: formatHex(mix(ink, canvas, 0.45)),
+    inkMuted: formatHex(mutedInk(ink, canvas, [canvas, surface])),
     accent: formatHex(accent),
     accentStrong: formatHex(lightCanvas ? mix(accent, ink, 0.25) : mix(accent, surface, 0.25)),
     accentSoft: formatHex(mix(accent, surface, 0.82)),
@@ -40,6 +43,28 @@ export function deriveDesignColors(palette: CreationPalette): DesignColors {
     dangerSoft: lightCanvas ? '#f8e6e3' : formatHex(mix({ r: 164, g: 61, b: 61 }, canvas, 0.7)),
     onAccent: luminance(accent) > 0.45 ? formatHex(ink) : '#ffffff',
   }
+}
+
+/**
+ * mutedInk is the lightest blend of ink toward canvas, at most 45%, whose rounded color still reaches
+ * WCAG AA text contrast on every background muted text sits on. A fixed 45% blend read at about 3.5:1
+ * on both starters' canvas and surface. A palette whose own ink misses AA keeps that ink.
+ */
+function mutedInk(ink: Rgb, canvas: Rgb, backgrounds: readonly Rgb[]): Rgb {
+  for (let percent = 45; percent > 0; percent--) {
+    const candidate = rounded(mix(ink, canvas, percent / 100))
+    if (backgrounds.every(background => contrastRatio(candidate, background) >= MIN_TEXT_CONTRAST)) {
+      return candidate
+    }
+  }
+  return ink
+}
+
+/** contrastRatio is the WCAG contrast ratio between two colors, from 1 to 21. */
+function contrastRatio(first: Rgb, second: Rgb): number {
+  const firstLuminance = luminance(first)
+  const secondLuminance = luminance(second)
+  return (Math.max(firstLuminance, secondLuminance) + 0.05) / (Math.min(firstLuminance, secondLuminance) + 0.05)
 }
 
 /** parseHex reads a #rrggbb color; the plan validator has already rejected other spellings. */
@@ -79,6 +104,11 @@ export function saturation(color: Rgb): number {
     return 0
   }
   return lightness > 0.5 ? (max - min) / (2 - max - min) : (max - min) / (max + min)
+}
+
+/** rounded snaps a blended color to the integer channels `formatHex` writes. */
+function rounded(color: Rgb): Rgb {
+  return { r: clamp(color.r), g: clamp(color.g), b: clamp(color.b) }
 }
 
 function clamp(value: number): number {

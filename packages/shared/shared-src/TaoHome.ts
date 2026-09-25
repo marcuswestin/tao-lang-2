@@ -4,10 +4,9 @@ import * as Platform from './Platform'
 
 /**
  * TaoHome owns the one directory Tao keeps machine-wide state in: installed versions, the `tao`
- * executable link, downloaded hosts, and caches. Every writer resolves it here, so relocating it with
- * `TAO_HOME` relocates all of it rather than whichever pieces happened to read the variable. The
- * install script (`standalone-install.sh`) spells the same rule in shell, because it runs before
- * any Tao binary exists; the two must agree.
+ * executable link, downloaded hosts, and reusable caches. Every writer resolves it here, so
+ * relocating with `TAO_HOME` relocates all of it. The install script (`standalone-install.sh`)
+ * spells the same installed-state rule in shell because it runs before any Tao binary exists.
  *
  * Project state is not here. A project's builds, sessions, and generated hosts stay under its own
  * `.tao/`, so deleting a project deletes them and no project reaches into another.
@@ -19,6 +18,8 @@ const DECLARED_ROOT_ENV = 'TAO_HOME'
 /** TaoHome owns the machine-wide Tao directory and how it is found. */
 export const TaoHome = {
   DECLARED_ROOT_ENV,
+  cacheResolve,
+  cacheRoot,
   resolve,
   root,
 } as const
@@ -44,4 +45,16 @@ function root(): string {
 /** resolve names a path inside the Tao home. */
 function resolve(relativePath: string): string {
   return FS.resolvePath(relativePath, root())
+}
+
+/**
+ * cacheRoot keeps reusable, disposable data beside installed state, under the one Tao home.
+ */
+function cacheRoot(): string {
+  return FS.resolvePath('cache', root())
+}
+
+/** cacheResolve names one disposable path under Tao's cache root. */
+function cacheResolve(relativePath: string): string {
+  return FS.resolvePath(relativePath, cacheRoot())
 }

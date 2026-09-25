@@ -388,7 +388,7 @@ function record(devicePublicKey: string, name: string) {
 }
 
 async function withRoot(use: (root: string) => Promise<void>): Promise<void> {
-  const root = await mkTestDir(FS.resolvePath('tao-studio-trust-store-', FS.tmpdir()))
+  const root = await mkTestDir('tao-studio-trust-store-')
   try {
     await use(root)
   } finally {

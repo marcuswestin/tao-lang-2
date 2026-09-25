@@ -1,7 +1,7 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
-import { FinalizeCommand, LandCommand, MergeMainCommand } from '@verification/Finalize'
+import { FinalizeCommand, LandCommand, MergeMainCommand, StartBranchCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
 import { GreenTree } from '@verification/GreenTree'
 import { LandingLock } from '@verification/LandingLock'
@@ -447,6 +447,21 @@ await runWithCommands(commands => {
     .action(async (options: { hard?: boolean; resetTo?: string } = {}) => {
       try {
         await MergeRecovery.run(options)
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('start-branch')
+    .description('Start a new feat/* branch at fetched origin/main after checking every checkout write.')
+    .argument('<name>', 'Full feat/* branch name.')
+    .action(async (name: string) => {
+      try {
+        await StartBranchCommand.run(name)
+        Platform.runtimeProcess.exit(0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)

@@ -200,7 +200,7 @@ export async function runCompanionHostPublish(options: CompanionHostPublishOptio
   const repository = hostReleasesRepository()
   const tag = hostReleaseTag(first.manifest)
   const platforms = built.map(host => host.manifest.platform).join(' and ')
-  const staging = await FS.mkTmpDir(FS.resolvePath('tao-host-publish-', FS.tmpdir()))
+  const staging = await Repo.mkScratchDir('tao-host-publish-', root)
   try {
     const assets: string[] = []
     for (const host of built) {

@@ -4,10 +4,12 @@ import type { DoctorCheck } from './RepositoryDoctor'
 /**
  * What the doctors know about Watchman, read without starting it or creating a watch.
  *
- * Metro and Jest fall back to watching through the OS when Watchman does not answer, silently. An
- * agent sandbox refuses OS file watching outright — even one `fs.watch` of an empty directory fails,
- * reported as `EMFILE: too many open files, watch` although nothing is exhausted — so inside a sandbox
- * Watchman is the only watching there is, and every way it can be unusable is a failure here.
+ * An agent sandbox refuses OS file watching outright — even one `fs.watch` of an empty directory
+ * fails, reported as `EMFILE: too many open files, watch` although nothing is exhausted — and no
+ * sandbox is given Watchman's per-login socket either (`.rulesync/permissions.jsonc` says why). So
+ * file-watching dev loops run on the host through named operations, a sandbox that cannot reach
+ * Watchman is expected. A missing client fails, while a stopped server warns because host dev loops
+ * can start it or use OS watching and sandboxed tests and builds crawl without it.
  *
  * The server is asked directly over its socket, never through the `watchman` client: the client
  * spawns a server when it may, so a diagnosis would change the machine, and answers some commands
@@ -19,13 +21,11 @@ import type { DoctorCheck } from './RepositoryDoctor'
 /** Where launchd reads how to restart Watchman on macOS. Watchman writes it on its first start. */
 const LAUNCH_AGENT_PATH = 'Library/LaunchAgents/com.github.facebook.watchman.plist'
 
-/** The directory Watchman's per-login socket lives under, and the rule the agent sandbox needs. */
-const PERMISSIONS_SOURCE = '.rulesync/permissions.jsonc'
-
 /** The pinned client inside a checkout's devenv profile. */
 const PROFILE_WATCHMAN = '.devenv/profile/bin/watchman'
 
-const FALLBACK = 'Metro and Jest fall back to OS file watching, which an agent sandbox refuses (reported as EMFILE)'
+const FALLBACK =
+  'Metro and Jest fall back to crawling and OS file watching, slower on the host and refused in a sandbox'
 
 /** WatchmanServer is what connecting to the server's socket found. */
 export type WatchmanServer =
@@ -87,18 +87,20 @@ function serverCheck(facts: WatchmanFacts): DoctorCheck {
   const socket = FS.displayPath(facts.socket ?? '')
   return Switch<WatchmanServer['state'], DoctorCheck>(facts.server?.state ?? 'not-running', {
     answering: () => ({ detail: `${facts.clientVersion}, answering at ${socket}`, name, status: 'pass' }),
+    // By design (see .rulesync/permissions.jsonc): no agent sandbox is given Watchman's per-login
+    // socket, so file-watching dev loops run on the host, and sandboxed tests and builds crawl without it.
     denied: () => ({
-      detail: `this shell's sandbox denies Watchman's socket ${socket}; ${FALLBACK}`,
+      detail: `${facts.clientVersion} is running, and this shell's sandbox leaves its socket out by design; `
+        + 'file-watching dev loops run on the host',
       name,
-      remediation: `The sandbox must allow Unix sockets under ~/.local/state/watchman (${PERMISSIONS_SOURCE}): `
-        + 'run ./agent setup, then start a new agent session so it loads the rule',
-      status: 'fail',
+      remediation: 'Run them as ./agent unsandboxed app-dev or ./agent unsandboxed studio',
+      status: 'pass',
     }),
     'not-running': () => ({
       detail: `no Watchman server is running; ${FALLBACK}`,
       name,
       remediation: startRemediation(facts),
-      status: 'fail',
+      status: 'warn',
     }),
   })
 }
@@ -189,24 +191,41 @@ async function readClientVersion(): Promise<string | undefined> {
 /** readSocket asks the client where this login's socket is; the client answers without a server. */
 async function readSocket(): Promise<string | undefined> {
   const result = await CLI.run('watchman', { args: ['--no-pretty', 'get-sockname', '--no-spawn'] })
-  if (result.error !== undefined || result.exitCode !== 0) {
-    return undefined
+  return result.error === undefined ? watchmanSocketFromClient(result) : undefined
+}
+
+/**
+ * watchmanSocketFromClient reads the socket path from the client's `get-sockname` answer. In an
+ * agent sandbox the client cannot even answer that: it first tightens its state directory's mode,
+ * which the sandbox refuses, and the refusal names the directory the socket lives in, as `sock`.
+ */
+export function watchmanSocketFromClient(
+  result: { exitCode: number | null; stderr: string; stdout: string },
+): string | undefined {
+  if (result.exitCode === 0) {
+    try {
+      const sockname = (JSON.parse(result.stdout) as { sockname?: unknown }).sockname
+      return typeof sockname === 'string' && sockname !== '' ? sockname : undefined
+    } catch {
+      return undefined
+    }
   }
-  try {
-    const sockname = (JSON.parse(result.stdout) as { sockname?: unknown }).sockname
-    return typeof sockname === 'string' && sockname !== '' ? sockname : undefined
-  } catch {
-    return undefined
-  }
+  const stateDirectory = /fchmod\((\/[^,]+), \d+\): Operation not permitted/u.exec(`${result.stderr}\n${result.stdout}`)
+  return stateDirectory === null ? undefined : FS.resolvePath('sock', stateDirectory[1]!)
 }
 
 /** How a sandbox's denial of a Unix socket surfaces; macOS reports it as a missing file. */
 const DENIAL_CODES = new Set(['EACCES', 'ENOENT', 'EPERM'])
 
-/** readWatchmanServer connects to `socket` and asks the server what it watches. */
+/**
+ * readWatchmanServer connects to `socket` and asks the server what it watches. Inside an agent
+ * sandbox any failure to reach an existing socket is the sandbox's: Bun reports the denied connect
+ * as `ECONNREFUSED`, the code a stopped server gives too.
+ */
 export async function readWatchmanServer(
   socket: string,
   request: (socket: string, command: readonly string[]) => Promise<{ roots?: unknown }> = LocalSocket.request,
+  sandboxed = CLI.inAgentSandbox(),
 ): Promise<WatchmanServer> {
   try {
     const response = await request(socket, ['watch-list'])
@@ -216,7 +235,9 @@ export async function readWatchmanServer(
     return { roots, state: 'answering' }
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code ?? ''
-    return DENIAL_CODES.has(code) && await FS.exists(socket) ? { state: 'denied' } : { state: 'not-running' }
+    return (sandboxed || DENIAL_CODES.has(code)) && await FS.exists(socket)
+      ? { state: 'denied' }
+      : { state: 'not-running' }
   }
 }
 

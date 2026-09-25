@@ -13,6 +13,7 @@ import {
   langiumImportIssues,
   missingTestAppReadmeEntries,
   repoLintIssues,
+  testScratchConventionIssues,
   wordFlowerDirectoryIssues,
 } from '../verification-src/repo-lint'
 import type { LedgerSide } from '../verification-src/repo-lint'
@@ -33,6 +34,15 @@ _test:
 `
 
 Describe('repo lint contracts', () => {
+  Test('requires test directories to use the shared scratch lifecycle', () => {
+    const path = 'packages/shared/shared-tests/fixture.test.ts'
+    const source = `await ${'FS.mkTmpDir'}('fixture-')\nawait mkTestDir('fixture-')\n`
+    Expect(testScratchConventionIssues([{ path, source }])).toEqual([
+      `${path}:1 creates a test directory directly; use \`mkTestDir\` for fixtures or \`Repo.mkScratchDir\` for host specs.`,
+    ])
+    Expect(testScratchConventionIssues([{ path: 'packages/shared/shared-src/fixture.ts', source }])).toEqual([])
+  })
+
   Test('keeps the language benchmark in bench and out of correctness gates', () => {
     Expect(justRecipeIssues(`
 VERIFY_FULL_GATES := "_test _native"
@@ -229,7 +239,7 @@ _bench-check:
   })
 
   Test('rejects hidden file divergence in an absorbed repository tranche', async () => {
-    const root = await mkTestDir('tao-repo-lint-')
+    const root = await mkTestDir('tao-repo-lint-', { location: 'host' })
     try {
       await FS.writeText(
         FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root),
@@ -259,8 +269,8 @@ _bench-check:
     }
   })
 
-  Test('ignores generated Tao dev directories before reading WordFlower files', async () => {
-    const root = await mkTestDir('tao-repo-lint-dev-')
+  Test('ignores generated Tao metadata and dependency directories before reading WordFlower files', async () => {
+    const root = await mkTestDir('tao-repo-lint-dev-', { location: 'host' })
     try {
       await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root), absorbed)
       await FS.writeText(FS.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next', root), absorbed)
@@ -268,9 +278,14 @@ _bench-check:
       await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
       await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
       await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/runtime/App.tsx', root), 'generated\n')
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/@ui/Shell.tao.ts', root), 'generated\n')
       await FS.symlink(
         FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/runtime', root),
         FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/node_modules', root),
+      )
+      await FS.symlink(
+        FS.resolvePath('Apps/WordFlower/1 - Current/.tao/dev/runtime', root),
+        FS.resolvePath('Apps/WordFlower/1 - Current/node_modules', root),
       )
 
       Expect(await repoLintIssues(root)).toEqual([])
@@ -280,7 +295,7 @@ _bench-check:
   })
 
   Test('scans Apps, runtime, and CommonJS executable sources for raw errors', async () => {
-    const root = await mkTestDir('tao-repo-lint-sources-')
+    const root = await mkTestDir('tao-repo-lint-sources-', { location: 'host' })
     try {
       await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
       await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
@@ -310,7 +325,7 @@ _bench-check:
   })
 
   Test('scans untracked worktree sources while preserving ignores and repository boundaries', async () => {
-    const root = await mkTestDir('tao-repo-lint-worktree-')
+    const root = await mkTestDir('tao-repo-lint-worktree-', { location: 'host' })
     try {
       await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: root })
       await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
@@ -338,6 +353,7 @@ _bench-check:
         file('.tao-project/lock.jsonc', '{ "ship": true }'),
         file('.tao/sessions/owner.json', '{ "owner": "studio" }'),
         file('.tao/sessions/session.json', '{ "status": "active" }'),
+        file('@ui/View.tao.ts', 'generated bridge metadata'),
       ],
       [file('WordFlower.tao-next', absorbed)],
     ))).toEqual([])

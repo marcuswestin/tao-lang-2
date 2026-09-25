@@ -1,0 +1,57 @@
+use TestWorldApp, TestWorldDevApp, TestWorldICloudApp from ./
+
+test "Test world controls" {
+   test "queues an offline granular write and syncs on reconnect" {
+      run TestWorldApp
+      network offline
+      enter "Offline note" into #draft
+      press #add
+      expect text "Offline note"
+      expect text "Queued 1"
+      network online
+      wait for sync
+      expect text "Queued 0"
+   }
+   test "fails one granular write and retries that record" {
+      run TestWorldApp
+      datasource fails after create Note "rejected note"
+      enter "Retry note" into #draft
+      press #add
+      expect text "Failed 1"
+      expect text "rejected note"
+      press #retry
+      wait for sync
+      expect text "Failed 0"
+   }
+   test "holds a declared failure until an offline write reaches the provider" {
+      run TestWorldApp
+      datasource fails after create Note "rejected on reconnect"
+      network offline
+      enter "Delayed rejection" into #draft
+      press #add
+      expect text "Queued 1"
+      expect text "Failed 0"
+      network online
+      expect text "Failed 1"
+      expect text "rejected on reconnect"
+      press #retry
+      wait for sync
+      expect text "Failed 0"
+   }
+   test "keeps an iCloud snapshot locally through reconnect" {
+      run TestWorldICloudApp
+      network offline
+      enter "Offline iCloud" into #draft
+      press #add
+      expect text "Offline iCloud"
+      network online
+      expect text "Offline iCloud"
+   }
+   test "shows a Dev server save error while offline" {
+      run TestWorldDevApp
+      network offline
+      enter "Offline Dev" into #draft
+      press #add
+      expect text "Could not save data: Network is offline."
+   }
+}

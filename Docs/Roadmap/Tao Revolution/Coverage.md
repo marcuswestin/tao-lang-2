@@ -9,8 +9,9 @@ Every row's Forcing feature cell is now filled, with one exception spelling: a c
 it_. Those are red flags to resolve at MVP derivation (step 4) — cut the capability, or let the Developer name
 the feature that earns it — and they are deliberately not given a contrived one. Occurrence queries
 are the sharpest of the five: `Decisions.md` §17 decides Hearth's repeating list items as the
-forcing feature, and Hearth does not have them, so either the app grows the feature or the decision
-loses its justification.
+forcing feature, and Hearth does not have them. **Post-MVP recommendation:** add real routines to
+Hearth before activating occurrence queries: generate dated occurrences without stored copies and
+persist completion against each occurrence. If that product feature is cut, reconsider the capability.
 
 Tier values: **MVP** (must run for v1), **Post-MVP** (Revolution; activated with the app
 expansion), **TBD** (assigned at step 4). Test status is updated as tranches land.
@@ -37,7 +38,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Named transactions, for-caller (§5)                         | Skillet · StartKitchen and membership operations                              | Post-MVP | —                         |
 | One atomic commit across rows (§5)                          | Skillet · StartKitchen; Wayfare · CreateTrip mints the owner's own seat       | Post-MVP | —                         |
 | Bulk write verbs (`update each`, `delete each`) (§5)        | Skillet · clear what was bought; Hearth · clear a finished list               | Post-MVP | —                         |
-| Guard default, effect outcomes (§5)                         | WordFlower · document availability                                            | MVP      | partially in Current      |
+| Guard default, effect outcomes (§5)                         | WordFlower · document availability and export outcomes                        | MVP      | in Current                |
 | Outcome vocabulary incl. `queued` (§5)                      | Wayfare · saving a stop with no network                                       | Post-MVP | —                         |
 | Queries: filters, ordering, limits (§6)                     | WordFlower · drafts, finished documents, paragraphs                           | MVP      | in Current                |
 | Entity-declared search consumed by a query (§6)             | WordFlower · find in a workspace; Skillet · find anything                     | MVP      | in Current                |
@@ -93,24 +94,25 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Places provider, nearby search (§11, §17)                   | Skillet · which shop is nearest; Hearth · errands on a map                    | Post-MVP | —                         |
 | Offline closure (§11)                                       | Skillet · a kept kitchen; Wayfare · the map around saved places               | TBD      | —                         |
 | Automations, notifications, levels (§12)                    | Skillet · timers, meal reminders                                              | Post-MVP | —                         |
-| Design system: blocks, styles, screens (§13)                | Skillet, Hearth, Wayfare · one design each, and WordFlower's own              | MVP      | pending                   |
+| Design system: blocks, styles, screens (§13)                | Skillet, Hearth, Wayfare · one design each, and WordFlower's own              | MVP      | partially in Current[^17] |
 | Container conditions (§13)                                  | **none — for the Developer**                                                  | Post-MVP | —                         |
 | Plural phrases (§14)                                        | WordFlower · the outline's paragraph count                                    | MVP      | in Current                |
 | Copy extraction, words, `tao words check` (§14)             | WordFlower · all copy + one locale                                            | Post-MVP | —                         |
 | Measurement phrases (§14)                                   | Skillet · metric/imperial amounts                                             | Post-MVP | —                         |
-| TypeScript boundary: from, fails (§15)                      | WordFlower · build stamp, document export; @tao/text; @tao/time               | MVP      | partially in Current[^3]  |
-| Bridge metadata module (§15)                                | WordFlower · type-checked TypeScript behind `from`                            | MVP      | —                         |
+| TypeScript boundary: from, fails (§15)                      | WordFlower · build stamp, document export; @tao/text; @tao/time               | MVP      | in Current[^3]            |
+| Bridge metadata module (§15)                                | WordFlower · type-checked TypeScript behind `from`                            | MVP      | in Current                |
 | Foreign views (`accepts content … from ./X.tsx`) (§15)      | **none — for the Developer**                                                  | TBD      | —                         |
 | Foreign `runs latest` scheduling (§8, §15)                  | **none — for the Developer**                                                  | TBD      | —                         |
 | Render failure containment and recovery (§15)               | **none — for the Developer** (no author surface; it is runtime policy)        | MVP      | —                         |
-| Fixtures, tests, query assertions (§16)                     | WordFlower · behavior tests                                                   | MVP      | partially in Current      |
-| Fault injection (§16)                                       | WordFlower · sync failure journey                                             | MVP      | pending — regressed[^1]   |
-| Sidecar stubs by declared case (§16)                        | Skillet · the import journey's two outcomes                                   | Post-MVP | —                         |
-| World controls: network, sync, relaunch (§16)               | WordFlower · offline edits that sync on reconnect                             | MVP      | partially in Current      |
+| Fixtures, tests, query assertions (§16)                     | WordFlower · behavior tests                                                   | MVP      | partially in Current[^18] |
+| Fault injection (§16)                                       | Test World Controls · injected save failure; WordFlower · sync failure        | MVP      | in Current[^1]            |
+| Foreign action failure stubs by declared case (§16)         | WordFlower · export outcomes; Test Apps · Effect Outcomes check isolation     | MVP      | in Current                |
+| Foreign action value-return stubs (§16)                     | Skillet · the import journey's success value                                  | Post-MVP | —                         |
+| World controls: network, sync, relaunch (§16)               | Test World Controls · offline queue and reconnect; WordFlower · offline edits | MVP      | in Current                |
 | World controls: clock, collaborators (§16)                  | Skillet · a timer that outlives the window; Wayfare · a live conflict         | Post-MVP | —                         |
 | Scenarios, pseudolocale, review gallery (§16)               | WordFlower · scenario set                                                     | TBD      | partially in Current      |
 | Sketch placeholders and flexible space (§16)                | WordFlower · the Placeholder journey                                          | MVP      | in Current                |
-| Occurrence queries (§17)                                    | **none — for the Developer** (§17 decides Hearth's routines; Hearth has none) | Post-MVP | —                         |
+| Occurrence queries (§17)                                    | **none — for the Developer** (Hearth · dated routines are decided but absent) | Post-MVP | —                         |
 | Nearness, distance, places (§17)                            | Hearth · Around                                                               | Post-MVP | —                         |
 
 Rows marked _partially in Current_ have behavior tests for part of the capability; _pending_ means
@@ -132,8 +134,8 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     uses it.
 
 [^3]: `<expression> from <path>` is in Current and is how both stdlib packages bind their runtimes.
-    Declared failures (`fails`) are in the language but no WordFlower tier uses them yet; the MVP
-    tier's document export will. `progress` was struck on 2026-09-25: no decision ever defined it.
+    WordFlower's Markdown export now uses a foreign action with declared failures. `progress` was
+    struck on 2026-09-25: no decision ever defined it.
 
 [^4]: The unified view tranche established one renderable family with content acceptance, render
     slots, and `responds` inferred from the body; the later host-read tranche added `scene is view`
@@ -202,12 +204,12 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     adapters, the Help layer, multi-target behavior, broader custom actions,
     and real-device assistive-technology validation.
 
-[^1]: The dialect migration tranche retired `data <status>` (Decisions §16) and with it the Data MVP
-    check that drove a provider through `loading`, `error`, and `ready`. Nothing replaces it in this
-    tranche, so provider-state coverage is lower than before until the world controls — network,
-    sync, and datasource fault injection — land. Skillet's journeys are written against §16's
-    decided spelling (`datasource fails after create Membership "…"`), so graduating them needs that
-    injection.
+[^1]: The dialect migration tranche retired `data <status>` (Decisions §16). Data MVP reaches
+    snapshot save error through fault injection. Test World Controls and WordFlower
+    exercise a granular provider's offline queue, injected failure, and retry; WordFlower uses a
+    test-only CloudKit variant because its hosted InstantDB variant saves snapshots. Skillet's
+    Membership failure journey remains to be graduated and backend transaction atomicity remains
+    outside these in-process tests.
 
 [^14]: HNReader binds a query-driven feed store beside a CloudKit store for bookmarks, and a patch on
     the bound name gives the shipped app its own bookmarks storage key without forking the
@@ -230,3 +232,14 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     form and document editor use them through the stdlib `Problems(Input.Problems)` view; its MVP
     rules are `required` alone on `Workspace.Name` and `Document.Title`, since `validate` and
     `refuse when` were deferred to Post-MVP on 2026-09-25.
+
+[^17]: Typed design blocks, styles, element defaults, interaction conditions, and `color` view
+    parameters are in Current. `screens { }` declares breakpoints, but `when Screen` remains
+    unimplemented; parameterized colors and design rules are outside the MVP slice.
+
+[^18]: Test App journeys exercise `on` and `with`, including a fixture split across a bound
+    datasource and device-local data. WordFlower document journeys now pin a phone, and its export
+    journeys use a fresh StarterWorkspace graph with a seeded document. Device width is observed at
+    the harness level because Tao tests cannot select a layout direction. `through` fixture
+    bindings remain unexecuted, and the synthetic viewport applies one layout pass. The remaining
+    world controls are a separate tranche.

@@ -3,11 +3,11 @@
 - **Status:** Candidate
 - **Section:** External
 - **Area:** Watchman, agent sandboxes, Metro and Jest file watching, `./agent doctor`, Studio launch
-- **Impact:** Watchman-backed watching keeps stopping, and an agent cannot bring it back. Nothing in
-  the tracked tree is login-specific any more, and every way Watchman can be unusable now fails
-  `./agent doctor` by name. But when the server stops, it stays stopped until a person starts it
-  from an unsandboxed terminal, and a watched primary checkout still folds every worktree beneath
-  it into one watch until someone removes that watch.
+- **Impact:** Largely resolved on 2026-09-25: no agent sandbox reaches Watchman any more, because
+  file-watching dev loops run on the host through named operations (`./agent unsandboxed app-dev`,
+  `studio`, `studio-native`), where Studio's launch starts Watchman itself when it is down, and the
+  tracked Codex config names no login. What remains: a watched primary checkout still folds a
+  worktree nested inside it into one watch, and launchd restarts Watchman only after a crash.
 - **Evidence:** Measured on 2026-09-22.
   - What was wrong, now fixed: the socket rule named one login (`ro-state`, audit `P17`), so every
     other login was silently denied. The tracked `.codex/config.toml` carried `/Users/<login>/…`
@@ -52,11 +52,13 @@
     `watch-project` on a folder inside it still resolved to the outer watch (measured on a
     throwaway tree). Watchman consolidates onto an enclosing watch by design, so the one structural
     fix is not to nest checkouts inside a watched one.
-- **Workaround:** Run `./agent doctor`. It names a denied socket (fix the sandbox rule, then
-  restart the session), a stopped server (the exact start command, using the primary checkout's
-  client so the LaunchAgent survives worktree cleanup), and an enclosing watch root (the
-  `watch-del` to run once `debug-get-subscriptions` shows no dev server on it). Studio's launch
-  check now releases an enclosing watch nothing subscribes to by itself.
+- **Workaround:** Run dev loops through the host operations above. `./agent doctor` names a stopped
+  server (the exact start command, using the primary checkout's client so the LaunchAgent survives
+  worktree cleanup) as a warning, because sandboxed tests and builds can crawl without it while host
+  dev loops can use OS watching. Studio starts Watchman when needed. A missing client remains a
+  failure. The doctor also names an enclosing watch root (the `watch-del` to run once
+  `debug-get-subscriptions` shows no dev server on it), and reports a sandbox without Watchman as
+  expected. Studio's launch check releases an enclosing watch nothing subscribes to by itself.
 - **Proposed change:** Done in part. `WorktreeCreate`/`WorktreeRemove` hooks
   (`WorktreePlacement.ts`) now place Claude Code's worktrees beside the primary checkout, in
   `<checkout>.worktrees/`, falling back to `.claude/worktrees/` when that fails. Codex already keeps
@@ -68,8 +70,9 @@
   and chosen by the Developer on 2026-09-24 over polling: let sandboxed commands watch natively by
   adding `"allowMachLookup": ["com.apple.FSEvents"]` to the Claude Code sandbox's `network` block in
   `.rulesync/permissions.jsonc` (Claude Code's `sandbox.network.allowMachLookup`). Codex's sandbox
-  has no equivalent setting while openai/codex#15698 is open, so Codex agents keep needing Watchman
-  or polling. Until this lands, `DebouncedWatcher` polls on macOS under Bun 1.4.2 or later.
+  has no equivalent setting while openai/codex#15698 is open, so Codex agents keep running
+  file-watching loops on the host, or polling. Until this lands, `DebouncedWatcher` polls on macOS
+  under Bun 1.4.2 or later.
 - **Dependencies:** None.
 - **Acceptance:** A fresh worktree under a watched primary checkout gets its own watch without a
   person's intervention, and a stopped server is either restarted without a person or reported by
@@ -77,4 +80,7 @@
 - **Source:** 2026-09-22 agent file-watching project; decisions A1, B1, C1 and D1 of its decision
   round (Codex config untracked and machine-local; doctor fails when Watchman is unusable; doctor
   prints the start command rather than writing to the host; enclosing roots detected), then
-  worktrees placed beside the checkout and idle enclosing watches released.
+  worktrees placed beside the checkout and idle enclosing watches released; on 2026-09-25, the
+  Watchman socket removed from every sandbox and the per-user Docker path from Codex's config, in
+  favour of named host operations for Studio and the local InstantDB stack. The stopped-server
+  doctor result was then amended to a warning; Studio starts Watchman when needed.

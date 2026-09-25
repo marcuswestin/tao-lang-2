@@ -1994,6 +1994,24 @@ design SkilletDesign {
   app starts from the `Text` entry, and `App` is the root's. This replaces the
   `style Control { base / variant / state }` stack: the base is the element default, a variant is a
   bundle, and a state is an ordinary condition.
+- **A clause list names only lowercase styles** (decided 2026-09-23). An element default applies by
+  element and is never named in a clause list; a default that needs another's clauses restates them
+  or takes a condition, the way a state does. Design names — colors, sizes, text styles, and styles
+  — are lowercase, and a Capitalized word in a clause list is a value (a parameter, state, or
+  environment value), so a clause head, a design name, and a value never share a spelling and no
+  reference marker is needed. A violation is a compile error (decided 2026-09-25).
+- **A `color` parameter carries a design color as a value** (decided 2026-09-25). A view may declare
+  `Tint color default inkMuted`; a caller passes a design color name (`Tint: accent`) or another
+  `color` value; inside, `background Tint` reads it, resolved against the mounted design at render
+  so it follows the scheme and whichever design is mounted. Every value starts as a design name — no
+  conversion from text or data reaches a clause — so the set of colors a clause can receive stays
+  listed in source. `color` is a keyword and only a view parameter's type; a design name is a color
+  only when used directly as an argument or parameter default, not inside an arbitrary `when`
+  expression. A name, with its shade, must exist in every design the project's apps mount,
+  refinements included, or it is a compile error naming the design that lacks it. The same
+  every-design rule applies to style references. WordFlower's document status badge forces it: the
+  badge tints a dot inside itself, which a caller's clauses cannot reach. `size` parameters,
+  `color` state, and aliases wait for a feature that forces them.
 - **Generated interaction affordances use ordinary element defaults** (KEY-D13). `Hint` styles an anchored
   key-and-label affordance and `Overview` styles the generated overview, verb, and palette surfaces;
   an app may override either in `styles { }` without declaring or owning those runtime layers.
@@ -2002,7 +2020,10 @@ design SkilletDesign {
   popover, and authored overlay-family syntax remains deferred.
 - **Interaction states are conditions.** `pressed`, `focused`, and `hovered` join the condition
   vocabulary, so state styling is §9's postfix `when` (`background ember.20 when pressed`), not a
-  sub-grammar of its own.
+  sub-grammar of its own. `selected` joins them for the element its host marks as the current
+  choice — today the active navigation tab — so `NavigationTab` carries its active look as
+  `background accentSoft when selected` and there is no separate active-tab default (decided
+  2026-09-25).
 - **No reference marker.** A bare name in a clause list resolves to a style, text style, or design
   value; clause keywords are a closed, reserved set, so a style may not be named `pad` and the
   validator says so at the declaration.
@@ -2010,10 +2031,11 @@ design SkilletDesign {
   (decided 2026-09-22). The legacy spellings stay accepted and lower identically, and every use
   draws a warning naming the decided head, so MVP source is written the way Revolution writes it
   (Process principle 1). One bundle spelling the same property both ways remains an error.
+  `tao fix` rewrites them (decided 2026-09-25), so canonical source never contains them.
 - **The flat catalog is deprecated** (decided 2026-09-22). A color or bundle written directly in
   `design { }`, outside the typed blocks, is still accepted, but its design draws one warning to
   move colors into `colors { }` and bundles into `styles { }`. `tao create` writes only the typed
-  form.
+  form, and `tao fix` moves flat entries into the typed blocks (decided 2026-09-25).
 - **`patterns { }` is not carried forward.** A named arrangement with slots is an ordinary `view`
   placing `@@content` (§9), and a row pattern like the source designs' `Line` is such a view plus
   element defaults. If a demo finds a need a view cannot meet, it returns.
@@ -2048,6 +2070,9 @@ design SkilletDesign {
   contrast, naming, heading order, and declared tap minimums are build diagnostics; layout-dependent
   rules (200% clipping, overflow) are measured over the scenario gallery; perceptual rules (meaning
   without colour) are stated here as review criteria the gallery surfaces, never as pass/fail.
+  **Deferred past MVP** (decided 2026-09-23): the MVP ships no `rules { }` checks, no runtime
+  validation, and no review automation. The static analysis this needs, and why it waits, is in
+  the design system plan's "Design rules — deferred past MVP".
 - **Adaptation reads the person's settings first** — `Motion`, `Contrast`, `Pointer`, `TextScale` —
   before guessing from hardware.
 - **A declaration's style defaults live in its header clause** (decided 2026-09-22, R9):
@@ -2360,6 +2385,8 @@ action FetchRecipe fails NotARecipe
 action FetchRecipe returns { Foo: 1, Bar: ["123", "abc"] }
 ```
 
+- The MVP implements declared-case failure stubs for foreign actions with no result. Value-return
+  stubs remain Post-MVP until return-valued actions have their complete language and runtime path.
 - A success stub supplies the **value**, so it needs no type name and works whether the action's
   return type was named or written inline.
 - **A preference in a test is an ordinary update, and the device locale is a scenario pin — both
@@ -2440,7 +2467,8 @@ scenarios Recipe "devices" {
     Because raw values are confined to the design and screens speak in names (§13), contrast to WCAG
     AA is checkable per (ink, background, scheme) pair at compile time; unnamed interactive elements,
     heading order, declared tap-target minimums, and raw-values-outside-the-design are ordinary
-    validator errors.
+    validator warnings, not errors (decided 2026-09-23). The rule checks are deferred past MVP
+    (§13); raw values outside the design already warn.
   - **Rules that need rendered layout annotate the scenario gallery for human review.** `tao review`
     renders every `scenario` (each is a pinned, buildable state — that is what they are for) into a
     gallery, flagging what it can measure there — text clipping at 200% scale, horizontal overflow —
@@ -2450,7 +2478,8 @@ scenarios Recipe "devices" {
   perceptual quality — "does meaning survive without colour", "does this layout read well
   mirrored" — is _QA_: humans reviewing the scenario gallery, with the pseudolocale and RTL
   scenarios as standing review states. The language never encodes a QA judgement as an assertion,
-  because a failing "test" no machine can actually evaluate teaches people to ignore red.
+  because a failing "test" no machine can actually evaluate teaches people to ignore red. A journey
+  does not assert a rendered color; compiler and runtime tests prove color lowering and resolution.
 
 ---
 

@@ -39,6 +39,7 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
     'Scenarios.tao': scenariosFile(plan, names),
     [`${names.app}.test.tao`]: testFile(plan, names),
     'tsconfig.json': PROJECT_TSCONFIG,
+    '.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
     // The reserved root generated package exists from day one, committed empty, so Studio and the
     // compiler have their folder before the first generated file lands.
     '@/.gitkeep': '',
@@ -210,8 +211,7 @@ design ${names.design} {
       NavigationHeader [background surface, border line]
       NavigationTitle [size 18, weight 700, ink ink]
       NavigationTabs [gap 6, pad 6, background surface, border line]
-      NavigationTab [pad 10, radius 10, ink inkMuted, weight 600]
-      NavigationTabActive [NavigationTab, background accentSoft, ink accentStrong]
+      NavigationTab [pad 10, radius 10, ink inkMuted, weight 600, background accentSoft when selected, ink accentStrong when selected]
       NavigationChromeButton [pad 8, radius 8, ink accentStrong, weight 600]
 
       screen [fill, content top stretch, pad 24, background canvas]

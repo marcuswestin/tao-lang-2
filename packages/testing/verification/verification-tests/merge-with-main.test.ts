@@ -928,7 +928,7 @@ Describe('merge-with-main', () => {
     Expect(outcome.lines).toEqual([
       "PASS  Merged 'feat/example' into main and archived it as merged/example.",
       'PASS  Preserved the clean invoking worktree at /repo-feature on detached HEAD; '
-      + 'archive its owning task when you are ready to remove it.',
+      + 'run `./agent start-branch feat/<name>` for the next slice, or archive its owning task.',
     ])
     Expect(fake.successLines).toEqual(outcome.lines)
     Expect(outcome.snapshotPath).toMatch(

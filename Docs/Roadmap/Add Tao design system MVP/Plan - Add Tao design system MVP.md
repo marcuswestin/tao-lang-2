@@ -12,7 +12,9 @@ MVP" onward, the tooling, artifacts, and later-phase direction around it.
 
 ## Goal
 
-Make Tao apps visually coherent through a deterministic, language-owned design system: design declarations, tokens, semantic tokens, component recipes, recipe application from UI call sites, runtime lowering to React Native styles, and initial design diagnostics.
+Make Tao apps visually coherent through a deterministic, language-owned design system: design
+declarations with typed value blocks, styles and element defaults (`Decisions.md` §13), application
+from UI call sites, runtime lowering to React Native styles, and deterministic design diagnostics.
 
 The first MVP should prove that ordinary Tao UI can get polished, consistent visual treatment without app authors hand-writing React Native styles or generated TypeScript duplicating style logic.
 
@@ -27,9 +29,9 @@ The first MVP should prove that ordinary Tao UI can get polished, consistent vis
 
 ## Assumptions
 
-- Layout and visual design entries share one typed `[ ... ]` application surface. The first design
-  declaration and named-bundle shape are implemented; recipe shapes remain later work, not a second
-  render-site delimiter.
+- Layout and visual design entries share one typed `[ ... ]` application surface. §13 replaced
+  recipes with lowercase styles, element defaults, and conditions, so there is no second render-site
+  delimiter.
 - The first runtime target is the existing Expo/React Native runtime.
 - Generated code imports default `TR` from `@runtime/TR` and delegates reusable design semantics to `TR.*` or generated design data consumed by `TR`.
 - The first implementation updated the complete `Apps/WordFlower/1 - Current/` directory only after the slice was executable.
@@ -39,15 +41,15 @@ The first MVP should prove that ordinary Tao UI can get polished, consistent vis
 
 ## Tao code coverage
 
-Tranche 4 proved the first slice through the owning package suites and WordFlower. The broader design
-MVP should add a dedicated Test App only when a later tranche settles semantic tokens and recipes:
+Tranche 4 proved the first slice through the owning package suites and WordFlower. A dedicated Test
+App is warranted only for §13 surface WordFlower does not itself force:
 
 - Parser, validator, formatter, compiler, runtime, and expo-host tests cover flat tokens,
   named bundles, diagnostics, lowering, mounted-app lookup, and precedence.
 - `Apps/WordFlower/1 - Current/Design.tao` and the WordFlower journeys prove the end-to-end first
   slice in a product app.
-- A later focused Test App should demonstrate the accepted semantic-token and recipe surface, with
-  its purpose recorded in `Apps/Test Apps/README.md` before that app is created.
+- A later focused Test App, if one is needed, records its purpose in `Apps/Test Apps/README.md`
+  before it is created.
 
 ## Implementation steps
 
@@ -131,38 +133,28 @@ Validation: parser, validator, compiler, formatter, runtime tests; `just compile
 Exit criteria: visible Tao source can apply the exact WordFlower bundles such as `screen`, `title`,
 `body`, and `panel`, and runtime output reflects their resolved clauses.
 
-### 5. Extend the settled foundation with semantic tokens and recipes
+### 5. Finish the decided surface (reframed 2026-09-22)
 
-After the first slice, use a later WordFlower tranche to settle the still-open source
-shape for semantic tokens, component recipes, variants, state styles, rules, and deterministic app
-defaults. Extend validation, lowering, and runtime tests only for the forms that tranche represents.
-This preserves the broader MVP goal without expanding the already-solidified Next contract.
+`Decisions.md` §13 superseded the semantic-token, recipe, and variant framing this step used to
+carry: typed blocks replace tokens and a meaning layer, the `styles { }` case convention replaces
+recipes and variants, and a state is an ordinary `when` condition. The structured subset (`colors`,
+`sizes`, `text`, `screens`, `styles`) landed with Studio Slice 6.
 
-Exit criteria: ordinary Tao source can request the accepted semantic treatments and the runtime
-resolves their tokens, defaults, variants, and states deterministically.
+- **Landed 2026-09-22** (`merged/design-system-mvp-5-7-44b3e6`): `bg`/`fg` warn in favour of
+  `background`/`ink`; a design keeping colors or bundles outside the typed blocks draws one warning;
+  `tao create` and the starters write only the typed form.
+- **Absorbed 2026-09-25: the design values tranche**, below — the casing rule, `selected`, `color`
+  parameters, and the `tao fix` migration.
 
-### 6. Add deterministic design diagnostics and CLI surface
+Exit criteria: every §13 construct the MVP keeps is implemented, and every one it drops is recorded
+as deferred.
 
-Concrete work:
+### 6. Diagnostics and CLI surface
 
-- Add the initial `tao design check` or equivalent CLI surface after the source and runtime model exists.
-- Start with diagnostics that do not require screenshot analysis:
-  - unknown or unused tokens;
-  - raw values where tokenized values are preferred;
-  - duplicate or unreachable recipe variants;
-  - missing app design selection when a project uses design declarations;
-  - source-level contrast checks only when foreground/background pairs are statically knowable.
-- Decide whether safe fixes live in `tao fix`, `tao design fix --safe`, or both.
-- Keep rendered checks such as tap target, overflow, hierarchy, and visual rhythm as deferrals unless they can be computed from existing runtime metadata without a browser loop.
-
-Likely commit unit: CLI command, diagnostics/fix plumbing, tests.
-
-Validation: CLI tests, fixture diagnostics tests, and repo `verify`.
-
-Exit criteria: design diagnostics can run deterministically in CI and editor workflows without launching Expo or invoking AI.
-
-The fuller `tao design` command surface, its output shape, and safe-fix examples are carried in
-"Tooling and rollout beyond the MVP" below.
+Decided: there is no `tao design check` (§16). Design diagnostics are ordinary `tao check`
+diagnostics, and rule diagnostics are warnings (2026-09-23). The `rules { }` checks themselves are
+deferred past MVP — see "Design rules — deferred past MVP". `tao fix` migrates `bg`/`fg` and the
+flat catalog automatically; `tao check` reports unmigrated source as noncanonical.
 
 ### 7. Close the MVP and plan the next design phase
 
@@ -180,6 +172,155 @@ Validation: `./agent verify`.
 Exit criteria: docs, examples, test apps, and roadmap agree on the shipped deterministic design surface.
 
 The phased tooling and rollout work this step prepares is laid out in full below.
+
+`tao create` writes an authored `Design.tao`, so its first app already has a palette, element
+defaults, and named styles. A manually written app that omits `Design` can still render stdlib views
+with their built-in layout: primitive containers and text use React Native's unthemed appearance,
+published native controls use the platform's own chrome (or a portable fallback), and controls such
+as `TextInput` and `Progress` retain their fixed runtime styling. It cannot use named colors or
+styles, and the runtime invents no replacement palette. The result works, but looks sparse and
+platform-native until the author mounts a design.
+
+## Design values tranche (absorbed, 2026-09-25)
+
+WordFlower `2 - Next` held the contract (`WordFlower.tao-next` header, "DESIGN VALUES"); `1 - Current`
+now matches it and both read absorbed. It finishes the MVP design surface in four decision groups,
+recorded in `Decisions.md` §13. The Developer confirmed the implementation's remaining choices on
+2026-09-25:
+`color` is rejected everywhere except a view parameter; a design name counts as a `color` only
+directly as an argument or a default (not inside a `when` passed as one); a name and its shade must
+exist in every design the project's apps mount, refinements included (after review found the check
+depended on app order); `color` is now a keyword, and Studio refuses it and Capitalized names for new
+colors, sizes, and forks. Studio's suggested fork name lowercases an element name (`Card` becomes
+`cardVariant`). Editor references now cover go-to-definition from `background Tint` to its
+parameter, shade rename across `Tint: accent.20` arguments, and relinking a shared view's color
+arguments when an app's `Design` changes. Style references now require every mounted design,
+including refinements, to declare the style. Journeys stay at observable functionality rather than
+asserting a rendered color; compiler and runtime tests cover the color itself.
+
+1. **The clause-list casing rule is a compile error.** A reserved lowercase word is a clause head,
+   any other lowercase word is a design name (a style in entry position, a color or size in value
+   position), and a Capitalized word is a value. Naming an element default in a clause list, or
+   giving a design value a Capitalized name, is an error. The only violations were
+   `NavigationTabActive [NavigationTab, …]` in WordFlower and both starters.
+2. **`selected` is an interaction condition.** The navigation host supplies it for the active tab,
+   so `NavigationTab` carries the active look and `NavigationTabActive` is retired. Selection is
+   otherwise not a tracked state today: a loop row's `on select` presents a detail and keeps no
+   selected state, so rows do not get `selected` in this tranche.
+3. **A `color` parameter carries a design color as a value**, forced by the documents list:
+
+   ```tao
+   view StatusBadge(Label text, Tint color default inkMuted) {
+      render Row() [gapSmall] {
+         Box() [statusDot, background Tint]
+         Text(Label) [caption]
+   }  }
+
+   loop Documents / Document {
+      Col() [card, gapSmall] {
+         Text(Document.Title) [sectionTitle]
+         if Document.Final is Final {
+            StatusBadge("Final", Tint: accent)
+         }
+         if Document.Final is Draft {
+            StatusBadge("Draft")
+      }  }
+      on select -> { present DocumentScreen(Document) }
+   }
+   ```
+
+   The dot sits inside the badge, where a caller's clauses cannot reach (R9 keeps a root's inner
+   renders private), so its color has to travel as a value. A value is a reference to a design
+   name, resolved against the mounted design at render, so it follows light and dark. Every value
+   starts as a design name — no `color(Input)` conversion and no entity field reaches a clause — so
+   the set of colors a clause can receive stays listed in source, the property the deferred rule
+   analysis needs. `size` parameters (the §2 `size` family, `Decisions.md:145`), `color` state,
+   `set`, and aliases are not forced by any MVP feature and wait for one; a `style` type is not
+   planned.
+4. **`tao fix` migrates legacy design source**: `bg`/`fg` become `background`/`ink`, and flat design
+   entries move into `colors { }` and `styles { }`. Because `tao check` reports anything `tao fix`
+   would change as noncanonical, WordFlower is migrated in the same change.
+
+Earlier finding, kept for the record: before this tranche no WordFlower tier needed a color passed
+as a value (2026-09-24 scan); the documents list's status badge is the product feature added to
+force it. Skillet's per-aisle color (`Apps/Tao Future/Skillet/Shared.tao-revolution:100`) forces
+§13's parameterized entries, a separate post-MVP capability.
+
+## Design rules — deferred past MVP (notes, 2026-09-22/23)
+
+Decided: the MVP uses deterministic static analysis only, no runtime validation, and no review
+automation, so `rules { }` waits. When it lands, its diagnostics are warnings (§16, amended
+2026-09-23) and its source form is §13's sentences (`rule contrast at least wcag.aa`). These notes
+carry the analysis so it does not have to be redone.
+
+**What each rule needs.** A: decidable from source, a build diagnostic. B: needs rendering, measured
+on the `tao review` gallery. C: needs a person.
+
+| Class | Rules                                                                                                                                                                                                                                                                                                                     |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A     | raw values only in the design (implemented as a warning); text contrast (WCAG 1.4.3); border and focus-ring contrast (1.4.11); declared tap minimums; names on controls and informative images (4.1.2); heading order (needs heading semantics); text sized in `rem`; focus visible; reduced-motion cases; design budgets |
+| B     | clipping at 200% text (1.4.4); overflow and reflow (1.4.10); actual target size and spacing where none is declared (2.5.8); contrast over backgrounds source cannot see; focus obscured (2.4.11); text-spacing overrides (1.4.12)                                                                                         |
+| C     | meaning without colour (1.4.1); descriptive names and headings (2.4.6); visual versus reading order (1.3.2)                                                                                                                                                                                                               |
+
+**Why A is so large in Tao.** A clause value is only a word, a number, a color, or `none`
+(`layout.langium:21-22`), and a word names a design value that folds at build or a `when` with a
+finite set of cases. `pad Indent` with `Indent` a view parameter is `Design 'Theme' has no size
+'Indent'.` today.
+
+**The contrast analysis.** Walk the render graph (every call site is in source): for each text, the
+set of nearest backgrounds across every context it renders in — its own view, then each call site,
+recursively — unioned over branches, interaction states, schemes, and mounted designs, with R9
+precedence per site; a recursive view reaches a fixpoint over a finite set. The property is local,
+so whole trees are never enumerated. WCAG relative luminance, 4.5:1 (3:1 for text at least 24px,
+or 18.66px bold).
+
+- Cost: a single run is roughly linear. The editor is the concern — the analysis is
+  whole-program, so it needs per-view summaries invalidated along the call graph and must stay
+  inside `./agent bench`'s steady-state budgets.
+- Assumption breakers besides authored `render inject` views: runtime colors (`color(Input)`),
+  platform-drawn surfaces (translucent sheets, header materials), translucent colors over an unknown
+  background, floating layers without their own background, OS color transforms, and the contract
+  that stdlib elements — themselves injected — paint only their resolved design clauses.
+- Why it waits: a rule with no declarations checks nothing silently; unknown backgrounds are skipped
+  silently; the stdlib dims disabled controls to 55% (`TR-views.tsx:275`, `:563`) invisibly;
+  conditions that never co-occur produce false warnings Tao has no way to suppress; a warning can
+  appear far from the edit that caused it; and a warning may hold under only one mounted design.
+
+**Contrast findings.** The generated starter palettes fail AA for muted text: Notebook `inkMuted` on
+`canvas` 3.53:1 and on `surface` 3.88:1, Pantry 3.52:1 and 3.90:1 — so the fault was
+`deriveDesignColors` (`packages/cli/tao-cli/cli-src/create/creation-colors.ts`), not one palette.
+Fixed 2026-09-24: muted ink is now the lightest blend that reaches 4.5:1 on canvas and surface.
+WordFlower passes (4.63:1 light, 8.51:1 dark).
+
+**`tap min`.** The decided spelling (`Decisions.md` §2 and its spelling table: `tap min 48`); its
+runtime meaning is not. Downsides: Tao says `press` elsewhere and "tap" is wrong for a pointer; as a
+layout minimum it is `width min`/`height min` under another name, and neither exists yet (`width
+max` is the only min/max clause, `LayoutTypes.ts:40`); it means nothing on a non-pressable element;
+only declared elements get checked; and a minimum beats an explicit `height` in Yoga. No `tap max`:
+no guideline caps a target. Preferred direction: the rule applies the minimum itself to every
+pressable stdlib element, so there is nothing to check and nothing silently unchecked; `tap min` only
+raises it. The cost is layout that grows on its own, and inline targets that cannot.
+
+**React Native `hitSlop`** extends where a press registers without changing layout, but the touch
+area never extends past the parent's bounds and overlapping siblings win by z-order (every
+platform); React Native for Web's `Pressable` does not document it. A layout minimum is visible,
+measurable, and uniform, which is why it is preferred.
+
+**Measuring B.** Deterministic without a language model: Studio renders scenarios in Chrome, and
+`tao review` can evaluate script in the page — compare text content size with its box at 200%,
+page width with the viewport, pressable boxes for size and spacing, and sample screenshot pixels
+under text. It is only as complete as the scenarios: the render graph lists every view and branch,
+but reaching each branch needs a pinned state. Unreliable even so: clipping depends on fixture
+string length and localisation, fonts differ between the web renderer and native, only the widths
+and text scales rendered are covered, transient UI needs timing, and pixel sampling is noisy near a
+threshold. C has deterministic stand-ins — a condition whose only effect is a color change,
+generic or duplicate labels, rendered position versus tree order — and a vision model could only
+assist review, never gate.
+
+**`tao review` today** screenshots every review-ready web scenario into a static report and
+`review.json` of hashes, and `--against` marks each scenario added, removed, changed, unchanged, or
+failed (`StudioReview.ts`). It measures nothing and checks no rule; deferring review automation
+leaves it as it is.
 
 ## Validation summary
 
@@ -200,6 +341,8 @@ The phased tooling and rollout work this step prepares is laid out in full below
 - Full platform adaptation across iOS, Android, web, density, motion, high contrast, locale, direction, and accessibility settings.
 - Pattern recipes beyond the initial component recipe surface.
 - Rendered tap-target, overflow, hierarchy, and screenshot baseline checks.
+- `rules { }` and every rule check, static or rendered (2026-09-23; see "Design rules — deferred
+  past MVP").
 - Exact declaration syntax for recipe variants and state-specific entries (see the open questions
   below).
 - The `tao.design.lock` schema, and visual screenshot artifact naming and retention.
@@ -215,10 +358,12 @@ apply; see `Apps/Starters/README.md`.
 
 - Which visual treatments can apply to content-accepting wrapper views, versus only to leaf views and
   view-like primitives?
-- Which design diagnostics are ordinary validator diagnostics, and which belong to a future
-  `tao design check` command that can use rendered context?
-- Should recipe variants be declared through a standalone `recipe Button { variant ... }` surface,
-  named combined specs, generated semantic components, or a staged combination?
+- ~~Which design diagnostics are ordinary validator diagnostics, and which belong to a future
+  `tao design check` command?~~ **Decided (§16):** there is no `tao design check`; every design
+  diagnostic is a `tao check` diagnostic, and rules warn.
+- ~~Should recipe variants be declared through a standalone `recipe Button { variant ... }`
+  surface?~~ **Decided (§13):** no recipes — a variant is a lowercase style and a state is a
+  condition.
 - How much of "beautiful defaults" should ship before author-controlled tokens and recipes? A
   deterministic baseline can be useful, but it should not obscure the source-level design system
   contract.
@@ -268,10 +413,10 @@ warn Settings screen uses 6 radius values; theme defines 4
 Safe fixes should be reviewable and small:
 
 ```text
-- Replace raw spacing 16 with space.lg
-- Replace "#ffffff" with bg.surface
-- Add minTap 44 to icon-only buttons
-- Convert repeated card styles into recipe Card.raised
+- Replace raw spacing 16 with a named size
+- Replace "#ffffff" with `background surface`
+- Apply a declared `tap min 48` to icon-only buttons
+- Convert repeated card clauses into the `cardRaised` style
 ```
 
 Rendered checks, screenshot baselines, AI critique, design diff, and visual iteration should wait until the deterministic source/runtime model exists.

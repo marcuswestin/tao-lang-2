@@ -1,13 +1,17 @@
+import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
-import type { TaoConfiguredDatasource, TaoDataSchema } from './TR-data'
+import type { TaoConfiguredDatasource, TaoDataSchema, TaoDatasourceDeclaration } from './TR-data'
 import { entityHandle, metadataOf, type TaoEntityReferenceSnapshot } from './TR-data-entity'
-import { testDataConnection } from './TR-data-provider'
 import { UserInputError } from './TR-errors'
 import { runtimeListeners } from './TR-listeners'
+import { TestWorld } from './TR-test-world'
 
 export type DataStatus = 'error' | 'loading' | 'ready' | 'unauthorized'
 
 let testMode = false
+let testDeclarations = new WeakMap<TaoDataSchema, WeakMap<TaoDatasourceDeclaration, TaoDatasourceDeclaration>>()
+let testBoundSchemas = new WeakSet<TaoDataSchema>()
+let testValueIds = new Map<unknown, number>()
 const schemas = new Set<TaoDataSchema>()
 const globalListeners = runtimeListeners()
 let globalRevision = 0
@@ -46,6 +50,43 @@ export function restoreEntityReference(reference: TaoEntityReferenceSnapshot): u
   })
 }
 
+function testValueIdentity(value: unknown): number {
+  let id = testValueIds.get(value)
+  if (id === undefined) {
+    id = testValueIds.size + 1
+    testValueIds.set(value, id)
+  }
+  return id
+}
+
+/** Stable for equivalent evaluated configuration values, distinct for adapter objects by identity. */
+function testConfigurationKey(value: unknown): unknown {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return value
+  }
+  if (typeof value === 'number') {
+    return ['number', String(value)]
+  }
+  if (typeof value === 'undefined' || typeof value === 'bigint') {
+    return [typeof value, String(value)]
+  }
+  if (Array.isArray(value)) {
+    return ['array', value.map(testConfigurationKey)]
+  }
+  if (
+    typeof value === 'object'
+    && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
+  ) {
+    return [
+      'record',
+      Arrays.sorted(Object.keys(value)).map(
+        key => [key, testConfigurationKey((value as Record<string, unknown>)[key])],
+      ),
+    ]
+  }
+  return ['identity', testValueIdentity(value)]
+}
+
 export function bindConfiguredDataSchema(
   schema: TaoDataSchema,
   source: TaoConfiguredDatasource,
@@ -56,13 +97,58 @@ export function bindConfiguredDataSchema(
     // production mount, so the runtime-owned validation runs here even though the provider is
     // never connected under test.
     schema.validateConfigured(source, storageName)
-    // A snapshot provider stays replaced by the fresh test Memory store. A fill-capable provider
-    // binds anyway: fills are how a query-driven datasource has any rows at all, and determinism
-    // is the running app variant's responsibility — a test runs the variant whose adapter is a
-    // deterministic stub, never the network (Decisions §11, §16).
-    if (source.declaration.provider.fills === undefined) {
+    // Query-driven fills still bind their deterministic adapter. Other providers bind a stand-in
+    // under the same configuration and storage key, so a patch or provider switch really rebinds.
+    if (source.declaration.provider.fills !== undefined) {
+      schema.bindConfigured(source, storageName)
+      testBoundSchemas.add(schema)
       return
     }
+    let declarations = testDeclarations.get(schema)
+    if (declarations === undefined) {
+      declarations = new WeakMap()
+      testDeclarations.set(schema, declarations)
+    }
+    let declaration = declarations.get(source.declaration)
+    if (declaration === undefined) {
+      const granular = source.declaration.provider.testWriteRecovery === true
+      const networkMode = source.declaration.provider.testNetwork ?? (granular ? 'remote' : 'local')
+      const providerIdentity = source.declaration.canonicalIdentity?.canonical
+        ?? `instance:${testValueIdentity(source.declaration.identity)}`
+      // Fixtures can create rows before the app binds its provider. Carry those rows into the
+      // first stand-in connection; later configuration changes use the selected store's state.
+      let initialSnapshot = testBoundSchemas.has(schema) ? undefined : schema.captureSnapshot()
+      declaration = Object.freeze({
+        ...source.declaration,
+        provider: {
+          connect: context => {
+            const connection = TestWorld.connection(
+              granular,
+              JSON.stringify([
+                context.schema.name,
+                providerIdentity,
+                context.storageKey,
+                testConfigurationKey(context.configuration),
+              ]),
+              initialSnapshot,
+              networkMode,
+            )
+            initialSnapshot = undefined
+            return connection
+          },
+        },
+      })
+      declarations.set(source.declaration, declaration)
+    }
+    const testDeclaration = declaration
+    const testSource: TaoConfiguredDatasource = Object.freeze({
+      ...source,
+      declaration: testDeclaration,
+      evaluate: () => testSource,
+    })
+    schema.bindConfigured(testSource, storageName)
+    testBoundSchemas.add(schema)
+    return
   }
   schema.bindConfigured(source, storageName)
 }
@@ -136,13 +222,18 @@ export function revision(): number {
 
 export function beginTest(): void {
   testMode = true
+  TestWorld.begin()
+  testDeclarations = new WeakMap()
+  testBoundSchemas = new WeakSet()
+  testValueIds = new Map()
   for (const schema of schemas) {
-    schema.configure(testDataConnection(), 'test')
+    schema.configure(TestWorld.connection(), 'test')
   }
 }
 
 export function endTest(): void {
   testMode = false
+  TestWorld.end()
 }
 
 export function emitDataChange(localListeners: Iterable<() => void>): void {

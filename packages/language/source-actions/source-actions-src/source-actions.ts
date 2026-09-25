@@ -1,5 +1,6 @@
 import Formatter from '@formatter'
 import type { AST } from '@parser'
+import { moveFlatCatalogIntoBlocks, renameLegacyVisualHeads } from './design-actions'
 import { canonicalizeTopLevel } from './files-actions'
 import {
   assembleWithTrailingSource,
@@ -46,12 +47,28 @@ async function moveRendersLast(document: AST.Document): Promise<string | undefin
   return await formatWhenChanged(document, moved)
 }
 
-/** fixSource returns the fully canonical source: renders last, organized imports, formatted. */
+/**
+ * sourceFixes rewrite one parsed document each, returning undefined when they have nothing to change.
+ * Each later fix reads the reparsed result of the one before it.
+ */
+const sourceFixes: readonly ((document: AST.Document) => string | undefined)[] = [
+  renameLegacyVisualHeads,
+  moveFlatCatalogIntoBlocks,
+  moveViewRendersLast,
+]
+
+/**
+ * fixSource returns the fully canonical source: decided design spellings and typed design blocks,
+ * renders last, organized imports, formatted.
+ */
 async function fixSource(document: AST.Document, options: SourceActionOptions = {}): Promise<string> {
   assertNoSyntaxErrors(document)
-  const moved = moveViewRendersLast(document)
-  const movedDocument = moved === undefined ? document : await parseSourceText(document, moved, options)
-  return await Formatter.formatCode(canonicalizeTopLevel(movedDocument))
+  let fixed = document
+  for (const fix of sourceFixes) {
+    const text = fix(fixed)
+    fixed = text === undefined ? fixed : await parseSourceText(fixed, text, options)
+  }
+  return await Formatter.formatCode(canonicalizeTopLevel(fixed))
 }
 
 /** SourceActions exposes Tao source canonicalization transforms. */

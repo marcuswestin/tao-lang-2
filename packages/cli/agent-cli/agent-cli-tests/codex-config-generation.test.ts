@@ -133,32 +133,24 @@ Describe('Codex config generation', () => {
     Expect(parsed['permissions']['tao-review']['filesystem']['~/.ssh/**']).toBe('deny')
     Expect(profile['network']['allow_local_binding']).toBe(true)
     Expect(profile['network']['unix_sockets']['/nix/var/nix/daemon-socket/socket']).toBe('allow')
-    // Codex matches a socket rule as a directory prefix, so Watchman's state directory covers the
-    // `<login>-state/sock` it names after whoever is running it.
-    Expect(profile['network']['unix_sockets'][FS.resolvePath('.local/state/watchman', FS.homeDir())])
-      .toBe('allow')
+    // A home-relative socket cannot be spelled for Codex without a login, so it is left out rather
+    // than expanded into one developer's home directory.
+    Expect(Object.keys(profile['network']['unix_sockets'])).toEqual(['/nix/var/nix/daemon-socket/socket'])
     Expect(profile['network']['unix_sockets']['/var/run/docker.sock']).toBeUndefined()
     Expect(profile['network']['domains']['*']).toBeUndefined()
     Expect(parsed['permissions']['tao-review']['extends']).toBe(':read-only')
     Expect(parsed['permissions']['tao-native']['filesystem']['~/Library/Developer/CoreSimulator']).toBe('write')
-    Expect(parsed['permissions']['tao-local-services']['network']['unix_sockets']['/var/run/docker.sock'])
-      .toBe('allow')
-    Expect(
-      parsed['permissions']['tao-local-services']['network']['unix_sockets'][
-        FS.resolvePath('.docker/run/docker.sock', FS.homeDir())
-      ],
-    ).toBe('allow')
+    // Docker's login-free system link stays; Codex follows it to the per-user socket.
+    Expect(Object.keys(parsed['permissions']['tao-local-services']['network']['unix_sockets']))
+      .toEqual(['/var/run/docker.sock'])
     Expect(parsed['permissions']['tao-release']['extends']).toBe('tao-native')
     Expect(parsed['permissions']['tao-release']['filesystem']['~/Library/Developer/Xcode/Archives']).toBe('write')
     Expect(parsed['permissions']['tao-device-lab']['extends']).toBe('tao-local-services')
     Expect(parsed['permissions']['tao-device-lab']['description'])
       .toBe('Test a profile the renderer does not know by name.')
     Expect(parsed['permissions']['tao-device-lab']['filesystem']['~/Library/Developer/TaoDeviceLab']).toBe('write')
-    Expect(
-      parsed['permissions']['tao-device-lab']['network']['unix_sockets'][
-        FS.resolvePath('Library/Developer/TaoDeviceLab/control.sock', FS.homeDir())
-      ],
-    ).toBe('allow')
+    // Its only socket is home-relative, so the profile carries no socket table at all.
+    Expect(parsed['permissions']['tao-device-lab']['network']).toBeUndefined()
     Expect(parsed['permissions']['tao-unsandboxed']).toEqual({
       description: 'Test unrestricted host access.',
       extends: ':danger-full-access',
@@ -340,16 +332,14 @@ Describe('Codex config generation', () => {
     Expect(rules).not.toContain('pattern=["./agent","land"]')
   })
 
-  Test('tracks the startup profile and limits machine paths to its required sockets', async () => {
-    // A new managed worktree must load this before either setup or a session hook can run.
+  Test('tracks the startup profile, and no harness file names a home directory or a login', async () => {
+    // A new managed worktree must load this before either setup or a session hook can run, and a
+    // path under one developer's home directory would be wrong for every other developer.
     const root = Repo.getRoot()
     const tracked = await CLI.run('git', { args: ['ls-files', '.claude', '.codex', '.cursor', '.rulesync'], cwd: root })
     const login = Platform.runtimeProcess.env['USER'] ?? FS.basename(FS.homeDir())
     const offending: string[] = []
     for (const path of tracked.stdout.split('\n').filter(Boolean)) {
-      if (path === '.codex/config.toml') {
-        continue
-      }
       const file = FS.resolvePath(path, root)
       if (!(await FS.isFile(file))) {
         continue
@@ -368,10 +358,5 @@ Describe('Codex config generation', () => {
     Expect(config.default_permissions).toBe('tao-workspace')
     Expect(config.permissions['tao-workspace'].extends).toBe(':workspace')
     Expect(config.permissions['tao-workspace'].filesystem['~/code/tao-lang-2/.git']).toBe('write')
-    const machinePaths = configText.split('\n').filter(line => line.includes(FS.homeDir()))
-    Expect(machinePaths).toEqual([
-      `"${FS.resolvePath('.local/state/watchman', FS.homeDir())}" = "allow"`,
-      `"${FS.resolvePath('.docker/run/docker.sock', FS.homeDir())}" = "allow"`,
-    ])
   })
 })

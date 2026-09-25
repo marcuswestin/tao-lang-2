@@ -250,7 +250,7 @@ function worktreeCheck(facts: DoctorFacts): DoctorCheck {
     return {
       detail: `${facts.repositoryRoot} (${kind}) is on a detached HEAD`,
       name: 'worktree',
-      remediation: 'Name a branch before committing: git switch -c feat/<name>',
+      remediation: 'Name a branch before committing: ./agent start-branch feat/<name>',
       status: 'warn',
     }
   }

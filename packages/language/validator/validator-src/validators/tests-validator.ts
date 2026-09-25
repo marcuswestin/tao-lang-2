@@ -1,6 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch } from '@shared'
+import { FS, Switch } from '@shared'
 import { type NodeValidationCheck, type NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
@@ -30,6 +30,12 @@ export const testValidationMessages = {
   backPlacement: 'Back steps are only allowed inside test blocks.',
   relaunchPlacement: 'Relaunch steps are only allowed inside test blocks.',
   advancePlacement: 'Advance steps are only allowed inside test blocks.',
+  networkPlacement: 'Network steps are only allowed inside test blocks.',
+  syncPlacement: 'Wait for sync steps are only allowed inside test blocks.',
+  datasourceFailurePlacement: 'Datasource failure steps are only allowed inside test blocks.',
+  unknownDatasourceFailureEntity: (name: string) => `Datasource failure names unknown data entity '${name}'.`,
+  unboundDatasourceFailureEntity: (name: string, app: string) =>
+    `Datasource failure names '${name}', which app '${app}' does not bind.`,
   narrowPlacement: 'Narrow steps are only allowed inside test blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
@@ -49,6 +55,15 @@ export const testValidationMessages = {
   interactionVocabulary: (expected: string) => `Expected '${expected}' in this interaction test step.`,
   interactionExpectation:
     "Expected 'target <label>', 'focus region <label>', or 'verbs <label>, ...' in this interaction test step.",
+  duplicateHeadClause: (name: string, clause: string) => `Test '${name}' declares '${clause}' more than once.`,
+  deviceDimensions: 'Test device dimensions must be positive whole numbers.',
+  fixtureAppBinding: (fixture: string, entity: string, app: string) =>
+    `Fixture '${fixture}' creates '${entity}', which app '${app}' does not bind.`,
+  actionStubPlacement: 'An action failure stub is allowed only directly in a test check.',
+  actionStubBeforeRun: 'An action failure stub must appear before run.',
+  actionStubForeign: (name: string) => `Action '${name}' must be foreign to use a test failure stub.`,
+  actionStubCase: (name: string, caseName: string) => `Action '${name}' does not declare failure case '${caseName}'.`,
+  actionStubDuplicate: (name: string) => `Action '${name}' has more than one failure stub in this check.`,
 } as const
 
 const validateRunPlacement = validateStepPlacement(testValidationMessages.runPlacement)
@@ -63,10 +78,14 @@ const validateBackPlacement = validateStepPlacement(testValidationMessages.backP
 const validateRelaunchPlacement = validateStepPlacement(testValidationMessages.relaunchPlacement)
 const validateAdvancePlacement = validateStepPlacement(testValidationMessages.advancePlacement)
 const validateNarrowPlacement = validateStepPlacement(testValidationMessages.narrowPlacement)
+const validateNetworkPlacement = validateStepPlacement(testValidationMessages.networkPlacement)
+const validateSyncPlacement = validateStepPlacement(testValidationMessages.syncPlacement)
+const validateDatasourceFailurePlacement = validateStepPlacement(testValidationMessages.datasourceFailurePlacement)
 
 /** testValidationChecks validates v0 Tao test declarations and steps. */
 export const testValidationChecks = {
   [AST.TestDeclaration.$type]: validateTest,
+  [AST.ActionFailureStubStep.$type]: validateActionFailureStub,
   [AST.RunStep.$type]: validateRunPlacement,
   [AST.PressTextStep.$type]: [validatePressPlacement, validateSelector],
   [AST.TagPressStep.$type]: validatePressPlacement,
@@ -86,6 +105,9 @@ export const testValidationChecks = {
   [AST.BackTestStep.$type]: validateBackPlacement,
   [AST.RelaunchStep.$type]: validateRelaunchPlacement,
   [AST.AdvanceStep.$type]: [validateAdvancePlacement, validateAdvanceDuration],
+  [AST.NetworkTestStep.$type]: validateNetworkPlacement,
+  [AST.WaitForSyncStep.$type]: validateSyncPlacement,
+  [AST.DatasourceFailureStep.$type]: [validateDatasourceFailurePlacement, validateDatasourceFailureTarget],
   [AST.ExpectCheckboxStateStep.$type]: validateExpectationPlacement,
   [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector],
   [AST.ExpectNavigationTitleStep.$type]: [
@@ -115,11 +137,51 @@ function validateAdvanceDuration(step: AST.AdvanceStep, ctx: ValidationContext):
   }
 }
 
+/** Faults name a real entity in the running app's store, even from a sidecar that cannot import it. */
+function validateDatasourceFailureTarget(step: AST.DatasourceFailureStep, ctx: ValidationContext): void {
+  const check = AST.findOwningTest(step)
+  const app = check?.block.statements.find(AST.isRunStep)?.app.ref
+  if (!app) {
+    return
+  }
+  const appPath = AST.getDocument(app).uri.path
+  const projectRoot = ctx.workspaceFiles
+    .filter(file => file.statements.some(AST.isProjectDeclaration))
+    .map(file => FS.dirname(AST.getDocument(file).uri.path))
+    .filter(directory => FS.pathIsWithin(appPath, directory))
+    .toSorted((left, right) => right.length - left.length)[0] ?? FS.dirname(appPath)
+  const files = ctx.workspaceFiles.filter(file => FS.pathIsWithin(AST.getDocument(file).uri.path, projectRoot))
+  const collections = files.flatMap(file => file.statements.filter(AST.isEntityDataDeclaration))
+  const entity = collections.find(candidate => candidate.singularName === step.entity)
+  if (!entity) {
+    ctx.error(step, testValidationMessages.unknownDatasourceFailureEntity(step.entity))
+    return
+  }
+  const plan = ASTUtils.planDataStores(
+    collections,
+    files.flatMap(file => file.statements.filter(AST.isDatasourceDeclaration)),
+  )
+  const store = ASTUtils.storeOfCollection(plan, entity)
+  const bindings = ASTUtils.appBoundDatasources(app)
+  if (store?.kind === 'device' || bindings.length === 0) {
+    return
+  }
+  const bound = bindings.some(binding =>
+    binding.declaration === undefined
+      ? store?.kind === 'default'
+      : store?.datasources.includes(binding.declaration)
+  )
+  if (!bound) {
+    ctx.error(step, testValidationMessages.unboundDatasourceFailureEntity(step.entity, app.name))
+  }
+}
+
 // A test is either a group of nested tests or a leaf journey of steps, never a mix.
 function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
   if (AST.testDisplayName(test) === '') {
     ctx.error(test, testValidationMessages.unnamedTest)
   }
+  validateTestHeadClauses(test, ctx)
   const owner = test.$container
   if (!AST.isTaoFile(owner) && !AST.isTestDeclaration(blockOwner(test))) {
     ctx.error(test, testValidationMessages.testPlacement)
@@ -146,8 +208,28 @@ function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
 
 function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): void {
   for (const statement of check.block.statements) {
-    if (!AST.isCheckStep(statement)) {
+    if (!AST.isCheckStep(statement) && !AST.isActionFailureStubStep(statement)) {
       ctx.error(statement, testValidationMessages.checkBlock(AST.testDisplayName(check)))
+    }
+  }
+  const stubbed = new Set<AST.ActionDeclaration>()
+  let seenRun = false
+  for (const statement of check.block.statements) {
+    if (AST.isRunStep(statement)) {
+      seenRun = true
+    }
+    if (!AST.isActionFailureStubStep(statement)) {
+      continue
+    }
+    if (seenRun) {
+      ctx.error(statement, testValidationMessages.actionStubBeforeRun)
+    }
+    const action = statement.action.ref
+    if (action && stubbed.has(action)) {
+      ctx.error(statement, testValidationMessages.actionStubDuplicate(action.name))
+    }
+    if (action) {
+      stubbed.add(action)
     }
   }
   const runSteps = check.block.statements.filter(AST.isRunStep)
@@ -157,6 +239,7 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
   }
   for (const run of runSteps) {
     validateRun(run, ctx)
+    validateFixtureBinding(check, run, ctx)
   }
   for (const run of runSteps.slice(1)) {
     ctx.error(run, testValidationMessages.duplicateRun(AST.testDisplayName(check)))
@@ -185,6 +268,9 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
         hasRun = true
       },
       AdvanceStep: checkStepOrder,
+      NetworkTestStep: checkStepOrder,
+      WaitForSyncStep: checkStepOrder,
+      DatasourceFailureStep: checkStepOrder,
       SubmitInputStep: checkStepOrder,
       TagSubmitStep: checkStepOrder,
       SelectStep: checkStepOrder,
@@ -216,11 +302,32 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       | AST.SelectStep
       | AST.BackTestStep
       | AST.RelaunchStep
-      | AST.AdvanceStep,
+      | AST.AdvanceStep
+      | AST.NetworkTestStep
+      | AST.WaitForSyncStep
+      | AST.DatasourceFailureStep,
   ): void {
     if (!hasRun) {
       ctx.error(step, testValidationMessages.expectationBeforeRun)
     }
+  }
+}
+
+function validateActionFailureStub(step: AST.ActionFailureStubStep, ctx: ValidationContext): void {
+  if (!AST.isTestDeclaration(blockOwner(step))) {
+    ctx.error(step, testValidationMessages.actionStubPlacement)
+    return
+  }
+  const action = step.action.ref
+  if (!action) {
+    return
+  }
+  if (!action.foreign) {
+    ctx.error(step, testValidationMessages.actionStubForeign(action.name))
+    return
+  }
+  if (!action.foreign.failures.some(failure => failure.case.ref?.name === step.case)) {
+    ctx.error(step, testValidationMessages.actionStubCase(action.name, step.case))
   }
 }
 
@@ -335,6 +442,60 @@ function validateRun(run: AST.RunStep, ctx: ValidationContext): void {
   }
   if (!run.app.ref) {
     ctx.error(run, testValidationMessages.runTarget(run.app.$refText))
+  }
+}
+
+/** A test's own `on`/`with` may each appear at most once; a nested test overrides by repeating one. */
+function validateTestHeadClauses(test: AST.TestDeclaration, ctx: ValidationContext): void {
+  allowOneTestClause(test, 'on', AST.isTestDeviceClause, ctx)
+  allowOneTestClause(test, 'with', AST.isTestFixtureClause, ctx)
+  for (const device of test.headClauses.filter(AST.isTestDeviceClause)) {
+    if (
+      device.width !== undefined
+      && (!Number.isInteger(device.width) || !Number.isInteger(device.height) || device.width <= 0
+        || device.height! <= 0)
+    ) {
+      ctx.error(device, testValidationMessages.deviceDimensions)
+    }
+  }
+}
+
+function allowOneTestClause<ClauseT extends AST.TestHeadClause>(
+  test: AST.TestDeclaration,
+  name: string,
+  predicate: (clause: AST.TestHeadClause) => clause is ClauseT,
+  ctx: ValidationContext,
+): void {
+  for (const duplicate of test.headClauses.filter(predicate).slice(1)) {
+    ctx.error(duplicate, testValidationMessages.duplicateHeadClause(AST.testDisplayName(test), name))
+  }
+}
+
+/**
+ * A check's effective fixture must be usable by the app it runs: every entity the fixture creates
+ * must be covered by a datasource the app binds, or seeding it could write rows the app can never
+ * read back. An app with no explicit `Datasource` binding, or one bound datasource with no `Data`
+ * membership (the ordinary shape), holds everything, so there is nothing to check.
+ */
+function validateFixtureBinding(check: AST.TestDeclaration, run: AST.RunStep, ctx: ValidationContext): void {
+  const fixture = AST.effectiveTestClause(check, AST.isTestFixtureClause)?.fixture.ref
+  const app = run.app.ref
+  if (!fixture || !app) {
+    return
+  }
+  const bindings = ASTUtils.appBoundDatasources(app)
+  const hasCatchAll = bindings.some(binding =>
+    !binding.declaration || !ASTUtils.datasourceCollectionNames(binding.declaration)
+  )
+  if (bindings.length === 0 || hasCatchAll) {
+    return
+  }
+  const bound = new Set(bindings.flatMap(binding => ASTUtils.datasourceCollectionNames(binding.declaration!) ?? []))
+  for (const binding of AST.fixtureValueDeclarations(fixture).filter(AST.isFixtureCreateBinding)) {
+    const entity = binding.entity.ref
+    if (entity && !bound.has(entity.name)) {
+      ctx.error(run, testValidationMessages.fixtureAppBinding(fixture.name, entity.singularName, app.name))
+    }
   }
 }
 

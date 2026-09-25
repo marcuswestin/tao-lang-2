@@ -105,7 +105,7 @@ Describe('tao ship git behavior', () => {
   })
 
   Test('allows projects outside git', async () => {
-    const root = await mkTestDir('tao-ship-no-git-')
+    const root = await mkTestDir('tao-ship-no-git-', { location: 'host' })
     try {
       const state = await inspectShipGit(root)
       Expect(state).toEqual({ commit: 'unversioned', dirty: false })

@@ -1,13 +1,16 @@
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
+import { TestActionStubs } from './TR-action-test-stubs'
 import {
   actionFailureCaseName,
+  actionTestStubContext,
   captureActionContinuation,
   deferDetached,
   existingTransactionResource,
   markExternalEffect,
   resumeActionContinuation,
   runAction,
+  skippedActionRun,
   type TaoActionContinuation,
   type TaoDeclaredFailure,
   transactionResource,
@@ -58,6 +61,7 @@ import {
   type TaoDesign,
   type TaoDesignSpec,
 } from './TR-design'
+import { runEffectOutcome, type TaoEffectContract } from './TR-effect-outcomes'
 import {
   captureArguments,
   latestFailureCapture,
@@ -160,8 +164,11 @@ import { createShareSheet, type TaoShareSheet } from './TR-share'
 import { StudioDeviceHost } from './TR-studio-device-host'
 import {
   StudioEnvironmentControls,
+  type TaoStudioCellRuntime,
   type TaoStudioEnvironment,
+  type TaoStudioFixturePlan,
   type TaoStudioProviderOverlay,
+  type TaoStudioScenarioRuntime,
   type TaoStudioStateCapture,
   type TaoStudioStateSeed,
 } from './TR-studio-environment'
@@ -407,7 +414,7 @@ class TR {
     implementation: (...arguments_: any[]) => unknown,
     name: string,
     failures: readonly TaoDeclaredFailure[],
-    options: Readonly<{ requiredArguments?: number; runs?: 'latest' }> = {},
+    options: Readonly<{ requiredArguments?: number; runs?: 'latest'; testStubKey?: string }> = {},
   ): TR.Action<Args> {
     const requiredArguments = options.requiredArguments ?? implementation.length
     return new RuntimeAction(
@@ -424,6 +431,14 @@ class TR {
         )
         markExternalEffect()
         try {
+          const stubbedCase = options.testStubKey === undefined
+            ? undefined
+            : TestActionStubs.failureFor(actionTestStubContext(), options.testStubKey)
+          if (stubbedCase !== undefined) {
+            const declared = failures.find(failure => actionFailureCaseName(failure.case) === stubbedCase)
+            RuntimeAssert(declared !== undefined, 'validated foreign action test stub names a declared failure')
+            throw new TaoActionFailure(stubbedCase, declared.sentence)
+          }
           await implementation(...arguments_.map(argument => argument?.evaluate().jsValue))
         } catch (error) {
           if (error instanceof TaoActionFailure) {
@@ -442,6 +457,9 @@ class TR {
       options.runs,
     )
   }
+
+  /** TestActionStubs is the check-scoped foreign action seam used only by the test harness. */
+  static TestActionStubs = TestActionStubs
 
   /** BridgedAction adapts an explicitly action-typed TypeScript export at the ordinary from boundary. */
   static BridgedAction<Args extends TR.Evaluable[]>(
@@ -492,6 +510,22 @@ class TR {
     ...args: Args
   ): void | Promise<void> {
     return action.evaluate().jsValue.invokeJoined(...args)
+  }
+
+  /**
+   * WhenDo runs one verb as `Do` does but contains its failure at this site: the verb's own writes
+   * roll back, and the outcome the site names runs with the selected user message.
+   */
+  static WhenDo(
+    invoke: () => void | Promise<void>,
+    contract: TaoEffectContract,
+    outcomes: readonly TR.CaseBranch<unknown>[],
+  ): unknown {
+    return runEffectOutcome(
+      invoke,
+      contract,
+      outcomes.map(([outcome, body]) => [outcome, (message: string) => body(new RuntimeValue(message))]),
+    )
   }
 
   /** Set updates a Tao state value. */
@@ -969,7 +1003,7 @@ class RuntimeActionValue<Args extends any[] = any[]> {
 type LatestActionInvocation<Args extends any[]> = {
   args: Args
   reject(error: unknown): void
-  resolve(): void
+  resolve(outcome?: typeof skippedActionRun): void
   run(args: Args): void | Promise<void>
 }
 
@@ -979,16 +1013,17 @@ class LatestActionInvocations<Args extends any[]> {
   #pending: LatestActionInvocation<Args> | undefined
 
   invoke(args: Args, run: (args: Args) => void | Promise<void>): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+    // A superseded call resolves with the skip marker, so a `when do` can tell it never ran.
+    return new Promise<void | typeof skippedActionRun>((resolve, reject) => {
       const invocation = { args, reject, resolve, run }
       if (!this.#active) {
         this.#active = true
         void this.#execute(invocation)
         return
       }
-      this.#pending?.resolve()
+      this.#pending?.resolve(skippedActionRun)
       this.#pending = invocation
-    })
+    }) as Promise<void>
   }
 
   async #execute(invocation: LatestActionInvocation<Args>): Promise<void> {
@@ -1222,6 +1257,12 @@ namespace TR {
   export type StudioStateCapture = TaoStudioStateCapture
   /** StudioProviderOverlay is the cell-local provider wrapper exposed to generated Studio hosts. */
   export type StudioProviderOverlay = TaoStudioProviderOverlay
+  /** StudioCellRuntime is what `TR.Studio.Environment.Host` mounts above one launched app. */
+  export type StudioCellRuntime = TaoStudioCellRuntime
+  /** StudioFixturePlan is a fixture's created rows, materialized by `TR.Studio.Environment.useFixture`. */
+  export type StudioFixturePlan = TaoStudioFixturePlan
+  /** StudioScenarioRuntime is the generated app-or-view selection a `StudioCellRuntime` carries. */
+  export type StudioScenarioRuntime = TaoStudioScenarioRuntime
   /** StudioStateArtifact is the versioned, explicit-domain durable state transport. */
   export type StudioStateArtifact = TaoStudioStateArtifact
   /** StudioStateLayer is one named input to ordered state composition. */
