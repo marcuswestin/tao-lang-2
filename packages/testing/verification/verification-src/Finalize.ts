@@ -15,7 +15,9 @@ import { VerificationLanes } from './VerificationLanes'
  * the merge message is written only when none exists, or when `--redraft` explicitly asks for a new
  * one. Recorded state now decides one thing — whether a kept message is *proved* to cover the HEAD
  * finalize is looking at, or whether the report has to ask the author to confirm it. Main
- * integration and verification never trust it: integration re-asks Git whether main is already an
+ * integration and verification never trust it. A generated `DRAFT:` message additionally needs a
+ * byte-changing author edit; recorded finalize state alone can never turn the draft into review.
+ * Integration re-asks Git whether main is already an
  * ancestor (a single cheap command), and verification is gated entirely by `GreenTree`, whose
  * records are keyed by tree content, not by anything this file writes. A missing, unreadable,
  * malformed, or older-version state file therefore degrades to keeping the message and saying it
@@ -113,9 +115,11 @@ export type FinalizeDependencies = {
   ) => Promise<GreenTreeMatch | undefined>
   /** The tree-plus-toolchain identity a record must match; see `GreenTree.key`. */
   key: (repositoryRoot: string) => Promise<GreenTreeKey>
+  isSymbolicLink: (path: string) => Promise<boolean>
   makeProbeDirectory: (prefix: string) => Promise<string>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
+  realPath: (path: string) => Promise<string>
   readText: (path: string) => Promise<string>
   removeFile: (path: string) => Promise<void>
   run: FinalizeCommandRunner
@@ -136,10 +140,12 @@ const defaultDependencies: FinalizeDependencies = {
   },
   exists: FS.exists,
   findGreenTree: GreenTree.find,
+  isSymbolicLink: FS.isSymbolicLink,
   key: GreenTree.key,
   makeProbeDirectory: FS.mkTmpDir,
   now: () => new Date(),
   readJson: FS.readJson,
+  realPath: FS.realPath,
   readText: FS.readText,
   removeFile: FS.remove,
   run: CLI.run,
@@ -157,8 +163,8 @@ const defaultDependencies: FinalizeDependencies = {
 export type FinalizeState = {
   headSha: string
   mainIntegratedSha: string
-  /** The HEAD the merge message on disk is known to cover — the HEAD it was drafted for, or the
-   * HEAD at which finalize last kept and reported it. Never a licence to replace the file. */
+  /** The HEAD the merge message on disk is known to cover. A generated draft additionally needs an
+   * author edit recorded by `DraftReviewState`; this field alone never marks it reviewed. */
   messageHeadSha: string
   updatedAt: string
   verifiedAt: string
@@ -243,6 +249,7 @@ export const FinalizeCommand = {
     const priorState = options.fresh === true ? undefined : await loadState(dependencies, statePath)
 
     const messageFile = FS.resolvePath(options.messageFile ?? `.artifacts/merge/${branch}.msg`, root)
+    const reviewPath = `${messageFile}.review.json`
     const message = await draftOrKeepMessage(
       dependencies,
       root,
@@ -255,6 +262,9 @@ export const FinalizeCommand = {
       options.redraft === true,
       lines,
     )
+    if (!check && message.decision !== 'kept') {
+      await recordDraftReview(dependencies, reviewPath, messageFile, integration.headSha)
+    }
     remaining.push(...messageRemaining(message, messageFile))
 
     // Advisory judgments never gate finalize's own exit code — the brief is explicit that this list
@@ -288,7 +298,7 @@ export const FinalizeCommand = {
 export type LandOptions = {
   /** Report the readiness of this branch and the plan, and change nothing. */
   dryRun?: boolean
-  /** Override `.artifacts/merge/<branch>.msg`. */
+  /** Must resolve exactly to this branch's canonical `.artifacts/merge/<branch>.msg`. */
   messageFile?: string
   /** Override the current repository root, principally for tests. */
   repositoryRoot?: string
@@ -329,9 +339,23 @@ export const LandCommand = {
     dependencies: FinalizeDependencies = defaultDependencies,
   ): Promise<LandResult> {
     const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+    if (options.skipVerify === true && options.skipVerifyFull === true) {
+      Errors.throwUserInput(
+        '`land` cannot combine --skip-verify-full with --skip-verify because that would land '
+          + 'unverified bytes without confirmation. Use the lower-level `merge-with-main --skip-all` '
+          + 'workflow when a person has explicitly chosen and confirmed that exception.',
+      )
+    }
+    const branch = await assertOnFeatureBranch(dependencies, root, 'land')
+    const messageFile = await assertCanonicalLandingMessageFile(
+      dependencies,
+      root,
+      branch,
+      options.messageFile,
+    )
     const preparation = await prepareForLanding(
       {
-        ...(options.messageFile === undefined ? {} : { messageFile: options.messageFile }),
+        messageFile,
         redraft: options.redraft === true,
         repositoryRoot: root,
       },
@@ -346,7 +370,7 @@ export const LandCommand = {
 
     const merge = await MergeWithMainCommand.run({
       dryRun: options.dryRun === true,
-      ...(options.messageFile === undefined ? {} : { messageFile: options.messageFile }),
+      messageFile,
       repositoryRoot: root,
       skipVerify: options.skipVerify === true,
       skipVerifyFull: options.skipVerifyFull === true,
@@ -377,6 +401,51 @@ export const MergeMainCommand = {
     return { lines, mergedNow: integration.integratedNow }
   },
 } as const
+
+/**
+ * The agent landing runs with host access, so its unlocked message preparation is restricted to the
+ * one repository-owned artifact for this branch. The lower-level merge command keeps its explicit
+ * override for a person, while this path rejects both lexical escapes and symlink components before
+ * any message bytes are read or written.
+ */
+async function assertCanonicalLandingMessageFile(
+  dependencies: FinalizeDependencies,
+  root: string,
+  branch: string,
+  configuredPath: string | undefined,
+): Promise<string> {
+  const expected = FS.resolvePath(`.artifacts/merge/${branch}.msg`, root)
+  const requested = FS.resolvePath(configuredPath ?? expected, root)
+  if (requested !== expected) {
+    Errors.throwUserInput(
+      `\`land\` only accepts its canonical merge message: ${FS.displayPath(expected)}. `
+        + 'Use the lower-level human workflow for an explicit alternate message file.',
+    )
+  }
+
+  const physicalRoot = await dependencies.realPath(root)
+  if (!FS.pathIsWithin(FS.resolvePath(FS.relativePath(root, requested), physicalRoot), physicalRoot)) {
+    Errors.throwUserInput('The canonical landing merge message resolves outside the repository.')
+  }
+  let component = root
+  for (const name of FS.relativePath(root, requested).split('/').filter(Boolean)) {
+    component = FS.resolvePath(name, component)
+    if (await dependencies.isSymbolicLink(component)) {
+      Errors.throwUserInput(
+        `The canonical landing merge message crosses a symbolic link: ${FS.displayPath(component)}.`,
+      )
+    }
+    if (await dependencies.exists(component)) {
+      const physicalComponent = await dependencies.realPath(component)
+      if (!FS.pathIsWithin(physicalComponent, physicalRoot)) {
+        Errors.throwUserInput(
+          `The canonical landing merge message resolves outside the repository: ${FS.displayPath(component)}.`,
+        )
+      }
+    }
+  }
+  return requested
+}
 
 /** LandingPreparation is everything settled before the lock is taken. */
 export type LandingPreparation = {
@@ -566,9 +635,8 @@ async function assertCleanWorktree(dependencies: FinalizeDependencies, root: str
 }
 
 /**
- * Integrate main when the branch does not already contain it. The remote fetches the
- * fixed GitHub ref and objects without exposing credentials; a direct fetch keeps human shells and
- * machines that have not installed it working, with local main as the final offline fallback.
+ * Integrate main when the branch does not already contain it. Fetch the remote main ref,
+ * with local main as the final offline fallback.
  */
 async function integrateMain(
   dependencies: FinalizeDependencies,
@@ -849,9 +917,10 @@ async function verifyTree(
  * `check` reaches the same decision from the same inputs as a real run, so `--check` can no longer
  * describe the message differently from the run that follows it.
  *
- * A kept-but-unproved message is recorded against this HEAD once the run ends, so the confirmation
- * is asked for once rather than on every re-run of the landing convoy. The file itself is untouched
- * either way.
+ * A kept-but-unproved hand-written message is recorded against this HEAD once the run ends, so the
+ * confirmation is asked for once rather than on every re-run of the landing convoy. A generated
+ * draft stays unconfirmed until its review baseline proves that an author changed its bytes. The
+ * file itself is untouched either way.
  */
 async function draftOrKeepMessage(
   dependencies: FinalizeDependencies,
@@ -867,12 +936,13 @@ async function draftOrKeepMessage(
 ): Promise<MessageOutcome> {
   const messageExists = await dependencies.exists(messageFile)
   if (messageExists && !redraft) {
-    const malformed = keptMessageDefect(await dependencies.readText(messageFile))
+    const source = await dependencies.readText(messageFile)
+    const malformed = keptMessageDefect(source)
     if (malformed !== '') {
       lines.push(`FAIL  The kept merge message is not one the landing will accept: ${malformed}`)
       return { decision: 'kept', malformed, messageHeadSha: headSha, unconfirmedReason: '' }
     }
-    const unconfirmedReason = keptMessageReason(priorState, headSha, reviewedDraftHeadSha)
+    const unconfirmedReason = keptMessageReason(source, priorState, headSha, reviewedDraftHeadSha)
     lines.push(
       `PASS  Kept the existing merge message; ${
         unconfirmedReason === ''
@@ -905,18 +975,22 @@ async function draftOrKeepMessage(
 }
 
 /**
- * Why a kept message cannot be called current, in the author's terms: either nothing records which
- * HEAD it was written for (it was written by hand, or the record was discarded by `--fresh`), or it
- * was recorded against an earlier HEAD and the branch has gained commits since. Empty means the
- * record proves it covers this HEAD.
+ * Why a kept message cannot be called current, in the author's terms: a generated draft has not
+ * changed from its review baseline, nothing records which HEAD a hand-written message was for, or
+ * it was recorded against an earlier HEAD and the branch has gained commits since. Empty means the
+ * applicable evidence proves it covers this HEAD.
  */
 function keptMessageReason(
+  source: string,
   priorState: FinalizeState | undefined,
   headSha: string,
   reviewedDraftHeadSha: string | undefined,
 ): string {
   if (reviewedDraftHeadSha === headSha) {
     return ''
+  }
+  if (source.startsWith(DRAFT_PREFIX)) {
+    return 'the generated draft has not been edited by its author'
   }
   if (priorState === undefined) {
     return 'nothing records which HEAD it was written for'
@@ -943,6 +1017,22 @@ async function loadDraftReview(
   } catch {
     return undefined
   }
+}
+
+async function recordDraftReview(
+  dependencies: FinalizeDependencies,
+  reviewPath: string,
+  messageFile: string,
+  headSha: string,
+): Promise<void> {
+  await dependencies.writeJson(
+    reviewPath,
+    {
+      draftText: await dependencies.readText(messageFile),
+      headSha,
+      version: DRAFT_REVIEW_VERSION,
+    } satisfies DraftReviewState,
+  )
 }
 
 async function readFeatureCommits(

@@ -759,6 +759,13 @@ export class StudioDeviceGateway {
       return
     }
     const identity = StudioPreviewManifest.cellIdentity(manifest, cell)
+    const previousIdentity = connection.assignment?.identity
+    const assignmentChanged = previousIdentity === undefined
+      || previousIdentity.appName !== identity.appName
+      || previousIdentity.cellId !== identity.cellId
+      || previousIdentity.cellRevision !== identity.cellRevision
+      || previousIdentity.compileRevision !== identity.compileRevision
+      || previousIdentity.manifestRevision !== identity.manifestRevision
     const previewInstanceId = crypto.randomUUID()
     try {
       this.#releaseInstance(connection)
@@ -776,6 +783,9 @@ export class StudioDeviceGateway {
         },
         previewInstanceId,
         ...(cell.scenarioId === undefined ? {} : { scenarioId: cell.scenarioId }),
+      }
+      if (assignmentChanged) {
+        this.#state(ref.sessionId).lensSamples = undefined
       }
       connection.lastError = undefined
       connection.scenarioLabel = manifest.scenarios.find(scenario => scenario.scenarioId === cell.scenarioId)?.label

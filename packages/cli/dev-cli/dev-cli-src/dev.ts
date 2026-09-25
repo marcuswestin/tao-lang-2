@@ -167,7 +167,7 @@ await runWithCommands(commands => {
     .command('land')
     .description('Land this feature branch: prepare unlocked, then integrate, verify, squash and push under one lock.')
     .option('--dry-run', 'Report readiness and the plan, and change nothing.')
-    .option('--message-file <path>', 'Override .artifacts/merge/<branch>.msg.')
+    .option('--message-file <path>', 'Must name the canonical .artifacts/merge/<branch>.msg file.')
     .option('--redraft', 'Replace an existing merge message with a fresh mechanical draft before landing.')
     .option('--skip-verify', 'Skip the staged-squash just verify --complete pass.')
     .option('--skip-verify-full', 'Skip just verify-full; the staged squash then gets just verify --complete.')

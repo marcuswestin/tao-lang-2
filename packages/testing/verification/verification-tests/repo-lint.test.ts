@@ -426,6 +426,24 @@ _bench-check:
     ])
   })
 
+  Test('rejects a wrapped developer-environment status that the index would truncate', () => {
+    Expect(developerEnvironmentLedgerIssues(
+      {
+        entries: [{
+          name: 'DEVENV-909-wrapped.md',
+          section: 'External',
+          status: 'Candidate',
+          statusMultiline: true,
+        }],
+        index: '',
+      },
+      emptySide,
+    )).toContain(
+      'Developer environment upgrades/DEVENV-909-wrapped.md must keep `**Status:**` on one physical line;'
+        + ' move detail to an update field.',
+    )
+  })
+
   Test('requires a valid Section on an open developer-environment entry', () => {
     Expect(developerEnvironmentLedgerIssues(
       {

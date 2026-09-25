@@ -181,6 +181,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       }
       return undefined
     },
+    isSymbolicLink: async () => false,
     key: async () => ({ toolchain: FAKE_TOOLCHAIN, treeHash: `tree-of-${headAfterMerge}` }),
     makeProbeDirectory: async prefix => {
       if (resolvedIn(repository.unwritableDirectories ?? []).some(directory => prefix.startsWith(`${directory}/`))) {
@@ -198,6 +199,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       }
       return states.get(path) as ValueT
     },
+    realPath: async path => path,
     readText: async (path: string) => files.get(path) ?? '',
     run: runner,
     writeJson: async (path, value) => {
@@ -997,10 +999,12 @@ Describe('finalize', () => {
         canWriteFile: async () => true,
         exists: FS.exists,
         findGreenTree: async () => undefined,
+        isSymbolicLink: FS.isSymbolicLink,
         key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),
         makeProbeDirectory: FS.mkTmpDir,
         now: () => new Date('2026-09-17T12:00:00.000Z'),
         readJson: FS.readJson,
+        realPath: FS.realPath,
         readText: FS.readText,
         removeFile: FS.remove,
         run: async (command, spec) =>
@@ -1080,6 +1084,21 @@ Describe('landing preparation', () => {
     Expect(changedHead.ok).toBe(false)
   })
 
+  Test('does not turn an untouched generated draft into author review on a later landing', async () => {
+    const fake = fakeDependencies()
+    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+    const path = '/repo/.artifacts/merge/feat/example.msg'
+
+    const untouched = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(untouched.ok).toBe(false)
+    Expect(untouched.remaining[0]).toContain('generated draft has not been edited by its author')
+
+    fake.files.set(path, 'Land the example workflow\n\n- Add the example workflow.\n')
+    const edited = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(edited.ok).toBe(true)
+  })
+
   Test('accepts an updated kept message without an out-of-lock finalize', async () => {
     const fake = fakeDependencies()
     const path = '/repo/.artifacts/merge/feat/example.msg'
@@ -1127,6 +1146,49 @@ Describe('landing preparation', () => {
       .rejects.toThrow('is not ready to land, and the landing lock was not taken')
     Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
     Expect(fake.calls.some(call => call.args[0] === 'update-ref')).toBe(false)
+  })
+
+  Test('rejects an alternate agent landing message before redraft can read or write it', async () => {
+    const fake = fakeDependencies()
+    const outside = '/private/tmp/host-owned.msg'
+    fake.files.set(outside, 'Keep this host file.\n')
+
+    await Expect(LandCommand.run({
+      messageFile: outside,
+      redraft: true,
+      repositoryRoot: '/repo',
+    }, fake.dependencies)).rejects.toThrow('only accepts its canonical merge message')
+
+    Expect(fake.files.get(outside)).toBe('Keep this host file.\n')
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+  })
+
+  Test('rejects symlinked and physically escaped canonical landing messages before preparation', async () => {
+    const symlinked = fakeDependencies()
+    symlinked.dependencies.isSymbolicLink = async path => path === '/repo/.artifacts/merge'
+    await Expect(LandCommand.run({ repositoryRoot: '/repo' }, symlinked.dependencies))
+      .rejects.toThrow('crosses a symbolic link')
+    Expect(symlinked.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+
+    const escaped = fakeDependencies()
+    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+    escaped.files.set(messagePath, 'Land it\n\n- Do the thing.\n')
+    escaped.dependencies.realPath = async path => path === messagePath ? '/private/tmp/escaped.msg' : path
+    await Expect(LandCommand.run({ repositoryRoot: '/repo' }, escaped.dependencies))
+      .rejects.toThrow('resolves outside the repository')
+    Expect(escaped.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+  })
+
+  Test('rejects the two noninteractive verification skips before inspecting the repository', async () => {
+    const fake = fakeDependencies()
+
+    await Expect(LandCommand.run({
+      repositoryRoot: '/repo',
+      skipVerify: true,
+      skipVerifyFull: true,
+    }, fake.dependencies)).rejects.toThrow('cannot combine --skip-verify-full with --skip-verify')
+
+    Expect(fake.calls).toEqual([])
   })
 
   Test('refuses a branch that is not feat/* or a dirty worktree, before anything else', async () => {
