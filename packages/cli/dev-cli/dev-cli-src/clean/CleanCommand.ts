@@ -1,5 +1,5 @@
 import { OutputText } from '@cli-kit'
-import { CLI, FS, HCI, Repo } from '@shared'
+import { CLI, HCI, Repo } from '@shared'
 
 /**
  * `just clean` and `just clean-all`, as steps a reader can watch rather than one silent block.
@@ -8,7 +8,7 @@ import { CLI, FS, HCI, Repo } from '@shared'
  * nothing while it happened: a stalled `find` over `node_modules` and a finished clean looked
  * identical. Each step therefore names itself as it starts and states what it cost when it ends.
  *
- * The removals follow the recipes' order and include the checkout-keyed test cache in host temp.
+ * The removals follow the recipes' order. Shared test caches have their own liveness-aware lifecycle.
  * This lives in TypeScript rather than the Justfile because timing and reporting each step is more
  * shell than a recipe should carry.
  *
@@ -37,7 +37,7 @@ type RunCleanOptions = {
 
 /**
  * What `clean` removes: build and dev artifacts, the runtime toolchain's Expo and generated app
- * trees, the checkout-keyed temp test cache, and every installed `node_modules`. Keep `find`
+ * trees, and every installed `node_modules`. Keep `find`
  * pruning rather than descending into what it is about to delete.
  */
 const CHECKOUT_STEPS: readonly CleanStep[] = [
@@ -71,14 +71,7 @@ const ALL_STEPS: readonly CleanStep[] = [
 
 /** stepsFor names the removals one scope performs, in the order the recipes performed them. */
 async function stepsFor(scope: CleanScope): Promise<readonly CleanStep[]> {
-  // The runtime testing entrypoint loads compiler code; keep it out of unrelated `./dev` commands.
-  const { RuntimeTesting } = await import('@expo-host/testing/runtime-testing')
-  const [generated, ...rest] = CHECKOUT_STEPS
-  const checkout = [
-    { ...generated!, args: [...generated!.args, FS.dirname(RuntimeTesting.TestRunRoot.generatedRoot())] },
-    ...rest,
-  ]
-  return scope === 'all' ? [...checkout, ...ALL_STEPS] : checkout
+  return scope === 'all' ? [...CHECKOUT_STEPS, ...ALL_STEPS] : CHECKOUT_STEPS
 }
 
 /**

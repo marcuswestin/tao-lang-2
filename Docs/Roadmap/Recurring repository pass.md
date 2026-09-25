@@ -22,12 +22,13 @@ notes after each completed pass; Git history is the longer record.
 - Recheck `uuid`, the Appium transitive pins, and Linux Nixpkgs in
   [Dependency advisory follow-up](<Dependency advisory follow-up.md>). Use real host or device evidence
   before claiming native, Cloud, signing, distribution, or installed-binary acceptance.
-- Re-measure identity count, bytes, file count, age, and leases in `~/.cache/tao/jest-transform-cache`,
-  `~/.cache/tao/jest-standalone`, `$TMPDIR/jest_dx`, `$TMPDIR/tao-test-runs`, and `.artifacts/host-testing`
-  across relevant worktrees. Give every owner-unknown root an explicit disposition. Bound managed
-  identities and direct Jest with lease-aware normal-operation cleanup; preserve active state.
-- Recheck that `TAO_HOME` moves the managed and direct Jest caches after deciding how to account
-  for existing leased roots. The installed Claude Code 2.1.267 needs an approved host update to
+- Re-measure identity count, bytes, file count, age, and leases in Tao's configured cache root
+  (`TAO_HOME/cache`, `$XDG_CACHE_HOME/tao`, or `~/.cache/tao`), legacy `$TMPDIR/jest_dx` and
+  `$TMPDIR/tao-test-runs`, and `.artifacts/host-testing` across relevant worktrees. Give every
+  owner-unknown root an explicit disposition and preserve active state. Check that routine runs
+  retire inactive identities without touching legacy roots that lack ownership evidence.
+- Recheck that `TAO_HOME` moves managed caches without creating new login-home cache state.
+  The installed Claude Code 2.1.267 needs an approved host update to
   run configured Opus 5.5 standard and deep profiles; the shared Bun 1.3.13 profile needs its
   already tracked reload before standalone-binary acceptance.
 - Include a quick dependency-advisory check in every security review. Inspect dependency changes
@@ -51,7 +52,12 @@ notes after each completed pass; Git history is the longer record.
 4. Check temporary-state growth: identify creation sites and retention rules, measure significant
    worktree and machine-wide accumulation, and distinguish active state from abandoned output. For
    each material source, design and verify a bounded cleanup path in normal agent operations; do not
-   remove another live run's files or rely solely on a one-time purge.
+   remove another live run's files or rely solely on a one-time purge. Include a read-only grouped
+   inventory of the largest active projects' worktrees, caches, and Tao-named OS temp roots: report
+   total bytes, file count, oldest age, known owner, and change from the previous pass per project
+   and root class. Identify temporary roots that can affect boot-time cleanup by file count as well
+   as bytes. Keep another project's cleanup with that project's owner; do not turn this inventory
+   into a machine-wide deletion command.
 5. Check model routing: run `./agent model-audit`, then compare the delegation routing table with
    official model availability, harness precedence, and current input, cache-read, cache-write, and
    output pricing. Weigh completed-task cost and review quality before recommending a tier change,

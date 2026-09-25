@@ -58,6 +58,10 @@ async function rulesyncOutputs(root: string): Promise<Map<string, string>> {
           FS.resolvePath('.rulesync/permissions.jsonc', root),
           FS.resolvePath('.rulesync/permissions.jsonc', scratch),
         )
+        await FS.copyFile(
+          FS.resolvePath('.rulesync/rulesync.jsonc', root),
+          FS.resolvePath('.rulesync/rulesync.jsonc', scratch),
+        )
         await generateClaudeHostSettings(scratch)
       }
       outputs.set(output.path, await FS.readText(regenerated))

@@ -14,7 +14,7 @@ const messages = {
     '`guard` in an action is retired: use `check <condition>` to stop the action, or `if` to branch. `guard` stays the view-side construct.',
   checkCondition: '`check` requires a boolean condition.',
   checkPlacement:
-    '`check` stops its whole action, so it belongs in the action itself, not inside an `if` or `guard` block.',
+    '`check` stops its whole action, so it belongs in the action itself, not inside an `if`, `guard`, or `when do` block.',
   bareGuardSubject:
     "A bare `guard` sends its subject's exceptional cases to the read net, so its subject must be an entity or a query.",
   emptyGuardCases: 'A `guard` case block names at least one case; to send every case to the read net, drop the braces.',
@@ -313,8 +313,9 @@ function validateIfCondition(condition: AST.Expression, ctx: ValidationContext):
 }
 
 /**
- * A false check returns from the callback that owns its block. An `if` or `guard` case compiles to a
- * nested callback, so a check there would skip only that sub-block while the action carried on.
+ * A false check returns from the callback that owns its block. An `if` block, a `guard` case, or a
+ * `when do` outcome compiles to a nested callback, so a check there would skip only that sub-block
+ * while the action carried on.
  */
 function validateCheck(statement: AST.CheckStatement, ctx: ValidationContext): void {
   const type = Type.ofExpression(statement.condition)
@@ -322,7 +323,7 @@ function validateCheck(statement: AST.CheckStatement, ctx: ValidationContext): v
     ctx.error(statement.condition, messages.checkCondition)
   }
   const owner = statement.$container.$container
-  if (AST.isIfActionStatement(owner) || AST.isGuardActionBranch(owner)) {
+  if (AST.isIfActionStatement(owner) || AST.isGuardActionBranch(owner) || AST.isWhenDoOutcome(owner)) {
     ctx.error(statement, messages.checkPlacement)
   }
 }

@@ -7,6 +7,7 @@ import {
   LandCommand,
   MergeMainCommand,
   prepareForLanding,
+  StartBranchCommand,
 } from '../verification-src/Finalize'
 import {
   GeneratedEvidence,
@@ -37,6 +38,7 @@ const FAKE_GENERATED: GeneratedEvidenceRecord = {
 
 type FakeRepository = {
   branch: string
+  branchExists?: boolean
   conflictOnMerge?: boolean
   /** A merge that fails without recording a conflict, as a sandbox-denied one does. */
   deniedMergeStderr?: string
@@ -47,6 +49,8 @@ type FakeRepository = {
   unwritableDirectories?: string[]
   /** Existing files a write is denied to inside a writable directory, as `.claude/settings.json` is. */
   unwritableFiles?: string[]
+  /** Simulate a managed shell that creates a probe directory but cannot remove it. */
+  probeRemovalError?: string
   /** Paths `git merge-tree` reports, which it can answer even when the merge itself cannot run. */
   mergeTreeConflicts?: string[]
   featureCommits?: Array<{ body: string; subject: string }>
@@ -90,6 +94,12 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     if (joined === 'status --porcelain=v1 --untracked-files=all') {
       return result(args, spec.cwd, repository.status)
     }
+    if (args[0] === 'check-ref-format' && args[1] === '--branch') {
+      return result(args, spec.cwd, '', args[2]?.includes(' ') ? 1 : 0)
+    }
+    if (args[0] === 'show-ref' && args[1] === '--verify') {
+      return result(args, spec.cwd, '', repository.branchExists === true ? 0 : 1)
+    }
     if (joined === `fetch --quiet origin main`) {
       return result(args, spec.cwd, '', repository.remoteReachable ? 0 : 1)
     }
@@ -124,11 +134,21 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       headAfterMerge = 'mergedhead000000000000000000000000000000000'
       return result(args, spec.cwd)
     }
+    if (args[0] === 'switch' && args[1] === '--no-track') {
+      headAfterMerge = repository.mainSha
+      return result(args, spec.cwd)
+    }
     if (joined === 'diff --name-only --diff-filter=U') {
       return result(args, spec.cwd, repository.conflictOnMerge === true ? 'conflicted.ts\n' : '')
     }
     if (args[0] === 'diff' && args[1] === '--name-only') {
-      return result(args, spec.cwd, (repository.diffPaths ?? []).join('\n'))
+      return result(
+        args,
+        spec.cwd,
+        args.includes('-z')
+          ? (repository.diffPaths ?? []).map(path => `${path}\0`).join('')
+          : (repository.diffPaths ?? []).join('\n'),
+      )
     }
     if (args[0] === 'log' && args[1] === '--no-merges') {
       const RECORD_SEPARATOR = ''
@@ -206,6 +226,9 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       states.set(path, structuredClone(value))
     },
     removeFile: async path => {
+      if (repository.probeRemovalError !== undefined) {
+        Errors.throwHostEnvironment(`${repository.probeRemovalError}: rmdir '${path}'`)
+      }
       files.delete(path)
     },
     writeLine: line => lines.push(line),
@@ -332,6 +355,21 @@ Describe('finalize', () => {
     Expect(message.includes('- .claude/settings.json')).toBe(true)
     Expect(message.includes('- agents/skills/delegation\n')).toBe(true)
     Expect(message.includes('.claude/hooks.md')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
+  })
+
+  Test('reports an unremovable write probe with its leftover path and recovery', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['Docs/Roadmap/plan.md'],
+      existingDirectories: ['Docs/Roadmap'],
+      probeRemovalError: 'EFAULT',
+    })
+
+    const failure = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(error => error)
+    const report = Errors.formatForUser(failure)
+
+    Expect(report).toContain(fake.probePaths[0]!)
+    Expect(report).toContain('rmdir from a normal Terminal')
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
   })
 
@@ -1255,6 +1293,75 @@ Describe('merge-main', () => {
     const dirty = fakeDependencies({ status: ' M tracked.ts\n' })
     await Expect(MergeMainCommand.run({ repositoryRoot: '/repo' }, dirty.dependencies))
       .rejects.toThrow('merge-main refuses to guess')
+  })
+})
+
+Describe('start-branch', () => {
+  Test('refuses a protected checkout path before switching, naming its host command', async () => {
+    const fake = fakeDependencies({
+      branch: '',
+      diffPaths: ['.claude/settings.json', 'packages/cli/dev-cli/dev-cli-src/dev.ts'],
+      existingDirectories: ['.claude', 'packages/cli/dev-cli/dev-cli-src'],
+      unwritableFiles: ['.claude/settings.json'],
+    })
+
+    const failure = await StartBranchCommand.run('feat/next', { repositoryRoot: '/repo' }, fake.dependencies)
+      .catch(error => error)
+    const report = Errors.formatForUser(failure)
+
+    Expect(report).toContain('.claude/settings.json')
+    Expect(report).toContain('./agent unsandboxed start-branch feat/next')
+    Expect(report).not.toContain('packages/cli/dev-cli/dev-cli-src/dev.ts')
+    Expect(fake.calls.some(call => call.args[0] === 'fetch')).toBe(true)
+    Expect(fake.calls.some(call => call.args[0] === 'switch')).toBe(false)
+  })
+
+  Test('starts an untracked feature branch from fetched origin/main when writes are allowed', async () => {
+    const fake = fakeDependencies({
+      branch: '',
+      diffPaths: ['Docs/Roadmap/plan.md'],
+      existingDirectories: ['Docs/Roadmap'],
+    })
+
+    await StartBranchCommand.run('feat/next', { repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(fake.calls.some(call => call.args.join(' ') === 'fetch --quiet origin main')).toBe(true)
+    Expect(fake.calls.some(call =>
+      call.args.join(' ')
+        === 'switch --no-track -c feat/next mainsha00000000000000000000000000000000000'
+    )).toBe(true)
+    Expect(fake.lines.some(line => line.includes("Started 'feat/next' from origin/main"))).toBe(true)
+  })
+
+  Test('probes a pathname containing a newline as one protected file', async () => {
+    const protectedPath = '.claude/odd\nname.json'
+    const fake = fakeDependencies({
+      diffPaths: [protectedPath],
+      existingDirectories: ['.claude'],
+      unwritableFiles: [protectedPath],
+    })
+
+    const failure = await StartBranchCommand.run('feat/next', { repositoryRoot: '/repo' }, fake.dependencies)
+      .catch(error => error)
+
+    Expect(Errors.formatForUser(failure)).toContain(protectedPath)
+    Expect(fake.calls.some(call => call.args[0] === 'switch')).toBe(false)
+  })
+
+  Test('requires a clean worktree and a new valid feat branch before fetching', async () => {
+    for (
+      const [name, overrides] of [
+        ['dev/next', {}],
+        ['feat/bad name', {}],
+        ['feat/next', { status: ' M tracked.ts\n' }],
+        ['feat/next', { branchExists: true }],
+      ] as const
+    ) {
+      const fake = fakeDependencies(overrides)
+      await Expect(StartBranchCommand.run(name, { repositoryRoot: '/repo' }, fake.dependencies)).rejects.toThrow()
+      Expect(fake.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+      Expect(fake.calls.some(call => call.args[0] === 'switch')).toBe(false)
+    }
   })
 })
 

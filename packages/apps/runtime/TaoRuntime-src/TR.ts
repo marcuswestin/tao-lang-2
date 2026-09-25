@@ -8,6 +8,7 @@ import {
   markExternalEffect,
   resumeActionContinuation,
   runAction,
+  skippedActionRun,
   type TaoActionContinuation,
   type TaoDeclaredFailure,
   transactionResource,
@@ -58,6 +59,7 @@ import {
   type TaoDesign,
   type TaoDesignSpec,
 } from './TR-design'
+import { runEffectOutcome, type TaoEffectContract } from './TR-effect-outcomes'
 import {
   captureArguments,
   latestFailureCapture,
@@ -492,6 +494,22 @@ class TR {
     ...args: Args
   ): void | Promise<void> {
     return action.evaluate().jsValue.invokeJoined(...args)
+  }
+
+  /**
+   * WhenDo runs one verb as `Do` does but contains its failure at this site: the verb's own writes
+   * roll back, and the outcome the site names runs with the selected user message.
+   */
+  static WhenDo(
+    invoke: () => void | Promise<void>,
+    contract: TaoEffectContract,
+    outcomes: readonly TR.CaseBranch<unknown>[],
+  ): unknown {
+    return runEffectOutcome(
+      invoke,
+      contract,
+      outcomes.map(([outcome, body]) => [outcome, (message: string) => body(new RuntimeValue(message))]),
+    )
   }
 
   /** Set updates a Tao state value. */
@@ -969,7 +987,7 @@ class RuntimeActionValue<Args extends any[] = any[]> {
 type LatestActionInvocation<Args extends any[]> = {
   args: Args
   reject(error: unknown): void
-  resolve(): void
+  resolve(outcome?: typeof skippedActionRun): void
   run(args: Args): void | Promise<void>
 }
 
@@ -979,16 +997,17 @@ class LatestActionInvocations<Args extends any[]> {
   #pending: LatestActionInvocation<Args> | undefined
 
   invoke(args: Args, run: (args: Args) => void | Promise<void>): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+    // A superseded call resolves with the skip marker, so a `when do` can tell it never ran.
+    return new Promise<void | typeof skippedActionRun>((resolve, reject) => {
       const invocation = { args, reject, resolve, run }
       if (!this.#active) {
         this.#active = true
         void this.#execute(invocation)
         return
       }
-      this.#pending?.resolve()
+      this.#pending?.resolve(skippedActionRun)
       this.#pending = invocation
-    })
+    }) as Promise<void>
   }
 
   async #execute(invocation: LatestActionInvocation<Args>): Promise<void> {
