@@ -158,7 +158,7 @@ Exercise `required` completeness and the writes that consume it through an ordin
 
 **Belongs here:** `required "<sentence>"` deriving `Incomplete` and `Problems` on a stored row and on a projection that selects the field; a projection that leaves a required field out never reporting it; a projection-backed form disabling its submit while incomplete; `check` stopping an action on an incomplete input; `create Entity with Input` creating a row from a projected item; and a row written incomplete that reads complete after an update.
 
-**Does not belong here:** `validate` and store-side rejection, which are not implemented; diagnostic cases for the completeness members and `create … with`, which belong to package tests; and a stdlib view that presents `Problems`, whose spelling is undecided.
+**Does not belong here:** `validate` and store-side rejection, which are Post-MVP; diagnostic cases for the completeness members and `create … with`, which belong to package tests; and the stdlib `Problems(…)` view, which WordFlower's forms prove.
 
 ## Data MVP
 

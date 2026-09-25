@@ -2,7 +2,7 @@ use InstantDB from @tao/data/providers/instantdb
 use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav from @tao/nav
 use CountWords, Join from @tao/text
 use Interval from @tao/time
-use Checkbox, Col, FormButton, Image, Panes, Placeholder, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput from @tao/ui
+use Checkbox, Col, FormButton, Image, Panes, Placeholder, Problems, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput from @tao/ui
 
 // WordFlower/MVP is the malleable full target for the v1 release: everything Tao must cover to call
 // itself shipped, written with the syntax decisions settled so far (see `../2 - Next`). It is
@@ -220,7 +220,7 @@ let StarterPrompt = WritingPrompt {
 type ConfirmResult is one of Confirmed
 
 data Workspaces / Workspace {
-   Name text (title)
+   Name text (required "Name this workspace", title)
    CreatedAt time (default now)
    Pinned yes / no // demonstrative declaration; the product does not use it yet
    Documents (relation Documents, owned)
@@ -230,7 +230,7 @@ data Workspaces / Workspace {
 }
 
 data Documents / Document {
-   Title text (title)
+   Title text (required "Name this document", title)
    Body text (default "")
    Final yes / Draft no
    Public yes / Private no (default Public) // demonstrative declaration; the product does not use it yet
@@ -360,19 +360,19 @@ view TagSummary(Tags PromptTags) {
 // A declaration that fills host-facing chrome is a `scene`, and a scene is presented rather than
 // composed inline. `Title`, `Toolbar`, and `Header` live on `scene` alone, so a view that is only
 // ever composed cannot declare chrome nothing reads.
+type WorkspaceInput is Workspace { Name }
+
 scene WorkspaceList() {
    Title "WordFlower"
-   state WorkspaceName = ""
+   state Input = WorkspaceInput { Name: "" }
    query Workspaces { }
    action AddWorkspace() {
-      if WorkspaceName is empty {
+      if Input.Incomplete {
          present WorkspaceNameNotice() as overlay
       }
-      check WorkspaceName is not empty
-      create Workspace {
-         Name: WorkspaceName
-      }
-      set WorkspaceName = ""
+      check not Input.Incomplete
+      create Workspace with Input
+      set Input = WorkspaceInput { Name: "" }
    }
    render ScrollView() [screen] {
       Col() [width max 720, centered, gap 10] {
@@ -386,11 +386,12 @@ scene WorkspaceList() {
             }
          }
          #workspaceName
-         TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Novel") {
+         TextInput(Value: Input.Name, Label: "Workspace name", Placeholder: "Novel") {
             on submit AddWorkspace
          }
+         Problems(Input.Problems) [validation]
          #addWorkspace
-         FormButton("Add workspace", Icon: "plus", Disabled: WorkspaceName is empty) {
+         FormButton("Add workspace", Icon: "plus", Disabled: Input.Incomplete) {
             on press AddWorkspace
          }
          #activateWorkspaceTab
@@ -724,7 +725,7 @@ view DocumentEditor(Document) {
       update Document { Final: Value }
    }
    action SaveDocument() {
-      check Input.Title is not empty
+      check not Input.Incomplete
       set PreviousTitle = Document.Title
       set PreviousBody = Document.Body
       update Document with Input
@@ -766,6 +767,7 @@ view DocumentEditor(Document) {
       TextInput(Value: Input.Title, Label: "Document title", Placeholder: "Document title") {
          on submit SaveDocument
       }
+      Problems(Input.Problems) [validation]
       #documentBody
       TextInput(Value: Input.Body, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
          on submit SaveDocument
