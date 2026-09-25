@@ -700,8 +700,9 @@ at all, and determinism is the running app variant's responsibility — a journe
 whose adapter is a deterministic in-repo stub, never the network. Between steps the harness settles
 every schema's load, in-flight fills, and queued saves, so assertions read a quiet store.
 
-Bare `data <status>` steps are retired (Decisions §16). The provider states they drove return through
-the world controls — network, sync, and datasource fault injection — which have not landed yet.
+Bare `data <status>` steps are retired (Decisions §16). Network, sync, and datasource fault controls
+now reach real provider-state boundaries in behavior tests; snapshot failures surface through
+`guard … error`, while granular providers expose queued, failed, and retryable write records.
 
 See `Tao Testing.md` for selector, row-scope, clock, and isolation rules.
 

@@ -1,4 +1,12 @@
 use ExportDocument, StarterWorkspace, WordFlower, WordFlowerDeclarationHead, WordFlowerDeclarationHeadWith, WordFlowerDeclarationLet, WordFlowerDeclarationLetWith, WordFlowerDrawer, WordFlowerFoundationTest, WordFlowerStage from ./
+use CloudKit from @tao/data/providers/cloudkit
+
+// Exercise per-row recovery through the same WordFlower UI; its hosted InstantDB variant saves
+// snapshots, while this test-only provider has queued and retryable writes.
+app WordFlowerSyncTest = WordFlower with {
+   Name "WordFlower Sync Test"
+   Datasource CloudKit { }
+}
 
 // Directional journeys for the full target. Steps that reach panes, overlays, toasts, windows,
 // and dialogues reuse the implemented #tag / select vocabulary; anything beyond that vocabulary
@@ -317,9 +325,35 @@ test "WordFlower keyboard attention" {
    }
 }
 
-// Provider-state controls operate on the run's isolated InstantDB test provider; journeys never
-// contact a shared remote service.
+// World controls operate on isolated, provider-faithful test stores; journeys never contact a
+// shared remote service.
 test "WordFlower remote data" {
+   test "keeps an offline document edit queued until reconnect" on phone with StarterWorkspace {
+      run WordFlowerSyncTest
+      select #workspaces[1] { press #openWorkspace }
+      select #documents[1] { press #openDocument }
+      network offline
+      enter "An offline revision." into #documentBody
+      press #save
+      expect text "Waiting to sync"
+      network online
+      wait for sync
+      expect missing text "Waiting to sync"
+   }
+
+   test "retries a rejected document write" on phone with StarterWorkspace {
+      run WordFlowerSyncTest
+      select #workspaces[1] { press #openWorkspace }
+      select #documents[1] { press #openDocument }
+      datasource fails after update Document "Server rejected the document."
+      enter "A revised opening." into #documentBody
+      press #save
+      expect text "Server rejected the document."
+      press #retryDocument
+      wait for sync
+      expect missing text "Server rejected the document."
+   }
+
    test "surfaces and recovers from an unauthorized document" {
       run WordFlower
       enter "Novel" into #workspaceName

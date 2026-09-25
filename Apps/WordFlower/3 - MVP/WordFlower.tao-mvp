@@ -860,6 +860,7 @@ view DocumentEditor(Document) {
       if Document.WritesFailed > 0 {
          Text(Document.WriteError)
          if Document.CanRetryWrites {
+            #retryDocument
             FormButton("Retry submitted write") { on press -> { retry Document } }
          }
       }

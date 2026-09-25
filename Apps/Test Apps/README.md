@@ -164,7 +164,7 @@ Exercise `required` completeness and the writes that consume it through an ordin
 
 Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.
 
-**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, and stored rows surviving a `relaunch`. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
+**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, stored rows surviving a `relaunch`, and Memory saving while the test network is offline. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
 
 **Does not belong here:** remote providers, credentials, auth, permissions, sync, pagination, or aggregation; navigation or WordFlower product behavior; schema, query, and write diagnostics.
 
@@ -366,5 +366,18 @@ rendered style the harness itself produces.
 
 **Does not belong here:** the device and fixture vocabulary reused from Studio scenarios
 (`ScenarioDeviceClause`, `ScenarioFixtureClause`), which Studio's own scenario coverage owns; the
-still-deferred `network`, `wait for sync`, `datasource fails after`, `as <account>`, and `expect
-refused` test world controls.
+`network`, `wait for sync`, and `datasource fails after`, which the Test World Controls entry owns;
+the still-deferred `as <account>` and `expect refused` controls.
+
+## Test World Controls
+
+Exercise Decisions §16's network, sync, and datasource fault controls with rendered Tao journeys.
+
+**Belongs here:** a granular CloudKit stand-in queues an offline write, syncs it on reconnect,
+reports an injected failed write, and retries that record. ICloud keeps an offline snapshot locally
+through reconnect, but its protocol cannot confirm remote upload completion for `wait for sync`;
+Dev shows a remote save error while offline. Data MVP proves that Memory
+saves offline and shows an injected snapshot save error through `guard … error`.
+
+**Does not belong here:** live CloudKit or InstantDB transport acceptance, account policy, and
+atomic backend rejection. Those need provider and device evidence.
