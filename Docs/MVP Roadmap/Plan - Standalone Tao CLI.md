@@ -933,6 +933,12 @@ above; where the two disagree, these are later and win.
     not start; no hidden dependency finding is claimed. Its logs remain under
     `.artifacts/standalone-vm/tao-acceptance-1790359337-42764/logs/`. The driver now streams clone
     and acceptance output to both the terminal and log, and reports SSH wait progress every 15 seconds.
+    A second run from Terminal.app reached guest SSH in 22 seconds, so the earlier route failure was
+    specific to the app-launched process. The guest then exposed a separate release blocker: the
+    Nix-provided Bun compiler embedded its `/nix/store` ICU path in both the release and acceptance
+    executables. The builder now compiles with a SHA-pinned official Bun 1.4.2 binary and rejects
+    non-system dynamic library paths; the guest acceptance uses the same compiler. The fixed gate
+    still needs a complete guest run before clean-machine acceptance can be claimed.
 
     **Tart host troubleshooting.** Tart's installer notes that macOS gives VM addresses a default
     DHCP lease of 86,400 seconds. This gate uses Tart's default network, even though `softnet` is

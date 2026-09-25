@@ -11,6 +11,7 @@ logs="$root/logs"
 release="$(pwd)/.artifacts/release/v0.0.0"
 expect_script='packages/cli/tao-cli/cli-src/standalone-clean-machine.expect'
 bun_bin="${TAO_STANDALONE_BUN:-bun}"
+portable_bun_script='packages/cli/tao-cli/cli-src/standalone-bun.sh'
 created=0
 started=0
 vm_pid=''
@@ -76,7 +77,8 @@ fi
 cat "$logs/release.log"
 
 cp -R "$release" "$input/release/"
-if ! step 'compile the existing acceptance for the guest' "$bun_bin" build --compile \
+portable_bun=$(bash "$portable_bun_script")
+if ! step 'compile the existing acceptance for the guest' "$portable_bun" build --compile \
   packages/cli/tao-cli/cli-src/standalone-acceptance.ts --outfile "$input/acceptance" \
   > "$logs/compile.log" 2>&1; then
   cat "$logs/compile.log" >&2
