@@ -152,7 +152,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'target' && AST.isFixtureValueReference(container)) {
       return this.createFixtureValueScope(container)
     }
-    if (context.property === 'fixture' && AST.isScenarioFixtureClause(container)) {
+    if (
+      context.property === 'fixture' && (AST.isScenarioFixtureClause(container) || AST.isTestFixtureClause(container))
+    ) {
       return this.createFixtureDeclarationScope(container)
     }
     if (context.property === 'target' && AST.isScenarioPrepareUpdate(container)) {
@@ -558,7 +560,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScope(descriptions)
   }
 
-  private createFixtureDeclarationScope(node: AST.ScenarioFixtureClause): Langium.Scope {
+  private createFixtureDeclarationScope(node: AST.ScenarioFixtureClause | AST.TestFixtureClause): Langium.Scope {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
