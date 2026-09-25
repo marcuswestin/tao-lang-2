@@ -1,6 +1,6 @@
 # DEVENV-111 — `finalize`'s integration merge half-applies `main` in the sandbox and names no conflicting path
 
-- **Status:** In progress
+- **Status:** Resolved
 - **Section:** External
 - **Partly addressed, 2026-09-20:** `Finalize.ts` now asks `git merge-tree --write-tree --name-only`
   what would conflict _before_ attempting the merge, and separates the two failures. A merge that
@@ -86,6 +86,11 @@
   the leftover path and a normal-Terminal `rmdir` instruction. The branch-start tests exercise a
   protected existing file, a writable switch, dirty/existing/invalid-name refusals, and a pathname
   containing a newline.
+  The 2026-09-25 normal-Terminal `./agent unsandboxed start-branch
+  feat/devenv-111-guard-proof` then started a clean branch at `e355b5b1f509` after the artificial
+  directory denial was removed. `git status --short --branch` named only the new branch, and HEAD
+  exactly equalled fetched `origin/main` at `e355b5b1f50980acae28ed71609044bb0e6f7b1a`.
+  The disposable worktree and branch were removed after the proof.
 - **Workaround:** Only needed for a tree an older finalize already half-wrote. Set the debris aside
   with `git stash push -u -m '<unique-tag>'` rather than `git checkout -f`, which is both
   sandbox-denied and classifier-denied — confirmed 2026-09-21 on
@@ -112,3 +117,4 @@
   detached-HEAD warning, landing's closing line, and `git-workflow` skill point to the operation.
   `./agent unsandboxed finalize` passes, the merge message is reviewed, and landing succeeds.
 - **Source:** 2026-09-20 landing of `feat/misc-followups-66ff38`.
+- **Archived:** 2026-09-25
