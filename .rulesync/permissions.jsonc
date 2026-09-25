@@ -202,7 +202,7 @@
     "env": {
       "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
       "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
-      "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet",
+      "CLAUDE_CODE_SUBAGENT_MODEL": "opus",
     },
     // Deliberately not set here: `env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`. It scrubs only
     // Anthropic and cloud-provider credentials from subprocess environments, and in exchange

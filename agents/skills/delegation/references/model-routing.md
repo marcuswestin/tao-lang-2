@@ -30,7 +30,9 @@ does not establish a cheaper completed task. Missing usage data stays unknown.
 The 2026-09-23 sample of 19 Claude subagent transcripts established an old `opus` alias
 resolution and that cache reads and writes dominated its API-equivalent estimate. It did not
 measure a denominator of successfully completed tasks, elapsed task time, review defects,
-re-reads, or plan usage. The tier changes here have expected savings only; none are measured yet.
+re-reads, or plan usage. The tier changes here have no measured completed-task savings. The
+Developer chose Opus 5.5 for the standard Claude Code and Cursor tiers on 2026-09-25; measure
+completed-task cost, quality, and latency before claiming an improvement.
 
 `./agent delegation-report` displays recent resolved models when supported hook fields or bounded
 transcript metadata provide them. Spawn hooks do not share an agent ID with start hooks, so a

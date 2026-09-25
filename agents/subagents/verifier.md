@@ -10,11 +10,11 @@ codexcli:
   sandbox_mode: workspace-write
   nickname_candidates: [Lane, Gate, Signal, Residue, Failure, Evidence]
 claudecode:
-  model: sonnet
+  model: opus
   effort: low
   tools: Bash, Read, Skill, Monitor, ToolSearch
 cursor:
-  model: claude-sonnet-5
+  model: claude-opus-5-5
   readonly: false
 ---
 

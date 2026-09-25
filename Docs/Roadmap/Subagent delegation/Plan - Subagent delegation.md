@@ -53,6 +53,10 @@ inferring it. Spawn and start events have no shared agent ID, so the report cann
 resolved model to one spawn; startup drift warnings use local model metadata and installed harness
 version until that seam has supported correlation.
 
+On 2026-09-25 the Developer chose Opus 5.5 for the standard Claude Code and Cursor tiers as
+well as deep. The routing table owns the active models; completed-task measurements will determine
+whether this choice improves cost and quality in practice.
+
 Ask the Developer when the routing table has no row for the work and confidence between two tiers is low, when
 the frontier tier or a long run is at stake, or when the log already shows the pattern — a task like
 this one re-run at a higher tier, a result that came back inadequate, or evident overkill. Every
