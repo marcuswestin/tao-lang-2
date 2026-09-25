@@ -43,6 +43,10 @@ type TestHeadClause = TestDeviceClause | TestFixtureClause;
 TestBlock returns Block:
     '{' statements+=(AppBlockDiagnosticStatement | InteractionWordStep)* '}';
 
+// A check pins a declared failure of a foreign action before launching its app.
+ActionFailureStubStep:
+    'action' action=[ActionDeclaration:ID] 'fails' case=ID;
+
 type CheckStep = RunStep | PressTextStep | TagPressStep | PressWordStep | InteractionWordStep
     | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep
     | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep

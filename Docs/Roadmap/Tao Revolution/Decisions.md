@@ -2385,6 +2385,8 @@ action FetchRecipe fails NotARecipe
 action FetchRecipe returns { Foo: 1, Bar: ["123", "abc"] }
 ```
 
+- The MVP implements declared-case failure stubs for foreign actions with no result. Value-return
+  stubs remain Post-MVP until return-valued actions have their complete language and runtime path.
 - A success stub supplies the **value**, so it needs no type name and works whether the action's
   return type was named or written inline.
 - **A preference in a test is an ordinary update, and the device locale is a scenario pin — both

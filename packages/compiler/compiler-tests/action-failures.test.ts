@@ -19,7 +19,7 @@ Describe('compiler: action failures', () => {
     Expect(code).toContain("import { Publish as __tao_foreign_action_Publish_1__ } from './Api'")
     Expect(code).toContain('TR.ForeignAction( __tao_foreign_action_Publish_1__, "Publish"')
     Expect(code).toContain('sentence: "Unavailable."')
-    Expect(code).toContain('{ runs: "latest", requiredArguments: 1 }')
+    Expect(code).toContain('{ runs: "latest", requiredArguments: 1, testStubKey: "')
   })
 
   Test('binds foreign action defaults before crossing the JavaScript boundary', async () => {
@@ -38,7 +38,7 @@ Describe('compiler: action failures', () => {
     Expect(code).toContain(
       '__tao_foreign_action_Publish_1__(_Scope.Title.evaluate().jsValue, _Scope.Copies.evaluate().jsValue)',
     )
-    Expect(code).toContain('{ requiredArguments: 0 }')
+    Expect(code).toContain('{ requiredArguments: 0, testStubKey: "')
   })
 
   Test('does not mark an outer action interruptible for a respond owned by a nested action value', async () => {

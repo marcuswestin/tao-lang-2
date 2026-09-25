@@ -1,4 +1,5 @@
 import { Arrays } from './core/RuntimeCore'
+import { type TestActionStubContext, TestActionStubs } from './TR-action-test-stubs'
 import { journalSettle, journalStart, type TaoDebugJournalEntry } from './TR-debug-journal'
 import { recordActionFailureFrames, reportActionFailure, reportUnownedFailure, TaoActionFailure } from './TR-errors'
 
@@ -43,16 +44,17 @@ let launchGeneration = 0
 
 class ActionTransaction {
   readonly afterCommit: Array<() => void> = []
-  readonly detached: Array<() => PromiseLike<unknown>> = []
+  readonly detached: Array<{ body: () => PromiseLike<unknown>; testStubs: TestActionStubContext }> = []
   readonly frames: string[] = []
   readonly frameTrail: string[] = []
-  readonly launch = launchGeneration
   readonly resources = new Map<object, TransactionResource<any>>()
   externalEffects = false
   committed = false
   journal: TaoDebugJournalEntry | undefined
   failure: unknown
   settled = false
+
+  constructor(readonly launch: number, readonly testStubs: TestActionStubContext) {}
 
   pushFrame(name: string): void {
     this.frames.push(name)
@@ -182,6 +184,11 @@ export function resumeActionContinuation(continuation: TaoActionContinuation): v
   }
 }
 
+/** The active action keeps the check whose foreign outcomes it may observe. */
+export function actionTestStubContext(): TestActionStubContext {
+  return activeTransaction?.testStubs ?? TestActionStubs.capture()
+}
+
 /**
  * beginActionLaunch ends the launch every running action root belongs to. A root the ending launch
  * started can still be suspended — on an `ask`, or on any other await — and the instance it was
@@ -225,13 +232,15 @@ export function runAction(
   body: () => unknown,
   join = false,
   interrupt = false,
+  testStubs = TestActionStubs.capture(),
 ): void | Promise<void> {
   if (join && activeTransaction) {
     return runJoinedAction(activeTransaction, name, body)
   }
   const suspendedTransaction = interrupt ? activeTransaction : undefined
+  const launch = launchGeneration
   const run = (): void | Promise<void> => {
-    const transaction = new ActionTransaction()
+    const transaction = new ActionTransaction(launch, testStubs)
     let pending = false
     activeTransaction = transaction
     transaction.pushFrame(name)
@@ -335,7 +344,7 @@ function finishRoot(transaction: ActionTransaction, suspendedTransaction?: Actio
     return
   }
   for (const detached of transaction.detached) {
-    void enqueueDetached(detached)
+    void enqueueDetached(detached.body, detached.testStubs)
   }
 }
 
@@ -409,8 +418,8 @@ function runJoinedAction(
   }
 }
 
-async function enqueueDetached(body: () => PromiseLike<unknown>): Promise<void> {
-  await runAction('async', [], body)
+async function enqueueDetached(body: () => PromiseLike<unknown>, testStubs: TestActionStubContext): Promise<void> {
+  await runAction('async', [], body, false, false, testStubs)
 }
 
 /**
@@ -465,7 +474,7 @@ export function existingTransactionResource<ValueT>(key: object): ValueT | undef
 /** deferDetached starts an `async` body after its caller commits or rolls back. */
 export function deferDetached(body: () => PromiseLike<unknown>): void {
   if (activeTransaction) {
-    activeTransaction.detached.push(body)
+    activeTransaction.detached.push({ body, testStubs: activeTransaction.testStubs })
     return
   }
   // Host-authored detached work outside a Tao action preserves the established immediate behavior.
