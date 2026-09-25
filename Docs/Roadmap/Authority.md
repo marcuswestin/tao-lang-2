@@ -370,6 +370,24 @@ strongest claims available: the policy layer behaves identically on both sides o
 
 ## Deferred (running list — liked or acknowledged, not in this program's slices)
 
+**Post-MVP tooling recommendation:** build on the implemented
+[Studio Lens](./Tao%20Studio%20companion%20app/Slice%203%20-%20Tao%20Lens%20and%20diagnostics.md),
+the [simulation exploration](./Deterministic%20simulation.md), the decided publication preview
+([Revolution Coverage](./Tao%20Revolution/Coverage.md) §4), and the
+[deferred publish cockpit](./Tao%20ship/Plan%20-%20Beta%20distribution%20in%20one%20command.md).
+Their existing scopes cover render timing/source causes, scripted worlds, projection previews, and
+deployment diffs. The following end-to-end questions remain:
+
+- Explain why a control or row is visible across UI, data, authority, provider result, and source;
+  use a two-account Skillet refusal to prove the explanation without exposing private values.
+- Preview Skillet as an owner, cook, guest, and signed-out link holder, then show the privacy diff
+  before a projection is published; require an exact field/relation allow-list and revocation proof.
+- Report which authority and offline guarantees survive a provider change; compare two real
+  provider adapters before calling portability a product promise.
+- Rehearse deletion, account removal, role changes, and capability rotation against representative
+  fixtures in the shared simulation seam, then require live-provider acceptance for the effects a
+  simulation cannot prove.
+
 - Nuanced rule customization: negative grants, time-boxed grants, delegation ("may invite but
   not remove"), per-field _read_ scoping outside `publish`.
 - Organizations, nested groups, roles beyond one enum per membership.

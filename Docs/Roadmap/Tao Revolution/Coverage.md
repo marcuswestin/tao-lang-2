@@ -9,8 +9,9 @@ Every row's Forcing feature cell is now filled, with one exception spelling: a c
 it_. Those are red flags to resolve at MVP derivation (step 4) — cut the capability, or let the Developer name
 the feature that earns it — and they are deliberately not given a contrived one. Occurrence queries
 are the sharpest of the five: `Decisions.md` §17 decides Hearth's repeating list items as the
-forcing feature, and Hearth does not have them, so either the app grows the feature or the decision
-loses its justification.
+forcing feature, and Hearth does not have them. **Post-MVP recommendation:** add real routines to
+Hearth before activating occurrence queries: generate dated occurrences without stored copies and
+persist completion against each occurrence. If that product feature is cut, reconsider the capability.
 
 Tier values: **MVP** (must run for v1), **Post-MVP** (Revolution; activated with the app
 expansion), **TBD** (assigned at step 4). Test status is updated as tranches land.
@@ -111,7 +112,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | World controls: clock, collaborators (§16)                  | Skillet · a timer that outlives the window; Wayfare · a live conflict         | Post-MVP | —                         |
 | Scenarios, pseudolocale, review gallery (§16)               | WordFlower · scenario set                                                     | TBD      | partially in Current      |
 | Sketch placeholders and flexible space (§16)                | WordFlower · the Placeholder journey                                          | MVP      | in Current                |
-| Occurrence queries (§17)                                    | **none — for the Developer** (§17 decides Hearth's routines; Hearth has none) | Post-MVP | —                         |
+| Occurrence queries (§17)                                    | **none — for the Developer** (Hearth · dated routines are decided but absent) | Post-MVP | —                         |
 | Nearness, distance, places (§17)                            | Hearth · Around                                                               | Post-MVP | —                         |
 
 Rows marked _partially in Current_ have behavior tests for part of the capability; _pending_ means
