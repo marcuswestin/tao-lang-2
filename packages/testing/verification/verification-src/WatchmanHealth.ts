@@ -8,7 +8,8 @@ import type { DoctorCheck } from './RepositoryDoctor'
  * fails, reported as `EMFILE: too many open files, watch` although nothing is exhausted — and no
  * sandbox is given Watchman's per-login socket either (`.rulesync/permissions.jsonc` says why). So
  * file-watching dev loops run on the host through named operations, a sandbox that cannot reach
- * Watchman is expected, and what fails here is a Watchman that is missing or not running at all.
+ * Watchman is expected. A missing client fails, while a stopped server warns because host dev loops
+ * can start it or use OS watching and sandboxed tests and builds crawl without it.
  *
  * The server is asked directly over its socket, never through the `watchman` client: the client
  * spawns a server when it may, so a diagnosis would change the machine, and answers some commands
@@ -99,7 +100,7 @@ function serverCheck(facts: WatchmanFacts): DoctorCheck {
       detail: `no Watchman server is running; ${FALLBACK}`,
       name,
       remediation: startRemediation(facts),
-      status: 'fail',
+      status: 'warn',
     }),
   })
 }
