@@ -457,3 +457,26 @@ and distribution remain separate release checks.
   needs a migration before Instant Cloud shuts down on August 31, 2027.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`,
   `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`'s "InstantDB" section.
+
+## Project tracking
+
+### A17 — Track issues in the repository with git-bug, then sync them with GitHub
+
+Issues, bugs, and todos live today only in roadmap and ledger documents, which an outside
+contributor cannot file against and an agent cannot query. [git-bug](https://github.com/git-bug/git-bug)
+keeps issues as git objects rather than files in the tree, so they travel with `git bug push` and
+`git bug pull`, work offline, and survive any hosting change; its GitHub bridge mirrors them to
+GitHub Issues, where early feedback arrives (`R10`, `A7`).
+
+- Shape, in two steps:
+  1. Start using git-bug: pin it in the devenv profile (a dependency change, so the Developer
+     approves it first), expose the routine commands through `./agent` where agents need them, and
+     settle what moves into it — bug reports and small todos — versus what stays in `Docs/` —
+     plans, decisions, and the DEVENV ledger.
+  2. Sync with GitHub: configure a `git bug bridge` targeting GitHub, run `git bug bridge pull` and
+     `git bug bridge push` from a repository command, and keep the bridge token out of the tree
+     and out of the generated harness config.
+- Context: `A7`'s `.github/` issue forms, `R10`, and the GitHub organization move in the
+  Developer roadmap's release checklist, which changes the bridge's repository URL.
+- Done: an issue filed with `git bug` appears on GitHub, and one filed through a GitHub issue form
+  appears in `git bug ls` after a sync.
