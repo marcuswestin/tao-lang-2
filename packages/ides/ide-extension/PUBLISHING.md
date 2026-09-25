@@ -12,10 +12,10 @@ release readiness still requires both listings.
 
 ## One-time accounts and identity
 
-1. The publisher ID is `dev-tao`, with `tao-lang` as the fallback if it is taken (decided
-   2026-09-24). The ID appears in extension URLs and cannot be renamed in the VS Code Marketplace. The
+1. The publisher ID is `devtao`, with `tao-lang` as the fallback if it is taken (decided
+   2026-09-25). The ID appears in extension URLs and cannot be renamed in the VS Code Marketplace. The
    extension's `publisher` in `package.json` must equal that ID in both registries, and already says
-   `dev-tao`. Check that `tao-ide-extension` and the display name `Tao Lang` are accepted by
+   `devtao`. Check that `tao-ide-extension` and the display name `Tao Lang` are accepted by
    Marketplace.
 2. In [Marketplace publisher management](https://marketplace.visualstudio.com/manage/publishers/),
    sign in with a Microsoft account and create that publisher. Create an Azure DevOps organization

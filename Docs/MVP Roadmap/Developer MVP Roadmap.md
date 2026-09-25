@@ -22,21 +22,21 @@ Run down this list before the first public push. Each item points at the entry t
 - [ ] **No login name or home directory in the generated harness config** (`P17`, `P18`): the
       Watchman socket rule in `.claude/settings.json` and `.codex/config.toml`.
 - [ ] **Register the public identifiers.** Most cannot be changed once published or once users
-      depend on them. **Decided 2026-09-24:** the domain is `devtao.com`, and every other namespace
-      prefers Dev Tao (`Dev Tao`, `dev-tao`, and `dev_tao` only where a hyphen is not allowed), with
+      depend on them. **Decided 2026-09-24, revised 2026-09-25:** the domain is `devtao.com`, and
+      every other namespace prefers Dev Tao — `devtao` as an identifier, `Dev Tao` in prose — with
       Tao Lang (`Tao Lang`, `tao-lang`, `tao_lang`) as the fallback where the first is taken. The
-      repository already uses the domain's names; what remains is claiming them:
+      repository already uses these names; what remains is claiming them:
   - The domain `devtao.com`, and `updates.devtao.com` for the update server `tao ship` defaults to.
   - The reverse-domain prefix `com.devtao`: the companion app `com.devtao.studio.companion` on iOS
     and Android, its iCloud container `iCloud.com.devtao.studio.companion` with Push Notifications,
     the macOS Studio app `com.devtao.studio`, and `tao ship`'s default namespace for new apps. The
     URL scheme `taostudiocompanion` and the store listing names stay to be chosen.
-  - The GitHub organization `dev-tao` (fallback `tao-lang`), which also names the Homebrew tap
-    `dev-tao/homebrew-tao`.
-  - The VS Code and Open VSX publisher `dev-tao` (fallback `tao-lang`) for `tao-ide-extension`,
+  - The GitHub organization `devtao` (fallback `tao-lang`), which also names the Homebrew tap
+    `devtao/homebrew-tao`.
+  - The VS Code and Open VSX publisher `devtao` (fallback `tao-lang`) for `tao-ide-extension`,
     which `packages/ides/ide-extension/package.json` already names, making the extension
-    `dev-tao.tao-ide-extension`.
-  - The npm scope `@dev-tao` (fallback `@tao-lang`) for the CLI's platform packages; `tao-cli`,
+    `devtao.tao-ide-extension`.
+  - The npm scope `@devtao` (fallback `@tao-lang`) for the CLI's platform packages; `tao-cli`,
     `tao-runtime`, `tao-stdlib`, and the other packages are unscoped today — decide between those
     names and the scope, and check each is free.
 
