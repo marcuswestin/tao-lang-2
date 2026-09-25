@@ -137,4 +137,27 @@ Describe('agent host command permissions', () => {
       './agent unsandboxed land *',
     ])
   })
+
+  Test('drops a Claude setting the source no longer has, which rulesync would merge back', () => {
+    const initial = JSON.stringify({
+      $schema: 'schema',
+      env: { KEPT: '1', REMOVED: '1' },
+      hooks: { SessionStart: [] },
+      permissions: { allow: [] },
+      removed: true,
+      sandbox: { excludedCommands: [], network: { allowedDomains: ['a'], allowLocalBinding: true } },
+    })
+    const rendered = JSON.parse(renderClaudeHostSettings(initial, [], {
+      env: { KEPT: '1' },
+      sandbox: { excludedCommands: [], network: { allowedDomains: ['a'] } },
+    })) as unknown
+
+    Expect(rendered).toEqual({
+      $schema: 'schema',
+      env: { KEPT: '1' },
+      hooks: { SessionStart: [] },
+      permissions: { allow: [] },
+      sandbox: { excludedCommands: [], network: { allowedDomains: ['a'] } },
+    })
+  })
 })

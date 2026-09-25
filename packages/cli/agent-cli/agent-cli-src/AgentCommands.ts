@@ -32,6 +32,7 @@ export const JUST_COMMANDS = [
   // mid-write all look like failure. An agent that guesses re-lands work already on `main`.
   'landed',
   'ledger-index',
+  'model-audit',
   'native-module-check',
   // Pushes the branch, opens or reuses its pull request, and stays attached to stream its checks —
   // the one command both the Developer and an agent run to get GitHub's own CI signal without a

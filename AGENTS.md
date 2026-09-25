@@ -27,7 +27,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 - Lead with the answer or outcome and stop there. Write for the pull rather than the push: a short answer the Developer can ask into beats a complete one they have to wade through. Surface what they would act on — a decision you took that they may want to confirm, something unexpected, something needing their judgment — and let the rest wait to be asked for. Work that did what it was supposed to needs a sentence, not an inventory.
 - Shape a response as a numbered list, bulleted sub-items where needed, at most three levels deep, lettered so "elaborate 2.b" lands. One point per item. Error text and command output go verbatim in code blocks.
 - Depart from this when a root-cause walkthrough or a design argument serves the Developer better. This section governs what they read and nothing else: subagent and agent-to-agent text is exempt from the shape, and the `delegation` skill owns what a subagent's report must contain instead.
-- After a meaningful chunk, recommend the next slice. Recommend `/compact` only when a visible meter shows at least 70% of the context window used, or after roughly 30 substantive turns since the last compaction when usage is unavailable. Never guess a usage percentage. Refresh `.artifacts/checkpoint/<branch>.md` before recommending it.
+- After a meaningful chunk, recommend the next slice. Harness settings compact context automatically; at a natural break before an unrelated slice, refresh `.artifacts/checkpoint/<branch>.md` and offer `/compact` or a fresh session.
 
 ## Safety
 

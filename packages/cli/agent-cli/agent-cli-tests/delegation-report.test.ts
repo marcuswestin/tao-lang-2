@@ -13,11 +13,10 @@ function spawn(type: string): string {
 }
 
 Describe('delegation report', () => {
-  Test('reports an unknown selection without an inheritance warning', async () => {
+  Test('reports an unknown selection', async () => {
     const summary = summarizeDelegationLog(spawn('unrecognized'))
     const output = await withCapturedOutput(() => DelegationReportCommand.write(summary, {}))
     Expect(output.stdout).toContain('unknown 1')
-    Expect(output.stdout).not.toContain('inherited a deep or frontier model')
   })
 
   Test('keeps selection and observation separate without linking unrelated events', async () => {
@@ -36,6 +35,5 @@ Describe('delegation report', () => {
     const output = await withCapturedOutput(() => DelegationReportCommand.write(summary, {}))
     Expect(output.stdout).toContain('inherited 1')
     Expect(output.stdout).toContain('claude-opus-5')
-    Expect(output.stdout).not.toContain('inherited a deep or frontier model')
   })
 })

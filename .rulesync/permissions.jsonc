@@ -199,9 +199,10 @@
     // never needs a `cd` prefix — which takes a command out of its allow rule and into permission
     // review, about two seconds per call. The profile PATH comes from the session-start hook in
     // hooks.jsonc, because `env` values here are literal and cannot extend the existing PATH.
+    // Subagents default to the standard tier's `opus` alias, left unpinned so each install
+    // resolves it to the newest Opus it knows.
     "env": {
       "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
-      "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
       "CLAUDE_CODE_SUBAGENT_MODEL": "opus",
     },
     // Deliberately not set here: `env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`. It scrubs only
