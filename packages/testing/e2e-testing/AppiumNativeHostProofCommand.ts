@@ -7,7 +7,7 @@ import {
   startAppiumServer,
 } from '@appium-driver'
 import { type HostRevision, type MachineResourceLease, MachineResources } from '@host-control'
-import { CLI, Errors, FS, HCI, Json, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, Repo, Switch } from '@shared'
 import type { HostBuild, PrepareHostAppOptions } from './app-build/HostBuild'
 import type { HostTestingContext, SimulatorNativeHostTestingRequest } from './HostTestingRequest'
 import { compileHostJourney, type HostJourney } from './journey/HostJourney'
@@ -235,15 +235,51 @@ async function reportProof(
 }
 
 async function journeyFor(subject: SimulatorNativeHostTestingRequest['subject']) {
-  return subject === 'clockwork'
-    ? await compileHostJourney(Repo.resolvePath('packages/testing/e2e-testing/fixtures/Clockwork/Clockwork.test.tao'), {
-      check: 'counts down after a controlled second',
-      suite: 'clockwork',
-    })
-    : await compileHostJourney(Repo.resolvePath('Apps/HNReader/HNReader.test.tao'), {
-      check: 'keeps reading history across a relaunch in most-recent order',
-      suite: 'hn reader',
-    })
+  const journey = await Switch<SimulatorNativeHostTestingRequest['subject'], Promise<HostJourney>>(subject, {
+    clockwork: () =>
+      compileHostJourney(Repo.resolvePath('packages/testing/e2e-testing/fixtures/Clockwork/Clockwork.test.tao'), {
+        check: 'counts down after a controlled second',
+        suite: 'clockwork',
+      }),
+    hnreader: () =>
+      compileHostJourney(Repo.resolvePath('Apps/HNReader/HNReader.test.tao'), {
+        check: 'keeps reading history across a relaunch in most-recent order',
+        suite: 'hn reader',
+      }),
+    'native-navigation': () =>
+      compileHostJourney(Repo.resolvePath('Apps/Test Apps/Navigation/Native Navigation.test.tao'), {
+        check: 'keeps three independent stack positions and local state when switching tabs',
+        suite: 'Native navigation acceptance',
+      }),
+  })
+  return subject === 'clockwork' ? journey : requireNativeNavigationHosts(journey, subject)
+}
+
+/** Host receipts guard each process lifetime, including both sides of an authored relaunch. */
+export function requireNativeNavigationHosts(
+  journey: HostJourney,
+  subject: 'hnreader' | 'native-navigation' = 'native-navigation',
+): HostJourney {
+  const receipt = {
+    kind: 'expect' as const,
+    missing: false,
+    selector: 'text' as const,
+    source: { filePath: Repo.resolvePath('packages/testing/e2e-testing/app-build/HostBuild.ts') },
+    text: subject === 'hnreader' ? 'Native navigation host: stack' : 'Native navigation host: tabs and stack',
+  }
+  const steps = journey.check.steps.flatMap<HostJourney['check']['steps'][number]>(step => {
+    if (step.kind === 'select' && containsRelaunch(step.steps)) {
+      return Errors.throwUserInput(
+        'Native host acceptance requires relaunch outside select blocks so host receipts remain globally observable.',
+      )
+    }
+    return step.kind === 'relaunch' ? [receipt, step, receipt] : [step]
+  })
+  return { ...journey, check: { ...journey.check, steps: [receipt, ...steps, receipt] } }
+}
+
+function containsRelaunch(steps: HostJourney['check']['steps']): boolean {
+  return steps.some(step => step.kind === 'relaunch' || (step.kind === 'select' && containsRelaunch(step.steps)))
 }
 
 /** appiumFault binds a mutation to one exact source-ranged assertion in its authored Tao journey. */

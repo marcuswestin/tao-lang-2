@@ -15,6 +15,7 @@ import {
   type HostJourneySelection,
   runHostJourney,
 } from '../../journey/HostJourney'
+import { assertNativeInputValue, enterNativeInput } from '../AppiumNativeInputs'
 
 export type AppiumAndroidHostFault = Readonly<{
   expectedAssertion: Readonly<{
@@ -134,7 +135,7 @@ export async function runAppiumAndroidHostProof(
 }
 
 /** appiumAndroidJourneyAdapter maps one authored Tao journey onto the Android driver. */
-function appiumAndroidJourneyAdapter(
+export function appiumAndroidJourneyAdapter(
   session: HostSession,
   control: AppiumAndroidHostControl,
   runId: string,
@@ -145,6 +146,9 @@ function appiumAndroidJourneyAdapter(
     capabilities: [
       'advanceTime',
       'assertNavigationTitle',
+      'assertInputValue',
+      'back',
+      'textInput',
       'assertText',
       'press',
       'relaunch',
@@ -169,15 +173,33 @@ function appiumAndroidJourneyAdapter(
           network: unsupportedJourneyOperation,
           waitForSync: unsupportedJourneyOperation,
           datasourceFailure: unsupportedJourneyOperation,
-          back: unsupportedJourneyOperation,
-          enter: unsupportedJourneyOperation,
+          back: async () => {
+            await session.perform({
+              expectedRevision: session.descriptor().revision,
+              kind: 'key',
+              key: 'Back',
+              lease: session.descriptor().lease,
+            })
+          },
+          enter: async next => await enterNativeInput(session, next.selector, next.target, next.value, next.selections),
           expect: async next =>
             await assertText(session, next.text, next.missing, next.selections, next.source.filePath),
           expectCheckboxState: unsupportedJourneyOperation,
           expectFocusRegion: unsupportedJourneyOperation,
           expectGroup: unsupportedJourneyOperation,
-          expectInputValue: unsupportedJourneyOperation,
-          expectNavigationTitle: async next => await assertNavigationTitle(session, next.title, next.source.filePath),
+          expectInputValue: async next =>
+            await assertNativeInputValue(
+              session,
+              next.selector,
+              next.target,
+              next.value,
+              next.selections,
+              next.source.filePath,
+            ),
+          expectNavigationTitle: async next =>
+            appName === 'NativeNavigation'
+              ? await assertText(session, next.title, false, [], next.source.filePath)
+              : await assertNavigationTitle(session, next.title, next.source.filePath),
           expectTarget: unsupportedJourneyOperation,
           expectToolbarCommand: unsupportedJourneyOperation,
           expectVerbs: unsupportedJourneyOperation,
@@ -197,7 +219,7 @@ function appiumAndroidJourneyAdapter(
             }),
           run: async next => {
             appName = next.appName
-            if (appName === 'HNReaderStub') {
+            if (appName === 'HNReaderStub' || appName === 'NativeNavigation') {
               await assertReady(session, appName)
             }
           },
@@ -307,7 +329,7 @@ async function observeIfPresent(session: HostSession, target: HostTarget): Promi
   try {
     return await observe(session, target)
   } catch (error) {
-    if (error instanceof AppiumNoSuchElementError) {
+    if (isMissingElement(error)) {
       return undefined
     }
     throw error
@@ -325,7 +347,21 @@ async function press(
     : selector === 'label'
     ? { kind: 'accessibility', name: value }
     : { kind: 'text', value }
-  const observation = await observe(session, scopedTarget(selections, target))
+  // Native RN Button uppercases Android's visual title. Tao's native Button keeps the
+  // authored Title as its accessibility label; use that exact button label only for presses.
+  const observation = await Time.pollUntil(async () => {
+    const found = selector === 'text'
+      ? await observeIfPresent(session, scopedTarget(selections, target))
+        ?? await observeIfPresent(
+          session,
+          scopedTarget(selections, { kind: 'accessibility', name: value, role: 'button' }),
+        )
+      : await observeIfPresent(session, scopedTarget(selections, target))
+    return found?.visible === true ? found : undefined
+  }, { intervalMs: 100, timeoutMs: 10_000 })
+  if (observation === undefined) {
+    throw new HostControlError('assertion', `Tao journey could not press ${selector} '${value}': target was not ready.`)
+  }
   await session.perform({
     expectedRevision: session.descriptor().revision,
     kind: 'click',
@@ -365,6 +401,8 @@ function retainsTargetLease(error: unknown): boolean {
 
 function isMissingElement(error: unknown): boolean {
   return error instanceof AppiumNoSuchElementError
+    || (error instanceof HostControlError && error.code === 'assertion'
+      && error.details?.['reason'] === 'element-not-found')
 }
 
 function scopedTarget(selections: readonly HostJourneySelection[], target: HostTarget): HostTarget {

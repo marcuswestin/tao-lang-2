@@ -1,6 +1,6 @@
 import { hostSessionTargetLeaseName, type MachineResourceLease, MachineResources } from '@host-control'
 import { CLI, FS, Platform, Repo } from '@shared'
-import type { HostBuild, PrepareHostAppOptions } from '../app-build/HostBuild'
+import type { HostBuild, HostSubject, PrepareHostAppOptions } from '../app-build/HostBuild'
 
 /** The physical-device path proves only that an isolated Release build was installed. */
 export type PhysicalIosInstallOptions = Readonly<{
@@ -10,7 +10,7 @@ export type PhysicalIosInstallOptions = Readonly<{
   device: string
   runId: string
   seed: number
-  subject: 'clockwork' | 'hnreader'
+  subject: HostSubject
 }>
 
 type PhysicalIosInstallFilesystem = Pick<
@@ -52,7 +52,7 @@ export type PhysicalIosInstallReceipt = Readonly<{
   preparation?: HostBuild
   runId: string
   status: 'blocked' | 'failed' | 'installed'
-  subject: 'clockwork' | 'hnreader'
+  subject: HostSubject
   version: 1
 }>
 
@@ -288,10 +288,10 @@ async function physicalIosInstallConfigurationFailure(
       message: 'The host builder did not return an isolated Expo project under artifactRoot.',
     }
   }
-  const expectedAppId = `dev.tao.taohost${options.subject}${options.runId.replaceAll('-', '')}`
+  const expectedAppId = `dev.tao.taohost${options.subject.replaceAll('-', '')}${options.runId.replaceAll('-', '')}`
   if (
     preparation.appId !== expectedAppId
-    || !/^dev\.tao\.taohost(?:clockwork|hnreader)[a-z0-9]+$/u.test(preparation.appId)
+    || !/^dev\.tao\.taohost(?:clockwork|hnreader|nativenavigation)[a-z0-9]+$/u.test(preparation.appId)
   ) {
     return {
       code: 'host-app-id-not-isolated',
