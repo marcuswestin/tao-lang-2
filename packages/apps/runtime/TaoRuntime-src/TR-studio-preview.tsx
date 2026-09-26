@@ -136,16 +136,30 @@ type StudioPreviewOverlay = StudioPreviewElement & {
 
 /** The document events this bridge listens for; registration and removal name the same set. */
 type StudioPreviewDocumentEvent =
+  | 'auxclick'
   | 'blur'
   | 'click'
+  | 'contextmenu'
+  | 'dblclick'
+  | 'dragstart'
   | 'input'
   | 'keydown'
+  | 'keyup'
   | 'mousedown'
+  | 'mouseenter'
   | 'mouseleave'
   | 'mousemove'
   | 'mouseover'
   | 'mouseout'
   | 'mouseup'
+  | 'pointercancel'
+  | 'pointerdown'
+  | 'pointerenter'
+  | 'pointerleave'
+  | 'pointermove'
+  | 'pointerout'
+  | 'pointerover'
+  | 'pointerup'
   | 'wheel'
 
 type StudioPreviewWindowEvent = 'blur' | 'message' | 'resize' | 'scroll'
@@ -821,6 +835,7 @@ export function mountStudioPreviewBridge(
   let postedHoverKey: string | undefined
   let interactionMode: 'edit' | 'run' = 'edit'
   let canvasGesturesOwned = false
+  let canvasPanKeyHeld = false
   let recording: StudioJourneyRecording | undefined
   let measurementQueued = false
   let stopped = false
@@ -1002,9 +1017,44 @@ export function mountStudioPreviewBridge(
     redrawOverlay()
     scheduleLayoutMeasurements()
   }
+  const releaseCanvasPanKey = () => {
+    if (canvasPanKeyHeld) {
+      canvasPanKeyHeld = false
+      postToStudio(host, config, 'preview-canvas-pan-key', { held: false })
+    }
+  }
+  const onCanvasPanKeyDown = (event: StudioPreviewPointerEvent) => {
+    if (
+      !canvasGesturesOwned || event.key !== ' ' || event.isComposing === true
+      || event.taoStudioJourney === true || isCanvasPanTypingTarget(previewElementFromEvent(event))
+    ) {
+      return
+    }
+    blockAppPointerEvent(event)
+    if (!canvasPanKeyHeld) {
+      canvasPanKeyHeld = true
+      hoverTarget = undefined
+      postedHoverKey = undefined
+      disarmDrag()
+      redrawOverlay()
+      postToStudio(host, config, 'preview-canvas-pan-key', { held: true })
+    }
+  }
+  const onCanvasPanKeyUp = (event: StudioPreviewPointerEvent) => {
+    if (event.key === ' ' && canvasPanKeyHeld && event.taoStudioJourney !== true) {
+      blockAppPointerEvent(event)
+      releaseCanvasPanKey()
+    }
+  }
+  const onCanvasPanPointer = (event: StudioPreviewPointerEvent) => {
+    if (canvasPanKeyHeld && event.taoStudioJourney !== true) {
+      blockAppPointerEvent(event)
+    }
+  }
   const onCanvasWheel = (event: StudioPreviewPointerEvent) => {
     if (
       !canvasGesturesOwned
+      || (canvasPanKeyHeld && event.taoStudioJourney === true)
       || event.clientX === undefined
       || event.clientY === undefined
       || event.deltaX === undefined
@@ -1014,7 +1064,11 @@ export function mountStudioPreviewBridge(
     }
     // Cancellation is synchronous and happens only after the parent has advertised that Design
     // owns the gesture. Run and startup retain the embedded app's native scrolling and zooming.
-    event.preventDefault?.()
+    if (canvasPanKeyHeld) {
+      blockAppPointerEvent(event)
+    } else {
+      event.preventDefault?.()
+    }
     postToStudio(host, config, 'preview-canvas-gesture', {
       clientX: event.clientX,
       clientY: event.clientY,
@@ -1154,6 +1208,9 @@ export function mountStudioPreviewBridge(
     'set-canvas-gestures': message => {
       if (typeof message['owned'] === 'boolean') {
         canvasGesturesOwned = message['owned']
+        if (!canvasGesturesOwned) {
+          releaseCanvasPanKey()
+        }
       }
     },
     'set-interaction-mode': message => {
@@ -1180,11 +1237,37 @@ export function mountStudioPreviewBridge(
 
   // One table drives both halves of the bridge's lifetime: the cleanup below removes exactly what
   // was added, which two hand-written sequences could not promise.
-  const documentListeners: readonly Parameters<StudioPreviewHost['document']['addEventListener']>[] = [
+  const canvasPanPointerEvents: readonly StudioPreviewDocumentEvent[] = [
+    'auxclick',
+    'click',
+    'contextmenu',
+    'dblclick',
+    'dragstart',
+    'mousedown',
+    'mouseenter',
+    'mouseleave',
+    'mousemove',
+    'mouseover',
+    'mouseout',
+    'mouseup',
+    'pointercancel',
+    'pointerdown',
+    'pointerenter',
+    'pointerleave',
+    'pointermove',
+    'pointerout',
+    'pointerover',
+    'pointerup',
+  ]
+  const documentListeners: readonly Readonly<Parameters<StudioPreviewHost['document']['addEventListener']>>[] = [
+    // This capture barrier is synchronous; the parent's iframe shield arrives through postMessage.
+    ...canvasPanPointerEvents.map(type => [type, onCanvasPanPointer, true] as const),
     ['click', onClick, true],
     ['click', onRecordedClick, true],
     ['input', onRecordedInput, true],
     ['blur', onRecordedBlur, true],
+    ['keydown', onCanvasPanKeyDown, true],
+    ['keyup', onCanvasPanKeyUp, true],
     ['keydown', onRecordedKeyDown, true],
     ['mousedown', onMouseDown, true],
     ['mouseleave', disarmDrag],
@@ -1196,6 +1279,7 @@ export function mountStudioPreviewBridge(
   ]
   const windowListeners: readonly Parameters<StudioPreviewHost['window']['addEventListener']>[] = [
     ['blur', disarmDrag],
+    ['blur', releaseCanvasPanKey],
     ['message', onMessage],
     ['resize', onResize],
     ['scroll', redrawOverlay],
@@ -1218,6 +1302,7 @@ export function mountStudioPreviewBridge(
   )
 
   return () => {
+    releaseCanvasPanKey()
     stopped = true
     // A preview instance owns its debugger pause and clock hold. Releasing the bridge must release
     // both before a replacement instance starts, without letting the old pause publish a resumed
@@ -1380,6 +1465,22 @@ function recordingControl(
 
 function previewElementFromEvent(event: StudioPreviewPointerEvent): StudioPreviewElement | undefined {
   return isStudioElement(event.target) ? event.target : undefined
+}
+
+/** Text entry retains Space even when a containing preview belongs to the Design canvas. */
+function isCanvasPanTypingTarget(element: StudioPreviewElement | undefined): boolean {
+  for (let current = element; current !== undefined && current !== null; current = current.parentElement ?? undefined) {
+    const tag = current.tagName?.toLowerCase()
+    const editable = current.getAttribute('contenteditable')
+    if (
+      tag === 'input' || tag === 'textarea' || tag === 'select'
+      || current.getAttribute('role') === 'textbox'
+      || editable === '' || editable === 'true' || editable === 'plaintext-only'
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 function isJourneySubmitKey(event: StudioPreviewPointerEvent, element: StudioPreviewElement): boolean {
