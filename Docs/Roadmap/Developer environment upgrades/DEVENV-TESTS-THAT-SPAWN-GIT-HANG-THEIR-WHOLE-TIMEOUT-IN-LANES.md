@@ -19,7 +19,7 @@
   repositories, with `just` faked and no output capture, so DEVENV-098's capture queue does not
   explain them; the fingerprint probes also spawn `git`. No global Git configuration sets
   `core.fsmonitor`, `core.hooksPath`, or commit signing.
-- **Workaround:** Rerun the lane; a passing run on the same tree is the gate.
+- **Workaround:** Temporarily skip the two live-host tests in `environment-fingerprint.test.ts` on `feat/quarantine-verification-flakes`, at the Developer's request. Pure formatting and hostile-input privacy tests remain active. Restore the live-host privacy and doctor attachment checks after diagnosing the probe lifecycle; skips are missing coverage, not evidence of a repair.
 - **Proposed change:** Find what the spawned `git` waits on when other suites run beside it — a
   lock, an inherited environment variable, an open stdin, or the child's exit never reaching Bun —
   and fix that rather than raising the bound. Recording which command was still running when a test
