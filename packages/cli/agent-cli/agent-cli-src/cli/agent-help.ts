@@ -102,6 +102,8 @@ Examples:
   ./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
   ./agent unsandboxed prepare-release ide-extension
   ./agent unsandboxed capabilities
+  ./agent unsandboxed watchman status
+  ./agent unsandboxed watchman start
   ./agent unsandboxed land --dry-run
   ./agent unsandboxed merge-main
   ./agent unsandboxed merge-recover
@@ -120,6 +122,12 @@ Each name runs its fixed host implementation with following arguments forwarded 
 a shell. It fails before dispatch if still sandboxed. Other host operations need the Developer's
 explicit approval; plain commands remain sandboxed.
 
+Watchman is one shared daemon per user. status does not start it; start is idempotent;
+watchman stop disconnects subscriptions in every worktree. Startup uses the primary checkout's
+pinned client so removing a linked worktree does not break the daemon's launch path.
+
+setup --environment builds this checkout's pinned Nix environment, then runs setup without opening
+an interactive shell. Use it when native tools such as Hutch are missing or the toolchain changed.
 setup installs with a frozen lockfile. After adding, removing, or moving a workspace package, or
 changing a package.json dependency, setup --refresh-lockfile is the one install that rewrites
 bun.lock.

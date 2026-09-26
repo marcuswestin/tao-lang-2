@@ -327,7 +327,7 @@ Describe('test runner suite registry', () => {
       timings: { nodes: {}, version: 1 as const },
     })
 
-    Expect(plan.plans.find(item => item.suite === 'cli/tao-cli')?.shards.length).toBe(8)
+    Expect(plan.plans.find(item => item.suite === 'cli/tao-cli')?.shards.length).toBe(12)
     Expect(plan.plans.find(item => item.suite === 'tao-apps')?.shards.length).toBe(2)
     Expect(plan.warnings).toEqual([])
   })

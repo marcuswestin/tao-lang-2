@@ -5,6 +5,7 @@ let
     inherit pkgs;
     bunPkgs = import inputs.bun-nixpkgs { system = pkgs.stdenv.system; };
   };
+  hutchPkg = pkgs.callPackage ./nix/hutch.nix { };
 in
 {
   name = "tao-lang";
@@ -44,6 +45,7 @@ in
 
   packages = toolchain.packages ++ [
     pkgs.cocoapods
+    hutchPkg
   ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ pkgs.age-plugin-se ];
 
   env.TAO_DEVENV = "1";

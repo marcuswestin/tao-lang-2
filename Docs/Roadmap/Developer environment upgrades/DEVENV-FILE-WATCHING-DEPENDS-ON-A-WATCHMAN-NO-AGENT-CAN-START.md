@@ -5,10 +5,17 @@
 - **Area:** Watchman, agent sandboxes, Metro and Jest file watching, `./agent doctor`, Studio launch
 - **Impact:** Largely resolved on 2026-09-25: no agent sandbox reaches Watchman any more, because
   file-watching dev loops run on the host through named operations (`./agent unsandboxed app-dev`,
-  `studio`, `studio-native`), where Studio's launch starts Watchman itself when it is down, and the
-  tracked Codex config names no login. What remains: a watched primary checkout still folds a
+  `studio`, `studio-native`), and the tracked Codex config names no login. Named Watchman lifecycle
+  commands now let agents start the daemon before Studio's non-spawning preflight. What remains:
+  a watched primary checkout still folds a
   worktree nested inside it into one watch, and launchd restarts Watchman only after a crash.
 - **Evidence:** Measured on 2026-09-22.
+  - On 2026-09-26, landing stopped before the queue because the shared daemon was stopped.
+    Named `./agent unsandboxed watchman start|status|stop` operations now use the primary
+    checkout's pinned client. Status and stop disable both spawning and local fallback; start
+    ensures a real daemon answers. Stop explicitly reports that all worktree subscriptions
+    disconnect. Dispatcher tests reject additional arguments and arbitrary service commands.
+    The daemon remains per-user; Nix already supplies the pinned binary to every checkout.
   - What was wrong, now fixed: the socket rule named one login (`ro-state`, audit `P17`), so every
     other login was silently denied. The tracked `.codex/config.toml` carried `/Users/<login>/…`
     paths and a hardcoded `~/code/tao-lang-2/.git` (`P18`). The doctor only warned, and its probe
@@ -53,9 +60,10 @@
     throwaway tree). Watchman consolidates onto an enclosing watch by design, so the one structural
     fix is not to nest checkouts inside a watched one.
 - **Workaround:** Run dev loops through the host operations above. `./agent doctor` names a stopped
-  server (the exact start command, using the primary checkout's client so the LaunchAgent survives
-  worktree cleanup) as a warning, because sandboxed tests and builds can crawl without it while host
-  dev loops can use OS watching. Studio starts Watchman when needed. A missing client remains a
+  server and directs agents to `./agent unsandboxed watchman start`, using the primary checkout's
+  client so the LaunchAgent survives worktree cleanup. This remains a warning, because sandboxed
+  tests and builds can crawl without it while host dev loops can use OS watching. Start the daemon
+  before Studio: its non-spawning capability preflight can fail before watch registration. A missing client remains a
   failure. The doctor also names an enclosing watch root (the `watch-del` to run once
   `debug-get-subscriptions` shows no dev server on it), and reports a sandbox without Watchman as
   expected. Studio's launch check releases an enclosing watch nothing subscribes to by itself.

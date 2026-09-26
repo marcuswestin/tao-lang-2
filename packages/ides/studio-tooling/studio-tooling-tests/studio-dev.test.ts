@@ -359,7 +359,7 @@ Describe('Studio native wrapper foundation', () => {
         homeDirectory: homeRoot,
         path: '',
       })).rejects.toThrow(
-        /Hutch is not installed[\s\S]*curl -fsSL https:\/\/hutch\.blackboard\.sh\/hutch\/install\.sh \| sh[\s\S]*--hutch[\s\S]*\.\/dev studio/,
+        /Hutch is not installed[\s\S]*\.\/agent setup --environment[\s\S]*--hutch[\s\S]*\.\/dev studio/,
       )
     } finally {
       await FS.remove(homeRoot)

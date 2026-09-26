@@ -251,6 +251,23 @@ Describe('native tab reconciliation', () => {
     }
   })
 
+  Test('uses native sidebar adaptation for Catalyst without changing mobile adaptation', () => {
+    for (
+      const [platform, mode] of [
+        [{ isMacCatalyst: true, Version: '26.0' }, 'tabSidebar'],
+        [{ isPad: false, Version: '26.0' }, 'automatic'],
+        [{ isPad: true, Version: '17.0' }, 'automatic'],
+      ] as const
+    ) {
+      const fixture = tabsFixture(platform)
+      try {
+        Expect(fixture.host().ios?.tabBarControllerMode).toBe(mode)
+      } finally {
+        fixture.dispose()
+      }
+    }
+  })
+
   Test('activates a user selection once through its outline identity, never its JS acknowledgement', () => {
     const fixture = tabsFixture()
     const activate = jest.spyOn(InteractionControls, 'ActivateIdentity')
@@ -313,7 +330,7 @@ Describe('native tab reconciliation', () => {
   })
 })
 
-function tabsFixture(platform: { OS?: string; isPad?: boolean; Version?: string } = {}) {
+function tabsFixture(platform: { OS?: string; isPad?: boolean; isMacCatalyst?: boolean; Version?: string } = {}) {
   const activations: string[] = []
   const mounts: string[] = []
   const unmounts: string[] = []

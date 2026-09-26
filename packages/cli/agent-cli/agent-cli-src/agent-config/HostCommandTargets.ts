@@ -29,6 +29,10 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'studio-ps': { command: './dev', fixedArgs: ['studio-ps'], argsPolicy: 'studio-list' },
   'studio-stop': { command: './dev', fixedArgs: ['studio-stop'], argsPolicy: 'studio-stop' },
   'docker-desktop start': { command: 'open', fixedArgs: ['-a', 'Docker'], argsPolicy: 'none' },
+  // One daemon serves this login's worktrees; no arbitrary Watchman commands or socket overrides.
+  'watchman start': { command: './dev', fixedArgs: ['watchman', 'start'], argsPolicy: 'none' },
+  'watchman status': { command: './dev', fixedArgs: ['watchman', 'status'], argsPolicy: 'none' },
+  'watchman stop': { command: './dev', fixedArgs: ['watchman', 'stop'], argsPolicy: 'none' },
   // The local InstantDB stack is Docker Compose; running its two recipes on the host keeps the Docker
   // socket, which is root-equivalent, out of every agent sandbox.
   'local-instantdb start': { command: 'just', fixedArgs: ['start-local-instantdb'], argsPolicy: 'none' },

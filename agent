@@ -32,6 +32,13 @@ if [[ "${1:-}" == unsandboxed ]]; then
 fi
 
 SCRIPT_DIR="${0:A:h}"
+if [[ "$HOST_COMMAND_REQUESTED" == false && "${1:-}" == setup && "${2:-}" == --environment ]]; then
+  if (( $# != 2 )); then
+    echo 'Usage: ./agent setup --environment' >&2
+    exit 2
+  fi
+  exec "$SCRIPT_DIR/enter-tao-dev-env" --setup-only
+fi
 AGENT_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/agent-cli"
 DEV_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/dev-cli"
 CLI_KIT_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/cli-kit"

@@ -74,6 +74,9 @@ Automatic tabs use `Tabs.Host`/`Tabs.Screen`; iOS headers use native buttons and
 iPad automatic tabs request system tab/sidebar adaptation. Implementation and platform acceptance
 are separate: see [Native navigation acceptance](<Native navigation acceptance.md>) for evidence,
 physical-device and accessibility gaps, the bounded Catalyst gate, and the Android trial verdict.
+The separately authorized [Mac Catalyst proof of concept](<Mac Catalyst proof of concept.md>)
+permits isolated compatibility patches and local visual review, without production support or
+publication authority. Physical iPhone/iPad acceptance remains outstanding.
 
 Search tabs, badges, accessories, custom minimization, large-title options, richer sheet detents,
 guards and public routes remain deferred. Android native menu/sheet fidelity, full predictive Back,

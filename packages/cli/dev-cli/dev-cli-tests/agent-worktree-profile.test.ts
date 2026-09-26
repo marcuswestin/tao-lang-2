@@ -494,6 +494,7 @@ Describe('agent worktree profile bootstrap', () => {
 
     Expect(commands).toContain('packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh')
     Expect(commands).toContain('--health')
+    Expect(commands).toContain('packages/cli/dev-cli/dev-cli-src/cli/initial-dev-branch.zsh')
     Expect(commands).not.toContain('bun install')
     Expect(names).not.toContain('deps')
     Expect(names).not.toContain('setup')
