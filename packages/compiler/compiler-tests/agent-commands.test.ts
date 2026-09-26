@@ -45,8 +45,11 @@ Describe('compiler: explicit app agent commands', () => {
     Expect(compiled.code).toContain('scalarType: "text"')
     Expect(compiled.code).toContain('agentCommands: () => []')
     Expect(compiled.code).not.toContain('agentCommands: () => [_Scope.Private]')
+    // Nested member hook calls force a Fast Refresh remount. Keep the hook in module scope.
+    Expect(compiled.code).toContain('const useTaoGeneratedAgentCommands = TR.Agent.useCommands')
+    Expect(compiled.code).not.toContain('TR.Agent.useCommands(')
     Expect(compiled.code).toContain(
-      'TR.Agent.useCommands(_TaoAppDefinition_Restricted.definition.agentCommands?.() ?? [], [',
+      'useTaoGeneratedAgentCommands(_TaoAppDefinition_Restricted.definition.agentCommands?.() ?? [], [',
     )
     Expect(compiled.code).toContain(
       '...(_TaoAppDefinition_Restricted.definition.datasources?.() ?? []).map(binding => binding.store)',

@@ -125,7 +125,7 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       : gen.noop()
   }
       ${compileFixtureSeed(options)}
-      TR.Agent.useCommands(${gen.Name(definition)}.definition.agentCommands?.() ?? [], [
+      useTaoGeneratedAgentCommands(${gen.Name(definition)}.definition.agentCommands?.() ?? [], [
         ...(${gen.Name(definition)}.definition.datasources?.() ?? []).map(binding => binding.store),
         ${options.localDataCatalog ? gen`${gen.scopeName({ name: '_TaoLocalDataCatalog' })},` : gen.noop()}
       ])

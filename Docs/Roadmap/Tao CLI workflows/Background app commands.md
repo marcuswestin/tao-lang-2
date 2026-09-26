@@ -18,3 +18,4 @@ shutdown and persistence after a visible relaunch. Hidden host requests use Elec
 JavaScript delivery path so an idle WebKit view wakes without showing a window; requests are sent once.
 Client failures identify the failed RPC method. Failed discovery explicitly reports that execution
 was never submitted, and a shutdown failure cannot replace a command's execution receipt.
+Generated app hooks use module-scope aliases so Fast Refresh preserves app state during Studio edits.
