@@ -1,4 +1,4 @@
-use Documents, Duplicate, Finish, Workspaces from @data
+use Document, Duplicate, Finish, Workspace, Workspaces from @data
 use SlotNav from @tao/nav
 use Join from @tao/text
 use Box, Col, Image, Panes, Problems, Row, ScrollView, Text, TextInput, TextMultiline from @tao/ui

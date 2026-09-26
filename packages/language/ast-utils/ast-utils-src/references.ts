@@ -1,12 +1,9 @@
 import { AST } from '@parser'
 import { Type } from './Type'
 
-/** referencedNames returns every cross-referenced name in `file` outside of use statements. */
+/** referencedNames returns the external and unresolved names used in `file` outside of use statements. */
 export function referencedNames(file: AST.TaoFile): Set<string> {
   const names = new Set<string>()
-  const dataEntitiesBySingularName = new Map(
-    Type.visibleDataEntities(file).map(entity => [entity.singularName, entity]),
-  )
   for (const node of AST.streamAllContents(file)) {
     if (AST.isUseStatement(node)) {
       continue
@@ -18,12 +15,11 @@ export function referencedNames(file: AST.TaoFile): Set<string> {
       names.add(node.sourceName ?? node.name)
     }
     for (const reference of AST.streamReferences(node)) {
-      names.add(reference.reference.$refText)
       const target = 'ref' in reference.reference ? reference.reference.ref : undefined
-      if (AST.isEntityDataDeclaration(target)) {
-        // A data import names its plural declaration, while Tao source may refer to the declaration
-        // through its singular entity name (`Document`). Keep the owning `Documents` import too.
-        names.add(target.name)
+      if (target === undefined || AST.findRoot(target) !== file) {
+        // Local bindings do not use a same-spelled import. Keep unresolved references while the
+        // author is editing, and external references including implicitly visible folder members.
+        names.add(reference.reference.$refText)
       }
       if (AST.isCaseSetCase(target)) {
         // Importing a one-of type also imports its cases. A case reference therefore uses the
@@ -33,10 +29,11 @@ export function referencedNames(file: AST.TaoFile): Set<string> {
     }
     if (AST.isNamedTypeReference(node)) {
       names.add(node.root)
-      const dataEntity = dataEntitiesBySingularName.get(node.root)
-      if (dataEntity) {
-        names.add(dataEntity.name)
-      }
+    }
+    if (AST.isEntityDataField(node) && !node.primitive && !node.boolean) {
+      // Data relationship types are stored as names rather than cross-references. Both explicit
+      // target types and same-name fields use only the exact singular or plural form they spell.
+      names.add(Type.dataFieldRelationName(node))
     }
     if (isImportedShorthandPropertyReference(node)) {
       names.add(node.name)

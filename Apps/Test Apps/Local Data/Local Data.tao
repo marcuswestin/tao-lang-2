@@ -1,4 +1,4 @@
-use FocusSessions, Notes from @data
+use FocusSession, FocusSessions, Note, Notes from @data
 use Local from @tao/data/providers/local
 use Memory from @tao/data/providers/memory
 use StackNav from @tao/nav
