@@ -23,6 +23,69 @@ issuer/subject identity mapping, session records, account encryption keys, and o
 This is a localhost reference implementation, without managed-provider recovery, MFA, passkeys,
 linking, or production deployment guarantees.
 
+## Clerk account gateway
+
+This is the application backend that translates a verified Clerk identity into a Tao Account and
+resource-scoped data authority. It is not a disposable auth stub. The current launcher still binds
+to loopback and supports one gateway process per deployment; production ingress, operations and
+migration are not supplied by this reference service.
+
+Use a **fresh database** and add `--clerk-config PATH` to the startup command. The trusted JSON
+configuration has this shape (the PEM is Clerk's public JWT verification key, never its secret API key):
+
+```json
+{
+  "issuer": "https://YOUR_INSTANCE.clerk.accounts.dev",
+  "jwtKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
+  "authorizedParties": ["http://localhost:8081"]
+}
+```
+
+An optional `audience` string or list restricts JWT audiences. The configured issuer and parties
+must match the session's `iss` and `azp`; missing required claims, pending sessions, expired proofs
+and malformed factor claims fail closed. `--origin` independently allows the browser origin
+through CORS. Only public verification material belongs in this gateway configuration.
+
+`POST /v1/auth/clerk/exchange` accepts a Clerk bearer proof and `{ "resource": "auth-review" }`.
+It verifies the signature locally with `@clerk/backend`, provisions the issuer/subject mapping,
+and returns the existing opaque gateway session. The gateway session never outlives the proof,
+including time spent provisioning remote storage. Expired gateway sessions are pruned. Local
+password registration/sign-in endpoints are disabled in Clerk mode. Each database binds its auth
+mode and Clerk issuer permanently: changing either, or adopting populated legacy local state into
+Clerk, requires an explicit future migration. No email-based identity linking is performed.
+
+The Tao binding is `Auth Clerk { PublishableKey "..." Endpoint "..." Resource "auth-review" }`
+from `@tao/auth/clerk`. `Datasource Reference` continues to use the same endpoint and resource.
+SQLite and self-hosted Instant remain gateway storage choices. The first implemented methods are
+password and email code, including signup verification and email-based Device Trust. Required MFA,
+other session tasks and unsupported instance requirements fail closed.
+
+### Testing Clerk
+
+Ordinary driver, connection and cryptographic gateway tests work offline. Real sign-in requires
+Clerk's hosted development instance, even when the application and gateway run on localhost.
+The opt-in browser test uses real Tao UI, synthetic `+clerk_test` addresses and code `424242`;
+it does not use the helper that bypasses authentication with a backend ticket.
+
+Configure a dedicated development instance with password and email-code sign-in enabled, no
+required MFA/session tasks, and local browser origins allowed. Supply `CLERK_PUBLISHABLE_KEY`,
+`CLERK_SECRET_KEY` and the PEM `CLERK_JWT_KEY` through your shell's secure environment. No dotenv
+files are loaded, and no secret is needed in Tao source. From the repository root run:
+
+```sh
+TAO_CLERK_LIVE=1 ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-auth.test.ts
+```
+
+Without opt-in the journey explicitly skips; opted-in missing configuration fails. The test creates
+and deletes its own Clerk user, temporary project, gateway database and browser profile. If remote
+cleanup fails, it reports the synthetic user ID for manual deletion. Live acceptance has not yet
+been recorded for this adapter. The gateway requires an `azp` origin claim, which native Clerk proofs may omit. Native
+authentication is not a verified pairing; its token/origin contract and physical-device storage
+need separate acceptance.
+
+See [Clerk's testing guide](https://clerk.com/docs/guides/development/testing/playwright/overview)
+and [test emails and phones](https://clerk.com/docs/guides/development/testing/test-emails-and-phones).
+
 ## Self-hosted Instant storage
 
 The same LocalAuth/Reference app can use Instant for application rows and transaction receipts.
