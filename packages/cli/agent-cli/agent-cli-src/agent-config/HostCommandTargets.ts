@@ -52,6 +52,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'simulators run': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
   'simulators app-container': { command: 'xcrun', fixedArgs: ['simctl', 'get_app_container'] },
   'simulators install': { command: 'xcrun', fixedArgs: ['simctl', 'install'] },
+  'simulators launch': { command: 'xcrun', fixedArgs: ['simctl', 'launch'] },
   'simulators open-url': { command: 'xcrun', fixedArgs: ['simctl', 'openurl'] },
   'simulators uninstall': { command: 'xcrun', fixedArgs: ['simctl', 'uninstall'] },
   'simulators open': { command: 'open', fixedArgs: ['-a', 'Simulator'] },

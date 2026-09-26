@@ -125,6 +125,7 @@ function createCommands(): Command {
     .option('--app <name>', 'Select a named app.')
     .option('--web', 'Export a static web artifact.')
     .option('--desktop', 'Build a locally runnable macOS app.')
+    .option('--visionos', 'Export an experimental visionOS Xcode project with bundled web UI.')
     .option('--agents', 'Build a background app service and bundled client executable (defaults to desktop).')
     .option('--output <directory>', 'Retain builds in this directory instead of the project’s .tao/builds.')
     .option('--ios', 'Show the status of local iOS builds.')
@@ -140,6 +141,7 @@ function createCommands(): Command {
           output?: string
           web?: boolean
           desktop?: boolean
+          visionos?: boolean
           ios?: boolean
           android?: boolean
           compileOnly?: boolean
@@ -147,7 +149,9 @@ function createCommands(): Command {
       ) => {
         try {
           const { runTaoBuild } = await import('./build-command')
-          const targets = (['web', 'desktop', 'ios', 'android'] as const).filter(target => options[target] === true)
+          const targets = (['web', 'desktop', 'ios', 'android', 'visionos'] as const).filter(target =>
+            options[target] === true
+          )
           if (options.agents && targets.length === 0) {
             targets.push('desktop')
           }

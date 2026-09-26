@@ -46,6 +46,7 @@ const expected = [
   'simulators run',
   'simulators app-container',
   'simulators install',
+  'simulators launch',
   'simulators open-url',
   'simulators uninstall',
   'simulators open',
@@ -125,6 +126,10 @@ Describe('agent host command permissions', () => {
     Expect(hostCommandTarget(['simulators', 'list'])).toEqual({
       command: 'xcrun',
       fixedArgs: ['simctl', 'list', 'devices'],
+    })
+    Expect(hostCommandTarget(['simulators', 'launch'])).toEqual({
+      command: 'xcrun',
+      fixedArgs: ['simctl', 'launch'],
     })
     Expect(hostCommandTarget(['start-branch'])).toEqual({ command: './dev', fixedArgs: ['start-branch'] })
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()

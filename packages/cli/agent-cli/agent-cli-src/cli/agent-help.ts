@@ -109,6 +109,7 @@ Examples:
   ./agent unsandboxed merge-recover
   ./agent unsandboxed simulators list booted
   ./agent unsandboxed simulators run <device-udid>
+  ./agent unsandboxed simulators launch <device-udid> <bundle-id>
   ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios
   ./agent unsandboxed studio Apps/HNReader
   ./agent unsandboxed studio-ps --json
