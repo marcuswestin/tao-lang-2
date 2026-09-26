@@ -74,6 +74,7 @@ change that addressed it.
 - [DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM — Claude Code is below the configured Opus minimum](<Developer environment upgrades/DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM.md>) — Candidate
 - [DEVENV-CODEX-HOST-COMMANDS-COST-THE-CREDENTIAL-READ-DENIES — Codex host commands cost the credential read denies](<Developer environment upgrades/DEVENV-CODEX-HOST-COMMANDS-COST-THE-CREDENTIAL-READ-DENIES.md>) — Deferred
 - [DEVENV-COMPILED-TEST-STORE-RETAINS-BROKEN-MODULE-LINKS — Compiled test store retains broken module links](<Developer environment upgrades/DEVENV-COMPILED-TEST-STORE-RETAINS-BROKEN-MODULE-LINKS.md>) — Candidate
+- [DEVENV-DEVICE-HUB-APPROVAL-PROMPT-IS-MISSING — Device Hub approval prompt is missing](<Developer environment upgrades/DEVENV-DEVICE-HUB-APPROVAL-PROMPT-IS-MISSING.md>) — Candidate
 - [DEVENV-DIRENV-RELOAD-REPORTS-RUNNING-COMMAND-NOT-FOUND — direnv reload reports Running command not found](<Developer environment upgrades/DEVENV-DIRENV-RELOAD-REPORTS-RUNNING-COMMAND-NOT-FOUND.md>) — Candidate
 - [DEVENV-DOCTOR-PASSES-A-BUN-OLDER-THAN-THE-DEVENV-PIN — `./agent doctor` passes a Bun older than the one devenv pins](<Developer environment upgrades/DEVENV-DOCTOR-PASSES-A-BUN-OLDER-THAN-THE-DEVENV-PIN.md>) — In progress
 - [DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION — Doctor test observes concurrent artifact creation](<Developer environment upgrades/DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION.md>) — Candidate
