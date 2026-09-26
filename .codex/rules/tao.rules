@@ -19,6 +19,8 @@ prefix_rule(pattern=["./agent","unsandboxed","prepare-release"], decision="allow
 prefix_rule(pattern=["./agent","unsandboxed","app-dev"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","studio"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","studio-native"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
+prefix_rule(pattern=["./agent","unsandboxed","studio-ps"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
+prefix_rule(pattern=["./agent","unsandboxed","studio-stop"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","docker-desktop"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","local-instantdb"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","companion-host-build"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
