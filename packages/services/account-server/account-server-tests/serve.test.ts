@@ -1,8 +1,73 @@
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, MockModule, Test, testOverrideSlot, until } from '@shared/test'
 import { startAccountServerFromArguments } from '../account-server-src/serve'
 
+const originalFS = { ...FS }
+const writeJson = testOverrideSlot({
+  read: () => FS.writeJson,
+  write: value => {
+    MockModule(new URL('../../../shared/shared-src/FS.ts', import.meta.url).pathname, () => ({
+      ...originalFS,
+      writeJson: value,
+    }))
+  },
+})
+
 Describe('Account reference service launcher', () => {
+  Test('publishes readiness only after the complete JSON has been written', async () => {
+    const root = await mkTestDir('tao-account-ready-')
+    const policy = FS.resolvePath('policy.json', root)
+    const ready = FS.resolvePath('ready.json', root)
+    await FS.writeJson(policy, {
+      accountEntity: 'Account',
+      entities: { Account: { fields: ['DisplayName'], grants: [{ principal: [], operations: ['read'] }] } },
+    })
+    const entered = Deferred<string>()
+    const release = Deferred()
+    const original = FS.writeJson
+    const restore = writeJson.install(async (path, content, options) => {
+      if (path === ready || path.startsWith(`${ready}.`)) {
+        await FS.writeText(path, '')
+        entered.resolve(path)
+        await release.promise
+      }
+      await original(path, content, options)
+    })
+    const launched = startAccountServerFromArguments([
+      '--policy',
+      policy,
+      '--database',
+      FS.resolvePath('accounts.sqlite', root),
+      '--port',
+      '0',
+      '--ready-file',
+      ready,
+    ])
+    void launched.then(
+      () => entered.reject(new Errors.UnexpectedBehaviorError('The readiness write was not intercepted.')),
+      error => entered.reject(error),
+    )
+    try {
+      const pending = await entered.promise
+      Expect(await FS.isFile(pending)).toBe(true)
+      Expect(await FS.readText(pending)).toBe('')
+      Expect(await FS.isFile(ready)).toBe(false)
+      release.resolve()
+      const server = await launched
+      Expect(await FS.readJson(ready)).toEqual({ resource: 'auth-review', url: server.url })
+      Expect(await FS.isFile(pending)).toBe(false)
+      Expect((await fetch(`${server.url}/v1/data`)).status).toBe(401)
+    } finally {
+      release.resolve()
+      try {
+        await (await launched).stop()
+      } finally {
+        restore()
+        await FS.remove(root)
+      }
+    }
+  })
+
   Test('requires an explicit trusted policy with declared grants', async () => {
     await Expect(startAccountServerFromArguments([])).rejects.toThrow('compiler-emitted TaoDataPolicy.json')
     const root = await mkTestDir('tao-account-launcher-', { location: 'host' })

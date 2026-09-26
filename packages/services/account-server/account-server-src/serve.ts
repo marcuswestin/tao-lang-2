@@ -62,7 +62,14 @@ export async function startAccountServerFromArguments(args: readonly string[]): 
   const readyPath = values.get('--ready-file')
   try {
     if (readyPath !== undefined) {
-      await FS.writeJson(FS.resolvePath(readyPath), { resource, url: server.url })
+      const path = FS.resolvePath(readyPath)
+      const temporary = `${path}.${Platform.randomUUID()}.tmp`
+      try {
+        await FS.writeJson(temporary, { resource, url: server.url })
+        await FS.move(temporary, path)
+      } finally {
+        await FS.remove(temporary)
+      }
     }
     return server
   } catch (error) {
