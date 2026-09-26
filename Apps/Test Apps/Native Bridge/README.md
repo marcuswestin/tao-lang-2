@@ -40,8 +40,9 @@ Choose **Device → roPhone → Open this app on device** in Studio.
 - **Haptics:** the original default calls, every impact and notification case, and selection. Expand
   the Android group on an Android device for every Android haptic case. `No_Haptics` intentionally
   produces no pulse. Status reports completion of the API call, not actuator output.
-- **Vibration:** request a vibration and cancel it. Platforms control their supported behavior;
-  iOS chooses its vibration duration, and cancellation applies to Android.
+- **Vibration:** request a vibration and cancel it. Android honors the requested duration; iOS
+  uses a fixed system pulse. Cancellation stops patterns on both platforms, but cannot shorten
+  an iOS pulse already underway.
 - **Clipboard:** copy/read text and HTML; check availability; copy a one-pixel sample image, or copy
   a photo in another app and read it as PNG/JPEG; copy/read/check URLs on iOS or macOS. Reads may
   trigger an OS paste prompt. A missing image produces “No image read.”
@@ -93,6 +94,13 @@ For the next supported API, add `<Surface>/<Surface>.tao` beside `<Surface>/Gene
 bindings, and add a home-screen button. Keep platform-specific controls labeled. Android can use the
 same app; future source/target adapters belong in `packages/native-bindings`, not in this demo.
 
-The Tao journey checks navigation and initial UI without calling native operations. Package tests
-exercise generated native contracts against mocks. Physical-device behavior needs the interactions
-above; neither check substitutes for the other.
+The Tao journey checks navigation and initial UI without calling native operations. The
+`native-bridge-demo.jest-test.tsx` suite compiles this maintained app and operates its controls with
+native substitutes. It checks edited and submitted clipboard text, HTML options, availability,
+image previews and absent results, URLs, listener controls/events and cleanup on Back, every
+Haptics control, and vibration/cancellation. A pending clipboard write must finish before its
+completion status appears. The substitutes leave the real clipboard and device hardware untouched.
+
+Separate generated-binding tests exercise the native contracts. Physical-device behavior still
+needs the interactions above: these tests do not prove OS paste prompts, clipboard formats,
+platform support or physical feedback.

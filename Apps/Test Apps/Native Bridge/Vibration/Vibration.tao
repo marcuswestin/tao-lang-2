@@ -15,7 +15,7 @@ scene VibrationDemo() {
    }
    render ScrollView() {
       Col() [screen] {
-         TextMultiline("A 200 ms request uses the system vibration. On iOS the system chooses the duration; cancellation is supported on Android.")
+         TextMultiline("Requests a 200 ms vibration on Android. iOS uses a fixed system pulse. Cancel stops patterns; it cannot shorten an iOS pulse already underway.")
          Text("Status: { Status }")
          Button("Vibrate") {
             on press Pulse

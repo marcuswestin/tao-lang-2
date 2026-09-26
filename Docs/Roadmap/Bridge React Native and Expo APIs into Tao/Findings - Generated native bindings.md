@@ -181,11 +181,16 @@ operations, which satisfies strict unused-local checks in the repository.
 The demo exposes a remaining language gap: nullable record results can be stored and passed through
 Tao, but their fields cannot yet be inspected directly. A separate injected UI renderer previews a
 returned clipboard image without any handwritten native calls. A future language slice should settle
-nullable-value narrowing before expanding this pattern. Clipboard device acceptance remains open;
-the demo journey covers navigation and initial state, and package tests cover native contracts.
+nullable-value narrowing before expanding this pattern. Clipboard device acceptance remains open.
+The demo journey covers navigation and initial state. A maintained-app runtime suite now exercises
+the actual Clipboard controls, rendered results, listener lifecycle and Back cleanup, all Haptics
+controls and vibration/cancellation against native substitutes. Separate generated-binding tests
+cover native contracts; neither suite proves physical device effects or OS clipboard behavior.
 
-The app includes a phone scenario. Physical iPhone launch uses Studio's Device panel after
-`./dev studio "Apps/Test Apps/Native Bridge" --app NativeBridge`; `tao dev --ios` selects a simulator.
+The app has no scenario and opens as an ordinary app. Physical iPhone launch can use
+`./tao dev "Apps/Test Apps/Native Bridge" --app NativeBridge --device roPhone`, or Studio's Device
+panel after `./dev studio "Apps/Test Apps/Native Bridge" --app NativeBridge`.
+`tao dev --ios` selects a simulator.
 
 ## Community project assessment
 

@@ -313,9 +313,10 @@ it. The entry's README owns launch and regeneration commands and the extension p
 
 **Belongs here:** device controls for all generated Haptics enum values, React Native vibration and
 cancellation, and Clipboard text/HTML, image, URL, and subscription operations. Navigation journeys
-check that each screen is reachable and can be left without starting native effects. Package tests
-own mocked native operation and cleanup assertions; physical feedback, clipboard access prompts,
-and platform availability require device acceptance.
+check that each screen is reachable and can be left without starting native effects. A maintained-app
+runtime suite exercises Clipboard input, controls, previews and listener cleanup, all Haptics controls,
+and vibration/cancellation with native substitutes. Package tests also cover generated contracts;
+physical feedback, clipboard access prompts, and platform availability require device acceptance.
 
 **Does not belong here:** handwritten binding implementations, new language semantics, or the
 semantic `@tao/device` facade covered by Device Kit.
