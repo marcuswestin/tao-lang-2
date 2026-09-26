@@ -377,6 +377,9 @@ own native Feed drag hit-testing. The real-app lane also invokes `studio-hnreade
 against an isolated HNReader project and real Metro preview. Browser input draws and snaps a sketch,
 drops Generated Story and Title onto a free rectangle and a rendered iframe target, checks transient
 preview text without disk writes, then exercises Discard, Keep, Undo Keep, and a fresh-session reopen.
+Previews accept mouse input only after a selecting click, with one highlighted preview at a time.
+Clicking outside deselects. Neutral Design surfaces pan on ordinary drag or scroll; Space also pans
+the Draw canvas while preventing sketch edits.
 Free rectangle drops happen in Draw mode; rendered preview drops happen in Design mode with Data open.
 Run this review proof with `./agent unsandboxed studio-proof-real-app hnreader-feed-review`.
 Fixture syntax currently cannot preserve arbitrary captured timestamps; unsupported

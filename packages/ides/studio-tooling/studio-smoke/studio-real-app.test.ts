@@ -141,7 +141,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
 
     await browser.click('[data-preset="design"]')
     await browser.waitFor(`document.querySelector('.studio-canvas-zoom') !== null`)
-    await browser.clickAtOffset('.studio-preview-cell iframe', { x: 100, y: 250 })
+    await activateFirstPreview(browser)
     await browser.withKeyHeld(' ', async () => {
       await browser!.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === 'true'`)
       const before = await canvasTranslation(browser!)
@@ -164,8 +164,14 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     ).toBe('')
     const heldPan = await canvasTranslation(browser)
     await browser.wheel('.studio-preview-cell iframe', { x: 20, y: 30 })
-    await browser.wheel('.studio-canvas-zoom', { x: 20, y: 30 })
     Expect(await canvasTranslation(browser)).toEqual(heldPan)
+    await browser.wheel('.studio-canvas-zoom', { x: 20, y: 30 })
+    await browser.waitFor(
+      `new DOMMatrix(getComputedStyle(document.querySelector('.studio-preview-grid')).transform).f === ${
+        heldPan.y - 22.5
+      }`,
+    )
+    Expect(await canvasTranslation(browser)).toEqual({ x: heldPan.x - 15, y: heldPan.y - 22.5 })
     // A focused iframe forwards zoom shortcuts without moving focus back to the host.
     await browser.clickAtOffset('.studio-preview-cell iframe', { x: 100, y: 250 })
     await browser.pressShortcut('+')
@@ -213,7 +219,9 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     // Edit mode gives Studio every click for selection, so the press happens in Run mode, the way a
     // person would press it, and the drag after it happens back in Edit mode.
     await setInteractionMode(browser, 'run')
+    await exerciseInactivePreview(browser, previewUrl)
     await pressIncrementOnce(browser, previewUrl)
+    await exercisePreviewFocusRelease(browser, previewUrl)
     await browser.evaluateInFrame(
       previewUrl,
       `(() => {
@@ -264,6 +272,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     await browser.waitForInFrame(previewUrl, `window.__taoSmokeMode === 'edit'`)
 
     const compileRevision = await waitForCompileAfter(browser, -1)
+    await activateFirstPreview(browser)
     await dragThirdBetweenFirstAndSecond(browser, previewUrl)
     await waitForSourceOrder(sourcePath, ['Text("First")', 'Text("Third")', 'Text("Second")'])
     const movedRevision = await waitForCompileAfter(browser, compileRevision)
@@ -351,6 +360,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     )
     const afterReset = await browser.evaluate<Readonly<{ loads: number }>>('window.__taoFastRefreshFrameProbe')
     Expect(afterReset.loads).toBeGreaterThan(0)
+    await exerciseExclusivePreviewSelection(browser)
     Expect(browser.browserFailures()).toEqual([])
   } finally {
     await browser?.close()
@@ -645,4 +655,122 @@ async function dragThirdBetweenFirstAndSecond(browser: StudioCdp, previewUrl: st
     return true
   })()`,
   )
+}
+
+async function activateFirstPreview(browser: StudioCdp): Promise<void> {
+  if (
+    !await browser.evaluate<boolean>(
+      `document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`,
+    )
+  ) {
+    await browser.clickAtOffset('.studio-preview-cell .studio-preview-activation-shield', { x: 100, y: 250 })
+  }
+  await browser.waitFor(`document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`)
+}
+
+async function exerciseInactivePreview(browser: StudioCdp, previewUrl: string): Promise<void> {
+  await browser.waitFor(`document.querySelectorAll('[data-preview-interactive="true"]').length === 0`)
+  await browser.evaluateInFrame(
+    previewUrl,
+    `(() => {
+    window.__taoInactiveEvents = []
+    for (const type of ['pointermove', 'pointerdown', 'click', 'wheel']) {
+      document.addEventListener(type, () => window.__taoInactiveEvents.push(type), true)
+    }
+  })()`,
+  )
+  const before = await canvasTranslation(browser)
+  await browser.hover('.studio-preview-cell iframe')
+  await browser.wheel('.studio-preview-cell iframe', { x: 0, y: 20 })
+  await browser.waitFor(
+    `new DOMMatrix(getComputedStyle(document.querySelector('.studio-preview-grid')).transform).f === ${before.y - 15}`,
+  )
+  await browser.dragBy('.studio-preview-cell iframe', { x: 40, y: 20 })
+  Expect(await canvasTranslation(browser)).toEqual({ x: before.x + 30, y: before.y })
+  Expect(await browser.evaluate(`document.querySelectorAll('[data-preview-interactive="true"]').length`)).toBe(0)
+  Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoInactiveEvents')).toEqual([])
+  // Click directly over Increment: selecting the preview must not also press its button.
+  const point = await browser.evaluateInFrame<{ x: number; y: number }>(
+    previewUrl,
+    `(() => {
+    const button = [...document.querySelectorAll('[data-tao-studio]')]
+      .filter(node => node.textContent.trim() === 'Increment')
+      .toSorted((a,b) => a.querySelectorAll('[data-tao-studio]').length - b.querySelectorAll('[data-tao-studio]').length)[0]
+    const r = button.getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })()`,
+  )
+  await browser.clickAtOffset('.studio-preview-cell .studio-preview-activation-shield', point)
+  await browser.waitFor(`document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`)
+  Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoInactiveEvents.includes("click")')).toBe(false)
+  Expect(
+    await browser.evaluateInFrame(
+      previewUrl,
+      `[...document.querySelectorAll('[data-tao-studio]')].some(node => node.textContent.trim() === '0')`,
+    ),
+  ).toBe(true)
+}
+
+async function exerciseExclusivePreviewSelection(browser: StudioCdp): Promise<void> {
+  await browser.waitFor(`document.querySelectorAll('.studio-preview-cell iframe').length === 2`)
+  await browser.pressShortcut('0')
+  const frames = await browser.evaluate<string[]>(
+    `[...document.querySelectorAll('.studio-preview-cell')].map(frame => frame.dataset.taoStudioCell)`,
+  )
+  for (const id of frames) {
+    await browser.click(`[data-tao-studio-cell="${id}"] iframe`)
+    Expect(
+      await browser.evaluate(
+        `([...document.querySelectorAll('.studio-preview-cell[data-preview-interactive="true"]')]).map(frame => frame.dataset.taoStudioCell)`,
+      ),
+    ).toEqual([id])
+    Expect(
+      await browser.evaluate(
+        `([...document.querySelectorAll('.studio-preview-cell iframe')]).filter(frame => getComputedStyle(frame).pointerEvents !== 'none').length`,
+      ),
+    ).toBe(1)
+  }
+  const outside = await browser.evaluate<{ x: number; y: number } | null>(`(() => {
+    const host = document.querySelector('.studio-preview')
+    const rect = host.getBoundingClientRect()
+    for (let y = rect.top + 5; y < rect.bottom; y += 20) {
+      for (let x = rect.left + 5; x < rect.right; x += 20) {
+        const target = document.elementFromPoint(x,y)
+        if (target && host.contains(target) && !target.closest('.studio-preview-cell, button, input')) return {x,y}
+      }
+    }
+    return null
+  })()`)
+  Expect(outside).not.toBeNull()
+  await browser.clickAt(outside!)
+  Expect(await browser.evaluate(`document.querySelectorAll('[data-preview-interactive="true"]').length`)).toBe(0)
+  Expect(
+    await browser.evaluate(
+      `([...document.querySelectorAll('.studio-preview-cell iframe')]).every(frame => getComputedStyle(frame).pointerEvents === 'none')`,
+    ),
+  ).toBe(true)
+}
+
+async function exercisePreviewFocusRelease(browser: StudioCdp, previewUrl: string): Promise<void> {
+  Expect(await browser.evaluate(`document.activeElement === document.querySelector('.studio-preview-cell iframe')`))
+    .toBe(true)
+  await browser.evaluateInFrame(
+    previewUrl,
+    `(() => {
+    window.__taoInactiveKeys = []
+    document.addEventListener('keydown', event => window.__taoInactiveKeys.push(event.key), true)
+  })()`,
+  )
+  await browser.evaluate(
+    `document.querySelector('.studio-canvas-zoom').addEventListener('pointerdown', event => event.preventDefault(), {once:true})`,
+  )
+  await browser.click('.studio-canvas-zoom')
+  Expect(await browser.evaluate(`document.activeElement === document.querySelector('.studio-preview-cell iframe')`))
+    .toBe(false)
+  Expect(await browser.evaluate(`document.querySelectorAll('[data-preview-interactive="true"]').length`)).toBe(0)
+  await browser.pressShortcut('1')
+  Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoInactiveKeys')).toEqual([])
+  await browser.click('.studio-canvas-zoom')
+  await activateFirstPreview(browser)
+  await browser.clickAtOffset('.studio-preview-cell iframe', { x: 100, y: 250 })
 }

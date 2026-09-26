@@ -872,10 +872,15 @@ Focusing a view wraps it in a frame whose size is the occurrence's measured size
   Fit all, 100%, Zoom to selection, and Zoom to focused frame; absent targets are disabled. Viewport
   state persists per canonical project path beneath the existing Studio user-state root, surviving
   server-port changes without project mutations. Saved writes are ordered, coalesced during motion,
-  and flushed on gesture end or page hide. Ordinary scroll stays with the app; canvas pan now requires
-  held Space for both scroll and left/middle drag. Pinch and modifier-wheel zoom remain unconditional
-  in Design. Selection geometry refreshes after app scrolling and before selection. Remaining from
+  and flushed on gesture end or page hide. Selection geometry refreshes after app scrolling and before selection. Remaining from
   this stride: ⇧1/⇧2 framing shortcuts and counter-scaled sketch-handle strokes.
+
+- **Revised 2026-09-26.** Ordinary scrolling and neutral-surface dragging pan in Design. Every preview
+  starts inert; a first click selects and outlines it without activating its app controls. Only the
+  selected preview accepts mouse input; an outside pointer press deselects it. Inactive-preview drags
+  pan without selecting. Space still overrides preview input, and now pans the Draw plane as well;
+  normal Draw gestures continue creating and editing rectangles. Browser coverage checks first-click
+  consumption, exclusive selection, outside deselection, and Draw pan without catalog mutation.
 
 ### Stride D — Focus-selection mode with a red outline on view frames
 

@@ -1,5 +1,7 @@
+import { applyCanvasViewport } from './matrix/StudioCanvasViewport'
 import { mountFeedDropOverlay } from './matrix/StudioFeedDropOverlays'
 import { StudioMatrixSketches } from './matrix/StudioMatrixSketches'
+import { mountPreviewActivation } from './matrix/StudioPreviewActivation'
 import { StudioFeedController } from './StudioFeedController'
 /**
  * StudioApp mounts the imperative workbench shell and wires its parts together. Each part under
@@ -102,6 +104,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
   const disposeDialogs = StudioDialog.mount({ container: root, signal })
   // The tabs' EditorViews are document models; the editor a person sees is the one Tao mounts.
   const focusVisibleEditor = (): void => root.querySelector<HTMLElement>('.studio-editor .cm-content')?.focus()
+  let partialActivation: ReturnType<typeof mountPreviewActivation> | undefined
   let partialSession: StudioEditorSession | undefined
   let partialPreviews: Awaited<ReturnType<typeof connectPreviews>> = []
   let partialDevicePanel: ReturnType<typeof createStudioDevicePanel> | undefined
@@ -133,6 +136,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         }
       },
     })
+    const previewActivation = mountPreviewActivation(view.preview, previews)
+    partialActivation = previewActivation
     configureInteractionMode(view.interactionMode, previews, handshake)
     let deviceLogs: readonly StudioDeviceLog[] = []
     let deviceLensSamples: NonNullable<StudioDeviceStatus['lensSamples']> = []
@@ -346,9 +351,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     const wirePreview = wireStudioPreviews(previewWiring)
     const publishCanvasGestureOwnership = (): void => {
-      if (!canvasGesturesOwned()) {
-        canvasViewport?.cancelPan()
-      }
+      canvasViewport?.cancelPan()
+      previewActivation.clear()
+      view.preview.dataset['canvasWorkspace'] = root.dataset['layoutPreset'] === 'draw' ? 'draw' : 'preview'
+      applyCanvasViewport(view.preview)
       for (const preview of previews) {
         postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned())
       }
@@ -482,6 +488,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (config.previewUrl !== undefined) {
           void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
             activePreview.reconcile(wirePreview)
+            previewActivation.reconcile()
             previewNotice.render()
             previewNotice.checkBundle()
           }).catch(error => {
@@ -514,7 +521,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     window.addEventListener('pagehide', flushCanvas)
     document.addEventListener('visibilitychange', onCanvasVisibility)
     canvasViewport = mountCanvasViewport({
-      enabled: () => root.dataset['layoutPreset'] === 'design',
+      enabled: () => root.dataset['layoutPreset'] === 'design' || root.dataset['layoutPreset'] === 'draw',
+      canPanWithoutSpace: event =>
+        root.dataset['layoutPreset'] === 'design'
+        && previewActivation.canPanWithoutSpace(event),
       host: view.preview,
       initialState: handshake.canvasViewport,
       onChange: next => canvasPersistence.changed(next),
@@ -530,6 +540,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             .find(group => group.dataset['taoStudioGroupViewId'] === focused)?.getBoundingClientRect()
       },
     })
+    publishCanvasGestureOwnership()
     const canvasFocus = mountStudioCanvasFocus({
       button: view.canvasFocus,
       onError: error => showSourceActionError(view.status, error),
@@ -783,6 +794,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       canvasFocus.dispose()
       canvasViewport?.dispose()
       disposeFeedDropOverlay()
+      previewActivation.dispose()
       window.removeEventListener('pagehide', flushCanvas)
       document.removeEventListener('visibilitychange', onCanvasVisibility)
       canvasPersistence.dispose()
@@ -800,6 +812,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     disposeDialogs()
     view.dispose()
     partialSession?.dispose()
+    partialActivation?.dispose()
     partialDevicePanel?.dispose()
     disconnectPreviews(partialPreviews)
     if (!StudioMountSignal.isAbortError(error)) {

@@ -583,13 +583,18 @@ project views, grouped scenarios, commands, and component/view insertions. The c
 stdlib catalog plus compiler-manifest project views; drag to canvas emits position-aware source actions,
 and drag to editor inserts formatted snippets with required-parameter placeholders selected for editing.
 
-In Design, hold Space while dragging or scrolling to pan the canvas over either empty background or preview apps.
-Without Space, scrolling belongs to the embedded app and neither left- nor middle-button dragging pans.
-Pinch and modifier-wheel zoom remain available without Space.
+In Design, dragging empty canvas or an inactive preview pans without Space; ordinary wheel and
+trackpad scrolling over those surfaces also pans. In Draw, ordinary dragging draws or edits rectangles,
+while Space-drag pans the Draw canvas. Pinch and modifier-wheel zoom remain available without Space.
+Previews start inactive and accept no mouse input. The first click selects a preview without forwarding
+that click to its app; subsequent input reaches it. Only one preview can be active, shown by its accent
+outline. Clicking outside deselects it, and clicking another preview transfers activation. In Design,
+ordinary scrolling inside the selected preview belongs to the app. A canvas drag does not select a
+preview, and selection for input is separate from the inspector's retained editing context.
 For the entire time Space is held, a transparent canvas shield makes previews neutral pan surfaces:
 hover, clicks, dragging, and wheel input cannot interact with the embedded apps, including between drags.
 A focused preview suppresses mouse input immediately and forwards Space to the host. Text inputs keep
-normal Space typing, and Run keeps app interaction when the canvas does not own the gesture.
+normal Space typing, and Run keeps selected-app interaction when the canvas does not own the gesture.
 Releasing Space or the pointer, or losing window focus, ends a pan; losing focus also clears held Space.
 Canvas shortcuts (⌘/Ctrl+0 fit, 1 reset, +/− zoom) also work from focused previews outside text entry.
 The zoom menu offers Fit all, 100%, Zoom to selection, and Zoom to focused frame; unavailable targets

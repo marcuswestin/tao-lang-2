@@ -62,6 +62,20 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await driver.waitFor(`document.querySelector(${JSON.stringify(snap)})?.disabled === false`)
     await driver.click(snap)
     await until(async () => (await catalog()).sketches[0]?.snapped.length === 1)
+    const beforePanCatalog = await FS.readText(catalogPath)
+    const drawTransform = () =>
+      driver.evaluate<{ x: number; y: number }>(`(() => {
+      const matrix = new DOMMatrix(getComputedStyle(document.querySelector('.studio-draw-canvas')).transform)
+      return { x: matrix.e, y: matrix.f }
+    })()`)
+    const beforePan = await drawTransform()
+    await driver.withKeyHeld(' ', async () => {
+      await driver.dragBy(board, { x: 40, y: 20 })
+      Expect(await drawTransform()).toEqual({ x: beforePan.x + 30, y: beforePan.y + 15 })
+      await driver.dragBy(board, { x: -40, y: -20 })
+      Expect(await drawTransform()).toEqual(beforePan)
+    })
+    Expect(await FS.readText(catalogPath)).toBe(beforePanCatalog)
     const beforeCatalog = await catalog()
     Expect(beforeCatalog.sketches[0]?.rects.map(rect => rect.id)).toEqual([freeId])
     const beforeView = await FS.readText(viewPath)
