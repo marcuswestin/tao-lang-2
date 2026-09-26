@@ -415,8 +415,14 @@ outline on rendered text; switching back to Run restored Back navigation. An exp
 survived a page reload. The Browser button opened the standalone app in Chrome, where Bookmarks
 navigation also responded. These interactions were observed in Chrome; the in-app browser rendered
 the preview but its iframe click automation returned stale-target errors. No phone acceptance is
-implied. A fresh Clerk review still needs worktree-local secret materialization before physical
-registration, profile, note persistence, email-code login, and logout isolation can be checked.
+implied. Worktree-local secrets were then materialized, and a fresh real browser journey passed with Clerk
+and local InstantDB. Physical password sign-in reached the generic failure message; it has not yet
+proved physical-device account persistence. The automated iOS simulator journey passed password and
+email-code sign-in, profile and note writes against real InstantDB, process relaunch restoration,
+and sign-out isolation after relaunch on 2026-09-26. Its explicit pre-MVP lane is tracked in
+[initial release QA](<../MVP Roadmap/Plan - Initial release QA.md#live-native-authentication-acceptance>).
+Physical registration, profile, note persistence, email-code login, and logout isolation remain
+separate acceptance work.
 
 ## Original implementation seams
 

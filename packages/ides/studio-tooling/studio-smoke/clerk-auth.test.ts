@@ -1,13 +1,19 @@
 import { createClerkClient } from '@clerk/backend'
 import { clerkSetup } from '@clerk/testing/playwright'
 import Compiler from '@compiler'
-import { Assert, CLI, Errors, FS, Platform, ProcessTree, Repo, Time } from '@shared'
+import { Assert, CLI, Errors, FS, Platform, Repo } from '@shared'
 import { Expect, mkTestDir, runCleanups, Test } from '@shared/test'
 import { openStudioPreviewSession } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from '../studio-tooling-src/StudioPreviewRuntime'
+import { startClerkGateway } from './clerk-gateway'
 import { assertClerkInstantData, type ClerkInstantFixture, withClerkInstant } from './clerk-instant'
-import { clerkFailureSummary, clerkTestingTokenScript, loadClerkLiveConfiguration } from './clerk-testing-token'
+import {
+  clerkChildEnvironment,
+  clerkFailureSummary,
+  clerkTestingTokenScript,
+  loadClerkLiveConfiguration,
+} from './clerk-testing-token'
 
 /**
  * Explicit remote acceptance: a development Clerk instance with password and email-code enabled,
@@ -48,7 +54,7 @@ async function runClerkBrowser(
   let runtime: CreatedStudioPreviewRuntime | undefined
   let preview: Awaited<ReturnType<typeof openStudioPreviewSession>> | undefined
   let staticServer: ReturnType<typeof startStaticExport> | undefined
-  let gateway: Awaited<ReturnType<typeof startGateway>> | undefined
+  let gateway: Awaited<ReturnType<typeof startClerkGateway>> | undefined
   let userId: string | undefined
   let primaryFailure: unknown
   let stage = 'prepare compiled app'
@@ -67,7 +73,7 @@ async function runClerkBrowser(
     if (policyFile === undefined) {
       Errors.throwUnexpected('Auth Review must emit its account data policy.')
     }
-    gateway = await startGateway(artifactRoot, policyFile.code, configuration, staticServer.url, instant)
+    gateway = await startClerkGateway(artifactRoot, policyFile.code, configuration, staticServer.url, instant)
     const configuredSource = source.replaceAll('pk_test_REPLACE_WITH_YOUR_KEY', configuration.publishableKey)
       .replaceAll('http://127.0.0.1:4738', gateway.url)
     await FS.writeText(FS.resolvePath('Auth Review.tao', projectRoot), configuredSource)
@@ -88,7 +94,7 @@ async function runClerkBrowser(
       args: ['export', '--platform', 'web', '--output-dir', exportRoot],
       cwd: runtime.root,
       env: {
-        ...Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith('CLERK_'))),
+        ...clerkChildEnvironment(env),
         CI: '1',
         EXPO_NO_DOTENV: '1',
         TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: toolchainRoot,
@@ -263,78 +269,6 @@ async function clickButtonText(browser: StudioCdp, label: string): Promise<void>
     return true
   })()`)
   Assert(clicked, 'the rendered account profile has a save button')
-}
-
-async function startGateway(
-  root: string,
-  policy: string,
-  configuration: { issuer: string; jwtKey: string },
-  origin: string,
-  instant: ClerkInstantFixture | undefined,
-) {
-  const policyPath = FS.resolvePath('TaoDataPolicy.json', root)
-  const clerkPath = FS.resolvePath('clerk-public-trust.json', root)
-  const readyPath = FS.resolvePath('gateway-ready.json', root)
-  await FS.writeText(policyPath, policy)
-  await FS.writeJson(clerkPath, {
-    issuer: configuration.issuer,
-    jwtKey: configuration.jwtKey,
-    authorizedParties: [origin],
-  })
-  const instantPath = FS.resolvePath('instant-private.json', root)
-  if (instant !== undefined) {
-    await FS.writeJson(instantPath, instant.instant, { mode: 0o600 })
-  }
-  const command = CLI.start(Repo.resolvePath('agent'), {
-    args: [
-      'auth-review-server',
-      '--policy',
-      policyPath,
-      '--clerk-config',
-      clerkPath,
-      ...(instant === undefined ? [] : ['--instant-config', instantPath]),
-      '--database',
-      FS.resolvePath('accounts.sqlite', root),
-      '--port',
-      '0',
-      '--resource',
-      'auth-review',
-      '--issuer',
-      'tao-local:clerk-live',
-      '--origin',
-      origin,
-      '--ready-file',
-      readyPath,
-    ],
-    cwd: Repo.getRoot(),
-    detached: true,
-    stdio: 'pipe',
-    env: Object.fromEntries(Object.entries(Platform.runtimeProcess.env).filter(([key]) => !key.startsWith('CLERK_'))),
-  })
-  const stop = async () => {
-    await ProcessTree.stopTree(command.pid)
-    await command.waitForClose()
-    await command.closeOutput()
-    command.dispose()
-  }
-  try {
-    const ready = await Time.pollUntil(async () => {
-      if (command.exitCode !== null || command.signalCode !== null || command.error !== undefined) {
-        Errors.throwHostEnvironment('The Clerk account gateway exited before reporting readiness.')
-      }
-      if (!await FS.isFile(readyPath)) {
-        return undefined
-      }
-      return await FS.readJson<{ resource: string; url: string }>(readyPath)
-    }, { timeoutMs: 60_000, intervalMs: 100 })
-    if (!ready || ready.resource !== 'auth-review' || !/^http:\/\/127\.0\.0\.1:\d+$/.test(ready.url)) {
-      Errors.throwHostEnvironment('The Clerk account gateway did not report its localhost URL.')
-    }
-    return { url: ready.url, stop }
-  } catch (error) {
-    await stop()
-    throw error
-  }
 }
 
 function startStaticExport(root: string) {
