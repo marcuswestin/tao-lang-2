@@ -515,7 +515,7 @@ Describe('agent worktree profile bootstrap', () => {
       await FS.writeText(
         FS.resolvePath('bun', fakeBin),
         [
-          '#!/bin/zsh',
+          '#!/usr/bin/env zsh',
           'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
           '[[ "$1" == run ]]',
           '',
@@ -567,7 +567,7 @@ Describe('agent worktree profile bootstrap', () => {
       await FS.writeText(
         FS.resolvePath('bun', fakeBin),
         [
-          '#!/bin/zsh',
+          '#!/usr/bin/env zsh',
           'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
           'if [[ "$1" == run ]]; then',
           '  [[ -f "$TAO_TEST_REPAIRED" ]] && exit 0',
@@ -634,7 +634,7 @@ Describe('agent worktree profile bootstrap', () => {
       await FS.writeText(
         FS.resolvePath('bun', fakeBin),
         [
-          '#!/bin/zsh',
+          '#!/usr/bin/env zsh',
           'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
           'if [[ "$1" == run ]]; then',
           '  [[ -f "$TAO_TEST_REPAIRED" ]] && exit 0',
@@ -984,7 +984,7 @@ async function runAgentInstall(testRoot: string, attemptOutputs: readonly string
   await FS.writeText(
     FS.resolvePath('bun', fakeBin),
     [
-      '#!/bin/zsh',
+      '#!/usr/bin/env zsh',
       'print -r -- attempt >> "$TAO_TEST_ATTEMPT_LOG"',
       'attempt=$(wc -l < "$TAO_TEST_ATTEMPT_LOG" | tr -d " ")',
       'output_file="$TAO_TEST_OUTPUTS/$attempt.txt"',
@@ -1053,7 +1053,7 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
   await FS.writeText(
     fakeGit,
     [
-      '#!/bin/zsh',
+      '#!/usr/bin/env zsh',
       'if [[ " $* " == *" --absolute-git-dir "* ]]; then',
       '  print -r -- "$TAO_TEST_GIT_DIR"',
       'elif [[ " $* " == *" --git-common-dir "* ]]; then',
@@ -1064,14 +1064,14 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
       '',
     ].join('\n'),
   )
-  await FS.writeText(fakeGetconf, '#!/bin/zsh\nprint -r -- "$TAO_TEST_DARWIN_TEMP_DIR"\n')
+  await FS.writeText(fakeGetconf, '#!/usr/bin/env zsh\nprint -r -- "$TAO_TEST_DARWIN_TEMP_DIR"\n')
   await Promise.all([makeExecutable(fakeGetconf), makeExecutable(fakeGit)])
   if (withPrimaryProfile) {
     const primaryNode = FS.resolvePath('bin/node', primaryProfile)
     const primaryBun = FS.resolvePath('bin/bun', primaryProfile)
     await FS.mkdir(FS.resolvePath('libexec/android-sdk', primaryProfile))
-    await FS.writeText(primaryNode, '#!/bin/zsh\nprint -r -- v24.test\n')
-    await FS.writeText(primaryBun, '#!/bin/zsh\nprint -r -- 1.4.2\n')
+    await FS.writeText(primaryNode, '#!/usr/bin/env zsh\nprint -r -- v24.test\n')
+    await FS.writeText(primaryBun, '#!/usr/bin/env zsh\nprint -r -- 1.4.2\n')
     await Promise.all([makeExecutable(primaryNode), makeExecutable(primaryBun)])
   }
   return {
@@ -1123,7 +1123,7 @@ async function writeBootstrapBun(path: string): Promise<void> {
   await FS.writeText(
     path,
     [
-      '#!/bin/zsh',
+      '#!/usr/bin/env zsh',
       'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
       'if [[ "$1" == install ]]; then',
       '  [[ "${TAO_TEST_BUN_INSTALL_FAILURE:-}" == 1 ]] && exit 1',

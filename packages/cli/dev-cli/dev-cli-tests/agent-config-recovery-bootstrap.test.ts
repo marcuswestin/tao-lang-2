@@ -34,7 +34,7 @@ async function fixture(): Promise<Fixture> {
   await FS.writeText(
     FS.resolvePath('bun', bin),
     [
-      '#!/bin/zsh',
+      '#!/usr/bin/env zsh',
       'print -r -- "$*" >> "$TAO_TEST_BUN_LOG"',
       'if [[ "$1" == run && "${TAO_TEST_HEALTH_FAIL:-}" == 1 ]]; then exit 1; fi',
       'exit 0',
