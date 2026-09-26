@@ -58,11 +58,19 @@ without erasing compatible coverage:
 
 Exercise the navigation layer: the native stack, the portable basic kit, platform sheet and overlay
 presentation, the split surface, the root-view app form, the shell that renders a navigator as
-ordinary content, and the toggle bar that replaces a stack's header. Ten `app` declarations share
+ordinary content, and the toggle bar that replaces a stack's header. Eleven `app` declarations share
 the folder, one or more per source file, and each check picks its app with `run`.
 
 **Belongs here:**
 
+- _Native navigation acceptance_ (`Native Navigation.tao`, app `NativeNavigation`): three automatic
+  tabs with independent native-default stacks; tab switching retains stack positions, editable
+  drafts, and local counters; four toolbar commands, including a reactive enabled state; a sheet,
+  an overlay above it, and an answered or dismissed `ask`; scrollable notes for keyboard and
+  safe-area acceptance. Behavioral journeys cover host titles, commands, Back, and restoration of
+  the selected tab and all stack histories. Device acceptance must separately inspect platform
+  chrome, all four commands, interrupted back gestures, sheet dismissal, scrolling, and keyboard
+  insets; the deterministic test host does not prove those native behaviors.
 - _Native stack_ (`Navigation MVP.tao`): an `app` with `Name` and a configured
   `Navigator StackNav { Initial <view> }` taken from the bare, native-default `@tao/nav` root;
   presented `view` declarations with typed parameters; `present Detail(Name: "…")` with required

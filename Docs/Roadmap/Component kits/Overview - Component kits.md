@@ -156,8 +156,14 @@ Landed:
   SegmentedControl, DatePicker, Spinner — as aliases over `@tao/ui/native`. `@tao/ui/basic` holds
   the clause-honoring wireframe tier.
 - **Native navigation surfaces**: `SelectionNav` with `Display "automatic"` renders through
-  `react-native-screens`' BottomTabs (UITabBarController on iOS — Liquid Glass on an iOS 26 build —
-  and the Material bar on Android), controlled by Tao's reducer; `present X as sheet` hosts a view in
+  the pinned `react-native-screens` `Tabs.Host`/`Tabs.Screen` API (UITabBarController on iOS and
+  the Material bar on Android), controlled by Tao's reducer and acknowledged native provenance.
+  System appearance supplies Liquid Glass on compatible Apple SDK/OS combinations. iPadOS 18+
+  requests tab/sidebar mode; Android above five tabs keeps the complete basic surface and warns.
+  iOS stack commands use native buttons and ordered `More` menus; Android retains portable commands.
+  These adapter capabilities are not device acceptance: see
+  [native navigation acceptance](<../Add navigation and routing MVP/Native navigation acceptance.md>).
+  `present X as sheet` hosts a view in
   the platform's modal. `StackNav` now uses the platform stack/header while retaining Tao's reducer,
   reads direct reactive `Title`/`Toolbar` slots from scenes while giving plain views Back-only
   chrome, and falls back to the same fixed-header basic host on web or under deterministic behavior

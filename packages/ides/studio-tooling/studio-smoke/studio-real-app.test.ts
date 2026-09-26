@@ -155,7 +155,27 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
         `document.querySelector('.studio-preview')?.dataset.canvasPanning ?? ''`,
       ),
     ).toBe('')
-    await browser.pressShortcut('1')
+    const heldPan = await canvasTranslation(browser)
+    await browser.wheel('.studio-preview-cell iframe', { x: 20, y: 30 })
+    await browser.wheel('.studio-canvas-zoom', { x: 20, y: 30 })
+    Expect(await canvasTranslation(browser)).toEqual(heldPan)
+    // A focused iframe forwards zoom shortcuts without moving focus back to the host.
+    await browser.clickAtOffset('.studio-preview-cell iframe', { x: 100, y: 250 })
+    await browser.pressShortcut('+')
+    await browser.waitFor(`document.querySelector('.studio-canvas-zoom')?.textContent === '150%'`)
+    const savedCamera = await browser.evaluate<string>(`document.querySelector('.studio-preview-grid').style.transform`)
+    await browser.waitFor(
+      `fetch(location.pathname + '/api/protocol').then(r => r.json()).then(h => h.canvasViewport?.z === 1.5)`,
+    )
+    await browser.goto(studio.readiness.sessionUrl)
+    await browser.waitFor(
+      `document.querySelector('.studio-preview-grid')?.style.transform === ${JSON.stringify(savedCamera)}`,
+    )
+    await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('Increment') === true`)
+    await browser.click('[data-preset="design"]')
+    await browser.clickAtOffset('.studio-canvas-zoom', { x: 10, y: 10 })
+    await browser.clickAtOffset('[data-tao-studio-canvas-zoom-action="1"]', { x: 10, y: 10 })
+    await browser.waitFor(`document.querySelector('.studio-canvas-zoom')?.textContent === '100%'`)
 
     await browser.evaluate(`(() => {
       const frame = document.querySelector('.studio-preview-cell iframe')
@@ -518,7 +538,15 @@ async function pressIncrementOnce(browser: StudioCdp, previewUrl: string): Promi
     return await browser.evaluateInFrame<boolean>(previewUrl, counted)
   }, { intervalMs: 100, timeoutMs: 30_000 })
   if (!ready) {
-    Errors.throwHostEnvironment('Timed out pressing Increment in Run mode.')
+    const diagnostics = await browser.evaluate(`(() => {
+      const frame = document.querySelector('.studio-preview-cell iframe')
+      const rect = frame.getBoundingClientRect()
+      return { frame: {x:rect.x,y:rect.y,width:rect.width,height:rect.height}, mode: document.querySelector('.studio-interaction-mode')?.dataset.mode,
+        canvas: document.querySelector('.studio-preview')?.dataset, transform: document.querySelector('.studio-preview-grid')?.style.transform,
+        hit: document.elementFromPoint(rect.left+50,rect.top+30)?.outerHTML.slice(0,400) }
+    })()`)
+    const text = await browser.evaluateInFrame<string>(previewUrl, 'document.body.innerText')
+    Errors.throwHostEnvironment(`Timed out pressing Increment in Run mode: ${JSON.stringify(diagnostics)}; app=${text}`)
   }
 }
 

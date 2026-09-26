@@ -115,7 +115,10 @@ function androidSession(remote: WireSession): AppiumAndroidWebDriverSession {
     findElementsWithin: async (scope, locator) =>
       await Promise.all((await wire(scope).findAll(locator)).map(async element => wrap(element))),
     id: remote.id,
-    pressKey: async key => await remote.actions(keyActions(key)),
+    pressKey: async key =>
+      key === 'Back'
+        ? await remote.executeScript('mobile: pressKey', [{ keycode: 4 }])
+        : await remote.actions(keyActions(key)),
     screenshot: async () => await remote.screenshot(),
     scroll: async input =>
       await remote.executeScript('mobile: scrollGesture', [{

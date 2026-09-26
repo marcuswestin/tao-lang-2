@@ -1,0 +1,111 @@
+use NativeNavigation from ./
+
+test "Native navigation acceptance" {
+   test "keeps three independent stack positions and local state when switching tabs" {
+      run NativeNavigation
+
+      expect text "Saved note: Nothing saved"
+      enter "Keep this draft" into #nativeDraft
+      press "Open note detail"
+      press "Count detail tap"
+      press label "Library"
+      expect text "Library visits: 0"
+      press "Count library visit"
+      press "Open library detail"
+      press label "Settings"
+      expect text "Profile: Not set"
+      enter "River" into #nativeNickname
+      press "Open settings detail"
+      expect text "Settings detail taps: 0"
+      press label "Notes"
+      expect text "Note detail taps: 1"
+      back
+      expect #nativeDraft input value "Keep this draft"
+      press label "Library"
+      expect text "Library detail taps: 0"
+      back
+      expect text "Library visits: 1"
+      press label "Settings"
+      expect text "Settings detail taps: 0"
+      back
+      expect #nativeNickname input value "River"
+      press label "Notes"
+      expect text "Saved note: Nothing saved"
+   }
+   test "exposes all four toolbar commands and updates the save command enabled state" {
+      run NativeNavigation
+      expect toolbar command "Save note" disabled
+      expect toolbar command "Show sheet" enabled
+      enter "Saved through the toolbar" into #nativeDraft
+      expect toolbar command "Save note" enabled
+      press toolbar command "Save note"
+      expect text "Saved note: Saved through the toolbar"
+      expect #nativeDraft input value ""
+      expect toolbar command "Save note" disabled
+      press label "More"
+      expect toolbar command "Show overlay" enabled
+      expect toolbar command "Confirm note" enabled
+      press toolbar command "Show overlay"
+      expect text "Native overlay content"
+      press "Close native overlay"
+   }
+   test "dismisses an overlay above a sheet before dismissing the sheet" {
+      run NativeNavigation
+      press toolbar command "Show sheet"
+      expect text "Native sheet content"
+      press "Cover this sheet"
+      expect text "Native overlay content"
+      back
+      expect missing text "Native overlay content"
+      expect text "Native sheet content"
+      press "Close native sheet"
+      expect missing text "Native sheet content"
+      expect navigation title "Notes workspace"
+      press label "More"
+      press toolbar command "Show overlay"
+      expect text "Native overlay content"
+      press "Close native overlay"
+      expect missing text "Native overlay content"
+      press toolbar command "Show sheet"
+      back
+      expect missing text "Native sheet content"
+   }
+   test "resumes an answered confirmation and treats dismissal as no answer" {
+      run NativeNavigation
+      press label "More"
+      press toolbar command "Confirm note"
+      expect text "Confirm this note?"
+      press "Approve note"
+      expect text "Confirmations: 1"
+      press label "More"
+      press toolbar command "Confirm note"
+      press "Cancel confirmation"
+      expect missing text "Confirm this note?"
+      expect text "Confirmations: 1"
+      press label "More"
+      press toolbar command "Confirm note"
+      back
+      expect text "Confirmations: 1"
+      expect missing text "Confirm this note?"
+   }
+   test "restores the selected tab and all three stack histories with typed detail arguments" {
+      run NativeNavigation
+      press "Open note detail"
+      press label "Library"
+      press "Open library detail"
+      press label "Settings"
+      press "Open settings detail"
+      relaunch
+      expect navigation title "Settings detail"
+      press label "Notes"
+      expect navigation title "Note detail"
+      press label "Library"
+      expect navigation title "Library detail"
+      relaunch fresh
+      expect navigation title "Notes workspace"
+      press label "Library"
+      expect navigation title "Library workspace"
+      press label "Settings"
+      expect navigation title "Settings workspace"
+   }
+}

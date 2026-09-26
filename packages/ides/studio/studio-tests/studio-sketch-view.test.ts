@@ -17,6 +17,7 @@ import {
   StudioSketchOuterDrawing,
   StudioSketchPointerRelease,
   StudioSketchProposal,
+  type StudioSketchRectChange,
   StudioSketchRenderGate,
   StudioSketchSelection,
   StudioSketchView,
@@ -645,6 +646,205 @@ Test('Studio pointer release keeps the render gate held until an asynchronous ca
   Expect(order).toEqual(['commit', 'settled', 'release'])
 })
 
+Test('mounted Text double-click survives pointer paint and commits content once with the original geometry', () => {
+  const fixture = mountTextEditor()
+  const { board, dom, host, mounted, changes } = fixture
+  const rect = dom.find(board, 'taoStudioSketchRect', 'front')
+  for (const pointerId of [1, 2]) {
+    board.dispatch('pointerdown', pointer('pointerdown', rect, pointerId, 45, 15))
+    board.dispatch('pointerup', pointer('pointerup', rect, pointerId, 45, 15))
+    Expect(dom.find(board, 'taoStudioSketchRect', 'front')).toBe(rect)
+    Expect(board.children.filter(element => element.dataset['taoStudioSketchRect'] !== undefined)).toHaveLength(2)
+    Expect(rect.parent).toBe(board)
+  }
+  board.dispatch('dblclick', pointer('dblclick', rect, 2, 45, 15))
+  const input = dom.find(host, 'taoStudioSketchTextEditor', 'front')
+  Expect(dom.activeElement).toBe(input)
+  Expect(input.selectionStart).toBe(0)
+  Expect(input.selectionEnd).toBe(5)
+  Expect(input.value).toBe('Front')
+  input.value = 'Edited title'
+  board.dispatch('pointerdown', pointer('pointerdown', input, 3, 50, 15))
+  Expect(board.dataset['taoStudioSketchGesture']).toBeUndefined()
+  let stopped = false
+  input.dispatch('pointerdown', {
+    ...pointer('pointerdown', input, 3, 50, 15),
+    stopPropagation() {
+      stopped = true
+    },
+  })
+  Expect(stopped).toBe(true)
+  press(input, 'Enter')
+  press(input, 'Enter')
+  Expect(changes).toEqual([{
+    kind: 'update',
+    rect: { content: 'Edited title', height: 20, id: 'front', kind: 'Text', width: 20, x: 40, y: 10 },
+    sketchId: 'sketch-1',
+  }])
+  Expect(dom.find(host, 'taoStudioSketchRect', 'front').textContent).toBe('Edited title')
+  mounted.dispose()
+})
+
+Test('mounted inline Text Escape, blur, unchanged Enter, and disposal cancel without writes', () => {
+  for (const action of ['Escape', 'blur', 'unchanged', 'dispose']) {
+    const { board, dom, host, mounted, changes } = mountTextEditor()
+    board.dispatch('dblclick', pointer('dblclick', board, 1, 45, 15))
+    const input = dom.find(host, 'taoStudioSketchTextEditor', 'front')
+    if (action !== 'unchanged') {
+      input.value = 'Discard me'
+    }
+    if (action === 'blur') {
+      input.dispatch('blur', { target: input, type: 'blur' })
+    } else if (action === 'dispose') {
+      mounted.dispose()
+    } else {
+      press(input, action === 'unchanged' ? 'Enter' : action)
+    }
+    press(input, 'Enter')
+    Expect(changes).toEqual([])
+    Expect(host.descendants().some(element => element.dataset['taoStudioSketchTextEditor'] !== undefined)).toBe(false)
+    if (action !== 'dispose') {
+      Expect(dom.find(host, 'taoStudioSketchRect', 'front').textContent).toBe('Front')
+    }
+    mounted.dispose()
+  }
+})
+
+Test('mounted inline Text preserves existing newlines and unchanged Enter does not write', () => {
+  const { board, dom, host, mounted, changes } = mountTextEditor(undefined, {
+    ...testSketch(),
+    rects: [testRects()[0]!, { ...testRects()[1]!, content: 'First\nSecond' }],
+  })
+  board.dispatch('dblclick', pointer('dblclick', board, 1, 45, 15))
+  const input = dom.find(host, 'taoStudioSketchTextEditor', 'front')
+  Expect(input.value).toBe('First\nSecond')
+  Expect(input.selectionEnd).toBe(12)
+  press(input, 'Enter')
+  Expect(changes).toEqual([])
+  Expect(dom.find(host, 'taoStudioSketchRect', 'front').textContent).toBe('First\nSecond')
+  mounted.dispose()
+})
+
+Test('mounted double-click ignores non-Text rectangles and snapped Text', () => {
+  for (const kind of ['Placeholder', 'Image', 'Box']) {
+    const { board, host, mounted, changes } = mountTextEditor(undefined, {
+      ...testSketch(),
+      rects: [{ ...testRects()[1]!, kind }],
+      snapped: [{ rect: { ...testRects()[0]!, kind: 'Text' }, target: target('back') }],
+    })
+    board.dispatch('dblclick', pointer('dblclick', board, 1, 45, 15))
+    board.dispatch('dblclick', pointer('dblclick', board, 1, 15, 15))
+    Expect(host.descendants().some(element => element.dataset['taoStudioSketchTextEditor'] !== undefined)).toBe(false)
+    Expect(changes).toEqual([])
+    mounted.dispose()
+  }
+})
+
+Test(
+  'mounted inline Text holds unrelated refreshes through delayed persistence and preserves their changes',
+  async () => {
+    const persistence = Deferred<void>()
+    const { board, dom, host, mounted, changes } = mountTextEditor(() => persistence.promise)
+    board.dispatch('dblclick', pointer('dblclick', board, 1, 45, 15))
+    const input = dom.find(host, 'taoStudioSketchTextEditor', 'front')
+    const refreshed = { ...testSketch(), name: 'Renamed', rects: [{ ...testRects()[0]!, width: 70 }, testRects()[1]!] }
+    mounted.render([refreshed])
+    Expect(dom.find(host, 'taoStudioSketchTextEditor', 'front')).toBe(input)
+    input.value = 'Saved later'
+    press(input, 'Enter')
+    input.dispatch('blur', { target: input, type: 'blur' })
+    press(input, 'Enter')
+    Expect(input.disabled).toBe(true)
+    Expect(dom.find(host, 'taoStudioSketch', 'sketch-1')).toBe(board)
+    Expect(changes).toHaveLength(1)
+    persistence.resolve()
+    await persistence.promise
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(dom.find(host, 'taoStudioSketchRect', 'front').textContent).toBe('Saved later')
+    Expect(dom.find(host, 'taoStudioSketchRect', 'back').style['width']).toBe('70px')
+    Expect(dom.find(host, 'taoStudioSketchName', 'sketch-1').textContent).toBe('Renamed')
+    mounted.dispose()
+  },
+)
+
+Test('mounted inline Text cancels when its authoritative rectangle changes, disappears, or snaps', () => {
+  const changed = { ...testRects()[1]!, content: 'Remote', width: 80, x: 90 }
+  for (
+    const next of [
+      { ...testSketch(), rects: [testRects()[0]!, changed] },
+      { ...testSketch(), rects: [testRects()[0]!] },
+      { ...testSketch(), rects: [testRects()[0]!], snapped: [{ rect: testRects()[1]!, target: target('front') }] },
+    ]
+  ) {
+    const { board, dom, host, mounted, changes } = mountTextEditor()
+    board.dispatch('dblclick', pointer('dblclick', board, 1, 45, 15))
+    const input = dom.find(host, 'taoStudioSketchTextEditor', 'front')
+    input.value = 'Stale draft'
+    mounted.render([next])
+    press(input, 'Enter')
+    Expect(changes).toEqual([])
+    Expect(host.descendants().some(element => element.dataset['taoStudioSketchTextEditor'] !== undefined)).toBe(false)
+    if (next.rects.includes(changed)) {
+      const rect = dom.find(host, 'taoStudioSketchRect', 'front')
+      Expect(rect.textContent).toBe('Remote')
+      Expect(rect.style['left']).toBe('90px')
+      Expect(rect.style['width']).toBe('80px')
+    }
+    mounted.dispose()
+  }
+})
+
+Test('mounted inline Text rejects stale settlement after a concurrent rectangle refresh or disposal', async () => {
+  for (const dispose of [false, true]) {
+    const persistence = Deferred<readonly StudioSketch[] | void>()
+    const { board, dom, host, mounted, changes } = mountTextEditor(() => persistence.promise)
+    board.dispatch('dblclick', pointer('dblclick', board, 1, 45, 15))
+    const input = dom.find(host, 'taoStudioSketchTextEditor', 'front')
+    input.value = 'Stale write'
+    press(input, 'Enter')
+    mounted.render([{ ...testSketch(), rects: [testRects()[0]!, { ...testRects()[1]!, content: 'Remote', x: 90 }] }])
+    Expect(dom.find(host, 'taoStudioSketch', 'sketch-1')).toBe(board)
+    if (dispose) {
+      mounted.dispose()
+    }
+    persistence.resolve([testSketch()])
+    await persistence.promise
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(changes).toHaveLength(1)
+    if (dispose) {
+      Expect(host.children).toEqual([])
+    } else {
+      const rect = dom.find(host, 'taoStudioSketchRect', 'front')
+      Expect(rect.textContent).toBe('Remote')
+      Expect(rect.style['left']).toBe('90px')
+    }
+    mounted.dispose()
+  }
+})
+
+function mountTextEditor(
+  persist?: () => Promise<readonly StudioSketch[] | void>,
+  sketch = testSketch(),
+) {
+  const dom = new SketchTestDocument()
+  const host = dom.createElement('main')
+  const changes: StudioSketchRectChange[] = []
+  const mounted = StudioSketchView.mount(host as unknown as HTMLElement, {
+    onRectChange: change => {
+      changes.push(change)
+      return persist?.()
+    },
+    sketches: [sketch],
+  })
+  return { board: dom.find(host, 'taoStudioSketch', 'sketch-1'), changes, dom, host, mounted }
+}
+
+function press(input: SketchTestElement, key: string): void {
+  input.dispatch('keydown', { key, preventDefault() {}, stopPropagation() {}, target: input, type: 'keydown' })
+}
+
 Test('successful sketch work clears board and persistent host errors', () => {
   const host = { closest: () => null, dataset: { taoStudioSketchError: 'old host failure' } }
   const board = {
@@ -676,6 +876,7 @@ function pointer(
     isPrimary: true,
     pointerId,
     preventDefault() {},
+    stopPropagation() {},
     shiftKey: false,
     target,
     type,
@@ -683,6 +884,7 @@ function pointer(
 }
 
 class SketchTestDocument {
+  activeElement: SketchTestElement | undefined
   hitTest: SketchTestElement[] = []
 
   createElement(tagName: string): SketchTestElement {
@@ -715,13 +917,24 @@ class SketchTestElement {
   parent: SketchTestElement | undefined
   readonly releasedPointers: number[] = []
   selected = false
+  selectionStart = 0
+  selectionEnd = 0
   readonly style: Record<string, string> = {}
   textContent = ''
   title = ''
   type = ''
-  value = ''
+  private textValue = ''
 
   constructor(readonly ownerDocument: SketchTestDocument, readonly tagName: string) {}
+
+  get value(): string {
+    return this.textValue
+  }
+
+  set value(value: string) {
+    // Text inputs sanitize line breaks; a textarea must preserve multiline catalog content.
+    this.textValue = this.tagName === 'input' ? value.replace(/[\r\n]/gu, '') : value
+  }
 
   get selectedOptions(): SketchTestElement[] {
     return this.children.filter(child => child.selected)
@@ -766,6 +979,15 @@ class SketchTestElement {
     for (const listener of this.listeners.get(type) ?? []) {
       listener(event as never)
     }
+  }
+
+  focus(): void {
+    this.ownerDocument.activeElement = this
+  }
+
+  select(): void {
+    this.selectionStart = 0
+    this.selectionEnd = this.value.length
   }
 
   getBoundingClientRect(): DOMRect {
