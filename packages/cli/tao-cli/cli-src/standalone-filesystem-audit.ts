@@ -450,7 +450,7 @@ function violations(diff: Diff, scope: AuditScope): string[] {
   const chromeInstallRoots = new Set(
     [...retainedChanges].filter(path =>
       /^scoped_dir[A-Za-z0-9]{6}\/\.com\.google\.Chrome\.[A-Za-z0-9]{6}$/.test(FS.relativePath(guestTemp, path))
-      && retainedChanges.has(FS.resolvePath('CRX_INSTALL/manifest.json', FS.dirname(path)))
+      && retainedChanges.has(FS.resolvePath('CRX_INSTALL', FS.dirname(path)))
     ).map(path => FS.dirname(path)),
   )
   const cryptexRoot = onVolume('/private/var/run/com.apple.security.cryptexd')
@@ -512,7 +512,9 @@ function violations(diff: Diff, scope: AuditScope): string[] {
       }
       if (
         [...chromeInstallRoots].some(root =>
-          path === root || FS.pathIsWithin(path, FS.resolvePath('CRX_INSTALL', root))
+          path === root || path === FS.resolvePath('CRX_INSTALL', root)
+          || (retainedChanges.has(FS.resolvePath('CRX_INSTALL/manifest.json', root))
+            && FS.pathIsWithin(path, FS.resolvePath('CRX_INSTALL', root)))
           || (FS.dirname(path) === root && /^\.com\.google\.Chrome\.[A-Za-z0-9]{6}$/.test(FS.basename(path))
             && retainedChanges.has(path))
         )

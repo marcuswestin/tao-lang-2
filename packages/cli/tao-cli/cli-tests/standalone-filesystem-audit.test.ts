@@ -380,7 +380,21 @@ Describe('standalone filesystem audit', () => {
         Expect((await compare()).exitCode).toBe(0)
         Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toEqual([])
 
-        // An existing marker and manifest also qualify when both were observed changing.
+        const emptyInstall = {
+          ...observed,
+          entries: Object.fromEntries(
+            Object.entries(observed.entries).filter(([path]) => !path.startsWith(`${root}/CRX_INSTALL/`)),
+          ),
+        }
+        await FS.writeJson(after, emptyInstall)
+        Expect((await compare()).exitCode).toBe(0)
+        Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toEqual([])
+        const payload = `${root}/CRX_INSTALL/unexpected.js`
+        await FS.writeJson(after, { ...emptyInstall, entries: { ...emptyInstall.entries, [payload]: file } })
+        Expect((await compare()).exitCode).not.toBe(0)
+        Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toEqual([payload])
+
+        // Existing artifacts also qualify when their marker, directory, and manifest changed.
         await FS.writeJson(before, { ...baseline, entries: { ...baseline.entries, ...installation } })
         await FS.writeJson(after, {
           ...observed,
@@ -388,6 +402,7 @@ Describe('standalone filesystem audit', () => {
             ...observed.entries,
             [marker]: { ...file, modifiedMs: 2 },
             [manifest]: { ...file, modifiedMs: 2 },
+            [`${root}/CRX_INSTALL`]: { ...directory, modifiedMs: 2 },
           },
         })
         Expect((await compare()).exitCode).toBe(0)
@@ -405,6 +420,7 @@ Describe('standalone filesystem audit', () => {
           unexpected.push(
             `/guest/tmp/${malformed}`,
             `/guest/tmp/${malformed}/.com.google.Chrome.eTe4CV`,
+            `/guest/tmp/${malformed}/CRX_INSTALL`,
             `/guest/tmp/${malformed}/CRX_INSTALL/manifest.json`,
           )
         }
@@ -419,17 +435,18 @@ Describe('standalone filesystem audit', () => {
           Expect(result.violations).toContain(path)
         }
 
-        for (const missing of [marker, manifest]) {
+        for (const missing of [marker, manifest, `${root}/CRX_INSTALL`]) {
           await FS.writeJson(after, {
             ...observed,
             entries: Object.fromEntries(Object.entries(observed.entries).filter(([path]) => path !== missing)),
           })
           Expect((await compare()).exitCode).not.toBe(0)
-          Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain(root)
+          const rejected = missing === manifest ? `${root}/CRX_INSTALL/_locales/en/messages.json` : root
+          Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain(rejected)
           // A removed artifact cannot be the evidence that authorizes the remaining install tree.
           await FS.writeJson(before, { ...baseline, entries: { ...baseline.entries, [missing]: file } })
           Expect((await compare()).exitCode).not.toBe(0)
-          Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain(root)
+          Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain(rejected)
           await FS.writeJson(before, baseline)
         }
 
