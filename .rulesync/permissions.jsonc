@@ -105,6 +105,7 @@
     "prepare-release studio", "prepare-release ide-extension",
     "app-dev", "studio", "studio-native", "studio-ps", "studio-stop",
     "docker-desktop start",
+    "watchman start", "watchman status", "watchman stop",
     "local-instantdb start", "local-instantdb stop",
     "companion-host-build",
     "standalone-cli-vm-setup", "standalone-cli-clean-machine",

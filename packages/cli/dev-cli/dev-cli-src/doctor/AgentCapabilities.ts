@@ -73,8 +73,8 @@ const PROBES: readonly CapabilityProbe[] = [
     display: 'watchman --no-spawn --no-local watch-list',
     name: 'Watchman socket',
     // Agent sandboxes leave Watchman's per-login socket out by design; a denial there is expected.
-    remediation:
-      'Run file-watching dev loops on the host with ./agent unsandboxed app-dev or ./agent unsandboxed studio.',
+    remediation: 'Run ./agent unsandboxed watchman status; if stopped, run ./agent unsandboxed watchman start. '
+      + 'Run file-watching dev loops with ./agent unsandboxed app-dev or ./agent unsandboxed studio.',
   },
   {
     args: ['store', 'info', '--store', 'daemon'],

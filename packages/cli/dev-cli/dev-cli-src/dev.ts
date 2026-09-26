@@ -493,6 +493,15 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('watchman')
+    .description('Manage the shared per-user Watchman daemon; stop affects every worktree.')
+    .argument('<action>', 'start, status, or stop')
+    .action(async (action: string) => {
+      const { WatchmanCommand } = await import('./doctor/WatchmanCommand')
+      await runExitCommand(() => WatchmanCommand.run(action))
+    })
+
+  commands
     .command('delegation-report')
     .description('Summarise which subagents this repository spawned, at which model, and for how long.')
     .option('--json', 'Print the structured summary instead of a table.')
