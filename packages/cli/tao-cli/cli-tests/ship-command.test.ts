@@ -1,5 +1,13 @@
-import { CLI, FS } from '@shared'
-import { Describe, Expect, fakeTerminal, Test, withTaoFiles } from '@shared/test'
+import { FS } from '@shared'
+import {
+  Describe,
+  Expect,
+  fakeTerminal,
+  initGitTestRepository,
+  mkGitTestDir,
+  Test,
+  withTaoFiles,
+} from '@shared/test'
 import { runShipCommand } from '../cli-src/ship-command'
 import { shipInputHash } from '../cli-src/ship-model'
 
@@ -73,26 +81,19 @@ Describe('tao ship command', () => {
         },
       },
     }
-    await withTaoFiles('tao-ship-command-', {
-      '.tao-project/lock.jsonc': JSON.stringify(lock),
-      'App.tao': source,
-    }, async paths => {
-      const root = FS.dirname(paths['App.tao']!)
-      await CLI.mustRun('git', { args: ['-C', root, 'init', '-q'] })
-      await CLI.mustRun('git', { args: ['-C', root, 'config', 'user.email', 'test@example.com'] })
-      await CLI.mustRun('git', { args: ['-C', root, 'config', 'user.name', 'Tao Test'] })
-      await CLI.mustRun('git', { args: ['-C', root, 'add', '.'] })
-      await CLI.mustRun('git', { args: ['-C', root, 'commit', '-qm', 'Initial'] })
-      const terminal = fakeTerminal()
-      await runShipCommand(root, {
-        betaRecipients: ['friend@example.com'],
-        dryRun: true,
-        ...terminal,
-      }, { inspectPreflight: async () => [] })
-
-      Expect(terminal.outputText()).toContain('Resume uploaded App Store Connect build 202609020901 without rebuilding')
-      Expect(terminal.outputText()).not.toContain('Archive and sign')
+    const root = await mkGitTestDir('tao-ship-command-')
+    await initGitTestRepository(root, {
+      commit: { files: { '.tao-project/lock.jsonc': JSON.stringify(lock), 'App.tao': source } },
     })
+    const terminal = fakeTerminal()
+    await runShipCommand(root, {
+      betaRecipients: ['friend@example.com'],
+      dryRun: true,
+      ...terminal,
+    }, { inspectPreflight: async () => [] })
+
+    Expect(terminal.outputText()).toContain('Resume uploaded App Store Connect build 202609020901 without rebuilding')
+    Expect(terminal.outputText()).not.toContain('Archive and sign')
   })
 
   Test('does not retry a terminally rejected Apple build', async () => {
