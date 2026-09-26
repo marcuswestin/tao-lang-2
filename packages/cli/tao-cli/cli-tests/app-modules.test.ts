@@ -46,7 +46,7 @@ Describe('Tao app TypeScript modules', () => {
       const cliRoot = FS.resolvePath('tao-cli', root)
       await FS.writeText(FS.resolvePath('cli-src/tao-cli.ts', cliRoot), '')
 
-      await Expect(async () => TaoAppModules.runtimeRoot(cliRoot)).toThrow('has no @tao/runtime module')
+      Expect(() => TaoAppModules.runtimeRoot(cliRoot)).toThrow('has no @tao/runtime module')
 
       const runtimeSource = Repo.resolvePath('packages/apps/runtime')
       const carried = await TaoAppModules.packageRuntime(cliRoot, runtimeSource)

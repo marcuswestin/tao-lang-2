@@ -253,6 +253,9 @@ export function setTestRuntime(nextRuntime: TestRuntime): void {
   copyFunctionProperties(Describe, nextRuntime.describe)
   copyFunctionProperties(Expect, nextRuntime.expect)
   copyFunctionProperties(Test, nextRuntime.test)
+  // Bun exposes skip lazily, so Reflect.ownKeys does not enumerate it.
+  Test['skip'] = nextRuntime.test['skip']
+  Describe['skip'] = nextRuntime.describe['skip']
   // `copyFunctionProperties` carries the runner's own statics (`expect.any`, `expect.objectContaining`,
   // …) across; these two are Tao's and are restored after it, in case a runner ever spells them too.
   Expect.Is = ExpectIs
@@ -263,7 +266,7 @@ export function setTestRuntime(nextRuntime: TestRuntime): void {
 type ExpectApi = TestRunnerExpect & {
   Is: <T>(value: unknown, guard: (value: unknown) => value is T) => asserts value is T
   /**
-   * Unguarded returns the runner's raw matcher object, with no Langium deep-equality guard. It is
+   * Unguarded omits the Langium deep-equality guard but retains safe promise scheduling. It is
    * for the rare test that genuinely needs structural equality on parsed nodes and accepts that a
    * failure may print a node the formatter cannot bound; assert on fields wherever you can instead.
    */
@@ -349,15 +352,15 @@ function createExpectFunction(): TestRunnerExpect {
 }
 
 function createUnguardedExpectFunction(): TestRunnerExpect {
-  return ((...args: any[]) => getTestRuntime().expect(...args)) as TestRunnerExpect
+  return ((...args: any[]) => guardMatchers(getTestRuntime().expect(...args), args[0], false)) as TestRunnerExpect
 }
 
 /**
- * guardMatchers wraps a runner matcher object so the deep-equality matchers refuse a Langium node.
+ * guardMatchers protects promise scheduling and, unless opted out, refuses Langium deep equality.
  * Every forwarded call and getter runs against the real matcher object rather than the proxy, so a
  * runner whose matchers keep native internal state is unaffected.
  */
-function guardMatchers(matchers: unknown, received: unknown): any {
+function guardMatchers(matchers: unknown, received: unknown, guard = true, asynchronous = false): any {
   if (matchers === null || typeof matchers !== 'object') {
     return matchers
   }
@@ -368,20 +371,54 @@ function guardMatchers(matchers: unknown, received: unknown): any {
         return value
       }
       if (GUARDED_MATCHER_CHAINS.has(property)) {
-        return guardMatchers(value, received)
+        return guardMatchers(value, received, guard, asynchronous || property === 'resolves' || property === 'rejects')
       }
       if (typeof value !== 'function') {
         return value
       }
-      if (!GUARDED_MATCHERS.has(property)) {
+      if (!asynchronous && (!guard || !GUARDED_MATCHERS.has(property))) {
         return value.bind(target)
       }
       return (...args: unknown[]) => {
-        refuseLangiumOperand(property, received, args)
+        const guarded = guard && GUARDED_MATCHERS.has(property)
+        if (guarded) {
+          refuseLangiumOperand(property, received, args)
+        }
+        if (asynchronous && received instanceof Promise) {
+          return invokeSettledMatcher(received, () => Reflect.apply(value, target, args), settled => {
+            if (guarded) {
+              refuseLangiumOperand(property, settled, args)
+            }
+          })
+        }
         return Reflect.apply(value, target, args)
       }
     },
   })
+}
+
+/**
+ * Bun's promise matchers synchronously pump the event loop while their input is pending. From an
+ * I/O continuation that can overwrite the current poll batch and lose another child's pipe/exit
+ * event forever (oven-sh/bun#33261). Await the input ourselves, then invoke the original matcher
+ * with its original, now-settled promise: native negation, rejection and diagnostic semantics stay
+ * intact. Awaiting the matcher at its call site is too late to prevent the synchronous re-entry.
+ * Only native promises take this path: awaiting a stateful thenable before the runner consumes it
+ * would execute it twice. Invalid inputs and Jest's callable rejection inputs stay runner-owned.
+ */
+async function invokeSettledMatcher(
+  received: unknown,
+  invoke: () => unknown,
+  check: (settled: unknown) => void,
+): Promise<unknown> {
+  let settled: unknown
+  try {
+    settled = await received
+  } catch (error) {
+    settled = error
+  }
+  check(settled)
+  return invoke()
 }
 
 function refuseLangiumOperand(matcher: string, received: unknown, args: readonly unknown[]): void {
