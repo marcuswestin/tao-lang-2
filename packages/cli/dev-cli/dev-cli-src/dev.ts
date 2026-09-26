@@ -8,6 +8,7 @@ import { LandingLock } from '@verification/LandingLock'
 import { landedReport, MergeWithMainCommand } from '@verification/MergeWithMain'
 import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/RunSummary'
 import { TestRunner } from '@verification/TestRunner'
+import { VerificationLanes } from '@verification/VerificationLanes'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
 import { devZshCompletion } from './completion/DevCompletion'
@@ -328,6 +329,15 @@ await runWithCommands(commands => {
     // uncaught stack with a code frame from inside the error helper.
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       await runExitCommand(async () => {
+        // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
+        // Gate children inherit it; the invoking shell and landing process keep their priority.
+        if (VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)) {
+          try {
+            Platform.lowerProcessPriority()
+          } catch (error) {
+            HCI.logProcessWarn('verify', `${Errors.formatForUser(error)} Continuing at inherited priority.`)
+          }
+        }
         const outputMode = WorkReporter.resolveMode({ requested: options.output })
         const verdict = { color: WorkReporter.colorizes(outputMode) }
         return await holdingLandingLock(options.lane ?? 'verify', async () => {
