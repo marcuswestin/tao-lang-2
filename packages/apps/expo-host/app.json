@@ -11,6 +11,9 @@
     "android": {
       "softwareKeyboardLayoutMode": "pan"
     },
+    "ios": {
+      "supportsTablet": true
+    },
     "web": {
       "bundler": "metro"
     },
