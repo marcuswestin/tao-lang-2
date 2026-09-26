@@ -220,7 +220,7 @@ standalone-cli-acceptance: _parser-gen
     "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
     "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
 
-# Build a 0.0.0 release and run its acceptance in a fresh vanilla macOS Tart VM, retaining guest logs
+# Test a release in a disposable macOS VM; --base or --prepare-base vanilla|xcode selects a pinned image
 [group('Ship')]
 standalone-cli-clean-machine action='' vm='': _parser-gen
     bash packages/cli/tao-cli/cli-src/standalone-clean-machine.sh {{ quote(action) }} {{ quote(vm) }}

@@ -1,8 +1,11 @@
 #!/bin/bash
-# Prove a release in a disposable vanilla macOS VM. The image cache may persist; the VM never does.
+# Prove a release in a disposable macOS VM. Cache the base; retain a failed clone only for recovery.
 set -euo pipefail
 
-image='ghcr.io/cirruslabs/macos-tahoe-vanilla:latest'
+profile=vanilla
+prepare_base=0
+lease_owned=0
+lease_root="$HOME/.tao/standalone-vm-lease"
 overall_started=$(date +%s)
 name="tao-acceptance-$(date +%s)-$$"
 root="$(pwd)/.artifacts/standalone-vm/$name"
@@ -14,18 +17,39 @@ bun_bin="${TAO_STANDALONE_BUN:-$(pwd)/.devenv/profile/bin/bun}"
 portable_bun_script='packages/cli/tao-cli/cli-src/standalone-bun.sh'
 browser_app="${TAO_STANDALONE_BROWSER_APP:-/Applications/Google Chrome.app}"
 if [ "$#" -eq 2 ] && [ -z "$1$2" ]; then set --; fi
-if [ "$#" -eq 2 ] && { [ "$1" = --diagnose ] || [ "$1" = --stop ] || [ "$1" = --collect ]; }; then
+if [ "$#" -eq 2 ] && { [ "$1" = --base ] || [ "$1" = --prepare-base ]; }; then
+  if [ "$2" != vanilla ] && [ "$2" != xcode ]; then
+    printf 'Expected the vanilla or xcode VM profile.\n' >&2
+    exit 2
+  fi
+  profile="$2"
+  if [ "$1" = --prepare-base ]; then prepare_base=1; fi
+  set --
+fi
+case "$profile" in
+  vanilla) image='ghcr.io/cirruslabs/macos-tahoe-vanilla@sha256:eeec54bfe1f076e27786c5d92b89187a05b1d109b5071eb2dcdf02d596e34640' ;;
+  xcode) image='ghcr.io/cirruslabs/macos-tahoe-xcode@sha256:71d9dc1d6c4614b7ecbb328753124912b43425fc8cf1c4085d7f352026df6601' ;;
+esac
+if [ "$#" -eq 2 ] && { [ "$1" = --diagnose ] || [ "$1" = --stop ] || [ "$1" = --collect ] || [ "$1" = --recover-lease ] || [ "$1" = --audit-results ]; }; then
   owned_name="$2"
   if [[ ! "$owned_name" =~ ^tao-acceptance-[0-9]+-[0-9]+$ ]] || [ ! -d "$(pwd)/.artifacts/standalone-vm/$owned_name/logs" ]; then
     printf 'Expected a VM run owned by this checkout.\n' >&2
     exit 2
   fi
   owned_root="$(pwd)/.artifacts/standalone-vm/$owned_name"
-  if [ "$1" = --diagnose ]; then
+  if [ "$1" = --audit-results ]; then
+    "$bun_bin" run packages/cli/tao-cli/cli-src/standalone-filesystem-audit.ts compare \
+      "$owned_root/logs/filesystem-before.json" "$owned_root/logs/filesystem-after.json" \
+      "$owned_root/logs/filesystem-policy-replay.json" "$owned_root/logs/filesystem-policy-replay.txt" \
+      "$owned_root/logs/guest/steps/audit-scope.json"
+    printf 'Saved snapshot policy replay only; no guest was run or base qualified.\n'
+  elif [ "$1" = --diagnose ]; then
     "$bun_bin" run "$vm_helper" exec "$owned_name" 10000 /bin/ps -axo pid=,command= > "$owned_root/logs/guest-processes.log"
     "$bun_bin" run "$vm_helper" exec "$owned_name" 15000 /usr/bin/log show --last 10m --style compact \
       --predicate 'subsystem == "com.apple.TCC"' > "$owned_root/logs/guest-privacy.log"
     printf 'Guest diagnostics: %s/logs/guest-{processes,privacy}.log\n' "$owned_root"
+  elif [ "$1" = --recover-lease ]; then
+    "$bun_bin" run "$vm_helper" recover-lease "$owned_name" "$owned_root"
   elif [ "$1" = --collect ]; then
     if ! mkdir "$owned_root/run-active"; then
       printf 'The original runner still owns %s; wait for it to exit before collecting.\n' "$owned_name" >&2
@@ -41,7 +65,7 @@ if [ "$#" -eq 2 ] && { [ "$1" = --diagnose ] || [ "$1" = --stop ] || [ "$1" = --
   exit
 fi
 if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != --audit ]; }; then
-  printf 'Usage: %s [--audit | --diagnose <owned-vm> | --stop <owned-vm> | --collect <stopped-owned-vm>]\n' "$0" >&2
+  printf 'Usage: %s [--prepare-base|--base vanilla|xcode | --diagnose|--stop|--collect|--recover-lease|--audit-results <owned-vm>]\n' "$0" >&2
   exit 2
 fi
 created=0
@@ -75,6 +99,15 @@ cleanup() {
   fi
   rm -f "$input/browser.tar"
   rmdir "$root/run-active"
+  if [ "$lease_owned" -eq 1 ]; then
+    if [ -f "$root/disk-attached" ] || { [ -n "$vm_pid" ] && kill -0 "$vm_pid" 2>/dev/null; }; then
+      printf 'Clean-machine: retaining VM lease %s; inspect its owner and the VM before recovery.\n' "$lease_root" >&2
+      status=1
+    else
+      rm -f "$lease_root/owner.txt"
+      rmdir "$lease_root"
+    fi
+  fi
   printf 'Clean-machine: total %ss\n' "$(($(date +%s) - overall_started))"
   printf 'Clean-machine logs: %s\n' "$logs"
   exit "$status"
@@ -101,6 +134,21 @@ if ! command -v tart >/dev/null; then
   printf 'Tart is required for the clean-machine gate.\n' >&2
   exit 1
 fi
+# A shared account-wide lease coordinates our worktrees. Ambiguous/stale owners require inspection;
+# age alone is never evidence that a Tart child or mounted disk has stopped.
+tart_store="${TART_HOME:-$HOME/.tart}"
+mkdir -p "$tart_store"
+export TART_HOME="$(cd "$tart_store" && pwd -P)"
+mkdir -p "$(dirname "$lease_root")"
+if ! mkdir "$lease_root" 2>/dev/null; then
+  printf 'Another VM workflow owns %s. Owner:\n' "$lease_root" >&2
+  cat "$lease_root/owner.txt" >&2 || true
+  exit 1
+fi
+lease_owned=1
+printf 'pid=%s\nstarted=%s\nrun=%s\nvm=%s\ntart_home=%s\n' "$$" "$(/bin/ps -p $$ -o lstart=)" "$root" "$name" "$TART_HOME" > "$lease_root/owner.txt"
+"$bun_bin" run "$vm_helper" idle "$name" "$root"
+printf 'Clean-machine: profile %s, pinned image %s\n' "$profile" "$image"
 tart_version=$(tart --version)
 IFS=. read -r tart_major tart_minor tart_patch <<< "$tart_version"
 if (( tart_major < 2 || (tart_major == 2 && tart_minor < 32) || (tart_major == 2 && tart_minor == 32 && tart_patch < 1) )); then
@@ -176,8 +224,12 @@ export PATH=/usr/bin:/bin
 export TAO_ACCEPTANCE_LOG_DIR='/Users/admin/tao-harness/logs/steps'
 export TAO_ACCEPTANCE_BROWSER_DRIVER='/Users/admin/tao-harness/input/browser-click'
 export TAO_STUDIO_CHROME_PATH="$HOME/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+profile="$1"
+export TAO_ACCEPTANCE_VM_PROFILE="$profile"
+{ /usr/bin/sw_vers; /usr/bin/uname -m; } > "$TAO_ACCEPTANCE_LOG_DIR/guest-platform.log"
 test -x "$TAO_ACCEPTANCE_BROWSER_DRIVER" || { echo 'The browser click driver is missing.' >&2; exit 1; }
 test -x "$TAO_STUDIO_CHROME_PATH" || { echo 'The guest browser is missing.' >&2; exit 1; }
+if [ "$profile" = vanilla ]; then
 for tool in brew bun node; do
   if command -v "$tool" >/dev/null 2>&1; then
     echo "The vanilla guest unexpectedly has $tool on PATH." >&2
@@ -194,6 +246,12 @@ if [ -d /Library/Developer/CommandLineTools ] || [ -d /Applications/Xcode.app ];
   echo 'The vanilla guest unexpectedly has Xcode tools installed.' >&2
   exit 1
 fi
+else
+  /usr/bin/xcodebuild -version > "$TAO_ACCEPTANCE_LOG_DIR/xcode-version.log"
+  /usr/bin/xcrun simctl list runtimes --json > "$TAO_ACCEPTANCE_LOG_DIR/simulator-runtimes.json"
+  /opt/homebrew/bin/brew --version > "$TAO_ACCEPTANCE_LOG_DIR/brew-version.log"
+  /opt/homebrew/opt/node@24/bin/node --version > "$TAO_ACCEPTANCE_LOG_DIR/vendor-node-version.log"
+fi
 export TAO_ACCEPTANCE_AUDIT_FILESYSTEM=1
 if '/Users/admin/tao-harness/input/acceptance' \
   '/Users/admin/tao-harness/input/release/v0.0.0'; then
@@ -204,15 +262,21 @@ fi
 exit "$acceptance_status"
 GUEST
 
+if [ "$prepare_base" -eq 1 ]; then
+  step "cache the pinned $profile base" tart pull "$image" 2>&1 | tee "$logs/pull.log"
+fi
 created=1
-if ! step 'clone vanilla macOS' tart clone "$image" "$name" 2>&1 | tee "$logs/clone.log"; then
+if ! step "clone the $profile base" tart clone "$image" "$name" 2>&1 | tee "$logs/clone.log"; then
   exit 1
 fi
-step 'provision the stopped vanilla clone' "$bun_bin" run "$vm_helper" provision "$name" "$root" \
+printf '%s\n' "$image" > "$logs/source-image.txt"
+printf '%s\n' "$profile" > "$logs/profile.txt"
+tart get "$name" --format json > "$logs/vm-config.json"
+step 'provision the stopped clone' "$bun_bin" run "$vm_helper" provision "$name" "$root" \
   2>&1 | tee "$logs/provision.log"
 printf 'Clean-machine: booting %s headless...\n' "$name"
 boot_started=$(date +%s)
-tart run --no-graphics "$name" > "$logs/boot.log" 2>&1 &
+"$bun_bin" run "$vm_helper" boot "$name" "$root" > "$logs/boot.log" 2>&1 &
 vm_pid=$!
 started=1
 booted=1
@@ -251,8 +315,8 @@ fi
 printf 'Clean-machine: tart exec ready in %ss\n' "$(($(date +%s) - boot_started))"
 
 acceptance_status=0
-step 'run standalone acceptance in the vanilla guest' \
-  "$bun_bin" run "$vm_helper" exec "$name" 1800000 /bin/sh /Users/admin/tao-harness/input/run.sh \
+step "run standalone acceptance in the $profile guest" \
+  "$bun_bin" run "$vm_helper" exec "$name" 1800000 /bin/sh /Users/admin/tao-harness/input/run.sh "$profile" \
   2>&1 | tee "$logs/acceptance.log" || acceptance_status=$?
 step 'stop the VM before its final audit' tart stop "$name"
 wait "$vm_pid" || true
@@ -263,4 +327,7 @@ collected=1
 step 'enforce the filesystem audit' "$bun_bin" run packages/cli/tao-cli/cli-src/standalone-filesystem-audit.ts \
   compare "$logs/filesystem-before.json" "$logs/filesystem-after.json" \
   "$logs/filesystem-diff.json" "$logs/filesystem-diff.txt" "$logs/guest/steps/audit-scope.json"
+if [ "$acceptance_status" -eq 0 ]; then
+  "$bun_bin" run "$vm_helper" qualify "$name" "$root"
+fi
 exit "$acceptance_status"

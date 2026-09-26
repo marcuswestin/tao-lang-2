@@ -22,7 +22,13 @@ type Diff = {
   afterSkippedMounts: string[]
   violations: string[]
 }
-type AuditScope = { guestHome: string; guestTemp: string; root: string }
+type AuditScope = {
+  guestHome: string
+  guestTemp: string
+  root: string
+  browserProfiles?: string[]
+  vmProfile?: 'vanilla' | 'xcode'
+}
 
 const REPORT_LIMIT = 200
 
@@ -155,6 +161,9 @@ function compare(before: Snapshot, after: Snapshot): Diff {
 
 /** Require every observed change to belong to the acceptance or an explicit macOS-owned area. */
 function violations(diff: Diff, scope: AuditScope): string[] {
+  if (scope.vmProfile !== undefined && scope.vmProfile !== 'vanilla' && scope.vmProfile !== 'xcode') {
+    Errors.throwUserInput(`Invalid filesystem audit VM profile: ${scope.vmProfile}`)
+  }
   for (const path of [scope.root, scope.guestHome, scope.guestTemp]) {
     if (!FS.isAbsolute(path)) {
       Errors.throwUserInput(`Filesystem audit scope path must be absolute: ${path}`)
@@ -165,6 +174,12 @@ function violations(diff: Diff, scope: AuditScope): string[] {
   const acceptanceHome = FS.resolvePath('home', acceptanceRoot)
   const guestHome = onVolume(scope.guestHome)
   const guestTemp = onVolume(scope.guestTemp)
+  const browserProfiles = (scope.browserProfiles ?? []).map(path => {
+    if (FS.dirname(path) !== scope.guestTemp || !/^tao-studio-chrome-[A-Za-z0-9]{6}$/.test(FS.basename(path))) {
+      Errors.throwUserInput(`Invalid browser fixture profile: ${path}`)
+    }
+    return onVolume(path)
+  })
   const fixtureLogs = FS.resolvePath('tao-harness/logs', guestHome)
   const permittedHome = ['.tao', 'a-tally-counter', 'a-reading-list'].map(name => FS.resolvePath(name, acceptanceHome))
   const permittedHarness = ['releases', 'releases.json', 'watchman-bin']
@@ -397,7 +412,69 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     /^com\.apple\.launchd\.[A-Za-z0-9]+(?:\/Listeners)?$/.test(
       FS.relativePath(runtimeRoot, path),
     )
-  const allowedSystem = [...system, ...guestSystem, ...guestCache]
+  const xcodeSystem = scope.vmProfile === 'xcode'
+    ? [
+      onVolume('/Library/Developer/CoreSimulator'),
+      FS.resolvePath('Library/Developer/CoreSimulator', guestHome),
+      FS.resolvePath('Library/Logs/CoreSimulator', guestHome),
+    ]
+    : []
+  const xcodeExact = scope.vmProfile === 'xcode'
+    ? [
+      '/private/tmp/tart-guest-agent.log',
+      '/private/tmp/tart-guest-daemon.log',
+      '/private/var/tmp',
+      '/private/var/tmp/SoftwareUpdateCore_NRD/EventReporterPersistedState',
+      '/private/var/tmp/SoftwareUpdateCore_NRD/EventReporterPersistedState/SUCoreEventReporterState.state',
+      '/private/var/tmp/SoftwareUpdateCore_NRD/RecorderSplunkRecords',
+    ].map(onVolume)
+    : []
+  // These baseline directories changed only their timestamp, not their entries or permissions.
+  const xcodeTimestampDirectories = [
+    FS.resolvePath('.rbenv/shims', guestHome),
+    ...['assistantd', 'assistantd/TemporaryItems', 'siriknowledged'].map(name => FS.resolvePath(name, guestTemp)),
+  ]
+  const timestampChanged = new Set(
+    diff.changed.filter(change =>
+      change.before.kind === 'directory' && change.after.kind === 'directory'
+      && JSON.stringify({ ...change.before, device: 0, modifiedMs: 0 })
+        === JSON.stringify({ ...change.after, device: 0, modifiedMs: 0 })
+    ).map(change => change.path),
+  )
+  const newsDirectory = FS.resolvePath(
+    'Library/News/com.apple.news.public-com.apple.news.private-production',
+    guestHome,
+  )
+  // Recognize the observed extension-install shape, without attributing who wrote it.
+  const retainedChanges = new Set([...diff.added, ...diff.changed.map(change => change.path)])
+  const chromeInstallRoots = new Set(
+    [...retainedChanges].filter(path =>
+      /^scoped_dir[A-Za-z0-9]{6}\/\.com\.google\.Chrome\.[A-Za-z0-9]{6}$/.test(FS.relativePath(guestTemp, path))
+      && retainedChanges.has(FS.resolvePath('CRX_INSTALL', FS.dirname(path)))
+    ).map(path => FS.dirname(path)),
+  )
+  const cryptexRoot = onVolume('/private/var/run/com.apple.security.cryptexd')
+  const xcodeCryptex = (path: string) => {
+    if (scope.vmProfile !== 'xcode') {
+      return false
+    }
+    const relative = FS.relativePath(cryptexRoot, path)
+    const asset =
+      'com\\.apple\\.(?:(?:AppleTVOS|WatchOS|XROS|iPhoneOS)\\.SimulatorRuntime|MobileAsset\\.MetalToolchain)'
+      + '-v[0-9]+(?:\\.[0-9]+){3}'
+    return new RegExp(`^(?:codex\\.system/(?:boot-session|live)/${asset}|mnt/${asset}\\.[A-Za-z0-9]{6})$`)
+      .test(relative)
+      || (/^codex\.system\/stage\/protex\.[A-Za-z0-9]{6}$/.test(relative) && diff.removed.includes(path)
+        && !diff.afterIssues.some(issue => issue.path === path) && !diff.afterSkippedMounts.includes(path))
+  }
+  const xcodeRemoved = (path: string) =>
+    scope.vmProfile === 'xcode' && diff.removed.includes(path) && (
+      path === onVolume('/private/var/run/hdiejectd.pid')
+      || ['adb.501.log', 'hsperfdata_admin', 'metrickitd'].some(name => path === FS.resolvePath(name, guestTemp))
+      || /^cryptex\.personalize\.[A-Za-z0-9]{6}(?:\/im4m)?$/.test(FS.relativePath(guestTemp, path))
+      || /^cryptex_personalized_manifest\.[A-Za-z0-9]{6}$/.test(FS.relativePath(guestTemp, path))
+    )
+  const allowedSystem = [...system, ...guestSystem, ...guestCache, ...xcodeSystem]
   const changed = [
     ...diff.added,
     ...diff.changed.map(change => change.path),
@@ -413,6 +490,13 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     if ([...forbiddenExternal, ...forbiddenTemp].some(forbidden => FS.pathIsWithin(path, forbidden))) {
       return true
     }
+    if (
+      xcodeExact.includes(path) || xcodeCryptex(path) || xcodeRemoved(path)
+      || (scope.vmProfile === 'xcode' && xcodeTimestampDirectories.includes(path) && timestampChanged.has(path))
+      || (path === newsDirectory && timestampChanged.has(path))
+    ) {
+      return false
+    }
     if (removedBaselineArtifacts.includes(path)) {
       return !diff.removed.includes(path)
     }
@@ -423,9 +507,25 @@ function violations(diff: Diff, scope: AuditScope): string[] {
       return false
     }
     if (FS.pathIsWithin(path, guestTemp)) {
+      if (scope.vmProfile === 'xcode' && path === FS.resolvePath('xcrun_db', guestTemp)) {
+        return false
+      }
+      if (
+        [...chromeInstallRoots].some(root =>
+          path === root || path === FS.resolvePath('CRX_INSTALL', root)
+          || (retainedChanges.has(FS.resolvePath('CRX_INSTALL/manifest.json', root))
+            && FS.pathIsWithin(path, FS.resolvePath('CRX_INSTALL', root)))
+          || (FS.dirname(path) === root && /^\.com\.google\.Chrome\.[A-Za-z0-9]{6}$/.test(FS.basename(path))
+            && retainedChanges.has(path))
+        )
+      ) {
+        return false
+      }
       const child = path.slice(guestTemp.length + 1).split('/')[0] ?? ''
       return path !== guestTemp && !child.startsWith('com.apple.')
         && !child.startsWith('com.google.Chrome.') && !child.startsWith('.com.google.Chrome.')
+        // Only the recorded browser fixture may retain its Chrome profile here.
+        && !browserProfiles.some(profile => FS.pathIsWithin(path, profile))
         && ![
           '.LINKS',
           'TemporaryItems',
@@ -513,6 +613,9 @@ function violations(diff: Diff, scope: AuditScope): string[] {
       return false
     }
     if (launchdDirectory(path)) {
+      return false
+    }
+    if (xcodeCryptex(path)) {
       return false
     }
     if ([onVolume('/Volumes/My Shared Files'), onVolume('/home')].includes(path)) {
