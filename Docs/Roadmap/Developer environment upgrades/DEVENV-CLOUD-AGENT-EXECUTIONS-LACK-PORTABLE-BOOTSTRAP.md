@@ -318,12 +318,14 @@ image capture), producing
 Its cached guest reused those tools, completed bootstrap/setup in 76 seconds, repeated setup
 in 24 seconds, passed the parser test in 50 seconds, and completed checks in 856 seconds.
 Cached tests failed after 2536 seconds, repeating portability failures and timeouts; verification
-started at 21:03:35 UTC. Both use the original `1c7e6279` source, not the subsequent repairs.
-The runner removed
-the completed cold and tools containers; it retains the active cached guest, base image, and
-reusable tools image. Read-only inspection `20260926T200309Z-76264` independently confirmed
-the cold container was absent before cached provisioning. Full cold verification evidence is
-retained in snapshot `.artifacts/contributor-linux/20260926T195929Z-56423/`.
+failed after 3397 seconds. Both used the original `1c7e6279` source, not the subsequent repairs.
+The cached guest took 6952 host seconds; the complete cold/tools/cached run took 14098 seconds.
+The runner removed all three containers and its base image, retaining the reusable tools image
+and shared caches. Read-only inspection `20260926T220026Z-51081` independently confirmed no
+run-specific container or base image remained. Full cold verification evidence is retained in
+snapshot `.artifacts/contributor-linux/20260926T195929Z-56423/`; the last cached workflow snapshot
+is `.artifacts/contributor-linux/20260926T215820Z-49468/`, with final guest reports under the
+original run's `cached/guest/` directory.
 
 Cached tests repeated the known quiet-output and suite timeouts. One additional 120-second
 fixture timeout came from `just --dry-run verify-full`, not actual bootstrap or verification.
@@ -331,7 +333,41 @@ The same source passed that fixture three times in the cold guest in under one s
 cached timeout has no established cause. Its helper now supervises the child with a 20-second
 bound and retains the complete process result on failure, so the enclosing test timeout cannot
 leave an unbounded child. This is diagnostic and lifecycle coverage, not a claimed repair of
-the emulation failure. Native Linux comparison remains pending behind the active cached run.
+the emulation failure. After that run finished and cleanup was confirmed, native ARM control
+`20260926T220103Z-51682` started at repaired commit `0e747207`, following successful named host
+capabilities and probe commands. The ARM Ubuntu layer and `ports.ubuntu.com` package indexes
+downloaded without a new policy failure. Base provisioning took 25 seconds; cold bootstrap passed
+in 127 seconds, with Python 3.13.12 confirmed in the managed profile. Repeat setup took 3 seconds,
+parser tests 5 seconds, and checks 65 seconds. Test-all finished in 309 seconds with two fixture
+failures. Cold verification finished in 571 seconds with only the inspector fixture failing;
+the cold phase took 1098 host seconds including log collection. Tools bootstrap took 26 seconds
+(104 host seconds including image capture). Cached bootstrap passed in 38 seconds with managed
+Python, repeat setup in 4 seconds, parser in 6 seconds, and checks in 67 seconds. Cached tests and
+verification remain pending.
+
+The remaining inspector fixture intercepted the macOS helper even on Linux, where process
+identities correctly come from `/proc`. It now exercises both real adapters in isolated module
+graphs, injecting failed helper execution on macOS and `EACCES` at the requested Linux stat file.
+Changing the latter to `ENOENT` makes its unavailable-inspector assertion fail, preserving the
+difference between denied inspection and a vanished process. Actual worker teardown is unchanged.
+
+The doctor fixture compared a shared checkout's artifacts while a Studio startup-failure fixture
+created `.artifacts/user/dev-data` through its omitted `devDataRoot`. The Studio fixture now owns
+that directory under its temporary root. Doctor mutation protection runs against an owned Git
+checkout, including staged, unstaged, untracked, and ignored contents; the real-checkout dependency
+and parser smoke checks remain separate. A scratch copy of the actual doctor that creates
+`.artifacts/user` fails the new preservation assertion. These are test-isolation repairs; no
+production doctor or process-inspection contract was weakened.
+
+The host gate caught and corrected an invalid matcher access in the new inspector test. That
+same run also observed empty stdout from a successful Git child in the configuration fixture,
+under recorded five-lane contention. The focused configuration file passed immediately afterward;
+no cause is established, and no production change or deadline increase was made for that event.
+The next host gate observed the same empty-output symptom in the existing concurrent Git-child
+fixture, plus a CPU-versus-wall plausibility assertion. Both focused files passed afterward,
+including 680 Git children. The logs contain no actual permission denial. Completion-event and
+stream-byte tracing would be needed to distinguish premature completion from upstream output
+loss; the gate's sandbox classification alone does not establish either cause.
 
 The cached browser-shortcut integration test also used Meta+K without declaring an Apple browser
 platform. Production maps the primary modifier to Meta on Apple browsers and Control elsewhere;
