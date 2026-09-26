@@ -1,0 +1,17 @@
+# DEVENV-STUDIO-ARTIFACT-SHELL-LOSES-COMPLETION — Studio artifact shell still stalls after promise assertion repair
+
+- **Status:** Resolved
+- **Section:** External
+- **Area:** Studio tooling test subprocesses
+- **Impact:** A trivial shell fixture can consume the Studio tooling suite's entire 120-second hang bound during parallel verification.
+- **Evidence:** On 2026-09-26, repetition five of `feat/git-test-timeout` timed out `Studio test process output > requests and retains the versioned live-render artifact from tao test` at 120000ms. Its isolated retry passed in 85.18ms. The test runs `/bin/sh` to write one JSON artifact, through `StudioTestProcessRunner` and `StudioProcessTree`; stdin is ignored, and the close listener is registered without an intervening await. Log: `.artifacts/logs/verify-changed/2026-09-26T04-33-43-937Z-72369-9b6b4ed9/ides_studio-tooling.initial.log`. The same failure predates this fix in worktree `4ccd`'s `verify-full/2026-09-26T04-08-13-874Z-4079-acafac9a/ides_studio-tooling.initial.log`. Git tests passed in the new failing lane.
+- **Workaround:** None needed for the repaired path; the shell-to-artifact test is enabled again.
+- **Proposed change:** Use the shared exit-plus-closed-output completion observer, preserving explicit exit-only callers and testing real child notification loss with descendant output and artifact retention.
+- **Dependencies:** Follow-up to [Git subprocess timeouts](DEVENV-TESTS-THAT-SPAWN-GIT-HANG-THEIR-WHOLE-TIMEOUT-IN-LANES.md); the shared promise-assertion repair has a causal regression but does not establish this fixture's cause.
+- **Acceptance:** Reproduce the remaining cause, show the targeted repair fails when removed, and repeatedly run the Studio tooling suite alongside broad verification without a close-event stall. Preserve complete captured output and owned process cleanup.
+- **Source:** Git-test timeout investigation and repeated full-scope verification on `feat/git-test-timeout`.
+
+- **Completion repair (2026-09-26, feat/repair-verification-flakes):** Studio now uses the same exit-plus-closed-output observer as CLI. Twenty complete Studio tooling repetitions and a further 750 real artifact shells alongside 30 browser/service builds did not reproduce a spontaneous Studio stall. A maintained isolated regression suppresses only the real child's aggregate close notification, holds both pipes open in a descendant, then releases trailing output. It proves that Studio waits, retains both tails and its artifact, and cleans its process group; the old close-only observer hangs after exit and both pipe closures. Exit-only callers still resolve before descendant pipes close and can observe full closure separately. The shell-to-artifact test is restored. This repairs the vulnerable completion seam; it does not establish Studio's original runtime trigger independently. Evidence: `studio-tooling-tests/process-completion.test.ts` and `.scratch/studio-completion-probe-joined-legacy-studio.jsonl` under that package.
+
+- **Acceptance evidence (2026-09-26):** Ten consecutive uncached `./agent verify-changed --no-cache` runs passed on the repair branch, selecting both verification and developer CLI suites. No original 120-second subprocess timeout recurred; the repaired suites passed their initial attempts. Run one separately recorded a 30-second runtime-journey timeout that passed its isolated retry; that observation has its own open entry. Repetitions are recorded in `.artifacts/investigation/repair-acceptance.json`.
+- **Archived:** 2026-09-26

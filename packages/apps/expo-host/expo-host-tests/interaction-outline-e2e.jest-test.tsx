@@ -23,8 +23,7 @@ function nodes(kind?: TR.OutlineNode['kind']): readonly TR.OutlineNode[] {
   return TR.Interaction.Outline.read().nodes.filter(node => kind === undefined || node.kind === kind)
 }
 
-// Temporarily quarantined: DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI.
-Describe['skip']('interaction outline runtime', () => {
+Describe('interaction outline runtime', () => {
   registerRuntimeE2ELifecycle()
 
   Test('renders a web selectable row as a group and leaves its nested controls independent', async () => {
