@@ -1,11 +1,13 @@
 name: Pull request
 
 # This placeholder only proves the pull-request trigger and checkout. The separate companion-hosts
-# workflow builds native hosts and checks kit parity for host-related changes. `./agent land` remains
-# the gate that decides whether the full repository is fit to land.
+# workflow builds native hosts and checks kit parity for host-related changes. Both run once, when a
+# pull request opens, and never on a later push to its branch. `./agent land` remains the gate that
+# decides whether the full repository is fit to land.
 
 on:
   pull_request:
+    types: [opened]
     branches: [main]
   workflow_dispatch:
 
