@@ -136,17 +136,30 @@ type StudioPreviewOverlay = StudioPreviewElement & {
 
 /** The document events this bridge listens for; registration and removal name the same set. */
 type StudioPreviewDocumentEvent =
+  | 'auxclick'
   | 'blur'
   | 'click'
+  | 'contextmenu'
+  | 'dblclick'
+  | 'dragstart'
   | 'input'
   | 'keydown'
   | 'keyup'
   | 'mousedown'
+  | 'mouseenter'
   | 'mouseleave'
   | 'mousemove'
   | 'mouseover'
   | 'mouseout'
   | 'mouseup'
+  | 'pointercancel'
+  | 'pointerdown'
+  | 'pointerenter'
+  | 'pointerleave'
+  | 'pointermove'
+  | 'pointerout'
+  | 'pointerover'
+  | 'pointerup'
   | 'wheel'
 
 type StudioPreviewWindowEvent = 'blur' | 'message' | 'resize' | 'scroll'
@@ -1020,7 +1033,10 @@ export function mountStudioPreviewBridge(
     blockAppPointerEvent(event)
     if (!canvasPanKeyHeld) {
       canvasPanKeyHeld = true
+      hoverTarget = undefined
+      postedHoverKey = undefined
       disarmDrag()
+      redrawOverlay()
       postToStudio(host, config, 'preview-canvas-pan-key', { held: true })
     }
   }
@@ -1030,9 +1046,15 @@ export function mountStudioPreviewBridge(
       releaseCanvasPanKey()
     }
   }
+  const onCanvasPanPointer = (event: StudioPreviewPointerEvent) => {
+    if (canvasPanKeyHeld && event.taoStudioJourney !== true) {
+      blockAppPointerEvent(event)
+    }
+  }
   const onCanvasWheel = (event: StudioPreviewPointerEvent) => {
     if (
       !canvasGesturesOwned
+      || (canvasPanKeyHeld && event.taoStudioJourney === true)
       || event.clientX === undefined
       || event.clientY === undefined
       || event.deltaX === undefined
@@ -1042,7 +1064,11 @@ export function mountStudioPreviewBridge(
     }
     // Cancellation is synchronous and happens only after the parent has advertised that Design
     // owns the gesture. Run and startup retain the embedded app's native scrolling and zooming.
-    event.preventDefault?.()
+    if (canvasPanKeyHeld) {
+      blockAppPointerEvent(event)
+    } else {
+      event.preventDefault?.()
+    }
     postToStudio(host, config, 'preview-canvas-gesture', {
       clientX: event.clientX,
       clientY: event.clientY,
@@ -1211,7 +1237,31 @@ export function mountStudioPreviewBridge(
 
   // One table drives both halves of the bridge's lifetime: the cleanup below removes exactly what
   // was added, which two hand-written sequences could not promise.
-  const documentListeners: readonly Parameters<StudioPreviewHost['document']['addEventListener']>[] = [
+  const canvasPanPointerEvents: readonly StudioPreviewDocumentEvent[] = [
+    'auxclick',
+    'click',
+    'contextmenu',
+    'dblclick',
+    'dragstart',
+    'mousedown',
+    'mouseenter',
+    'mouseleave',
+    'mousemove',
+    'mouseover',
+    'mouseout',
+    'mouseup',
+    'pointercancel',
+    'pointerdown',
+    'pointerenter',
+    'pointerleave',
+    'pointermove',
+    'pointerout',
+    'pointerover',
+    'pointerup',
+  ]
+  const documentListeners: readonly Readonly<Parameters<StudioPreviewHost['document']['addEventListener']>>[] = [
+    // This capture barrier is synchronous; the parent's iframe shield arrives through postMessage.
+    ...canvasPanPointerEvents.map(type => [type, onCanvasPanPointer, true] as const),
     ['click', onClick, true],
     ['click', onRecordedClick, true],
     ['input', onRecordedInput, true],

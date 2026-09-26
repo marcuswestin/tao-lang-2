@@ -560,8 +560,10 @@ stdlib catalog plus compiler-manifest project views; drag to canvas emits positi
 and drag to editor inserts formatted snippets with required-parameter placeholders selected for editing.
 
 In Design, hold Space and drag to pan the canvas over either empty background or preview apps.
-While Space owns the gesture, preview content yields pointer input to the canvas; a focused preview
-forwards Space to the host. Text inputs keep normal Space typing, and Run keeps app interaction.
+For the entire time Space is held, a transparent canvas shield makes previews neutral pan surfaces:
+hover, clicks, dragging, and wheel input cannot interact with the embedded apps, including between drags.
+A focused preview suppresses mouse input immediately and forwards Space to the host. Text inputs keep
+normal Space typing, and Run keeps app interaction when the canvas does not own the gesture.
 Releasing the pointer or losing window focus ends a pan; losing focus also clears held Space.
 
 Layout inspection uses parser-owned current clauses. Style inspection carries landing provenance and

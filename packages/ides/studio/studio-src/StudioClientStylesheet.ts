@@ -586,12 +586,12 @@ kbd {
 }
 .studio-preview[data-canvas-pan-ready="true"] { cursor: grab; }
 .studio-preview[data-canvas-panning="true"] { cursor: grabbing; }
-/* A preview iframe cannot bubble pointer events to the canvas. While Space owns the gesture,
-   hit the host instead of embedded apps or sketch handles, including after capture is released. */
-.studio-preview[data-canvas-pan-ready="true"] > .studio-preview-grid,
-.studio-preview[data-canvas-pan-ready="true"] > .studio-preview-grid *,
-.studio-preview[data-canvas-panning="true"] > .studio-preview-grid,
-.studio-preview[data-canvas-panning="true"] > .studio-preview-grid * { pointer-events: none !important; }
+/* Keep one transparent surface above every preview for the entire held-Space gesture, including
+   between drags. Pointer hit testing targets the canvas host, never an embedded app or edit handle. */
+.studio-preview[data-canvas-pan-ready="true"]::after,
+.studio-preview[data-canvas-panning="true"]::after {
+  content: ""; cursor: inherit; inset: 0; pointer-events: auto; position: absolute; z-index: 6;
+}
 .studio-canvas-zoom {
   background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 999px; bottom: 12px;
   color: var(--studio-text-muted); cursor: pointer; font: 11px var(--studio-mono); padding: 5px 11px; position: absolute;

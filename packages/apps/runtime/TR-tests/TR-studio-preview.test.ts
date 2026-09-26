@@ -257,6 +257,131 @@ Describe('Studio preview runtime bridge', () => {
     cleanup()
   })
 
+  Test('synchronously shields iframe pointer events while Space is held and preserves journey input', () => {
+    const target = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
+    const fake = previewHost([target])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
+    fake.dispatchDocument('mouseover', { target })
+    Expect(fake.messages.at(-1)?.message).toMatchObject({ type: 'preview-hover-source' })
+    const hoverOverlay = fake.overlays.at(-1)!
+    fake.dispatchDocument('keydown', { key: ' ' })
+    Expect(hoverOverlay.style['display']).toBe('none')
+    const before = fake.messages.length
+    const events = [
+      'auxclick',
+      'click',
+      'contextmenu',
+      'dblclick',
+      'dragstart',
+      'mousedown',
+      'mouseenter',
+      'mouseleave',
+      'mousemove',
+      'mouseover',
+      'mouseout',
+      'mouseup',
+      'pointercancel',
+      'pointerdown',
+      'pointerenter',
+      'pointerleave',
+      'pointermove',
+      'pointerout',
+      'pointerover',
+      'pointerup',
+    ] as const
+    const appEvents: string[] = []
+    const cancellations: string[] = []
+    for (const type of events) {
+      fake.host.document.addEventListener(type, () => appEvents.push(type))
+      fake.dispatchDocument(type, {
+        clientX: 10,
+        clientY: 10,
+        preventDefault: () => cancellations.push(type),
+        target,
+      })
+    }
+    Expect(cancellations).toEqual([...events])
+    Expect(appEvents).toEqual([])
+    Expect(fake.messages).toHaveLength(before)
+    for (const type of events) {
+      fake.dispatchDocument(type, { target, taoStudioJourney: true })
+    }
+    Expect(appEvents).toEqual([...events])
+    Expect(cancellations).toEqual([...events])
+    fake.dispatchDocument('keyup', { key: ' ' })
+    fake.dispatchDocument('mouseover', { target })
+    Expect(fake.messages.at(-1)?.message).toMatchObject({ type: 'preview-hover-source' })
+    fake.dispatchDocument('click', { target })
+    Expect(fake.messages.at(-1)?.message).toMatchObject({ type: 'preview-select-source' })
+    fake.dispatchWindow('message', interactionModeMessage('run', fake.parent))
+    appEvents.length = 0
+    for (const type of events) {
+      fake.dispatchDocument(type, { target })
+    }
+    Expect(appEvents).toEqual([...events])
+    cleanup()
+  })
+
+  Test('arming Space abandons an edit drag before a later mouseup can commit it', () => {
+    const first = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 10, top: 10, width: 100 })
+    const second = renderElement('/project/Main.tao', 30, 40, { height: 20, left: 10, top: 50, width: 100 })
+    const third = renderElement('/project/Main.tao', 50, 60, { height: 20, left: 10, top: 90, width: 100 })
+    const fake = previewHost([first, second, third])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
+    fake.dispatchDocument('mousedown', { clientX: 40, clientY: 100, target: third })
+    fake.dispatchDocument('mousemove', { clientX: 40, clientY: 40, target: second })
+    Expect(fake.overlays.filter(overlay => !overlay.removed)).toHaveLength(2)
+    fake.dispatchDocument('keydown', { key: ' ' })
+    Expect(fake.overlays.filter(overlay => !overlay.removed)).toHaveLength(0)
+    fake.dispatchDocument('keyup', { key: ' ' })
+    fake.dispatchDocument('mouseup', { clientX: 40, clientY: 40, target: second })
+    Expect(fake.messages.map(post => (post.message as { type: string }).type))
+      .toEqual(['preview-applied', 'preview-canvas-pan-key', 'preview-canvas-pan-key'])
+    cleanup()
+  })
+
+  Test('shields owned wheel input and preserves journey wheel input only while Space is held', () => {
+    const fake = previewHost([])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    let appWheels = 0
+    let cancellations = 0
+    fake.host.document.addEventListener('wheel', () => {
+      appWheels += 1
+    })
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
+    fake.dispatchDocument('keydown', { key: ' ' })
+    const wheel = {
+      clientX: 10,
+      clientY: 20,
+      deltaX: 3,
+      deltaY: 5,
+      preventDefault: () => {
+        cancellations += 1
+      },
+    }
+    fake.dispatchDocument('wheel', wheel)
+    Expect(fake.messages.at(-1)?.message).toMatchObject({ type: 'preview-canvas-gesture', deltaY: 5 })
+    Expect(appWheels).toBe(0)
+    Expect(cancellations).toBe(1)
+    const before = fake.messages.length
+    fake.dispatchDocument('wheel', { ...wheel, taoStudioJourney: true })
+    Expect(appWheels).toBe(1)
+    Expect(cancellations).toBe(1)
+    Expect(fake.messages).toHaveLength(before)
+    fake.dispatchDocument('keyup', { key: ' ' })
+    fake.dispatchDocument('wheel', wheel)
+    Expect(appWheels).toBe(2)
+    Expect(cancellations).toBe(2)
+    Expect(fake.messages.at(-1)?.message).toMatchObject({ type: 'preview-canvas-gesture', deltaY: 5 })
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(false, fake.parent))
+    fake.dispatchDocument('wheel', wheel)
+    Expect(appWheels).toBe(3)
+    Expect(cancellations).toBe(2)
+    cleanup()
+  })
+
   Test('releases held iframe Space on blur, ownership loss, and disposal without duplicate releases', () => {
     const fake = previewHost([])
     const cleanup = mountStudioPreviewBridge(config, fake.host)
@@ -1332,8 +1457,21 @@ function removeListener(listeners: Map<string, Set<Listener>>, type: string, lis
 }
 
 function dispatch(listeners: Map<string, Set<Listener>>, type: string, event: unknown): void {
+  let stopped = false
+  const dispatched = typeof event === 'object' && event !== null
+    ? {
+      ...event,
+      stopImmediatePropagation() {
+        stopped = true
+        ;(event as { stopImmediatePropagation?: () => void }).stopImmediatePropagation?.()
+      },
+    }
+    : event
   for (const listener of listeners.get(type) ?? []) {
-    listener(event)
+    listener(dispatched)
+    if (stopped) {
+      break
+    }
   }
 }
 

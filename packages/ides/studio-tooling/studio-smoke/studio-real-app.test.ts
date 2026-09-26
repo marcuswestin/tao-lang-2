@@ -187,15 +187,41 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     // person would press it, and the drag after it happens back in Edit mode.
     await setInteractionMode(browser, 'run')
     await pressIncrementOnce(browser, previewUrl)
+    await browser.evaluateInFrame(
+      previewUrl,
+      `(() => {
+      window.__taoPointerEvents = []
+      for (const type of ['pointerover', 'pointermove', 'pointerdown', 'pointerup', 'mouseover',
+        'mousemove', 'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu', 'wheel', 'dragstart']) {
+        document.addEventListener(type, () => window.__taoPointerEvents.push(type), true)
+      }
+      return true
+    })()`,
+    )
     // The app button now has focus: Space must cross the iframe boundary, and must not press it.
     await browser.withKeyHeld(' ', async () => {
       await browser!.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === 'true'`)
       const before = await canvasTranslation(browser!)
       await browser!.dragBy('.studio-preview-cell iframe', { x: 30, y: 15 })
       Expect(await canvasTranslation(browser!)).toEqual({ x: before.x + 30, y: before.y + 15 })
+      // Between drags the preview remains a neutral surface: no hover, press or wheel reaches it.
+      await browser!.hover('.studio-canvas-zoom')
+      await browser!.hover('.studio-preview-cell iframe')
+      await browser!.click('.studio-preview-cell iframe')
+      await browser!.wheel('.studio-preview-cell iframe', { x: 0, y: 10 })
+      await browser!.waitFor(`new DOMMatrix(getComputedStyle(
+        document.querySelector('.studio-preview > .studio-preview-grid')).transform).f === ${before.y + 5}`)
+      Expect(await browser!.evaluateInFrame(previewUrl, 'window.__taoPointerEvents')).toEqual([])
     })
     await browser.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === undefined`)
     await browser.pressShortcut('1')
+    await browser.hover('.studio-canvas-zoom')
+    await browser.hover('.studio-preview-cell iframe')
+    await browser.clickAtOffset('.studio-preview-cell iframe', { x: 100, y: 250 })
+    const resumedEvents = await browser.evaluateInFrame<string[]>(previewUrl, 'window.__taoPointerEvents')
+    Expect(resumedEvents).toContain('pointermove')
+    Expect(resumedEvents).toContain('mousedown')
+    Expect(resumedEvents).toContain('click')
     await browser.evaluateInFrame(
       previewUrl,
       `(() => {

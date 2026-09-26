@@ -898,6 +898,16 @@ export class StudioCdp {
     })()`)
   }
 
+  /** Moves the physical pointer without pressing, including over embedded app content. */
+  async hover(selector: string): Promise<void> {
+    await this.client.send('Input.dispatchMouseEvent', {
+      button: 'none',
+      buttons: 0,
+      type: 'mouseMoved',
+      ...await this.elementCenter(selector, 'hover target'),
+    })
+  }
+
   private collectConsoleEvent(params: unknown): void {
     if (!Json.isRecord(params)) {
       return
