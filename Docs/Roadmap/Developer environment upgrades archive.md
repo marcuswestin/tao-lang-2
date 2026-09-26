@@ -70,6 +70,8 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-108 — `finalize` overwrites a hand-written merge message with its own draft](<Developer environment upgrades/Archive/DEVENV-108-finalize-overwrites-a-hand-written-merge-message.md>) — Closed
 - [DEVENV-111 — `finalize`'s integration merge half-applies `main` in the sandbox and names no conflicting path](<Developer environment upgrades/Archive/DEVENV-111-finalize-s-integration-merge-half-applies-main-in-the-sandbox.md>) — Resolved
 - [DEVENV-112 — The human landing recipe rejected the landing dry-run flag](<Developer environment upgrades/Archive/DEVENV-112-human-landing-recipe-rejected-dry-run.md>) — Resolved
+- [DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE — Account service readiness JSON race](<Developer environment upgrades/Archive/DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE.md>) — Resolved
+- [DEVENV-ACCOUNT-TEST-READS-PARTIAL-READINESS-JSON — Account test reads partial readiness JSON](<Developer environment upgrades/Archive/DEVENV-ACCOUNT-TEST-READS-PARTIAL-READINESS-JSON.md>) — Resolved
 - [DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD — Agent-config recovery can download dprint plugins](<Developer environment upgrades/Archive/DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD.md>) — Resolved
 - [DEVENV-COLD-VM-CHROME-STARTUP — Cold VM Chrome startup](<Developer environment upgrades/Archive/DEVENV-COLD-VM-CHROME-STARTUP.md>) — Resolved
 - [DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS — Compiled test store rename is denied in managed shells](<Developer environment upgrades/Archive/DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS.md>) — Resolved
