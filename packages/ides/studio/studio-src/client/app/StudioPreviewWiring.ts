@@ -162,6 +162,7 @@ export function studioPreviewMessageListener(deps: StudioPreviewMessagesDeps): (
       activate: () => activePreview.activate(connection),
       applySourceAction: envelope => mutations.submitPreview(envelope),
       canvasGesture: gesture => deps.onCanvasGesture?.(connection, gesture),
+      canvasGesturesOwned: deps.canvasGesturesOwned,
       canvasPanKey: message => deps.onCanvasPanKey?.(connection, message),
       canvasShortcut: message => deps.onCanvasShortcut?.(message.command, connection.iframe),
       feedDrop: deps.onFeedDrop,

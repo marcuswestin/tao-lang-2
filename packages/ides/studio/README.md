@@ -360,12 +360,26 @@ arguments before anything is written. Keep persists view, fixture, and catalog t
 the overlay, and Undo Keep restores the whole operation. Conflicting source edits are preserved.
 Collection drops propose a typed loop and row view. Move to package defaults to relocating scenarios
 into the app's `Scenarios.tao`, subject to normal package visibility and import rules.
+Design-mode Feed drags temporarily cover the preview canvas with a transparent parent surface:
+browsers block native drags between the Studio and Metro origins. The parent forwards the real drop's
+coordinates through the authenticated preview bridge; the preview hit-tests its rendered element and
+returns its current source identity. Cancellation removes the surface, and Run mode and held Space
+cannot apply a Feed drop.
+Source-only preview publications preserve scenario providers and fixture handles for scenarios without
+automatic journey steps. Scenarios with steps reseed before each publication replay. A changed fixture,
+environment, subject, replay, or explicit cell revision remounts their owners together.
 
 The `studio-feed-browser`, `studio-feed-draft`, `studio-feed-source`, `studio-feed-loop-source`,
 `studio-feed-session`, `studio-feed-controller`, and `studio-preview-feed-overlays` tests own the new
 boundaries. The simulated-user browser lane invokes `studio-feed-journey.ts` through the actual panel
 and drag adapters, with simulated preview messages crossing the iframe identity boundary; runtime tests
-own native Feed drag hit-testing. Fixture syntax currently cannot preserve arbitrary captured timestamps; unsupported
+own native Feed drag hit-testing. The real-app lane also invokes `studio-hnreader-feed-journey.ts`
+against an isolated HNReader project and real Metro preview. Browser input draws and snaps a sketch,
+drops Generated Story and Title onto a free rectangle and a rendered iframe target, checks transient
+preview text without disk writes, then exercises Discard, Keep, Undo Keep, and a fresh-session reopen.
+Free rectangle drops happen in Draw mode; rendered preview drops happen in Design mode with Data open.
+Run this review proof with `./agent unsandboxed studio-proof-real-app hnreader-feed-review`.
+Fixture syntax currently cannot preserve arbitrary captured timestamps; unsupported
 rows and optional bindings without a fallback report an error rather than changing their meaning.
 
 Run the focused Draw, Snap, and Feed-foundation contracts with the repository's installed profile:

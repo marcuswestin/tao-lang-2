@@ -199,6 +199,85 @@ Describe('Studio preview runtime bridge', () => {
     Expect(fake.listenerCount()).toBe(0)
   })
 
+  Test('resolves trusted parent Feed drops at iframe coordinates and rejects stale or inactive requests', () => {
+    const leaf = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 30, top: 40, width: 80 }, {
+      studioRectId: 'title',
+    })
+    const nested = { ...leaf, closest: () => leaf, getAttribute: () => null }
+    const fake = previewHost([leaf])
+    const hits: number[][] = []
+    Object.assign(fake.host.document, {
+      elementFromPoint: (x: number, y: number) => {
+        hits.push([x, y])
+        return x === 42 && y === 51 ? nested : null
+      },
+    })
+    const cell = { cellId: 'cell-1', cellRevision: 2, compileRevision: 7, manifestRevision: 'manifest-1' }
+    const cleanup = mountStudioPreviewBridge({ ...config, ...cell }, fake.host)
+    const message = {
+      ...interactionModeMessage('edit', fake.parent),
+      data: {
+        channel: 'tao-studio',
+        protocolVersion: 1,
+        type: 'feed-drop-at-point',
+        identity: {
+          appName: config.appName,
+          project: config.project,
+          previewInstanceId: config.previewInstanceId,
+          ...cell,
+        },
+        clientX: 42,
+        clientY: 51,
+        drop: { entity: 'Playlist', kind: 'field', path: ['Title'], presentation: 'text', rowId: 'opaque-row' },
+      },
+    }
+    const drops = () => fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-feed-drop')
+    fake.dispatchWindow('message', { ...message, origin: 'https://untrusted.test' })
+    fake.dispatchWindow('message', { ...message, source: {} })
+    for (
+      const identity of [
+        { ...message.data.identity, previewInstanceId: 'old-preview' },
+        { ...message.data.identity, cellRevision: 1 },
+        { ...message.data.identity, compileRevision: 6 },
+        { ...message.data.identity, manifestRevision: 'old-manifest' },
+      ]
+    ) {
+      fake.dispatchWindow('message', { ...message, data: { ...message.data, identity } })
+    }
+    for (
+      const fields of [{ clientX: Number.NaN }, { clientY: Infinity }, { drop: { ...message.data.drop, path: [] } }]
+    ) {
+      fake.dispatchWindow('message', { ...message, data: { ...message.data, ...fields } })
+    }
+    fake.dispatchWindow('message', interactionModeMessage('run', fake.parent))
+    fake.dispatchWindow('message', message)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
+    fake.dispatchDocument('keydown', { key: ' ' })
+    fake.dispatchWindow('message', message)
+    fake.dispatchDocument('keyup', { key: ' ' })
+    Expect(hits).toEqual([])
+    fake.dispatchWindow('message', { ...message, data: { ...message.data, clientX: 999 } })
+    Expect(drops()).toEqual([])
+    fake.dispatchDocument('click', { target: nested })
+    const selections = () =>
+      fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-select-source')
+    Expect(selections()).toHaveLength(1)
+    fake.dispatchWindow('message', message)
+    Expect(hits).toEqual([[999, 51], [42, 51]])
+    fake.dispatchDocument('click', { target: nested })
+    Expect(selections()).toHaveLength(2)
+    Expect(drops()).toMatchObject([{
+      message: {
+        drop: message.data.drop,
+        identity: { ...message.data.identity, path: '/project/Main.tao', sourceVersion: 'version-1' },
+        renderId: '/project/Main.tao:10:20',
+        studioRectId: 'title',
+      },
+    }])
+    cleanup()
+  })
+
   Test('validates bounded Feed transfer payloads without carrying arbitrary fields', () => {
     const valid = {
       entity: 'Playlist',

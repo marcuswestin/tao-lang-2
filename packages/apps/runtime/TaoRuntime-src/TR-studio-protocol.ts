@@ -40,3 +40,21 @@ export function parseTaoStudioFeedDrop(value: unknown): TaoStudioFeedDrop | unde
     ? { ...base, kind, presentation }
     : undefined
 }
+
+/** Validates the parent bridge payload without trusting any source identity supplied by a drop. */
+export function parseTaoStudioFeedDropAtPoint(value: unknown): {
+  clientX: number
+  clientY: number
+  drop: TaoStudioFeedDrop
+} | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined
+  }
+  const fields = value as Record<string, unknown>
+  const { clientX, clientY } = fields
+  const drop = parseTaoStudioFeedDrop(fields['drop'])
+  return typeof clientX === 'number' && Number.isFinite(clientX)
+      && typeof clientY === 'number' && Number.isFinite(clientY) && drop !== undefined
+    ? { clientX, clientY, drop }
+    : undefined
+}

@@ -12,6 +12,26 @@ import {
 } from '../studio-src/StudioProtocol'
 
 Describe('Studio session paths and routes', () => {
+  Test('parses parent Feed coordinates with bounded semantic payloads', () => {
+    const message = {
+      channel: studioProtocolChannel,
+      protocolVersion: studioProtocolVersion,
+      identity: { appName: 'Garden', previewInstanceId: 'preview-2', project: '/workspace/garden' },
+      type: 'feed-drop-at-point',
+      clientX: 12,
+      clientY: 24,
+      drop: { entity: 'Story', rowId: 'story-1', path: ['Title'], kind: 'field', presentation: 'text' },
+    }
+    Expect(StudioProtocol.parseMessage(message)).toEqual(message)
+    for (
+      const fields of [{ clientX: Infinity }, { clientY: Number.NaN }, { clientX: '12' }, {
+        drop: { ...message.drop, path: [] },
+      }]
+    ) {
+      Expect(StudioProtocol.parseMessage({ ...message, ...fields })).toBeUndefined()
+    }
+  })
+
   Test('accepts bounded Lens timing without exposing values or trusting malformed causes', () => {
     const message = {
       channel: studioProtocolChannel,

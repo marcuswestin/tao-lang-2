@@ -9,6 +9,13 @@
   and 1.3 seconds warm. These are two-test measurements, not whole-gate timings.
   Focused lifecycle controls pass. Cross-process lock contention and real
   interrupted-run recovery remain to be exercised before this entry can close.
+- **Update, 2026-09-26:** The HNReader Feed browser-review branch's full verification
+  hit 120-second waits for `jest-transform-cache-v2/coordination.tao-file-mutation.lock`
+  in two Tao app shards. The run measured four concurrent lanes and peak load 398.8
+  on 18 CPUs. `./agent test-retry` subsequently passed the unsettled app suites.
+  This is lock-contention evidence, not proof of stale ownership; no shared cache
+  was removed. Full-run evidence is `2026-09-26T22-23-24-361Z-39674-21363b1c`,
+  with retry `2026-09-26T22-30-23-605Z-47603-1cf0b12b` under worktree logs.
 - **Section:** External
 - **Area:** Test infrastructure
 - **Impact:** The managed `tao test` cache enforces 25,000 files and 256 MiB per

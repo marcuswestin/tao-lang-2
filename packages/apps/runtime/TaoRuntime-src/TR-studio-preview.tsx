@@ -20,7 +20,13 @@ import {
   waitForTaoJourneyTarget,
 } from './TR-studio-journey'
 import { StudioLensHost, type TaoStudioLensRenderSample } from './TR-studio-lens'
-import { parseTaoStudioFeedDrop, taoStudioFeedMime, TaoStudioProtocolVersions } from './TR-studio-protocol'
+import {
+  parseTaoStudioFeedDrop,
+  parseTaoStudioFeedDropAtPoint,
+  type TaoStudioFeedDrop,
+  taoStudioFeedMime,
+  TaoStudioProtocolVersions,
+} from './TR-studio-protocol'
 import RuntimeSwitch from './TR-switch'
 import type { TaoStudioIdentity } from './TR-TaoProps'
 import { Clock } from './TR-units'
@@ -191,6 +197,7 @@ export type StudioPreviewHost = {
       getBoundingClientRect?(): StudioPreviewRect
     }
     createElement(name: 'div'): StudioPreviewOverlay
+    elementFromPoint?(x: number, y: number): StudioPreviewElement | null
     querySelectorAll(selector: string): ArrayLike<StudioPreviewElement>
     removeEventListener: StudioPreviewDocumentListener
   }
@@ -1110,11 +1117,6 @@ export function mountStudioPreviewBridge(
     if (!editingGesture(event) || canvasPanKeyHeld) {
       return
     }
-    const target = renderTargetFromEvent(event)
-    const sourceVersion = target === undefined ? undefined : sourceVersionFor(config, target.identity.sourcePath)
-    if (target === undefined || sourceVersion === undefined) {
-      return
-    }
     let raw: unknown
     try {
       const text = event.dataTransfer!.getData(taoStudioFeedMime)
@@ -1127,13 +1129,20 @@ export function mountStudioPreviewBridge(
     }
     const drop = parseTaoStudioFeedDrop(raw)
     if (drop !== undefined) {
-      postToStudio(host, config, 'preview-feed-drop', {
-        drop,
-        identity: occurrenceIdentity(config, target.identity, sourceVersion),
-        renderId: renderId(target.identity),
-        ...(target.identity.studioRectId === undefined ? {} : { studioRectId: target.identity.studioRectId }),
-      })
+      postFeedDrop(drop, renderTargetFromEvent(event))
     }
+  }
+  const postFeedDrop = (drop: TaoStudioFeedDrop, target: StudioRenderTarget | undefined) => {
+    const sourceVersion = target === undefined ? undefined : sourceVersionFor(config, target.identity.sourcePath)
+    if (target === undefined || sourceVersion === undefined) {
+      return
+    }
+    postToStudio(host, config, 'preview-feed-drop', {
+      drop,
+      identity: occurrenceIdentity(config, target.identity, sourceVersion),
+      renderId: renderId(target.identity),
+      ...(target.identity.studioRectId === undefined ? {} : { studioRectId: target.identity.studioRectId }),
+    })
   }
   const onCanvasWheel = (event: StudioPreviewPointerEvent) => {
     if (
@@ -1281,6 +1290,23 @@ export function mountStudioPreviewBridge(
       )
     },
     'debug-command': applyDebugCommand,
+    'feed-drop-at-point': message => {
+      const point = parseTaoStudioFeedDropAtPoint(message)
+      const identity = message['identity']
+      if (
+        point === undefined || interactionMode !== 'edit' || canvasPanKeyHeld || !isObject(identity)
+        || identity['cellId'] !== config.cellId
+        || identity['cellRevision'] !== config.cellRevision
+        || identity['manifestRevision'] !== config.manifestRevision
+        || (config.cellId !== undefined && identity['compileRevision'] !== config.compileRevision)
+      ) {
+        return
+      }
+      endFeedDrag()
+      disarmDrag()
+      const element = host.document.elementFromPoint?.(point.clientX, point.clientY)
+      postFeedDrop(point.drop, renderTargetFromElement(element?.closest?.(studioRenderSelector) ?? element))
+    },
     'highlight-source': message => {
       const selection = highlightSelection(message, config)
       if (selection === undefined) {

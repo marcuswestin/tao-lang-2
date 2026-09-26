@@ -280,7 +280,6 @@ export function StudioFeedDrag(
           event.preventDefault()
           return
         }
-        event.stopPropagation()
         event.dataTransfer.effectAllowed = 'copy'
         event.dataTransfer.setData('application/x-tao-studio-feed', props.Payload)
       }}

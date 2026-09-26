@@ -1,3 +1,4 @@
+import { mountFeedDropOverlay } from './matrix/StudioFeedDropOverlays'
 import { StudioMatrixSketches } from './matrix/StudioMatrixSketches'
 import { StudioFeedController } from './StudioFeedController'
 /**
@@ -316,6 +317,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
 
     let canvasViewport: ReturnType<typeof mountCanvasViewport> | undefined
     const canvasGesturesOwned = (): boolean => studioLayoutOwnsCanvasGestures(root.dataset['layoutPreset'])
+    const disposeFeedDropOverlay = mountFeedDropOverlay(view.preview, previews, canvasGesturesOwned)
     const previewWiring = {
       activePreview,
       canvasGesturesOwned,
@@ -780,6 +782,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       disconnectPreviewMessages()
       canvasFocus.dispose()
       canvasViewport?.dispose()
+      disposeFeedDropOverlay()
       window.removeEventListener('pagehide', flushCanvas)
       document.removeEventListener('visibilitychange', onCanvasVisibility)
       canvasPersistence.dispose()

@@ -589,6 +589,7 @@ kbd {
 /* Keep one transparent surface above every preview for the entire held-Space gesture, including
    between drags. Pointer hit testing targets the canvas host, never an embedded app or edit handle. */
 .studio-preview[data-canvas-pan-ready="true"]::after,
+.studio-preview[data-feed-dragging="true"]::after,
 .studio-preview[data-canvas-panning="true"]::after {
   content: ""; cursor: inherit; inset: 0; pointer-events: auto; position: absolute; z-index: 6;
 }

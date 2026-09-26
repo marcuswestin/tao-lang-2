@@ -954,7 +954,7 @@ Test('Feed rows dispatch Tao selection and native drag preserves entity and fiel
   const chip = StudioFeedDrag({ Payload: fieldPayload, Label: 'Title', Disabled: false })
   ;(property(chip, 'onDragStart') as (event: unknown) => void)(event)
   Expect(transferred).toBe(fieldPayload)
-  Expect(stopped).toBe(true)
+  Expect(stopped).toBe(false) // The parent Feed surface must observe this native drag.
   const disabled = StudioFeedDrag({ Payload: 'invalid', Label: 'Title', Disabled: true })
   ;(property(disabled, 'onDragStart') as (event: unknown) => void)(event)
   Expect(property(disabled, 'draggable')).toBe(false)

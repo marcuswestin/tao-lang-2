@@ -39,6 +39,7 @@ type StudioPreviewMessageActions = {
   activate?: () => void
   applySourceAction: (envelope: StudioSourceActionEnvelope) => Promise<void>
   canvasGesture?: (gesture: StudioPreviewCanvasGestureMessage) => void
+  canvasGesturesOwned?: () => boolean
   canvasPanKey?: (message: StudioPreviewCanvasPanKeyMessage) => void
   canvasShortcut?: (message: StudioPreviewCanvasShortcutMessage) => void
   changed?: () => void
@@ -229,8 +230,10 @@ export async function handlePreviewMessage(
   const ignored = (): void => {}
   await Switch.property<StudioWindowMessage, 'type', Promise<void> | void>(message, 'type', {
     'debug-command': ignored,
+    'feed-drop-at-point': ignored,
     'highlight-source': ignored,
-    'preview-applied': type => receivePreviewApplied(preview, received(message, type), handshake),
+    'preview-applied': type =>
+      receivePreviewApplied(preview, received(message, type), handshake, actions.canvasGesturesOwned?.()),
     'preview-console': type => receiveConsole(preview, received(message, type), actions),
     'preview-canvas-gesture': type => actions.canvasGesture?.(received(message, type)),
     'preview-canvas-pan-key': type => actions.canvasPanKey?.(received(message, type)),
@@ -407,6 +410,7 @@ async function receivePreviewApplied(
   preview: StudioPreviewConnection,
   message: StudioWindowMessageOf<'preview-applied'>,
   handshake: StudioHandshake,
+  canvasGesturesOwned?: boolean,
 ): Promise<void> {
   postInteractionMode(preview, handshake)
   const identity = preview.cellIdentity
@@ -418,6 +422,11 @@ async function receivePreviewApplied(
   )
   if (!currentCell) {
     return
+  }
+  // The bridge's React effect can mount after iframe load, or remount without another load.
+  // Its acknowledgement is the first reliable opportunity to restore canvas key ownership.
+  if (canvasGesturesOwned !== undefined) {
+    postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned)
   }
   if (identity !== undefined) {
     preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)

@@ -6,6 +6,13 @@ import {
 } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
+import { exerciseHnreaderFeed } from './studio-hnreader-feed-journey'
+
+Test(
+  'Studio feeds, keeps, discards, and undoes generated HNReader Stories through real browser drags',
+  exerciseHnreaderFeed,
+  300_000,
+)
 
 async function canvasTranslation(browser: StudioCdp): Promise<{ x: number; y: number }> {
   return await browser.evaluate(`(() => {

@@ -242,6 +242,14 @@ folder-only and file-only models as well as importable public models.
 HNReader's entities now live in a workspace-visible `@model` package so its generated Story examples
 can bind into sketches without changing language visibility rules. A real HNReader regression covers
 the generated row, shared fixture, required parameter, field binding, and overlay compilation.
+The real-app browser lane now drives the HNReader review through actual drag input, including a
+rendered Metro iframe target, transient disk invariants, Discard/Keep/Undo Keep, and a fresh-session
+reopen. It exposed the browser's cross-origin drag restriction: Design Feed drops now cross a
+temporary parent capture surface and authenticated coordinate bridge before runtime hit-testing.
+Preview acknowledgements also restore canvas gesture ownership after a late bridge mount.
+The review also exposed stale fixture handles during live recompilation. Compatible source-only
+publications now retain the scenario provider; changed scenario contracts remount provider and fixture
+state together, with a regression for retained local state and reseeded data.
 
 **Representability limits.** Existing fixture syntax represents primitive literals, `now`, and fixture
 references. Exact captured/generated timestamps, unresolved live relation IDs, cyclic fixture creation

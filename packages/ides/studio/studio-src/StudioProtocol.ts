@@ -1,6 +1,11 @@
 import type { TaoSchemeCapability } from '@runtime/TR-scheme'
 import type { TaoStudioLensCause, TaoStudioLensRenderSample } from '@runtime/TR-studio-lens'
-import { parseTaoStudioFeedDrop, type TaoStudioFeedDrop, TaoStudioProtocolVersions } from '@runtime/TR-studio-protocol'
+import {
+  parseTaoStudioFeedDrop,
+  parseTaoStudioFeedDropAtPoint,
+  type TaoStudioFeedDrop,
+  TaoStudioProtocolVersions,
+} from '@runtime/TR-studio-protocol'
 import type { StudioDeviceStateEvent } from './device/StudioDeviceStatus'
 import type {
   StudioCompileCompletion,
@@ -496,6 +501,16 @@ export type StudioPreviewSourceMessage = {
   type: 'preview-hover-source' | 'preview-select-source'
 }
 
+export type StudioFeedDropAtPointMessage = {
+  channel: typeof studioProtocolChannel
+  clientX: number
+  clientY: number
+  drop: TaoStudioFeedDrop
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'feed-drop-at-point'
+}
+
 export type StudioPreviewFeedDropMessage = {
   channel: typeof studioProtocolChannel
   drop: TaoStudioFeedDrop
@@ -811,6 +826,7 @@ export type StudioWindowMessage =
   | StudioPreviewCanvasGestureMessage
   | StudioPreviewCanvasPanKeyMessage
   | StudioPreviewCanvasShortcutMessage
+  | StudioFeedDropAtPointMessage
   | StudioPreviewFeedDropMessage
   | StudioDebugCommandMessage
   | StudioPreviewLayoutMeasurementsMessage
@@ -905,6 +921,7 @@ const windowMessageParsers: {
   [TypeT in StudioWindowMessage['type']]: (value: StudioJsonObject) => StudioWindowMessage | undefined
 } = {
   'debug-command': parseDebugCommand,
+  'feed-drop-at-point': parseFeedDropAtPoint,
   'highlight-source': parseHighlightSource,
   'preview-applied': parsePreviewApplied,
   'preview-canvas-gesture': parsePreviewCanvasGesture,
@@ -1711,6 +1728,14 @@ function parsePreviewSource(value: StudioJsonObject): StudioPreviewSourceMessage
     range,
     type,
   })
+}
+
+function parseFeedDropAtPoint(value: StudioJsonObject): StudioFeedDropAtPointMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const point = parseTaoStudioFeedDropAtPoint(value)
+  return identity === undefined || point === undefined
+    ? undefined
+    : envelope({ ...point, identity, type: 'feed-drop-at-point' })
 }
 
 function parsePreviewFeedDrop(value: StudioJsonObject): StudioPreviewFeedDropMessage | undefined {

@@ -2639,6 +2639,69 @@ Test('Studio canvas shortcuts reach only the authenticated preview bridge', asyn
   Expect(commands).toEqual(['fit', 'reset', 'zoom-in', 'zoom-out'])
 })
 
+const previewAppliedSlot = testOverrideSlot({
+  read: () => StudioApiClient.previewApplied,
+  write: value => {
+    ;(StudioApiClient as { previewApplied: typeof value }).previewApplied = value
+  },
+})
+
+Test('Studio restores current canvas ownership when a preview bridge mounts after iframe load', async () => {
+  const messages: unknown[] = []
+  const contentWindow = { postMessage: (message: unknown) => messages.push(message) }
+  const preview = previewConnection('preview-late', 'late', contentWindow)
+  let owned = true
+  let applied = 0
+  const restore = previewAppliedSlot.install(async () => {
+    applied += 1
+  })
+  const listener = studioPreviewMessageListener({
+    canvasGesturesOwned: () => owned,
+    handshake: { identity: { appName: 'Garden', project: '/workspace' } },
+    previews: [preview],
+  } as never)
+  const event = {
+    data: {
+      appliedRevision: 1,
+      channel: studioProtocolChannel,
+      compileRevision: 1,
+      identity: { ...preview.cellIdentity, previewInstanceId: preview.previewInstanceId },
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-applied',
+    },
+    origin: preview.origin,
+    source: contentWindow,
+  } as unknown as MessageEvent
+  try {
+    // The receiver missed load-time publication. Its mounted acknowledgement must recover it.
+    listener({ ...event, origin: 'https://untrusted.example' } as MessageEvent)
+    Expect(messages).toEqual([])
+    listener(event)
+    await until(() => applied === 1)
+    Expect(messages).toContainEqual({
+      channel: studioProtocolChannel,
+      identity: event.data.identity,
+      owned: true,
+      protocolVersion: studioProtocolVersion,
+      type: 'set-canvas-gestures',
+    })
+    messages.length = 0
+    owned = false
+    // A later bridge remount must receive the current layout, not the initial Design state.
+    listener(event)
+    await until(() => applied === 2)
+    Expect(messages).toContainEqual({
+      channel: studioProtocolChannel,
+      identity: event.data.identity,
+      owned: false,
+      protocolVersion: studioProtocolVersion,
+      type: 'set-canvas-gestures',
+    })
+  } finally {
+    restore()
+  }
+})
+
 Test('Studio wires a canvas shortcut to the iframe that sent it', () => {
   const first = previewConnection('preview-first', 'first', {})
   const second = previewConnection('preview-second', 'second', {})
