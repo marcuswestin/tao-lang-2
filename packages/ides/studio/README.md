@@ -35,6 +35,17 @@ and `--hutch <path>` for an explicit Hutch executable.
 Studio advertises the **session URL**, never the server root. The root is not a usable page: a
 session prefix carries the opaque session ID that its HTTP and WebSocket routes hang off.
 
+## Run the app
+
+New previews start in **Run**, so clicks and typing go to the app. **Mode: Run** toggles to
+**Edit** for source selection. The initial workbench layout is Run too; an explicitly saved
+layout remains respected.
+
+The toolbar **Browser** button opens the current project's standalone app in the host's default
+web browser, from either browser or native Studio. It uses the same running Metro preview and
+leaves Studio open. **Device** opens the companion launcher described below. Browser runs require
+web-compatible app adapters; a native-only authentication configuration still needs the device.
+
 ## Companion device
 
 A physical iPhone or iPad, or an iOS simulator on this Mac, renders the selected Tao app through the

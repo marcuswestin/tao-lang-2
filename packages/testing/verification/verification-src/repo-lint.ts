@@ -504,10 +504,10 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1478',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:108',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:130',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:794',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:797',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:627',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:3424',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:708',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:3516',
   // Expo config plugins execute as standalone CommonJS host scripts.
   'packages/providers/icloud/plugins/with-tao-icloud.cjs:32',
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:14',

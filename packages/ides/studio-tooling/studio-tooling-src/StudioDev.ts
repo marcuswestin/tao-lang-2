@@ -224,6 +224,9 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       deviceLauncher: createStudioDeviceLauncher(),
       generationProvider: foundationModels.provider,
       hostname: options.hostname,
+      openBrowser: async url => {
+        await betterOpen(url)
+      },
       port: options.port,
     })
     const sessionUrl = `${server.url}${StudioSessionPath.window(initial.sessionId)}`
