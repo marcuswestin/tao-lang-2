@@ -7,25 +7,62 @@ const SHELL_SOURCE = 'packages/cli/dev-cli/dev-cli-src/shell'
 async function prepareFixture(fixture: string): Promise<Record<string, string | undefined>> {
   const bin = FS.resolvePath('bin', fixture)
   const stub = FS.resolvePath('devenv', bin)
+  const shellHook = (await FS.readText(Repo.resolvePath('devenv.nix'))).match(/enterShell = ''([\s\S]*?)'';/)?.[1]
+  Expect(shellHook).toBeDefined()
   await FS.copyFile(ENTRY, FS.resolvePath('enter-tao-dev-env', fixture))
   await FS.copyFile(Repo.resolvePath(`${SHELL_SOURCE}/.zshrc`), FS.resolvePath(`${SHELL_SOURCE}/.zshrc`, fixture))
   await FS.writeText(
     stub,
     `#!/bin/sh
-printf '%s|%s|%s\\n' "$PWD" "$DEVENV_TUI" "$*" >> "$TAO_TEST_DEVENV_LOG"
-if [ "$*" = 'shell --no-tui -- zsh -i' ]; then
-  printf '%s\\n%s\\n' "$ZDOTDIR" "$TAO_ORIGINAL_ZDOTDIR" > "$TAO_TEST_STARTUP_ENV"
-  if [ -n "$TAO_TEST_STARTUP_SCRIPT" ]; then
-    exec /bin/zsh -f "$TAO_TEST_STARTUP_SCRIPT"
-  fi
-fi
+printf 'devenv|%s|%s\\n' "$PWD" "$DEVENV_TUI" >> "$TAO_TEST_DEVENV_LOG"
+[ "$1" = shell ] && [ "$2" = --no-tui ] || exit 90
+shift 2
+if [ "\${1:-}" = -- ]; then shift; fi
+export TAO_TEST_PINNED_ENV=yes
+export SHELL=/bin/false
+${shellHook}
+exec "$@"
 `,
   )
   await FS.chmod(stub, 0o755)
+  await FS.writeText(
+    FS.resolvePath('agent', fixture),
+    `#!/bin/sh
+printf 'setup|%s|%s\\n' "$TAO_TEST_PINNED_ENV" "$*" >> "$TAO_TEST_DEVENV_LOG"
+if [ "$TAO_TEST_COLD_SETUP" = yes ]; then
+  for bin in "$DEVENV_ROOT/node_modules/.bin" "$DEVENV_ROOT/packages/shared/node_modules/.bin"; do
+    mkdir -p "$bin"
+    printf '#!/bin/sh\\nexit 0\\n' > "$bin/fixture-tool"
+    chmod +x "$bin/fixture-tool"
+  done
+fi
+exit "\${TAO_TEST_SETUP_EXIT:-0}"
+`,
+  )
+  await FS.chmod(FS.resolvePath('agent', fixture), 0o755)
+  for (const shell of ['zsh', 'bash']) {
+    await FS.writeText(
+      FS.resolvePath(shell, bin),
+      `#!/bin/sh
+printf 'interactive|%s|%s\\n' "$TAO_TEST_PINNED_ENV" "$*" >> "$TAO_TEST_DEVENV_LOG"
+printf '%s\\n%s\\n' "$ZDOTDIR" "$TAO_ORIGINAL_ZDOTDIR" > "$TAO_TEST_STARTUP_ENV"
+if [ "$TAO_TEST_COLD_SETUP" = yes ]; then
+  cd "$DEVENV_ROOT/packages"
+  printf '%s\\n' "$PATH" > "$DEVENV_ROOT/interactive-path.log"
+  command -v fixture-tool > "$DEVENV_ROOT/installed-tool.log"
+fi
+if [ -n "$TAO_TEST_STARTUP_SCRIPT" ]; then
+  exec /bin/zsh -f "$TAO_TEST_STARTUP_SCRIPT"
+fi
+exit "\${TAO_TEST_SHELL_EXIT:-0}"
+`,
+    )
+    await FS.chmod(FS.resolvePath(shell, bin), 0o755)
+  }
   return {
     ...Platform.runtimeProcess.env,
     PATH: `${bin}:/usr/bin:/bin`,
-    SHELL: '/bin/zsh',
+    SHELL: FS.resolvePath('zsh', bin),
     ZDOTDIR: undefined,
     DEVENV_ROOT: fixture,
     TAO_TEST_DEVENV_LOG: FS.resolvePath('calls.log', fixture),
@@ -34,7 +71,29 @@ fi
 }
 
 Describe('interactive Tao development shell', () => {
-  Test('runs setup once in devenv before entering the interactive shell', async () => {
+  Test('finds freshly installed dependency tools from a subdirectory after first setup', async () => {
+    const fixture = await mkTestDir('tao-dev-shell-')
+    try {
+      const env = await prepareFixture(fixture)
+      Expect(await FS.exists(FS.resolvePath('node_modules', fixture))).toBe(false)
+      const result = await CLI.run('/bin/sh', {
+        args: [FS.resolvePath('enter-tao-dev-env', fixture)],
+        cwd: fixture,
+        env: { ...env, TAO_TEST_COLD_SETUP: 'yes' },
+      })
+      Expect(result.exitCode).toBe(0)
+      const path = (await FS.readText(FS.resolvePath('interactive-path.log', fixture))).trim().split(':')
+      Expect(path).toContain(FS.resolvePath('node_modules/.bin', fixture))
+      Expect(path).toContain(FS.resolvePath('packages/shared/node_modules/.bin', fixture))
+      Expect((await FS.readText(FS.resolvePath('installed-tool.log', fixture))).trim()).toBe(
+        FS.resolvePath('packages/shared/node_modules/.bin/fixture-tool', fixture),
+      )
+    } finally {
+      await FS.remove(fixture)
+    }
+  })
+
+  Test('enters devenv once and completes setup before starting the interactive shell', async () => {
     const fixture = await mkTestDir('tao-dev-shell-')
     try {
       const log = FS.resolvePath('calls.log', fixture)
@@ -47,8 +106,9 @@ Describe('interactive Tao development shell', () => {
 
       Expect(result.exitCode).toBe(0)
       Expect((await FS.readText(log)).trim().split('\n')).toEqual([
-        `${fixture}|false|shell --no-tui ./agent setup`,
-        `${fixture}|false|shell --no-tui -- zsh -i`,
+        `devenv|${fixture}|false`,
+        'setup|yes|setup',
+        'interactive|yes|-i',
       ])
       Expect((await FS.readText(FS.resolvePath('startup-env.log', fixture))).trim().split('\n')).toEqual([
         FS.resolvePath('.artifacts/cache/dev-shell/zsh', fixture),
@@ -56,6 +116,56 @@ Describe('interactive Tao development shell', () => {
       ])
     } finally {
       await FS.remove(fixture)
+    }
+  })
+
+  Test('does not start an interactive shell when setup fails and preserves its exit status', async () => {
+    const fixture = await mkTestDir('tao-dev-shell-')
+    try {
+      const env = await prepareFixture(fixture)
+      const result = await CLI.run('/bin/sh', {
+        args: [FS.resolvePath('enter-tao-dev-env', fixture)],
+        cwd: fixture,
+        env: { ...env, TAO_TEST_SETUP_EXIT: '23' },
+      })
+      Expect(result.exitCode).toBe(23)
+      Expect((await FS.readText(FS.resolvePath('calls.log', fixture))).trim().split('\n')).toEqual([
+        `devenv|${fixture}|false`,
+        'setup|yes|setup',
+      ])
+      Expect(await FS.exists(FS.resolvePath('startup-env.log', fixture))).toBe(false)
+    } finally {
+      await FS.remove(fixture)
+    }
+  })
+
+  Test('honors a non-zsh shell in a checkout with spaces and returns its exit status', async () => {
+    const root = await mkTestDir('tao-dev-shell-')
+    const fixture = FS.resolvePath('checkout with spaces', root)
+    try {
+      const env = await prepareFixture(fixture)
+      const result = await CLI.run('/bin/sh', {
+        args: [FS.resolvePath('enter-tao-dev-env', fixture)],
+        cwd: root,
+        env: {
+          ...env,
+          SHELL: FS.resolvePath('bin/bash', fixture),
+          TAO_TEST_SHELL_EXIT: '7',
+          ZDOTDIR: FS.resolvePath('user-startup', fixture),
+        },
+      })
+      Expect(result.exitCode).toBe(7)
+      Expect((await FS.readText(FS.resolvePath('calls.log', fixture))).trim().split('\n')).toEqual([
+        `devenv|${fixture}|false`,
+        'setup|yes|setup',
+        'interactive|yes|-i',
+      ])
+      Expect((await FS.readText(FS.resolvePath('startup-env.log', fixture))).split('\n')[0]).toBe(
+        FS.resolvePath('user-startup', fixture),
+      )
+      Expect(await FS.exists(FS.resolvePath('.artifacts/cache/dev-shell/zsh', fixture))).toBe(false)
+    } finally {
+      await FS.remove(root)
     }
   })
 

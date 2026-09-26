@@ -60,8 +60,9 @@ git clone <repository> tao && cd tao
 ./tao create "A reading list"
 ```
 
-The entry script builds the pinned toolchain, runs `./agent setup`, and opens an interactive
-development shell. Run it again when you return to the checkout; type `exit` to leave. Then:
+The entry script enters the pinned environment once, runs `./agent setup`, and opens your interactive
+shell in that same environment. A failed setup stops entry. Run it again when you return to the
+checkout; type `exit` to leave. Then:
 
 | Command      | What it does                                                                          |
 | ------------ | ------------------------------------------------------------------------------------- |
