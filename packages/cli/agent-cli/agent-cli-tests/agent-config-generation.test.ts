@@ -1,34 +1,30 @@
 import { CLI, FS, Repo, Text } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 import type { GenerateOptions } from 'rulesync'
 import { AgentConfigGenerator } from '../agent-cli-src/agent-config/AgentConfigGenerator'
 
 Describe('agent config generation', () => {
   Test('the session-start hook reaches the worktree script from a repository subdirectory', async () => {
-    const root = await mkTestDir('tao-agent-hook-subdirectory-')
-    try {
-      await CLI.run('git', { args: ['init', '--quiet'], cwd: root })
-      const marker = FS.resolvePath('hook-ran', root)
-      const script = FS.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh', root)
-      await FS.writeText(script, '#!/bin/zsh\n: > "$TAO_TEST_HOOK_MARKER"\n')
-      await FS.chmod(script, 0o755)
-      const nested = FS.resolvePath('packages/cli/agent-cli', root)
-      await FS.mkdir(nested)
-      const hooks = JSON.parse(
-        Text.stripJsonc(await FS.readText(Repo.resolvePath('.rulesync/hooks.jsonc'))),
-      ) as { hooks: { sessionStart: Array<{ command: string }> } }
+    const root = await mkGitTestDir('tao-agent-hook-subdirectory-')
+    await initGitTestRepository(root)
+    const marker = FS.resolvePath('hook-ran', root)
+    const script = FS.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh', root)
+    await FS.writeText(script, '#!/bin/zsh\n: > "$TAO_TEST_HOOK_MARKER"\n')
+    await FS.chmod(script, 0o755)
+    const nested = FS.resolvePath('packages/cli/agent-cli', root)
+    await FS.mkdir(nested)
+    const hooks = JSON.parse(
+      Text.stripJsonc(await FS.readText(Repo.resolvePath('.rulesync/hooks.jsonc'))),
+    ) as { hooks: { sessionStart: Array<{ command: string }> } }
 
-      const result = await CLI.run('zsh', {
-        args: ['-c', hooks.hooks.sessionStart[0]!.command],
-        cwd: nested,
-        env: { TAO_TEST_HOOK_MARKER: marker },
-      })
+    const result = await CLI.run('zsh', {
+      args: ['-c', hooks.hooks.sessionStart[0]!.command],
+      cwd: nested,
+      env: { TAO_TEST_HOOK_MARKER: marker },
+    })
 
-      Expect(result.exitCode).toBe(0)
-      Expect(await FS.exists(marker)).toBe(true)
-    } finally {
-      await FS.remove(root)
-    }
+    Expect(result.exitCode).toBe(0)
+    Expect(await FS.exists(marker)).toBe(true)
   })
 
   Test('continues when a managed worktree blocks one adapter directory', async () => {
