@@ -212,7 +212,7 @@ Describe('Studio source-action patch bus', () => {
       use Col, Text from @tao/ui
       data Playlists / Playlist { Title text }
       view MainView() {
-         query Playlists
+         query Playlists = Playlists
          render Col() {
             loop Playlists / Playlist {
                Text(Playlist.Title)
@@ -238,7 +238,7 @@ Describe('Studio source-action patch bus', () => {
       use Col, Text from @tao/ui
       data Playlists / Playlist { Title text }
       view MainView() {
-         query Playlists
+         query Playlists = Playlists
          render Col() {
             loop Playlists / Playlist {
                loop Playlists / Playlist {
@@ -1978,7 +1978,7 @@ Describe('Studio source-action patch bus', () => {
 
   Test('adds an imported entity parameter and fixture argument to every sketch scenario', async () => {
     await withTaoFiles('tao-source-actions-sketch-feed-', {
-      'Data.tao': `workspace data Playlists / Playlist { Cover text Title text Score number }\n`,
+      'Data.tao': `workspace data Playlists / Playlist { Cover text, Title text, Score number }\n`,
       'View1.tao': `
         use Placeholder from @tao/ui
         public view View1() { render Placeholder("View1") [width 360, height 76] }
@@ -2008,7 +2008,7 @@ Describe('Studio source-action patch bus', () => {
       Expect(patch.content).toContain('scenario "second" {\n      render (Playlist: MorningRun)')
       Expect(updated.entry.document.parseResult.lexerErrors).toEqual([])
       Expect(updated.entry.document.parseResult.parserErrors).toEqual([])
-    })
+    }, { location: 'host' })
   })
 
   Test('rejects incomplete sketch scenario bindings and arbitrary source text', async () => {
@@ -2036,7 +2036,7 @@ Describe('Studio source-action patch bus', () => {
   Test('binds tagged sketch leaves to text, interpolation, and accessible image fields', async () => {
     const first = await parseDocument(`
       use Image, Placeholder, Row, Text from @tao/ui
-      data Playlists / Playlist { Cover text Title text Score number }
+      data Playlists / Playlist { Cover text, Title text, Score number }
       public view View1(Playlist) {
         render Row() {
           #studio_rect_0063006f007600650072
@@ -2095,7 +2095,7 @@ Describe('Studio source-action patch bus', () => {
   Test('rejects stale sketch tags, unknown paths, and non-text image fields', async () => {
     const document = await parseDocument(`
       use Placeholder from @tao/ui
-      data Playlists / Playlist { Title text Score number }
+      data Playlists / Playlist { Title text, Score number }
       public view View1(Playlist) {
         #studio_rect_007400690074006c0065
         render Placeholder("Title") [width 100]
@@ -2217,9 +2217,9 @@ Describe('Studio canvas-mode source actions', () => {
       use Col, Text from @tao/ui
 
       data Stories / Story {
-         Title text
-         Score number
-         Author text
+         Title text,
+         Score number,
+         Author text,
          Summary text?
       }
 
@@ -2339,7 +2339,7 @@ Describe('Studio canvas-mode source actions', () => {
       use Col, Text from @tao/ui
 
       data Stories / Story {
-         Title text
+         Title text,
          Score number
       }
 
@@ -2549,7 +2549,7 @@ Describe('Studio canvas-mode source actions', () => {
         renderId: renderId(requireRenderByText(parsed.entry.document, 'First')),
         wrapper: 'Row',
       }, { files: [parsed.entry.ast, sibling.entry.ast] })).rejects.toThrow("cannot import 'Row' from @tao/ui")
-    })
+    }, { location: 'host' })
   })
 
   Test('wrap-render keeps a Snap marker attached to the render it identifies', async () => {

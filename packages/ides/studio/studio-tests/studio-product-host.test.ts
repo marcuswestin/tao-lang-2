@@ -319,7 +319,7 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).toContain('StudioScenarioControlGroup("Record interaction")')
   Expect(source).toContain('Name: StudioScenarioJourneyCommand(JourneyRecording)')
   Expect(source).toContain('Name: "scenario-save-journey"')
-  Expect(source).toContain('query Files as Children')
+  Expect(source).toContain('query Children = Files')
   Expect(source).toContain('FileTree(FolderPath: File.Path')
   Expect(source).toContain('do CreateFile(NewPath)')
   Expect(source).toContain('do RenameFile(Path: File.Path, SourceVersion: File.Version, TargetPath: RenamePath)')

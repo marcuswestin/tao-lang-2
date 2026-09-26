@@ -21,7 +21,7 @@ app Reader {
 }
 
 data Stories / Story {
-   Title text
+   Title text,
    Score number
 }
 
@@ -31,14 +31,13 @@ view StoryRow(Story) {
 }  }
 `
 
-/** span locates a snippet in the fixture source so a node carries the offsets it would really have. */
-function span(needle: string): { start: number; end: number } {
-  const start = SOURCE.indexOf(needle)
-  Expect(start).not.toBe(-1)
-  return { end: start + needle.length, start }
-}
-
-function snapshot(): SemanticSnapshot {
+function snapshot(source = SOURCE): SemanticSnapshot {
+  /** span locates a snippet in the fixture source so a node carries the offsets it would really have. */
+  function span(needle: string): { start: number; end: number } {
+    const start = source.indexOf(needle)
+    Expect(start).not.toBe(-1)
+    return { end: start + needle.length, start }
+  }
   const nodes = new Map<string, SnapshotNode>()
   const add = (node: SnapshotNode) => nodes.set(node.id, node)
   add({ id: 'app:Reader', kind: 'app', name: 'Reader', path: PATH, ...span('app Reader {\n   Name "Reader"\n}') })
@@ -225,7 +224,7 @@ Describe('Agent feature lowering', () => {
     // One file holds the entity, the view and the app, so it must be rewritten once, not once per placement.
     Expect(result.edits.length).toBe(1)
     const after = result.edits[0]!.after
-    Expect(after).toContain('Score number\n   Bookmarked yes / no')
+    Expect(after).toContain('Score number,\n   Bookmarked yes / no')
     Expect(after).toContain('action SetBookmarked(Value boolean)')
     Expect(after).toContain('Bookmarked: Value')
     Expect(after).toContain('#markBookmarked')
@@ -244,6 +243,17 @@ Describe('Agent feature lowering', () => {
     Expect(result.steps[0]!.decidedBy).toBe('tao')
     Expect(result.steps[0]!.action).toBe('capitalize the field name: bookmarked → Bookmarked')
     Expect(result.edits[0]!.after).toContain('Bookmarked yes / no')
+  })
+
+  Test('preserves the anchor field comment with or without a trailing comma', async () => {
+    for (const suffix of [' // Original score', ', // Original score']) {
+      const source = SOURCE.replace('Score number\n', `Score number${suffix}\n`)
+      const problems: string[] = []
+      const result = await lowerFeature(snapshot(source), { ...FLAG_SHAPE }, async () => source, problems)
+
+      Expect(problems).toEqual([])
+      Expect(result.edits[0]!.after).toContain('Score number, // Original score\n   Bookmarked yes / no,')
+    }
   })
 
   Test('refuses a field kind it cannot lower without pretending to place it', async () => {

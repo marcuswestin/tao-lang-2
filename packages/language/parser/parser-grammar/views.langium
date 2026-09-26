@@ -93,13 +93,29 @@ type Render = RenderStatement | ViewRender;
 
 // `otherwise` makes every subject render conditional total and terminates the branch list unambiguously.
 WhenRenderStatement:
-    'when' subject=SubjectExpression '{' branches+=WhenRenderBranch+ otherwise=WhenRenderOtherwise '}';
+    'when' (subject=SubjectExpression
+      ('{' branches+=WhenRenderBranch* otherwise=WhenRenderOtherwise '}'
+       | branches+=BarWhenRenderBranch* otherwise=BarWhenRenderOtherwise)
+      | branches+=PredicateWhenRenderBranch* otherwise=BarWhenRenderOtherwise);
 
 WhenRenderBranch:
-    case=SubjectCaseName '->' payload=CasePayload? block=Block;
+    case=SubjectCaseName '->' payload=CasePayload? block=(Block | AtomicRenderBlock);
+
+BarWhenRenderBranch infers WhenRenderBranch:
+    barSyntax?='|' case=SubjectCaseName '->' payload=CasePayload? block=(Block | AtomicRenderBlock);
+
+PredicateWhenRenderBranch infers WhenRenderBranch:
+    barSyntax?='|' condition=OrExpression '->' block=(Block | AtomicRenderBlock);
 
 WhenRenderOtherwise:
-    'otherwise' '->' block=Block;
+    'otherwise' '->' block=(Block | AtomicRenderBlock);
+
+BarWhenRenderOtherwise infers WhenRenderOtherwise:
+    barSyntax?='|' 'otherwise' '->' block=(Block | AtomicRenderBlock);
+
+// A bare arm owns exactly one render or terminal match; a statement sequence requires braces.
+AtomicRenderBlock returns Block:
+    statements+=(ViewRender | RenderStatement | WhenRenderStatement);
 
 IfRenderStatement:
     'if' condition=Expression block=Block;

@@ -6,6 +6,7 @@
   "module": "shared-src/shared.ts",
   "exports": {
     ".": "./shared-src/shared.ts",
-    "./core": "./shared-src/core/shared-core.ts"
+    "./core": "./shared-src/core/shared-core.ts",
+    "./auth": "./shared-src/auth/AuthProtocol.ts"
   }
 }

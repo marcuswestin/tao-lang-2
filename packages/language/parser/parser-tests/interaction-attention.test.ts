@@ -11,10 +11,10 @@ Describe('parser: interaction attention', () => {
       command Duplicate(Document) { Title "Duplicate" do Run() }
       command Delete(Document) { Title "Delete" do Run() }
       data Documents / Document {
-        Title text
+        Title text,
 
-        commands Finish, Duplicate
-        commands hide Delete
+        commands { Finish, Duplicate },
+        commands hide { Delete }
       }
       view Row(Document) {
         Commands { Finish }

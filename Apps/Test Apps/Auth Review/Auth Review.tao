@@ -1,0 +1,226 @@
+use Account, AccountView, LoginFlow, Session, SignIn, SignInFlow, SignInView, SignOut from @tao/auth
+use LocalAuth from @tao/auth/local
+use TestAuth from @tao/auth/testing
+use Memory from @tao/data/providers/memory
+use Reference from @tao/data/providers/reference
+use StackNav from @tao/nav
+use Col, FormButton, Text, TextInput from @tao/ui
+
+app AuthReview {
+   Name "Auth Review"
+   Auth TestAuth { }
+   action Leave() {
+      do SignOut()
+   }
+   Datasource Memory { }
+   Navigator StackNav {
+      Initial Authentication(Leave: Leave)
+}  }
+
+app AuthReviewLocal = AuthReview with {
+   Auth LocalAuth {
+      Endpoint "http://127.0.0.1:4738"
+      Resource "auth-review"
+   }
+   Datasource Reference {
+      ServerURL "http://127.0.0.1:4738"
+      Resource "auth-review"
+      Offline {
+         Me,
+         Me.Notes
+}  }  }
+
+let Me = Account
+
+folder
+data Accounts / Account {
+   DisplayName text (required "Enter your name"),
+   Notes (owned),
+}
+
+folder
+data Notes / Note {
+   Owner Account,
+   Body text (required "Write something"),
+   CreatedAt time (default now),
+
+   index CreatedAt,
+}
+
+access Account {
+   Account can read
+   Account can update DisplayName
+}
+
+access Note {
+   Owner can read, create, delete
+   Owner can update Body
+}
+
+// Authenticated does not imply that the application profile has finished loading.
+guard default {
+   loading -> Text("Opening account…")
+   missing -> Text("Account data is missing")
+   unauthorized -> Text("You do not have access")
+   error -> Message { Text(Message) }
+}
+
+scene Authentication(Leave action()) {
+   Title "Auth Review"
+   render Col() {
+      when Session.State
+         | SignedIn -> {
+            Text("Signed in")
+
+            #signOut
+            FormButton(Title: "Sign out") {
+               on press -> { do Leave() }
+            }
+            when Me {
+               otherwise -> { NotesHome() }
+         }  }
+         | Restoring -> Text("Restoring session…")
+         | otherwise -> Login()
+}  }
+
+view Login() {
+   state Flow = SignInFlow()
+   state CodeFlow = SignInFlow(Method: "EmailCode")
+   state Supplied = false
+   state EmailCode = false
+   state PresentedProblem = ""
+   action PresentLogin() {
+      when do SignIn()
+         | cancelled -> { set PresentedProblem = "Presented sign in cancelled" }
+         | error -> Message { set PresentedProblem = Message }
+         | otherwise -> { }
+   }
+   render Col() {
+      Text("Sign in to your notes")
+
+      #presentSignIn
+      FormButton(Title: "Open sign-in dialog") {
+         on press PresentLogin
+      }
+      if PresentedProblem is not empty {
+         Text(PresentedProblem)
+      }
+
+      #toggleSignIn
+      FormButton(Title: "Switch sign-in UI") {
+         on press -> { toggle Supplied }
+      }
+
+      #toggleMethod
+      FormButton(Title: "Use email code") {
+         on press -> { toggle EmailCode }
+      }
+      when EmailCode
+         | true -> CodeLogin(CodeFlow, Supplied)
+         | otherwise -> { when Supplied
+            | true -> SignInView(Flow)
+            | otherwise -> {
+               #email
+               TextInput(Value: Flow.Email, Label: "Account email") {
+                  on submit -> { do Flow.Submit() }
+               }
+
+               #password
+               TextInput(Value: Flow.Password, Label: "Password") {
+                  on submit -> { do Flow.Submit() }
+               }
+
+               #submitSignIn
+               FormButton(Title: "Sign in", Disabled: Flow.Running) {
+                  on press -> { do Flow.Submit() }
+               }
+
+               #register
+               FormButton(Title: "Create account", Disabled: Flow.Running) {
+                  on press -> {
+                     set Flow.Registration = true
+                     do Flow.Submit()
+               }  }
+               if Flow.Problem is not empty {
+                  Text(Flow.Problem)
+               }
+
+               #cancelSignIn
+               FormButton(Title: "Cancel sign in") {
+                  on press -> { do Flow.Cancel() }
+               }
+            } }
+}  }
+
+view CodeLogin(Flow LoginFlow, Supplied boolean) {
+   render Col() {
+      when Supplied
+         | true -> SignInView(Flow)
+         | otherwise -> {
+            Text("Email-code sign in")
+
+            #codeEmail
+            TextInput(Value: Flow.Email, Label: "Email for code") {
+               on submit -> { do Flow.SendCode() }
+            }
+
+            #sendCode
+            FormButton(Title: "Send code", Disabled: Flow.Running) {
+               on press -> { do Flow.SendCode() }
+            }
+            if Flow.Step == "Code" {
+               Text("Enter your code")
+
+               #code
+               TextInput(Value: Flow.Code, Label: "Code") {
+                  on submit -> { do Flow.Verify() }
+               }
+
+               #verifyCode
+               FormButton(Title: "Verify code", Disabled: Flow.Running) {
+                  on press -> { do Flow.Verify() }
+            }  }
+            if Flow.Problem is not empty {
+               Text(Flow.Problem)
+            }
+            if Flow.Step == "Cancelled" {
+               Text("Sign in cancelled")
+            }
+
+            #cancelCode
+            FormButton(Title: "Cancel code sign in") {
+               on press -> { do Flow.Cancel() }
+}  }  }  }
+
+view NotesHome() {
+   state Body = ""
+   query Mine = Me.Notes with {
+      order by CreatedAt desc
+   }
+   action Add() {
+      check Body is not empty
+      create Note {
+         Owner: Me,
+         Body: Body
+      }
+      set Body = ""
+   }
+   render Col() {
+      Text("Hello { Me.DisplayName }")
+      if Me.IsIncomplete {
+         Text("Complete your profile")
+      }
+      AccountView()
+
+      #newNote
+      TextInput(Value: Body, Label: "New note") {
+         on submit Add
+      }
+
+      #addNote
+      FormButton(Title: "Add note") {
+         on press Add
+      }
+      loop Mine / Note {
+         Text(Note.Body)
+}  }  }

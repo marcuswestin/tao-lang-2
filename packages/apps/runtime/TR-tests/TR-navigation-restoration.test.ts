@@ -53,6 +53,159 @@ function runtimeApp(
 }
 
 Describe('navigation restoration', () => {
+  Test('passes each mounted auth scope into lazy navigator and auxiliary configuration', () => {
+    const scopes: Array<TR.AuthScope | undefined> = []
+    const home = TR.Navigation.View({
+      identity: identity('view', 'ScopedHome'),
+      name: 'ScopedHome',
+      render: () => null,
+    })
+    const stack = TR.Navigation.Declaration('ScopedStack', TR.NavKind.Stack(), identity('nav', 'ScopedStack'))
+    const declared = TR.Navigation.App({
+      name: 'ScopedCallbacks',
+      navigator: scope => {
+        scopes.push(scope)
+        return TR.Navigation.Configure(stack, { Initial: home })
+      },
+      auxiliaries: scope => {
+        scopes.push(scope)
+        return {}
+      },
+    })
+    const first = TR.Auth.CreateScope()
+    const second = TR.Auth.CreateScope()
+    const firstApp = first.app(declared)
+    const secondApp = second.app(declared)
+    void firstApp.navigator
+    void firstApp.auxiliaries
+    void secondApp.navigator
+    void secondApp.auxiliaries
+    Expect(scopes).toEqual([first, first, second, second])
+    first.dispose()
+    second.dispose()
+    declared.dispose()
+  })
+
+  Test(
+    'restores entity arguments in the destination mount when accounts and datasource declarations match',
+    async () => {
+      const source = TR.Auth.Configure(
+        TR.Auth.Declaration('Auth', {
+          connect: () => ({
+            capabilities: { methods: ['Password'] },
+            restore: async () => ({
+              state: 'SignedIn' as const,
+              identity: { accountId: 'same-account', issuer: 'test', subject: 'alice' },
+            }),
+            signIn: async () => ({ outcome: { status: 'cancelled' as const } }),
+            signOut: async () => ({ status: 'completed' as const }),
+            credential: async () => ({ audience: 'unused', value: 'unused' }),
+          }),
+        }),
+        {},
+      )
+      const firstScope = TR.Auth.CreateScope(source)
+      const secondScope = TR.Auth.CreateScope(source)
+      await Promise.all([firstScope.restore(), secondScope.restore()])
+      const schema = TR.Data.Schema({
+        name: 'ScopedRestore',
+        entities: {
+          Account: {
+            collection: 'Accounts',
+            fields: { Name: { kind: 'text' } },
+            grants: [{ operations: ['read'], principal: [] }],
+          },
+        },
+      })
+      const provider = TR.Data.Declaration('ScopedMemory', {
+        authenticatedAuthority: 'server',
+        connect: context => ({
+          load: () =>
+            JSON.stringify({
+              formatVersion: 1,
+              schemaVersion: 1,
+              nextId: 1,
+              rows: { Account: [{ Id: 'same-account', Name: context.configuration['Name'] }] },
+            }),
+          save: () => undefined,
+          referenceToken: reference => reference.id,
+          resolveReference: reference => reference.token,
+        }),
+      }, identity('datasource', 'ScopedMemory'))
+      firstScope.bindDatasources([{ store: schema, source: TR.Data.Configure(provider, { Name: 'First mount' }) }])
+      secondScope.bindDatasources([{ store: schema, source: TR.Data.Configure(provider, { Name: 'Second mount' }) }])
+      const declared = runtimeApp('scoped-reference')
+      const firstApp = firstScope.app(declared.app)
+      const secondApp = secondScope.app(declared.app)
+      Expect(firstApp).not.toBe(secondApp)
+      secondApp.present(secondApp.navigator, declared.detail, {
+        Row: TR.Value(secondScope.store(schema).entity('Account', 'same-account')),
+      })
+      const captured = secondApp.captureNavigation()
+      secondApp.restoreNavigation(captured)
+      const entries =
+        (secondApp.navigator as unknown as { entries: Array<{ arguments: TaoNavigationArguments }> }).entries
+      const restored = entries[1]!.arguments['Row']!.evaluate().jsValue
+      Expect(TR.Data.Read(restored, 'Name')).toBe('Second mount')
+      firstScope.dispose()
+      Expect(TR.Data.EntityAvailability(restored)).toEqual({ status: 'available' })
+      Expect(TR.Data.Read(restored, 'Name')).toBe('Second mount')
+      secondScope.dispose()
+      declared.app.dispose()
+    },
+  )
+
+  Test('keeps private scalar route arguments out of another account and resets navigation on logout', async () => {
+    const storage = new Map<string, string>()
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(storage))
+    const scopeFor = async (accountId: string) => {
+      const scope = TR.Auth.CreateScope(TR.Auth.Configure(
+        TR.Auth.Declaration('Auth', {
+          connect: () => ({
+            capabilities: { methods: [] },
+            restore: async () => ({
+              state: 'SignedIn' as const,
+              identity: { accountId, issuer: 'test', subject: accountId },
+            }),
+            signIn: async () => ({ outcome: { status: 'cancelled' as const } }),
+            signOut: async () => ({ status: 'completed' as const }),
+            credential: async () => ({ audience: 'unused', value: 'unused' }),
+          }),
+        }),
+        {},
+      ))
+      await scope.restore()
+      return scope
+    }
+    const alice = await scopeFor('alice')
+    const bob = await scopeFor('bob')
+    const returnedAlice = await scopeFor('alice')
+    const declared = runtimeApp('private-scalar')
+    try {
+      const first = alice.app(declared.app)
+      const detach = await first.attachRestoration()
+      first.present(first.navigator, declared.detail, { Message: TR.Value('Alice private route') })
+      await drainMicrotasks()
+      detach()
+      const second = bob.app(declared.app)
+      const detachBob = await second.attachRestoration()
+      Expect((second.navigator as RuntimeStackNav).depth).toBe(1)
+      detachBob()
+      const returned = returnedAlice.app(declared.app)
+      const detachAlice = await returned.attachRestoration()
+      Expect((returned.navigator as RuntimeStackNav).depth).toBe(2)
+      await returnedAlice.signOut()
+      Expect((returned.navigator as RuntimeStackNav).depth).toBe(1)
+      detachAlice()
+    } finally {
+      alice.dispose()
+      bob.dispose()
+      returnedAlice.dispose()
+      declared.app.dispose()
+      restoreStorage()
+    }
+  })
+
   Test('round-trips stack entries and arguments through a relaunch', async () => {
     const values = new Map<string, string>()
     const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))

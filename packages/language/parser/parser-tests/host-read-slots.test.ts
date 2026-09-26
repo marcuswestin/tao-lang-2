@@ -86,7 +86,7 @@ Describe('parser: host-read slots and commands', () => {
   Test('parses a renamed typed slot in the parameter list beside the member fills', async () => {
     const result = await testParseCode(`
       data Songs / Song {
-        Title text
+        Title text,
         Liked yes / Unliked no
       }
 

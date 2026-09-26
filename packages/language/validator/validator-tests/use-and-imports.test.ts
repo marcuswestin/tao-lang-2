@@ -543,7 +543,7 @@ Describe('validator: imported declaration regressions', () => {
         'Schema.tao': 'workspace data Workspaces / Workspace { Name text }',
         'Main.tao': importingApp(
           'use Workspaces from ./Schema',
-          `query Workspaces { }
+          `query Workspaces = Workspaces with { }
            render Text("Rows: { Workspaces.Count }")`,
           stubView('Text', 'Value text'),
         ),

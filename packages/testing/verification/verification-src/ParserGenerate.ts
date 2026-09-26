@@ -270,7 +270,7 @@ async function validateDeclaredOutputBoundaries(
  * Dependencies stay in the real parser package and are invoked by absolute path.
  */
 async function createParserGenerateStagingRepository(parserRoot: string): Promise<string> {
-  const stagingRepositoryRoot = await Repo.mkScratchDir('tao-parser-generate-', FS.resolvePath('../../..', parserRoot))
+  const stagingRepositoryRoot = await FS.mkTmpDir('tao-parser-generate-')
   const stagingParserRoot = FS.resolvePath('packages/language/parser', stagingRepositoryRoot)
   try {
     await FS.copyFile(
@@ -323,7 +323,7 @@ async function synchronizeGeneratedOutputs(
   options: ParserGenerateOptions,
 ): Promise<void> {
   const plan = await generatedPublicationPlan(stagingParserRoot, stagingRepositoryRoot, parserRoot, repositoryRoot)
-  const transactionRoot = await Repo.mkScratchDir('tao-parser-publish-', repositoryRoot)
+  const transactionRoot = await FS.mkTmpDir('tao-parser-publish-')
   const publicationScratchRoot = FS.resolvePath('.artifacts', repositoryRoot)
   const stagedFiles = new Map<string, string>()
   const backups = new Map<string, string>()

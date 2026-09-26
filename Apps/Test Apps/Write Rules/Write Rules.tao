@@ -13,9 +13,9 @@ app WriteRulesApp {
 // `required` states completeness. It never blocks a write; it derives `Incomplete` and `Problems`
 // on a stored row, and on every projection that selects the field.
 data Notes / Note {
-   Title text (required "Give the note a title")
-   Topic text (required "Pick a topic")
-   Summary text (default "", required "Summarize the note")
+   Title text (required "Give the note a title"),
+   Topic text (required "Pick a topic"),
+   Summary text (default "", required "Summarize the note"),
 }
 
 // A projection carries the `required` sentences of the fields it selects, so a form knows it is
@@ -28,7 +28,7 @@ scene NotesView() {
       Title: "",
       Topic: ""
    }
-   query Notes { }
+   query Notes = Notes with { }
    // The button is gated by its `Disabled` argument alone, so pressing it while incomplete proves
    // the view received `Input.Incomplete`. A keyboard submit has no such gate and checks instead.
    action Add() {

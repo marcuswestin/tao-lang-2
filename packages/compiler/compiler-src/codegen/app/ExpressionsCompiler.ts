@@ -3,7 +3,9 @@ import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { authLibraryExport, compileCurrentAccount, contextualCommand, contextualReference } from './auth-context'
 import { configurationRuntimeBindingName } from './ConfigurationCompiler'
+import { activeDataStorePlan } from './data-store-context'
 import { compileDeclarationIdentity } from './declaration-identity'
 import { bridgeBindingName } from './injection-plan'
 import { compileReactiveArgument } from './reactive-parameters'
@@ -168,7 +170,9 @@ export const ExpressionsCompiler = {
   CaseTestExpression(expression: AST.CaseTestExpression): Compiled {
     let test: Compiled
     if (expression.builtinCase) {
-      test = gen`TR.IsCase(${Compile.Expression(expression.value)}, ${gen.jsLiteral(expression.builtinCase)})`
+      test = gen`TR.IsCase(${Compile.Expression(expression.value)}, ${
+        gen.jsLiteral(AST.canonicalSubjectCase(expression.builtinCase))
+      })`
     } else {
       Assert.defined(expression.declaredCase, 'parsed case test has a declared or built-in case')
       const declaredCase = resolveRef(expression.declaredCase)
@@ -183,6 +187,20 @@ export const ExpressionsCompiler = {
 
   /** WhenExpression evaluates one subject and selects one lazy value case. */
   WhenExpression(expression: AST.WhenExpression): Compiled {
+    if (!expression.subject) {
+      Assert.defined(expression.otherwise, 'a predicate match has a terminal otherwise')
+      return gen`(() => {
+        ${
+        gen.list(expression.branches, branch => {
+          Assert.defined(branch.condition, 'predicate match branch has a condition')
+          return gen`if (${Compile.Expression(branch.condition)}.evaluate().jsValue === true) return ${
+            Compile.Expression(branch.value)
+          }`
+        })
+      }
+        return ${Compile.Expression(expression.otherwise.value)}
+      })()`
+    }
     // The compact form is the two-outcome sibling of the block form, so it lowers to the same case
     // switch: the positive case is `true`, and an omitted negative outcome is absence.
     if (expression.positive) {
@@ -196,7 +214,8 @@ export const ExpressionsCompiler = {
       ${
       gen.list(
         expression.branches,
-        branch => gen`[${gen.jsLiteral(branch.case)}, () => ${Compile.Expression(branch.value)}],`,
+        branch =>
+          gen`[${gen.jsLiteral(AST.canonicalSubjectCase(branch.case!))}, () => ${Compile.Expression(branch.value)}],`,
       )
     }
     ], () => ${Compile.Expression(expression.otherwise.value)})`
@@ -226,7 +245,7 @@ export const ExpressionsCompiler = {
     const parameters = AST.parametersOf(fn)
     const argumentsByParameter = new Map(resolved.pairs.map(pair => [pair.parameter, pair.argument]))
     const lastProvidedIndex = Math.max(...resolved.pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
-    return gen`TR.Call(${gen.scopeName(fn)}${
+    return gen`TR.Call(${contextualReference(fn)}${
       gen.join(
         parameters.slice(0, lastProvidedIndex + 1),
         parameter => {
@@ -300,7 +319,12 @@ export const ExpressionsCompiler = {
       ? (call.argumentList?.arguments ?? []).map(argument => gen`${Compile.Expression(argument.value)}.jsValue`)
       : undefined
     const binding = gen.Name({ name: bridgeBindingName(bridge) })
-    return values
+    const contextual = AST.getDocument(bridge).uri.path.endsWith('/@tao/auth/Auth.tao')
+    return contextual
+      ? gen`TR.Value(${binding}(_TaoAuthScope!${
+        values?.length ? gen`, ${gen.join(values, value => value)}` : gen.noop()
+      }))`
+      : values
       ? gen`TR.Value(${binding}(${gen.join(values, value => value)}))`
       : gen`TR.Value(${binding})`
   },
@@ -328,13 +352,16 @@ export const ExpressionsCompiler = {
 
   /** ValueDeclarationReference compiles an alias or parameter declaration reference. */
   ValueDeclarationReference(target: AST.ValueDeclaration): Compiled {
+    if (authLibraryExport(target) === 'Account') {
+      return compileCurrentAccount()
+    }
     return Switch.type(target, {
-      ActionDeclaration: action => gen`${gen.scopeName(action)}.evaluate()`,
-      AliasDeclaration: alias => gen`${gen.scopeName(alias)}.evaluate()`,
+      ActionDeclaration: action => gen`${contextualReference(action)}.evaluate()`,
+      AliasDeclaration: alias => gen`${contextualReference(alias)}.evaluate()`,
       AppDeclaration: app => gen`${gen.Name({ name: `_TaoAppDefinition_${app.name}` })}`,
       AskStatement: ask => gen`${gen.scopeName(ask)}.evaluate()`,
       CasePayload: payload => gen`${gen.scopeName(payload)}.evaluate()`,
-      CommandDeclaration: command => gen`${gen.scopeName(command)}.evaluate()`,
+      CommandDeclaration: command => gen`${contextualCommand(command)}.evaluate()`,
       DesignDeclaration: design => gen`${gen.scopeName(design)}.evaluate()`,
       DesignColorEntry: color => compileDesignColorValue(AST.designColorPath(color)),
       DesignToken: token => compileDesignColorValue(AST.designColorPath(token)),
@@ -349,7 +376,7 @@ export const ExpressionsCompiler = {
       NavDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
       // A phrase compiles to a callable `TR.Function`; a bare reference is its zero-argument call.
-      PhraseDeclaration: phrase => gen`TR.Call(${gen.scopeName(phrase)})`,
+      PhraseDeclaration: phrase => gen`TR.Call(${contextualReference(phrase)})`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
       ViewDeclaration: view => Compile.ViewValue(view),
     })
@@ -489,6 +516,9 @@ function configureCall(declaration: AST.ConfigurableDeclaration, config: Compile
   if (primitive === 'nav') {
     const runtimeDeclaration = gen.scopeName({ name: configurationRuntimeBindingName(declaration) })
     return gen`TR.Navigation.Configure(${runtimeDeclaration}, ${config})`
+  }
+  if (primitive === 'auth') {
+    return gen`TR.Auth.Configure(${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })}, ${config})`
   }
   return primitive === 'datasource' ? dataConfigureCall(declaration, config) : undefined
 }
@@ -632,6 +662,9 @@ function compileConfigurationEntries(
     if (entry.key && entry.block) {
       return gen`${gen.jsLiteral(entry.key)}: ${compileKeyedItemObject(entry.block, keyedDefaults)},`
     }
+    if (entry.name === 'Offline' && entry.block) {
+      return gen`"Offline": ${gen.jsLiteral(entry.block.entries.map(compileOfflineScope))},`
+    }
     if (entry.name && entry.block) {
       // A configured nav reads the same `Toolbar` slot a scene does, so it lists the same commands.
       const references = entry.block.entries.flatMap(referenceEntry => {
@@ -667,6 +700,9 @@ function compileConfiguredPatch(value: AST.RefinementExpression): Compiled {
   }
   if (type.kind === 'primitive' && type.primitive === 'datasource') {
     return gen`TR.Data.Patch(${compiledBase}, ${patch})`
+  }
+  if (AST.isAliasDeclaration(base) && AST.configuredPrimitiveOfExpression(base.value) === 'auth') {
+    return gen`TR.Auth.Patch(${compiledBase}, ${patch})`
   }
   if (type.kind === 'item') {
     if (type.item) {
@@ -901,7 +937,13 @@ function compileCompletenessMember(
     const sentence = Type.requiredSentence(field)
     return sentence === undefined ? [] : [gen`[${gen.jsLiteral(field.name)}, ${gen.jsLiteral(sentence)}]`]
   })
-  const helper = member === 'Incomplete' ? 'Incomplete' : 'Problems'
+  const helper = member === 'IsComplete'
+    ? 'IsComplete'
+    : member === 'IsIncomplete'
+    ? 'IsIncomplete'
+    : member === 'Incomplete'
+    ? 'Incomplete'
+    : 'Problems'
   return gen`TR.${helper}(${compiled}, [${gen.join(required, field => field)}])`
 }
 
@@ -938,4 +980,32 @@ function ratioOf(family: ASTUtils.UnitFamily, unit: string): number {
   const ratio = Units.ratioToBase(family, unit)
   Assert.defined(ratio, 'validated unit accessor names a unit of its family', { family, unit })
   return ratio
+}
+
+/** Offline scopes are symbolic account relations; no account is read during module initialization. */
+function compileOfflineScope(entry: AST.ConfigurationEntry): { entity: string; field: string; actor: 'account' } {
+  const target = entry.reference?.ref
+  const expression = entry.memberReference ?? (AST.isAliasDeclaration(target) ? target.value : undefined)
+  const path = AST.isAuthLibraryDeclaration(target, 'Account')
+    ? []
+    : expression
+    ? AST.authAccountPath(expression)
+    : undefined
+  Assert.defined(path, 'validated Offline scope is rooted at the current Account')
+  if (path.length === 0) {
+    return { entity: 'Account', field: 'id', actor: 'account' }
+  }
+  const account = activeDataStorePlan()?.stores.flatMap(store => store.collections).find(entity =>
+    entity.singularName === 'Account'
+  )
+  Assert.defined(account, 'validated Offline scope has an Account entity')
+  const relation = Type.dataFields(account).find(field => field.name === path[0])
+  Assert.defined(relation, 'validated Offline scope names an Account relation')
+  const entity = Type.dataFieldRelationEntity(relation)
+  Assert.defined(entity, 'validated Offline scope has an entity target')
+  const inverse = Type.dataFields(entity).find(field =>
+    Type.dataFieldRelationEntity(field) === account && !Type.dataFieldIsInverseRelation(field)
+  )
+  Assert.defined(inverse, 'validated Offline scope has one stored inverse relation')
+  return { entity: entity.singularName, field: inverse.name, actor: 'account' }
 }

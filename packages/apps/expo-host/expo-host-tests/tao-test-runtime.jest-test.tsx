@@ -657,7 +657,7 @@ Describe('Expo runtime', () => {
           state Draft = ""
           state Status = "Waiting"
           state Selection = "Nothing selected"
-          query Items { }
+          query Items = Items with { }
           render Col() {
             guard Items {
               loading -> { Text("Loading") }

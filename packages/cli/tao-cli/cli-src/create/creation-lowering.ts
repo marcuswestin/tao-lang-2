@@ -107,13 +107,13 @@ app ${names.app} {
 
 function dataFile(plan: CreationPlan, _names: ProjectNames): string {
   const entities = plan.entities.map(entity => {
-    const fields = entity.fields.map(field => `   ${fieldDeclaration(field)}`).join('\n')
+    const fields = entity.fields.map(field => `   ${fieldDeclaration(field)},`).join('\n')
     return `${commentLines(entity.purpose)}
 package
 data ${entity.plural} / ${entity.singular} {
 ${fields}
 
-   order by ${orderField(entity).name}
+   order by ${orderField(entity).name},
 }`
   })
   return `// The data catalog. Every entity the app stores is declared here, so what a row contains is

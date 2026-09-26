@@ -3,6 +3,36 @@ import { Describe, Expect, stubView, Test, withTaoFiles } from '@shared/test'
 import { TestCompiler as Compiler } from './test-compile'
 
 Describe('compiler: explicit app agent commands', () => {
+  Test('passes an inherited authenticated app scope to the mounted command hook', async () => {
+    await withTaoFiles('tao-agent-auth-commands-', {
+      'Main.tao': `
+        use Base from ./Base
+        app Inherited = Base with { Name "Inherited" }
+      `,
+      'Base.tao': `
+        use Account from @tao/auth
+        use TestAuth from @tao/auth/testing
+        use Memory from @tao/data/providers/memory
+        data Accounts / Account { DisplayName text, Notes }
+        data Notes / Note { Owner Account, Body text }
+        let Me = Account
+        action AppendNote(Body text) { create Note { Owner: Me, Body } }
+        command Append(Body text) { Title "Append" do AppendNote(Body) }
+        workspace app Base { Auth TestAuth {} Datasource Memory {} AgentCommands [Append] view Home() }
+        ${stubView('Home')}
+      `,
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao'], { appName: 'Inherited' })
+      Expect(result.validation.diagnostics).toEqual([])
+      const code = result.files.find(file => file.relativePath === 'App.tsx')?.code.replace(/\s+/g, ' ') ?? ''
+      Expect(code).toContain('agentCommands: () => _Scope.Base.definition.agentCommands?.() ?? []')
+      Expect(code).toContain(
+        'useTaoGeneratedAgentCommands(_TaoAppDefinition_Inherited.definition.agentCommands?.() ?? [], [ ...(_TaoAppDefinition_Inherited.definition.datasources?.() ?? []).map(binding => binding.store), ], _TaoAuthScope)',
+      )
+      Expect(code).toContain('const useTaoGeneratedAgentCommands = TR.Agent.useCommands')
+    })
+  })
+
   Test('inherits imported app commands and replaces an imported allowlist', async () => {
     await withTaoFiles('tao-agent-commands-', {
       'Project.tao': 'project { id "agent-commands" name "Agent commands" }',

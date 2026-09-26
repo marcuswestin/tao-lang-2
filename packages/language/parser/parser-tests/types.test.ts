@@ -5,7 +5,7 @@ import { testParseCode } from './test-parse'
 Describe('parser: types', () => {
   Test('parses projected input types and typed copies', async () => {
     const parseResult = await testParseCode(`
-      data Documents / Document { Title text Body text Owner text CreatedAt time }
+      data Documents / Document { Title text, Body text, Owner text, CreatedAt time }
       type DocumentInput is Document { Title, Body }
       type Editable is Document without { Owner, CreatedAt }
       view Editor(Document) {

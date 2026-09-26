@@ -14,7 +14,7 @@ const catalog = `
   use Memory from @tao/data/providers/memory
 
   data Documents / Document {
-    Title text (title)
+    Title text (title),
     Body text (default "")
   }
 `
@@ -346,7 +346,7 @@ Describe('interaction outline runtime', () => {
         }
         scene Main() {
           Title "Documents"
-          query Documents { }
+          query Documents = Documents with { }
           state Selected = "Nothing selected"
           state SelectCount = 0
           action Seed() {
@@ -437,7 +437,7 @@ Describe('interaction outline runtime', () => {
           Datasource Memory { }
         }
         view Main() {
-          query Documents { }
+          query Documents = Documents with { }
           action Seed() {
             create Document { Title: "Chapter one", Body: "It began at sea." }
           }
@@ -495,7 +495,7 @@ Describe('interaction outline runtime', () => {
           Datasource Memory { }
         }
         view Main() {
-          query Documents { }
+          query Documents = Documents with { }
           action Seed() {
             create Document { Title: "Chapter one" }
           }
@@ -654,7 +654,7 @@ Describe('interaction outline runtime', () => {
           Datasource Memory { }
         }
         view Main() {
-          query Documents { }
+          query Documents = Documents with { }
           state Count = 0
           action Seed() {
             create Document { Title: "Chapter one" }

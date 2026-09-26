@@ -10,6 +10,7 @@ import {
   actionInstrumentationEnabled,
   actionInvocationRequiresAsync,
 } from './action-control-flow'
+import { authLibraryExport, withAuthContextFactory } from './auth-context'
 import { compileDeclarationIdentity, declarationModuleName } from './declaration-identity'
 import { foreignActionBindingName } from './injection-plan'
 import { compileReactiveArgument, compileWritableTarget } from './reactive-parameters'
@@ -23,11 +24,19 @@ export const ActionsCompiler = {
   /** ActionDeclaration compiles a named Tao action into a runtime action value. */
   ActionDeclaration(action: AST.ActionDeclaration): Compiled {
     if (action.foreign) {
+      if (authLibraryExport(action)) {
+        return withAuthContextFactory(
+          action,
+          gen`${gen.scopeName(action)} = ${gen.Name({ name: foreignActionBindingName(action) })}(_TaoAuthScope!)`,
+        )
+      }
       return compileForeignAction(action)
     }
     const parameters = actionParameters(action)
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
-    return gen`
+    return withAuthContextFactory(
+      action,
+      gen`
       ${gen.scopeName(action)} = TR.Action(${asyncKeyword}(${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
         const _TaoActionContinuation = TR.ActionContinuation()
         return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
@@ -38,7 +47,8 @@ export const ActionsCompiler = {
         name: ${gen.jsLiteral(action.name)},
         ${actionBlockContainsRespond(action.block) ? gen`interrupt: true,` : gen``}
       })
-    `
+    `,
+    )
   },
 
   /**
@@ -62,6 +72,8 @@ export const ActionsCompiler = {
     })
     const inFills = (body: Compiled) =>
       gen`_TaoFills => TR.BlockScope(_Scope, _Scope => {
+        const _TaoAuthScope = _TaoFills["__taoAuth"]?.evaluate().jsValue as TR.AuthScope | undefined
+        void _TaoAuthScope
         ${bindSlots}
         return ${body}
       })`
@@ -245,6 +257,7 @@ export const ActionsCompiler = {
       Compile.ActionArguments(invocation)
     }), {
       name: ${gen.jsLiteral(effectOutcomeName(statement))},
+      ${isAuthEffect(statement) ? gen`success: 'completed',` : gen.noop()}
       declared: ${compileEffectContract(statement)},
     }, [
       ${
@@ -256,6 +269,13 @@ export const ActionsCompiler = {
           ${Compile.ActionBlockBody(outcome.block)}
         })],`,
       )
+    }
+      ${
+      statement.otherwise
+        ? gen`['otherwise', async () => TR.BlockScope(_Scope, async _Scope => {
+        ${Compile.ActionBlockBody(statement.otherwise.block)}
+      })],`
+        : gen.noop()
     }
     ])`
   },
@@ -386,6 +406,9 @@ function positionalArguments(
  * and its contract is unknown here; the runtime then reads any declared failure as `rejected`.
  */
 function compileEffectContract(statement: AST.WhenDoStatement): Compiled {
+  if (isAuthEffect(statement)) {
+    return gen`['cancelled', 'rejected']`
+  }
   if (!ASTUtils.invokedEffect(statement)) {
     return gen`null`
   }
@@ -503,4 +526,9 @@ function statementPath(block: AST.ActionBlock, index: number): string {
     node = parent
   }
   return segments.join('.')
+}
+
+function isAuthEffect(statement: AST.WhenDoStatement): boolean {
+  const effect = ASTUtils.invokedEffect(statement)
+  return effect !== undefined && authLibraryExport(effect) !== undefined
 }

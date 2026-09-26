@@ -158,7 +158,11 @@ export class StudioFixtureGeneration {
     }
 
     return {
-      fixture: { accounts: sourcePlan.accounts, creates },
+      fixture: {
+        accounts: sourcePlan.accounts,
+        creates,
+        ...(sourcePlan.signedIn === undefined ? {} : { signedIn: sourcePlan.signedIn }),
+      },
       status: 'ready',
     }
   }
@@ -196,7 +200,10 @@ function studioFixturePlan(value: unknown): StudioFixturePlan {
       name: create['name'],
     }
   })
-  return { accounts, creates }
+  if (value['signedIn'] !== undefined && (typeof value['signedIn'] !== 'string' || value['signedIn'].trim() === '')) {
+    Errors.throwUserInput('The Studio fixture signed-in account is invalid.')
+  }
+  return { accounts, creates, ...(value['signedIn'] === undefined ? {} : { signedIn: value['signedIn'] as string }) }
 }
 
 function studioFixtureFields(

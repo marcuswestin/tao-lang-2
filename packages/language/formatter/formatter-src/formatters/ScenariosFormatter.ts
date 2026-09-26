@@ -21,6 +21,15 @@ export const ScenariosFormatter = {
     f.oneSpaceBefore('through', 'for')
   },
 
+  FixtureCreateStatement(f) {
+    f.oneSpaceAfter('create', 'for')
+    f.oneSpaceBefore('through', 'for')
+  },
+
+  FixtureSignedInClause(f) {
+    f.oneSpaceAfter('signed', 'in', 'as')
+  },
+
   FixtureThroughClause(f) {
     f.oneSpaceBefore('through')
     f.oneSpaceAfter('through')

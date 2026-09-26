@@ -17,9 +17,9 @@ FixtureDeclaration:
     visibility=DeclarationVisibility? 'fixture' name=ID block=FixtureBlock;
 
 FixtureBlock:
-    '{' entries+=(FixtureAccountDeclaration | FixtureCreateBinding)* '}';
+    '{' entries+=(FixtureAccountDeclaration | FixtureCreateBinding | FixtureCreateStatement | FixtureSignedInClause)* '}';
 
-type FixtureEntry = FixtureAccountDeclaration | FixtureCreateBinding;
+type FixtureEntry = FixtureAccountDeclaration | FixtureCreateBinding | FixtureCreateStatement | FixtureSignedInClause;
 type FixtureValueDeclaration = FixtureAccountDeclaration | FixtureCreateBinding;
 
 FixtureAccountDeclaration:
@@ -28,6 +28,13 @@ FixtureAccountDeclaration:
 FixtureCreateBinding:
     name=ID '=' 'create' entity=[EntityDataDeclaration:ID] block=FixtureFieldBlock
     through=FixtureThroughClause? ('for' account=[FixtureAccountDeclaration:ID])?;
+
+FixtureCreateStatement:
+    'create' entity=[EntityDataDeclaration:ID] block=FixtureFieldBlock
+    through=FixtureThroughClause? ('for' account=[FixtureAccountDeclaration:ID])?;
+
+FixtureSignedInClause:
+    'signed' 'in' 'as' account=[FixtureAccountDeclaration:ID];
 
 FixtureThroughClause:
     'through' action=[ActionDeclaration:ID] '(' argumentList=FixtureArgumentList? ')';

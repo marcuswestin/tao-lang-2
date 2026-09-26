@@ -1,0 +1,11 @@
+use AuthProvider from @tao/auth
+
+public
+type TestAuth is AuthProvider with {
+   State text is "SignedOut"
+   AccountId text is "test-account"
+   Email text is "alice@example.com"
+   Code text is "123456"
+
+   provider TestAuthProvider from ./TestAuth.ts
+}

@@ -16,24 +16,24 @@ app KeyboardNavigationAcceptance {
 }
 
 data Folders / Folder {
-   Name text (title)
+   Name text (title),
 
-   order by Name
+   order by Name,
 }
 
 data Notes / Note {
-   Title text (title)
-   Folder
+   Title text (title),
+   Folder,
 
-   order by Title
+   order by Title,
 
-   commands FileNote
+   commands { FileNote },
 }
 
 data Events / Event {
-   Name text (title)
+   Name text (title),
 
-   order by Name
+   order by Name,
 }
 
 command FileNote(Note, Destination Folder, Label text) {
@@ -69,11 +69,11 @@ command RecordGamma() {
 scene KeyboardWorkbench() {
    Title "Keyboard acceptance"
    state Search = ""
-   query Folders as VisibleFolders {
+   query VisibleFolders = Folders with {
       limit 1
    }
-   query Notes { }
-   query Events { }
+   query Notes = Notes with { }
+   query Events = Events with { }
    action SeedFolders() {
       create Folder {
          Name: "Archive"

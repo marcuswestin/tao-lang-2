@@ -38,12 +38,12 @@ Describe('parser: decided dialect', () => {
     parses(`
       type Course is one of Breakfast, Lunch, Dinner
       data Recipes / Recipe {
-        Title text (required "Name this recipe", unique, search, title)
-        Servings number (default 4)
-        ChangedAt time (default now, touch on change)
-        Course (default Dinner)
-        Ingredients (owned, ordered)
-        Photo text?
+        Title text (required "Name this recipe", unique, search, title),
+        Servings number (default 4),
+        ChangedAt time (default now, touch on change),
+        Course (default Dinner),
+        Ingredients (owned, ordered),
+        Photo text?,
         order by ChangedAt
       }
     `),
@@ -82,9 +82,9 @@ Describe('parser: decided dialect', () => {
     'yes / Alias no on data fields, with the alias an ordinary identifier',
     parses(`
       data Documents / Document {
-        Final yes / Draft no
-        Public yes / Private no (default Public)
-        Pinned yes / no
+        Final yes / Draft no,
+        Public yes / Private no (default Public),
+        Pinned yes / no,
         Name text
       }
     `),
@@ -119,15 +119,15 @@ Describe('parser: decided dialect', () => {
   )
 
   Test(
-    'a relation trait names a target the field name does not',
+    'a typed relation names a target the field name does not',
     parses(`
       data Accounts / Account { Name text }
       data Members / Member {
-        Household
-        Person (relation Accounts)
+        Household,
+        Person Accounts
       }
       data Households / Household {
-        Seats (relation Members, owned)
+        Seats Members (owned)
       }
     `),
   )

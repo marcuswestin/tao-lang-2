@@ -4,6 +4,7 @@ import type { TaoActionValue } from './TR-action-values'
 import { RuntimeAssert } from './TR-assert'
 import { DataControls } from './TR-data'
 import { isPersistedEnumCase } from './TR-persisted-state'
+import { isReactiveValue } from './TR-reactive'
 
 /** TaoRuntimeValue is the evaluable value shape generated Tao code exchanges at runtime. */
 export type TaoRuntimeValue<ValueT> = Readonly<{
@@ -110,7 +111,11 @@ class PathLens implements TaoWritable<unknown> {
 
   set(value: TaoRuntimeValue<unknown>): void | Promise<void> {
     RuntimeAssert.input(this.path.length > 0, 'A writable field path must name a field.')
-    return this.root.set(reactiveValue(replacePath(this.root.evaluate().jsValue, this.path, value.evaluate().jsValue)))
+    const root = this.root.evaluate().jsValue
+    if (isReactiveValue(root) && root.writeMember) {
+      return root.writeMember(this.path, value.evaluate().jsValue)
+    }
+    return this.root.set(reactiveValue(replacePath(root, this.path, value.evaluate().jsValue)))
   }
 
   at(path: readonly string[]): TaoWritable<unknown> {

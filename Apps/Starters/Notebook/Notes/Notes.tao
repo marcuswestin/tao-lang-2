@@ -7,7 +7,7 @@ package
 scene NoteList() {
    Title "Notes"
    state NewTitle = ""
-   query Notes { }
+   query Notes = Notes with { }
    action AddNote() {
       check NewTitle is not empty
       create Note {

@@ -1,0 +1,12 @@
+{
+  "name": "tao-account-server",
+  "private": true,
+  "type": "module",
+  "module": "account-server-src/AccountServer.ts",
+  "exports": {
+    ".": "./account-server-src/AccountServer.ts"
+  },
+  "dependencies": {
+    "tao-shared": "workspace:*"
+  }
+}

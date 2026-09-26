@@ -74,7 +74,7 @@ Describe('Expo runtime `on <device>` and `with <fixture>` test clauses', () => {
           workspace data Workspaces / Workspace { Name text }
           app WordFlowerFixtureApp { view MainView Datasource Memory { } }
           view MainView() {
-            query Workspaces { }
+            query Workspaces = Workspaces with { }
             render Col() {
               when Workspaces {
                 empty -> { Text("No workspaces yet") }

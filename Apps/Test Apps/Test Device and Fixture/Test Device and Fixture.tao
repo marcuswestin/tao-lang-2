@@ -12,20 +12,20 @@ app WordFlower {
 
 workspace
 data Workspaces / Workspace {
-   Name text
+   Name text,
 }
 
 workspace
 data FocusSessions / FocusSession {
-   Label text
+   Label text,
 
-   local only
+   local only,
 }
 
 scene MainView() {
    Title "WordFlower"
-   query Workspaces { }
-   query FocusSessions { }
+   query Workspaces = Workspaces with { }
+   query FocusSessions = FocusSessions with { }
    render Panes() [gap 16] {
       #workspaceList
       Col() [claim 2] {
