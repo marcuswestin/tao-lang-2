@@ -3,7 +3,7 @@
 Status: **exploration, first pass (2026-09-25)**. This page evaluates [Hypen](https://github.com/hypen-lang/hypen)
 ([docs](https://docs.hypen.space/)) in two ways: as a possible compilation target in place of React Native, and as
 something Tao can learn from. It records the questions to answer, a side-by-side comparison of the two languages, how
-the Hypen runtime works, and a plan for investigating it hands-on. Nothing here is a decision. Tao's decided language
+the Hypen runtime works, and a read-only plan for investigating it further. Nothing here is a decision. Tao's decided language
 is `Tao Revolution/Decisions.md`.
 
 All evidence is from `hypen-lang/hypen` at commit `4e62ad1` (2026-09-04, workspace version 0.6.4, MIT). Hypen paths are
@@ -47,8 +47,8 @@ means `Apps/Test Apps`.
 2. What does a Tao→Hypen lowering look like for one WordFlower slice? Which constructs have no mapping? Candidates:
    typed navigation parameters, `query`, `guard`, `fails` outcomes, `ask`/`respond`, `copy … as`, writable
    parameters, and offline queues.
-3. What is the latency of a tap, and of typing, on a simulator connected to a local Hypen server? What about on a
-   throttled network?
+3. What is the latency of a tap, and of typing, on a simulator connected to a Hypen server? (Not measured here: the plan is
+   read only, so this is answered from upstream benchmarks or reports, if at all.)
 4. How does text input behave under server round trips (IME, autocorrect, selection, undo)? Compose keeps a local
    copy and resyncs on blur (`hypen-renderer-android/.../InputComponent.kt:55-99`).
 5. What would we give up from React Native and Expo? Native modules, Reanimated, gestures, `react-native-screens`,
@@ -84,7 +84,7 @@ The side-by-side below covers everything the Developer listed, plus the followin
 - authentication
 - accessibility, animation and i18n
 
-Still open for the hands-on pass:
+Still open:
 - lifecycle (mount, activate, background)
 - offline and reconnection
 - host chrome (title, toolbar, commands, keyboard shortcuts)
@@ -652,6 +652,82 @@ The contrast is the widest in the whole comparison:
 5. **Template registration** for list rows, with a lowering pass so older renderers keep working. It is a pattern for
    evolving a protocol without breaking old clients.
 
+### The shared fixture suite
+
+`engine-compatibility-tests/` is a set of JSON test cases that every Hypen engine binding must pass: the WASM engine
+from TypeScript, the native engine from Go, and the engine from Kotlin. Each binding has a small runner that reads the
+same files. A case gives some source, the initial state and the module's actions. It then lists steps
+(`initialRender`, `updateState`, `dispatchAction`), each with the patches it must produce and, optionally, the patch
+types it must *not* produce (`fixtures/state/state-update-patches.json`):
+
+```json
+"input": {
+  "source": "Column { Text(\"@{state.title}\") Text(\"@{state.subtitle}\") Text(\"Static text\") }",
+  "initialState": { "title": "Initial Title", "subtitle": "Initial Subtitle" }
+},
+"steps": [{
+  "action": "updateState",
+  "stateChange": { "paths": ["title"], "newValues": { "title": "Updated Title" } },
+  "expectedPatches": [{ "type": "setProp", "name": "0", "value": "Updated Title" }],
+  "forbiddenPatchTypes": ["create", "remove", "insert"]
+}]
+```
+
+The forbidden list asserts minimality: changing `title` must patch one node and rebuild nothing.
+- A second family, `fixtures/portable/`, covers pure functions as input→output pairs: route matching, path get and set,
+  URL encoding, and session policy.
+- Another family pins accessibility on the wire (`fixtures/rendering/button-semantics.json`: `Button("Save")` must
+  create `{ role: "button", name: "Save" }`).
+
+The contract lives in data, and each implementation proves itself against it.
+
+**For Tao, the value is narrower.**
+- Tao has one runtime, in TypeScript, and already has code-based conformance suites:
+  - `TR-navigation-conformance.ts` for navigation kinds;
+  - the sync conformance in `TR-data-sync.ts` for datasource providers.
+- Data fixtures pay off where one contract has several implementations:
+  - native and basic navigation (`Decisions.md` §11 requires the same contract from both);
+  - the accessibility translation to React Native and to web;
+  - datasource providers;
+  - any future second target.
+- A case would be a Tao snippet plus steps, with the expected interaction outline, semantics or navigation state.
+  Unlike Tao's behaviour tests, it pins the runtime's *output contract*, not what a person sees.
+
+### Deriving accessibility semantics once in Tao
+
+Hypen computes one typed `Semantics` record per node in the engine: role, accessible name, heading level, form state,
+hidden, live region, and references (`hypen-engine-rs/src/ir/semantics.rs:319-360`). It sends that record in the
+`Create` patch, and each renderer only translates it: ARIA on the DOM, `Modifier.semantics` on Compose, traits on
+SwiftUI. It also emits no role when the role is uncertain, on the grounds that a wrong role is worse than none (a
+`List` or `Card` gets no role).
+
+**Where Tao is today.**
+- The compiler already derives regions, collections, controls and labels into the interaction outline
+  (`packages/compiler/compiler-src/codegen/app/InteractionOutlineCompiler.ts`).
+- But the role, name and state of each leaf control are still written by hand, as about 96 accessibility props across
+  18 runtime and stdlib files. Examples: `TR-views.tsx:145` (image), `:193` (progress bar), `:264` (checkbox),
+  `:677` (button).
+
+**The Hypen lesson applied to Tao.**
+1. Define one `Semantics` value: role, name, description, value, state (checked, selected, disabled, busy, invalid,
+   expanded), heading level, live region, hidden, and actions.
+2. Derive it from the declarations Tao already has, in one table:
+   - the control kind: `Switch(Value: Enabled, Label: "Enabled")` becomes a switch named "Enabled", checked from
+     `Enabled`;
+   - `Title`, `Label` and `Description`, and a field marked `(title)` for row names;
+   - commands, which become custom actions;
+   - `required` and `Problems`, which set invalid and describe the error;
+   - `guard … loading`, which sets busy;
+   - `Decorative: true`, which hides the node;
+   - a scene's `Title`, which becomes a heading;
+   - `phrase`, for localized names.
+3. Compute the static part in the compiler, next to the outline table, and the reactive part in one runtime function.
+4. Give each target a single translator: React Native accessibility props today, ARIA for react-native-web.
+   Stdlib `render inject` bodies stop writing accessibility props themselves.
+5. Make "provably unnamed control" a compiler diagnostic read from the same table. This is candidate 2 in
+   `Docs/Roadmap/Accessible Tao apps/Plan - Accessible Tao apps.md`.
+6. Pin the table with fixture cases, each a Tao snippet with its expected `Semantics`, run against every translator.
+
 ### Risks observed
 
 1. Mobile is server-only. Offline use and latency depend on the network, and gaps in the patch sequence are dropped
@@ -665,36 +741,26 @@ The contrast is the widest in the whole comparison:
 
 ## Investigation plan
 
-### Setup
+Decided 2026-09-26: **read only**. Given the trust-boundary findings above, nobody clones, builds or runs Hypen here.
+Agents read the source on GitHub at a pinned commit (starting from `4e62ad1`), and nothing from it is executed in a Tao
+worktree or on the host. Hypen stays out of the tracked tree and out of dependencies.
 
-1. **Keep the clone out of Tao's tracked tree.** Do not commit the 2,152-file Hypen tree on a branch, and do not add
-   it as a submodule.
-   - Either would put foreign Rust, Swift and Kotlin into repository search, formatting and lint.
-   - Instead, clone it into the ignored `.artifacts/research/hypen/` at a pinned commit, starting from `4e62ad1`.
-   - Record the pin and all findings on this page, which is what the branch carries.
-2. **Make the clone repeatable through `./agent`**, for example an `./agent research-clone hypen` operation, so every
-   agent gets the same pinned tree. This needs the Developer's approval, because it changes developer automation.
-3. **Agree the toolchain before any hands-on work.** Building the engine needs Rust, and the examples need Bun. Running
-   the iOS renderer needs Xcode on the host. Installing a Rust toolchain into the dev environment is a dependency
-   change, so the Developer approves it first.
+Each pass is an agent brief that returns findings with `file:line` evidence, which are added to this page.
 
-### Passes
+1. **Accessibility semantics (standard tier).** Read `hypen-engine-rs/src/ir/semantics.rs` and the accessibility guide
+   against Tao's `InteractionOutlineCompiler.ts`, `TR-interaction-outline.ts`, and the hand-written accessibility
+   props in `packages/apps/runtime/TaoRuntime-src/` and the stdlib. Draft the derivation table described in
+   [Deriving accessibility semantics once in Tao](#deriving-accessibility-semantics-once-in-tao).
+2. **Fixture suite (standard tier).** Read `engine-compatibility-tests/` (schemas, fixtures, runners) against Tao's
+   existing code-based conformance suites (`TR-navigation-conformance.ts`, the sync conformance in `TR-data-sync.ts`,
+   `stdlib-tests/data-providers.test.ts`). Propose which Tao contracts would gain from data-driven fixtures.
+3. **Runtime mapping (standard tier).** Map the patch protocol, `Detach`/`Attach` route caching and path-keyed
+   invalidation onto how `TR` re-renders after a `set` and restores navigation. Answer questions 7 and 8.
+4. **Upstream and governance (fast tier plus web).** Look at issues, pull requests, release cadence, and whether an
+   on-device mobile engine or a stable IR is planned. Answer questions 1 and 6.
 
-Each pass is a read-only agent brief against the pinned clone. Each returns findings with `file:line` evidence, which
-are added to this page.
-
-1. **Runtime deep dive, standard tier.** Map the patch protocol, the reconciler and the dependency graph onto `TR`
-   (`packages/apps/runtime/TaoRuntime-src/`). Answer questions 7 and 8.
-2. **Conformance and accessibility, standard tier.** Study `engine-compatibility-tests/` and
-   `hypen-engine-rs/src/ir/semantics.rs`. Draft what a Tao fixture suite and an accessibility linter would look like.
-   Answer questions 9 and 10.
-3. **Mapping sketch, deep tier.** Hand-translate one WordFlower slice (the workspace list, add workspace, and push to
-   detail) into Hypen DSL plus a TS host module. Tabulate every Tao construct as maps directly, maps with generated
-   host code, or has no mapping. Answer question 2.
-4. **Hands-on run, host lane, Developer present.** Run a Hypen example with the iOS simulator against a local server.
-   Measure tap-to-paint and typing latency, locally and throttled. Answer questions 3 and 4.
-5. **Ecosystem and governance, fast tier plus web.** Look at the upstream issue and pull-request history, release
-   cadence and roadmap, and check whether an on-device mobile engine is planned. Answer questions 1 and 6.
+A hand-translation of one WordFlower slice into Hypen text (question 2) can still be done on paper, if the first four
+passes leave the compile-target question open.
 
 ### Exit
 
@@ -702,6 +768,3 @@ A short decision memo for the Developer with three possible outcomes:
 - **Reject as a target and keep the lessons.** File the borrowed ideas as roadmap items.
 - **Prototype an additional server-driven target.** Scope a spike.
 - **Revisit at a named trigger.** For example, when Hypen ships an on-device mobile engine and a stable IR ingest.
-
-Passes 1 to 3 need no approval beyond starting them, and can run in parallel. Passes 4 and 5 wait on the setup
-decisions.
