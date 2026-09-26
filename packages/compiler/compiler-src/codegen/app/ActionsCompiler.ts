@@ -124,6 +124,11 @@ export const ActionsCompiler = {
             gen`{
               name: ${gen.jsLiteral(slot.name)},
               type: ${gen.jsLiteral(slot.typeName)},
+              ${
+              slot.type.kind === 'primitive' && ['text', 'number', 'boolean'].includes(slot.type.primitive)
+                ? gen`scalarType: ${gen.jsLiteral(slot.type.primitive)},`
+                : gen.noop()
+            }
               entity: ${slot.type.kind === 'entity' ? 'true' : 'false'},
               required: ${slot.parameter.defaultValue === undefined ? 'true' : 'false'},
             },`)

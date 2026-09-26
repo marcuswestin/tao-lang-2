@@ -122,6 +122,13 @@ companion-host-publish:
 test-host *ARGS:
     ./dev test-host {{ ARGS }}
 
+# Build the agent-command example, list commands, invoke one in a separate CLI process, and stop (macOS)
+[group('Run')]
+agents-demo: _parser-gen
+    ./tao build "Apps/Test Apps/Agent Commands" --agents --app AgentCommandsProof --output .artifacts/agents-demo
+    ./.artifacts/agents-demo/agents commands
+    ./.artifacts/agents-demo/agents run AppendEntry --args '{"Message":"Hello from just agents-demo","Quantity":3,"Marked":true}' --stop-after
+
 # Run an explicit slow Studio smoke file in an isolated lane
 [group('Host proofs')]
 studio-smoke test_file="packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts" run_id="local":
@@ -218,7 +225,7 @@ standalone-cli-acceptance: _parser-gen
     "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
     "{{ BUN }}" run packages/cli/tao-cli/cli-src/standalone-acceptance.ts .artifacts/release/v0.0.0
 
-# Build a 0.0.0 release and run its acceptance in a fresh vanilla macOS Tart VM, retaining guest logs
+# Test a release in a disposable macOS VM; --base or --prepare-base vanilla|xcode selects a pinned image
 [group('Ship')]
 standalone-cli-clean-machine action='' vm='': _parser-gen
     bash packages/cli/tao-cli/cli-src/standalone-clean-machine.sh {{ quote(action) }} {{ quote(vm) }}

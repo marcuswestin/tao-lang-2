@@ -1,4 +1,5 @@
 import { CLI, Errors, FS, HCI, Platform, Repo, Text, Time } from '@shared'
+import { StandaloneScenarios } from './standalone-scenarios'
 
 /**
  * standalone-acceptance proves a release installs and works the way a newcomer meets it: the install
@@ -8,9 +9,8 @@ import { CLI, Errors, FS, HCI, Platform, Repo, Text, Time } from '@shared'
  * The release directory is mirrored at GitHub's tag-specific `download/v<version>/` URL and served
  * through `file://`, with a release listing beside it for the unpinned install.
  *
- * Each slice of the standalone plan adds its step here as it lands. Today that is `tao create` with
- * its tests, then `tao check`, `tao compile`, `tao test`, `tao build`, and `tao dev` serving the web
- * target on what it created; the native targets are not yet claimed.
+ * Named scenarios retain progress and failure evidence for installation, source recovery, starter
+ * journeys, semantic reports, builds, and the dev browser journey. Native targets are not claimed.
  */
 
 /** A PATH with the system tools and nothing a Tao developer's shell would add. */
@@ -57,6 +57,7 @@ async function accept(release: string): Promise<void> {
         guestHome: Platform.runtimeProcess.env['HOME'],
         guestTemp: await FS.realPath(FS.tmpdir()),
         root,
+        vmProfile: Platform.runtimeProcess.env['TAO_ACCEPTANCE_VM_PROFILE'] ?? 'vanilla',
       })
     }
     if (Repo.tryGetRoot(root) !== undefined) {
@@ -79,77 +80,117 @@ async function accept(release: string): Promise<void> {
     const environment = await newcomerEnvironment(root, home, userBin, `file://${releases}`, `file://${listing}`)
     const shell = newcomerShell(environment)
 
-    await shell(home, `curl -fsSL "$TAO_RELEASES/download/v${version}/install.sh" | sh`)
-    // Again, pinned: no index needed, and replacing an installed version in place.
-    await shell(home, `curl -fsSL "$TAO_RELEASES/download/v${version}/install.sh" | TAO_VERSION=${version} sh`)
-
-    const reported = (await shell(home, 'tao --version')).trim()
-    if (reported !== version) {
-      Errors.throwUnexpected(`The installed tao reports ${JSON.stringify(reported)}, not ${version}.`)
-    }
-    // The first release leaves `tao review` out (`R12`).
-    if (/^\s+review\b/m.test(await shell(home, 'tao --help'))) {
-      Errors.throwUnexpected('The installed tao still offers `tao review`, which the first release leaves out.')
-    }
-    await shell(home, 'tao create "A tally counter" --ai none --yes --skip-tests')
     const project = FS.resolvePath('a-tally-counter', home)
-    await versionPinWorks(environment, project, version)
-    await shell(project, 'tao check .')
-    await shell(project, 'tao compile App.tao')
-
-    const installed = FS.resolvePath(`.tao/versions/${version}`, home)
-    const generated = FS.resolvePath('resources/host/_gen_tao-app/App.tsx', installed)
-    if (!await FS.isFile(generated)) {
-      Errors.throwUnexpected(`tao compile reported success but wrote no ${generated}.`)
-    }
-    // The decided replacement for `tao compile`, which writes into the project's own `.tao/builds/`
-    // rather than into the installed version.
-    await shell(project, 'tao build --web --compile-only')
-    const compiled: string[] = []
-    for await (const path of FS.walk(FS.resolvePath('.tao/builds', project))) {
-      if (path.endsWith('/compiled/web/_gen_tao-app/App.tsx')) {
-        compiled.push(path)
-      }
-    }
-    if (compiled.length !== 1) {
-      Errors.throwUnexpected('tao build --compile-only reported success but wrote no compiled web App.tsx.')
-    }
-    // A full web build installs the host's packages first: a cold download into this throwaway
-    // home, approved ahead of time because there is no terminal to ask.
-    const first = await shell(project, 'TAO_HOST_INSTALL=yes tao build --web')
-    if (!first.includes(HOST_INSTALL_NOTICE)) {
-      Errors.throwUnexpected('The first web build did not say it was installing the host.')
-    }
-    const sites: string[] = []
-    for await (const path of FS.walk(FS.resolvePath('.tao/builds', project))) {
-      if (path.includes('/web/') && path.endsWith('/index.html')) {
-        sites.push(path)
-      }
-    }
-    if (sites.length !== 1) {
-      Errors.throwUnexpected('tao build --web reported success but wrote no index.html.')
-    }
-    // `tao test` downloads the release's Node once and runs the project's journeys under it.
-    const tested = await shell(project, 'TAO_HOST_INSTALL=yes tao test')
-    if (!/Tests:\s+[1-9]\d* passed/.test(tested)) {
-      Errors.throwUnexpected(`tao test exited cleanly but reported no passing journeys:\n${tested}`)
-    }
-    // A second project is created with its tests run, as a newcomer's first `tao create` is, and
-    // builds against the same host install rather than resolving its own.
-    await shell(home, 'tao create "A reading list" --ai none --yes')
-    const second = await shell(FS.resolvePath('a-reading-list', home), 'tao build --web')
-    if (second.includes(HOST_INSTALL_NOTICE)) {
-      Errors.throwUnexpected('A second project installed the host again instead of sharing the first install.')
-    }
-    if (Platform.runtimeProcess.env['TAO_ACCEPTANCE_BROWSER_DRIVER'] !== undefined) {
-      await prepareBrowserClickProject(environment, project)
-    }
-    await devLoopServesWeb(environment, project, 'ATallyCounter')
+    const summary = FS.resolvePath('acceptance-summary.json', ACCEPTANCE_LOG_DIR ?? release)
+    HCI.writeLine(`Acceptance summary: ${summary}`)
+    await StandaloneScenarios.run([
+      {
+        name: 'install latest release through curl and sh',
+        run: () => shell(home, `curl -fsSL "$TAO_RELEASES/download/v${version}/install.sh" | sh`),
+      },
+      {
+        name: 'replace the installed release with a pinned install',
+        run: () =>
+          shell(home, `curl -fsSL "$TAO_RELEASES/download/v${version}/install.sh" | TAO_VERSION=${version} sh`),
+      },
+      {
+        name: 'installed version and first-release command surface',
+        run: async () => {
+          const reported = (await shell(home, 'tao --version')).trim()
+          if (reported !== version) {
+            Errors.throwUnexpected(`The installed tao reports ${JSON.stringify(reported)}, not ${version}.`)
+          }
+          if (/^\s+review\b/m.test(await shell(home, 'tao --help'))) {
+            Errors.throwUnexpected('The installed tao still offers `tao review`, which the first release leaves out.')
+          }
+        },
+      },
+      {
+        name: 'create a deterministic starter outside a checkout',
+        run: () => shell(home, 'tao create "A tally counter" --ai none --yes --skip-tests'),
+      },
+      {
+        name: 'project pin, version overrides, missing version, and updates',
+        run: () => versionPinWorks(environment, project, version),
+      },
+      { name: 'check the created project', run: () => shell(project, 'tao check .') },
+      {
+        name: 'reject malformed source without rewriting it',
+        run: () => malformedSourceIsReadOnly(environment, project),
+      },
+      { name: 'fix and format converge on canonical source', run: () => canonicalSourceRecovers(environment, project) },
+      { name: 'machine-readable starter facts and textual coverage', run: () => semanticReports(environment, project) },
+      {
+        name: 'compile the installed starter',
+        run: async () => {
+          await shell(project, 'tao compile App.tao')
+          const installed = FS.resolvePath(`.tao/versions/${version}`, home)
+          const generated = FS.resolvePath('resources/host/_gen_tao-app/App.tsx', installed)
+          if (!await FS.isFile(generated)) {
+            Errors.throwUnexpected(`tao compile reported success but wrote no ${generated}.`)
+          }
+        },
+      },
+      {
+        name: 'build compile-only into the project',
+        run: async () => {
+          await shell(project, 'tao build --web --compile-only')
+          const compiled: string[] = []
+          for await (const path of FS.walk(FS.resolvePath('.tao/builds', project))) {
+            if (path.endsWith('/compiled/web/_gen_tao-app/App.tsx')) {
+              compiled.push(path)
+            }
+          }
+          if (compiled.length !== 1) {
+            Errors.throwUnexpected('tao build --compile-only reported success but wrote no compiled web App.tsx.')
+          }
+        },
+      },
+      {
+        name: 'cold web build installs its host and emits a site',
+        run: async () => {
+          const first = await shell(project, 'TAO_HOST_INSTALL=yes tao build --web')
+          if (!first.includes(HOST_INSTALL_NOTICE)) {
+            Errors.throwUnexpected('The first web build did not say it was installing the host.')
+          }
+          const sites: string[] = []
+          for await (const path of FS.walk(FS.resolvePath('.tao/builds', project))) {
+            if (path.includes('/web/') && path.endsWith('/index.html')) {
+              sites.push(path)
+            }
+          }
+          if (sites.length !== 1) {
+            Errors.throwUnexpected('tao build --web reported success but wrote no index.html.')
+          }
+        },
+      },
+      { name: 'run the starter journeys', run: () => passingJourneys(shell, project) },
+      {
+        name: 'reject a broken journey, restore it, and pass',
+        run: () => failingJourneyRecovers(environment, project),
+      },
+      {
+        name: 'create with journeys and reuse the host in a second project',
+        run: async () => {
+          await shell(home, 'tao create "A reading list" --ai none --yes')
+          const second = await shell(FS.resolvePath('a-reading-list', home), 'tao build --web')
+          if (second.includes(HOST_INSTALL_NOTICE)) {
+            Errors.throwUnexpected('A second project installed the host again instead of sharing the first install.')
+          }
+        },
+      },
+      ...(Platform.runtimeProcess.env['TAO_ACCEPTANCE_BROWSER_DRIVER'] === undefined ? [] : [{
+        name: 'prepare a deterministic browser journey',
+        run: () => prepareBrowserClickProject(environment, project),
+      }]),
+      {
+        name: 'dev serves web and runs the available browser journey',
+        run: () => devLoopServesWeb(environment, project, 'ATallyCounter'),
+      },
+    ], summary)
     HCI.logProcessInfo(
       'standalone',
-      `Accepted Tao ${version}: installed through curl | sh, then create with its tests, check, compile,`
-        + ' test, build --compile-only, build --web in two projects sharing one host install, and tao dev'
-        + ' serving web and a browser click when the VM driver is present, outside a checkout.',
+      `Accepted Tao ${version}: installed CLI scenarios passed. Evidence: ${summary}`,
     )
   } finally {
     // The audit snapshots the projects and temporary home after acceptance returns. The VM is
@@ -168,6 +209,106 @@ async function accept(release: string): Promise<void> {
       await FS.remove(root)
     }
   }
+}
+
+/** A syntax rejection must name its source position and leave the author's input intact. */
+async function malformedSourceIsReadOnly(environment: Platform.ProcessEnv, project: string): Promise<void> {
+  const file = FS.resolvePath('Acceptance.tao', project)
+  const source = 'view Broken() {\n   render Text(\n}\n'
+  await FS.writeText(file, source)
+  try {
+    await newcomerShell(environment)(project, 'tao check Acceptance.tao', /Acceptance\.tao:3:1 error:/)
+    if (await FS.readText(file) !== source) {
+      Errors.throwUnexpected('tao check rewrote malformed input.')
+    }
+  } finally {
+    await FS.remove(file)
+  }
+}
+
+/** Each in-place command must repair whitespace and then leave its canonical result unchanged. */
+async function canonicalSourceRecovers(environment: Platform.ProcessEnv, project: string): Promise<void> {
+  const shell = newcomerShell(environment)
+  const file = FS.resolvePath('App.tao', project)
+  const canonical = await FS.readText(file)
+  const noncanonical = canonical.replace(/^ +/gm, ' ')
+  if (noncanonical === canonical) {
+    Errors.throwUnexpected('The starter has no indentation to exercise formatting recovery.')
+  }
+  try {
+    for (const command of ['fix', 'fmt']) {
+      await FS.writeText(file, noncanonical)
+      await shell(project, 'tao check App.tao', /Needs fixes/)
+      if (await FS.readText(file) !== noncanonical) {
+        Errors.throwUnexpected('tao check rewrote noncanonical input.')
+      }
+      await shell(project, `tao ${command} App.tao`)
+      if (await FS.readText(file) !== canonical) {
+        Errors.throwUnexpected(`tao ${command} did not restore the starter's canonical source.`)
+      }
+      await shell(project, `tao ${command} App.tao`)
+      if (await FS.readText(file) !== canonical) {
+        Errors.throwUnexpected(`tao ${command} changed already canonical source.`)
+      }
+      await shell(project, 'tao check App.tao')
+    }
+  } finally {
+    await FS.writeText(file, canonical)
+  }
+}
+
+/** Exercise the installed semantic entrypoints with the starter's real source and checks. */
+async function semanticReports(environment: Platform.ProcessEnv, project: string): Promise<void> {
+  const shell = newcomerShell(environment)
+  const facts = JSON.parse(await shell(project, 'tao facts . App.tao ATallyCounter'))
+  if (
+    facts.format !== 'tao-semantic-facts-v1' || facts.version !== 1 || facts.app !== 'ATallyCounter'
+    || !Array.isArray(facts.facts) || facts.facts.length === 0 || !Array.isArray(facts.diagnostics)
+    || facts.diagnostics.some((diagnostic: { severity: string }) => diagnostic.severity === 'error')
+  ) {
+    Errors.throwUnexpected(`tao facts did not report the created app's semantic envelope: ${JSON.stringify(facts)}`)
+  }
+  const coverage = JSON.parse(await shell(project, 'tao coverage . App.tao ATallyCounter ItemList'))
+  if (
+    coverage.format !== 'tao-semantic-coverage-v1' || coverage.version !== 1 || coverage.coverage?.view !== 'ItemList'
+    || !Array.isArray(coverage.coverage.shows)
+    || !coverage.coverage.shows.some((show: { text: string; checks: string[] }) =>
+      show.text === 'No items yet' && show.checks.includes('adds a item, opens it, and renames it')
+    )
+  ) {
+    Errors.throwUnexpected(
+      `tao coverage did not connect the starter's empty state to its journey: ${JSON.stringify(coverage)}`,
+    )
+  }
+}
+
+async function passingJourneys(shell: ReturnType<typeof newcomerShell>, project: string): Promise<void> {
+  const tested = await shell(project, 'TAO_HOST_INSTALL=yes tao test')
+  if (!/Tests:\s+[1-9]\d* passed/.test(tested)) {
+    Errors.throwUnexpected(`tao test exited cleanly but reported no passing journeys:\n${tested}`)
+  }
+}
+
+/** A real generated assertion fails under the installed runner, then passes again after restoration. */
+async function failingJourneyRecovers(environment: Platform.ProcessEnv, project: string): Promise<void> {
+  const shell = newcomerShell(environment)
+  const file = FS.resolvePath('ATallyCounter.test.tao', project)
+  const source = await FS.readText(file)
+  const expected = 'expect text "No items yet"'
+  if (!source.includes(expected)) {
+    Errors.throwUnexpected('The starter journey has no empty-state assertion to exercise rejection.')
+  }
+  await FS.writeText(file, source.replace(expected, 'expect text "Acceptance deliberately missing text"'))
+  try {
+    await shell(
+      project,
+      'tao test --output lines',
+      /expect text "Acceptance deliberately missing text" expected rendered text but found none\./,
+    )
+  } finally {
+    await FS.writeText(file, source)
+  }
+  await passingJourneys(shell, project)
 }
 
 /** Replace the generated app after its own acceptance steps with a deterministic browser journey. */
@@ -242,10 +383,7 @@ async function versionPinWorks(environment: Platform.ProcessEnv, project: string
       Errors.throwUnexpected(`\`${script}\` did not run Tao ${version}.`)
     }
   }
-  const missing = await CLI.run('/bin/sh', { args: ['-c', 'tao +9.9.9 --version'], cwd: project, env: environment })
-  if (missing.exitCode === 0 || !missing.stderr.includes('download/v9.9.9/install.sh')) {
-    Errors.throwUnexpected(`A missing release did not name its install command:\n${missing.stdout}${missing.stderr}`)
-  }
+  await shell(project, 'tao +9.9.9 --version', /download\/v9\.9\.9\/install\.sh/)
   const updates = await shell(project, 'tao check-for-updates')
   if (!updates.includes(`Tao ${version} is the latest release.`)) {
     Errors.throwUnexpected(`tao check-for-updates did not recognise Tao ${version} as the latest:\n${updates}`)
@@ -263,6 +401,8 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
     args: ['-c', 'exec tao dev'],
     cwd: project,
     env: environment,
+    processPolicy: 'test',
+    timeoutMs: 900_000,
     onOutput: (_stream, chunk) => {
       output += String(chunk)
     },
@@ -278,7 +418,9 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
       }
       await Time.sleep(250)
     }
-    const response = await fetch(`http://127.0.0.1:${port}/index.bundle?platform=web&dev=true&minify=false`)
+    const response = await fetch(`http://127.0.0.1:${port}/index.bundle?platform=web&dev=true&minify=false`, {
+      signal: AbortSignal.timeout(DEV_START_TIMEOUT_MS),
+    } as RequestInit)
     const bundle = await response.text()
     if (response.status !== 200 || !bundle.includes(appName)) {
       Errors.throwUnexpected(`tao dev's Metro answered ${response.status} without ${appName} in its web bundle.`)
@@ -286,7 +428,11 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
     const browserDriver = Platform.runtimeProcess.env['TAO_ACCEPTANCE_BROWSER_DRIVER']
     if (browserDriver !== undefined) {
       const click = await CLI.run(browserDriver, {
-        args: [`http://127.0.0.1:${port}/`],
+        args: [
+          `http://127.0.0.1:${port}/`,
+          FS.resolvePath('App.tao', project),
+          ACCEPTANCE_LOG_DIR ?? FS.resolvePath('.tao/browser-acceptance', project),
+        ],
         cwd: project,
         env: {
           ...environment,
@@ -295,7 +441,7 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
         },
         onOutput: (_stream, chunk) => HCI.write(String(chunk)),
         processPolicy: 'test',
-        timeoutMs: 300_000,
+        timeoutMs: 420_000,
       })
       if (ACCEPTANCE_LOG_DIR !== undefined) {
         await FS.writeText(FS.resolvePath('browser-click.log', ACCEPTANCE_LOG_DIR), click.stdout + click.stderr)
@@ -339,7 +485,11 @@ async function newcomerEnvironment(
     const watchmanBin = FS.resolvePath('watchman-bin', root)
     await FS.symlink(watchman, FS.resolvePath('watchman', watchmanBin))
     path = `${watchmanBin}:${path}`
-    const sockname = await CLI.mustRun(watchman, { args: ['get-sockname'] })
+    const sockname = await CLI.mustRun(watchman, {
+      args: ['get-sockname'],
+      processPolicy: 'test',
+      timeoutMs: 30_000,
+    })
     watchmanSocket = { WATCHMAN_SOCK: (JSON.parse(sockname.stdout) as { sockname: string }).sockname }
   }
   return {
@@ -358,12 +508,14 @@ async function newcomerEnvironment(
  * and fails on a non-zero exit.
  */
 function newcomerShell(environment: Platform.ProcessEnv) {
-  return async (cwd: string, script: string): Promise<string> => {
+  return async (cwd: string, script: string, expectedDiagnostic?: RegExp): Promise<string> => {
     const startedAt = Date.now()
     const result = await CLI.run('/bin/sh', {
       args: ['-c', script],
       cwd,
       env: environment,
+      processPolicy: 'test',
+      timeoutMs: 600_000,
     })
     if (ACCEPTANCE_LOG_DIR !== undefined) {
       const name = `step-${String(++shellStep).padStart(2, '0')}.log`
@@ -374,9 +526,6 @@ function newcomerShell(environment: Platform.ProcessEnv) {
         }\n\n${result.stdout}${result.stderr}`,
       )
     }
-    if (result.exitCode !== 0) {
-      Errors.throwUnexpected(`\`${script}\` failed (exit ${result.exitCode}):\n${result.stdout}${result.stderr}`)
-    }
-    return result.stdout
+    return StandaloneScenarios.commandOutput(script, result, expectedDiagnostic)
   }
 }

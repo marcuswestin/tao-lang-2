@@ -89,6 +89,7 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     ? options.selectedAppDatasourceConfiguration
     : undefined
   const datasources = compileAppDatasources(app, crossModuleBase, selectedDatasourceConfiguration)
+  const compiledAgentCommands = compileAgentCommands(configuration, baseReference)
   return gen`
     ${gen.list(declaredPersistedStates, Compile.StateDeclaration)}
     ${gen.list(declaredAppActions, Compile.ActionDeclaration)}
@@ -101,6 +102,7 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       ? gen`(_TaoAuthScope?: TR.AuthScope) => { void _TaoAuthScope; return ${navigator} }`
       : gen`() => ${navigator}`
   },
+      agentCommands: () => ${compiledAgentCommands},
       useSetup: () => {
         ${
     crossModuleBase
@@ -156,6 +158,10 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       : gen.noop()
   }
       ${compileFixtureSeed(options, auth !== undefined)}
+      useTaoGeneratedAgentCommands(${gen.Name(definition)}.definition.agentCommands?.() ?? [], [
+        ...(${gen.Name(definition)}.definition.datasources?.() ?? []).map(binding => binding.store),
+        ${options.localDataCatalog ? gen`${gen.scopeName({ name: '_TaoLocalDataCatalog' })},` : gen.noop()}
+      ]${auth ? gen`, _TaoAuthScope` : gen.noop()})
       ${compileStudioSubject(options, app, auth !== undefined)}
       ${fixtureSeedInScope(options) ? gen`if (!_TaoFixtureSeed.ready) return null` : gen.noop()}
       return ${auth ? gen`<TR.Auth.Host scope={_TaoAuthScope}>` : gen.noop()}<TR.AppShell>
@@ -165,6 +171,26 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     ${compileStudioSubjects(options, app, definition)}
     ${gen.scopeName(app)} = ${gen.Name(definition)}
   `
+}
+
+/** App variants replace the allowlist, preserving imported base command identities through its getter. */
+function compileAgentCommands(
+  configuration: ASTUtils.EffectiveAppConfiguration,
+  baseReference: Compiled | undefined,
+): Compiled {
+  const value = configuration.get('AgentCommands')?.value
+  if (!value) {
+    return baseReference ? gen`${baseReference}.definition.agentCommands?.() ?? []` : gen`[]`
+  }
+  Assert.is(value, AST.isListLiteral, 'validated agent allowlist is a literal list')
+  return gen`[${
+    gen.join(value.elements, element => {
+      Assert.is(element, AST.isValueReference, 'validated agent command is a direct reference')
+      const command = resolveRef(element.target)
+      Assert.is(command, AST.isCommandDeclaration, 'validated agent reference resolves a command')
+      return gen.scopeName(command)
+    }, { separator: ', ' })
+  }]`
 }
 
 /**

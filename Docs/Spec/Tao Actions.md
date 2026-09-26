@@ -101,6 +101,39 @@ At the implemented boundary, module-level command catalogs belong to the compile
 variants and sibling app declarations in that project share the catalog. A separate running-app
 ownership boundary requires an authored ownership construct and is not inferred from app variants.
 
+### App command exposure
+
+An app may expose a subset of module commands to the local command client:
+
+```tao
+app MyApp {
+   Name "My app"
+   Navigator Main
+   AgentCommands [AppendCommand]
+}
+```
+
+The primitive app property is `AgentCommands list of command is []`. Its value is a literal list of
+direct references to module commands, including imported commands. App variants replace the list
+using ordinary app-property replacement. The initial desktop bridge accepts only text, number, and
+boolean slots. View-local commands, derived command values, and entity slots are rejected.
+
+Discovery returns only this list, with canonical identities and named scalar inputs. A command whose
+enabled state needs arguments is not advertised as definitely enabled. Execution validates named JSON
+arguments without coercion, retains omitted defaults, then evaluates `Enabled` with the bound values.
+Exposure makes this command surface available to the local capability holder; datasource permissions
+and the app's existing authentication still apply.
+Exposed commands bind to the mounted app's auth scope, and persistence waits on that scope's
+store instances. The command client cannot supply an account identity or credentials.
+
+The installed app owns execution and storage. A completion receipt identifies the root action
+transaction as committed, failed, or abandoned, and waits for its queued provider persistence. It does
+not promise remote synchronization or completion of detached `async` work. A missing response or
+timeout leaves the outcome unknown and must not trigger an automatic retry. Commands needing an
+interactive dialog are unsuitable for the background proof of concept.
+
+See [desktop command client](../../packages/cli/tao-cli/README.md) for building and controlling the app.
+
 ## Shortcuts
 
 `shortcut` is the type of the key a command answers to. A bare string literal in `Key` position is a

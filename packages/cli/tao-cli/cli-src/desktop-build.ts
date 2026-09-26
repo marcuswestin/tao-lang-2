@@ -6,18 +6,24 @@ export async function buildDesktopApp(options: {
   appName: string
   outputRoot: string
   siteRoot: string
-  workRoot: string
+  agents?: { buildId: string }
 }): Promise<string> {
-  const host = await DesktopHost.prepare({
-    appName: options.appName,
-    root: FS.resolvePath('desktop-host', options.workRoot),
-    siteRoot: options.siteRoot,
-  })
-  const builtApp = await DesktopHost.build(host)
-  const destination = FS.resolvePath(FS.basename(builtApp), options.outputRoot)
-  if (await FS.exists(destination)) {
-    Errors.throwUnexpected(`Desktop app output already exists: ${destination}`)
+  const hostRoot = FS.resolvePath('.host', options.outputRoot)
+  try {
+    const host = await DesktopHost.prepare({
+      appName: options.appName,
+      root: hostRoot,
+      siteRoot: options.siteRoot,
+      agents: options.agents,
+    })
+    const builtApp = await DesktopHost.build(host)
+    const destination = FS.resolvePath(FS.basename(builtApp), options.outputRoot)
+    if (await FS.exists(destination)) {
+      Errors.throwUnexpected(`Desktop app output already exists: ${destination}`)
+    }
+    await FS.move(builtApp, destination)
+    return destination
+  } finally {
+    await FS.remove(hostRoot)
   }
-  await FS.move(builtApp, destination)
-  return destination
 }

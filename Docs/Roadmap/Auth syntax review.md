@@ -1,6 +1,6 @@
 # Auth syntax review
 
-Status: accepted design under implementation, 2026-09-26. The
+Status: local and self-hosted slice implemented, 2026-09-26; managed-provider acceptance remains later work. The
 [implementation plan](<Plan - Auth and account data.md>) owns sequencing and acceptance;
 [Tao Revolution decisions](<Tao Revolution/Decisions.md>) owns the decided language. This review
 does not settle the broader authority cluster's MVP scope. The executable review app is

@@ -5,6 +5,7 @@ import type { RuntimeAuthScope, TaoConfiguredAuth } from './TR-auth'
 import type { TaoAppDatasourceBinding } from './TR-data'
 import type { TaoDesign } from './TR-design'
 import { UnexpectedBehaviorError, UserInputError } from './TR-errors'
+import type { RuntimeCommand } from './TR-interaction'
 import { resetInteractionRuntime } from './TR-interaction-catalog'
 import { ownerOfNavigation, RuntimeAppDefinition } from './TR-navigation-app'
 import { NavigationAppHost } from './TR-navigation-app-host'
@@ -92,6 +93,7 @@ export type TaoAppDeclaration = Readonly<{
 }>
 
 export type TaoAppDefinition = {
+  agentCommands?(): readonly RuntimeCommand[]
   auth?(): TaoConfiguredAuth
   auxiliaries(scope?: RuntimeAuthScope): Record<string, TaoNavigationInput>
   /**

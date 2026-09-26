@@ -218,7 +218,16 @@ The local service implements email/password registration and sign-in, resource-b
 expiry and revocation, server-owned issuer/subject-to-account mapping, and durable SQLite rows,
 constraints, and receipts. Email is a login handle, not a verified contact claim. This is a
 localhost reference implementation; it does not establish a managed identity-provider deployment,
-MFA, passkeys, account linking, recovery, or an InstantDB auth integration.
+MFA, passkeys, account linking, recovery, or native InstantDB authentication.
+
+The service can instead store application rows and operation receipts in self-hosted InstantDB,
+selected by trusted `--instant-config PATH` configuration. App source and the LocalAuth/Reference
+protocol stay the same; SQLite retains credentials, sessions, keys, and identity mappings. Each
+Instant transaction atomically commits changed entity rows, an idempotency receipt, and a unique
+revision guard. Startup and acknowledged revocation advance that revision to fence older requests.
+This deployment requires deny-all direct-client rules and one gateway using its original identity
+database. Policy migration, copied databases running extra gateways, and distributed failover are
+unsupported. Live tests exercise the actual Tao app, transaction races, and process/offline recovery.
 
 An authenticated datasource must declare that it enforces authenticated authority. `Reference`
 declares server authority; `Memory` declares test authority and is usable with `TestAuth`.

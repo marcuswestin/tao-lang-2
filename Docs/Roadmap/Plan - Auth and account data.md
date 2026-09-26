@@ -323,6 +323,8 @@ Implementation decisions made within the authorized slice:
   an operation as durably queued.
 - Navigation persistence is isolated by account and mounted app; logout resets protected navigation
   and data access immediately. Credentials and identity do not become caller-supplied Tao values.
+- Background app commands inherit the mounted app's auth scope and wait for its scoped stores;
+  command RPC does not introduce a caller-supplied account identity.
 - Authenticated data requires an explicit adapter authority capability. Unsupported snapshot/local
   adapters fail before connection; Memory's authority is limited to TestAuth. This prevents an
   unimplemented remote pairing from appearing secure merely because the client filters its rows.

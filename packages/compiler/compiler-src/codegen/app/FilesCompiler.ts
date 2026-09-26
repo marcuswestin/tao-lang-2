@@ -44,6 +44,7 @@ export const FilesCompiler = {
       } as const
       ${opts.selectedAppName ? gen`export default TaoApps[${gen.jsLiteral(opts.selectedAppName)}]` : gen.noop()}
     `
+    // Module-scope hook aliases let Fast Refresh resolve them without forcing an app remount.
     return gen`
       import React from 'react'
       void React
@@ -51,6 +52,7 @@ export const FilesCompiler = {
 
       ${gen.textLines(importLines)}
 
+      ${apps.length > 0 ? gen`const useTaoGeneratedAgentCommands = TR.Agent.useCommands` : gen.noop()}
       ${
       apps.length > 0 && (opts.studio || activeFixtureStores().length > 0)
         ? gen`

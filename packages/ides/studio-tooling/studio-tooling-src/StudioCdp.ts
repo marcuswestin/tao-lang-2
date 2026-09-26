@@ -64,6 +64,7 @@ type Point = {
 
 type StudioCdpOptions = {
   artifactRoot?: string
+  onProfileCreated?: (path: string) => Promise<void>
   startupTimeoutMs?: number
   useMockKeychain?: boolean
 }
@@ -148,6 +149,7 @@ export class StudioCdp {
       stdio: 'pipe',
     })
     try {
+      await options.onProfileCreated?.(userDataRoot)
       const port = await waitForActivePort(userDataRoot, command, startupOutput, options.startupTimeoutMs)
       const target = await waitForTarget(`http://127.0.0.1:${port}`)
       const client = await CdpClient.connect(requireWebSocketUrl(target))

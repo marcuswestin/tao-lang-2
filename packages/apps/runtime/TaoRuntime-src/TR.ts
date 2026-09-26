@@ -12,9 +12,11 @@ import {
   runAction,
   skippedActionRun,
   type TaoActionContinuation,
+  type TaoActionReceipt,
   type TaoDeclaredFailure,
   transactionResource,
 } from './TR-action-transactions'
+import { AgentControls } from './TR-agent'
 import { AppShell, AppSurfaceFrame } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
 import {
@@ -926,6 +928,7 @@ class TR {
 
   /** Interaction exposes command values and the catalog of the verbs a module publishes. */
   static readonly Interaction = InteractionControls
+  static readonly Agent = AgentControls
 
   /** Navigation exposes deterministic stack history, presentation, and back behavior. */
   static readonly Navigation = NavigationControls
@@ -1065,6 +1068,28 @@ class RuntimeActionValue<Args extends any[] = any[]> {
   invokeJoined(...args: Args): void | Promise<void> {
     const run = (latestArgs: Args) => runAction(this.name, latestArgs, () => this.body(...latestArgs), true)
     return this.#latest?.invoke(args, run) ?? run(args)
+  }
+
+  invokeReceipt(...args: Args): Promise<TaoActionReceipt> {
+    return new Promise((resolve, reject) => {
+      const run = (latestArgs: Args) =>
+        runAction(
+          this.name,
+          latestArgs,
+          () => this.body(...latestArgs),
+          false,
+          this.interrupt,
+          undefined,
+          resolve,
+        )
+      try {
+        const pending = this.#latest ? this.#latest.invoke(args, run) : run(args)
+        // A latest-only invocation can be replaced before it gets its own transaction.
+        void Promise.resolve(pending).then(() => resolve({ outcome: 'abandoned' }), reject)
+      } catch (error) {
+        reject(error)
+      }
+    })
   }
 }
 
