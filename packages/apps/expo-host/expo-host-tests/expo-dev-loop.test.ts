@@ -1,4 +1,4 @@
-import { devLoopOutputKind } from '@expo-host/dev-loop/DevLoopOutput'
+import { DevLoopOutput, devLoopOutputKind } from '@expo-host/dev-loop/DevLoopOutput'
 import { createDevLoopExpoSession } from '@expo-host/dev-loop/expo-dev-loop'
 import {
   createAndroid,
@@ -31,8 +31,8 @@ import { handleCommandKey } from '@expo-host/dev-loop/keyboard-input/CommandKeys
 import Commands from '@expo-host/dev-loop/keyboard-input/Commands'
 import Run from '@expo-host/dev-loop/Run'
 import { CLI, Errors, FS, Repo, Time } from '@shared'
-import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
-import { createServer } from 'node:net'
+import { Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
+import { connect, createServer, type Server } from 'node:net'
 
 Describe('Expo dev-loop output severity', () => {
   Test('reads a child process line by its text, not by the stream it chose', () => {
@@ -263,6 +263,21 @@ Describe('Expo dev-loop command helpers', () => {
     Expect(`${captured.stdout}${captured.stderr}`).toContain('requires a Tao source checkout')
   })
 
+  Test('lists the source-checkout controls only when the loop runs from a checkout', async () => {
+    try {
+      DevLoopOutput.showCheckoutControls(false)
+      const outside = await withCapturedOutput(() => Commands.printControls())
+      DevLoopOutput.showCheckoutControls(true)
+      const inside = await withCapturedOutput(() => Commands.printControls())
+
+      Expect(outside.stdout).toContain('reload app')
+      Expect(outside.stdout).not.toContain('source checkout')
+      Expect(inside.stdout).toContain('verify Tao checkout (source checkout)')
+    } finally {
+      DevLoopOutput.showCheckoutControls(true)
+    }
+  })
+
   Test('keeps child-process output as the useful dev-loop failure', () => {
     const error = new Errors.CommandExecutionError({
       args: ['compile', 'App.tao'],
@@ -285,6 +300,39 @@ Describe('Expo dev-loop command helpers', () => {
       'Error: Cannot find module ./publicFolder',
       'Expo exited with code=1.',
     ].join('\n'))
+  })
+
+  // `bunx` takes the package name first; an installed Tao's launcher already names Expo's script,
+  // and Expo reads a stray `expo` as its project root.
+  Test('drops the package name only for a launcher that already names Expo’s script', async () => {
+    const firstArgument = async (namesExpoScript: boolean): Promise<string> => {
+      const root = await mkTestDir('tao-expo-launcher-args-')
+      const argsPath = FS.resolvePath('args.txt', root)
+      const server = new ExpoServer(root, createExpoConfig(49_154), async () => {}, {
+        command: {
+          argsPrefix: ['-c', 'printf "%s\\n" "$@" > "$0"', argsPath],
+          executable: '/bin/sh',
+          namesExpoScript,
+        },
+        logRoot: root,
+        runtimeToolchainSourceRoot: root,
+        stopTimeoutMs: 25,
+      })
+      try {
+        await server.start()
+        for (let attempt = 0; attempt < 200 && !await FS.isFile(argsPath); attempt += 1) {
+          await Time.sleep(10)
+        }
+        await Time.sleep(20)
+        return (await FS.readText(argsPath)).split('\n')[0] ?? ''
+      } finally {
+        await server.stop().catch(() => undefined)
+        await FS.remove(root)
+      }
+    }
+
+    Expect(await firstArgument(false)).toBe('expo')
+    Expect(await firstArgument(true)).toBe('start')
   })
 
   Test('stops the complete Expo subprocess tree when Metro outlives its launcher', async () => {
@@ -333,6 +381,22 @@ Describe('Expo dev-loop command helpers', () => {
 })
 
 Describe('Expo dev-loop port helpers', () => {
+  async function listenIfSupported(server: Server, host: string): Promise<boolean> {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject)
+        server.listen({ host, ipv6Only: true, port: 0 }, resolve)
+      })
+      return true
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (host.includes(':') && (code === 'EAFNOSUPPORT' || code === 'EADDRNOTAVAIL')) {
+        return false
+      }
+      throw error
+    }
+  }
+
   Test('derives every Expo endpoint and start argument from the session port', () => {
     const config = createExpoConfig(49_152)
 
@@ -368,32 +432,81 @@ Describe('Expo dev-loop port helpers', () => {
     Expect(selected).toBe(49_152)
   })
 
-  Test('reserves a different dev-loop port when Expo sees the preferred port as occupied', async () => {
-    const blocker = createServer()
-    blocker.unref()
-    await new Promise<void>((resolve, reject) => {
-      blocker.once('error', reject)
-      // Expo probes a wildcard listener. On macOS, an IPv4-loopback-only probe can
-      // otherwise miss this IPv6 wildcard socket and hand Expo an occupied port.
-      blocker.listen({ port: 0 }, resolve)
-    })
-    const address = blocker.address()
-    const blockedPort = typeof address === 'object' && address !== null ? address.port : undefined
-    try {
-      if (blockedPort === undefined) {
-        Errors.throwHostEnvironment('Expected the test listener to have a TCP port.')
+  for (const host of ['0.0.0.0', '127.0.0.1', '::', '::1']) {
+    Test(`reserves a different port when ${host} already owns the preferred port`, async () => {
+      const blocker = createServer()
+      blocker.unref()
+      if (!await listenIfSupported(blocker, host)) {
+        return
       }
-      const session = await createDevLoopExpoSession(blockedPort)
+      const address = blocker.address()
+      const blockedPort = typeof address === 'object' && address !== null ? address.port : undefined
       try {
-        Expect(session.config.EXPO_PORT).not.toBe(blockedPort)
-        Expect(session.config.EXPO_PORT).toBeGreaterThan(0)
+        if (blockedPort === undefined) {
+          Errors.throwHostEnvironment('Expected the test listener to have a TCP port.')
+        }
+        const session = await createDevLoopExpoSession(blockedPort)
+        try {
+          Expect(session.config.EXPO_PORT).not.toBe(blockedPort)
+          Expect(session.config.EXPO_PORT).toBeGreaterThan(0)
+        } finally {
+          await session.releasePortReservation()
+        }
       } finally {
-        await session.releasePortReservation()
+        await new Promise<void>((resolve, reject) => {
+          blocker.close(error => error ? reject(error) : resolve())
+        })
       }
-    } finally {
+      // A collision on a later address must release every earlier partial reservation.
+      const reused = await createDevLoopExpoSession(blockedPort)
+      try {
+        Expect(reused.config.EXPO_PORT).toBe(blockedPort)
+      } finally {
+        await reused.releasePortReservation()
+      }
+    })
+  }
+
+  // A dev client that retries Metro's port connects to the reservation long before Expo starts.
+  Test('drops clients in both address families and releases every reserved listener', async () => {
+    const ipv6Probe = createServer()
+    const ipv6Supported = await listenIfSupported(ipv6Probe, '::1')
+    if (ipv6Supported) {
       await new Promise<void>((resolve, reject) => {
-        blocker.close(error => error ? reject(error) : resolve())
+        ipv6Probe.close(error => error ? reject(error) : resolve())
       })
+    }
+    const session = await createDevLoopExpoSession(0)
+    const hosts = ipv6Supported ? ['127.0.0.1', '::1'] : ['127.0.0.1']
+    const clients = hosts.map(host => {
+      const client = connect({ host, port: session.config.EXPO_PORT })
+      const dropped = new Promise<boolean>((resolve, reject) => {
+        client.once('error', reject)
+        client.once('close', () => resolve(true))
+      })
+      return { client, dropped, host }
+    })
+    try {
+      // Waiting for the server to drop each client proves that our listeners accepted it.
+      await Promise.all(
+        clients.map(({ dropped, host }) =>
+          until(() => dropped, { description: `the reservation to drop its ${host} client` })
+        ),
+      )
+    } finally {
+      for (const { client } of clients) {
+        client.destroy()
+      }
+      await until(async () => {
+        await session.releasePortReservation()
+        return true
+      }, { description: 'both port reservation families to close' })
+    }
+    const reused = await createDevLoopExpoSession(session.config.EXPO_PORT)
+    try {
+      Expect(reused.config.EXPO_PORT).toBe(session.config.EXPO_PORT)
+    } finally {
+      await reused.releasePortReservation()
     }
   })
 
@@ -588,10 +701,11 @@ en7: flags=8863
     const android = createAndroid(config, {} as ExpoMetroSession, { requireAdb: async () => {} })
     const opened: string[] = []
     android.listPhysicalDevices = async () => ['ANDROID-A', 'ANDROID-B']
-    android.ensureExpoGoOnSerial = async () => {}
+    android.prepareRuntimeOnSerial = async () => {}
     android.reverseMetroPort = async () => true
-    android.openExpoGoOnSerial = async serial => {
+    android.openRuntimeOnSerial = async serial => {
       opened.push(serial)
+      return 'expo-go'
     }
     const result = await openPhysicalDevice(
       config,
@@ -629,6 +743,41 @@ en7: flags=8863
       'Android emulator exited before it booted, leaving nothing in /tmp/emulator.log.',
     )
   })
+
+  Test(
+    'opens a phone in its prepared runtime on its own loopback when USB reverses Metro, and at the LAN address otherwise',
+    async () => {
+      const config = createExpoConfig(8_099)
+      const android = createAndroid(config, {} as ExpoMetroSession, { requireAdb: async () => {} })
+      const opens: { expoGoUrl: string; metroHost: string; serial: string }[] = []
+      let reversed = true
+      android.listPhysicalDevices = async () => ['PHONE-1']
+      android.prepareRuntimeOnSerial = async () => {}
+      android.reverseMetroPort = async () => reversed
+      android.openRuntimeOnSerial = async (serial, expoGoUrl, metroHost) => {
+        opens.push({ expoGoUrl, metroHost, serial })
+        return 'companion'
+      }
+      const open = () =>
+        withCapturedOutput(() =>
+          openPhysicalDevice(config, { waitForMetro: async () => {} } as unknown as ExpoMetroSession, android, {
+            detectLanHost: async () => '192.168.1.20',
+            listIosDevices: async () => [],
+          })
+        )
+
+      const overUsb = await open()
+      reversed = false
+      const overLan = await open()
+
+      Expect(overUsb.stdout).toContain('opened PHONE-1 (Tao Companion)')
+      Expect(opens).toEqual([
+        { expoGoUrl: config.EXPO_GO_URL, metroHost: '127.0.0.1', serial: 'PHONE-1' },
+        { expoGoUrl: 'exp://192.168.1.20:8099', metroHost: '192.168.1.20', serial: 'PHONE-1' },
+      ])
+      Expect(overLan.result).toBe(true)
+    },
+  )
 
   Test('accepts only Android Expo Go clients from the configured SDK generation', () => {
     const packageInfo = `

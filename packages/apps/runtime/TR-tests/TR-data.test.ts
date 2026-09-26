@@ -27,6 +27,22 @@ const noteDefinition: TaoDataSchemaDefinition = {
   },
 }
 
+/** documentDefinition has two `(search)` fields, `Title` and `Body`, and one plain field, `Owner`. */
+const documentDefinition: TaoDataSchemaDefinition = {
+  name: 'RuntimeDocuments',
+  schemaVersion: 1,
+  entities: {
+    Document: {
+      collection: 'Documents',
+      fields: {
+        Title: { kind: 'text', search: true },
+        Body: { kind: 'text', search: true },
+        Owner: { kind: 'text' },
+      },
+    },
+  },
+}
+
 Describe('TR.Data provider foundation', () => {
   Test('submits supplied same-value update fields as transient write intent', async () => {
     const saves: Array<{ intents: readonly { entity: string; fields: readonly string[]; id: string }[] | undefined }> =
@@ -402,6 +418,106 @@ Describe('TR.Data provider foundation', () => {
     }) as Array<Record<string, unknown>>
 
     Expect(rows.map(row => row['Title'])).toEqual(['D', 'C'])
+  })
+
+  Test('matches a query search term against any (search) field, ignoring a non-(search) field', () => {
+    const schema = TR.Data.Schema(documentDefinition, memoryConnection())
+    TR.Data.Create(schema, 'Document', {
+      Title: TR.Value('Bread Recipe'),
+      Body: TR.Value('Mix flour and water'),
+      Owner: TR.Value('Casey'),
+    })
+    TR.Data.Create(schema, 'Document', {
+      Title: TR.Value('Grocery List'),
+      Body: TR.Value('Buy bread and milk'),
+      Owner: TR.Value('Alex'),
+    })
+    TR.Data.Create(schema, 'Document', {
+      Title: TR.Value('Travel Notes'),
+      Body: TR.Value('Pack sunscreen'),
+      // Owner is not a `(search)` field, so a term matching it only must never match the row.
+      Owner: TR.Value('Bread'),
+    })
+
+    const rows = schema.query({
+      entity: 'Document',
+      filters: [],
+      search: () => TR.Value('bread'),
+    }) as Array<Record<string, unknown>>
+
+    Expect(rows.map(row => row['Title']).sort()).toEqual(['Bread Recipe', 'Grocery List'])
+  })
+
+  Test('requires the whole search term to match one field', () => {
+    const schema = TR.Data.Schema(documentDefinition, memoryConnection())
+    TR.Data.Create(schema, 'Document', {
+      Title: TR.Value('Bread'),
+      Body: TR.Value('Recipe'),
+      Owner: TR.Value(''),
+    })
+    TR.Data.Create(schema, 'Document', {
+      Title: TR.Value('Bread Recipe'),
+      Body: TR.Value(''),
+      Owner: TR.Value(''),
+    })
+    TR.Data.Create(schema, 'Document', {
+      Title: TR.Value('Kitchen'),
+      Body: TR.Value('Bread Recipe'),
+      Owner: TR.Value(''),
+    })
+
+    const rows = schema.query({
+      entity: 'Document',
+      filters: [],
+      search: () => TR.Value('bread recipe'),
+    }) as Array<Record<string, unknown>>
+
+    Expect(rows.map(row => row['Title']).sort()).toEqual(['Bread Recipe', 'Kitchen'])
+  })
+
+  Test('matches every row on a blank search term and narrows on a word-prefix subsequence', () => {
+    const schema = TR.Data.Schema(documentDefinition, memoryConnection())
+    TR.Data.Create(schema, 'Document', {
+      Title: TR.Value('Bread Recipe'),
+      Body: TR.Value(''),
+      Owner: TR.Value(''),
+    })
+    TR.Data.Create(schema, 'Document', {
+      Title: TR.Value('Grocery List'),
+      Body: TR.Value(''),
+      Owner: TR.Value(''),
+    })
+
+    const blank = schema.query({
+      entity: 'Document',
+      filters: [],
+      search: () => TR.Value(''),
+    }) as Array<Record<string, unknown>>
+    Expect(blank.map(row => row['Title']).sort()).toEqual(['Bread Recipe', 'Grocery List'])
+
+    const narrowed = schema.query({
+      entity: 'Document',
+      filters: [],
+      search: () => TR.Value('Gro'),
+    }) as Array<Record<string, unknown>>
+    Expect(narrowed.map(row => row['Title'])).toEqual(['Grocery List'])
+  })
+
+  Test('applies limit after search narrows a query', () => {
+    const schema = TR.Data.Schema(documentDefinition, memoryConnection())
+    TR.Data.Create(schema, 'Document', { Title: TR.Value('Bread A'), Body: TR.Value(''), Owner: TR.Value('') })
+    TR.Data.Create(schema, 'Document', { Title: TR.Value('Bread B'), Body: TR.Value(''), Owner: TR.Value('') })
+    TR.Data.Create(schema, 'Document', { Title: TR.Value('Bread C'), Body: TR.Value(''), Owner: TR.Value('') })
+
+    const rows = schema.query({
+      entity: 'Document',
+      filters: [],
+      search: () => TR.Value('Bread'),
+      order: { direction: 'asc', field: 'Title' },
+      limit: 2,
+    }) as Array<Record<string, unknown>>
+
+    Expect(rows.map(row => row['Title'])).toEqual(['Bread A', 'Bread B'])
   })
 
   Test('applies explicit true defaults and entity ordering to unordered queries', () => {

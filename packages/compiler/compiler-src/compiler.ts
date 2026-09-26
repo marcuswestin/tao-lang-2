@@ -3,6 +3,8 @@ import { AST, codeProjectRoot, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, Errors, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
+import { authPolicy } from './auth-policy'
+import { BridgeMetadata } from './bridge-metadata'
 import { withActionInstrumentation } from './codegen/app/action-control-flow'
 import {
   configurationAliasTargetTypeBindingName,
@@ -29,7 +31,7 @@ import {
   withInlineInjectionBindings,
 } from './codegen/app/injection-plan'
 import { RuntimeGen } from './codegen/app/RuntimeGen'
-import { LocalDataBindings } from './codegen/codegen-util'
+import { LocalDataBindings, ReadNetBinding } from './codegen/codegen-util'
 import {
   compileStudioPreviewManifest,
   type StudioPreviewManifest,
@@ -66,6 +68,7 @@ type ImportTarget = {
 
 type DataCatalogPlan = {
   entities: readonly AST.EntityDataDeclaration[]
+  access: readonly AST.AccessDeclaration[]
   /** localOnly is whether any entity carries the `local only` storage fact, which adds a catalog. */
   localOnly: boolean
   /** localUserPaths are the files that reference the companion catalog's bindings. */
@@ -264,6 +267,8 @@ function compileValidatedInput(
   const identityProjects = declarationIdentityProjects(validationResult.files, context)
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
   const dataCatalog = planDataCatalog(sourceFiles, entryPath)
+  // Validation allows one `guard default` per project, and every app in the project carries it.
+  const readNetOwnerPath = sourceFiles.find(file => file.ast.statements.some(AST.isGuardDefaultStatement))?.path
   const studioViews = studio
     ? sourceFiles.flatMap(file =>
       file.ast.statements.filter(AST.isScenarioGroupDeclaration).flatMap(group =>
@@ -287,6 +292,7 @@ function compileValidatedInput(
   const compiledFiles = sourceFiles.flatMap(file =>
     compileSourceFile(file, {
       dataCatalog,
+      readNetOwnerPath,
       sourceByPath,
       outputPaths,
       packagesContext: context.packagesContext,
@@ -301,8 +307,20 @@ function compileValidatedInput(
     })
   )
 
+  if (dataCatalog?.access.length) {
+    compiledFiles.push({
+      relativePath: 'TaoDataPolicy.json',
+      sourcePath: entryPath,
+      code: JSON.stringify(authPolicy(dataCatalog.entities, dataCatalog.access), null, 2),
+    })
+  }
+
   const studioManifest = studio
-    ? compileStudioPreviewManifest(sourceFiles, selectedAppName, context.sourceRoot)
+    ? compileStudioPreviewManifest(
+      sourceFiles.filter(file => !FS.pathIsWithin(file.path, context.packagesContext.stdlibRoot)),
+      selectedAppName,
+      context.sourceRoot,
+    )
     : undefined
   if (studioManifest !== undefined) {
     compiledFiles.push({
@@ -438,6 +456,8 @@ function planOutputPaths(
 
 type CompileSourceFileOptions = {
   dataCatalog: DataCatalogPlan | undefined
+  /** readNetOwnerPath is the file declaring the project's `guard default`, when there is one. */
+  readNetOwnerPath: string | undefined
   sourceByPath: Map<string, ParsedFile>
   outputPaths: PlannedOutputs
   packagesContext: Packages.Context
@@ -454,6 +474,7 @@ type CompileSourceFileOptions = {
 function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile[] {
   const {
     dataCatalog,
+    readNetOwnerPath,
     sourceByPath,
     outputPaths,
     packagesContext,
@@ -496,6 +517,13 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       addResolvedImport(imports, dataCatalog.ownerPath, binding)
     }
   }
+  // Every app carries the project's read net, so a module declaring an app reads it from its owner.
+  const ownsReadNet = readNetOwnerPath === file.path
+  if (
+    readNetOwnerPath !== undefined && !ownsReadNet && AST.appValueDeclarationsInFile(file.ast).length > 0
+  ) {
+    addResolvedImport(imports, readNetOwnerPath, ReadNetBinding)
+  }
   const planned = outputPaths.bySourcePath.get(file.path)
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
   const importLines = [
@@ -518,6 +546,9 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     .filter(declarationEmitsRuntimeBinding)
     .filter(declarationVisibleOutsideFile)
     .map((declaration: AST.Declaration) => exportedBinding(runtimeBindingName(declaration)))
+  if (ownsReadNet) {
+    exportedBindings.push(exportedBinding(ReadNetBinding))
+  }
   if (ownsDataCatalog) {
     exportedBindings.push(...syncedCatalogBindings(dataCatalog).map(exportedBinding))
     if (dataCatalog.localOnly) {
@@ -537,14 +568,17 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
             () =>
               withActionInstrumentation(debug, () =>
                 RuntimeGen.TaoFile(file.ast, {
+                  bridgeTypes: BridgeMetadata.typesFor(file.ast),
                   configurationTypes: planned.declarationsPath === undefined
                     ? undefined
                     : RuntimeGen.ConfigurationTypes(file.ast),
                   dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+                  dataAccess: ownsDataCatalog ? dataCatalog.access : [],
                   emitDataCatalog: ownsDataCatalog,
                   importLines,
                   localDataCatalog: usesLocalDataCatalog,
                   journeyObservations,
+                  readNet: readNetOwnerPath !== undefined,
                   scopeBindings,
                   exportedBindings,
                   selectedAppDatasourceConfiguration,
@@ -562,7 +596,11 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const declarationsPath = planned.declarationsPath
   const declarations = declarationsPath === undefined ? [] : [emitted(
     declarationsPath,
-    RuntimeGen.ConfigurationDeclarations(file.ast, configurationAliasImportLines(file, declarationsPath, outputPaths)),
+    RuntimeGen.ConfigurationDeclarations(
+      file.ast,
+      configurationAliasImportLines(file, declarationsPath, outputPaths),
+      BridgeMetadata.typesFor(file.ast),
+    ),
   )]
   const injections = planned.injections.map(injection =>
     emitted(injection.relativePath, RuntimeGen.InjectionBoundary(injection.node))
@@ -895,9 +933,14 @@ function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string):
   if (entities.length === 0 && directUserPaths.size === 0) {
     return undefined
   }
+  const stores = ASTUtils.planDataStores(entities, datasources)
+  const seedsSyncedRows = stores.stores.some(store => store.kind !== 'device' && store.collections.length > 0)
   const userPaths = new Set([
     ...directUserPaths,
-    ...pathsOf(file => AST.appValueDeclarationsInFile(file.ast).some(appUsesDatasource)),
+    // Every app root seeds the project's synced stores when a test or Studio fixture is mounted,
+    // including an app that leaves its datasource at the default. A project with only local-only
+    // rows does not need the empty synced catalog in those roots.
+    ...pathsOf(file => seedsSyncedRows && AST.appValueDeclarationsInFile(file.ast).length > 0),
   ])
   const ownerPath = sourceFiles.find(file => file.ast.statements.some(AST.isEntityDataDeclaration))?.path ?? entryPath
   // Both catalogs are emitted by one owner file, so a project that mixes stores still has a single
@@ -909,10 +952,11 @@ function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string):
   )
   return {
     entities,
+    access: sourceFiles.flatMap(file => file.ast.statements.filter(AST.isAccessDeclaration)),
     localOnly: entities.some(Type.dataEntityIsLocalOnly),
     localUserPaths,
     ownerPath,
-    stores: ASTUtils.planDataStores(entities, datasources),
+    stores,
     userPaths,
   }
 }
@@ -935,29 +979,10 @@ function fileUsesDataCatalog(file: ParsedFile): boolean {
   if (AST.appValueDeclarationsInFile(file.ast).some(app => ASTUtils.appBoundDatasources(app).length > 0)) {
     return true
   }
-  return AST.streamAllContents(file.ast).some(node => AST.isEntityQueryDeclaration(node) || AST.isCreateStatement(node))
-}
-
-function appUsesDatasource(app: AST.AppValueDeclaration): boolean {
-  const seen = new Set<AST.AppValueDeclaration>()
-  let current: AST.AppValueDeclaration | undefined = app
-  while (current && !seen.has(current)) {
-    seen.add(current)
-    if (
-      AST.streamAllContents(current).some(node =>
-        (AST.isAppProperty(node) || AST.isConfigurationEntry(node)) && node.name === 'Datasource'
-      )
-    ) {
-      return true
-    }
-    const expression: AST.Expression | undefined = current.value
-    if (!expression || (!AST.isRefinementExpression(expression) && !AST.isValueReference(expression))) {
-      return false
-    }
-    const target: AST.RefinementBaseDeclaration | undefined = expression.target.ref
-    current = AST.isConcreteAppValueDeclaration(target) ? target : undefined
-  }
-  return false
+  return AST.streamAllContents(file.ast).some(node =>
+    AST.isEntityQueryDeclaration(node) || AST.isCreateStatement(node)
+    || (AST.isValueReference(node) && AST.isAuthLibraryDeclaration(node.target.ref, 'Account'))
+  )
 }
 
 function addResolvedImport(imports: ResolvedImports, sourcePath: string, binding: string): void {
@@ -1222,9 +1247,11 @@ function declarationVisibleOutsideFile(declaration: AST.Declaration): boolean {
 
 // Most type declarations are erased, but a case set carries runtime case identities and a
 // configurable type carries a declaration identity, so both cross file boundaries as bindings.
+// Entity declarations contribute to the shared catalog rather than emitting individual bindings.
 function declarationEmitsRuntimeBinding(node: AST.Node): node is AST.Declaration {
   return AST.isDeclaration(node)
     && AST.isEmittingRuntimeBinding(node)
+    && !AST.isEntityDataDeclaration(node)
     && (!AST.isTypeDeclaration(node)
       || AST.isCaseSetTypeExpression(node.type)
       || isRuntimeConfigurableDeclaration(node))

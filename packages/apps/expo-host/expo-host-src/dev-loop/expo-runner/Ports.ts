@@ -1,4 +1,4 @@
-import { CLI, Errors, type ProcessListener as Listener, ProcessListeners, Time } from '@shared'
+import { CLI, Errors, Platform, type ProcessListener as Listener, ProcessListeners, Time } from '@shared'
 import { createServer } from 'node:net'
 import { DevLoopOutput } from '../DevLoopOutput'
 
@@ -42,9 +42,48 @@ async function reserveAvailable(preferredPort: number): Promise<PortReservation>
 }
 
 async function reservePort(port: number): Promise<PortReservation | undefined> {
+  // Darwin permits a wildcard and a loopback listener to coexist on the same port, even
+  // within one address family. Hold both there; elsewhere the wildcard owns loopback too.
+  const hosts = Platform.hostPlatform === 'darwin'
+    ? ['0.0.0.0', '127.0.0.1', '::', '::1']
+    : ['0.0.0.0', '::']
+  const reservations: PortReservation[] = []
+  let released: Promise<void> | undefined
+  const release = () => released ??= Promise.all(reservations.map(item => item.release())).then(() => {})
+  let selectedPort = port
+  try {
+    for (const host of hosts) {
+      let reservation: PortReservation | undefined
+      try {
+        reservation = await reserveAddress(selectedPort, host)
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code
+        if (host.includes(':') && (code === 'EAFNOSUPPORT' || code === 'EADDRNOTAVAIL')) {
+          // Hosts with IPv6 disabled still need their IPv4 reservations.
+          continue
+        }
+        throw error
+      }
+      if (reservation === undefined) {
+        await release()
+        return undefined
+      }
+      reservations.push(reservation)
+      selectedPort = reservation.port
+    }
+    return { port: selectedPort, release }
+  } catch (error) {
+    await release()
+    throw error
+  }
+}
+
+async function reserveAddress(port: number, host: string): Promise<PortReservation | undefined> {
   return await new Promise<PortReservation | undefined>((resolve, reject) => {
     const server = createServer()
     server.unref()
+    // Nothing serves here yet. Drop accepted clients so they cannot keep release waiting.
+    server.on('connection', socket => socket.destroy())
     server.once('error', error => {
       if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
         resolve(undefined)
@@ -52,24 +91,18 @@ async function reservePort(port: number): Promise<PortReservation | undefined> {
         reject(normalizeReservationError(error))
       }
     })
-    // Expo checks the wildcard host before starting Metro. Binding only 127.0.0.1 can
-    // miss an existing IPv6 wildcard listener and incorrectly select its occupied port.
-    server.listen({ exclusive: true, port }, () => {
+    server.listen({ exclusive: true, host, ipv6Only: true, port }, () => {
       const address = server.address()
       const availablePort = typeof address === 'object' && address !== null ? address.port : undefined
       if (availablePort === undefined) {
         server.close(error => error ? reject(error) : resolve(undefined))
         return
       }
-      let released = false
+      let released: Promise<void> | undefined
       resolve({
         port: availablePort,
-        async release() {
-          if (released) {
-            return
-          }
-          released = true
-          await new Promise<void>((resolveClose, rejectClose) => {
+        release() {
+          return released ??= new Promise<void>((resolveClose, rejectClose) => {
             server.close(error => error ? rejectClose(error) : resolveClose())
           })
         },
@@ -91,11 +124,15 @@ function normalizeReservationError(error: Error): Error {
 }
 
 async function requireEphemeralReservation(): Promise<PortReservation> {
-  const reservation = await reservePort(0)
-  if (reservation === undefined) {
-    Errors.throwUserInput('Could not reserve a free Expo Metro port.')
+  // A port chosen by IPv4 can still be occupied in IPv6. Release the partial reservation
+  // and ask the OS for another, with a bound for hosts that cannot provide a shared port.
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const reservation = await reservePort(0)
+    if (reservation !== undefined) {
+      return reservation
+    }
   }
-  return reservation
+  Errors.throwUserInput('Could not reserve a free Expo Metro port.')
 }
 
 async function requireEphemeralPort(probe: PortProbe): Promise<number> {

@@ -50,12 +50,18 @@ model and the brief; only the subagent's own start and stop carry the id that bo
 `effort` means different things on the two — the caller's on a spawn, since the subagent has not
 started, and the subagent's on a stop. Where a field never arrives the report says so instead of
 inferring it. Spawn and start events have no shared agent ID, so the report cannot attribute a
-resolved model to one spawn; startup drift warnings use local model metadata and installed harness
-version until that seam has supported correlation.
+resolved model to one spawn. `./agent model-audit` works from the other end: it compares the
+routing table with the models every transcript on the machine ran and the installed Codex catalog,
+without attributing any of them to a spawn, and session start reports its findings in one line.
 
-On 2026-09-25 the Developer chose Opus 5.5 for the standard Claude Code and Cursor tiers as
-well as deep. The routing table owns the active models; completed-task measurements will determine
-whether this choice improves cost and quality in practice.
+The 2026-09-23 sample of 19 Claude subagent transcripts found the `opus` alias resolving to an
+older model, and cache reads and writes dominating its API-equivalent estimate. It measured no
+denominator of successfully completed tasks, elapsed task time, review defects, re-reads, or plan
+usage. On 2026-09-25 the Developer chose Opus 5.5 for the standard Claude Code and Cursor tiers as
+well as deep, then chose to leave the `opus` alias unpinned rather than pin it to that id, so each
+install follows its own newest Opus and the audit names an install that lags. The routing table
+owns the active models; the tier changes have no measured completed-task savings, and completed-task
+measurements will determine whether this choice improves cost and quality in practice.
 
 Ask the Developer when the routing table has no row for the work and confidence between two tiers is low, when
 the frontier tier or a long run is at stake, or when the log already shows the pattern — a task like
@@ -77,10 +83,30 @@ listed context window, not a verified Codex compaction trigger or an established
 On a native one-million-token Claude model, it could compact substantially earlier than the
 documented default near 967,000 tokens.
 
-The 2026-09-23 sample of 19 Claude subagent transcripts supplies a cost-category observation, but
-no usable baseline for compaction count or `preTokens`, completed-task cost, post-compaction
-re-reads, or quality. Collect those values for comparable completed tasks under this threshold,
-including retries and reviewer work. For each task, separate cached reads, cache writes, uncached
+The setting reached `main` in `7f5f3e4a` at 2026-09-25 14:58Z, and a session picks it up once its
+checkout has merged that commit. `./agent model-audit --until 2026-09-25T14:58:11Z` gives the
+baseline, the seven days before, for this checkout's Claude Code sessions in tokens (nearest-rank
+percentiles; context is uncached input plus cache writes and reads):
+
+| Measure                      | p50     | p90     | max     | Count  |
+| ---------------------------- | ------- | ------- | ------- | ------ |
+| Main-session context/request | 321,246 | 625,398 | 966,932 | 13,071 |
+| Subagent context/request     | 147,060 | 306,796 | 592,640 | 17,720 |
+| Context before a compaction  | 459,434 | 822,841 | 967,216 | 16     |
+
+10,550 of those 30,791 requests sent more than 272,000 tokens, and 15 of the 16 compactions were
+manual. The first full seven-day window after the routing audit and compaction setting landed ends
+2026-10-02 16:17:37Z (`d1dcbe36` landed on 2026-09-25 at 16:17:37Z). On or after that time, run
+`./agent model-audit --until 2026-10-02T16:17:37Z` and compare main and subagent context per request
+(count, p50, p90, max), context before compaction, requests over 272,000 tokens, and manual versus
+automatic compactions with the baseline above. Check when each sampled checkout actually picked up
+the setting before attributing a change to it.
+
+The 2026-09-23 sample supplied a cost-category observation, but no usable baseline for
+completed-task cost, post-compaction re-reads, or quality. Collect those values for comparable
+completed tasks under this threshold, including retries and reviewer work. The model audit does not
+provide a completed-task denominator, cost categories, plan usage, or quality evidence; collect these
+separately. For each task, separate cached reads, cache writes, uncached
 input, and output in an API-equivalent estimate, and record plan usage separately. Compare the
 same task types with the earlier setting where evidence permits, along with elapsed time, rework,
 and accepted review findings. Revert the threshold if cost per successfully completed task rises,

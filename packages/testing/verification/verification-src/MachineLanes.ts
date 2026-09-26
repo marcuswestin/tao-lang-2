@@ -50,6 +50,12 @@ export type MachineExclusiveLease = {
   release: () => Promise<void>
 }
 
+/** A landing's verification window admits its child and lanes already running when it began. */
+export type LandingPriorityLease = {
+  token: string
+  release: () => Promise<void>
+}
+
 /** LaneQueueEntry is one lane's place in the machine-wide arrival queue. */
 export type LaneQueueEntry = {
   /** Admitted lanes run at their own full width; the rest hold nothing until one of them ends. */
@@ -80,6 +86,8 @@ export type MachineLane = {
    */
   readonly waitReason: string | undefined
   waitForAvailability: () => Promise<void>
+  /** Wait before taking a GUI or prepare lease if a landing began before this lane registered. */
+  waitForLandingPriority: () => Promise<void>
 }
 
 /** AcquireOptions describes the lane asking for a share of the machine. */
@@ -101,6 +109,8 @@ export type AcquireOptions = {
   lockTimeoutMs?: number
   registryRoot?: string
   repositoryRoot: string
+  /** Injected by tests; production inherits the landing child's transaction token. */
+  landingPriorityToken?: string
 }
 
 type ExclusiveRecord = {
@@ -108,6 +118,14 @@ type ExclusiveRecord = {
   laneId: string
   pid: number
   startedAt: string
+}
+
+type LandingPriorityRecord = {
+  id: string
+  pid: number
+  startedAt: string
+  existingLaneIds: string[]
+  ownerLaneIds: string[]
 }
 
 type MutexRecord = {
@@ -155,7 +173,9 @@ const MUTEX_ACQUIRE_TIMEOUT_MS = 30_000
 const EXCLUSIVE_TIMEOUT_MS = 5 * 60 * 1_000
 const MUTEX_LINK = '.mutex'
 const EXCLUSIVE_PATH = '.exclusive'
+const LANDING_PRIORITY_PATH = '.landing-priority'
 const LANE_ID_ENV_KEY = 'TAO_MACHINE_LANE_ID'
+const LANDING_PRIORITY_ENV_KEY = 'TAO_LANDING_PRIORITY_TOKEN'
 
 /** registryRoot resolves the machine-wide directory shared by every worktree. */
 function registryRoot(): string {
@@ -210,9 +230,15 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
 
   let initialCapacity = record.maxSlots
   let initialLaneCount = 1
+  const landingPriorityToken = options.landingPriorityToken ?? Platform.runtimeProcess.env[LANDING_PRIORITY_ENV_KEY]
   try {
     const registration = await withRegistryLock(root, async () => {
       const entries = await activeLaneEntries(root, true)
+      const priority = await liveLandingPriority(root)
+      if (priority !== undefined && priority.id === landingPriorityToken) {
+        priority.ownerLaneIds.push(id)
+        await atomicWriteJson(FS.resolvePath(LANDING_PRIORITY_PATH, root), priority)
+      }
       await atomicWriteJson(path, record)
       const queue = laneQueue([...entries.map(entry => entry.record), record])
       const own = queue.find(entry => entry.record.id === id)
@@ -238,6 +264,7 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
     path,
     record,
     root,
+    landingPriorityToken,
   })
 }
 
@@ -388,6 +415,7 @@ function registeredLane(options: {
   path: string
   record: LaneRecord & { id: string; maxSlots: number }
   root: string
+  landingPriorityToken?: string
 }): MachineLane {
   let peakLanes = options.initialLaneCount
   let peakLoadAverage = options.loadAverage()
@@ -397,6 +425,19 @@ function registeredLane(options: {
   let admissionPollMs = ADMISSION_POLL_MS
   let queuedPoll = false
   let waitReason: string | undefined
+
+  const landingPriorityAllows = async (): Promise<boolean> =>
+    await withRegistryLock(options.root, async () => {
+      const priority = await liveLandingPriority(options.root)
+      if (
+        priority === undefined || priority.id === options.landingPriorityToken
+        || priority.existingLaneIds.includes(options.id) || priority.ownerLaneIds.includes(options.id)
+      ) {
+        return true
+      }
+      waitReason = `landing verification has priority (PID ${priority.pid})`
+      return false
+    }, options.lockTimeoutMs)
 
   const timer = setInterval(() => {
     peakLoadAverage = Math.max(peakLoadAverage, options.loadAverage())
@@ -455,7 +496,25 @@ function registeredLane(options: {
             waitReason = describeExclusiveHolder(exclusive, entries)
             return undefined
           }
-          const queue = laneQueue(entries.map(entry => entry.record))
+          const priority = await liveLandingPriority(options.root)
+          if (
+            priority !== undefined && priority.id !== options.landingPriorityToken
+            && !priority.existingLaneIds.includes(options.id) && !priority.ownerLaneIds.includes(options.id)
+          ) {
+            waitReason = `landing verification has priority (PID ${priority.pid})`
+            return undefined
+          }
+          // A lane paused by this window must not occupy one of the two broad positions ahead of
+          // the landing child. Its registration remains visible for diagnostics and cleanup.
+          const queue = laneQueue(
+            entries
+              .filter(entry =>
+                priority === undefined
+                || priority.existingLaneIds.includes(entry.record.id)
+                || priority.ownerLaneIds.includes(entry.record.id)
+              )
+              .map(entry => entry.record),
+          )
           const admitted = queue.find(entry => entry.record.id === options.id)?.admitted === true
           // An admitted lane owns its whole ceiling. There is no machine-wide slot total to check
           // against any more: the machine is divided by whole broad lanes, and a narrow lane is
@@ -502,6 +561,22 @@ function registeredLane(options: {
       }
     },
     waitForAvailability: () => Time.sleep(admissionPollMs),
+    waitForLandingPriority: async () => {
+      while (!released) {
+        try {
+          if (await landingPriorityAllows()) {
+            return
+          }
+        } catch (error) {
+          if (error instanceof RegistryLockTimeoutError) {
+            throw error
+          }
+          // A missing registry cannot enforce an advisory priority window.
+          return
+        }
+        await Time.sleep(QUEUED_POLL_MS)
+      }
+    },
   }
   return lane
 }
@@ -610,6 +685,73 @@ async function liveExclusive(root: string): Promise<ExclusiveRecord | undefined>
   return record
 }
 
+/**
+ * Capture lanes that arrived before the landing window. They keep progressing, including through
+ * resource leases, so an existing lane cannot be stranded while holding GUI or prepare. New lanes
+ * pause before acquiring either resource and before starting any graph node.
+ */
+async function beginLandingPriority(root = registryRoot()): Promise<LandingPriorityLease | undefined> {
+  const id = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
+  try {
+    const created = await withRegistryLock(root, async () => {
+      if (await liveLandingPriority(root) !== undefined) {
+        return false
+      }
+      const existingLaneIds = (await activeLaneEntries(root, true)).map(entry => entry.record.id)
+      await atomicWriteJson(
+        FS.resolvePath(LANDING_PRIORITY_PATH, root),
+        {
+          id,
+          pid: Platform.runtimeProcess.pid,
+          startedAt: new Date().toISOString(),
+          existingLaneIds,
+          ownerLaneIds: [],
+        } satisfies LandingPriorityRecord,
+      )
+      return true
+    })
+    if (!created) {
+      return undefined
+    }
+  } catch {
+    // Priority is an optimization. The landing lock and verification still provide correctness.
+    return undefined
+  }
+  let released = false
+  return {
+    token: id,
+    release: async () => {
+      if (released) {
+        return
+      }
+      await withRegistryLock(root, async () => {
+        const current = await readRecord<LandingPriorityRecord>(FS.resolvePath(LANDING_PRIORITY_PATH, root))
+        if (current?.id === id) {
+          await FS.remove(FS.resolvePath(LANDING_PRIORITY_PATH, root))
+        }
+      })
+      released = true
+    },
+  }
+}
+
+async function liveLandingPriority(root: string): Promise<LandingPriorityRecord | undefined> {
+  const path = FS.resolvePath(LANDING_PRIORITY_PATH, root)
+  const record = await readRecord<LandingPriorityRecord>(path)
+  if (
+    record !== undefined && typeof record.id === 'string'
+    && Array.isArray(record.existingLaneIds) && record.existingLaneIds.every(id => typeof id === 'string')
+    && Array.isArray(record.ownerLaneIds) && record.ownerLaneIds.every(id => typeof id === 'string')
+    && Number.isInteger(record.pid) && typeof record.startedAt === 'string' && isLive(record)
+  ) {
+    return record
+  }
+  if (record !== undefined) {
+    await FS.remove(path).catch(() => {})
+  }
+  return undefined
+}
+
 async function acquireResource(options: AcquireResourceOptions): Promise<MachineResourceLease> {
   return await MachineResources.acquire(options)
 }
@@ -632,6 +774,7 @@ function unregisteredLane(capacity: number): MachineLane {
     // Nothing declines an admission here, so there is never a wait to explain.
     waitReason: undefined,
     waitForAvailability: () => Time.sleep(ADMISSION_POLL_MS),
+    waitForLandingPriority: async () => {},
   }
 }
 
@@ -668,6 +811,7 @@ async function observingUnregisteredLane(
     tryAcquire: async requestedSlots => uncoordinatedReservation(requestedSlots),
     waitReason: undefined,
     waitForAvailability: () => Time.sleep(ADMISSION_POLL_MS),
+    waitForLandingPriority: async () => {},
   }
 }
 
@@ -902,7 +1046,9 @@ export const MachineLanes = {
   CONTENDED_LOAD_RATIO,
   EXCLUSIVE_TIMEOUT_MS,
   LANE_ID_ENV_KEY,
+  LANDING_PRIORITY_ENV_KEY,
   acquire,
+  beginLandingPriority,
   acquireResource,
   activeLanes,
   contentionReport,

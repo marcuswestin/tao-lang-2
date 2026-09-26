@@ -39,12 +39,12 @@ This is a compact feature file using the existing `Ingredients` entity:
 
 ```tao SkillFeature/SkillFeature.tao
 use Col, Text from @tao/ui
-use Ingredients from ..
+use Ingredient, Ingredients from ..
 
 package
 scene SkillIngredientList() {
    Title "Ingredient summary"
-   query Ingredients { }
+   query Ingredients = Ingredients with { }
    render Col() [gap 8] {
       #skillIngredients
       loop Ingredients / Ingredient {

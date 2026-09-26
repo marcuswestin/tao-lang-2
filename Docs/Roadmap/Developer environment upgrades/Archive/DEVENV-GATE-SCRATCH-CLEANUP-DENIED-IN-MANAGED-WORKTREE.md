@@ -1,0 +1,11 @@
+# DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE — Gate scratch cleanup denied in managed worktree
+
+- **Status:** Resolved
+- **Area:** Verification scratch directories
+- **Impact:** IDE build, configuration freshness, and runtime packaging checks fail removing their disposable directories in the managed worktree, preventing a complete verification record.
+- **Evidence:** On 2026-09-26, `./agent check` on `feat/auth-account-data` reported `EPERM` from `FS.remove` for `.artifacts/scratch/tao-ide-extension-build-6pty4K`, `tao-agent-config-freshness-mdoMzZ`, and `tao-runtime-pack-fJjB5h`. Logs are under `.artifacts/logs/check/2026-09-26T09-29-11-027Z-80589-b516108c/`. Ordinary and escalated `./agent unsandboxed capabilities` both refused because the command still ran inside a sandbox. Separate auth bridge and formatting failures in that run remain repository issues, not environment failures.
+- **Workaround:** None required for these gate staging roots. Existing test fixtures that require checkout-directory removal still need host execution; this repair does not change their global ownership policy.
+- **Proposed change:** Implemented: the IDE build, runtime package check, configuration comparison, and pristine permission render use `FS.mkTmpDir` for disposable output. Inputs remain resolved from the repository and persistent output keeps existing file-only publication. No permissions or persistent state were relocated.
+- **Dependencies:** Archived DEVENV-064 documents the earlier directory-lifecycle boundary; this entry records its recurrence in current gate scratch roots. Parser staging is addressed separately by DEVENV-PARSER-STAGING-USES-WORKTREE-DIRECTORIES.
+- **Acceptance:** The 2026-09-26 `verify-changed` run at `.artifacts/logs/verify-changed/2026-09-26T09-39-25-758Z-82869-9691ac03/` passed the IDE build and runtime package gates; repo lint completed its configuration comparison and reported actual source issues instead of cleanup denial. `./agent setup --refresh-lockfile` completed and restored canonical generated settings. Existing publication rollback tests remain host-blocked by their own fixture cleanup; their publication implementation was not changed.
+- **Source:** 2026-09-26 auth/account-data implementation verification.

@@ -15,16 +15,15 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
     artifactRoots: [{ path: '.artifacts/tmp', present: true, sizeBytes: 2_500_000, writable: true }],
     branch: 'feat/example',
     bunTempDir: { path: '/w/.artifacts/tmp', writable: true },
-    bunVersion: '1.3.13',
+    bunVersion: '1.4.2',
     dependencyIssues: [],
     devenvProfileNode: '/w/.devenv/profile/bin/node',
-    direnvAllowed: true,
     fingerprint: {
       architecture: 'arm64',
       kernel: { name: 'Darwin', version: '27.0.0' },
       os: { build: '26A428', name: 'macOS', version: '27.0' },
       tao: { commit: '3e1ae411dff6', describe: '3e1ae411', modified: false },
-      toolchain: [{ name: 'bun', present: true, version: '1.3.13' }],
+      toolchain: [{ name: 'bun', present: true, version: '1.4.2' }],
       version: 1,
     },
     generatedParserArtifacts: [{ path: 'packages/language/parser/parser-src/_gen_tao-parser/ast.ts', present: true }],
@@ -74,11 +73,18 @@ Describe('repository doctor', () => {
     Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(0)
   })
 
+  Test('rejects Bun too old for the pinned standalone build workflow', () => {
+    const report = doctorReport(facts({ bunVersion: '1.3.13' }))
+
+    Expect(check(report, 'bun')?.status).toBe('fail')
+    Expect(check(report, 'bun')?.detail).toContain('>=1.4.2')
+  })
+
   Test('fails a checkout that cannot run Tao commands at all', () => {
     const report = doctorReport(facts({ devenvProfileNode: undefined, nodeVersion: undefined }))
 
     Expect(report.status).toBe('fail')
-    Expect(check(report, 'devenv profile')?.remediation).toContain('direnv exec . ./agent setup')
+    Expect(check(report, 'devenv profile')?.remediation).toContain('./enter-tao-dev-env')
     Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(1)
   })
 
@@ -86,19 +92,12 @@ Describe('repository doctor', () => {
     const report = doctorReport(facts({ branch: undefined }))
 
     Expect(check(report, 'worktree')?.status).toBe('warn')
-    Expect(check(report, 'worktree')?.remediation).toContain('git switch -c feat/<name>')
+    Expect(check(report, 'worktree')?.remediation).toContain('./agent start-branch feat/<name>')
     Expect(report.status).toBe('warn')
     Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(0)
   })
 
-  Test('treats optional tooling as a warning, never a failure', () => {
-    const report = doctorReport(facts({ direnvAllowed: undefined }))
-
-    Expect(check(report, 'direnv')?.status).toBe('warn')
-    Expect(report.status).toBe('warn')
-  })
-
-  Test('fails a checkout whose Watchman does not answer, because the fallback dies with EMFILE', () => {
+  Test('warns when Watchman is not running, and names the fallback that follows', () => {
     const report = doctorReport(facts({
       watchman: {
         clientVersion: '2026.01.19.00',
@@ -107,9 +106,9 @@ Describe('repository doctor', () => {
       },
     }))
 
-    Expect(check(report, 'watchman')?.status).toBe('fail')
-    Expect(check(report, 'watchman')?.detail).toContain('EMFILE')
-    Expect(report.status).toBe('fail')
+    Expect(check(report, 'watchman')?.status).toBe('warn')
+    Expect(check(report, 'watchman')?.detail).toContain('fall back to crawling')
+    Expect(report.status).toBe('warn')
   })
 
   Test('fails an incomplete dependency graph with a repair command', () => {
@@ -356,7 +355,7 @@ Describe('repository doctor', () => {
 
     Expect(lines.some(line => line.startsWith('PASS  '))).toBe(true)
     Expect(lines.find(line => line.startsWith('WARN  worktree'))).toContain(
-      '\n       Name a branch before committing: git switch -c feat/<name>',
+      '\n       Name a branch before committing: ./agent start-branch feat/<name>',
     )
   })
 
@@ -367,7 +366,7 @@ Describe('repository doctor', () => {
 
     // The screen is where somebody about to file a report learns that a pasteable block exists.
     Expect(printed.stdout).toContain('macOS 27.0 (26A428) · Darwin 27.0.0 · arm64')
-    Expect(printed.stdout).toContain('Tao 3e1ae411dff6 · bun 1.3.13')
+    Expect(printed.stdout).toContain('Tao 3e1ae411dff6 · bun 1.4.2')
     Expect(printed.stdout).toContain('./agent doctor --fingerprint')
     Expect((JSON.parse(json.stdout) as DoctorReport).fingerprint).toEqual(report.fingerprint)
   })
@@ -410,11 +409,13 @@ Describe('repository doctor', () => {
 
   Test('reads this checkout without changing it', async () => {
     const before = await CLI.run('git', { args: ['status', '--porcelain'], cwd: Repo.getRoot() })
-    const listedBefore = (await FS.listDir(Repo.resolvePath('.artifacts'))).toSorted()
+    const stableArtifacts = async () =>
+      (await FS.listDir(Repo.resolvePath('.artifacts'))).filter(name => !name.endsWith('.lock')).toSorted()
+    const listedBefore = await stableArtifacts()
     const report = doctorReport(await readDoctorFacts())
     const after = await CLI.run('git', { args: ['status', '--porcelain'], cwd: Repo.getRoot() })
 
-    Expect((await FS.listDir(Repo.resolvePath('.artifacts'))).toSorted()).toEqual(listedBefore)
+    Expect(await stableArtifacts()).toEqual(listedBefore)
     Expect(after.stdout).toBe(before.stdout)
     Expect(report.repositoryRoot).toBe(Repo.getRoot())
     Expect(check(report, 'dependency compatibility')?.status).toBe('pass')

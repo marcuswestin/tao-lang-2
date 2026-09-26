@@ -1,9 +1,9 @@
 import Runtime, { RuntimeToolchainPaths, type ShipManifest } from '@expo-host'
-import { Assert, CLI, Errors, FS, HCI, Platform } from '@shared'
+import { Assert, CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 
 /** verifyReleaseBundle exports real release and preview bundles in an isolated host. */
 async function verifyReleaseBundle(): Promise<void> {
-  const runRoot = await FS.mkTmpDir('tao-ship-bundle-proof-')
+  const runRoot = await Repo.mkScratchDir('tao-ship-bundle-proof-')
   let primaryFailure: unknown
   try {
     const hostRoot = FS.resolvePath('host', runRoot)

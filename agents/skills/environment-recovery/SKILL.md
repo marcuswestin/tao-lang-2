@@ -27,15 +27,13 @@ behind it.
 - `./agent setup` bootstraps dependencies and the CLI build on every `./agent` call, so a stale
   worktree repairs itself by being used; `dev-automation` owns how each harness reaches it.
 - In a linked worktree `./agent` reuses the primary checkout's pinned profile, or prints the
-  fallback itself (`direnv allow && direnv exec . ./agent setup`) when it finds none.
+  fallback itself (`./enter-tao-dev-env`) when it finds none.
 - The session-start hook puts `.devenv/profile/bin` on each tool shell's PATH — call `bun`,
-  `bunx`, `dprint`, `just`, and `node` directly. Exports do not persist between tool calls, so if
-  `which bun` shows a shell without it, prefix the affected invocation with
-  `$PWD/.devenv/profile/bin/` rather than trying to fix the shell.
-- `direnv exec .` works unsandboxed and fails sandboxed — it needs the nix daemon socket the
-  sandbox denies, surfacing as `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'`
-  or, misleadingly, `Failed to get attribute 'config.cachix.enable'`. Neither means the lock is
-  broken.
+  `bunx`, `dprint`, `just`, and `node` directly for inspection when needed; repository workflows
+  still enter through `./agent`. Exports do not persist between tool calls, so if a diagnostic
+  shell lacks the profile, use its explicit `.devenv/profile/bin/` path.
+- Build a missing profile through `./enter-tao-dev-env` in a regular terminal. A sandbox denial
+  from Nix's daemon socket does not mean the pinned lock is broken.
 
 ## Denied installs
 
@@ -62,6 +60,12 @@ behind it.
   auto-review is not the Developer's approval. Do not try alternate spellings, a host session, or a policy
   change to route around the denial. `.rulesync/permissions.jsonc` grants only the named
   `./agent unsandboxed` host commands in default sessions; landing still needs authorization for the named slice.
+- No agent sandbox reaches Watchman's socket, and only the opt-in `tao-local-services` profile
+  reaches Docker's, by design: both sockets live under a developer's home directory, which a tracked
+  config cannot name. Run file-watching dev loops with
+  `./agent unsandboxed app-dev`, `studio`, or `studio-native`, and the local InstantDB stack with
+  `./agent unsandboxed local-instantdb start` or `stop`. A denied Watchman socket in a sandbox is
+  expected; sandboxed tests and builds crawl the tree without it.
 - The browser and native UI lanes cannot run inside the managed Bash sandbox. Use
   `./agent unsandboxed studio-smoke` or `./agent unsandboxed studio-proof-real-app`; if the host
   blocks Chrome there, rerun only with explicit review, and never reuse an existing browser profile.

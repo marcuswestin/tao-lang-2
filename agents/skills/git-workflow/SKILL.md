@@ -16,13 +16,25 @@ Root `AGENTS.md` owns the hard constraints on branches and the Git index; the wa
 
 - Read `git worktree list` before any operation that moves a ref. A branch checked out elsewhere is not yours to move, and never write to another worktree's files, index, or branch.
 - In a linked worktree, `./agent` reuses the primary checkout's pinned devenv profile (run
-  `direnv allow && direnv exec . ./agent setup` only when it reports no shared profile), and remove a
+  `./enter-tao-dev-env` in that worktree when it reports no shared profile), and remove a
   worktree you created once its branch is merged or abandoned.
+- Before reclaiming a worktree, use `./agent reclaim` and follow
+  `references/reclaim-task-associations.md` for agent task ownership that local metadata cannot prove.
 - Git operations that replace protected paths can half-succeed inside the sandbox: HEAD and most
-  files move, but protected paths stay dirty. Do not try alternate commands or another host shape
-  to finish one. Diagnose the exact state read-only, report the write needed, and pause for the
-  Developer's explicit approval. An authorized `./agent unsandboxed land` performs its own
-  integration under the landing lock.
+  files move, but protected paths stay dirty. To bring `main` into a feature branch, run
+  `./agent merge-main`; when it refuses because `main` writes a protected path, run
+  `./agent unsandboxed merge-main`, which makes the same merge on the host. Resolve any conflict it
+  leaves and commit the merge. If a direct `git merge` already left `MERGE_HEAD`, use
+  `./agent unsandboxed merge-recover` to abort it on the host. If Git left no `MERGE_HEAD`, inspect
+  status, reflog, and `ORIG_HEAD`; after the Developer authorizes a reset, run
+  `./agent unsandboxed merge-recover --reset-to <full pre-merge SHA>`. That uses `git reset --merge`
+  to retain unrelated work where Git can; `--hard` discards tracked edits and needs separate explicit
+  authorization. To start a new feature branch from current `origin/main`, run
+  `./agent start-branch feat/<name>`; if its write probe refuses, run
+  `./agent unsandboxed start-branch feat/<name>`. Both require a clean worktree. An authorized
+  `./agent unsandboxed land` performs its own integration under the landing lock. For any other
+  Git operation that half-succeeded, diagnose the exact state read-only, report the write needed,
+  and pause for the Developer's explicit approval.
 
 ## Moving a branch ref
 

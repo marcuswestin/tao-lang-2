@@ -1,12 +1,29 @@
 import { RuntimeTesting } from '@expo-host/testing/runtime-testing'
-import { FS, Platform } from '@shared'
-import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
+import { FS, HCI, Platform, Time } from '@shared'
+import { AfterEach, Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime', () => {
+  let journeyProgress: { completed: boolean; phase: string; started: number } | undefined
+
+  // An outer Jest timeout does not reject the test's awaited promise, so report from teardown
+  // and detach this progress object before a late continuation or the next test can run.
+  AfterEach(() => {
+    const progress = journeyProgress
+    journeyProgress = undefined
+    if (progress !== undefined && !progress.completed) {
+      HCI.logProcessError(
+        'journey-observation',
+        `Unfinished during ${progress.phase} after ${Math.round(Time.nowMs() - progress.started)}ms.`,
+      )
+    }
+  })
+
   Test('records only render occurrences mounted by one executed Tao journey', async () => {
+    const progress = { completed: false, phase: 'fixture creation', started: Time.nowMs() }
+    journeyProgress = progress
     await withTaoFiles(
       'tao-runtime-journey-observations-',
       {
@@ -26,14 +43,19 @@ Describe('Expo runtime', () => {
         `,
       },
       async paths => {
+        progress.phase = 'observation directory creation'
         const directory = await mkTestDir('tao-journey-observations-')
         const previous = Platform.runtimeProcess.env[RuntimeTesting.JourneyObservations.ENV]
         Platform.runtimeProcess.env[RuntimeTesting.JourneyObservations.ENV] = directory
         try {
+          progress.phase = 'compile response'
           const file = await RuntimeTesting.TestCompiler.Worker.compileTestPlan(paths['Main.test.tao']!)
+          progress.phase = 'compiled check assertions'
           const check = file.suites[0]?.checks[0]
           Expect(check).toBeDefined()
+          progress.phase = 'journey execution'
           const observation = await RuntimeTesting.runTestCheck('Render observations', check!)
+          progress.phase = 'render observation assertions'
 
           Expect(observation.status).toBe('passed')
           Expect(observation.renders).toHaveLength(1)
@@ -41,11 +63,14 @@ Describe('Expo runtime', () => {
           Expect(render?.renderId).toContain(`${paths['Main.tao']}:`)
           Expect(render?.sourcePath).toBe(paths['Main.tao'])
           Expect(render?.sourceVersion).toMatch(/^text-v1:/)
+          progress.phase = 'artifact read'
           const artifact = await RuntimeTesting.JourneyObservations.read(directory)
+          progress.phase = 'artifact assertions'
           Expect(artifact.format).toBe('tao-journey-observations')
           Expect(artifact.version).toBe(1)
           Expect(artifact.checks).toHaveLength(1)
           Expect(artifact.checks[0]?.renders).toEqual(observation.renders)
+          progress.phase = 'observation directory cleanup'
         } finally {
           if (previous === undefined) {
             delete Platform.runtimeProcess.env[RuntimeTesting.JourneyObservations.ENV]
@@ -54,8 +79,10 @@ Describe('Expo runtime', () => {
           }
           await FS.remove(directory)
         }
+        progress.phase = 'fixture cleanup'
       },
     )
+    progress.completed = true
   })
 
   Test('runs keyboard attention steps directly through the reducer', async () => {
@@ -630,7 +657,7 @@ Describe('Expo runtime', () => {
           state Draft = ""
           state Status = "Waiting"
           state Selection = "Nothing selected"
-          query Items { }
+          query Items = Items with { }
           render Col() {
             guard Items {
               loading -> { Text("Loading") }

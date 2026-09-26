@@ -45,7 +45,7 @@ Describe('compiler: files and packages', () => {
       }
     `)
 
-    Expect(compiled.files).toHaveLength(2)
+    Expect(compiled.files.filter(file => !file.relativePath.startsWith('modules/'))).toHaveLength(2)
     Expect(compiled.files[0]?.relativePath).toBe('App.tsx')
     Expect(compiled.files[1]?.relativePath).toBe('App.injection-1.tsx')
     Expect(compiled.files[0]?.code).toContain("import __tao_injection_1__ from './App.injection-1'")
@@ -290,6 +290,8 @@ Describe('compiler: files and packages', () => {
         Expect(declarationText).toContain(
           'export type SidecarStoreConfig = Readonly<{ readonly "StorageKey": TR.Value<string> }>',
         )
+        Expect(declarationText).toContain('export type MemoryProvider = () => TR.DataProvider')
+        Expect(module.code).toContain('export type MemoryProvider = () => TR.DataProvider')
         Expect(declarationText).toContain(
           'export type SidecarSlotConfig = Readonly<{ '
             + 'readonly hostSlots?: TR.NavHostSlotConfiguration '
@@ -664,7 +666,21 @@ Describe('compiler: files and packages', () => {
         const relativePaths = allFiles.map(file => file.relativePath)
 
         Expect(sourceModules).toHaveLength(3)
-        Expect(allFiles).toHaveLength(5)
+        Expect(relativePaths.toSorted()).toEqual([
+          'App.tsx',
+          'modules/external/Auth.files/Auth.ts',
+          'modules/external/Auth.files/AuthFlow.ts',
+          'modules/external/Auth.files/AuthViews.tsx',
+          'modules/external/Auth.tao.tsx',
+          'modules/external/AuthFlow.ts',
+          'modules/external/AuthViews.files/AuthFlow.ts',
+          'modules/external/AuthViews.files/AuthViews.tsx',
+          'modules/external/Prelude.tao.tsx',
+          'modules/external/Views.tao-2.injection-1.tsx',
+          'modules/external/Views.tao-2.tsx',
+          'modules/external/Views.tao.injection-1.tsx',
+          'modules/external/Views.tao.tsx',
+        ])
         Expect(new Set(relativePaths).size).toBe(relativePaths.length)
         Expect(relativePaths).toContain('modules/external/Views.tao.tsx')
         Expect(relativePaths).toContain('modules/external/Views.tao-2.tsx')

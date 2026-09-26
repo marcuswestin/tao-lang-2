@@ -701,7 +701,9 @@ Describe('tao test CLI', () => {
           Expect(entrypointsOf(outputText(first))).toBeDefined()
           Expect(entrypointsOf(outputText(second))).toBe(entrypointsOf(outputText(first)))
           Expect(entrypointsOf(outputText(first))).not.toContain('/run-')
-          Expect(jestCacheOf(outputText(first))).toContain('/.cache/tao/jest-transform-cache/')
+          Expect(jestCacheOf(outputText(first))).toBe(
+            FS.resolvePath('data', RuntimeTesting.JestTransformCache.root(runtimeRoot)),
+          )
           Expect(jestCacheOf(outputText(second))).toBe(jestCacheOf(outputText(first)))
           Expect(jestCacheOf(outputText(third))).toBe(jestCacheOf(outputText(first)))
           Expect(firstModules.length).toBeGreaterThan(0)

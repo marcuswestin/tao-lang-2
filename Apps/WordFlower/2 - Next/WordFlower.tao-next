@@ -1,10 +1,71 @@
-use Workspaces from @data
+use Document, Workspace from @data
 use WordFlowerDrawerNavigator, WordFlowerNavigator, WordFlowerTabsNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
+use Spinner, TextMultiline from @tao/ui
 use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
+//
+// EXPLICIT DATA IMPORTS. Each used collection or entity name is imported independently with
+// commas. This fixture file needs only Document and Workspace; @ui/Workspaces needs both
+// Workspace and Workspaces. A loop's local row binder and relationship member access do not
+// import another declaration name. Folder-visible declarations retain their existing scope.
+//
+// BRIDGE METADATA. The build stamp and Markdown export sidecars import their generated, source-
+// adjacent Tao contract types. Tao writes those ignored modules during compilation and checks the
+// handwritten implementations in `tao check`; authors may use the type-only imports for editor
+// feedback without maintaining a second contract.
+//
+// TEST WORLD CONTROLS. The document journeys use a fresh StarterWorkspace fixture on a phone.
+// A test-only WordFlower variant binds CloudKit so offline edits, failed writes, retry, and
+// reconnect use that provider's per-row recovery contract. The hosted InstantDB variant saves
+// snapshots and does not claim queued per-row writes.
+//
+// DESIGN VALUES. The design language finishes its MVP surface: a clause list reads by case, the
+// active navigation tab is a condition, and a color travels as a value where a view tints something
+// inside itself.
+//
+// This tranche decides:
+// - A clause list names only lowercase styles, design names are lowercase, and a Capitalized word in
+//   a clause list is a value. An element default named in a clause list, or a Capitalized design
+//   name, is a compile error
+// - `selected` joins `pressed`, `focused`, and `hovered`; the navigation host supplies it for the
+//   active tab, so `NavigationTab` carries the active look and `NavigationTabActive` is retired
+// - `color` is a view parameter type. A default or an argument is a design color name or another
+//   `color` value, and `background Tint` inside the view reads it, resolved against the mounted
+//   design. `StatusBadge` in @ui/Workspaces forces it: the documents list mixes drafts and finished
+//   work
+// - `tao fix` rewrites `bg`/`fg` to `background`/`ink` and moves flat design entries into the typed
+//   blocks, so this directory's designs are written only in the typed form
+//
+// PHRASES. A `phrase` is named copy that returns text: one sentence with typed holes, or plural
+// forms (`one`, `other`, and the other CLDR categories, `other` required) chosen by its one number
+// parameter. The outline's count reads "1 paragraph" and "0 paragraphs". Extracting copy for
+// translation and `words` blocks are Post-MVP.
+//
+// READ NET. Every app has a read net for the exceptional read cases a guard site does not name:
+// loading, missing, unauthorized, and error. The runtime supplies it; a file-level `guard default`
+// restyles it case by case, as WordFlower does for loading and error. A bare `guard Subject` sends
+// every exceptional case to the net, and a site names only the cases it treats specially.
+//
+// SEARCH. A field marked `(search)` is part of its entity's search corpus, and a query's
+// `search <term>` keeps the rows whose search fields match the term with the matcher keyboard
+// narrowing uses: locale-aware word prefixes, in order. A blank term keeps every row; the query's
+// order and limit apply afterwards. Grouping (`group by`) is Post-MVP.
+//
+// WRITE RULES. `required "<sentence>"` states completeness: it never blocks a write, and it derives
+// `Incomplete` and `Problems` on a row and on every projection that selects the field. A form for a
+// new row edits a projection (`type WorkspaceInput is Workspace { Name }`), `create Workspace with
+// Input` writes it, and the stdlib `Problems(Input.Problems)` lists what is still missing, in the
+// order the entity states its rules and nothing once the input is complete. `validate` and `refuse
+// when` are Post-MVP.
+//
+// CHECK. `check <boolean>` is an action's early exit: when the expression is false, the rest of that
+// action is skipped. Nothing fails, nothing is reported, and a caller that reached it through `do`
+// carries on. It is a statement in actions only; `guard` stays the view-side construct and tests a
+// data object's availability, never a boolean. A notice that explains the stop is an ordinary `if`
+// before the `check`, as `AddWorkspace` shows.
 //
 // REACTIVE EDITING. Input projections and explicit copies produce ordinary local values.
 // Writable view/action parameters share storage; copy parameters detach explicitly. Native
@@ -471,8 +532,8 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 //   `when FocusBar is active` is the named region-focus form. These existing words parse through
 //   `ID`/layout-word seams and are spelling-validated, not reserved as grammar keywords. `focused`
 //   means the target control in every modality; `active` means the currently focused region
-// - An entity data block orders default verbs with `commands A, B` and withholds a command using
-//   `commands hide C`. Any view may promote commands through its `Commands { ... }` supplied slot
+// - An entity data block orders default verbs with `commands { A, B }` and withholds a command using
+//   `commands hide { C }`. Any view may promote commands through its `Commands { ... }` supplied slot
 //   and exclude inherited defaults with `hide C`. Verb order is view Commands, rendered inner
 //   controls, entity defaults, then the remaining applicable catalog alphabetically. Repeated
 //   visible labels fold onto the first verb in that priority order
@@ -559,9 +620,27 @@ app WordFlowerLocalInstantDB = WordFlower with {
    Datasource WordFlowerLocalInstantDBStore
 }
 
+// The read net: a guard site that does not name an exceptional read case sends it here. The runtime
+// supplies every case; WordFlower restyles loading and error and keeps the runtime's missing and
+// unauthorized sentences.
+guard default {
+   loading -> Spinner()
+   error -> Message { TextMultiline("Could not load this: { Message }") [body] }
+}
+
 fixture StudioWorkspace {
    Novel = create Workspace {
       Name: "Novel"
+}  }
+
+folder fixture StarterWorkspace {
+   Novel = create Workspace {
+      Name: "Novel"
+   }
+   Opening = create Document {
+      Workspace: Novel
+      Title: "Opening"
+      Body: "The first line."
 }  }
 
 scenarios WorkspaceRow "states" {

@@ -166,6 +166,13 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
       `document.body?.innerText.indexOf('First') < document.body?.innerText.indexOf('Third')
         && document.body?.innerText.indexOf('Third') < document.body?.innerText.indexOf('Second')`,
     )
+    await waitForPreview(
+      browser,
+      studio,
+      previewUrl,
+      `[...document.querySelectorAll('[data-tao-studio]')]
+        .some(element => element.textContent?.trim() === '1')`,
+    )
 
     const movedSource = await FS.readText(sourcePath)
     await replaceEditorSource(browser, 'view Broken( {\n')
@@ -236,7 +243,6 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     )
     const afterReset = await browser.evaluate<Readonly<{ loads: number }>>('window.__taoFastRefreshFrameProbe')
     Expect(afterReset.loads).toBeGreaterThan(0)
-    await writePreviewDiagnostics(browser, studio, previewUrl, 'scenario-reset-passed')
     Expect(browser.browserFailures()).toEqual([])
   } finally {
     await browser?.close()

@@ -1,4 +1,5 @@
-import { CLI, FS } from '@shared'
+import { RuntimeToolchainPaths } from '@expo-host'
+import { CLI, FS, Platform } from '@shared'
 import type { ShipProgressPhaseId } from './ship-progress'
 
 type ShipAppleCredentials = {
@@ -29,7 +30,10 @@ export type ShipPipelinePlan = {
   exportOptionsPlist: string
   installPods: ShipCommandInvocation
   prebuild: ShipCommandInvocation
+  nodeBridge?: { path: string; script: string; xcodeEnvironmentPath: string }
 }
+
+type ShipToolchain = Pick<typeof RuntimeToolchainPaths, 'expoCommand' | 'expoEnvironment' | 'hostInstallRoot'>
 
 export type ShipCommandRunner = (
   command: string,
@@ -47,11 +51,25 @@ export type ShipPipelineRunOptions = {
 }
 
 /** planShipPipeline makes every Apple command argument a pure function of manifest-derived input. */
-export function planShipPipeline(input: ShipPipelineInput): ShipPipelinePlan {
+export function planShipPipeline(
+  input: ShipPipelineInput,
+  toolchain: ShipToolchain = RuntimeToolchainPaths,
+): ShipPipelinePlan {
   const workspace = FS.resolvePath(`ios/${input.xcodeProjectName}.xcworkspace`, input.runtimeRoot)
   const derivedDataPath = FS.resolvePath('.artifacts/ship/DerivedData', input.runtimeRoot)
   const exportOptionsPath = FS.resolvePath('.artifacts/ship/ExportOptions.plist', input.runtimeRoot)
   const cocoaPodsHome = FS.resolvePath('.artifacts/cocoapods', input.runtimeRoot)
+  const expo = toolchain.expoCommand(input.runtimeRoot, ['prebuild', '--platform', 'ios', '--no-install'])
+  const expoEnvironment = toolchain.expoEnvironment()
+  const nodeBridge = toolchain.hostInstallRoot === undefined ? undefined : {
+    path: FS.resolvePath('.artifacts/ship/bin/node', input.runtimeRoot),
+    script: `#!/bin/sh\nBUN_BE_BUN=1 exec ${shellQuoted(expo.command)} "$@"\n`,
+    xcodeEnvironmentPath: FS.resolvePath('ios/.xcode.env.local', input.runtimeRoot),
+  }
+  const nativeEnvironment = nodeBridge === undefined ? expoEnvironment : {
+    ...expoEnvironment,
+    PATH: `${FS.dirname(nodeBridge.path)}:${Platform.runtimeProcess.env['PATH'] ?? '/usr/bin:/bin'}`,
+  }
   const authentication = [
     '-authenticationKeyPath',
     input.keyPath,
@@ -62,15 +80,16 @@ export function planShipPipeline(input: ShipPipelineInput): ShipPipelinePlan {
   ]
   return {
     prebuild: {
-      command: FS.resolvePath('node_modules/.bin/expo', input.runtimeRoot),
-      args: ['prebuild', '--platform', 'ios', '--no-install'],
+      command: expo.command,
+      args: expo.args,
       cwd: input.runtimeRoot,
+      ...(Object.keys(expo.env).length === 0 ? {} : { env: expo.env }),
     },
     installPods: {
       command: 'pod',
       args: ['install', '--ansi'],
       cwd: FS.resolvePath('ios', input.runtimeRoot),
-      env: { CP_HOME_DIR: cocoaPodsHome },
+      env: { ...nativeEnvironment, CP_HOME_DIR: cocoaPodsHome, LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' },
     },
     archive: {
       command: 'xcodebuild',
@@ -91,6 +110,7 @@ export function planShipPipeline(input: ShipPipelineInput): ShipPipelinePlan {
         'archive',
       ],
       cwd: input.runtimeRoot,
+      ...(Object.keys(nativeEnvironment).length === 0 ? {} : { env: nativeEnvironment }),
     },
     exportArchive: {
       command: 'xcodebuild',
@@ -106,9 +126,11 @@ export function planShipPipeline(input: ShipPipelineInput): ShipPipelinePlan {
         ...authentication,
       ],
       cwd: input.runtimeRoot,
+      ...(Object.keys(nativeEnvironment).length === 0 ? {} : { env: nativeEnvironment }),
     },
     exportOptionsPath,
     exportOptionsPlist: exportOptionsPlist(input.teamId),
+    ...(nodeBridge === undefined ? {} : { nodeBridge }),
   }
 }
 
@@ -162,7 +184,19 @@ export async function runShipPipeline(
         terminal: options.logFile === undefined,
       },
     })
+    if (phase === 'ios-project' && plan.nodeBridge !== undefined) {
+      await FS.writeText(plan.nodeBridge.path, plan.nodeBridge.script)
+      await FS.chmod(plan.nodeBridge.path, 0o755)
+      await FS.writeText(
+        plan.nodeBridge.xcodeEnvironmentPath,
+        `export NODE_BINARY=${shellQuoted(plan.nodeBridge.path)}\n`,
+      )
+    }
   }
+}
+
+function shellQuoted(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`
 }
 
 function exportOptionsPlist(teamId: string): string {

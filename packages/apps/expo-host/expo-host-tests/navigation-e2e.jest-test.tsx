@@ -11,7 +11,7 @@ import { overrideNativeNavigationModuleForTest } from '@runtime/TR-navigation-na
 import { NativeStackSurface, NativeToolbar } from '@runtime/TR-navigation-native-stack'
 import { navigationContentAccessibilityTestId } from '@runtime/TR-navigation-surfaces'
 import * as TaoReactNative from '@runtime/TR-react-native'
-import { Errors, FS, HCI } from '@shared'
+import { Errors, FS, HCI, Repo } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { act, fireEvent, fireEventAsync, render } from '@testing-library/react-native'
 import { createElement, type ReactElement, useState } from 'react'
@@ -1189,7 +1189,7 @@ Describe('Expo runtime', () => {
           let generatedRoot: string | undefined
           let primaryFailure: unknown
           try {
-            generatedRoot = await FS.mkTmpDir('tao-runtime-app-identity-')
+            generatedRoot = await Repo.mkScratchDir('tao-runtime-app-identity-')
             await FS.symlink(
               FS.resolvePath('node_modules', RuntimeToolchainPaths.packageRoot),
               FS.resolvePath('node_modules', generatedRoot),

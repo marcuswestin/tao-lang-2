@@ -1,5 +1,5 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
-import { Platform } from '@shared'
+import { CLI, Platform } from '@shared'
 import { JUST_COMMANDS, recipeFor } from './AgentCommands'
 import { registerAgentHelpCommand } from './cli/agent-help'
 import { runAgentCommand } from './runner/AgentRunner'
@@ -31,6 +31,27 @@ await runWithCommands(commands => {
     })
 
   registerAgentHelpCommand(commands, JUST_COMMANDS)
+  commands
+    .command('tao [args...]')
+    .allowUnknownOption(true)
+    .helpOption(false)
+    .passThroughOptions()
+    .action(async (args: string[] = []) => {
+      const result = await CLI.run('./tao', { args, stdio: 'inherit' })
+      Platform.runtimeProcess.setExitCode(result.exitCode ?? 1)
+    })
+  commands
+    .command('start-branch <name>')
+    .description('Start a feat/* branch from fetched origin/main after checking checkout writes.')
+    .action(async (name: string) => {
+      const exitCode = await runAgentCommand({
+        args: [name],
+        command: 'start-branch',
+        spawnArgs: ['start-branch'],
+        spawnCommand: './dev',
+      })
+      Platform.runtimeProcess.setExitCode(exitCode)
+    })
   for (const command of JUST_COMMANDS) {
     commands
       .command(`${command} [args...]`)

@@ -1,7 +1,12 @@
+import * as CLI from '../CLI'
 import { Assert } from '../core/Assert'
-import { throwUserInput } from '../core/Errors'
+import { throwUnexpected, throwUserInput } from '../core/Errors'
 import * as Text from '../core/Text'
 import * as FS from '../FS'
+import { logProcessError } from '../HCI'
+import * as Platform from '../Platform'
+import * as Repo from '../Repo'
+import { runCleanups } from './TestCleanup'
 import { testOverrideSlot } from './TestOverride'
 
 /** AfterEach wraps the active test runner's afterEach hook. */
@@ -40,21 +45,153 @@ export function MockModule(specifier: string, factory: () => unknown): void {
   getTestRuntime().mockModule(specifier, factory)
 }
 
-/** Test wraps the active test runner's test case API. */
-export const Test = createTestRunnerFunction('test')
+/** Test wraps each case in its own fixture lifetime, including concurrently running cases. */
+export const Test = ((...args: any[]) => {
+  const callbackIndex = args.findIndex((arg, index) => index > 0 && typeof arg === 'function')
+  if (callbackIndex >= 0) {
+    const callback = args[callbackIndex] as (...callbackArgs: any[]) => unknown
+    args[callbackIndex] = (...callbackArgs: any[]) =>
+      temporaryDirectoryScope.run(new Set<string>(), async () => {
+        let failure: unknown
+        try {
+          return await callback(...callbackArgs)
+        } catch (error) {
+          failure = error
+          throw error
+        } finally {
+          const directories = [...(temporaryDirectoryScope.current() ?? [])]
+          const kept = failure === undefined ? [] : directories.filter(directory => keptOnFailure.has(directory))
+          for (const directory of kept) {
+            temporaryDirectories.delete(directory)
+            keptOnFailure.delete(directory)
+            logProcessError('test-fixture', `Kept the failed test's Git fixture for debugging: ${directory}`)
+          }
+          await runCleanups(
+            failure,
+            directories.filter(directory => !kept.includes(directory)).map(directory => ({
+              label: directory,
+              run: async () => {
+                await FS.remove(directory)
+                temporaryDirectories.delete(directory)
+                keptOnFailure.delete(directory)
+              },
+            })),
+            { channel: 'test-fixture', subject: 'test directory' },
+          )
+        }
+      })
+  }
+  return getTestRuntime().test(...args)
+}) as TestRunnerFunction
 let temporaryProjectSequence = 0
+const temporaryDirectories = new Set<string>()
+const keptOnFailure = new Set<string>()
+const temporaryDirectoryScope = Platform.createAsyncContext<Set<string>>()
+let exitCleanupRegistered = false
+
+guardGitDiscovery()
 
 /**
- * mkTestDir creates a unique temporary directory under the host temp directory. The canonical path
- * is returned because the host temp directory is a symlink on macOS: a test that builds a path from
- * the uncanonical one and compares it with a path the code under test resolved would never match.
+ * guardGitDiscovery stops every git this test process starts from climbing out of a fixture. Git
+ * finds its repository by walking up from its working directory, so a fixture whose `git init`
+ * failed — the agent sandbox refuses it inside a checkout — hands the fixture's commits and branches
+ * to whatever repository encloses it, which for worktree scratch is the real one. Child processes
+ * inherit the ceiling: the OS temporary directory, where Git fixtures live, and this worktree's scratch.
  */
-export async function mkTestDir(prefix: string): Promise<string> {
-  return await FS.realPath(await FS.mkTmpDir(FS.resolvePath(prefix, FS.tmpdir())))
+function guardGitDiscovery(): void {
+  const env = Platform.runtimeProcess.env
+  const root = Repo.tryGetRoot()
+  const ceilings = [FS.tmpdir(), ...(root === undefined ? [] : [FS.resolvePath('.artifacts/scratch', root)])]
+    .map(path => FS.existsSync(path) ? FS.realPathSync(path) : path)
+  const existing = (env['GIT_CEILING_DIRECTORIES'] ?? '').split(':').filter((entry: string) => entry.length > 0)
+  env['GIT_CEILING_DIRECTORIES'] = [...new Set([...existing, ...ceilings])].join(':')
 }
+
+/**
+ * mkTestDir creates a unique directory in this worktree's ignored scratch. Use `location: 'host'`
+ * only when a test needs its fixture outside this worktree's Git ignore boundary. The test runner
+ * removes directories tests did not remove themselves; normal process exit is a second chance.
+ * An interrupted run leaves scratch for a later owner-reviewed clean.
+ */
+export async function mkTestDir(prefix: string, options: { location?: 'host' | 'worktree' } = {}): Promise<string> {
+  Assert.input(
+    prefix.length > 0 && FS.basename(prefix) === prefix && prefix !== '.' && prefix !== '..',
+    `Test directory prefix must be one name: ${JSON.stringify(prefix)}.`,
+  )
+  const useHost = options.location === 'host'
+  const path = await FS.realPath(await (useHost ? FS.mkTmpDir(prefix) : Repo.mkScratchDir(prefix)))
+  temporaryDirectories.add(path)
+  temporaryDirectoryScope.current()?.add(path)
+  if (!exitCleanupRegistered) {
+    exitCleanupRegistered = true
+    Platform.onProcessExit(() => {
+      for (const directory of temporaryDirectories) {
+        try {
+          FS.removeSync(directory)
+        } catch {
+          // An interrupted cleanup leaves worktree scratch for the next explicit clean.
+        }
+      }
+    })
+  }
+  return path
+}
+
+/**
+ * mkGitTestDir creates a directory for a fixture that holds Git repositories. It sits in the OS
+ * temporary directory, outside every checkout, because the agent sandbox refuses `git init` inside
+ * one. A passing test removes it; a failing test keeps it and prints its path for debugging.
+ */
+export async function mkGitTestDir(prefix: string): Promise<string> {
+  const path = await mkTestDir(prefix, { location: 'host' })
+  keptOnFailure.add(path)
+  return path
+}
+
+/** GitTestRepositoryOptions shapes the repository `initGitTestRepository` creates. */
+export type GitTestRepositoryOptions = {
+  /** Create a bare repository, as a fixture's remote. */
+  bare?: boolean
+  /** Files for a first commit, which must then succeed too. */
+  commit?: { files: Readonly<Record<string, string>>; message?: string }
+  /** The unborn branch; `main` unless the fixture needs another. */
+  initialBranch?: string
+}
+
+/**
+ * initGitTestRepository makes `path` a Git repository and throws unless git then resolves `path`
+ * itself as the repository, so a failed or misplaced `git init` stops the test instead of leaving
+ * the fixture's later commits to land in whatever repository encloses it.
+ */
+export async function initGitTestRepository(path: string, options: GitTestRepositoryOptions = {}): Promise<void> {
+  Assert.input(!(options.bare && options.commit), 'A bare Git test repository cannot take a first commit.')
+  await FS.mkdir(path)
+  const git = (...args: string[]) => CLI.mustRun('git', { args: ['-C', path, ...args], stdio: 'pipe' })
+  const initialBranch = `--initial-branch=${options.initialBranch ?? 'main'}`
+  await git('init', '--quiet', initialBranch, ...(options.bare ? ['--bare'] : []))
+  const gitDirectory = await FS.realPath((await git('rev-parse', '--absolute-git-dir')).stdout.trim())
+  const expected = FS.resolvePath(options.bare ? '.' : '.git', await FS.realPath(path))
+  if (gitDirectory !== expected) {
+    throwUnexpected(`git init left ${path} outside its own repository: git resolves it to ${gitDirectory}.`)
+  }
+  if (options.commit === undefined) {
+    return
+  }
+  for (const [relativePath, content] of Object.entries(options.commit.files)) {
+    const filePath = FS.resolvePath(relativePath, path)
+    await FS.mkdir(FS.dirname(filePath))
+    await FS.writeText(filePath, content)
+  }
+  await git('add', '--all')
+  await git(...GIT_TEST_IDENTITY, 'commit', '--quiet', '--no-verify', '-m', options.commit.message ?? 'Initial')
+}
+
+/** GIT_TEST_IDENTITY commits as a fixed author, whatever the host's Git configuration says. */
+const GIT_TEST_IDENTITY = ['-c', 'user.name=Tao Test', '-c', 'user.email=tao@example.test']
 
 /** WithTaoFilesOptions: `verbatim` writes sources as given, with no indent stripping and no synthesized project. */
 export type WithTaoFilesOptions = {
+  location?: 'host' | 'worktree'
   verbatim?: boolean
 }
 
@@ -65,7 +202,7 @@ export async function withTaoFiles<const Files extends Record<string, string>>(
   testFunction: (paths: { [Path in keyof Files]: string }, rootDir: string) => Promise<void> | void,
   options: WithTaoFilesOptions = {},
 ): Promise<void> {
-  const rootDir = await mkTestDir(prefix)
+  const rootDir = await mkTestDir(prefix, options)
   const paths = {} as { [Path in keyof Files]: string }
 
   try {
@@ -116,6 +253,9 @@ export function setTestRuntime(nextRuntime: TestRuntime): void {
   copyFunctionProperties(Describe, nextRuntime.describe)
   copyFunctionProperties(Expect, nextRuntime.expect)
   copyFunctionProperties(Test, nextRuntime.test)
+  // Bun exposes skip lazily, so Reflect.ownKeys does not enumerate it.
+  Test['skip'] = nextRuntime.test['skip']
+  Describe['skip'] = nextRuntime.describe['skip']
   // `copyFunctionProperties` carries the runner's own statics (`expect.any`, `expect.objectContaining`,
   // …) across; these two are Tao's and are restored after it, in case a runner ever spells them too.
   Expect.Is = ExpectIs
@@ -126,7 +266,7 @@ export function setTestRuntime(nextRuntime: TestRuntime): void {
 type ExpectApi = TestRunnerExpect & {
   Is: <T>(value: unknown, guard: (value: unknown) => value is T) => asserts value is T
   /**
-   * Unguarded returns the runner's raw matcher object, with no Langium deep-equality guard. It is
+   * Unguarded omits the Langium deep-equality guard but retains safe promise scheduling. It is
    * for the rare test that genuinely needs structural equality on parsed nodes and accepts that a
    * failure may print a node the formatter cannot bound; assert on fields wherever you can instead.
    */
@@ -212,15 +352,15 @@ function createExpectFunction(): TestRunnerExpect {
 }
 
 function createUnguardedExpectFunction(): TestRunnerExpect {
-  return ((...args: any[]) => getTestRuntime().expect(...args)) as TestRunnerExpect
+  return ((...args: any[]) => guardMatchers(getTestRuntime().expect(...args), args[0], false)) as TestRunnerExpect
 }
 
 /**
- * guardMatchers wraps a runner matcher object so the deep-equality matchers refuse a Langium node.
+ * guardMatchers protects promise scheduling and, unless opted out, refuses Langium deep equality.
  * Every forwarded call and getter runs against the real matcher object rather than the proxy, so a
  * runner whose matchers keep native internal state is unaffected.
  */
-function guardMatchers(matchers: unknown, received: unknown): any {
+function guardMatchers(matchers: unknown, received: unknown, guard = true, asynchronous = false): any {
   if (matchers === null || typeof matchers !== 'object') {
     return matchers
   }
@@ -231,20 +371,54 @@ function guardMatchers(matchers: unknown, received: unknown): any {
         return value
       }
       if (GUARDED_MATCHER_CHAINS.has(property)) {
-        return guardMatchers(value, received)
+        return guardMatchers(value, received, guard, asynchronous || property === 'resolves' || property === 'rejects')
       }
       if (typeof value !== 'function') {
         return value
       }
-      if (!GUARDED_MATCHERS.has(property)) {
+      if (!asynchronous && (!guard || !GUARDED_MATCHERS.has(property))) {
         return value.bind(target)
       }
       return (...args: unknown[]) => {
-        refuseLangiumOperand(property, received, args)
+        const guarded = guard && GUARDED_MATCHERS.has(property)
+        if (guarded) {
+          refuseLangiumOperand(property, received, args)
+        }
+        if (asynchronous && received instanceof Promise) {
+          return invokeSettledMatcher(received, () => Reflect.apply(value, target, args), settled => {
+            if (guarded) {
+              refuseLangiumOperand(property, settled, args)
+            }
+          })
+        }
         return Reflect.apply(value, target, args)
       }
     },
   })
+}
+
+/**
+ * Bun's promise matchers synchronously pump the event loop while their input is pending. From an
+ * I/O continuation that can overwrite the current poll batch and lose another child's pipe/exit
+ * event forever (oven-sh/bun#33261). Await the input ourselves, then invoke the original matcher
+ * with its original, now-settled promise: native negation, rejection and diagnostic semantics stay
+ * intact. Awaiting the matcher at its call site is too late to prevent the synchronous re-entry.
+ * Only native promises take this path: awaiting a stateful thenable before the runner consumes it
+ * would execute it twice. Invalid inputs and Jest's callable rejection inputs stay runner-owned.
+ */
+async function invokeSettledMatcher(
+  received: unknown,
+  invoke: () => unknown,
+  check: (settled: unknown) => void,
+): Promise<unknown> {
+  let settled: unknown
+  try {
+    settled = await received
+  } catch (error) {
+    settled = error
+  }
+  check(settled)
+  return invoke()
 }
 
 function refuseLangiumOperand(matcher: string, received: unknown, args: readonly unknown[]): void {

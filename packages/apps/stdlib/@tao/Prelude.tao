@@ -1,3 +1,5 @@
+use AuthProvider from @tao/auth
+
 // Core primitives are compiler-known opaque types. `is` declares a nominal refinement, and `with`
 // pins the supplied-slot contract that ordinary Tao declarations fill.
 primitive item
@@ -14,6 +16,11 @@ primitive time
 
 // A duration is a unit value of the `duration` family; `.unit` builds and reads it (Decisions §2).
 primitive duration
+
+// A color is a design color carried as a value: a view parameter whose argument or default names a
+// color of the mounted design, read in a clause list as `background Tint` (Decisions §13). It is
+// never built from text or data, so every color a clause can receive stays listed in a design.
+primitive color
 
 // An action is a private procedure. It names no title and no summary, because nothing lists an
 // action: a `command` is the discoverable verb, and it is what carries the words a person reads.
@@ -74,6 +81,8 @@ primitive datasource with {
 primitive app with {
    Name text,
    Navigator nav,
+   AgentCommands list of command is [],
    Datasource list of datasource is [],
+   Auth AuthProvider is none,
    Design design is none,
 }

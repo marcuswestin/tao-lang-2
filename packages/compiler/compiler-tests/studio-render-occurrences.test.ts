@@ -9,11 +9,36 @@ const tsFence = '```ts'
 const fence = '```'
 
 Describe('compiler: Studio render occurrences', () => {
+  Test('keeps external authored schemas while excluding standard library schemas', async () => {
+    await withTaoFiles('tao-studio-external-schemas-', {
+      'Project.tao': `project { id "studio-external-schemas" name "External schemas" }`,
+      'app/Main.tao': `
+        use Shared from ../shared/Views
+        app Preview { view Main }
+        view Main() { render Shared() }
+      `,
+      'shared/Views.tao': `
+        public type Tone is one of Neutral, Good
+        public view Shared() { render inject ${tsFence} return null ${fence} }
+      `,
+    }, async paths => {
+      const compiled = await Workspace.compile(paths['app/Main.tao'], { studio: true })
+
+      Expect(compiled.studioManifest?.views.map(view => ({ name: view.name, path: view.source.path }))).toEqual([
+        { name: 'Main', path: paths['app/Main.tao'] },
+        { name: 'Shared', path: paths['shared/Views.tao'] },
+      ])
+      Expect(compiled.studioManifest?.generationDeclarations).toEqual([
+        { kind: 'case', name: 'Tone', cases: ['Neutral', 'Good'] },
+      ])
+    })
+  })
+
   Test('publishes an imported shared fixture without a runtime import binding', async () => {
     await withTaoFiles('tao-studio-shared-fixture-', {
       'Data.tao': `public data Playlists / Playlist { Title text }`,
       'Main.tao': `
-        use Playlists from ./Data
+        use Playlist from ./Data
         use Sketches from ./Sketches
         app Preview { view Main }
         view Main() { render Native() }
@@ -26,7 +51,7 @@ Describe('compiler: Studio render occurrences', () => {
         }
       `,
       'Sketches.tao': `
-        use Playlists from ./Data
+        use Playlist from ./Data
         public fixture Sketches {
           ChillVibes = create Playlist { Title: "Chill Vibes" }
         }
@@ -304,7 +329,7 @@ Describe('compiler: Studio render occurrences', () => {
     await withTaoFiles('tao-studio-preview-manifest-', {
       'Main.tao': `
         type Tone is one of Neutral, Good
-        use Accounts, Detail from ./More.tao
+        use Account, Detail from ./More.tao
 
         app Preview { view Main }
         view Main() { render Native() }
@@ -409,7 +434,7 @@ Describe('compiler: Studio render occurrences', () => {
       Expect(generated?.code).toContain('"formatVersion":2')
       Expect(generated?.code).toContain(JSON.stringify(paths['Main.tao']))
       Expect(compiled.code).toContain(
-        "import { _TaoDataCatalog, Accounts, Detail } from './modules/More.tao'",
+        "import { _TaoDataCatalog, Detail } from './modules/More.tao'",
       )
       Expect(compiled.code).toContain('const useTaoGeneratedStudioScenario = TR.Studio.Environment.useScenario')
       Expect(compiled.code).toContain('const useTaoGeneratedStudioFixture = TR.Studio.Environment.useFixture')
@@ -439,18 +464,18 @@ Describe('compiler: Studio render occurrences', () => {
 
         workspace
         data Workspaces / Workspace {
-          Name text (required "Use a realistic workspace name.")
-          Summary text?
-          CreatedAt time (default now)
-          Pinned yes / no
+          Name text (required "Use a realistic workspace name."),
+          Summary text?,
+          CreatedAt time (default now),
+          Pinned yes / no,
           Documents (owned)
         }
 
         workspace
         data Documents / Document {
-          Title text (default "Untitled")
-          Score number (default 0)
-          Public yes / Private no (default Public)
+          Title text (default "Untitled"),
+          Score number (default 0),
+          Public yes / Private no (default Public),
           Workspace
         }
 

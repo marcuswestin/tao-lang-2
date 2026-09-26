@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { authLibraryExport, contextualCommand } from './auth-context'
 import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
 import { foreignViewBindingName } from './injection-plan'
 import { compileNativeParameter, compileReactiveArgument, nativeParameterName } from './reactive-parameters'
@@ -184,6 +185,8 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
   }(_ViewProps: ${parameterList}) {
       TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(renderable.name)})
       TR.Interaction.UseOccurrence(_ViewProps.__tao)
+      const _TaoAuthScope = TR.Auth.UseOptionalContext()
+      void _TaoAuthScope
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(renderable), Compile.ViewParameterBinding)}
         ${gen.list(setupStatements, statement => Compile.Statement(statement, options))}
@@ -269,6 +272,8 @@ function compileForeignView(view: AST.ViewDeclaration, options: CodegenOptions):
   }(_ViewProps: ${parameterList}) {
       TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(view.name)})
       TR.Interaction.UseOccurrence(_ViewProps.__tao)
+      const _TaoAuthScope = TR.Auth.UseOptionalContext()
+      void _TaoAuthScope
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(view), Compile.ViewParameterBinding)}
         ${declarationProps}
@@ -280,6 +285,12 @@ function compileForeignView(view: AST.ViewDeclaration, options: CodegenOptions):
         parameter.mutable ? compileNativeParameter(parameter) : gen`_Scope.${name}.evaluate().jsValue`
       }}`
     })
+  }
+          ${authLibraryExport(view) ? gen`Auth={_TaoAuthScope}` : gen.noop()}
+          ${
+    authLibraryExport(view) === 'AccountView'
+      ? gen`Account={_TaoAuthScope ? TR.Auth.Account(_TaoAuthScope) : undefined}`
+      : gen.noop()
   }
           Layout={TR.VisualLayout(${ambientProps})}
           Tag={TR.VisualTag(${ambientProps})}
@@ -317,9 +328,9 @@ function compileMentionedCommand(
 ): Compiled {
   const fills = owner ? ASTUtils.mentionFills(command, owner).fills : undefined
   if (!fills || fills.size === 0) {
-    return gen`${gen.scopeName(command)}`
+    return contextualCommand(command)
   }
-  return gen`TR.Interaction.Bind(${gen.scopeName(command)}, {
+  return gen`TR.Interaction.Bind(${contextualCommand(command)}, {
     ${
     gen.list([...fills], ([slot, parameter]) =>
       gen`${gen.jsLiteral(slot)}: ${gen.scopeName({ name: Type.parameterName(parameter) })},`)

@@ -529,24 +529,24 @@ Describe('parser: core language syntax', () => {
   Test('parses top-level plural/singular data declarations and inferred fields', async () => {
     const parseResult = await testParseCode(`
       data Workspaces / Workspace {
-        Name text
-        CreatedAt time (default now)
-        Pinned yes / no
-        Documents (owned)
-        index CreatedAt
+        Name text,
+        CreatedAt time (default now),
+        Pinned yes / no,
+        Documents (owned),
+        index CreatedAt,
         order by CreatedAt desc
       }
       data Documents / Document {
-        Title text
-        Final yes / Draft no
-        Public yes / Private no (default Public)
-        Workspace
+        Title text,
+        Final yes / Draft no,
+        Public yes / Private no (default Public),
+        Workspace,
         Paragraphs (owned)
       }
       data Paragraphs / Paragraph {
-        Text text
-        Ordering number
-        Document
+        Text text,
+        Ordering number,
+        Document,
         order by Ordering
       }
       view Detail(Workspace) {
@@ -554,9 +554,9 @@ Describe('parser: core language syntax', () => {
         render inject \`\`\`ts return null \`\`\`
       }
       view Queries(Workspace) {
-        query Workspaces as AllWorkspaces { }
+        query AllWorkspaces = Workspaces with { }
         render Col() {
-          query Drafts from Workspace.Documents { where is Draft }
+          query Drafts = Workspace.Documents with { where is Draft }
           loop Drafts / Draft { Text(Draft.Title) }
         }
       }
@@ -601,21 +601,21 @@ Describe('parser: core language syntax', () => {
   Test('parses local only and keeps a module query only as a diagnostic-recovery statement', async () => {
     const parseResult = await testParseSyntax(`
       data Notes / Note {
-        Title text
+        Title text,
 
         order by Title
       }
       data FocusSessions / FocusSession {
-        Label text
+        Label text,
 
-        index Label
+        index Label,
         local only
       }
-      query FocusSessions as CurrentSession {
+      query CurrentSession = FocusSessions with {
         limit 1
       }
       view Board() {
-        query Notes { }
+        query Notes = Notes with { }
         render Text(Notes.Count)
       }
       view Text(Value number) { render inject \`\`\`ts return null \`\`\` }
@@ -633,6 +633,38 @@ Describe('parser: core language syntax', () => {
     Expect(AST.isExportableDeclaration(moduleQuery)).toBe(false)
     Expect(AST.isEmittingRuntimeBinding(moduleQuery)).toBe(false)
     Expect(AST.isImportableValueDeclaration(moduleQuery)).toBe(false)
+  })
+
+  Test('parses a query search clause alongside its entity (search) fields', async () => {
+    const parseResult = await testParseCode(`
+      data Documents / Document {
+        Title text (search, title),
+        Body text (default "", search)
+      }
+      view Board() {
+        state Find = ""
+        query Found = Documents with {
+          search Find
+          order by Title
+        }
+        render Text(Found.Count)
+      }
+      view Text(Value number) { render inject \`\`\`ts return null \`\`\` }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const query = AST.streamAllContents(parseResult.entry.ast).find(AST.isEntityQueryDeclaration)
+    Expect.Is(query, AST.isEntityQueryDeclaration)
+    const search = query.block?.clauses.find(AST.isSearchClause)
+    Expect.Is(search, AST.isSearchClause)
+    Expect.Is(search.term, AST.isValueReference)
+    Expect.Is(search.term.target.ref, AST.isStateDeclaration)
+    Expect(search.term.target.ref.name).toBe('Find')
+    const entity = Type.queryEntity(query)
+    Expect.Is(entity, AST.isEntityDataDeclaration)
+    const searchFields = Type.dataFields(entity)
+      .filter(field => (field.traits?.traits ?? []).some(trait => trait.search))
+    Expect(searchFields.map(field => field.name)).toEqual(['Title', 'Body'])
   })
 
   Test('parses configured apps, view declarations, and contextual presentation', async () => {

@@ -1,7 +1,7 @@
 import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import type { TaoDataSchemaDefinition } from './TR-data'
-import { valueMatchesKind } from './TR-data-definition'
+import { validateUniqueRows, valueMatchesField } from './TR-data-definition'
 import { UserInputError } from './TR-errors'
 
 export type StoredRow = Record<string, unknown> & { Id: string }
@@ -35,7 +35,11 @@ export function envelope(data: StoredData, definition: TaoDataSchemaDefinition):
   }
 }
 
-export function parseEnvelope(serialized: string, definition: TaoDataSchemaDefinition): StoredData {
+export function parseEnvelope(
+  serialized: string,
+  definition: TaoDataSchemaDefinition,
+  allowAbsentRelations = false,
+): StoredData {
   const value = JSON.parse(serialized) as unknown
   RuntimeAssert.input(value && typeof value === 'object', 'Persisted data is not an object envelope.')
   const candidate = value as Partial<PersistedEnvelope>
@@ -69,6 +73,7 @@ export function parseEnvelope(serialized: string, definition: TaoDataSchemaDefin
       throw new UserInputError(`Persisted entity '${entityName}' is not a row list.`, { entityName })
     }
     const validated: StoredRow[] = entityRows.map((row: unknown) => validatedStoredRow(entityName, row, definition))
+    validateUniqueRows(entityName, definition.entities[entityName]!, validated)
     rows[entityName] = validated
     const ids: readonly string[] = validated.map(row => row.Id)
     RuntimeAssert.input(
@@ -77,7 +82,9 @@ export function parseEnvelope(serialized: string, definition: TaoDataSchemaDefin
       { entityName },
     )
   }
-  validatePersistedRelations(rows, definition)
+  if (!allowAbsentRelations) {
+    validatePersistedRelations(rows, definition)
+  }
   return { nextId: candidate.nextId!, rows }
 }
 
@@ -101,11 +108,7 @@ function validatedStoredRow(entityName: string, value: unknown, definition: TaoD
     const value = row[name]
     // A reference is stored as the target's unique value, which is whatever primitive that field
     // holds, and the target row may be in a store this snapshot does not contain.
-    const valid = field.kind === 'relation'
-      ? typeof value === 'string'
-      : field.kind === 'reference'
-      ? value === null || typeof value === 'string' || typeof value === 'number'
-      : valueMatchesKind(value, field.kind)
+    const valid = (field.kind === 'reference' && value === null) || valueMatchesField(value, field)
     RuntimeAssert.input(
       valid,
       `Persisted field '${entityName}.${name}' has an invalid ${field.kind} value.`,
@@ -123,6 +126,9 @@ function validatePersistedRelations(rows: Record<string, StoredRow[]>, definitio
       }
       const relatedIds = new Set((rows[field.relation ?? ''] ?? []).map(row => row.Id))
       for (const row of rows[entityName] ?? []) {
+        if (field.optional && (row[name] === null || row[name] === undefined)) {
+          continue
+        }
         RuntimeAssert.input(
           relatedIds.has(row[name] as string),
           `Persisted relationship '${entityName}.${name}' refers to missing ${field.relation}.`,

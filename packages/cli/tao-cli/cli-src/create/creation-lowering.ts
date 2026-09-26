@@ -39,6 +39,7 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
     'Scenarios.tao': scenariosFile(plan, names),
     [`${names.app}.test.tao`]: testFile(plan, names),
     'tsconfig.json': PROJECT_TSCONFIG,
+    '.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
     // The reserved root generated package exists from day one, committed empty, so Studio and the
     // compiler have their folder before the first generated file lands.
     '@/.gitkeep': '',
@@ -106,13 +107,13 @@ app ${names.app} {
 
 function dataFile(plan: CreationPlan, _names: ProjectNames): string {
   const entities = plan.entities.map(entity => {
-    const fields = entity.fields.map(field => `   ${fieldDeclaration(field)}`).join('\n')
+    const fields = entity.fields.map(field => `   ${fieldDeclaration(field)},`).join('\n')
     return `${commentLines(entity.purpose)}
 package
 data ${entity.plural} / ${entity.singular} {
 ${fields}
 
-   order by ${orderField(entity).name}
+   order by ${orderField(entity).name},
 }`
   })
   return `// The data catalog. Every entity the app stores is declared here, so what a row contains is
@@ -210,8 +211,7 @@ design ${names.design} {
       NavigationHeader [background surface, border line]
       NavigationTitle [size 18, weight 700, ink ink]
       NavigationTabs [gap 6, pad 6, background surface, border line]
-      NavigationTab [pad 10, radius 10, ink inkMuted, weight 600]
-      NavigationTabActive [NavigationTab, background accentSoft, ink accentStrong]
+      NavigationTab [pad 10, radius 10, ink inkMuted, weight 600, background accentSoft when selected, ink accentStrong when selected]
       NavigationChromeButton [pad 8, radius 8, ink accentStrong, weight 600]
 
       screen [fill, content top stretch, pad 24, background canvas]
@@ -286,7 +286,7 @@ function featureFile(entity: CreationEntity, _names: ProjectNames): string {
 
   return `use ${uiViews.join(', ')} from @tao/ui
 use FormButton from @tao/ui/basic
-use ${entity.plural} from ..
+use ${[entity.plural, entity.singular].sort().join(', ')} from ..
 
 ${
     commentLines(
@@ -299,7 +299,7 @@ scene ${listScene(entity)}() {
    state ${draft} = ""
    query ${entity.plural} { }
    action Add${singular}() {
-      guard ${draft} empty
+      check ${draft} is not empty
       create ${singular} {
          ${title.name}: ${draft}
       }
@@ -371,7 +371,7 @@ scene ${detailScene(entity)}(${singular}) {
    Title ${singular}.${title.name}
 ${draftStates.join('\n')}
    action Save${singular}() {
-      guard ${title.name}Draft empty
+      check ${title.name}Draft is not empty
       update ${singular} {
 ${saveUpdates.join('\n')}
       }
@@ -443,7 +443,7 @@ ${fields}
 ${scenarios}
 }`
   })
-  return `use ${[names.app, ...plan.entities.map(entity => entity.plural)].sort().join(', ')} from ./
+  return `use ${[names.app, ...plan.entities.map(entity => entity.singular)].sort().join(', ')} from ./
 ${rowImports}
 
 // Deterministic data for Studio previews and the device matrix.

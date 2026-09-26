@@ -93,25 +93,65 @@ type Render = RenderStatement | ViewRender;
 
 // `otherwise` makes every subject render conditional total and terminates the branch list unambiguously.
 WhenRenderStatement:
-    'when' subject=SubjectExpression '{' branches+=WhenRenderBranch+ otherwise=WhenRenderOtherwise '}';
+    'when' (subject=SubjectExpression
+      ('{' branches+=WhenRenderBranch* otherwise=WhenRenderOtherwise '}'
+       | branches+=BarWhenRenderBranch* otherwise=BarWhenRenderOtherwise)
+      | branches+=PredicateWhenRenderBranch* otherwise=BarWhenRenderOtherwise);
 
 WhenRenderBranch:
-    case=SubjectCaseName '->' payload=CasePayload? block=Block;
+    case=SubjectCaseName '->' payload=CasePayload? block=(Block | AtomicRenderBlock);
+
+BarWhenRenderBranch infers WhenRenderBranch:
+    barSyntax?='|' case=SubjectCaseName '->' payload=CasePayload? block=(Block | AtomicRenderBlock);
+
+PredicateWhenRenderBranch infers WhenRenderBranch:
+    barSyntax?='|' condition=OrExpression '->' block=(Block | AtomicRenderBlock);
 
 WhenRenderOtherwise:
-    'otherwise' '->' block=Block;
+    'otherwise' '->' block=(Block | AtomicRenderBlock);
+
+BarWhenRenderOtherwise infers WhenRenderOtherwise:
+    barSyntax?='|' 'otherwise' '->' block=(Block | AtomicRenderBlock);
+
+// A bare arm owns exactly one render or terminal match; a statement sequence requires braces.
+AtomicRenderBlock returns Block:
+    statements+=(ViewRender | RenderStatement | WhenRenderStatement);
 
 IfRenderStatement:
     'if' condition=Expression block=Block;
 
+// A render guard with no cases sends every exceptional case of its subject to the read net; one
+// with cases sends the exceptional cases it does not name.
+//
+// The bare form is its own alternative rather than an optional tail: the parser decides an optional
+// that ends its rule from the next token alone, and the render a bare guard protects begins with a
+// name exactly as a declared case does. As alternatives the choice sees past that name.
 GuardRenderStatement:
-    'guard' subject=SubjectExpression (caseBlock=GuardRenderCaseBlock | single=GuardRenderBranch);
+    'guard' subject=SubjectExpression (caseBlock=GuardRenderCaseBlock | single=GuardRenderSingleBranch)
+    | 'guard' subject=SubjectExpression;
 
+// A single declared case is a name, like the render that follows a bare guard, so it needs its arrow
+// or handler to be told apart.
+GuardRenderSingleBranch infers GuardRenderBranch:
+    case=BuiltInSubjectCaseName ('->' payload=CasePayload?)? block=Block?
+    | case=ID ('->' payload=CasePayload? block=Block? | block=Block);
+
+// An empty case block parses so the validator can say what to write instead: a bare guard.
 GuardRenderCaseBlock:
-    '{' branches+=GuardRenderBranch+ '}';
+    '{' branches+=GuardRenderBranch* '}';
 
 GuardRenderBranch:
     case=SubjectCaseName ('->' payload=CasePayload?)? block=Block?;
+
+// The project's read net: `guard default { … }` replaces, case by case, the handling the runtime
+// supplies for the exceptional read cases every guard leaves unnamed. It is file-level and
+// anonymous; the validator owns its placement, its cases, and the one-per-project rule. A handler
+// is a render block, or one bare render when that is all it draws.
+GuardDefaultStatement:
+    'guard' 'default' '{' branches+=GuardDefaultBranch+ '}';
+
+GuardDefaultBranch:
+    case=SubjectCaseName '->' (render=ViewRender | payload=CasePayload? block=Block);
 
 ForStatement:
     'loop' collection=ForCollectionExpression '/' name=ID block=Block;

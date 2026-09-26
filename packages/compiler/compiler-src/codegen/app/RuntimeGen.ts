@@ -3,7 +3,9 @@ import { Compile } from '../Compile'
 import type { InlineInjection } from './injection-plan'
 
 type TaoFileCompileOptions = {
+  bridgeTypes?: string
   configurationTypes?: string
+  dataAccess?: readonly AST.AccessDeclaration[]
   dataEntities?: readonly AST.EntityDataDeclaration[]
   emitDataCatalog?: boolean
   importLines?: string[]
@@ -12,6 +14,7 @@ type TaoFileCompileOptions = {
   scopeBindings?: string[]
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
   projectRoot?: string
+  readNet?: boolean
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName?: string
   studioDataCatalog?: boolean
@@ -33,8 +36,8 @@ export const RuntimeGen = {
   },
 
   /** ConfigurationDeclarations emits the sidecar-facing declaration companion for one Tao file. */
-  ConfigurationDeclarations(taoFile: AST.TaoFile, importLines: readonly string[] = []): string {
-    return Langium.toString(Compile.ConfigurationDeclarations(taoFile, importLines))
+  ConfigurationDeclarations(taoFile: AST.TaoFile, importLines: readonly string[] = [], bridgeTypes = ''): string {
+    return Langium.toString(Compile.ConfigurationDeclarations(taoFile, importLines, bridgeTypes))
   },
 
   /** ConfigurationTypes emits sidecar-facing contracts inside one generated runtime module. */

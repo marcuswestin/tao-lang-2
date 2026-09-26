@@ -1,15 +1,15 @@
 use Checkbox, Col, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
-use Recipes from ..
+use Recipe, Recipes from ..
 
 // The recipes feature: the list a person lands on, one row of it, and the detail of one recipe.
 package
 scene RecipeList() {
    Title "Recipes"
    state NewTitle = ""
-   query Recipes { }
+   query Recipes = Recipes with { }
    action AddRecipe() {
-      guard NewTitle empty
+      check NewTitle is not empty
       create Recipe {
          Title: NewTitle
       }
@@ -76,7 +76,7 @@ scene RecipeDetail(Recipe) {
    state TitleDraft = Recipe.Title
    state StepsDraft = Recipe.Steps
    action SaveRecipe() {
-      guard TitleDraft empty
+      check TitleDraft is not empty
       update Recipe {
          Title: TitleDraft
          Steps: StepsDraft

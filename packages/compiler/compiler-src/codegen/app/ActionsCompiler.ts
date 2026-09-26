@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
+import { foreignActionTestStubKey } from '../../foreign-action-test-stubs'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import {
@@ -9,6 +10,7 @@ import {
   actionInstrumentationEnabled,
   actionInvocationRequiresAsync,
 } from './action-control-flow'
+import { authLibraryExport, withAuthContextFactory } from './auth-context'
 import { compileDeclarationIdentity, declarationModuleName } from './declaration-identity'
 import { foreignActionBindingName } from './injection-plan'
 import { compileReactiveArgument, compileWritableTarget } from './reactive-parameters'
@@ -22,11 +24,19 @@ export const ActionsCompiler = {
   /** ActionDeclaration compiles a named Tao action into a runtime action value. */
   ActionDeclaration(action: AST.ActionDeclaration): Compiled {
     if (action.foreign) {
+      if (authLibraryExport(action)) {
+        return withAuthContextFactory(
+          action,
+          gen`${gen.scopeName(action)} = ${gen.Name({ name: foreignActionBindingName(action) })}(_TaoAuthScope!)`,
+        )
+      }
       return compileForeignAction(action)
     }
     const parameters = actionParameters(action)
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
-    return gen`
+    return withAuthContextFactory(
+      action,
+      gen`
       ${gen.scopeName(action)} = TR.Action(${asyncKeyword}(${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
         const _TaoActionContinuation = TR.ActionContinuation()
         return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
@@ -37,7 +47,8 @@ export const ActionsCompiler = {
         name: ${gen.jsLiteral(action.name)},
         ${actionBlockContainsRespond(action.block) ? gen`interrupt: true,` : gen``}
       })
-    `
+    `,
+    )
   },
 
   /**
@@ -61,6 +72,8 @@ export const ActionsCompiler = {
     })
     const inFills = (body: Compiled) =>
       gen`_TaoFills => TR.BlockScope(_Scope, _Scope => {
+        const _TaoAuthScope = _TaoFills["__taoAuth"]?.evaluate().jsValue as TR.AuthScope | undefined
+        void _TaoAuthScope
         ${bindSlots}
         return ${body}
       })`
@@ -111,6 +124,11 @@ export const ActionsCompiler = {
             gen`{
               name: ${gen.jsLiteral(slot.name)},
               type: ${gen.jsLiteral(slot.typeName)},
+              ${
+              slot.type.kind === 'primitive' && ['text', 'number', 'boolean'].includes(slot.type.primitive)
+                ? gen`scalarType: ${gen.jsLiteral(slot.type.primitive)},`
+                : gen.noop()
+            }
               entity: ${slot.type.kind === 'entity' ? 'true' : 'false'},
               required: ${slot.parameter.defaultValue === undefined ? 'true' : 'false'},
             },`)
@@ -159,12 +177,14 @@ export const ActionsCompiler = {
       AsyncActionStatement: Compile.AsyncActionStatement,
       CreateStatement: Compile.CreateStatement,
       AskStatement: Compile.AskStatement,
+      CheckStatement: Compile.CheckStatement,
       ContextualPresentStatement: Compile.ContextualPresentStatement,
       DeleteStatement: Compile.DeleteStatement,
       RetryStatement: Compile.RetryStatement,
       DeclarationSlotFill: Compile.DeclarationSlotFill,
       DismissStatement: Compile.DismissStatement,
       DoStatement: Compile.DoStatement,
+      WhenDoStatement: Compile.WhenDoStatement,
       GuardActionStatement: Compile.GuardActionStatement,
       IfActionStatement: Compile.IfActionStatement,
       ReplaceStatement: Compile.ReplaceStatement,
@@ -179,8 +199,13 @@ export const ActionsCompiler = {
 
   /** ActionBlockBody compiles one callback-owned action block. */
   ActionBlockBody(block: AST.ActionBlock | undefined): Compiled {
-    if (!actionInstrumentationEnabled() || !block) {
-      return gen.list(block?.statements ?? [], statement =>
+    // Every caller declares the continuation before the body; an empty body must still read it,
+    // or a generated app compiled with unused-local checks rejects `on submit -> { }`.
+    if (!block || block.statements.length === 0) {
+      return gen`void _TaoActionContinuation`
+    }
+    if (!actionInstrumentationEnabled()) {
+      return gen.list(block.statements, statement =>
         gen`
         TR.ResumeActionContinuation(_TaoActionContinuation)
         ${Compile.ActionStatement(statement)}
@@ -219,6 +244,40 @@ export const ActionsCompiler = {
   DoStatement(invocation: AST.DoStatement): Compiled {
     const awaitKeyword = actionInvocationRequiresAsync(invocation) ? gen`await ` : gen``
     return gen`${awaitKeyword}TR.Do(${Compile.Expression(invocation.action)}${Compile.ActionArguments(invocation)})`
+  },
+
+  /**
+   * WhenDoStatement runs its verb inside the caller's transaction as `do` does, but the runtime
+   * contains the verb's failure at this site and runs the outcome it names. The verb's effective
+   * failure contract travels with it, which is what tells a declared case from an undeclared error.
+   */
+  WhenDoStatement(statement: AST.WhenDoStatement): Compiled {
+    const invocation = statement.invocation
+    return gen`await TR.WhenDo(() => TR.Do(${Compile.Expression(invocation.action)}${
+      Compile.ActionArguments(invocation)
+    }), {
+      name: ${gen.jsLiteral(effectOutcomeName(statement))},
+      ${isAuthEffect(statement) ? gen`success: 'completed',` : gen.noop()}
+      declared: ${compileEffectContract(statement)},
+    }, [
+      ${
+      gen.list(
+        statement.outcomes,
+        outcome =>
+          gen`[${gen.jsLiteral(outcome.case)}, async _TaoCasePayload => TR.BlockScope(_Scope, async _Scope => {
+          ${outcome.payload ? gen`${gen.scopeName(outcome.payload)} = _TaoCasePayload` : ''}
+          ${Compile.ActionBlockBody(outcome.block)}
+        })],`,
+      )
+    }
+      ${
+      statement.otherwise
+        ? gen`['otherwise', async () => TR.BlockScope(_Scope, async _Scope => {
+        ${Compile.ActionBlockBody(statement.otherwise.block)}
+      })],`
+        : gen.noop()
+    }
+    ])`
   },
 
   /** FailStatement aborts the joined action transaction with one declared case and sentence. */
@@ -279,6 +338,11 @@ export const ActionsCompiler = {
     ])) return`
   },
 
+  /** CheckStatement ends its action's callback when the validated condition is false. */
+  CheckStatement(statement: AST.CheckStatement): Compiled {
+    return gen`if (TR.Check(${Compile.Expression(statement.condition)})) return`
+  },
+
   /** IfActionStatement lazily executes one action sub-block without terminating its caller. */
   IfActionStatement(statement: AST.IfActionStatement): Compiled {
     return gen`await TR.If(${Compile.Expression(statement.condition)}, async () =>
@@ -337,6 +401,30 @@ function positionalArguments(
   })
 }
 
+/**
+ * compileEffectContract lists the verb's effective failure cases, or `null` when the verb is dynamic
+ * and its contract is unknown here; the runtime then reads any declared failure as `rejected`.
+ */
+function compileEffectContract(statement: AST.WhenDoStatement): Compiled {
+  if (isAuthEffect(statement)) {
+    return gen`['cancelled', 'rejected']`
+  }
+  if (!ASTUtils.invokedEffect(statement)) {
+    return gen`null`
+  }
+  return gen`[${gen.join(ASTUtils.invocationFailureCases(statement), failureCase => gen.jsLiteral(failureCase))}]`
+}
+
+/** effectOutcomeName is the verb name a failure message falls back to when nothing says more. */
+function effectOutcomeName(statement: AST.WhenDoStatement): string {
+  const effect = ASTUtils.invokedEffect(statement)
+  if (effect && !AST.isActionExpression(effect)) {
+    return effect.name
+  }
+  const action = statement.invocation.action
+  return AST.isValueReference(action) ? action.target.$refText : 'action'
+}
+
 function actionInvocationArguments(invocation: AST.DoStatement): Compiled[] {
   const resolved = ASTUtils.resolveActionInvocation(invocation)
   if (!resolved.action) {
@@ -377,7 +465,8 @@ function compileForeignAction(action: AST.ActionDeclaration): Compiled {
       sentence: ${gen.jsLiteral(failure.sentence)},
     }`)
   }],
-    { ${action.runsLatest ? gen`runs: "latest", ` : gen``}requiredArguments: ${requiredArguments} },
+    { ${action.runsLatest ? gen`runs: "latest", ` : gen``}requiredArguments: ${requiredArguments},
+      testStubKey: ${gen.jsLiteral(foreignActionTestStubKey(action))} },
   )`
 }
 
@@ -437,4 +526,9 @@ function statementPath(block: AST.ActionBlock, index: number): string {
     node = parent
   }
   return segments.join('.')
+}
+
+function isAuthEffect(statement: AST.WhenDoStatement): boolean {
+  const effect = ASTUtils.invokedEffect(statement)
+  return effect !== undefined && authLibraryExport(effect) !== undefined
 }

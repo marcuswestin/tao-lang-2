@@ -1,5 +1,6 @@
 import React from 'react'
 import { Arrays } from './core/RuntimeCore'
+import type { RuntimeAuthScope } from './TR-auth'
 import { createElement } from './TR-create-element'
 import type { TaoDesign } from './TR-design'
 import { runtimeRevisionStore } from './TR-listeners'
@@ -39,6 +40,7 @@ import {
   withBrowserHistoryEntry,
 } from './TR-navigation-value'
 import { requireReactNativeRuntime } from './TR-react-native'
+import type { TaoReadNet } from './TR-read-net'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import type { TaoProps } from './TR-TaoProps'
 import { Clock } from './TR-units'
@@ -105,30 +107,48 @@ export class RuntimeAppDefinition implements Subscription {
   >()
   private descriptorMounts = new Map<TaoConfiguredNavigation, TaoNavigationValue>()
   private designValue: TaoDesign | undefined
+  private readNetValue: TaoReadNet | undefined
   private readonly changes = runtimeRevisionStore()
   private readonly navigationLanes = new WeakMap<TaoNavigationValue, TaoNavigationValue>()
   private readonly navigationLaneRecords = new Map<TaoNavigationValue, NavigationLaneRecord>()
   private nextBrowserEntryId = 1
   private nextBrowserSelectionId = 1
   private nextToastEntryId = 1
-  private readonly presentableVersion = presentableRegistryVersion()
+  private readonly presentableVersion: number
+  readonly authScope: RuntimeAuthScope | undefined
   private navigatorValue: TaoNavigationValue | undefined
   private replacement: TaoNavigationValue | undefined
   private toastEntries = new Map<string, ToastEntry>()
   private readonly browserHistory = new BrowserNavigationHistory(() => this.back())
-  private readonly restoration = new NavigationRestorationController(this)
+  private readonly restoration: NavigationRestorationController
 
   readonly declaration: TaoAppDeclaration
 
-  constructor(readonly definition: TaoAppDefinition, options: { deferredRegistration?: boolean } = {}) {
+  constructor(
+    readonly definition: TaoAppDefinition,
+    options: { deferredRegistration?: boolean; authScope?: RuntimeAuthScope; presentableVersion?: number } = {},
+  ) {
+    this.restoration = new NavigationRestorationController(this, options.deferredRegistration)
+    this.authScope = options.authScope
+    this.presentableVersion = options.presentableVersion ?? presentableRegistryVersion()
     this.declaration = definition.declaration ?? createAppDeclaration(definition.name)
     if (options.deferredRegistration !== true) {
       runtimeApps.add(this)
     }
   }
 
+  /** Authenticated hosts keep navigation and restoration within their own mounted scope. */
+  mountForAuth(scope: RuntimeAuthScope): RuntimeAppDefinition {
+    return new RuntimeAppDefinition(this.definition, {
+      authScope: scope,
+      deferredRegistration: true,
+      presentableVersion: this.presentableVersion,
+    })
+  }
+
   /** Activates a render-created Studio app only after React commits the host that owns it. */
   commitRegistration(): void {
+    this.restoration.commitRegistration()
     runtimeApps.add(this)
     registerNavigationApp(this)
   }
@@ -159,12 +179,12 @@ export class RuntimeAppDefinition implements Subscription {
   readonly snapshot = this.changes.snapshot
 
   get navigator(): TaoNavigationValue {
-    return this.replacement ?? (this.navigatorValue ??= this.mount(this.definition.navigator()))
+    return this.replacement ?? (this.navigatorValue ??= this.mount(this.definition.navigator(this.authScope)))
   }
 
   get auxiliaries(): Record<string, TaoNavigationValue> {
     return this.auxiliariesValue ??= Object.fromEntries(
-      Object.entries(this.definition.auxiliaries()).map(([key, value]) => [key, this.mount(value)]),
+      Object.entries(this.definition.auxiliaries(this.authScope)).map(([key, value]) => [key, this.mount(value)]),
     )
   }
 
@@ -173,11 +193,17 @@ export class RuntimeAppDefinition implements Subscription {
     return this.designValue ??= this.definition.design?.()
   }
 
+  /** readNet is the project's `guard default`, resolved after generated module initialization. */
+  get readNet(): TaoReadNet | undefined {
+    return this.readNetValue ??= this.definition.readNet?.()
+  }
+
   attachBrowserHistory(driver: BrowserNavigationHistoryDriver): () => void {
     return this.browserHistory.attach(driver)
   }
 
-  attachRestoration(): Promise<() => void> {
+  async attachRestoration(): Promise<() => void> {
+    await this.authScope?.restore()
     return this.restoration.attach()
   }
 

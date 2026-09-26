@@ -40,12 +40,24 @@ use Button, TextField from @design-kit
 use Recipe as SharedRecipe from ../Sharing
 ```
 
-- **Two visibility modifiers and no others**: `file` narrows a declaration to its source file;
-  `public` widens it past the folder or package boundary.
+- **Data imports select names independently.** A `data Workspaces / Workspace` declaration
+  supplies two names; `use Workspaces, Workspace from @data` imports both. Import only
+  `Workspaces` when using the collection, or only `Workspace` when using the entity type or
+  creating a row. Importing one never implicitly imports the other. The list uses ordinary
+  commas, because the declaration already establishes the pair. A local binder such as
+  `loop Workspaces / Workspace` introduces its own row name and needs only the collection
+  import. Existing file-local and implicit folder visibility still expose both names.
+
+- **Five visibility modifiers, narrowest first**, and a declaration carries the narrowest that works:
+  `file` (the default) keeps it to its source file; `folder` reaches the rest of its folder with no
+  `use` line; `package` reaches the rest of its package; `workspace` reaches any file in the
+  workspace but never a consumer of a published workspace; `public` reaches those consumers.
+  _(Amended 2026-09-25: this read "two modifiers and no others" while §8 and the implementation
+  carried five; the five stand.)_
 
 ```swift
 file function Slugify(Title text) returns text { … }   // only this file may call it
-public data Households / Household { … }               // other folders and packages may reference it
+public data Households / Household { … }               // consumers of the published workspace may reference it
 ```
 
 - **Each app has the same file decomposition**, so the security story is reviewable on one page:
@@ -262,40 +274,44 @@ data Recipes / Recipe {
 }
 ```
 
-- **The target is omitted when the field name is the entity name** (`Household`, above), and named
-  by the `relation` trait when it is not:
+- **Auth review amendment, 2026-09-26: data entries are comma-separated**, with an optional
+  trailing comma. This applies to entries of `data` bodies, not every Tao block. A newline is
+  whitespace, not a separator. Older examples below await the implementation migration.
+- **The target is omitted when the field name is the entity name** (`Household`, above), and
+  otherwise occupies the ordinary type position:
 
 ```swift
 data Memberships / Membership {
-   Person (relation Accounts)        // named Person, pointing at the Accounts entity
+   Workspace,
+   Person Account,                   // to-one Account relation
+   Role,
+   unique Workspace + Person,         // one constraint on the pair, not two unique fields
 }
 ```
 
-Juxtaposition is _not_ used here. Inside a `data` block, fields are separated by nothing but
-layout, so a juxtaposed type is genuinely ambiguous: in
+The comma resolves the previous juxtaposition ambiguity: `Workspace, Paragraphs (owned)` is two
+fields; `Workspace Paragraphs` is one explicitly typed field. Singular and plural entity targets
+retain their to-one/to-many distinction. `Role` may infer the same-named declared value type;
+type resolution must distinguish value types from entity relations.
 
-```swift
-data Documents / Document {
-   Workspace
-   Paragraphs (owned)
-}
-```
+**One index or uniqueness constraint per keyword.** `unique Workspace + Person` constrains the
+tuple; `unique Workspace, unique Person` declares two independent constraints. `+` in this
+declaration is a field-list separator, not addition. Composite uniqueness needs implementation in
+schema, runtime, and backend enforcement; this is not only a parser change. Scalar identity and
+cross-source reference keys do not silently become composite keys.
 
-`Workspace Paragraphs` reads equally as one field named `Workspace` of type `Paragraphs` and as
-two separate relation fields, and the grammar has no newline sensitivity to break the tie. The
-`relation` trait carries the target explicitly, so nothing about a field's meaning depends on where
-a line break falls. This is the one place where the three-symbol rule of §2 does not apply, and
-the trait is required only when the names differ — the common case still writes nothing.
+Inner lists must have their own boundary rather than consuming entry commas. Existing `commands
+Save, Share` and planned `together A, B` need a spelling decision before this grammar ships; the
+[auth implementation plan](<../Plan - Auth and account data.md>) records the remaining gate.
 
 A reverse relation whose name differs from its entity names its collection the same way, which
 removes the last reason to write cardinality or a `through` path by hand:
 
 ```swift
-data Members / Member { Household Person (relation Accounts) }
+data Members / Member { Household, Person Account }
 
 data Households / Household {
-   Seats (relation Members, owned)   // named Seats, but holds the Members collection — no
-                                     // cardinality or inverse-path clause needed either way
+   Seats Members (owned),            // named Seats, holding the Members collection
 }
 ```
 
@@ -352,18 +368,18 @@ data Groceries / Grocery {
 - **Every other trait trails in one parenthesized list, and that list belongs to `data`
   declarations.** The list is closed:
 
-| Trait                   | Argument             | Meaning                                                |
-| ----------------------- | -------------------- | ------------------------------------------------------ |
-| `default <expr>`        | a value or case name | the field's value when it is not set                   |
-| `relation <Entity>`     | an entity name       | the relation target, when the field is named otherwise |
-| `required "<sentence>"` | a sentence           | completeness, never blocking (§ Correctness)           |
-| `touch on change`       | —                    | restamp this field on every write to the row           |
-| `owned`                 | —                    | cascade lifetime for a relation                        |
-| `ordered`               | —                    | store-kept positions for a relation                    |
-| `unique`                | —                    | a storage fact                                         |
-| `search`                | —                    | participates in the entity's multi-field text search   |
-| `device`                | —                    | a preference scoped to one device, so it does not sync |
-| `title`                 | —                    | the one text field that names a row to a person (§9)   |
+| Trait                   | Argument             | Meaning                                                   |
+| ----------------------- | -------------------- | --------------------------------------------------------- |
+| `default <expr>`        | a value or case name | the field's value when it is not set                      |
+| `relation <Entity>`     | legacy spelling      | replaced by the field type position in the auth amendment |
+| `required "<sentence>"` | a sentence           | completeness, never blocking (§ Correctness)              |
+| `touch on change`       | —                    | restamp this field on every write to the row              |
+| `owned`                 | —                    | cascade lifetime for a relation                           |
+| `ordered`               | —                    | store-kept positions for a relation                       |
+| `unique`                | —                    | a storage fact                                            |
+| `search`                | —                    | participates in the entity's multi-field text search      |
+| `device`                | —                    | a preference scoped to one device, so it does not sync    |
+| `title`                 | —                    | the one text field that names a row to a person (§9)      |
 
 ```swift
 data Recipes / Recipe {
@@ -415,14 +431,18 @@ gentler severity: a message that neither blocks a write nor marks a row incomple
 
 - `validate <condition> "<sentence>"` — a store invariant enforced on **every** write path
   (keystroke, draft commit, transaction, sidecar import), which rejects the write.
-- `required "<sentence>"` — completeness, which never blocks a write. It derives `Row.Incomplete`
+- `required "<sentence>"` — completeness, which never blocks a write. It derives `Row.IsComplete`
   and `Row.Problems` so a row can be built one field at a time and still know it is unfinished.
+  **Auth review amendment, 2026-09-26:** the positive boolean spelling is `IsComplete`, replacing
+  the earlier `Incomplete` sketch; callers write `check Edit.IsComplete`. This derived row/draft
+  API is still unimplemented. Completeness means all required fields are supplied, not that a
+  write is authorized, passes every `validate`, or has reached a remote server.
 - `refuse when <condition> "<sentence>"` — a domain rejection inside a transaction, before any write
   lands.
 
 ```swift
 data Recipes / Recipe {
-   Title text (required "Name this recipe")           // required: Recipe.Incomplete until set
+   Title text (required "Name this recipe")           // Recipe.IsComplete is no until set
    validate Servings >= 1 "A recipe serves at least one"   // validate: the write is rejected outright
 }
 
@@ -523,34 +543,49 @@ data Recipes / Recipe {
 ## 3. Authority
 
 - **Deny by default.** Nothing is readable or writable unless a rule grants it.
-- **Four verbs**: `read`, `create`, `change`, `delete`. Verbs may be grouped on one line.
-- **One `access <Entity> { … }` block per entity**, with verbs as bare lines:
+- **Four verbs**: `read`, `create`, `update`, `delete`. Verbs may be grouped on one line.
+- **One `access <Entity> { … }` block per entity**, with audience-first grants:
+  `<account-or-account-set> can <verbs>`. **Auth review amendment, 2026-09-26:** this replaces
+  `<verbs> to <audience>` without changing enforcement, field restrictions, or post-write
+  semantics. An account-valued relation path is written directly. Named `audience` declarations
+  are deferred until after MVP. `update` is the canonical permission verb, matching the write
+  operation; `change` is an older spelling to migrate, not an additional operation.
+
+```swift
+access Account { Account can read; Account can update DisplayName }
+access Note { Owner can read, create, delete; Owner can update Body }
+access Workspace { Workspace.Memberships.Person can read }
+access Membership { Person can read }
+```
+
+The larger examples below retain named audiences as post-MVP illustrations. They do not expand
+the reviewed MVP scope to named policies, invitations, or ownership transfers.
 
 ```swift
 access Recipe {
-   read to Family of Household
-   create, change to Cooks of Household
-   change Shared, ShareCode through StartSharing or StopSharing
-   delete to Owners of Household
+   Family of Household can read
+   Cooks of Household can create, update
+   update Shared, ShareCode through StartSharing or StopSharing
+   Owners of Household can delete
 }
 
 access Invite {
-   read to Cooks of Household or holder of Code
-   create to Cooks of Household where Role in Cook, Guest   // a cook may invite cooks and guests
-   create to Owners of Household                            // only an owner may mint an owner
-   change Used to holder of Code
-   delete to Owners of Household
+   Cooks of Household or holder of Code can read
+   Cooks of Household can create where Role in Cook, Guest   // a cook may invite cooks and guests
+   Owners of Household can create                            // only an owner may mint an owner
+   holder of Code can update Used
+   Owners of Household can delete
 }
 ```
 
 - **The composition rules are part of the language, not a convention**: grants are additive; a bare
-  `change` covers every field; a field no grant covers cannot change; and a field named in a
+  `update` covers every field; a field no grant covers cannot change; and a field named in a
   `through` grant changes _only_ that way, even for callers a broader grant covers.
-- **A grant may constrain the row as it will be** — `create to Cooks of Household where Role in
+- **A grant may constrain the row as it will be** — `Cooks of Household can create where Role in
   Cook, Guest`, above, reads the _new_ row's `Role`, which is how "a cook may invite cooks and
   guests, but only an owner may mint an owner" is two lines instead of a transaction.
 
-- **`audience Name for Entity = <path>` names a reusable set of accounts** derived from a durable
+- **Post-MVP: `audience Name for Entity = <path>` names a reusable set of accounts** derived from a durable
   relation path with a filter. The same named audience is used by both the access rules and the
   screens:
 
@@ -558,29 +593,29 @@ access Invite {
 audience Cooks for Household = Household.Memberships[Role in Owner, Cook].Person
 
 access Recipe {
-   create, change to Cooks of Household   // used by an access rule …
+   Cooks of Household can create, update   // used by an access rule …
 }
 
 // … and by a screen, so "who can cook here" is asked and answered in one place
 Text("Cooking: { Cooks of Recipe.Household }")
 ```
 
-- **Field-scoped change grants** keep everyday edits open while provenance, lifecycle, and sharing
-  fields stay closed (`change Shared, ShareCode through StartSharing or StopSharing`, above — every
-  other field stays open to `change Recipe`).
+- **Field-scoped update grants** keep everyday edits open while provenance, lifecycle, and sharing
+  fields stay closed (`update Shared, ShareCode through StartSharing or StopSharing`, above — every
+  other field stays open to `update Recipe`).
 - **Transaction-only write paths** (`through <Transaction>`) reserve sensitive mutations for one
   named atomic operation, even for a caller in the right audience (`create through JoinWithInvite`,
   below).
 - **Holder-of-secret grants** authorize whoever presents a capability. This is how invitations work.
   The grant needs no separate "authorizes" clause: presenting a `secret`-typed parameter to a
   transaction is what makes its caller `holder of <Field>` for that call, and the same access verbs
-  that grant everyday changes (`through <Transaction>`, `to holder of <Field>`) say what the holder
+  that grant everyday changes (`through <Transaction>`, `holder of <Field> can …`) say what the holder
   may do — mirroring how the store's own rules check a bearer secret against a related row rather
   than consulting a separate authorization table:
 
 ```swift
 access Invite {
-   change Used to holder of Code            // presenting Code as it is authorizes the caller
+   holder of Code can update Used           // presenting Code as it is authorizes the caller
    create through JoinWithInvite
 }
 
@@ -605,7 +640,7 @@ command Favorite(Recipe) {
    Icon "heart"
    do FavoriteRecipe(Recipe)
 }
-// shown only while `can change Recipe` — the command asks the store; nothing re-implements the rule (§8)
+// shown only while `can update Recipe` — the command asks the store; nothing re-implements the rule (§8)
 ```
 
 ---
@@ -716,9 +751,12 @@ when do LeaveKitchen(MyMembership) {
 }
 ```
 
-- **One mandatory, app-wide safety net, and it is a read net.** `guard default { … }` is declared
-  once, anonymously, and covers the states of the _subject_ a site is reading. A site names only the
-  cases it treats specially, so `unauthorized` can never be accidentally skipped:
+- **Every app has a read safety net, supplied by the standard library when omitted.** An app may
+  declare `guard default { … }` once to customize it. Resolution is per case: site override, then
+  app override, then the standard fallback. The net covers the states of the _subject_ being read.
+  Default copy is generic (for example, "Loading…"), and error text is safe for users rather than
+  raw backend diagnostics. This does not catch auth action outcomes or silently propagate a
+  receiver's availability through arbitrary member access. An app customization looks like:
 
 ```swift
 guard default {
@@ -748,6 +786,33 @@ on press -> { do LeaveKitchen(MyMembership) }   // silent on rejection — nothi
 - **Data-write outcomes belong to the document** under the reactive-editing amendment (§7).
   Ordinary input values have no entity lifecycle. Backend validation remains deferred.
 
+_(Amended 2026-09-25, in the MVP decision rounds.)_ The outcome vocabulary and the net as they ship:
+
+- **`saved`, `rejected`, and `error` are the outcomes; `queued` waits for the first app that needs a
+  durable outbox (Wayfare).** `saved` means the effect finished on this device. Whether its writes
+  reached the provider is the row's to say (`WritesQueued`, §7), wherever the row is shown, so an
+  action never stays open while a device is offline.
+- **A declared failure case refines `rejected`.** A site may name one of the effect's `fail` or
+  `fails` cases; the named case handles only itself, and `rejected -> Problem` catches every other
+  declared case with its sentence. `error -> Message` is anything the effect never declared:
+
+```swift
+when do ExportDocument(Document, Format: Format) {
+   saved    -> { present Notice("Exported") as toast }
+   Offline  -> { set RetryWhenOnline = yes }
+   rejected -> Problem { present Notice(Problem) as toast }
+}
+```
+
+- **An unhandled failure stays silent, and the compiler says so.** A root invocation of an effect
+  whose failure contract is not empty, with no site outcome covering its declared cases, draws a
+  warning naming the cases and pointing at `when do`. The contract counts the cases an effect's own
+  `fail` and `fails` declare and those of the effects it reaches through a plain `do`.
+- **The net is always present; an app restyles it case by case.** The runtime supplies `loading`,
+  `missing`, `unauthorized`, and `error -> Message`. A file-level `guard default { … }` replaces
+  only the cases it names and covers every app in the project. A bare `guard Subject` sends every
+  exceptional case to the net; `guard Subject { … }` sends the cases it does not name.
+
 - **Availability is a state, not an empty collection.** Loading, missing, unauthorized, and error
   are distinct from "there are zero rows":
 
@@ -765,16 +830,22 @@ when Recipes {
 
 ## 6. Reads
 
-- **`query Name from <path> { … }` is live and provider-backed**, with filtering, ordering, search,
+- **`query Name = <path> with { … }` is live and provider-backed**, with filtering, ordering, search,
   grouping, and limits declared next to the consumer. Views never poll or subscribe manually:
 
 ```swift
-query RecentRecipes from MyKitchen.Recipes {
+query RecentRecipes = MyKitchen.Recipes with {
    where CreatedAt > now - 7.days
    order by CreatedAt descending
    limit 20
 }
 ```
+
+- **Auth review amendment, 2026-09-26:** the named-path query above replaces the earlier
+  `query Name from <path> { … }` spelling. `query` selects the declaration, and the member path
+  ends before `with`, so neither `=` nor the existing `with` keyword introduces a structural
+  grammar ambiguity. Parser and formatter migration is pending; this does not claim that the
+  current parser accepts the new form or settle general expression-valued query sources.
 
 - **A module-level query is not part of the language today**, although it could be added and nothing
   strictly prevents it; queries live in the view whose mount owns their reactive lifetime.
@@ -785,14 +856,14 @@ query RecentRecipes from MyKitchen.Recipes {
 
 ```swift
 data Recipes / Recipe { Title text (search), Ingredients { Name text (search) } }
-query FoundRecipes from MyKitchen.Recipes { search Query }
+query FoundRecipes = MyKitchen.Recipes with { search Query }
 ```
 
 - **Grouped and aggregate queries retain their contributing source rows**, so a folded total can be
   traced back and written through:
 
 ```swift
-query AisleTotals from MyKitchen.Groceries {
+query AisleTotals = MyKitchen.Groceries with {
    group by Aisle
    Count = count()
 }
@@ -904,6 +975,26 @@ Projection types contain the selected fields and their types, without entity ide
 `without` excludes named fields. Field paths into writable ordinary items are writable and preserve
 siblings. `update Document with Input` writes every supplied field by name and preserves omitted
 fields; it has no implicit dirty tracking or baseline. Explicit field updates remain available.
+
+_(Amended 2026-09-24, in the write-rules dialogue.)_ **A projection also carries the `required`
+sentences of the fields it selects**, so `Input.Incomplete` and `Input.Problems` read before any row
+exists, exactly as they would on a row (§2). **`create Entity with Input` creates a row from a
+projected input**, mirroring `update … with`; the projection must cover every field a create must
+supply. This is how a form for a new row is written now that entity drafts are retired:
+
+```tao
+type WorkspaceInput is Workspace { Name }
+
+scene WorkspaceList() {
+   state Input = WorkspaceInput { Name: "" }
+   action AddWorkspace() {
+      check not Input.Incomplete
+      create Workspace with Input
+      set Input = WorkspaceInput { Name: "" }
+   }
+   render FormButton("Add workspace", Disabled: Input.Incomplete) { on press AddWorkspace }
+}
+```
 
 ### Document write outcomes
 
@@ -1141,6 +1232,18 @@ command New(Title text) {
 
 - **`if` is one-sided and never takes `else`.** It conditionally includes one branch and nothing
   more: `if Step.Timer is not none { StartTimerFor(Step) }`.
+- **Text in a condition is deferred until after MVP** (auth review, 2026-09-26). No coercion rule
+  is settled by this review. Keep `if Problem is not empty { Text(Problem) }`; boolean-condition
+  positions retain their current typing. Future work must address whitespace, availability, and
+  consistency across condition positions rather than inheriting host-language truthiness.
+- **Bar-form matches are the auth review's target spelling**, pending a parser/formatter migration:
+  `when Subject | Case -> Body | otherwise -> Body`. Every multi-arm match has a terminal
+  `otherwise`; a value arm contains one expression, and a render/effect arm contains one atomic
+  statement or nested terminal match, or an explicit braced block for multiple statements. The
+  terminal arm closes a nested match's arm list, but does not group multiple sibling statements.
+  Subject-less matches use the same arm boundaries. The older braced examples in this record
+  remain migration inputs. The compact boolean form below needs an explicit compatibility
+  decision before a universal replacement; this amendment does not silently remove it.
 - **`when` covers two or more outcomes, and is the value-producing form.** One word for "maybe do
   this", one word for "cover every case":
 
@@ -1943,6 +2046,24 @@ design SkilletDesign {
   app starts from the `Text` entry, and `App` is the root's. This replaces the
   `style Control { base / variant / state }` stack: the base is the element default, a variant is a
   bundle, and a state is an ordinary condition.
+- **A clause list names only lowercase styles** (decided 2026-09-23). An element default applies by
+  element and is never named in a clause list; a default that needs another's clauses restates them
+  or takes a condition, the way a state does. Design names — colors, sizes, text styles, and styles
+  — are lowercase, and a Capitalized word in a clause list is a value (a parameter, state, or
+  environment value), so a clause head, a design name, and a value never share a spelling and no
+  reference marker is needed. A violation is a compile error (decided 2026-09-25).
+- **A `color` parameter carries a design color as a value** (decided 2026-09-25). A view may declare
+  `Tint color default inkMuted`; a caller passes a design color name (`Tint: accent`) or another
+  `color` value; inside, `background Tint` reads it, resolved against the mounted design at render
+  so it follows the scheme and whichever design is mounted. Every value starts as a design name — no
+  conversion from text or data reaches a clause — so the set of colors a clause can receive stays
+  listed in source. `color` is a keyword and only a view parameter's type; a design name is a color
+  only when used directly as an argument or parameter default, not inside an arbitrary `when`
+  expression. A name, with its shade, must exist in every design the project's apps mount,
+  refinements included, or it is a compile error naming the design that lacks it. The same
+  every-design rule applies to style references. WordFlower's document status badge forces it: the
+  badge tints a dot inside itself, which a caller's clauses cannot reach. `size` parameters,
+  `color` state, and aliases wait for a feature that forces them.
 - **Generated interaction affordances use ordinary element defaults** (KEY-D13). `Hint` styles an anchored
   key-and-label affordance and `Overview` styles the generated overview, verb, and palette surfaces;
   an app may override either in `styles { }` without declaring or owning those runtime layers.
@@ -1951,7 +2072,10 @@ design SkilletDesign {
   popover, and authored overlay-family syntax remains deferred.
 - **Interaction states are conditions.** `pressed`, `focused`, and `hovered` join the condition
   vocabulary, so state styling is §9's postfix `when` (`background ember.20 when pressed`), not a
-  sub-grammar of its own.
+  sub-grammar of its own. `selected` joins them for the element its host marks as the current
+  choice — today the active navigation tab — so `NavigationTab` carries its active look as
+  `background accentSoft when selected` and there is no separate active-tab default (decided
+  2026-09-25).
 - **No reference marker.** A bare name in a clause list resolves to a style, text style, or design
   value; clause keywords are a closed, reserved set, so a style may not be named `pad` and the
   validator says so at the declaration.
@@ -1959,10 +2083,11 @@ design SkilletDesign {
   (decided 2026-09-22). The legacy spellings stay accepted and lower identically, and every use
   draws a warning naming the decided head, so MVP source is written the way Revolution writes it
   (Process principle 1). One bundle spelling the same property both ways remains an error.
+  `tao fix` rewrites them (decided 2026-09-25), so canonical source never contains them.
 - **The flat catalog is deprecated** (decided 2026-09-22). A color or bundle written directly in
   `design { }`, outside the typed blocks, is still accepted, but its design draws one warning to
   move colors into `colors { }` and bundles into `styles { }`. `tao create` writes only the typed
-  form.
+  form, and `tao fix` moves flat entries into the typed blocks (decided 2026-09-25).
 - **`patterns { }` is not carried forward.** A named arrangement with slots is an ordinary `view`
   placing `@@content` (§9), and a row pattern like the source designs' `Line` is such a view plus
   element defaults. If a demo finds a need a view cannot meet, it returns.
@@ -1997,6 +2122,9 @@ design SkilletDesign {
   contrast, naming, heading order, and declared tap minimums are build diagnostics; layout-dependent
   rules (200% clipping, overflow) are measured over the scenario gallery; perceptual rules (meaning
   without colour) are stated here as review criteria the gallery surfaces, never as pass/fail.
+  **Deferred past MVP** (decided 2026-09-23): the MVP ships no `rules { }` checks, no runtime
+  validation, and no review automation. The static analysis this needs, and why it waits, is in
+  the design system plan's "Design rules — deferred past MVP".
 - **Adaptation reads the person's settings first** — `Motion`, `Contrast`, `Pointer`, `TextScale` —
   before guessing from hardware.
 - **A declaration's style defaults live in its header clause** (decided 2026-09-22, R9):
@@ -2309,6 +2437,8 @@ action FetchRecipe fails NotARecipe
 action FetchRecipe returns { Foo: 1, Bar: ["123", "abc"] }
 ```
 
+- The MVP implements declared-case failure stubs for foreign actions with no result. Value-return
+  stubs remain Post-MVP until return-valued actions have their complete language and runtime path.
 - A success stub supplies the **value**, so it needs no type name and works whether the action's
   return type was named or written inline.
 - **A preference in a test is an ordinary update, and the device locale is a scenario pin — both
@@ -2389,7 +2519,8 @@ scenarios Recipe "devices" {
     Because raw values are confined to the design and screens speak in names (§13), contrast to WCAG
     AA is checkable per (ink, background, scheme) pair at compile time; unnamed interactive elements,
     heading order, declared tap-target minimums, and raw-values-outside-the-design are ordinary
-    validator errors.
+    validator warnings, not errors (decided 2026-09-23). The rule checks are deferred past MVP
+    (§13); raw values outside the design already warn.
   - **Rules that need rendered layout annotate the scenario gallery for human review.** `tao review`
     renders every `scenario` (each is a pinned, buildable state — that is what they are for) into a
     gallery, flagging what it can measure there — text clipping at 200% scale, horizontal overflow —
@@ -2399,7 +2530,8 @@ scenarios Recipe "devices" {
   perceptual quality — "does meaning survive without colour", "does this layout read well
   mirrored" — is _QA_: humans reviewing the scenario gallery, with the pseudolocale and RTL
   scenarios as standing review states. The language never encodes a QA judgement as an assertion,
-  because a failing "test" no machine can actually evaluate teaches people to ignore red.
+  because a failing "test" no machine can actually evaluate teaches people to ignore red. A journey
+  does not assert a rendered color; compiler and runtime tests prove color lowering and resolution.
 
 ---
 

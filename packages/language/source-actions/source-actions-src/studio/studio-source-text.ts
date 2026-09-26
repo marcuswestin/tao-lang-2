@@ -1,5 +1,5 @@
 import Formatter from '@formatter'
-import { AST } from '@parser'
+import { AST, Parser } from '@parser'
 import { Errors } from '@shared'
 import { assertNoSyntaxErrors, parseSourceText } from '../source-actions-utils'
 import type { StudioSourceTextEdit } from './studio-contract'
@@ -159,6 +159,26 @@ const taoStringEscapes: Readonly<Record<string, string>> = {
 export function requireIdentifier(value: string, label: string): void {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
     Errors.throwUserInput(`Studio ${label} name is invalid: ${value}`)
+  }
+}
+
+/**
+ * requireDesignValueName refuses a name Studio would write for a new color, size, or style a render
+ * names. Those names are lowercase, because a Capitalized design name is either a compile error or an
+ * element default no clause list may name (Decisions §13), and none may be a Tao keyword, which the
+ * lexer would never read as a name.
+ */
+export function requireDesignValueName(value: string, label: string): void {
+  requireIdentifier(value, label)
+  if (/^[A-Z]/.test(value)) {
+    const lowercase = `${value[0]!.toLowerCase()}${value.slice(1)}`
+    Errors.throwUserInput(
+      `Studio ${label} names start with a lowercase letter; use '${lowercase}' instead of '${value}'.`,
+    )
+  }
+  const tokens = Parser.lexCode(value).tokens
+  if (tokens.length !== 1 || tokens[0]!.tokenType.name !== 'ID') {
+    Errors.throwUserInput(`Studio ${label} name '${value}' is a Tao keyword; choose another name.`)
   }
 }
 

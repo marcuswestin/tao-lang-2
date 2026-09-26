@@ -1,7 +1,8 @@
 import React from 'react'
 import { RuntimeAssert } from './TR-assert'
+import type { TaoDataAuthBinding } from './TR-auth'
 import { entityHandle, metadataOf } from './TR-data-entity'
-import { testDataConnection, UnboundConnection } from './TR-data-provider'
+import { UnboundConnection } from './TR-data-provider'
 import {
   beginTest as beginDataTest,
   bindConfiguredDataSchema,
@@ -26,6 +27,7 @@ import { canonicalDescriptor } from './TR-navigation-identity'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import { StudioEnvironmentControls } from './TR-studio-environment'
 import { useStudioLensScope } from './TR-studio-lens'
+import { TestWorld } from './TR-test-world'
 
 export { testProvider } from './TR-data-provider'
 
@@ -38,6 +40,10 @@ export type TaoEntityAvailability =
   | { message: string; status: 'error' }
 
 export type TaoDataField = {
+  cases?: readonly string[]
+  enumValues?: () => Readonly<Record<string, Evaluable>>
+  optional?: boolean
+  required?: string
   defaultNow?: true
   defaultValue?: boolean | number | string
   indexed?: boolean
@@ -47,11 +53,13 @@ export type TaoDataField = {
    * that row lives in a store this schema knows nothing about; it resolves through the schema
    * registry and reads as `missing` when no store holds it.
    */
-  kind: DataPrimitive | 'reference' | 'relation'
+  kind: DataPrimitive | 'enum' | 'reference' | 'relation'
   onDelete?: RelationDeleteBehavior
   /** referenceField is the target entity's unique field, the value a reference stores. */
   referenceField?: string
   relation?: string
+  /** search marks a text field a query's `search` clause matches a term against. */
+  search?: boolean
   /** store names the store a reference's target lives in, among the stores its project links. */
   store?: string
   /** title marks the one text field that names a row to a person: a label of last resort. */
@@ -60,6 +68,12 @@ export type TaoDataField = {
 }
 
 export type TaoDataEntity = {
+  grants?: readonly Readonly<{
+    operations: readonly ('read' | 'create' | 'update' | 'delete')[]
+    principal: readonly string[]
+    updateFields?: readonly string[]
+  }>[]
+  uniqueConstraints?: readonly (readonly string[])[]
   collection: string
   commandPolicy?: TaoEntityCommandPolicy
   defaultOrder?: {
@@ -96,6 +110,12 @@ export type TaoQueryPlan = {
     direction: 'asc' | 'desc'
     field: string
   }
+  /**
+   * search is the query's own reactive term, matched against every `(search)` field the same
+   * way keyboard narrowing and the command palette match: locale-aware word-prefix subsequence.
+   * It is evaluated locally over the store for every provider, never offered to a fill connection.
+   */
+  search?: () => Evaluable
 }
 
 /** TaoQueryDescriptor is the serializable shape of one active query offered to a fill connection. */
@@ -138,6 +158,11 @@ export type TaoFillOps = {
  * belong to a future provider family rather than leaking into this full-snapshot contract.
  */
 export type TaoDataConnection = {
+  /** Whether this account has a durable complete cache for its declared offline scope. */
+  offline?: {
+    status(): Readonly<{ state: 'loading' | 'ready' | 'unavailable'; reason?: string }>
+    subscribe(listener: () => void): () => void
+  }
   /** Local durable write records, when the provider implements recorded mutation recovery. */
   writes?: TaoSyncWriteRecovery
   /**
@@ -148,6 +173,8 @@ export type TaoDataConnection = {
    */
   automaticReset?: true
   close?(): void
+  /** Stop account work immediately; resolve once durable cache removal/outbox sealing finishes. */
+  invalidateAuth?(): Promise<void> | void
   /** referenceToken and resolveReference are the optional, versioned restoration capability. */
   referenceToken?(reference: { entity: string; id: string; schema: string }): string
   resolveReference?(reference: { entity: string; schema: string; token: string }): string | undefined
@@ -163,9 +190,18 @@ export type TaoDataConnection = {
   load(): Promise<string | undefined> | string | undefined
   /** reset is optional because remote providers may not permit destructive recovery. */
   reset?(): Promise<void> | void
-  save(snapshot: string, intents?: readonly TaoDataWriteIntent[]): Promise<void> | void
+  save(snapshot: string, intents?: readonly TaoDataWriteIntent[], context?: TaoDataWriteContext): Promise<void> | void
+  /** A supplied form applies its local input only after the transport reports a confirmed receipt. */
+  submit?(
+    snapshot: string,
+    intents?: readonly TaoDataWriteIntent[],
+    context?: TaoDataWriteContext,
+  ): Promise<{ status: 'queued' | 'saved' }>
   subscribe?(observer: TaoDataConnectionObserver): () => void
 }
+
+/** The baseline is the snapshot the runtime actually consumed, not a transport's last publication. */
+export type TaoDataWriteContext = Readonly<{ previousSnapshot: string }>
 
 /** TaoDataWriteIntent preserves an authored same-value update through a snapshot-backed sync bridge. */
 export type TaoDataWriteIntent = Readonly<{
@@ -182,6 +218,7 @@ export type TaoDataConnectionObserver = Readonly<{
 
 /** TaoDataProviderContext is the provider-neutral mount passed to a package implementation. */
 export type TaoDataProviderContext = Readonly<{
+  auth?: TaoDataAuthBinding
   configuration: Readonly<Record<string, unknown>>
   schema: TaoDataSchemaDefinition
   storageKey: string
@@ -189,7 +226,13 @@ export type TaoDataProviderContext = Readonly<{
 
 /** TaoDataProvider is the clean package boundary implemented by Local, Memory, and remote providers. */
 export type TaoDataProvider = {
+  /** Server providers enforce resource credentials and grants; test authority requires TestAuth. */
+  authenticatedAuthority?: 'server' | 'test'
   connect(context: TaoDataProviderContext): TaoDataConnection
+  /** Test stand-ins model remote saves or local snapshots awaiting background upload. */
+  testNetwork?: 'deferred' | 'remote'
+  /** Declares that this provider supports recorded per-write recovery in behavior tests. */
+  testWriteRecovery?: true
   /**
    * fills marks a query-driven provider whose connections offer fill. Tao behavior tests keep the
    * fresh test Memory store for snapshot providers but bind a fill-capable provider anyway: fills
@@ -261,7 +304,13 @@ function useConfiguredProviderBinding(
   // The wrapped declaration must be stable across renders: the app root reconstructs the
   // configured value per render, and bindConfigured treats a new declaration object as a full
   // rebind. Only `source.declaration` and the studio overlay are stable inputs.
-  const studioProvider = StudioEnvironmentControls.useProvider(source.declaration.provider)
+  const requestedStudioProvider = StudioEnvironmentControls.useProvider(source.declaration.provider)
+  // A Tao check uses the Studio fixture seeding seam, but snapshot providers get their behavior
+  // from the provider-faithful test world. The Studio overlay would erase their recovery/network
+  // capabilities. Fill providers still need its cell-local persistence and controlled fills.
+  const studioProvider = isDataTestMode() && source.declaration.provider.fills === undefined
+    ? source.declaration.provider
+    : requestedStudioProvider
   const declaration = React.useMemo<TaoDatasourceDeclaration>(() =>
     studioProvider === source.declaration.provider
       ? source.declaration
@@ -280,8 +329,8 @@ function useConfiguredProviderBinding(
 /** DataControls is the provider-neutral generated-code API for Tao schemas, queries, and writes. */
 export const DataControls = {
   /** interactionCandidates is the internal pending-command picker seam over active stores. */
-  interactionCandidates(entity: string): readonly unknown[] {
-    return interactionEntityHandles(entity)
+  interactionCandidates(entity: string, scope?: { ownsStore(store: TaoDataSchema): boolean }): readonly unknown[] {
+    return interactionEntityHandles(entity, scope)
   },
 
   /** interactionCandidateIdentity keeps same-id rows from different stores distinct in a picker. */
@@ -348,7 +397,7 @@ export const DataControls = {
     connection?: TaoDataConnection,
   ): RuntimeDataSchema {
     const selectedConnection = connection
-      ?? (isDataTestMode() ? testDataConnection() : UnboundConnection(definition.name))
+      ?? (isDataTestMode() ? TestWorld.connection() : UnboundConnection(definition.name))
     const schema = new RuntimeDataSchema(
       definition,
       selectedConnection,
@@ -444,6 +493,16 @@ export const DataControls = {
 
   Create(schema: RuntimeDataSchema, entity: string, fields: Record<string, Evaluable>): void {
     schema.create(entity, evaluatedFields(fields))
+  },
+
+  /** CreateWith creates one row from every own field of a projected input item. */
+  CreateWith(schema: RuntimeDataSchema, entity: string, input: Evaluable): void {
+    const fields = input.evaluate().jsValue
+    RuntimeAssert.input(
+      fields !== null && typeof fields === 'object' && !Array.isArray(fields),
+      'Data create expects an input item.',
+    )
+    schema.create(entity, Object.fromEntries(Object.entries(fields)))
   },
 
   Update(row: Evaluable, fields: Record<string, Evaluable>): void {
@@ -552,6 +611,9 @@ export const DataControls = {
   endTest(): void {
     endDataTest()
   },
+
+  /** TestWorld controls the deterministic provider stand-in for the current check. */
+  TestWorld,
 
   Capture(): TaoDataCapture {
     return captureDataSchemas()

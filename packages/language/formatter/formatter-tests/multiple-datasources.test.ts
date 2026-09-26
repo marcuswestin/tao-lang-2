@@ -8,7 +8,7 @@ Describe('multiple datasources formatter', () => {
       `datasource Feed=Memory{Data{Stories,Comments}}
 datasource Personal=Local{StorageKey "p" Data{Bookmarks}}
 app Reader{Name "Reader" Datasource{Feed,Personal with{StorageKey "prod"}}}
-data Bookmarks/Bookmark{Story(reference) Kept(reference  Story) Note text(default "")}`,
+data Bookmarks/Bookmark{Story(reference), Kept Story (reference), Note text(default "")}`,
       `
         datasource Feed = Memory {
            Data {
@@ -31,8 +31,8 @@ data Bookmarks/Bookmark{Story(reference) Kept(reference  Story) Note text(defaul
         }  }  }
 
         data Bookmarks / Bookmark {
-           Story (reference)
-           Kept (reference Story)
+           Story (reference),
+           Kept Story (reference),
            Note text (default "")
         }
       `,

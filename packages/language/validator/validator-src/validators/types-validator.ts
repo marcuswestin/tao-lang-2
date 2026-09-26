@@ -491,7 +491,7 @@ function typePropertyOwner(property: AST.TypeProperty): AST.TypeDefinition | und
 }
 
 function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: ValidationContext): void {
-  let current = Type.ofValueDeclaration(memberAccess.target.ref)
+  let current = Type.ofValueDeclaration(memberAccess.target.ref, memberAccess)
   if (current.kind === 'unresolved') {
     return
   }
@@ -512,6 +512,12 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
         return
       }
       current = memberType
+      typeName = Type.displayName(current)
+      continue
+    }
+    const completeness = Type.completenessFieldsOf(current) && Type.completenessMemberType(member)
+    if (completeness) {
+      current = completeness
       typeName = Type.displayName(current)
       continue
     }

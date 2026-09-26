@@ -1,0 +1,16 @@
+use AgentCommandsProof from ./
+
+test "Agent Commands" {
+   test "shares the declared write command with visible UI and retains its row" {
+      run AgentCommandsProof
+
+      expect text "Agent command entries: 0"
+      press #append
+      expect text "Visible sample: 7"
+      expect text "Marked"
+      relaunch
+      expect text "Agent command entries: 1"
+      expect text "Visible sample: 7"
+      expect text "Marked"
+   }
+}

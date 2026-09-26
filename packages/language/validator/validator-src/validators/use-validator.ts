@@ -38,6 +38,7 @@ type DeclarationRecord = {
 
 type VisibleDeclarationRecord = {
   declaration: AST.Declaration
+  name: string
   document: AST.Document
   folderPath: string
 }
@@ -47,7 +48,7 @@ export function validateUseStatements(file: AST.TaoFile, ctx: ValidationContext)
   const fromFilePath = AST.getDocument(file).uri.path
   const useStatements = file.statements.filter(AST.isUseStatement)
   const localDeclarationNames = new Set(
-    file.statements.filter(AST.isDeclaration).map(AST.declarationKey),
+    declarationsInFile(file).map(declarationRecordKey),
   )
   const referencedNames = ASTUtils.referencedNames(file)
   const previouslyImportedNames = new Set<string>()
@@ -258,11 +259,17 @@ function reportUseStatementsOutOfSection(file: AST.TaoFile, ctx: ValidationConte
 function declarationsInFile(file: AST.TaoFile): DeclarationRecord[] {
   return file.statements
     .filter(AST.isDeclaration)
-    .map((declaration) => ({
-      name: declaration.name,
-      namespace: AST.declarationNamespace(declaration),
-      visibility: Packages.visibilityOf(declaration),
-    }))
+    .flatMap(declaration => declarationRecords(declaration))
+}
+
+function declarationRecords(declaration: AST.Declaration): DeclarationRecord[] {
+  const visibility = Packages.visibilityOf(declaration)
+  return [
+    { name: declaration.name, namespace: AST.declarationNamespace(declaration), visibility },
+    ...(AST.isEntityDataDeclaration(declaration)
+      ? [{ name: declaration.singularName, namespace: 'type' as const, visibility }]
+      : []),
+  ]
 }
 
 /** visibleDeclarationsByFolder indexes every visible declaration by folder, then by name. */
@@ -277,10 +284,12 @@ function visibleDeclarationsByFolder(ctx: ValidationContext): Map<string, Map<st
       if (Packages.visibilityOf(declaration) === undefined) {
         continue
       }
-      const key = AST.declarationKey(declaration)
-      const records = declarationsByName.get(key) ?? []
-      records.push({ declaration, document, folderPath })
-      declarationsByName.set(key, records)
+      for (const binding of declarationRecords(declaration)) {
+        const key = declarationRecordKey(binding)
+        const records = declarationsByName.get(key) ?? []
+        records.push({ declaration, name: binding.name, document, folderPath })
+        declarationsByName.set(key, records)
+      }
     }
   }
   return declarationsByFolder
@@ -304,7 +313,7 @@ export function validateVisibleDeclarations(
         if (targetDocument === undefined || targetDocument === record.document) {
           ctx.error(
             record.declaration,
-            useValidationMessages.duplicateVisibleDeclaration(record.declaration.name, record.folderPath),
+            useValidationMessages.duplicateVisibleDeclaration(record.name, record.folderPath),
           )
         }
       }

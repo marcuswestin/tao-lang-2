@@ -260,7 +260,7 @@ view StoryScreen() {
 
     const result = await call(writeTools(it, changes, () => {}), 'proposeEdit', {
       declaration: 'Stories',
-      replacement: 'data Stories / Story {\n   Title text\n   Summary text\n}',
+      replacement: 'data Stories / Story {\n   Title text,\n   Summary text\n}',
     })
 
     Expect(result['refused']).toBeUndefined()

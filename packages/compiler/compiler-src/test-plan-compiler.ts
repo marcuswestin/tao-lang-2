@@ -3,6 +3,7 @@ import { AST, type ParseResult } from '@parser'
 import { Assert, type DiagnosticRange, Diagnostics, Switch } from '@shared'
 import type { ValidationResult } from '@validator'
 import type { CompilerContext } from './compiler'
+import { foreignActionTestStubKey } from './foreign-action-test-stubs'
 
 type TaoTestPlanInput = ParseResult | ValidationResult
 
@@ -17,6 +18,11 @@ type TaoTestRun = {
   appName: string
   appSourcePath: string
   source: TaoTestSourceLocation
+}
+
+type TaoTestActionFailureStub = {
+  actionKey: string
+  caseName: string
 }
 
 /** TaoTestExpectation declares one v0 selector-targeted assertion. */
@@ -216,6 +222,50 @@ type TaoTestStep =
   | TaoTestRelaunchStep
   | TaoTestSelectStep
   | TaoTestSubmitStep
+  | { kind: 'network'; mode: 'offline' | 'online'; source: TaoTestSourceLocation }
+  | { kind: 'waitForSync'; source: TaoTestSourceLocation }
+  | {
+    kind: 'datasourceFailure'
+    operation: 'create' | 'delete' | 'update'
+    entity: string
+    message: string
+    source: TaoTestSourceLocation
+  }
+
+/** TaoTestDevice declares the viewport preset an `on <device>` clause pins for a check. */
+type TaoTestDevice = {
+  device: 'laptop' | 'phone' | 'tablet'
+  height: number
+  width: number
+}
+
+/**
+ * TaoTestFixtureValue mirrors the Studio preview fixture value shape (`TaoStudioFixtureValue` in
+ * `@runtime/TR`) field for field, so a compiled test fixture plan can be handed straight to the same
+ * runtime seeding seam a Studio scenario's fixture already uses.
+ */
+type TaoTestFixtureValue =
+  | boolean
+  | number
+  | string
+  | { kind: 'now' }
+  | { handle: string; kind: 'fixture-reference' }
+
+/** TaoTestFixtureCreate declares one row a `with <fixture>` clause creates before a check launches. */
+type TaoTestFixtureCreate = {
+  account?: string
+  entity: string
+  fields: Readonly<Record<string, TaoTestFixtureValue>>
+  name: string
+}
+
+/** TaoTestFixture declares the rows a check's effective fixture creates. */
+type TaoTestFixture = {
+  accounts: readonly { name: string; fields: Readonly<Record<string, TaoTestFixtureValue>> }[]
+  signedIn?: string
+  creates: readonly TaoTestFixtureCreate[]
+  name: string
+}
 
 /** TaoTestCheck declares one runnable v0 Tao check. */
 type TaoTestCheck = {
@@ -223,6 +273,9 @@ type TaoTestCheck = {
   source: TaoTestSourceLocation
   run: TaoTestRun
   steps: TaoTestStep[]
+  actionFailureStubs?: TaoTestActionFailureStub[]
+  device?: TaoTestDevice
+  fixture?: TaoTestFixture
 }
 
 /** TaoTestSuite declares one Tao test suite. */
@@ -252,10 +305,10 @@ export function compileTestPlan(input: TaoTestPlanInput, _context: CompilerConte
 }
 
 function compileSuite(suite: AST.TestDeclaration): TaoTestSuite {
-  const checks = suite.block.statements.filter(AST.isTestDeclaration).map(compileCheck)
-  // A suite's checks are the tests nested in it and nothing else, so a file-level test written as a
-  // leaf journey compiles to a suite of none. The validator rejects that shape; asserting it here
-  // keeps the one failure mode a test run cannot report — a file that runs nothing and passes —
+  const checks = leafTests(suite).map(compileCheck)
+  // A suite's checks are the leaf tests nested in it and nothing else, so a file-level test written
+  // as a leaf journey compiles to a suite of none. The validator rejects that shape; asserting it
+  // here keeps the one failure mode a test run cannot report — a file that runs nothing and passes —
   // from surviving a compile that was told validation had already happened.
   Assert(checks.length > 0, 'validated test suite declares at least one check', { suiteName: suite.name })
   return {
@@ -265,16 +318,93 @@ function compileSuite(suite: AST.TestDeclaration): TaoTestSuite {
   }
 }
 
+/** leafTests returns a test's leaf descendants in document order, at whatever depth they nest. */
+function leafTests(test: AST.TestDeclaration): AST.TestDeclaration[] {
+  const nested = test.block.statements.filter(AST.isTestDeclaration)
+  return nested.length === 0 ? [test] : nested.flatMap(leafTests)
+}
+
 function compileCheck(check: AST.TestDeclaration): TaoTestCheck {
   const run = check.block.statements.find(AST.isRunStep)
   Assert.defined(run, 'validated check has one run step', { checkName: check.name })
   const steps = check.block.statements.filter(AST.isCheckStep).filter(isRunnableTestStep).map(compileStep)
+  // A nested test inherits its nearest ancestor's `on`/`with` unless it repeats the clause itself
+  // (Decisions §16), so the effective clause may belong to an ancestor rather than this check.
+  const device = AST.effectiveTestClause(check, AST.isTestDeviceClause)
+  const fixture = AST.effectiveTestClause(check, AST.isTestFixtureClause)?.fixture.ref
   return {
     name: AST.testDisplayName(check),
     source: sourceLocation(check),
     run: compileRun(run),
     steps,
+    actionFailureStubs: check.block.statements.filter(AST.isActionFailureStubStep).map(stub => {
+      const action = stub.action.ref
+      Assert.defined(action, 'validated action stub references an action')
+      return { actionKey: foreignActionTestStubKey(action), caseName: stub.case }
+    }),
+    ...(device === undefined ? {} : { device: compileDevice(device) }),
+    ...(fixture === undefined ? {} : { fixture: compileFixture(fixture) }),
   }
+}
+
+function compileDevice(device: AST.TestDeviceClause): TaoTestDevice {
+  const defaults = device.device === 'phone'
+    ? { height: 844, width: 390 }
+    : device.device === 'tablet'
+    ? { height: 1024, width: 768 }
+    : { height: 900, width: 1440 }
+  return {
+    device: device.device,
+    height: device.height ?? defaults.height,
+    width: device.width ?? defaults.width,
+  }
+}
+
+/**
+ * compileFixture compiles a fixture's created rows into the same shape Studio's own fixture plan
+ * uses, so the runtime seeding seam a scenario already seeds its store through also seeds a check's.
+ * `through` bindings are not compiled: the same runtime seam declines to execute them yet, matching
+ * Studio's own current limit, and a validated `with <fixture>` never reaches here with one.
+ */
+function compileFixture(fixture: AST.FixtureDeclaration): TaoTestFixture {
+  const creates = fixture.block.entries.filter(entry =>
+    AST.isFixtureCreateBinding(entry) || AST.isFixtureCreateStatement(entry)
+  )
+  const signedIn = fixture.block.entries.find(AST.isFixtureSignedInClause)?.account.$refText
+  return {
+    name: fixture.name,
+    accounts: fixture.block.entries.filter(AST.isFixtureAccountDeclaration).map(account => ({
+      name: account.name,
+      fields: Object.fromEntries(account.block.fields.map(field => [field.name, compileFixtureValue(field.value)])),
+    })),
+    ...(signedIn ? { signedIn } : {}),
+    creates: creates.map((binding, index) => {
+      const name = AST.isFixtureCreateBinding(binding) ? binding.name : `_Created${index + 1}`
+      Assert(binding.through === undefined, 'validated test fixture has no through binding', {
+        binding: name,
+        fixture: fixture.name,
+      })
+      const entity = binding.entity.ref
+      Assert.defined(entity, 'validated fixture create binding references an entity', { binding: name })
+      return {
+        entity: entity.singularName,
+        fields: Object.fromEntries(binding.block.fields.map(field => [field.name, compileFixtureValue(field.value)])),
+        name,
+        ...(binding.account?.$refText ?? signedIn ? { account: binding.account?.$refText ?? signedIn } : {}),
+      }
+    }),
+  }
+}
+
+function compileFixtureValue(value: AST.FixtureValue): TaoTestFixtureValue {
+  return Switch.type(value, {
+    // The grammar's BooleanLiteralValue is the source word; convert it to the declared boolean.
+    BooleanLiteral: value => value.value === 'true',
+    FixtureValueReference: value => ({ handle: value.target.$refText, kind: 'fixture-reference' as const }),
+    NowExpression: () => ({ kind: 'now' as const }),
+    NumberLiteral: value => value.value,
+    StringLiteral: value => value.value,
+  })
 }
 
 function compileRun(run: AST.RunStep): TaoTestRun {
@@ -310,6 +440,15 @@ function compileInputValueExpectation(expectation: AST.ExpectInputValueStep): Ta
 function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   return Switch.type(step, {
     AdvanceStep: compileAdvanceStep,
+    NetworkTestStep: step => ({ kind: 'network', mode: step.mode, source: sourceLocation(step) }),
+    WaitForSyncStep: step => ({ kind: 'waitForSync', source: sourceLocation(step) }),
+    DatasourceFailureStep: step => ({
+      kind: 'datasourceFailure',
+      operation: step.operation,
+      entity: step.entity,
+      message: step.message,
+      source: sourceLocation(step),
+    }),
     BackTestStep: compileBackTestStep,
     RelaunchStep: compileRelaunchStep,
     EnterTextStep: compileEnterTextStep,

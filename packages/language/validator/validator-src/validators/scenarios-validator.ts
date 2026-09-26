@@ -80,7 +80,11 @@ function validateFixture(fixture: AST.FixtureDeclaration, ctx: ValidationContext
   for (const account of fixture.block.entries.filter(AST.isFixtureAccountDeclaration)) {
     validateDuplicateFields(`Account '${account.name}'`, account.block.fields, ctx)
   }
-  for (const binding of fixture.block.entries.filter(AST.isFixtureCreateBinding)) {
+  for (
+    const binding of fixture.block.entries.filter(entry =>
+      AST.isFixtureCreateBinding(entry) || AST.isFixtureCreateStatement(entry)
+    )
+  ) {
     validateCreateBinding(binding, ctx)
     if (binding.through) {
       validateThrough(binding.through, ctx)
@@ -88,7 +92,10 @@ function validateFixture(fixture: AST.FixtureDeclaration, ctx: ValidationContext
   }
 }
 
-function validateCreateBinding(binding: AST.FixtureCreateBinding, ctx: ValidationContext): void {
+function validateCreateBinding(
+  binding: AST.FixtureCreateBinding | AST.FixtureCreateStatement,
+  ctx: ValidationContext,
+): void {
   const entity = binding.entity.ref
   if (!entity) {
     return

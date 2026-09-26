@@ -13,6 +13,7 @@ export type TaoType =
       | 'boolean'
       | 'time'
       | 'duration'
+      | 'color'
       | 'none'
       | 'shortcut'
       | 'command'
@@ -167,8 +168,9 @@ export class Type {
   }
 
   /** ofValueDeclaration resolves the runtime value type introduced by one linked value declaration. */
-  static ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
-    return new TypeResolutionContext().ofValueDeclaration(declaration)
+  static ofValueDeclaration(declaration: AST.ValueDeclaration | undefined, context?: AST.Node): TaoType {
+    const resolution = new TypeResolutionContext()
+    return context ? resolution.ofContextualValue(declaration, context) : resolution.ofValueDeclaration(declaration)
   }
 
   /** ofFunctionReturn resolves an explicit function result or infers it from every return statement. */
@@ -196,6 +198,7 @@ export class Type {
       ActionDeclaration: typeOfParameterizedDeclaration,
       CommandDeclaration: typeOfParameterizedDeclaration,
       FunctionDeclaration: typeOfParameterizedDeclaration,
+      PhraseDeclaration: typeOfParameterizedDeclaration,
       ViewDeclaration: typeOfParameterizedDeclaration,
       undefined: unresolvedType,
     })
@@ -406,7 +409,8 @@ export class Type {
   /** entityOfReference resolves a top-level entity's singular type name. */
   static entityOfReference(reference: AST.NamedTypeReference): DataEntityDefinition | undefined {
     return reference.members.length === 0
-      ? Type.visibleDataEntities(reference).find(entity => entity.singularName === reference.root)
+      ? AST.visibleFileDeclarations(reference, AST.isEntityDataDeclaration, entity => entity.singularName)
+        .find(entity => entity.singularName === reference.root)
       : undefined
   }
 
@@ -467,6 +471,51 @@ export class Type {
     return Units.ratioToBase(family, member) === undefined ? undefined : primitiveType('number')
   }
 
+  /** requiredSentence returns the sentence a field's `required` trait states, when it has one. */
+  static requiredSentence(field: DataFieldDefinition): string | undefined {
+    return (field.traits?.traits ?? []).find(AST.traitIsRequired)?.sentence
+  }
+
+  /**
+   * completenessFieldsOf returns the fields whose `required` sentences a value's `Incomplete` and
+   * `Problems` read: an entity row's own fields, or the ones a projection selected. Any other type
+   * has no completeness members.
+   */
+  static completenessFieldsOf(type: TaoType): readonly DataFieldDefinition[] | undefined {
+    if (type.kind === 'entity') {
+      return Type.dataFields(type.entity)
+    }
+    return type.kind === 'item' && type.item?.projectedEntity ? type.item.dataFields ?? [] : undefined
+  }
+
+  /**
+   * isCompletenessMember is whether reading `member` on `type` is a derived completeness read. Such a
+   * member is computed from the `required` fields, never stored, so it is not a writable path.
+   */
+  static isCompletenessMember(type: TaoType, member: string): boolean {
+    return Type.completenessFieldsOf(type) !== undefined && Type.completenessMemberType(member) !== undefined
+  }
+
+  /** completenessMemberDepth returns how many members a path reads up to a completeness member. */
+  static completenessMemberDepth(root: TaoType, members: readonly string[]): number | undefined {
+    let type = root
+    for (const [index, member] of members.entries()) {
+      if (Type.isCompletenessMember(type, member)) {
+        return index + 1
+      }
+      type = Type.atMemberPath(type, [member])
+    }
+    return undefined
+  }
+
+  /** completenessMemberType resolves completeness flags and problems derived from required fields. */
+  static completenessMemberType(member: string): TaoType | undefined {
+    if (member === 'Incomplete' || member === 'IsIncomplete' || member === 'IsComplete') {
+      return primitiveType('boolean')
+    }
+    return member === 'Problems' ? { kind: 'list', element: primitiveType('text') } : undefined
+  }
+
   /** entityBuiltinMemberType resolves the runtime write-status members available on every entity. */
   static entityBuiltinMemberType(member: string): TaoType | undefined {
     if (member === 'WritesQueued' || member === 'WritesFailed') {
@@ -511,7 +560,8 @@ export class Type {
       return source.kind === 'list' && source.element?.kind === 'entity' ? source.element.entity : undefined
     }
     const sourceName = query.sourceName ?? query.name
-    return Type.visibleDataEntities(query).find(entity => entity.name === sourceName)
+    return AST.visibleFileDeclarations(query, AST.isEntityDataDeclaration, entity => entity.name)
+      .find(entity => entity.name === sourceName)
   }
 
   /** dataEntityName returns the durable singular name stored in provider envelopes. */
@@ -541,7 +591,8 @@ export class Type {
    * the same as the entity it references. */
   static dataFieldRelationName(field: DataFieldDefinition): string {
     const traits = field.traits?.traits ?? []
-    return traits.find(trait => trait.relationName)?.relationName
+    return field.typeName
+      ?? traits.find(trait => trait.relationName)?.relationName
       ?? traits.find(trait => trait.referenceName)?.referenceName
       ?? field.name
   }
@@ -562,9 +613,11 @@ export class Type {
       return undefined
     }
     const relationName = Type.dataFieldRelationName(field)
-    return Type.topLevelDataEntities(field).find(entity =>
-      entity.singularName === relationName || entity.name === relationName
-    )
+    return AST.visibleFileDeclarations(
+      field,
+      AST.isEntityDataDeclaration,
+      entity => entity.name === relationName ? entity.name : entity.singularName,
+    ).find(entity => entity.singularName === relationName || entity.name === relationName)
   }
 
   /** dataFieldIsInverseRelation distinguishes plural owner-side relations from stored handles. */
@@ -572,8 +625,7 @@ export class Type {
     if (field.primitive || field.boolean) {
       return false
     }
-    const relationName = Type.dataFieldRelationName(field)
-    return Type.topLevelDataEntities(field).some(entity => entity.name === relationName)
+    return Type.dataFieldRelationEntity(field)?.name === Type.dataFieldRelationName(field)
   }
 
   /** topLevelDataEntities returns the current provider-neutral catalog declarations in a file. */
@@ -594,7 +646,8 @@ export class Type {
     }
     const relation = Type.dataFieldRelationEntity(field)
     if (!relation) {
-      return unresolvedType()
+      const definition = visibleTypeDeclaration(field, field.typeName ?? field.name)
+      return definition ? Type.ofDefinition(definition) : unresolvedType()
     }
     return Type.dataFieldIsInverseRelation(field)
       ? { kind: 'list', element: { kind: 'entity', entity: relation } }
@@ -897,6 +950,10 @@ function memberType(current: TaoType, member: string): TaoType | undefined {
   if (family) {
     return Type.unitMemberType(family, member)
   }
+  const completeness = Type.completenessFieldsOf(current) && Type.completenessMemberType(member)
+  if (completeness) {
+    return completeness
+  }
   if (current.kind === 'entity') {
     if (member === 'Id') {
       return primitiveType('text')
@@ -986,7 +1043,7 @@ class TypeResolutionContext {
           : unresolvedType()
       },
       WhenExpression: when => this.whenExpressionType(when),
-      FunctionCallExpression: call => call.function.ref ? this.ofFunctionReturn(call.function.ref) : unresolvedType(),
+      FunctionCallExpression: call => this.functionCallExpressionType(call),
       InterpolatedString: () => primitiveType('text'),
       ListLiteral: list => this.listLiteralType(list),
       MemberAccessExpression: access => this.ofMemberAccess(access),
@@ -995,7 +1052,7 @@ class TypeResolutionContext {
       StringLiteral: () => primitiveType('text'),
       TypedConstructor: constructor => Type.ofConstructorReference(constructor.type),
       UnaryExpression: unary => this.unaryExpressionType(unary),
-      ValueReference: reference => this.ofValueDeclaration(reference.target.ref),
+      ValueReference: reference => this.ofContextualValue(reference.target.ref, reference),
     })
   }
 
@@ -1059,8 +1116,22 @@ class TypeResolutionContext {
   }
 
   ofMemberAccess(expression: AST.MemberAccessExpression): TaoType {
-    const rootType = this.ofValueDeclaration(expression.target.ref)
-    return this.atMemberPath(rootType, expression.members)
+    const target = expression.target.ref
+    // A shade is a design color family member (`schemeAccent.20`); nothing else has one.
+    if (expression.shade !== undefined) {
+      return AST.isDesignColorEntry(target) && AST.designColorShade(target, expression.shade)
+        ? primitiveType('color')
+        : unresolvedType()
+    }
+    return this.atMemberPath(this.ofContextualValue(target, expression), expression.members)
+  }
+
+  ofContextualValue(declaration: AST.ValueDeclaration | undefined, context: AST.Node): TaoType {
+    if (AST.isAuthLibraryDeclaration(declaration, 'Account')) {
+      const entity = Type.visibleDataEntities(context).find(candidate => candidate.singularName === 'Account')
+      return entity ? { kind: 'entity', entity } : unresolvedType()
+    }
+    return this.ofValueDeclaration(declaration)
   }
 
   ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
@@ -1082,7 +1153,10 @@ class TypeResolutionContext {
       DatasourceDeclaration: declaration =>
         declaration.value ? this.ofExpression(declaration.value) : primitiveType('datasource'),
       DesignDeclaration: () => primitiveType('design'),
+      DesignColorEntry: () => primitiveType('color'),
+      DesignToken: () => primitiveType('color'),
       NavDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('nav'),
+      PhraseDeclaration: () => primitiveType('text'),
       StateDeclaration: state => this.stateDeclarationType(state),
       ViewDeclaration: declaration => primitiveType(declaration.scene ? 'scene' : 'view'),
       undefined: unresolvedType,
@@ -1114,6 +1188,15 @@ class TypeResolutionContext {
         writable: parameterRequiresWritable(parameter),
       })),
     )
+  }
+
+  /** A call's target links to a pure function or a phrase; a phrase always returns text. */
+  private functionCallExpressionType(call: AST.FunctionCallExpression): TaoType {
+    const target = call.function.ref
+    if (!target) {
+      return unresolvedType()
+    }
+    return AST.isPhraseDeclaration(target) ? primitiveType('text') : this.ofFunctionReturn(target)
   }
 
   ofFunctionReturn(declaration: AST.FunctionDeclaration): TaoType {

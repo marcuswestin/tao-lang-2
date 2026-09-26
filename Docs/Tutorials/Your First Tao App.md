@@ -168,12 +168,12 @@ Add the entity after `design`:
 
 ```tao edit after=design
 data Books / Book {
-   Title text
-   Author text (default "Unknown")
-   Finished yes / Reading no
-   AddedAt time (default now)
+   Title text,
+   Author text (default "Unknown"),
+   Finished yes / Reading no,
+   AddedAt time (default now),
 
-   order by AddedAt
+   order by AddedAt,
 }
 ```
 
@@ -219,7 +219,7 @@ And replace `scene BookList()` with this, followed by a new `view BookRow(Book)`
 ```tao edit
 scene BookList() {
    Title "Reading List"
-   query Books { }
+   query Books = Books with { }
    render ScrollView() [screen] {
       Col() [width max 960, centered, gap 10] {
          Text("Reading List") [title]
@@ -243,7 +243,7 @@ view BookRow(Book) {
 
 Four new ideas:
 
-- **`query Books { }`** is a reactive list. Declare it before you use it; when rows change, the
+- **`query Books = Books with { }`** is a reactive list. Declare it before you use it; when rows change, the
   screen re-renders.
 - **`guard`** handles a value's exceptional states. If a case matches, it renders and the rest of
   the enclosing block does not — so the lines after it can assume the data is there. `error ->
@@ -275,9 +275,9 @@ change:
 scene BookList() {
    Title "Reading List"
    state NewTitle = ""
-   query Books { }
+   query Books = Books with { }
    action AddBook() {
-      guard NewTitle empty
+      check NewTitle is not empty
       create Book {
          Title: NewTitle
       }
@@ -312,8 +312,8 @@ scene BookList() {
   in both directions, so typing updates it with no handler of your own.
 - **`action AddBook()`** groups what happens on an event. `on press AddBook` and `on submit AddBook`
   both run it, so Enter in the field and the button do the same thing.
-- **`guard NewTitle empty`** with no branch body is an early exit: if the title is empty, the action
-  stops there.
+- **`check NewTitle is not empty`** is the action's early exit: if the title is empty, the action
+  stops there and nothing is created. (`guard`, below, is the view-side construct.)
 - **`create Book { Title: NewTitle }`** writes a row. `Author`, `Finished`, and `AddedAt` all have
   defaults, so naming `Title` is enough.
 - **`Disabled: NewTitle is empty`** — `is empty` tests text, lists, and queries.
@@ -354,7 +354,7 @@ scene BookScreen(Book) {
    state TitleDraft = Book.Title
    state AuthorDraft = Book.Author
    action Save() {
-      guard TitleDraft empty
+      check TitleDraft is not empty
       update Book {
          Title: TitleDraft
          Author: AuthorDraft
@@ -497,15 +497,15 @@ becomes a `Panes` with one column each:
 scene BookList() {
    Title "Reading List"
    state NewTitle = ""
-   query Books { }
-   query Books as CurrentlyReading {
+   query Books = Books with { }
+   query CurrentlyReading = Books with {
       where is Reading
    }
-   query Books as FinishedBooks {
+   query FinishedBooks = Books with {
       where is Finished
    }
    action AddBook() {
-      guard NewTitle empty
+      check NewTitle is not empty
       create Book {
          Title: NewTitle
       }
@@ -652,12 +652,12 @@ design ReadingListDesign {
 }
 
 data Books / Book {
-   Title text
-   Author text (default "Unknown")
-   Finished yes / Reading no
-   AddedAt time (default now)
+   Title text,
+   Author text (default "Unknown"),
+   Finished yes / Reading no,
+   AddedAt time (default now),
 
-   order by AddedAt
+   order by AddedAt,
 }
 
 nav LibraryStack = StackNav {
@@ -681,15 +681,15 @@ nav ReadingListNavigator = SelectionNav {
 scene BookList() {
    Title "Reading List"
    state NewTitle = ""
-   query Books { }
-   query Books as CurrentlyReading {
+   query Books = Books with { }
+   query CurrentlyReading = Books with {
       where is Reading
    }
-   query Books as FinishedBooks {
+   query FinishedBooks = Books with {
       where is Finished
    }
    action AddBook() {
-      guard NewTitle empty
+      check NewTitle is not empty
       create Book {
          Title: NewTitle
       }
@@ -743,7 +743,7 @@ scene BookScreen(Book) {
    state TitleDraft = Book.Title
    state AuthorDraft = Book.Author
    action Save() {
-      guard TitleDraft empty
+      check TitleDraft is not empty
       update Book {
          Title: TitleDraft
          Author: AuthorDraft

@@ -20,8 +20,8 @@ Describe('project development session ownership', () => {
       await until(() => output.includes('READY') ? true : undefined, {
         description: 'the child to claim the project',
       })
-      await Expect(async () => ProjectDevSession.acquire(root, 'studio'))
-        .toThrow('already owned by cli session')
+      await Expect(ProjectDevSession.acquire(root, 'studio'))
+        .rejects.toThrow('already owned by cli session')
       const owner = await FS.readJson<{ id: string }>(FS.resolvePath('.tao/sessions/owner.json', root))
       child.kill('SIGKILL')
       await child.waitForClose()

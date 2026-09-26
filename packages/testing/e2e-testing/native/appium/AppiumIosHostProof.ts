@@ -162,6 +162,9 @@ export function appiumIosJourneyAdapter(
       }
       try {
         await Switch.kind(operation, {
+          network: unsupportedJourneyOperation,
+          waitForSync: unsupportedJourneyOperation,
+          datasourceFailure: unsupportedJourneyOperation,
           advance: async next =>
             await advanceNativeClock(
               session,

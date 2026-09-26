@@ -1,0 +1,108 @@
+#!/usr/bin/env bun
+import { Errors, FS, HCI, Platform } from '@shared'
+import { accountPolicyFromJSON } from './AccountPolicy'
+import { AccountServer, type AccountServerOptions } from './AccountServer'
+
+/** startAccountServerFromArguments starts only from an explicit trusted policy file. */
+export async function startAccountServerFromArguments(args: readonly string[]): Promise<AccountServer> {
+  const values = new Map<string, string>()
+  const allowedOrigins: string[] = []
+  const names = [
+    '--policy',
+    '--database',
+    '--port',
+    '--resource',
+    '--issuer',
+    '--origin',
+    '--ready-file',
+    '--instant-config',
+  ]
+  for (let index = 0; index < args.length; index += 2) {
+    const name = args[index]!
+    const value = args[index + 1]
+    if (!names.includes(name) || value === undefined || value.startsWith('--') || value.trim() === '') {
+      Errors.throwUserInput(
+        'Use --policy PATH [--database PATH] [--port PORT] [--resource NAME] [--issuer NAME] [--origin URL] [--instant-config PATH].',
+      )
+    }
+    if (name === '--origin') {
+      allowedOrigins.push(new URL(value).origin)
+    } else {
+      if (values.has(name)) {
+        Errors.throwUserInput(`Account server option '${name}' was repeated.`)
+      }
+      values.set(name, value)
+    }
+  }
+  const policyPath = values.get('--policy')
+  if (policyPath === undefined) {
+    Errors.throwUserInput('Pass --policy with the compiler-emitted TaoDataPolicy.json path.')
+  }
+  const port = Number(values.get('--port') ?? '4738')
+  if (!Number.isSafeInteger(port) || port < 0 || port > 65_535) {
+    Errors.throwUserInput('Account server port must be an integer from 0 through 65535.')
+  }
+  const resource = values.get('--resource') ?? 'auth-review'
+  const instantPath = values.get('--instant-config')
+  const instant = instantPath === undefined ? undefined : await readInstantConfiguration(instantPath)
+  const server = await AccountServer.start({
+    allowedOrigins,
+    databasePath: FS.resolvePath(values.get('--database') ?? '.artifacts/auth-review/accounts.sqlite'),
+    issuer: values.get('--issuer') ?? `tao-local:${resource}`,
+    ...(instant === undefined ? {} : { instant }),
+    policy: accountPolicyFromJSON(await FS.readJson<unknown>(FS.resolvePath(policyPath))),
+    port,
+    resource,
+  })
+  const readyPath = values.get('--ready-file')
+  try {
+    if (readyPath !== undefined) {
+      await FS.writeJson(FS.resolvePath(readyPath), { resource, url: server.url })
+    }
+    return server
+  } catch (error) {
+    await server.stop()
+    throw error
+  }
+}
+
+async function readInstantConfiguration(path: string): Promise<NonNullable<AccountServerOptions['instant']>> {
+  let value: unknown
+  try {
+    value = await FS.readJson<unknown>(FS.resolvePath(path))
+  } catch {
+    Errors.throwUserInput(
+      'Unable to read the Instant configuration file. Provide a JSON file with apiURI, appId, and adminToken.',
+    )
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    Errors.throwUserInput('Instant configuration must contain apiURI, appId, and adminToken.')
+  }
+  const configuration = value as Record<string, unknown>
+  const keys = ['apiURI', 'appId', 'adminToken']
+  if (
+    Object.keys(configuration).length !== keys.length
+    || keys.some(key => typeof configuration[key] !== 'string' || (configuration[key] as string).trim() === '')
+  ) {
+    Errors.throwUserInput('Instant configuration must contain only nonempty apiURI, appId, and adminToken strings.')
+  }
+  return configuration as NonNullable<AccountServerOptions['instant']>
+}
+
+if (import.meta.main) {
+  try {
+    const server = await startAccountServerFromArguments(Platform.runtimeProcess.argv.slice(2))
+    const stop = (): void => {
+      void server.stop().then(() => Platform.runtimeProcess.exit(0)).catch(error => {
+        HCI.writeLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      })
+    }
+    Platform.onProcessSignal('SIGINT', stop)
+    Platform.onProcessSignal('SIGTERM', stop)
+    HCI.writeLine(`Tao account reference server listening on ${server.url}.`)
+  } catch (error) {
+    HCI.writeLine(Errors.formatForUser(error))
+    Platform.runtimeProcess.setExitCode(1)
+  }
+}

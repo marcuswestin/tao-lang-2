@@ -2,6 +2,10 @@ import { Langium } from './langium-exports'
 import type { PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
 
+type BuildCacheResolver = PackageResolver & {
+  clearPhysicalPathCache?: () => void
+}
+
 /** ValueScopeProvider resolves value references through Tao binding and parameter visibility. */
 export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   /**
@@ -9,26 +13,37 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
    * statement above it, and each answer filters the whole workspace, so without this the link phase
    * costs references times imports times documents.
    *
-   * An answer depends on which documents the workspace holds, so it may outlive nothing that changes
-   * them. `Parser.parse` replaces every document it builds, which retires their use statements and
-   * these entries with them; that is why the keys are held weakly. The editor instead updates
-   * documents in place and relinks the ones a change may have moved, so the table is dropped when
-   * an update starts and again when any build finishes parsing, which is after the last syntax tree
-   * is replaced and before the first reference is linked against it.
+   * These answers and package boundary paths depend on the current documents and file system.
+   * `Parser.parse` replaces every document it builds, which retires use statements; that is why
+   * their keys are held weakly. The editor instead updates documents in place and relinks the ones
+   * a change may have moved, so these caches are dropped when an update starts and again when any
+   * build finishes parsing, which is after the last syntax tree is replaced and before the first
+   * reference is linked against it.
    */
   private useTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, AST.Declaration[]>()
+
+  /**
+   * The design colors each file's project mounts, the outer layer of every design color name in that
+   * file. It reads every project file's apps, so without this each lowercase argument and default paid
+   * for the project walk again. It depends on the same documents a use target does and is forgotten
+   * at the same moments.
+   */
+  private mountedColors = new WeakMap<AST.TaoFile, readonly AST.DesignColor[]>()
 
   constructor(
     private readonly coreServices: Langium.LangiumCoreServices,
     private readonly packages: PackageResolver,
   ) {
     super(coreServices)
-    const forgetUseTargets = (): void => {
+    const forgetBuildCaches = (): void => {
       this.useTargets = new WeakMap()
+      this.mountedColors = new WeakMap()
+      const packages = this.packages as BuildCacheResolver
+      packages.clearPhysicalPathCache?.()
     }
     const builder = coreServices.shared.workspace.DocumentBuilder
-    builder.onUpdate(forgetUseTargets)
-    builder.onBuildPhase(Langium.DocumentState.Parsed, forgetUseTargets)
+    builder.onUpdate(forgetBuildCaches)
+    builder.onBuildPhase(Langium.DocumentState.Parsed, forgetBuildCaches)
   }
 
   /** getScope returns Tao values visible to a value reference. */
@@ -43,7 +58,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       if (AST.isDataWriteField(context.container.$container)) {
         return this.createDataWriteValueScope(context.container)
       }
-      return this.createValueScope(context.container)
+      return this.createValueScope(context.container, this.createDesignColorScope(context))
     }
     if (context.property === 'target' && AST.isRefinementExpression(context.container)) {
       return this.createPatchBaseScope(context.container)
@@ -52,7 +67,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createConfigurationReferenceScope(context.container)
     }
     if (context.property === 'target' && AST.isMemberAccessExpression(context.container)) {
-      return this.createValueScope(context.container)
+      return this.createValueScope(context.container, this.createDesignColorScope(context))
     }
     if (context.property === 'case' && AST.isBooleanWhereClause(context.container)) {
       return this.createBooleanWhereScope(context.container)
@@ -122,22 +137,37 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'view' && AST.isAppView(context.container)) {
       return this.createAppViewScope(context.container)
     }
-    if (context.property === 'entity' && AST.isCreateStatement(context.container)) {
+    if (
+      context.property === 'entity'
+      && (AST.isCreateStatement(context.container) || AST.isAccessDeclaration(context.container))
+    ) {
       return this.createEntityDataScope(context.container)
     }
-    if (context.property === 'entity' && AST.isFixtureCreateBinding(container)) {
+    if (
+      context.property === 'entity'
+      && (AST.isFixtureCreateBinding(container) || AST.isFixtureCreateStatement(container))
+    ) {
       return this.createEntityDataScope(container)
     }
     if (context.property === 'action' && AST.isFixtureThroughClause(container)) {
       return this.createDeclarationScope(container, AST.isActionDeclaration)
     }
-    if (context.property === 'account' && AST.isFixtureCreateBinding(container)) {
+    if (context.property === 'action' && AST.isActionFailureStubStep(container)) {
+      return this.createDeclarationScope(container, AST.isActionDeclaration)
+    }
+    if (
+      context.property === 'account'
+      && (AST.isFixtureCreateBinding(container) || AST.isFixtureCreateStatement(container)
+        || AST.isFixtureSignedInClause(container))
+    ) {
       return this.createFixtureAccountScope(container)
     }
     if (context.property === 'target' && AST.isFixtureValueReference(container)) {
       return this.createFixtureValueScope(container)
     }
-    if (context.property === 'fixture' && AST.isScenarioFixtureClause(container)) {
+    if (
+      context.property === 'fixture' && (AST.isScenarioFixtureClause(container) || AST.isTestFixtureClause(container))
+    ) {
       return this.createFixtureDeclarationScope(container)
     }
     if (context.property === 'target' && AST.isScenarioPrepareUpdate(container)) {
@@ -191,6 +221,51 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     )
   }
 
+  /**
+   * A design color name is a value only as an argument or a parameter default, where a `color` may be
+   * expected (Decisions §13). It is resolved against the designs this project's apps mount, as the
+   * outermost layer, so any Tao value of the same name shadows it; the argument binding and the
+   * default's declared type then decide whether a `color` was expected there. Design names are
+   * lowercase and values are Capitalized, so only a lowercase name pays for the project walk.
+   *
+   * A name links when any mounted design declares it; the validator then requires every mounted
+   * design to declare it. A shade (`accent.20`) links to a color whose family declares that shade
+   * wherever one exists, so whether it types as a `color` never depends on which design came first.
+   */
+  private createDesignColorScope(context: Langium.ReferenceInfo): Langium.Scope | undefined {
+    if (!/^[a-z]/.test(context.reference.$refText) || !AST.isDesignColorPosition(context.container)) {
+      return undefined
+    }
+    const root = AST.findRoot(context.container)
+    if (!AST.isTaoFile(root)) {
+      return undefined
+    }
+    const colors = this.mountedDesignColors(root)
+    const shade = AST.isMemberAccessExpression(context.container) ? context.container.shade : undefined
+    if (shade === undefined) {
+      return this.createScopeForNodes(colors)
+    }
+    const shaded = colors.filter(color => AST.isDesignColorEntry(color) && AST.designColorShade(color, shade))
+    return this.createScopeForNodes([...shaded, ...colors])
+  }
+
+  private mountedDesignColors(root: AST.TaoFile): readonly AST.DesignColor[] {
+    const known = this.mountedColors.get(root)
+    if (known !== undefined) {
+      return known
+    }
+    const workspaceFiles = Array.from(this.coreServices.shared.workspace.LangiumDocuments.all)
+      .map(document => document.parseResult.value)
+      .filter(AST.isTaoFile)
+    const projectFiles = this.packages.projectSourceFiles({
+      fromFilePath: AST.getDocument(root).uri.path,
+      workspaceFiles,
+    })
+    const colors = AST.mountedDesigns(projectFiles).flatMap(AST.designColorsOf)
+    this.mountedColors.set(root, colors)
+    return colors
+  }
+
   private createValueScope(reference: AST.Node, outer?: Langium.Scope): Langium.Scope {
     const root = AST.findRoot(reference)
     if (!AST.isTaoFile(root)) {
@@ -227,6 +302,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     const owningFunction = AST.findOwningFunction(reference)
     if (owningFunction) {
       scope = this.createScopeForParameters(owningFunction, scope, reference)
+    }
+
+    const owningPhrase = AST.findOwningPhrase(reference)
+    if (owningPhrase) {
+      scope = this.createScopeForParameters(owningPhrase, scope, reference)
     }
 
     const owningAction = AST.findOwningAction(reference)
@@ -429,8 +509,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScopeForNodes(target ? AST.renderSlotDeclarationsOf(target) : [])
   }
 
+  /** A call resolves a pure function or named copy; both share the one call shape (Decisions §14). */
   private createFunctionScope(call: AST.FunctionCallExpression): Langium.Scope {
-    return this.createDeclarationScope(call, AST.isFunctionDeclaration)
+    return this.createDeclarationScope(call, AST.isCallableDeclaration)
   }
 
   private createAppViewScope(node: AST.AppView): Langium.Scope {
@@ -484,7 +565,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     const declarations = [
       ...root.statements.filter(AST.isEntityDataDeclaration),
-      ...this.importedDeclarations(node, AST.isEntityDataDeclaration),
+      ...this.importedDeclarations(node, AST.isEntityDataDeclaration, declaration => declaration.singularName),
     ]
     const descriptions = declarations.map(declaration =>
       this.descriptions.createDescription(declaration, declaration.singularName, AST.getDocument(declaration))
@@ -492,7 +573,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return this.createScope(descriptions)
   }
 
-  private createFixtureDeclarationScope(node: AST.ScenarioFixtureClause): Langium.Scope {
+  private createFixtureDeclarationScope(node: AST.ScenarioFixtureClause | AST.TestFixtureClause): Langium.Scope {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
@@ -519,7 +600,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return scope
   }
 
-  private createFixtureAccountScope(node: AST.FixtureCreateBinding): Langium.Scope {
+  private createFixtureAccountScope(
+    node: AST.FixtureCreateBinding | AST.FixtureCreateStatement | AST.FixtureSignedInClause,
+  ): Langium.Scope {
     return this.createScopeForNodes(this.fixtureValuesBefore(node).filter(AST.isFixtureAccountDeclaration))
   }
 
@@ -653,7 +736,16 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createUseImportScope(useStatement: AST.UseStatement): Langium.Scope {
-    return this.createScopeForNodes(this.collectTargetDeclarations(useStatement))
+    return this.createImportTargetScope(this.collectTargetDeclarations(useStatement))
+  }
+
+  private createImportTargetScope(declarations: AST.Declaration[]): Langium.Scope {
+    return this.createScope(declarations.flatMap(declaration => {
+      const names = AST.isEntityDataDeclaration(declaration)
+        ? [declaration.name, declaration.singularName]
+        : [declaration.name]
+      return names.map(name => this.descriptions.createDescription(declaration, name, AST.getDocument(declaration)))
+    }))
   }
 
   /** A namespace name resolves only against this file's own use-package statements. */
@@ -676,7 +768,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!AST.isUsePackageStatement(statement)) {
       return this.createScopeForNodes([])
     }
-    return this.createScopeForNodes(this.collectTargetDeclarations(statement))
+    return this.createImportTargetScope(this.collectTargetDeclarations(statement))
   }
 
   private importedCaseSetCases(node: AST.Node): AST.CaseSetCase[] {
@@ -714,6 +806,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   private importedDeclarations<DeclarationT extends AST.Declaration>(
     node: AST.Node,
     isDeclaration: (node: AST.Node) => node is DeclarationT,
+    importedName: (declaration: DeclarationT) => string = declaration => declaration.name,
   ): DeclarationT[] {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
@@ -726,7 +819,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     for (const useStatement of root.statements.filter(AST.isUseStatement)) {
       const importedNames = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
       for (const statement of this.collectTargetDeclarations(useStatement, currentPath)) {
-        if (AST.isDeclaration(statement) && isDeclaration(statement) && importedNames.has(statement.name)) {
+        if (AST.isDeclaration(statement) && isDeclaration(statement) && importedNames.has(importedName(statement))) {
           declarations.push(statement)
         }
       }
@@ -817,8 +910,8 @@ function entityDataForValueDeclaration(
   if (AST.isParameterDeclaration(declaration)) {
     const type = declaration.inlineType ? declaration.inlineType.type : declaration.type
     if (AST.isNamedTypeReference(type) && type.members.length === 0) {
-      return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
-        entity.singularName === type.root
+      return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration, entity => entity.singularName).find(
+        entity => entity.singularName === type.root,
       )
     }
   }
@@ -845,22 +938,23 @@ function booleanFieldForCaseTest(test: AST.CaseTestExpression): AST.EntityDataFi
     if (index === subject.members.length - 1) {
       return field.boolean ? field : undefined
     }
-    entity = relationEntityForField(field, test)
+    entity = relationEntityForField(field)
   }
   return undefined
 }
 
 function relationEntityForField(
   field: AST.EntityDataField,
-  context: AST.Node,
 ): AST.EntityDataDeclaration | undefined {
   if (field.primitive || field.boolean) {
     return undefined
   }
-  const relationName = field.name
-  return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
-    entity.singularName === relationName || entity.name === relationName
-  )
+  const relationName = field.typeName ?? field.name
+  return AST.visibleFileDeclarations(
+    field,
+    AST.isEntityDataDeclaration,
+    entity => entity.name === relationName ? entity.name : entity.singularName,
+  ).find(entity => entity.singularName === relationName || entity.name === relationName)
 }
 
 function entityDataForCollection(
@@ -887,7 +981,8 @@ function entityDataForQuery(query: AST.EntityQueryDeclaration): AST.EntityDataDe
     return entityDataForCollection(query.source, query)
   }
   const sourceName = query.sourceName ?? query.name
-  return AST.visibleFileDeclarations(query, AST.isEntityDataDeclaration).find(entity => entity.name === sourceName)
+  return AST.visibleFileDeclarations(query, AST.isEntityDataDeclaration, entity => entity.name)
+    .find(entity => entity.name === sourceName)
 }
 
 type ScopeCarrier =
@@ -907,7 +1002,8 @@ function scopeCarriersContaining(node: AST.Node): ScopeCarrier[] {
       carriers.push({ kind: 'action-block', block: current })
     }
     if (
-      (AST.isGuardActionBranch(current) || AST.isGuardRenderBranch(current) || AST.isWhenRenderBranch(current))
+      (AST.isGuardActionBranch(current) || AST.isGuardRenderBranch(current) || AST.isWhenRenderBranch(current)
+        || AST.isWhenDoOutcome(current) || AST.isGuardDefaultBranch(current))
       && current.payload
     ) {
       carriers.push({ kind: 'payload', payload: current.payload })

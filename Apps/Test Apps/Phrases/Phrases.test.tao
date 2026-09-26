@@ -1,0 +1,14 @@
+use Phrases from ./
+
+test "Phrases" {
+   test "renders plural forms as a count changes, and a parameterless phrase" {
+      run Phrases
+
+      expect text "0 items"
+      expect text "That document is gone."
+      press "Add item"
+      expect text "1 item"
+      press "Add item"
+      expect text "2 items"
+   }
+}

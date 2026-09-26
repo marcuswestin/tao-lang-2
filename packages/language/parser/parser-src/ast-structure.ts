@@ -157,12 +157,14 @@ export function configurableTypeAliasResolution(
     : { kind: 'invalid', target: current }
 }
 
-/** resolvedImportedDeclarations returns every requested declaration, preserving type/value namespace peers. */
+/** resolvedImportedDeclarations returns requested declarations, preserving identity across data forms and namespace peers. */
 export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AST.Declaration[] {
   const names = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
   const declarations = resolvedUseTargets.get(useStatement)
     ?? useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isDeclaration)
-  return declarations.filter(declaration => names.has(declaration.name))
+  return [...new Set(declarations)].filter(declaration =>
+    names.has(declaration.name) || (AST.isEntityDataDeclaration(declaration) && names.has(declaration.singularName))
+  )
 }
 
 type ArgumentListOwner =
@@ -222,6 +224,31 @@ export function scenarioGroupClauses(group: AST.ScenarioGroupDeclaration): AST.S
 /** scenarioSteps returns one entry's interaction prefix in authored replay order. */
 export function scenarioSteps(scenario: AST.ScenarioDeclaration): AST.ScenarioStep[] {
   return scenario.block.steps
+}
+
+/** findOwningTest returns the nearest test containing `node`, if any, excluding `node` itself. */
+export function findOwningTest(node: AST.Node): AST.TestDeclaration | undefined {
+  return findAncestor(node, AST.isTestDeclaration, false)
+}
+
+/**
+ * effectiveTestClause resolves one test's device/fixture clause over its nearest ancestor test's,
+ * walking up through however many tests it is nested inside. A nested test that repeats the clause
+ * overrides every ancestor's; one that does not inherits the nearest ancestor that does.
+ */
+export function effectiveTestClause<ClauseT extends AST.TestHeadClause>(
+  test: AST.TestDeclaration,
+  predicate: (clause: AST.TestHeadClause) => clause is ClauseT,
+): ClauseT | undefined {
+  let current: AST.TestDeclaration | undefined = test
+  while (current) {
+    const own = current.headClauses.find(predicate)
+    if (own) {
+      return own
+    }
+    current = findOwningTest(current)
+  }
+  return undefined
 }
 
 /** effectiveScenarioClause resolves one entry clause over the matching group default. */
@@ -311,6 +338,7 @@ export type ImportableValueDeclaration =
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
+  | AST.PhraseDeclaration
   | AST.ViewDeclaration
 
 /** importableValueDeclarationsInFile returns file-level value declarations visible to other files. */
@@ -423,6 +451,11 @@ export function traitIsTitle(trait: AST.Trait): boolean {
   return trait.word === 'title'
 }
 
+/** traitIsRequired identifies `required "<sentence>"`: completeness that never blocks a write. */
+export function traitIsRequired(trait: AST.Trait): trait is AST.Trait & { sentence: string } {
+  return trait.sentence !== undefined
+}
+
 /** loopSelectHandlers returns the direct row-selection handlers declared by one loop. */
 export function loopSelectHandlers(loop: AST.ForStatement): AST.LoopSelectHandler[] {
   return loop.block.statements.filter(AST.isLoopSelectHandler)
@@ -507,11 +540,41 @@ export function isImportableValueDeclaration(node: AST.Node): node is Importable
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
     || AST.isDesignDeclaration(node)
+    || AST.isPhraseDeclaration(node)
     || AST.isViewDeclaration(node)
 }
 
 /** ConfigurableDeclaration is an ordinary type whose primitive family is app, nav, or datasource. */
 export type ConfigurableDeclaration = AST.TypeDeclaration
+
+/** ConfigurationFamily includes the library-defined auth provider contract without a new keyword. */
+export type ConfigurationFamily = AST.ConfigurationPrimitive | 'auth'
+
+/** isAuthLibraryDeclaration recognizes contextual exports by their canonical package source. */
+export function isAuthLibraryDeclaration(declaration: AST.Node | undefined, name: string): boolean {
+  return (AST.isTypeDeclaration(declaration) || AST.isAliasDeclaration(declaration)
+    || AST.isActionDeclaration(declaration) || AST.isFunctionDeclaration(declaration)
+    || AST.isViewDeclaration(declaration))
+    && declaration.name === name
+    && getDocument(declaration).uri.path.endsWith('/@tao/auth/Auth.tao')
+}
+
+/** authAccountPath identifies symbolic current-account scopes without reading a live session. */
+export function authAccountPath(expression: AST.Expression, seen = new Set<AST.Node>()): string[] | undefined {
+  if (!AST.isValueReference(expression) && !AST.isMemberAccessExpression(expression)) {
+    return undefined
+  }
+  const declaration = expression.target.ref
+  const members = AST.isMemberAccessExpression(expression) ? expression.members : []
+  if (isAuthLibraryDeclaration(declaration, 'Account')) {
+    return members
+  }
+  if (!AST.isAliasDeclaration(declaration) || seen.has(declaration)) {
+    return undefined
+  }
+  const root = authAccountPath(declaration.value, new Set(seen).add(declaration))
+  return root ? [...root, ...members] : undefined
+}
 
 /** ConfigurationProperty is one ordinary type slot or one keyed-item property. */
 export type ConfigurationProperty = AST.TypeProperty | AST.ConfigurationPropertyDeclaration
@@ -525,11 +588,14 @@ export function isConfigurableDeclaration(node: AST.Node): node is ConfigurableD
 export function configurationPrimitiveOf(
   declaration: AST.TypeDeclaration,
   seen: Set<AST.TypeDeclaration> = new Set(),
-): AST.ConfigurationPrimitive | undefined {
+): ConfigurationFamily | undefined {
   if (seen.has(declaration)) {
     return undefined
   }
   seen.add(declaration)
+  if (isAuthLibraryDeclaration(declaration, 'AuthProvider')) {
+    return 'auth'
+  }
   if (declaration.aliasTarget) {
     const target = declaration.aliasTarget.member.ref
     return AST.isTypeDeclaration(target) ? configurationPrimitiveOf(target, seen) : undefined
@@ -612,7 +678,7 @@ export function configurationPropertyIsKey(property: ConfigurationProperty): boo
 function configurationPrimitiveOfTypeExpression(
   type: AST.TypeExpression,
   seen: Set<AST.TypeDeclaration>,
-): AST.ConfigurationPrimitive | undefined {
+): ConfigurationFamily | undefined {
   const base = AST.isDerivedTypeExpression(type) ? type.base : type
   if (AST.isPrimitiveTypeReference(base)) {
     return AST.isConfigurationPrimitive(base.primitive) ? base.primitive : undefined
@@ -628,10 +694,11 @@ function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclarati
   return visibleFileDeclarations(node, AST.isTypeDeclaration).find(declaration => declaration.name === name)
 }
 
-/** visibleFileDeclarations returns a file's own and use-imported declarations matching `guard`. */
+/** visibleFileDeclarations returns local, folder-visible and imported declarations, optionally selecting one import form. */
 export function visibleFileDeclarations<DeclarationT extends AST.Node>(
   node: AST.Node,
   guard: (candidate: unknown) => candidate is DeclarationT,
+  importedName?: (declaration: DeclarationT) => string,
 ): DeclarationT[] {
   const root = findRoot(node)
   if (!AST.isTaoFile(root)) {
@@ -643,12 +710,29 @@ export function visibleFileDeclarations<DeclarationT extends AST.Node>(
       declarations.push(statement)
     }
   }
+  const currentPath = AST.getDocument(root).uri.path
+  const currentDirectory = currentPath.slice(0, currentPath.lastIndexOf('/'))
+  for (const file of visibleWorkspaceFiles.get(root) ?? []) {
+    const path = AST.getDocument(file).uri.path
+    if (file === root || isTestSidecarPath(path) || path.slice(0, path.lastIndexOf('/')) !== currentDirectory) {
+      continue
+    }
+    for (const statement of file.statements) {
+      if (guard(statement) && 'visibility' in statement && statement.visibility === 'folder') {
+        declarations.push(statement)
+      }
+    }
+  }
   for (const statement of root.statements) {
     if (!AST.isUseStatement(statement)) {
       continue
     }
     for (const declaration of resolvedImportedDeclarations(statement)) {
-      if (guard(declaration)) {
+      if (
+        guard(declaration)
+        && (!importedName
+          || statement.importedDeclarations.some(reference => reference.$refText === importedName(declaration)))
+      ) {
         declarations.push(declaration)
       }
     }
@@ -702,8 +786,11 @@ export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
   }
   for (const statement of root.statements) {
     if (AST.isUseStatement(statement)) {
+      const names = new Set(statement.importedDeclarations.map(reference => reference.$refText))
       for (const declaration of resolvedImportedDeclarations(statement)) {
-        add(declaration)
+        if (names.has(declaration.name)) {
+          add(declaration)
+        }
       }
     }
   }
@@ -797,7 +884,7 @@ export function isConcreteAppValueDeclaration(
 function configuredPrimitiveOfValueDeclaration(
   declaration: AST.RefinementBaseDeclaration | undefined,
   seen: Set<AST.AliasDeclaration> = new Set(),
-): AST.ConfigurationPrimitive | undefined {
+): ConfigurationFamily | undefined {
   if (AST.isAppDeclaration(declaration)) {
     return declaration.value ? configuredPrimitiveOfExpression(declaration.value, seen) : 'app'
   }
@@ -821,7 +908,7 @@ function configuredPrimitiveOfValueDeclaration(
 export function configuredPrimitiveOfExpression(
   expression: AST.Expression,
   seen: Set<AST.AliasDeclaration> = new Set(),
-): AST.ConfigurationPrimitive | undefined {
+): ConfigurationFamily | undefined {
   if (AST.isPrimitiveConfigurationConstructor(expression)) {
     return expression.primitive
   }
@@ -1030,6 +1117,11 @@ export function blockStatements(owner: AST.BlockStatementOwner): readonly AST.Ow
   return (owner.block?.statements || []) as readonly AST.OwnedBlockStatement[]
 }
 
+/** canonicalSubjectCase gives yes/no arms the same runtime cases as boolean subjects. */
+export function canonicalSubjectCase(name: string): string {
+  return name === 'yes' ? 'true' : name === 'no' ? 'false' : name
+}
+
 /**
  * whenExpressionOutcomes returns the values a `when` can produce and whether they cover the subject.
  * The block form is total by construction; the compact form covers both poles only when it declares
@@ -1075,6 +1167,11 @@ export function actionFailuresOf(action: AST.ActionDeclaration): AST.FailStateme
 /** findOwningFunction returns the pure function declaration that owns `node`, if any. */
 export function findOwningFunction(node: AST.Node): AST.FunctionDeclaration | undefined {
   return findAncestor(node, AST.isFunctionDeclaration)
+}
+
+/** findOwningPhrase returns the phrase declaration that owns `node`, if any. */
+export function findOwningPhrase(node: AST.Node): AST.PhraseDeclaration | undefined {
+  return findAncestor(node, AST.isPhraseDeclaration)
 }
 
 /** findOwningActionBlock returns the named or inline action block that owns `node`, if any. */

@@ -39,6 +39,7 @@ export function actionBlockRequiresAsync(
     if (
       AST.isAskStatement(statement)
       || AST.isGuardActionStatement(statement) || AST.isIfActionStatement(statement)
+      || AST.isWhenDoStatement(statement)
     ) {
       return true
     }
@@ -99,6 +100,9 @@ export function actionBlockContainsRespond(block: AST.ActionBlock | undefined): 
     }
     if (AST.isGuardActionStatement(statement)) {
       return ASTUtils.guardBranches(statement).some(branch => actionBlockContainsRespond(branch.block))
+    }
+    if (AST.isWhenDoStatement(statement)) {
+      return statement.outcomes.some(outcome => actionBlockContainsRespond(outcome.block))
     }
     return false
   }) ?? false

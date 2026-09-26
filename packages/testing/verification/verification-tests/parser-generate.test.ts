@@ -11,22 +11,22 @@ const CONFIG = {
   languages: [{
     fileExtensions: ['tao'],
     grammar: './parser-grammar/tao-grammar.langium',
-    id: 'tao-lang',
-    textMate: { out: '../../ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json' },
+    id: 'tao',
+    textMate: { out: '../../ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json' },
   }],
   out: './parser-src/_gen_tao-parser',
   projectName: 'TaoLang',
 }
 
 const GENERATED = [
-  'packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+  'packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json',
   'packages/language/parser/parser-src/_gen_tao-parser/ast.ts',
   'packages/language/parser/parser-src/_gen_tao-parser/grammar.ts',
 ]
 
 /** repository builds a parser package skeleton with the same shape the real generator reads. */
 async function repository(): Promise<string> {
-  const root = await mkTestDir('tao-parser-generate-')
+  const root = await mkTestDir('tao-parser-generate-', { location: 'host' })
   await FS.writeJson(FS.resolvePath('packages/language/parser/langium-config.json', root), CONFIG)
   await FS.writeText(
     FS.resolvePath('packages/language/parser/parser-grammar/tao-grammar.langium', root),
@@ -55,7 +55,7 @@ function generator(outcome: Partial<ParserGenerateOutcome> = {}) {
 
 Describe('parser generate staleness stamp', () => {
   Test('runs the real Langium CLI against staged copies of the repository grammar', async () => {
-    const root = await mkTestDir('tao-parser-generate-real-')
+    const root = await mkTestDir('tao-parser-generate-real-', { location: 'host' })
     const parserRoot = FS.resolvePath('packages/language/parser', root)
     try {
       await FS.copyFile(
@@ -76,7 +76,7 @@ Describe('parser generate staleness stamp', () => {
       Expect(
         await FS.isFile(
           FS.resolvePath(
-            'packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+            'packages/ides/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json',
             root,
           ),
         ),
@@ -87,8 +87,8 @@ Describe('parser generate staleness stamp', () => {
   })
 
   Test('rejects an escaping real Langium output before the CLI can mutate it', async () => {
-    const root = await mkTestDir('tao-parser-generate-escape-')
-    const externalRoot = await mkTestDir('tao-parser-generate-external-')
+    const root = await mkTestDir('tao-parser-generate-escape-', { location: 'host' })
+    const externalRoot = await mkTestDir('tao-parser-generate-external-', { location: 'host' })
     const parserRoot = FS.resolvePath('packages/language/parser', root)
     const sentinel = FS.resolvePath('sentinel.txt', externalRoot)
     try {
@@ -212,12 +212,12 @@ Describe('parser generate staleness stamp', () => {
     }
   })
 
-  Test('regenerates in host-temporary storage while the worktree tree stays in place', async () => {
+  Test('regenerates in disposable system temp while the published tree stays in place', async () => {
     const root = await repository()
     const langium = generator()
     const grammar = FS.resolvePath('packages/language/parser/parser-grammar/views.langium', root)
     const generatedAst = FS.resolvePath('packages/language/parser/parser-src/_gen_tao-parser/ast.ts', root)
-    let generatedOutsideWorktree = false
+    let generatedOutsideRepository = false
     let previousTreeStayedVisible = false
     try {
       await runParserGenerate({ generate: langium.generate, repositoryRoot: root })
@@ -226,7 +226,8 @@ Describe('parser generate staleness stamp', () => {
       Expect(
         await runParserGenerate({
           generate: async parserRoot => {
-            generatedOutsideWorktree = !FS.pathIsWithin(parserRoot, root)
+            generatedOutsideRepository = !FS.pathIsWithin(parserRoot, root)
+              && FS.pathIsWithin(await FS.realPath(parserRoot), await FS.realPath(FS.tmpdir()))
             previousTreeStayedVisible = await FS.isFile(generatedAst)
             return langium.generate(parserRoot)
           },
@@ -234,7 +235,7 @@ Describe('parser generate staleness stamp', () => {
         }),
       ).toBe(0)
 
-      Expect(generatedOutsideWorktree).toBe(true)
+      Expect(generatedOutsideRepository).toBe(true)
       Expect(previousTreeStayedVisible).toBe(true)
       Expect(await FS.readText(generatedAst)).toBe('generated 2\n')
     } finally {
@@ -533,7 +534,7 @@ Describe('parser generate staleness stamp', () => {
 
   Test('rejects a generated-output parent swap before it can publish outside the repository', async () => {
     const root = await repository()
-    const external = await mkTestDir('tao-parser-external-')
+    const external = await mkTestDir('tao-parser-external-', { location: 'host' })
     const langium = generator()
     const grammar = FS.resolvePath('packages/language/parser/parser-grammar/views.langium', root)
     const generatedRoot = FS.resolvePath('packages/language/parser/parser-src/_gen_tao-parser', root)

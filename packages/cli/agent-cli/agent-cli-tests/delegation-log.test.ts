@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   DELEGATION_EVENTS_PATH,
   readDelegationLog,
@@ -120,7 +120,7 @@ Describe('delegation log', () => {
   })
 
   Test('reads a directory of one file per event, which is how the hooks avoid interleaving', async () => {
-    const directory = await FS.mkTmpDir('delegation-events')
+    const directory = await mkTestDir('delegation-events')
     const events = FS.resolvePath(`${DELEGATION_EVENTS_PATH}`, directory)
     await FS.mkdir(events)
     await FS.writeText(
@@ -145,7 +145,7 @@ Describe('delegation log', () => {
   })
 
   Test('reads all event files and orders same-second starts before stops', async () => {
-    const root = await FS.mkTmpDir('delegation-history')
+    const root = await mkTestDir('delegation-history')
     const events = FS.resolvePath(DELEGATION_EVENTS_PATH, root)
     await FS.mkdir(events)
     for (let index = 0; index < 260; index += 1) {
@@ -168,8 +168,25 @@ Describe('delegation log', () => {
     Expect(summary.completed).toEqual(1)
   })
 
+  Test('reads a profile that pins only a Claude Code model as its own default', async () => {
+    const root = await mkTestDir('delegation-pins')
+    const events = FS.resolvePath(DELEGATION_EVENTS_PATH, root)
+    await FS.mkdir(events)
+    await FS.mkdir(FS.resolvePath('agents/subagents', root))
+    await FS.writeText(
+      FS.resolvePath('agents/subagents/scout.md', root),
+      ['---', 'name: scout', 'codexcli:', '  sandbox_mode: read-only', 'claudecode:', '  model: opus', '---', ''].join(
+        '\n',
+      ),
+    )
+    await FS.writeText(FS.resolvePath('a-spawn.json', events), logLine('spawn', '2026-09-17T10:00:00Z', spawn('scout')))
+
+    const summary = await readDelegationLog(root)
+    Expect(summary.profiles[0]?.selections['profile default']).toEqual(1)
+  })
+
   Test('extracts a resolved model from bounded transcript metadata and tolerates a missing file', async () => {
-    const root = await FS.mkTmpDir('delegation-models')
+    const root = await mkTestDir('delegation-models')
     const events = FS.resolvePath(DELEGATION_EVENTS_PATH, root)
     const transcript = FS.resolvePath('subagents/agent-a1.jsonl', root)
     await FS.mkdir(events)

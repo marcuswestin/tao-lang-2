@@ -1,7 +1,7 @@
-import { CLI, FS, Platform, TaoStdlib } from '@shared'
+import { FS, Platform, TaoStdlib } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { TestCache } from '../cli-src/test-cache'
-import { withTaoFixture } from './test-cli-files'
+import { withGitTaoFixture, withTaoFixture } from './test-cli-files'
 
 /**
  * The fingerprint is the whole of the correctness argument for reusing compiled output: anything it
@@ -178,8 +178,7 @@ Describe('tao test compiled-output fingerprint', () => {
   // with nothing, which is not "these sources are unchanged" but "I cannot see these sources", and
   // hashing that answer hands every later run of an edited scratch app the first run's green.
   Test('changes when a source under a Git-ignored path changes', async () => {
-    await withTaoFixture({ ...fixture, '.gitignore': 'Nested/\n' }, async rootDir => {
-      await CLI.run('git', { args: ['init', '--quiet'], cwd: rootDir, stdio: 'pipe' })
+    await withGitTaoFixture({ ...fixture, '.gitignore': 'Nested/\n' }, async rootDir => {
       const before = await fingerprintOf(requestFor(rootDir))
       await FS.writeText(
         FS.resolvePath('Nested/App.tao', rootDir),

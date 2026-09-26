@@ -11,10 +11,10 @@ Describe('parser: interaction attention', () => {
       command Duplicate(Document) { Title "Duplicate" do Run() }
       command Delete(Document) { Title "Delete" do Run() }
       data Documents / Document {
-        Title text
+        Title text,
 
-        commands Finish, Duplicate
-        commands hide Delete
+        commands { Finish, Duplicate },
+        commands hide { Delete }
       }
       view Row(Document) {
         Commands { Finish }
@@ -46,7 +46,7 @@ Describe('parser: interaction attention', () => {
     const result = await testParseCode(`
       view Leaf() { render inject \`\`\`ts return null \`\`\` }
       view Conditions() {
-        render Leaf() [opacity 80 when pressed, border accent when focused, color ink when hovered,
+        render Leaf() [opacity 80 when pressed, border accent when focused, fg ink when hovered,
           background panel when Sidebar is active, foreground ink when Scheme is Dark]
       }
     `)

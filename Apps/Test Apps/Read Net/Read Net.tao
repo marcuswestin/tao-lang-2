@@ -1,0 +1,85 @@
+use Memory from @tao/data/providers/memory
+use StackNav from @tao/nav
+use Col, FormButton, Text, TextInput from @tao/ui
+
+app ReadNetApp {
+   Name "Read Net"
+   Navigator StackNav {
+      Initial NotesView
+   }
+   Datasource Memory { }
+}
+
+// The project's net replaces only `missing`; every other exceptional case keeps the runtime's.
+guard default {
+   missing -> { Text("Read Net: this note is gone") }
+}
+
+workspace
+data Notes / Note {
+   Title text,
+}
+
+scene NotesView() {
+   Title "Notes"
+   state TitleDraft = ""
+   query Notes = Notes with { }
+   action AddNote() {
+      create Note {
+         Title: TitleDraft
+      }
+      set TitleDraft = ""
+   }
+   render Col() {
+      #noteTitle
+      TextInput(Value: TitleDraft, Label: "Note title") {
+         on submit AddNote
+      }
+
+      #addNote
+      FormButton("Add note") {
+         on press AddNote
+      }
+      guard Notes
+      loop Notes / Note {
+         Col() {
+            Text(Note.Title)
+
+            #openNetNote
+            FormButton("Open behind a bare guard") {
+               on press -> { present NetNoteView(Note) }
+            }
+
+            #openSiteNote
+            FormButton("Open behind a missing guard") {
+               on press -> { present SiteNoteView(Note) }
+}  }  }  }  }
+
+// A bare guard names no case, so a deleted note reaches the project's net.
+scene NetNoteView(Note) {
+   Title "Bare guard"
+   render Col() {
+      guard Note
+      Text(Note.Title)
+
+      #deleteNote
+      FormButton("Delete note") {
+         on press -> { delete Note }
+}  }  }
+
+// A guard that names `missing` handles it itself; the net keeps the cases it leaves unnamed.
+scene SiteNoteView(Note) {
+   Title "Missing guard"
+   render Col() {
+      guard Note {
+         missing -> {
+            Text("Deleted here")
+            if Note.Id is not empty {
+               Text("The deleted note kept its id")
+      }  }  }
+      Text(Note.Title)
+
+      #deleteNote
+      FormButton("Delete note") {
+         on press -> { delete Note }
+}  }  }

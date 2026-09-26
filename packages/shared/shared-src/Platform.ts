@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
 import {
   type ChildProcess,
   spawn as spawnProcess,
@@ -13,6 +14,18 @@ import { throwUnexpected } from './core/Errors'
 
 export type ProcessEnv = NodeJS.ProcessEnv
 export type ProcessSignal = NodeJS.Signals
+
+/** createAsyncContext keeps task-owned state separate across concurrent asynchronous work. */
+export function createAsyncContext<Value>(): {
+  current: () => Value | undefined
+  run: <Result>(value: Value, work: () => Result) => Result
+} {
+  const storage = new AsyncLocalStorage<Value>()
+  return {
+    current: () => storage.getStore(),
+    run: (value, work) => storage.run(value, work),
+  }
+}
 
 /** cpuCount returns the number of CPUs available to this process. */
 export function cpuCount(): number {
@@ -125,6 +138,63 @@ export function spawn(command: string, options: SpawnOptions = {}): ChildProcess
   })
 }
 
+// Completion owns its event sources until the output is drained or the caller disposes them.
+const pendingChildCompletions = new Set<() => void>()
+
+/**
+ * Observes process exit together with closed output pipes. Bun can omit the aggregate child
+ * `close` event even after exit and both pipe closes; joining those facts preserves its semantics.
+ * The native close event remains the completion path for spawn failures, which have no exit event.
+ */
+export function onChildProcessClose(
+  child: ChildProcess,
+  listener: (exitCode: number | null, signal: NodeJS.Signals | null) => void,
+): () => void {
+  const streams = [child.stdout, child.stderr].filter(stream => stream !== null)
+  // Auxiliary descriptors and IPC retain their native close contract. The fallback covers only
+  // the standard output pipes whose complete lifecycle this observer can verify.
+  const standardPipesOnly = child.stdio.length <= 3 && child.channel === undefined
+  let exited = child.exitCode !== null || child.signalCode !== null
+  let exitCode = child.exitCode
+  let signal = child.signalCode
+  let finished = false
+  const release = () => {
+    pendingChildCompletions.delete(check)
+    child.off('exit', onExit)
+    child.off('close', complete)
+    for (const stream of streams) {
+      stream.off('close', check)
+    }
+  }
+  const complete = (code: number | null, exitSignal: NodeJS.Signals | null) => {
+    if (finished) {
+      return
+    }
+    finished = true
+    release()
+    listener(code, exitSignal)
+  }
+  const check = () => {
+    if (standardPipesOnly && exited && streams.every(stream => stream.closed)) {
+      complete(exitCode, signal)
+    }
+  }
+  const onExit = (code: number | null, exitSignal: NodeJS.Signals | null) => {
+    exited = true
+    exitCode = code
+    signal = exitSignal
+    check()
+  }
+  pendingChildCompletions.add(check)
+  child.once('exit', onExit)
+  child.once('close', complete)
+  for (const stream of streams) {
+    stream.once('close', check)
+  }
+  check()
+  return release
+}
+
 /** spawnSync runs a child process synchronously. */
 export function spawnSync(command: string, options: SpawnSyncOptions = {}): SpawnSyncReturns<Buffer> {
   const { args = [], env, ...spawnOptions } = options
@@ -139,6 +209,11 @@ export function spawnSync(command: string, options: SpawnSyncOptions = {}): Spaw
 export function onProcessSignal(signal: ProcessSignal, listener: () => void): () => void {
   process.on(signal, listener)
   return () => process.off(signal, listener)
+}
+
+/** onProcessExit registers synchronous cleanup for resources a normal process exit must retire. */
+export function onProcessExit(listener: () => void): void {
+  process.once('exit', listener)
 }
 
 /** readStdinText resolves the full text piped to this process on stdin, or '' when stdin is a live terminal. */

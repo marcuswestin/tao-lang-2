@@ -25,9 +25,9 @@ Describe('validator: interaction attention', () => {
       ${leaf}
       action Run() { }
       data Documents / Document {
-        Title text
-        commands Finish
-        commands hide Delete
+        Title text,
+        commands { Finish },
+        commands hide { Delete }
       }
       command Finish(Document) { Title "Finish" Key "f" do Run() }
       command Duplicate(Document) { Title "Duplicate" Key "d" do Run() }
@@ -44,7 +44,7 @@ Describe('validator: interaction attention', () => {
         Commands { Finish, Duplicate }
         hide Delete
         render Leaf() [fill when pressed, hug when focused, compress when hovered,
-          centered when Scheme is Dark]
+          rigid when selected, centered when Scheme is Dark]
       }
     `),
   )
@@ -154,11 +154,11 @@ Describe('validator: interaction attention', () => {
       `
         ${commandFixture}
         data Notes / Note {
-          Title text
-          commands Finish, Finish, NewWorkspace
-          commands Duplicate
-          commands hide Finish
-          commands hide Delete
+          Title text,
+          commands { Finish, Finish, NewWorkspace },
+          commands { Duplicate },
+          commands hide { Finish },
+          commands hide { Delete }
         }
       `,
       messages.duplicateMention("Entity 'Note' commands", 'Finish'),
@@ -176,8 +176,8 @@ Describe('validator: interaction attention', () => {
         ${leaf}
         action Run() { }
         data Documents / Document {
-          Title text
-          commands First, Second
+          Title text,
+          commands { First, Second }
         }
         command First(Document) { Title "First" Key "x" do Run() }
         command Second(Document) { Title "Second" Key "x" do Run() }

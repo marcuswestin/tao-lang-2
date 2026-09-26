@@ -14,6 +14,11 @@ export const ConfigurationCompiler = {
     const implementation = AST.configurationImplementationOf(declaration)
     Assert.defined(implementation, 'validated configurable declaration has one implementation')
     const factory = configurationFactory(declaration, implementation)
+    if (AST.configurationPrimitiveOf(declaration) === 'auth') {
+      return gen`${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })} = TR.Auth.Declaration(
+        ${gen.jsLiteral(declaration.name)}, ${factory},
+      )`
+    }
     return AST.configurationPrimitiveOf(declaration) === 'nav'
       ? gen`${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })} = TR.Navigation.Declaration(
           ${gen.jsLiteral(declaration.name)},
@@ -28,18 +33,19 @@ export const ConfigurationCompiler = {
   },
 
   /** ConfigurationDeclarations emits sidecar-facing TypeScript configuration contracts for one Tao file. */
-  ConfigurationDeclarations(taoFile: AST.TaoFile, importLines: readonly string[] = []): Compiled {
+  ConfigurationDeclarations(taoFile: AST.TaoFile, importLines: readonly string[] = [], bridgeTypes = ''): Compiled {
     const declarations = taoFile.statements.filter(isRuntimeConfigurableDeclaration)
-    const hasProperties = declarations.some(declaration =>
+    const needsRuntimeTypes = bridgeTypes.includes('TR.') || declarations.some(declaration =>
       !declaration.aliasTarget
       && (AST.configurationPropertiesOf(declaration).length > 0
         || (AST.configurationKeyOf(declaration)?.block.properties.length ?? 0) > 0)
     )
     return gen`
       ${gen.textLines(importLines.join('\n'))}
-      ${hasProperties ? gen`import type TR from '@runtime/TR'` : gen.noop()}
+      ${needsRuntimeTypes ? gen`import type TR from '@runtime/TR'` : gen.noop()}
 
       ${gen.list(declarations, configurationDeclarationType, { newLines: 2 })}
+      ${gen.textLines(bridgeTypes)}
     `
   },
 
@@ -50,6 +56,11 @@ export const ConfigurationCompiler = {
       configurationDeclarationType,
       { newLines: 2 },
     )
+  },
+
+  /** ConfigurationType shares one declaration's sidecar-facing type with bridge metadata. */
+  ConfigurationType(declaration: AST.ConfigurableDeclaration): Compiled {
+    return configurationDeclarationType(declaration)
   },
 } as const
 
@@ -62,6 +73,7 @@ export function isRuntimeConfigurableDeclaration(
   }
   const primitive = AST.configurationPrimitiveOf(declaration)
   return primitive === 'nav' || primitive === 'datasource'
+    || (primitive === 'auth' && !AST.isAuthLibraryDeclaration(declaration, 'AuthProvider'))
 }
 
 /** isTransparentConfigurableAlias identifies a pass-through with no declaration identity of its own. */

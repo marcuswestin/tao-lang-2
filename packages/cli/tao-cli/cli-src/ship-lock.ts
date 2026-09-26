@@ -1,4 +1,5 @@
 import { Errors, FS, Json, Platform, Text } from '@shared'
+import { PROJECT_LOCK_RELATIVE_PATH } from './project-lock-path'
 import { withShipLockWrite } from './ship-transaction'
 
 type ShipLockStatus = 'accepted' | 'suggested'
@@ -85,9 +86,13 @@ export type TaoProjectLock = {
   ship?: {
     apps: Record<string, ShipLockEntry>
   }
+  /** The Tao release this project runs under; `toolchain-pin.ts` reads and writes it. */
+  toolchain?: {
+    version: string
+  }
 }
 
-export const SHIP_LOCK_RELATIVE_PATH = '.tao-project/lock.jsonc'
+export const SHIP_LOCK_RELATIVE_PATH = PROJECT_LOCK_RELATIVE_PATH
 
 export async function readProjectLock(projectRoot: string): Promise<TaoProjectLock> {
   const path = FS.resolvePath(SHIP_LOCK_RELATIVE_PATH, projectRoot)
@@ -157,15 +162,21 @@ export function mergeProjectLocks(fresh: TaoProjectLock, incoming: TaoProjectLoc
       ]
     }),
   )
-  return {
-    ...fresh,
-    ...incoming,
-    ship: {
-      ...fresh.ship,
-      ...incoming.ship,
-      apps,
-    },
-  }
+  // A lock only the other concerns have written, such as a new project's toolchain pin, gains no
+  // empty `ship` section.
+  const shipping = fresh.ship === undefined && incoming.ship === undefined
+    ? {}
+    : { ship: { ...fresh.ship, ...incoming.ship, apps } }
+  return { ...fresh, ...incoming, ...shipping }
+}
+
+/**
+ * writeToolchainPin records the Tao release a project runs under, which the version shim in
+ * `toolchain-pin.ts` reads, keeping every other concern the lock already holds.
+ */
+export async function writeToolchainPin(projectRoot: string, version: string): Promise<string> {
+  const lock = await readProjectLock(projectRoot)
+  return await writeProjectLock(projectRoot, { ...lock, toolchain: { version } })
 }
 
 function shipLockEntry(lock: TaoProjectLock, identity: string): ShipLockEntry | undefined {

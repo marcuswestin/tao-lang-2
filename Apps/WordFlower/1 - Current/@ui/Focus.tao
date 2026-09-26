@@ -1,4 +1,4 @@
-use FocusSessions from @data
+use FocusSession, FocusSessions from @data
 use primary from @tao/keys
 use Interval from @tao/time
 use Col, Row, Text from @tao/ui
@@ -12,7 +12,7 @@ use FormButton from @tao/ui/basic
 // view creates the row and nothing else.
 folder
 view FocusStarter() {
-   query FocusSessions as CurrentSession {
+   query CurrentSession = FocusSessions with {
       limit 1
    }
    action Start(Length duration) {
@@ -43,7 +43,7 @@ view FocusStarter() {
 // resuming re-anchors the deadline to the remainder, so paused time is not lost.
 folder
 view FocusBar() {
-   query FocusSessions as CurrentSession {
+   query CurrentSession = FocusSessions with {
       limit 1
    }
    state Tick = Interval(1.s)

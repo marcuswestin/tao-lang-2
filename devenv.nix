@@ -16,6 +16,7 @@ in
   apple.sdk = null;
 
   enterShell = ''
+    export PATH="$DEVENV_ROOT:$PATH"
     for bin_dir in "$DEVENV_ROOT/node_modules/.bin" "$DEVENV_ROOT/packages/shared/node_modules/.bin"; do
       if [ -d "$bin_dir" ]; then
         export PATH="$bin_dir:$PATH"
@@ -51,6 +52,9 @@ in
     # GNU coreutils for `timeout`, which repository scripts and agents use to bound a run.
     pkgs.coreutils
     pkgs.dprint
+    # `./agent open-pr` and `companion-host-publish` drive GitHub through gh; pinning it here gives
+    # every checkout the same version rather than whatever each machine installed, if any.
+    pkgs.gh
     pkgs.git
     pkgs.just
     pkgs.ripgrep

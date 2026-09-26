@@ -1,5 +1,5 @@
 import { CLI, Errors, FS, HCI, Platform, TaoHome } from '@shared'
-import type { Readable, Writable } from 'node:stream'
+import { type DownloadPromptOptions, OneTimeDownload } from './one-time-download'
 import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
 /**
@@ -8,16 +8,12 @@ import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
  * project on the machine then shares that one install. Inside a checkout there is nothing to do,
  * because the repository's own install already provides them.
  *
- * The first install asks first, as the Developer decided, because it is a one-time download of
- * about 400 MB. A terminal gets the question; anything else needs `TAO_HOST_INSTALL=yes` to go
- * ahead, and is told so rather than left waiting on a prompt nobody can answer.
+ * The first install asks first (`OneTimeDownload`), because it is a one-time download of about
+ * 400 MB.
  */
 
 /** INSTALLED_STAMP holds the lockfile's identity, written after the install completes. */
 const INSTALLED_STAMP = '.tao-host-installed'
-
-/** CONSENT_ENV lets a run with no terminal approve the one-time download ahead of time. */
-const CONSENT_ENV = 'TAO_HOST_INSTALL'
 
 /** APPROXIMATE_SIZE is measured: 741 packages and 388 MB on 2026-09-24. */
 const APPROXIMATE_SIZE = 'about 400 MB'
@@ -27,19 +23,13 @@ const HOST_INSTALL_FILES = ['package.json', 'bun.lock'] as const
 
 /** HostDependencies owns installing the host's packages for an installed Tao. */
 export const HostDependencies = {
-  CONSENT_ENV,
+  CONSENT_ENV: OneTimeDownload.CONSENT_ENV,
   INSTALLED_STAMP,
   ensure,
   ensureIn,
 } as const
 
-/** EnsureOptions are the terminal a consent question uses, and the environment consent is read from. */
-type EnsureOptions = {
-  environment?: Record<string, string | undefined>
-  input?: Readable
-  interactive?: boolean
-  output?: Writable
-}
+type EnsureOptions = DownloadPromptOptions
 
 /** HostInstall is where one install happens and how; `ensureIn` takes it so a test can supply a fake. */
 type HostInstall = {
@@ -67,13 +57,12 @@ async function ensure(options: EnsureOptions = {}): Promise<void> {
 async function ensureIn(host: HostInstall, options: EnsureOptions = {}): Promise<void> {
   const identity = Platform.sha256Hex(await FS.readFile(FS.resolvePath('bun.lock', host.hostFiles)))
   if (await installedWith(host.installRoot, identity)) {
+    await linkBesideHostFiles(host)
     return
   }
-  if (!await consented(options)) {
-    Errors.throwUserInput(
-      `Tao needs to download its Expo host once for this version (${APPROXIMATE_SIZE}) first. Run the `
-        + `command again in a terminal to approve it, or set ${CONSENT_ENV}=yes to approve it ahead of time.`,
-    )
+  const what = `its Expo host once for this version (${APPROXIMATE_SIZE})`
+  if (!await OneTimeDownload.approve(`Tao needs to download ${what}. Download it now?`, options)) {
+    Errors.throwUserInput(OneTimeDownload.refusalMessage(what))
   }
   await FS.mkdir(host.installRoot)
   await FS.withFileMutationLock(host.installRoot, FS.dirname(host.installRoot), async () => {
@@ -90,27 +79,32 @@ async function ensureIn(host: HostInstall, options: EnsureOptions = {}): Promise
     await host.install(host.installRoot)
     await FS.writeText(FS.resolvePath(INSTALLED_STAMP, host.installRoot), identity)
   })
+  await linkBesideHostFiles(host)
 }
 
-async function installedWith(installRoot: string, identity: string): Promise<boolean> {
-  return await FS.readText(FS.resolvePath(INSTALLED_STAMP, installRoot)).then(
-    content => content === identity,
-    () => false,
+/**
+ * linkBesideHostFiles gives the host's own files a `node_modules` that points at the install, the
+ * shape they have inside the repository. Jest resolves its preset and the host's modules from its
+ * root directory, which is the host's files, so this is what lets `tao test` run there unchanged.
+ * A new resource payload replaces those files whole, so the link is made again on every call.
+ */
+async function linkBesideHostFiles(host: HostInstall): Promise<void> {
+  await FS.replaceSymlink(
+    FS.resolvePath('node_modules', host.installRoot),
+    FS.resolvePath('node_modules', host.hostFiles),
   )
 }
 
-async function consented(options: EnsureOptions): Promise<boolean> {
-  if ((options.environment ?? Platform.runtimeProcess.env)[CONSENT_ENV] === 'yes') {
-    return true
-  }
-  if (!HCI.isInteractive(options)) {
-    return false
-  }
-  return await HCI.askConfirm({
-    ...options,
-    defaultValue: true,
-    message: `Tao needs to download its Expo host once for this version (${APPROXIMATE_SIZE}). Download it now?`,
-  })
+async function installedWith(installRoot: string, identity: string): Promise<boolean> {
+  const stamped = await FS.readText(FS.resolvePath(INSTALLED_STAMP, installRoot)).then(
+    content => content === identity,
+    () => false,
+  )
+  // The stamp can outlive a removed or partial node_modules directory. Expo and Jest are direct
+  // dependencies needed by the two installed host paths, and isFile follows Bun's package links.
+  return stamped
+    && await FS.isFile(FS.resolvePath('node_modules/expo/package.json', installRoot))
+    && await FS.isFile(FS.resolvePath('node_modules/jest/package.json', installRoot))
 }
 
 /**

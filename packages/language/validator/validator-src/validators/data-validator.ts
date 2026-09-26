@@ -1,5 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { dataWriteValidationChecks, dataWriteValidationMessages } from './data-write-validator'
@@ -14,6 +15,10 @@ export const dataValidationMessages = {
     `Entity '${entity}' cannot declare reserved field '${name}'; every entity receives that field automatically.`,
   unknownRelation: (entity: string, name: string) =>
     `Entity '${entity}' references unknown relationship entity '${name}'.`,
+  legacyRelation: (field: string, target: string) =>
+    `Write '${field} ${target}' instead of '${field} (relation ${target})'. Separate data entries with commas.`,
+  unsupportedValueType: (field: string) =>
+    `Data field '${field}' requires a scalar value type, a named case set, or an entity target.`,
   relationModifier: (field: string) => `Primitive or boolean data field '${field}' cannot declare a relation.`,
   relationDefault: (field: string) => `Relationship data field '${field}' cannot declare a default.`,
   optionalDefault: (field: string) => `Field '${field}' is optional, so it cannot also declare a default.`,
@@ -24,7 +29,7 @@ export const dataValidationMessages = {
   ambiguousInverseRelation: (field: string, relation: string) =>
     `Inverse relationship '${field}' is ambiguous because '${relation}' has more than one stored relationship back to its owner.`,
   booleanDefaultCase: (field: string) => `Boolean data field '${field}' must name a yes/no case as its default.`,
-  defaultCase: (name: string, field: string) => `Default case '${name}' is not a boolean case of field '${field}'.`,
+  defaultCase: (name: string, field: string) => `Default case '${name}' is not a case of field '${field}'.`,
   duplicateModifier: (field: string, modifier: string) =>
     `Data field '${field}' declares '${modifier}' more than once.`,
   duplicateBooleanCase: (entity: string, name: string) =>
@@ -38,6 +43,8 @@ export const dataValidationMessages = {
   unknownCollection: (data: string, name: string) => `Data '${data}' has no collection named '${name}'.`,
   unknownEntity: (data: string, name: string) => `Data '${data}' has no entity named '${name}'.`,
   duplicateIndex: (name: string) => `Index '${name}' is declared more than once.`,
+  duplicateConstraintField: (name: string) => `Unique constraint repeats field '${name}'.`,
+  uniqueCollectionField: (name: string) => `Unique constraints require stored scalar or entity fields, not '${name}'.`,
   duplicateLocalOnly: (entity: string) => `Entity '${entity}' declares 'local only' more than once.`,
   crossStorageRelation: (entity: string, field: string, relation: string) =>
     `Relationship '${entity}.${field}' crosses the local-only storage boundary; '${entity}' and '${relation}' must both declare 'local only', or neither.`,
@@ -54,6 +61,11 @@ export const dataValidationMessages = {
   duplicateOrder: 'A query may declare only one order clause.',
   duplicateLimit: 'A query may declare only one limit clause.',
   limitCount: 'A query limit must be a whole number of at least 1.',
+  duplicateSearch: 'A query may declare only one search clause.',
+  searchTermType: (actual: string) => `Query search term must be text, got ${actual}.`,
+  missingSearchField: (entity: string) =>
+    `Entity '${entity}' has no '(search)' field; mark a text field '(search)' to use 'search' in a query.`,
+  searchFieldKind: (field: string) => `Only text data fields can declare 'search', not '${field}'.`,
   uniqueFieldKind: (field: string) => `Only primitive data fields can declare 'unique', not '${field}'.`,
   duplicateUniqueField: (entity: string) =>
     `Entity '${entity}' declares more than one unique field; one field is the reconciliation key.`,
@@ -108,6 +120,21 @@ function validateEntityDefinition(entity: AST.EntityDataDeclaration, ctx: Valida
       ctx.error(index, dataValidationMessages.unknownField(entity.singularName, index.fieldName))
     }
   }
+  for (const constraint of entity.block.entries.filter(AST.isDataUnique)) {
+    const seen = new Set<string>()
+    for (const name of constraint.fieldNames) {
+      const field = fields.find(candidate => candidate.name === name)
+      if (!field) {
+        ctx.error(constraint, dataValidationMessages.unknownField(entity.singularName, name))
+      } else if (Type.dataFieldIsInverseRelation(field)) {
+        ctx.error(constraint, dataValidationMessages.uniqueCollectionField(name))
+      }
+      if (seen.has(name)) {
+        ctx.error(constraint, dataValidationMessages.duplicateConstraintField(name))
+      }
+      seen.add(name)
+    }
+  }
   const orders = entity.block.entries.filter(AST.isDataDefaultOrder)
   for (const duplicate of orders.slice(1)) {
     ctx.error(duplicate, dataValidationMessages.duplicateOrder)
@@ -141,10 +168,37 @@ function validateEntityField(
   field: AST.EntityDataField,
   ctx: ValidationContext,
 ): void {
-  if (['Id', 'WritesQueued', 'WritesFailed', 'WriteError', 'CanRetryWrites'].includes(field.name)) {
+  const reserved = [
+    'Id',
+    'WritesQueued',
+    'WritesFailed',
+    'WriteError',
+    'CanRetryWrites',
+    'Incomplete',
+    'IsIncomplete',
+    'IsComplete',
+    'Problems',
+  ]
+  if (reserved.includes(field.name)) {
     ctx.error(field, dataValidationMessages.reservedField(entity.singularName, field.name))
   }
   const traits = field.traits?.traits ?? []
+  const fieldType = Type.dataFieldType(field)
+  const primitive = Switch.kind<
+    ASTUtils.TaoType,
+    Extract<ASTUtils.TaoType, { kind: 'primitive' }>['primitive'] | undefined
+  >(fieldType, {
+    primitive: type => type.primitive,
+    enum: () => undefined,
+    entity: () => undefined,
+    unresolved: () => undefined,
+    list: () => undefined,
+    item: () => undefined,
+    union: () => undefined,
+  })
+  for (const trait of traits.filter(candidate => candidate.relationName)) {
+    ctx.error(trait, dataValidationMessages.legacyRelation(field.name, trait.relationName!))
+  }
   const defaults = traits.filter(trait => trait.defaultValue || trait.defaultCase)
   for (const duplicate of defaults.slice(1)) {
     ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'default'))
@@ -156,11 +210,14 @@ function validateEntityField(
   for (const duplicate of owned.slice(1)) {
     ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'owned'))
   }
+  for (const duplicate of traits.filter(AST.traitIsRequired).slice(1)) {
+    ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'required'))
+  }
   const uniques = traits.filter(trait => trait.unique)
   for (const duplicate of uniques.slice(1)) {
     ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'unique'))
   }
-  if (!field.primitive) {
+  if (primitive === undefined) {
     for (const trait of uniques) {
       ctx.error(trait, dataValidationMessages.uniqueFieldKind(field.name))
     }
@@ -174,12 +231,29 @@ function validateEntityField(
   for (const duplicate of titles.slice(1)) {
     ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'title'))
   }
-  if (field.primitive !== 'text') {
+  if (primitive !== 'text') {
     for (const trait of titles) {
       ctx.error(trait, dataValidationMessages.titleFieldKind(field.name))
     }
   }
-  if (field.primitive || field.boolean) {
+  const searches = traits.filter(trait => trait.search)
+  for (const duplicate of searches.slice(1)) {
+    ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'search'))
+  }
+  if (primitive !== 'text') {
+    for (const trait of searches) {
+      ctx.error(trait, dataValidationMessages.searchFieldKind(field.name))
+    }
+  }
+  const isValue = fieldType.kind === 'enum'
+    || (primitive !== undefined && ['text', 'number', 'boolean', 'time'].includes(primitive))
+  if (
+    !isValue && fieldType.kind !== 'entity' && fieldType.kind !== 'unresolved'
+    && !Type.dataFieldIsInverseRelation(field)
+  ) {
+    ctx.error(field, dataValidationMessages.unsupportedValueType(field.name))
+  }
+  if (field.primitive || field.boolean || isValue) {
     for (const trait of owned) {
       ctx.error(trait, dataValidationMessages.autoDeleteOwner(field.name))
     }
@@ -342,8 +416,22 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
     }
   }
   const fields = Type.dataFields(entity)
+  const searches = clauses.filter(AST.isSearchClause)
+  for (const duplicate of searches.slice(1)) {
+    ctx.error(duplicate, dataValidationMessages.duplicateSearch)
+  }
+  for (const search of searches) {
+    const termType = Type.ofExpression(search.term)
+    if (termType.kind !== 'unresolved' && !(termType.kind === 'primitive' && termType.primitive === 'text')) {
+      ctx.error(search.term, dataValidationMessages.searchTermType(Type.displayName(termType)))
+    }
+    const searchable = fields.some(field => (field.traits?.traits ?? []).some(trait => trait.search))
+    if (!searchable) {
+      ctx.error(search, dataValidationMessages.missingSearchField(Type.dataEntityName(entity)))
+    }
+  }
   for (const clause of clauses) {
-    if (AST.isLimitClause(clause)) {
+    if (AST.isLimitClause(clause) || AST.isSearchClause(clause)) {
       continue
     }
     if (AST.isBooleanWhereClause(clause)) {
@@ -412,6 +500,13 @@ function validateEntityFieldDefault(field: AST.EntityDataField, ctx: ValidationC
     return
   }
   if (modifier.defaultCase) {
+    const type = Type.dataFieldType(field)
+    if (
+      type.kind === 'enum'
+      && AST.caseSetCasesOf(type.declaration).some(candidate => candidate.name === modifier.defaultCase)
+    ) {
+      return
+    }
     if (!field.boolean || (modifier.defaultCase !== field.name && modifier.defaultCase !== field.negativeName)) {
       ctx.error(modifier, dataValidationMessages.defaultCase(modifier.defaultCase, field.name))
     }
@@ -426,7 +521,8 @@ function validateEntityFieldDefault(field: AST.EntityDataField, ctx: ValidationC
     return
   }
   if (AST.isNowExpression(defaultValue)) {
-    if (field.primitive !== 'time') {
+    const type = Type.dataFieldType(field)
+    if (type.kind !== 'primitive' || type.primitive !== 'time') {
       ctx.error(defaultValue, dataValidationMessages.nowDefault(field.name))
     }
     return

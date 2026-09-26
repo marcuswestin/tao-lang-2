@@ -1,5 +1,15 @@
-import { CLI, FS } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
+import { FS } from '@shared'
+import {
+  Deferred,
+  Describe,
+  Expect,
+  initGitTestRepository,
+  mkGitTestDir,
+  mkTestDir,
+  settle,
+  Test,
+  until,
+} from '@shared/test'
 import { GateCatalog } from '../verification-src/GateCatalog'
 import { runGates } from '../verification-src/GateRunner'
 import { GreenTree } from '../verification-src/GreenTree'
@@ -36,8 +46,7 @@ function overlap(left: Window | undefined, right: Window | undefined): boolean {
 }
 
 async function gitInit(root: string): Promise<void> {
-  const result = await CLI.run('git', { args: ['init', '--quiet'], cwd: root, stdio: 'pipe' })
-  Expect(result.exitCode).toBe(0)
+  await initGitTestRepository(root)
   // Artifacts a lane writes are derived state, so they are outside the tree the run is proving.
   await FS.writeText(FS.resolvePath('.gitignore', root), '.artifacts/\n')
 }
@@ -147,55 +156,46 @@ Describe('two lanes in one checkout', () => {
   })
 
   Test('names every path two fingerprints of one working tree disagree about', async () => {
-    const root = await mkTestDir('tao-verify-fingerprint-')
-    try {
-      await gitInit(root)
-      await FS.writeText(FS.resolvePath('kept.txt', root), 'kept\n')
-      await FS.writeText(FS.resolvePath('rewritten.txt', root), 'before\n')
-      await FS.writeText(FS.resolvePath('removed.txt', root), 'doomed\n')
-      const before = await GreenTree.fingerprint(root)
+    const root = await mkGitTestDir('tao-verify-fingerprint-')
+    await gitInit(root)
+    await FS.writeText(FS.resolvePath('kept.txt', root), 'kept\n')
+    await FS.writeText(FS.resolvePath('rewritten.txt', root), 'before\n')
+    await FS.writeText(FS.resolvePath('removed.txt', root), 'doomed\n')
+    const before = await GreenTree.fingerprint(root)
 
-      await FS.writeText(FS.resolvePath('rewritten.txt', root), 'after\n')
-      await FS.remove(FS.resolvePath('removed.txt', root))
-      await FS.writeText(FS.resolvePath('added.txt', root), 'new\n')
-      const after = await GreenTree.fingerprint(root)
+    await FS.writeText(FS.resolvePath('rewritten.txt', root), 'after\n')
+    await FS.remove(FS.resolvePath('removed.txt', root))
+    await FS.writeText(FS.resolvePath('added.txt', root), 'new\n')
+    const after = await GreenTree.fingerprint(root)
 
-      Expect(before.hash).not.toBe(after.hash)
-      Expect(GreenTree.changedPaths(before, after)).toEqual(['added.txt', 'removed.txt', 'rewritten.txt'])
-      Expect(GreenTree.changedPaths(before, before)).toEqual([])
-      Expect(before.paths.get('kept.txt')).toBe(after.paths.get('kept.txt'))
-    } finally {
-      await FS.remove(root)
-    }
+    Expect(before.hash).not.toBe(after.hash)
+    Expect(GreenTree.changedPaths(before, after)).toEqual(['added.txt', 'removed.txt', 'rewritten.txt'])
+    Expect(GreenTree.changedPaths(before, before)).toEqual([])
+    Expect(before.paths.get('kept.txt')).toBe(after.paths.get('kept.txt'))
   })
 
   Test('names the path a gate changed under a real working tree', async () => {
-    const root = await mkTestDir('tao-verify-drift-named-')
+    const root = await mkGitTestDir('tao-verify-drift-named-')
     const registryRoot = await mkTestDir('tao-verify-drift-lanes-')
-    try {
-      await gitInit(root)
-      await FS.writeText(FS.resolvePath('kept.txt', root), 'kept\n')
-      const summary = await runGates({
-        gates: [READER_GATE],
-        // No injected hasher: the run fingerprints this checkout itself, paths and all.
-        greenTree: { lanes: ['verify'] },
-        registryRoot,
-        repositoryRoot: root,
-        runGate: async () => {
-          await FS.writeText(FS.resolvePath('drifted.txt', root), 'written by something else\n')
-          return { exitCode: 0, output: '' }
-        },
-      })
+    await gitInit(root)
+    await FS.writeText(FS.resolvePath('kept.txt', root), 'kept\n')
+    const summary = await runGates({
+      gates: [READER_GATE],
+      // No injected hasher: the run fingerprints this checkout itself, paths and all.
+      greenTree: { lanes: ['verify'] },
+      registryRoot,
+      repositoryRoot: root,
+      runGate: async () => {
+        await FS.writeText(FS.resolvePath('drifted.txt', root), 'written by something else\n')
+        return { exitCode: 0, output: '' }
+      },
+    })
 
-      Expect(summary.status).toBe('failed')
-      Expect(summary.warnings).toContain(
-        'working tree changed while verification was running (drifted.txt); this run is not green evidence',
-      )
-      Expect((await GreenTree.load(root)).lanes['verify']).toBeUndefined()
-    } finally {
-      await FS.remove(root)
-      await FS.remove(registryRoot)
-    }
+    Expect(summary.status).toBe('failed')
+    Expect(summary.warnings).toContain(
+      'working tree changed while verification was running (drifted.txt); this run is not green evidence',
+    )
+    Expect((await GreenTree.load(root)).lanes['verify']).toBeUndefined()
   })
 
   Test("leaves both lanes' records readable when two of them finish at once", async () => {

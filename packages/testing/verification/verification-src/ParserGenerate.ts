@@ -266,7 +266,7 @@ async function validateDeclaredOutputBoundaries(
 }
 
 /**
- * createParserGenerateStagingRepository copies only Langium's inputs into host-temporary storage.
+ * createParserGenerateStagingRepository copies only Langium's inputs into worktree scratch.
  * Dependencies stay in the real parser package and are invoked by absolute path.
  */
 async function createParserGenerateStagingRepository(parserRoot: string): Promise<string> {

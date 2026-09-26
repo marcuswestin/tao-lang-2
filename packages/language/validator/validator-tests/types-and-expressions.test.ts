@@ -3,9 +3,12 @@ import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import { Diagnostics, FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { dataValidationMessages } from '../validator-src/validators/data-validator'
 import { dataWriteValidationMessages } from '../validator-src/validators/data-write-validator'
 import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalCoreValidator'
 import { InvocationsValidator } from '../validator-src/validators/invocations-validator'
+import { ReactiveParametersValidator } from '../validator-src/validators/ReactiveParametersValidator'
+import { StateValidator } from '../validator-src/validators/StateValidator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import {
   accepts,
@@ -60,7 +63,7 @@ Describe('validator: types and expressions', () => {
   Test(
     'accepts copied projected inputs and bulk data updates',
     accepts(`
-      data Documents / Document { Title text Body text Owner text CreatedAt time }
+      data Documents / Document { Title text, Body text, Owner text, CreatedAt time }
       type DocumentInput is Document { Title, Body }
       type DraftFields is { Title text, Body text }
       app EditorApp { view Main }
@@ -95,6 +98,147 @@ Describe('validator: types and expressions', () => {
   )
 
   Test(
+    'types the completeness members that required derives on rows and projections',
+    accepts(`
+      data Documents / Document { Title text (required "Name this document"), Body text }
+      type DocumentInput is Document { Title, Body }
+      type BodyInput is Document without { Title }
+      app EditorApp { view Main }
+      view Main() { render Empty() }
+      view Editor(Document) {
+        state Input = copy Document as DocumentInput
+        state Body = copy Document as BodyInput
+        let RowIncomplete is boolean = Document.Incomplete
+        let RowProblems is list of text = Document.Problems
+        let InputIncomplete is boolean = Input.Incomplete
+        let InputProblems is list of text = Input.Problems
+        let BodyIncomplete is boolean = Body.Incomplete
+        render Empty()
+      }
+      ${stubView('Empty')}
+    `),
+  )
+
+  Test(
+    'offers completeness members only on rows and projections, never on a plain item',
+    rejects(
+      `
+        type Draft is { Title text }
+        app EditorApp { view Main }
+        view Main() {
+          let Value = Draft { Title: "" }
+          let Missing = Value.Problems
+          render Empty()
+        }
+        ${stubView('Empty')}
+      `,
+      typeValidationMessages.unknownMember('Draft', 'Problems'),
+    ),
+  )
+
+  Test(
+    'reserves the completeness member names and rejects a repeated required',
+    rejects(
+      `
+        data Documents / Document {
+          Problems text,
+          Incomplete text,
+          Title text (required "Name it", required "Name it again")
+        }
+      `,
+      dataValidationMessages.reservedField('Document', 'Problems'),
+      dataValidationMessages.reservedField('Document', 'Incomplete'),
+      dataValidationMessages.duplicateModifier('Title', 'required'),
+    ),
+  )
+
+  Test(
+    'rejects writes to derived completeness members and binding one as writable storage',
+    rejects(
+      `
+        data Notes / Note { Title text (required "Name it") }
+        type NoteInput is Note { Title }
+        app EditorApp { view Main }
+        view Flip(Value boolean) {
+          action Go() { toggle Value }
+          render Empty()
+        }
+        view Main() {
+          state Input = NoteInput { Title: "" }
+          action Break() {
+            set Input.Incomplete = true
+            toggle Input.Incomplete
+          }
+          render Flip(Value: Input.Incomplete)
+        }
+        ${stubView('Empty')}
+      `,
+      StateValidator.messages.derivedMemberWrite('Input.Incomplete'),
+      ReactiveParametersValidator.messages.readonlyArgument('Value'),
+    ),
+  )
+
+  Test('reports a derived-member write once, without the generic writable-path diagnostic', async () => {
+    const result = await testValidateCodeWithErrors(`
+      data Notes / Note { Title text (required "Name it") }
+      type NoteInput is Note { Title }
+      app EditorApp { view Main }
+      view Main() { render Empty() }
+      view Editor(Input NoteInput) {
+        action Break() { set Input.Incomplete = true }
+        render Empty()
+      }
+      ${stubView('Empty')}
+    `)
+
+    Expect(validationErrorMessages(result)).toEqual([StateValidator.messages.derivedMemberWrite('Input.Incomplete')])
+  })
+
+  Test(
+    'accepts a create from a projection that covers every field a create must supply',
+    accepts(`
+      data Workspaces / Workspace { Name text (required "Name this workspace"), Pinned yes / no }
+      type WorkspaceInput is Workspace { Name }
+      app EditorApp { view Main }
+      view Main() {
+        state Input = WorkspaceInput { Name: "" }
+        action Add() { create Workspace with Input }
+        render Empty()
+      }
+      ${stubView('Empty')}
+    `),
+  )
+
+  Test(
+    'rejects a create from another entity, a to-many field, or a projection missing a needed field',
+    rejects(
+      `
+        data Workspaces / Workspace { Name text, Motto text, Documents (owned) }
+        data Documents / Document { Title text, Workspace }
+        type NameOnly is Workspace { Name }
+        type WithDocuments is Workspace { Name, Motto, Documents }
+        type TitleOnly is Document { Title }
+        app EditorApp { view Main }
+        view Main() {
+          state Short = NameOnly { Name: "" }
+          state Listed = WithDocuments { Name: "", Motto: "" }
+          state Other = TitleOnly { Title: "" }
+          action Add() {
+            create Workspace with Short
+            create Workspace with Listed
+            create Workspace with Other
+          }
+          render Empty()
+        }
+        ${stubView('Empty')}
+      `,
+      dataWriteValidationMessages.createInputMissing('Workspace', 'Motto'),
+      dataWriteValidationMessages.createInputField('Workspace', 'Documents'),
+      dataWriteValidationMessages.createInput('Workspace'),
+    ),
+  )
+
+  Test(
     'rejects invalid projected input fields and bulk updates from another entity',
     rejects(
       `
@@ -121,7 +265,7 @@ Describe('validator: types and expressions', () => {
     'rejects incompatible copy targets and projected input widening',
     rejects(
       `
-        data Documents / Document { Title text Body text }
+        data Documents / Document { Title text, Body text }
         type DocumentInput is Document { Title, Body }
         type TitleInput is Document { Title }
         app EditorApp { view Main }
@@ -688,7 +832,7 @@ function caseScopeApp(body: string, declarations = ''): string {
     app ScopeApp { view Main }
     view Main() {
       ${declarations}
-      query Workspaces { }
+      query Workspaces = Workspaces with { }
       render Col() { ${body} }
     }
     ${stubContainer('Col')}

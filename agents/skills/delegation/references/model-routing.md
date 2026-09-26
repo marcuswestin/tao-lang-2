@@ -1,13 +1,13 @@
 # Model routing and measurement
 
 The routing table in `../SKILL.md` owns tier names. The repository sets Claude Code's
-`CLAUDE_CODE_SUBAGENT_MODEL` to its standard tier and maps the `opus` alias with
-`ANTHROPIC_DEFAULT_OPUS_MODEL`. [Claude Code's documented order](https://code.claude.com/docs/en/sub-agents)
+`CLAUDE_CODE_SUBAGENT_MODEL` to its standard tier and leaves the `opus` alias unpinned, so each
+install resolves it to the newest Opus that install knows. [Claude Code's documented order](https://code.claude.com/docs/en/sub-agents)
 is an explicit spawn model, the subagent definition's model, the subagent default, then the
 parent's model. Do not set `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`: it overrides profile pins, including
-deep reviewers. The alias mapping only affects uses of `opus`. Claude Code 2.1.280 or later is
-[required for Opus 5.5](https://code.claude.com/docs/en/model-config); an older installed version
-cannot establish live resolution, regardless of what the generated settings say.
+deep reviewers. Claude Code 2.1.280 or later is
+[required for Opus 5.5](https://code.claude.com/docs/en/model-config); an older install resolves
+`opus` to an older model, and `./agent model-audit` names the install that did.
 Claude Code and Codex accept `low`/`medium`/`high`/`xhigh` effort in `effort` and
 `model_reasoning_effort` profile fields respectively; Cursor puts effort in the model string.
 
@@ -27,15 +27,18 @@ is not a bill. Compare completion and defect escape rates, review findings accep
 elapsed task time, and rework against a baseline of the same task types. A faster or cheaper spawn
 does not establish a cheaper completed task. Missing usage data stays unknown.
 
-The 2026-09-23 sample of 19 Claude subagent transcripts established an old `opus` alias
-resolution and that cache reads and writes dominated its API-equivalent estimate. It did not
-measure a denominator of successfully completed tasks, elapsed task time, review defects,
-re-reads, or plan usage. The tier changes here have no measured completed-task savings. The
-Developer chose Opus 5.5 for the standard Claude Code and Cursor tiers on 2026-09-25; measure
-completed-task cost, quality, and latency before claiming an improvement.
-
 `./agent delegation-report` displays recent resolved models when supported hook fields or bounded
 transcript metadata provide them. Spawn hooks do not share an agent ID with start hooks, so a
-transcript observation cannot establish which explicit selection produced it. The startup drift
-check uses fresh local catalog metadata and installed harness version; transcript mismatch warnings
-are deferred until the events can be correlated without guessing.
+transcript observation cannot establish which explicit selection produced it.
+
+`./agent model-audit` compares the table with what this machine ran instead: a Codex id the
+installed catalog supersedes; a full Claude id behind a newer model of its family; and a Claude
+Code install whose latest request under an alias ran an older model than another install ran,
+unless its version also ran the newer one, which makes the older model a session's own choice.
+Every Codex install on the machine rewrites the one catalog with the models offered to its own
+version, so an id missing from it is only a note naming the version that fetched it. The audit
+reads every project's transcripts, since an alias resolves per install, and also measures the
+context and compactions of this checkout's sessions; `--until` ends the window early, to measure
+the period before a change. Session start runs its one-day form and prints one line only when
+there is a finding, which `./agent doctor` also shows. A finding is the Developer's to act on,
+never a reason to edit the table unasked.

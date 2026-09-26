@@ -5,6 +5,66 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const DISPATCHER = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts')
 
 Describe('named host command dispatch', () => {
+  Test('launches only Docker Desktop and propagates launch failure', async () => {
+    const root = await mkTestDir('tao-docker-desktop-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const bin = FS.resolvePath('bin', root)
+      const log = FS.resolvePath('open.log', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["docker-desktop start"] }')
+      const open = FS.resolvePath('open', bin)
+      await FS.writeText(open, '#!/bin/zsh\nprintf "%s\\n" "$@" >> "$TAO_HOST_LOG"\nexit "${TAO_OPEN_EXIT:-0}"\n')
+      await FS.chmod(open, 0o755)
+      const invoke = (args: string[], exitCode = '0') =>
+        CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'docker-desktop', ...args],
+          cwd: root,
+          env: {
+            PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+            TAO_HOST_LOG: log,
+            TAO_OPEN_EXIT: exitCode,
+          },
+        })
+      Expect((await invoke(['start'])).exitCode).toBe(0)
+      Expect(await FS.readText(log)).toBe('-a\nDocker\n')
+      Expect((await invoke(['start', '-a', 'Terminal'])).exitCode).toBe(2)
+      Expect((await invoke(['stop'])).exitCode).toBe(2)
+      Expect(await FS.readText(log)).toBe('-a\nDocker\n')
+      Expect((await invoke(['start'], '1')).exitCode).toBe(1)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('routes only reclaim execution through the named host target', async () => {
+    const root = await mkTestDir('tao-reclaim-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('dev.log', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["reclaim --execute"] }')
+      const dev = FS.resolvePath('dev', root)
+      await FS.writeText(dev, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.chmod(dev, 0o755)
+      const executed = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, 'reclaim', '--execute'],
+        cwd: root,
+        env: { TAO_HOST_LOG: log },
+      })
+      Expect(executed.exitCode).toBe(0)
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual(['reclaim', '--execute'])
+
+      const rejected = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, 'reclaim', '--execute', '--report-json'],
+        cwd: root,
+        env: { TAO_HOST_LOG: log },
+      })
+      Expect(rejected.exitCode).toBe(2)
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual(['reclaim', '--execute'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('forwards only the selected release preparation target as argv', async () => {
     const root = await mkTestDir('tao-release-host-')
     try {
@@ -160,6 +220,76 @@ Describe('named host command dispatch', () => {
       })
       Expect(started.exitCode).toBe(0)
       Expect((await FS.readText(log)).trim().split('\n')).toEqual(['-o', 'lstart=', '-p', '1234'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('validates VM recovery and base profiles before Just can interpret extra recipes or options', async () => {
+    const root = await mkTestDir('tao-vm-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('just.log', root)
+      const just = FS.resolvePath('just', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["standalone-cli-clean-machine"] }')
+      await FS.writeText(just, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.chmod(just, 0o755)
+      const env = { PATH: root, TAO_HOST_LOG: log }
+      for (
+        const args of [
+          ['--diagnose', 'tao-acceptance-1-2', 'fix'],
+          ['--dry-run'],
+          ['--justfile', '/tmp/untrusted'],
+          ['--stop', '../other'],
+          ['--recover-lease', '../other'],
+          ['--audit-results', '../other'],
+          ['--audit-results', 'tao-acceptance-1-2', 'fix'],
+          ['--recover-lease', 'tao-acceptance-1-2', 'fix'],
+          ['--diagnose', 'vanilla'],
+          ['--prepare-base'],
+          ['--base'],
+          ['--prepare-base', 'unknown'],
+          ['--base', 'unknown'],
+          ['--prepare-base', 'tao-acceptance-1-2'],
+          ['--base', 'tao-acceptance-1-2'],
+          ['--prepare-base', 'vanilla', 'fix'],
+          ['--base', 'xcode', 'fix'],
+          ['--prepare-base', '--justfile'],
+          ['--base', 'vanilla fix'],
+          ['--base=vanilla'],
+        ]
+      ) {
+        const denied = await CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'standalone-cli-clean-machine', ...args],
+          cwd: root,
+          env,
+        })
+        Expect(denied.exitCode).toBe(2)
+        Expect(denied.stderr).toContain('--prepare-base|--base <vanilla|xcode>')
+        Expect(await FS.exists(log)).toBe(false)
+      }
+      for (
+        const args of [
+          [],
+          ['--diagnose', 'tao-acceptance-1-2'],
+          ['--stop', 'tao-acceptance-1-2'],
+          ['--collect', 'tao-acceptance-1-2'],
+          ['--recover-lease', 'tao-acceptance-1-2'],
+          ['--audit-results', 'tao-acceptance-1-2'],
+          ['--prepare-base', 'vanilla'],
+          ['--prepare-base', 'xcode'],
+          ['--base', 'vanilla'],
+          ['--base', 'xcode'],
+        ]
+      ) {
+        const accepted = await CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'standalone-cli-clean-machine', ...args],
+          cwd: root,
+          env,
+        })
+        Expect(accepted.exitCode).toBe(0)
+        Expect((await FS.readText(log)).trim().split('\n')).toEqual(['standalone-cli-clean-machine', ...args])
+      }
     } finally {
       await FS.remove(root)
     }

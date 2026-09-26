@@ -10,14 +10,14 @@ const leaf = stubView('Leaf')
 
 const documents = `
   data Documents / Document {
-    Title text
+    Title text,
     Final yes / Draft no
   }
 `
 
 const songs = `
   data Songs / Song {
-    Title text
+    Title text,
     Liked yes / Unliked no
   }
 `

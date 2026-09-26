@@ -3,10 +3,10 @@
 // One note: a title, a body, and whether it is pinned.
 package
 data Notes / Note {
-   Title text (title)
-   Body text (default "")
-   Pinned yes / no
-   CreatedAt time (default now)
+   Title text (title),
+   Body text (default ""),
+   Pinned yes / no,
+   CreatedAt time (default now),
 
-   order by CreatedAt
+   order by CreatedAt,
 }

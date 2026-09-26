@@ -1,9 +1,11 @@
 import type React from 'react'
 import { beginActionLaunch, deferTransactionCommit, suspendAcrossLaunch } from './TR-action-transactions'
 import { RuntimeAssert } from './TR-assert'
+import type { RuntimeAuthScope, TaoConfiguredAuth } from './TR-auth'
 import type { TaoAppDatasourceBinding } from './TR-data'
 import type { TaoDesign } from './TR-design'
 import { UnexpectedBehaviorError, UserInputError } from './TR-errors'
+import type { RuntimeCommand } from './TR-interaction'
 import { resetInteractionRuntime } from './TR-interaction-catalog'
 import { ownerOfNavigation, RuntimeAppDefinition } from './TR-navigation-app'
 import { NavigationAppHost } from './TR-navigation-app-host'
@@ -47,6 +49,7 @@ import {
   endNavigationRestorationTest,
 } from './TR-navigation-restoration'
 import { RuntimeNavigationValue } from './TR-navigation-value'
+import type { TaoReadNet } from './TR-read-net'
 import { type TaoProps, TaoPropsControls } from './TR-TaoProps'
 
 export { testNavKind } from './TR-navigation-conformance'
@@ -90,7 +93,9 @@ export type TaoAppDeclaration = Readonly<{
 }>
 
 export type TaoAppDefinition = {
-  auxiliaries(): Record<string, TaoNavigationInput>
+  agentCommands?(): readonly RuntimeCommand[]
+  auth?(): TaoConfiguredAuth
+  auxiliaries(scope?: RuntimeAuthScope): Record<string, TaoNavigationInput>
   /**
    * The stores the app mounts. A variant in another module inherits these values rather than
    * recompiling its base's datasource, whose names are not in scope there.
@@ -100,7 +105,9 @@ export type TaoAppDefinition = {
   /** A definition built for a Studio cell forwards the app's design, which an app may not declare. */
   design?(): TaoDesign | undefined
   name: string
-  navigator(): TaoNavigationInput
+  navigator(scope?: RuntimeAuthScope): TaoNavigationInput
+  /** The project's `guard default`, which every app in the project carries when one is declared. */
+  readNet?(): TaoReadNet | undefined
   restoration?: TaoAppRestorationDefinition
   useSetup?(): void
 }

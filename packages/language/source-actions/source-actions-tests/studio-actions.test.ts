@@ -11,7 +11,7 @@ import SourceActions, {
   type StudioSnapSketchToFlowPatchRequest,
   type StudioSourcePatchRequest,
 } from '../source-actions-src/source-actions'
-import { parseDocument, parseRawDocument } from './test-source-actions'
+import { parseDocument, parseRawDocument, sourceActionOptionsFor } from './test-source-actions'
 
 Describe('Studio source-action patch bus', () => {
   Test('inserts a current-dialect component and returns a full-document versioned edit', async () => {
@@ -212,7 +212,7 @@ Describe('Studio source-action patch bus', () => {
       use Col, Text from @tao/ui
       data Playlists / Playlist { Title text }
       view MainView() {
-         query Playlists
+         query Playlists = Playlists
          render Col() {
             loop Playlists / Playlist {
                Text(Playlist.Title)
@@ -238,7 +238,7 @@ Describe('Studio source-action patch bus', () => {
       use Col, Text from @tao/ui
       data Playlists / Playlist { Title text }
       view MainView() {
-         query Playlists
+         query Playlists = Playlists
          render Col() {
             loop Playlists / Playlist {
                loop Playlists / Playlist {
@@ -340,6 +340,39 @@ Describe('Studio source-action patch bus', () => {
       renderId: id,
     })
     Expect(patch.content).toContain('Text("First") [gap 8, body, size 18]')
+  })
+
+  Test('inspects and edits a clause that reads a color value without treating it as a token', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+      workspace design Theme { colors { accent #2f6b4f } }
+      app Demo { view MainView Design Theme }
+      view MainView() { render Badge(Tint: accent) }
+      view Badge(Tint color default accent) {
+         render Text("Badge") [background Tint, pad 4]
+      }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("Badge")'))
+    const inspection = SourceActions.inspectStudioRender(document, id)
+
+    Expect(inspection.styleEntries).toEqual([['background', 'Tint']])
+    Expect(inspection.explorations).toEqual([['pad', 4]])
+    Expect(inspection.styleProvenance[0]?.landing).toEqual({ kind: 'element-inline' })
+    // Only a raw color can become a token; a value read is refused as a request, not a crash.
+    await Expect(SourceActions.applyStudioPatch(document, {
+      entry: ['background', 'Tint'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName: 'badge' },
+      renderId: id,
+    })).rejects.toThrow('Current Tao design tokens can only promote raw background, bg, border, fg, or ink colors.')
+
+    const patch = await SourceActions.applyStudioPatch(document, {
+      entry: ['ink', 'Tint'],
+      kind: 'set-style-entry',
+      landing: { kind: 'element-inline' },
+      renderId: id,
+    })
+    Expect(patch.content).toContain('Text("Badge") [background Tint, pad 4, ink Tint]')
   })
 
   Test('inspects the owning view and its root render so a host can size a focused frame to it', async () => {
@@ -630,6 +663,137 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).toContain('Text [size 18]')
     Expect(patch.content).toContain('render Text("First")')
     Expect(patch.content).not.toContain('Text("First") [size 18]')
+  })
+
+  Test('lands new colors and element defaults of a design without typed blocks as canonical source', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+
+      design Theme { }
+
+      view MainView() {
+         render Text("First") [size 18, background #c00]
+      }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+
+    const colored = await SourceActions.applyStudioPatch(document, {
+      entry: ['background', '#c00'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName: 'danger' },
+      renderId: id,
+    })
+    Expect(colored.content).toContain('design Theme {\n   colors {\n      danger #c00\n   }\n}')
+    Expect(colored.content).toContain('Text("First") [size 18, background danger]')
+    await expectCanonical(colored.content)
+
+    const defaulted = await SourceActions.applyStudioPatch(document, {
+      entry: ['size', 18],
+      kind: 'set-style-entry',
+      landing: { elementName: 'Text', kind: 'element-default' },
+      renderId: id,
+    })
+    Expect(defaulted.content).toContain('design Theme {\n   styles {\n      Text [size 18]\n   }\n}')
+    await expectCanonical(defaulted.content)
+  })
+
+  Test('lands new colors and forks of a flat design in typed blocks, leaving flat members as written', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { ink #111 body [ink ink, size 14] }
+      view MainView() { render Text("First") [body, size 18, background #c00] }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+
+    const colored = await SourceActions.applyStudioPatch(document, {
+      entry: ['background', '#c00'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName: 'danger' },
+      renderId: id,
+    })
+    Expect(colored.content).toContain('   ink #111\n')
+    Expect(colored.content).toContain('   colors {\n      danger #c00\n   }\n')
+
+    const recolored = await SourceActions.applyStudioPatch(document, {
+      entry: ['background', '#c00'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName: 'ink' },
+      renderId: id,
+    })
+    Expect(recolored.content).toContain('   ink #c00\n')
+    Expect(recolored.content).not.toContain('colors {')
+
+    const forked = await SourceActions.applyStudioPatch(document, {
+      entry: ['size', 18],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'body', kind: 'style-bundle', mode: 'fork' },
+      renderId: id,
+    })
+    Expect(forked.content).toContain('   body [ink ink, size 14]\n')
+    Expect(forked.content).toContain('   styles {\n      bodyVariant [ink ink, size 18]\n   }\n')
+    Expect(forked.content).toContain('Text("First") [bodyVariant, background #c00]')
+  })
+
+  Test('refuses a Capitalized or keyword name for a new color, size, or fork', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { colors { ink #111 } styles { card [pad 4] } }
+      view MainView() { render Text("First") [card, pad 12, background #c00] }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+    const color = (tokenName: string): StudioSourcePatchRequest => ({
+      entry: ['background', '#c00'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName },
+      renderId: id,
+    })
+    const size = (tokenName: string): StudioSourcePatchRequest => ({
+      entry: ['pad', 12],
+      kind: 'set-style-entry',
+      landing: { kind: 'size-token', tokenName },
+      renderId: id,
+    })
+    const fork = (forkName: string): StudioSourcePatchRequest => ({
+      entry: ['pad', 12],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'card', forkName, kind: 'style-bundle', mode: 'fork' },
+      renderId: id,
+    })
+
+    await Expect(SourceActions.applyStudioPatch(document, color('Danger'))).rejects.toThrow(
+      "Studio color token names start with a lowercase letter; use 'danger' instead of 'Danger'.",
+    )
+    await Expect(SourceActions.applyStudioPatch(document, color('color'))).rejects.toThrow(
+      "Studio color token name 'color' is a Tao keyword; choose another name.",
+    )
+    await Expect(SourceActions.applyStudioPatch(document, size('CardPad'))).rejects.toThrow(
+      "Studio size token names start with a lowercase letter; use 'cardPad' instead of 'CardPad'.",
+    )
+    await Expect(SourceActions.applyStudioPatch(document, size('when'))).rejects.toThrow(
+      "Studio size token name 'when' is a Tao keyword; choose another name.",
+    )
+    await Expect(SourceActions.applyStudioPatch(document, fork('Special'))).rejects.toThrow(
+      "Studio forked style bundle names start with a lowercase letter; use 'special' instead of 'Special'.",
+    )
+    await Expect(SourceActions.applyStudioPatch(document, fork('color'))).rejects.toThrow(
+      "Studio forked style bundle name 'color' is a Tao keyword; choose another name.",
+    )
+    // A keyword prefix is still a name.
+    Expect((await SourceActions.applyStudioPatch(document, color('colorful'))).content).toContain('colorful #c00')
+  })
+
+  Test('names a default fork of a Capitalized style as a lowercase style', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { styles { Card [pad 4] } }
+      view MainView() { render Text("First") [Card, pad 12] }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      entry: ['pad', 12],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'Card', kind: 'style-bundle', mode: 'fork' },
+      renderId: renderId(requireRenderByText(document, 'Text("First")')),
+    })
+
+    Expect(patch.content).toContain('cardVariant [pad 12]')
+    Expect(patch.content).toContain('Text("First") [cardVariant]')
   })
 
   Test('accepts exactly the current Studio layout vocabulary', async () => {
@@ -1410,6 +1574,56 @@ Describe('Studio source-action patch bus', () => {
     Expect(stringLiteralValues(updated)).toContain('Captured {draft}')
   })
 
+  for (const scope of ['plural-import', 'singular-import', 'folder', 'local'] as const) {
+    Test(`resolves captured entity rows with ${scope} scope`, async () => {
+      const imported = scope === 'plural-import'
+        ? 'use Notes from ./Data.tao'
+        : scope === 'singular-import'
+        ? 'use Note, Notes from ./Data.tao'
+        : ''
+      await withTaoFiles('tao-captured-fixture-import-', {
+        'Data.tao': `${scope === 'folder' ? 'folder' : 'workspace'} data Notes / Note { Title text }`,
+        'View.tao': `
+          ${imported}
+          ${scope === 'local' ? 'data Notes / Note { Title text }' : ''}
+          view List() {
+            query Notes = Notes
+            render Empty()
+          }
+          view Empty() { render inject \`\`\`ts return null \`\`\` }
+          scenarios List "states" { device phone scenario "empty" { render () } }
+        `,
+      }, async paths => {
+        const parsed = await Workspace.validate(paths['View.tao'])
+        Expect(parsed.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+        const patch = await SourceActions.applyStudioPatch(parsed.entry.document, {
+          fixtureName: 'CapturedState',
+          kind: 'insert-captured-fixture',
+          plan: {
+            accounts: [],
+            creates: [{ entity: 'Note', fields: { Title: 'Captured' }, name: 'Note1' }],
+          },
+        })
+        await FS.writeText(paths['View.tao'], patch.content)
+        const validated = await Workspace.validate(paths['View.tao'])
+        Expect(validated.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+        const fixture = validated.entry.ast.statements.find(AST.isFixtureDeclaration)!
+        const row = fixture.block.entries.find(AST.isFixtureCreateBinding)!
+        Expect.Is(row.entity.ref, AST.isEntityDataDeclaration)
+        Expect(AST.getDocument(row.entity.ref).uri.fsPath).toBe(
+          scope === 'local' ? paths['View.tao'] : paths['Data.tao'],
+        )
+        const imports = validated.entry.ast.statements.filter(AST.isUseStatement)
+        Expect(imports.flatMap(use => use.importedDeclarations.map(reference => reference.$refText))).toEqual(
+          scope === 'plural-import' || scope === 'singular-import' ? ['Note', 'Notes'] : [],
+        )
+        if (imports.length !== 0) {
+          Expect(imports[0]!.importPath).toBe('./Data.tao')
+        }
+      })
+    })
+  }
+
   Test('toggles the nearest owning flow direction from a stable nested leaf id', async () => {
     const document = await parseDocument(`
       use Col, Row, Text from @tao/ui
@@ -1812,40 +2026,52 @@ Describe('Studio source-action patch bus', () => {
     } as unknown as StudioSourcePatchRequest)).rejects.toThrow('unsupported fields')
   })
 
-  Test('adds an imported entity parameter and fixture argument to every sketch scenario', async () => {
-    await withTaoFiles('tao-source-actions-sketch-feed-', {
-      'Data.tao': `workspace data Playlists / Playlist { Cover text Title text Score number }\n`,
-      'View1.tao': `
-        use Placeholder from @tao/ui
-        public view View1() { render Placeholder("View1") [width 360, height 76] }
-        fixture Sketches {
-          ChillVibes = create Playlist { Cover: "cover.png", Title: "Chill Vibes", Score: 7 }
-          MorningRun = create Playlist { Cover: "run.png", Title: "Morning Run", Score: 12 }
-        }
-        scenarios View1 "sketch" {
-          device phone
-          scenario "first" { render () }
-          scenario "second" { render () }
-        }
-      `,
-    }, async paths => {
-      const parsed = await Workspace.parse(paths['View1.tao'])
-      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, addEntityRequest(), {
-        files: parsed.files.map(file => file.ast),
-      })
-      const updated = await Workspace.shared(FS.dirname(paths['View1.tao'])).then(workspace =>
-        workspace.parseSource(patch.content, parsed.entry.document.uri)
-      )
+  for (const existingImport of ['', 'use Playlists from ./Data.tao']) {
+    Test(
+      `adds an imported entity parameter to every sketch scenario with ${existingImport || 'no data import'}`,
+      async () => {
+        await withTaoFiles('tao-source-actions-sketch-feed-', {
+          'Data.tao': `workspace data Playlists / Playlist { Cover text, Title text, Score number }\n`,
+          'View1.tao': `
+          use Placeholder from @tao/ui
+          ${existingImport}
+          public view View1() { render Placeholder("View1") [width 360, height 76] }
+          fixture Sketches {
+            ChillVibes = create Playlist { Cover: "cover.png", Title: "Chill Vibes", Score: 7 }
+            MorningRun = create Playlist { Cover: "run.png", Title: "Morning Run", Score: 12 }
+          }
+          scenarios View1 "sketch" {
+            device phone
+            scenario "first" { render () }
+            scenario "second" { render () }
+          }
+        `,
+        }, async paths => {
+          const parsed = await Workspace.parse(paths['View1.tao'])
+          const patch = await SourceActions.applyStudioPatch(parsed.entry.document, addEntityRequest(), {
+            files: parsed.files.map(file => file.ast),
+          })
+          const updated = await Workspace.shared(FS.dirname(paths['View1.tao'])).then(workspace =>
+            workspace.parseSource(patch.content, parsed.entry.document.uri)
+          )
 
-      Expect(patch.content).toContain('use Playlists from ./Data.tao')
-      Expect(patch.content).toContain('public\nview View1(Playlist)')
-      Expect(patch.content).toContain('fixture Sketches\n   device phone')
-      Expect(patch.content).toContain('scenario "first" {\n      render (Playlist: ChillVibes)')
-      Expect(patch.content).toContain('scenario "second" {\n      render (Playlist: MorningRun)')
-      Expect(updated.entry.document.parseResult.lexerErrors).toEqual([])
-      Expect(updated.entry.document.parseResult.parserErrors).toEqual([])
-    })
-  })
+          Expect(patch.content).toContain(
+            existingImport === '' ? 'use Playlist from ./Data.tao' : 'use Playlist, Playlists from ./Data.tao',
+          )
+          const entityImport = updated.entry.ast.statements.filter(AST.isUseStatement)
+            .flatMap(statement => statement.importedDeclarations)
+            .find(reference => reference.$refText === 'Playlist')
+          Expect.Is(entityImport?.ref, AST.isEntityDataDeclaration)
+          Expect(patch.content).toContain('public\nview View1(Playlist)')
+          Expect(patch.content).toContain('fixture Sketches\n   device phone')
+          Expect(patch.content).toContain('scenario "first" {\n      render (Playlist: ChillVibes)')
+          Expect(patch.content).toContain('scenario "second" {\n      render (Playlist: MorningRun)')
+          Expect(updated.entry.document.parseResult.lexerErrors).toEqual([])
+          Expect(updated.entry.document.parseResult.parserErrors).toEqual([])
+        }, { location: 'host' })
+      },
+    )
+  }
 
   Test('rejects incomplete sketch scenario bindings and arbitrary source text', async () => {
     const document = await parseDocument(`
@@ -1872,7 +2098,7 @@ Describe('Studio source-action patch bus', () => {
   Test('binds tagged sketch leaves to text, interpolation, and accessible image fields', async () => {
     const first = await parseDocument(`
       use Image, Placeholder, Row, Text from @tao/ui
-      data Playlists / Playlist { Cover text Title text Score number }
+      data Playlists / Playlist { Cover text, Title text, Score number }
       public view View1(Playlist) {
         render Row() {
           #studio_rect_0063006f007600650072
@@ -1931,7 +2157,7 @@ Describe('Studio source-action patch bus', () => {
   Test('rejects stale sketch tags, unknown paths, and non-text image fields', async () => {
     const document = await parseDocument(`
       use Placeholder from @tao/ui
-      data Playlists / Playlist { Title text Score number }
+      data Playlists / Playlist { Title text, Score number }
       public view View1(Playlist) {
         #studio_rect_007400690074006c0065
         render Placeholder("Title") [width 100]
@@ -2053,9 +2279,9 @@ Describe('Studio canvas-mode source actions', () => {
       use Col, Text from @tao/ui
 
       data Stories / Story {
-         Title text
-         Score number
-         Author text
+         Title text,
+         Score number,
+         Author text,
          Summary text?
       }
 
@@ -2175,7 +2401,7 @@ Describe('Studio canvas-mode source actions', () => {
       use Col, Text from @tao/ui
 
       data Stories / Story {
-         Title text
+         Title text,
          Score number
       }
 
@@ -2385,7 +2611,7 @@ Describe('Studio canvas-mode source actions', () => {
         renderId: renderId(requireRenderByText(parsed.entry.document, 'First')),
         wrapper: 'Row',
       }, { files: [parsed.entry.ast, sibling.entry.ast] })).rejects.toThrow("cannot import 'Row' from @tao/ui")
-    })
+    }, { location: 'host' })
   })
 
   Test('wrap-render keeps a Snap marker attached to the render it identifies', async () => {
@@ -2408,6 +2634,12 @@ Describe('Studio canvas-mode source actions', () => {
     Expect(patch.content.indexOf('Row()')).toBeLessThan(patch.content.indexOf('#studio_rect_00720031'))
   })
 })
+
+/** expectCanonical asserts that `tao check` finds edited source canonical: every source fix leaves it unchanged. */
+async function expectCanonical(content: string): Promise<void> {
+  const document = await parseRawDocument(content)
+  Expect(await SourceActions.fixSource(document, await sourceActionOptionsFor(document))).toBe(content)
+}
 
 function source(text: string): string {
   return `${Text.stripIndent(text)}\n`

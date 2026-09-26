@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
+import { authGrants } from '../../auth-policy'
 import { type Compiled, gen, LocalDataBindings, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { activeDataStorePlan } from './data-store-context'
@@ -33,14 +34,14 @@ export const DataCompiler = {
    * entities keep their own device catalog with its own connection and storage key so a synced
    * datasource never carries them.
    */
-  DataCatalog(entities: readonly AST.EntityDataDeclaration[]): Compiled {
+  DataCatalog(entities: readonly AST.EntityDataDeclaration[], access: readonly AST.AccessDeclaration[] = []): Compiled {
     const plan = activeDataStorePlan()
     const stores = plan?.stores ?? ASTUtils.planDataStores(entities, []).stores
     return gen`
       ${
       gen.list(
         stores.filter(store => store.kind !== 'device'),
-        store => dataCatalogSchema(gen.scopeName({ name: store.binding }), store.name, store.collections),
+        store => dataCatalogSchema(gen.scopeName({ name: store.binding }), store.name, store.collections, access),
         { newLines: 1 },
       )
     }
@@ -51,6 +52,7 @@ export const DataCompiler = {
           localDataCatalogScope(),
           'LocalData',
           stores.find(store => store.kind === 'device')?.collections ?? [],
+          access,
         )
       }
         ${gen.scopeName({ name: LocalDataBindings.datasource })} = TR.Data.Configure(
@@ -78,15 +80,18 @@ export const DataCompiler = {
     return gen.noop()
   },
 
-  EntityDataDefinition(entity: AST.EntityDataDeclaration): Compiled {
+  EntityDataDefinition(entity: AST.EntityDataDeclaration, access: readonly AST.AccessDeclaration[] = []): Compiled {
     const order = entity.block.entries.find(AST.isDataDefaultOrder)
     const fields = entity.block.entries.filter(AST.isEntityDataField)
+    const unique = entity.block.entries.filter(AST.isDataUnique).map(entry => entry.fieldNames)
     const policies = AST.entityCommandPoliciesOf(entity)
     const surfaced = policies.filter(policy => !policy.hide).flatMap(policy => policy.commands.map(resolveRef))
     const hidden = policies.filter(policy => policy.hide).flatMap(policy => policy.commands.map(resolveRef))
     return gen`
       [${gen.jsLiteral(entity.singularName)}]: {
         collection: ${gen.jsLiteral(entity.name)},
+        ${access.length ? gen`grants: ${gen.jsLiteral(authGrants(entity, access))},` : gen.noop()}
+        ${unique.length ? gen`uniqueConstraints: ${gen.jsLiteral(unique)},` : gen.noop()}
         ${
       policies.length === 0
         ? gen.noop()
@@ -118,7 +123,7 @@ export const DataCompiler = {
     const sourceFilter = query.source ? compileRelationSourceFilter(query.source, entity) : undefined
     return gen`
       ${gen.scopeName(query)} = TR.Data.Query(
-        ${catalogScopeOf(entity)},
+        TR.Auth.Store(_TaoAuthScope, ${catalogScopeOf(entity)}),
         {
           entity: ${gen.jsLiteral(Type.dataEntityName(entity))},
           filters: [
@@ -132,6 +137,7 @@ export const DataCompiler = {
           ],
           ${clauses.find(AST.isOrderClause) ? Compile.OrderClause(clauses.find(AST.isOrderClause)!) : ''}
           ${compileLimitClause(clauses.find(AST.isLimitClause))}
+          ${compileSearchClause(clauses.find(AST.isSearchClause))}
         },
         TR.Value,
       )
@@ -164,10 +170,18 @@ export const DataCompiler = {
 
   CreateStatement(create: AST.CreateStatement): Compiled {
     const entity = resolveRef(create.entity)
+    if (create.source) {
+      return gen`TR.Data.CreateWith(
+        TR.Auth.Store(_TaoAuthScope, ${catalogScopeOf(entity)}),
+        ${gen.jsLiteral(Type.dataEntityName(entity))},
+        ${Compile.Expression(create.source)},
+      )`
+    }
+    Assert.defined(create.block, 'validated create has a write block or input source')
     const bindings = ASTUtils.resolveDataWriteBindings(entity, create.block.fields, true)
     Assert(bindings.diagnostics.length === 0, 'validated create has no field-binding diagnostics')
     return gen`TR.Data.Create(
-      ${catalogScopeOf(entity)},
+      TR.Auth.Store(_TaoAuthScope, ${catalogScopeOf(entity)}),
       ${gen.jsLiteral(Type.dataEntityName(entity))},
       { ${gen.list(bindings.pairs, Compile.DataWriteField)} },
     )`
@@ -203,13 +217,14 @@ function dataCatalogSchema(
   scope: Compiled,
   name: string,
   entities: readonly AST.EntityDataDeclaration[],
+  access: readonly AST.AccessDeclaration[],
 ): Compiled {
   return gen`
     ${scope} = TR.Data.Schema({
       name: '${name}',
       schemaVersion: 1,
       entities: {
-        ${gen.list(entities, Compile.EntityDataDefinition)}
+        ${gen.list(entities, entity => DataCompiler.EntityDataDefinition(entity, access))}
       },
     })
   `
@@ -235,6 +250,10 @@ function catalogScopeOf(entity: ASTUtils.DataEntityDefinition): Compiled {
 
 function compileLimitClause(limit: AST.LimitClause | undefined): Compiled {
   return limit ? gen`limit: ${limit.count.value},` : gen.noop()
+}
+
+function compileSearchClause(search: AST.SearchClause | undefined): Compiled {
+  return search ? gen`search: () => ${Compile.Expression(search.term)},` : gen.noop()
 }
 
 function compileRelationSourceFilter(
@@ -273,13 +292,27 @@ function compileEntityDataField(
   const traits = field.traits?.traits ?? []
   const indexed = owner.block.entries.some(entry => AST.isDataIndex(entry) && entry.fieldName === field.name)
   const defaultModifier = traits.find(trait => trait.defaultValue || trait.defaultCase)
-  if (field.primitive || field.boolean) {
-    const kind = field.boolean ? 'boolean' : field.primitive!
+  const type = Type.dataFieldType(field)
+  const required = traits.find(AST.traitIsRequired)?.sentence
+  const metadata = gen`${field.optional ? gen`optional: true,` : gen.noop()}
+    ${required ? gen`required: ${gen.jsLiteral(required)},` : gen.noop()}`
+  if (type.kind === 'enum') {
+    return gen`[${gen.jsLiteral(field.name)}]: {
+      kind: 'enum',
+      cases: ${gen.jsLiteral(AST.caseSetCasesOf(type.declaration).map(AST.caseSetCaseName))},
+      enumValues: () => ${gen.scopeName(type.declaration)},
+      ${metadata}
+    },`
+  }
+  if (type.kind === 'primitive') {
+    const kind = type.primitive
     return gen`[${gen.jsLiteral(field.name)}]: {
       kind: ${gen.jsLiteral(kind)},
+      ${metadata}
       ${indexed ? 'indexed: true,' : ''}
       ${traits.some(trait => trait.unique) ? 'unique: true,' : ''}
       ${traits.some(AST.traitIsTitle) ? 'title: true,' : ''}
+      ${traits.some(trait => trait.search) ? 'search: true,' : ''}
       ${compileEntityFieldDefault(field, defaultModifier)}
     },`
   }
@@ -295,6 +328,7 @@ function compileEntityDataField(
     const store = plan ? ASTUtils.storeOfCollection(plan, direct) : undefined
     return gen`[${gen.jsLiteral(field.name)}]: {
       kind: 'reference',
+      ${metadata}
       relation: ${gen.jsLiteral(direct.singularName)},
       referenceField: ${gen.jsLiteral(unique.name)},
       ${store ? gen`store: ${gen.jsLiteral(store.name)},` : ''}
@@ -303,6 +337,7 @@ function compileEntityDataField(
   if (direct && !Type.dataFieldIsInverseRelation(field)) {
     return gen`[${gen.jsLiteral(field.name)}]: {
       kind: 'relation',
+      ${metadata}
       relation: ${gen.jsLiteral(direct.singularName)},
       ${storedRelationCascades(owner, direct) ? "onDelete: 'cascade'," : ''}
     },`

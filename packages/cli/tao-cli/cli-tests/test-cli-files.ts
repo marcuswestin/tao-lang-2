@@ -1,5 +1,5 @@
 import { FS, Platform, Text } from '@shared'
-import { withTaoFiles } from '@shared/test'
+import { initGitTestRepository, mkGitTestDir, withTaoFiles } from '@shared/test'
 import { Writable } from 'node:stream'
 import type { InPlace } from '../cli-src/in-place-files'
 import { runTaoCli } from '../cli-src/tao-cli'
@@ -93,7 +93,47 @@ export async function withTaoFixture(
   testsFunction: (rootDir: string) => Promise<void>,
 ): Promise<void> {
   await withoutInheritedNoCache(async () => {
-    await withTaoFiles('tao-cli-test', files, (_paths, rootDir) => testsFunction(rootDir), { verbatim: true })
+    // CLI tests exercise project-root detection; give each fixture its own root outside this Git checkout.
+    await withTaoFiles('tao-cli-test', files, async (_paths, rootDir) => {
+      await withTaoHome(rootDir, () => testsFunction(rootDir))
+    }, {
+      location: 'host',
+      verbatim: true,
+    })
+  })
+}
+
+/** withTaoHome keeps a CLI fixture's machine state inside its own writable test root. */
+export async function withTaoHome<T>(rootDir: string, run: () => Promise<T>): Promise<T> {
+  const previousHome = Platform.runtimeProcess.env['TAO_HOME']
+  Platform.runtimeProcess.env['TAO_HOME'] = FS.resolvePath('.tao', rootDir)
+  try {
+    return await run()
+  } finally {
+    if (previousHome === undefined) {
+      delete Platform.runtimeProcess.env['TAO_HOME']
+    } else {
+      Platform.runtimeProcess.env['TAO_HOME'] = previousHome
+    }
+  }
+}
+
+/**
+ * withGitTaoFixture is `withTaoFixture` for a test that needs its fixture to be its own Git
+ * repository. The root sits in the OS temporary directory, outside every checkout, and a failing
+ * test keeps it for debugging.
+ */
+export async function withGitTaoFixture(
+  files: Record<string, string>,
+  testsFunction: (rootDir: string) => Promise<void>,
+): Promise<void> {
+  await withoutInheritedNoCache(async () => {
+    const rootDir = await mkGitTestDir('tao-cli-git-test-')
+    await initGitTestRepository(rootDir)
+    for (const [relativePath, source] of Object.entries(files)) {
+      await FS.writeText(FS.resolvePath(relativePath, rootDir), source)
+    }
+    await withTaoHome(rootDir, () => testsFunction(rootDir))
   })
 }
 

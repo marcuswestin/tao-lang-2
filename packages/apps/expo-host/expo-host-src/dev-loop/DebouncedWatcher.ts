@@ -94,21 +94,26 @@ export function startDebouncedWatcher(
 }
 
 /**
- * FIRST_BUN_WITHOUT_MACOS_EVENTS is the Bun that stopped delivering native file-edit events on macOS
- * 27, in both `tao test --watch` and the dev loop; 1.3.13 delivered them.
+ * FIRST_BUN_WATCHING_ONLY_THROUGH_FSEVENTS is the Bun whose macOS `fs.watch` watches single files
+ * through FSEvents too, where earlier ones used kqueue. An agent sandbox refuses FSEvents, so from
+ * this release on a sandboxed watcher receives no native events at all; outside a sandbox they
+ * arrive as before.
  */
-const FIRST_BUN_WITHOUT_MACOS_EVENTS = '1.4.2'
+const FIRST_BUN_WATCHING_ONLY_THROUGH_FSEVENTS = '1.3.14'
 
 /**
  * defaultsToPolling reports whether a watcher on this platform and runtime polls when its caller does
- * not choose. Every Bun from the one that broke native events onward polls, not only that release:
- * polling on a Bun that has since fixed them costs some CPU, while native watching on one that has
- * not misses edits without a word. Under Node there is no Bun version, and native events work.
+ * not choose. The events are lost only inside an agent sandbox, which refuses the FSEvents service,
+ * but nothing here can tell a sandbox apart reliably, so every macOS Bun that depends on FSEvents
+ * polls. That costs an ordinary Mac some CPU; the alternative is missing edits without a word inside
+ * a sandbox. Letting the sandbox reach FSEvents removes the reason, which
+ * `DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START` tracks. Under Node there is no Bun
+ * version, and the sandbox's refusal surfaces as an `EMFILE` error rather than silence.
  */
 export function defaultsToPolling(platform: string, bunVersion: string | undefined): boolean {
   return platform === 'darwin'
     && bunVersion !== undefined
-    && Platform.semverSatisfies(bunVersion, `>=${FIRST_BUN_WITHOUT_MACOS_EVENTS}`)
+    && Platform.semverSatisfies(bunVersion, `>=${FIRST_BUN_WATCHING_ONLY_THROUGH_FSEVENTS}`)
 }
 
 /** shouldIgnoreWatchPath excludes noisy, generated, or vendored paths every dev-loop watcher skips. */

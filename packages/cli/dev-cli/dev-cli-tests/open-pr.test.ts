@@ -51,6 +51,28 @@ function cleanFeatureBranchRoutes(): Record<string, RouteResult> {
   }
 }
 
+const PR_LIST_KEY = routeKey(
+  'gh',
+  ['pr', 'list', '--head', BRANCH, '--state', 'open', '--json', 'number,url', '--limit', '1'],
+  ROOT,
+)
+const SUBJECT = 'Add the example workflow'
+const BODY = '- one detail\n- another'
+
+/** openedPullRequestRoutes is `cleanFeatureBranchRoutes` for a branch with no open pull request, whose
+ * `gh pr create` opens `prNumber` drafted from the newest commit. */
+function openedPullRequestRoutes(prNumber: number): Record<string, RouteResult> {
+  return {
+    ...cleanFeatureBranchRoutes(),
+    [PR_LIST_KEY]: { stdout: '[]' },
+    [routeKey('git', ['log', '-1', '--pretty=format:%s'], ROOT)]: { stdout: SUBJECT },
+    [routeKey('git', ['log', '-1', '--pretty=format:%b'], ROOT)]: { stdout: BODY },
+    [routeKey('gh', ['pr', 'create', '--base', 'main', '--head', BRANCH, '--title', SUBJECT, '--body', BODY], ROOT)]: {
+      stdout: `https://github.com/tao/tao/pull/${prNumber}\n`,
+    },
+  }
+}
+
 function headViewKey(prNumber: number): string {
   return routeKey('gh', ['pr', 'view', String(prNumber), '--json', 'headRefOid,mergeable,statusCheckRollup'], ROOT)
 }
@@ -78,23 +100,16 @@ function fakeDependencies(
 }
 
 Describe('open-pr', () => {
-  Test('waits for the pushed commit’s own checks before watching any', async () => {
+  Test('waits for the opened pull request’s checks before watching any', async () => {
     // What the first real runs met: `gh pr checks` asked straight after the push, before GitHub had
-    // created the new commit's workflow run, answered "no checks reported" — and on a reused pull
-    // request it can answer with the previous commit's finished checks instead. The pushed commit's
-    // run appeared seconds later. The previous commit's checks must not stand in for the new one's.
-    const routes = cleanFeatureBranchRoutes()
-    routes[
-      routeKey('gh', ['pr', 'list', '--head', BRANCH, '--state', 'open', '--json', 'number,url', '--limit', '1'], ROOT)
-    ] = {
-      stdout: '[{"number":2,"url":"https://github.com/o/r/pull/2"}]',
-    }
+    // created the workflow run, answered "no checks reported". The run appeared seconds later.
+    const routes = openedPullRequestRoutes(2)
     routes[routeKey('gh', ['pr', 'checks', '--help'], ROOT)] = { stdout: '  --watch  Watch checks\n' }
     routes[routeKey('gh', ['pr', 'checks', '2', '--watch'], ROOT)] = {}
     routes[routeKey('gh', ['pr', 'checks', '2', '--json', 'name,state,link,bucket'], ROOT)] = {
       stdout: JSON.stringify([{ bucket: 'pass', link: 'https://ci/1', name: 'unit', state: 'SUCCESS' }]),
     }
-    const views = [headView('previoussha0000', 1), headView(HEAD_SHA, 0), headView(HEAD_SHA, 1)]
+    const views = [headView(HEAD_SHA, 0), headView(HEAD_SHA, 0), headView(HEAD_SHA, 1)]
     const { calls, dependencies } = fakeDependencies(routes)
     const sleeps: number[] = []
     dependencies.sleep = async ms => {
@@ -121,12 +136,7 @@ Describe('open-pr', () => {
   })
 
   Test('fails, without watching, when no checks ever appear on the pushed commit', async () => {
-    const routes = cleanFeatureBranchRoutes()
-    routes[
-      routeKey('gh', ['pr', 'list', '--head', BRANCH, '--state', 'open', '--json', 'number,url', '--limit', '1'], ROOT)
-    ] = {
-      stdout: '[{"number":2,"url":"https://github.com/o/r/pull/2"}]',
-    }
+    const routes = openedPullRequestRoutes(2)
     routes[headViewKey(2)] = headView(HEAD_SHA, 0)
     const { calls, dependencies } = fakeDependencies(routes)
 
@@ -141,19 +151,18 @@ Describe('open-pr', () => {
   Test('names a conflict with main as the reason no checks appeared', async () => {
     // The second real run: GitHub creates no pull_request workflow run for a pull request that
     // conflicts with its base, so blaming disabled Actions sent the reader the wrong way.
-    const routes = cleanFeatureBranchRoutes()
-    routes[
-      routeKey('gh', ['pr', 'list', '--head', BRANCH, '--state', 'open', '--json', 'number,url', '--limit', '1'], ROOT)
-    ] = {
-      stdout: '[{"number":2,"url":"https://github.com/o/r/pull/2"}]',
-    }
+    const routes = openedPullRequestRoutes(2)
     routes[headViewKey(2)] = headView(HEAD_SHA, 0, 'CONFLICTING')
     const { dependencies } = fakeDependencies(routes)
 
     const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
 
     Expect(result.exitCode).toBe(1)
-    Expect(result.lines.some(line => line.includes('conflicts with main') && line.includes('Merge main'))).toBe(true)
+    // Resolving the conflict takes a later push, which starts no run, so the remedy names the rerun.
+    Expect(result.lines.some(line =>
+      line.includes('conflicts with main') && line.includes('Merge main')
+      && line.includes(`gh workflow run <workflow file> --ref ${BRANCH}`)
+    )).toBe(true)
   })
 
   Test('refuses a detached HEAD', async () => {
@@ -210,18 +219,11 @@ Describe('open-pr', () => {
       .rejects.toThrow('gh auth login')
   })
 
-  Test('reuses an existing pull request instead of creating a second one', async () => {
+  Test('reuses an existing pull request, and waits for no checks its push cannot start', async () => {
+    // The workflows run only when a pull request opens, so a push to one already open starts none;
+    // waiting for them would end in a failure that blames disabled Actions.
     const routes = cleanFeatureBranchRoutes()
-    routes[
-      routeKey('gh', ['pr', 'list', '--head', BRANCH, '--state', 'open', '--json', 'number,url', '--limit', '1'], ROOT)
-    ] = {
-      stdout: JSON.stringify([{ number: 7, url: 'https://github.com/tao/tao/pull/7' }]),
-    }
-    routes[headViewKey(7)] = headView(HEAD_SHA, 1)
-    routes[routeKey('gh', ['pr', 'checks', '--help'], ROOT)] = { stdout: 'Show CI status.\n' } // no --watch
-    routes[routeKey('gh', ['pr', 'checks', '7', '--json', 'name,state,link,bucket'], ROOT)] = {
-      stdout: JSON.stringify([{ bucket: 'pass', link: 'https://ci/1', name: 'unit', state: 'SUCCESS' }]),
-    }
+    routes[PR_LIST_KEY] = { stdout: JSON.stringify([{ number: 7, url: 'https://github.com/tao/tao/pull/7' }]) }
     const { calls, dependencies } = fakeDependencies(routes)
 
     const result = await OpenPrCommand.run({ repositoryRoot: ROOT }, dependencies)
@@ -229,32 +231,15 @@ Describe('open-pr', () => {
     Expect(result.exitCode).toBe(0)
     Expect(result.lines.some(line => line.includes('Reusing the existing pull request') && line.includes('#7')))
       .toBe(true)
-    Expect(calls.some(call => call.startsWith('gh pr create'))).toBe(false)
+    Expect(result.lines.some(line => line.includes('started no checks') && line.includes(`--ref ${BRANCH}`)))
+      .toBe(true)
+    Expect(calls.some(call => call.startsWith('gh pr create') || call.startsWith('gh pr view')))
+      .toBe(false)
+    Expect(calls.some(call => call.startsWith('gh pr checks'))).toBe(false)
   })
 
   Test('drafts a new pull request from the newest commit and fails when a check fails', async () => {
-    const routes = cleanFeatureBranchRoutes()
-    routes[
-      routeKey('gh', ['pr', 'list', '--head', BRANCH, '--state', 'open', '--json', 'number,url', '--limit', '1'], ROOT)
-    ] = {
-      stdout: '[]',
-    }
-    routes[routeKey('git', ['log', '-1', '--pretty=format:%s'], ROOT)] = { stdout: 'Add the example workflow' }
-    routes[routeKey('git', ['log', '-1', '--pretty=format:%b'], ROOT)] = { stdout: '- one detail\n- another' }
-    routes[
-      routeKey('gh', [
-        'pr',
-        'create',
-        '--base',
-        'main',
-        '--head',
-        BRANCH,
-        '--title',
-        'Add the example workflow',
-        '--body',
-        '- one detail\n- another',
-      ], ROOT)
-    ] = { stdout: 'https://github.com/tao/tao/pull/42\n' }
+    const routes = openedPullRequestRoutes(42)
     routes[headViewKey(42)] = headView(HEAD_SHA, 2)
     routes[routeKey('gh', ['pr', 'checks', '--help'], ROOT)] = { stdout: 'Show CI status.\n\n  --watch   watch\n' }
     routes[routeKey('gh', ['pr', 'checks', '42', '--watch'], ROOT)] = { exitCode: 1 }
@@ -275,11 +260,7 @@ Describe('open-pr', () => {
 
   Test('prefers a prepared merge message over the newest commit when one is on disk', async () => {
     const routes = cleanFeatureBranchRoutes()
-    routes[
-      routeKey('gh', ['pr', 'list', '--head', BRANCH, '--state', 'open', '--json', 'number,url', '--limit', '1'], ROOT)
-    ] = {
-      stdout: '[]',
-    }
+    routes[PR_LIST_KEY] = { stdout: '[]' }
     routes[
       routeKey('gh', [
         'pr',
@@ -315,12 +296,7 @@ Describe('open-pr', () => {
   })
 
   Test('polls gh pr checks --json on an interval when this gh has no --watch flag', async () => {
-    const routes = cleanFeatureBranchRoutes()
-    routes[
-      routeKey('gh', ['pr', 'list', '--head', BRANCH, '--state', 'open', '--json', 'number,url', '--limit', '1'], ROOT)
-    ] = {
-      stdout: JSON.stringify([{ number: 3, url: 'https://github.com/tao/tao/pull/3' }]),
-    }
+    const routes = openedPullRequestRoutes(3)
     routes[headViewKey(3)] = headView(HEAD_SHA, 1)
     routes[routeKey('gh', ['pr', 'checks', '--help'], ROOT)] = { stdout: 'Show CI status.\n' } // no --watch
     const { dependencies } = fakeDependencies(routes)

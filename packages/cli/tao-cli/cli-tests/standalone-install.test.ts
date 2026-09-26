@@ -4,22 +4,27 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 // The binary here is a shell script standing in for Tao, so these cover the install script alone
 // and run anywhere; `just standalone-cli-acceptance` installs a real build the same way.
 const INSTALL_SCRIPT = Repo.resolvePath('packages/cli/tao-cli/cli-src/standalone-install.sh')
-const STAND_IN = '#!/bin/sh\n[ "$1" = --version ] && echo 0.4.0\n'
+// It answers only when asked the way the installer must ask, from `/` and naming no version, because a
+// real release asked from inside a pinned project would hand the question to the release pinned there.
+const STAND_IN = '#!/bin/sh\n[ "$1" = --version ] && [ "$(pwd)" = / ] && [ -z "${TAO_VERSION:-}" ] && echo 0.4.0\n'
 
 Describe('standalone install script', () => {
-  Test('installs the release under the Tao home and links it into a user bin directory on PATH', async () => {
+  Test('installs and links the release inside the Tao home only', async () => {
     await withRelease(async ({ home, install }) => {
-      const userBin = FS.resolvePath('.local/bin', home)
+      const userBin = FS.resolvePath('.tao/bin', home)
       await FS.mkdir(userBin)
 
       const result = await install({ PATH: `${userBin}:/usr/bin:/bin` })
 
       Expect(result.exitCode).toBe(0)
       Expect(result.stdout).toContain('Downloading Tao 0.4.0')
-      const installed = FS.resolvePath('.local/share/tao/versions/0.4.0/tao', home)
+      const installed = FS.resolvePath('.tao/versions/0.4.0/tao', home)
       Expect(await FS.isFile(installed)).toBe(true)
+      Expect(await FS.isSymbolicLink(installed)).toBe(false)
+      Expect(await FS.isSymbolicLink(FS.resolvePath('tao', userBin))).toBe(true)
       Expect(await FS.realPath(FS.resolvePath('tao', userBin))).toBe(await FS.realPath(installed))
       Expect(result.stdout).not.toContain('export PATH')
+      Expect(await FS.exists(FS.resolvePath('.local', home))).toBe(false)
     })
   })
 
@@ -28,7 +33,55 @@ Describe('standalone install script', () => {
       const result = await install({ PATH: '/usr/bin:/bin' })
 
       Expect(result.exitCode).toBe(0)
-      Expect(result.stdout).toContain(`export PATH="${FS.resolvePath('.local/share/tao/bin', home)}:$PATH"`)
+      Expect(result.stdout).toContain(`export PATH="${FS.resolvePath('.tao/bin', home)}:$PATH"`)
+    })
+  })
+
+  Test('links through the first writable user-owned directory already on PATH', async () => {
+    await withRelease(async ({ home, install }) => {
+      const userBin = FS.resolvePath('bin', home)
+      await FS.mkdir(userBin)
+
+      const result = await install({ PATH: `${userBin}:/usr/bin:/bin` })
+
+      Expect(result.exitCode).toBe(0)
+      Expect(await FS.isSymbolicLink(FS.resolvePath('tao', userBin))).toBe(true)
+      Expect(await FS.realPath(FS.resolvePath('tao', userBin)))
+        .toBe(await FS.realPath(FS.resolvePath('.tao/versions/0.4.0/tao', home)))
+      Expect(await FS.isSymbolicLink(FS.resolvePath('.tao/bin/tao', home))).toBe(true)
+      Expect(result.stdout).toContain(`Linked tao in ${userBin}`)
+      Expect(result.stdout).not.toContain('export PATH')
+    })
+  })
+
+  Test('rejects relative TAO_HOME before creating an installation', async () => {
+    await withRelease(async ({ home, install }) => {
+      const result = await install({ PATH: '/usr/bin:/bin', TAO_HOME: 'relative-home' })
+
+      Expect(result.exitCode).not.toBe(0)
+      Expect(result.stderr).toContain('TAO_HOME must be an absolute path')
+      Expect(await FS.exists(FS.resolvePath('relative-home', home))).toBe(false)
+    })
+  })
+
+  Test('ignores XDG_DATA_HOME and installs under the single default home', async () => {
+    await withRelease(async ({ home, install }) => {
+      const result = await install({ PATH: '/usr/bin:/bin', XDG_DATA_HOME: '/other-data' })
+
+      Expect(result.exitCode).toBe(0)
+      Expect(await FS.isFile(FS.resolvePath('.tao/versions/0.4.0/tao', home))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('.local', home))).toBe(false)
+    })
+  })
+
+  Test('installs into an absolute declared home', async () => {
+    await withRelease(async ({ home, install }) => {
+      const declared = FS.resolvePath('chosen-home', home)
+      const result = await install({ PATH: '/usr/bin:/bin', TAO_HOME: declared, XDG_DATA_HOME: 'ignored-relative' })
+
+      Expect(result.exitCode).toBe(0)
+      Expect(await FS.isFile(FS.resolvePath('versions/0.4.0/tao', declared))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('.tao', home))).toBe(false)
     })
   })
 
@@ -57,7 +110,7 @@ Describe('standalone install script', () => {
 
       Expect(result.exitCode).not.toBe(0)
       Expect(result.stderr).toContain('does not match its published checksum')
-      Expect(await FS.exists(FS.resolvePath('.local/share/tao/versions/0.4.0', home))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/versions/0.4.0', home))).toBe(false)
     })
   })
 
@@ -82,6 +135,15 @@ Describe('standalone install script', () => {
       await FS.remove(listing)
       const result = await install({ PATH: '/usr/bin:/bin', TAO_VERSION: '0.4.0' })
 
+      Expect(result.exitCode).toBe(0)
+    })
+  })
+
+  Test('asks the download its version from outside the current project, naming none', async () => {
+    await withRelease(async ({ install }) => {
+      const result = await install({ PATH: '/usr/bin:/bin', TAO_VERSION: '0.4.0' })
+
+      Expect(result.stderr).toBe('')
       Expect(result.exitCode).toBe(0)
     })
   })
@@ -132,7 +194,13 @@ async function withRelease(run: (release: Release) => Promise<void>): Promise<vo
         CLI.run('/bin/sh', {
           args: [INSTALL_SCRIPT],
           cwd: home,
-          env: { HOME: home, TAO_RELEASES: `file://${releases}`, TAO_RELEASE_INDEX_URL: `file://${listing}`, ...env },
+          env: {
+            HOME: home,
+            TAO_HOME: '',
+            TAO_RELEASES: `file://${releases}`,
+            TAO_RELEASE_INDEX_URL: `file://${listing}`,
+            ...env,
+          },
         }),
     })
   } finally {

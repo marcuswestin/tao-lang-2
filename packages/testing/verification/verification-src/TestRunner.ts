@@ -988,7 +988,12 @@ const MAX_TEST_DEADLINE_MS = 120_000
  */
 function taoAppsSuite(roots: readonly string[], pattern: string, repositoryRoot: string): TestProcess {
   const args = ['test', ...roots, ...(pattern.length > 0 ? ['--name', pattern, '--pass-with-no-tests'] : [])]
-  return { args, command: './tao', cwd: repositoryRoot, files: roots }
+  return { args, command: './tao', cwd: repositoryRoot, env: testTaoHome(repositoryRoot), files: roots }
+}
+
+/** Test lanes keep disposable Tao state inside the checkout, independent of the installed product home. */
+function testTaoHome(repositoryRoot: string): Record<string, string> {
+  return TaoAppSharedRun.testHomeEnv(repositoryRoot)
 }
 
 function runtimeJestSuite(
@@ -1015,6 +1020,7 @@ function runtimeJestSuite(
     ],
     command: Shared.FS.resolvePath('.devenv/profile/bin/node', repositoryRoot),
     cwd: Shared.FS.resolvePath('packages/apps/expo-host', repositoryRoot),
+    env: testTaoHome(repositoryRoot),
     files,
     testReport,
   }

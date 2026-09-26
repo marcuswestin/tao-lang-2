@@ -10,7 +10,7 @@ import "./terminals"
 import "./restoration"
 
 entry ExpressionsGrammarEntrypoint:
-    ArgumentList | Expression | FunctionDeclaration;
+    ArgumentList | Expression | FunctionDeclaration | PhraseDeclaration;
 
 ArgumentList:
     arguments+=Argument (',' arguments+=Argument)*;
@@ -28,6 +28,27 @@ FunctionDeclaration:
 
 FunctionBlock:
     '{' statements+=FunctionStatement* '}';
+
+// A phrase is named copy that returns text. Its parameter list is omitted entirely for a phrase
+// with no holes (`phrase DocumentGone = "..."`), which is what lets it be referenced by bare name
+// like a `let` value (Decisions §14). Its body is either one interpolated string, or plural forms
+// separated by `/`, each led by a CLDR category keyword the validator checks against `other` and
+// its siblings — `one` is already reserved by `type X is one of A, B`, so it is spelled out as a
+// literal alternative here rather than folded into the validated-ID form the other categories take.
+PhraseDeclaration:
+    visibility=DeclarationVisibility? 'phrase' name=ID parameterList=ParameterList?
+    '=' (text=PhraseText | forms+=PhraseForm ('/' forms+=PhraseForm)*);
+
+PhraseForm:
+    category=PhraseCategory text=PhraseText;
+
+// A phrase with no holes still writes a plain string; only a phrase with an actual `{ ... }` hole
+// lexes as an interpolated string, so a phrase's text accepts either shape.
+PhraseText infers Expression:
+    InterpolatedString | StringLiteral;
+
+PhraseCategory returns string:
+    'one' | ID;
 
 FunctionStatement:
     ReturnStatement | IfFunctionStatement;
@@ -166,6 +187,7 @@ ConfigurationEntry:
     | key=USE_IMPORT_PATH block=ConfigurationBlock
     | label=ID ':' expression=Expression
     | name=ID ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)
+    | memberReference=MemberAccessExpression
     | reference=[ListedDeclaration:ID]
     | expression=NonIdentifierConstructorEntryValue;
 
@@ -209,9 +231,11 @@ ConfigurationReference:
 // `when` subject stops before `{`, which is what distinguishes a block from a bare item constructor,
 // and it stops before `/`, which is what leaves the compact form's separator visible.
 WhenExpression:
-    'when' subject=WhenSubjectExpression
-    ('{' branches+=WhenBranch+ otherwise=WhenOtherwise '}'
-        | positive=WhenSubjectExpression ('/' negativeLabel=CompactNegativeLabel negative=WhenSubjectExpression)?);
+    'when' (subject=WhenSubjectExpression
+    ('{' branches+=WhenBranch* otherwise=WhenOtherwise '}'
+        | branches+=BarWhenBranch* otherwise=BarWhenOtherwise
+        | positive=WhenSubjectExpression ('/' negativeLabel=CompactNegativeLabel negative=WhenSubjectExpression)?)
+        | branches+=PredicateWhenBranch* otherwise=BarWhenOtherwise);
 
 CompactNegativeLabel returns string:
     'not' | ID;
@@ -264,8 +288,17 @@ WhenSubjectPrimaryExpression infers Expression:
 WhenBranch:
     case=SubjectCaseName '->' value=OrExpression;
 
+BarWhenBranch infers WhenBranch:
+    barSyntax?='|' case=SubjectCaseName '->' value=OrExpression;
+
+PredicateWhenBranch infers WhenBranch:
+    barSyntax?='|' condition=OrExpression '->' value=OrExpression;
+
 WhenOtherwise:
     'otherwise' '->' value=OrExpression;
+
+BarWhenOtherwise infers WhenOtherwise:
+    barSyntax?='|' 'otherwise' '->' value=OrExpression;
 
 SubjectExpression infers Expression:
     '(' Expression ')' | ListLiteral | MemberAccessExpression | FunctionCallExpression | InterpolatedString
@@ -275,7 +308,7 @@ SubjectCaseName returns string:
     BuiltInSubjectCaseName | ID;
 
 BuiltInSubjectCaseName returns string:
-    'empty' | 'loading' | 'refreshing' | 'stale' | 'missing' | 'unauthorized' | 'error' | 'true' | 'false';
+    'empty' | 'loading' | 'refreshing' | 'stale' | 'missing' | 'unauthorized' | 'error' | 'true' | 'false' | 'yes' | 'no';
 
 CasePayload:
     name=ID;
@@ -298,11 +331,19 @@ ItemLiteral:
 ItemProperty:
     (label=ID ':')? value=Expression;
 
+// A numeric member names a design color family shade (`schemeAccent.20`), which a `color` argument
+// or default may pass; the validator rejects a shade on any other value.
 MemberAccessExpression:
-    target=[ValueDeclaration:ID] '.' members+=ID ('.' members+=ID)*;
+    target=[ValueDeclaration:ID] '.' (members+=ID ('.' members+=ID)* | shade=NUMBER);
 
+// A call invokes a pure function or named copy; both share this one shape (`Name(...)`), so a
+// separate phrase-call rule would be structurally ambiguous with this one at parse time — nothing
+// short of the linked name tells them apart. `function` resolves either kind; call sites branch on
+// which declaration kind actually linked.
 FunctionCallExpression:
-    function=[FunctionDeclaration:ID] '(' argumentList=ArgumentList? ')';
+    function=[CallableDeclaration:ID] '(' argumentList=ArgumentList? ')';
+
+type CallableDeclaration = FunctionDeclaration | PhraseDeclaration;
 
 InterpolatedString:
     INTERPOLATED_STRING_START parts+=InterpolatedStringPart* STRING_END;
@@ -341,4 +382,7 @@ RefinementExpression:
     target=[RefinementBaseDeclaration:ID] 'with' patchBlock=ConfigurationBlock;
 
 type RefinementBaseDeclaration = ValueDeclaration | TypeDeclaration;
-type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | CommandDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | DesignDeclaration;
+// A design color is a value only where a `color` argument or default names it; the scope offers
+// the mounted designs' colors there and nowhere else.
+type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | CommandDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | DesignDeclaration | DesignColor | PhraseDeclaration;
+type DesignColor = DesignColorEntry | DesignToken;

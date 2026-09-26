@@ -27,3 +27,8 @@ export function withDataStorePlan<ResultT>(
 export function activeDataStorePlan(): ASTUtils.DataStorePlan | undefined {
   return activePlan
 }
+
+/** activeFixtureStores excludes empty placeholder stores, but includes device-local collections. */
+export function activeFixtureStores(): readonly ASTUtils.DataStore[] {
+  return activePlan?.stores.filter(store => store.collections.length > 0) ?? []
+}

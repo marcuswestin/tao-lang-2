@@ -68,6 +68,11 @@ export function resolveDataWriteBindings(
   }
 }
 
+/** createRequiresField is whether a create must supply this field: a stored value with no default. */
+export function createRequiresField(field: DataFieldDefinition): boolean {
+  return Type.dataFieldType(field).kind !== 'list' && !hasDataFieldDefault(field)
+}
+
 function hasDataFieldDefault(field: DataFieldDefinition): boolean {
   return field.boolean
     || (field.traits?.traits ?? []).some(trait => trait.defaultValue !== undefined || trait.defaultCase !== undefined)

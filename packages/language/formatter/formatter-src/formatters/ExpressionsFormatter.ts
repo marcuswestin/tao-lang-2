@@ -113,6 +113,22 @@ export const ExpressionsFormatter = {
     f.noSpaceBefore(')')
   },
 
+  /** PhraseDeclaration formats an optional parameter list and a `=` before its body. */
+  PhraseDeclaration(f) {
+    f.visibilityOnOwnLine()
+    f.oneSpaceAfter('phrase')
+    f.noSpaceBefore('(')
+    f.oneSpaceAround('=')
+    if (f.node.forms.length > 0) {
+      f.oneSpaceAround('/')
+    }
+  },
+
+  /** PhraseForm spaces a plural category keyword before its interpolated string. */
+  PhraseForm(f) {
+    f.oneSpaceBeforeProperty('text')
+  },
+
   /** BinaryExpression formats operators with one space on each side. */
   BinaryExpression(f) {
     f.oneSpaceAround('==', '!=', '<', '<=', '>', '>=', '+', '-', '*', '/', 'and', 'or')
@@ -136,6 +152,10 @@ export const ExpressionsFormatter = {
    */
   WhenExpression(f) {
     f.oneSpaceAfter('when')
+    if (f.node.otherwise?.barSyntax) {
+      f.indentedLines([...f.node.branches, f.node.otherwise])
+      return
+    }
     if (f.node.positive) {
       f.oneSpaceBeforeProperty('positive')
       f.oneSpaceAround('/')
@@ -150,11 +170,13 @@ export const ExpressionsFormatter = {
 
   /** WhenBranch spaces a value branch around its arrow. */
   WhenBranch(f) {
+    f.oneSpaceAfter('|')
     f.oneSpaceAround('->')
   },
 
   /** WhenOtherwise spaces the required fallback around its arrow. */
   WhenOtherwise(f) {
+    f.oneSpaceAfter('|')
     f.oneSpaceAround('->')
   },
 

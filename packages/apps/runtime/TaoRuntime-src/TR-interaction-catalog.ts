@@ -1,9 +1,10 @@
 import React from 'react'
 import { Arrays } from './core/RuntimeCore'
 import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
+import { AuthControls } from './TR-auth'
 import type { TaoDesign, TaoDesignSpec } from './TR-design'
 import { CommandControls, type RuntimeCommand } from './TR-interaction'
-import { InteractionAttention, type TaoAttentionKey } from './TR-interaction-attention'
+import { InteractionAttention, runtimeInteractionValue, type TaoAttentionKey } from './TR-interaction-attention'
 import { interactionKeyboardPresence, normalizeInteractionKey } from './TR-interaction-keys'
 import {
   describeOutlineTable,
@@ -24,6 +25,7 @@ import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-
 import { type TaoProps, TaoPropsControls, type TaoVisualLayout } from './TR-TaoProps'
 
 export type TaoCommandSlotDescription = Readonly<{
+  scalarType?: 'text' | 'number' | 'boolean'
   entity: boolean
   name: string
   required: boolean
@@ -501,11 +503,20 @@ function registerCommands(table: TaoCommandTable): () => void {
 }
 
 function useRegisteredCommands(table: TaoCommandTable): void {
+  const auth = AuthControls.UseOptionalContext()
   const parent = useOutlineParentIdentity()
   const commands = table.commands
   const identities = commands.map(entry => entry.identity).join('\u0000')
   const current = React.useRef(table)
-  current.current = table
+  current.current = auth
+    ? {
+      ...table,
+      commands: table.commands.map(entry => ({
+        ...entry,
+        command: () => entry.command().with({ __taoAuth: runtimeInteractionValue(auth) }),
+      })),
+    }
+    : table
   React.useEffect(
     () =>
       commandCatalog.register({
@@ -519,9 +530,15 @@ function useRegisteredCommands(table: TaoCommandTable): void {
 }
 
 function useCommandSurface(surface: TaoCommandSurface): void {
+  const auth = AuthControls.UseOptionalContext()
   const parent = useOutlineParentIdentity()
   const current = React.useRef(surface)
-  current.current = surface
+  current.current = auth
+    ? {
+      ...surface,
+      commands: surface.commands.map(command => command.with({ __taoAuth: runtimeInteractionValue(auth) })),
+    }
+    : surface
   const signature = `${surface.identity}\u0000${surface.hidden.join('\u0000')}\u0000${surface.commands.length}`
   React.useEffect(
     () =>

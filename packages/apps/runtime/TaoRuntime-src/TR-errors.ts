@@ -193,7 +193,8 @@ export function reportActionFailure(
   action: string,
   arguments_: readonly unknown[],
   unownedError?: unknown,
-): void {
+  owned = false,
+): TaoActionFailureReport {
   const failure = actionFailureReport(error, transaction, action, arguments_)
   actionHistory.push(failure)
   if (actionHistory.length > 50) {
@@ -202,9 +203,10 @@ export function reportActionFailure(
   for (const listener of actionFailureListeners) {
     listener(failure)
   }
-  if (actionFailureListeners.size === 0) {
+  if (actionFailureListeners.size === 0 && !owned) {
     reportUnownedFailure(unownedError ?? new TaoActionFailure(failure.case, failure.message))
   }
+  return failure
 }
 
 /**
@@ -286,9 +288,7 @@ function actionFailureReport(
   action: string,
   arguments_: readonly unknown[],
 ): TaoActionFailureReport {
-  const failure = error instanceof TaoActionFailure
-    ? error
-    : new TaoActionFailure('Unexpected', '', error instanceof Error ? error.message : '')
+  const failure = asActionFailure(error)
   return Object.freeze({
     action,
     arguments: sanitize(arguments_) as readonly unknown[],
@@ -296,12 +296,28 @@ function actionFailureReport(
     frames: typeof error === 'object' && error !== null
       ? [...(actionFailureFrames.get(error) ?? transaction.frames)]
       : [...transaction.frames],
-    message: failure.providerSentence
-      || failure.declaredSentence
-      || `Couldn't finish '${action}.' Nothing was changed.`,
+    message: actionFailureMessage(failure, action),
     retryEligible: !transaction.externalEffects,
     timestamp: Date.now(),
   })
+}
+
+/** asActionFailure reads any thrown value as an action failure; an undeclared throw is `Unexpected`. */
+export function asActionFailure(error: unknown): TaoActionFailure {
+  return error instanceof TaoActionFailure
+    ? error
+    : new TaoActionFailure('Unexpected', '', error instanceof Error ? error.message : '')
+}
+
+/**
+ * actionFailureMessage selects the one user message for a failure: the provider's sentence, then the
+ * declared sentence, then a fallback naming the action. A failure report and a `when do` outcome
+ * read the same ladder, so a person sees one sentence whichever of them surfaces it.
+ */
+export function actionFailureMessage(failure: TaoActionFailure, action: string): string {
+  return failure.providerSentence
+    || failure.declaredSentence
+    || `Couldn't finish '${action}.' Nothing was changed.`
 }
 
 function sanitize(value: unknown, seen = new WeakSet<object>()): unknown {

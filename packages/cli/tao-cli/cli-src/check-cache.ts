@@ -46,6 +46,8 @@ import { verdictPackageFiles } from './toolchain-packages'
  *   hashed too.
  * - the **entry set**: which files of the workspace this run was asked to check. A check of one
  *   subdirectory validates a different graph than a check of the whole workspace and gets its own entry.
+ * Generated bridge modules are ignored outputs, so a clean stamp also records their paths and
+ * refuses replay if any module from the checked import graph has been deleted.
  */
 
 /**
@@ -56,7 +58,7 @@ import { verdictPackageFiles } from './toolchain-packages'
 const STAMP_PATH = '.artifacts/tao-check-stamp.json'
 
 /** The stamp layout and the composition above. An older or unreadable stamp is no stamp. */
-const STAMP_VERSION = 2
+const STAMP_VERSION = 3
 
 /**
  * The opt-outs. `TAO_CHECK_NO_CACHE` is this command's own, spelled the way `TAO_TEST_NO_CACHE` is
@@ -98,7 +100,12 @@ export type CheckCacheDiagnostic = {
 /** CheckCacheRecord is one workspace's clean verdict, offered for stamping. */
 type CheckCacheRecord = {
   diagnostics: readonly CheckCacheDiagnostic[]
+  metadataPaths: readonly string[]
   workspaceRoot: string
+}
+
+type CheckCacheReplay = {
+  diagnostics: readonly CheckCacheDiagnostic[]
 }
 
 /** CheckCacheOptions configures the stamp; `tao check` uses the defaults and tests pass a root. */
@@ -111,8 +118,8 @@ export type CheckCacheOptions = {
 type CheckCacheSession = {
   /** commit stamps every offered workspace whose inputs are still the ones its verdict was read from. */
   commit(records: readonly CheckCacheRecord[]): Promise<void>
-  /** reuse returns a workspace's recorded warnings when its inputs are unchanged, else undefined. */
-  reuse(workspaceRoot: string, entryFiles: readonly string[]): Promise<readonly CheckCacheDiagnostic[] | undefined>
+  /** reuse returns recorded warnings only while all generated bridge modules still exist. */
+  reuse(workspaceRoot: string, entryFiles: readonly string[]): Promise<CheckCacheReplay | undefined>
 }
 
 /** CheckCache owns when one `tao check` run may hand its per-workspace verdict to the next. */
@@ -126,6 +133,7 @@ export const CheckCache = {
 type CheckStampEntry = {
   diagnostics: readonly CheckCacheDiagnostic[]
   inputs: string
+  metadataPaths: readonly string[]
 }
 
 type CheckStamp = {
@@ -187,7 +195,11 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
             continue
           }
           delete entries[held.entryKey]
-          entries[held.entryKey] = { diagnostics: record.diagnostics, inputs: held.inputs }
+          entries[held.entryKey] = {
+            diagnostics: record.diagnostics,
+            inputs: held.inputs,
+            metadataPaths: record.metadataPaths.map(path => FS.relativePath(workspaceRoot, FS.resolvePath(path))),
+          }
         }
         await writeStamp(stampPath, repositoryRoot, { entries: capEntries(entries), version: STAMP_VERSION })
       })
@@ -196,7 +208,7 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
     async reuse(
       workspaceRoot: string,
       entryFiles: readonly string[],
-    ): Promise<readonly CheckCacheDiagnostic[] | undefined> {
+    ): Promise<CheckCacheReplay | undefined> {
       const resolvedRoot = FS.resolvePath(workspaceRoot)
       if (!FS.pathIsWithin(resolvedRoot, repositoryRoot)) {
         return undefined
@@ -208,7 +220,16 @@ function createSession(repositoryRoot: string, toolchain: string): CheckCacheSes
       }
       pending.set(resolvedRoot, held)
       const entry = (await readStamp(stampPath))?.entries[entryKey]
-      return entry?.inputs === held.inputs ? entry.diagnostics : undefined
+      if (entry?.inputs !== held.inputs) {
+        return undefined
+      }
+      for (const relativePath of entry.metadataPaths) {
+        const path = FS.resolvePath(relativePath, resolvedRoot)
+        if (!FS.pathIsWithin(path, resolvedRoot) || !await FS.isFile(path)) {
+          return undefined
+        }
+      }
+      return { diagnostics: entry.diagnostics }
     },
   }
 }
@@ -309,7 +330,10 @@ async function treeIdentity(root: string): Promise<string> {
     return TaoStdlib.ABSENT
   }
   const paths = await Repo.filesUnder(root, { excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames })
-  return await FS.filesIdentity(paths.map(path => [FS.relativePath(root, path), path]))
+  // Git lists directory symlinks as entries. They are not files, and reading one raises EISDIR.
+  const files = (await Promise.all(paths.map(async path => await FS.isFile(path) ? path : undefined)))
+    .filter((path): path is string => path !== undefined)
+  return await FS.filesIdentity(files.map(path => [FS.relativePath(root, path), path]))
 }
 
 /**
@@ -381,7 +405,11 @@ function parseStampEntry(entry: unknown): CheckStampEntry | undefined {
     return undefined
   }
   const candidate = entry as Partial<CheckStampEntry>
-  if (typeof candidate.inputs !== 'string' || !Array.isArray(candidate.diagnostics)) {
+  if (
+    typeof candidate.inputs !== 'string' || !Array.isArray(candidate.diagnostics)
+    || !Array.isArray(candidate.metadataPaths)
+    || candidate.metadataPaths.some(path => typeof path !== 'string')
+  ) {
     return undefined
   }
   const diagnostics: CheckCacheDiagnostic[] = []
@@ -404,7 +432,7 @@ function parseStampEntry(entry: unknown): CheckStampEntry | undefined {
       path: diagnostic.path,
     })
   }
-  return { diagnostics, inputs: candidate.inputs }
+  return { diagnostics, inputs: candidate.inputs, metadataPaths: candidate.metadataPaths }
 }
 
 /**

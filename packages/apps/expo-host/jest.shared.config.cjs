@@ -1,9 +1,5 @@
 const os = require('node:os')
-// The Tao CLI passes its bounded cache directory explicitly. A direct Jest invocation gets a
-// checkout-scoped cache too, instead of writing into the machine-wide jest_dx directory.
-const defaultCacheDirectory = `${os.homedir()}/.cache/tao/jest-standalone/${
-  Buffer.from(__dirname).toString('base64url')
-}`
+const { root: directCacheRoot } = require('./jest-direct-cache.cjs')
 
 // The per-journey budget an uncontended machine keeps. A Tao journey compiles and renders a whole
 // app, so its floor sits far above Jest's five-second default.
@@ -27,10 +23,33 @@ function starvationAdjustedTimeoutMs(budgetMs) {
 }
 
 function createRuntimeJestConfig(options) {
+  const realHttp = process.env.TAO_TEST_REAL_HTTP === '1'
+  // Capture Node's transport before Expo installs its native fetch stub, then restore it after
+  // the preset. Keep this explicit: ordinary journeys retain deterministic native mocks.
+  const preset = realHttp ? require('jest-expo/jest-preset') : undefined
+  const managedCacheDirectory = process.env.TAO_TEST_JEST_CACHE_DIRECTORY
   const dependencyRoot = process.env.TAO_TEST_NODE_MODULES_ROOT ?? '<rootDir>/node_modules'
+  // Inside the repository the runtime and `@shared` sit where the package layout puts them relative
+  // to this host. An installed Tao has no repository around its host, so it names both instead
+  // (`RuntimeToolchainPaths.expoEnvironment`), as it does for `metro.config.cjs`.
+  const runtimeSourceRoot = process.env.TAO_RUNTIME_SOURCE_ROOT ?? '<rootDir>/../runtime/TaoRuntime-src'
+  const sharedSourceRoot = process.env.TAO_SHARED_SOURCE_ROOT ?? '<rootDir>/../../shared/shared-src'
   return {
-    preset: 'jest-expo',
-    cacheDirectory: process.env.TAO_TEST_JEST_CACHE_DIRECTORY ?? defaultCacheDirectory,
+    ...(preset === undefined ? { preset: 'jest-expo' } : {
+      ...preset,
+      setupFiles: [
+        '<rootDir>/jest-http-capture.cjs',
+        ...preset.setupFiles,
+        '<rootDir>/jest-http-restore.cjs',
+      ],
+    }),
+    cacheDirectory: managedCacheDirectory ?? `${directCacheRoot(__dirname)}/data`,
+    ...(managedCacheDirectory === undefined
+      ? {
+        globalSetup: require.resolve('./jest-direct-cache-setup.cjs'),
+        globalTeardown: require.resolve('./jest-direct-cache-teardown.cjs'),
+      }
+      : {}),
     // Generated Tao apps may live outside the package's ancestor chain. Resolve workspace packages
     // from this runtime package's installed links.
     modulePaths: ['<rootDir>/node_modules'],
@@ -49,15 +68,15 @@ function createRuntimeJestConfig(options) {
     // and resolve. A config that generates test files elsewhere adds that directory to this list.
     roots: options.roots ?? ['<rootDir>/expo-host-tests', '<rootDir>/expo-host-src'],
     moduleNameMapper: {
-      '^@runtime/TR$': '<rootDir>/../runtime/TaoRuntime-src/TR.ts',
-      '^@tao/runtime$': '<rootDir>/../runtime/TaoRuntime-src/TR.ts',
-      '^@tao/runtime/core$': '<rootDir>/../runtime/TaoRuntime-src/core/RuntimeCore.ts',
-      '^@runtime/(.*)$': '<rootDir>/../runtime/TaoRuntime-src/$1',
+      '^@runtime/TR$': `${runtimeSourceRoot}/TR.ts`,
+      '^@tao/runtime$': `${runtimeSourceRoot}/TR.ts`,
+      '^@tao/runtime/core$': `${runtimeSourceRoot}/core/RuntimeCore.ts`,
+      '^@runtime/(.*)$': `${runtimeSourceRoot}/$1`,
       '^@expo-host$': '<rootDir>/expo-host-src/runtime.ts',
       '^@expo-host/(.*)$': '<rootDir>/expo-host-src/$1',
-      '^@shared$': '<rootDir>/../../shared/shared-src/shared.ts',
-      '^@shared/core$': '<rootDir>/../../shared/shared-src/core/shared-core.ts',
-      '^@shared/test$': '<rootDir>/../../shared/shared-src/testing/Test-Jest.ts',
+      '^@shared$': `${sharedSourceRoot}/shared.ts`,
+      '^@shared/core$': `${sharedSourceRoot}/core/shared-core.ts`,
+      '^@shared/test$': `${sharedSourceRoot}/testing/Test-Jest.ts`,
       '^(\\.{1,2}/.*)\\.js$': '$1',
       '^@jest/globals$': `${dependencyRoot}/@jest/globals`,
       '^@babel/runtime/(.*)$': `${dependencyRoot}/@babel/runtime/$1`,

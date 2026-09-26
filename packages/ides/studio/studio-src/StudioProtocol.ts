@@ -502,8 +502,10 @@ export type StudioFixtureValue =
   | Readonly<{ handle: string; kind: 'fixture-reference' }>
 
 export type StudioFixturePlan = Readonly<{
+  signedIn?: string
   accounts: readonly Readonly<{ fields: Readonly<Record<string, StudioFixtureValue>>; name: string }>[]
   creates: readonly Readonly<{
+    account?: string
     entity: string
     fields: Readonly<Record<string, StudioFixtureValue>>
     name: string
@@ -1540,8 +1542,11 @@ function parseFixturePlan(value: unknown): StudioFixturePlan | undefined {
   }
   const accounts = value['accounts'].map(parseFixtureAccount)
   const creates = value['creates'].map(parseFixtureCreate)
+  if (value['signedIn'] !== undefined && !nonEmptyString(value['signedIn'])) {
+    return undefined
+  }
   return accounts.every(isDefined) && creates.every(isDefined)
-    ? { accounts, creates }
+    ? { accounts, creates, ...(value['signedIn'] === undefined ? {} : { signedIn: value['signedIn'] as string }) }
     : undefined
 }
 
@@ -1558,7 +1563,15 @@ function parseFixtureCreate(value: unknown): StudioFixturePlan['creates'][number
     return undefined
   }
   const fields = parseFixtureFields(value['fields'])
-  return fields === undefined ? undefined : { entity: value['entity'], fields, name: value['name'] }
+  if (value['account'] !== undefined && !nonEmptyString(value['account'])) {
+    return undefined
+  }
+  return fields === undefined ? undefined : {
+    entity: value['entity'],
+    fields,
+    name: value['name'],
+    ...(value['account'] === undefined ? {} : { account: value['account'] as string }),
+  }
 }
 
 function parseFixtureFields(value: unknown): Readonly<Record<string, StudioFixtureValue>> | undefined {

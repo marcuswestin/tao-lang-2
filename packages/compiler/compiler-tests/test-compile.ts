@@ -35,5 +35,5 @@ export async function withCompiledTestPlan<const Files extends Record<string, st
       Compiler.createContext(await Packages.createContext(FS.dirname(testPath)), FS.dirname(testPath)),
     )
     await run(plan, paths)
-  })
+  }, { location: 'host' })
 }

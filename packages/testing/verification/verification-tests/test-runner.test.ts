@@ -359,6 +359,8 @@ Describe('test runner suite registry', () => {
     Expect(argsOf(byName, 'runtime-jest', { slots: 3 })).toContain('--maxWorkers=3')
     Expect(argsOf(byName, 'runtime-jest', { slots: 1 })).toContain('--maxWorkers=1')
     Expect(argsOf(byName, 'runtime-jest', { slots: 1 })).toContain('--no-watchman')
+    Expect(processOf(byName, 'runtime-jest').env?.['TAO_HOME'])
+      .toBe(Repo.resolvePath('.artifacts/testing/tao-home'))
   })
 
   Test('narrows the Jest child to the slots actually admitted after another lane joins', async () => {
@@ -423,6 +425,8 @@ Describe('test runner suite registry', () => {
     Expect(argsOf(byName, 'cli/dev-cli')).not.toContain('--pass-with-no-tests')
     Expect(argsOf(byName, 'runtime-jest').some(argument => argument.startsWith('--changedSince'))).toBe(false)
     Expect(argsOf(byName, 'tao-apps')).toEqual(['test', 'Apps/WordFlower'])
+    Expect(processOf(byName, 'tao-apps').env?.['TAO_HOME'])
+      .toBe(Repo.resolvePath('.artifacts/testing/tao-home'))
     Expect(byName.get('tao-apps')?.files).toEqual(['Apps/WordFlower'])
   })
 

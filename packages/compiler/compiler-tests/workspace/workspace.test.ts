@@ -1,6 +1,6 @@
 import { Packages } from '@ast-utils'
 import { AST, Langium } from '@parser'
-import { type Diagnostic, Diagnostics, FS } from '@shared'
+import { type Diagnostic, Diagnostics, FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until, withTaoFiles } from '@shared/test'
 import { LSPWorkspace, Workspace } from '../../compiler-src/workspace/index'
 import { createWorkspaceLspServices } from '../../compiler-src/workspace/langium-services'
@@ -44,13 +44,19 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const validation = await workspace.validate(paths['Main.tao']!)
         const compiled = await workspace.compile(paths['Main.tao']!)
 
-        Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(5)
+        Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(6)
         Expect(parseResult.files.some(file => file.path.endsWith('/@tao/Prelude.tao'))).toBe(true)
+        Expect(parseResult.files.some(file => file.path.endsWith('/@tao/auth/Auth.tao'))).toBe(true)
         Expect(errorMessages(validation)).toEqual([])
         Expect([...new Set(compiled.files.map(file => file.sourcePath))].sort()).toEqual([
           paths['Main.tao']!,
           paths['Packages/@cards/Title.tao']!,
           paths['Packages/@cards/screens/Main.tao']!,
+          Repo.resolvePath('packages/apps/stdlib/@tao/Prelude.tao'),
+          Repo.resolvePath('packages/apps/stdlib/@tao/auth/Auth.tao'),
+          Repo.resolvePath('packages/apps/stdlib/@tao/auth/Auth.ts'),
+          Repo.resolvePath('packages/apps/stdlib/@tao/auth/AuthFlow.ts'),
+          Repo.resolvePath('packages/apps/stdlib/@tao/auth/AuthViews.tsx'),
         ].sort())
       },
     )

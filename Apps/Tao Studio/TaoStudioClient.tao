@@ -20,11 +20,15 @@ app TaoStudioFiles {
 }
 
 design StudioDesign {
-   panel #090909
-   ink #f4f4f4
-   line #363636
-   Text [ink ink]
-   TextInput [background panel, border line, ink ink]
+   colors {
+      panel #090909
+      ink #f4f4f4
+      line #363636
+   }
+   styles {
+      Text [ink ink]
+      TextInput [background panel, border line, ink ink]
+   }
 }
 
 type StudioServer is datasource with {
@@ -35,71 +39,71 @@ type StudioServer is datasource with {
 
 workspace
 data Files / File {
-   StableId text (unique)
-   Path text
-   Name text
-   ParentPath text
-   Version text
-   Dirty boolean
-   Folder boolean
-   DiagnosticCount number
-   Diagnostics (owned)
+   StableId text (unique),
+   Path text,
+   Name text,
+   ParentPath text,
+   Version text,
+   Dirty boolean,
+   Folder boolean,
+   DiagnosticCount number,
+   Diagnostics (owned),
 
-   order by Path
+   order by Path,
 }
 
 workspace
 data Diagnostics / Diagnostic {
-   Message text
-   Source text
-   File
+   Message text,
+   Source text,
+   File,
 }
 
 workspace
 data Screens / Screen {
-   StableId text (unique)
-   Name text
-   SourcePath text
+   StableId text (unique),
+   Name text,
+   SourcePath text,
 }
 
 workspace
 data Views / View {
-   StableId text (unique)
-   Name text
-   SourcePath text
+   StableId text (unique),
+   Name text,
+   SourcePath text,
 }
 
 workspace
 data Scenarios / Scenario {
-   StableId text (unique)
-   Group text
-   Name text
-   SourcePath text
-   SubjectId text
+   StableId text (unique),
+   Group text,
+   Name text,
+   SourcePath text,
+   SubjectId text,
 }
 
 workspace
 data Checkpoints / Checkpoint {
-   StableId text (unique)
-   Path text
-   BeforeVersion text
-   AfterVersion text
-   Status text
+   StableId text (unique),
+   Path text,
+   BeforeVersion text,
+   AfterVersion text,
+   Status text,
 }
 
 workspace
 data DesignTokens / DesignToken {
-   StableId text (unique)
-   DesignName text
-   Kind text
-   Name text
-   SourcePath text
-   SourceVersion text
-   Start number
-   End number
-   Value text
+   StableId text (unique),
+   DesignName text,
+   Kind text,
+   Name text,
+   SourcePath text,
+   SourceVersion text,
+   Start number,
+   End number,
+   Value text,
 
-   order by SourcePath
+   order by SourcePath,
 }
 
 type StudioActionFailure is one of Conflict
@@ -178,7 +182,7 @@ view Disclosure(Label text, FolderPath text, CollapsedFolders list of text, Togg
 view TreeFolder(Label text, Expanded boolean, Toggle action()) accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 view FileTree(FolderPath text, CollapsedFolders list of text, ToggleFolder action(text)) {
-   query Files as Children {
+   query Children = Files with {
       where ParentPath == FolderPath
    }
    render Col() {
@@ -299,7 +303,7 @@ view ProjectViewRow(View) {
 }
 
 view ProjectViewsPanel() {
-   query Views as ProjectViews
+   query ProjectViews = Views
    render StudioPanelSurface("Project views") {
       guard ProjectViews {
          loading -> { Text("Loading compiled views…") }
@@ -317,7 +321,7 @@ view ScreenRow(Screen) {
 }
 
 view ScreensPanel() {
-   query Screens as ProjectScreens
+   query ProjectScreens = Screens
    render StudioPanelSurface("Screens") {
       guard ProjectScreens {
          loading -> { Text("Loading compiled screens…") }
@@ -335,7 +339,7 @@ view DesignTokenRow(DesignToken) {
 }
 
 view DesignTokenKindGroup(TokenKind text, Title text) {
-   query DesignTokens as Tokens {
+   query Tokens = DesignTokens with {
       where Kind == TokenKind
    }
    render Col() {
@@ -349,7 +353,7 @@ view DesignTokenKindGroup(TokenKind text, Title text) {
 }  }  }
 
 view DesignTokensPanel() {
-   query DesignTokens as Tokens
+   query Tokens = DesignTokens
    render StudioPanelSurface("Design") {
       guard Tokens {
          loading -> { Text("Loading parser-owned design values…") }

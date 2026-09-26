@@ -78,6 +78,7 @@ Describe('validator: workspace structure', () => {
         'list',
         'time',
         'duration',
+        'color',
         'action',
         'shortcut',
         'command',
@@ -92,7 +93,9 @@ Describe('validator: workspace structure', () => {
       Expect(appPrimitive?.slots?.properties.map(property => property.name)).toEqual([
         'Name',
         'Navigator',
+        'AgentCommands',
         'Datasource',
+        'Auth',
         'Design',
       ])
     })

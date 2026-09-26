@@ -5,7 +5,7 @@
 # Claude Code and Codex from the SessionStart hook generated out of .rulesync/hooks.jsonc for
 # worktrees they create themselves, and Cursor from .cursor/worktrees.json. Change what setup
 # does in the Justfile `setup` recipe, and keep this command and those hooks in step.
-# `direnv exec` is what builds or trusts the devenv profile the first time; `./agent` itself
-# links a linked worktree to the primary checkout's profile when one exists.
+# `devenv shell` builds the profile on first entry; `./agent` can reuse the primary checkout's
+# profile in a linked worktree when one exists.
 [pre-start]
-setup = "direnv allow && direnv exec . ./agent setup"
+setup = "devenv shell --no-tui ./agent setup"

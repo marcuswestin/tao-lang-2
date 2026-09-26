@@ -16,13 +16,13 @@ import { readWatchmanFacts, watchmanChecks, type WatchmanFacts } from './Watchma
  * The repository half of `doctor`: everything a checkout needs before any Tao command can work.
  * It never installs, never mutates the checkout, and never signals a process, so running it can
  * only ever tell you something. It does *run* processes to ask them about themselves — `git`,
- * `bun`, `node`, `watchman`, `direnv`, `du`, `lsof` — including a Node require of the Expo config
+ * `bun`, `node`, `watchman`, `du`, `lsof` — including a Node require of the Expo config
  * to prove the dependency graph resolves. `StudioDoctor` layers Studio's own checks on top.
  */
 
 /** The Node major devenv.nix pins, and the Bun the lockfile and workflow scripts assume. */
 const SUPPORTED_NODE_MAJOR = 24
-const SUPPORTED_BUN_RANGE = '>=1.3.0'
+const SUPPORTED_BUN_RANGE = '>=1.4.2'
 
 /** Ports Tao conventionally occupies, so an occupied one is reported with its owner. */
 const CONVENTIONAL_PORTS = [
@@ -139,7 +139,6 @@ export type DoctorFacts = {
   dependencyIssues: readonly string[]
   dependencyHealthError?: string
   devenvProfileNode?: string
-  direnvAllowed?: boolean
   generatedParserArtifacts: readonly { path: string; present: boolean }[]
   githubTransport: GitHubTransport
   gitHooks: readonly GitHookInstallation[]
@@ -164,7 +163,6 @@ export function repositoryDoctorChecks(facts: DoctorFacts): DoctorCheck[] {
     worktreeCheck(facts),
     worktreeRealPathCheck(facts),
     devenvProfileCheck(facts),
-    direnvCheck(facts),
     nodeCheck(facts),
     bunCheck(facts),
     bunTempDirCheck(facts),
@@ -252,7 +250,7 @@ function worktreeCheck(facts: DoctorFacts): DoctorCheck {
     return {
       detail: `${facts.repositoryRoot} (${kind}) is on a detached HEAD`,
       name: 'worktree',
-      remediation: 'Name a branch before committing: git switch -c feat/<name>',
+      remediation: 'Name a branch before committing: ./agent start-branch feat/<name>',
       status: 'warn',
     }
   }
@@ -270,29 +268,8 @@ function devenvProfileCheck(facts: DoctorFacts): DoctorCheck {
   return {
     detail: 'no pinned devenv profile is linked into this checkout',
     name: 'devenv profile',
-    remediation: 'Create the worktree with Worktrunk, or run: direnv allow && direnv exec . ./agent setup',
+    remediation: 'Run ./enter-tao-dev-env from a regular terminal to build the pinned environment.',
     status: 'fail',
-  }
-}
-
-function direnvCheck(facts: DoctorFacts): DoctorCheck {
-  if (facts.direnvAllowed === undefined) {
-    return {
-      detail: 'direnv is not installed, so .envrc trust could not be read',
-      name: 'direnv',
-      remediation: 'Optional. Install direnv to activate the pinned environment automatically.',
-      status: 'warn',
-    }
-  }
-  if (facts.direnvAllowed) {
-    return { detail: '.envrc is trusted', name: 'direnv', status: 'pass' }
-  }
-  // A linked worktree reuses the primary checkout's profile, so untrusted direnv is survivable.
-  return {
-    detail: "this checkout's .envrc is not trusted",
-    name: 'direnv',
-    remediation: 'Trust it with: direnv allow',
-    status: 'warn',
   }
 }
 
@@ -312,7 +289,7 @@ function nodeCheck(facts: DoctorFacts): DoctorCheck {
   return {
     detail: `${facts.nodeVersion}, but devenv.nix pins Node ${SUPPORTED_NODE_MAJOR}`,
     name: 'node',
-    remediation: 'Run Tao commands through ./agent or ./dev so the pinned profile is used.',
+    remediation: 'Re-enter ./enter-tao-dev-env, then rerun ./agent doctor.',
     status: 'warn',
   }
 }
@@ -322,7 +299,7 @@ function bunCheck(facts: DoctorFacts): DoctorCheck {
     return {
       detail: 'no Bun runtime is reachable',
       name: 'bun',
-      remediation: 'Install Bun through the pinned devenv profile: direnv allow && direnv exec . ./agent setup',
+      remediation: 'Install Bun through the pinned devenv profile: ./enter-tao-dev-env',
       status: 'fail',
     }
   }
@@ -332,7 +309,7 @@ function bunCheck(facts: DoctorFacts): DoctorCheck {
   return {
     detail: `${facts.bunVersion}, outside the supported ${SUPPORTED_BUN_RANGE}`,
     name: 'bun',
-    remediation: 'Run Tao commands through ./agent or ./dev so the pinned profile is used.',
+    remediation: 'Re-enter ./enter-tao-dev-env, then rerun ./agent doctor.',
     status: 'fail',
   }
 }
@@ -607,7 +584,6 @@ export async function readDoctorFacts(
     bunVersion,
     nodeVersion,
     watchman,
-    direnvAllowed,
     artifactRoots,
     ports,
     dependencyIssues,
@@ -620,7 +596,6 @@ export async function readDoctorFacts(
     readCommandVersion('bun', ['--version']),
     readCommandVersion('node', ['--version']),
     readWatchmanFacts(repositoryRoot),
-    readDirenvAllowed(repositoryRoot),
     Promise.all(ARTIFACT_ROOTS.map(path => readArtifactRoot(repositoryRoot, path))),
     Promise.all(CONVENTIONAL_PORTS.map(readPortOccupancy)),
     readDependencyIssues(),
@@ -651,7 +626,6 @@ export async function readDoctorFacts(
     dependencyHealthError: await dependencyHealthError(repositoryRoot),
     dependencyIssues,
     devenvProfileNode: await presentPath(repositoryRoot, '.devenv/profile/bin/node'),
-    direnvAllowed,
     fingerprint: environmentFingerprint(fingerprintFacts),
     generatedParserArtifacts: await readGeneratedParserArtifacts(repositoryRoot),
     githubTransport,
@@ -794,19 +768,6 @@ async function readCommandVersion(command: string, args: readonly string[]): Pro
     return undefined
   }
   return result.stdout.trim().split('\n')[0]?.trim()
-}
-
-async function readDirenvAllowed(repositoryRoot: string): Promise<boolean | undefined> {
-  const result = await CLI.run('direnv', { args: ['status', '--json'], cwd: repositoryRoot })
-  if (result.error !== undefined || result.exitCode !== 0) {
-    return undefined
-  }
-  try {
-    const status = JSON.parse(result.stdout) as { state?: { foundRC?: { allowed?: number } } }
-    return status.state?.foundRC?.allowed === 0
-  } catch {
-    return undefined
-  }
 }
 
 async function readArtifactRoot(repositoryRoot: string, path: string): Promise<ArtifactRoot> {

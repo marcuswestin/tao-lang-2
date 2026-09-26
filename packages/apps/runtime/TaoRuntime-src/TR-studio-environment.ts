@@ -1,6 +1,7 @@
 import React from 'react'
 import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
+import type { RuntimeAuthScope } from './TR-auth'
 import { createElement } from './TR-create-element'
 import type { TaoDataConnection, TaoDataProvider, TaoDataSchema, TaoFillOps, TaoFillRequest } from './TR-data'
 import { entityHandle, metadataOf } from './TR-data-entity'
@@ -78,8 +79,10 @@ type TaoStudioArgumentValue = Readonly<{
 }>
 
 export type TaoStudioFixturePlan = Readonly<{
+  signedIn?: string
   accounts: readonly Readonly<{ fields: Readonly<Record<string, TaoStudioFixtureValue>>; name: string }>[]
   creates: readonly Readonly<{
+    account?: string
     entity: string
     fields: Readonly<Record<string, TaoStudioFixtureValue>>
     name: string
@@ -209,9 +212,14 @@ export const StudioEnvironmentControls = {
    */
   useFixture(
     stores: TaoDataSchema | readonly TaoDataSchema[] | undefined,
+    auth?: RuntimeAuthScope,
   ): Readonly<{ handles: Readonly<Record<string, unknown>>; ready: boolean }> {
     const host = React.useContext(StudioHostContext)
     const applied = React.useRef(false)
+    const [failure, setFailure] = React.useState<unknown>(undefined)
+    if (failure !== undefined) {
+      throw failure
+    }
     const schemas = stores === undefined ? [] : Array.isArray(stores) ? stores : [stores as TaoDataSchema]
     const [handles, setHandles] = React.useState<Readonly<Record<string, unknown>>>({})
     const [ready, setReady] = React.useState(host === undefined || schemas.length === 0)
@@ -223,36 +231,78 @@ export const StudioEnvironmentControls = {
         host.registerSchema(schema)
       }
       applied.current = true
-      const resolved: Record<string, unknown> = {}
-      for (const account of host.cell.fixture.accounts) {
-        resolved[account.name] = resolveObject(account.fields, resolved)
+      let active = true
+      const apply = async () => {
+        const resolved: Record<string, unknown> = {}
+        const fixture = host.cell.fixture
+        const usesAuth = auth !== undefined
+          && (fixture.accounts.length > 0 || fixture.signedIn !== undefined
+            || fixture.creates.some(create => create.account !== undefined))
+        for (const account of fixture.accounts) {
+          resolved[account.name] = resolveObject(account.fields, resolved)
+        }
+        if (usesAuth) {
+          Object.assign(
+            resolved,
+            await auth.prepareFixture({
+              accounts: fixture.accounts.map(account => ({
+                name: account.name,
+                fields: resolveObject(account.fields, resolved),
+              })),
+              ...(fixture.signedIn ? { signedIn: fixture.signedIn } : {}),
+            }, schemas),
+          )
+        }
+        try {
+          for (const create of host.cell.fixture.creates) {
+            RuntimeAssert.input(
+              create.through === undefined,
+              `Tao Studio fixture '${create.name}' uses through-action setup that this runtime cannot execute yet.`,
+              { fixture: create.name },
+            )
+            const store = schemas.find(schema => schema.definition.entities[create.entity] !== undefined)
+            RuntimeAssert.input(
+              store,
+              `Tao Studio fixture '${create.name}' creates ${create.entity}, which no store in this app holds.`,
+              { entity: create.entity, fixture: create.name },
+            )
+            resolved[create.name] = usesAuth
+              ? auth.fixtureCreate(
+                store,
+                create.entity,
+                resolveObject(create.fields, resolved),
+                create.account ?? fixture.signedIn,
+              )
+              : store.create(create.entity, resolveObject(create.fields, resolved))
+          }
+          for (const update of host.cell.scenario.prepare) {
+            const target = entityHandle(resolved[update.target])
+            RuntimeAssert.input(
+              target !== undefined,
+              `Tao Studio prepare target '${update.target}' was not created.`,
+              { target: update.target },
+            )
+            metadataOf(target).schema.update(target, resolveObject(update.fields, resolved))
+          }
+        } finally {
+          if (usesAuth) {
+            auth.finishFixture()
+          }
+        }
+        if (active) {
+          setHandles(Object.freeze({ ...resolved }))
+          setReady(true)
+        }
       }
-      for (const create of host.cell.fixture.creates) {
-        RuntimeAssert.input(
-          create.through === undefined,
-          `Tao Studio fixture '${create.name}' uses through-action setup that this runtime cannot execute yet.`,
-          { fixture: create.name },
-        )
-        const store = schemas.find(schema => schema.definition.entities[create.entity] !== undefined)
-        RuntimeAssert.input(
-          store,
-          `Tao Studio fixture '${create.name}' creates ${create.entity}, which no store in this app holds.`,
-          { entity: create.entity, fixture: create.name },
-        )
-        resolved[create.name] = store.create(create.entity, resolveObject(create.fields, resolved))
+      void apply().catch(error => {
+        if (active) {
+          setFailure(error)
+        }
+      })
+      return () => {
+        active = false
       }
-      for (const update of host.cell.scenario.prepare) {
-        const target = entityHandle(resolved[update.target])
-        RuntimeAssert.input(
-          target !== undefined,
-          `Tao Studio prepare target '${update.target}' was not created.`,
-          { target: update.target },
-        )
-        metadataOf(target).schema.update(target, resolveObject(update.fields, resolved))
-      }
-      setHandles(Object.freeze({ ...resolved }))
-      setReady(true)
-    }, [host, schemas.length])
+    }, [host, schemas.length, auth])
     return { handles, ready }
   },
 

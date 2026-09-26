@@ -25,7 +25,7 @@ import { Errors, FS, Platform, ProcessTree, type TrackedProcess } from '@shared'
 export type WorkStatus = 'failed' | 'passed' | 'pending' | 'running' | 'skipped'
 
 /** WorkFailureKind is the machine-readable reason a node did not pass. */
-export type WorkFailureKind = 'dependency' | 'interrupted' | 'nonzero-exit' | 'process-error' | 'timeout'
+export type WorkFailureKind = 'dependency' | 'fail-fast' | 'interrupted' | 'nonzero-exit' | 'process-error' | 'timeout'
 
 /** WorkTimeoutKind distinguishes a node that ran too long from one that went quiet. */
 type WorkTimeoutKind = 'idle' | 'wall-clock'
@@ -209,6 +209,8 @@ export type WorkRunOptions = {
   runNode?: (state: WorkState, context: WorkRunContext) => Promise<WorkOutcome>
   /** Optional machine-wide admission; nested graphs omit it because their parent owns the slots. */
   slotBroker?: WorkSlotBroker
+  /** A confirmed failure stops new admissions; nodes already running finish and keep their logs. */
+  stopOnFailure?: (state: WorkState) => boolean | Promise<boolean>
   /** Registers the run's cancel hook and returns its unsubscribe; defaults to SIGINT. */
   watchInterrupt?: (interrupt: () => void) => () => void
 }
@@ -218,6 +220,8 @@ export type WorkRunResult = {
   /** Local worker width this run was allowed, which is the divisor for idle slot-seconds. */
   capacity: number
   finishedAt: number
+  /** The node whose confirmed failure stopped admission, when one did. */
+  haltedBy?: string
   interrupted: boolean
   startedAt: number
   states: readonly WorkState[]
@@ -299,6 +303,8 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
   const startedAt = Date.now()
   let lastScanAt = startedAt
   let availableSlots = capacity
+  let classifyingFailures = 0
+  let haltedBy: string | undefined
   let interrupted = false
 
   const interrupt = () => {
@@ -359,7 +365,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
     stopWatchingInterrupt()
   }
   emit({ kind: 'done', interrupted, states })
-  return { capacity, finishedAt: Date.now(), interrupted, startedAt, states }
+  return { capacity, finishedAt: Date.now(), haltedBy, interrupted, startedAt, states }
 
   /**
    * accountWaits charges the time since the last admission scan to whatever was holding each
@@ -409,6 +415,9 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
     let started = 0
     let settled = 0
     let machineBlocked = false
+    if (haltedBy !== undefined || classifyingFailures > 0) {
+      return { machineBlocked, settled, started }
+    }
     for (let index = 0; index < pending.length;) {
       const state = pending[index]!
       const failedDependency = failedDependencyName(state, states)
@@ -432,7 +441,10 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         requestedSlots,
         running.size === 0 && started === 0,
       )
-      if (interrupted || pending[index] !== state || state.status !== 'pending') {
+      if (
+        interrupted || haltedBy !== undefined || classifyingFailures > 0 || pending[index] !== state
+        || state.status !== 'pending'
+      ) {
         await machineReservation?.release()
         return { machineBlocked: false, settled, started }
       }
@@ -529,12 +541,37 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         state.reason = INTERRUPTED_REASON
         state.failure = { kind: 'interrupted', message: INTERRUPTED_REASON }
       }
-      await machineReservation?.release()
-      // Keep the node in `running` through asynchronous broker cleanup. The scheduler uses this map
-      // as its drain condition; deleting first lets the graph return and its caller remove the
-      // registry root while a reservation is still trying to lock it.
-      running.delete(state)
-      emit({ kind: 'complete', state })
+      // Mark classification before the first await: a peer can complete while broker cleanup is
+      // pending, and its completion would otherwise let the scheduler admit another node.
+      const stopOnFailure = options.stopOnFailure
+      const classify = !interrupted && haltedBy === undefined && state.status === 'failed'
+        && stopOnFailure !== undefined
+      if (classify) {
+        classifyingFailures += 1
+      }
+      // Keep the node in `running` through broker cleanup and failure classification. An unrelated
+      // completion may wake the scheduler while a test report is being read; it must not admit more
+      // work until the caller has decided whether this failure is conclusive.
+      try {
+        await machineReservation?.release()
+        if (classify && stopOnFailure !== undefined) {
+          if (await stopOnFailure(state) && !interrupted && haltedBy === undefined) {
+            haltedBy = state.name
+          }
+        }
+      } finally {
+        if (classify) {
+          classifyingFailures -= 1
+        }
+        running.delete(state)
+        emit({ kind: 'complete', state })
+      }
+      if (haltedBy === state.name) {
+        accountWaits()
+        for (const waiting of pending.splice(0)) {
+          finishWithoutRunning(waiting, `not run after definite failure: ${state.name}`, emit)
+        }
+      }
     })
     running.set(state, { cancel: () => cancel(), promise })
   }
@@ -701,7 +738,9 @@ function finishWithoutRunning(
   state.status = status
   state.reason = reason
   state.failure = {
-    kind: reason === INTERRUPTED_REASON ? 'interrupted' : 'dependency',
+    kind: reason === INTERRUPTED_REASON ? 'interrupted' : reason.startsWith('not run after definite failure:')
+      ? 'fail-fast'
+      : 'dependency',
     message: reason,
   }
   emit({ kind: 'complete', state })

@@ -586,13 +586,13 @@ Describe('validator: declaration contracts', () => {
   const queryCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
       'queries without a data source',
-      queryApp('query Missing { }'),
+      queryApp('query Missing = Missing with { }'),
       dataValidationMessages.querySource,
     ],
     [
       'queries after unconditional control flow',
       queryApp(
-        'guard "stop" empty -> { Text("Stopped") } query Workspaces { }',
+        'guard "stop" empty -> { Text("Stopped") } query Workspaces = Workspaces with { }',
         'data Workspaces / Workspace { Name text }',
       ),
       dataValidationMessages.queryAfterControl,
@@ -606,7 +606,7 @@ Describe('validator: declaration contracts', () => {
   Test(
     'accepts a query limit beside ordering',
     accepts(queryApp(
-      'query Workspaces { order by Name limit 20 }',
+      'query Workspaces = Workspaces with { order by Name limit 20 }',
       'data Workspaces / Workspace { Name text }',
     )),
   )
@@ -615,7 +615,7 @@ Describe('validator: declaration contracts', () => {
     'rejects duplicate query limits',
     rejects(
       queryApp(
-        'query Workspaces { limit 20 limit 10 }',
+        'query Workspaces = Workspaces with { limit 20 limit 10 }',
         'data Workspaces / Workspace { Name text }',
       ),
       dataValidationMessages.duplicateLimit,
@@ -626,17 +626,58 @@ Describe('validator: declaration contracts', () => {
     'rejects a query limit below one',
     rejects(
       queryApp(
-        'query Workspaces { limit 0 }',
+        'query Workspaces = Workspaces with { limit 0 }',
         'data Workspaces / Workspace { Name text }',
       ),
       dataValidationMessages.limitCount,
     ),
   )
 
+  Test(
+    'accepts a query search term beside ordering',
+    accepts(queryApp(
+      'query Documents = Documents with { search "bread" order by Title }',
+      'data Documents / Document { Title text (search) }',
+    )),
+  )
+
+  Test(
+    'rejects duplicate query search clauses',
+    rejects(
+      queryApp(
+        'query Documents = Documents with { search "a" search "b" }',
+        'data Documents / Document { Title text (search) }',
+      ),
+      dataValidationMessages.duplicateSearch,
+    ),
+  )
+
+  Test(
+    'rejects a query search term that is not text',
+    rejects(
+      queryApp(
+        'query Documents = Documents with { search 5 }',
+        'data Documents / Document { Title text (search) }',
+      ),
+      dataValidationMessages.searchTermType('number'),
+    ),
+  )
+
+  Test(
+    'rejects a query search over an entity with no (search) field',
+    rejects(
+      queryApp(
+        'query Documents = Documents with { search "a" }',
+        'data Documents / Document { Title text }',
+      ),
+      dataValidationMessages.missingSearchField('Document'),
+    ),
+  )
+
   Test('reports exactly one tailored diagnostic for a module-level query', async () => {
     const result = await testValidateCodeWithErrors(`
       data Workspaces / Workspace { Name text }
-      query Missing as Current { limit 0 limit 1 }
+      query Current = Missing with { limit 0 limit 1 }
     `)
 
     Expect(validationErrorMessages(result)).toEqual([dataValidationMessages.moduleQuery])
@@ -646,7 +687,7 @@ Describe('validator: declaration contracts', () => {
     'rejects a query nested inside a control-flow block',
     rejects(
       queryApp(
-        'when "on" { empty -> { Text("Off") } otherwise -> { query Workspaces { } Text("On") } }',
+        'when "on" { empty -> { Text("Off") } otherwise -> { query Workspaces = Workspaces with { } Text("On") } }',
         'data Workspaces / Workspace { Name text }',
       ),
       dataValidationMessages.currentQueryPlacement,
@@ -656,7 +697,7 @@ Describe('validator: declaration contracts', () => {
   const dataFieldCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
       'boolean cases that collide with field names',
-      'data Parents / Parent { Name text Enabled yes / Name no }',
+      'data Parents / Parent { Name text, Enabled yes / Name no }',
       dataValidationMessages.duplicateBooleanCase('Parent', 'Name'),
     ],
     [
@@ -678,7 +719,7 @@ Describe('validator: declaration contracts', () => {
       'ambiguous owner-side cascade relations',
       `
         data Parents / Parent { Children (owned) }
-        data Children / Child { Parent OtherParent (relation Parent) }
+        data Children / Child { Parent, OtherParent Parent }
       `,
       dataValidationMessages.ambiguousInverseRelation('Parent.Children', 'Child'),
     ],
@@ -690,14 +731,19 @@ Describe('validator: declaration contracts', () => {
 
   Test(
     'accepts unique on a primitive field',
-    accepts('data Parents / Parent { ExternalId number (unique) Name text }'),
+    accepts('data Parents / Parent { ExternalId number (unique), Name text }'),
+  )
+
+  Test(
+    'accepts unique on a boolean field with named cases',
+    accepts('data Parents / Parent { Enabled yes / Disabled no (unique) }'),
   )
 
   Test(
     'rejects unique on a non-primitive field',
     rejects(
-      'data Parents / Parent { Enabled yes / Disabled no (unique) }',
-      dataValidationMessages.uniqueFieldKind('Enabled'),
+      'data Accounts / Account { Name text } data Parents / Parent { Owner Account (unique) }',
+      dataValidationMessages.uniqueFieldKind('Owner'),
     ),
   )
 
@@ -712,14 +758,14 @@ Describe('validator: declaration contracts', () => {
   Test(
     'rejects a second unique field on one entity',
     rejects(
-      'data Parents / Parent { ExternalId number (unique) Slug text (unique) }',
+      'data Parents / Parent { ExternalId number (unique), Slug text (unique) }',
       dataValidationMessages.duplicateUniqueField('Parent'),
     ),
   )
 
   Test(
     'accepts title on a text field',
-    accepts('data Recipes / Recipe { Title text (title) Servings number }'),
+    accepts('data Recipes / Recipe { Title text (title), Servings number }'),
   )
 
   Test(
@@ -749,20 +795,41 @@ Describe('validator: declaration contracts', () => {
   Test(
     'rejects a second title field on one entity',
     rejects(
-      'data Recipes / Recipe { Title text (title) Subtitle text (title) }',
+      'data Recipes / Recipe { Title text (title), Subtitle text (title) }',
       dataValidationMessages.duplicateTitleField('Recipe'),
     ),
   )
 
   Test(
+    'accepts search on a text field',
+    accepts('data Recipes / Recipe { Title text (search), Servings number }'),
+  )
+
+  Test(
+    'rejects search on a non-text field',
+    rejects(
+      'data Recipes / Recipe { Servings number (search) }',
+      dataValidationMessages.searchFieldKind('Servings'),
+    ),
+  )
+
+  Test(
+    'rejects duplicate search modifiers',
+    rejects(
+      'data Recipes / Recipe { Title text (search, search) }',
+      dataValidationMessages.duplicateModifier('Title', 'search'),
+    ),
+  )
+
+  Test(
     'accepts local only beside the other entity storage facts',
-    accepts('data Sessions / Session { Label text index Label order by Label local only }'),
+    accepts('data Sessions / Session { Label text, index Label, order by Label, local only }'),
   )
 
   Test(
     'rejects a repeated local only storage fact',
     rejects(
-      'data Sessions / Session { Label text local only local only }',
+      'data Sessions / Session { Label text, local only, local only }',
       dataValidationMessages.duplicateLocalOnly('Session'),
     ),
   )
@@ -774,7 +841,7 @@ Describe('validator: declaration contracts', () => {
     rejects(
       `
         data Parents / Parent { Name text }
-        data Sessions / Session { Parent local only }
+        data Sessions / Session { Parent, local only }
       `,
       dataValidationMessages.crossStorageRelation('Session', 'Parent', 'Parent'),
     ),
@@ -784,7 +851,7 @@ Describe('validator: declaration contracts', () => {
     'rejects a stored relation from a synced entity to a local only one',
     rejects(
       `
-        data Sessions / Session { Label text local only }
+        data Sessions / Session { Label text, local only }
         data Notes / Note { Session }
       `,
       dataValidationMessages.crossStorageRelation('Note', 'Session', 'Session'),
@@ -795,8 +862,8 @@ Describe('validator: declaration contracts', () => {
     'accepts a relation between two local only entities',
     accepts(
       `
-        data Sessions / Session { Label text Marks (owned) local only }
-        data Marks / Mark { Session local only }
+        data Sessions / Session { Label text, Marks (owned), local only }
+        data Marks / Mark { Session, local only }
       `,
     ),
   )
@@ -944,7 +1011,7 @@ function collectionApp(body: string): string {
     data Items / Item { Title text }
     ${
     app(
-      `query Items { } render Stack() { ${body} }`,
+      `query Items = Items with { } render Stack() { ${body} }`,
       `${stubContainer('Stack')}${stubView('Text', 'Value text')}`,
     )
   }

@@ -9,14 +9,12 @@ import React from 'react'
 import * as RN from 'react-native'
 import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 
-registerRuntimeE2ELifecycle()
-
 const catalog = `
   use Col, FormButton, Text from @tao/ui
   use Memory from @tao/data/providers/memory
 
   data Documents / Document {
-    Title text (title)
+    Title text (title),
     Body text (default "")
   }
 `
@@ -26,6 +24,8 @@ function nodes(kind?: TR.OutlineNode['kind']): readonly TR.OutlineNode[] {
 }
 
 Describe('interaction outline runtime', () => {
+  registerRuntimeE2ELifecycle()
+
   Test('renders a web selectable row as a group and leaves its nested controls independent', async () => {
     const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
       ActivityIndicator: RN.ActivityIndicator,
@@ -346,7 +346,7 @@ Describe('interaction outline runtime', () => {
         }
         scene Main() {
           Title "Documents"
-          query Documents { }
+          query Documents = Documents with { }
           state Selected = "Nothing selected"
           state SelectCount = 0
           action Seed() {
@@ -437,7 +437,7 @@ Describe('interaction outline runtime', () => {
           Datasource Memory { }
         }
         view Main() {
-          query Documents { }
+          query Documents = Documents with { }
           action Seed() {
             create Document { Title: "Chapter one", Body: "It began at sea." }
           }
@@ -495,7 +495,7 @@ Describe('interaction outline runtime', () => {
           Datasource Memory { }
         }
         view Main() {
-          query Documents { }
+          query Documents = Documents with { }
           action Seed() {
             create Document { Title: "Chapter one" }
           }
@@ -654,7 +654,7 @@ Describe('interaction outline runtime', () => {
           Datasource Memory { }
         }
         view Main() {
-          query Documents { }
+          query Documents = Documents with { }
           state Count = 0
           action Seed() {
             create Document { Title: "Chapter one" }

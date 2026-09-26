@@ -5,6 +5,8 @@ const reactiveValueBrand = Symbol('TaoReactiveValue')
 /** TaoReactiveValue is a runtime-owned library value that can notify a mounted holder when it changes. */
 export type TaoReactiveValue = {
   subscribe(listener: () => void): () => void
+  /** A library-owned field keeps its identity and sensitive storage outside generic state copies. */
+  writeMember?(path: readonly string[], value: unknown): void | Promise<void>
 }
 
 /** TaoReactiveSource owns the subscriptions behind one reactive library value. */

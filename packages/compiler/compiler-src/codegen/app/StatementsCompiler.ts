@@ -8,11 +8,16 @@ export const StatementsCompiler = {
   /** Statement compiles one Tao statement. */
   Statement(statement: AST.Statement, options: CodegenOptions = {}): Compiled {
     return Switch.type(statement, {
+      AccessDeclaration: () => gen.noop(),
       AliasDeclaration: value => Compile.AliasDeclaration(value, options),
       AppDeclaration: value => Compile.App(value, options),
       ActionDeclaration: Compile.ActionDeclaration,
+      ActionFailureStubStep: Compile.ActionFailureStubStep,
       AsyncActionStatement: Compile.AsyncActionStatement,
       AdvanceStep: Compile.AdvanceStep,
+      NetworkTestStep: () => gen.noop(),
+      WaitForSyncStep: () => gen.noop(),
+      DatasourceFailureStep: () => gen.noop(),
       BackTestStep: Compile.BackTestStep,
       RelaunchStep: Compile.RelaunchStep,
       CommandDeclaration: Compile.CommandDeclaration,
@@ -35,6 +40,7 @@ export const StatementsCompiler = {
       ExpectToolbarCommandStep: Compile.ExpectToolbarCommandStep,
       ForStatement: value => Compile.ForStatement(value, options),
       FunctionDeclaration: Compile.FunctionDeclaration,
+      GuardDefaultStatement: value => Compile.GuardDefaultStatement(value, options),
       GuardRenderStatement: value => Compile.GuardRenderStatement(value, [], options),
       IfRenderStatement: value => Compile.IfRenderStatement(value, options),
       WhenRenderStatement: value => Compile.WhenRenderStatement(value, options),
@@ -44,6 +50,7 @@ export const StatementsCompiler = {
       PressTextStep: Compile.PressTextStep,
       PressWordStep: Compile.PressWordStep,
       InteractionWordStep: Compile.InteractionWordStep,
+      PhraseDeclaration: Compile.PhraseDeclaration,
       PressToolbarCommandStep: Compile.PressToolbarCommandStep,
       TagPressStep: Compile.TagPressStep,
       ProjectDeclaration: Compile.ProjectDeclaration,

@@ -475,9 +475,9 @@ model, so the loop's behavior is tested without a network.
 
 **Phase 1, ask.** `readTools` is the whole read surface, and `AgentChatFacts` is what an advisory answer may
 rest on. `AgentChatProvider` holds the two separate gates: a key in the environment, and the person turning
-cloud use on for the session. It also holds which vendor answers — Anthropic (`ANTHROPIC_API_KEY`,
-`claude-sonnet-5`) or OpenAI (`OPENAI_API_KEY`, `gpt-5.6-terra`), each model overridable through
-`TAO_STUDIO_AGENT_ANTHROPIC_MODEL` or `TAO_STUDIO_AGENT_OPENAI_MODEL` — and switching vendor turns cloud use
+cloud use on for the session. It also holds which vendor answers — Anthropic (`ANTHROPIC_API_KEY`) or
+OpenAI (`OPENAI_API_KEY`), each defaulting to that vendor's standard tier in the delegation routing table and
+overridable through `TAO_STUDIO_AGENT_ANTHROPIC_MODEL` or `TAO_STUDIO_AGENT_OPENAI_MODEL` — and switching vendor turns cloud use
 off again, since consent to send a project to one vendor is not consent to send it to the other.
 
 **Phase 2, build.** Every change is proposed and applied in two steps, and only the applying pauses for

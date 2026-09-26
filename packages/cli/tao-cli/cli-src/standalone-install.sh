@@ -5,7 +5,7 @@
 #
 # The unpinned installer chooses the highest stable vVERSION release, leaving GitHub's repository-wide
 # latest marker to Studio. TAO_VERSION=0.4.0 installs that exact release. TAO_HOME relocates everything
-# this writes, which is otherwise ${XDG_DATA_HOME:-~/.local/share}/tao. TAO_RELEASES points at another
+# this writes, which is otherwise ~/.tao. TAO_RELEASES points at another
 # copy of the releases; TAO_RELEASE_INDEX_URL supplies its release listing for a mirror or local test.
 #
 # `standalone-build.ts --release` fills in the release URL and version when it publishes this file
@@ -16,19 +16,28 @@ set -eu
 releases="${TAO_RELEASES:-@TAO_RELEASES@}"
 releases="${releases%/}"
 requested="${TAO_VERSION:-}"
-tao_home="${TAO_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/tao}"
 
 fail() {
   printf 'Tao install: %s\n' "$*" >&2
   exit 1
 }
 
+# Match TaoHome in the binary: a declared home must be absolute.
+if [ -n "${TAO_HOME:-}" ]; then
+  case "$TAO_HOME" in
+    /*) tao_home="$TAO_HOME" ;;
+    *) fail "TAO_HOME must be an absolute path; it was $TAO_HOME." ;;
+  esac
+else
+  tao_home="$HOME/.tao"
+fi
+
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64) target=darwin-arm64 ;;
   *) fail "Tao is built only for macOS on Apple silicon so far, and this is $(uname -s) on $(uname -m)." ;;
 esac
 
-for tool in curl shasum gunzip awk grep plutil; do
+for tool in curl shasum gunzip awk grep plutil stat id; do
   command -v "$tool" > /dev/null 2>&1 || fail "this needs \`$tool\`, which is not on PATH."
 done
 
@@ -112,8 +121,10 @@ gunzip -c "$staging/$asset" > "$staging/tao"
 rm -f "$staging/$asset" "$staging/$asset.sha256"
 chmod 755 "$staging/tao"
 
-# The binary confirms the selected version and unpacks the resources it carries beside it.
-version="$("$staging/tao" --version)" || fail "the downloaded binary did not run."
+# The binary confirms the selected version and unpacks the resources it carries beside it. It is asked
+# from `/` with no version named, so a project pin in the current directory cannot hand the check to
+# another installed release.
+version="$(cd / && unset TAO_VERSION && "$staging/tao" --version)" || fail "the downloaded binary did not run."
 if [ "$version" != "$requested" ]; then
   fail "asked for $requested, but the download is $version."
 fi
@@ -129,34 +140,68 @@ else
 fi
 ln -sfn "$destination/tao" "$tao_home/bin/tao"
 
-# Link into a bin directory the user already has on PATH, if one of theirs is writable and does not
-# hold some other `tao`; otherwise print the one line that puts Tao's own bin directory on PATH.
-linked=""
-old_ifs="$IFS"
-IFS=:
-for directory in $PATH; do
-  case "$directory" in
-    "$HOME"/*) ;;
-    *) continue ;;
-  esac
-  [ -d "$directory" ] && [ -w "$directory" ] || continue
-  candidate="$directory/tao"
-  if [ -e "$candidate" ] || [ -L "$candidate" ]; then
-    case "$(readlink "$candidate" 2> /dev/null || true)" in
-      "$tao_home"/*) ;;
-      *) continue ;;
-    esac
-  fi
-  ln -sfn "$tao_home/bin/tao" "$candidate"
-  linked="$candidate"
-  break
-done
-IFS="$old_ifs"
-
 printf 'Installed Tao %s in %s.\n' "$version" "$destination"
-if [ -n "$linked" ]; then
-  printf 'Linked %s, so `tao` is ready in any new shell.\n' "$linked"
+# Use the first safe directory on PATH. A later link is useless if an earlier `tao` would shadow it.
+# Only write a link in a directory owned by this user; never replace someone else's command.
+path_bin=''
+remaining_path="$PATH:"
+while [ -n "$remaining_path" ]; do
+  directory="${remaining_path%%:*}"
+  remaining_path="${remaining_path#*:}"
+  [ -n "$directory" ] || continue
+  case "$directory" in /*) ;; *) continue ;; esac
+  [ -d "$directory" ] || continue
+  if [ "$directory" = "$tao_home/bin" ]; then
+    path_bin="$directory"
+    break
+  fi
+  if [ -e "$directory/tao" ] || [ -L "$directory/tao" ]; then
+    if [ -L "$directory/tao" ] && [ "$(readlink "$directory/tao")" = "$tao_home/bin/tao" ]; then
+      path_bin="$directory"
+    fi
+    break
+  fi
+  if [ -w "$directory" ] && [ "$(stat -f %u "$directory")" = "$(id -u)" ]; then
+    path_bin="$directory"
+    break
+  fi
+done
+if [ -n "$path_bin" ]; then
+  if [ "$path_bin" != "$tao_home/bin" ]; then
+    ln -sfn "$tao_home/bin/tao" "$path_bin/tao"
+    printf 'Linked tao in %s.\n' "$path_bin"
+  fi
 else
-  printf 'Add Tao to PATH, for example in ~/.zshrc:\n\n  export PATH="%s:$PATH"\n\n' "$tao_home/bin"
+  case "${SHELL:-}" in
+    */zsh) startup_file='~/.zshrc' ;;
+    */bash) startup_file='~/.bash_profile' ;;
+    *) startup_file='your shell startup file' ;;
+  esac
+  printf 'No safe writable directory on PATH can expose tao. Add this line to %s, then open a new shell:\n\n  export PATH="%s:$PATH"\n\n' \
+    "$startup_file" "$tao_home/bin"
+  if [ -z "${TAO_HOME:-}" ] && [ -t 2 ] && [ -r /dev/tty ]; then
+    case "${SHELL:-}" in
+      */zsh) startup_path="$HOME/.zshrc" ;;
+      */bash) startup_path="$HOME/.bash_profile" ;;
+      *) startup_path='' ;;
+    esac
+    if [ -n "$startup_path" ]; then
+      printf 'Add that PATH line to %s now? [y/N] ' "$startup_path" > /dev/tty
+      IFS= read -r answer < /dev/tty || answer=''
+      case "$answer" in
+        y|Y|yes|YES)
+          if [ -e "$startup_path" ] && [ ! -w "$startup_path" ]; then
+            printf 'Cannot write %s; add the line yourself.\n' "$startup_path" >&2
+          else
+            path_line='export PATH="$HOME/.tao/bin:$PATH"'
+            if [ ! -e "$startup_path" ] || ! grep -Fqx "$path_line" "$startup_path"; then
+              printf '\n%s\n' "$path_line" >> "$startup_path"
+            fi
+            printf 'Added the Tao PATH line to %s. Open a new shell to use tao.\n' "$startup_path"
+          fi
+          ;;
+      esac
+    fi
+  fi
 fi
 printf 'Start with: tao create "A tally counter"\n'

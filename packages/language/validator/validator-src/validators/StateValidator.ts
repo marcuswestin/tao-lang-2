@@ -27,14 +27,20 @@ const stateValidationMessages = {
     `Persisted state '${state}' cannot use nonpersistable type '${type}'.`,
   initialTypeMismatch: (state: string, expected: string, actual: string) =>
     `State '${state}' declares ${expected}, got initial value ${actual}.`,
+  derivedMemberWrite: (name: string) =>
+    `'${name}' is derived from the \`required\` fields and cannot be written; write those fields instead.`,
 } as const
 
 /** StateValidator groups state validation and diagnostics. */
 export const StateValidator = {
   checks: {
     [AST.StateDeclaration.$type]: [reportStateReferenceOrder, reportStatePlacement],
-    [AST.SetStatement.$type]: reportStateMutationTargetReferenceOrder,
-    [AST.ToggleStatement.$type]: [reportStateMutationTargetReferenceOrder, reportToggleTarget],
+    [AST.SetStatement.$type]: [reportStateMutationTargetReferenceOrder, reportDerivedMemberWrite],
+    [AST.ToggleStatement.$type]: [
+      reportStateMutationTargetReferenceOrder,
+      reportToggleTarget,
+      reportDerivedMemberWrite,
+    ],
   } satisfies NodeValidationChecks,
   messages: stateValidationMessages,
   typeChecks: {
@@ -109,6 +115,21 @@ function reportToggleTarget(toggle: AST.ToggleStatement, ctx: ValidationContext)
       ? stateValidationMessages.toggleStateType(target.name, Type.displayName(targetType))
       : stateValidationMessages.mutableToggleType(name, Type.displayName(targetType))
     ctx.error(toggle, message)
+  }
+}
+
+/** reportDerivedMemberWrite rejects a `set` or `toggle` that reaches `Incomplete` or `Problems`. */
+function reportDerivedMemberWrite(mutation: AST.SetStatement | AST.ToggleStatement, ctx: ValidationContext): void {
+  const target = mutation.target.ref
+  if (!AST.isMutableDeclaration(target)) {
+    return
+  }
+  const depth = Type.completenessMemberDepth(Type.ofValueDeclaration(target), mutation.members)
+  if (depth !== undefined) {
+    ctx.error(
+      mutation,
+      stateValidationMessages.derivedMemberWrite(mutationTargetName(target, mutation.members.slice(0, depth))),
+    )
   }
 }
 

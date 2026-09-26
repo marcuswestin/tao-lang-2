@@ -6,26 +6,18 @@
   "permission": {
     "bash": {
       // `--force` breaks a lock this session did not necessarily take, on the strength of a dead
-      // PID that proves nothing (see LandingLock.ts). These sit above the blanket `./agent *` /
-      // `./dev *` / `just *` allows below — deny, then ask, then allow, is Claude Code's own
+      // PID that proves nothing (see LandingLock.ts). This sits above the blanket `./agent *`
+      // allow below — deny, then ask, then allow, is Claude Code's own
       // precedence regardless of rule order — so a force-unlock always asks even though the plain
       // command does not. Codex cannot express this: `CodexConfigGenerator.renderCodexRules` only
       // emits `allow` entries, so Codex gets no equivalent gate; that asymmetry is accepted.
-      "./dev land-unlock --force*": "ask",
       "./agent land-unlock --force*": "ask",
-      "just land-unlock --force*": "ask",
-      // The repository's own workflow surface. Agents run these without asking.
+      // Agent workflow commands stay sandboxed except for one host rule per named
+      // `./agent unsandboxed X` operation. The editable dispatcher checks deeper argv.
       "./agent *": "allow",
-      "./dev *": "allow",
-      "./tao *": "allow",
-      "just *": "allow",
       // One owner prevents concurrent or redundant Bun installs from colliding in node_modules.
       // The generated harness rules reject this directly and point agents to `./agent setup`.
       "bun install *": "deny",
-      "bun run *": "allow",
-      "bun test *": "allow",
-      "direnv exec . *": "allow",
-      "dprint *": "allow",
       // Routine inspection stays sandboxed. State-changing variants are deliberately absent.
       "pwd": "allow",
       // Harmless on its own, and listed so a compound `cd <dir> && rg …` keeps every part inside
@@ -34,6 +26,7 @@
       "cd *": "allow",
       "ls *": "allow",
       "rg *": "allow",
+      "cat *": "allow",
       "file *": "allow",
       "stat *": "allow",
       "readlink *": "allow",
@@ -67,7 +60,7 @@
       // Claude Code and Codex's read-only review profile enforce these denials. Codex's default
       // workspace profile omits them: Codex will not honor an explicit host command rule when
       // any denied-read pattern is active. AGENTS.md still forbids agents from reading them.
-      // Not `.env*`: that pattern also matches this repository's own `.envrc`.
+      // Keep the patterns narrow so they do not match unrelated repository files.
       "**/.env": "deny",
       "**/.env.*": "deny",
       "~/.aws/**": "deny",
@@ -102,14 +95,19 @@
       "*": "ask",
     },
   },
-  // Named argv prefixes accepted by ./agent unsandboxed, and the only host rules generated for
-  // the supported harnesses. HostCommandTargets implements tool operations; plain commands stay sandboxed.
+  // Named argv prefixes accepted by ./agent unsandboxed. The harnesses grant one exception
+  // per first operation name; the wrapper checks deeper argv and HostCommandTargets implements
+  // tool operations. This editable-wrapper trust boundary is tracked for later replacement.
   "agentHostCommands": [
-    "land", "finalize", "landed", "capabilities", "open-pr", "fix-agent-config",
+    "land", "finalize", "merge-main", "merge-recover", "landed", "capabilities", "open-pr", "fix-agent-config",
     "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
-    "native-module-check",
+    "native-module-check", "reclaim --execute",
     "prepare-release studio", "prepare-release ide-extension",
-    "app-dev",
+    "app-dev", "studio", "studio-native",
+    "docker-desktop start",
+    "local-instantdb start", "local-instantdb stop",
+    "companion-host-build",
+    "standalone-cli-vm-setup", "standalone-cli-clean-machine",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators open-url", "simulators uninstall", "simulators open",
     "devices list", "devices apps", "devices launch",
@@ -118,7 +116,7 @@
     "pods install", "pods spec",
     "android devices", "android state", "android emulators", "android boot", "android ensure",
     "remote fetch", "remote refs", "remote heads", "remote exists",
-    "processes list", "processes started",
+    "processes list", "processes started", "start-branch",
   ],
   "claudecode": {
     "autoCompactWindow": 272000,
@@ -134,30 +132,29 @@
           { "path": "~/.config/gh", "mode": "deny" },
         ],
       },
-      // Caches the pinned toolchain writes outside the worktree. Expo's native-module cache,
-      // Hutch's launcher root, and Watchman's state directory are as much part of the dev loop
-      // as Bun's and Gradle's: without them Studio, native Studio, and file watching all fail.
+      // Caches the pinned toolchain writes outside the worktree. Expo's native-module cache and
+      // Hutch's launcher root are as much part of the dev loop as Bun's and Gradle's.
       "filesystem": {
         "allowWrite": [
+          "~/.tao",
           "~/.bun",
           "~/.cache",
           "~/.gradle",
           "~/.android",
           "~/.expo",
           "~/.hutch",
-          "~/.local/state/watchman",
           "~/Library/Caches",
         ],
       },
       "network": {
         "allowLocalBinding": true,
-        // Watchman's client reaches its server through `<login>-state/sock` under this directory,
-        // named after whoever runs it. Claude Code and Codex both render a socket entry as a
-        // Seatbelt `subpath` rule, so the directory covers every login without naming one; the
-        // rule matches the resolved path, so a link planted here reaches no other socket.
+        // Watchman is deliberately absent. Its socket sits under each developer's home directory,
+        // and Codex accepts only an absolute socket path, which would put a login in the tracked
+        // config; an agent sandbox also refuses OS file watching outright. So file-watching dev
+        // loops run on the host (`./agent unsandboxed app-dev` or `studio`), and sandboxed tests
+        // and builds crawl the tree without Watchman.
         "allowUnixSockets": [
           "/nix/var/nix/daemon-socket/socket",
-          "~/.local/state/watchman",
         ],
         "allowedDomains": [
           "registry.npmjs.org",
@@ -171,10 +168,10 @@
           "*.expo.dev",
           "*.expo.io",
           "exp.host",
-          // React Native's CocoaPods integration downloads the Hermes iOS artifact from Maven
-          // during the native-module compiler proof. The command still requires explicit host
-          // review or an opt-in unsandboxed session; this network rule does not grant a host escape.
+          // React Native's CocoaPods integration downloads iOS artifacts from Maven and its
+          // artifact CDN during native builds. These network rules do not grant a host escape.
           "repo1.maven.org",
+          "repo.reactnative.dev",
           "cache.nixos.org",
           "*.cachix.org",
           "*.anthropic.com",
@@ -199,9 +196,10 @@
     // never needs a `cd` prefix — which takes a command out of its allow rule and into permission
     // review, about two seconds per call. The profile PATH comes from the session-start hook in
     // hooks.jsonc, because `env` values here are literal and cannot extend the existing PATH.
+    // Subagents default to the standard tier's `opus` alias, left unpinned so each install
+    // resolves it to the newest Opus it knows.
     "env": {
       "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
-      "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
       "CLAUDE_CODE_SUBAGENT_MODEL": "opus",
     },
     // Deliberately not set here: `env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`. It scrubs only

@@ -172,6 +172,7 @@ Describe('Studio scenario startup reconciliation', () => {
     await withCompiledSession(async harness => {
       const manifest = harness.manifest()
 
+      Expect(manifest.fixtures.map(fixture => fixture.plan)).toEqual([{ accounts: [], creates: [] }])
       // Both groups are authored in Garden.tao; a manifest missing one is a canvas missing a row.
       Expect(groupsOf(manifest)).toEqual(['application', 'cards'])
       // Every scenario reaches the canvas: a scenario with no cell is a scenario nobody sees.

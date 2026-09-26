@@ -200,7 +200,7 @@ export async function runCompanionHostPublish(options: CompanionHostPublishOptio
   const repository = hostReleasesRepository()
   const tag = hostReleaseTag(first.manifest)
   const platforms = built.map(host => host.manifest.platform).join(' and ')
-  const staging = await FS.mkTmpDir(FS.resolvePath('tao-host-publish-', FS.tmpdir()))
+  const staging = await Repo.mkScratchDir('tao-host-publish-', root)
   try {
     const assets: string[] = []
     for (const host of built) {
@@ -340,7 +340,9 @@ export async function companionGradleEnv(
   const sdk = env['ANDROID_HOME'] ?? env['ANDROID_SDK_ROOT'] ?? FS.resolvePath(DEVENV_ANDROID_SDK_PATH, root)
   if (!await FS.isDirectory(sdk)) {
     Errors.throwUserInput(
-      `No Android SDK at ${FS.displayPath(sdk)}. Run \`direnv allow\` so devenv provides one, or set ANDROID_HOME.`,
+      `No Android SDK at ${
+        FS.displayPath(sdk)
+      }. Enter \`./enter-tao-dev-env\` so devenv provides one, or set ANDROID_HOME.`,
     )
   }
   const javaOptions = [

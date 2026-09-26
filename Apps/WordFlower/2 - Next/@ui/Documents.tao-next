@@ -1,6 +1,6 @@
-use Documents, Finish, Paragraphs from @data
+use Document, Finish, Paragraph from @data
 use CountWords from @tao/text
-use Checkbox, Col, Panes, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Checkbox, Col, Panes, Problems, Progress, Row, ScrollView, Spacer, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
 // Shared values, types, and the typed-injection escape hatch.
@@ -8,20 +8,30 @@ use FormButton from @tao/ui/basic
 // value, and a dismissed responder answers `none` rather than requiring a second enum case.
 type ConfirmResult is one of Confirmed
 
+type ExportFailure is one of Offline, TooLarge, Cancelled
+
+// A phrase is named copy: its plural forms choose by the count, so the outline never reads
+// "1 paragraphs".
+phrase ParagraphCount(Count number) = one "{ Count } paragraph" / other "{ Count } paragraphs"
+
 // The document area: an availability-guarded entry, the editor itself, and the close conversation.
 // The presented entry guards entity availability; the editor below assumes an available document.
 workspace
 scene DocumentScreen(Document) {
+   command Export() {
+      Title "Export document"
+      Description "Shares the saved document as Markdown."
+      Icon "square.and.arrow.up"
+      do -> { present ExportPanel(Document) as sheet }
+   }
    Title Document.Title
-   Toolbar { Finish }
+   Toolbar { Finish, Export }
    render Col() [grow] {
+      // The screen names the one case it words itself; loading, unauthorized, and error go to the net.
       guard Document {
-         loading -> { Spinner() }
          missing -> {
             TextMultiline("Document { Document.Id } no longer exists.") [body] // a handle keeps its Id
-         }
-         error -> Message { TextMultiline("The document could not be loaded: { Message }") [body] }
-      }
+      }  }
       DocumentEditor(Document)
 }  }
 
@@ -32,6 +42,38 @@ view WordCountLabel(Value text) {
 
 type DocumentInput is Document { Title, Body }
 
+// The TypeScript sidecar hands a Markdown copy to the platform share sheet. The app records the
+// failure cases here so an export site can distinguish a missing connection from other rejections.
+workspace
+action ExportDocument(Document) fails Offline "Exporting needs a connection." fails TooLarge "This document is too long to export." fails Cancelled "" from ./Export.ts
+
+view ExportPanel(Document) {
+   action RunExport() {
+      when do ExportDocument(Document) {
+         saved -> { present ExportNotice("Ready to share") as toast (Key: "document-export", Duration: 3.s) }
+         Offline -> { present ExportNotice("Exporting needs a connection.") as toast (Key: "document-export", Duration: 5.s) }
+         Cancelled -> { }
+         rejected -> Problem { present ExportNotice(Problem) as toast (Key: "document-export", Duration: 5.s) }
+         error -> Message { present ExportNotice(Message) as toast (Key: "document-export", Duration: 5.s) }
+   }  }
+   render Col() [panel, formWidth] {
+      Text("Export { Document.Title }") [sectionTitle]
+      TextMultiline("Share a Markdown copy of the saved document.") [body]
+
+      #export
+      FormButton("Share Markdown") {
+         on press RunExport
+      }
+
+      #closeExport
+      FormButton("Close") [buttonSecondary] {
+         on press -> { dismiss }
+}  }  }
+
+view ExportNotice(Message text) {
+   render TextMultiline(Message) [body]
+}
+
 view DocumentEditor(Document) {
    state Input = copy Document as DocumentInput
    state ParagraphText = ""
@@ -39,14 +81,14 @@ view DocumentEditor(Document) {
    state SaveCount = 0
    state PreviousTitle = ""
    state PreviousBody = ""
-   query Paragraphs from Document.Paragraphs { }
+   query Paragraphs = Document.Paragraphs with { }
    action SetFinished(Value boolean) {
       // A yes/no field takes the boolean directly; naming the field writes the pole it selects.
       update Document {
          Final: Value
    }  }
    action SaveDocument() {
-      guard Input.Title empty
+      check not Input.Incomplete // the projection carries Title's `required` sentence
       set PreviousTitle = Document.Title
       set PreviousBody = Document.Body
       update Document with Input
@@ -64,7 +106,7 @@ view DocumentEditor(Document) {
       }) as toast (Key: "document-saved", Duration: 3.s)
    }
    action AddParagraph() {
-      guard ParagraphText empty
+      check ParagraphText is not empty
       // `async` starts as a later root, so capture the submitted value before clearing the input.
       // A failed detached write enters the datasource error state.
       set DetachedParagraphText = ParagraphText
@@ -94,6 +136,7 @@ view DocumentEditor(Document) {
             TextInput(Value: Input.Title, Label: "Document title", Placeholder: "Document title") {
                on submit SaveDocument
             }
+            Problems(Input.Problems) [validation]
 
             #editDocumentBody
             TextInput(Value: Input.Body, Label: "Document body", Placeholder: "Write the document body") [claimDouble] {
@@ -110,7 +153,7 @@ view DocumentEditor(Document) {
             }
 
             #saveDocument
-            FormButton("Save document", Disabled: Input.Title is empty) {
+            FormButton("Save document", Disabled: Input.Incomplete) {
                on press SaveDocument
             }
             TextMultiline("Saved title: { Document.Title }") [body]
@@ -133,11 +176,8 @@ view DocumentEditor(Document) {
       }  }  }
       Col() [panel] {
          Text("OUTLINE") [eyebrow]
-         Text("Paragraphs: { Paragraphs.Count }") [sectionTitle]
-         guard Paragraphs {
-            loading -> { Spinner() }
-            error -> Message { TextMultiline("Could not load paragraphs: { Message }") [body] }
-         }
+         Text(ParagraphCount(Paragraphs.Count)) [sectionTitle]
+         guard Paragraphs
 
          // `Progress` takes a fraction between 0 and 1.
          Progress(Value: GoalFraction(Paragraphs.Count))

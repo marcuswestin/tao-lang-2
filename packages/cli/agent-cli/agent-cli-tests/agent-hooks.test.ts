@@ -1,5 +1,5 @@
 import { CLI, FS, Repo, Text } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import { branchWarnings, commitMessageWarnings } from '../agent-cli-src/agent-hooks/CommitChecks'
 import { PIPE_WARNING, PREFIX_WARNING, shellHabitWarnings } from '../agent-cli-src/agent-hooks/ShellHabits'
 import { subagentBrief } from '../agent-cli-src/agent-hooks/SubagentBrief'
@@ -52,12 +52,13 @@ const SHELL_CASES: ReadonlyArray<readonly [string, readonly Habit[]]> = [
 const COMMIT_MESSAGE_CASES: ReadonlyArray<readonly [string, string, number]> = [
   ['an ordinary subject', 'Simplify the dispatch tables', 0],
   ['generated paths as subjects', 'Regenerate .codex/hooks.json and .claude/settings.json', 0],
-  ['a human co-author', 'Fix it\n\nCo-Authored-By: Marcus Westin <marcus@example.com>', 0],
+  ['a human co-author', 'Fix it\n\nCo-Authored-By: Marcus Westin <marcus@example.com>', 1],
   ['a generator that is not an agent', 'Generated with the Langium parser generator', 0],
   ['an automated co-author trailer', 'Fix it\n\nCo-Authored-By: A Model <noreply@anthropic.com>', 1],
+  ['co-author text anywhere', 'Document co-authored-by handling', 1],
   ['a generated-with line', 'Fix it\n\nGenerated with Copilot', 1],
   ['the robot marker alone', 'Fix it 🤖', 1],
-  ['an identity in the body', 'Fix it\n\nAsked chatgpt about the parser', 1],
+  ['changed harnesses in the body', 'Update Claude Code and Codex model routing', 0],
   ['commented-out git help', 'Fix it\n# Co-Authored-By: A Model <noreply@anthropic.com>', 0],
 ]
 
@@ -117,7 +118,8 @@ Describe('agent hooks', () => {
         '120,000 files',
         'stage, unstage',
         'developer environment',
-        'no agent identity',
+        'no agent author credit',
+        'no `Co-Authored-By` text',
         'cover every provider in use',
         'Messaging another agent',
       ]
@@ -144,109 +146,93 @@ Describe('agent hooks', () => {
   })
 
   Test('warns through a real commit without ever failing one', async () => {
-    const root = await mkTestDir('tao-commit-warn-')
-    try {
-      const repository = await initRepository(root, 'repo')
-      await addHookSupport(repository)
-      await installGitHooks(repository)
+    const root = await mkGitTestDir('tao-commit-warn-')
+    const repository = await initRepository(root, 'repo')
+    await addHookSupport(repository)
+    await installGitHooks(repository)
 
-      const commit = await commitChange(
-        repository,
-        'two',
-        'Change it\n\nCo-Authored-By: A Model <noreply@anthropic.com>',
-      )
+    const commit = await commitChange(
+      repository,
+      'two',
+      'Change it\n\nCo-Authored-By: Marcus Westin <marcus@example.com>',
+    )
 
-      // Both hooks speak, the commit lands, and `git commit` reports success.
-      Expect(commit.exitCode).toBe(0)
-      Expect(commit.stderr).toContain('is not a `feat/<name>` or `dev/<name>` branch')
-      Expect(commit.stderr).toContain('automated attribution trailer')
-      Expect((await git(repository, ['log', '-1', '--format=%s'])).stdout.trim()).toBe('Change it')
-    } finally {
-      await FS.remove(root)
-    }
+    // Both hooks speak, the commit lands, and `git commit` reports success.
+    Expect(commit.exitCode).toBe(0)
+    Expect(commit.stderr).toContain('is not a `feat/<name>` or `dev/<name>` branch')
+    Expect(commit.stderr).toContain('Co-Authored-By text')
+    Expect((await git(repository, ['log', '-1', '--format=%s'])).stdout.trim()).toBe('Change it')
   })
 
   Test('stays silent in a worktree whose commit predates the hook script', async () => {
     // Fifteen or more worktrees share one hooks directory here, and most sit on older commits.
     // An entry script that assumed its own implementation existed would break every one of them.
-    const root = await mkTestDir('tao-old-worktree-')
-    try {
-      const repository = await initRepository(root, 'repo')
-      const before = (await git(repository, ['rev-parse', 'HEAD'])).stdout.trim()
-      await addHookSupport(repository)
-      await installGitHooks(repository)
+    const root = await mkGitTestDir('tao-old-worktree-')
+    const repository = await initRepository(root, 'repo')
+    const before = (await git(repository, ['rev-parse', 'HEAD'])).stdout.trim()
+    await addHookSupport(repository)
+    await installGitHooks(repository)
 
-      const older = FS.resolvePath('older', root)
-      await git(repository, ['worktree', 'add', '--quiet', '-b', 'feat/older', older, before])
-      Expect(await FS.exists(FS.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh', older)))
-        .toBe(false)
-      const commit = await commitChange(older, 'older', 'Change it 🤖')
+    const older = FS.resolvePath('older', root)
+    await git(repository, ['worktree', 'add', '--quiet', '-b', 'feat/older', older, before])
+    Expect(await FS.exists(FS.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh', older)))
+      .toBe(false)
+    const commit = await commitChange(older, 'older', 'Change it 🤖')
 
-      Expect(commit.exitCode).toBe(0)
-      Expect(commit.stderr).toBe('')
-    } finally {
-      await FS.remove(root)
-    }
+    Expect(commit.exitCode).toBe(0)
+    Expect(commit.stderr).toBe('')
   })
 
   Test('leaves the squash commit a landing builds alone', async () => {
     // `merge-with-main` lands through `git commit-tree`, which is plumbing and runs no hook. A
     // hook that fired there would sit between a verified branch and `main`.
-    const root = await mkTestDir('tao-plumbing-')
-    try {
-      const repository = await initRepository(root, 'repo')
-      await addHookSupport(repository)
-      await installGitHooks(repository)
-      await FS.writeText(FS.resolvePath('f.txt', repository), 'two')
-      await git(repository, ['add', '-A'])
-      const tree = (await git(repository, ['write-tree'])).stdout.trim()
-      const parent = (await git(repository, ['rev-parse', 'HEAD'])).stdout.trim()
+    const root = await mkGitTestDir('tao-plumbing-')
+    const repository = await initRepository(root, 'repo')
+    await addHookSupport(repository)
+    await installGitHooks(repository)
+    await FS.writeText(FS.resolvePath('f.txt', repository), 'two')
+    await git(repository, ['add', '-A'])
+    const tree = (await git(repository, ['write-tree'])).stdout.trim()
+    const parent = (await git(repository, ['rev-parse', 'HEAD'])).stdout.trim()
 
-      const built = await git(repository, [
-        '-c',
-        'user.email=t@t',
-        '-c',
-        'user.name=T',
-        'commit-tree',
-        tree,
-        '-p',
-        parent,
-        '-m',
-        'Landing 🤖 on main',
-      ])
+    const built = await git(repository, [
+      '-c',
+      'user.email=t@t',
+      '-c',
+      'user.name=T',
+      'commit-tree',
+      tree,
+      '-p',
+      parent,
+      '-m',
+      'Landing 🤖 on main',
+    ])
 
-      Expect(built.exitCode).toBe(0)
-      Expect(built.stderr).toBe('')
-    } finally {
-      await FS.remove(root)
-    }
+    Expect(built.exitCode).toBe(0)
+    Expect(built.stderr).toBe('')
   })
 
   Test('installs into the directory every worktree shares, and leaves a foreign hook there', async () => {
-    const root = await mkTestDir('tao-hook-install-')
-    try {
-      const repository = await initRepository(root, 'repo')
-      await addHookSupport(repository)
-      const hooksDir = FS.resolvePath('.git/hooks', repository)
+    const root = await mkGitTestDir('tao-hook-install-')
+    const repository = await initRepository(root, 'repo')
+    await addHookSupport(repository)
+    const hooksDir = FS.resolvePath('.git/hooks', repository)
 
-      Expect((await installGitHooks(repository)).stdout.trim().split('\n'))
-        .toEqual(['Installed commit-msg.', 'Installed pre-commit.'])
-      // Re-running setup rewrites its own entry scripts rather than refusing or duplicating them.
-      Expect((await installGitHooks(repository)).stdout.trim().split('\n'))
-        .toEqual(['Installed commit-msg.', 'Installed pre-commit.'])
-      const entry = await FS.readText(FS.resolvePath('commit-msg', hooksDir))
-      Expect(entry).toContain('git rev-parse --show-toplevel')
-      Expect(entry).toContain('packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh')
-      // Tried second, so a worktree that has not yet merged the package split keeps working.
-      Expect(entry).toContain('packages/dev/dev-src/cli/agent-git-hooks.zsh')
-      Expect(entry.trimEnd().endsWith('exit 0')).toBe(true)
+    Expect((await installGitHooks(repository)).stdout.trim().split('\n'))
+      .toEqual(['Installed commit-msg.', 'Installed pre-commit.'])
+    // Re-running setup rewrites its own entry scripts rather than refusing or duplicating them.
+    Expect((await installGitHooks(repository)).stdout.trim().split('\n'))
+      .toEqual(['Installed commit-msg.', 'Installed pre-commit.'])
+    const entry = await FS.readText(FS.resolvePath('commit-msg', hooksDir))
+    Expect(entry).toContain('git rev-parse --show-toplevel')
+    Expect(entry).toContain('packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh')
+    // Tried second, so a worktree that has not yet merged the package split keeps working.
+    Expect(entry).toContain('packages/dev/dev-src/cli/agent-git-hooks.zsh')
+    Expect(entry.trimEnd().endsWith('exit 0')).toBe(true)
 
-      await FS.writeText(FS.resolvePath('pre-commit', hooksDir), '#!/bin/sh\nexit 0\n')
-      Expect((await installGitHooks(repository)).stdout.trim().split('\n'))
-        .toEqual(['Installed commit-msg.', 'Left pre-commit in place: it was not written by this repository.'])
-    } finally {
-      await FS.remove(root)
-    }
+    await FS.writeText(FS.resolvePath('pre-commit', hooksDir), '#!/bin/sh\nexit 0\n')
+    Expect((await installGitHooks(repository)).stdout.trim().split('\n'))
+      .toEqual(['Installed commit-msg.', 'Left pre-commit in place: it was not written by this repository.'])
   })
 
   Test('names a hook script that exists for every command the hook source declares', async () => {
@@ -322,10 +308,7 @@ function preToolUsePayload(command: string): string {
 
 async function initRepository(root: string, name: string): Promise<string> {
   const repository = FS.resolvePath(name, root)
-  await FS.writeText(FS.resolvePath('f.txt', repository), 'one')
-  await git(repository, ['init', '--quiet', '--initial-branch', 'main'])
-  await git(repository, ['add', '-A'])
-  await commitStaged(repository, 'initial')
+  await initGitTestRepository(repository, { commit: { files: { 'f.txt': 'one' }, message: 'initial' } })
   return repository
 }
 

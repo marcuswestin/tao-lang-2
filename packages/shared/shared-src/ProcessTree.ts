@@ -1,8 +1,7 @@
-import type { Pointer } from 'bun:ffi'
-import { createRequire } from 'node:module'
 import * as Errors from './core/Errors'
 import { sleep } from './core/Time'
 import * as Platform from './Platform'
+import { inspectDarwinProcesses } from './ProcessTreeDarwin'
 
 /**
  * Stopping a child is not stopping what the child started. A lane that signals only its direct
@@ -44,22 +43,6 @@ const FORCE_KILL_GRACE_MS = 250
 /** How often a wait loop re-reads whether the tree it stopped has gone. */
 const EXIT_POLL_MS = 25
 
-type BunFfi = typeof import('bun:ffi')
-
-let bunFfi: BunFfi | undefined
-
-/**
- * `bun:ffi` is reached through a runtime require rather than a static import: `@shared` is also
- * bundled for the IDE extension by esbuild, which cannot resolve a Bun-only specifier at all. A
- * lazy require keeps the specifier out of the module graph, and nothing here runs in that bundle.
- * The base path is the filesystem root rather than this module, because a builtin specifier needs
- * no resolution base and `import.meta.url` is empty in the extension's CommonJS bundle.
- */
-function ffi(): BunFfi {
-  bunFfi ??= createRequire('/')('bun:ffi') as BunFfi
-  return bunFfi
-}
-
 /**
  * descendantProcesses snapshots the whole owned tree before a teardown can orphan an escaped
  * process group. Each PID carries its OS start identity so a later signal cannot hit a reused PID.
@@ -91,95 +74,15 @@ function descendantProcesses(rootPid: number): TrackedProcess[] {
  * descendant is signalled first so a parent cannot spawn a replacement for a child already stopped.
  */
 function darwinDescendantProcesses(rootPid: number): TrackedProcess[] {
-  const { dlopen, FFIType, ptr } = ffi()
-  const library = dlopen('/usr/lib/libproc.dylib', {
-    proc_listchildpids: {
-      args: [FFIType.i32, FFIType.ptr, FFIType.i32],
-      returns: FFIType.i32,
-    },
-    proc_pidinfo: {
-      args: [FFIType.i32, FFIType.i32, FFIType.u64, FFIType.ptr, FFIType.i32],
-      returns: FFIType.i32,
-    },
-  })
-  try {
-    const descendants: Array<TrackedProcess & { depth: number }> = []
-    const visited = new Set<number>([rootPid])
-    const visit = (pid: number, depth: number) => {
-      const children = new Int32Array(4_096)
-      const count = library.symbols.proc_listchildpids(pid, ptr(children), children.byteLength)
-      for (const childPid of children.subarray(0, Math.min(Math.max(0, count), children.length))) {
-        if (!Number.isSafeInteger(childPid) || childPid <= 1 || visited.has(childPid)) {
-          continue
-        }
-        visited.add(childPid)
-        const child = darwinProcessIdentity(childPid, library.symbols.proc_pidinfo)
-        if (child === undefined) {
-          continue
-        }
-        descendants.push({ ...child, depth })
-        visit(childPid, depth + 1)
-      }
-    }
-    visit(rootPid, 1)
-    return descendants.toSorted((left, right) => right.depth - left.depth)
-      .map(({ depth: _depth, ...process }) => process)
-  } finally {
-    library.close()
-  }
+  return inspectDarwinProcesses('descendants', [rootPid]).map(({ group: _group, ...process }) => process)
 }
 
-function darwinProcessIdentity(
-  pid: number,
-  inspect: (pid: number, flavor: number, arg: number, buffer: Pointer, size: number) => number,
-): TrackedProcess | undefined {
-  const bytes = new Uint8Array(136)
-  if (inspect(pid, 3, 0, ffi().ptr(bytes), bytes.byteLength) < bytes.byteLength) {
-    return undefined
-  }
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-  if (view.getUint32(12, true) !== pid) {
-    return undefined
-  }
-  return {
-    command: darwinProcessName(bytes),
-    pid,
-    startedAt: `${view.getBigUint64(120, true)}:${view.getBigUint64(128, true)}`,
-  }
-}
-
-/**
- * processGroupOf reads which process group a PID belongs to, so a caller can see whether a child
- * was detached rather than having to trust the option it passed. `proc_bsdinfo` carries `pbi_pgid`
- * at offset 100, beside the `pbi_pid` at 12 that guards against a stale read.
- */
+/** processGroupOf reads the kernel process group rather than trusting the spawn options. */
 function processGroupOf(pid: number): number | undefined {
   if (process.platform !== 'darwin') {
     Errors.throwHostEnvironment('Reading a process group id is only implemented on macOS.')
   }
-  const { dlopen, FFIType } = ffi()
-  const library = dlopen('/usr/lib/libproc.dylib', {
-    proc_pidinfo: {
-      args: [FFIType.i32, FFIType.i32, FFIType.u64, FFIType.ptr, FFIType.i32],
-      returns: FFIType.i32,
-    },
-  })
-  try {
-    const bytes = new Uint8Array(136)
-    if (library.symbols.proc_pidinfo(pid, 3, 0, ffi().ptr(bytes), bytes.byteLength) < bytes.byteLength) {
-      return undefined
-    }
-    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    return view.getUint32(12, true) === pid ? view.getUint32(100, true) : undefined
-  } finally {
-    library.close()
-  }
-}
-
-function darwinProcessName(bytes: Uint8Array): string {
-  const decode = (offset: number, length: number) =>
-    new TextDecoder().decode(bytes.subarray(offset, offset + length)).replace(/\0.*$/, '')
-  return decode(64, 32) || decode(48, 16)
+  return inspectDarwinProcesses('identities', [pid])[0]?.group
 }
 
 /** processTable uses the repository-approved fixed process listing, not caller-shaped ps arguments. */
@@ -254,8 +157,7 @@ function sameProcess(current: TrackedProcess | undefined, expected: TrackedProce
  * absent from the result. Outside Darwin the only reading available is `ps`, whose `lstart` has
  * one-second granularity — enough to catch a PID the kernel handed on minutes later, not enough to
  * catch one reused inside the same second. Darwin's libproc start time is microsecond-precise and
- * needs no subprocess, which is why it is the primary path and the one every lane on this host
- * takes.
+ * runs directly under Bun, or in a Bun helper when the caller runs under Node.
  */
 function currentProcessIdentities(pids: readonly number[]): Map<number, TrackedProcess> {
   if (process.platform !== 'darwin') {
@@ -267,21 +169,9 @@ function currentProcessIdentities(pids: readonly number[]): Map<number, TrackedP
       processTable().filter(entry => wanted.has(entry.pid)).map(entry => [entry.pid, entry]),
     )
   }
-  const { dlopen, FFIType } = ffi()
-  const library = dlopen('/usr/lib/libproc.dylib', {
-    proc_pidinfo: {
-      args: [FFIType.i32, FFIType.i32, FFIType.u64, FFIType.ptr, FFIType.i32],
-      returns: FFIType.i32,
-    },
-  })
-  try {
-    return new Map(pids.flatMap(pid => {
-      const process = darwinProcessIdentity(pid, library.symbols.proc_pidinfo)
-      return process === undefined ? [] : [[pid, process] as const]
-    }))
-  } finally {
-    library.close()
-  }
+  return new Map(
+    inspectDarwinProcesses('identities', pids).map(({ group: _group, ...process }) => [process.pid, process]),
+  )
 }
 
 async function waitForTrackedProcessesExit(processes: readonly TrackedProcess[]): Promise<void> {

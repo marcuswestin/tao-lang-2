@@ -1,5 +1,5 @@
 import { Errors, HCI } from '@shared'
-import { execute, formatReclaimReport, reclaim } from './Reclaim'
+import { execute, formatReclaimReport, formatWorktreeStatus, reclaim } from './Reclaim'
 
 /** RunReclaimOptions selects the output shape and whether anything is removed. */
 type RunReclaimOptions = {
@@ -29,4 +29,13 @@ async function runReclaim(options: RunReclaimOptions = {}): Promise<number> {
 /** ReclaimCommand is the `./dev reclaim` entry point. */
 export const ReclaimCommand = {
   run: runReclaim,
+  async status(): Promise<number> {
+    try {
+      HCI.writeLine(formatWorktreeStatus(await reclaim()))
+      return 0
+    } catch (error) {
+      HCI.writeErrorLine(Errors.formatForUser(error))
+      return 1
+    }
+  },
 }

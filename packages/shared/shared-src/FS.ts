@@ -3,6 +3,7 @@ import {
   existsSync as nodeExistsSync,
   readFileSync as nodeReadFileSync,
   realpathSync as nodeRealpathSync,
+  rmSync as nodeRmSync,
 } from 'node:fs'
 import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
@@ -113,6 +114,11 @@ export async function mkTmpDir(prefix: string): Promise<string> {
   return nodeFs.mkdtemp(nodePath.isAbsolute(prefix) ? prefix : nodePath.join(nodeOs.tmpdir(), prefix))
 }
 
+/** removeSync is for process-exit cleanup, when there is no event loop to await. */
+export function removeSync(path: string): void {
+  nodeRmSync(path, { force: true, recursive: true })
+}
+
 /** catching runs `check`, returning `fallback` instead of throwing when it fails. */
 async function catching<Value>(check: () => Promise<Value>, fallback: Value): Promise<Value> {
   try {
@@ -148,6 +154,37 @@ export async function isDirectory(inputPath: string): Promise<boolean> {
 /** isSymbolicLink reports on the path entry itself rather than following its target. */
 export async function isSymbolicLink(inputPath: string): Promise<boolean> {
   return catching(async () => (await nodeFs.lstat(inputPath)).isSymbolicLink(), false)
+}
+
+/** entryMetadata describes one directory entry without following a symlink or mounted path. */
+export async function entryMetadata(inputPath: string): Promise<{
+  device: number
+  gid: number
+  kind: 'directory' | 'file' | 'other' | 'symlink'
+  linkTarget?: string
+  mode: number
+  modifiedMs: number
+  size: number
+  uid: number
+}> {
+  const stats = await nodeFs.lstat(inputPath)
+  const kind = stats.isDirectory()
+    ? 'directory'
+    : stats.isFile()
+    ? 'file'
+    : stats.isSymbolicLink()
+    ? 'symlink'
+    : 'other'
+  return {
+    device: stats.dev,
+    gid: stats.gid,
+    kind,
+    ...(kind === 'symlink' ? { linkTarget: await nodeFs.readlink(inputPath) } : {}),
+    mode: stats.mode,
+    modifiedMs: stats.mtimeMs,
+    size: stats.size,
+    uid: stats.uid,
+  }
 }
 
 /** realPath resolves symlinks and filesystem indirections for an existing path. */
@@ -205,6 +242,20 @@ export async function readTextPrefix(inputPath: string, maxBytes: number): Promi
   try {
     const bytes = Buffer.alloc(maxBytes)
     const { bytesRead } = await handle.read(bytes, 0, maxBytes, 0)
+    return bytes.subarray(0, bytesRead).toString('utf8')
+  } finally {
+    await handle.close()
+  }
+}
+
+/** Read at most maxBytes from the end of a UTF-8 file, without loading the rest. The first line may be partial. */
+export async function readTextSuffix(inputPath: string, maxBytes: number): Promise<string> {
+  const handle = await nodeFs.open(inputPath, 'r')
+  try {
+    const { size } = await handle.stat()
+    const length = Math.min(size, maxBytes)
+    const bytes = Buffer.alloc(length)
+    const { bytesRead } = await handle.read(bytes, 0, length, size - length)
     return bytes.subarray(0, bytesRead).toString('utf8')
   } finally {
     await handle.close()

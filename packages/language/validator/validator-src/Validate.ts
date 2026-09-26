@@ -1,10 +1,12 @@
 import { AST } from '@parser'
 import { NodeValidation, type NodeValidationChecks } from './node-validation'
 import type { ValidationContext } from './validation'
+import { accessValidationChecks } from './validators/access-validator'
 import { ActionsValidator } from './validators/ActionsValidator'
 import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
 import { bridgeValidationChecks, validateBridgedSidecarFiles } from './validators/bridge-validator'
+import { colorValueValidationChecks } from './validators/color-values-validator'
 import { commandValidationChecks } from './validators/commands-validator'
 import { completenessValidationChecks } from './validators/completeness-validator'
 import {
@@ -19,12 +21,14 @@ import { dataValidationChecks, validateDataFile } from './validators/data-valida
 import { validateDatasourceMembership } from './validators/datasource-membership-validator'
 import { declarationSlotValidationChecks } from './validators/declaration-slots-validator'
 import { DesignValidator } from './validators/design-validator'
+import { EffectOutcomesValidator } from './validators/effect-outcomes-validator'
 import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
 import { injectionValidationChecks } from './validators/injections-validator'
 import { InteractionValidator } from './validators/interaction-validator'
 import { InvocationsValidator } from './validators/invocations-validator'
 import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
+import { PhrasesValidator } from './validators/phrases-validator'
 import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
 import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
 import { ReactiveParametersValidator } from './validators/ReactiveParametersValidator'
@@ -49,6 +53,7 @@ const nodeValidationChecks = NodeValidation.compile(
     projectValidationChecks,
     ViewsValidator.checks,
     ActionsValidator.checks,
+    EffectOutcomesValidator.checks,
     StateValidator.checks,
     ReactiveParametersValidator.checks,
     AliasesValidator.checks,
@@ -59,8 +64,11 @@ const nodeValidationChecks = NodeValidation.compile(
     typeValidationChecks,
     InvocationsValidator.checks,
     FunctionalCoreValidator.checks,
+    PhrasesValidator.checks,
     dataValidationChecks,
+    accessValidationChecks,
     DesignValidator.checks,
+    colorValueValidationChecks,
     configurationValidationChecks,
     completenessValidationChecks,
     commandValidationChecks,

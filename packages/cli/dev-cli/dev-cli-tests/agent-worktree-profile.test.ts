@@ -1,5 +1,5 @@
 import { CLI, FS, Platform, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 
 const PROFILE_SCRIPT = Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh')
 const DEPENDENCY_SCRIPT = Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh')
@@ -199,32 +199,25 @@ Describe('agent worktree profile bootstrap', () => {
   })
 
   Test('warns on a detached HEAD and stays quiet on a named branch', async () => {
-    const testRoot = await mkTestDir('tao-agent-head-')
-    try {
-      const repository = FS.resolvePath('detached-repo', testRoot)
-      await FS.writeText(FS.resolvePath('file.txt', repository), 'one')
-      await git(repository, ['init', '--quiet', '--initial-branch', 'main'])
-      await git(repository, ['add', 'file.txt'])
-      await git(repository, ['-c', 'user.email=t@t', '-c', 'user.name=T', 'commit', '--quiet', '-m', 'one'])
+    const testRoot = await mkGitTestDir('tao-agent-head-')
+    const repository = FS.resolvePath('detached-repo', testRoot)
+    await initGitTestRepository(repository, { commit: { files: { 'file.txt': 'one' }, message: 'one' } })
 
-      const warn = async () =>
-        await CLI.run('zsh', {
-          args: ['-c', `source "$1"\ntao_warn_on_detached_head "$2"`, 'head-test', PROFILE_SCRIPT, repository],
-        })
+    const warn = async () =>
+      await CLI.run('zsh', {
+        args: ['-c', `source "$1"\ntao_warn_on_detached_head "$2"`, 'head-test', PROFILE_SCRIPT, repository],
+      })
 
-      const onBranch = await warn()
-      Expect(onBranch.exitCode).toBe(0)
-      Expect(onBranch.stderr).toBe('')
+    const onBranch = await warn()
+    Expect(onBranch.exitCode).toBe(0)
+    Expect(onBranch.stderr).toBe('')
 
-      await git(repository, ['checkout', '--quiet', '--detach', 'HEAD'])
-      const detached = await warn()
+    await git(repository, ['checkout', '--quiet', '--detach', 'HEAD'])
+    const detached = await warn()
 
-      Expect(detached.exitCode).toBe(0)
-      Expect(detached.stderr).toContain('detached HEAD')
-      Expect(detached.stderr).toContain('git switch -c feat/<name>')
-    } finally {
-      await FS.remove(testRoot)
-    }
+    Expect(detached.exitCode).toBe(0)
+    Expect(detached.stderr).toContain('detached HEAD')
+    Expect(detached.stderr).toContain('./agent start-branch feat/<name>')
   })
 
   Test('leaves Bun to choose its install backend in every checkout', async () => {
@@ -388,7 +381,7 @@ Describe('agent worktree profile bootstrap', () => {
 
       Expect(result.exitCode).not.toBe(0)
       Expect(result.stderr).toContain('pinned devenv profile is unavailable')
-      Expect(result.stderr).toContain('direnv allow && direnv exec . ./agent setup')
+      Expect(result.stderr).toContain('./enter-tao-dev-env')
     } finally {
       await FS.remove(testRoot)
     }
@@ -400,7 +393,7 @@ Describe('agent worktree profile bootstrap', () => {
       const fixture = await createProfileFixture(testRoot, true)
       const commandLog = FS.resolvePath('commands.log', testRoot)
       await copyBootstrapScripts(fixture.worktree)
-      await writeBootstrapBun(FS.resolvePath('bin/bun', testRoot))
+      await writeBootstrapBun(FS.resolvePath('bin/bun', fixture.primaryProfile))
 
       const dev = await CLI.run(FS.resolvePath('dev', fixture.worktree), {
         args: ['--help'],
@@ -424,13 +417,59 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
+  Test('rebuilds the agent when an imported CLI-kit source changes', async () => {
+    const testRoot = await mkTestDir('tao-agent-cli-kit-freshness-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const commandLog = FS.resolvePath('commands.log', testRoot)
+      const buildRoot = FS.resolvePath('.artifacts/build/agent-dev', fixture.worktree)
+      const outputText = FS.resolvePath('packages/cli/cli-kit/cli-kit-src/OutputText.ts', fixture.worktree)
+      await copyBootstrapScripts(fixture.worktree)
+      await writeBootstrapBun(FS.resolvePath('bin/bun', fixture.primaryProfile))
+      await Promise.all([
+        FS.mkdir(FS.resolvePath('node_modules', fixture.worktree)),
+        FS.writeText(FS.resolvePath('package.json', fixture.worktree), '{}'),
+        FS.writeText(FS.resolvePath('bun.lock', fixture.worktree), ''),
+        FS.writeText(FS.resolvePath('packages/cli/agent-cli/package.json', fixture.worktree), '{}'),
+        FS.writeText(FS.resolvePath('packages/cli/cli-kit/package.json', fixture.worktree), '{}'),
+        FS.writeText(FS.resolvePath('packages/cli/dev-cli/package.json', fixture.worktree), '{}'),
+        FS.writeText(FS.resolvePath('packages/shared/package.json', fixture.worktree), '{}'),
+        FS.writeText(outputText, 'export const OutputText = {}\n'),
+        FS.writeText(FS.resolvePath('agent-dev.js', buildRoot), ''),
+        FS.writeText(FS.resolvePath('dev-deps.stamp', buildRoot), ''),
+        FS.writeText(FS.resolvePath('agent-dev.stamp', buildRoot), ''),
+      ])
+      const stamp = FS.resolvePath('agent-dev.stamp', buildRoot)
+      await FS.setModifiedTimeMs(stamp, Date.now() + 10_000)
+
+      const unchanged = await CLI.run(FS.resolvePath('agent', fixture.worktree), {
+        args: ['help'],
+        env: { ...fixture.env, TAO_TEST_COMMAND_LOG: commandLog },
+      })
+      Expect(unchanged.exitCode).toBe(0)
+      Expect((await FS.readText(commandLog)).split('\n').some(command => command.startsWith('build '))).toBe(false)
+
+      await FS.writeText(outputText, 'export const OutputText = { changed: true }\n')
+      await FS.setModifiedTimeMs(outputText, Date.now() + 20_000)
+      const changed = await CLI.run(FS.resolvePath('agent', fixture.worktree), {
+        args: ['help'],
+        env: { ...fixture.env, TAO_TEST_COMMAND_LOG: commandLog },
+      })
+
+      Expect(changed.exitCode).toBe(0)
+      Expect((await FS.readText(commandLog)).split('\n').some(command => command.startsWith('build '))).toBe(true)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
   Test('does not publish the shared install stamp after ./dev installation fails', async () => {
     const testRoot = await mkTestDir('tao-dev-agent-install-stamp-failure-')
     try {
       const fixture = await createProfileFixture(testRoot, true)
       const commandLog = FS.resolvePath('commands.log', testRoot)
       await copyBootstrapScripts(fixture.worktree)
-      await writeBootstrapBun(FS.resolvePath('bin/bun', testRoot))
+      await writeBootstrapBun(FS.resolvePath('bin/bun', fixture.primaryProfile))
 
       const dev = await CLI.run(FS.resolvePath('dev', fixture.worktree), {
         args: ['--help'],
@@ -823,7 +862,9 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands).not.toContain('manual-check')
     Expect(await justRecipeNames()).not.toContain('_verify-full-smoke-launch')
     Expect(await justCommands('ship-bundle-proof')).toContain(
-      'bun run packages/apps/expo-host/expo-host-src/testing/verify-release-bundle.ts',
+      `"${
+        Repo.resolvePath('.devenv/profile/bin/bun')
+      }" run packages/apps/expo-host/expo-host-src/testing/verify-release-bundle.ts`,
     )
     Expect(await justCommands('studio-canary')).toContain('./dev studio-canary')
     Expect(await justCommands('studio-manual-checks')).toContain('./dev studio-manual-checks')
@@ -1022,9 +1063,11 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
   await Promise.all([makeExecutable(fakeGetconf), makeExecutable(fakeGit)])
   if (withPrimaryProfile) {
     const primaryNode = FS.resolvePath('bin/node', primaryProfile)
+    const primaryBun = FS.resolvePath('bin/bun', primaryProfile)
     await FS.mkdir(FS.resolvePath('libexec/android-sdk', primaryProfile))
     await FS.writeText(primaryNode, '#!/bin/zsh\nprint -r -- v24.test\n')
-    await makeExecutable(primaryNode)
+    await FS.writeText(primaryBun, '#!/bin/zsh\nprint -r -- 1.4.2\n')
+    await Promise.all([makeExecutable(primaryNode), makeExecutable(primaryBun)])
   }
   return {
     commonGitDir,

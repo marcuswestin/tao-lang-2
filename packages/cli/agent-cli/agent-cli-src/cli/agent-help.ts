@@ -27,7 +27,17 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
     agentHostCommands?: unknown
   }
   const hostOperations = agentHostCommands(permissions).map(prefix => prefix.join(' '))
-  HCI.write(formatAgentHelpText(justHelpLines(result.stdout, justCommands), hostOperations))
+  HCI.write(formatAgentHelpText(
+    [
+      ...justHelpLines(result.stdout, justCommands),
+      fallbackLine('tao [args...]', 'Run the Tao CLI inside the sandbox'),
+      fallbackLine(
+        'start-branch <name>',
+        'Start a feat/* branch from fetched origin/main after checking checkout writes',
+      ),
+    ],
+    hostOperations,
+  ))
   return 0
 }
 
@@ -67,6 +77,7 @@ function formatAgentHelpText(justLines: readonly string[], hostOperations: reado
 Usage:
   ./agent help
   ./agent <just-command> [args...]
+  ./agent tao [args...]
   ./agent unsandboxed <operation> [args...]
 
 Agent commands:
@@ -92,9 +103,13 @@ Examples:
   ./agent unsandboxed prepare-release ide-extension
   ./agent unsandboxed capabilities
   ./agent unsandboxed land --dry-run
+  ./agent unsandboxed merge-main
+  ./agent unsandboxed merge-recover
   ./agent unsandboxed simulators list booted
   ./agent unsandboxed simulators run <device-udid>
   ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios
+  ./agent unsandboxed studio Apps/HNReader
+  ./agent unsandboxed local-instantdb start
   ./agent unsandboxed pods install <ios-directory>
   ./agent setup --refresh-lockfile
 
