@@ -21,6 +21,7 @@ import {
   StudioSourceActionConflictError,
   StudioSourceConflictError,
 } from './session/StudioSourceConflicts'
+import { StudioCanvasViewportStore } from './StudioCanvasViewportStore'
 import {
   type StudioCompileCompletion,
   StudioCompileCoordinator,
@@ -34,6 +35,7 @@ import { type StudioCellRuntime, StudioMatrixSession } from './StudioMatrixSessi
 import type { StudioCellInstanceIdentity, StudioPreviewManifestV2 } from './StudioPreviewManifest'
 import {
   type StudioAppVariant,
+  type StudioCanvasViewport,
   type StudioCheckpointSummary,
   type StudioCreateFileRequest,
   type StudioCreateFileResult,
@@ -205,6 +207,9 @@ export class StudioProjectSession {
   readonly #workspace: Workspace
   #mutationLane: Promise<void> = Promise.resolve()
   #matrix: StudioMatrixSession | undefined
+  #canvasViewportStore: StudioCanvasViewportStore | undefined
+  #canvasViewport: StudioCanvasViewport | undefined
+  readonly #canvasViewportSequences = new Map<string, number>()
 
   private constructor(
     readonly projectRoot: string,
@@ -267,6 +272,39 @@ export class StudioProjectSession {
 
   identity(): StudioProjectIdentity {
     return { appName: this.appName, project: this.projectRoot }
+  }
+
+  /** The server installs its device-local preferences store before exposing this session. */
+  setCanvasViewportStore(store: StudioCanvasViewportStore): void {
+    this.#canvasViewportStore = store
+  }
+
+  async saveCanvasViewport(request: unknown): Promise<StudioCanvasViewport> {
+    if (
+      !Json.isRecord(request)
+      || typeof request['clientId'] !== 'string' || request['clientId'].length === 0
+      || request['clientId'].length > 128
+      || typeof request['sequence'] !== 'number' || !Number.isSafeInteger(request['sequence'])
+      || request['sequence'] < 0
+    ) {
+      Errors.throwUserInput('Expected a canvas viewport client id and nonnegative sequence number.')
+    }
+    const viewport = StudioCanvasViewportStore.normalize(request['viewport'])
+    const previous = this.#canvasViewportSequences.get(request['clientId'])
+    if (previous !== undefined && request['sequence'] <= previous) {
+      return this.#canvasViewport ?? viewport
+    }
+    this.#canvasViewportSequences.set(request['clientId'], request['sequence'])
+    this.#canvasViewport = viewport
+    try {
+      await this.#canvasViewportStore?.save(this.projectRoot, viewport)
+    } catch (error) {
+      if (this.#canvasViewportSequences.get(request['clientId']) === request['sequence']) {
+        this.#canvasViewportSequences.delete(request['clientId'])
+      }
+      throw error
+    }
+    return viewport
   }
 
   /**
@@ -509,7 +547,12 @@ export class StudioProjectSession {
       previewMeasurementCellKey(cellIdentity),
       {
         identity: cellIdentity,
-        measurements: new Map(message.measurements.map(measurement => [measurement.renderId, measurement])),
+        // Scrolled, clipped renders still supply viewport geometry to the client; source layout
+        // operations retain their original nonnegative canvas-coordinate eligibility.
+        measurements: new Map(
+          message.measurements.filter(measurement => measurement.rect.x >= 0 && measurement.rect.y >= 0)
+            .map(measurement => [measurement.renderId, measurement]),
+        ),
       },
     )
     return { accepted: true }
@@ -543,8 +586,12 @@ export class StudioProjectSession {
   }
 
   async handshake(): Promise<StudioSessionHandshake> {
+    const canvasViewport = this.#canvasViewportStore === undefined
+      ? this.#canvasViewport
+      : await this.#canvasViewportStore.load(this.projectRoot)
     return {
       apps: this.apps,
+      ...(canvasViewport === undefined ? {} : { canvasViewport }),
       capabilities: {
         drafts: 'disk-synced-parsable',
         language: ['lsp', 'textmate'],

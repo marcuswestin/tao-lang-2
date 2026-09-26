@@ -128,6 +128,12 @@ const overlayLayerStyle = {
 const hiddenNavigationLevelStyle = { display: 'none' } as const
 const visibleOverlayLevelStyle = { flex: 1 } as const
 const zeroInsets: SafeAreaInsets = { bottom: 0, left: 0, right: 0, top: 0 }
+const overlayBackdropColor = 'rgba(0, 0, 0, 0.45)'
+const overlaySurfaceStyle = {
+  backgroundColor: overlayBackdropColor,
+  flex: 1,
+  pointerEvents: 'box-none',
+} as const
 
 // An asked view is modal: it dims what it covers and sits centred over it, rather than rendering as
 // another full-bleed layer on top of the content it is supposed to interrupt. The scrim is the
@@ -135,7 +141,7 @@ const zeroInsets: SafeAreaInsets = { bottom: 0, left: 0, right: 0, top: 0 }
 // home indicator, so it grows by the live safe-area insets on top of its fixed minimum.
 const askScrimBaseStyle = {
   alignItems: 'center',
-  backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  backgroundColor: overlayBackdropColor,
   bottom: 0,
   justifyContent: 'center',
   left: 0,
@@ -218,17 +224,6 @@ const sheetSurfacePadding = 20
 /** What a native sheet hosts: the rendered entries presented while it showed, how many, and whether one is modal. */
 type SheetHosted = { hosted: React.ReactNode[] | null; hostedCount: number; hostedModal: boolean }
 
-/**
- * A native dismissal — the iOS page sheet swiped down, Android's back press on the modal — takes the
- * whole sheet: the platform has already taken its window, so the sheet's own entry must go with
- * everything it hosts, top entry first, or the stack would keep a sheet nothing shows any more.
- */
-function dismissSheet(navigation: TaoNavigationValue, taoProps: TaoProps | undefined, entries: number): void {
-  for (let index = 0; index < entries; index += 1) {
-    dismissOverlay(navigation, taoProps)
-  }
-}
-
 function modalSheet(
   content: React.ReactNode,
   navigation: TaoNavigationValue,
@@ -242,7 +237,6 @@ function modalSheet(
 ): React.ReactNode {
   const runtime = requireReactNativeRuntime()
   const modal = (runtime as { Modal?: React.ComponentType<any> }).Modal
-  const dismiss = () => dismissSheet(navigation, taoProps, 1 + sheetHosted.hostedCount)
   if (!modal) {
     // Without a modal host the sheet renders inline, inside the app's own window and its
     // KeyboardAvoidingView; the enclosing level hides it when covered.
@@ -263,23 +257,61 @@ function modalSheet(
       ),
     )
   }
-  // The modal is a portal above the overlay lane, so covering it cannot rely on the enclosing
-  // level: `visible` must track whether this entry is the top of the overlay stack. The native
-  // presentation supplies the sheet card and dimming itself, and `pageSheet` rejects transparency.
+  return createElement(NativeSheetModal, { content, modal, navigation, sheetHosted, taoProps, visible })
+}
+
+/** A covered sheet cannot surrender the native window that owns its overlay and ask followers. */
+function NativeSheetModal(props: {
+  content: React.ReactNode
+  modal: React.ComponentType<any>
+  navigation: TaoNavigationValue
+  sheetHosted: SheetHosted
+  taoProps: TaoProps | undefined
+  visible: boolean
+}): React.JSX.Element {
+  const canDismiss = props.visible && props.sheetHosted.hostedCount === 0
+    && props.taoProps?.navigationHostActive !== false
+  const dismissal = React.useRef({ allowed: canDismiss, epoch: 0, mounted: true }).current
+  React.useEffect(() => {
+    dismissal.mounted = true
+    return () => {
+      dismissal.mounted = false
+    }
+  }, [dismissal])
+  if (dismissal.allowed !== canDismiss) {
+    dismissal.allowed = canDismiss
+    dismissal.epoch += 1
+  }
+  const epoch = dismissal.epoch
   return createElement(
-    modal,
+    props.modal,
     {
-      allowSwipeDismissal: true,
+      allowSwipeDismissal: canDismiss,
       animationType: 'slide',
-      onRequestClose: dismiss,
+      onRequestClose: () => {
+        if (!dismissal.mounted) {
+          return
+        }
+        if (requireReactNativeRuntime().Platform?.OS === 'android') {
+          // Android asks JS to handle Back; the native window is still present. Remove only the
+          // current top layer so an overlay or ask consumes Back before its hosting sheet.
+          dismissOverlay(props.navigation, props.taoProps)
+          return
+        }
+        // iOS reports a completed swipe. A callback captured before coverage stays stale even
+        // after that coverage ends, and cannot remove a newer presentation.
+        if (canDismiss && dismissal.allowed && dismissal.epoch === epoch) {
+          dismissOverlay(props.navigation, props.taoProps)
+        }
+      },
       presentationStyle: 'pageSheet',
-      visible,
+      visible: props.visible,
     },
     createElement(ModalSheetSurface, {
-      accessibilityProps: modalAccessibilityProps(navigation, taoProps, visible),
-      children: content,
-      sheetHosted,
-      taoProps,
+      accessibilityProps: modalAccessibilityProps(props.navigation, props.taoProps, props.visible),
+      children: props.content,
+      sheetHosted: props.sheetHosted,
+      taoProps: props.taoProps,
     }),
   )
 }
@@ -491,7 +523,7 @@ function renderOverlayLevel(
                 hostedModal,
               }),
           })
-          : content,
+          : createElement(requireReactNativeRuntime().View, { style: overlaySurfaceStyle }, content),
         fill: true,
         hidden,
         key: entry.instanceId,

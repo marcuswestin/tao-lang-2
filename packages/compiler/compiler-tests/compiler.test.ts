@@ -103,10 +103,12 @@ Describe('compiler: language lowering', () => {
     )
   })
 
-  Test('keeps owned state actions synchronous and marks ask responses as queue interrupts', async () => {
-    const compiled = await Compiler.compileCode(`
+  Test(
+    'keeps owned state actions synchronous and marks ask responses and cancellations as queue interrupts',
+    async () => {
+      const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
-      use Button, Text from @tao/ui
+      use Button, Col, Text from @tao/ui
       app Actions { Name "Actions" Navigator StackNav { Initial Main } }
       type Answer is one of Confirmed
       scene Main() {
@@ -114,21 +116,32 @@ Describe('compiler: language lowering', () => {
         state Count = 0
         action Increment() { set Count += 1 }
         action AddOne() { do Increment() }
+        action DismissContent() { dismiss }
+        action CycleA() { do CycleB() }
+        action CycleB() { do CycleA() }
         action AskFirst() { let Result = ask Dialogue() }
         render Button("Increment") { on press AddOne }
       }
       view Dialogue() responds Answer {
-        render Button("Confirm") { on press -> { respond Confirmed } }
+        action Cancel() { dismiss }
+        render Col() {
+          Button("Confirm") { on press -> { respond Confirmed } }
+          Button("Cancel named") { on press Cancel }
+          Button("Cancel inline") { on press -> { dismiss } }
+          Button("Cancel delegated") { on press -> { do Cancel() } }
+        }
       }
     `)
 
-    Expect(compiled.code).toContain('_Scope.Increment = TR.Action(() =>')
-    Expect(compiled.code).toContain('_Scope.AddOne = TR.Action(() =>')
-    Expect(compiled.code).toContain('TR.Do(_Scope.Increment.evaluate())')
-    Expect(compiled.code).not.toContain('await TR.Do(_Scope.Increment.evaluate())')
-    Expect(compiled.code).toContain('_Scope.AskFirst = TR.Action(async () =>')
-    Expect(compiled.code).toMatch(/owner: _TaoActionOwner,\s*interrupt: true/)
-  })
+      Expect(compiled.code).toContain('_Scope.Increment = TR.Action(() =>')
+      Expect(compiled.code).toContain('_Scope.AddOne = TR.Action(() =>')
+      Expect(compiled.code).toContain('TR.Do(_Scope.Increment.evaluate())')
+      Expect(compiled.code).not.toContain('await TR.Do(_Scope.Increment.evaluate())')
+      Expect(compiled.code).toContain('_Scope.AskFirst = TR.Action(async () =>')
+      Expect(compiled.code.match(/interrupt: true/g)).toHaveLength(4)
+      Expect(compiled.code).toMatch(/owner: _TaoActionOwner,\s*interrupt: true/)
+    },
+  )
 
   Test('lowers app persisted state as a writable SplitNav width binding', async () => {
     const compiled = await Compiler.compileCode(`

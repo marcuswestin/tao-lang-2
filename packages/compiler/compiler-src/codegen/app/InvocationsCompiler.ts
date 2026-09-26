@@ -3,7 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
-import { actionBlockContainsRespond, actionBlockRequiresAsync } from './action-control-flow'
+import { actionBlockInterruptsAsk, actionBlockRequiresAsync } from './action-control-flow'
 import { compileReactiveArgument } from './reactive-parameters'
 
 export const InvocationsCompiler = {
@@ -197,7 +197,7 @@ export const InvocationsCompiler = {
           ${handler.payload ? gen`${gen.scopeName(handler.payload)} = _TaoEventValue` : ''}
           ${Compile.ActionBlockBody(handler.block)}
         })
-      }, { owner: _TaoActionOwner, ${actionBlockContainsRespond(handler.block) ? gen`interrupt: true` : gen``} })
+      }, { owner: _TaoActionOwner, ${actionBlockInterruptsAsk(handler.block) ? gen`interrupt: true` : gen``} })
     `
   },
 

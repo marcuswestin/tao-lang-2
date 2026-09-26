@@ -1,5 +1,5 @@
 import { Expect, Test, testOverrideSlot } from '@shared/test'
-import { mountCanvasViewport } from '../studio-src/client/matrix/StudioCanvasViewport'
+import { mountCanvasViewport, type StudioCanvasViewportDeps } from '../studio-src/client/matrix/StudioCanvasViewport'
 
 class CanvasElement extends EventTarget {
   dataset: Record<string, string> = {}
@@ -8,6 +8,13 @@ class CanvasElement extends EventTarget {
   children: CanvasElement[] = []
   captures = new Set<number>()
   tabIndex = 0
+  hidden = false
+  disabled = false
+  scrollWidth = 1000
+  scrollHeight = 800
+  getBoundingClientRect() {
+    return { left: 20, top: 30, width: 500, height: 400, right: 520, bottom: 430 }
+  }
   typing = false
   focused = false
   ownerDocument!: ReturnType<typeof canvasDocument>
@@ -41,14 +48,23 @@ class CanvasElement extends EventTarget {
   }
   focus(): void {
     this.focused = true
+    if (this.ownerDocument) {
+      this.ownerDocument.activeElement = this
+    }
   }
 }
 
 function canvasDocument() {
-  return Object.assign(new EventTarget(), {
-    createElement: () => new CanvasElement(),
+  const document = Object.assign(new EventTarget(), {
+    createElement: () => {
+      const node = new CanvasElement()
+      node.ownerDocument = document
+      return node
+    },
     defaultView: new EventTarget(),
+    activeElement: undefined as CanvasElement | undefined,
   })
+  return document
 }
 
 const elementSlot = testOverrideSlot<PropertyDescriptor | undefined>({
@@ -76,6 +92,7 @@ function canvasTest(
     controls: ReturnType<typeof mountCanvasViewport>
     enabled: (value: boolean) => void
   }) => void,
+  options: Partial<StudioCanvasViewportDeps> = {},
 ): void {
   const restore = elementSlot.install({ configurable: true, value: CanvasElement })
   const document = canvasDocument()
@@ -83,7 +100,7 @@ function canvasTest(
   host.ownerDocument = document
   host.append(new CanvasElement())
   let enabled = true
-  const controls = mountCanvasViewport({ enabled: () => enabled, host: host as unknown as HTMLElement })
+  const controls = mountCanvasViewport({ ...options, enabled: () => enabled, host: host as unknown as HTMLElement })
   try {
     run({
       controls,
@@ -168,6 +185,7 @@ Test('Studio focus loss and disposal release pan state and listeners', () => {
     Expect(host.dataset['canvasPanReady']).toBeUndefined()
     emit(host, 'pointermove', move)
     Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
+    emit(document, 'keydown', { key: ' ' })
     emit(host, 'pointerdown', { ...down, button: 1 })
     emit(host, 'pointermove', move)
     Expect(controls.state()).toEqual({ x: 45, y: 18.75, z: 1 })
@@ -191,6 +209,82 @@ Test('Studio releases canvas input when a layout change cancels a pan', () => {
     Expect(host.dataset['canvasPanning']).toBeUndefined()
     Expect(host.captures.size).toBe(0)
     emit(host, 'pointermove', move)
+    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
+  })
+})
+
+Test('Studio pans only with Space while pinch zoom remains available', () => {
+  canvasTest(({ controls, document, host }) => {
+    const wheel = { clientX: 100, clientY: 100, deltaX: 20, deltaY: 10 }
+    Expect(emit(host, 'wheel', wheel).defaultPrevented).toBe(true)
+    emit(host, 'pointerdown', { ...down, button: 1 })
+    emit(host, 'pointermove', move)
+    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
+    const frame = new CanvasElement()
+    host.append(frame)
+    controls.iframeWheel({ ...wheel, zoom: false }, frame as unknown as Element)
+    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
+    emit(document, 'keydown', { key: ' ' })
+    Expect(emit(host, 'wheel', wheel).defaultPrevented).toBe(true)
+    Expect(controls.state()).toEqual({ x: -15, y: -7.5, z: 1 })
+    emit(host, 'pointerdown', down)
+    emit(document, 'keyup', { key: ' ' })
+    emit(host, 'pointermove', move)
+    Expect(controls.state()).toEqual({ x: -15, y: -7.5, z: 1 })
+    Expect(host.captures.size).toBe(0)
+    Expect(emit(host, 'wheel', { ...wheel, ctrlKey: true }).defaultPrevented).toBe(true)
+    Expect(controls.state().z).toBeLessThan(1)
+  })
+})
+
+Test('Studio restores viewport and menu frames selection in the current transformed coordinate system', () => {
+  const published: unknown[] = []
+  canvasTest(({ controls, host, document }) => {
+    Expect(controls.state()).toEqual({ x: -100, y: -50, z: 2 })
+    const pill = host.children[1]!
+    const menu = host.children[2]!
+    emit(pill, 'click')
+    Expect(menu.hidden).toBe(false)
+    Expect(menu.children[2]!.disabled).toBe(false)
+    Expect(menu.children[3]!.disabled).toBe(true)
+    emit(menu.children[2]!, 'click')
+    // Screen rect 120,130..320,230 is model rect 100,75..200,125 at the restored camera.
+    Expect(controls.state()).toEqual({ x: -350, y: -200, z: 4 })
+    Expect(menu.hidden).toBe(true)
+    Expect(pill.focused).toBe(true)
+    emit(pill, 'click')
+    Expect(emit(menu, 'keydown', { key: 'Escape' }).defaultPrevented).toBe(true)
+    Expect(menu.hidden).toBe(true)
+    emit(pill, 'click')
+    emit(menu, 'keydown', { key: 'End' })
+    Expect(document.activeElement).toBe(menu.children[2])
+    emit(menu.children[1]!, 'click')
+    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
+    Expect(published.length).toBe(2)
+  }, {
+    initialState: { x: -100, y: -50, z: 2 },
+    selectionBounds: () => ({ left: 120, top: 130, right: 320, bottom: 230 }),
+    onChange: state => published.push(state),
+  })
+})
+
+Test('Studio iframe shortcuts require a contained frame and enabled canvas', () => {
+  canvasTest(({ controls, host, enabled }) => {
+    const frame = new CanvasElement()
+    controls.iframeShortcut('zoom-in', frame as unknown as Element)
+    Expect(controls.state().z).toBe(1)
+    host.append(frame)
+    controls.iframeShortcut('zoom-in', frame as unknown as Element)
+    Expect(controls.state().z).toBe(1.5)
+    controls.iframeShortcut('zoom-out', frame as unknown as Element)
+    Expect(controls.state().z).toBe(1)
+    controls.iframeShortcut('fit', frame as unknown as Element)
+    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 0.5 })
+    enabled(false)
+    controls.iframeShortcut('reset', frame as unknown as Element)
+    Expect(controls.state().z).toBe(0.5)
+    enabled(true)
+    controls.iframeShortcut('reset', frame as unknown as Element)
     Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
   })
 })

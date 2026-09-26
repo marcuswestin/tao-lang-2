@@ -30,7 +30,9 @@ export type AppiumTarget =
   | Readonly<{ appId: string; kind: 'simulator'; udid: string }>
   | Readonly<{ appId: string; kind: 'physical'; signing: AppiumPhysicalSigning; udid: string }>
 
-export type AppiumLocator = Readonly<{ using: 'accessibility id' | '-ios predicate string'; value: string }>
+export type AppiumLocator = Readonly<
+  { using: 'accessibility id' | '-ios predicate string' | '-ios class chain'; value: string }
+>
 
 export type AppiumElement = Readonly<{
   click: () => Promise<void>
@@ -737,6 +739,19 @@ function locatorFor(target: HostTarget): AppiumLocator {
     return { using: 'accessibility id', value: target.value }
   }
   if (target.kind === 'accessibility') {
+    if (target.role === 'textbox') {
+      const types = 'type IN {"XCUIElementTypeTextField", "XCUIElementTypeSecureTextField", "XCUIElementTypeTextView"}'
+      return {
+        using: '-ios predicate string',
+        value: target.name === '' ? types : `${types} AND label == ${JSON.stringify(target.name)}`,
+      }
+    }
+    if (target.role === 'navigation-back') {
+      return {
+        using: '-ios class chain',
+        value: '**/XCUIElementTypeNavigationBar[`visible == true`]/XCUIElementTypeButton[1]',
+      }
+    }
     if (target.role !== undefined) {
       return unsupported('inspect', 'Appium/XCUITest cannot enforce an accessibility role for this target.')
     }

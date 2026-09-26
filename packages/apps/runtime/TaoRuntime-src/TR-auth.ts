@@ -70,6 +70,11 @@ export type TaoAuthConnection = {
 export type TaoAuthProvider = {
   /** Only the deterministic testing provider may accept authored fixture identities. */
   testing?: true
+  /** Optional SDK host; receives the same app-scoped configuration as connect. */
+  Host?: React.ComponentType<{
+    configuration: Readonly<Record<string, unknown>>
+    children?: React.ReactNode
+  }>
   connect(context: Readonly<{ configuration: Readonly<Record<string, unknown>> }>): TaoAuthConnection
 }
 export type TaoAuthDeclaration = Readonly<{ name: string; identity: symbol; provider: TaoAuthProvider }>
@@ -120,6 +125,7 @@ export class RuntimeAuthScope {
   private readonly storeSubscriptions = new Map<TaoDataSchema, () => void>()
   private bindings: readonly TaoAppDatasourceBinding[] = []
   private connection: TaoAuthConnection | undefined
+  private evaluatedConfiguration: Readonly<Record<string, unknown>> | undefined
   private stop: (() => void) | undefined
   private subscriptionGeneration = 0
   private operation = new AbortController()
@@ -504,13 +510,18 @@ export class RuntimeAuthScope {
     this.changes.clear()
   }
 
+  get configuration(): Readonly<Record<string, unknown>> {
+    RuntimeAssert.input(this.source !== undefined, 'This app has no authentication provider.')
+    this.evaluatedConfiguration ??= Object.freeze(Object.fromEntries(
+      Object.entries(this.source.config).map(([key, value]) => [key, evaluated(value)]),
+    ))
+    return this.evaluatedConfiguration
+  }
+
   private connect(): TaoAuthConnection {
     RuntimeAssert.input(this.source !== undefined, 'This app has no authentication provider.')
     if (!this.connection) {
-      const configuration = Object.freeze(Object.fromEntries(
-        Object.entries(this.source.config).map(([key, value]) => [key, evaluated(value)]),
-      ))
-      this.connection = this.source.declaration.provider.connect({ configuration })
+      this.connection = this.source.declaration.provider.connect({ configuration: this.configuration })
     }
     return this.connection
   }
@@ -535,7 +546,7 @@ export class RuntimeAuthScope {
 
   private watch(): void {
     this.unwatch()
-    if (this.current.state !== 'SignedIn' || this.disposed) {
+    if (this.disposed) {
       return
     }
     const generation = this.subscriptionGeneration
@@ -546,9 +557,8 @@ export class RuntimeAuthScope {
       this.operation.abort()
       this.operationGeneration += 1
       this.accept(session)
-      if (session.state !== 'SignedIn') {
-        this.unwatch()
-      }
+      // Provider transitions can temporarily clear identity while exchanging a new account.
+      // Explicit user operations and disposal invalidate this subscription separately.
     })
     if (generation === this.subscriptionGeneration && !this.disposed) {
       this.stop = stop
@@ -734,12 +744,14 @@ export const AuthControls = {
       renderPresentation?: (scope: RuntimeAuthScope) => React.ReactNode
     },
   ): React.ReactElement {
-    return createElement(
+    const children = createElement(
       AuthContext.Provider,
       { value: props.scope },
       props.children,
       createElement(AuthPresentation, { scope: props.scope, render: props.renderPresentation }),
     )
+    const Host = props.scope.source?.declaration.provider.Host
+    return Host ? createElement(Host, { configuration: props.scope.configuration }, children) : children
   },
   UseContext(): RuntimeAuthScope {
     const scope = AuthControls.UseOptionalContext()

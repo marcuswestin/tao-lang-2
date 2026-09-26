@@ -22,6 +22,14 @@ async function run(): Promise<number> {
     return 2
   }
   const args = argv.slice(prefix.length)
+  if (
+    (target.argsPolicy === 'studio-list' || target.argsPolicy === 'studio-stop')
+    && !validStudioArgs(args, target.argsPolicy === 'studio-stop')
+  ) {
+    const selector = target.argsPolicy === 'studio-stop' ? ' [--launch <id> | --all]' : ''
+    HCI.writeErrorLine(`Usage: ./agent unsandboxed ${prefix.join(' ')}${selector} [--json] | --help`)
+    return 2
+  }
   if (target.argsPolicy === 'none' && args.length > 0) {
     HCI.writeErrorLine(`Usage: ./agent unsandboxed ${prefix.join(' ')}`)
     return 2
@@ -80,6 +88,32 @@ async function run(): Promise<number> {
     HCI.writeErrorLine(`FAIL  ${prefix.join(' ')}: ${result.error.message}`)
   }
   return result.exitCode ?? 1
+}
+
+/** Lifecycle commands select recorded launches, never arbitrary processes or roots. */
+function validStudioArgs(args: readonly string[], stop: boolean): boolean {
+  if (args.length === 1 && ['--help', '-h'].includes(args[0]!)) {
+    return true
+  }
+  let json = false
+  let selected = false
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]
+    if (arg === '--json' && !json) {
+      json = true
+    } else if (stop && arg === '--all' && !selected) {
+      selected = true
+    } else if (stop && arg === '--launch' && !selected) {
+      const id = args[++index]
+      if (id === undefined || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/u.test(id)) {
+        return false
+      }
+      selected = true
+    } else {
+      return false
+    }
+  }
+  return true
 }
 
 /** Boot one selected device and bring its Simulator or Device Hub window forward. */

@@ -6,7 +6,7 @@ import { foreignActionTestStubKey } from '../../foreign-action-test-stubs'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import {
-  actionBlockContainsRespond,
+  actionBlockInterruptsAsk,
   actionBlockRequiresAsync,
   actionInstrumentationEnabled,
   actionInvocationRequiresAsync,
@@ -47,7 +47,7 @@ export const ActionsCompiler = {
       }, {
         name: ${gen.jsLiteral(action.name)},
         ${AST.findOwningView(action) ? gen`owner: _TaoActionOwner,` : gen``}
-        ${actionBlockContainsRespond(action.block) ? gen`interrupt: true,` : gen``}
+        ${actionBlockInterruptsAsk(action.block) ? gen`interrupt: true,` : gen``}
       })
     `,
     )
@@ -153,7 +153,7 @@ export const ActionsCompiler = {
           ${Compile.ActionBlockBody(action.block)}
         })
       }, { ${AST.findOwningView(action) ? gen`owner: _TaoActionOwner,` : gen``}
-        ${actionBlockContainsRespond(action.block) ? gen`interrupt: true,` : gen``} })
+        ${actionBlockInterruptsAsk(action.block) ? gen`interrupt: true,` : gen``} })
     `
   },
 

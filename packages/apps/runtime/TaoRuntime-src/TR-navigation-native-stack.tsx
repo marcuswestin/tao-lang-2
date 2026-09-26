@@ -21,7 +21,8 @@ import {
   useHostSlotSnapshot,
 } from './TR-navigation-host-slots'
 import type { RuntimeStackNav } from './TR-navigation-mounts'
-import { nativeNavigationModule } from './TR-navigation-native-hosts'
+import { nativeNavigationFallback, nativeNavigationModule, nativeNavigationMounted } from './TR-navigation-native-hosts'
+import { useNativeHeaderToolbar } from './TR-navigation-native-toolbar'
 import type { PresentableEntry } from './TR-navigation-state'
 import { presentedOccurrenceRegion } from './TR-navigation-surfaces'
 import { isNavigation, renderPresentable } from './TR-navigation-values'
@@ -32,7 +33,11 @@ type HostEntry = PresentableEntry & { host: RuntimeHostReadChannel }
 
 export function nativeStackAvailable(): boolean {
   const module = nativeNavigationModule()
-  return Boolean(module?.ScreenStack && module.ScreenStackItem)
+  const available = Boolean(module?.ScreenStack && module.ScreenStackItem)
+  if (module && !available) {
+    nativeNavigationFallback('stack', 'api-mismatch')
+  }
+  return available
 }
 
 /** NativeStackSurface delegates only presentation chrome and gestures to react-native-screens. */
@@ -44,6 +49,13 @@ export function NativeStackSurface(props: {
   taoProps?: TaoProps
 }): React.ReactNode {
   const module = nativeNavigationModule()
+  React.useEffect(() => {
+    if (module?.ScreenStack && module.ScreenStackItem) {
+      nativeNavigationMounted('stack')
+    } else if (module) {
+      nativeNavigationFallback('stack', 'api-mismatch')
+    }
+  }, [module])
   if (!module?.ScreenStack || !module.ScreenStackItem) {
     return createElement(BasicStackSurface, props)
   }
@@ -98,6 +110,16 @@ function NativeStackItemContent(props: {
   const header = slots.header && !props.chrome
   const ScreenStackItem = module.ScreenStackItem!
   const Right = module.ScreenStackHeaderRightView
+  const runtime = requireReactNativeRuntime()
+  const ios = runtime.Platform?.OS === 'ios'
+  const androidHeader = runtime.Platform?.OS === 'android' && runtime.PlatformColor
+    ? {
+      backgroundColor: runtime.PlatformColor('?android:attr/colorBackground'),
+      color: runtime.PlatformColor('?android:attr/colorForeground'),
+      titleColor: runtime.PlatformColor('?android:attr/colorForeground'),
+    }
+    : undefined
+  const toolbar = useNativeHeaderToolbar(ios && header && props.observable ? slots.toolbar : [])
   const entryTaoProps = { ...props.taoProps, navigationHostActive: props.observable }
   const backCapabilities = React.useRef<TaoOutlineLiveEntry>({}).current
   const backIdentity = useOutlineNode(
@@ -133,28 +155,41 @@ function NativeStackItemContent(props: {
       // ScreenStack owns native coverage. ScreenStackItem forbids decreasing a native-stack
       // screen from activityState 2 to 1 during push, so every retained item stays active here.
       activityState: 2,
-      children: contentOwnsWindow
-        ? content
-        : createElement(
-          AppSurfaceFrame,
-          { bottomInset: props.bottomInset, nativeInsets: true, taoProps: entryTaoProps },
-          content,
-        ),
+      children: createElement(
+        React.Fragment,
+        null,
+        toolbar.outline,
+        contentOwnsWindow
+          ? content
+          : createElement(
+            AppSurfaceFrame,
+            { bottomInset: props.bottomInset, nativeInsets: true, taoProps: entryTaoProps },
+            content,
+          ),
+      ),
+      gestureEnabled: props.observable,
+      // The native stack checks every removed screen during a multi-pop, including retained
+      // inactive entries. Only attention outside the entire stack should veto that transition.
+      preventNativeDismiss: props.taoProps?.navigationHostActive === false,
       headerConfig: {
-        children: Right && header && props.observable && slots.toolbar.length > 0
-          ? createElement(Right, null, createElement(NativeToolbar, { commands: slots.toolbar }))
+        ...androidHeader,
+        children: !ios && Right && header && props.observable && slots.toolbar.length > 0
+          ? createElement(Right, null, createElement(NativeToolbar, { commands: slots.toolbar, nativeHeader: true }))
           : null,
+        headerRightBarButtonItems: ios ? toolbar.items : undefined,
         hidden: !header,
         hideBackButton: !header || !props.observable,
         title: header ? slots.title ?? '' : '',
       },
       onDismissed: (event: { nativeEvent?: { dismissCount?: number } }) => {
+        if (!props.observable) {
+          return
+        }
         const count = Math.max(1, event.nativeEvent?.dismissCount ?? 1)
         props.navigation.reconcileNativeDismissal(props.entry.instanceId, count)
       },
-      onHeaderBackButtonClicked: () => {
-        activateBack()
-      },
+      // iOS reports the completed native pop through onDismissed. Android asks JS to pop.
+      onHeaderBackButtonClicked: ios || !props.observable ? undefined : activateBack,
       screenId: String(props.entry.instanceId),
       shouldFreeze: false,
       stackPresentation: 'push',
@@ -162,7 +197,9 @@ function NativeStackItemContent(props: {
   )
 }
 
-export function NativeToolbar(props: { commands: readonly TaoNavigationCommand[] }): React.JSX.Element {
+export function NativeToolbar(
+  props: { commands: readonly TaoNavigationCommand[]; nativeHeader?: boolean },
+): React.JSX.Element {
   const [expanded, setExpanded] = React.useState(false)
   const runtime = requireReactNativeRuntime()
   const moreHost = React.useRef<TaoAccessibilityHost | null>(null)
@@ -182,20 +219,30 @@ export function NativeToolbar(props: { commands: readonly TaoNavigationCommand[]
   }
   const toggleOverflow = () => expanded ? closeOverflow() : setExpanded(true)
   return createElement(
-    React.Fragment,
-    null,
-    ...direct.map(command => createElement(NavigationCommandButton, { command, key: command.identity })),
+    props.nativeHeader ? runtime.View : React.Fragment,
+    props.nativeHeader ? { style: { alignItems: 'center', flexDirection: 'row', gap: 4 } } : null,
+    ...direct.map(command =>
+      createElement(NavigationCommandButton, {
+        command,
+        iconOnly: props.nativeHeader,
+        key: command.identity,
+        nativeHeader: props.nativeHeader,
+      })
+    ),
     overflow.length > 0
       ? createElement(NavigationCommandButton, {
         accessibilityState: { expanded },
         command: {
           enabled: true,
           identity: 'navigation:toolbar:more',
+          ...(props.nativeHeader ? { icon: 'ellipsis' } : {}),
           label: 'More',
           invoke: toggleOverflow,
         },
         hostRef: moreHost,
+        iconOnly: props.nativeHeader,
         key: 'more',
+        nativeHeader: props.nativeHeader,
         outlineIdentity: 'navigation:toolbar:more',
       })
       : null,

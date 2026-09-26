@@ -106,7 +106,11 @@ await runWithCommands(commands => {
       'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, agents, or setup.',
       'check',
     )
-    .option('--app <subject>', 'Explicit product or harness subject: hnreader or clockwork.', 'hnreader')
+    .option(
+      '--app <subject>',
+      'Explicit product or harness subject: hnreader, clockwork, or native-navigation (ios/android acceptance; device installation only).',
+      'hnreader',
+    )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
     .option('--seed <seed>', 'Unsigned 32-bit deterministic application seed.', '12345')
     .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')

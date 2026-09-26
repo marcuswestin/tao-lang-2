@@ -22,6 +22,7 @@ export class AccountStore {
       PRAGMA busy_timeout = 5000;
       CREATE TABLE IF NOT EXISTS authority (id INTEGER PRIMARY KEY CHECK(id = 1), value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS persistenceMode (id INTEGER PRIMARY KEY CHECK(id = 1), value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS authConfiguration (id INTEGER PRIMARY KEY CHECK(id = 1), mode TEXT NOT NULL, issuer TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS identities (issuer TEXT NOT NULL, subject TEXT NOT NULL, accountId TEXT NOT NULL UNIQUE, PRIMARY KEY (issuer, subject));
       CREATE TABLE IF NOT EXISTS passwords (email TEXT PRIMARY KEY, subject TEXT NOT NULL UNIQUE, hash TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, accountId TEXT NOT NULL, issuer TEXT NOT NULL, subject TEXT NOT NULL, expiresAt INTEGER NOT NULL, resource TEXT NOT NULL);
@@ -59,6 +60,33 @@ export class AccountStore {
 
   close(): void {
     this.#db.close()
+  }
+
+  /** An auth database belongs to one login authority; changing it requires an explicit migration. */
+  bindAuthentication(mode: 'local' | 'clerk', issuer: string): void {
+    this.#db.transaction(() => {
+      const existing = this.#db.query<{ mode: string; issuer: string }, []>(
+        'SELECT mode, issuer FROM authConfiguration WHERE id = 1',
+      ).get()
+      if (existing !== null && (existing.mode !== mode || existing.issuer !== issuer)) {
+        rejectAccountRequest(
+          'unavailable',
+          'This account database belongs to another authentication mode or issuer. Use a new database or an explicit migration.',
+        )
+      }
+      if (existing === null && mode === 'clerk') {
+        const contents = this.#db.query<{ count: number }, []>(
+          'SELECT ((SELECT count(*) FROM identities) + (SELECT count(*) FROM passwords) + (SELECT count(*) FROM sessions) + (SELECT count(*) FROM rows) + (SELECT count(*) FROM receipts) + (SELECT count(*) FROM dataKeys)) AS count',
+        ).get()!
+        if (contents.count !== 0) {
+          rejectAccountRequest(
+            'unavailable',
+            'An existing unbound account database requires an explicit migration before using Clerk.',
+          )
+        }
+      }
+      this.#db.query('INSERT OR IGNORE INTO authConfiguration VALUES (1, ?, ?)').run(mode, issuer)
+    }).immediate()
   }
 
   /** Stable identity of this auth database, bound permanently to its remote app. */
@@ -132,6 +160,15 @@ export class AccountStore {
 
   revoke(token: string): void {
     this.#db.query('DELETE FROM sessions WHERE hash = ?').run(Platform.sha256Hex(token))
+  }
+
+  hasExpiredSessions(now: number): boolean {
+    return this.#db.query<{ hash: string }, [number]>('SELECT hash FROM sessions WHERE expiresAt <= ? LIMIT 1').get(now)
+      !== null
+  }
+
+  pruneExpiredSessions(now: number): void {
+    this.#db.query('DELETE FROM sessions WHERE expiresAt <= ?').run(now)
   }
 
   /** Includes expired sessions: their previously admitted remote writes still need fencing. */

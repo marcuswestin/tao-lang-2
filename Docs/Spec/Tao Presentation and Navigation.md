@@ -194,6 +194,12 @@ suffix into an accessible `More` affordance in the same order. A future wider ho
 direct controls without reordering them. A command is never clipped or dropped, and a disabled
 command remains visible but inert.
 
+On iOS, native stack headers use the pinned host's system bar-button descriptors: the first two
+commands are direct buttons and the remaining suffix is an ordered native `More` menu. Labels,
+enabled state and invocation remain Tao command capabilities. Icon metadata is an SF Symbol name;
+the descriptor retains its title when UIKit cannot resolve the image. UIKit owns material and
+grouping. Other hosts and the explicit toggle keep portable command controls.
+
 The stdlib host-family contract fixes the current read and requirement sets:
 
 | Host placement                                                                | Reads              | Requires |
@@ -362,9 +368,14 @@ a nav is the one scene that supplies its own chrome, which is why a render site 
 what the app mounts; the synthesized navigator and every nav its view rendered go with it.
 
 The native `StackNav` maps those reducer-owned entries to the platform stack and header through the
-pinned `react-native-screens` host. A native dismissal or gesture reconciles exactly one Tao Back;
-overlays still consume Back before content history. The basic stack renders a fixed title/back/toolbar
-header and scrollable safe content. On web, the native kit uses that basic chrome, updates
+pinned `react-native-screens` host. A completed native dismissal reconciles its dismissed entry count
+once; duplicate or stale notifications cannot remove more history, and a canceled gesture changes
+no Tao state. Covered stacks disable native gestures and dismissal before an overlay or asked
+dialogue can lose its underlying history. Covered page sheets also prevent native swipe dismissal;
+Android modal Back consumes the top semantic layer first. App frames and authored scroll views
+preserve handled control taps while the keyboard is open. Overlays still consume Back before
+content history. The basic stack renders a fixed title/back/toolbar header and scrollable safe
+content. On web, the native kit uses that basic chrome, updates
 `document.title`, mirrors semantic pushes into same-URL `history.state`, and maps browser Back to one
 Tao Back. This is history integration, not routing: internal mount paths are not shareable or
 reloadable URLs.
@@ -376,8 +387,21 @@ used as a value. Every `Initial` value and every SelectionNav item `Content` is 
 chrome when a host presents the nav itself.
 
 Selection keys belong to their configured declaration's namespace. `Initial` must name one of its
-items. The visible controls use each item's `Label`; `Icon` is preserved in the descriptor while the
-current native selection control remains label-rendered. A target-only activation reveals a root
+items. The visible controls use each item's `Label`; native iOS tabs use `Icon` as an SF Symbol and
+Android tabs use supported names through the portable icon mapping, retaining labels for unsupported
+icons. Automatic native selection uses the pinned `Tabs.Host` and `Tabs.Screen` contract with stable
+item keys and native-owned provenance. Programmatic acknowledgements do not invoke commands again;
+reselecting a tab preserves its stack and scroll position. All tab content remains mounted.
+
+On iPadOS 18 and later, automatic navigation selects the system tab/sidebar controller mode. UIKit
+owns its window-size adaptation; this does not change `SplitNav` collapse or pane semantics. iOS
+retains every destination through its native overflow. Android uses the complete basic selection
+surface above five destinations. Missing expected mobile native APIs and Android overflow emit a
+structured tooling warning; explicit basic navigation, deterministic behavior checks and web do not.
+Native host acceptance rejects fallback. Platform acceptance and outstanding device checks are
+recorded in `Docs/Roadmap/Add navigation and routing MVP/Native navigation acceptance.md`.
+
+A target-only activation reveals a root
 SelectionNav item without presenting new content:
 
 ```tao
@@ -413,6 +437,8 @@ present DocumentInfo(Document) as overlay in WorkspaceNav
 ```
 
 The runtime gives each nav a relative host and an absolute-fill overlay layer above its content.
+Plain overlays dim the covered content with the same translucent gray backdrop as an asked view.
+Their content remains full-bleed, without the asked view's default card or centering.
 Overlays stack. Covered overlay entries remain mounted but are hidden visually and from
 accessibility; revealing them restores their state. `dismiss` or Back consumes the top overlay before
 the nav's ordinary content history. An overlay covers the nav that presented it, not the window;

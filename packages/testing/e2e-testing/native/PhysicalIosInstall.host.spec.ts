@@ -137,13 +137,17 @@ test('preserves discovery evidence when the build or Release install fails', asy
   expect(installFailure.receipts.at(-1)).toMatchObject({ commands: failedInstall.commands, status: 'failed' })
 })
 
-function physicalInstallHarness(options: Readonly<{ discoveryExitCode?: number; installExitCode?: number }> = {}) {
+function physicalInstallHarness(
+  options: Readonly<
+    { discoveryExitCode?: number; installExitCode?: number; subject?: 'hnreader' | 'native-navigation' }
+  > = {},
+) {
   const receipts: unknown[] = []
   const commands: Array<readonly [string, readonly string[], string | undefined]> = []
   const leases: string[] = []
   const json = new Map<string, unknown>()
   const build = {
-    appId: 'dev.tao.taohosthnreaderrunid',
+    appId: `dev.tao.taohost${(options.subject ?? 'hnreader').replaceAll('-', '')}runid`,
     compiledArtifactDigest: '0'.repeat(64),
     entrySourceDigest: '1'.repeat(64),
     root: 'artifacts/project',
@@ -194,8 +198,34 @@ function physicalInstallHarness(options: Readonly<{ discoveryExitCode?: number; 
       device: 'physical-id',
       runId: 'run-id',
       seed: 12345,
-      subject: 'hnreader' as const,
+      subject: options.subject ?? 'hnreader' as const,
     },
     receipts,
   }
 }
+
+test('installs native navigation only on the explicitly discovered physical target and reports installation alone', async () => {
+  const harness = physicalInstallHarness({ subject: 'native-navigation' })
+  const receipt = await runPhysicalIosInstall({ ...harness.options, build: async () => harness.build })
+  expect(receipt).toMatchObject({
+    status: 'installed',
+    subject: 'native-navigation',
+    device: { id: 'physical-id', kind: 'physical-ios' },
+  })
+  expect(receipt).not.toHaveProperty('journey')
+  expect(harness.commands[1]?.[1]).toEqual([
+    'run:ios',
+    '--device',
+    'physical-id',
+    '--configuration',
+    'Release',
+    '--no-bundler',
+  ])
+  const wrongBuild = physicalInstallHarness({ subject: 'native-navigation' })
+  const rejected = await runPhysicalIosInstall({
+    ...wrongBuild.options,
+    build: async () => ({ ...wrongBuild.build, appId: 'dev.tao.taohosthnreaderrunid' }),
+  })
+  expect(rejected).toMatchObject({ status: 'failed', failure: { code: 'host-app-id-not-isolated' } })
+  expect(wrongBuild.commands).toHaveLength(1)
+})

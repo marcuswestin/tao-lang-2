@@ -30,7 +30,7 @@ export async function runNativeHostProofCommand(
     }
     return prepared
   }
-  if (request.mode === 'android' || request.mode === 'ios') {
+  if (request.mode !== 'device') {
     return await runAppiumNativeHostProofCommand(request, context, build)
   }
   const receipt = await runPhysicalIosInstall({

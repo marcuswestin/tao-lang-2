@@ -12,6 +12,7 @@ import {
 import { expect, test } from '@playwright/test'
 import { Errors, FS, Repo } from '@shared'
 import type { HostJourney } from '../../journey/HostJourney'
+import { appiumAndroidJourneyAdapter } from '../appium-android/AppiumAndroidHostProof'
 import { appiumIosJourneyAdapter, classifyAppiumIosFault, runAppiumIosHostProof } from './AppiumIosHostProof'
 
 const revision: HostRevision = { build: 'build-a', source: 'source-a' }
@@ -270,6 +271,7 @@ test('writes the exact passed receipt after the native clock acknowledgement', a
 
 class RecordingSession implements HostSession {
   readonly targets: HostTarget[] = []
+  readonly actions: HostAction[] = []
   readonly #missing: string | undefined
   readonly #texts: Readonly<Record<string, string>>
 
@@ -318,8 +320,16 @@ class RecordingSession implements HostSession {
     }
   }
 
-  async perform(_action: HostAction): Promise<never> {
-    return {} as never
+  async perform(action: HostAction): ReturnType<HostSession['perform']> {
+    this.actions.push(action)
+    return {
+      action: action.kind,
+      lease: this.descriptor().lease,
+      observationRevision: this.actions.length,
+      revision: this.descriptor().revision,
+      sessionId: 'test',
+      version: 1,
+    }
   }
 
   async publishRevision(): Promise<void> {}
@@ -473,3 +483,185 @@ function clockJourney(): HostJourney {
     version: 1,
   }
 }
+
+for (
+  const [platform, createAdapter] of [['ios', appiumIosJourneyAdapter], [
+    'android',
+    appiumAndroidJourneyAdapter,
+  ]] as const
+) {
+  test(`${platform} native navigation adapter preserves authored input, exact values, header titles and back`, async () => {
+    const session = new RecordingSession(undefined, { nativeDraft: '', '': 'Keep this draft' })
+    const adapter = createAdapter(session, { advance: async () => {} }, 'run-native', [])
+    expect(adapter.capabilities).toEqual(expect.arrayContaining(['assertInputValue', 'back', 'textInput']))
+    await adapter.execute({
+      kind: 'run',
+      appName: 'NativeNavigation',
+      appSourcePath: 'Native Navigation.tao',
+      source: source(),
+    })
+    await adapter.execute({
+      kind: 'enter',
+      selector: 'tag',
+      target: 'nativeDraft',
+      value: 'Keep this draft',
+      selections: [],
+      source: source(),
+    })
+    await adapter.execute({
+      kind: 'expectInputValue',
+      selector: 'tag',
+      target: 'nativeDraft',
+      value: 'Keep this draft',
+      selections: [],
+      source: source(),
+    })
+    await adapter.execute({ kind: 'expectNavigationTitle', title: 'Notes workspace', selections: [], source: source() })
+    await adapter.execute({ kind: 'back', selections: [], source: source() })
+    expect(session.targets).toEqual([
+      { kind: 'tag', value: 'tao-host-ready' },
+      {
+        kind: 'scoped',
+        scope: { kind: 'tag', value: 'nativeDraft' },
+        target: { kind: 'accessibility', role: 'textbox', name: '' },
+      },
+      {
+        kind: 'scoped',
+        scope: { kind: 'tag', value: 'nativeDraft' },
+        target: { kind: 'accessibility', role: 'textbox', name: '' },
+      },
+      { kind: 'text', value: 'Notes workspace' },
+      ...(platform === 'ios' ? [{ kind: 'accessibility', role: 'navigation-back', name: 'Back' }] : []),
+    ])
+    expect(session.actions[0]).toMatchObject({
+      kind: 'type',
+      text: 'Keep this draft',
+      observation: {
+        target: {
+          kind: 'scoped',
+          scope: { kind: 'tag', value: 'nativeDraft' },
+          target: { kind: 'accessibility', role: 'textbox', name: '' },
+        },
+      },
+    })
+    expect(session.actions[1]).toMatchObject(platform === 'ios' ? { kind: 'click' } : { kind: 'key', key: 'Back' })
+    await expect(
+      adapter.execute({
+        kind: 'expectInputValue',
+        selector: 'tag',
+        target: 'nativeDraft',
+        value: 'Lost draft',
+        selections: [],
+        source: source(),
+      }),
+    ).rejects.toThrow("expected input value 'Lost draft'")
+  })
+
+  test(`${platform} input assertions wait through missing, hidden and stale values`, async () => {
+    const session = new RecordingSession(undefined, { 'Note draft': 'Keep this draft' })
+    const observe = session.observe.bind(session)
+    let attempts = 0
+    session.observe = async request => {
+      attempts += 1
+      if (attempts === 1) {
+        throw new AppiumNoSuchElementError('Pop transition is running')
+      }
+      if (attempts === 2) {
+        throw new HostControlError('assertion', 'Editable descendant is missing', { reason: 'element-not-found' })
+      }
+      const found = await observe(request)
+      if (attempts === 3) {
+        return { ...found, visible: false }
+      }
+      if (attempts === 4) {
+        return { ...found, text: 'Stale draft' }
+      }
+      return found
+    }
+    const adapter = createAdapter(session, { advance: async () => {} }, 'run-native', [])
+    await adapter.execute({
+      kind: 'expectInputValue',
+      selector: 'label',
+      target: 'Note draft',
+      value: 'Keep this draft',
+      selections: [],
+      source: source(),
+    })
+    expect(attempts).toBe(5)
+    expect(session.actions).toEqual([])
+    expect(session.targets).toEqual(Array.from({ length: 3 }, () => ({
+      kind: 'accessibility',
+      name: 'Note draft',
+      role: 'textbox',
+    })))
+  })
+
+  test(`${platform} input entry waits for visibility but never retries dispatched typing`, async () => {
+    const session = new RecordingSession(undefined, { 'Note draft': '' })
+    const observe = session.observe.bind(session)
+    let observations = 0
+    let writes = 0
+    session.observe = async request => {
+      observations += 1
+      if (observations === 1) {
+        throw new AppiumNoSuchElementError('Input has not mounted')
+      }
+      return { ...await observe(request), visible: observations >= 3 }
+    }
+    session.perform = async () => {
+      writes += 1
+      return Errors.throwHostEnvironment('Typing transport failed after dispatch')
+    }
+    const adapter = createAdapter(session, { advance: async () => {} }, 'run-native', [])
+    await expect(adapter.execute({
+      kind: 'enter',
+      selector: 'label',
+      target: 'Note draft',
+      value: 'Keep this draft',
+      selections: [],
+      source: source(),
+    })).rejects.toThrow('Typing transport failed after dispatch')
+    expect(observations).toBe(3)
+    expect(writes).toBe(1)
+  })
+
+  test(`${platform} input lookups propagate transport failures without polling`, async () => {
+    const session = new RecordingSession()
+    let lookups = 0
+    session.observe = async () => {
+      lookups += 1
+      return Errors.throwHostEnvironment('Input transport disconnected')
+    }
+    const adapter = createAdapter(session, { advance: async () => {} }, 'run-native', [])
+    for (const kind of ['enter', 'expectInputValue'] as const) {
+      await expect(adapter.execute({
+        kind,
+        selector: 'tag',
+        target: 'nativeDraft',
+        value: 'Keep this draft',
+        selections: [],
+        source: source(),
+      })).rejects.toThrow('Input transport disconnected')
+    }
+    expect(lookups).toBe(2)
+    expect(session.actions).toEqual([])
+  })
+}
+
+test('native input labels retain nested authored selection scopes and editable roles', async () => {
+  const session = new RecordingSession(undefined, { 'Note draft': 'Scoped draft' })
+  const adapter = appiumIosJourneyAdapter(session, { advance: async () => {} }, 'run-native')
+  await adapter.execute({
+    kind: 'expectInputValue',
+    selector: 'label',
+    target: 'Note draft',
+    value: 'Scoped draft',
+    selections: [{ tag: 'notes', index: 2, source: source() }],
+    source: source(),
+  })
+  expect(session.targets).toEqual([{
+    kind: 'scoped',
+    scope: { kind: 'tag', value: 'notes', occurrence: 2 },
+    target: { kind: 'accessibility', name: 'Note draft', role: 'textbox' },
+  }])
+})

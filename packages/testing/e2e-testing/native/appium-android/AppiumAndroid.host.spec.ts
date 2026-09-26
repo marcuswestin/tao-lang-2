@@ -10,6 +10,7 @@ import type {
 import { expect, test } from '@playwright/test'
 import { Errors, FS, Repo } from '@shared'
 import type { HostJourney } from '../../journey/HostJourney'
+import { assertNativeInputValue, enterNativeInput } from '../AppiumNativeInputs'
 import {
   androidTargetLeaseName,
   appiumAndroidCapabilities,
@@ -23,7 +24,11 @@ import {
   type AppiumAndroidWebDriverSession,
   createAppiumAndroidController,
 } from './AppiumAndroidController'
-import { classifyAppiumAndroidFault, runAppiumAndroidHostProof } from './AppiumAndroidHostProof'
+import {
+  appiumAndroidJourneyAdapter,
+  classifyAppiumAndroidFault,
+  runAppiumAndroidHostProof,
+} from './AppiumAndroidHostProof'
 
 const revision: HostRevision = { build: 'build-a', source: 'source-a' }
 
@@ -468,7 +473,7 @@ class FakeElement implements AppiumAndroidElement {
   async isDisplayed(): Promise<boolean> {
     return true
   }
-  async sendKeys(): Promise<void> {}
+  async sendKeys(_text: string): Promise<void> {}
 }
 
 class FakeLeases implements AppiumAndroidLeaseManager {
@@ -684,4 +689,205 @@ function sourceWithRange(
   range: { end: { character: number; line: number }; start: { character: number; line: number } }
 } {
   return { filePath, range: { end: { character: 24, line }, start: { character: 0, line } } }
+}
+
+test('Android tagged inputs target an EditText descendant and retain label constraints', async () => {
+  const client = new FakeClient('editable-child')
+  const remote = client.session
+  const wrapper = new FakeElement(remote, 'wrapper', '')
+  const input = new FakeElement(remote, 'editable', '')
+  let value = ''
+  const typedTargets: string[] = []
+  input.getText = async () => value
+  input.sendKeys = async text => {
+    value = text
+    typedTargets.push(input.id)
+  }
+  wrapper.sendKeys = async () => {
+    Errors.throwUnexpected('The input wrapper is not editable.')
+  }
+  remote.findElement = async locator => {
+    remote.locators.push(locator)
+    return locator.value.includes('resourceId') ? wrapper : input
+  }
+  remote.findElementWithin = async (scope, locator) => {
+    expect(scope.id).toBe('wrapper')
+    remote.locators.push(locator)
+    return input
+  }
+  const session = await open(controller(client, new FakeLeases(), target('emulator-EDITABLE'), new FakeReceipts()))
+  try {
+    await enterNativeInput(session, 'tag', 'nativeDraft', 'Keep this draft', [])
+    await assertNativeInputValue(session, 'tag', 'nativeDraft', 'Keep this draft', [], 'Native Navigation.test.tao')
+    await assertNativeInputValue(session, 'label', 'Note draft', 'Keep this draft', [], 'Native Navigation.test.tao')
+    expect(typedTargets).toEqual(['editable'])
+    expect(remote.locators).toEqual([
+      { using: '-android uiautomator', value: 'new UiSelector().resourceId("nativeDraft")' },
+      { using: '-android uiautomator', value: 'new UiSelector().className("android.widget.EditText")' },
+      { using: '-android uiautomator', value: 'new UiSelector().resourceId("nativeDraft")' },
+      { using: '-android uiautomator', value: 'new UiSelector().className("android.widget.EditText")' },
+      {
+        using: '-android uiautomator',
+        value: 'new UiSelector().className("android.widget.EditText").description("Note draft")',
+      },
+    ])
+  } finally {
+    await session.close(session.descriptor().lease)
+  }
+})
+
+test('Android text presses use an exact scoped native button label without changing text assertions', async () => {
+  const client = new FakeClient('native-button')
+  const remote = client.session
+  const scope = new FakeElement(remote, 'scope', '')
+  const button = new FakeElement(remote, 'button', 'OPEN NOTE DETAIL')
+  const clicks: string[] = []
+  button.click = async () => {
+    clicks.push(button.id)
+  }
+  remote.findElement = async locator => {
+    expect(locator.value).toBe('new UiSelector().resourceId("notes")')
+    return scope
+  }
+  remote.findElements = async locator => locator.value.includes('resourceId') ? [await remote.findElement(locator)] : []
+  remote.findElementWithin = async (parent, locator) => {
+    expect(parent.id).toBe('scope')
+    remote.locators.push(locator)
+    if (
+      locator.value === 'new UiSelector().className("android.widget.Button").description("Open note detail")'
+      || locator.value === 'new UiSelector().text("OPEN NOTE DETAIL")'
+    ) {
+      return button
+    }
+    throw new AppiumNoSuchElementError('No exact native text or button label')
+  }
+  remote.findElementsWithin = async (parent, locator) => [await remote.findElementWithin(parent, locator)]
+  const session = await open(controller(client, new FakeLeases(), target('emulator-BUTTON'), new FakeReceipts()))
+  const adapter = appiumAndroidJourneyAdapter(session, { advance: async () => {} }, 'button-run', [])
+  const source = { filePath: 'Native Navigation.test.tao' }
+  const selections = [{ index: 1, source, tag: 'notes' }]
+  try {
+    await adapter.execute({ kind: 'press', selections, selector: 'text', source, text: 'Open note detail' })
+    expect(clicks).toEqual(['button'])
+    expect(remote.locators).toEqual([
+      { using: '-android uiautomator', value: 'new UiSelector().text("Open note detail")' },
+      {
+        using: '-android uiautomator',
+        value: 'new UiSelector().className("android.widget.Button").description("Open note detail")',
+      },
+    ])
+    remote.locators.length = 0
+    await adapter.execute({
+      kind: 'expect',
+      missing: true,
+      selections,
+      selector: 'text',
+      source,
+      text: 'Open note detail',
+    })
+    await adapter.execute({
+      kind: 'expect',
+      missing: false,
+      selections,
+      selector: 'text',
+      source,
+      text: 'OPEN NOTE DETAIL',
+    })
+    expect(remote.locators).toEqual([
+      { using: '-android uiautomator', value: 'new UiSelector().text("Open note detail")' },
+      { using: '-android uiautomator', value: 'new UiSelector().text("OPEN NOTE DETAIL")' },
+    ])
+    await expect(adapter.execute({
+      kind: 'press',
+      selections,
+      selector: 'text',
+      source,
+      text: 'open note detail',
+    })).rejects.toThrow("could not press text 'open note detail': target was not ready")
+    expect(clicks).toEqual(['button'])
+  } finally {
+    await session.close(session.descriptor().lease)
+  }
+})
+
+test('Android text presses prefer exact visible text and propagate transport errors', async () => {
+  const client = new FakeClient('visible-text')
+  const remote = client.session
+  const text = new FakeElement(remote, 'text', 'Story headline')
+  let clicks = 0
+  text.click = async () => {
+    clicks += 1
+  }
+  remote.findElement = async locator => {
+    remote.locators.push(locator)
+    if (locator.value === 'new UiSelector().text("Story headline")') {
+      return text
+    }
+    return Errors.throwHostEnvironment('transport unavailable')
+  }
+  const session = await open(controller(client, new FakeLeases(), target('emulator-TEXT'), new FakeReceipts()))
+  const adapter = appiumAndroidJourneyAdapter(session, { advance: async () => {} }, 'text-run', [])
+  const source = { filePath: 'HNReader.test.tao' }
+  try {
+    await adapter.execute({ kind: 'press', selections: [], selector: 'text', source, text: 'Story headline' })
+    await expect(adapter.execute({
+      kind: 'press',
+      selections: [],
+      selector: 'text',
+      source,
+      text: 'Disconnected',
+    })).rejects.toThrow('transport unavailable')
+    expect(clicks).toBe(1)
+    expect(remote.locators).toEqual([
+      { using: '-android uiautomator', value: 'new UiSelector().text("Story headline")' },
+      { using: '-android uiautomator', value: 'new UiSelector().text("Disconnected")' },
+    ])
+  } finally {
+    await session.close(session.descriptor().lease)
+  }
+})
+
+for (const clickFails of [false, true]) {
+  test(`Android presses wait for a visible target and click only once when click failure is ${clickFails}`, async () => {
+    const client = new FakeClient('delayed-tab')
+    const remote = client.session
+    const tab = new FakeElement(remote, 'notes', 'Notes')
+    let observations = 0
+    let clicks = 0
+    remote.findElement = async locator => {
+      expect(locator).toEqual({ using: 'accessibility id', value: 'Notes' })
+      observations += 1
+      if (observations === 1) {
+        throw new AppiumNoSuchElementError('Transition has not exposed the tab yet')
+      }
+      return tab
+    }
+    tab.isDisplayed = async () => observations >= 3
+    tab.click = async () => {
+      clicks += 1
+      if (clickFails) {
+        Errors.throwHostEnvironment('Click transport failed after dispatch')
+      }
+    }
+    const session = await open(controller(client, new FakeLeases(), target('emulator-WAIT'), new FakeReceipts()))
+    const adapter = appiumAndroidJourneyAdapter(session, { advance: async () => {} }, 'wait-run', [])
+    try {
+      const pressed = adapter.execute({
+        kind: 'press',
+        selections: [],
+        selector: 'label',
+        source: { filePath: 'Native Navigation.test.tao' },
+        text: 'Notes',
+      })
+      if (clickFails) {
+        await expect(pressed).rejects.toThrow('Click transport failed after dispatch')
+      } else {
+        await pressed
+      }
+      expect(observations).toBe(3)
+      expect(clicks).toBe(1)
+    } finally {
+      await session.close(session.descriptor().lease)
+    }
+  })
 }

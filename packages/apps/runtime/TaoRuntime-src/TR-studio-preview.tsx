@@ -160,6 +160,7 @@ type StudioPreviewDocumentEvent =
   | 'pointerout'
   | 'pointerover'
   | 'pointerup'
+  | 'scroll'
   | 'wheel'
 
 type StudioPreviewWindowEvent = 'blur' | 'message' | 'resize' | 'scroll'
@@ -209,6 +210,7 @@ export type StudioPreviewLayoutMeasurement = {
   rect: { height: number; width: number; x: number; y: number }
   renderId: string
   studioRectId?: string
+  viewportRect?: { height: number; width: number; x: number; y: number }
 }
 
 type StudioRenderGap = {
@@ -857,7 +859,11 @@ export function mountStudioPreviewBridge(
       return
     }
     measurementQueued = true
-    queueMicrotask(postLayoutMeasurements)
+    queueMicrotask(() => {
+      if (measurementQueued) {
+        postLayoutMeasurements()
+      }
+    })
   }
 
   /**
@@ -1013,7 +1019,7 @@ export function mountStudioPreviewBridge(
     )
     positionOverlay(overlay, target.element.getBoundingClientRect())
   }
-  const onResize = () => {
+  const onGeometryChange = () => {
     redrawOverlay()
     scheduleLayoutMeasurements()
   }
@@ -1023,10 +1029,30 @@ export function mountStudioPreviewBridge(
       postToStudio(host, config, 'preview-canvas-pan-key', { held: false })
     }
   }
+  const onCanvasShortcutKeyDown = (event: StudioPreviewPointerEvent) => {
+    if (
+      !canvasGesturesOwned || !(event.metaKey === true || event.ctrlKey === true) || event.isComposing === true
+      || event.taoStudioJourney === true || isCanvasTypingTarget(previewElementFromEvent(event))
+    ) {
+      return
+    }
+    const commands: Readonly<Record<string, 'fit' | 'reset' | 'zoom-in' | 'zoom-out'>> = {
+      '0': 'fit',
+      '1': 'reset',
+      '=': 'zoom-in',
+      '+': 'zoom-in',
+      '-': 'zoom-out',
+    }
+    if (event.key === undefined || !Object.hasOwn(commands, event.key)) {
+      return
+    }
+    blockAppPointerEvent(event)
+    postToStudio(host, config, 'preview-canvas-shortcut', { command: commands[event.key] })
+  }
   const onCanvasPanKeyDown = (event: StudioPreviewPointerEvent) => {
     if (
       !canvasGesturesOwned || event.key !== ' ' || event.isComposing === true
-      || event.taoStudioJourney === true || isCanvasPanTypingTarget(previewElementFromEvent(event))
+      || event.taoStudioJourney === true || isCanvasTypingTarget(previewElementFromEvent(event))
     ) {
       return
     }
@@ -1054,6 +1080,7 @@ export function mountStudioPreviewBridge(
   const onCanvasWheel = (event: StudioPreviewPointerEvent) => {
     if (
       !canvasGesturesOwned
+      || (!canvasPanKeyHeld && event.ctrlKey !== true && event.metaKey !== true)
       || (canvasPanKeyHeld && event.taoStudioJourney === true)
       || event.clientX === undefined
       || event.clientY === undefined
@@ -1063,7 +1090,7 @@ export function mountStudioPreviewBridge(
       return
     }
     // Cancellation is synchronous and happens only after the parent has advertised that Design
-    // owns the gesture. Run and startup retain the embedded app's native scrolling and zooming.
+    // owns the gesture. Ordinary scrolling belongs to the app unless Space is held.
     if (canvasPanKeyHeld) {
       blockAppPointerEvent(event)
     } else {
@@ -1095,6 +1122,7 @@ export function mountStudioPreviewBridge(
     sourceTarget = undefined
     selectedTarget = target
     redrawOverlay()
+    postLayoutMeasurements()
     postSourceMessage(host, config, 'preview-select-source', target.identity)
   }
   const onMouseDown = (event: StudioPreviewPointerEvent) => {
@@ -1266,6 +1294,7 @@ export function mountStudioPreviewBridge(
     ['click', onRecordedClick, true],
     ['input', onRecordedInput, true],
     ['blur', onRecordedBlur, true],
+    ['keydown', onCanvasShortcutKeyDown, true],
     ['keydown', onCanvasPanKeyDown, true],
     ['keyup', onCanvasPanKeyUp, true],
     ['keydown', onRecordedKeyDown, true],
@@ -1275,14 +1304,15 @@ export function mountStudioPreviewBridge(
     ['mouseover', onMouseOver],
     ['mouseout', onMouseOut],
     ['mouseup', onMouseUp, true],
+    ['scroll', onGeometryChange, true],
     ['wheel', onCanvasWheel, true],
   ]
   const windowListeners: readonly Parameters<StudioPreviewHost['window']['addEventListener']>[] = [
     ['blur', disarmDrag],
     ['blur', releaseCanvasPanKey],
     ['message', onMessage],
-    ['resize', onResize],
-    ['scroll', redrawOverlay],
+    ['resize', onGeometryChange],
+    ['scroll', onGeometryChange],
   ]
   for (const [type, listener, capture] of documentListeners) {
     host.document.addEventListener(type, listener, capture)
@@ -1328,7 +1358,7 @@ export function mountStudioPreviewBridge(
   }
 }
 
-/** collectStudioPreviewLayoutMeasurements reads mounted render geometry relative to the cell content root. */
+/** Collect root-relative geometry for source layout and viewport geometry for canvas selection. */
 export function collectStudioPreviewLayoutMeasurements(
   elements: ArrayLike<StudioPreviewElement>,
   rootRect: StudioPreviewRect,
@@ -1350,7 +1380,8 @@ export function collectStudioPreviewLayoutMeasurements(
     const id = renderId(target.identity)
     if (
       renderIds.has(id)
-      || Object.values(measurement).some(value => !Number.isFinite(value) || value < 0)
+      || Object.values(measurement).some(value => !Number.isFinite(value))
+      || measurement.height < 0 || measurement.width < 0
     ) {
       continue
     }
@@ -1359,6 +1390,7 @@ export function collectStudioPreviewLayoutMeasurements(
       elementName: target.identity.elementName,
       rect: measurement,
       renderId: id,
+      viewportRect: { height: rect.height, width: rect.width, x: rect.left, y: rect.top },
       ...(target.identity.studioRectId === undefined ? {} : { studioRectId: target.identity.studioRectId }),
     })
   }
@@ -1468,7 +1500,7 @@ function previewElementFromEvent(event: StudioPreviewPointerEvent): StudioPrevie
 }
 
 /** Text entry retains Space even when a containing preview belongs to the Design canvas. */
-function isCanvasPanTypingTarget(element: StudioPreviewElement | undefined): boolean {
+function isCanvasTypingTarget(element: StudioPreviewElement | undefined): boolean {
   for (let current = element; current !== undefined && current !== null; current = current.parentElement ?? undefined) {
     const tag = current.tagName?.toLowerCase()
     const editable = current.getAttribute('contenteditable')

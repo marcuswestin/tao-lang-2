@@ -1,3 +1,4 @@
+export { StudioCanvasViewportStore } from './StudioCanvasViewportStore'
 export {
   type StudioCompileCause,
   type StudioCompileCompletion,

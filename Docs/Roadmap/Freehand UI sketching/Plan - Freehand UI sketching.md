@@ -567,8 +567,9 @@ of it stays catalog-only, so no language change and no compile per keystroke.
   threshold and Figma's red line and pink spacing rendering. This matters more here than in Figma:
   FS-D11 infers `gap` from the median neighbour distance and `pad` from the edge distance, so a
   drawing snapped to guides projects cleanly by construction.
-- **i. Inline text.** Double-click a `Text` rectangle to edit its content in place; Enter commits,
-  Escape cancels.
+- **i. Inline text — implemented 2026-09-26.** Double-click a free `Text` rectangle to edit its content
+  in place; Enter commits a changed value, Escape or blur cancels. Multiline content is preserved,
+  and concurrent changes to the edited rectangle invalidate the local edit.
 
 **Tests.** A Studio journey per gesture in `studio-sketch-view.test.ts` and `studio-sketch-session.test.ts`;
 the simulated smoke lane gains one keyboard pass (draw, nudge, duplicate, delete, undo, marquee) and
@@ -819,7 +820,8 @@ Focusing a view wraps it in a frame whose size is the occurrence's measured size
   `StudioSketchView.ts`, `StudioSketchGeometry`, the matrix focus outline) divides deltas by `z`;
   `getBoundingClientRect` already reflects the transform for positions. Sketch boards, frames, and
   handles keep constant on-screen stroke widths by scaling the inverse on their border layer.
-- Persistence: viewport per project in the catalog (`viewport: {x, y, z}`), restored on open.
+- Persistence: viewport per project in Studio user state (`{x, y, z}`), restored on open. User navigation
+  does not change the shared sketch catalog or project source.
 - Work: transform layer and gesture handling in `StudioMatrixView`, coordinate helpers, zoom pill,
   keyboard bindings in `StudioApp`. Two days. Lands before Stride A's frames-on-a-surface so the
   surface is pannable from the start.
@@ -842,6 +844,15 @@ Focusing a view wraps it in a frame whose size is the occurrence's measured size
   Text entry retains Space.
   Pan sensitivity is 0.75 for both drag and scroll; pinch/modifier-wheel zoom uses a 0.006 exponential
   gain per delta unit, retaining the per-event cap and total zoom limits.
+
+- **Extended 2026-09-26.** Focused previews forward the fit/reset/zoom shortcuts. The zoom pill opens
+  Fit all, 100%, Zoom to selection, and Zoom to focused frame; absent targets are disabled. Viewport
+  state persists per canonical project path beneath the existing Studio user-state root, surviving
+  server-port changes without project mutations. Saved writes are ordered, coalesced during motion,
+  and flushed on gesture end or page hide. Ordinary scroll stays with the app; canvas pan now requires
+  held Space for both scroll and left/middle drag. Pinch and modifier-wheel zoom remain unconditional
+  in Design. Selection geometry refreshes after app scrolling and before selection. Remaining from
+  this stride: ⇧1/⇧2 framing shortcuts and counter-scaled sketch-handle strokes.
 
 ### Stride D — Focus-selection mode with a red outline on view frames
 
