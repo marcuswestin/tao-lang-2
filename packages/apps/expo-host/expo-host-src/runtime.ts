@@ -17,6 +17,7 @@ export {
 export { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
 export type GeneratePreviewOptions = {
+  sourceOverrides?: Readonly<Record<string, string>>
   project: string
   revision: number
   sourceVersions: Readonly<Record<string, string>>
@@ -182,9 +183,13 @@ async function compileStudioPreview(
     .filter(path => /^@\/studio\/.*\.tao$/u.test(path))
     .map(path => FS.resolvePath(path, preview.project))
   if (!await FS.isDirectory(preview.project)) {
+    Assert.input(
+      Object.keys(preview.sourceOverrides ?? {}).length === 0,
+      'Preview source overrides require an existing project directory.',
+    )
     return await Workspace.compile(sourcePath, options)
   }
-  const workspace = await Workspace.open(preview.project)
+  const workspace = await Workspace.open(preview.project, { sourceOverrides: preview.sourceOverrides })
   return await workspace.compileFiles([sourcePath, ...generatedEntries], options)
 }
 

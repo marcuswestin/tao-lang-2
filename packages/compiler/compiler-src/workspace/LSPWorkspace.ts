@@ -1,5 +1,5 @@
 import { Langium } from '@parser'
-import { Repo, TaoFiles } from '@shared'
+import { Assert, Repo, TaoFiles } from '@shared'
 import {
   createWorkspaceLspServices,
   type WorkspaceLspContributions,
@@ -17,13 +17,19 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
   /** open creates an LSP Workspace rooted at `directoryPath`. */
   static async open(
     directoryPath: string,
-    context: Langium.DefaultSharedModuleContext = Langium.NodeFileSystem,
+    context: Langium.DefaultSharedModuleContext | { sourceOverrides?: Readonly<Record<string, string>> } =
+      Langium.NodeFileSystem,
     contributions: WorkspaceLspContributions = {},
   ): Promise<LSPWorkspace> {
+    Assert.input(
+      !('sourceOverrides' in context) || Object.keys(context.sourceOverrides ?? {}).length === 0,
+      'Source overrides are supported by compile workspaces, not language-server workspaces.',
+    )
+    const langiumContext = 'fileSystemProvider' in context ? context : Langium.NodeFileSystem
     const workspace = new LSPWorkspace(
       await createProjectContext(
         directoryPath,
-        packagesContext => createWorkspaceLspServices(packagesContext, context, contributions),
+        packagesContext => createWorkspaceLspServices(packagesContext, langiumContext, contributions),
       ),
     )
     await workspace.loadWorkspaceDocuments()
