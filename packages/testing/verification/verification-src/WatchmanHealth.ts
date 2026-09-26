@@ -52,7 +52,7 @@ export type WatchmanFacts = {
   /** The socket the client names for this login. */
   readonly socket?: string
   /** A client path that outlives every linked worktree: the primary checkout's pinned one. */
-  readonly stableClient: string
+  readonly stableClient?: string
 }
 
 /** watchmanChecks diagnoses Watchman from a gathered snapshot. */
@@ -63,13 +63,6 @@ export function watchmanChecks(facts: WatchmanFacts): DoctorCheck[] {
 /** enclosingWatchRoot returns a watched root that holds `repositoryRoot` inside it, if any. */
 export function enclosingWatchRoot(roots: readonly string[], repositoryRoot: string): string | undefined {
   return roots.find(root => root !== repositoryRoot && FS.pathIsWithin(repositoryRoot, root))
-}
-
-function startRemediation(facts: WatchmanFacts): string {
-  // An agent sandbox cannot start it: launchd needs a LaunchAgent written, and a direct start is
-  // refused a scheduling priority. The primary checkout's client keeps the LaunchAgent restartable
-  // after any linked worktree is removed.
-  return `Start it from a terminal outside any agent sandbox: ${facts.stableClient} version`
 }
 
 function serverCheck(facts: WatchmanFacts): DoctorCheck {
@@ -99,7 +92,7 @@ function serverCheck(facts: WatchmanFacts): DoctorCheck {
     'not-running': () => ({
       detail: `no Watchman server is running; ${FALLBACK}`,
       name,
-      remediation: startRemediation(facts),
+      remediation: 'Start the shared per-user daemon with ./agent unsandboxed watchman start',
       status: 'warn',
     }),
   })
@@ -142,8 +135,8 @@ function launchAgentChecks(facts: WatchmanFacts): DoctorCheck[] {
   // Both halves name the pinned client: a bare `watchman` resolves through whatever PATH the terminal
   // has, and one that misses this server leaves the old LaunchAgent in place. Stopping the server drops
   // every dev server's subscriptions on the machine, hence the timing.
-  const rewrite = `While no dev server is running, from a terminal outside any agent sandbox: `
-    + `${facts.stableClient} shutdown-server; ${facts.stableClient} version`
+  const rewrite = 'While no dev server is running, run ./agent unsandboxed watchman stop, '
+    + 'then ./agent unsandboxed watchman start (shared by all worktrees).'
   if (!agent.programPresent) {
     return [{
       detail: `launchd restarts Watchman from ${FS.displayPath(agent.program)}, which no longer exists`,
@@ -176,7 +169,7 @@ export async function readWatchmanFacts(repositoryRoot: string): Promise<Watchma
     ...(clientVersion === undefined ? {} : { clientVersion }),
     ...(socket === undefined ? {} : { server: await readWatchmanServer(socket), socket }),
     repositoryRoot: canonicalRoot,
-    stableClient: FS.resolvePath(PROFILE_WATCHMAN, checkouts.primary),
+    ...(checkouts.primary === undefined ? {} : { stableClient: FS.resolvePath(PROFILE_WATCHMAN, checkouts.primary) }),
   }
   const launchAgent = await readLaunchAgent(checkouts.linked)
   return launchAgent === undefined ? facts : { ...facts, launchAgent }
@@ -242,13 +235,13 @@ export async function readWatchmanServer(
 }
 
 /** readCheckouts names the primary checkout and every linked worktree of this repository. */
-async function readCheckouts(repositoryRoot: string): Promise<{ linked: string[]; primary: string }> {
+async function readCheckouts(repositoryRoot: string): Promise<{ linked: string[]; primary?: string }> {
   const result = await CLI.run('git', { args: ['worktree', 'list', '--porcelain'], cwd: repositoryRoot })
   const paths = result.exitCode === 0
     ? result.stdout.split('\n').filter(line => line.startsWith('worktree ')).map(line => line.slice(9))
     : []
   // git lists the primary checkout first.
-  return { linked: paths.slice(1), primary: paths[0] ?? repositoryRoot }
+  return { linked: paths.slice(1), ...(paths[0] === undefined ? {} : { primary: paths[0] }) }
 }
 
 async function readLaunchAgent(linkedWorktrees: readonly string[]): Promise<WatchmanFacts['launchAgent']> {

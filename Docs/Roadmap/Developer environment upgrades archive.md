@@ -81,6 +81,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-GUEST-AGENT-AUDIT-PRIVACY — Guest agent audit privacy](<Developer environment upgrades/Archive/DEVENV-GUEST-AGENT-AUDIT-PRIVACY.md>) — Resolved
 - [DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND — Host-test artifacts accumulate without bound](<Developer environment upgrades/Archive/DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND.md>) — Resolved
 - [DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND — Jest's transform cache grows without bound](<Developer environment upgrades/Archive/DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND.md>) — Resolved
+- [DEVENV-LANDING-PREFLIGHT-MISSES-HUTCH-LAUNCHER — Landing preflight misses the native Hutch launcher](<Developer environment upgrades/Archive/DEVENV-LANDING-PREFLIGHT-MISSES-HUTCH-LAUNCHER.md>) — Resolved
 - [DEVENV-LANDING-SNAPSHOTS-MAIN-BEFORE-WAITING-FOR-THE-LOCK — A landing that queues behind another loses to every landing that finishes while it waits](<Developer environment upgrades/Archive/DEVENV-LANDING-SNAPSHOTS-MAIN-BEFORE-WAITING-FOR-THE-LOCK.md>) — Resolved
 - [DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS — Setup can retain an old transitive package link](<Developer environment upgrades/Archive/DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS.md>) — Resolved
 - [DEVENV-MERGE-RECOVERY-TEST-TIMES-OUT-UNDER-COMPLETE-VERIFY — Merge recovery test times out under complete verification](<Developer environment upgrades/Archive/DEVENV-MERGE-RECOVERY-TEST-TIMES-OUT-UNDER-COMPLETE-VERIFY.md>) — Resolved

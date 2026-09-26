@@ -56,11 +56,20 @@ type PhysicalIosInstallRequest = Readonly<{
 
 export type NativeHostTestingRequest = SimulatorNativeHostTestingRequest | PhysicalIosInstallRequest
 
+export type CatalystHostTestingRequest = Readonly<{
+  kind: 'catalyst'
+  mode: 'catalyst'
+  subject: 'native-navigation' | 'hnreader'
+  seed: number
+  browserChannel: string
+}>
+
 export type HostTestingRequest =
   | MaintenanceHostTestingRequest
   | BrowserHostTestingRequest
   | DriverHostTestingRequest
   | NativeHostTestingRequest
+  | CatalystHostTestingRequest
 
 export type HostTestingContext = Readonly<{
   artifactRoot: string
@@ -93,6 +102,12 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
     seed,
     subject: options.app,
   } as const
+  if (mode === 'catalyst') {
+    if (options.app === 'clockwork' || options.fault === true || options.device !== undefined) {
+      Errors.throwUserInput('Catalyst builds require --app native-navigation or hnreader, without --device or --fault.')
+    }
+    return { ...common, subject: options.app, kind: 'catalyst', mode }
+  }
   if (mode === 'driver') {
     if (options.fault === true) {
       Errors.throwUserInput(

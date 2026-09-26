@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -ne 0 ]; then
-  printf 'Usage: ./enter-tao-dev-env\n' >&2
+if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != --setup-only ]; }; then
+  printf 'Usage: ./enter-tao-dev-env [--setup-only]\n' >&2
   exit 2
 fi
 
@@ -18,6 +18,9 @@ fi
 # devenv invocation reuses its evaluated profile and keeps the shell active until the user exits.
 export DEVENV_TUI=false
 devenv shell --no-tui ./agent setup
+if [ "${1:-}" = --setup-only ]; then
+  exit 0
+fi
 if [ "${SHELL##*/}" = zsh ]; then
   # System zshrc runs compinit before our zshrc can restore the user's ZDOTDIR.
   # Keep its dump beside a startup link in the checkout's disposable cache, not in source.

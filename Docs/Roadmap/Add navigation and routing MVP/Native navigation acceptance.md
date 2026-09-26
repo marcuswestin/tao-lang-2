@@ -1,8 +1,10 @@
 # Native navigation acceptance
 
-Implementation and native acceptance are separate. This record follows the approved order:
-iPhone, iPad, bounded Mac Catalyst feasibility, then Android compatibility. Neither desktop nor
-Android can invalidate completed Apple mobile evidence.
+Implementation and native acceptance are separate. The original acceptance order was iPhone,
+iPad, bounded Mac Catalyst feasibility, then Android compatibility. A subsequent authorization
+started a separate [Mac Catalyst proof of concept](<Mac Catalyst proof of concept.md>) allowing
+small isolated compatibility patches. That experiment does not close outstanding Apple mobile
+acceptance or invalidate its completed evidence.
 
 ## Implemented scope
 
@@ -57,7 +59,7 @@ each relaunch so restarting cannot erase a prior process's fallback failure.
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | iPhone   | Native three-stack simulator journey and HNReader smoke passed; physical installation/launch confirmed separately.                     | Physical Liquid Glass, gestures, menus, sheets, keyboard/insets and accessibility review.                                                                                                         |
 | iPad     | Native three-stack simulator journey passed with tab/sidebar controller mode.                                                          | Inline title visibility, compact/expanded windows, rotation, sidebar switching, pointer, keyboard, VoiceOver and sheet/menu placement.                                                            |
-| macOS    | **Blocked**: the unchanged pinned slider module fails Catalyst compilation.                                                            | A separately authorized native-module/dependency proposal is required; no Mac UI accepted.                                                                                                        |
+| macOS    | **Working with named limitations**: Catalyst/Mac native hosts, Save menu/shortcut and HNReader history smoke observed.                 | Repaired sidebar sizing, manual typing, keyboard-only and appearance review; dark adaptation unimplemented. See the separate proof-of-concept record for build-specific evidence.                 |
 | Android  | **Working with named limitations**: Release emulator journey passed with native tabs/stacks, ordinary Back and retained per-tab state. | Portable toolbar/menu and modal fidelity; root exit, keyboard-dismissal precedence, modal precedence, relaunch/background/resume, predictive Back and physical-device acceptance remain unproven. |
 
 The successful iPhone run was `8c7a2f77-2418-482e-8f2c-507557ea2754`; its source-linked event
@@ -140,7 +142,7 @@ edits or a desktop navigation redesign. A webview shell or an iPad app merely ru
 not satisfy the gate. Native Mac chrome, usable menus, keyboard and window resizing must all be
 reviewed after a successful build.
 
-The actual Catalyst attempt enabled `SUPPORTS_MACCATALYST`, CocoaPods' Catalyst post-install mode,
+The earlier unchanged-module Catalyst attempt enabled `SUPPORTS_MACCATALYST`, CocoaPods' Catalyst post-install mode,
 an iOS 16.4/Catalyst 13.3 deployment target in the isolated trial target, and Expo's supported
 source-module build switch because its precompiled Expo frameworks lacked Catalyst slices. React
 Native and Hermes already supplied Catalyst slices. The source build then failed in the unchanged
@@ -149,6 +151,10 @@ Native and Hermes already supplied Catalyst slices. The source build then failed
 Catalyst). This fails the requirement that pinned native modules build unchanged. No dependency
 source, manifest or lockfile was modified. Build evidence is retained in the task-local
 `.artifacts/native-navigation-catalyst/Build-expo-source.xcresult` and `conclusion.md`.
+
+The later authorized proof of concept uses a task-owned copy of the pinned slider with a one-line
+type correction. Its separate record owns the new build and UI evidence; the historical failed
+trial above remains valid for the stricter unchanged-module requirement.
 
 Android results must report tabs/stacks, toolbar/menu fidelity and sheet behavior separately.
 The iOS descriptor API is not an Android toolbar implementation; current Android commands remain

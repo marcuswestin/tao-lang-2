@@ -112,6 +112,7 @@ function NativeStackItemContent(props: {
   const Right = module.ScreenStackHeaderRightView
   const runtime = requireReactNativeRuntime()
   const ios = runtime.Platform?.OS === 'ios'
+  const catalyst = ios && (runtime.Platform as { isMacCatalyst?: boolean })?.isMacCatalyst === true
   const androidHeader = runtime.Platform?.OS === 'android' && runtime.PlatformColor
     ? {
       backgroundColor: runtime.PlatformColor('?android:attr/colorBackground'),
@@ -193,6 +194,7 @@ function NativeStackItemContent(props: {
       screenId: String(props.entry.instanceId),
       shouldFreeze: false,
       stackPresentation: 'push',
+      style: catalyst ? catalystStackItemStyle : undefined,
     },
   )
 }
@@ -303,6 +305,10 @@ function NativeOverflowMenu(props: {
 
 /** ScreenStack lays its screens out inside its own bounds, so it must be told to fill its parent. */
 const stackSurfaceStyle = { flex: 1 } as const
+
+// UIKit overlays retained screens. Their Catalyst shadow layout must do the same so
+// Pressability measures a pushed control at its visible origin, not below prior screens.
+const catalystStackItemStyle = { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0 } as const
 
 const nativeMenuBackdropStyle = { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 } as const
 const nativeMenuPortalStyle = { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 } as const
