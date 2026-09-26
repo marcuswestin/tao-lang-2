@@ -422,4 +422,5 @@ local InstantDB storage and independent row/guest-access checks on 2026-09-26. P
 acceptance remains outstanding. `just clerk-review` configures this app from the encrypted development
 credentials, starts its local InstantDB gateway, and opens Studio for manual iPhone review. Install
 Tao Companion with `just studio-companion-install roPhone`, keep the phone and Mac on the same
-network, then choose the phone in Studio and open the app. Clerk sign-in requires Internet access.
+network, then choose the phone in Studio and open the app. Select the "Clerk and InstantDB / iPhone"
+scenario to send the app to Companion. Clerk sign-in requires Internet access.

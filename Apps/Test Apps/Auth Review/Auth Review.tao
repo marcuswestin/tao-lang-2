@@ -41,6 +41,14 @@ app AuthReviewClerk = AuthReviewLocal with {
 
 let Me = Account
 
+scenarios AuthReviewClerk "Clerk and InstantDB" {
+   scenario "iPhone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+}  }
+
 folder
 data Accounts / Account {
    DisplayName text (required "Enter your name"),
