@@ -85,3 +85,56 @@
      } else
  #endif // Check for iOS >= 18
        if (newComponentProps.tabBarControllerMode != react::RNSTabsHostIOSTabBarControllerMode::Automatic) {
+--- a/ios/RNSScreen.mm
++++ b/ios/RNSScreen.mm
+@@ -30,0 +31,4 @@
++#if TARGET_OS_MACCATALYST
++#import "RNSTabsScreenComponentView.h"
++#import "RNSTabsScreenViewController.h"
++#endif
+@@ -147 +151,15 @@
+-    auto newState = react::RNSScreenState{RCTSizeFromCGSize(self.bounds.size), {0, effectiveContentOffsetY}};
++    CGFloat contentOffsetX = 0;
++#if TARGET_OS_MACCATALYST
++    UIViewController *navigationParent = _controller.navigationController.parentViewController;
++    if ([navigationParent isKindOfClass:RNSTabsScreenViewController.class]) {
++      RNSTabsScreenComponentView *tabScreen =
++          ((RNSTabsScreenViewController *)navigationParent).tabScreenComponentView;
++      if (self.window != nil && tabScreen.window == self.window) {
++        // Publish the pane translation once: nested stacks inherit this screen's
++        // shadow content origin and must not add the enclosing tab origin again.
++        contentOffsetX = [tabScreen catalystNativeContentOriginDeltaX];
++      }
++    }
++#endif
++    auto newState = react::RNSScreenState{
++        RCTSizeFromCGSize(self.bounds.size), RCTPointFromCGPoint(CGPointMake(contentOffsetX, effectiveContentOffsetY))};
+--- a/ios/tabs/screen/RNSTabsScreenComponentView.h
++++ b/ios/tabs/screen/RNSTabsScreenComponentView.h
+@@ -31,0 +32,5 @@
++
++#if TARGET_OS_MACCATALYST
++// Difference between the native pane origin and its Fabric origin, for descendant measurement.
++- (CGFloat)catalystNativeContentOriginDeltaX;
++#endif
+--- a/ios/tabs/screen/RNSTabsScreenComponentView.mm
++++ b/ios/tabs/screen/RNSTabsScreenComponentView.mm
+@@ -10,0 +11,3 @@
++#if TARGET_OS_MACCATALYST
++#import "RNSTabsHostComponentView.h"
++#endif
+@@ -107,0 +111,14 @@
++
++#if TARGET_OS_MACCATALYST
++- (CGFloat)catalystNativeContentOriginDeltaX
++{
++  RNSTabsHostComponentView *host = self.reactSuperview;
++  if (self.window == nil || host == nil || host.window != self.window) {
++    return 0;
++  }
++  // UIKit reparents the pane inside its own containers. Convert to the original
++  // React parent rather than assuming the immediate native parent's coordinates.
++  CGPoint nativeOrigin = [self convertPoint:CGPointZero toView:host];
++  return nativeOrigin.x - _layoutMetrics.frame.origin.x;
++}
++#endif

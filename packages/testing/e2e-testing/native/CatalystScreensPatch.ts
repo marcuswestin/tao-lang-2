@@ -13,6 +13,21 @@ const reviewedFiles = [
     originalDigest: '63a2faed5da53adbc12b1e9e99833cf28aaccaecb33fbefe22ab769bda8ad613',
     replacementDigest: '713d139a069ad5f388834e750d18831434d28e3eb0a578014184280d82866b19',
   },
+  {
+    path: 'ios/RNSScreen.mm',
+    originalDigest: '7685f8732386a62dc82c8ab21fb37211ce4f51299af9e9ea6dea1a2d1c279207',
+    replacementDigest: 'fd2287b34832b6c27861db4545ba94f7eccc49be4ccb95af09ceb033fdc5a986',
+  },
+  {
+    path: 'ios/tabs/screen/RNSTabsScreenComponentView.h',
+    originalDigest: '2281ead5aa46d0cf0b0d6238d4ca2d659f91792484b8db0870a52d2faf50dc01',
+    replacementDigest: '7c750b8070d2cc671db4d4bb30edd910c4cc74261514935b66b0e259d6336970',
+  },
+  {
+    path: 'ios/tabs/screen/RNSTabsScreenComponentView.mm',
+    originalDigest: '524b46ba215f8aee22a506f65096b22f903c762138294f3545a17c6c5561a81d',
+    replacementDigest: '5fb7a2d028b0d905c5bee12d08b87d60c2f95ec2cf5d53fafc6a289b6d475e6f',
+  },
 ] as const
 
 /** Copies the pinned package before applying the experimental native tab-pane adaptation. */

@@ -31,6 +31,13 @@ export async function runCatalystBuild(
     sourceSlider,
     await FS.realPath(FS.resolvePath('react-native-screens/ios/RNSScreenStack.mm', sourceModules)),
     await FS.realPath(FS.resolvePath('react-native-screens/ios/tabs/host/RNSTabsHostComponentView.mm', sourceModules)),
+    await FS.realPath(FS.resolvePath('react-native-screens/ios/RNSScreen.mm', sourceModules)),
+    await FS.realPath(
+      FS.resolvePath('react-native-screens/ios/tabs/screen/RNSTabsScreenComponentView.h', sourceModules),
+    ),
+    await FS.realPath(
+      FS.resolvePath('react-native-screens/ios/tabs/screen/RNSTabsScreenComponentView.mm', sourceModules),
+    ),
   ]
   const protectedDigests = await digests(protectedPaths)
   const env = {

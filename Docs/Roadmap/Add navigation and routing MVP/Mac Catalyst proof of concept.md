@@ -96,19 +96,25 @@ arbitrary route restoration, network behavior, or chronological ordering with th
 
 ### Current review builds
 
-The clean navigation app is retained at:
+The repaired clean navigation app is retained at:
 
 ```text
-.artifacts/catalyst/6922415c-ddea-4e2f-9993-957d889a22d5/NativeNavigation.app
+.artifacts/catalyst/4a977e27-50c4-48c3-955e-f58bbd537408/NativeNavigation.app
 ```
 
-Its first build compiled the native patch, then failed JavaScript bundling because the copied
+The preceding run `6922415c-ddea-4e2f-9993-957d889a22d5` compiled the native patch, then failed JavaScript bundling because the copied
 screens package no longer resolved its installed `warn-once` dependency. The workflow now retains
 links to its existing declared dependencies (`warn-once` and `react-freeze`) inside the owned copy;
 versions and manifests are unchanged. The named Xcode retry retained
 `Dependency-links-retry.xcresult` and built the app. Recursive strict signature verification passed,
 both binary slices report Catalyst, and actual launch again reported Mac idiom and native tabs and
 stack. The original failed receipt is preserved separately from this retry.
+
+Replacement run `4a977e27-50c4-48c3-955e-f58bbd537408` completed the named Catalyst build
+workflow from `0bf140095268` plus the retained pointer-repair diff. Signature, binary-platform and
+protected-source checks passed. Its uninstrumented launch showed Mac idiom and native tabs and
+stack; a three-pixel movement incremented Note detail taps from 0 to 1. The developer then
+confirmed ordinary tapping works. The earlier app remains preserved as failure evidence.
 
 Fresh HNReader run `ffc68857-0999-420e-9986-077a26cf439b` completed the whole corrected build
 workflow, including source-integrity and signature checks, producing `HNReader.app`. This latest
@@ -117,7 +123,7 @@ copy has not been launched; the runtime/restoration observations above belong to
 Launch either review app only when ready for a visible window:
 
 ```sh
-open '.artifacts/catalyst/6922415c-ddea-4e2f-9993-957d889a22d5/NativeNavigation.app'
+open '.artifacts/catalyst/4a977e27-50c4-48c3-955e-f58bbd537408/NativeNavigation.app'
 open '.artifacts/catalyst/ffc68857-0999-420e-9986-077a26cf439b/HNReader.app'
 ```
 
@@ -127,6 +133,35 @@ then stopped when the developer requested quiet desktop workflows. No window-man
 appearance settings were changed. Remaining visible checks are manual until review is convenient.
 
 ### Unresolved layout and appearance
+
+#### Repaired detail button pointer regression
+
+The developer reported that repeated ordinary clicks on Count detail tap did not update the
+counter, although Count library visit worked. Stationary automated clicks initially masked the
+failure. A three-pixel pointer movement during a press reproduced it on the detail screen while
+the same movement worked on the root screen.
+
+An isolated generated-entry diagnostic retained the original Pressability predicate and reported
+its inputs. The detail pointer was at `(536.5, 206)` while its measured button rectangle spanned
+`(28, 1486)` to `(605, 1523)`. The root button measured `(28, 197)` to `(605, 234)`. Retained native
+stack screens lacked an outer absolute layout, so Fabric placed successive screens below the
+previous screen while UIKit displayed them at the same origin. Catalyst stack items now use
+absolute fill: the same detail press measured the root-equivalent rectangle and incremented once.
+Moving outside the button still canceled the press. Mobile item styles remain unchanged.
+
+The probe also exposed a separate missing sidebar translation in horizontal measurement: a pointer
+at `x=771.5` within the visible button was outside its shadow rectangle ending at `x=605`.
+The private native patch now publishes the measured tab-pane translation through the existing
+screen measurement state, once for its direct tab-owned stack. It compiled and corrected the bounds
+to `(248, 197)` through `(825, 234)`. Center and right-edge movements incremented once; outside
+movement canceled. Sidebar hide/show refreshed the bounds; tab switching retained counters, and
+Back/re-push created a fresh counter that responded normally. These observations belong to
+`NativeNavigation-counter-pane.app` in run `6922415c-ddea-4e2f-9993-957d889a22d5`.
+The pointer follow-up retains diagnostics and original failure evidence under
+`.artifacts/catalyst-counter-investigation/`. The replacement clean build was retested and the
+developer confirmed tapping works on 2026-09-26. This closes the reported detail-counter failure;
+resize, narrow controls, appearance and the broader platform matrix remain open.
+No general counter-state defect was demonstrated.
 
 With the sidebar shown, its 220-point width covers the leading content. Native measurements show
 that the selected tab's safe area includes that inset while the Fabric content still spans the
