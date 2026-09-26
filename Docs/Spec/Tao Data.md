@@ -254,6 +254,57 @@ establish live browser or physical-device acceptance.
 The service's [README](../../packages/services/account-server/README.md) owns startup and protocol
 operational details. Deterministic account fixtures use `TestAuth`, described in `Tao Testing.md`.
 
+### Clerk integration
+
+`Clerk` in `@tao/auth/clerk` implements the same auth interface. Replace the app's `Auth` binding;
+its account schema, access rules, `Account` reads, sign-in actions, and `Reference` datasource stay
+unchanged:
+
+```tao
+use Clerk from @tao/auth/clerk
+
+app ManagedNotes = NotesApp with {
+   Auth Clerk {
+      PublishableKey "pk_test_YOUR_INSTANCE_KEY"
+      Endpoint "http://localhost:4738"
+      Resource "notes"
+   }
+}
+```
+
+The endpoint is an application account gateway, not Clerk's API URL or a testing-only server.
+It verifies Clerk session proofs against a configured issuer, public key and allowed origins,
+then maps `(issuer, subject)` to the application's opaque Account. Resource credentials stay
+inside providers. The included gateway is a localhost, single-process reference implementation;
+production hosting, distributed failover and identity migration remain deployment work.
+
+Password and email-code sign-in/registration use the supplied or custom Tao UI. Email verification
+and email-based Device Trust remain challenges until completed. MFA, session tasks, and other
+unsupported requirements reject the flow without authenticating the app. OAuth, passkeys,
+recovery and account linking are not implemented. Provider configuration does not override the
+methods or required fields enabled in the Clerk instance.
+
+The runtime mounts the SDK through an optional provider `Host`, with the same app-scoped frozen
+configuration passed to `connect`. The Expo SDK currently permits one mounted native Clerk app;
+its lease lasts through outstanding authentication cleanup. Credentials are managed by the SDK
+and never authored as Tao fields. Cancellation revokes a newly created SDK session; logout clears
+local access immediately, then attempts both SDK and gateway revocation. Failed SDK revocations
+retain non-secret session-ID tombstones and retry on reconnection/restoration. Each session has
+its own durable marker, checked again before accepting a proof exchange; another browser tab
+cannot erase that marker by saving a stale retry list.
+
+Restoration and session renewal require Clerk connectivity. The gateway's credential expires no
+later than the verified Clerk proof; failed renewal moves the app to reauthentication at that
+deadline. `Offline { Me.Notes }` does not extend Clerk authentication or promise a cold offline
+login. The experimental Clerk offline resource cache is not enabled.
+
+Offline driver, connection and signed-proof tests exercise adapter behavior without Clerk servers.
+The separate opt-in browser journey uses a Clerk development instance and real password/email-code
+UI. Testing tokens bypass bot protection; they do not replace hosted authentication. Live browser
+and physical-device acceptance are distinct from the offline contract tests. The gateway currently
+requires an `azp` origin claim; native Clerk proofs may omit it. Native authentication is therefore
+not supported as a verified pairing until its token/origin contract has been established.
+
 ## App datasource configuration
 
 The catalog does not own provider identity. An app constructs a datasource from a declaration. A
