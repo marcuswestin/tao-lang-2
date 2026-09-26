@@ -280,6 +280,25 @@ guest's subsequent verification completed one Tao shard in 117 seconds; the othe
 52 passing journeys and one 30-second WordFlower journey timeout. This demonstrates further
 progress with warmed state, without establishing the cause of the remaining timeouts.
 
+Cold verification finished with failures after 3,439 seconds. The complete cold guest took
+6,996 host seconds and exited 1; its collected `cold/guest/steps.tsv` records every phase.
+The final retry exposed three more root-sensitive preview rollback fixtures and a simulator
+archive test that assumes macOS `ditto`. The rollback fixtures now inject exact filesystem
+failures in isolated children while exercising real generation and recovery; deliberate
+rollback-order mutations fail their assertions. The archive boundary remains under repair.
+These are repository portability failures, not evidence that another Ubuntu image is needed.
+
+The same run then provisioned its reusable tools in 79 seconds (147 host seconds including
+image capture), producing
+`sha256:625bbfdcf61f769765b0eabf45d3207c46185a4c9cde61110bcacb1087560942`.
+Its cached guest reused those tools, completed bootstrap/setup in 76 seconds, repeated setup
+in 24 seconds, and passed the parser test in 50 seconds. Cached check/test/verify are still
+running against the original `1c7e6279` source, not the subsequent repairs. The runner removed
+the completed cold and tools containers; it retains the active cached guest, base image, and
+reusable tools image. Read-only inspection `20260926T200309Z-76264` independently confirmed
+the cold container was absent before cached provisioning. Full cold verification evidence is
+retained in snapshot `.artifacts/contributor-linux/20260926T195929Z-56423/`.
+
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published
       [reference container](https://github.com/openai/codex-universal) and
