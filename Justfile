@@ -561,6 +561,9 @@ clean-all: clean-scratch
 #
 # `--complete` remains accepted on `verify` as the explicit spelling of what bare `verify` already
 # does, because the merge command and the repository's instructions name it that way.
+# Full verification lanes lower their CLI process to below-normal scheduling priority before
+# launching gates; children inherit it. This leaves job counts and admission unchanged.
+# A host or sandbox refusal prints a warning and verification continues at inherited priority.
 # Verify everything: fix, check, and every test suite. --no-cache ignores a recorded green tree
 [arg('complete', long='complete', value='true')]
 [arg('no_cache', long='no-cache', value='true')]
