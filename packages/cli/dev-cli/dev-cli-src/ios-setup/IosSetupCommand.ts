@@ -110,6 +110,11 @@ async function run(options: Options): Promise<number> {
     )
   }
   const signed = async (app: string) => {
+    if (options.apply) {
+      notice(
+        `Verifying the full Xcode code signature at ${app}... This reads the app bundle and can take several minutes.`,
+      )
+    }
     await requireSuccess('/usr/bin/codesign', [
       '--verify',
       '--deep',
@@ -119,7 +124,13 @@ async function run(options: Options): Promise<number> {
       '=anchor apple and identifier "com.apple.dt.Xcode"',
       app,
     ])
+    if (options.apply) {
+      notice('Code signature verified. Checking macOS Gatekeeper approval...')
+    }
     await requireSuccess('/usr/sbin/spctl', ['--assess', '--verbose', app])
+    if (options.apply) {
+      notice('Gatekeeper approval confirmed.')
+    }
   }
   const save = async () => {
     if (options.apply) {
@@ -144,6 +155,9 @@ async function run(options: Options): Promise<number> {
     return !['q', 'quit'].includes(answer.trim().toLowerCase())
   }
   const inspectRuntime = async (app: string) => {
+    if (options.apply) {
+      notice('Checking the simulator SDK, installed runtimes, and CoreSimulator service...')
+    }
     receipt.sdk = await requireSuccess('/usr/bin/xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-version'], app)
     if (!VERSION.test(receipt.sdk) || !atLeast(receipt.sdk, options.runtimeVersion)) {
       Errors.throwHostEnvironment(
@@ -397,15 +411,15 @@ async function run(options: Options): Promise<number> {
       notice(`Xcode installed at ${target}.`)
     }
     const selected = receipt.selectedXcode
-    if (options.apply) {
-      notice('Checking Xcode signature, first-launch readiness, and simulator availability...')
-    }
     await signed(selected)
     const minimum = await plist(selected, 'LSMinimumSystemVersion')
     if (!VERSION.test(minimum) || !atLeast(receipt.macOS, minimum)) {
       Errors.throwHostEnvironment(`Xcode requires macOS ${minimum}; this host runs ${receipt.macOS}.`)
     }
     receipt.xcodeBuild = await requireSuccess('/usr/bin/xcodebuild', ['-version'], selected)
+    if (options.apply) {
+      notice('Checking Xcode first-launch readiness...')
+    }
     const launch = await command('/usr/bin/xcodebuild', ['-checkFirstLaunchStatus'], selected)
     if (launch.exitCode !== 0 || launch.error) {
       receipt.remaining.push(firstLaunch(selected))
