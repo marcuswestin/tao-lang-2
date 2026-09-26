@@ -2,6 +2,12 @@ import { CLI, Errors, FS, Repo } from '@shared'
 import { LandingLock } from '@verification/LandingLock'
 import { MachineLanes, type MachineResourceOwner } from '@verification/MachineLanes'
 import { parseWorktreePorcelain } from './Board'
+import {
+  readWorktreeThreads,
+  threadInventoryAvailable,
+  type WorktreeThread,
+  type WorktreeThreadInventory,
+} from './WorktreeThreads'
 
 /**
  * `reclaim` is the verdict `board` deliberately refuses to draw. `board` is a read-only picture of
@@ -31,6 +37,7 @@ const RESOURCE_LEASE_SUFFIX = '.lease'
 export type ReclaimDependencies = {
   registryRoot?: string
   run?: typeof CLI.run
+  readThreads?: (paths: readonly string[]) => Promise<WorktreeThreadInventory>
   /** The worktree asking. Injected by tests; nothing may reclaim the ground it is standing on. */
   thisRoot?: string
 }
@@ -58,6 +65,7 @@ type ReclaimWorktree = {
   evidence: readonly string[]
   head: string
   path: string
+  threads: readonly WorktreeThread[]
   verdict: ReclaimVerdict
 }
 
@@ -70,8 +78,9 @@ export type ReclaimRemoval = {
 
 /** ReclaimReport is the versioned `--json` shape of `reclaim`. */
 export type ReclaimReport = {
+  providers: WorktreeThreadInventory['providers']
   removals?: readonly ReclaimRemoval[]
-  version: 1
+  version: 2
   worktrees: readonly ReclaimWorktree[]
 }
 
@@ -89,11 +98,12 @@ export async function reclaim(dependencies: ReclaimDependencies = {}): Promise<R
   const thisRoot = await canonicalPath(dependencies.thisRoot ?? Repo.getRoot())
   const records = await listWorktrees(run)
   const live = await readLiveRoots(dependencies.registryRoot)
+  const threads = await (dependencies.readThreads ?? readWorktreeThreads)(records.map(record => record.path))
   const primary = records[0]?.path
   const worktrees = await Promise.all(
-    records.map(async record => await classify(record, { live, primary, run, thisRoot })),
+    records.map(async record => await classify(record, { live, primary, run, thisRoot, threads })),
   )
-  return { version: 1, worktrees }
+  return { providers: threads.providers, version: 2, worktrees }
 }
 
 type ClassifyContext = {
@@ -101,6 +111,7 @@ type ClassifyContext = {
   primary?: string
   run: typeof CLI.run
   thisRoot: string
+  threads: WorktreeThreadInventory
 }
 
 /**
@@ -112,8 +123,15 @@ async function classify(
   record: { branch?: string; detached: boolean; head: string; path: string },
   context: ClassifyContext,
 ): Promise<ReclaimWorktree> {
-  const row = { branch: record.branch, detached: record.detached, head: record.head.slice(0, 10), path: record.path }
   const path = await canonicalPath(record.path)
+  const attached = context.threads.byPath[path] ?? []
+  const row = {
+    branch: record.branch,
+    detached: record.detached,
+    head: record.head.slice(0, 10),
+    path: record.path,
+    threads: attached,
+  }
 
   if (path === context.thisRoot) {
     return { ...row, evidence: ['this worktree is the one running reclaim'], verdict: 'live' }
@@ -129,6 +147,12 @@ async function classify(
   }
   if (context.live.busy.has(path)) {
     return { ...row, evidence: ['holds a lane, a resource lease, or the landing lock'], verdict: 'live' }
+  }
+  if (attached.length > 0) {
+    return { ...row, evidence: [`attached to ${attached.length} agent task(s)`], verdict: 'live' }
+  }
+  if (!threadInventoryAvailable(context.threads)) {
+    return { ...row, evidence: ['an installed agent task index could not be read'], verdict: 'unclassified' }
   }
   if (!await FS.isDirectory(record.path)) {
     return {
@@ -170,6 +194,7 @@ export async function execute(
   dependencies: ReclaimDependencies = {},
 ): Promise<readonly ReclaimRemoval[]> {
   const run = dependencies.run ?? CLI.run
+  const readThreads = dependencies.readThreads ?? readWorktreeThreads
   const removals: ReclaimRemoval[] = []
   for (const worktree of report.worktrees.filter(candidate => candidate.verdict === 'reclaimable')) {
     const live = await readLiveRoots(dependencies.registryRoot)
@@ -179,6 +204,17 @@ export async function execute(
         outcome: 'skipped-now-live',
         path: worktree.path,
         reason: live.registryAvailable ? 'took a lane since the report' : 'the lane registry became unreadable',
+      })
+      continue
+    }
+    const threads = await readThreads([path])
+    if (!threadInventoryAvailable(threads) || (threads.byPath[path] ?? []).length > 0) {
+      removals.push({
+        outcome: 'skipped-now-live',
+        path: worktree.path,
+        reason: threadInventoryAvailable(threads)
+          ? 'attached to an agent task'
+          : 'an agent task index became unreadable',
       })
       continue
     }
@@ -324,14 +360,22 @@ export function formatReclaimReport(report: ReclaimReport): string {
     counts[worktree.verdict] += 1
   }
   const rows = report.worktrees.map(worktree =>
-    `${worktree.verdict.toUpperCase().padEnd(13)} ${FS.displayPath(worktree.path)}\n`
-    + `              ${worktree.branch ?? `detached at ${worktree.head}`} — ${worktree.evidence.join('; ')}`
+    [
+      `${worktree.verdict.toUpperCase().padEnd(13)} ${FS.displayPath(worktree.path)}`,
+      `              ${worktree.branch ?? `detached at ${worktree.head}`} — ${worktree.evidence.join('; ')}`,
+      ...worktree.threads.map(thread =>
+        `              ${thread.app}${thread.archived ? ' (archived)' : ''}: ${thread.title} — ${
+          thread.description || 'no description'
+        }; created ${thread.createdAt ?? 'unknown'}; active ${thread.lastActivityAt ?? 'unknown'}`
+      ),
+    ].join('\n')
   )
   const summary = `${counts.reclaimable} reclaimable, ${counts.live} live, ${counts.unclassified} unclassified`
   const sections = [
     report.worktrees.length === 0 ? '(no worktrees found)' : rows.join('\n'),
     '',
     summary,
+    `Task indexes: ${Object.entries(report.providers).map(([app, status]) => `${app}=${status}`).join(', ')}`,
     ...(report.removals === undefined
       ? counts.reclaimable === 0 ? [] : ['Nothing was removed. Re-run with --execute to remove the reclaimable ones.']
       : [
@@ -345,4 +389,38 @@ export function formatReclaimReport(report: ReclaimReport): string {
       ]),
   ]
   return sections.join('\n')
+}
+
+/** formatWorktreeStatus prints one compact entry per checkout; `reclaim --json` retains every task. */
+export function formatWorktreeStatus(report: ReclaimReport): string {
+  const shorten = (value: string, limit: number): string =>
+    value.length > limit ? `${value.slice(0, limit - 1)}…` : value
+  const date = (value: string | null): string => {
+    if (value === null) {
+      return 'unknown'
+    }
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.valueOf()) ? value : `${parsed.toISOString().slice(0, 16)}Z`
+  }
+  const rows = report.worktrees.flatMap(worktree => {
+    const latest = worktree.threads[0]
+    const task = latest === undefined
+      ? 'no matching task'
+      : `${latest.app}${latest.archived ? ' archived' : ''}: ${shorten(latest.title, 48)}`
+        + ` — ${shorten(latest.description || 'no description', 64)}`
+        + `; created ${date(latest.createdAt)}; active ${date(latest.lastActivityAt)}`
+        + (worktree.threads.length === 1 ? '' : `; +${worktree.threads.length - 1} other task(s)`)
+    return [
+      `${worktree.verdict.toUpperCase().padEnd(12)} ${FS.displayPath(worktree.path)}`
+      + ` — ${worktree.branch ?? `detached ${worktree.head}`}`,
+      `  ${task}`,
+    ]
+  })
+  return [
+    ...rows,
+    `${
+      report.worktrees.filter(row => row.verdict === 'reclaimable').length
+    } would be attempted by reclaim --execute; no worktrees removed.`,
+    `Task indexes: ${Object.entries(report.providers).map(([app, status]) => `${app}=${status}`).join(', ')}`,
+  ].join('\n')
 }
