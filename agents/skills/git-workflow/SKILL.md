@@ -18,6 +18,8 @@ Root `AGENTS.md` owns the hard constraints on branches and the Git index; the wa
 - In a linked worktree, `./agent` reuses the primary checkout's pinned devenv profile (run
   `direnv allow && direnv exec . ./agent setup` only when it reports no shared profile), and remove a
   worktree you created once its branch is merged or abandoned.
+- Before reclaiming a worktree, use `./agent reclaim` and follow
+  `references/reclaim-task-associations.md` for agent task ownership that local metadata cannot prove.
 - Git operations that replace protected paths can half-succeed inside the sandbox: HEAD and most
   files move, but protected paths stay dirty. To bring `main` into a feature branch, run
   `./agent merge-main`; when it refuses because `main` writes a protected path, run

@@ -96,10 +96,15 @@ async function linkBesideHostFiles(host: HostInstall): Promise<void> {
 }
 
 async function installedWith(installRoot: string, identity: string): Promise<boolean> {
-  return await FS.readText(FS.resolvePath(INSTALLED_STAMP, installRoot)).then(
+  const stamped = await FS.readText(FS.resolvePath(INSTALLED_STAMP, installRoot)).then(
     content => content === identity,
     () => false,
   )
+  // The stamp can outlive a removed or partial node_modules directory. Expo and Jest are direct
+  // dependencies needed by the two installed host paths, and isFile follows Bun's package links.
+  return stamped
+    && await FS.isFile(FS.resolvePath('node_modules/expo/package.json', installRoot))
+    && await FS.isFile(FS.resolvePath('node_modules/jest/package.json', installRoot))
 }
 
 /**

@@ -1,7 +1,7 @@
 import { CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { Database } from 'bun:sqlite'
-import { execute, formatWorktreeStatus, reclaim } from '../dev-cli-src/doctor/Reclaim'
+import { execute, formatReclaimReport, formatWorktreeStatus, reclaim } from '../dev-cli-src/doctor/Reclaim'
 import type { WorktreeThreadInventory } from '../dev-cli-src/doctor/WorktreeThreads'
 
 /**
@@ -118,13 +118,31 @@ Describe('reclaim', () => {
     await FS.mkdir(codexRoot)
     const codex = new Database(FS.resolvePath('state_5.sqlite', codexRoot))
     codex.run(
-      'CREATE TABLE threads (id TEXT, cwd TEXT, name TEXT, title TEXT, first_user_message TEXT, created_at INTEGER, updated_at INTEGER, created_at_ms INTEGER, updated_at_ms INTEGER, archived INTEGER, thread_source TEXT)',
+      'CREATE TABLE threads (id TEXT, cwd TEXT, name TEXT, title TEXT, first_user_message TEXT, created_at INTEGER, updated_at INTEGER, created_at_ms INTEGER, updated_at_ms INTEGER, archived INTEGER, thread_source TEXT, thread_section_id TEXT)',
     )
+    codex.run('CREATE TABLE thread_sections (id TEXT, name TEXT)')
+    codex.run("INSERT INTO thread_sections VALUES ('next', 'NEXT')")
     codex.run(
-      "INSERT INTO threads VALUES ('codex-1', ?, 'Codex title', '', 'Codex description', 1, 2, 1000, 2000, 0, 'user')",
+      "INSERT INTO threads VALUES ('codex-1', ?, 'Codex title', '', 'Codex description', 1, 2, 1000, 2000, 0, 'user', 'next')",
       [worktree],
     )
     codex.close()
+    const history = new Database(FS.resolvePath('thread_history_1.sqlite', codexRoot))
+    history.run(
+      'CREATE TABLE thread_turns (thread_id TEXT, turn_id TEXT, rollout_ordinal INTEGER, completed_at INTEGER)',
+    )
+    history.run(
+      'CREATE TABLE thread_items (thread_id TEXT, turn_id TEXT, item_type TEXT, rollout_ordinal INTEGER, item_json TEXT)',
+    )
+    history.run("INSERT INTO thread_turns VALUES ('codex-1', 'turn-1', 1, 1790300000)")
+    history.run('INSERT INTO thread_items VALUES (?, ?, ?, ?, ?)', [
+      'codex-1',
+      'turn-1',
+      'userMessage',
+      1,
+      JSON.stringify({ content: [{ text: 'Review the worktree cleanup', type: 'text' }] }),
+    ])
+    history.close()
 
     const claudeProject = FS.resolvePath('.claude/projects/project', home)
     await FS.mkdir(claudeProject)
@@ -167,6 +185,9 @@ Describe('reclaim', () => {
     Expect(inventory.byPath[worktree]?.map(thread => thread.app).toSorted()).toEqual(['claude', 'codex', 'cursor'])
     Expect(inventory.byPath[`${worktree}-other`]).toEqual([])
     Expect(inventory.byPath[worktree]?.find(thread => thread.app === 'cursor')?.archived).toBe(true)
+    Expect(inventory.byPath[worktree]?.find(thread => thread.app === 'codex')?.label).toBe('NEXT')
+    Expect(inventory.byPath[worktree]?.find(thread => thread.app === 'codex')?.lastActivity)
+      .toBe('User: Review the worktree cleanup')
   })
   Test('reports a clean, idle, preserved worktree as reclaimable with its evidence', async () => {
     const { candidate, registryRoot, run } = await scenario({})
@@ -229,6 +250,8 @@ Describe('reclaim', () => {
           createdAt: null,
           description: 'Review',
           id: 'task-1',
+          label: 'NEXT',
+          lastActivity: 'User: Review the worktree cleanup',
           lastActivityAt: null,
           path: candidate,
           title: 'Attached task',
@@ -242,6 +265,11 @@ Describe('reclaim', () => {
     Expect(formatWorktreeStatus(report)).toContain(
       'codex archived: Attached task — Review; created unknown; active unknown',
     )
+    const full = formatReclaimReport(report)
+    Expect(full).toContain('Title: Attached task')
+    Expect(full).toContain('Description: Review')
+    Expect(full).toContain('App label: NEXT; created: unknown')
+    Expect(full).toContain('Last activity: unknown — User: Review the worktree cleanup')
   })
 
   Test('an unreadable installed task index leaves an unmatched worktree unclassified', async () => {

@@ -448,6 +448,33 @@ Describe('TR.Data provider foundation', () => {
     Expect(rows.map(row => row['Title']).sort()).toEqual(['Bread Recipe', 'Grocery List'])
   })
 
+  Test('requires the whole search term to match one field', () => {
+    const schema = TR.Data.Schema(documentDefinition, memoryConnection())
+    TR.Data.Create(schema, 'Document', {
+      Title: TR.Value('Bread'),
+      Body: TR.Value('Recipe'),
+      Owner: TR.Value(''),
+    })
+    TR.Data.Create(schema, 'Document', {
+      Title: TR.Value('Bread Recipe'),
+      Body: TR.Value(''),
+      Owner: TR.Value(''),
+    })
+    TR.Data.Create(schema, 'Document', {
+      Title: TR.Value('Kitchen'),
+      Body: TR.Value('Bread Recipe'),
+      Owner: TR.Value(''),
+    })
+
+    const rows = schema.query({
+      entity: 'Document',
+      filters: [],
+      search: () => TR.Value('bread recipe'),
+    }) as Array<Record<string, unknown>>
+
+    Expect(rows.map(row => row['Title']).sort()).toEqual(['Bread Recipe', 'Kitchen'])
+  })
+
   Test('matches every row on a blank search term and narrows on a word-prefix subsequence', () => {
     const schema = TR.Data.Schema(documentDefinition, memoryConnection())
     TR.Data.Create(schema, 'Document', {

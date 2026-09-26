@@ -28,6 +28,18 @@ its review date. `devenv.lock` still pins `73c703c22422b8951895a960959dbbaca7296
 The Nixpkgs tracker was checked, but no updated patch comparison or Linux closure was
 available; the same owner and review date remain. No dependency or lockfile changed.
 
+### 2026-09-25 review
+
+`bun audit --json` still reports exactly one moderate record,
+[`GHSA-w5hq-g745-h8pq`](https://github.com/advisories/GHSA-w5hq-g745-h8pq), for the installed
+`xcode@3.0.1 → uuid@7.0.3` path. The installed parent still calls `uuid.v4()` without a buffer;
+the advisory identifies the `v3`/`v5`/`v6` APIs with caller-provided buffers. No affected call
+was demonstrated through this parent. The current Appium pins yielded no additional Bun audit
+record. The `devenv.lock` Nixpkgs input remains `73c703c22422b8951895a960959dbbaca7296492`;
+its glibc patch lacks six CVE-tagged fixes present in a later Nixpkgs patch, but this Darwin host
+cannot establish exposure or a passing Linux closure. Both entries remain open with the Developer
+as owner until delegated and September 28 as the review date. No dependency or lockfile changed.
+
 ## Bun/npm graph
 
 - **Remaining: `uuid@7.0.3` through `@expo/config-plugins → xcode@3.0.1`.**

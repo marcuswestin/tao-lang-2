@@ -7,6 +7,8 @@ export type WorktreeThread = {
   createdAt: string | null
   description: string
   id: string
+  label?: string | null
+  lastActivity?: string | null
   lastActivityAt: string | null
   path: string
   title: string

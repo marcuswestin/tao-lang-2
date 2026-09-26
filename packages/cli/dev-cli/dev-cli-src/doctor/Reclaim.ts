@@ -46,11 +46,11 @@ export type ReclaimDependencies = {
 /**
  * A verdict says what was proved, not how confident the command feels.
  *
- * - `reclaimable` — proved idle and proved preserved: every liveness signal is silent, the tree is
- *   clean, and the commit is reachable from `main` or from an `origin/merged/*` ref, so removing the
- *   directory loses no history.
- * - `live` — proved in use: a lane, a resource lease, the landing lock, uncommitted changes, or a
- *   protected path. Reported so the count adds up, never acted on.
+ * - `reclaimable` — no local task link or machine liveness signal was found, the tree is clean, and
+ *   the commit is reachable from `main` or an `origin/merged/*` ref. Cloud-only task ownership
+ *   still needs an app check before removal.
+ * - `live` — a local task link, lane, resource lease, landing lock, uncommitted changes, or a
+ *   protected path was found. Reported so the count adds up, never acted on.
  * - `unclassified` — neither was proved. An unreadable worktree, a commit reachable from nothing,
  *   a Git command that failed. This is the class that keeps the command honest: it is where
  *   everything the rules do not cover lands, rather than defaulting into `reclaimable`.
@@ -368,11 +368,17 @@ export function formatReclaimReport(report: ReclaimReport): string {
     [
       `${worktree.verdict.toUpperCase().padEnd(13)} ${FS.displayPath(worktree.path)}`,
       `              ${worktree.branch ?? `detached at ${worktree.head}`} — ${worktree.evidence.join('; ')}`,
-      ...worktree.threads.map(thread =>
-        `              ${thread.app}${thread.archived ? ' (archived)' : ''}: ${thread.title} — ${
-          thread.description || 'no description'
-        }; created ${thread.createdAt ?? 'unknown'}; active ${thread.lastActivityAt ?? 'unknown'}`
-      ),
+      ...(worktree.threads.length === 0
+        ? ['              Agent task: no matching local record; check app task associations.']
+        : worktree.threads.flatMap(thread => [
+          `              Agent task: ${thread.app}${thread.archived ? ' (archived)' : ''} ${thread.id}`,
+          `                Title: ${thread.title}`,
+          `                Description: ${thread.description || 'unknown'}`,
+          `                App label: ${thread.label ?? 'unknown'}; created: ${thread.createdAt ?? 'unknown'}`,
+          `                Last activity: ${thread.lastActivityAt ?? 'unknown'} — ${
+            thread.lastActivity ?? 'inspect the task in the app for the subject'
+          }`,
+        ])),
     ].join('\n')
   )
   const summary = `${counts.reclaimable} reclaimable, ${counts.live} live, ${counts.unclassified} unclassified`
@@ -382,7 +388,11 @@ export function formatReclaimReport(report: ReclaimReport): string {
     summary,
     `Task indexes: ${Object.entries(report.providers).map(([app, status]) => `${app}=${status}`).join(', ')}`,
     ...(report.removals === undefined
-      ? counts.reclaimable === 0 ? [] : ['Nothing was removed. Re-run with --execute to remove the reclaimable ones.']
+      ? counts.reclaimable === 0
+        ? []
+        : [
+          'Nothing was removed. Check task associations in the apps before --execute; local records cannot prove absence.',
+        ]
       : [
         '',
         'Removals:',
