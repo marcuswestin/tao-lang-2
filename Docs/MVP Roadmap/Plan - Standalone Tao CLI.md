@@ -11,7 +11,8 @@ development program complete. Before that landing:
 - [x] Remove the task-only VM and browser routes from `./agent unsandboxed capabilities`, leaving
       that command read-only; use the dedicated `standalone-cli-clean-machine` host operation for the gate.
 
-Follow-up work after this intermediate landing, before closing the standalone development effort:
+Follow-up work after this intermediate landing continues on `feat/standalone-cli-followups`
+(to be created from the landed `main`), before closing the standalone development effort:
 
 - [ ] Move the remaining human recipes into `./dev`, make `dev` available in the entered shell,
       and retire `Justfile` after the replacement workflows are proven.
