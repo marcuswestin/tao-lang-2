@@ -317,8 +317,9 @@ image capture), producing
 `sha256:625bbfdcf61f769765b0eabf45d3207c46185a4c9cde61110bcacb1087560942`.
 Its cached guest reused those tools, completed bootstrap/setup in 76 seconds, repeated setup
 in 24 seconds, passed the parser test in 50 seconds, and completed checks in 856 seconds.
-Cached test/verify are still running against the original `1c7e6279` source, not the subsequent
-repairs. The runner removed
+Cached tests failed after 2536 seconds, repeating portability failures and timeouts; verification
+started at 21:03:35 UTC. Both use the original `1c7e6279` source, not the subsequent repairs.
+The runner removed
 the completed cold and tools containers; it retains the active cached guest, base image, and
 reusable tools image. Read-only inspection `20260926T200309Z-76264` independently confirmed
 the cold container was absent before cached provisioning. Full cold verification evidence is
@@ -331,6 +332,12 @@ cached timeout has no established cause. Its helper now supervises the child wit
 bound and retains the complete process result on failure, so the enclosing test timeout cannot
 leave an unbounded child. This is diagnostic and lifecycle coverage, not a claimed repair of
 the emulation failure. Native Linux comparison remains pending behind the active cached run.
+
+The cached browser-shortcut integration test also used Meta+K without declaring an Apple browser
+platform. Production maps the primary modifier to Meta on Apple browsers and Control elsewhere;
+the fixture therefore depended on the host. Explicit Mac and Linux platform/modifier cases now
+exercise the same renderer and dispatch, including handled and unhandled browser defaults.
+No production shortcut semantics changed.
 
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published
