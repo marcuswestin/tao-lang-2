@@ -5,7 +5,7 @@ use TestAuth from @tao/auth/testing
 use Memory from @tao/data/providers/memory
 use Reference from @tao/data/providers/reference
 use StackNav from @tao/nav
-use Col, FormButton, Text, TextInput, TextMultiline from @tao/ui
+use Col, FormButton, Row, ScrollView, Text, TextInput, TextMultiline from @tao/ui
 
 app AuthReview {
    Name "Auth Review"
@@ -40,6 +40,8 @@ app AuthReviewClerk = AuthReviewLocal with {
 }  }
 
 let Me = Account
+let ReviewEmail = "narcvs+tao-clerk-test@gmail.com"
+let ReviewPassword = "TaoReview!Violet-27-River"
 
 scenarios AuthReviewClerk "Clerk and InstantDB" {
    scenario "iPhone" {
@@ -84,21 +86,22 @@ guard default {
 
 scene Authentication(Leave action()) {
    Title "Auth Review"
-   render Col() {
-      when Session.State
-         | SignedIn -> {
-            Text("Signed in")
+   render ScrollView() {
+      Col() [hug, gap 12, pad 16] {
+         when Session.State
+            | SignedIn -> {
+               Text("Signed in")
 
-            #signOut
-            FormButton(Title: "Sign out") {
-               on press -> { do Leave() }
-            }
-            when Me {
-               otherwise -> { NotesHome() }
-         }  }
-         | Restoring -> Text("Restoring session…")
-         | otherwise -> Login()
-}  }
+               #signOut
+               FormButton(Title: "Sign out") {
+                  on press -> { do Leave() }
+               }
+               when Me {
+                  otherwise -> { NotesHome() }
+            }  }
+            | Restoring -> Text("Restoring session…")
+            | otherwise -> Login()
+}  }  }
 
 view Login() {
    state Flow = SignInFlow()
@@ -106,13 +109,17 @@ view Login() {
    state Supplied = false
    state EmailCode = false
    state PresentedProblem = ""
+   action ExistingAccount() {
+      set Flow.Registration = false
+      do Flow.Submit()
+   }
    action PresentLogin() {
       when do SignIn()
          | cancelled -> { set PresentedProblem = "Presented sign in cancelled" }
          | error -> Message { set PresentedProblem = Message }
          | otherwise -> { }
    }
-   render Col() {
+   render Col() [hug, gap 12] {
       Text("Sign in to your notes")
 
       #presentSignIn
@@ -137,71 +144,101 @@ view Login() {
          | otherwise -> { when Supplied
             | true -> SignInView(Flow)
             | otherwise -> {
-               #email
-               TextInput(Value: Flow.Email, Label: "Account email") {
-                  on submit -> { do Flow.Submit() }
+               if Flow.Step == "Code" or Flow.Step == "Cancelled" {
+                  CodeLogin(Flow, false)
                }
+               if Flow.Step != "Code" and Flow.Step != "Cancelled" {
+                  Row() [hug, gap 8, content left bottom] {
+                     #email
+                     TextInput(Value: Flow.Email, Label: "Account email") [claim 1] {
+                        on submit ExistingAccount
+                     }
 
-               #password
-               TextInput(Value: Flow.Password, Label: "Password", Secure: true) {
-                  on submit -> { do Flow.Submit() }
-               }
+                     #fillEmail
+                     FormButton(Title: "Fill email") [hug] {
+                        on press -> { set Flow.Email = ReviewEmail }
+                  }  }
+                  Row() [hug, gap 8, content left bottom] {
+                     #password
+                     TextInput(Value: Flow.Password, Label: "Password", Secure: true) [claim 1] {
+                        on submit ExistingAccount
+                     }
 
-               #submitSignIn
-               FormButton(Title: "Sign in", Disabled: Flow.Running) {
-                  on press -> { do Flow.Submit() }
-               }
+                     #fillPassword
+                     FormButton(Title: "Fill password") [hug] {
+                        on press -> { set Flow.Password = ReviewPassword }
+                  }  }
 
-               #register
-               FormButton(Title: "Create account", Disabled: Flow.Running) {
-                  on press -> {
-                     set Flow.Registration = true
-                     do Flow.Submit()
+                  #submitSignIn
+                  FormButton(Title: "Sign in", Disabled: Flow.Running) {
+                     on press ExistingAccount
+                  }
+
+                  #register
+                  FormButton(Title: "Create account", Disabled: Flow.Running) {
+                     on press -> {
+                        set Flow.Registration = true
+                        do Flow.Submit()
+                  }  }
+                  if Flow.Problem is not empty {
+                     TextMultiline(Flow.Problem)
+                  }
+
+                  #cancelSignIn
+                  FormButton(Title: "Cancel sign in") {
+                     on press -> { do Flow.Cancel() }
                }  }
-               if Flow.Problem is not empty {
-                  TextMultiline(Flow.Problem)
-               }
-
-               #cancelSignIn
-               FormButton(Title: "Cancel sign in") {
-                  on press -> { do Flow.Cancel() }
-               }
             } }
 }  }
 
 view CodeLogin(Flow LoginFlow, Supplied boolean) {
-   render Col() {
+   render Col() [hug, gap 12] {
       when Supplied
          | true -> SignInView(Flow)
          | otherwise -> {
-            Text("Email-code sign in")
+            if Flow.Step == "Cancelled" {
+               Text("Sign in cancelled")
 
-            #codeEmail
-            TextInput(Value: Flow.Email, Label: "Email for code") {
-               on submit -> { do Flow.SendCode() }
-            }
-
-            #sendCode
-            FormButton(Title: "Send code", Disabled: Flow.Running) {
-               on press -> { do Flow.SendCode() }
-            }
+               #retryCode
+               FormButton(Title: "Try again") {
+                  on press -> { do Flow.Reset() }
+            }  }
             if Flow.Step == "Code" {
                Text("Enter your code")
 
                #code
-               TextInput(Value: Flow.Code, Label: "Code") {
+               TextInput(Value: Flow.Code, Label: "Code", Secure: true) {
                   on submit -> { do Flow.Verify() }
                }
 
                #verifyCode
                FormButton(Title: "Verify code", Disabled: Flow.Running) {
                   on press -> { do Flow.Verify() }
+               }
+
+               #resendCode
+               FormButton(Title: "Resend code", Disabled: Flow.Running or Flow.RetryAfter > 0) {
+                  on press -> { do Flow.Resend() }
+            }  }
+            if Flow.Step != "Code" and Flow.Step != "Cancelled" {
+               Text("Email-code sign in")
+               Row() [hug, gap 8, content left bottom] {
+                  #codeEmail
+                  TextInput(Value: Flow.Email, Label: "Email for code") [claim 1] {
+                     on submit -> { do Flow.SendCode() }
+                  }
+
+                  #fillCodeEmail
+                  FormButton(Title: "Fill email") [hug] {
+                     on press -> { set Flow.Email = ReviewEmail }
+               }  }
+
+               #sendCode
+               FormButton(Title: "Send code", Disabled: Flow.Running) {
+                  on press -> { do Flow.SendCode() }
             }  }
             if Flow.Problem is not empty {
                TextMultiline(Flow.Problem)
-            }
-            if Flow.Step == "Cancelled" {
-               Text("Sign in cancelled")
             }
 
             #cancelCode

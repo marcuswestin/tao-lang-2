@@ -401,8 +401,11 @@ verified bearer session and does not attest a physical device. `just clerk-revie
 development gateway and local InstantDB behind Studio for manual Companion review.
 The authored iPhone scenario has mounted on a connected phone. Manual review exposed an unmasked
 custom password input and truncated failure text; secure input and wrapped messages address those.
-Known Clerk configuration errors now have fixed messages distinct from rejected credentials; the
-reported phone sign-in failure still requires a fresh attempt to identify its underlying cause.
+Known Clerk configuration errors now have fixed messages distinct from rejected credentials.
+Follow-up phone review identified Clerk rejecting registration with a password equal to the email.
+Separate review fill values, compact scrolling input rows, explicit sign-in/registration selection,
+and a visible verification-code step address the observed form issues. Completed real registration
+and account-data persistence on the phone remain manual acceptance work.
 Advanced recovery, OAuth, MFA/passkeys,
 linking, deletion and production gateway deployment are not part of this initial implementation.
 

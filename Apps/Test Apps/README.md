@@ -427,3 +427,8 @@ scenario to send the app to Companion. Clerk sign-in requires Internet access.
 The custom password input is masked and authentication problems wrap on a phone. Known Clerk
 configuration failures, including disabled native API access, are distinguished from rejected
 credentials without exposing provider response text.
+Fill buttons beside the custom email and password fields insert separate review values without
+submitting; the email-code form offers the same email shortcut. The phone form scrolls and keeps its
+input rows compact. Password and registration challenges open the code form, and Sign in explicitly
+leaves registration mode. Tao journeys cover filling, code verification and cancellation/retry;
+real registration still requires manual acceptance.
