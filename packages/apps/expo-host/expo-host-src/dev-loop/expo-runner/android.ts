@@ -3,6 +3,7 @@ import { DevLoopOutput } from '../DevLoopOutput'
 import { companionDevClientUrl, CompanionIdentity } from '../prebuilt-host/CompanionIdentity'
 import { nativeKitOf } from '../prebuilt-host/HostManifest'
 import { type HostSearch, obtainCompatibleHost, type PrebuiltHost } from '../prebuilt-host/PrebuiltHosts'
+import { type EmulatorLog, EmulatorLogs } from './EmulatorLogs'
 import { EXPO_SDK_VERSION, ExpoConfig, expoSdkMajor, type ExpoSessionConfig } from './expo-config'
 import { createExpoMetro, ExpoMetro, type ExpoMetroSession } from './metro'
 
@@ -71,7 +72,10 @@ export function createAndroid(
     listPhysicalDevices,
     openExpoGoOnSerial: (serial: string, url: string = config.EXPO_GO_URL) => openExpoGoOnSerial(serial, url),
     openRuntime: (expoGoUrl: string = config.EXPO_GO_URL) => openRuntime(config, metro, runtimes, expoGoUrl),
+    openRuntimeOnSerial: (serial: string, expoGoUrl: string, metroHost: string) =>
+      openRuntimeOnSerial(config, runtimes, serial, expoGoUrl, metroHost),
     prepareAvailableRuntime: () => prepareAvailableRuntime(config, compatibility, prepare),
+    prepareRuntimeOnSerial: prepare,
     reverseMetroPort: (serial: string) => reverseMetroPort(config, serial),
   }
 }
@@ -121,18 +125,39 @@ async function ensureEmulator(): Promise<void> {
   if (avdName === ANDROID_AVD_NAME) {
     await ensureAvdConfig(avdName)
   }
-  const logPath = FS.resolvePath('tao-android-emulator.log', FS.tmpdir())
   const runningSerial = await findRunningEmulator()
+  await pruneEmulatorLogs(runningSerial !== undefined)
   if (runningSerial) {
     if (await isEmulatorBooted(runningSerial)) {
       DevLoopOutput.logDevLoop('dev', `Android emulator ${runningSerial} is already booted.`)
       return
     }
     DevLoopOutput.logDevLoop('dev', `Android emulator ${runningSerial} is starting.`)
-    await waitForBootedEmulator(logPath)
+    await waitForBootedEmulator()
   } else {
-    await waitForBootedEmulator(logPath, await startEmulator(avdName, logPath))
+    const log = await EmulatorLogs.begin()
+    let exited = () => false
+    let outcome: 'booted' | 'failed' | 'timed-out' = 'timed-out'
+    try {
+      exited = await startEmulator(avdName, log)
+      await waitForBootedEmulator(log.path, exited)
+      outcome = 'booted'
+    } catch (error) {
+      outcome = exited() ? 'failed' : 'timed-out'
+      throw error
+    } finally {
+      await EmulatorLogs.finish(log, outcome).catch(warnEmulatorLogFailure)
+      await pruneEmulatorLogs(!exited())
+    }
   }
+}
+
+async function pruneEmulatorLogs(mayHaveUnrecordedEmulator: boolean): Promise<void> {
+  await EmulatorLogs.prune(mayHaveUnrecordedEmulator).catch(warnEmulatorLogFailure)
+}
+
+function warnEmulatorLogFailure(error: unknown): void {
+  DevLoopOutput.logDevLoop('dev', `Could not maintain Android emulator logs: ${Errors.messageOf(error)}`, 'warn')
 }
 
 async function ensureExpoGo(compatibility: AndroidCompatibilityDependencies): Promise<void> {
@@ -289,8 +314,23 @@ async function openRuntime(
   await metro.waitForMetro()
   const serial = await requireBootedEmulator()
   await reverseMetroPort(config, serial)
+  return await openRuntimeOnSerial(config, runtimes, serial, expoGoUrl, '127.0.0.1')
+}
+
+/**
+ * openRuntimeOnSerial opens the app on one device in the runtime it was prepared with: the Companion
+ * through its development-client link to Metro at `metroHost`, or Expo Go at `expoGoUrl`. A device
+ * whose Metro port is reversed reaches Metro on its own loopback; any other needs the Mac's address.
+ */
+async function openRuntimeOnSerial(
+  config: ExpoSessionConfig,
+  runtimes: ReadonlyMap<string, AndroidRuntime>,
+  serial: string,
+  expoGoUrl: string,
+  metroHost: string,
+): Promise<AndroidRuntime> {
   if (runtimes.get(serial) === 'companion') {
-    await openCompanionOnSerial(serial, companionDevClientUrl({ host: '127.0.0.1', port: config.EXPO_PORT }))
+    await openCompanionOnSerial(serial, companionDevClientUrl({ host: metroHost, port: config.EXPO_PORT }))
     return 'companion'
   }
   await openExpoGoOnSerial(serial, expoGoUrl)
@@ -403,9 +443,9 @@ async function isEmulatorBooted(serial: string): Promise<boolean> {
 }
 
 /** startEmulator starts the emulator detached and answers whether that process has since exited. */
-async function startEmulator(avdName: string, logPath: string): Promise<() => boolean> {
+async function startEmulator(avdName: string, log: EmulatorLog): Promise<() => boolean> {
   DevLoopOutput.logDevLoop('dev', `Starting Android emulator ${avdName}.`)
-  const logFile = await FS.openAppend(logPath)
+  const logFile = await FS.openAppend(log.path)
   let exited = false
   try {
     const emulator = CLI.start('emulator', {
@@ -414,6 +454,7 @@ async function startEmulator(avdName: string, logPath: string): Promise<() => bo
       stdio: ['ignore', logFile.fd, logFile.fd],
       unref: true,
     })
+    await EmulatorLogs.recordChild(log, emulator.pid)
     emulator.onceClose(() => {
       exited = true
     })
@@ -431,7 +472,7 @@ async function startEmulator(avdName: string, logPath: string): Promise<() => bo
  * exits first ends the wait at once with the reason its log gives, rather than after the whole boot
  * timeout with none.
  */
-async function waitForBootedEmulator(logPath: string, exited: () => boolean = () => false): Promise<void> {
+async function waitForBootedEmulator(logPath?: string, exited: () => boolean = () => false): Promise<void> {
   const serial = await Time.pollUntil(async () => {
     const candidate = await findRunningEmulator()
     return candidate && await isEmulatorBooted(candidate) ? candidate : undefined
@@ -440,10 +481,14 @@ async function waitForBootedEmulator(logPath: string, exited: () => boolean = ()
     DevLoopOutput.logDevLoop('dev', `Android emulator ${serial} is booted.`)
     return
   }
-  if (exited()) {
+  if (exited() && logPath !== undefined) {
     Errors.throwUserInput(emulatorExitMessage(await FS.readText(logPath).catch(() => ''), logPath))
   }
-  Errors.throwUserInput(`Android emulator did not finish booting. Check ${logPath}.`)
+  Errors.throwUserInput(
+    logPath === undefined
+      ? 'Android emulator did not finish booting.'
+      : `Android emulator did not finish booting. Check ${logPath}.`,
+  )
 }
 
 /**

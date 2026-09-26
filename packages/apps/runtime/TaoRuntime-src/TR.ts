@@ -1,13 +1,16 @@
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
+import { TestActionStubs } from './TR-action-test-stubs'
 import {
   actionFailureCaseName,
+  actionTestStubContext,
   captureActionContinuation,
   deferDetached,
   existingTransactionResource,
   markExternalEffect,
   resumeActionContinuation,
   runAction,
+  skippedActionRun,
   type TaoActionContinuation,
   type TaoDeclaredFailure,
   transactionResource,
@@ -58,6 +61,7 @@ import {
   type TaoDesign,
   type TaoDesignSpec,
 } from './TR-design'
+import { runEffectOutcome, type TaoEffectContract } from './TR-effect-outcomes'
 import {
   captureArguments,
   latestFailureCapture,
@@ -120,6 +124,7 @@ import {
   type TaoWritableState,
   usePersistedState,
 } from './TR-persisted-state'
+import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue } from './TR-reactive'
 import {
@@ -135,6 +140,7 @@ import {
   useParameterCell,
   writablePath,
 } from './TR-reactive-values'
+import { ReadNet, readNetCases, renderReadNet } from './TR-read-net'
 import {
   captureRuntime,
   registerRuntimeCaptureDomain,
@@ -158,8 +164,11 @@ import { createShareSheet, type TaoShareSheet } from './TR-share'
 import { StudioDeviceHost } from './TR-studio-device-host'
 import {
   StudioEnvironmentControls,
+  type TaoStudioCellRuntime,
   type TaoStudioEnvironment,
+  type TaoStudioFixturePlan,
   type TaoStudioProviderOverlay,
+  type TaoStudioScenarioRuntime,
   type TaoStudioStateCapture,
   type TaoStudioStateSeed,
 } from './TR-studio-environment'
@@ -208,6 +217,15 @@ class TR {
     return new RuntimeValue(parts.map(part => part.evaluate().jsValue).map(value => value ?? '').join(''))
   }
 
+  /**
+   * Plural selects one of a phrase's CLDR-category forms for the running locale, falling back to
+   * `other` when that category has no form. `locale` defaults to English when the caller has none
+   * to offer.
+   */
+  static Plural(count: TR.Evaluable, forms: TR.PluralForms, locale?: string): TR.Value<string> {
+    return selectPluralForm(count.evaluate().jsValue, forms, locale).evaluate()
+  }
+
   /** Enum creates declaration-owned case identities and registers their stable persistence names. */
   static Enum(
     declaration: TR.DeclarationIdentity,
@@ -232,6 +250,21 @@ class TR {
   /** If evaluates a validated boolean once and lazily runs its one-sided body when true. */
   static If<ResultT>(condition: TR.Evaluable, body: () => ResultT): ResultT | undefined {
     return condition.evaluate().jsValue === true ? body() : undefined
+  }
+
+  /** Check evaluates a validated boolean once and reports whether its action must stop. */
+  static Check(condition: TR.Evaluable): boolean {
+    return condition.evaluate().jsValue !== true
+  }
+
+  /** Incomplete reports whether any `required` field of a row or projected value is missing. */
+  static Incomplete(root: TR.Evaluable, required: readonly TR.RequiredField[]): TR.Value<boolean> {
+    return TR.Value(missingRequiredFields(root, required).length > 0)
+  }
+
+  /** Problems lists the `required` sentences of a row's or projected value's missing fields. */
+  static Problems(root: TR.Evaluable, required: readonly TR.RequiredField[]): TR.Value<string[]> {
+    return TR.Value(missingRequiredFields(root, required).map(([, sentence]) => sentence))
   }
 
   /** WhenCase evaluates one subject once and selects one mutually exclusive value case. */
@@ -266,15 +299,32 @@ class TR {
     return isPromiseLike(matched.result) ? Promise.resolve(matched.result).then(() => true) : true
   }
 
-  /** GuardRender renders a matching handler or the untouched remainder of the enclosing block. */
+  /**
+   * GuardRender renders a matching handler, the read net for an exceptional case no handler names,
+   * or the untouched remainder of the enclosing block. `siteProps` are the guarding view's own, so
+   * the net renders where the guard stands and finds the mounted app's `guard default`.
+   */
   static GuardRender(
     subject: TR.Evaluable,
     branches: readonly TR.CaseBranch<React.ReactNode>[],
     remaining: () => React.ReactNode,
+    siteProps?: TR.TaoProps,
   ): React.ReactNode {
-    const matched = firstMatchedBranch(subject.evaluate().jsValue, branches)
-    return matched ? matched.result : remaining()
+    const value = subject.evaluate().jsValue
+    const matched = firstMatchedBranch(value, branches)
+    if (matched) {
+      return matched.result
+    }
+    const exceptional = readNetCases
+      .map(caseName => ({ caseName, match: matchSubjectCase(value, caseName) }))
+      .find(({ match }) => match.matched)
+    return exceptional
+      ? renderReadNet(exceptional.caseName, new RuntimeValue(exceptional.match.payload), siteProps)
+      : remaining()
   }
+
+  /** ReadNet freezes the handlers a project's compiled `guard default` replaces. */
+  static readonly ReadNet = ReadNet
 
   /** Member reads item fields and the built-in Count collection and text member. */
   static Member(root: TR.Evaluable, path: readonly string[]): TR.MemberValue<any> {
@@ -364,7 +414,7 @@ class TR {
     implementation: (...arguments_: any[]) => unknown,
     name: string,
     failures: readonly TaoDeclaredFailure[],
-    options: Readonly<{ requiredArguments?: number; runs?: 'latest' }> = {},
+    options: Readonly<{ requiredArguments?: number; runs?: 'latest'; testStubKey?: string }> = {},
   ): TR.Action<Args> {
     const requiredArguments = options.requiredArguments ?? implementation.length
     return new RuntimeAction(
@@ -381,6 +431,14 @@ class TR {
         )
         markExternalEffect()
         try {
+          const stubbedCase = options.testStubKey === undefined
+            ? undefined
+            : TestActionStubs.failureFor(actionTestStubContext(), options.testStubKey)
+          if (stubbedCase !== undefined) {
+            const declared = failures.find(failure => actionFailureCaseName(failure.case) === stubbedCase)
+            RuntimeAssert(declared !== undefined, 'validated foreign action test stub names a declared failure')
+            throw new TaoActionFailure(stubbedCase, declared.sentence)
+          }
           await implementation(...arguments_.map(argument => argument?.evaluate().jsValue))
         } catch (error) {
           if (error instanceof TaoActionFailure) {
@@ -399,6 +457,9 @@ class TR {
       options.runs,
     )
   }
+
+  /** TestActionStubs is the check-scoped foreign action seam used only by the test harness. */
+  static TestActionStubs = TestActionStubs
 
   /** BridgedAction adapts an explicitly action-typed TypeScript export at the ordinary from boundary. */
   static BridgedAction<Args extends TR.Evaluable[]>(
@@ -449,6 +510,22 @@ class TR {
     ...args: Args
   ): void | Promise<void> {
     return action.evaluate().jsValue.invokeJoined(...args)
+  }
+
+  /**
+   * WhenDo runs one verb as `Do` does but contains its failure at this site: the verb's own writes
+   * roll back, and the outcome the site names runs with the selected user message.
+   */
+  static WhenDo(
+    invoke: () => void | Promise<void>,
+    contract: TaoEffectContract,
+    outcomes: readonly TR.CaseBranch<unknown>[],
+  ): unknown {
+    return runEffectOutcome(
+      invoke,
+      contract,
+      outcomes.map(([outcome, body]) => [outcome, (message: string) => body(new RuntimeValue(message))]),
+    )
   }
 
   /** Set updates a Tao state value. */
@@ -926,7 +1003,7 @@ class RuntimeActionValue<Args extends any[] = any[]> {
 type LatestActionInvocation<Args extends any[]> = {
   args: Args
   reject(error: unknown): void
-  resolve(): void
+  resolve(outcome?: typeof skippedActionRun): void
   run(args: Args): void | Promise<void>
 }
 
@@ -936,16 +1013,17 @@ class LatestActionInvocations<Args extends any[]> {
   #pending: LatestActionInvocation<Args> | undefined
 
   invoke(args: Args, run: (args: Args) => void | Promise<void>): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+    // A superseded call resolves with the skip marker, so a `when do` can tell it never ran.
+    return new Promise<void | typeof skippedActionRun>((resolve, reject) => {
       const invocation = { args, reject, resolve, run }
       if (!this.#active) {
         this.#active = true
         void this.#execute(invocation)
         return
       }
-      this.#pending?.resolve()
+      this.#pending?.resolve(skippedActionRun)
       this.#pending = invocation
-    })
+    }) as Promise<void>
   }
 
   async #execute(invocation: LatestActionInvocation<Args>): Promise<void> {
@@ -1129,12 +1207,18 @@ namespace TR {
   export type CaseBranch<ResultT> = readonly [string, (payload: TR.Value<any>) => ResultT]
   /** Function declares a runtime Tao pure function. */
   export type Function = RuntimeFunction
+  /** PluralCategory declares the CLDR plural categories a compiled phrase's forms may carry. */
+  export type PluralCategory = TaoPluralCategory
+  /** PluralForms is a compiled phrase's category-to-value table passed to `TR.Plural`. */
+  export type PluralForms = TaoPluralForms<TR.Evaluable>
   /** State declares a runtime Tao state wrapper. */
   export type State<T> = RuntimeState<T> | TaoWritableState<T>
   /** Writable is a state or parameter lens that may be the target of generated mutation. */
   export type Writable<T> = Pick<TaoWritable<T>, 'evaluate' | 'set'>
   /** MemberValue is read-only by default and carries mutation methods only for writable roots. */
   export type MemberValue<T> = TR.Value<T> & Partial<TR.Writable<T>>
+  /** RequiredField pairs a field a `required` trait names with the sentence the trait states. */
+  export type RequiredField = readonly [field: string, sentence: string]
   /** NativeMutationLease is the mutation callback supplied to a mounted native implementation. */
   export type NativeMutationLease<T> = import('./TR-reactive-values').NativeMutationLease<T>
   /** Value declares a runtime Tao value wrapper. */
@@ -1173,6 +1257,12 @@ namespace TR {
   export type StudioStateCapture = TaoStudioStateCapture
   /** StudioProviderOverlay is the cell-local provider wrapper exposed to generated Studio hosts. */
   export type StudioProviderOverlay = TaoStudioProviderOverlay
+  /** StudioCellRuntime is what `TR.Studio.Environment.Host` mounts above one launched app. */
+  export type StudioCellRuntime = TaoStudioCellRuntime
+  /** StudioFixturePlan is a fixture's created rows, materialized by `TR.Studio.Environment.useFixture`. */
+  export type StudioFixturePlan = TaoStudioFixturePlan
+  /** StudioScenarioRuntime is the generated app-or-view selection a `StudioCellRuntime` carries. */
+  export type StudioScenarioRuntime = TaoStudioScenarioRuntime
   /** StudioStateArtifact is the versioned, explicit-domain durable state transport. */
   export type StudioStateArtifact = TaoStudioStateArtifact
   /** StudioStateLayer is one named input to ordered state composition. */
@@ -1388,6 +1478,20 @@ function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
 
 const isCountableValue = (value: unknown): value is string | unknown[] =>
   Array.isArray(value) || typeof value === 'string'
+
+/**
+ * A `required` field is missing when it reads as none, or as text or a list that `is empty` would
+ * match. Declaration order is kept, so `Problems` reads the way the entity states its rules.
+ */
+function missingRequiredFields(
+  root: TR.Evaluable,
+  required: readonly TR.RequiredField[],
+): readonly TR.RequiredField[] {
+  return required.filter(([field]) => {
+    const value = TR.Member(root, [field]).evaluate().jsValue
+    return value === null || value === undefined || (isCountableValue(value) && value.length === 0)
+  })
+}
 
 function queryStatus(
   value: unknown,

@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { FS, Platform, Repo } from '@shared'
 import { context } from 'esbuild'
 import { writeMergedTaoTextMateGrammar } from './ide-extension-src/syntax/textmate-grammar'
 
@@ -46,18 +46,18 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
   const repositoryRoot = FS.resolvePath('../../..', packageRoot)
   const watch = options.watch ?? Platform.runtimeProcess.argv.includes('--watch')
   const minify = options.minify ?? Platform.runtimeProcess.argv.includes('--minify')
-  const stagingPackageRoot = await FS.mkTmpDir('tao-ide-extension-build-')
+  const stagingPackageRoot = await Repo.mkScratchDir('tao-ide-extension-build-', repositoryRoot)
   const stagingGeneratedRoot = FS.resolvePath('_gen_ide-extension', stagingPackageRoot)
   const generatedTaoTextMateGrammar = FS.resolvePath(
-    'ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+    'ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json',
     packageRoot,
   )
   const stagingTaoTextMateGrammar = FS.resolvePath(
-    'ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
+    'ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json',
     stagingPackageRoot,
   )
   const taoTextMateGrammarOverlay = FS.resolvePath(
-    'ide-extension-syntaxes/tao-lang.tmLanguage.overlay.json',
+    'ide-extension-syntaxes/tao.tmLanguage.overlay.json',
     packageRoot,
   )
   const formatterPackageRoot = FS.resolvePath('..', Bun.resolveSync('tao-formatter/package.json', packageRoot))

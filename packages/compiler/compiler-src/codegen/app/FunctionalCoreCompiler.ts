@@ -1,7 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen, ReadNetBinding } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileDeclarationIdentity } from './declaration-identity'
 
@@ -55,6 +55,39 @@ export const FunctionalCoreCompiler = {
     return gen`if (${Compile.Expression(statement.condition)}.evaluate().jsValue === true) {
       ${Compile.FunctionBlockBody(statement.block)}
     }`
+  },
+
+  /** PhraseDeclaration compiles named copy into a callable Tao pure-function value. */
+  PhraseDeclaration(phrase: AST.PhraseDeclaration): Compiled {
+    const parameters = AST.parametersOf(phrase).map((parameter, index) => ({ index, parameter }))
+    return gen`
+      ${gen.scopeName(phrase)} = TR.Function((${gen.join(parameters, Compile.FunctionRuntimeParameter)}) => {
+        return TR.BlockScope(_Scope, _Scope => {
+          ${gen.list(parameters, Compile.FunctionParameterBinding)}
+          ${Compile.PhraseBody(phrase)}
+        })
+      })
+    `
+  },
+
+  /** PhraseBody compiles a phrase's one interpolated string, or its plural-selected forms. */
+  PhraseBody(phrase: AST.PhraseDeclaration): Compiled {
+    if (!ASTUtils.phraseIsPlural(phrase)) {
+      Assert.defined(phrase.text, 'validated non-plural phrase has one interpolated string')
+      return gen`return ${Compile.Expression(phrase.text)}`
+    }
+    const numberParameter = ASTUtils.phraseNumberParameters(phrase)[0]
+    Assert.defined(numberParameter, 'validated plural phrase has one number parameter')
+    return gen`
+      return TR.Plural(${gen.scopeName({ name: Type.parameterName(numberParameter) })}.evaluate(), {
+        ${
+      gen.list(
+        phrase.forms,
+        form => gen`${form.category}: ${Compile.Expression(form.text)},`,
+      )
+    }
+      })
+    `
   },
 
   /** FunctionRuntimeParameter emits one runtime-wrapped function parameter. */
@@ -141,7 +174,32 @@ export const FunctionalCoreCompiler = {
     }
       ], () => <>
         ${Compile.RenderBlockFragments(remaining, options)}
-      </>)}
+      </>, _ViewProps.__tao)}
+    `
+  },
+
+  /**
+   * GuardDefaultStatement binds the project's read net. Each handler renders at whichever guard
+   * reached the net, so it takes that guard's view props as its own and binds `error`'s message.
+   */
+  GuardDefaultStatement(statement: AST.GuardDefaultStatement, options: CodegenOptions = {}): Compiled {
+    return gen`
+      ${gen.scopeName({ name: ReadNetBinding })} = TR.ReadNet({
+        ${
+      gen.list(
+        statement.branches,
+        branch =>
+          gen`${gen.jsLiteral(branch.case)}: (_ViewProps, _TaoCasePayload) => TR.BlockScope(_Scope, _Scope => {
+          ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
+          ${
+            branch.block
+              ? Compile.RenderBlockBody(branch.block, options)
+              : gen`return <>${Compile.RenderFragmentStatement(requiredRender(branch), options)}</>`
+          }
+        }),`,
+      )
+    }
+      })
     `
   },
 
@@ -188,6 +246,12 @@ export const FunctionalCoreCompiler = {
     }`
   },
 } as const
+
+/** A read net handler without a block is, by the grammar, one bare render. */
+function requiredRender(branch: AST.GuardDefaultBranch): AST.ViewRender {
+  Assert.defined(branch.render, 'parsed read net handler has a block or a render')
+  return branch.render
+}
 
 function functionRuntimeParameterName(index: number): Compiled {
   return gen.Name({ name: `_TaoFunctionArg${index}` })

@@ -1,9 +1,9 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen, ReadNetBinding, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
-import { activeDataStorePlan } from './data-store-context'
+import { activeDataStorePlan, activeFixtureStores } from './data-store-context'
 import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
 import { configuredDeclarationOfValue } from './ExpressionsCompiler'
 
@@ -102,6 +102,7 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       ? gen`design: () => ${design},`
       : gen.noop()
   }
+      ${options.readNet ? gen`readNet: () => ${gen.scopeName({ name: ReadNetBinding })},` : gen.noop()}
       auxiliaries: () => ({
         ${crossModuleBase ? gen`...${baseReference}.definition.auxiliaries(),` : gen.noop()}
         ${
@@ -121,7 +122,9 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
         )`
       : gen.noop()
   }
+      ${compileFixtureSeed(options)}
       ${compileStudioSubject(options, app)}
+      ${fixtureSeedInScope(options) ? gen`if (!_TaoFixtureSeed.ready) return null` : gen.noop()}
       return <TR.AppShell>
         <TR.Navigation.AppHost app={${gen.Name(definition)}} />
       </TR.AppShell>
@@ -129,6 +132,35 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     ${compileStudioSubjects(options, app, definition)}
     ${gen.scopeName(app)} = ${gen.Name(definition)}
   `
+}
+
+/**
+ * fixtureSeedInScope says whether `_TaoFixtureSeed` is declared for this app: whenever the project has
+ * a store to seed rows into, and always for a Studio-compiled app, because its focused-view path
+ * below reads `_TaoFixtureSeed` even for a view with no data of its own. The device-local companion
+ * store can also hold fixture rows; its bindings are imported into every app root.
+ */
+function fixtureSeedInScope(options: CodegenOptions): boolean {
+  if (options.studio) {
+    return true
+  }
+  return activeFixtureStores().length > 0
+}
+
+/**
+ * compileFixtureSeed materializes a `with <fixture>` test's or Studio scenario's created rows before
+ * the app it launches renders, the same way for both: the Studio device host and the Tao test runner
+ * both wrap a launched app in `TR.Studio.Environment.Host`, which is a no-op outside that wrapper, so
+ * a production launch and a fixture-less test never pay for this beyond the one settled hook call.
+ * `compileStudioSubject` below reuses this same result for its focused-view path rather than calling
+ * the hook a second time, so a Studio-compiled app renders it exactly once either way.
+ */
+function compileFixtureSeed(options: CodegenOptions): Compiled {
+  if (!fixtureSeedInScope(options)) {
+    return gen.noop()
+  }
+  const plan = activeDataStorePlan()
+  return gen`const _TaoFixtureSeed = useTaoGeneratedStudioFixture(${plan ? compileStudioStores() : 'undefined'})`
 }
 
 /**
@@ -144,17 +176,14 @@ function compileStudioSubject(options: CodegenOptions, app: { name: string }): C
   }
   return gen`
     const _TaoStudioScenario = useTaoGeneratedStudioScenario()
-    const _TaoStudioFixture = useTaoGeneratedStudioFixture(${
-    options.studioDataCatalog ? compileStudioStores() : 'undefined'
-  })
     if (_TaoStudioScenario?.kind === 'view') {
       const _TaoStudioSubject = ${gen.Name(studioSubjectsName(app))}[_TaoStudioScenario.subjectId]
         ?? TR.Errors.failInvariant('Tao Studio focused view is not available in the selected app scope.')
-      if (!_TaoStudioFixture.ready) return null
+      if (!_TaoFixtureSeed.ready) return null
       const _TaoStudioArgs = Object.fromEntries(
         Object.entries(_TaoStudioScenario.arguments ?? {}).map(([name, value]) => [
           name,
-          TR.Studio.Environment.Argument(value, _TaoStudioFixture.handles),
+          TR.Studio.Environment.Argument(value, _TaoFixtureSeed.handles),
         ]),
       )
       return <TR.AppShell><TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} /></TR.AppShell>
@@ -163,14 +192,15 @@ function compileStudioSubject(options: CodegenOptions, app: { name: string }): C
 }
 
 /**
- * compileStudioStores lists every store a fixture may seed. An app with one datasource has one store,
- * and passing the default catalog by name missed every collection a `Data` slot moved elsewhere.
+ * compileStudioStores lists every store a fixture may seed, including the device-local companion.
+ * Passing the default catalog by name missed collections a `Data` slot moved elsewhere.
  */
 function compileStudioStores(): Compiled {
   const plan = activeDataStorePlan()
-  Assert.defined(plan, 'a Studio compile with a data catalog has a store plan')
-  const stores = plan.stores.filter(store => store.kind !== 'device')
-  return gen`[${gen.join(stores, store => gen`${gen.scopeName({ name: store.binding })}`, { separator: ', ' })}]`
+  Assert.defined(plan, 'a fixture-seeding compile with a data catalog has a store plan')
+  return gen`[${
+    gen.join(activeFixtureStores(), store => gen`${gen.scopeName({ name: store.binding })}`, { separator: ', ' })
+  }]`
 }
 
 /**
@@ -210,6 +240,7 @@ function compileStudioSubjects(
         ),
         design: () => ${gen.Name(appDefinition)}.design,
         name: ${gen.Name(appDefinition)}.definition.name,
+        readNet: () => ${gen.Name(appDefinition)}.readNet,
         navigator: () =>
           TR.Navigation.Configure(
             TR.Navigation.Declaration(

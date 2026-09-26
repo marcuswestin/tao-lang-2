@@ -387,6 +387,17 @@ export function buildSemanticSnapshot(
                   })
                 }
               }
+              const sourceType = node.source ? Type.ofExpression(node.source) : undefined
+              for (const field of sourceType?.kind === 'item' ? sourceType.item?.dataFields ?? [] : []) {
+                edge({
+                  evidence: src(node.source!),
+                  from: actionId,
+                  origin: 'compiler',
+                  rel: 'writes',
+                  to: `field:${entity.singularName}.${field.name}`,
+                  via: 'create input projection selects this entity field',
+                })
+              }
             }
           }
         }

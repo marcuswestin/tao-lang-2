@@ -34,6 +34,31 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.Data.UpdateWith(_Scope.Document.evaluate(), _Scope.Input.evaluate())')
   })
 
+  Test('lowers completeness members with their required sentences and creates from an input', async () => {
+    const compiled = await Compiler.compileCode(`
+      data Documents / Document { Title text (required "Name this document") Body text }
+      type DocumentInput is Document { Title, Body }
+      type BodyInput is Document { Body }
+      app EditorApp { view Main }
+      view Main() {
+        state Input = DocumentInput { Title: "", Body: "" }
+        state Body = BodyInput { Body: "" }
+        let Blocked = Input.Incomplete
+        let Sentences = Input.Problems
+        let NothingRequired = Body.Incomplete
+        action Add() { create Document with Input }
+        render Empty()
+      }
+      ${stubView('Empty')}
+    `)
+
+    Expect(compiled.code).toContain('TR.Incomplete(_Scope.Input.evaluate(), [["Title", "Name this document"]])')
+    Expect(compiled.code).toContain('TR.Problems(_Scope.Input.evaluate(), [["Title", "Name this document"]])')
+    // A projection that selects no required field still has the members; they read complete.
+    Expect(compiled.code).toContain('TR.Incomplete(_Scope.Body.evaluate(), [])')
+    Expect(compiled.code).toContain('TR.Data.CreateWith(')
+  })
+
   Test('preserves release project metadata in generated source provenance', async () => {
     const compiled = await Compiler.compileCode(`
       project {
@@ -362,6 +387,38 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.ForEach(_Scope.Drafts.evaluate()')
   })
 
+  Test('compiles a query search clause and its entity (search) fields', async () => {
+    const compiled = await Compiler.compileCode(`
+      use Memory from @tao/data/providers/memory
+      use StackNav from @tao/nav
+      data Documents / Document {
+        Title text (search, title)
+        Body text (default "", search)
+        Owner text (default "")
+      }
+      app Notes {
+        Name "Notes"
+        Navigator StackNav { Initial Main }
+        Datasource Memory { }
+      }
+      scene Main() {
+        Title "Main"
+        state Find = ""
+        query Documents as Found {
+          search Find
+          order by Title
+        }
+        render Text(Found.Count)
+      }
+      view Text(Value number) { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.code).toContain('search: () => _Scope.Find.evaluate()')
+    // Only Title and Body declare `(search)`; Owner does not, so the flag appears exactly twice.
+    Expect(compiled.code.match(/search: true,/g)).toHaveLength(2)
+    Expect(compiled.code).toContain('order: {')
+  })
+
   Test('partitions collections into one catalog per datasource an app binds', async () => {
     const compiled = await Compiler.compileCode(`
       use Local from @tao/data/providers/local
@@ -557,6 +614,9 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain(
       'TR.Data.UseConfigured(\n            _Scope._TaoLocalDataCatalog,\n            _Scope._TaoLocalDatasource,\n          )',
     )
+    Expect(compiled.code).toContain(
+      'useTaoGeneratedStudioFixture([_Scope._TaoDataCatalog, _Scope._TaoLocalDataCatalog])',
+    )
     // Reads and writes route to the catalog that stores the entity.
     Expect(compiled.code).toContain('_Scope.CurrentSession = TR.Data.Query(\n      _Scope._TaoLocalDataCatalog,')
     Expect(compiled.code).toContain('_Scope.Notes = TR.Data.Query(\n      _Scope._TaoDataCatalog,')
@@ -602,6 +662,36 @@ Describe('compiler: language lowering', () => {
         'TR.Data.UseConfigured(\n            _Scope._TaoLocalDataCatalog,\n            _Scope._TaoLocalDatasource,\n          )',
       )
       Expect(appModule?.code).not.toContain('_Scope._TaoDataCatalog')
+      Expect(appModule?.code).toContain('useTaoGeneratedStudioFixture([_Scope._TaoLocalDataCatalog])')
+    })
+  })
+
+  Test('imports a synced catalog into an app root that configures no datasource', async () => {
+    await withTaoFiles('tao-fixture-catalog-', {
+      'Project.tao': 'project { id "fixture-catalog-test" name "Fixture catalog test" }',
+      'Catalog.tao': `
+        workspace
+        data Notes / Note { Title text }
+      `,
+      'Board.tao': `
+        use Notes from ./Catalog
+        workspace
+        view Board() {
+          query Notes { }
+          render Label("{ Notes.Count }")
+        }
+        view Label(Value text) { render inject ${tsFence} return null ${fence} }
+      `,
+      'Main.tao': `
+        use Board from ./Board
+        app Notebook { view Board }
+      `,
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao']!)
+      const appModule = result.files.find(file => file.relativePath === 'App.tsx')
+
+      Expect(appModule?.code).toContain("import { _TaoDataCatalog } from './modules/Catalog.tao'")
+      Expect(appModule?.code).toContain('useTaoGeneratedStudioFixture([_Scope._TaoDataCatalog])')
     })
   })
 

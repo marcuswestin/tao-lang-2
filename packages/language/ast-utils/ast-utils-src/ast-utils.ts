@@ -6,6 +6,7 @@ import {
 } from './app-configuration'
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
+import { colorValues } from './color-values'
 import {
   commandSlots,
   commandStaticMemberText,
@@ -25,9 +26,17 @@ import {
   storeOfCollection,
   storeOfDatasource,
 } from './data-stores'
-import { resolveDataWriteBindings } from './data-write-bindings'
+import { createRequiresField, resolveDataWriteBindings } from './data-write-bindings'
 import { resolveDatasourceValue } from './datasource-values'
 import { design } from './design'
+import {
+  effectFailureCases,
+  effectOutcomeWords,
+  invocationFailureCases,
+  invokedEffect,
+  isRootEffectInvocation,
+  unhandledOutcomeCases,
+} from './effect-outcomes'
 import { guardBranches } from './guards'
 import { injectionArgumentName } from './injections'
 import {
@@ -46,6 +55,7 @@ import {
 import { resolveItemPropertyBindings } from './item-property-bindings'
 import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
+import { isPluralCategory, phraseIsPlural, phraseNumberParameters, pluralCategories } from './phrases'
 import { literalExpression, parameterRequiresWritable, writableExpression } from './reactive-parameters'
 import { referencedNames } from './references'
 import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './render-targets'
@@ -69,6 +79,7 @@ export const ASTUtils = {
   parseShortcut,
   reservedCommandShortcuts,
   mentionFills,
+  colorValues,
   guardBranches,
   datasourceMembershipSlot,
   datasourceCollectionNames,
@@ -81,6 +92,12 @@ export const ASTUtils = {
   storeOfDatasource,
   resolveDatasourceValue,
   design,
+  effectFailureCases,
+  effectOutcomeWords,
+  invocationFailureCases,
+  invokedEffect,
+  isRootEffectInvocation,
+  unhandledOutcomeCases,
   injectionArgumentName,
   layoutEntryValues,
   layoutTermValue,
@@ -97,11 +114,16 @@ export const ASTUtils = {
   resolveArgumentBindings,
   resolveActionTarget,
   resolveDataWriteBindings,
+  createRequiresField,
   resolveFunctionInvocation,
   resolveItemPropertyBindings,
   resolveRenderInvocation,
   resolveRenderTarget,
   rootAppValue,
+  isPluralCategory,
+  phraseIsPlural,
+  phraseNumberParameters,
+  pluralCategories,
 } as const
 
 export namespace ASTUtils {
@@ -114,6 +136,8 @@ export namespace ASTUtils {
   export type ArgumentBindingDiagnostic = import('./argument-bindings').ArgumentBindingDiagnostic
   export type CommandSlot = import('./commands').CommandSlot
   export type ParsedShortcut = import('./commands').ParsedShortcut
+  export type EffectDeclaration = import('./effect-outcomes').EffectDeclaration
+  export type EffectInvocation = import('./effect-outcomes').EffectInvocation
   export type DataWriteBindingDiagnostic = import('./data-write-bindings').DataWriteBindingDiagnostic
   export type DataWriteBindingPair = import('./data-write-bindings').DataWriteBindingPair
   export type DataWriteBindingResult = import('./data-write-bindings').DataWriteBindingResult
@@ -140,6 +164,7 @@ export namespace ASTUtils {
   export type RenderTarget = import('./render-targets').RenderTarget
   export type ResolvedActionInvocation = import('./invocations').ResolvedActionInvocation
   export type ResolvedActionTarget = import('./invocations').ResolvedActionTarget
+  export type PluralCategory = import('./phrases').PluralCategory
   export type ResolvedFunctionInvocation = import('./invocations').ResolvedFunctionInvocation
   export type ResolvedRenderInvocation = import('./invocations').ResolvedRenderInvocation
   export type TaoType = import('./Type').TaoType

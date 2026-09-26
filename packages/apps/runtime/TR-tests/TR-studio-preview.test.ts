@@ -18,6 +18,57 @@ import {
 } from '../TaoRuntime-src/TR-studio-preview'
 import { Clock } from '../TaoRuntime-src/TR-units'
 
+Describe('Studio cell publication bootstrap', () => {
+  Test('bounds reloads per publication and clears a successful recovery', () => {
+    const original = 'http://127.0.0.1:8081/?taoStudioCell=1'
+    let current = original
+    for (let attempt = 1; attempt <= 30; attempt += 1) {
+      const retry = StudioPreview.Bootstrap.nextPublicationReload(current, 8)
+      Expect(retry?.attempt).toBe(attempt)
+      current = retry!.url
+    }
+    Expect(StudioPreview.Bootstrap.nextPublicationReload(current, 8)).toBe(undefined)
+    Expect(StudioPreview.Bootstrap.nextPublicationReload(current, 9)?.attempt).toBe(1)
+    Expect(StudioPreview.Bootstrap.clearPublicationRetry(current)).toBe(original)
+    Expect(
+      StudioPreview.Bootstrap.nextPublicationReload(
+        StudioPreview.Bootstrap.clearPublicationRetry(current),
+        8,
+      )?.attempt,
+    ).toBe(1)
+  })
+
+  Test('bounds server catch-up polling with a capped delay', () => {
+    Expect(StudioPreview.Bootstrap.olderRetryDelay(1)).toBe(200)
+    Expect(StudioPreview.Bootstrap.olderRetryDelay(5)).toBe(1_000)
+    Expect(StudioPreview.Bootstrap.olderRetryDelay(30)).toBe(1_000)
+    Expect(StudioPreview.Bootstrap.olderRetryDelay(31)).toBe(undefined)
+  })
+
+  Test('requests a fresh iframe bundle when the registered cell is newer than its publication', () => {
+    const reloads: number[] = []
+    const publication = { appName: 'Demo', compileRevision: 3, project: '/demo' }
+    const runtime = { identity: { ...publication, compileRevision: 4 } }
+    const outcome = StudioPreview.Bootstrap.reconcile(runtime, publication, revision => reloads.push(revision))
+    Expect(outcome).toBe('newer')
+    Expect(reloads).toEqual([4])
+  })
+
+  Test('applies only a matching cell and does not reload for an older response', () => {
+    const reloads: number[] = []
+    const publication = { appName: 'Demo', compileRevision: 4, project: '/demo' }
+    const reconcile = (revision: number) =>
+      StudioPreview.Bootstrap.reconcile(
+        { identity: { ...publication, compileRevision: revision } },
+        publication,
+        newer => reloads.push(newer),
+      )
+    Expect(reconcile(3)).toBe('older')
+    Expect(reconcile(4)).toBe('matched')
+    Expect(reloads).toEqual([])
+  })
+})
+
 type Listener = (event: unknown) => void
 
 /** settled drains the microtask turns a queued action root takes to reach its first gate. */

@@ -35,17 +35,6 @@ github-setup:
     git ls-remote --exit-code origin refs/heads/main >/dev/null
     printf 'GitHub HTTPS authentication is ready for %s.\n' "$(git remote get-url origin)"
 
-# Remove an obsolete local Tao landing LaunchAgent after direct landing has been verified
-[group('Setup')]
-landing-broker-teardown:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    label='com.tao-lang.landing-broker'
-    plist="$HOME/Library/LaunchAgents/${label}.plist"
-    launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
-    rm -f "$plist"
-    printf 'Removed obsolete %s LaunchAgent if present.\n' "$label"
-
 # Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
 [group('Setup')]
 secrets *ARGS:
@@ -90,12 +79,12 @@ stop-local-instantdb:
 
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
-studio project="Apps/HNReader":
+studio project="Apps/HNReader": _parser-gen
     ./dev studio "{{ project }}"
 
 # Launch Tao Studio in its local Electrobun shell; offers to stop another session holding the native host
 [group('Run')]
-studio-native project="Apps/HNReader":
+studio-native project="Apps/HNReader": _parser-gen
     ./dev studio-native "{{ project }}"
 
 # Install the Tao Companion development build on a connected iPhone or iPad, once per native change
@@ -213,7 +202,7 @@ standalone-cli-build: _parser-gen
 standalone-cli-release version: _parser-gen
     bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release "{{ version }}"
 
-# Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, and compile work with no Bun or Node on PATH
+# Build a release, install it through curl | sh into a throwaway HOME, and prove create, check, compile, and build --compile-only work with no Bun or Node on PATH
 [group('Ship')]
 standalone-cli-acceptance: _parser-gen
     bun run packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0
@@ -296,6 +285,10 @@ report-test-stats limit="20":
 [arg('redraft', long='redraft', value='true')]
 finalize check='false' fresh='false' redraft='false':
     ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }}
+
+# Merge current main into this feature branch and nothing else; agents use ./agent unsandboxed merge-main when main writes paths the sandbox protects
+merge-main:
+    ./dev merge-main
 
 # Switch this checkout to your own dev/* branch, creating it from main the first time
 [group('Mine')]
@@ -442,12 +435,17 @@ board *ARGS:
 landed *ARGS:
     ./dev landed {{ ARGS }}
 
-# Classify every worktree as reclaimable, live, or unclassified; removes nothing without --execute
+# Classify worktrees without removal by default; use ./agent unsandboxed reclaim --execute to remove
 [group('Dev')]
 reclaim *ARGS:
     ./dev reclaim {{ ARGS }}
 
-# Push this feature branch, open or reuse its pull request against main, then stream its checks
+# List each worktree with its reclaim verdict and latest attached agent task
+[group('Report')]
+worktree-status:
+    ./dev worktree-status
+
+# Push this feature branch, open or reuse its pull request against main, then stream the checks opening starts
 [group('Dev')]
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
@@ -461,6 +459,11 @@ capabilities *ARGS:
 [group('Report')]
 delegation-report *ARGS:
     ./dev delegation-report {{ ARGS }}
+
+# Report where the delegation routing table lags the models this machine runs, and measure context
+[group('Report')]
+model-audit *ARGS:
+    ./dev model-audit {{ ARGS }}
 
 # Measure what a simplification pass targets: size, dispatch chains, allowlists, instructions, docs
 [group('Report')]
@@ -541,7 +544,7 @@ verify-changed no_cache='false': _deps
 # host — the native shell and the canary, which contend on the window server — declare `gui` in the
 # catalog and take a machine-wide lease for exactly as long as they run. Everything else here is
 # headless and parallel-safe, so refusing the whole lane priced six gates at the cost of two.
-# Verify everything plus the browser, native and bundle lanes. --no-cache ignores a recorded green tree
+# Verify everything plus browser, native and bundle lanes; stop starting checks after a definite failure. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-full no_cache='false': _deps

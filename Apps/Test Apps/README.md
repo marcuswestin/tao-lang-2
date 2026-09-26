@@ -152,11 +152,19 @@ Exercise settled writable and copied parameters through ordinary controls and ac
 
 **Does not belong here:** parameter grammar and diagnostic cases, runtime transaction internals, entity-field projection, or native callback lifecycle. Those belong to language, runtime, and WordFlower coverage respectively.
 
+## Write Rules
+
+Exercise `required` completeness and the writes that consume it through an ordinary form.
+
+**Belongs here:** `required "<sentence>"` deriving `Incomplete` and `Problems` on a stored row and on a projection that selects the field; a projection that leaves a required field out never reporting it; a projection-backed form disabling its submit while incomplete; `check` stopping an action on an incomplete input; `create Entity with Input` creating a row from a projected item; and a row written incomplete that reads complete after an update.
+
+**Does not belong here:** `validate` and store-side rejection, which are Post-MVP; diagnostic cases for the completeness members and `create … with`, which belong to package tests; and the stdlib `Problems(…)` view, which WordFlower's forms prove.
+
 ## Data MVP
 
 Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.
 
-**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, and stored rows surviving a `relaunch`. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
+**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, stored rows surviving a `relaunch`, and Memory saving while the test network is offline. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
 
 **Does not belong here:** remote providers, credentials, auth, permissions, sync, pagination, or aggregation; navigation or WordFlower product behavior; schema, query, and write diagnostics.
 
@@ -284,3 +292,92 @@ Exercise the type system through a small UI that passes typed values into views.
 **Belongs here:** text, number, and list literals; custom type declarations for primitive, list, and item shapes; typed constructors and invocation type-fixing; item member access; `let` bindings whose inferred types are used as arguments; nested render-block `let` shadowing while captured outer references keep their value; argument binding by type, including out-of-order; inject arguments exposing typed values inside injected TS.
 
 **Does not belong here:** grammar edge cases without type-system meaning; layout, styling, navigation, data, or action behavior beyond what type coverage needs; stdlib runtime coverage; invalid or intentionally failing cases.
+
+## Read Net
+
+Exercise the read net: the runtime's handling of the exceptional read cases a render guard leaves
+unnamed, and a project's file-level `guard default` replacing it case by case. Two projects share
+the folder so their nets can differ: `ReadNetApp` replaces `missing`, and `Runtime Default/`'s
+`RuntimeDefaultApp` replaces `loading` and `error` and leaves `missing` to the runtime.
+
+**Belongs here:** a bare `guard Subject` over an entity and a query; a deleted row reaching the net
+as `missing`; the project's override rendering at the guarding site; a guard that names `missing`
+winning over the net; the runtime's `missing` sentence where the project's net does not replace it;
+a deleted handle keeping `.Id` inside a site's own `missing` handler.
+
+**Does not belong here:** `loading`, `unauthorized`, and `error` rendered through a journey, which
+Memory cannot produce on demand and the runtime package tests prove; read-net diagnostics
+(placement, cases, one per project, a bare guard over text), which are package tests; action guards;
+write outcomes.
+
+## Phrases
+
+Exercise `phrase` declarations: named copy with typed holes and CLDR plural forms (Decisions §14).
+
+**Belongs here:** a single-form phrase with a typed hole; a parameterless phrase referenced by bare
+name; a plural phrase selecting `one` or `other` by its number parameter as the count changes
+through `0`, `1`, and `2`, rendered through the running `Text` view.
+
+**Does not belong here:** copy extraction, `words` blocks, and measurement forms, which are
+post-MVP; parser, validator, formatter, and compiler diagnostics, which are package tests; runtime
+locale-selection coverage across CLDR categories, which the runtime package tests own.
+
+## Search
+
+Exercise the query `search` clause: multi-field text search over an entity's `(search)` fields,
+matched with the same attention matcher keyboard narrowing and the command palette use.
+
+**Belongs here:** rows narrowing as a term is entered; a term matching a row only through its
+second `(search)` field; every row returned on a blank term; a field without `(search)` never
+matching. Schema and query diagnostics — a query search term that is not text, a query search
+clause over an entity with no `(search)` field, and `(search)` on a non-text field — are package
+tests, not journeys.
+
+**Does not belong here:** relevance ranking, which is explicitly not decided; `group by`, which is
+Post-MVP; remote providers; navigation or WordFlower product behavior.
+
+## Effect Outcomes
+
+Exercise `when do` (Decisions §5): a call site that runs a verb, contains its failure, and names what
+happens next. The verb is a native action that writes a draft and then calls a foreign `Export` whose
+sibling `Export.ts` ends each call the way its `Mode` argument says.
+
+**Belongs here:** a check-scoped declared-case failure stub that bypasses `Export.ts`; `saved` after the verb finishes, keeping its writes; a declared case the site names;
+`rejected -> Problem` catching a declared case the site does not name, with the declared sentence; `error
+-> Message` for a case the verb never declared, with the provider's own sentence; the verb's own write
+rolled back while the caller's earlier write survives; a verb's contract reached through a plain `do`.
+
+**Does not belong here:** the unhandled-failure warning, unknown or duplicate outcomes, and `check`
+placement, which are validator tests; `queued`, which is post-MVP; Studio's failure reports for an
+unhandled failure, which the runtime tests own.
+
+## Test Device and Fixture
+
+Exercise a behavior test's `on <device>` and `with <fixture>` head clauses (Decisions §16).
+
+**Belongs here:** a `with <fixture>` check starting with synced and device-local fixture rows visible
+before any interaction; a nested test inheriting its parent's `on`/`with` without repeating them; a nested test
+overriding its parent's `on` while still inheriting `with`. `on phone` versus `on tablet` producing a
+stacked versus side-by-side `Panes()` is not provable from this app's tests — the test language
+selects by visible text, label, placeholder, or `#tag`, with no selector for a chosen layout
+direction — so that half of the proof lives in
+`packages/apps/expo-host/expo-host-tests/test-device-fixture-e2e.jest-test.tsx`, which reads the
+rendered style the harness itself produces.
+
+**Does not belong here:** the device and fixture vocabulary reused from Studio scenarios
+(`ScenarioDeviceClause`, `ScenarioFixtureClause`), which Studio's own scenario coverage owns; the
+`network`, `wait for sync`, and `datasource fails after`, which the Test World Controls entry owns;
+the still-deferred `as <account>` and `expect refused` controls.
+
+## Test World Controls
+
+Exercise Decisions §16's network, sync, and datasource fault controls with rendered Tao journeys.
+
+**Belongs here:** a granular CloudKit stand-in queues an offline write, syncs it on reconnect,
+reports an injected failed write, and retries that record. ICloud keeps an offline snapshot locally
+through reconnect, but its protocol cannot confirm remote upload completion for `wait for sync`;
+Dev shows a remote save error while offline. Data MVP proves that Memory
+saves offline and shows an injected snapshot save error through `guard … error`.
+
+**Does not belong here:** live CloudKit or InstantDB transport acceptance, account policy, and
+atomic backend rejection. Those need provider and device evidence.

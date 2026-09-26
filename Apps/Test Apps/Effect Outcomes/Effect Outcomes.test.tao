@@ -1,0 +1,45 @@
+use EffectOutcomesApp, Export from ./
+
+test "Effect Outcomes" {
+   test "stubs a declared foreign failure without calling its sidecar" {
+      action Export fails Offline
+      run EffectOutcomesApp
+      press #exportSaved
+      expect {
+         text "Status: Waiting for a connection"
+         text "Draft: Empty"
+         text "Attempts: 1"
+   }  }
+   test "runs saved once the verb finishes, keeping its writes" {
+      run EffectOutcomesApp
+      press #exportSaved
+      expect {
+         text "Status: Exported"
+         text "Draft: Staged"
+         text "Attempts: 1"
+   }  }
+   test "runs the named case and rolls back the verb's write while the caller's stays" {
+      run EffectOutcomesApp
+      press #exportOffline
+      expect {
+         text "Status: Waiting for a connection"
+         // StageAndExport staged the draft before Export failed; the contained failure undoes it.
+         text "Draft: Empty"
+         // Run counted the attempt before `when do`, and that write survives.
+         text "Attempts: 1"
+   }  }
+   test "lets rejected catch a declared case the site does not name, with its sentence" {
+      run EffectOutcomesApp
+      press #exportTooLarge
+      expect {
+         text "Status: Rejected: This document is too long to export."
+         text "Draft: Empty"
+   }  }
+   test "sends a failure the verb never declared to error, with the service's sentence" {
+      run EffectOutcomesApp
+      press #exportBroken
+      expect {
+         text "Status: Failed: The export service is down."
+         text "Draft: Empty"
+         text "Attempts: 1"
+}  }  }

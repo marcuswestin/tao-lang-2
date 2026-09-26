@@ -1,7 +1,7 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
-import { FinalizeCommand, LandCommand } from '@verification/Finalize'
+import { FinalizeCommand, LandCommand, MergeMainCommand, StartBranchCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
 import { GreenTree } from '@verification/GreenTree'
 import { LandingLock } from '@verification/LandingLock'
@@ -167,7 +167,7 @@ await runWithCommands(commands => {
     .command('land')
     .description('Land this feature branch: prepare unlocked, then integrate, verify, squash and push under one lock.')
     .option('--dry-run', 'Report readiness and the plan, and change nothing.')
-    .option('--message-file <path>', 'Override .artifacts/merge/<branch>.msg.')
+    .option('--message-file <path>', 'Must name the canonical .artifacts/merge/<branch>.msg file.')
     .option('--redraft', 'Replace an existing merge message with a fresh mechanical draft before landing.')
     .option('--skip-verify', 'Skip the staged-squash just verify --complete pass.')
     .option('--skip-verify-full', 'Skip just verify-full; the staged squash then gets just verify --complete.')
@@ -413,6 +413,33 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('merge-main')
+    .description('Merge current main into this feature branch, and nothing else; no lane, no merge message.')
+    .action(async () => {
+      try {
+        await MergeMainCommand.run()
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('start-branch')
+    .description('Start a new feat/* branch at fetched origin/main after checking every checkout write.')
+    .argument('<name>', 'Full feat/* branch name.')
+    .action(async (name: string) => {
+      try {
+        await StartBranchCommand.run(name)
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('capabilities')
     .description('Report which host capabilities this agent environment can use without changing anything.')
     .option('--json', 'Print a versioned structured report.')
@@ -427,6 +454,25 @@ await runWithCommands(commands => {
     .action(async (options: { json?: boolean } = {}) => {
       const { DelegationReportCommand } = await import('@agent-cli/delegation/DelegationReportCommand')
       Platform.runtimeProcess.exit(await DelegationReportCommand.run({ json: options.json === true }))
+    })
+
+  commands
+    .command('model-audit')
+    .description('Report where the delegation routing table lags the models this machine runs, and measure context.')
+    .option('--days <count>', 'How many days of transcripts to read.', '7')
+    .option('--until <time>', 'End the window here instead of now, to measure the period before a change.')
+    .option('--json', 'Print the structured report instead of prose.')
+    .option('--brief', 'Print one line only when routing looks behind, over the last day; silent otherwise.')
+    .action(async (options: { brief?: boolean; days?: string; json?: boolean; until?: string } = {}) => {
+      const { ModelAuditCommand } = await import('@agent-cli/delegation/ModelAuditCommand')
+      Platform.runtimeProcess.exit(
+        await ModelAuditCommand.run({
+          brief: options.brief === true,
+          days: parseOptionalPositiveInteger(options.days, '--days'),
+          json: options.json === true,
+          until: options.until,
+        }),
+      )
     })
 
   commands
@@ -484,7 +530,7 @@ await runWithCommands(commands => {
   commands
     .command('open-pr')
     .description(
-      "Push this feature branch, open or reuse its pull request against main, then stream the pull request's checks.",
+      'Push this feature branch, open or reuse its pull request against main, then stream the checks opening it starts.',
     )
     .option('--poll-interval-ms <ms>', 'How often to poll checks when this gh has no `--watch` flag.')
     .action(async (options: { pollIntervalMs?: string } = {}) => {
@@ -502,11 +548,20 @@ await runWithCommands(commands => {
     )
     .option('--execute', 'Remove the reclaimable worktrees, re-checking each one for liveness as it acts.')
     .option('--json', 'Print a versioned structured report instead of the table.')
-    .action(async (options: { execute?: boolean; json?: boolean } = {}) => {
+    .option('--report-json', 'Print a versioned structured report through ./agent instead of the table.')
+    .action(async (options: { execute?: boolean; json?: boolean; reportJson?: boolean } = {}) => {
       Platform.runtimeProcess.exit(
-        await ReclaimCommand.run({ execute: options.execute === true, json: options.json === true }),
+        await ReclaimCommand.run({
+          execute: options.execute === true,
+          json: options.json === true || options.reportJson === true,
+        }),
       )
     })
+
+  commands
+    .command('worktree-status')
+    .description('Report every Git worktree and its latest matching Codex, Claude, or Cursor task; removes nothing.')
+    .action(async () => Platform.runtimeProcess.exit(await ReclaimCommand.status()))
 
   commands
     .command('secrets')

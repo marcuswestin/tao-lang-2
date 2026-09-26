@@ -35,9 +35,12 @@ import {
   compare,
   type Evaluable,
   matchesFilter,
+  matchesSearch,
   partialRowValues,
   queryFilterValue,
+  querySearchTerm,
   rowValues,
+  searchFieldNames,
 } from './TR-data-values'
 import {
   errorMessage,
@@ -47,6 +50,7 @@ import {
   UserInputError,
 } from './TR-errors'
 import RuntimeSwitch from './TR-switch'
+import { TestWorld } from './TR-test-world'
 import { Clock } from './TR-units'
 
 type DeleteTarget = { entity: string; id: string }
@@ -418,9 +422,14 @@ export class RuntimeDataSchema {
       filter,
       expected: queryFilterValue(plan.entity, entity, filter, this),
     }))
+    const searchFields = plan.search ? searchFieldNames(entity) : undefined
+    const searchTerm = plan.search ? querySearchTerm(plan.search) : undefined
     const source = this.data.rows[plan.entity] ?? []
     const rows = source
-      .filter(row => filters.every(({ filter, expected }) => matchesFilter(row, filter, expected)))
+      .filter(row =>
+        filters.every(({ filter, expected }) => matchesFilter(row, filter, expected))
+        && (searchTerm === undefined || matchesSearch(row, searchFields!, searchTerm))
+      )
       .map(row => this.handle(plan.entity, row.Id))
     const order = plan.order ?? entity.defaultOrder
     if (order) {
@@ -987,7 +996,9 @@ export class RuntimeDataSchema {
     }
     return RuntimeSwitch<DataStatus, TaoEntityAvailability>(this.status, {
       error: () =>
-        this.errorRecoverable && metadata.generation === this.generation
+        this.errorRecoverable
+          && (!TestWorld.isSnapshotConnection(this.connection) || this.failedSaveSequence === undefined)
+          && metadata.generation === this.generation
           && this.storedRow(metadata.entity, metadata.id)
           ? { status: 'available' }
           : { message: this.error, status: 'error' },
@@ -1150,6 +1161,20 @@ export class RuntimeDataSchema {
         }
       },
       overlay => describeDataOverlay(overlay),
+      // Writes replace `working` and its row lists rather than editing them, so the rows it held are
+      // the savepoint. The id counter is deliberately not restored: ids stay monotonic, so a row the
+      // rolled-back verb created never lends its id, or a handle cached for it, to a later row.
+      overlay => {
+        const rows = overlay.working.rows
+        const intents = new Map(overlay.intents)
+        return () => {
+          overlay.working = { ...overlay.working, rows }
+          overlay.intents.clear()
+          for (const [key, intent] of intents) {
+            overlay.intents.set(key, intent)
+          }
+        }
+      },
     )
   }
 

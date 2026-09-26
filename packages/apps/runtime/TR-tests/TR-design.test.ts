@@ -173,6 +173,36 @@ Describe('TR design runtime', () => {
     Expect(design.screens).toEqual([{ below: 500, name: 'narrow' }, { name: 'wide' }])
   })
 
+  // A `color` value is the design color name the argument or default wrote (`Tint: schemeInk`), and
+  // the compiler puts that name in the read's place (`[background Tint]` -> ['bg', Tint's value]).
+  Test('resolves a color value against the mounted design at render, following Scheme', () => {
+    const colors = (inkDark: string) => ({
+      'accent.20': '#cfe3d8',
+      accent: '#2f6b4f',
+      ink: '#111111',
+      inkDark,
+      schemeInk: {
+        environment: 'Scheme' as const,
+        expected: 'dark' as const,
+        kind: 'conditional' as const,
+        negative: { kind: 'reference' as const, path: 'ink' },
+        positive: { kind: 'reference' as const, path: 'inkDark' },
+      },
+    })
+    const light = DesignControls.Declaration({ bundles: {}, colors: colors('#eeeeee'), name: 'Light', tokens: {} })
+    const night = DesignControls.Declaration({ bundles: {}, colors: colors('#f5f0e6'), name: 'Night', tokens: {} })
+    const background = (design: typeof light, tint: string, scheme: 'dark' | 'light') =>
+      DesignControls.resolve(design, DesignControls.Spec([['bg', tint]]), undefined, scheme).style
+
+    Expect(background(light, 'schemeInk', 'light')).toEqual({ backgroundColor: '#111111' })
+    Expect(background(light, 'schemeInk', 'dark')).toEqual({ backgroundColor: '#eeeeee' })
+    // The same value mounted by another app reads that app's own design.
+    Expect(background(night, 'schemeInk', 'dark')).toEqual({ backgroundColor: '#f5f0e6' })
+    Expect(background(light, 'accent.20', 'light')).toEqual({ backgroundColor: '#cfe3d8' })
+    const bare = DesignControls.Declaration({ bundles: {}, colors: { ink: '#000000' }, name: 'Bare', tokens: {} })
+    Expect(() => background(bare, 'schemeInk', 'light')).toThrow("Design 'Bare' has no token 'schemeInk'.")
+  })
+
   Test('fails a mounted layout occurrence whose selected design has no named size', () => {
     const design = DesignControls.Declaration({
       bundles: {},

@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test'
-import { FS } from '@shared'
+import { FS, Repo } from '@shared'
 import { expandHostTestSourcePatterns } from './HostTestSourceRegistry'
 
 test('glob expansion discovers new source files in deterministic order', async () => {
-  const root = await FS.mkTmpDir('tao-e2e-source-registry-')
+  const root = await Repo.mkScratchDir('tao-e2e-source-registry-')
   try {
     await FS.writeText(FS.resolvePath('packages/testing/e2e-testing/Zeta.ts', root), 'export const zeta = true\n')
     await FS.writeText(
@@ -28,7 +28,7 @@ test('glob expansion discovers new source files in deterministic order', async (
 })
 
 test('glob expansion excludes generated and dependency trees', async () => {
-  const root = await FS.mkTmpDir('tao-e2e-source-exclusions-')
+  const root = await Repo.mkScratchDir('tao-e2e-source-exclusions-')
   try {
     await FS.writeText(
       FS.resolvePath('packages/testing/e2e-testing/Included.ts', root),
@@ -47,7 +47,7 @@ test('glob expansion excludes generated and dependency trees', async () => {
 })
 
 test('each unexpectedly empty registered pattern fails with its own pattern', async () => {
-  const root = await FS.mkTmpDir('tao-e2e-source-empty-')
+  const root = await Repo.mkScratchDir('tao-e2e-source-empty-')
   try {
     await FS.writeText(
       FS.resolvePath('packages/testing/e2e-testing/Included.ts', root),

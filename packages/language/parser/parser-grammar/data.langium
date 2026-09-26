@@ -47,7 +47,7 @@ QueryBlock:
     '{' clauses+=QueryClause* '}';
 
 QueryClause:
-    WhereClause | BooleanWhereClause | OrderClause | LimitClause;
+    WhereClause | BooleanWhereClause | SearchClause | OrderClause | LimitClause;
 
 WhereClause:
     'where' fieldName=ID operator=QueryComparisonOperator value=Expression;
@@ -57,6 +57,10 @@ BooleanWhereClause:
 
 QueryComparisonOperator returns string:
     '==' | '!=' | '<' | '<=' | '>' | '>=';
+
+// Multi-field text search over an entity's `(search)` fields. A blank term matches every row.
+SearchClause:
+    'search' term=Expression;
 
 OrderClause:
     'order' 'by' fieldName=ID direction=OrderDirection?;
@@ -68,7 +72,7 @@ OrderDirection returns string:
     'asc' | 'desc';
 
 CreateStatement:
-    'create' entity=[EntityDataDeclaration:ID] block=DataWriteBlock;
+    'create' entity=[EntityDataDeclaration:ID] (block=DataWriteBlock | 'with' source=Expression);
 
 UpdateStatement:
     'update' target=DataRowExpression (block=DataWriteBlock | 'with' source=Expression);

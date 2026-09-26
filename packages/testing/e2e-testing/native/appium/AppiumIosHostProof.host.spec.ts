@@ -10,7 +10,7 @@ import {
   type HostTarget,
 } from '@host-control'
 import { expect, test } from '@playwright/test'
-import { Errors, FS } from '@shared'
+import { Errors, FS, Repo } from '@shared'
 import type { HostJourney } from '../../journey/HostJourney'
 import { appiumIosJourneyAdapter, classifyAppiumIosFault, runAppiumIosHostProof } from './AppiumIosHostProof'
 
@@ -112,7 +112,7 @@ test('recognizes a deliberate fault only at its final source-linked text asserti
 })
 
 test('writes a target-retention receipt when opening a session leaves a live driver behind', async () => {
-  const artifactRoot = await FS.mkTmpDir('tao-appium-ios-retained-open-')
+  const artifactRoot = await Repo.mkScratchDir('tao-appium-ios-retained-open-')
   try {
     const receipt = await runAppiumIosHostProof({
       artifactRoot,
@@ -232,7 +232,7 @@ test('uses the authored Clockwork readiness and control tags on native iOS', asy
 })
 
 test('writes the exact passed receipt after the native clock acknowledgement', async () => {
-  const artifactRoot = await FS.mkTmpDir('tao-appium-ios-proof-')
+  const artifactRoot = await Repo.mkScratchDir('tao-appium-ios-proof-')
   const session = new ClockControlSession()
   const controller = new ProofController(session)
   try {

@@ -28,6 +28,8 @@ behind it.
   worktree repairs itself by being used; `dev-automation` owns how each harness reaches it.
 - In a linked worktree `./agent` reuses the primary checkout's pinned profile, or prints the
   fallback itself (`direnv allow && direnv exec . ./agent setup`) when it finds none.
+- When direnv blocks this checkout's `.envrc` and the sandbox denies its allowlist write, review the
+  file and run `./agent unsandboxed direnv allow`. Trust stays an explicit per-worktree action.
 - The session-start hook puts `.devenv/profile/bin` on each tool shell's PATH — call `bun`,
   `bunx`, `dprint`, `just`, and `node` directly. Exports do not persist between tool calls, so if
   `which bun` shows a shell without it, prefix the affected invocation with
@@ -62,6 +64,12 @@ behind it.
   auto-review is not the Developer's approval. Do not try alternate spellings, a host session, or a policy
   change to route around the denial. `.rulesync/permissions.jsonc` grants only the named
   `./agent unsandboxed` host commands in default sessions; landing still needs authorization for the named slice.
+- No agent sandbox reaches Watchman's socket, and only the opt-in `tao-local-services` profile
+  reaches Docker's, by design: both sockets live under a developer's home directory, which a tracked
+  config cannot name. Run file-watching dev loops with
+  `./agent unsandboxed app-dev`, `studio`, or `studio-native`, and the local InstantDB stack with
+  `./agent unsandboxed local-instantdb start` or `stop`. A denied Watchman socket in a sandbox is
+  expected; sandboxed tests and builds crawl the tree without it.
 - The browser and native UI lanes cannot run inside the managed Bash sandbox. Use
   `./agent unsandboxed studio-smoke` or `./agent unsandboxed studio-proof-real-app`; if the host
   blocks Chrome there, rerun only with explicit review, and never reuse an existing browser profile.

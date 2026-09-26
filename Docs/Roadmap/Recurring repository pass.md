@@ -6,50 +6,36 @@ notes after each completed pass; Git history is the longer record.
 
 ## Current status
 
-- **Most recent catch-up:** the 2026-09-21 pass reviewed the 74 first-parent `main` commits after
-  `18505fafbb5b4cae20351c1e8ef5dfbdc805e499`, through
-  `5e3526439008882a2c15da3e1cbdc44b7976cc91`. The earlier remediation and its external
-  acceptance boundary remain in
-  [`September squash-merge remediation.md`](<../Archive/Reports/September squash-merge remediation.md>).
-- **Covered:** changed language/CLI, Studio and native host control, developer automation, and
-  verification seams; focused reproductions and tests for accepted defects; `bun audit` on the
-  recorded lock graph; and the Nixpkgs tracker and upstream notices for pinned `devenv.lock` inputs.
-- **Outcome and limits:** remediation on `feat/recurring-repository-pass-september-catchup` addresses the confirmed
-  CLI false pass, Studio target routing and element identity, Appium input/close races, and developer
-  workflow defects. The lock graph resolves Appium's `@xmldom/xmldom@0.9.12`, Expo's compatible
-  `@xmldom/xmldom@0.8.15`, and `morgan@1.12.0`; 43 other Bun audit records predated this range.
-  Subsequent [dependency advisory follow-up](<Dependency advisory follow-up.md>) on
-  `feat/dependency-advisory-health` reduced those records to one and repaired the stale-link health
-  check. The pinned Linux Nixpkgs input still needs an update and Linux acceptance. Agent-config
-  recovery now resolves dprint plugins from installed local packages, including with a cold cache.
-  This pass did not establish physical-device, real CloudKit,
-  installed-binary OTA, signed Studio, or distribution acceptance. The later `2bc90866` package
-  restructure was integrated for compatibility but has not had a repository-wide pass.
+- **Reviewed through:** `7af6064174487e54c17c0737b8f91dd8d3bd4275` on local `main` (2026-09-25). The [September 2026 repository review](<September 2026 repository review.md>) retains the historical 142-landing ledger through `ff4f017c` and separately disposes all 24 newer first-parent landings. Four read-only units and independent challenges checked repair integration and current behavior. The review branch has integrated this main tip; the locked landing gate and archive ref remain unproved.
+- **Outcome:** The review branch carries the earlier fixes plus focused corrections for a host-test receipt interruption, a released-port test race, an inherited host marker, a false-green admission measurement, direct CocoaPods locale propagation, stale Android emulator exit logs, Studio publication recovery, standalone installer home paths, and the Claude model warning. Focused tests passed, including the host controls after a deliberate mutation failed. Current `main` still retains old host-test output; managed Jest identities and direct Jest lack aggregate bounds and do not follow `TAO_HOME`. Old shared and receipt-less state was preserved because ownership/liveness was not established. Emulator and Studio fixes have no real host acceptance in this pass.
+- **Security follow-up:** The current Bun audit still reports one moderate `uuid` advisory with no affected caller found in its installed `xcode` parent; the [dependency advisory follow-up](<Dependency advisory follow-up.md>) keeps its owner and September 28 review date. The pinned Nixpkgs input still needs upstream-patch comparison and Linux closure. Standalone and Companion release downloads need an authenticity decision and signing inputs before public distribution.
 
 ## Consider next time
 
-- Start after `5e3526439008882a2c15da3e1cbdc44b7976cc91`, reading any new hook override log
-  entries before revisiting the 2026-09-21 agent-governance changes. Choose checks from the changes
-  and current risks rather than repeating every category.
-- Recheck the Appium transitive pins when its Base Driver publishes `morgan@1.12.0`; remove the
-  override when it can resolve without one. Follow the remaining `uuid` and Linux Nixpkgs items in
-  [Dependency advisory follow-up](<Dependency advisory follow-up.md>), and use the installed-link
-  health check after lock changes. Use real host or device evidence before claiming external
-  acceptance.
-- Investigate where repository tools and agent workflows create temporary files, and measure the
-  size and age of temporary state across worktrees and relevant machine-wide locations. If there is
-  significant buildup, trace its owner and lifecycle and work out a fix that prevents unbounded
-  accumulation through cleanup during normal agent operations, including failed or interrupted runs.
-- Include a quick dependency-advisory check in every security review. Inspect dependency changes and
-  research current advisories or security releases from primary sources:
-  - For the Bun/npm graph recorded by `package.json` files and `bun.lock`, run
-    [`bun audit`](https://bun.sh/docs/pm/cli/audit) and investigate relevant reported or skipped
-    packages against their official advisories.
-  - For inputs recorded by `devenv.lock`, inspect changed inputs, the
-    [Nixpkgs security tracker](https://tracker.security.nixos.org/), and the affected upstream
-    projects' official security notices.
-  - If the repository gains another dependency system, identify its official audit command or
-    advisory source during planning and add it here only if future passes will need it.
+- Shortlist developer-environment work from the generated [open index](<Developer environment upgrades.md>).
+  Check each entry's evidence, impact, dependencies, acceptance, and live branch owner against
+  current `main` and the [archive](<Developer environment upgrades archive.md>); reproduce candidates,
+  defer owned or blocked work, and take only a few high-impact items with achievable acceptance checks.
+- Start after `7af60641` or the newer first-parent boundary established during landing. Check the
+  [emulator log repair](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>)
+  under real host use when available.
+- Recheck `uuid`, the Appium transitive pins, and Linux Nixpkgs in
+  [Dependency advisory follow-up](<Dependency advisory follow-up.md>). Use real host or device evidence
+  before claiming native, Cloud, signing, distribution, or installed-binary acceptance.
+- Re-measure identity count, bytes, file count, age, and leases in Tao's configured cache root
+  (`TAO_HOME/cache`, `$XDG_CACHE_HOME/tao`, or `~/.cache/tao`), legacy `$TMPDIR/jest_dx` and
+  `$TMPDIR/tao-test-runs`, and `.artifacts/host-testing` across relevant worktrees. Give every
+  owner-unknown root an explicit disposition and preserve active state. Check that routine runs
+  retire inactive identities without touching legacy roots that lack ownership evidence.
+- Recheck that `TAO_HOME` moves managed caches without creating new login-home cache state.
+  The installed Claude Code 2.1.267 needs an approved host update to
+  run configured Opus 5.5 standard and deep profiles; the shared Bun 1.3.13 profile needs its
+  already tracked reload before standalone-binary acceptance.
+- Include a quick dependency-advisory check in every security review. Inspect dependency changes
+  against primary sources: run [`bun audit`](https://bun.sh/docs/pm/cli/audit) for the Bun graph and
+  inspect `devenv.lock` changes against the [Nixpkgs security tracker](https://tracker.security.nixos.org/)
+  and affected upstream notices. Add other dependency systems when they appear. Recheck the Appium
+  transitive pins when Base Driver permits `morgan@1.12.0` and run installed-link health after lock changes.
 
 ## Run a pass
 
@@ -66,12 +52,22 @@ notes after each completed pass; Git history is the longer record.
 4. Check temporary-state growth: identify creation sites and retention rules, measure significant
    worktree and machine-wide accumulation, and distinguish active state from abandoned output. For
    each material source, design and verify a bounded cleanup path in normal agent operations; do not
-   remove another live run's files or rely solely on a one-time purge.
-5. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
+   remove another live run's files or rely solely on a one-time purge. Include a read-only grouped
+   inventory of the largest active projects' worktrees, caches, and Tao-named OS temp roots: report
+   total bytes, file count, oldest age, known owner, and change from the previous pass per project
+   and root class. Identify temporary roots that can affect boot-time cleanup by file count as well
+   as bytes. Keep another project's cleanup with that project's owner; do not turn this inventory
+   into a machine-wide deletion command.
+5. Check model routing: run `./agent model-audit`, then compare the delegation routing table with
+   official model availability, harness precedence, and current input, cache-read, cache-write, and
+   output pricing. Weigh completed-task cost and review quality before recommending a tier change,
+   since an API-equivalent estimate is not a plan or subscription bill; the change itself is the
+   Developer's choice, never a silent switch.
+6. Verify evidence, reject or deduplicate unsupported findings, and distinguish repository defects
    from host or external acceptance that was not exercised. For each unresolved dependency advisory,
    keep a short live record of its disposition, owner, review-by date, and primary evidence; close
    it explicitly when resolved.
-6. When the approved work is complete, replace **Current status** and **Consider next time** with the
+7. When the approved work is complete, replace **Current status** and **Consider next time** with the
    new reviewed-through commit, a brief account of what actually ran, material omissions, the outcome,
    and only the few notes that would help the next orchestrator.
 

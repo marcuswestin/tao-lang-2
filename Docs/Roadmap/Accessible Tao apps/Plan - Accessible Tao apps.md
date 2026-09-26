@@ -51,6 +51,11 @@ do not replace it.
 |     4 | Accessibility-aware design defaults                | Large text, contrast, target size, high contrast, and reduced motion help low-vision, motor, vestibular, and cognitive access automatically.                                                                          | Add host accessibility preferences beside `Scheme`; make built-in components scale and reflow; establish mandatory contrast/target/name checks, then let authored design `rules` tighten them; add 200% text and reduced-motion scenarios when the design/scenario program lands.                                            |
 |     5 | Alternative representations and complex operations | Tao can use structured source data to offer more than a traditional overlay: maps as synchronized lists, charts as tables/summaries, and drag/reorder as named move actions.                                          | Define one semantic operation per capability; generate list/table/summary alternatives; expose move before/after/up/down and adjustable-value actions; test equivalent results across gesture, keyboard, voice/switch, and assistive actions. Sequence this after the corresponding map, chart, and ordered-move primitives. |
 
+Candidate 4's contrast, target, and name checks wait for design `rules { }`, which is deferred past
+MVP (2026-09-23); when they land they are warnings rather than mandatory errors. The static analysis
+they need, and the preferred automatic tap minimum, are recorded in the design system plan's
+"Design rules — deferred past MVP".
+
 Custom accessibility actions on every suitable outline-backed action control are the next small
 extension of candidate 1. They should merge with authored/native actions and initially exclude text
 inputs so editing actions remain platform-owned. A later semantic reader can expose the outline by

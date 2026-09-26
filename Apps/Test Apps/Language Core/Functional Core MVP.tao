@@ -32,7 +32,7 @@ scene MainView() {
    state AsyncStarted = false
    state AsyncContinued = false
    action HideCount() {
-      guard HasCount(Count) true -> {
+      if HasCount(Count) {
          toggle Visible
          set Count = 0
    }  }

@@ -603,6 +603,16 @@ Describe('Studio device gateway sealed control plane', () => {
       })
       await new Promise(resolve => setTimeout(resolve, 10))
       Expect(env.gateway.status(env.sessionId).lensSamples).toHaveLength(1)
+
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      const sameCell = await nextAssignedCell(device)
+      Expect(sameCell.identity.cellId).toBe('cell:phone')
+      Expect(env.gateway.status(env.sessionId).lensSamples).toHaveLength(1)
+
+      device.sendSealed({ cellId: 'cell:tablet', type: 'device.selectCell' })
+      const reassigned = await nextAssignedCell(device)
+      Expect(reassigned.identity.cellId).toBe('cell:tablet')
+      Expect(env.gateway.status(env.sessionId).lensSamples).toBeUndefined()
     })
   })
 
@@ -1072,7 +1082,7 @@ async function withGateway(
   use: (env: Env) => Promise<void>,
 ): Promise<void> {
   const project = await openProject('Garden', 'tao-studio-device-', options.source)
-  const trustRoot = await mkTestDir(FS.resolvePath('tao-studio-device-trust-', FS.tmpdir()))
+  const trustRoot = await mkTestDir('tao-studio-device-trust-')
   const sessions = new Map<string, StudioDeviceGatewaySessionRef>()
   sessions.set('first_session', {
     previewUrl: 'http://127.0.0.1:8081',
@@ -1121,7 +1131,7 @@ async function openProject(
   compile: { failNext: boolean }
   session: StudioProjectSession
 }> {
-  const root = await mkTestDir(FS.resolvePath(prefix, FS.tmpdir()))
+  const root = await mkTestDir(prefix, { location: 'host' })
   await FS.writeText(
     FS.resolvePath('Project.tao', root),
     `project { id "tao-studio-device-${appName.toLowerCase()}" name "${appName}" }`,

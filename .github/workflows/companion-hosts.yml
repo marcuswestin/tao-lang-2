@@ -1,0 +1,48 @@
+name: Companion hosts
+
+# Build and check the host kit when a pull request that can change it opens; later pushes to the
+# branch start no run, and `workflow_dispatch` reruns it by hand. Release publication stays separate
+# until the repository and its compatible hosts are public.
+on:
+  pull_request:
+    types: [opened]
+    paths:
+      - '.github/workflows/companion-hosts.yml'
+      - 'bun.lock'
+      - 'devenv.*'
+      - 'packages/apps/expo-host/**'
+      - 'packages/ides/studio-companion-app/**'
+      - 'packages/ides/studio-tooling/studio-tooling-src/CompanionHostBuild.ts'
+      - 'packages/testing/verification/verification-tests/companion-native-parity.test.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }} host and native-kit parity
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: android
+            runner: ubuntu-24.04
+          - platform: ios-simulator
+            runner: macos-26
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: cachix/cachix-action@v16
+        with:
+          name: devenv
+      - name: Install devenv
+        run: nix profile add nixpkgs#devenv
+      - name: Set up Tao
+        run: devenv shell -- ./agent setup
+      - name: Check native-kit parity
+        run: devenv shell -- ./agent test-file packages/testing/verification/verification-tests/companion-native-parity.test.ts
+      - name: Build ${{ matrix.platform }} host
+        run: devenv shell -- ./agent unsandboxed companion-host-build --platform ${{ matrix.platform }}

@@ -22,7 +22,7 @@ test "WordFlower" {
 ```
 
 A `test` groups checks. Each `check` runs independently, starts exactly one declared app with
-`run AppName`, and receives a fresh mounted app, Memory datasource replacement, and navigation
+`run AppName`, and receives a fresh mounted app, capability-matched in-memory datasource stand-in, and navigation
 state. A sidecar sees declarations through ordinary Tao import and visibility rules. Test files and
 inline test declarations are excluded from application builds.
 
@@ -65,6 +65,45 @@ rerun rather than starting one per change. A rerun uses the same compiled-output
 run is reported the same way a one-shot `tao test` reports it and does not stop the loop; between
 runs the command prints one line naming what it is watching and that it is waiting for the next
 change.
+
+## Device and fixture
+
+`test "…" on <device>` pins the viewport preset for every check inside that test; `test "…" with
+<fixture>` starts every check's fresh store from a named `fixture` instead of empty. Either or both
+may appear, in either order, and both reuse a scenario's own vocabulary (§13 of Decisions, `Tao
+Studio.md`): `on phone|tablet|laptop`, optionally followed by `width N x height N`, and `with
+<FixtureName>` referencing a `fixture` declaration:
+
+```tao
+fixture StarterWorkspace {
+   Home = create Workspace { Name: "Home" }
+}
+
+test "WordFlower full target" on phone with StarterWorkspace {
+   test "opens the starter workspace" {   // inherits its parent's device and fixture
+      run WordFlower
+      expect text "Home"
+   }
+   test "on a tablet" on tablet { … }     // overrides the device, still inherits the fixture
+}
+```
+
+Tests nest arbitrarily deep, and a nested test inherits the nearest ancestor's `on`/`with` unless it
+repeats the clause itself, which overrides every ancestor's for that test and everything nested
+inside it. A test may declare at most one `on` and one `with`; a fixture name that does not resolve,
+or a fixture whose created entity the running app cannot bind (no bound datasource claims it), are
+diagnostics rather than a runtime failure.
+
+A check's device viewport is applied before its first step, through the same seam a Studio scenario
+uses to size its preview; the test language itself has no selector for a chosen layout direction, so
+a journey proves the device by the rows and controls it can still reach at that size, not by reading
+back which way an adaptive layout laid out. The viewport simulation sends one synthetic layout
+event per mounted node; it does not recalculate a layout whose child sizes change afterward. A
+check's fixture seeds the store the same way: every `create` binding in the fixture materializes
+before launch through the running app's bound or device-local store, the same runtime seam a Studio
+scenario's fixture already seeds through (`Tao Studio.md`).
+A fixture's `through <Action>(...)` binding is not yet executed by a test's `with` (Studio's own
+scenario fixtures share this limit); write a `with`-driven fixture without `through` until that lands.
 
 ## Tags and selectors
 
@@ -158,6 +197,22 @@ The runner re-resolves the selected row before every nested operation because an
 rerender or remove it. Nested selectors and expectations remain inside the selected host subtree.
 
 ## Actions, assertions, and deterministic state
+
+A check can force one declared failure case for a foreign action before `run`:
+
+```tao
+test "export fails offline" {
+   action Export fails Offline
+   run ExportApp
+   press #export
+   expect text "Waiting for a connection"
+}
+```
+
+The named action must be foreign and must declare the named failure with `fails Case "sentence"`.
+The stub lasts for this check only, uses that declared sentence, and bypasses the TypeScript
+implementation on every invocation. A second check starts without it. A check may stub each
+foreign action once. Return-value stubs and return-valued actions are not implemented.
 
 Executable steps run in source order:
 
@@ -346,16 +401,28 @@ The same split holds for persisted state: a relaunch really does read the device
 asserting a persisted value across one fails when the round trip through storage is broken, while
 the encoding and the storage keys themselves stay with the runtime's persisted-state suite.
 
-Before every check, the runner installs a fresh in-memory snapshot store and prevents the app's
-configured snapshot provider from replacing it, so no step reads or mutates durable data (a
-fill-capable provider still binds; see `Tao Data.md`). The shipped Memory declaration in
+Before every check, the runner installs a fresh in-memory provider stand-in, so no step reads or
+mutates durable provider data. Snapshot providers use whole-snapshot saves: Dev and InstantDB need
+remote acceptance, so an offline or rejected save puts the datasource into an error state visible
+through `guard … error`. Memory and Local save offline; ICloud saves a local document offline and
+holds an aggregate upload pending until reconnect. Its provider protocol cannot confirm remote
+upload completion, so `wait for sync` reports that ICloud is unsupported. A provider that
+declares per-write recovery gets an isolated stand-in with queued, failed, and retryable records;
+`WritesQueued`, `WritesFailed`, `WriteError`, and `retry` retain that provider's capability. A
+fill-capable provider still binds for query fills (see `Tao Data.md`). The shipped Memory declaration in
 `@tao/data/providers/memory` is bound through the published `TR.DataProvider` connection protocol;
 its implementation passes the same `TR.testProvider` empty-load, round-trip,
 key/instance-boundary, ordering, and rejection conformance used by other providers.
 
 Driving a provider into `loading`, `error`, or `ready` from a test step is retired (Decisions §16).
-The states those steps reached return through the world controls — network, sync, and datasource
-fault injection — which have not landed yet.
+The states those steps reached return through `network offline|online`, `wait for sync`, and
+`datasource fails after create|update|delete <Entity> "message"`. Each declared failure waits for the
+next provider attempt containing the named row operation. An offline granular write stays queued and
+its matching failure fires on reconnect; an offline Dev or InstantDB save leaves the failure armed.
+`wait for sync` succeeds when observable writes are settled and reports an offline or failed sync
+rather than pretending it completed. Each check starts online with no
+injection, regardless of the prior check. These controls are in-process journey behavior; host
+adapters preflight and reject them until they implement equivalent capabilities.
 
 ## Compiler/runtime boundary
 
@@ -375,7 +442,8 @@ syntax.
 ## Non-goals
 
 The implemented test-runner surface intentionally omits direct state/value assertions, direct action
-calls, provider-row inspection or fixture/scenario seeding, production datasource access, arbitrary
-sleeps, public runtime or test IDs, entity-ID row selection, focused render subjects, and navigation
-diagnostic assertions. Those may be connected independently without weakening the current
-user-observable testing contract.
+calls, provider-row inspection, production datasource access, arbitrary sleeps, public runtime or
+test IDs, entity-ID row selection, focused render subjects, and navigation diagnostic assertions. A
+`with <fixture>` clause seeds a check's store (`through <Action>(...)` bindings excepted, above), but
+reading it back stays through ordinary rendered output, never a store query. `as <account>` and
+`expect refused` remain out of scope.

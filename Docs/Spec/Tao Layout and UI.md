@@ -6,8 +6,9 @@ Current implementation status: this repo has one renderable view family, with `s
 `nav is scene is view`, explicit `render` roots, unnamed `@@content`, optional single-fill named render slots, runtime-backed controls and
 containers, private `#tag` test metadata, and bracketed clauses for `content`, `claim`, `gap`,
 `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`.
-It also implements `width max`, adaptive `Panes`, and the first flat-token design terms and named
-clause bundles. Render arguments are always parenthesized, and a spec remains a distinct following
+It also implements `width max`, adaptive `Panes`, and typed design values, lowercase styles,
+element defaults, conditions, and `color` view parameters. Render arguments are always parenthesized,
+and a spec remains a distinct following
 clause: `render View(args) [spec] { children }`. Tags, layout, and design style merge into an
 existing concrete native root and add no wrapper node. Compatible material beyond that first
 contract remains future direction in this document. The old repo implemented most of this layout
@@ -103,6 +104,9 @@ Also shipped:
 
 - `Image`: displays an image and allows you to size and transform it.
 - `Checkbox`: a checkbox for a two-state value, with a label and disabled state.
+- `Problems(Items)`: a form's unfinished-field sentences, usually `Input.Problems` from a projection
+  (see `Tao Data.md`), one line each; it renders nothing when the list is empty, and its clauses
+  style every line.
 - `Placeholder(Label)`: an explicit unfinished-content leaf. Development renders a labelled hatch;
   release renders no content while preserving the occurrence's declared layout. `tao check` warns
   when ordinary application source still renders one.

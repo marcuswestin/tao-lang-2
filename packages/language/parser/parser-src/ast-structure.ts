@@ -224,6 +224,31 @@ export function scenarioSteps(scenario: AST.ScenarioDeclaration): AST.ScenarioSt
   return scenario.block.steps
 }
 
+/** findOwningTest returns the nearest test containing `node`, if any, excluding `node` itself. */
+export function findOwningTest(node: AST.Node): AST.TestDeclaration | undefined {
+  return findAncestor(node, AST.isTestDeclaration, false)
+}
+
+/**
+ * effectiveTestClause resolves one test's device/fixture clause over its nearest ancestor test's,
+ * walking up through however many tests it is nested inside. A nested test that repeats the clause
+ * overrides every ancestor's; one that does not inherits the nearest ancestor that does.
+ */
+export function effectiveTestClause<ClauseT extends AST.TestHeadClause>(
+  test: AST.TestDeclaration,
+  predicate: (clause: AST.TestHeadClause) => clause is ClauseT,
+): ClauseT | undefined {
+  let current: AST.TestDeclaration | undefined = test
+  while (current) {
+    const own = current.headClauses.find(predicate)
+    if (own) {
+      return own
+    }
+    current = findOwningTest(current)
+  }
+  return undefined
+}
+
 /** effectiveScenarioClause resolves one entry clause over the matching group default. */
 export function effectiveScenarioClause<ClauseT extends AST.ScenarioClause>(
   scenario: AST.ScenarioDeclaration,
@@ -311,6 +336,7 @@ export type ImportableValueDeclaration =
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
+  | AST.PhraseDeclaration
   | AST.ViewDeclaration
 
 /** importableValueDeclarationsInFile returns file-level value declarations visible to other files. */
@@ -423,6 +449,11 @@ export function traitIsTitle(trait: AST.Trait): boolean {
   return trait.word === 'title'
 }
 
+/** traitIsRequired identifies `required "<sentence>"`: completeness that never blocks a write. */
+export function traitIsRequired(trait: AST.Trait): trait is AST.Trait & { sentence: string } {
+  return trait.sentence !== undefined
+}
+
 /** loopSelectHandlers returns the direct row-selection handlers declared by one loop. */
 export function loopSelectHandlers(loop: AST.ForStatement): AST.LoopSelectHandler[] {
   return loop.block.statements.filter(AST.isLoopSelectHandler)
@@ -507,6 +538,7 @@ export function isImportableValueDeclaration(node: AST.Node): node is Importable
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
     || AST.isDesignDeclaration(node)
+    || AST.isPhraseDeclaration(node)
     || AST.isViewDeclaration(node)
 }
 
@@ -1075,6 +1107,11 @@ export function actionFailuresOf(action: AST.ActionDeclaration): AST.FailStateme
 /** findOwningFunction returns the pure function declaration that owns `node`, if any. */
 export function findOwningFunction(node: AST.Node): AST.FunctionDeclaration | undefined {
   return findAncestor(node, AST.isFunctionDeclaration)
+}
+
+/** findOwningPhrase returns the phrase declaration that owns `node`, if any. */
+export function findOwningPhrase(node: AST.Node): AST.PhraseDeclaration | undefined {
+  return findAncestor(node, AST.isPhraseDeclaration)
 }
 
 /** findOwningActionBlock returns the named or inline action block that owns `node`, if any. */

@@ -3,7 +3,7 @@ use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav f
 use primary from @tao/keys
 use CountWords, Join from @tao/text
 use Interval from @tao/time
-use Checkbox, Col, FormButton, Icon, Image, Panes, Placeholder, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Checkbox, Col, FormButton, Icon, Image, Panes, Placeholder, Problems, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use Editor as ProseEditor from @prose // imports may be renamed locally
 
 // WordFlower/Revolution is the tier beyond the v1 release: functionality Tao eventually intends to
@@ -200,6 +200,11 @@ design WordFlowerDesign {
                   radius md, weight 700]
       Checkbox [ink ink]
       Progress [background edge, ink accent, radius 999]
+      statusDot [width sm, height sm, radius xs]
+
+      // The active tab takes its look from the same default, through the host-supplied `selected`.
+      NavigationTab [pad sm, radius sm, ink muted, background accent.20 when selected,
+                     ink accent.60 when selected]
 
       // The generated interaction layers are runtime renderings; an app restyles them here without
       // declaring or owning them (KEY-D13).
@@ -555,7 +560,7 @@ command Duplicate(Document) {
 
 command Export(Document) {
    Title "Export document"
-   Description "Writes this document out in a chosen format."
+   Description "Shares the saved document in a chosen format."
    Summary "Export { Document.Title }"
    Icon "square.and.arrow.up"
    Key primary + "e"
@@ -580,11 +585,13 @@ command Delete(Document) {
 // form of its own exists. `implement inject` and the inline fence are retired.
 text BuildStamp = BuildStamp() from ./Shell.ts
 
-// A foreign action has no Tao body and declares its failure cases on the declaration head. A stub in
-// a journey picks a declared case, so renaming one breaks the test at compile time.
-action ExportDocument(Document, Format ExportFormat) returns text
+// A foreign action has no Tao body and declares its failure cases on the declaration head. The MVP
+// shares Markdown; this tier adds format choice without changing the action's outcome vocabulary.
+type ExportFailure is one of Offline, TooLarge, Cancelled
+action ExportDocument(Document, Format ExportFormat)
    fails Offline "Exporting needs a connection."
-   fails Rejected "The export service rejected this document."
+   fails TooLarge "This document is too long to export."
+   fails Cancelled ""
    from ./Export.ts
 
 // A foreign view declares its TypeScript implementation in its head. Tao owns the parameter,
@@ -683,38 +690,41 @@ view TagSummary(Tags PromptTags) {
 // Workspaces
 // ---------------------------------------------------------------------------------------------
 
+// A projection selects the fields a form edits and carries their `required` sentences.
+type WorkspaceInput is Workspace { Name }
+
 // A declaration that fills host-facing chrome is a `scene`, and a scene is presented rather than
 // composed inline. `Title`, `Toolbar`, and `Header` live on `scene` alone, so a view that is only
 // ever composed cannot declare chrome nothing reads.
 scene WorkspaceList() {
    Title "WordFlower"
-   state WorkspaceName = ""
+   state Input = WorkspaceInput { Name: "" }
    query Workspaces {
       order by Pinned descending // what the Pin command is for; the entity's CreatedAt breaks ties
    }
    // An `action` is private: it carries no `Title`, `Description`, or `Summary` and is never
    // surfaced. `check` is the action's early exit — `guard` is the view-side construct and tests a
-   // data object's availability, never a boolean.
+   // data object's availability, never a boolean. The form edits a projection, which carries Name's
+   // `required` sentence; `validate` stays the store's own rule and rejects the write regardless.
    action AddWorkspace() {
-      if WorkspaceName is empty {
+      if Input.Incomplete {
          present WorkspaceNameNotice() as overlay
       }
-      check WorkspaceName is not empty
-      create Workspace {
-         Name: WorkspaceName
-      }
-      set WorkspaceName = ""
+      check not Input.Incomplete
+      create Workspace with Input
+      set Input = WorkspaceInput { Name: "" }
    }
    render ScrollView() [screen] {
       Col() [width max column, centered, gap sm] {
          Text("WordFlower") [title]
          Text(Tagline) [body]
          #workspaceName
-         TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Novel") {
+         TextInput(Value: Input.Name, Label: "Workspace name", Placeholder: "Novel") {
             on submit AddWorkspace
          }
+         Problems(Input.Problems) [validation]
          #addWorkspace
-         FormButton("Add workspace", Icon: "plus", Disabled: WorkspaceName is empty) {
+         FormButton("Add workspace", Icon: "plus", Disabled: Input.Incomplete) {
             on press AddWorkspace
          }
          #activateWorkspaceTab
@@ -783,12 +793,16 @@ view WorkspaceNameNotice() {
 scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
    Title Workspace.Name
    state DocumentTitle = ""
+   state Find = ""
    let SectionLabel = "Drafts"
+   // `search` narrows over the entity's `(search)` fields the way keyboard narrowing does.
    query Drafts from Workspace.Documents {
       where is Draft
+      search Find
    }
    query FinishedDocuments from Workspace.Documents {
       where is Final
+      search Find
    }
    // A command is a configured value: its slots are parameters, and its block holds metadata members
    // and exactly one `do`. This one is declared in the scene because it closes over that scene's own
@@ -839,6 +853,10 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
          when DocumentTitle {
             empty -> { Text("Document title is required") }
             otherwise -> { Text(DocumentTitle) }
+         }
+         #findDocuments
+         TextInput(Value: Find, Label: "Find in this workspace", Placeholder: "Title or words") {
+            on submit -> { } // the lists narrow as the term changes; there is nothing to submit
          }
          #addDocument
          FormButton("Add document", Disabled: DocumentTitle is empty) {
@@ -934,6 +952,15 @@ view EmptyInspector() {
    render Text("Select a paragraph")
 }
 
+// A status label led by a dot in the caller's color. The dot sits inside the badge, where a caller's
+// clauses cannot reach, so its color travels as a `color` value; a Capitalized word in a clause list
+// is a value, so `background Tint` reads it.
+view StatusBadge(Label text, Tint color default muted) {
+   render Row() [gap xs] {
+      Box() [statusDot, background Tint]
+      Text(Label)
+}  }
+
 view FileTree(Workspace) {
    query Documents from Workspace.Documents { }
    render Col() [gap xs, pad sm] {
@@ -946,6 +973,12 @@ view FileTree(Workspace) {
                // Relative @documents resolves to the nearest unique pane; `reveal` focuses an equal
                // mount rather than stacking a second copy of the same product state.
                on press -> { reveal DocumentScreen(Document) in @documents }
+            }
+            if Document.Final is Final {
+               StatusBadge("Final", Tint: accent)
+            }
+            if Document.Final is Draft {
+               StatusBadge("Draft")
             }
             #openRooted
             FormButton("Rooted") {
@@ -1013,7 +1046,7 @@ view DocumentEditor(Document) {
    action SaveDocument() runs single {
       set PreviousTitle = Document.Title
       set PreviousBody = Document.Body
-      check Input.Title is not empty
+      check not Input.Incomplete
       update Document with Input
       set SaveCount += 1
       // A keyed toast replaces the same key instead of stacking.
@@ -1049,6 +1082,7 @@ view DocumentEditor(Document) {
       TextInput(Value: Input.Title, Label: "Document title", Placeholder: "Document title") {
          on submit SaveDocument
       }
+      Problems(Input.Problems) [validation]
       #documentBody
       TextInput(Value: Input.Body, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
          on submit SaveDocument
@@ -1357,18 +1391,19 @@ view ReadingView(Document) {
    }
 }
 
-// A publishing flow: text-literal cases, a duration-typed state, a foreign action that declares its
-// own failure cases, and §5's outcome vocabulary at the calling site. There is no second, write-only
-// net, so a site that fires an effect names the outcomes it treats.
+// An export flow: text-literal format cases, a duration-typed state, a foreign action that declares
+// its own failure cases, and §5's outcome vocabulary at the calling site.
 view ExportPanel(Document) {
    state Format = ExportFormat."markdown"
    state Countdown = 30.s
 
    action RunExport() runs single {
       when do ExportDocument(Document, Format: Format) {
-         saved -> { present Notice("Exported") as toast (Key: "export", Duration: 3.s) }
-         queued -> { present Notice("Saved — it will export when you are back online") as toast (Key: "export", Duration: 3.s) }
+         saved -> { present Notice("Ready to share") as toast (Key: "export", Duration: 3.s) }
+         Offline -> { present Notice("Exporting needs a connection.") as toast (Key: "export", Duration: 5.s) }
+         Cancelled -> { }
          rejected -> Problem { present Notice(Problem) as toast (Key: "export", Duration: 5.s) }
+         error -> Message { present Notice(Message) as toast (Key: "export", Duration: 5.s) }
       }
    }
 

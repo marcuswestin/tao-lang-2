@@ -1,8 +1,8 @@
-import { Diagnostic, FS, Platform } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Diagnostic, FS, Platform, Repo } from '@shared'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { CheckCache } from '../cli-src/check-cache'
-import { type CheckWorkspaceOutcome, runCheck } from '../cli-src/source-commands'
-import { withTaoFixture } from './test-cli-files'
+import { type CheckWorkspaceOutcome, runCheck, runFix } from '../cli-src/source-commands'
+import { withGitTaoFixture, withTaoFixture } from './test-cli-files'
 
 /**
  * `tao check` skips a workspace whose inputs are byte-identical to the ones behind its last clean
@@ -43,10 +43,75 @@ async function checkedWorkspaces(
 }
 
 Describe('tao check per-workspace stamp', () => {
+  Test('checks a no-project temp file without entering an unreadable sibling', async () => {
+    const rootDir = await mkTestDir('tao-check-unreadable-sibling-')
+    const deniedRoot = FS.resolvePath('denied', rootDir)
+    try {
+      const appPath = FS.resolvePath('fixture/App.tao', rootDir)
+      await FS.writeText(appPath, CANONICAL_VIEW)
+      await FS.writeText(FS.resolvePath('Secret.txt', deniedRoot), 'private\n')
+      await FS.chmod(deniedRoot, 0o000)
+      await Expect(FS.listDir(deniedRoot)).rejects.toThrow()
+
+      const results = await runCheck(appPath)
+      const app = results.find(result => result.path === appPath)
+      Expect(app?.error).toBeUndefined()
+      Expect(app?.diagnostics?.some(Diagnostic.isError)).toBe(true)
+    } finally {
+      await FS.chmod(deniedRoot, 0o700).catch(() => {})
+      await FS.remove(rootDir)
+    }
+  })
+
+  Test('checks a standalone file at a Git root containing a directory symlink', async () => {
+    await withGitTaoFixture(
+      { 'App.tao': CANONICAL_VIEW, 'linked/Sidecar.ts': 'export const value = 1\n' },
+      async rootDir => {
+        const linkPath = FS.resolvePath('directory-link', rootDir)
+        await FS.symlink('linked', linkPath)
+        Expect(await Repo.filesUnder(rootDir)).toContain(linkPath)
+        Expect(await CheckCache.open({ repositoryRoot: rootDir })).toBeDefined()
+        const results = await runCheck('App.tao', { cwd: rootDir, cache: { repositoryRoot: rootDir } })
+
+        Expect(results.map(result => FS.relativePath(rootDir, result.path))).toContain('App.tao')
+      },
+    )
+  })
+
   Test('checks every workspace cold and replays every workspace warm', async () => {
     await withTaoFixture(TWO_WORKSPACES, async rootDir => {
       Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'checked', AppTwo: 'checked' })
       Expect(await checkedWorkspaces(rootDir)).toEqual({ AppOne: 'replayed', AppTwo: 'replayed' })
+    })
+  })
+
+  Test('regenerates deleted metadata for an imported bridge on a targeted cached check', async () => {
+    await withGitTaoFixture({
+      'App/.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
+      'App/Project.tao': 'project {\n   id "check-cache-bridge"\n   name "Check cache bridge"\n}\n',
+      'App/Main.tao': `use CountWords from ./Bridge.tao
+
+function Total() returns number {
+   return CountWords("hello")
+}
+`,
+      'App/Bridge.tao': `public function CountWords(Value text) returns number {
+   return CountWords(Value) from ./Words.ts
+}
+`,
+      'App/Words.ts': 'export function CountWords(value: string): number { return value.length }\n',
+    }, async rootDir => {
+      const main = FS.resolvePath('App/Main.tao', rootDir)
+      const metadata = FS.resolvePath('App/Bridge.tao.ts', rootDir)
+      await runFix(FS.resolvePath('App', rootDir))
+      const first = await runCheck(main, { cache: { repositoryRoot: rootDir } })
+      Expect(first.flatMap(result => result.diagnostics ?? []).filter(Diagnostic.isError)).toEqual([])
+      Expect(first.map(result => result.status)).toEqual(['unchanged'])
+      Expect(await FS.isFile(metadata)).toBe(true)
+      Expect(await checkedWorkspaces(rootDir, main)).toEqual({ App: 'replayed' })
+      await FS.remove(metadata)
+      Expect(await checkedWorkspaces(rootDir, main)).toEqual({ App: 'checked' })
+      Expect(await FS.isFile(metadata)).toBe(true)
     })
   })
 

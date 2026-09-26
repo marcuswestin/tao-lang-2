@@ -63,6 +63,12 @@ namespace TestCompiler {
   /** Step declares one ordered runtime test operation after app launch. */
   export type Step = CompiledTestCheck['steps'][number]
 
+  /** Device declares an `on <device>` check's effective viewport preset. */
+  export type Device = NonNullable<CompiledTestCheck['device']>
+
+  /** Fixture declares a `with <fixture>` check's effective created rows. */
+  export type Fixture = NonNullable<CompiledTestCheck['fixture']>
+
   /** App declares a precompiled app module for a check. */
   export type App = {
     modulePath: string
@@ -159,6 +165,8 @@ namespace TestCompiler {
 export type Context = TestCompiler.Context
 export type Source = TestCompiler.Source
 export type Step = TestCompiler.Step
+export type Device = TestCompiler.Device
+export type Fixture = TestCompiler.Fixture
 export type App = TestCompiler.App
 export type Check = TestCompiler.Check
 export type Suite = TestCompiler.Suite
@@ -258,6 +266,9 @@ async function checkForPlan(
     name: check.name,
     source: check.source,
     steps: check.steps,
+    actionFailureStubs: check.actionFailureStubs,
+    ...(check.device === undefined ? {} : { device: check.device }),
+    ...(check.fixture === undefined ? {} : { fixture: check.fixture }),
   }
 }
 

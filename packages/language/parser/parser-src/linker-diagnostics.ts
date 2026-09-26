@@ -18,6 +18,11 @@ export function unresolvedReferenceMessage(reference: LinkerReference): string |
   if (referenceType === undefined) {
     return undefined
   }
+  // Where a `color` may be expected, a lowercase name is looked up among the mounted designs' colors
+  // too, so a size, a style, or a misspelling is reported against both tables it missed.
+  if (/^[a-z]/.test(reference.$refText) && AST.isDesignColorPosition(info.container)) {
+    return `No ${declarationWord(referenceType)} or design color named '${reference.$refText}' is in scope.`
+  }
   return `No ${declarationWord(referenceType)} named '${reference.$refText}' is in scope.`
 }
 

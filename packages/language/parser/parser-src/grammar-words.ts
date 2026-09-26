@@ -79,6 +79,7 @@ const CONSTRUCT_WORDS: Readonly<Record<string, string>> = {
   Expression: 'value',
   FunctionBlock: 'function step',
   GuardActionCaseBlock: 'guard case',
+  GuardDefaultStatement: 'guard default case',
   GuardRenderCaseBlock: 'guard case',
   ParsedStatement: 'declaration',
   TypeExpression: 'type',

@@ -1,7 +1,7 @@
 import { HostControlError, type HostRevision, type HostSession } from '@host-control'
 import { createPlaywrightHostController } from '@playwright-driver'
 import { expect as Expect, test as Test } from '@playwright/test'
-import { FS, Platform, Time } from '@shared'
+import { FS, Platform, Repo, Time } from '@shared'
 
 const Describe = Test.describe
 
@@ -399,7 +399,7 @@ async function withFixturePage(
     writeFixture: (nextSource: string) => Promise<void>,
   ) => Promise<void>,
 ): Promise<void> {
-  const root = await FS.mkTmpDir('tao-playwright-host-control-')
+  const root = await Repo.mkScratchDir('tao-playwright-host-control-')
   const fixturePath = FS.resolvePath('fixture.html', root)
   const artifactRoot = FS.resolvePath('artifacts', root)
   const writeFixture = async (nextSource: string) => await FS.writeText(fixturePath, nextSource)

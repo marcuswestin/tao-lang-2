@@ -2,8 +2,8 @@
 # Git metadata writes outside the worktree are routed through Auto-review.
 #
 # Tracked so a new worktree has its permission profile before setup or session hooks run.
-# Unix socket entries must be absolute; setup refreshes those machine-specific values.
-# Review any resulting config diff before committing it on another machine.
+# It names no login: Codex accepts only absolute Unix socket paths, so a home-relative socket
+# in the canonical rules is left out here and reached through a named host operation instead.
 #
 # Generated with .codex/rules/tao.rules by `./agent setup` from .rulesync/permissions.jsonc
 # and .rulesync/profiles.jsonc. Edit those canonical files, not either generated Codex output:
@@ -32,7 +32,7 @@ network_proxy = true
 # agents/skills/delegation/SKILL.md, which is the one place this repository spells a model name.
 [agents]
 enabled = true
-default_subagent_model = "gpt-5.6-terra"
+default_subagent_model = "gpt-6-sol"
 default_subagent_reasoning_effort = "medium"
 max_concurrent_threads_per_session = 5
 
@@ -77,6 +77,7 @@ enabled = true
 "exp.host" = "allow"
 "gsa.apple.com" = "allow"
 "idmsa.apple.com" = "allow"
+"repo.reactnative.dev" = "allow"
 "repo1.maven.org" = "allow"
 "swcdn.apple.com" = "allow"
 "swdist.apple.com" = "allow"
@@ -95,7 +96,6 @@ description = "Tao worktree: write the workspace, read the reference repo, reach
 "~/.android" = "write"
 "~/.expo" = "write"
 "~/.hutch" = "write"
-"~/.local/state/watchman" = "write"
 "~/Library/Caches" = "write"
 # The previous repository is reference material only (see AGENTS.md).
 "~/code/tao-lang" = "read"
@@ -107,7 +107,6 @@ allow_local_binding = true
 
 [permissions.tao-workspace.network.unix_sockets]
 "/nix/var/nix/daemon-socket/socket" = "allow"
-"/Users/ro/.local/state/watchman" = "allow"
 
 # Allowlist-first: shell egress is limited to the hosts Tao's toolchain and research need.
 [permissions.tao-workspace.network.domains]
@@ -130,6 +129,7 @@ allow_local_binding = true
 "exp.host" = "allow"
 "gsa.apple.com" = "allow"
 "idmsa.apple.com" = "allow"
+"repo.reactnative.dev" = "allow"
 "repo1.maven.org" = "allow"
 "swcdn.apple.com" = "allow"
 "swdist.apple.com" = "allow"
@@ -149,7 +149,6 @@ description = "Tao local services: opt in to the Docker daemon used by the local
 
 [permissions.tao-local-services.network.unix_sockets]
 "/var/run/docker.sock" = "allow"
-"/Users/ro/.docker/run/docker.sock" = "allow"
 
 [permissions.tao-release]
 extends = "tao-native"

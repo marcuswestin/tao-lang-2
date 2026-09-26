@@ -15,7 +15,9 @@ import { VerificationLanes } from './VerificationLanes'
  * the merge message is written only when none exists, or when `--redraft` explicitly asks for a new
  * one. Recorded state now decides one thing — whether a kept message is *proved* to cover the HEAD
  * finalize is looking at, or whether the report has to ask the author to confirm it. Main
- * integration and verification never trust it: integration re-asks Git whether main is already an
+ * integration and verification never trust it. A generated `DRAFT:` message additionally needs a
+ * byte-changing author edit; recorded finalize state alone can never turn the draft into review.
+ * Integration re-asks Git whether main is already an
  * ancestor (a single cheap command), and verification is gated entirely by `GreenTree`, whose
  * records are keyed by tree content, not by anything this file writes. A missing, unreadable,
  * malformed, or older-version state file therefore degrades to keeping the message and saying it
@@ -102,6 +104,8 @@ export type FinalizeCommandRunner = (command: string, spec: CLI.CommandSpec) => 
 
 /** FinalizeDependencies isolates process, filesystem, verification, and clock effects for testing. */
 export type FinalizeDependencies = {
+  /** Whether this process may write an existing file, found by opening it without changing it. */
+  canWriteFile: (path: string) => Promise<boolean>
   exists: (path: string) => Promise<boolean>
   findGreenTree: (
     repositoryRoot: string,
@@ -111,9 +115,11 @@ export type FinalizeDependencies = {
   ) => Promise<GreenTreeMatch | undefined>
   /** The tree-plus-toolchain identity a record must match; see `GreenTree.key`. */
   key: (repositoryRoot: string) => Promise<GreenTreeKey>
+  isSymbolicLink: (path: string) => Promise<boolean>
   makeProbeDirectory: (prefix: string) => Promise<string>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
+  realPath: (path: string) => Promise<string>
   readText: (path: string) => Promise<string>
   removeFile: (path: string) => Promise<void>
   run: FinalizeCommandRunner
@@ -123,12 +129,23 @@ export type FinalizeDependencies = {
 }
 
 const defaultDependencies: FinalizeDependencies = {
+  canWriteFile: async path => {
+    try {
+      // Append mode writes nothing on open, so an existing file's bytes and times are untouched.
+      await (await FS.openAppend(path)).close()
+      return true
+    } catch {
+      return false
+    }
+  },
   exists: FS.exists,
   findGreenTree: GreenTree.find,
+  isSymbolicLink: FS.isSymbolicLink,
   key: GreenTree.key,
   makeProbeDirectory: FS.mkTmpDir,
   now: () => new Date(),
   readJson: FS.readJson,
+  realPath: FS.realPath,
   readText: FS.readText,
   removeFile: FS.remove,
   run: CLI.run,
@@ -146,8 +163,8 @@ const defaultDependencies: FinalizeDependencies = {
 export type FinalizeState = {
   headSha: string
   mainIntegratedSha: string
-  /** The HEAD the merge message on disk is known to cover — the HEAD it was drafted for, or the
-   * HEAD at which finalize last kept and reported it. Never a licence to replace the file. */
+  /** The HEAD the merge message on disk is known to cover. A generated draft additionally needs an
+   * author edit recorded by `DraftReviewState`; this field alone never marks it reviewed. */
   messageHeadSha: string
   updatedAt: string
   verifiedAt: string
@@ -163,6 +180,13 @@ type MainIntegration = {
   integratedNow: boolean
   mainSha: string
 }
+
+/** The commands that integrate main, which word a failure's next step differently. */
+type IntegratingCommand = 'finalize' | 'merge-main'
+
+/** The one recovery for a merge the sandbox would half-write, named wherever that failure is reported. */
+const UNSANDBOXED_MERGE =
+  'run `./agent unsandboxed merge-main`, which makes this merge on the host, where those paths are writable'
 
 type VerificationOutcome = {
   at: string
@@ -215,16 +239,17 @@ export const FinalizeCommand = {
     const lines: string[] = []
     const remaining: string[] = []
 
-    const branch = await assertOnFeatureBranch(dependencies, root)
-    await assertCleanWorktree(dependencies, root)
+    const branch = await assertOnFeatureBranch(dependencies, root, 'finalize')
+    await assertCleanWorktree(dependencies, root, 'finalize')
 
-    const integration = await integrateMain(dependencies, root, check, lines)
+    const integration = await integrateMain(dependencies, root, check, lines, 'finalize')
     const verification = await verifyTree(dependencies, root, check, lines)
 
     const statePath = FS.resolvePath(`.artifacts/merge/${branch}.state.json`, root)
     const priorState = options.fresh === true ? undefined : await loadState(dependencies, statePath)
 
     const messageFile = FS.resolvePath(options.messageFile ?? `.artifacts/merge/${branch}.msg`, root)
+    const reviewPath = `${messageFile}.review.json`
     const message = await draftOrKeepMessage(
       dependencies,
       root,
@@ -237,6 +262,9 @@ export const FinalizeCommand = {
       options.redraft === true,
       lines,
     )
+    if (!check && message.decision !== 'kept') {
+      await recordDraftReview(dependencies, reviewPath, messageFile, integration.headSha)
+    }
     remaining.push(...messageRemaining(message, messageFile))
 
     // Advisory judgments never gate finalize's own exit code — the brief is explicit that this list
@@ -270,7 +298,7 @@ export const FinalizeCommand = {
 export type LandOptions = {
   /** Report the readiness of this branch and the plan, and change nothing. */
   dryRun?: boolean
-  /** Override `.artifacts/merge/<branch>.msg`. */
+  /** Must resolve exactly to this branch's canonical `.artifacts/merge/<branch>.msg`. */
   messageFile?: string
   /** Override the current repository root, principally for tests. */
   repositoryRoot?: string
@@ -311,9 +339,23 @@ export const LandCommand = {
     dependencies: FinalizeDependencies = defaultDependencies,
   ): Promise<LandResult> {
     const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+    if (options.skipVerify === true && options.skipVerifyFull === true) {
+      Errors.throwUserInput(
+        '`land` cannot combine --skip-verify-full with --skip-verify because that would land '
+          + 'unverified bytes without confirmation. Use the lower-level `merge-with-main --skip-all` '
+          + 'workflow when a person has explicitly chosen and confirmed that exception.',
+      )
+    }
+    const branch = await assertOnFeatureBranch(dependencies, root, 'land')
+    const messageFile = await assertCanonicalLandingMessageFile(
+      dependencies,
+      root,
+      branch,
+      options.messageFile,
+    )
     const preparation = await prepareForLanding(
       {
-        ...(options.messageFile === undefined ? {} : { messageFile: options.messageFile }),
+        messageFile,
         redraft: options.redraft === true,
         repositoryRoot: root,
       },
@@ -328,7 +370,7 @@ export const LandCommand = {
 
     const merge = await MergeWithMainCommand.run({
       dryRun: options.dryRun === true,
-      ...(options.messageFile === undefined ? {} : { messageFile: options.messageFile }),
+      messageFile,
       repositoryRoot: root,
       skipVerify: options.skipVerify === true,
       skipVerifyFull: options.skipVerifyFull === true,
@@ -336,6 +378,128 @@ export const LandCommand = {
     return { lines: [...preparation.lines, ...merge.lines], mode: merge.mode === 'dry-run' ? 'dry-run' : 'executed' }
   },
 } as const
+
+/**
+ * MergeMainCommand integrates current main into this feature branch and does nothing else: no lane,
+ * no merge message. Most of main's commits write paths a harness write-protects against shell
+ * commands (`agents/skills`, `.claude/settings.json`), so inside a sandbox this refuses before
+ * starting, exactly as `finalize` does. Run as `./agent unsandboxed merge-main`, the same integration
+ * completes on the host, which is the one sanctioned way for an agent to bring such a main in
+ * without landing.
+ */
+export const MergeMainCommand = {
+  async run(
+    options: Pick<FinalizeOptions, 'repositoryRoot'> = {},
+    dependencies: FinalizeDependencies = defaultDependencies,
+  ): Promise<{ lines: string[]; mergedNow: boolean }> {
+    const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+    const lines: string[] = []
+    await assertOnFeatureBranch(dependencies, root, 'merge-main')
+    await assertCleanWorktree(dependencies, root, 'merge-main')
+    const integration = await integrateMain(dependencies, root, false, lines, 'merge-main')
+    writeLines(dependencies, lines)
+    return { lines, mergedNow: integration.integratedNow }
+  },
+} as const
+
+/** Start a new feature branch at freshly fetched origin/main after proving checkout writes safe. */
+export const StartBranchCommand = {
+  async run(
+    name: string,
+    options: Pick<FinalizeOptions, 'repositoryRoot'> = {},
+    dependencies: FinalizeDependencies = defaultDependencies,
+  ): Promise<void> {
+    const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+    if (!name.startsWith('feat/') || name === 'feat/') {
+      Errors.throwUserInput(`start-branch requires a feat/* branch name; got '${name}'.`)
+    }
+    const validName = await dependencies.run('git', {
+      args: ['check-ref-format', '--branch', name],
+      cwd: root,
+      stdio: 'pipe',
+    })
+    if (validName.exitCode !== 0) {
+      Errors.throwUserInput(`Invalid feature branch name: ${name}.`)
+    }
+    await assertCleanWorktree(dependencies, root, 'start-branch')
+    const existing = await dependencies.run('git', {
+      args: ['show-ref', '--verify', '--quiet', `refs/heads/${name}`],
+      cwd: root,
+      stdio: 'pipe',
+    })
+    if (existing.exitCode === 0) {
+      Errors.throwUserInput(`Feature branch '${name}' already exists.`)
+    }
+    if (existing.exitCode !== 1) {
+      assertCommandSucceeded(existing)
+    }
+    await git(dependencies, root, ['fetch', '--quiet', REMOTE, MAIN_BRANCH])
+    const mainSha = (await git(dependencies, root, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`])).stdout.trim()
+    const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
+    const diff = await git(dependencies, root, ['diff', '--name-only', '--no-renames', '-z', headSha, mainSha])
+    const blocked = await unwritablePaths(dependencies, root, diff.stdout.split('\0').filter(Boolean))
+    if (blocked.length > 0) {
+      Errors.throwHostEnvironment(
+        `Starting '${name}' from origin/main would write paths this shell may not:\n`
+          + blocked.map(path => `- ${path}`).join('\n')
+          + `\nThe checkout and HEAD are untouched; run \`./agent unsandboxed start-branch ${name}\`.`,
+      )
+    }
+    await git(dependencies, root, ['switch', '--no-track', '-c', name, mainSha])
+    const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
+    if (status !== '') {
+      Errors.throwHostEnvironment(
+        `Git switched to '${name}' but left a dirty checkout. Inspect these paths before continuing:\n${status.trimEnd()}`,
+      )
+    }
+    dependencies.writeLine(`Started '${name}' from origin/main (${shortSha(mainSha)}).`)
+  },
+} as const
+
+/**
+ * The agent landing runs with host access, so its unlocked message preparation is restricted to the
+ * one repository-owned artifact for this branch. The lower-level merge command keeps its explicit
+ * override for a person, while this path rejects both lexical escapes and symlink components before
+ * any message bytes are read or written.
+ */
+async function assertCanonicalLandingMessageFile(
+  dependencies: FinalizeDependencies,
+  root: string,
+  branch: string,
+  configuredPath: string | undefined,
+): Promise<string> {
+  const expected = FS.resolvePath(`.artifacts/merge/${branch}.msg`, root)
+  const requested = FS.resolvePath(configuredPath ?? expected, root)
+  if (requested !== expected) {
+    Errors.throwUserInput(
+      `\`land\` only accepts its canonical merge message: ${FS.displayPath(expected)}. `
+        + 'Use the lower-level human workflow for an explicit alternate message file.',
+    )
+  }
+
+  const physicalRoot = await dependencies.realPath(root)
+  if (!FS.pathIsWithin(FS.resolvePath(FS.relativePath(root, requested), physicalRoot), physicalRoot)) {
+    Errors.throwUserInput('The canonical landing merge message resolves outside the repository.')
+  }
+  let component = root
+  for (const name of FS.relativePath(root, requested).split('/').filter(Boolean)) {
+    component = FS.resolvePath(name, component)
+    if (await dependencies.isSymbolicLink(component)) {
+      Errors.throwUserInput(
+        `The canonical landing merge message crosses a symbolic link: ${FS.displayPath(component)}.`,
+      )
+    }
+    if (await dependencies.exists(component)) {
+      const physicalComponent = await dependencies.realPath(component)
+      if (!FS.pathIsWithin(physicalComponent, physicalRoot)) {
+        Errors.throwUserInput(
+          `The canonical landing merge message resolves outside the repository: ${FS.displayPath(component)}.`,
+        )
+      }
+    }
+  }
+  return requested
+}
 
 /** LandingPreparation is everything settled before the lock is taken. */
 export type LandingPreparation = {
@@ -362,8 +526,8 @@ export async function prepareForLanding(
   const lines: string[] = []
   const remaining: string[] = []
 
-  const branch = await assertOnFeatureBranch(dependencies, root)
-  await assertCleanWorktree(dependencies, root)
+  const branch = await assertOnFeatureBranch(dependencies, root, 'land')
+  await assertCleanWorktree(dependencies, root, 'land')
 
   const mainSha = await readMainSha(dependencies, root, lines)
   const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
@@ -495,7 +659,11 @@ function keptMessageDefect(source: string): string {
   }
 }
 
-async function assertOnFeatureBranch(dependencies: FinalizeDependencies, root: string): Promise<string> {
+async function assertOnFeatureBranch(
+  dependencies: FinalizeDependencies,
+  root: string,
+  command: string,
+): Promise<string> {
   const branchResult = await dependencies.run('git', {
     args: ['symbolic-ref', '--quiet', '--short', 'HEAD'],
     cwd: root,
@@ -506,30 +674,30 @@ async function assertOnFeatureBranch(dependencies: FinalizeDependencies, root: s
   }
   const branch = branchResult.exitCode === 0 ? branchResult.stdout.trim() : ''
   if (!branch.startsWith('feat/')) {
-    Errors.throwUserInput(`finalize requires a feat/* branch; this worktree is on '${branch || 'detached HEAD'}'.`)
+    Errors.throwUserInput(`${command} requires a feat/* branch; this worktree is on '${branch || 'detached HEAD'}'.`)
   }
   return branch
 }
 
-async function assertCleanWorktree(dependencies: FinalizeDependencies, root: string): Promise<void> {
+async function assertCleanWorktree(dependencies: FinalizeDependencies, root: string, command: string): Promise<void> {
   const status = (await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout
   if (status !== '') {
     Errors.throwUserInput(
-      `The worktree is not clean; finalize refuses to guess what to do with it. Dirty paths:\n${status.trimEnd()}`,
+      `The worktree is not clean; ${command} refuses to guess what to do with it. Dirty paths:\n${status.trimEnd()}`,
     )
   }
 }
 
 /**
- * Integrate main when the branch does not already contain it. The remote fetches the
- * fixed GitHub ref and objects without exposing credentials; a direct fetch keeps human shells and
- * machines that have not installed it working, with local main as the final offline fallback.
+ * Integrate main when the branch does not already contain it. Fetch the remote main ref,
+ * with local main as the final offline fallback.
  */
 async function integrateMain(
   dependencies: FinalizeDependencies,
   root: string,
   check: boolean,
   lines: string[],
+  command: IntegratingCommand,
 ): Promise<MainIntegration> {
   const mainSha = await readMainSha(dependencies, root, lines)
   const branchHead = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
@@ -545,15 +713,18 @@ async function integrateMain(
     lines.push(`PLAN  Merge ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
     return { headSha: branchHead, integratedNow: false, mainSha }
   }
-  const blocked = await undeniableDirectories(dependencies, root, branchHead, mainSha)
+  const incoming = await git(dependencies, root, ['diff', '--name-only', '-z', `${branchHead}...${mainSha}`])
+  const blocked = await unwritablePaths(dependencies, root, incoming.stdout.split('\0').filter(Boolean))
   if (blocked.length > 0) {
-    Errors.throwUserInput(deniedIntegrationReport(blocked))
+    Errors.throwUserInput(deniedIntegrationReport(blocked, command))
   }
 
   const wouldConflict = await mergeTreeConflicts(dependencies, root, branchHead, mainSha)
   const merge = await dependencies.run('git', { args: ['merge', '--no-edit', mainSha], cwd: root, stdio: 'pipe' })
   if (merge.exitCode !== 0 || merge.error !== undefined || merge.signal !== null) {
-    Errors.throwUserInput(failedIntegrationReport(merge, wouldConflict, await unmergedPaths(dependencies, root)))
+    Errors.throwUserInput(
+      failedIntegrationReport(merge, wouldConflict, await unmergedPaths(dependencies, root), command),
+    )
   }
   const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
   lines.push(`PASS  Merged ${MAIN_BRANCH} at ${shortSha(mainSha)} into this branch.`)
@@ -615,31 +786,39 @@ async function mergeTreeConflicts(
 const WRITE_PROBE_PREFIX = '.finalize-write-probe-'
 
 /**
- * undeniableDirectories returns the directories `main` would write that this process cannot, empty
- * when the merge can complete. A sandboxed shell write-protects part of the worktree — `agents/skills`
- * among them, which 77 of `main`'s last 100 commits touch — and `git merge` discovers that partway
- * through, leaving a tree with no `MERGE_HEAD`, no unmerged entries, and modifications nobody made
- * (DEVENV-111). Refusing before the merge starts is the difference between an instruction and a mess.
+ * unwritablePaths returns the directories and files a checkout would write that this process cannot,
+ * empty when the checkout can complete. A sandboxed shell write-protects part of the worktree —
+ * `agents/skills` among them, which 77 of `main`'s last 100 commits touch — and `git merge` discovers
+ * that partway through, leaving a tree with no `MERGE_HEAD`, no unmerged entries, and modifications
+ * nobody made (DEVENV-111). Refusing before the merge starts is the difference between an instruction
+ * and a mess.
  *
  * The test is an actual write rather than a list of protected prefixes, because the list belongs to
  * the harness rather than to this repository: it is not in `.rulesync/permissions.jsonc`, it is not
- * in the generated settings, and a copy kept here would rot silently the first time it changed.
+ * in the generated settings, and a copy kept here would rot silently the first time it changed. A
+ * directory probe alone misses a protected file inside a writable directory, which is how
+ * `.claude/settings.json` is protected, so every existing file main changes is opened for writing too.
  */
-async function undeniableDirectories(
+async function unwritablePaths(
   dependencies: FinalizeDependencies,
   root: string,
-  branchHead: string,
-  mainSha: string,
+  paths: readonly string[],
 ): Promise<string[]> {
-  const incoming = await git(dependencies, root, ['diff', '--name-only', `${branchHead}...${mainSha}`])
   const directories = new Set<string>()
-  for (const path of incoming.stdout.trim().split('\n').filter(Boolean)) {
+  for (const path of paths) {
     directories.add(await nearestExistingDirectory(dependencies, root, FS.dirname(path)))
   }
   const blocked: string[] = []
   for (const directory of [...directories].sort()) {
     if (!await canWriteInto(dependencies, FS.resolvePath(directory, root))) {
       blocked.push(directory === '' ? '.' : directory)
+    }
+  }
+  for (const path of [...paths].sort()) {
+    const file = FS.resolvePath(path, root)
+    const insideBlocked = blocked.some(directory => directory === '.' || path.startsWith(`${directory}/`))
+    if (!insideBlocked && await dependencies.exists(file) && !await dependencies.canWriteFile(file)) {
+      blocked.push(path)
     }
   }
   return blocked
@@ -667,18 +846,24 @@ async function canWriteInto(dependencies: FinalizeDependencies, directory: strin
   } catch {
     return false
   }
-  // A probe that cannot be removed is worse than one never written, so its failure is not swallowed.
-  await dependencies.removeFile(probe)
+  try {
+    await dependencies.removeFile(probe)
+  } catch (error) {
+    Errors.throwHostEnvironment(
+      `The write probe could not be removed: ${probe}. `
+        + 'Remove this empty directory with rmdir from a normal Terminal, then rerun the command. '
+        + `Cleanup failed: ${Errors.asError(error).message}`,
+    )
+  }
   return true
 }
 
 /** deniedIntegrationReport says what the merge would half-write, and how to do it where it works. */
-function deniedIntegrationReport(blocked: readonly string[]): string {
-  return `Integrating ${MAIN_BRANCH} would write ${blocked.length} director${blocked.length === 1 ? 'y' : 'ies'} `
+function deniedIntegrationReport(blocked: readonly string[], command: IntegratingCommand): string {
+  return `Integrating ${MAIN_BRANCH} would write ${blocked.length} path${blocked.length === 1 ? '' : 's'} `
     + `this shell may not, so the merge would stop partway and leave a tree no Git command describes:\n`
     + `${blocked.map(path => `- ${path}`).join('\n')}\n`
-    + `Nothing has been changed. Run \`git merge ${REMOTE}/${MAIN_BRANCH}\` yourself as a top-level `
-    + 'command — the sandbox exclusion reaches it there but not inside finalize — and finalize again.'
+    + `Nothing has been changed; ${UNSANDBOXED_MERGE}${command === 'finalize' ? ', then finalize again' : ''}.`
 }
 
 /** unmergedPaths reads the conflicts a merge actually recorded, which a denied merge never wrote. */
@@ -702,11 +887,12 @@ function failedIntegrationReport(
   merge: { stderr?: string },
   wouldConflict: readonly string[],
   unmerged: readonly string[],
+  command: IntegratingCommand,
 ): string {
   const list = (paths: readonly string[]): string => paths.map(path => `- ${path}`).join('\n')
   if (unmerged.length > 0) {
-    return `Integrating ${MAIN_BRANCH} conflicted; resolve it by hand and finalize again. `
-      + `Conflicting paths:\n${list(unmerged)}`
+    return `Integrating ${MAIN_BRANCH} conflicted; resolve it by hand and `
+      + `${command === 'finalize' ? 'finalize again' : 'commit the merge'}. Conflicting paths:\n${list(unmerged)}`
   }
   const reason = (merge.stderr ?? '').trim()
   return `Integrating ${MAIN_BRANCH} did not complete, and it is not a conflict: the merge recorded no `
@@ -715,9 +901,8 @@ function failedIntegrationReport(
     + (wouldConflict.length === 0
       ? 'Nothing would have conflicted.\n'
       : `These paths would conflict:\n${list(wouldConflict)}\n`)
-    + `Run \`git merge ${MAIN_BRANCH}\` yourself as a top-level command and resolve it there. A `
-    + 'sandboxed shell denies the writes this merge needs under the paths the policy protects, and a '
-    + 'grandchild `git` inherits a sandbox that its top-level command is excluded from (DEVENV-111).'
+    + 'A sandboxed shell denies the writes this merge needs under the paths the policy protects '
+    + `(DEVENV-111). Once the worktree is back to its last commit, ${UNSANDBOXED_MERGE}.`
 }
 
 async function localMainSha(dependencies: FinalizeDependencies, root: string): Promise<string> {
@@ -791,9 +976,10 @@ async function verifyTree(
  * `check` reaches the same decision from the same inputs as a real run, so `--check` can no longer
  * describe the message differently from the run that follows it.
  *
- * A kept-but-unproved message is recorded against this HEAD once the run ends, so the confirmation
- * is asked for once rather than on every re-run of the landing convoy. The file itself is untouched
- * either way.
+ * A kept-but-unproved hand-written message is recorded against this HEAD once the run ends, so the
+ * confirmation is asked for once rather than on every re-run of the landing convoy. A generated
+ * draft stays unconfirmed until its review baseline proves that an author changed its bytes. The
+ * file itself is untouched either way.
  */
 async function draftOrKeepMessage(
   dependencies: FinalizeDependencies,
@@ -809,12 +995,13 @@ async function draftOrKeepMessage(
 ): Promise<MessageOutcome> {
   const messageExists = await dependencies.exists(messageFile)
   if (messageExists && !redraft) {
-    const malformed = keptMessageDefect(await dependencies.readText(messageFile))
+    const source = await dependencies.readText(messageFile)
+    const malformed = keptMessageDefect(source)
     if (malformed !== '') {
       lines.push(`FAIL  The kept merge message is not one the landing will accept: ${malformed}`)
       return { decision: 'kept', malformed, messageHeadSha: headSha, unconfirmedReason: '' }
     }
-    const unconfirmedReason = keptMessageReason(priorState, headSha, reviewedDraftHeadSha)
+    const unconfirmedReason = keptMessageReason(source, priorState, headSha, reviewedDraftHeadSha)
     lines.push(
       `PASS  Kept the existing merge message; ${
         unconfirmedReason === ''
@@ -847,18 +1034,22 @@ async function draftOrKeepMessage(
 }
 
 /**
- * Why a kept message cannot be called current, in the author's terms: either nothing records which
- * HEAD it was written for (it was written by hand, or the record was discarded by `--fresh`), or it
- * was recorded against an earlier HEAD and the branch has gained commits since. Empty means the
- * record proves it covers this HEAD.
+ * Why a kept message cannot be called current, in the author's terms: a generated draft has not
+ * changed from its review baseline, nothing records which HEAD a hand-written message was for, or
+ * it was recorded against an earlier HEAD and the branch has gained commits since. Empty means the
+ * applicable evidence proves it covers this HEAD.
  */
 function keptMessageReason(
+  source: string,
   priorState: FinalizeState | undefined,
   headSha: string,
   reviewedDraftHeadSha: string | undefined,
 ): string {
   if (reviewedDraftHeadSha === headSha) {
     return ''
+  }
+  if (source.startsWith(DRAFT_PREFIX)) {
+    return 'the generated draft has not been edited by its author'
   }
   if (priorState === undefined) {
     return 'nothing records which HEAD it was written for'
@@ -885,6 +1076,22 @@ async function loadDraftReview(
   } catch {
     return undefined
   }
+}
+
+async function recordDraftReview(
+  dependencies: FinalizeDependencies,
+  reviewPath: string,
+  messageFile: string,
+  headSha: string,
+): Promise<void> {
+  await dependencies.writeJson(
+    reviewPath,
+    {
+      draftText: await dependencies.readText(messageFile),
+      headSha,
+      version: DRAFT_REVIEW_VERSION,
+    } satisfies DraftReviewState,
+  )
 }
 
 async function readFeatureCommits(

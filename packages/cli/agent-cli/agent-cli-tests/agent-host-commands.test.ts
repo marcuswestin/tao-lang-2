@@ -1,7 +1,11 @@
 import { FS, Repo } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { AgentConfigFreshness } from '../agent-cli-src/agent-config/AgentConfigFreshness'
-import { agentHostCommands, renderClaudeHostSettings } from '../agent-cli-src/agent-config/AgentHostCommands'
+import {
+  agentHostCommands,
+  generateClaudeHostSettings,
+  renderClaudeHostSettings,
+} from '../agent-cli-src/agent-config/AgentHostCommands'
 import { CodexConfigGenerator } from '../agent-cli-src/agent-config/CodexConfigGenerator'
 import { hostCommandKind } from '../agent-cli-src/agent-config/HostCommandPolicy'
 import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-config/HostCommandTargets'
@@ -9,6 +13,7 @@ import { HOST_COMMAND_TARGETS, hostCommandTarget } from '../agent-cli-src/agent-
 const expected = [
   'land',
   'finalize',
+  'merge-main',
   'landed',
   'capabilities',
   'open-pr',
@@ -18,9 +23,15 @@ const expected = [
   'studio-proof-real-app',
   'admission-experiment',
   'native-module-check',
+  'reclaim --execute',
   'prepare-release studio',
   'prepare-release ide-extension',
   'app-dev',
+  'studio',
+  'studio-native',
+  'local-instantdb start',
+  'local-instantdb stop',
+  'companion-host-build',
   'simulators list',
   'simulators boot',
   'simulators run',
@@ -51,6 +62,8 @@ const expected = [
   'remote exists',
   'processes list',
   'processes started',
+  'start-branch',
+  'direnv allow',
 ]
 
 Describe('agent host command permissions', () => {
@@ -64,7 +77,9 @@ Describe('agent host command permissions', () => {
     Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
-    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(11))
+    Expect(hostCommandKind(['reclaim', '--execute'], prefixes)).toBe('named')
+    Expect(hostCommandKind(['reclaim', '--report-json'], prefixes)).toBeUndefined()
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(expected.slice(12))
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
       permissions: { allow: string[] }
@@ -102,6 +117,12 @@ Describe('agent host command permissions', () => {
       command: 'xcrun',
       fixedArgs: ['simctl', 'list', 'devices'],
     })
+    Expect(hostCommandTarget(['start-branch'])).toEqual({ command: './dev', fixedArgs: ['start-branch'] })
+    Expect(hostCommandTarget(['direnv', 'allow'])).toEqual({
+      command: 'direnv',
+      fixedArgs: ['allow'],
+      argsPolicy: 'none',
+    })
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 42] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun simctl list devices'] })).toThrow()
@@ -136,5 +157,102 @@ Describe('agent host command permissions', () => {
       './agent unsandboxed land',
       './agent unsandboxed land *',
     ])
+  })
+
+  Test('drops a Claude setting the source no longer has, which rulesync would merge back', () => {
+    const initial = JSON.stringify({
+      $schema: 'schema',
+      env: { KEPT: '1', REMOVED: '1' },
+      hooks: { SessionStart: [] },
+      permissions: { allow: [] },
+      removed: true,
+      sandbox: { excludedCommands: [], network: { allowedDomains: ['a'], allowLocalBinding: true } },
+    })
+    const rendered = JSON.parse(renderClaudeHostSettings(initial, [], {
+      env: { KEPT: '1' },
+      sandbox: { excludedCommands: [], network: { allowedDomains: ['a'] } },
+    })) as unknown
+
+    Expect(rendered).toEqual({
+      $schema: 'schema',
+      env: { KEPT: '1' },
+      hooks: { SessionStart: [] },
+      permissions: { allow: [] },
+      sandbox: { excludedCommands: [], network: { allowedDomains: ['a'] } },
+    })
+  })
+
+  Test('replaces inherited permission lists while keeping other source settings', () => {
+    const initial = JSON.stringify({
+      permissions: {
+        additionalDirectories: ['../x'],
+        allow: ['Read', 'Bash(stale)'],
+        ask: ['Bash(stale ask)'],
+        defaultMode: 'plan',
+        deny: ['Read(.env)', 'Bash(stale deny)'],
+      },
+      sandbox: { excludedCommands: [] },
+    })
+    const rendered = JSON.parse(renderClaudeHostSettings(initial, [], {
+      permissions: { additionalDirectories: ['../x'] },
+      sandbox: { excludedCommands: [] },
+    }, { allow: ['Read'], deny: ['Read(.env)'] })) as unknown
+
+    Expect(rendered).toEqual({
+      permissions: { additionalDirectories: ['../x'], allow: ['Read'], deny: ['Read(.env)'] },
+      sandbox: { excludedCommands: [] },
+    })
+  })
+
+  Test('a pristine Rulesync render removes a tool absent from the permission source', async () => {
+    const root = await mkTestDir('tao-permission-removal-')
+    try {
+      await FS.writeText(
+        FS.resolvePath('.rulesync/rulesync.jsonc', root),
+        await FS.readText(Repo.resolvePath('.rulesync/rulesync.jsonc')),
+      )
+      await FS.writeText(
+        FS.resolvePath('.rulesync/permissions.jsonc', root),
+        JSON.stringify({
+          agentHostCommands: ['land'],
+          claudecode: { permissions: { additionalDirectories: ['../x'] } },
+          permission: { bash: { 'echo allow': 'allow', 'echo ask': 'ask', 'echo deny': 'deny' } },
+        }),
+      )
+      await FS.writeText(
+        FS.resolvePath('.claude/settings.json', root),
+        JSON.stringify({
+          permissions: {
+            additionalDirectories: ['../x'],
+            allow: ['Bash(echo allow)', 'Bash(stale allow)'],
+            ask: ['Bash(echo ask)', 'Bash(stale ask)'],
+            deny: ['Bash(echo deny)', 'Bash(stale deny)'],
+          },
+        }),
+      )
+
+      await generateClaudeHostSettings(root)
+
+      const settings = JSON.parse(await FS.readText(FS.resolvePath('.claude/settings.json', root))) as {
+        permissions: { additionalDirectories: string[]; allow: string[]; ask: string[]; deny: string[] }
+      }
+      Expect(settings.permissions).toEqual({
+        additionalDirectories: ['../x'],
+        allow: ['Bash(echo allow)', 'Bash(./agent unsandboxed land)', 'Bash(./agent unsandboxed land *)'],
+        ask: ['Bash(echo ask)'],
+        deny: ['Bash(echo deny)'],
+      })
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('still writes the host rules when the source has no sandbox block or allow list', () => {
+    const rendered = JSON.parse(
+      renderClaudeHostSettings(JSON.stringify({ permissions: {}, sandbox: { enabled: true } }), [['land']], {}),
+    ) as { permissions: { allow: string[] }; sandbox: unknown }
+
+    Expect(rendered.permissions.allow).toEqual(['Bash(./agent unsandboxed land)', 'Bash(./agent unsandboxed land *)'])
+    Expect(rendered.sandbox).toEqual({ excludedCommands: ['./agent unsandboxed land', './agent unsandboxed land *'] })
   })
 })

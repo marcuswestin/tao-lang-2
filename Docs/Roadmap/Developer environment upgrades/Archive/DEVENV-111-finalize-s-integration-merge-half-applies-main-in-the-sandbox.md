@@ -1,6 +1,6 @@
 # DEVENV-111 — `finalize`'s integration merge half-applies `main` in the sandbox and names no conflicting path
 
-- **Status:** In progress
+- **Status:** Resolved
 - **Section:** External
 - **Partly addressed, 2026-09-20:** `Finalize.ts` now asks `git merge-tree --write-tree --name-only`
   what would conflict _before_ attempting the merge, and separates the two failures. A merge that
@@ -31,6 +31,23 @@
   `UnexpectedBehaviorError: Something went wrong.` and never reached its blocked-directory report.
   A top-level `git merge main` then succeeded without conflicts. The probe cleanup needs to report
   its path and recovery when removal is denied; the current workaround is the top-level merge.
+- **Also, 2026-09-24:** the same half-write follows an ordinary branch start. A landing leaves its
+  worktree detached at the archived tip; `git switch -c feat/<next> main` from a sandboxed shell then
+  moved `HEAD` and every writable file but printed `unable to unlink old` for `.claude/settings.json`
+  and eight `agents/skills/**` files, leaving them at the previous tip. Nothing reports it as a
+  failure — the switch says `Switched to a new branch` — yet `repo-lint` then calls the settings
+  stale and two `agent-cli` tests fail on its old host-command rules, so `verify-changed` and
+  `finalize` stay red until a host-side restore. `merge-main` below covers merging; starting a branch
+  still has no named `./agent unsandboxed` operation. Seen on `feat/wordflower-check`.
+- **Partly addressed, 2026-09-25:** the hand-off is now a named approval boundary rather than a raw
+  `git merge`. `./agent merge-main` runs finalize's integration alone, with no lane and no message,
+  and `./agent unsandboxed merge-main` runs it on the host, so both finalize's and merge-main's
+  refusals name that one command. Proven by merging five `main` commits that wrote `agents/skills`
+  and `.claude/settings.json` into a branch: the sandboxed form refused untouched, the unsandboxed
+  form merged cleanly. The probe also missed a protected file inside a writable directory, which is
+  how `.claude/settings.json` is protected; it now opens every existing incoming file in append
+  mode, which writes nothing, and refuses on a denial. **What remains** is the 2026-09-21 follow-up:
+  a probe directory the sandbox will not let finalize remove still ends in an unexplained error.
 - **Area:** Verification and landing
 - **Impact:** `./agent finalize` run from a sandboxed agent shell leaves the worktree in a state no
   Git command describes. Its integration merge is denied partway on the paths the sandbox
@@ -57,25 +74,47 @@
   dirty tracked paths of which 60 were byte-identical to `main`, 5 untracked paths all present in
   `main`, no `MERGE_HEAD`, and a plain `git merge main` afterwards that named the one real conflict.
   A different branch and a different conflicting path, so this is the command and not one branch.
+  On 2026-09-25, a disposable worktree at `48519139` reproduced the branch-start half-write with
+  `.claude` made unwritable: `git switch -c feat/devenv-111-denied-repro origin/main` exited 0 and
+  printed both `unable to unlink old '.claude/settings.json': Permission denied` and `Switched to a
+  new branch`. HEAD moved to `e878db96`, but `.claude/settings.json` still had the old tip's blob
+  `2ffffc31`; `git status` reported it modified. The disposable worktree was restored and removed.
+  In a second disposable worktree at `3d05b7e4`, the guarded `./agent start-branch
+  feat/devenv-111-guard-proof` faced the same directory denial and exited 1, named `.claude`, and
+  pointed to its unsandboxed form; `git status` remained clean and detached at `3d05b7e4`.
+  The forced `EFAULT` cleanup test failed before the report change and passed afterward, asserting
+  the leftover path and a normal-Terminal `rmdir` instruction. The branch-start tests exercise a
+  protected existing file, a writable switch, dirty/existing/invalid-name refusals, and a pathname
+  containing a newline.
+  The 2026-09-25 normal-Terminal `./agent unsandboxed start-branch
+  feat/devenv-111-guard-proof` then started a clean branch at `e355b5b1f509` after the artificial
+  directory denial was removed. `git status --short --branch` named only the new branch, and HEAD
+  exactly equalled fetched `origin/main` at `e355b5b1f50980acae28ed71609044bb0e6f7b1a`.
+  The disposable worktree and branch were removed after the proof.
 - **Workaround:** Only needed for a tree an older finalize already half-wrote. Set the debris aside
   with `git stash push -u -m '<unique-tag>'` rather than `git checkout -f`, which is both
   sandbox-denied and classifier-denied — confirmed 2026-09-21 on
   `feat/ripgrep-replace-flag-issue-970ab2`, where `checkout -f`, `git merge` and even a
   path-scoped `git restore` were all refused as irreversible local destruction, and the tagged stash
-  was not; then run `git merge origin/main` yourself as a top-level command and resolve by hand. `git merge-tree --write-tree HEAD
-  origin/main` is a read-only way to learn what actually conflicts before touching anything.
-- **Proposed change:** Run the integration merge the way a top-level `git merge` already runs — the
-  policy exclusion exists precisely because this operation writes sandbox-protected paths — or detect
-  the denial and say so instead of calling it a conflict. Independently, a failed integration should
-  print the paths it is talking about, taken from the index or from `merge-tree`, and should leave the
-  worktree as it found it rather than partially written; a message naming no path is worse than no
-  message, because it sends the reader looking for a conflict that may not exist.
-- **Dependencies:** Same root cause as `DEVENV-088` and `DEVENV-068`: a grandchild process inherits
-  the sandbox that its top-level command is excluded from, so the exclusion does not reach the git
-  invocation that needs it. Fixing that generally would fix this; fixing the empty conflict list is
-  worth doing either way.
-- **Acceptance:** `./agent finalize` in a sandboxed shell, on a branch that genuinely conflicts with
-  `main`, names every conflicting path and leaves the worktree either cleanly conflicted or untouched;
-  on a branch that does not conflict, it integrates `main` and proceeds. Neither case leaves a tree
-  with no `MERGE_HEAD` and no unmerged entries.
+  was not; then run `./agent unsandboxed merge-main` and resolve any conflict by hand. `git
+  merge-tree --write-tree HEAD origin/main` is a read-only way to learn what actually conflicts
+  before touching anything.
+- **Proposed change:** Done for integration: `merge-main` probes incoming directories and files before
+  merging, refuses with blocked paths named, and has a named unsandboxed form. A failed probe cleanup
+  reports the leftover path and removal step. For branch starts, `start-branch feat/<name>` requires a
+  clean worktree, fetches `origin/main`, checks the paths a checkout would write, and refuses before
+  switching when any probe is denied. Its named unsandboxed form performs the same switch. Detached
+  checkout guidance points to this operation.
+- **Dependencies:** A nested Git process inherits its parent's sandbox. The only host boundary is a
+  named `./agent unsandboxed <operation>` in `.rulesync/permissions.jsonc` and the agent command
+  implementation; no inherited sandbox setting can widen it.
+- **Acceptance:** A forced `EFAULT` on probe cleanup reports the leftover path and tells the operator
+  to remove the empty directory from a normal Terminal; no merge starts. A clean, detached checkout
+  with a protected path changed between HEAD and fetched `origin/main` makes sandboxed `start-branch`
+  name that path and leave HEAD, index, and worktree untouched. With host access the named operation
+  starts a clean `feat/*` branch at the fetched SHA, without tracking or inheriting the old feature
+  branch's commits. Dirty worktrees and existing or invalid names refuse before fetching. The
+  detached-HEAD warning, landing's closing line, and `git-workflow` skill point to the operation.
+  `./agent unsandboxed finalize` passes, the merge message is reviewed, and landing succeeds.
 - **Source:** 2026-09-20 landing of `feat/misc-followups-66ff38`.
+- **Archived:** 2026-09-25

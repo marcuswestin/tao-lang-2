@@ -3,6 +3,7 @@ grammar TaoTests
 import "./app"
 import "./blocks"
 import "./data"
+import "./scenarios"
 import "./visibility"
 import "./terminals"
 
@@ -18,7 +19,23 @@ entry TestsGrammarEntrypoint:
 TestDeclaration:
     visibility=DeclarationVisibility? 'test'
     (dependencies+=[Declaration:ID] (',' dependencies+=[Declaration:ID])*)?
-    name=STRING? block=TestBlock;
+    name=STRING?
+    headClauses+=(TestDeviceClause | TestFixtureClause)*
+    block=TestBlock;
+
+// A test's device pins the viewport preset for every check inside it; a test's fixture starts every
+// check's fresh store from that fixture's rows instead of empty. Either or both may appear, in any
+// order, and a nested test inherits its parent's unless it repeats the clause itself (Decisions §16).
+// The device vocabulary matches `ScenarioDeviceClause`'s, so a test and a scenario describing the same
+// shape read the same width; the fixture reference matches `ScenarioFixtureClause`'s target.
+TestDeviceClause:
+    'on' device=('phone' | 'tablet' | 'laptop')
+    (width=NUMBER 'x' height=NUMBER)?;
+
+TestFixtureClause:
+    'with' fixture=[FixtureDeclaration:ID];
+
+type TestHeadClause = TestDeviceClause | TestFixtureClause;
 
 // Test blocks use the broad diagnostic statement family but deliberately exclude a declaration
 // slot fill. That is what lets the ID-headed `narrow "..."` seam remain spelling-validated without
@@ -26,12 +43,16 @@ TestDeclaration:
 TestBlock returns Block:
     '{' statements+=(AppBlockDiagnosticStatement | InteractionWordStep)* '}';
 
+// A check pins a declared failure of a foreign action before launching its app.
+ActionFailureStubStep:
+    'action' action=[ActionDeclaration:ID] 'fails' case=ID;
+
 type CheckStep = RunStep | PressTextStep | TagPressStep | PressWordStep | InteractionWordStep
     | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep
     | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep
     | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep
     | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep
-    | PressToolbarCommandStep;
+    | PressToolbarCommandStep | NetworkTestStep | WaitForSyncStep | DatasourceFailureStep;
 
 RunStep:
     'run' app=[AppValueDeclaration:ID];
@@ -124,6 +145,15 @@ RelaunchStep:
 // `advance` moves it by a duration, firing every callback that falls due, in order.
 AdvanceStep:
     'advance' duration=Expression;
+
+NetworkTestStep:
+    'network' mode=('offline' | 'online');
+
+WaitForSyncStep:
+    {infer WaitForSyncStep} 'wait' 'for' 'sync';
+
+DatasourceFailureStep:
+    'datasource' 'fails' 'after' operation=('create' | 'update' | 'delete') entity=ID message=STRING;
 
 TestSelector returns string:
     'text' | 'label' | 'placeholder';

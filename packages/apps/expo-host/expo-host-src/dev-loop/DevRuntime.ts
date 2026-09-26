@@ -1,4 +1,5 @@
 import { Errors, FS } from '@shared'
+import { HostDependencies } from '../host-dependencies'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 
 const runtimeFiles = [
@@ -27,7 +28,10 @@ async function prepare(projectRoot: string): Promise<{ root: string; sourceRoot:
     }
     await FS.copyFile(source, FS.resolvePath(file, root))
   }
-  const modules = FS.resolvePath('node_modules', sourceRoot)
+  // An installed Tao resolves its host's packages on first use, beside its resource root rather than
+  // inside the host's files; inside a checkout this does nothing and they are the host's own.
+  await HostDependencies.ensure()
+  const modules = RuntimeToolchainPaths.dependencyRoot()
   if (!await FS.isDirectory(modules)) {
     Errors.throwHostEnvironment(`Tao's development runtime has no installed modules at ${modules}.`)
   }

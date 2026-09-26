@@ -105,7 +105,7 @@ function html(config: StudioClientConfig): string {
 }
 
 async function buildClientBundle(validationMode: StudioClientBundleMode): Promise<string> {
-  const generatedRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-browser-', FS.tmpdir()))
+  const generatedRoot = await Repo.mkScratchDirOrHost('tao-studio-browser-')
   let generated: Awaited<ReturnType<typeof Runtime.generateApp>>
   try {
     generated = await Runtime.generateApp(FS.resolvePath('TaoStudioClient.tao', studioAppRoot), {

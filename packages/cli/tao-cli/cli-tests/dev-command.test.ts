@@ -14,7 +14,7 @@ const viewSource = 'view MainView() { render inject ```ts return null ``` }'
 
 Describe('Tao dev app discovery and selection', () => {
   Test('discovers every runnable app recursively and groups it by project', async () => {
-    const root = await mkTestDir('tao-dev-discovery-')
+    const root = await mkTestDir('tao-dev-discovery-', { location: 'host' })
     try {
       await FS.writeText(
         FS.resolvePath('WordFlower/Current/WordFlower.tao', root),
@@ -47,7 +47,7 @@ Describe('Tao dev app discovery and selection', () => {
   })
 
   Test('groups nested and package app declarations under ancestor project metadata', async () => {
-    const root = await mkTestDir('tao-dev-split-project-')
+    const root = await mkTestDir('tao-dev-split-project-', { location: 'host' })
     try {
       await FS.writeText(
         FS.resolvePath('Project.tao', root),
@@ -175,7 +175,7 @@ Describe('Tao dev app discovery and selection', () => {
   })
 
   Test('returns to the same Tao CLI selector when the running loop requests an app switch', async () => {
-    const root = await mkTestDir('tao-dev-switch-')
+    const root = await mkTestDir('tao-dev-switch-', { location: 'host' })
     try {
       await FS.writeText(
         FS.resolvePath('Project/Apps.tao', root),

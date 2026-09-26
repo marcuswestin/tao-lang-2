@@ -7,9 +7,12 @@ export const DesignFormatter = {
     f.oneSpaceAfter('design')
   },
 
+  // A blank line an author left between design members or entries is kept (at most one), so groups
+  // survive formatting and `tao fix`'s move into typed blocks.
   DesignBlock(f) {
     f.oneSpaceBefore('{')
     f.indentedBraceBlock(f.node.members)
+    f.separateIndentedLines(f.node.members, keepOneBlankLine)
   },
 
   DesignToken(f) {
@@ -23,7 +26,7 @@ export const DesignFormatter = {
   DesignColorsBlock(f) {
     f.oneSpaceBefore('{')
     f.indentedBraceBlock(f.node.entries)
-    f.lineSeparatedList(f.node.entries)
+    f.separateIndentedLines(f.node.entries, keepOneBlankLine)
     f.commaLineList()
   },
 
@@ -91,7 +94,7 @@ export const DesignFormatter = {
   DesignStylesBlock(f) {
     f.oneSpaceBefore('{')
     f.indentedBraceBlock(f.node.entries)
-    f.lineSeparatedList(f.node.entries)
+    f.separateIndentedLines(f.node.entries, keepOneBlankLine)
   },
 
   DesignStyleEntry(f) {
@@ -100,3 +103,8 @@ export const DesignFormatter = {
 
   DesignValuePath() {},
 } satisfies Partial<FormatHandlers>
+
+/** keepOneBlankLine starts each design member on its own line and keeps one blank line above it when the source had one. */
+function keepOneBlankLine() {
+  return { min: 1, max: 2 }
+}

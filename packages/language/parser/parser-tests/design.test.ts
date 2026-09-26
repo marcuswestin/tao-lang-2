@@ -1,6 +1,7 @@
 import { ASTUtils } from '@ast-utils'
 import { AST, Langium, Parser, URI } from '@parser'
-import { Describe, Expect, Test } from '@shared/test'
+import { FS } from '@shared'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { testParseCode } from './test-parse'
 
 Describe('parser: minimal design declarations', () => {
@@ -413,6 +414,283 @@ Describe('parser: minimal design declarations', () => {
     Expect(applyRename(doc, shadeEdit)).toBe(
       `design Theme { colors { palette #112233 { 70 #001122 } accent palette.70 } }`,
     )
+  })
+})
+
+Describe('parser: color values', () => {
+  const colorSource = `
+    workspace design Theme {
+      colors {
+        accent #2f6b4f { 20 #cfe3d8 }
+        inkMuted #6b7280
+      }
+      styles { dot [width 8] }
+    }
+    app Demo { view Main Design Theme }
+    view Main() { render Badge(Tint: accent.20) }
+    view Badge(Tint color default inkMuted) { render Surface() [dot, background Tint] }
+    view Surface() { }
+  `
+
+  Test('parses a color parameter whose default and argument link to the mounted design colors', async () => {
+    const parsed = await testParseCode(colorSource)
+
+    const badge = parsed.entry.ast.statements.filter(AST.isViewDeclaration).find(view => view.name === 'Badge')
+    const parameter = badge === undefined ? undefined : AST.parametersOf(badge)[0]
+    const type = parameter?.inlineType?.type
+    Expect.Is(type, AST.isPrimitiveTypeReference)
+    Expect(type.primitive).toBe('color')
+    const fallback = parameter?.defaultValue
+    Expect.Is(fallback, AST.isValueReference)
+    Expect.Is(fallback.target.ref, AST.isDesignColorEntry)
+    Expect(fallback.target.ref.name).toBe('inkMuted')
+
+    const argument = AST.streamAllContents(parsed.entry.ast).find(AST.isArgument)?.value
+    Expect.Is(argument, AST.isMemberAccessExpression)
+    Expect(argument.shade).toBe(20)
+    Expect(argument.members).toEqual([])
+    Expect.Is(argument.target.ref, AST.isDesignColorEntry)
+    Expect(argument.target.ref.name).toBe('accent')
+  })
+
+  Test('reads a Capitalized word after a color head as the value in scope', async () => {
+    const parsed = await testParseCode(colorSource)
+
+    const entry = AST.streamAllContents(parsed.entry.ast).filter(AST.isLayoutEntry)
+      .find(candidate => ASTUtils.layoutEntryValues(candidate)[0] === 'background')
+    Expect.Is(entry, AST.isLayoutEntry)
+    const word = ASTUtils.colorValues.clauseValueRead(entry)
+    Expect(word?.value).toBe('Tint')
+    const value = ASTUtils.colorValues.clauseValueNamed(entry, 'Tint')
+    Expect.Is(value, AST.isParameterDeclaration)
+    Expect(ASTUtils.colorValues.isColorValue(value)).toBe(true)
+  })
+
+  Test('goes from a color clause value to its view parameter', async () => {
+    const { services } = Parser.createContext()
+    const doc = services.shared.workspace.LangiumDocumentFactory.fromString(colorSource, URI.file('/colors/Main.tao'))
+    services.shared.workspace.LangiumDocuments.addDocument(doc)
+    await services.shared.workspace.DocumentBuilder.build([doc], { eagerLinking: true })
+    const file = doc.parseResult.value
+    Expect.Is(file, AST.isTaoFile)
+    const badge = file.statements.filter(AST.isViewDeclaration).find(view => view.name === 'Badge')
+    const parameter = badge && AST.parametersOf(badge)[0]
+    const word = AST.streamAllContents(file).filter(AST.isLayoutWord).find(candidate => candidate.value === 'Tint')
+    Expect(parameter).toBeDefined()
+    Expect(word?.$cstNode).toBeDefined()
+    Expect(AST.findOwningView(word!)).toBe(badge)
+    const clause = AST.streamAllContents(file).filter(AST.isLayoutEntry)
+      .find(entry => ASTUtils.colorValues.clauseValueRead(entry)?.value === 'Tint')
+    Expect(clause).toBeDefined()
+    Expect(ASTUtils.colorValues.clauseValueRead(clause!)).toBe(word)
+    Expect(parameter?.inlineType?.name).toBe('Tint')
+    const offset = colorSource.lastIndexOf('background Tint') + 'background '.length + 1
+    const leaf = Langium.CstUtils.findLeafNodeAtOffset(file.$cstNode!, offset)!
+    const declarations = services.language.references.References.findDeclarations(leaf)
+    Expect(declarations).toHaveLength(1)
+    Expect(declarations[0]).toBe(parameter)
+  })
+
+  Test('renames a color parameter through its clause value', async () => {
+    const { services } = Parser.createLspContext()
+    const doc = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
+      colorSource,
+      URI.file('/colors/RenameParameter.tao'),
+    )
+    services.shared.workspace.LangiumDocuments.addDocument(doc)
+    await services.shared.workspace.DocumentBuilder.build([doc], { eagerLinking: true })
+    const offset = colorSource.lastIndexOf('background Tint') + 'background '.length + 1
+    const rename = services.language.lsp.RenameProvider
+    Expect(rename).toBeDefined()
+    const edit = await rename!.rename(doc, {
+      newName: 'Tone',
+      position: doc.textDocument.positionAt(offset),
+      textDocument: { uri: doc.uri.toString() },
+    })
+    Expect(applyRename(doc, edit)).toBe(colorSource.replaceAll('Tint', 'Tone'))
+  })
+
+  Test('renames a shade through a color argument', async () => {
+    const { services } = Parser.createLspContext()
+    const source =
+      `workspace design Theme { colors { accent #fff { 20 #ccc } } } app Demo { view Main Design Theme } view Main() { render Badge(Tint: accent.20) } view Badge(Tint color) { }`
+    const doc = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
+      source,
+      URI.file('/colors/Rename.tao'),
+    )
+    services.shared.workspace.LangiumDocuments.addDocument(doc)
+    await services.shared.workspace.DocumentBuilder.build([doc], { eagerLinking: true })
+    const offset = source.lastIndexOf('accent.20') + 'accent.'.length
+    const leaf = Langium.CstUtils.findLeafNodeAtOffset(doc.parseResult.value.$cstNode!, offset)!
+    const design = doc.parseResult.value.statements.find(AST.isDesignDeclaration)!
+    const shade = design.block.members.find(AST.isDesignColorsBlock)!.entries[0]!.family!.members[0]!
+    const references = services.language.references.References
+    const declarations = references.findDeclarations(leaf)
+    Expect(declarations).toHaveLength(1)
+    Expect(declarations[0]).toBe(shade)
+    const refs = references.findReferences(shade, { includeDeclaration: false }).toArray()
+    Expect(refs.map(ref => doc.textDocument.getText(ref.segment.range))).toEqual(['20'])
+
+    const rename = services.language.lsp.RenameProvider
+    Expect(rename).toBeDefined()
+    const edit = await rename!.rename(doc, {
+      newName: '30',
+      position: doc.textDocument.positionAt(offset),
+      textDocument: { uri: doc.uri.toString() },
+    })
+    Expect(renameSegments(doc, edit)).toEqual(['20', '20'])
+    Expect(applyRename(doc, edit)).toBe(source.replace('20 #ccc', '30 #ccc').replace('accent.20', 'accent.30'))
+  })
+
+  Test('relinks a color argument after the mounted design changes in the same parser context', async () => {
+    const context = Parser.createContext()
+    const source = (design: string) => `
+      workspace design Light { colors { accent #fff } }
+      workspace design Dark { colors { accent #000 } }
+      app Demo { view Main Design ${design} }
+      view Main() { render Badge(Tint: accent) }
+      view Badge(Tint color) { }
+    `
+    for (const selected of ['Light', 'Dark']) {
+      const parsed = await Parser.parseSource(context, source(selected))
+      const design = parsed.entry.ast.statements.filter(AST.isDesignDeclaration)
+        .find(candidate => candidate.name === selected)!
+      const color = design.block.members.find(AST.isDesignColorsBlock)!.entries[0]!
+      const argument = AST.streamAllContents(parsed.entry.ast).find(AST.isArgument)?.value
+      Expect.Is(argument, AST.isValueReference)
+      Expect(argument.target.ref).toBe(color)
+    }
+  })
+
+  Test('relinks a shared view color argument after an app design edit', async () => {
+    await withTaoFiles('tao-color-relink-', {
+      'Designs.tao': `
+        folder design Light { colors { accent #fff } }
+        folder design Dark { colors { accent #000 } }
+      `,
+      'App.tao': 'app Demo { view Main Design Light }',
+      'View.tao': `
+        workspace view Main() { render Badge(Tint: accent) }
+        view Badge(Tint color) { }
+      `,
+    }, async paths => {
+      const { services } = Parser.createContext()
+      const documents = await Promise.all(
+        Object.values(paths).map(async path =>
+          await services.shared.workspace.LangiumDocumentFactory.fromUri(URI.file(path))
+        ),
+      )
+      documents.forEach(document => services.shared.workspace.LangiumDocuments.addDocument(document))
+      AST.rememberVisibleWorkspaceFiles(documents.map(document => document.parseResult.value).filter(AST.isTaoFile))
+      await services.shared.workspace.DocumentBuilder.build(documents, { eagerLinking: true })
+
+      const viewUri = URI.file(paths['View.tao']!)
+      const designUri = URI.file(paths['Designs.tao']!)
+      const linkedColor = (): AST.DesignColorEntry | undefined => {
+        const view = services.shared.workspace.LangiumDocuments.getDocument(viewUri)?.parseResult.value
+        const argument = AST.isTaoFile(view) ? AST.streamAllContents(view).find(AST.isArgument)?.value : undefined
+        return AST.isValueReference(argument) && AST.isDesignColorEntry(argument.target.ref)
+          ? argument.target.ref
+          : undefined
+      }
+      const color = (name: string): AST.DesignColorEntry | undefined => {
+        const file = services.shared.workspace.LangiumDocuments.getDocument(designUri)?.parseResult.value
+        const design = AST.isTaoFile(file)
+          ? file.statements.filter(AST.isDesignDeclaration)
+            .find(candidate => candidate.name === name)
+          : undefined
+        return design?.block.members.find(AST.isDesignColorsBlock)?.entries[0]
+      }
+      Expect(linkedColor() === color('Light')).toBe(true)
+      await FS.writeText(paths['App.tao']!, 'app Demo { view Main Design Dark }')
+      await services.shared.workspace.DocumentBuilder.update([URI.file(paths['App.tao']!)], [])
+      Expect(linkedColor() === color('Dark')).toBe(true)
+    })
+  })
+
+  Test('offers design colors only where a color argument or default may be expected', async () => {
+    const parsed = await Parser.parseCode(`
+      workspace design Theme { colors { accent #2f6b4f } }
+      app Demo { view Main Design Theme }
+      view Main() {
+        state Stored = accent
+        render Badge(Tint: acent)
+      }
+      view Badge(Tint color) { render Surface() }
+      view Surface() { }
+    `)
+
+    Expect(parsed.diagnostics.map(diagnostic => diagnostic.message)).toEqual([
+      "No value named 'accent' is in scope.",
+      "No value or design color named 'acent' is in scope.",
+    ])
+  })
+
+  for (const plainFirst of [true, false]) {
+    Test(`links a shade to the color that declares it (${plainFirst ? 'plain' : 'rich'} app first)`, async () => {
+      const apps = [
+        'app First { view Main Design Plain }',
+        'app Second { view Main Design Rich }',
+      ]
+      const parsed = await testParseCode(`
+        workspace design Plain { colors { accent #2f6b4f } }
+        workspace design Rich { colors { accent #2f6b4f { 20 #cfe3d8 } } }
+        ${(plainFirst ? apps : apps.toReversed()).join('\n')}
+        view Main() { render Badge(Tint: accent.20) }
+        view Badge(Tint color) { }
+      `)
+
+      const argument = AST.streamAllContents(parsed.entry.ast).find(AST.isArgument)?.value
+      Expect.Is(argument, AST.isMemberAccessExpression)
+      Expect.Is(argument.target.ref, AST.isDesignColorEntry)
+      Expect(AST.designColorShade(argument.target.ref, 20)).toBeDefined()
+    })
+  }
+
+  Test('links a color that only a design mounted through a refinement declares', async () => {
+    const parsed = await testParseCode(`
+      workspace design Light { colors { accent #2f6b4f } }
+      workspace design Dark { colors { glow #ffcc00 } }
+      app Demo { view Main Design Light }
+      app DemoDark = Demo with { Design Dark }
+      view Main() { render Badge(Tint: glow) }
+      view Badge(Tint color) { }
+    `)
+
+    Expect(AST.mountedDesigns([parsed.entry.ast]).map(design => design.name)).toEqual(['Dark', 'Light'])
+    const argument = AST.streamAllContents(parsed.entry.ast).find(AST.isArgument)?.value
+    Expect.Is(argument, AST.isValueReference)
+    Expect.Is(argument.target.ref, AST.isDesignColorEntry)
+    Expect(argument.target.ref.name).toBe('glow')
+  })
+
+  Test('finds a style declared only by a design mounted through an app refinement', async () => {
+    const { services } = Parser.createContext()
+    const source = `
+      workspace design Light { styles { daylight [pad 8] } }
+      workspace design Dark { styles { night [pad 8] } }
+      workspace design Unmounted { styles { night [pad 12] } }
+      app Demo { view Main Design Light }
+      app DemoDark = Demo with { Design Dark }
+      view Main() { render Surface() [night] }
+      view Surface() { }
+    `
+    const doc = services.shared.workspace.LangiumDocumentFactory.fromString(source, URI.file('/refined/Main.tao'))
+    services.shared.workspace.LangiumDocuments.addDocument(doc)
+    await services.shared.workspace.DocumentBuilder.build([doc], { eagerLinking: true })
+
+    const file = doc.parseResult.value
+    Expect.Is(file, AST.isTaoFile)
+    const dark = file.statements.filter(AST.isDesignDeclaration)
+      .find(design => design.name === 'Dark')
+    const night = dark?.block.members.filter(AST.isDesignStylesBlock).flatMap(block => block.entries)
+      .find(entry => entry.name === 'night')
+    const word = AST.streamAllContents(file).find(node => AST.isLayoutWord(node) && node.value === 'night')
+    Expect(night).toBeDefined()
+    Expect(word?.$cstNode).toBeDefined()
+    const declarations = services.language.references.References.findDeclarations(word!.$cstNode!)
+    Expect(declarations).toHaveLength(1)
+    Expect(declarations[0]).toBe(night)
   })
 })
 

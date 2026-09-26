@@ -32,8 +32,14 @@ export const JUST_COMMANDS = [
   // mid-write all look like failure. An agent that guesses re-lands work already on `main`.
   'landed',
   'ledger-index',
+  // Most of main's commits write paths a harness write-protects against shell commands, so a
+  // sandboxed merge stops partway. This is the merge alone, reachable unsandboxed by name, without
+  // the lane and message work `finalize` adds or the push `land` adds.
+  'merge-main',
+  'model-audit',
   'native-module-check',
-  // Pushes the branch, opens or reuses its pull request, and stays attached to stream its checks —
+  // Pushes the branch, opens or reuses its pull request, and stays attached to stream the checks a
+  // newly opened one starts —
   // the one command both the Developer and an agent run to get GitHub's own CI signal without a
   // second spelling.
   'open-pr',
@@ -61,6 +67,7 @@ export const JUST_COMMANDS = [
   'verify-changed',
   'verify-full',
   'verify-full-sandbox',
+  'worktree-status',
 ] as const
 
 export type AgentCommand = (typeof JUST_COMMANDS)[number]

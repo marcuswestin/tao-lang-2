@@ -762,6 +762,9 @@ async function readSourceFiles(repositoryRoot: string, extensions: readonly stri
       continue
     }
     for await (const path of FS.walk(rootPath, { excludeDirectory: EXCLUDED_DIRECTORIES, extensions })) {
+      if (path.endsWith('.tao.ts')) {
+        continue
+      }
       files.push({ path: FS.relativePath(repositoryRoot, path), source: await FS.readText(path) })
     }
   }

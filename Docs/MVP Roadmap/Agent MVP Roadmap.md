@@ -77,11 +77,17 @@ is `private`. Nobody outside the repository can install Tao.
 
 - Plan: `Plan - Standalone Tao CLI.md` beside this file answers the shape below with measured
   evidence, a nine-slice sequence, and the first-release decisions.
-- Progress: slices 1, 2, and 7 have landed. `just standalone-cli-release <version>` builds an
-  unsigned macOS arm64 release with its checksum, index, and install script, ready to publish once
-  the repository is public. Installed through `curl | sh`, the binary creates, checks, and compiles
-  a project outside any checkout; `just standalone-cli-acceptance` proves that much. `tao dev` and
-  `tao test` do not yet work from it.
+- Progress: slices 1–5, 7, and 8 have landed, and the binary leaves out `tao review` (slice 9).
+  `just standalone-cli-release <version>` builds an unsigned macOS arm64 release with its checksum,
+  index, and install script, ready to publish once the repository is public. Installed through
+  `curl | sh`, the binary creates a project with its tests, then checks, compiles, tests, builds for
+  web, and serves web from `tao dev` outside any checkout, and each project it creates runs under
+  the release that made it; `just standalone-cli-acceptance` proves all of that. The plan's
+  "Remaining work" orders what is still absent: the iOS Simulator and Android from `tao dev`, the
+  `tart` virtual-machine gate, moving `tao test` onto `bun test` and `tao ship` off Node so the
+  release needs no Node at all, signing and notarization with the
+  Foundation Models helper (both need the Developer ID certificate), a test for the interactive
+  download of a pinned release, and publishing.
 - First-release shape: a signed, notarized macOS arm64 `bun build --compile` binary; the
   files the CLI reads at runtime (stdlib, runtime sources, starters, grammar) either embedded or
   unpacked to a versioned directory; the Expo host and its `node_modules` downloaded per Tao version
@@ -263,7 +269,8 @@ from the development loop, which no virtualization approach can do.
   version, which `companion-native-parity.test.ts` enforces, and claims the iCloud (CloudDocuments,
   CloudKit) and push entitlements `tao-icloud` asks for. `.github/workflows/pull-request.yml` proves
   the pull-request trigger with a job that verifies nothing, and `./agent open-pr` pushes a branch,
-  opens or reuses its pull request, and watches the pushed commit's checks to a verdict.
+  opens or reuses its pull request, and watches the pushed commit's checks to a verdict. Since
+  2026-09-25 both workflows run only when a pull request opens, never on a later push to its branch.
 - Landed 2026-09-22, the Android emulator lane: `just companion-host-build` builds the Companion as
   a debug APK into `.artifacts/hosts/<version>-<kit digest>/android/` beside a `tao-host.json` naming its native
   kit, and `tao dev --android` installs a host whose kit covers its own and opens the app in it in
@@ -272,7 +279,8 @@ from the development loop, which no virtualization approach can do.
 - Landed 2026-09-23, distribution (`R7`): `just companion-host-publish` puts a built host on a
   prerelease tagged `companion-host-<version>-<kit digest>`, and when no cached host fits, `tao dev`
   lists those releases without signing in and downloads the newest whose kit covers its own into
-  `~/.tao/hosts`. The download is proven against a fake GitHub only: until the repository is public
+  the Tao home's `hosts/` (`~/.local/share/tao/hosts` by default). The download is proven against a
+  fake GitHub only: until the repository is public
   the listing answers 404, and `tao dev` says so and uses Expo Go.
 - Landed 2026-09-23, the iOS Simulator lane: `just companion-host-build --platform ios-simulator`
   builds the Companion for both simulator architectures, signed ad hoc so its entitlements are
@@ -280,8 +288,48 @@ from the development loop, which no virtualization approach can do.
   build and opens the app in it. Publishing zips it beside the Android host on the same release.
   Proven with HNReader on an iPhone 17 simulator; the first, unsigned build carried no entitlements
   and CloudKit aborted it, which the build now refuses.
-- Remaining: the first published host and a live download once the repository is public; physical
-  Android through the Companion; the physical-iPhone invitation beta; building hosts in CI; and
+- Landed 2026-09-25, physical Android: `tao dev`'s phone path prepares a phone the way it prepares an
+  emulator, installing a compatible Companion only when the phone's copy differs, and reaches Metro
+  over `adb reverse` on the phone's own loopback, or at the Mac's LAN address when that fails.
+  Unit-tested only; the Developer asked for it to land before a device run.
+- Expo Go retirement plan (2026-09-25; leave these paths in place until the repository is public,
+  compatible Android and iOS Simulator hosts are published, and a fresh Tao home has downloaded and
+  opened each one):
+  1. In `expo-runner/android.ts`, replace the `prepareRuntimeOnSerial` fallback to `ensureExpoGo` /
+     `ensureExpoGoOnSerial` with a Companion-only result. Remove the Expo Go APK lookup, cache,
+     installation, version check, `openExpoGoOnSerial`, and the `expo-go` runtime branch only after
+     the host path covers both emulator and phone. A missing, incompatible, or un-installable host
+     should name the reason and leave that target unopened while Metro stays available; it must not
+     silently launch another runtime. Update the Android preparation and opening messages accordingly.
+  2. In `expo-runner/run-targets.ts`, replace the iOS Simulator's Expo Go branch (`/_expo/open`,
+     `expoLink('ios')`, then `EXPO_GO_URL`) and the install-failure fallback with the Companion
+     development-client URL. If the host is unavailable or installation fails, report that and skip
+     opening the simulator. Replace `simulatorOpenFailure`'s `bunx expo start --ios` Expo Go remedy
+     with a host installation or download remedy, while retaining its useful LaunchServices detail.
+  3. In `expo-runner/physical-device.ts`, replace the Android phone's Expo Go URL for USB reverse and
+     LAN fallback with the Companion's development-client URL for the selected Metro host. Replace
+     `Try ... in Expo Go` and the no-device Expo Go wording with Companion recovery steps. Keep the
+     current physical-iPhone refusal until the invitation beta can install and open a signed
+     Companion; then replace that refusal with the device-host path.
+  4. Remove `EXPO_GO_URL` from `expo-config.ts` and the Expo Go-only facade in `ExpoRunner.ts` after
+     callers are migrated. Keep the Expo SDK pin for host compatibility. Prune the unused Expo Go
+     link helpers in `metro.ts`, then update focused runtime tests, the Companion README, and active
+     dev-loop documentation so no command or message offers Expo Go as a Tao app runtime. Verify
+     both cache-hit and fresh-download launches, missing-host and failed-install messages, and the
+     Android USB-reverse and LAN cases before declaring the retirement done.
+- CI host-build workflow (2026-09-25; hosted run still unproved): opening a relevant pull request
+  checks the Companion's native-kit parity and build Android on `ubuntu-24.04` and iOS Simulator on `macos-26`.
+  It does not publish a host; the first hosted result must establish that both runners can build it.
+- Local host proof 2026-09-25 from `68a36b1a`: after `./agent unsandboxed direnv allow`, the named
+  `companion-host-build --platform ios-simulator` operation completed with `** BUILD SUCCEEDED **`
+  and wrote `Tao Companion.app` and `tao-host.json` to
+  `.artifacts/hosts/1.0.0-6449773e3a7a/ios-simulator/`. CocoaPods used shared React Native tarballs,
+  so a separate fresh download fetched the exact 0.86.3 dependencies debug artifact from Maven:
+  18,746,275 bytes, SHA-256 `fa019419384f6f859655fec80b2d20736bb0441bb911cb1944b91719322ae512`,
+  byte-identical to the cached tarball. This proves local build and artifact network access; hosted
+  CI and a published-host download remain unproved.
+- Remaining: the first published host and a live download once the repository is public; proving
+  physical Android on a phone; the physical-iPhone invitation beta; live CI host-build proof; and
   retiring the Expo Go lanes as each is covered. The entitlements need the iCloud container and push
   enabled on the app id before a device build signs. The account-dependent device build and release
   proof are parked until the near-release pass (`R12`); simulator and Android work can continue.
@@ -353,6 +401,19 @@ equals MVP.
 - Scope: `R5` defers the authority cluster to the later app expansion. `R6` leaves the three runtime
   contracts experimental at 0.x launch; settle each when a forcing slice reaches it.
 - Context: `Coverage.md`'s tier column, `Apps/WordFlower/README.md` tranche mechanics.
+- Scope settled in the 2026-09-25 decision rounds (`Coverage.md` carries the tiers): MVP ships
+  `required` forms with `create … with` and `Problems(…)`, `check`, `when do` with `saved` /
+  `rejected` / `error` and declared-case branches plus the unhandled-failure warning, the
+  runtime-supplied `guard default`, query `search`, plural `phrase`s, the bridge metadata module, a
+  document export behind `fails`, and the test world's `on`/`with`, `network`, `wait for sync`,
+  and `datasource fails after`. Deferred: `validate` and `refuse when`, `queued`, `group by`,
+  preferences with `Me` and `@tao/auth`, copy extraction and `words`, clock and collaborator
+  controls, and multi-target interaction. Action-level `guard` is retired in favour of `check`.
+- Language tranche status (2026-09-25): the settled language subset above is implemented, tested in
+  Tao journeys, absorbed by WordFlower Current, and landed. This includes the Markdown export's
+  declared failures, provider-faithful test world controls, and checked TypeScript bridge contracts.
+  A13 remains open for the other MVP rows that `Coverage.md` still marks partial, pending, or absent;
+  these in-process journeys do not establish live-provider, device Share-sheet, or release acceptance.
 - The reactive editing implementation has a separate [deferred follow-up](../Roadmap/Reactive%20editing%20follow-up.md):
   snapshot-provider mutation recovery, authoritative validation decisions, and live-provider/device
   acceptance. These are not implied by the implemented projected inputs and writable parameters.
@@ -363,6 +424,12 @@ Work with an existing plan that needs implementation rather than decision: the d
 (`Docs/Roadmap/Add Tao design system MVP/`, except the caller-override question in `R9`), the
 keyboard and accessibility ledgers, the navigation follow-ups, `tao test` hardening, and the
 shell-completion tail. Each is a plan-and-execute task on its own.
+
+- Design system status (2026-09-25): **MVP done**. The `bg`/`fg` and flat-catalog deprecations,
+  WordFlower "DESIGN VALUES" tranche, casing errors, `selected`, `color` parameters, and `tao fix`
+  migration are implemented. Styles and sizes used by a shared view are checked across every
+  mounted design, including refinements. `rules { }` and rule checks are deferred past MVP. The
+  plan's "Design values tranche" and "Design rules — deferred past MVP" sections carry the detail.
 
 ### A15 — Studio's simulated-user lane — **done**
 
@@ -391,3 +458,27 @@ and distribution remain separate release checks.
   needs a migration before Instant Cloud shuts down on August 31, 2027.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`,
   `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`'s "InstantDB" section.
+
+## Project tracking
+
+### A17 — In-repository issues with git-bug, synced to GitHub Issues
+
+Open work is tracked today in Markdown — `Roadmap.md`, these roadmap files, and the
+developer-environment ledger — and `R10` makes GitHub Issues the place outside developers report
+problems. Nothing connects the two, and agents working offline in a worktree cannot read or file an
+issue. [git-bug](https://github.com/git-bug/git-bug) stores issues as Git objects under `refs/bugs/`,
+so they travel with the repository, work offline, and are scriptable from a shell; its GitHub bridge
+imports and exports issues and comments.
+
+- Shape: two steps, in order. First adopt git-bug locally: add it to the devenv profile (a dependency
+  change the Developer approves), expose the commands agents need through `./agent`, make sure
+  landing and worktree creation carry `refs/bugs/` and `refs/identities/`, and state which tracked
+  work moves into issues and which stays in Markdown. Then configure the GitHub bridge so issues
+  filed on GitHub arrive in the repository and local issues reach GitHub, with the token kept out of
+  the repository and a documented pull/push cadence.
+- Context: `Roadmap.md`, `Docs/Roadmap/Developer environment upgrades.md`, `A7`'s `.github/` issue
+  forms, `R10`.
+- Waits on: the Developer's approval of the dependency, and of what migrates out of Markdown; the
+  bridge needs a GitHub token with issue access.
+- Done: an agent in a fresh worktree lists, files, and comments on issues through `./agent`, and an
+  issue opened on GitHub appears there after a sync, and the reverse.

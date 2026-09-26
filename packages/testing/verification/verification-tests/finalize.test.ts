@@ -1,11 +1,13 @@
 import { CLI, Errors, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import {
   FinalizeCommand,
   type FinalizeDependencies,
   type FinalizeState,
   LandCommand,
+  MergeMainCommand,
   prepareForLanding,
+  StartBranchCommand,
 } from '../verification-src/Finalize'
 import {
   GeneratedEvidence,
@@ -36,6 +38,7 @@ const FAKE_GENERATED: GeneratedEvidenceRecord = {
 
 type FakeRepository = {
   branch: string
+  branchExists?: boolean
   conflictOnMerge?: boolean
   /** A merge that fails without recording a conflict, as a sandbox-denied one does. */
   deniedMergeStderr?: string
@@ -44,6 +47,10 @@ type FakeRepository = {
   existingDirectories?: string[]
   /** Worktree-relative directories a write is denied in, as the sandbox denies `agents/skills`. */
   unwritableDirectories?: string[]
+  /** Existing files a write is denied to inside a writable directory, as `.claude/settings.json` is. */
+  unwritableFiles?: string[]
+  /** Simulate a managed shell that creates a probe directory but cannot remove it. */
+  probeRemovalError?: string
   /** Paths `git merge-tree` reports, which it can answer even when the merge itself cannot run. */
   mergeTreeConflicts?: string[]
   featureCommits?: Array<{ body: string; subject: string }>
@@ -87,6 +94,12 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     if (joined === 'status --porcelain=v1 --untracked-files=all') {
       return result(args, spec.cwd, repository.status)
     }
+    if (args[0] === 'check-ref-format' && args[1] === '--branch') {
+      return result(args, spec.cwd, '', args[2]?.includes(' ') ? 1 : 0)
+    }
+    if (args[0] === 'show-ref' && args[1] === '--verify') {
+      return result(args, spec.cwd, '', repository.branchExists === true ? 0 : 1)
+    }
     if (joined === `fetch --quiet origin main`) {
       return result(args, spec.cwd, '', repository.remoteReachable ? 0 : 1)
     }
@@ -121,11 +134,21 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       headAfterMerge = 'mergedhead000000000000000000000000000000000'
       return result(args, spec.cwd)
     }
+    if (args[0] === 'switch' && args[1] === '--no-track') {
+      headAfterMerge = repository.mainSha
+      return result(args, spec.cwd)
+    }
     if (joined === 'diff --name-only --diff-filter=U') {
       return result(args, spec.cwd, repository.conflictOnMerge === true ? 'conflicted.ts\n' : '')
     }
     if (args[0] === 'diff' && args[1] === '--name-only') {
-      return result(args, spec.cwd, (repository.diffPaths ?? []).join('\n'))
+      return result(
+        args,
+        spec.cwd,
+        args.includes('-z')
+          ? (repository.diffPaths ?? []).map(path => `${path}\0`).join('')
+          : (repository.diffPaths ?? []).join('\n'),
+      )
     }
     if (args[0] === 'log' && args[1] === '--no-merges') {
       const RECORD_SEPARATOR = ''
@@ -158,8 +181,10 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     directories.map(directory => FS.resolvePath(directory, '/repo'))
 
   const dependencies: FinalizeDependencies = {
+    canWriteFile: async path => !resolvedIn(repository.unwritableFiles ?? []).includes(path),
     exists: async path =>
-      states.has(path) || files.has(path) || resolvedIn(repository.existingDirectories ?? []).includes(path),
+      states.has(path) || files.has(path)
+      || resolvedIn([...(repository.existingDirectories ?? []), ...(repository.unwritableFiles ?? [])]).includes(path),
     findGreenTree: async (_root, wanted, acceptedLanes, options = {}) => {
       for (const lane of acceptedLanes) {
         const record = greenTreeRecords.get(lane)
@@ -176,6 +201,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       }
       return undefined
     },
+    isSymbolicLink: async () => false,
     key: async () => ({ toolchain: FAKE_TOOLCHAIN, treeHash: `tree-of-${headAfterMerge}` }),
     makeProbeDirectory: async prefix => {
       if (resolvedIn(repository.unwritableDirectories ?? []).some(directory => prefix.startsWith(`${directory}/`))) {
@@ -193,12 +219,16 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       }
       return states.get(path) as ValueT
     },
+    realPath: async path => path,
     readText: async (path: string) => files.get(path) ?? '',
     run: runner,
     writeJson: async (path, value) => {
       states.set(path, structuredClone(value))
     },
     removeFile: async path => {
+      if (repository.probeRemovalError !== undefined) {
+        Errors.throwHostEnvironment(`${repository.probeRemovalError}: rmdir '${path}'`)
+      }
       files.delete(path)
     },
     writeLine: line => lines.push(line),
@@ -304,9 +334,42 @@ Describe('finalize', () => {
     const message = String(failure)
     Expect(message.includes('agents/skills/delegation')).toBe(true)
     Expect(message.includes('packages/dev/dev-src')).toBe(false)
-    Expect(message.includes('Nothing has been changed.')).toBe(true)
-    Expect(message.includes('as a top-level command')).toBe(true)
+    Expect(message.includes('Nothing has been changed')).toBe(true)
+    Expect(message.includes('./agent unsandboxed merge-main')).toBe(true)
+    Expect(message.includes('then finalize again')).toBe(true)
     // The merge must never have been attempted; that is the whole point of probing first.
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
+  })
+
+  Test('refuses for a protected file inside a writable directory, which a directory probe misses', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['.claude/settings.json', '.claude/hooks.md', 'agents/skills/delegation/SKILL.md'],
+      existingDirectories: ['.claude', 'agents/skills/delegation'],
+      unwritableDirectories: ['agents/skills'],
+      unwritableFiles: ['.claude/settings.json', 'agents/skills/delegation/SKILL.md'],
+    })
+
+    const message = String(await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(e => e))
+
+    Expect(message.includes('would write 2 paths')).toBe(true)
+    Expect(message.includes('- .claude/settings.json')).toBe(true)
+    Expect(message.includes('- agents/skills/delegation\n')).toBe(true)
+    Expect(message.includes('.claude/hooks.md')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
+  })
+
+  Test('reports an unremovable write probe with its leftover path and recovery', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['Docs/Roadmap/plan.md'],
+      existingDirectories: ['Docs/Roadmap'],
+      probeRemovalError: 'EFAULT',
+    })
+
+    const failure = await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(error => error)
+    const report = Errors.formatForUser(failure)
+
+    Expect(report).toContain(fake.probePaths[0]!)
+    Expect(report).toContain('rmdir from a normal Terminal')
     Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
   })
 
@@ -954,62 +1017,61 @@ Describe('finalize', () => {
   })
 
   Test('finalizes a real disposable Git branch end to end', async () => {
-    const root = await FS.realPath(await mkTestDir('tao-finalize-'))
+    const root = await mkGitTestDir('tao-finalize-')
     const mainRoot = FS.resolvePath('main', root)
     const featureRoot = FS.resolvePath('feature', root)
-    try {
-      await gitCommand(root, ['init', '--quiet', '--initial-branch=main', mainRoot])
-      await gitCommand(mainRoot, ['config', 'user.name', 'Tao Test'])
-      await gitCommand(mainRoot, ['config', 'user.email', 'tao@example.test'])
-      await FS.writeText(FS.resolvePath('.gitignore', mainRoot), '.artifacts/\n')
-      await FS.writeText(FS.resolvePath('base.txt', mainRoot), 'base\n')
-      await gitCommand(mainRoot, ['add', '.gitignore', 'base.txt'])
-      await gitCommand(mainRoot, ['commit', '--quiet', '-m', 'Base'])
-      await gitCommand(mainRoot, ['worktree', 'add', '--quiet', '-b', 'feat/finalize-fixture', featureRoot])
-      await FS.writeText(FS.resolvePath('feature.txt', featureRoot), 'feature\n')
-      await gitCommand(featureRoot, ['add', 'feature.txt'])
-      await gitCommand(featureRoot, ['commit', '--quiet', '-m', 'Add the disposable finalize fixture'])
+    await initGitTestRepository(mainRoot)
+    await gitCommand(mainRoot, ['config', 'user.name', 'Tao Test'])
+    await gitCommand(mainRoot, ['config', 'user.email', 'tao@example.test'])
+    await FS.writeText(FS.resolvePath('.gitignore', mainRoot), '.artifacts/\n')
+    await FS.writeText(FS.resolvePath('base.txt', mainRoot), 'base\n')
+    await gitCommand(mainRoot, ['add', '.gitignore', 'base.txt'])
+    await gitCommand(mainRoot, ['commit', '--quiet', '-m', 'Base'])
+    await gitCommand(mainRoot, ['worktree', 'add', '--quiet', '-b', 'feat/finalize-fixture', featureRoot])
+    await FS.writeText(FS.resolvePath('feature.txt', featureRoot), 'feature\n')
+    await gitCommand(featureRoot, ['add', 'feature.txt'])
+    await gitCommand(featureRoot, ['commit', '--quiet', '-m', 'Add the disposable finalize fixture'])
 
-      const dependencies: FinalizeDependencies = {
-        exists: FS.exists,
-        findGreenTree: async () => undefined,
-        key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),
-        makeProbeDirectory: FS.mkTmpDir,
-        now: () => new Date('2026-09-17T12:00:00.000Z'),
-        readJson: FS.readJson,
-        readText: FS.readText,
-        removeFile: FS.remove,
-        run: async (command, spec) =>
-          command === 'just'
-            ? {
-              args: [...(spec.args ?? [])],
-              command,
-              cwd: spec.cwd,
-              error: undefined,
-              exitCode: 0,
-              signal: null,
-              stderr: '',
-              stdout: '',
-            }
-            : await CLI.run(command, { ...spec, stdio: 'pipe' }),
-        writeJson: FS.writeJson,
-        writeLine: () => {},
-        writeText: FS.writeText,
-      }
-
-      const outcome = await FinalizeCommand.run({ repositoryRoot: featureRoot }, dependencies)
-
-      Expect(outcome.lines.some(line => line.includes('already contained in this branch'))).toBe(true)
-      const messagePath = FS.resolvePath('.artifacts/merge/feat/finalize-fixture.msg', featureRoot)
-      Expect(await FS.exists(messagePath)).toBe(true)
-      const draft = await FS.readText(messagePath)
-      Expect(() => validateMergeMessage(draft)).not.toThrow()
-      Expect(draft).toContain('- Add the disposable finalize fixture')
-      const statePath = FS.resolvePath('.artifacts/merge/feat/finalize-fixture.state.json', featureRoot)
-      Expect(await FS.exists(statePath)).toBe(true)
-    } finally {
-      await FS.remove(root)
+    const dependencies: FinalizeDependencies = {
+      canWriteFile: async () => true,
+      exists: FS.exists,
+      findGreenTree: async () => undefined,
+      isSymbolicLink: FS.isSymbolicLink,
+      key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),
+      makeProbeDirectory: FS.mkTmpDir,
+      now: () => new Date('2026-09-17T12:00:00.000Z'),
+      readJson: FS.readJson,
+      realPath: FS.realPath,
+      readText: FS.readText,
+      removeFile: FS.remove,
+      run: async (command, spec) =>
+        command === 'just'
+          ? {
+            args: [...(spec.args ?? [])],
+            command,
+            cwd: spec.cwd,
+            error: undefined,
+            exitCode: 0,
+            signal: null,
+            stderr: '',
+            stdout: '',
+          }
+          : await CLI.run(command, { ...spec, stdio: 'pipe' }),
+      writeJson: FS.writeJson,
+      writeLine: () => {},
+      writeText: FS.writeText,
     }
+
+    const outcome = await FinalizeCommand.run({ repositoryRoot: featureRoot }, dependencies)
+
+    Expect(outcome.lines.some(line => line.includes('already contained in this branch'))).toBe(true)
+    const messagePath = FS.resolvePath('.artifacts/merge/feat/finalize-fixture.msg', featureRoot)
+    Expect(await FS.exists(messagePath)).toBe(true)
+    const draft = await FS.readText(messagePath)
+    Expect(() => validateMergeMessage(draft)).not.toThrow()
+    Expect(draft).toContain('- Add the disposable finalize fixture')
+    const statePath = FS.resolvePath('.artifacts/merge/feat/finalize-fixture.state.json', featureRoot)
+    Expect(await FS.exists(statePath)).toBe(true)
   })
 })
 
@@ -1054,6 +1116,21 @@ Describe('landing preparation', () => {
     })
     const changedHead = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
     Expect(changedHead.ok).toBe(false)
+  })
+
+  Test('does not turn an untouched generated draft into author review on a later landing', async () => {
+    const fake = fakeDependencies()
+    await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+    const path = '/repo/.artifacts/merge/feat/example.msg'
+
+    const untouched = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(untouched.ok).toBe(false)
+    Expect(untouched.remaining[0]).toContain('generated draft has not been edited by its author')
+
+    fake.files.set(path, 'Land the example workflow\n\n- Add the example workflow.\n')
+    const edited = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(edited.ok).toBe(true)
   })
 
   Test('accepts an updated kept message without an out-of-lock finalize', async () => {
@@ -1105,6 +1182,49 @@ Describe('landing preparation', () => {
     Expect(fake.calls.some(call => call.args[0] === 'update-ref')).toBe(false)
   })
 
+  Test('rejects an alternate agent landing message before redraft can read or write it', async () => {
+    const fake = fakeDependencies()
+    const outside = '/private/tmp/host-owned.msg'
+    fake.files.set(outside, 'Keep this host file.\n')
+
+    await Expect(LandCommand.run({
+      messageFile: outside,
+      redraft: true,
+      repositoryRoot: '/repo',
+    }, fake.dependencies)).rejects.toThrow('only accepts its canonical merge message')
+
+    Expect(fake.files.get(outside)).toBe('Keep this host file.\n')
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+  })
+
+  Test('rejects symlinked and physically escaped canonical landing messages before preparation', async () => {
+    const symlinked = fakeDependencies()
+    symlinked.dependencies.isSymbolicLink = async path => path === '/repo/.artifacts/merge'
+    await Expect(LandCommand.run({ repositoryRoot: '/repo' }, symlinked.dependencies))
+      .rejects.toThrow('crosses a symbolic link')
+    Expect(symlinked.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+
+    const escaped = fakeDependencies()
+    const messagePath = '/repo/.artifacts/merge/feat/example.msg'
+    escaped.files.set(messagePath, 'Land it\n\n- Do the thing.\n')
+    escaped.dependencies.realPath = async path => path === messagePath ? '/private/tmp/escaped.msg' : path
+    await Expect(LandCommand.run({ repositoryRoot: '/repo' }, escaped.dependencies))
+      .rejects.toThrow('resolves outside the repository')
+    Expect(escaped.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+  })
+
+  Test('rejects the two noninteractive verification skips before inspecting the repository', async () => {
+    const fake = fakeDependencies()
+
+    await Expect(LandCommand.run({
+      repositoryRoot: '/repo',
+      skipVerify: true,
+      skipVerifyFull: true,
+    }, fake.dependencies)).rejects.toThrow('cannot combine --skip-verify-full with --skip-verify')
+
+    Expect(fake.calls).toEqual([])
+  })
+
   Test('refuses a branch that is not feat/* or a dirty worktree, before anything else', async () => {
     const detached = fakeDependencies({ branch: '' })
     await Expect(prepareForLanding({ repositoryRoot: '/repo' }, detached.dependencies))
@@ -1114,6 +1234,130 @@ Describe('landing preparation', () => {
     await Expect(prepareForLanding({ repositoryRoot: '/repo' }, dirty.dependencies))
       .rejects.toThrow('stray.ts')
     Expect(dirty.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+  })
+})
+
+Describe('merge-main', () => {
+  Test('merges main and stops there: no lane, no merge message, no state file', async () => {
+    const fake = fakeDependencies()
+    const outcome = await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(outcome.mergedNow).toBe(true)
+    Expect(fake.lines.some(line => line.includes('Merged main'))).toBe(true)
+    Expect(fake.calls.some(call => call.command === 'just')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'log')).toBe(false)
+    Expect(fake.states.size).toBe(0)
+  })
+
+  Test('reports a branch that already contains main without merging', async () => {
+    const fake = fakeDependencies({ headSha: 'mainsha00000000000000000000000000000000000' })
+    const outcome = await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(outcome.mergedNow).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'merge')).toBe(false)
+  })
+
+  Test('refuses where it cannot finish, and names itself unsandboxed as the way through', async () => {
+    const fake = fakeDependencies({
+      diffPaths: ['agents/skills/delegation/SKILL.md'],
+      existingDirectories: ['agents/skills/delegation'],
+      unwritableDirectories: ['agents/skills'],
+    })
+
+    const message = String(await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(e => e))
+
+    Expect(message.includes('./agent unsandboxed merge-main')).toBe(true)
+    Expect(message.includes('finalize')).toBe(false)
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--no-edit')).toBe(false)
+  })
+
+  Test('leaves a conflict for the author to resolve and commit', async () => {
+    const fake = fakeDependencies({ conflictOnMerge: true })
+
+    const message = String(await MergeMainCommand.run({ repositoryRoot: '/repo' }, fake.dependencies).catch(e => e))
+
+    Expect(message.includes('conflicted.ts')).toBe(true)
+    Expect(message.includes('commit the merge')).toBe(true)
+    Expect(fake.calls.some(call => ['reset', 'checkout', 'commit'].includes(call.args[0]!))).toBe(false)
+  })
+
+  Test('refuses a detached HEAD or a dirty worktree in its own name', async () => {
+    const detached = fakeDependencies({ branch: '' })
+    await Expect(MergeMainCommand.run({ repositoryRoot: '/repo' }, detached.dependencies))
+      .rejects.toThrow('merge-main requires a feat/* branch')
+
+    const dirty = fakeDependencies({ status: ' M tracked.ts\n' })
+    await Expect(MergeMainCommand.run({ repositoryRoot: '/repo' }, dirty.dependencies))
+      .rejects.toThrow('merge-main refuses to guess')
+  })
+})
+
+Describe('start-branch', () => {
+  Test('refuses a protected checkout path before switching, naming its host command', async () => {
+    const fake = fakeDependencies({
+      branch: '',
+      diffPaths: ['.claude/settings.json', 'packages/cli/dev-cli/dev-cli-src/dev.ts'],
+      existingDirectories: ['.claude', 'packages/cli/dev-cli/dev-cli-src'],
+      unwritableFiles: ['.claude/settings.json'],
+    })
+
+    const failure = await StartBranchCommand.run('feat/next', { repositoryRoot: '/repo' }, fake.dependencies)
+      .catch(error => error)
+    const report = Errors.formatForUser(failure)
+
+    Expect(report).toContain('.claude/settings.json')
+    Expect(report).toContain('./agent unsandboxed start-branch feat/next')
+    Expect(report).not.toContain('packages/cli/dev-cli/dev-cli-src/dev.ts')
+    Expect(fake.calls.some(call => call.args[0] === 'fetch')).toBe(true)
+    Expect(fake.calls.some(call => call.args[0] === 'switch')).toBe(false)
+  })
+
+  Test('starts an untracked feature branch from fetched origin/main when writes are allowed', async () => {
+    const fake = fakeDependencies({
+      branch: '',
+      diffPaths: ['Docs/Roadmap/plan.md'],
+      existingDirectories: ['Docs/Roadmap'],
+    })
+
+    await StartBranchCommand.run('feat/next', { repositoryRoot: '/repo' }, fake.dependencies)
+
+    Expect(fake.calls.some(call => call.args.join(' ') === 'fetch --quiet origin main')).toBe(true)
+    Expect(fake.calls.some(call =>
+      call.args.join(' ')
+        === 'switch --no-track -c feat/next mainsha00000000000000000000000000000000000'
+    )).toBe(true)
+    Expect(fake.lines.some(line => line.includes("Started 'feat/next' from origin/main"))).toBe(true)
+  })
+
+  Test('probes a pathname containing a newline as one protected file', async () => {
+    const protectedPath = '.claude/odd\nname.json'
+    const fake = fakeDependencies({
+      diffPaths: [protectedPath],
+      existingDirectories: ['.claude'],
+      unwritableFiles: [protectedPath],
+    })
+
+    const failure = await StartBranchCommand.run('feat/next', { repositoryRoot: '/repo' }, fake.dependencies)
+      .catch(error => error)
+
+    Expect(Errors.formatForUser(failure)).toContain(protectedPath)
+    Expect(fake.calls.some(call => call.args[0] === 'switch')).toBe(false)
+  })
+
+  Test('requires a clean worktree and a new valid feat branch before fetching', async () => {
+    for (
+      const [name, overrides] of [
+        ['dev/next', {}],
+        ['feat/bad name', {}],
+        ['feat/next', { status: ' M tracked.ts\n' }],
+        ['feat/next', { branchExists: true }],
+      ] as const
+    ) {
+      const fake = fakeDependencies(overrides)
+      await Expect(StartBranchCommand.run(name, { repositoryRoot: '/repo' }, fake.dependencies)).rejects.toThrow()
+      Expect(fake.calls.some(call => call.args[0] === 'fetch')).toBe(false)
+      Expect(fake.calls.some(call => call.args[0] === 'switch')).toBe(false)
+    }
   })
 })
 

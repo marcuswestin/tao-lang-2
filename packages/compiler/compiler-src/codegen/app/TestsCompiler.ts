@@ -12,6 +12,10 @@ export const TestsCompiler = {
     return gen.noop()
   },
 
+  ActionFailureStubStep(): Compiled {
+    return gen.noop()
+  },
+
   /** BackTestStep compiles to no generated app output. */
   BackTestStep(_back: AST.BackTestStep): Compiled {
     return gen.noop()

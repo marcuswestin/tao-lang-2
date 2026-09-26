@@ -1,5 +1,5 @@
 import { AST } from '@parser'
-import { sliceText, statementSlices } from './text-slices'
+import { closeBraceOffset, sliceText, statementSlices } from './text-slices'
 
 /**
  * moveViewRendersLast returns the document text with each visual declaration's single render
@@ -24,7 +24,7 @@ export function moveViewRendersLast(document: AST.Document): string | undefined 
     }
     const statements = AST.blockStatements(view)
     const regionStart = statementRegionStart(text, block, statements[0]!.$cstNode!.offset)
-    const { slices, end } = statementSlices(text, statements, regionStart, blockCloseBraceOffset(text, block))
+    const { slices, end } = statementSlices(text, statements, regionStart, closeBraceOffset(text, block))
     const renderSlices = slices.filter(slice => AST.isRenderStatement(slice.statement))
     const otherSlices = slices.filter(slice => !AST.isRenderStatement(slice.statement))
     const reordered = [...otherSlices, ...renderSlices].map(sliceText).join('\n')
@@ -42,12 +42,6 @@ function statementRegionStart(text: string, block: AST.Block, firstStatementOffs
     return firstStatementOffset
   }
   return bodyStart + comment.index + (leading[comment.index] === '\n' ? 1 : 0)
-}
-
-function blockCloseBraceOffset(text: string, block: AST.Block): number {
-  const blockEnd = block.$cstNode!.end
-  const closeOffset = text.lastIndexOf('}', blockEnd - 1)
-  return closeOffset === -1 ? blockEnd : closeOffset
 }
 
 function needsRenderMove(view: AST.ViewDeclaration): boolean {

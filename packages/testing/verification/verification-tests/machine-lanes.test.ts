@@ -467,6 +467,122 @@ Describe('machine lanes', () => {
     await second.release()
   })
 
+  Test('landing priority lets existing lanes finish and pauses later lanes until release', async () => {
+    const registryRoot = await mkTestDir('tao-machine-landing-priority-')
+    const existing = await MachineLanes.acquire({
+      cpuCount: 4,
+      lane: 'test-file',
+      registryRoot,
+      repositoryRoot: '/existing',
+    })
+    const priority = await MachineLanes.beginLandingPriority(registryRoot)
+    Expect(priority).toBeDefined()
+    const holder = await MachineLanes.acquire({
+      cpuCount: 4,
+      lane: 'verify-full',
+      landingPriorityToken: priority!.token,
+      registryRoot,
+      repositoryRoot: '/landing',
+    })
+    const later = await MachineLanes.acquire({
+      cpuCount: 4,
+      lane: 'test-file',
+      registryRoot,
+      repositoryRoot: '/later',
+    })
+    try {
+      // A lane registered before the window may keep starting its remaining nodes. This is what
+      // allows it to finish even if it already holds GUI or prepare when the landing begins.
+      const existingWork = await existing.tryAcquire(1, false)
+      const holderWork = await holder.tryAcquire(1, false)
+      Expect(existingWork?.slots).toBe(1)
+      Expect(holderWork?.slots).toBe(1)
+      Expect(await later.tryAcquire(1, false)).toBeUndefined()
+      Expect(later.waitReason).toContain('landing verification has priority')
+
+      let admitted = false
+      const waiting = later.waitForLandingPriority().then(() => {
+        admitted = true
+      })
+      await settle(5)
+      Expect(admitted).toBe(false)
+      await priority?.release()
+      await waiting
+      Expect(admitted).toBe(true)
+      const laterWork = await later.tryAcquire(1, false)
+      Expect(laterWork?.slots).toBe(1)
+      await laterWork?.release()
+      await existingWork?.release()
+      await holderWork?.release()
+    } finally {
+      await priority?.release()
+      await existing.release()
+      await holder.release()
+      await later.release()
+    }
+  })
+
+  Test('a dead landing process cannot leave priority stuck', async () => {
+    const registryRoot = await mkTestDir('tao-machine-landing-priority-')
+    await FS.mkdir(registryRoot)
+    await FS.writeJson(FS.resolvePath('.landing-priority', registryRoot), {
+      id: 'dead',
+      pid: 2 ** 30,
+      startedAt: new Date().toISOString(),
+      existingLaneIds: [],
+      ownerLaneIds: [],
+    })
+    const lane = await MachineLanes.acquire({
+      cpuCount: 4,
+      lane: 'test-file',
+      registryRoot,
+      repositoryRoot: '/later',
+    })
+    try {
+      await lane.waitForLandingPriority()
+      Expect((await lane.tryAcquire(1, false))?.slots).toBe(1)
+      Expect(await FS.exists(FS.resolvePath('.landing-priority', registryRoot))).toBe(false)
+    } finally {
+      await lane.release()
+    }
+  })
+
+  Test("a paused broad lane cannot take the landing verifier's queue position", async () => {
+    const registryRoot = await mkTestDir('tao-machine-landing-priority-')
+    const existing = await MachineLanes.acquire({
+      cpuCount: 4,
+      lane: VerificationLanes.VERIFY,
+      registryRoot,
+      repositoryRoot: '/existing',
+    })
+    const priority = await MachineLanes.beginLandingPriority(registryRoot)
+    Expect(priority).toBeDefined()
+    const paused = await MachineLanes.acquire({
+      cpuCount: 4,
+      lane: VerificationLanes.VERIFY_FULL,
+      registryRoot,
+      repositoryRoot: '/paused',
+    })
+    const holder = await MachineLanes.acquire({
+      cpuCount: 4,
+      lane: VerificationLanes.VERIFY_FULL,
+      landingPriorityToken: priority!.token,
+      registryRoot,
+      repositoryRoot: '/landing',
+    })
+    try {
+      Expect(await paused.tryAcquire(1, false)).toBeUndefined()
+      const running = await holder.tryAcquire(4, false)
+      Expect(running?.slots).toBe(4)
+      await running?.release()
+    } finally {
+      await priority?.release()
+      await existing.release()
+      await paused.release()
+      await holder.release()
+    }
+  })
+
   Test('exclusive confirmation drains a reservation held by another process', async () => {
     const root = await mkTestDir('tao-machine-exclusive-process-')
     const registryRoot = FS.resolvePath('registry', root)

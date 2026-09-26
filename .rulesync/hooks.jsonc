@@ -20,12 +20,13 @@
     // activates the pinned devenv profile itself, which a fresh worktree has not done yet; it is
     // idempotent and returns in well under a second once a checkout is bootstrapped, so it runs
     // unconditionally — and then, when Claude Code hands it CLAUDE_ENV_FILE, exports that profile's
-    // bin directory onto the PATH of every later Bash tool command. Its stdout would enter the
-    // agent's context in both harnesses, hence the redirect.
+    // bin directory onto the PATH of every later Bash tool command. Setup stays quiet; after it
+    // completes, the model-routing notice reaches the agent only when the routing table looks
+    // behind the models this machine runs.
     "sessionStart": [
       {
         "type": "command",
-        "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh\" > /dev/null",
+        "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh\"",
       },
     ],
     // The three delegation hooks record what this repository hands to subagents, so that the

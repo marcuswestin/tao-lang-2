@@ -30,10 +30,10 @@ async function stepping(
 }
 
 Describe('cleaning a checkout', () => {
-  Test('removes checkout artifacts and the temp test cache in recipe order', async () => {
+  Test('removes checkout artifacts without deleting shared test caches', async () => {
     const checkout = (await CleanCommand.stepsFor('checkout')).map(commandLine)
     Expect(checkout[0]).toMatch(
-      /^rm -rf \.artifacts\/build \.artifacts\/dev packages\/apps\/expo-host\/\.expo packages\/apps\/expo-host\/_gen_tao-app packages\/apps\/expo-host\/_gen_tao-app-test \/.*\/tao-test-runs\/[0-9a-f]{16}$/,
+      /^rm -rf \.artifacts\/build \.artifacts\/dev packages\/apps\/expo-host\/\.expo packages\/apps\/expo-host\/_gen_tao-app packages\/apps\/expo-host\/_gen_tao-app-test$/,
     )
     // Pruned rather than descended: `find` must not walk into a tree it is about to delete.
     Expect(checkout[1]).toBe('find . -name node_modules -type d -prune -exec rm -rf {} +')

@@ -205,16 +205,24 @@ test "WordFlower export" on laptop with StarterWorkspace {
       expect text "Exporting needs a connection."
    }
 
-   test "reports a successful export" {
-      // A success stub supplies the value, so it needs no type name.
-      action ExportDocument returns "https://example.com/opening.md"
+   test "reports a successful export handoff" {
       run WordFlowerPreview
       select #workspaces[1] { press #openWorkspace }
       select #documents[1] { press #openDocument }
       press key "primary+e" // the command's portable modifier shortcut, never a platform key
       press #export
-      expect text "Exported"
+      expect text "Ready to share"
       press #closeExport
+   }
+
+   test "leaves a cancelled export quiet" {
+      action ExportDocument fails Cancelled
+      run WordFlowerPreview
+      select #workspaces[1] { press #openWorkspace }
+      select #documents[1] { press #openDocument }
+      press toolbar command "Export document"
+      press #export
+      expect missing text "Ready to share"
    }
 }
 

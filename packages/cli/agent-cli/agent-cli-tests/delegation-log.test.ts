@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   DELEGATION_EVENTS_PATH,
   readDelegationLog,
@@ -29,12 +29,38 @@ Describe('delegation log', () => {
     Expect(summary.lastTime).toEqual('2026-09-17T10:02:00Z')
   })
 
-  Test('reports a spawn that named no model as inherited rather than guessing one', () => {
+  Test('keeps an unnamed spawn unknown when no default is established', () => {
     const summary = summarizeDelegationLog(logLine('spawn', '2026-09-17T10:00:00Z', spawn('reviewer')))
 
     Expect(summary.unnamedModels).toEqual(1)
     Expect(summary.profiles[0]?.models).toEqual([])
     Expect(summary.profiles[0]?.unnamedModels).toEqual(1)
+    Expect(summary.profiles[0]?.selections.unknown).toEqual(1)
+    Expect(summary.profiles[0]?.observedModels).toEqual([])
+  })
+
+  Test('distinguishes explicit, pinned profile, harness default, and built-in inheritance', () => {
+    const summary = summarizeDelegationLog(
+      [
+        logLine('spawn', '2026-09-17T10:00:00Z', spawn('reviewer', 'gpt-6-astra')),
+        logLine('spawn', '2026-09-17T10:01:00Z', spawn('reviewer')),
+        logLine('spawn', '2026-09-17T10:02:00Z', spawn('general-purpose')),
+        logLine('spawn', '2026-09-17T10:03:00Z', spawn('Explore')),
+        logLine('start', '2026-09-17T10:03:01Z', { agent_id: 'a1', agent_type: 'Explore', model: 'claude-opus-5' }),
+      ].join('\n'),
+      { profilePins: new Set(['reviewer']) },
+    )
+
+    Expect(summary.profiles.find(profile => profile.profile === 'reviewer')?.selections).toEqual({
+      explicit: 1,
+      'profile default': 1,
+      'harness default': 0,
+      inherited: 0,
+      unknown: 0,
+    })
+    Expect(summary.profiles.find(profile => profile.profile === 'general-purpose')?.selections['harness default'])
+      .toEqual(1)
+    Expect(summary.profiles.find(profile => profile.profile === 'Explore')?.selections.inherited).toEqual(1)
   })
 
   Test('times a delegation only when its start and stop share an agent id', () => {
@@ -94,7 +120,7 @@ Describe('delegation log', () => {
   })
 
   Test('reads a directory of one file per event, which is how the hooks avoid interleaving', async () => {
-    const directory = await FS.mkTmpDir('delegation-events')
+    const directory = await mkTestDir('delegation-events')
     const events = FS.resolvePath(`${DELEGATION_EVENTS_PATH}`, directory)
     await FS.mkdir(events)
     await FS.writeText(
@@ -116,5 +142,84 @@ Describe('delegation log', () => {
     Expect(summary.spawns).toEqual(1)
     Expect(summary.completed).toEqual(1)
     Expect(summary.profiles[0]).toMatchObject({ longestMs: 10_000, models: ['haiku'], profile: 'scout' })
+  })
+
+  Test('reads all event files and orders same-second starts before stops', async () => {
+    const root = await mkTestDir('delegation-history')
+    const events = FS.resolvePath(DELEGATION_EVENTS_PATH, root)
+    await FS.mkdir(events)
+    for (let index = 0; index < 260; index += 1) {
+      await FS.writeText(
+        FS.resolvePath(`${String(index).padStart(3, '0')}-spawn.json`, events),
+        logLine('spawn', '2026-09-17T10:00:00Z', spawn('scout')),
+      )
+    }
+    await FS.writeText(
+      FS.resolvePath('z-start.json', events),
+      logLine('start', '2026-09-17T10:00:00Z', { agent_id: 'a1', agent_type: 'scout' }),
+    )
+    await FS.writeText(
+      FS.resolvePath('a-stop.json', events),
+      logLine('stop', '2026-09-17T10:00:00Z', { agent_id: 'a1', agent_type: 'scout' }),
+    )
+
+    const summary = await readDelegationLog(root)
+    Expect(summary.spawns).toEqual(260)
+    Expect(summary.completed).toEqual(1)
+  })
+
+  Test('reads a profile that pins only a Claude Code model as its own default', async () => {
+    const root = await mkTestDir('delegation-pins')
+    const events = FS.resolvePath(DELEGATION_EVENTS_PATH, root)
+    await FS.mkdir(events)
+    await FS.mkdir(FS.resolvePath('agents/subagents', root))
+    await FS.writeText(
+      FS.resolvePath('agents/subagents/scout.md', root),
+      ['---', 'name: scout', 'codexcli:', '  sandbox_mode: read-only', 'claudecode:', '  model: opus', '---', ''].join(
+        '\n',
+      ),
+    )
+    await FS.writeText(FS.resolvePath('a-spawn.json', events), logLine('spawn', '2026-09-17T10:00:00Z', spawn('scout')))
+
+    const summary = await readDelegationLog(root)
+    Expect(summary.profiles[0]?.selections['profile default']).toEqual(1)
+  })
+
+  Test('extracts a resolved model from bounded transcript metadata and tolerates a missing file', async () => {
+    const root = await mkTestDir('delegation-models')
+    const events = FS.resolvePath(DELEGATION_EVENTS_PATH, root)
+    const transcript = FS.resolvePath('subagents/agent-a1.jsonl', root)
+    await FS.mkdir(events)
+    await FS.mkdir(FS.resolvePath('subagents', root))
+    await FS.writeText(
+      transcript,
+      [
+        JSON.stringify({ type: 'user', message: { content: 'ignored' } }),
+        JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-5-5', content: 'ignored' } }),
+      ].join('\n'),
+    )
+    await FS.writeText(
+      FS.resolvePath('a-start.json', events),
+      logLine('start', '2026-09-17T10:00:00Z', { agent_id: 'a1', agent_type: 'reviewer' }),
+    )
+    await FS.writeText(
+      FS.resolvePath('b-stop.json', events),
+      logLine('stop', '2026-09-17T10:00:01Z', {
+        agent_id: 'a1',
+        agent_type: 'reviewer',
+        agent_transcript_path: transcript,
+      }),
+    )
+    await FS.writeText(
+      FS.resolvePath('c-stop.json', events),
+      logLine('stop', '2026-09-17T10:00:02Z', {
+        agent_id: 'missing',
+        agent_type: 'reviewer',
+        agent_transcript_path: FS.resolvePath('subagents/agent-missing.jsonl', root),
+      }),
+    )
+
+    const summary = await readDelegationLog(root)
+    Expect(summary.profiles[0]?.observedModels).toEqual(['claude-opus-5-5'])
   })
 })

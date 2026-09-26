@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, TaoHome } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { RuntimeToolchainPaths } from '../expo-host-src/runtime-toolchain-paths'
 import { TestHarnessFiles } from '../expo-host-src/testing/test-harness-files'
@@ -127,14 +127,15 @@ async function listGenerated(runtimePackageRoot: string, relativePath = ''): Pro
 }
 
 Describe('generated test run roots', () => {
-  Test('the default runtime stores compiled apps outside the checkout', async () => {
+  Test('the default runtime stores compiled apps in Tao cache outside the checkout', async () => {
     const runRoot = await TestRunRoot.create('tao-test-command')
     const appPath = await compiledApp(runRoot, {
       app: 'export default function App() { return null }\n',
       files: { 'modules/probe.ts': 'export const probe = true\n' },
     })
 
-    Expect(FS.pathIsWithin(runRoot, FS.tmpdir())).toBe(true)
+    Expect(FS.pathIsWithin(runRoot, TaoHome.cacheRoot())).toBe(true)
+    Expect(FS.pathIsWithin(runRoot, FS.resolvePath('tao-test-runs', FS.tmpdir()))).toBe(false)
     Expect(TestRunRoot.generatedRoot()).toBe(TestRunRoot.hostGeneratedRoot(RuntimeToolchainPaths.packageRoot))
     Expect(await FS.isFile(appPath)).toBe(true)
     Expect(await FS.isFile(FS.resolvePath('modules/probe.ts', FS.dirname(appPath)))).toBe(true)
@@ -142,12 +143,145 @@ Describe('generated test run roots', () => {
     Expect(await FS.exists(runRoot)).toBe(false)
   })
 
-  Test('keeps the default generated store outside a managed worktree', async () => {
+  Test('keeps the default generated store in Tao cache outside a managed worktree', async () => {
     const runRoot = await TestRunRoot.create('tao-test-default-root')
     try {
-      Expect(FS.pathIsWithin(runRoot, FS.tmpdir())).toBe(true)
+      Expect(FS.pathIsWithin(runRoot, TaoHome.cacheRoot())).toBe(true)
     } finally {
       await TestRunRoot.discard(runRoot)
+    }
+  })
+
+  Test('records ownership when the CLI passes the explicit host root', async () => {
+    const runtimePackageRoot = await mkTestDir('tao-test-explicit-host-root-')
+    const generatedRoot = TestRunRoot.hostGeneratedRoot(runtimePackageRoot)
+    const identityRoot = FS.dirname(generatedRoot)
+    const runRoot = await TestRunRoot.create('tao-test-command', { runtimePackageRoot, generatedRoot })
+    try {
+      const owner = await FS.readJson<Record<string, unknown>>(
+        FS.resolvePath(`${process.pid}.json`, FS.resolvePath('.owners', identityRoot)),
+      )
+
+      Expect(FS.pathIsWithin(runRoot, TaoHome.cacheRoot())).toBe(true)
+      Expect(owner['pid']).toBe(process.pid)
+      Expect(typeof owner['updatedAt']).toBe('string')
+      Expect(owner['version']).toBe(1)
+    } finally {
+      await FS.remove(identityRoot)
+      await FS.remove(runtimePackageRoot)
+    }
+  })
+
+  Test('bounds aggregate roots while preserving live, uncertain, and receipt-less identities', async () => {
+    const aggregateRoot = await mkTestDir('tao-test-runs-aggregate-')
+    const oldIdentity = FS.resolvePath('0000000000000001', aggregateRoot)
+    const liveIdentity = FS.resolvePath('0000000000000002', aggregateRoot)
+    const uncertainIdentity = FS.resolvePath('0000000000000003', aggregateRoot)
+    const legacyIdentity = FS.resolvePath('0000000000000004', aggregateRoot)
+    const oldGeneratedRoot = FS.resolvePath(TestRunRoot.DIRECTORY_NAME, oldIdentity)
+    const liveGeneratedRoot = FS.resolvePath(TestRunRoot.DIRECTORY_NAME, liveIdentity)
+    const uncertainGeneratedRoot = FS.resolvePath(TestRunRoot.DIRECTORY_NAME, uncertainIdentity)
+    const legacyGeneratedRoot = FS.resolvePath(TestRunRoot.DIRECTORY_NAME, legacyIdentity)
+    const recentIdentity = FS.resolvePath('0000000000000005', aggregateRoot)
+    const recentGeneratedRoot = FS.resolvePath(TestRunRoot.DIRECTORY_NAME, recentIdentity)
+    const emptyIdentity = FS.resolvePath('0000000000000007', aggregateRoot)
+    const emptyGeneratedRoot = FS.resolvePath(TestRunRoot.DIRECTORY_NAME, emptyIdentity)
+    const recentRun = FS.resolvePath(`tao-test-command/run-${Date.now() - 23 * HOUR_MS}-recent`, recentGeneratedRoot)
+    const oldRun = FS.resolvePath(`tao-test-command/run-${Date.now() - 26 * HOUR_MS}-old`, oldGeneratedRoot)
+    try {
+      await FS.writeText(FS.resolvePath('output.ts', oldRun), 'old bytes')
+      await FS.writeText(
+        FS.resolvePath('output.ts', FS.resolvePath('tao-test-command/run-1-live', liveGeneratedRoot)),
+        'live bytes',
+      )
+      await FS.writeText(
+        FS.resolvePath('output.ts', FS.resolvePath('tao-test-command/run-1-uncertain', uncertainGeneratedRoot)),
+        'uncertain bytes',
+      )
+      await FS.writeText(
+        FS.resolvePath('output.ts', FS.resolvePath('tao-test-command/run-1-legacy', legacyGeneratedRoot)),
+        'legacy bytes',
+      )
+      await FS.writeText(FS.resolvePath('output.ts', recentRun), 'recent handoff')
+      await FS.writeText(
+        FS.resolvePath('output.ts', FS.resolvePath('tao-test-command/run-1-empty', emptyGeneratedRoot)),
+        'empty receipt root',
+      )
+      const oldOwners = FS.resolvePath('.owners', oldIdentity)
+      const liveOwners = FS.resolvePath('.owners', liveIdentity)
+      const uncertainOwners = FS.resolvePath('.owners', uncertainIdentity)
+      const recentOwners = FS.resolvePath('.owners', recentIdentity)
+      await FS.mkdir(FS.resolvePath('.owners', emptyIdentity))
+      await FS.writeJson(FS.resolvePath('2147483647.json', oldOwners), {
+        pid: 2147483647,
+        updatedAt: new Date(Date.now() - 26 * HOUR_MS).toISOString(),
+        version: 1,
+      })
+      await FS.writeJson(FS.resolvePath(`${process.pid}.json`, liveOwners), {
+        pid: process.pid,
+        updatedAt: new Date(Date.now() - 26 * HOUR_MS).toISOString(),
+        version: 1,
+      })
+      await FS.writeJson(FS.resolvePath('2147483646.json', recentOwners), {
+        pid: 2147483646,
+        updatedAt: new Date(Date.now() - 23 * HOUR_MS).toISOString(),
+        version: 1,
+      })
+      await FS.writeText(FS.resolvePath('interrupted.json.tmp', uncertainOwners), '{')
+      const oldTime = Date.now() - 26 * HOUR_MS
+      for (
+        const path of [
+          oldIdentity,
+          FS.resolvePath('.owners', oldIdentity),
+          FS.resolvePath('2147483647.json', oldOwners),
+          FS.resolvePath('output.ts', oldRun),
+        ]
+      ) {
+        await FS.setModifiedTimeMs(path, oldTime)
+      }
+
+      await Promise.all([
+        TestRunRoot.pruneHostAggregate(aggregateRoot, undefined, 1, true),
+        TestRunRoot.pruneHostAggregate(aggregateRoot, undefined, 1, true),
+      ])
+
+      Expect(await FS.exists(oldIdentity)).toBe(false)
+      Expect(await FS.isDirectory(liveGeneratedRoot)).toBe(true)
+      Expect(await FS.isDirectory(uncertainGeneratedRoot)).toBe(true)
+      Expect(await FS.isDirectory(legacyGeneratedRoot)).toBe(true)
+      Expect(await FS.isDirectory(recentGeneratedRoot)).toBe(true)
+      Expect(await FS.isDirectory(emptyGeneratedRoot)).toBe(true)
+    } finally {
+      await FS.remove(aggregateRoot)
+    }
+  })
+
+  Test('evicts an inactive aggregate identity when its file-count budget is spent', async () => {
+    const aggregateRoot = await mkTestDir('tao-test-runs-file-budget-')
+    const identityRoot = FS.resolvePath('0000000000000006', aggregateRoot)
+    const generatedRoot = FS.resolvePath(TestRunRoot.DIRECTORY_NAME, identityRoot)
+    const runRoot = FS.resolvePath(`tao-test-command/run-${Date.now() - 26 * HOUR_MS}-old`, generatedRoot)
+    try {
+      await FS.writeText(FS.resolvePath('first.ts', runRoot), 'one')
+      await FS.writeText(FS.resolvePath('second.ts', runRoot), 'two')
+      const ownerRoot = FS.resolvePath('.owners', identityRoot)
+      const ownerPath = FS.resolvePath('2147483645.json', ownerRoot)
+      await FS.writeJson(ownerPath, {
+        pid: 2147483645,
+        updatedAt: new Date(Date.now() - 26 * HOUR_MS).toISOString(),
+        version: 1,
+      })
+      const oldTime = Date.now() - 26 * HOUR_MS
+      await FS.setModifiedTimeMs(identityRoot, oldTime)
+      await FS.setModifiedTimeMs(ownerPath, oldTime)
+      await FS.setModifiedTimeMs(FS.resolvePath('first.ts', runRoot), oldTime)
+      await FS.setModifiedTimeMs(FS.resolvePath('second.ts', runRoot), oldTime)
+
+      await TestRunRoot.pruneHostAggregate(aggregateRoot, undefined, Number.MAX_SAFE_INTEGER, true, 1)
+
+      Expect(await FS.exists(identityRoot)).toBe(false)
+    } finally {
+      await FS.remove(aggregateRoot)
     }
   })
 

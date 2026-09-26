@@ -105,11 +105,13 @@
   // Named argv prefixes accepted by ./agent unsandboxed, and the only host rules generated for
   // the supported harnesses. HostCommandTargets implements tool operations; plain commands stay sandboxed.
   "agentHostCommands": [
-    "land", "finalize", "landed", "capabilities", "open-pr", "fix-agent-config",
+    "land", "finalize", "merge-main", "landed", "capabilities", "open-pr", "fix-agent-config",
     "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
-    "native-module-check",
+    "native-module-check", "reclaim --execute",
     "prepare-release studio", "prepare-release ide-extension",
-    "app-dev",
+    "app-dev", "studio", "studio-native",
+    "local-instantdb start", "local-instantdb stop",
+    "companion-host-build",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators open-url", "simulators uninstall", "simulators open",
     "devices list", "devices apps", "devices launch",
@@ -118,9 +120,10 @@
     "pods install", "pods spec",
     "android devices", "android state", "android emulators", "android boot", "android ensure",
     "remote fetch", "remote refs", "remote heads", "remote exists",
-    "processes list", "processes started",
+    "processes list", "processes started", "start-branch", "direnv allow",
   ],
   "claudecode": {
+    "autoCompactWindow": 272000,
     "sandbox": {
       "enabled": true,
       "excludedCommands": [],
@@ -133,9 +136,8 @@
           { "path": "~/.config/gh", "mode": "deny" },
         ],
       },
-      // Caches the pinned toolchain writes outside the worktree. Expo's native-module cache,
-      // Hutch's launcher root, and Watchman's state directory are as much part of the dev loop
-      // as Bun's and Gradle's: without them Studio, native Studio, and file watching all fail.
+      // Caches the pinned toolchain writes outside the worktree. Expo's native-module cache and
+      // Hutch's launcher root are as much part of the dev loop as Bun's and Gradle's.
       "filesystem": {
         "allowWrite": [
           "~/.bun",
@@ -144,19 +146,18 @@
           "~/.android",
           "~/.expo",
           "~/.hutch",
-          "~/.local/state/watchman",
           "~/Library/Caches",
         ],
       },
       "network": {
         "allowLocalBinding": true,
-        // Watchman's client reaches its server through `<login>-state/sock` under this directory,
-        // named after whoever runs it. Claude Code and Codex both render a socket entry as a
-        // Seatbelt `subpath` rule, so the directory covers every login without naming one; the
-        // rule matches the resolved path, so a link planted here reaches no other socket.
+        // Watchman is deliberately absent. Its socket sits under each developer's home directory,
+        // and Codex accepts only an absolute socket path, which would put a login in the tracked
+        // config; an agent sandbox also refuses OS file watching outright. So file-watching dev
+        // loops run on the host (`./agent unsandboxed app-dev` or `studio`), and sandboxed tests
+        // and builds crawl the tree without Watchman.
         "allowUnixSockets": [
           "/nix/var/nix/daemon-socket/socket",
-          "~/.local/state/watchman",
         ],
         "allowedDomains": [
           "registry.npmjs.org",
@@ -170,10 +171,10 @@
           "*.expo.dev",
           "*.expo.io",
           "exp.host",
-          // React Native's CocoaPods integration downloads the Hermes iOS artifact from Maven
-          // during the native-module compiler proof. The command still requires explicit host
-          // review or an opt-in unsandboxed session; this network rule does not grant a host escape.
+          // React Native's CocoaPods integration downloads iOS artifacts from Maven and its
+          // artifact CDN during native builds. These network rules do not grant a host escape.
           "repo1.maven.org",
+          "repo.reactnative.dev",
           "cache.nixos.org",
           "*.cachix.org",
           "*.anthropic.com",
@@ -198,8 +199,11 @@
     // never needs a `cd` prefix — which takes a command out of its allow rule and into permission
     // review, about two seconds per call. The profile PATH comes from the session-start hook in
     // hooks.jsonc, because `env` values here are literal and cannot extend the existing PATH.
+    // Subagents default to the standard tier's `opus` alias, left unpinned so each install
+    // resolves it to the newest Opus it knows.
     "env": {
       "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+      "CLAUDE_CODE_SUBAGENT_MODEL": "opus",
     },
     // Deliberately not set here: `env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`. It scrubs only
     // Anthropic and cloud-provider credentials from subprocess environments, and in exchange

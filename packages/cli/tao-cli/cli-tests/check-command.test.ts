@@ -1,4 +1,4 @@
-import { CLI, FS } from '@shared'
+import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runCheck } from '../cli-src/source-commands'
 import {
@@ -7,6 +7,7 @@ import {
   packageAwareCliMainPath,
   packageAwareCliPathCases,
   statusByFile,
+  withGitTaoFixture,
   withTaoFixture,
 } from './test-cli-files'
 
@@ -274,11 +275,10 @@ Describe('tao check', () => {
   })
 
   Test('skips an explicitly named ignored directory', async () => {
-    await withTaoFixture({
+    await withGitTaoFixture({
       '.gitignore': 'node_modules\n',
       'node_modules/pkg/ignored.tao': 'view   Ignored() { }',
     }, async (rootDir) => {
-      await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: rootDir })
       const directory = FS.resolvePath('node_modules', rootDir)
 
       Expect(await runCheck(directory)).toEqual([])

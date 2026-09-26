@@ -1,5 +1,5 @@
 import { CLI, FS, Time } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 import { readProjectLock } from '../cli-src/ship-lock'
 import { shipContentHash } from '../cli-src/ship-model'
 
@@ -11,7 +11,7 @@ const tsconfig = FS.resolvePath('packages/cli/tao-cli/tsconfig.json')
 
 Describe('tao ship cross-process transactions', () => {
   Test('keeps one stale reclaimer across older and freshly started contenders', async () => {
-    const root = await mkTestDir('tao-ship-stale-transaction-')
+    const root = await mkTestDir('tao-ship-stale-transaction-', { location: 'host' })
     const repositoryKey = shipContentHash([await FS.realPath(root)])
     const coordinationRoot = FS.resolvePath(`tao-ship-coordination/${repositoryKey}`, FS.tmpdir())
     try {
@@ -58,7 +58,7 @@ Describe('tao ship cross-process transactions', () => {
   })
 
   Test('reacquires a stale-owner claim displaced while the claimant is alive', async () => {
-    const root = await mkTestDir('tao-ship-displaced-claim-')
+    const root = await mkTestDir('tao-ship-displaced-claim-', { location: 'host' })
     const repositoryKey = shipContentHash([await FS.realPath(root)])
     const coordinationRoot = FS.resolvePath(`tao-ship-coordination/${repositoryKey}`, FS.tmpdir())
     const staleOwnerPath = FS.resolvePath('ship-transaction-stale.json', coordinationRoot)
@@ -120,31 +120,27 @@ Describe('tao ship cross-process transactions', () => {
   })
 
   Test('serializes projects that share one Git repository', async () => {
-    const root = await mkTestDir('tao-ship-repository-transaction-')
-    try {
-      await CLI.mustRun('git', { args: ['-C', root, 'init', '-q'] })
-      const projects = [FS.resolvePath('one', root), FS.resolvePath('two', root)]
-      await Promise.all(projects.map(FS.mkdir))
-      const results = await Promise.all(projects.map((project, index) =>
-        runWorker(`
-        import { withShipTransaction } from ${JSON.stringify(transactionModule)}
-        import { FS } from ${JSON.stringify(sharedModule)}
-        const marker = ${JSON.stringify(FS.resolvePath('inside.lock', root))}
-        await withShipTransaction(${JSON.stringify(project)}, async () => {
-          await FS.symlink(${JSON.stringify(String(index))}, marker)
-          await new Promise(resolve => setTimeout(resolve, 60))
-          await FS.remove(marker)
-        })
-      `)
-      ))
-      Expect(results.map(result => result.exitCode)).toEqual([0, 0])
-    } finally {
-      await FS.remove(root)
-    }
+    const root = await mkGitTestDir('tao-ship-repository-transaction-')
+    await initGitTestRepository(root)
+    const projects = [FS.resolvePath('one', root), FS.resolvePath('two', root)]
+    await Promise.all(projects.map(FS.mkdir))
+    const results = await Promise.all(projects.map((project, index) =>
+      runWorker(`
+      import { withShipTransaction } from ${JSON.stringify(transactionModule)}
+      import { FS } from ${JSON.stringify(sharedModule)}
+      const marker = ${JSON.stringify(FS.resolvePath('inside.lock', root))}
+      await withShipTransaction(${JSON.stringify(project)}, async () => {
+        await FS.symlink(${JSON.stringify(String(index))}, marker)
+        await new Promise(resolve => setTimeout(resolve, 60))
+        await FS.remove(marker)
+      })
+    `)
+    ))
+    Expect(results.map(result => result.exitCode)).toEqual([0, 0])
   })
 
   Test('admits only one independent ship process at a time', async () => {
-    const root = await mkTestDir('tao-ship-transaction-')
+    const root = await mkTestDir('tao-ship-transaction-', { location: 'host' })
     try {
       const results = await Promise.all(
         Array.from({ length: 6 }, (_, index) =>
@@ -168,7 +164,7 @@ Describe('tao ship cross-process transactions', () => {
   })
 
   Test('merges fresh app checkpoints from independent writers', async () => {
-    const root = await mkTestDir('tao-ship-lock-writers-')
+    const root = await mkTestDir('tao-ship-lock-writers-', { location: 'host' })
     try {
       const results = await Promise.all(
         Array.from({ length: 6 }, (_, index) =>
@@ -201,7 +197,7 @@ Describe('tao ship cross-process transactions', () => {
   })
 
   Test('preserves a fresh installs concern when a stale ship process checkpoints', async () => {
-    const root = await mkTestDir('tao-ship-lock-concerns-')
+    const root = await mkTestDir('tao-ship-lock-concerns-', { location: 'host' })
     const staleInstalls = installsLock('stale')
     const freshInstalls = installsLock('fresh')
     try {

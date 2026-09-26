@@ -6,6 +6,7 @@
   "module": "compiler-src/compiler.ts",
   "exports": {
     ".": "./compiler-src/compiler.ts",
+    "./bridge-metadata": "./compiler-src/bridge-metadata.ts",
     "./workspace": "./compiler-src/workspace/index.ts"
   },
   "dependencies": {

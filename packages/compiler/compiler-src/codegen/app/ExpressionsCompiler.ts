@@ -213,7 +213,11 @@ export const ExpressionsCompiler = {
     }])`
   },
 
-  /** FunctionCallExpression invokes a Tao pure function with owner-bound arguments. */
+  /**
+   * FunctionCallExpression invokes a pure function or named copy with owner-bound arguments; both
+   * share this one call shape (Decisions §14). A parameterless phrase's zero-argument call form
+   * (`DocumentGone()`) compiles the same way as its bare reference (`ValueDeclarationReference`).
+   */
   FunctionCallExpression(expression: AST.FunctionCallExpression): Compiled {
     const resolved = ASTUtils.resolveFunctionInvocation(expression)
     const fn = resolved.function
@@ -278,6 +282,10 @@ export const ExpressionsCompiler = {
   /** MemberAccessExpression compiles a typed item member path into a runtime value wrapper. */
   MemberAccessExpression(reference: AST.MemberAccessExpression): Compiled {
     const target = resolveRef(reference.target)
+    if (reference.shade !== undefined) {
+      Assert(AST.isDesignColorEntry(target), 'validated shade names a design color family member')
+      return compileDesignColorValue(AST.designColorPath(target, reference.shade))
+    }
     const root = Compile.ValueDeclarationReference(target)
     return compileMemberPath(root, Type.ofValueDeclaration(target), reference.members)
   },
@@ -328,6 +336,8 @@ export const ExpressionsCompiler = {
       CasePayload: payload => gen`${gen.scopeName(payload)}.evaluate()`,
       CommandDeclaration: command => gen`${gen.scopeName(command)}.evaluate()`,
       DesignDeclaration: design => gen`${gen.scopeName(design)}.evaluate()`,
+      DesignColorEntry: color => compileDesignColorValue(AST.designColorPath(color)),
+      DesignToken: token => compileDesignColorValue(AST.designColorPath(token)),
       EntityDataField: () => gen`TR.Value(true)`,
       EntityQueryDeclaration: query => gen`${gen.scopeName(query)}.evaluate()`,
       CaseSetCase: caseSetCase =>
@@ -338,6 +348,8 @@ export const ExpressionsCompiler = {
       DatasourceDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       NavDeclaration: declaration => gen`${gen.scopeName(declaration)}.evaluate()`,
       ParameterDeclaration: parameter => gen`${gen.scopeName({ name: Type.parameterName(parameter) })}.evaluate()`,
+      // A phrase compiles to a callable `TR.Function`; a bare reference is its zero-argument call.
+      PhraseDeclaration: phrase => gen`TR.Call(${gen.scopeName(phrase)})`,
       StateDeclaration: state => gen`${gen.scopeName(state)}.evaluate()`,
       ViewDeclaration: view => Compile.ViewValue(view),
     })
@@ -348,6 +360,14 @@ export const ExpressionsCompiler = {
     return compileNavigationDescriptor(view)
   },
 } as const
+
+/**
+ * A `color` value is the design color's name, never its hex: the mounted design resolves it at render,
+ * so a derived color follows `Scheme` and each app that mounts the view reads its own design.
+ */
+function compileDesignColorValue(path: string): Compiled {
+  return gen`TR.Value(${gen.jsLiteral(path)})`
+}
 
 function compileNavigationDescriptor(
   declaration: AST.ViewDeclaration,
@@ -853,11 +873,36 @@ function compileMemberPath(root: Compiled, rootType: ASTUtils.TaoType, members: 
       current = { kind: 'primitive', primitive: constructed }
       continue
     }
+    const completenessFields = Type.completenessFieldsOf(current)
+    const completenessType = completenessFields && Type.completenessMemberType(member)
+    if (completenessFields && completenessType) {
+      flushPlainMembers()
+      compiled = compileCompletenessMember(compiled, member, completenessFields)
+      current = completenessType
+      continue
+    }
     plainMembers.push(member)
     current = Type.atMemberPath(current, [member])
   }
   flushPlainMembers()
   return compiled
+}
+
+/**
+ * `Incomplete` and `Problems` read a row's or projection's `required` fields. Which fields carry a
+ * sentence is known here, so it is compiled in rather than carried by every runtime value.
+ */
+function compileCompletenessMember(
+  compiled: Compiled,
+  member: string,
+  fields: readonly ASTUtils.DataFieldDefinition[],
+): Compiled {
+  const required = fields.flatMap(field => {
+    const sentence = Type.requiredSentence(field)
+    return sentence === undefined ? [] : [gen`[${gen.jsLiteral(field.name)}, ${gen.jsLiteral(sentence)}]`]
+  })
+  const helper = member === 'Incomplete' ? 'Incomplete' : 'Problems'
+  return gen`TR.${helper}(${compiled}, [${gen.join(required, field => field)}])`
 }
 
 /**

@@ -63,7 +63,9 @@ function wordFlowerAbsorbedParityIssues(directory: WordFlowerDirectory): string[
 }
 
 function isWordFlowerParityFile(file: SourceFile): boolean {
-  return file.path !== '.tao-project/lock.jsonc' && !file.path.startsWith('.tao/')
+  return file.path !== '.tao-project/lock.jsonc'
+    && !file.path.split('/').some(segment => segment === '.tao' || segment === 'node_modules')
+    && !file.path.endsWith('.tao.ts')
 }
 
 function currentWordFlowerPath(path: string): string {
@@ -95,6 +97,8 @@ export type LedgerEntry = {
   name: string
   /** The entry's own `**Status:**`, or an empty string when the file states none. */
   status: string
+  /** Whether Status continues on another physical line, which the index cannot represent. */
+  statusMultiline?: boolean
   /** The entry's own `# DEVENV-... — Title` heading text, without the leading `# `, or `''` when absent. */
   heading?: string
   /** The entry's own `**Section:**`; meaningful only for an entry that lives in the open directory. */
@@ -176,6 +180,11 @@ export function developerEnvironmentLedgerIssues(open: LedgerSide, archived: Led
         continue
       }
       byId.set(id, [...byId.get(id) ?? [], `${linkPrefix}${entry.name}`])
+      if (entry.statusMultiline === true) {
+        issues.push(
+          `${linkPrefix}${entry.name} must keep \`**Status:**\` on one physical line; move detail to an update field.`,
+        )
+      }
       if (ARCHIVED_STATUSES.has(entry.status) !== archiveSide) {
         issues.push(
           archiveSide
@@ -452,49 +461,49 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:215',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:217',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:218',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:288',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:438',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:457',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:571',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:576',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:581',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:594',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:605',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:612',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:636',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:646',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:669',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:690',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:699',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:704',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:842',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:864',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:289',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:439',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:458',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:572',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:577',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:582',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:595',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:606',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:613',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:637',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:647',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:670',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:691',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:700',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:705',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:844',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:871',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:877',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:898',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:901',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:878',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:884',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:905',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:908',
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:235',
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:347',
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:355',
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:368',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:128',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:284',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:312',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:319',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:387',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:205',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:930',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:935',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:940',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:965',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1204',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1225',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1408',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1450',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1476',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:57',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:79',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:356',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:388',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:416',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:423',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:491',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:206',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:931',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:936',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:941',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:966',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1205',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1226',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1409',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1451',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1477',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:108',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:130',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:407',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
   'packages/ides/studio/studio-tests/studio-client.test.ts:627',
   'packages/ides/studio/studio-tests/studio-client.test.ts:3301',
@@ -504,9 +513,9 @@ const RAW_ERROR_ALLOWLIST = [
   // The shared leaf builds the Web-standard cancellation error itself.
   'packages/shared/shared-src/core/Errors.ts:160',
   // Tests hand raw unknown failures to production boundaries to prove their classification.
-  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:44',
-  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:84',
-  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:107',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:40',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:80',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:103',
   'packages/cli/agent-cli/agent-cli-tests/claude-profiles-generation.test.ts:87',
   'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:559',
   'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx:260',
@@ -577,6 +586,11 @@ const NODE_IMPORT_ALLOWLIST = [
   // Node-loaded configuration and Expo config plugins cannot use the ESM shared wrappers.
   'packages/apps/expo-host/app-config.cjs:1',
   'packages/apps/expo-host/jest.shared.config.cjs:1',
+  // Jest loads its direct-cache coordinator before TypeScript shared wrappers are available.
+  'packages/apps/expo-host/jest-direct-cache.cjs:2',
+  'packages/apps/expo-host/jest-direct-cache.cjs:3',
+  'packages/apps/expo-host/jest-direct-cache.cjs:4',
+  'packages/apps/expo-host/jest-direct-cache.cjs:5',
   'packages/apps/expo-host/app-config.cjs:2',
   'packages/apps/expo-host/metro.config.cjs:2',
   'packages/apps/expo-host/metro.config.cjs:3',
@@ -620,7 +634,6 @@ const PROCESS_ACCESS_ALLOWLIST = [
   // Studio's environment reads close with its own sweep onto `Platform.runtimeProcess`.
   'packages/ides/studio/studio-src/agent-chat/AgentChatProvider.ts',
   'packages/ides/studio/studio-src/agent-chat/AgentChatServer.ts',
-  'packages/ides/studio/studio-tests/studio-agent-chat-server.test.ts',
 ]
 
 /** The Electrobun main is emitted text that runs where no Tao module is loaded. */
@@ -755,6 +768,30 @@ export function conventionRuleIssues(
   return rule.allowlistBySite === true
     ? conventionSiteIssues(scanned, matches, allowlist, rule.staleDetail)
     : conventionIssues(scanned, matches, allowlist, rule.staleDetail)
+}
+
+const TEST_SOURCE_PATH_PATTERN = /(?:\.test\.[cm]?[jt]sx?|\.host\.spec\.[jt]s|\.jest-test\.[jt]sx?)$/u
+const DIRECT_TEST_TEMP_DIRECTORY_PATTERN = /\b(?:FS\.mkTmpDir|(?:nodeFs|fs)\.mkdtemp(?:Sync)?)\s*\(/gu
+const DIRECT_TEST_GIT_INIT_PATTERN = /\bgit\w*\b[^\n]{0,80}?['"]init['"]/gu
+
+/**
+ * testScratchConventionIssues keeps test-created directories on the shared lifecycle, and Git
+ * fixtures on the helpers that keep them outside this checkout and fail when `git init` does.
+ */
+export function testScratchConventionIssues(files: readonly SourceFile[]): string[] {
+  return files
+    .filter(file => TEST_SOURCE_PATH_PATTERN.test(file.path) || file.path.includes('/studio-smoke/'))
+    .flatMap(file => [
+      ...[...file.source.matchAll(DIRECT_TEST_TEMP_DIRECTORY_PATTERN)].map(match =>
+        `${file.path}:${lineNumber(file.source, match.index)} creates a test directory directly; `
+        + 'use `mkTestDir` for fixtures or `Repo.mkScratchDir` for host specs.'
+      ),
+      ...[...file.source.matchAll(DIRECT_TEST_GIT_INIT_PATTERN)].map(match =>
+        `${file.path}:${lineNumber(file.source, match.index)} runs \`git init\` directly; `
+        + 'use `mkGitTestDir` and `initGitTestRepository`, which keep the repository outside this checkout.'
+      ),
+    ])
+    .sort()
 }
 
 /**
@@ -1100,6 +1137,7 @@ export async function repoLintIssues(
     file.path.startsWith('packages/') && (file.path.endsWith('.ts') || file.path.endsWith('.tsx'))
   )
   issues.push(...duplicateDescribeTitleIssues(packageFiles.filter(file => file.path.endsWith('.test.ts'))))
+  issues.push(...testScratchConventionIssues(packageFiles))
   for (const [name, rule] of Object.entries(CONVENTION_RULES)) {
     const files = name === 'rawError' || name === 'nodeImport' ? executableFiles : packageFiles
     issues.push(...conventionRuleIssues(rule, files))
@@ -1211,6 +1249,7 @@ async function readLedgerSide(repoRoot: string, entriesDirectory: string, indexP
       name,
       section: source.match(/^- \*\*Section:\*\* (.*)$/m)?.[1]?.trim() ?? '',
       status: source.match(/^- \*\*Status:\*\* (.*)$/m)?.[1]?.trim() ?? '',
+      statusMultiline: /^- \*\*Status:\*\* [^\n]*\n[ \t]{2,}\S/m.test(source),
     })
   }
   const index = FS.resolvePath(indexPath, repoRoot)
@@ -1245,14 +1284,19 @@ async function readDirectoryFiles(directoryPath: string): Promise<SourceFile[]> 
   const files: SourceFile[] = []
   for await (
     const path of FS.walk(directoryPath, {
-      excludeDirectory: name => name === '.tao',
+      excludeDirectory: name => name === '.tao' || name === 'node_modules',
       includeHidden: true,
     })
   ) {
+    const relativePath = FS.relativePath(directoryPath, path)
+    // walk yields directory symlinks as files; skip generated roots before attempting a read.
+    if (!isWordFlowerParityFile({ path: relativePath, source: '' })) {
+      continue
+    }
     const bytes = await FS.readFile(path)
     files.push({
       bytes,
-      path: FS.relativePath(directoryPath, path),
+      path: relativePath,
       source: Buffer.from(bytes).toString('utf8'),
     })
   }
