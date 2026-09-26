@@ -11,6 +11,13 @@ The first surfaces are `expo-haptics` 57.0.3 (all four functions and all 27 enum
 default table or call into the curated `TR.Haptic` implementation. Tests supply an independent native
 boundary oracle; application bindings are regenerated directly from installed declarations.
 
+The output directory is entirely generator-owned. Repeating `tao bridge` replaces changed files,
+removes stale files and leaves identical files untouched. No generated code needs manual edits;
+optional wrappers or extensions live in separate files outside that directory. Its `bindings.json`
+catalog identifies an existing output as disposable; unrelated nonempty directories are refused.
+Generation finishes before the shared locked synchronizer publishes files, with rollback on write
+failure. Publication is per file, not an atomic directory swap; empty stale directories may remain.
+
 The catalog records package/version, resolved declaration, a hash of reached declarations in that
 package, enums and constant values, operations, parameter types/optionality, async completion, and
 platform tags. It excludes prose documentation and hashes of external dependency declarations.
@@ -66,22 +73,25 @@ separate portable convenience API.
 Tests were written before the generator and initially failed because it did not exist. The optional
 parameter regression also failed before its correction. Generation tests compile/check untouched
 generated Haptics and RN files, verify full Haptics coverage and deterministic output, reject unsupported
-signatures, follow public reexports, and exercise the CLI's refusal to overwrite output. Runtime tests
+signatures, follow public reexports, and exercise CLI reruns, stale-file removal, preserved custom
+siblings, failed-generation retention, and concurrent publication. Runtime tests
 exercise all Haptics values, actual omitted arguments, promise ordering and contained native failure
 through the compiled Tao program. Native package behavior is mocked only at its module boundary.
 
-This does not prove physical haptic feedback or linking on iOS/Android, nor the packaged CLI's resource
-layout. No dependency or native host configuration changed. Unsupported exported values fail the CLI
+The Developer exercised the generated Haptics demo on a connected physical iPhone and reported that
+the feedback works. This is a manual device observation, not exhaustive acceptance of all API cases;
+Android and the packaged CLI's resource layout remain unverified. No dependency or native host
+configuration changed. Unsupported exported values fail the CLI
 instead of producing a silently incomplete binding. Current support excludes result-bearing actions,
 records, callback subscriptions, overloads, generic functions and complex unions.
 
 Recommended next slices:
 
-1. Run the generated Haptics fixture on iOS and Android; verify each supported platform's real behavior
+1. Complete the generated Haptics fixture's iOS acceptance and run it on Android; verify each supported platform's real behavior
    and deliberate unsupported-platform outcomes. Preserve raw upstream semantics in this import layer.
 2. Add records and result-bearing APIs with one representative module. Decide the Tao outcome/resource
    surface before hiding a result in mutable state. Then add callbacks with explicit disposal/lifetimes.
-3. Add regeneration/diff review for locked package versions and persistent naming policy. Check compiler
+3. Add generated-diff review for locked package versions and persistent naming policy. Check compiler
    condition and dependency provenance, source licensing, and shipped CLI packaging before broad rollout.
 4. Add an Android metadata reader only when its invocation backend is chosen. The source-neutral catalog
    permits a new reader; direct Kotlin/Java calls also require a backend and packaging/linking support.

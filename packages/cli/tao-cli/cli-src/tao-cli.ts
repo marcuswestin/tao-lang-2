@@ -51,7 +51,10 @@ function createCommands(): Command {
     .requiredOption('--source <source>', 'Source adapter: expo or react-native.')
     .option('--export <name>', 'Import one public object, such as React Native Vibration.')
     .option('--from <directory>', 'Resolve installed declarations from this directory.', '.')
-    .requiredOption('--out <directory>', 'Write generated bindings into a new directory.')
+    .requiredOption(
+      '--out <directory>',
+      'Regenerate bindings in a dedicated generated directory; its contents are disposable.',
+    )
     .description('Generate experimental Tao bindings for supported native API actions.')
     .action(async (packageName, options) => {
       try {

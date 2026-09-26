@@ -6,20 +6,41 @@
 have separate source adapters feeding the same catalog and Tao/TypeScript emitter. From this repository:
 
 ```sh
-./agent tao bridge expo-haptics --source expo --from packages/apps/expo-host --out .artifacts/haptics
-./agent tao bridge react-native --source react-native --export Vibration --from packages/apps/expo-host --out .artifacts/vibration
+./tao bridge expo-haptics --source expo --from packages/apps/expo-host --out .artifacts/haptics
+./tao bridge react-native --source react-native --export Vibration --from packages/apps/expo-host --out .artifacts/vibration
 ```
 
-Choose a fresh output directory. The command writes `Bindings.tao`, its generated `Bindings.ts`
+Choose a dedicated generated output directory. The command writes `Bindings.tao`, its generated `Bindings.ts`
 implementation, and a versioned `bindings.json` catalog with package version, declaration path,
-declaration hash, platform annotations and diagnostics. It refuses an existing destination or any
-unsupported public value in the selected surface. It installs no packages and executes no native code.
-Keep the two binding files together in the consuming Tao project, where the same upstream package
-must be resolvable. Use ordinary Tao imports:
+declaration hash, platform annotations and diagnostics. Rerun the same command at any time: identical
+files stay untouched, changed files are replaced, and stale files in that directory are removed.
+The whole output directory is disposable, so added files and manual edits inside it are discarded.
+Keep its generated catalog: it identifies an existing output directory the command may replace.
+An unrelated nonempty directory or a symlink is refused.
+
+Generation and validation finish before publication, so unsupported upstream APIs leave the previous
+output intact. Publication uses the shared locked file synchronizer with rollback on write failure;
+it does not atomically swap the entire directory, and empty stale subdirectories may remain.
+The command installs no packages and executes no native code.
+
+Never customize generated files. Improve the generator or put optional custom wrappers in sibling
+files outside its output directory, for example:
+
+```text
+Native/
+├── Feedback.tao          # optional custom wrapper
+└── Haptics/              # wholly generated; --out points here
+    ├── Bindings.tao
+    ├── Bindings.ts
+    └── bindings.json
+```
+
+Keep all generated files together in the consuming Tao project, where the same upstream package
+must be resolvable. Use ordinary Tao imports from a sibling file:
 
 ```tao
 use SelectionAsync, ImpactAsync, NotificationAsync, PerformAndroidHapticsAsync,
-   ImpactFeedbackStyle, NotificationFeedbackType, AndroidHaptics from ./Bindings.tao
+   ImpactFeedbackStyle, NotificationFeedbackType, AndroidHaptics from ./Haptics/Bindings.tao
 
 action Feedback() {
    do SelectionAsync()
