@@ -342,8 +342,10 @@ parser tests 5 seconds, and checks 65 seconds. Test-all finished in 309 seconds 
 failures. Cold verification finished in 571 seconds with only the inspector fixture failing;
 the cold phase took 1098 host seconds including log collection. Tools bootstrap took 26 seconds
 (104 host seconds including image capture). Cached bootstrap passed in 38 seconds with managed
-Python, repeat setup in 4 seconds, parser in 6 seconds, and checks in 67 seconds. Cached tests and
-verification remain pending.
+Python, repeat setup in 4 seconds, parser in 6 seconds, and checks in 67 seconds. Cached tests took 308 seconds and verification 529 seconds; both failed only the
+inspector fixture. The cached phase took 967 host seconds. Read-only inspection
+`20260926T223819Z-33462` confirmed that no run-specific containers or base images remained;
+reusable tools and shared caches were preserved.
 
 The remaining inspector fixture intercepted the macOS helper even on Linux, where process
 identities correctly come from `/proc`. It now exercises both real adapters in isolated module
@@ -392,3 +394,22 @@ No production shortcut semantics changed.
       image identity, resource limits, and cleanup ownership for failures.
 - [ ] Run actual cloud smoke tests for every supported harness to cover hosted proxy, permissions,
       credentials, and setup-hook differences that the local Ubuntu environment cannot prove.
+
+## Updated-source native follow-up
+
+Native run `20260926T223924Z-40862` tests merge commit `03b54882`, including the inspector
+and doctor repairs at `2411e883` and main `d5bdeaef`. macOS complete verification passed
+in 241.8 seconds at `.artifacts/logs/verify/2026-09-26T22-40-09-499Z-38053-7bbf89e4/`.
+Cold Linux bootstrap took 67 seconds, repeat setup 3 seconds, parser 6 seconds, and checks
+65 seconds. Managed Python 3.13.12 is confirmed. Full Linux results remain pending.
+
+The first cold test failure came from the incoming Watchman dispatch fixture's `/bin/zsh`
+shebang. Linux provides zsh through the managed profile, not that macOS system path. The
+fixture uses only POSIX syntax and now uses `/bin/sh`, matching neighboring dispatch fixtures.
+No Watchman lifecycle or permission behavior changed. Failure evidence is retained under
+`.artifacts/contributor-linux/20260926T224544Z-85379/` in the cold workflow log snapshot.
+
+Incoming `./agent setup --environment` uses the full devenv environment and requires its
+launcher prerequisites. Fresh Linux continues to enter through `bootstrap-tao-dev-env`;
+that entry installs the pinned tools before invoking setup. The incoming full environment's
+Hutch package is separate from the portable contributor profile.

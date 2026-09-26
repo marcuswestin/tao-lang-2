@@ -17,7 +17,7 @@ Describe('named host command dispatch', () => {
         }),
       )
       const dev = FS.resolvePath('dev', root)
-      await FS.writeText(dev, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\nexit "${TAO_DEV_EXIT:-0}"\n')
+      await FS.writeText(dev, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\nexit "${TAO_DEV_EXIT:-0}"\n')
       await FS.chmod(dev, 0o755)
       const invoke = (args: string[], exitCode = '0') =>
         CLI.run(Platform.runtimeProcess.execPath, {
