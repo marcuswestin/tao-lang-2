@@ -445,7 +445,7 @@ reclaim *ARGS:
 worktree-status:
     ./dev worktree-status
 
-# Push this feature branch, open or reuse its pull request against main, then stream its checks
+# Push this feature branch, open or reuse its pull request against main, then stream the checks opening starts
 [group('Dev')]
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}

@@ -530,7 +530,7 @@ await runWithCommands(commands => {
   commands
     .command('open-pr')
     .description(
-      "Push this feature branch, open or reuse its pull request against main, then stream the pull request's checks.",
+      'Push this feature branch, open or reuse its pull request against main, then stream the checks opening it starts.',
     )
     .option('--poll-interval-ms <ms>', 'How often to poll checks when this gh has no `--watch` flag.')
     .action(async (options: { pollIntervalMs?: string } = {}) => {
