@@ -962,6 +962,11 @@ export class StudioCdp {
       text,
     }, details['timestamp']))
   }
+
+  /** Installs page-world setup before scripts execute in each subsequently loaded document. */
+  async addInitScript(source: string): Promise<void> {
+    await this.client.send('Page.addScriptToEvaluateOnNewDocument', { source })
+  }
 }
 
 function chromeKeyDetails(key: string): { code: string; key: string; windowsVirtualKeyCode: number } {

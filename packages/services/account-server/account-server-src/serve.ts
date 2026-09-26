@@ -2,6 +2,7 @@
 import { Errors, FS, HCI, Platform } from '@shared'
 import { accountPolicyFromJSON } from './AccountPolicy'
 import { AccountServer, type AccountServerOptions } from './AccountServer'
+import { type ClerkAccountOptions, validateClerkAccountOptions } from './ClerkAccountIdentity'
 
 /** startAccountServerFromArguments starts only from an explicit trusted policy file. */
 export async function startAccountServerFromArguments(args: readonly string[]): Promise<AccountServer> {
@@ -16,13 +17,14 @@ export async function startAccountServerFromArguments(args: readonly string[]): 
     '--origin',
     '--ready-file',
     '--instant-config',
+    '--clerk-config',
   ]
   for (let index = 0; index < args.length; index += 2) {
     const name = args[index]!
     const value = args[index + 1]
     if (!names.includes(name) || value === undefined || value.startsWith('--') || value.trim() === '') {
       Errors.throwUserInput(
-        'Use --policy PATH [--database PATH] [--port PORT] [--resource NAME] [--issuer NAME] [--origin URL] [--instant-config PATH].',
+        'Use --policy PATH [--database PATH] [--port PORT] [--resource NAME] [--issuer NAME] [--origin URL] [--instant-config PATH] [--clerk-config PATH].',
       )
     }
     if (name === '--origin') {
@@ -45,11 +47,14 @@ export async function startAccountServerFromArguments(args: readonly string[]): 
   const resource = values.get('--resource') ?? 'auth-review'
   const instantPath = values.get('--instant-config')
   const instant = instantPath === undefined ? undefined : await readInstantConfiguration(instantPath)
+  const clerkPath = values.get('--clerk-config')
+  const clerk = clerkPath === undefined ? undefined : await readClerkConfiguration(clerkPath)
   const server = await AccountServer.start({
     allowedOrigins,
     databasePath: FS.resolvePath(values.get('--database') ?? '.artifacts/auth-review/accounts.sqlite'),
     issuer: values.get('--issuer') ?? `tao-local:${resource}`,
     ...(instant === undefined ? {} : { instant }),
+    ...(clerk === undefined ? {} : { clerk }),
     policy: accountPolicyFromJSON(await FS.readJson<unknown>(FS.resolvePath(policyPath))),
     port,
     resource,
@@ -64,6 +69,35 @@ export async function startAccountServerFromArguments(args: readonly string[]): 
     await server.stop()
     throw error
   }
+}
+
+async function readClerkConfiguration(path: string): Promise<ClerkAccountOptions> {
+  let value: unknown
+  try {
+    value = await FS.readJson<unknown>(FS.resolvePath(path))
+  } catch {
+    Errors.throwUserInput(
+      'Unable to read the Clerk configuration file. Provide a JSON file with issuer, jwtKey, and authorizedParties.',
+    )
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    Errors.throwUserInput(
+      'Clerk configuration must contain issuer, jwtKey, and authorizedParties, with optional audience.',
+    )
+  }
+  const configuration = value as Record<string, unknown>
+  const required = ['issuer', 'jwtKey', 'authorizedParties']
+  if (
+    required.some(key => !Object.hasOwn(configuration, key))
+    || Object.keys(configuration).some(key => ![...required, 'audience'].includes(key))
+  ) {
+    Errors.throwUserInput(
+      'Clerk configuration must contain only issuer, jwtKey, authorizedParties, and optional audience.',
+    )
+  }
+  const options = configuration as ClerkAccountOptions
+  validateClerkAccountOptions(options)
+  return options
 }
 
 async function readInstantConfiguration(path: string): Promise<NonNullable<AccountServerOptions['instant']>> {
