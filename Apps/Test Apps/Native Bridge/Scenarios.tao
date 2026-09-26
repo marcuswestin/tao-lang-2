@@ -1,9 +1,0 @@
-use NativeBridge from ./App.tao
-
-scenarios NativeBridge "native bridge" {
-   scenario "phone" {
-      device phone
-      appearance light
-      network online
-      locale "en"
-}  }

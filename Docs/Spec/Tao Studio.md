@@ -118,6 +118,12 @@ scenario record and initially one preview cell per authored entry. Focused previ
 isolated app-owned navigation occurrence, so contextual presentation and Back work exactly as they do
 inside an app while remaining isolated from other cells.
 
+When the selected app has no applicable scenarios, Studio launches the ordinary app in both the
+browser preview and the paired native device. It applies no scenario fixtures, environment overrides,
+preparation or replay steps. Local `tao dev` also launches the ordinary app; scenario declarations
+remain metadata there. Removing the last scenario during a Studio session returns the device to the
+ordinary app once the matching bundle is loaded.
+
 ## Studio compilation manifest
 
 Preview compilation emits `TaoStudioManifest.ts` with format version 2. Production compilation does
@@ -747,7 +753,7 @@ Scenarios declared in imported files and authored `run App at Destination(...)` 
 Studio compilation with actionable messages. This satisfies the current mount-or-reject and execute-or-reject
 boundary without publishing blank cells or silently substituting the selected app's default route.
 
-A physical iPhone or iPad renders one cell through the Tao Companion development build
+A physical iPhone or iPad renders the ordinary app, or one scenario cell, through the Tao Companion development build
 (`packages/ides/studio-companion-app`, an Expo dev client with a fixed bundle id and scheme). Every Studio launch
 starts one `tao-studio-device-v1` gateway beside the loopback server, bound to every interface on an
 ephemeral port and carrying pairing, project/app identity, scenario bootstrap, revision state, and
@@ -768,9 +774,16 @@ trust. The protocol, threat model, and message set are in
 `Docs/Roadmap/Tao Studio companion app/Slice 1 - Device protocol and trust.md`. After pairing is
 confirmed, a device may send `device.selectCell`, `device.selectSource`, `device.setNetwork`,
 `device.sourceAction` (validated and applied with the same identity tuple as a browser request),
-`device.applied`, `device.log`, `device.report`, and runtime-capture results; before confirmation only
+`device.applied`, `device.appApplied`, `device.log`, `device.report`, and runtime-capture results; before confirmation only
 `device.ping` is answered. Studio now advertises authenticated Bonjour candidates and a trusted device
 rediscovers the current gateway and Metro endpoints after a network or session change; the advertisement
 is bound to Studio's pinned identity and the QR/deep-link route remains the fallback. The device panel
 exposes LAN/cable choice. The Tao relay and companion beta delivery remain roadmap work, and this
 software contract is not evidence of a successful physical cable or other real-device run.
+
+Without scenarios, the native host renders the generated app directly inside its error boundary and
+acknowledges the published compile and manifest revisions with `device.appApplied`. The gateway accepts
+that acknowledgement only for its current scenario-free publication with no assigned cell. This updates
+the device's applied status without replacing the browser preview instance. Pairing and bundle revision
+checks still apply. The device menu keeps layout bounds and session status; scenario-dependent inspection,
+source edits and environment overrides require an assigned cell.

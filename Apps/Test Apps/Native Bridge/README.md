@@ -13,9 +13,9 @@ From the repository root, in your regular terminal:
 ```
 
 Unlock roPhone. In Studio's Device panel, choose **roPhone → Open this app on device · cable** (or
-**· LAN**). The installed Tao Companion opens this session. If necessary, select **native bridge /
-phone** under **Scenario on device**. Keep the terminal running. The scenario is declared in the app,
-so the device has a scenario to display immediately.
+**· LAN**). The installed Tao Companion opens this session and launches the app directly. Keep the
+terminal running. This demo intentionally declares no scenarios: opening it applies no scenario
+fixtures, environment overrides, preparation or replay steps.
 
 If Tao Companion is not installed, install it once before starting Studio:
 
@@ -47,7 +47,7 @@ component and constant generation are supported. All 11 generated Clipboard oper
 
 ```text
 Native Bridge/
-  App.tao, Project.tao, Design.tao, Scenarios.tao
+  App.tao, Project.tao, Design.tao
   Native Bridge.test.tao
   Haptics/
     Haptics.tao

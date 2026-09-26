@@ -306,7 +306,8 @@ Vibration, vendor enums or result objects, or app-authored native bindings.
 ## Native Bridge
 
 A physical-device demo for generated Expo and React Native API bindings. `NativeBridge` starts at a
-surface chooser, with separate Haptics, Vibration, and Clipboard scenes and a phone Studio scenario.
+surface chooser, with separate Haptics, Vibration, and Clipboard scenes. It declares no scenarios,
+so Studio opens the ordinary app on the phone without preparation or replay steps.
 Each surface keeps generated bindings in its own `Generated/` directory; authored UI lives beside
 it. The entry's README owns launch and regeneration commands and the extension pattern.
 

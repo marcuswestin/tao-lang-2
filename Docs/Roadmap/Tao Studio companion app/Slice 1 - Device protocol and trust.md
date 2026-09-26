@@ -139,6 +139,7 @@ Device → Studio (sealed):
 ```text
 device.selectCell      cellId
 device.applied         identity, compileRevision, appliedRevision
+device.appApplied      compileRevision, manifestRevision (ordinary app with no scenarios)
 device.report          level: info | error, message
 device.ping            {}
 ```
@@ -152,6 +153,12 @@ Rules:
 - The device renders an assignment only when its loaded bundle's `compileRevision` equals the
   assignment's; until then it shows the stale overlay. After mounting, it sends `device.applied`,
   which the gateway feeds to `session.acknowledgePreview` as an ordinary `preview-applied` message.
+- With no applicable scenarios, a paired device mounts the ordinary generated app directly, without
+  replay or scenario environment providers. Its bundle must match the published manifest's compile
+  revision. `device.appApplied` updates only that connection's applied status, and is accepted only
+  for the current successfully published manifest with no cells and no active assignment. It does
+  not register a synthetic cell or replace the browser's preview instance. When the last scenario
+  disappears, both gateway and client discard the previous assignment and use this ordinary path.
 - `projectLabel` is the project folder name, and no source content, credential, or unrelated session
   state crosses the gateway. Filesystem paths are the exception, and an honest one: cell and scenario
   identifiers are built from the source document's absolute path, so they cross inside the manifest

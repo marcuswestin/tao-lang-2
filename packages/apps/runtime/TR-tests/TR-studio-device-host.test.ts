@@ -338,6 +338,18 @@ Describe('Studio device host presentation', () => {
     })
   })
 
+  Test('renders the ordinary app without a scenario only from the matching published bundle', () => {
+    const connected = state({
+      manifest: { compileRevision: 7, manifestRevision: 'compile:7', scenarios: [] },
+      phase: 'connected',
+    })
+    Expect(deviceHostPresentation(connected, publication)).toEqual({ kind: 'app', manifestRevision: 'compile:7' })
+    Expect(deviceHostPresentation(connected, { compileRevision: 6 })).toMatchObject({ reason: 'stale-bundle' })
+    Expect(deviceHostPresentation({ ...connected, phase: 'pairing' }, publication)).toMatchObject({ reason: 'pairing' })
+    Expect(deviceHostPresentation({ ...connected, phase: 'disconnected' }, publication))
+      .toMatchObject({ reason: 'disconnected' })
+  })
+
   Test('keys a mounted cell by its complete identity', () => {
     Expect(cellIdentityKey(identity)).toBe('Demo:states#cell:2:7:compile:7:instance-1')
     Expect(cellIdentityKey({ ...identity, previewInstanceId: 'instance-2' })).not.toBe(cellIdentityKey(identity))
