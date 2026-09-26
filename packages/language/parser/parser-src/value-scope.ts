@@ -137,10 +137,16 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'view' && AST.isAppView(context.container)) {
       return this.createAppViewScope(context.container)
     }
-    if (context.property === 'entity' && AST.isCreateStatement(context.container)) {
+    if (
+      context.property === 'entity'
+      && (AST.isCreateStatement(context.container) || AST.isAccessDeclaration(context.container))
+    ) {
       return this.createEntityDataScope(context.container)
     }
-    if (context.property === 'entity' && AST.isFixtureCreateBinding(container)) {
+    if (
+      context.property === 'entity'
+      && (AST.isFixtureCreateBinding(container) || AST.isFixtureCreateStatement(container))
+    ) {
       return this.createEntityDataScope(container)
     }
     if (context.property === 'action' && AST.isFixtureThroughClause(container)) {
@@ -149,7 +155,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'action' && AST.isActionFailureStubStep(container)) {
       return this.createDeclarationScope(container, AST.isActionDeclaration)
     }
-    if (context.property === 'account' && AST.isFixtureCreateBinding(container)) {
+    if (
+      context.property === 'account'
+      && (AST.isFixtureCreateBinding(container) || AST.isFixtureCreateStatement(container)
+        || AST.isFixtureSignedInClause(container))
+    ) {
       return this.createFixtureAccountScope(container)
     }
     if (context.property === 'target' && AST.isFixtureValueReference(container)) {
@@ -590,7 +600,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return scope
   }
 
-  private createFixtureAccountScope(node: AST.FixtureCreateBinding): Langium.Scope {
+  private createFixtureAccountScope(
+    node: AST.FixtureCreateBinding | AST.FixtureCreateStatement | AST.FixtureSignedInClause,
+  ): Langium.Scope {
     return this.createScopeForNodes(this.fixtureValuesBefore(node).filter(AST.isFixtureAccountDeclaration))
   }
 
@@ -926,22 +938,23 @@ function booleanFieldForCaseTest(test: AST.CaseTestExpression): AST.EntityDataFi
     if (index === subject.members.length - 1) {
       return field.boolean ? field : undefined
     }
-    entity = relationEntityForField(field, test)
+    entity = relationEntityForField(field)
   }
   return undefined
 }
 
 function relationEntityForField(
   field: AST.EntityDataField,
-  context: AST.Node,
 ): AST.EntityDataDeclaration | undefined {
   if (field.primitive || field.boolean) {
     return undefined
   }
-  const relationName = field.name
-  return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
-    entity.singularName === relationName || entity.name === relationName
-  )
+  const relationName = field.typeName ?? field.name
+  return AST.visibleFileDeclarations(
+    field,
+    AST.isEntityDataDeclaration,
+    entity => entity.name === relationName ? entity.name : entity.singularName,
+  ).find(entity => entity.singularName === relationName || entity.name === relationName)
 }
 
 function entityDataForCollection(

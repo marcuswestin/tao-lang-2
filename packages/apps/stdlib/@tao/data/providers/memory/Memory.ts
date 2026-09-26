@@ -4,6 +4,7 @@ import type TR from '@runtime/TR'
 export function MemoryProvider(): TR.DataProvider {
   const snapshots = new Map<string, string>()
   return {
+    authenticatedAuthority: 'test',
     connect: context => ({
       load: () => snapshots.get(context.storageKey),
       referenceToken: reference => reference.id,

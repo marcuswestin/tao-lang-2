@@ -547,7 +547,7 @@ Describe('validator: imported declaration regressions', () => {
         'Schema.tao': 'workspace data Workspaces / Workspace { Name text }',
         'Main.tao': importingApp(
           'use Workspaces from ./Schema',
-          `query Workspaces { }
+          `query Workspaces = Workspaces with { }
            render Text("Rows: { Workspaces.Count }")`,
           stubView('Text', 'Value text'),
         ),
@@ -581,7 +581,7 @@ Describe('validator: explicit data import forms', () => {
     acceptsFiles({
       'Main.tao': importingApp(
         'use Workspaces, Workspace from @records',
-        'query Workspaces { } render Text("Rows: { Workspaces.Count }")',
+        'query Workspaces = Workspaces with { } render Text("Rows: { Workspaces.Count }")',
         `view Editor(Workspace) { render Text(Workspace.Name) }
          ${stubView('Text', 'Value text')}`,
       ),
@@ -608,7 +608,7 @@ Describe('validator: explicit data import forms', () => {
     rejectsFiles({
       'Main.tao': importingApp(
         'use Workspace from ./Schema.tao',
-        'query Workspaces { } render Text("Ready")',
+        'query Workspaces = Workspaces with { } render Text("Ready")',
         stubView('Text', 'Value text'),
       ),
       'Schema.tao': schema,
@@ -620,7 +620,7 @@ Describe('validator: explicit data import forms', () => {
     rejectsFiles({
       'Main.tao': importingApp(
         'use Workspaces from ./Schema.tao',
-        'query Workspaces { } render Text("Ready")',
+        'query Workspaces = Workspaces with { } render Text("Ready")',
         `fixture Starter { Home = create Workspace { Name: "Home" } }
          ${stubView('Text', 'Value text')}`,
       ),
@@ -633,7 +633,7 @@ Describe('validator: explicit data import forms', () => {
     checksFiles({
       'Main.tao': importingApp(
         'use Workspaces, Workspace from ./Schema.tao',
-        'query Workspaces { } render Text("Rows: { Workspaces.Count }")',
+        'query Workspaces = Workspaces with { } render Text("Rows: { Workspaces.Count }")',
         `view Editor(Workspace) { render Text(Workspace.Name) }
          ${stubView('Text', 'Value text')}`,
       ),
@@ -649,7 +649,7 @@ Describe('validator: explicit data import forms', () => {
     acceptsFiles({
       'Main.tao': importingApp(
         'use Col from @tao/ui\nuse Workspaces from ./Schema.tao',
-        'query Workspaces { } render Col() { loop Workspaces / Workspace { Text(Workspace.Name) } }',
+        'query Workspaces = Workspaces with { } render Col() { loop Workspaces / Workspace { Text(Workspace.Name) } }',
         stubView('Text', 'Value text'),
       ),
       'Schema.tao': schema,
@@ -661,7 +661,7 @@ Describe('validator: explicit data import forms', () => {
     checksFiles({
       'Main.tao': importingApp(
         'use Col from @tao/ui\nuse Workspaces, Workspace from ./Schema.tao',
-        'query Workspaces { } render Col() { loop Workspaces / Workspace { Text(Workspace.Name) } }',
+        'query Workspaces = Workspaces with { } render Col() { loop Workspaces / Workspace { Text(Workspace.Name) } }',
         stubView('Text', 'Value text'),
       ),
       'Schema.tao': schema,
@@ -679,7 +679,7 @@ Describe('validator: explicit data import forms', () => {
     acceptsFiles({
       'Main.tao': importingApp(
         '',
-        'query Workspaces { } render Text("Rows: { Workspaces.Count }")',
+        'query Workspaces = Workspaces with { } render Text("Rows: { Workspaces.Count }")',
         `view Editor(Workspace) { render Text(Workspace.Name) }
          fixture Starter { Home = create Workspace { Name: "Home" } }
          ${stubView('Text', 'Value text')}`,
@@ -693,7 +693,7 @@ Describe('validator: explicit data import forms', () => {
     checksFiles({
       'Main.tao': importingApp(
         '',
-        'query Workspaces { order by LocalName } render Text("Rows: { Workspaces.Count }")',
+        'query Workspaces = Workspaces with { order by LocalName } render Text("Rows: { Workspaces.Count }")',
         `file data Workspaces / Workspace { LocalName text }
          view Editor(Workspace) { render Text(Workspace.LocalName) }
          fixture Starter { Home = create Workspace { LocalName: "Home" } }
@@ -725,6 +725,122 @@ Describe('validator: explicit data import forms', () => {
       Type.visibleDataEntities(root).forEach((entity, index) => Expect(declarations[index]).toBe(entity))
     }),
   )
+
+  for (const field of ['Owner Workspace', 'Workspace']) {
+    Test(
+      `requires the singular import for the relation field ${field}`,
+      rejectsFiles({
+        'Main.tao': importingApp(
+          'use Workspaces from ./Schema.tao',
+          'render Text("Ready")',
+          `data Notes / Note { ${field} }
+${stubView('Text', 'Value text')}`,
+        ),
+        'Schema.tao': schema,
+      }, dataValidationMessages.unknownRelation('Note', 'Workspace')),
+    )
+
+    Test(
+      `resolves the singular import for the relation field ${field}`,
+      checksFiles({
+        'Main.tao': importingApp(
+          'use Workspace from ./Schema.tao',
+          'render Text("Ready")',
+          `data Notes / Note { ${field} }
+${stubView('Text', 'Value text')}`,
+        ),
+        'Schema.tao': schema,
+      }, result => {
+        Expect(validationErrorMessages(result)).toEqual([])
+        Expect(result.diagnostics.filter(diagnostic => diagnostic.code === useValidationCodes.unusedImport)).toEqual([])
+      }),
+    )
+  }
+
+  Test(
+    'reads a related boolean case through an imported entity without importing its related target',
+    acceptsFiles({
+      'Main.tao': importingApp(
+        'use Workspace from ./Schema/Workspaces.tao',
+        'render Text("Ready")',
+        `view Editor(Workspace) {
+           let OwnerActive = Workspace.Owner.Active is Active
+           render Text("{ OwnerActive }")
+         }
+         ${stubView('Text', 'Value text')}`,
+      ),
+      'Schema/Workspaces.tao': `
+        use Person from ./People.tao
+        workspace data Workspaces / Workspace { Owner Person }
+      `,
+      'Schema/People.tao': 'workspace data People / Person { Active yes / Inactive no }',
+    }),
+  )
+
+  Test(
+    'imports a plural inverse relation with its singular backreference imported by the target schema',
+    checksFiles({
+      'Main.tao': importingApp(
+        'use Workspaces from ./Schema.tao',
+        'render Text("Ready")',
+        `workspace data Notes / Note { Workspaces }
+         ${stubView('Text', 'Value text')}`,
+      ),
+      'Schema.tao': `
+        use Note from ./Main.tao
+        workspace data Workspaces / Workspace { Note }
+      `,
+    }, result => {
+      Expect(validationErrorMessages(result)).toEqual([])
+      Expect(result.diagnostics.filter(diagnostic => diagnostic.code === useValidationCodes.unusedImport)).toEqual([])
+    }),
+  )
+
+  Test(
+    'requires the plural import for an inverse relation field',
+    rejectsFiles({
+      'Main.tao': importingApp(
+        'use Workspace from ./Schema.tao',
+        'render Text("Ready")',
+        `data Notes / Note { Workspaces }
+${stubView('Text', 'Value text')}`,
+      ),
+      'Schema.tao': schema,
+    }, dataValidationMessages.unknownRelation('Note', 'Workspaces')),
+  )
+
+  Test(
+    'preserves contextual auth Account values when only the account collection is imported',
+    acceptsFiles({
+      'Main.tao': importingApp(
+        'use Account from @tao/auth\nuse Accounts from ./Schema.tao',
+        'render Text(Account.DisplayName)',
+        stubView('Text', 'Value text'),
+      ),
+      'Schema.tao': 'workspace data Accounts / Account { DisplayName text }',
+    }),
+  )
+
+  for (const imported of ['Account', 'Accounts']) {
+    Test(
+      `requires a singular entity import for access declarations with ${imported} imported`,
+      checksFiles({
+        'Main.tao': importingApp(
+          `use ${imported} from ./Schema.tao`,
+          'render Text("Ready")',
+          `access Account { Account can read }
+${stubView('Text', 'Value text')}`,
+        ),
+        'Schema.tao': 'workspace data Accounts / Account { DisplayName text }',
+      }, result => {
+        if (imported === 'Account') {
+          Expect(validationErrorMessages(result)).toEqual([])
+        } else {
+          Expect(validationErrorMessages(result)).toContain("No data entity named 'Account' is in scope.")
+        }
+      }),
+    )
+  }
 
   Test(
     'diagnoses a repeated singular import',
@@ -765,7 +881,7 @@ ${stubView('Text', 'Value text')}`,
     acceptsFiles({
       'Main.tao': importingApp(
         'use Entries from ./Schema.tao',
-        'query Entries { } render Text("Rows: { Entries.Count }")',
+        'query Entries = Entries with { } render Text("Rows: { Entries.Count }")',
         `view Editor(Entries) { render Text(Entries.Label) }
          ${stubView('Text', 'Value text')}`,
       ),

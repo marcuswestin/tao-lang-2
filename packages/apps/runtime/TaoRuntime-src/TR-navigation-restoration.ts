@@ -1,5 +1,6 @@
 import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
+import type { RuntimeAuthScope } from './TR-auth'
 import { appProviderIdentity, type TaoKeyValueStorage } from './TR-data'
 import { entityHandle } from './TR-data-entity'
 import { memoryKeyValueStorage, platformKeyValueStorage } from './TR-data-provider'
@@ -41,6 +42,7 @@ type RestorableNavigation = TaoNavigationValue & {
 }
 
 type RestorableApp = {
+  authScope?: RuntimeAuthScope
   auxiliaries: Record<string, TaoNavigationValue>
   declaration: TaoAppDeclaration
   definition: TaoAppDefinition
@@ -158,7 +160,13 @@ export class NavigationRestorationController {
   private scheduled = false
   private subscriptions: Array<() => void> = []
 
-  constructor(private readonly app: RestorableApp) {
+  constructor(private readonly app: RestorableApp, deferredRegistration = false) {
+    if (!deferredRegistration) {
+      controllers.add(this)
+    }
+  }
+
+  commitRegistration(): void {
     controllers.add(this)
   }
 
@@ -204,6 +212,7 @@ export class NavigationRestorationController {
   }
 
   async attach(): Promise<() => void> {
+    this.commitRegistration()
     const generation = this.launchGeneration
     this.attachCount += 1
     await (this.loadPromise ??= this.load())
@@ -388,7 +397,8 @@ export class NavigationRestorationController {
     const exclusions = new Set(this.policy().exclusions)
     return {
       exclusions,
-      restorePresentable: snapshot => restorePresentable(snapshot, identity => this.app.resolvePresentable(identity)),
+      restorePresentable: snapshot =>
+        restorePresentable(snapshot, identity => this.app.resolvePresentable(identity), this.app.authScope),
       snapshotPresentable: entry =>
         snapshotPresentable(entry, diagnostic =>
           this.report(
@@ -420,9 +430,17 @@ export class NavigationRestorationController {
       return undefined
     }
     const scope = previewScope === undefined ? '' : `:${encodeURIComponent(previewScope)}`
+    const account = this.app.authScope?.session.identity
+    const auth = this.app.authScope
+      ? `:auth:${
+        encodeURIComponent(
+          JSON.stringify(account ? [account.issuer, account.subject, account.accountId] : ['signed-out']),
+        )
+      }`
+      : ''
     return `tao-navigation:${encodeURIComponent(identity)}:${encodeURIComponent(policy.variant)}:${
       encodeURIComponent(provider)
-    }${scope}`
+    }${scope}${auth}`
   }
 
   private storage(): TaoKeyValueStorage {
@@ -472,6 +490,7 @@ function snapshotPresentable(
 function restorePresentable(
   snapshot: TaoPresentableSnapshot,
   resolve: (canonicalIdentity: string) => TaoPresentable,
+  scope?: RuntimeAuthScope,
 ): {
   arguments: TaoNavigationArguments
   presentable: TaoPresentable
@@ -483,7 +502,7 @@ function restorePresentable(
     arguments: Object.fromEntries(
       Object.entries(snapshot.arguments).map(([name, value]) => [
         name,
-        new RuntimeNavigationResult(restoreValue(value)),
+        new RuntimeNavigationResult(restoreValue(value, scope)),
       ]),
     ),
     presentable: resolve(snapshot.view),
@@ -531,7 +550,7 @@ function snapshotValue(value: unknown, seen: Set<object>): TaoPersistedValue {
   }
 }
 
-function restoreValue(value: TaoPersistedValue): unknown {
+function restoreValue(value: TaoPersistedValue, scope?: RuntimeAuthScope): unknown {
   if (!Array.isArray(value)) {
     throw new UserInputError('Restored argument is not a tagged value.')
   }
@@ -549,18 +568,18 @@ function restoreValue(value: TaoPersistedValue): unknown {
     return payload[0]
   }
   if (tag === 'list') {
-    return payload.map(item => restoreValue(item as TaoPersistedValue))
+    return payload.map(item => restoreValue(item as TaoPersistedValue, scope))
   }
   if (tag === 'item') {
     return Object.fromEntries(payload.map(field => {
       if (!Array.isArray(field) || field.length !== 2 || typeof field[0] !== 'string') {
         throw new UserInputError('Restored item field is invalid.')
       }
-      return [field[0], restoreValue(field[1] as TaoPersistedValue)]
+      return [field[0], restoreValue(field[1] as TaoPersistedValue, scope)]
     }))
   }
   if (tag === 'entity' && payload.length === 1 && payload[0] && typeof payload[0] === 'object') {
-    return restoreEntityReference(payload[0] as any)
+    return restoreEntityReference(payload[0] as any, scope)
   }
   throw new UserInputError(`Unknown restored argument tag '${String(tag)}'.`, { tag })
 }

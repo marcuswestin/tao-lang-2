@@ -42,7 +42,7 @@ Describe('Expo runtime', () => {
 
           workspace scene Main() {
             Title "Notes"
-            query Notes { }
+            query Notes = Notes with { }
             render Text("Notes: { Notes.Count }")
           }
         `,

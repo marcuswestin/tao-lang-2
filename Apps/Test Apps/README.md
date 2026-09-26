@@ -399,3 +399,11 @@ saves offline and shows an injected snapshot save error through `guard … error
 
 **Does not belong here:** live CloudKit or InstantDB transport acceptance, account policy, and
 atomic backend rejection. Those need provider and device evidence.
+
+## Auth Review
+
+Provider-neutral sessions, custom and supplied sign-in UI, current account reads, profile editing,
+and owner-scoped notes. AuthReview uses the deterministic adapter; AuthReviewLocal binds the same
+UI to the localhost reference service at port4738. Backend policy, durable offline data and identity
+isolation are verified separately by the reference server/provider tests; only completed Tao
+journeys establish the user-facing behavior. Implementation and live-service acceptance in progress.

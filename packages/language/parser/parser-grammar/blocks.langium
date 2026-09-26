@@ -69,7 +69,7 @@ DeclarationSlotReferenceBlock:
 // bare visual/slot uses. Keep every other broad statement parseable in an app body for a semantic
 // placement diagnostic, while leaving those inherently overlapping bare forms to visual blocks.
 AppBlockDiagnosticStatement:
-    Declaration | EntityQueryDeclaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | ActionFailureStubStep | RunStep | PressTextStep | TagPressStep | PressWordStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | NetworkTestStep | WaitForSyncStep | DatasourceFailureStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardDefaultStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
+    Declaration | AccessDeclaration | EntityQueryDeclaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | ActionFailureStubStep | RunStep | PressTextStep | TagPressStep | PressWordStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | NetworkTestStep | WaitForSyncStep | DatasourceFailureStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardDefaultStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
 
 // EntityQueryDeclaration remains in the broad diagnostic statement rule so a query written at file
 // level parses far enough for the validator to explain the unsupported shape. It is deliberately
@@ -78,8 +78,8 @@ Declaration:
     PrimitiveDeclaration | AppDeclaration | ViewDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | PhraseDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration | DesignDeclaration | FixtureDeclaration;
 
 // File statements are the declarations accepted directly by Tao source files.
-type FileStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | GuardDefaultStatement;
-type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | GuardDefaultStatement;
+type FileStatement = Declaration | AccessDeclaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | GuardDefaultStatement;
+type TopLevelStatement = Declaration | AccessDeclaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | GuardDefaultStatement;
 // View statements are the declarations and render sites accepted by view/layout bodies.
 ViewStatement returns Statement:
     ParsedStatement | DeclarationSlotFill;

@@ -11,3 +11,8 @@ model-routing audit (`agent-cli-src/delegation/`). The shims the hooks call are 
 injects `AgentConfigFreshness` and the delegation issue source — but nothing here imports
 `tao-dev-cli`. `packages/cli/dev-cli/README.md` owns the shared lanes, artifacts, and doctor
 machinery both packages sit beside.
+
+On macOS, `./agent unsandboxed docker-desktop start` launches the installed Docker Desktop app
+with `open -a Docker`. It accepts no additional arguments. Successful launch does not imply the
+Docker engine is ready; use `./agent unsandboxed capabilities` to inspect readiness before starting
+the local InstantDB stack.

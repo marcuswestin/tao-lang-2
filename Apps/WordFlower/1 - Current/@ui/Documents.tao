@@ -81,7 +81,7 @@ view DocumentEditor(Document) {
    state SaveCount = 0
    state PreviousTitle = ""
    state PreviousBody = ""
-   query Paragraphs from Document.Paragraphs { }
+   query Paragraphs = Document.Paragraphs with { }
    action SetFinished(Value boolean) {
       // A yes/no field takes the boolean directly; naming the field writes the pole it selects.
       update Document {

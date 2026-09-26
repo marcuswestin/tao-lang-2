@@ -1,6 +1,7 @@
 import { Arrays } from './core/RuntimeCore'
 import { existingTransactionResource, type TaoDebugPendingWrite, transactionResource } from './TR-action-transactions'
 import { RuntimeAssert } from './TR-assert'
+import type { TaoDataAuthBinding } from './TR-auth'
 import type {
   TaoConfiguredDatasource,
   TaoDataConnection,
@@ -14,7 +15,8 @@ import type {
   TaoQueryDescriptor,
   TaoQueryPlan,
 } from './TR-data'
-import { validateDefinition, valueMatchesKind } from './TR-data-definition'
+import { dataAccessAllowed } from './TR-data-access'
+import { validateDefinition, validateUniqueRows, valueMatchesField } from './TR-data-definition'
 import {
   handleKey,
   metadataOf,
@@ -55,6 +57,69 @@ import { Clock } from './TR-units'
 
 type DeleteTarget = { entity: string; id: string }
 
+/** An invalidated account connection can never start another queued save or fill. */
+function accountConnection(connection: TaoDataConnection, auth: TaoDataAuthBinding): TaoDataConnection {
+  const active = (): void => {
+    RuntimeAssert.input(!auth.signal.aborted, 'This account data connection is no longer active.')
+  }
+  let invalidation: Promise<void> | undefined
+  const invalidateAuth = (): Promise<void> => {
+    if (!invalidation) {
+      try {
+        invalidation = Promise.resolve(connection.invalidateAuth?.())
+      } catch (error) {
+        invalidation = Promise.reject(error)
+      }
+    }
+    return invalidation
+  }
+  auth.onInvalidate?.(invalidateAuth)
+  return {
+    ...connection,
+    invalidateAuth,
+    load: () => {
+      active()
+      return connection.load()
+    },
+    save: (snapshot, intents, context) => {
+      active()
+      return connection.save(snapshot, intents, context)
+    },
+    ...(connection.submit
+      ? {
+        submit: (snapshot, intents, context) => {
+          active()
+          return connection.submit!(snapshot, intents, context)
+        },
+      }
+      : {}),
+    ...(connection.writes
+      ? {
+        writes: {
+          ...connection.writes,
+          retry: (entity, id) => {
+            active()
+            connection.writes!.retry(entity, id)
+          },
+        },
+      }
+      : {}),
+    ...(connection.fill
+      ? {
+        fill: async (request, ops) => {
+          active()
+          await connection.fill!(request, {
+            upsert: (entity, rows) => {
+              active()
+              ops.upsert(entity, rows)
+            },
+          })
+        },
+      }
+      : {}),
+  }
+}
+
 /** FillState tracks one activated query descriptor's connection-fill lifecycle. */
 type FillState = {
   filledAtMs?: number
@@ -63,6 +128,7 @@ type FillState = {
 }
 
 type ConfiguredProviderBinding = Readonly<{
+  auth?: TaoDataAuthBinding
   configuration: Readonly<Record<string, unknown>>
   declaration: TaoDatasourceDeclaration
   /** storageName is the bound datasource's own name, the storage key it defaults to. */
@@ -71,6 +137,7 @@ type ConfiguredProviderBinding = Readonly<{
 type ProviderBinding = ConfiguredProviderBinding | 'test' | 'unbound' | undefined
 
 type ActionDataOverlay = {
+  generation: number
   base: StoredData
   intents: Map<string, TaoDataWriteIntent>
   prepared?: StoredData
@@ -147,11 +214,14 @@ export class RuntimeDataSchema {
   private automaticResetPromise: Promise<void> | undefined
   private bufferedRemoteSnapshot: { stored: string | undefined } | undefined
   private committedData: StoredData
+  private writeBaseline = ''
   private error = ''
   private errorRecoverable = false
   private failedSaveSequence: number | undefined
   private fills = new Map<string, FillState>()
   private generation = 0
+  private sealed = false
+  private fixtureActor: string | undefined
   private pendingFills = new Set<Promise<void>>()
   private pendingWriteIntents = new Map<string, TaoDataWriteIntent>()
   private handles = new Map<string, RuntimeEntityHandle>()
@@ -181,6 +251,7 @@ export class RuntimeDataSchema {
     readonly definition: TaoDataSchemaDefinition,
     connection: TaoDataConnection,
     providerBinding?: ProviderBinding,
+    private readonly createId?: () => string,
   ) {
     validateDefinition(definition)
     this.name = definition.name
@@ -213,7 +284,7 @@ export class RuntimeDataSchema {
     }
     const declaration = binding.declaration.canonicalIdentity?.canonical ?? binding.declaration.name
     const storageKey = this.validatedStorageKey(binding.declaration.name, binding.configuration, binding.storageName)
-    return JSON.stringify([declaration, storageKey, this.name])
+    return JSON.stringify([declaration, storageKey, this.name, ...(binding.auth ? [binding.auth.accountId] : [])])
   }
 
   async resetFromRecovery(): Promise<void> {
@@ -245,6 +316,7 @@ export class RuntimeDataSchema {
   }
 
   private set data(value: StoredData) {
+    this.validateUnique(value)
     if (this.committedAccessDepth > 0) {
       this.committedData = value
       return
@@ -324,7 +396,7 @@ export class RuntimeDataSchema {
    * a store keeps its saved rows when collections or alternatives are added, and a stub standing in for
    * the real datasource keeps rows of its own.
    */
-  bindConfigured(source: TaoConfiguredDatasource, storageName?: string): void {
+  bindConfigured(source: TaoConfiguredDatasource, storageName?: string, auth?: TaoDataAuthBinding): void {
     // A rebind is compared by evaluated configuration value, not object identity: the app root
     // constructs a fresh configured value per render, while a Patch that changes `Adapter` or
     // `StorageKey` under the same declaration must still rebind.
@@ -333,6 +405,7 @@ export class RuntimeDataSchema {
       typeof this.providerBinding === 'object'
       && this.providerBinding.declaration === source.declaration
       && this.providerBinding.storageName === storageName
+      && this.providerBinding.auth === auth
       && configurationValuesEqual(this.providerBinding.configuration, configuration)
     ) {
       return
@@ -340,18 +413,32 @@ export class RuntimeDataSchema {
     const binding = Object.freeze({
       configuration,
       declaration: source.declaration,
+      ...(auth === undefined ? {} : { auth }),
       ...(storageName === undefined ? {} : { storageName }),
     })
     // A configuration or connect failure becomes data error state behind the recovery overlay; a
     // throw would escape into the mounting layout effect, where no error boundary catches it.
     try {
-      const storageKey = this.validatedStorageKey(source.declaration.name, configuration, storageName)
+      if (auth) {
+        const supported = RuntimeSwitch(source.declaration.provider.authenticatedAuthority ?? 'unsupported', {
+          server: () => true,
+          test: () => auth.testing === true,
+          unsupported: () => false,
+        })
+        RuntimeAssert.input(
+          supported,
+          `Datasource ${source.declaration.name} cannot enforce authenticated account access. Use an authenticated server provider, or Memory with TestAuth.`,
+        )
+      }
+      const baseStorageKey = this.validatedStorageKey(source.declaration.name, configuration, storageName)
+      const storageKey = auth ? JSON.stringify([baseStorageKey, auth.accountId]) : baseStorageKey
       const connection = source.declaration.provider.connect(Object.freeze({
+        ...(auth === undefined ? {} : { auth }),
         configuration,
         schema: this.definition,
         storageKey,
       }))
-      this.configure(connection, binding)
+      this.configure(auth ? accountConnection(connection, auth) : connection, binding)
     } catch (error) {
       this.configure(brokenConnection(error), binding)
     }
@@ -361,6 +448,7 @@ export class RuntimeDataSchema {
     connection: TaoDataConnection,
     providerBinding?: ProviderBinding,
   ): void {
+    this.sealed = false
     const generation = ++this.generation
     this.providerUnsubscribe?.()
     this.providerUnsubscribe = undefined
@@ -382,6 +470,7 @@ export class RuntimeDataSchema {
     })
     this.bufferedRemoteSnapshot = undefined
     this.committedData = emptyData(this.definition)
+    this.writeBaseline = JSON.stringify(envelope(this.committedData, this.definition))
     this.handles.clear()
     this.fills.clear()
     this.pendingWriteIntents.clear()
@@ -416,6 +505,49 @@ export class RuntimeDataSchema {
     }
   }
 
+  /** seal clears live handles immediately and disables writes while an account is absent. */
+  seal(): void {
+    if (this.sealed) {
+      return
+    }
+    this.configure({ load: () => undefined, save: () => undefined })
+    this.sealed = true
+    this.status = 'unauthorized'
+    this.emit()
+  }
+
+  /** invalidateAuth begins provider cleanup before dropping every live account row. */
+  invalidateAuth(): Promise<void> {
+    try {
+      return Promise.resolve(this.connection.invalidateAuth?.())
+    } catch (error) {
+      return Promise.reject(error)
+    } finally {
+      this.seal()
+    }
+  }
+
+  /** entity returns an availability-aware handle even before its trusted account row arrives. */
+  entity(entity: string, id: string): RuntimeEntityHandle {
+    this.requireEntity(entity)
+    return this.handle(entity, id)
+  }
+
+  /** TestAuth alone can select a one-operation actor without changing the mounted session. */
+  withFixtureActor<ResultT>(accountId: string, body: () => ResultT): ResultT {
+    RuntimeAssert.input(
+      typeof this.providerBinding === 'object' && this.providerBinding.auth?.testing === true,
+      'Fixture actor overrides require TestAuth.',
+    )
+    const previous = this.fixtureActor
+    this.fixtureActor = accountId
+    try {
+      return body()
+    } finally {
+      this.fixtureActor = previous
+    }
+  }
+
   query(plan: TaoQueryPlan): unknown[] {
     const entity = this.requireEntity(plan.entity)
     const filters = plan.filters.map(filter => ({
@@ -427,7 +559,8 @@ export class RuntimeDataSchema {
     const source = this.data.rows[plan.entity] ?? []
     const rows = source
       .filter(row =>
-        filters.every(({ filter, expected }) => matchesFilter(row, filter, expected))
+        this.canAccess(plan.entity, row, 'read')
+        && filters.every(({ filter, expected }) => matchesFilter(row, filter, expected))
         && (searchTerm === undefined || matchesSearch(row, searchFields!, searchTerm))
       )
       .map(row => this.handle(plan.entity, row.Id))
@@ -704,7 +837,7 @@ export class RuntimeDataSchema {
       }
       if (field.kind !== 'relation') {
         RuntimeAssert.input(
-          valueMatchesKind(value, field.kind),
+          valueMatchesField(value, field),
           `Fill field '${entityName}.${name}' expects ${field.kind}, got ${value === null ? 'null' : typeof value}.`,
           { entityName, fieldName: name },
         )
@@ -778,6 +911,7 @@ export class RuntimeDataSchema {
     const fields = rowValues(entityName, entity, values, this)
     const id = this.nextAvailableId(entityName)
     const row: StoredRow = { Id: id, ...fields }
+    this.requireAccess(entityName, row, 'create')
     this.data = {
       nextId: this.data.nextId,
       rows: {
@@ -799,6 +933,7 @@ export class RuntimeDataSchema {
       entity: metadata.entity,
     })
     const fields = partialRowValues(metadata.entity, entity, values, this)
+    this.requireAccess(metadata.entity, { ...existing, ...fields }, 'update', Object.keys(fields))
     this.recordWriteIntent(metadata.entity, metadata.id, Object.keys(fields))
     this.data = {
       nextId: this.data.nextId,
@@ -812,6 +947,63 @@ export class RuntimeDataSchema {
     this.commit()
   }
 
+  /** submitUpdate keeps form inputs private until its transport confirms the submitted fields. */
+  async submitUpdate(
+    handle: RuntimeEntityHandle,
+    values: Record<string, unknown>,
+  ): Promise<{ status: 'queued' | 'saved' }> {
+    this.requireReady('submit')
+    const metadata = this.requireOwnedHandle(handle)
+    const definition = this.requireEntity(metadata.entity)
+    const existing = this.committedData.rows[metadata.entity]?.find(row => row.Id === metadata.id)
+    RuntimeAssert.input(existing !== undefined, `Cannot submit missing ${metadata.entity} '${metadata.id}'.`)
+    const submit = this.connection.submit
+    RuntimeAssert.input(submit !== undefined, 'This datasource cannot confirm a submitted profile change.')
+    const fields = partialRowValues(metadata.entity, definition, values, this)
+    this.requireAccess(metadata.entity, { ...existing, ...fields }, 'update', Object.keys(fields))
+    const base = cloneStoredData(this.committedData)
+    const candidate = cloneStoredData(base)
+    candidate.rows[metadata.entity] = candidate.rows[metadata.entity]!.map(row =>
+      row.Id === metadata.id ? { ...row, ...fields } : row
+    )
+    this.validateUnique(candidate)
+    const snapshot = JSON.stringify(envelope(candidate, this.definition))
+    const context = { previousSnapshot: JSON.stringify(envelope(base, this.definition)) }
+    const intents = [{ entity: metadata.entity, id: metadata.id, fields: Object.keys(fields) }]
+    const generation = this.generation
+    const connection = this.connection
+    const sequence = ++this.nextSaveSequence
+    const submission = this.saveQueue.then(async () => {
+      RuntimeAssert.input(generation === this.generation, 'This session is no longer active.')
+      const receipt = await submit.call(connection, snapshot, intents, context)
+      RuntimeAssert.input(generation === this.generation, 'This session is no longer active.')
+      if (receipt.status === 'saved') {
+        const current = cloneStoredData(this.committedData)
+        current.rows[metadata.entity] = (current.rows[metadata.entity] ?? []).map(row => {
+          if (row.Id !== metadata.id) {
+            return row
+          }
+          const confirmed = Object.fromEntries(
+            Object.entries(fields).filter(([name]) => Object.is(row[name], existing[name])),
+          )
+          return { ...row, ...confirmed }
+        })
+        this.validateUnique(current)
+        this.committedData = current
+        this.writeBaseline = JSON.stringify(envelope(current, this.definition))
+        this.emit()
+      }
+      return receipt
+    })
+    this.saveQueue = submission.then(() => undefined, () => undefined).finally(() => {
+      if (generation === this.generation) {
+        this.completedSaveSequence = sequence
+        this.replayBufferedSnapshot(generation)
+      }
+    })
+    return submission
+  }
+
   delete(handle: RuntimeEntityHandle): void {
     this.ensureActionOverlay()
     this.requireReady('delete')
@@ -821,6 +1013,7 @@ export class RuntimeDataSchema {
       `Cannot delete missing ${metadata.entity} '${metadata.id}'.`,
       { entity: metadata.entity },
     )
+    this.requireAccess(metadata.entity, this.storedRow(metadata.entity, metadata.id)!, 'delete')
     const targets = new Map<string, DeleteTarget>()
     this.collectDeleteTargets(metadata.entity, metadata.id, targets)
     const rows = Object.fromEntries(
@@ -858,22 +1051,38 @@ export class RuntimeDataSchema {
       return writeStatus.Supported && writeStatus.Failed > 0
     }
     const row = this.storedRow(metadata.entity, metadata.id)
+    if (row && !this.canAccess(metadata.entity, row, 'read')) {
+      return undefined
+    }
     const entity = this.definition.entities[metadata.entity]
     const inverse = entity?.inverseFields?.[member]
     if (inverse) {
       return (this.data.rows[inverse.relation] ?? [])
         .filter(candidate => candidate[inverse.inverseField] === metadata.id)
+        .filter(candidate => this.canAccess(inverse.relation, candidate, 'read'))
         .map(candidate => this.handle(inverse.relation, candidate.Id))
     }
     const field = entity?.fields[member]
     const value = row?.[member]
-    if (field?.kind === 'reference') {
-      return this.resolveReference(field, value)
-    }
-    if (field?.kind !== 'relation' || typeof value !== 'string' || !field.relation) {
+    if (!field) {
       return value
     }
-    return this.storedRow(field.relation, value) ? this.handle(field.relation, value) : undefined
+    return RuntimeSwitch(field.kind, {
+      boolean: () => value,
+      number: () => value,
+      text: () => value,
+      time: () => value,
+      enum: () => typeof value === 'string' ? field.enumValues?.()[value]?.evaluate().jsValue ?? value : value,
+      reference: () => this.resolveReference(field, value),
+      relation: () => {
+        if (typeof value !== 'string' || !field.relation) {
+          return value
+        }
+        return this.authenticated || this.storedRow(field.relation, value)
+          ? this.handle(field.relation, value)
+          : undefined
+      },
+    })
   }
 
   writeStatus(handle: RuntimeEntityHandle): TaoEntityWriteStatus {
@@ -1000,15 +1209,18 @@ export class RuntimeDataSchema {
           && (!TestWorld.isSnapshotConnection(this.connection) || this.failedSaveSequence === undefined)
           && metadata.generation === this.generation
           && this.storedRow(metadata.entity, metadata.id)
-          ? { status: 'available' }
+          ? this.canAccess(metadata.entity, this.storedRow(metadata.entity, metadata.id)!, 'read')
+            ? { status: 'available' }
+            : { status: 'unauthorized' }
           : { message: this.error, status: 'error' },
       loading: () => ({ status: 'loading' }),
       ready: () => {
         if (metadata.generation !== this.generation) {
           return { status: 'missing' }
         }
-        return this.storedRow(metadata.entity, metadata.id)
-          ? { status: 'available' }
+        const row = this.storedRow(metadata.entity, metadata.id)
+        return row
+          ? this.canAccess(metadata.entity, row, 'read') ? { status: 'available' } : { status: 'unauthorized' }
           : { status: 'missing' }
       },
       unauthorized: () => ({ status: 'unauthorized' }),
@@ -1114,6 +1326,8 @@ export class RuntimeDataSchema {
     const connection = this.connection
     const saveSequence = ++this.nextSaveSequence
     const serialized = JSON.stringify(envelope(this.data, this.definition))
+    const context = { previousSnapshot: this.writeBaseline }
+    this.writeBaseline = serialized
     const submitted = intents === undefined ? [...this.pendingWriteIntents.values()] : [...intents.values()]
     if (intents === undefined) {
       this.pendingWriteIntents.clear()
@@ -1121,7 +1335,7 @@ export class RuntimeDataSchema {
     this.emit()
     this.saveQueue = this.saveQueue.then(async () => {
       try {
-        await connection.save(serialized, submitted)
+        await connection.save(serialized, submitted, context)
         if (
           generation === this.generation
           && this.status === 'error'
@@ -1155,6 +1369,7 @@ export class RuntimeDataSchema {
     transactionResource<ActionDataOverlay>(
       this,
       () => ({
+        generation: this.generation,
         base: cloneStoredData(this.committedData),
         intents: new Map(),
         working: cloneStoredData(this.committedData),
@@ -1166,7 +1381,13 @@ export class RuntimeDataSchema {
         this.commit(overlay.intents)
       },
       overlay => {
+        RuntimeAssert.input(
+          overlay.generation === this.generation,
+          'This data action belongs to a session that is no longer active.',
+        )
         overlay.prepared = applyStoredDataDelta(overlay.base, overlay.working, this.committedData, overlay.intents)
+        this.validateUnique(overlay.prepared)
+        this.validateAccessDelta(this.committedData, overlay.prepared, overlay.intents)
       },
       overlay => {
         if (overlay.previous) {
@@ -1299,7 +1520,10 @@ export class RuntimeDataSchema {
 
   /** applySnapshot replaces the store with one parsed snapshot; a parse failure throws unapplied. */
   private applySnapshot(stored: string | undefined): void {
-    this.committedData = stored === undefined ? emptyData(this.definition) : parseEnvelope(stored, this.definition)
+    this.committedData = stored === undefined
+      ? emptyData(this.definition)
+      : parseEnvelope(stored, this.definition, this.authenticated)
+    this.writeBaseline = JSON.stringify(envelope(this.committedData, this.definition))
     this.automaticResetAttempted = false
     this.failedSaveSequence = undefined
     this.errorRecoverable = false
@@ -1308,6 +1532,106 @@ export class RuntimeDataSchema {
     this.error = ''
     DataLoadRecovery.resolve(this)
     this.emit()
+  }
+
+  private get authenticated(): boolean {
+    return typeof this.providerBinding === 'object' && this.providerBinding.auth !== undefined
+  }
+
+  private canAccess(
+    entity: string,
+    row: StoredRow,
+    operation: 'read' | 'create' | 'update' | 'delete',
+    fields: readonly string[] = [],
+  ): boolean {
+    const auth = typeof this.providerBinding === 'object' ? this.providerBinding.auth : undefined
+    return !auth
+      || (!auth.signal.aborted
+        && dataAccessAllowed(
+          this.definition,
+          this.data,
+          this.fixtureActor ?? auth.accountId,
+          entity,
+          row,
+          operation,
+          fields,
+        ))
+  }
+
+  private requireAccess(
+    entity: string,
+    row: StoredRow,
+    operation: 'create' | 'update' | 'delete',
+    fields: readonly string[] = [],
+  ): void {
+    RuntimeAssert.input(
+      this.canAccess(entity, row, operation, fields),
+      `You do not have permission to ${operation} this ${entity}.`,
+    )
+  }
+
+  private validateAccessDelta(
+    before: StoredData,
+    after: StoredData,
+    intents: ReadonlyMap<string, TaoDataWriteIntent>,
+  ): void {
+    const auth = typeof this.providerBinding === 'object' ? this.providerBinding.auth : undefined
+    if (!auth) {
+      return
+    }
+    const check = (
+      entity: string,
+      row: StoredRow,
+      operation: 'create' | 'update' | 'delete',
+      fields: readonly string[] = [],
+    ): void => {
+      RuntimeAssert.input(
+        !auth.signal.aborted
+          && dataAccessAllowed(
+            this.definition,
+            after,
+            this.fixtureActor ?? auth.accountId,
+            entity,
+            row,
+            operation,
+            fields,
+          ),
+        `You do not have permission to ${operation} this ${entity}.`,
+      )
+    }
+    for (const entity of Object.keys(this.definition.entities)) {
+      const previous = new Map((before.rows[entity] ?? []).map(row => [row.Id, row]))
+      const current = new Map((after.rows[entity] ?? []).map(row => [row.Id, row]))
+      for (const row of current.values()) {
+        const old = previous.get(row.Id)
+        if (!old) {
+          check(entity, row, 'create')
+          continue
+        }
+        const fields = new Set(Object.keys(row).filter(field => field !== 'Id' && !Object.is(old[field], row[field])))
+        for (const intent of intents.values()) {
+          if (intent.entity === entity && intent.id === row.Id) {
+            for (const field of intent.fields) {
+              fields.add(field)
+            }
+          }
+        }
+        if (fields.size) {
+          check(entity, row, 'update', [...fields])
+        }
+      }
+      for (const row of previous.values()) {
+        if (!current.has(row.Id)) {
+          check(entity, row, 'delete')
+        }
+      }
+    }
+  }
+
+  private validateUnique(data: StoredData): void {
+    for (const [name, entity] of Object.entries(this.definition.entities)) {
+      validateUniqueRows(name, entity, data.rows[name] ?? [])
+    }
   }
 
   private startSubscription(generation: number, connection: TaoDataConnection): void {
@@ -1386,7 +1710,7 @@ export class RuntimeDataSchema {
   private nextAvailableId(entity: string): string {
     let id: string
     do {
-      id = `${entity}-${this.data.nextId++}`
+      id = this.createId?.() ?? `${entity}-${this.data.nextId++}`
     } while (this.storedRow(entity, id))
     return id
   }
@@ -1449,7 +1773,7 @@ export class RuntimeDataSchema {
     if (typeof binding === 'object') {
       const canonical = binding.declaration.canonicalIdentity?.canonical
       if (canonical) {
-        return canonical
+        return binding.auth ? JSON.stringify([canonical, binding.auth.accountId]) : canonical
       }
       throw new UnexpectedBehaviorError(
         `Datasource declaration '${binding.declaration.name}' has no canonical identity.`,

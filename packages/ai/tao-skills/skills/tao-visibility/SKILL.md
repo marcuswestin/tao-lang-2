@@ -35,6 +35,8 @@ view SkillProjectNotice() {
 
 - `use X from ./Feature`, `../Data`, or `./` uses a folder path, never a filename.
 - Bare `use X` imports a visible declaration from the same package.
+- Data names are independent: `use Workspaces, Workspace from @data` imports the collection and
+  entity; import only the form used. A loop's local row binder needs only the collection import.
 - A folder named `@name` is a Tao package. Use it as `@name` or `@name/subfolder`, never by a
   relative path.
 - `@/` is the reserved generated project package. Authored code may import its public declarations

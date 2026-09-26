@@ -1,6 +1,6 @@
 import { RuntimeAssert } from './TR-assert'
 import type { TaoDataEntity, TaoDataField, TaoDataSchema, TaoQueryFilter } from './TR-data'
-import { valueMatchesKind } from './TR-data-definition'
+import { valueMatchesField } from './TR-data-definition'
 import { entityHandle, metadataOf } from './TR-data-entity'
 import type { StoredRow } from './TR-data-persistence'
 import { matchesNarrowing } from './TR-interaction-labels'
@@ -34,6 +34,10 @@ export function rowValues(
   for (const [name, field] of Object.entries(entity.fields)) {
     if (Object.prototype.hasOwnProperty.call(values, name)) {
       result[name] = storedFieldValue({ entityName, fieldName: name, field, value: values[name], schema })
+      continue
+    }
+    if (field.optional && !Object.prototype.hasOwnProperty.call(field, 'defaultValue')) {
+      result[name] = null
       continue
     }
     RuntimeAssert.input(
@@ -77,30 +81,48 @@ function assertKnownFields(entityName: string, entity: TaoDataEntity, values: Re
 function storedFieldValue(
   { entityName, fieldName, field, value, schema }: StoredFieldValueOptions,
 ): unknown {
-  if (field.kind === 'relation') {
-    const handle = entityHandle(value)
+  if (field.optional && (value === null || value === undefined)) {
+    return null
+  }
+  const primitive = (): unknown => {
     RuntimeAssert.input(
-      handle,
-      `Relationship '${entityName}.${fieldName}' expects a live ${field.relation} entity handle.`,
+      valueMatchesField(value, field),
+      `Field '${entityName}.${fieldName}' expects ${field.kind}, got ${valueType(value)}.`,
       { entityName, fieldName },
     )
-    return schema.relationId(
-      handle,
-      field.relation!,
-      `Relationship '${entityName}.${fieldName}'`,
-    )
+    return value
   }
-  // A reference is written from a live handle like a relation, but stored as the target's unique
-  // value, so the handle may belong to a store other than the one being written.
-  if (field.kind === 'reference') {
-    return referenceValue(entityName, fieldName, field, value)
-  }
-  RuntimeAssert.input(
-    valueMatchesKind(value, field.kind),
-    `Field '${entityName}.${fieldName}' expects ${field.kind}, got ${valueType(value)}.`,
-    { entityName, fieldName },
-  )
-  return value
+  return RuntimeSwitch(field.kind, {
+    boolean: primitive,
+    number: primitive,
+    text: primitive,
+    time: primitive,
+    enum: () => {
+      const selected = typeof value === 'object' && value !== null && 'caseName' in value ? value.caseName : value
+      RuntimeAssert.input(
+        valueMatchesField(selected, field),
+        `Field '${entityName}.${fieldName}' expects a declared enum case.`,
+      )
+      if (typeof value === 'object' && value !== null && field.enumValues) {
+        RuntimeAssert.input(
+          field.enumValues()[String(selected)]?.evaluate().jsValue === value,
+          `Field '${entityName}.${fieldName}' expects a case from its declared enum.`,
+        )
+      }
+      return selected
+    },
+    relation: () => {
+      const handle = entityHandle(value)
+      RuntimeAssert.input(
+        handle,
+        `Relationship '${entityName}.${fieldName}' expects a live ${field.relation} entity handle.`,
+        { entityName, fieldName },
+      )
+      return schema.relationId(handle, field.relation!, `Relationship '${entityName}.${fieldName}'`)
+    },
+    // References retain the target's unique value rather than a same-store row id.
+    reference: () => referenceValue(entityName, fieldName, field, value),
+  })
 }
 
 /**

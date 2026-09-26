@@ -27,6 +27,8 @@ const NAMED_TOKEN_LIMIT = 3
  * parse, which is what proves the wiring as well as the wording.
  */
 const SyntaxMessages = {
+  dataEntryBoundary: 'Separate data entries with commas, for example `Name text, Owner Account`.',
+  dataCommandList: 'Enclose data command names in braces, for example `commands { Save, Share }`.',
   /** expected states what Tao was looking for at a position and what it found in that place. */
   expected(expectation: string, found: string): string {
     return `Expected ${expectation} here, but found ${found}.`
@@ -58,7 +60,13 @@ type FoundToken = MismatchedToken['actual']
 
 /** TaoParserErrorMessageProvider words each of Chevrotain's four parser errors as a Tao sentence. */
 export class TaoParserErrorMessageProvider extends AbstractParserErrorMessageProvider {
-  override buildMismatchTokenMessage({ expected, actual }: MismatchedToken): string {
+  override buildMismatchTokenMessage({ expected, actual, ruleName }: MismatchedToken): string {
+    if (ruleName === 'EntityDataDeclarationBlock' && actual.image !== '}') {
+      return SyntaxMessages.dataEntryBoundary
+    }
+    if (ruleName === 'EntityCommandPolicy' && tokenWord(expected) === '`{`') {
+      return SyntaxMessages.dataCommandList
+    }
     return SyntaxMessages.expected(tokenWord(expected), foundWord(actual))
   }
 

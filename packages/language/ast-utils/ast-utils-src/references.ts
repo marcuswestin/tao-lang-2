@@ -30,6 +30,11 @@ export function referencedNames(file: AST.TaoFile): Set<string> {
     if (AST.isNamedTypeReference(node)) {
       names.add(node.root)
     }
+    if (AST.isEntityDataField(node) && !node.primitive && !node.boolean) {
+      // Data relationship types are stored as names rather than cross-references. Both explicit
+      // target types and same-name fields use only the exact singular or plural form they spell.
+      names.add(Type.dataFieldRelationName(node))
+    }
     if (isImportedShorthandPropertyReference(node)) {
       names.add(node.name)
     }

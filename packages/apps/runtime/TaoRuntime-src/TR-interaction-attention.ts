@@ -1,3 +1,4 @@
+import type { RuntimeAuthScope } from './TR-auth'
 import { DataControls } from './TR-data'
 import type { RuntimeCommand } from './TR-interaction'
 import { allocateInteractionKeys, type TaoInteractionKeyAssignments } from './TR-interaction-allocation'
@@ -404,7 +405,8 @@ export class InteractionAttention {
       return []
     }
     const narrowing = this.memory().narrowing
-    return DataControls.interactionCandidates(pending.slot.type).flatMap(value => {
+    const scope = pending.command.binding('__taoAuth')?.evaluate().jsValue as RuntimeAuthScope | undefined
+    return DataControls.interactionCandidates(pending.slot.type, scope).flatMap(value => {
       const identity = DataControls.interactionCandidateIdentity(value)
       const label = DataControls.interactionCandidateLabel(value)
       if (

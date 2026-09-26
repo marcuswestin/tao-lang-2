@@ -26,6 +26,7 @@ export const configuredValueValidationMessages = {
   constructorBlock: (name: string) => `${name} configuration requires a block.`,
   configurationBlock: (type: string, name: string) =>
     `${type} configuration '${name}' expects a value expression, not a reference block.`,
+  offlineScope: 'Offline entries must name the current Account or one of its direct inverse collections.',
   referenceEntry: (surface: string, expected: string) => `${surface} entries must reference ${expected}.`,
   toolbarUnfilled: (name: string, slot: string) => `Toolbar command '${name}' still needs a value for slot '${slot}'.`,
   duplicateReference: (surface: string, kind: string, name: string) =>
@@ -269,6 +270,22 @@ export function validateReferenceBlock(
   const expected = referenceNoun(element)
   const seen = new Set<AST.Node>()
   for (const entry of block.entries) {
+    if (property.name === 'Offline' && element.kind === 'primitive' && element.primitive === 'data') {
+      const target = entry.reference?.ref
+      const expression = entry.memberReference ?? (AST.isAliasDeclaration(target) ? target.value : undefined)
+      const path = AST.isAuthLibraryDeclaration(target, 'Account')
+        ? []
+        : expression && AST.authAccountPath(expression)
+      const account = Type.visibleDataEntities(entry).find(entity => entity.singularName === 'Account')
+      const field = path?.length === 1 && account
+        ? Type.dataFields(account).find(field => field.name === path[0])
+        : undefined
+      if (path && (path.length === 0 || (field && Type.dataFieldIsInverseRelation(field)))) {
+        continue
+      }
+      ctx.error(entry, configuredValueValidationMessages.offlineScope)
+      continue
+    }
     const listed = ASTUtils.listedEntryOf(entry)
     if (!listed) {
       ctx.error(entry, configuredValueValidationMessages.referenceEntry(surface, `${expected}s`))
@@ -431,7 +448,7 @@ function effectiveConfigurationProperties(
   ctx: ValidationContext,
 ): AST.ConfigurationProperty[] {
   const primitive = AST.configurationPrimitiveOf(declaration)
-  const properties: AST.ConfigurationProperty[] = primitive
+  const properties: AST.ConfigurationProperty[] = primitive && primitive !== 'auth'
     ? primitiveSlots(ctx, primitive).filter(property => property.name !== 'implement')
     : []
   for (const property of AST.configurationPropertiesOf(declaration)) {

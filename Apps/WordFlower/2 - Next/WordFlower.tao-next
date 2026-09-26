@@ -532,8 +532,8 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 //   `when FocusBar is active` is the named region-focus form. These existing words parse through
 //   `ID`/layout-word seams and are spelling-validated, not reserved as grammar keywords. `focused`
 //   means the target control in every modality; `active` means the currently focused region
-// - An entity data block orders default verbs with `commands A, B` and withholds a command using
-//   `commands hide C`. Any view may promote commands through its `Commands { ... }` supplied slot
+// - An entity data block orders default verbs with `commands { A, B }` and withholds a command using
+//   `commands hide { C }`. Any view may promote commands through its `Commands { ... }` supplied slot
 //   and exclude inherited defaults with `hide C`. Verb order is view Commands, rendered inner
 //   controls, entity defaults, then the remaining applicable catalog alphabetically. Repeated
 //   visible labels fold onto the first verb in that priority order

@@ -1,6 +1,7 @@
 import React from 'react'
 import { settleActionRoots, type TaoActionReceipt } from './TR-action-transactions'
 import { RuntimeAssert } from './TR-assert'
+import { AuthControls, type RuntimeAuthScope } from './TR-auth'
 import type { TaoDataSchema } from './TR-data'
 import { errorDetail } from './TR-errors'
 import type { RuntimeCommand } from './TR-interaction'
@@ -25,6 +26,7 @@ type RegisteredCommand = Readonly<{
 type Configuration = Readonly<{
   commands: readonly RuntimeCommand[]
   stores: readonly TaoDataSchema[]
+  scope?: RuntimeAuthScope
   registered: ReadonlyMap<string, RegisteredCommand>
 }>
 type PersistenceError = Readonly<{ store: string; message: string }>
@@ -59,7 +61,11 @@ export const AgentControls = {
   },
 } as const
 
-function configure(commands: readonly RuntimeCommand[], stores: readonly TaoDataSchema[] = []): () => void {
+function configure(
+  commands: readonly RuntimeCommand[],
+  stores: readonly TaoDataSchema[] = [],
+  scope?: RuntimeAuthScope,
+): () => void {
   const registered = new Map<string, RegisteredCommand>()
   for (const command of commands) {
     const entry = commandCatalog.entryForCommand(command)
@@ -75,7 +81,7 @@ function configure(commands: readonly RuntimeCommand[], stores: readonly TaoData
     RuntimeAssert.input(!registered.has(entry.identity), `Command '${entry.identity}' is exposed more than once.`)
     registered.set(entry.identity, { command, entry, parameters })
   }
-  const selected: Configuration = { commands: [...commands], registered, stores: [...new Set(stores)] }
+  const selected: Configuration = { commands: [...commands], registered, stores: [...new Set(stores)], scope }
   configuration = selected
   const host = globalThis as typeof globalThis & { document?: unknown; __TAO_AGENT__?: typeof AgentControls }
   if (host.document !== undefined) {
@@ -93,13 +99,26 @@ function configure(commands: readonly RuntimeCommand[], stores: readonly TaoData
 }
 
 /** Keep rerenders on the same registration; mount after the selected app's provider binding hooks. */
-function useCommands(commands: readonly RuntimeCommand[], stores: readonly TaoDataSchema[]): void {
-  const current = React.useRef({ commands, stores })
-  if (!sameItems(commands, current.current.commands) || !sameItems(stores, current.current.stores)) {
-    current.current = { commands, stores }
+function useCommands(
+  commands: readonly RuntimeCommand[],
+  stores: readonly TaoDataSchema[],
+  scope?: RuntimeAuthScope,
+): void {
+  const current = React.useRef({ commands, stores, scope })
+  if (
+    !sameItems(commands, current.current.commands) || !sameItems(stores, current.current.stores)
+    || scope !== current.current.scope
+  ) {
+    current.current = { commands, stores, scope }
   }
   const selected = current.current
-  React.useLayoutEffect(() => configure(selected.commands, selected.stores), [selected])
+  React.useLayoutEffect(() => {
+    const boundCommands = selected.scope
+      ? selected.commands.map(command => command.with({ __taoAuth: runtimeInteractionValue(selected.scope) }))
+      : selected.commands
+    const boundStores = selected.stores.map(store => AuthControls.Store(selected.scope, store))
+    return configure(boundCommands, boundStores, selected.scope)
+  }, [selected])
 }
 
 function sameItems<T>(left: readonly T[], right: readonly T[]): boolean {
@@ -134,11 +153,19 @@ async function ready(): Promise<void> {
 
 function run(commandId: string, arguments_: unknown = {}): Promise<AgentResult> {
   const selected = selectedConfiguration()
-  const result = runs.then(async () => {
+  const generation = selected.scope?.generation
+  const assertCurrent = () => {
     RuntimeAssert.input(configuration === selected, 'The selected app changed before the command ran.')
+    RuntimeAssert.input(
+      selected.scope?.generation === generation,
+      'The signed-in account changed before the command ran.',
+    )
+  }
+  const result = runs.then(async () => {
+    assertCurrent()
     await settleStores(selected.stores)
     await settleActionRoots()
-    RuntimeAssert.input(configuration === selected, 'The selected app changed before the command ran.')
+    assertCurrent()
     const registered = selected.registered.get(commandId)
     RuntimeAssert.input(registered !== undefined, `Command '${commandId}' is not exposed by this app.`)
     RuntimeAssert.input(

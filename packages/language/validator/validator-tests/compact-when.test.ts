@@ -20,7 +20,7 @@ Describe('validator: the compact when form', () => {
     'accepts a declared no-pole alias as the label',
     accepts(`
       data Documents / Document {
-         Title text
+         Title text,
          Final yes / Draft no
       }
       ${compactApp('function Status(Document) returns text { return when Document.Final "Final" / Draft "Draft" }')}
@@ -32,7 +32,7 @@ Describe('validator: the compact when form', () => {
     rejects(
       `
       data Documents / Document {
-         Title text
+         Title text,
          Final yes / Draft no
       }
       ${compactApp('function Status(Document) returns text { return when Document.Final "Final" / Open "Draft" }')}

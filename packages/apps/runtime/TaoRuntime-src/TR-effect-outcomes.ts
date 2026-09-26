@@ -17,6 +17,8 @@ export type TaoEffectContract = Readonly<{
   declared: readonly string[] | null
   /** name is the verb a fallback message names. */
   name: string
+  /** Authentication completes a flow; it does not acknowledge a saved data write. */
+  success?: 'completed' | 'saved'
 }>
 
 /**
@@ -37,12 +39,14 @@ export function runEffectOutcome(
     restore()
     const failure = asActionFailure(error)
     const handler = failureOutcome(failure, error instanceof TaoActionFailure, contract, outcomes)
+      ?? outcomeNamed('otherwise', outcomes)
     if (!handler) {
       throw error
     }
     return handler(actionFailureMessage(failure, contract.name))
   }
-  const saved = (): unknown => outcomeNamed('saved', outcomes)?.('')
+  const saved = (): unknown =>
+    (outcomeNamed(contract.success ?? 'saved', outcomes) ?? outcomeNamed('otherwise', outcomes))?.('')
   let result: unknown
   try {
     result = invoke()

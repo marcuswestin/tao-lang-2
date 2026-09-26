@@ -19,6 +19,24 @@ import {
 import { AgentControls } from './TR-agent'
 import { AppShell, AppSurfaceFrame } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
+import {
+  AuthControls,
+  type RuntimeAuthScope,
+  type TaoAuthCapabilities,
+  type TaoAuthConnection,
+  type TaoAuthCredential,
+  type TaoAuthCredentialRequest,
+  type TaoAuthDeclaration,
+  type TaoAuthIdentity,
+  type TaoAuthInput,
+  type TaoAuthOutcome,
+  type TaoAuthProvider,
+  type TaoAuthResult,
+  type TaoAuthSecretStorage,
+  type TaoAuthSession,
+  type TaoConfiguredAuth,
+  type TaoDataAuthBinding,
+} from './TR-auth'
 import { createClipboard, type TaoPasteboard } from './TR-clipboard'
 import { createElement } from './TR-create-element'
 import {
@@ -128,7 +146,7 @@ import {
 } from './TR-persisted-state'
 import { selectPluralForm, type TaoPluralCategory, type TaoPluralForms } from './TR-phrases'
 import { requireReactNativeRuntime } from './TR-react-native'
-import { isReactiveValue } from './TR-reactive'
+import { isReactiveValue, markReactiveValue } from './TR-reactive'
 import {
   copyValue,
   createWritableCell,
@@ -142,6 +160,7 @@ import {
   useParameterCell,
   writablePath,
 } from './TR-reactive-values'
+import { readAvailability } from './TR-read-availability'
 import { ReadNet, readNetCases, renderReadNet } from './TR-read-net'
 import {
   captureRuntime,
@@ -191,8 +210,30 @@ import * as TRViews from './TR-views'
 const warnedUnhonoredLayouts = new Set<string>()
 
 /** TR exposes the generated-code runtime API used by generated apps. */
+const declaredEnumCases = new WeakSet<object>()
+
 class TR {
   private constructor() {}
+
+  /** Auth exposes mounted app authentication without a process-global principal. */
+  static Auth = {
+    ...AuthControls,
+    SignInAction(scope: RuntimeAuthScope, render?: (scope: RuntimeAuthScope) => React.ReactNode): TR.Action<[]> {
+      return TR.Action(async () => {
+        markExternalEffect()
+        authActionOutcome(await scope.requestSignIn(render))
+      }, { name: 'SignIn' })
+    },
+    SignOutAction(scope: RuntimeAuthScope): TR.Action<[]> {
+      return TR.Action(async () => {
+        markExternalEffect()
+        authActionOutcome(await scope.signOut())
+      }, { name: 'SignOut' })
+    },
+  }
+
+  /** ReactiveValue marks a library-owned live value without exposing the runtime's brand. */
+  static ReactiveValue = markReactiveValue
 
   /** Value creates runtime Tao values from JavaScript values. */
   static Value<T>(jsValue: T): TR.Value<T> {
@@ -236,14 +277,20 @@ class TR {
     return Object.freeze(Object.fromEntries(caseNames.map(caseName => {
       const value = Object.freeze({ caseName, declaration: declaration.canonical, identity: Symbol(caseName) })
       registerPersistedEnumCase(value)
+      declaredEnumCases.add(value)
       return [caseName, new RuntimeValue(value)]
     })))
   }
 
   /** IsCase tests built-in subject states, declared boolean cases, and enum identity values. */
   static IsCase(subject: TR.Evaluable, expected: TR.SubjectCaseName | TR.Evaluable): TR.Value<boolean> {
-    const value = subject.evaluate().jsValue
+    const evaluated = subject.evaluate()
+    const value = evaluated.jsValue
     if (typeof expected === 'string') {
+      const availability = readAvailability(evaluated)
+      if (availability) {
+        return new RuntimeValue(availability.status === expected)
+      }
       return new RuntimeValue(matchSubjectCase(value, expected).matched)
     }
     return new RuntimeValue(Object.is(value, expected.evaluate().jsValue))
@@ -262,6 +309,14 @@ class TR {
   /** Incomplete reports whether any `required` field of a row or projected value is missing. */
   static Incomplete(root: TR.Evaluable, required: readonly TR.RequiredField[]): TR.Value<boolean> {
     return TR.Value(missingRequiredFields(root, required).length > 0)
+  }
+
+  static IsIncomplete(root: TR.Evaluable, required: readonly TR.RequiredField[]): TR.Value<boolean> {
+    return TR.Incomplete(root, required)
+  }
+
+  static IsComplete(root: TR.Evaluable, required: readonly TR.RequiredField[]): TR.Value<boolean> {
+    return TR.Value(!TR.Incomplete(root, required).jsValue)
   }
 
   /** Problems lists the `required` sentences of a row's or projected value's missing fields. */
@@ -312,7 +367,14 @@ class TR {
     remaining: () => React.ReactNode,
     siteProps?: TR.TaoProps,
   ): React.ReactNode {
-    const value = subject.evaluate().jsValue
+    const evaluated = subject.evaluate()
+    const availability = readAvailability(evaluated)
+    if (availability && availability.status !== 'available') {
+      const payload = new RuntimeValue(availability.status === 'error' ? availability.message : undefined)
+      const handler = branches.find(([name]) => name === availability.status)?.[1]
+      return handler ? handler(payload) : renderReadNet(availability.status, payload, siteProps)
+    }
+    const value = evaluated.jsValue
     const matched = firstMatchedBranch(value, branches)
     if (matched) {
       return matched.result
@@ -891,6 +953,12 @@ function parentDirectionFromProps(props: TR.TaoProps | undefined): TR.TaoProps['
   return props.parentDirection ?? parentDirectionFromProps(props.callerProps)
 }
 
+function authActionOutcome(outcome: TaoAuthOutcome): void {
+  if (outcome.status !== 'completed') {
+    throw new TaoActionFailure(outcome.status, outcome.message ?? '')
+  }
+}
+
 class RuntimeValue<T> {
   constructor(readonly jsValue: T) {}
 
@@ -1260,6 +1328,24 @@ namespace TR {
   export type UnaryOperator = '-' | 'not'
   /** Scope declares generated Tao runtime declaration storage. */
   export type Scope = Record<string, any>
+  export type AuthScope = RuntimeAuthScope
+  export type AuthProvider = TaoAuthProvider
+  export type AuthConnection = TaoAuthConnection
+  export type AuthCapabilities = TaoAuthCapabilities
+  export type AuthSession = TaoAuthSession
+  export type AuthIdentity = TaoAuthIdentity
+  export type AuthInput = TaoAuthInput
+  export type AuthOutcome = TaoAuthOutcome
+  export type AuthResult = TaoAuthResult
+  export type AuthCredential = TaoAuthCredential
+  export type AuthCredentialRequest = TaoAuthCredentialRequest
+  export type AuthSecretStorage = TaoAuthSecretStorage
+  export type AuthDeclaration = TaoAuthDeclaration
+  export type ConfiguredAuth = TaoConfiguredAuth
+  export type DataAuthBinding = TaoDataAuthBinding
+  export type AppDatasourceBinding = import('./TR-data').TaoAppDatasourceBinding
+  export type DataWriteIntent = import('./TR-data').TaoDataWriteIntent
+  export type DataWriteContext = import('./TR-data').TaoDataWriteContext
   /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
   export type TaoProps = TRTaoProps.TaoProps
   /** OutlineNode is one mounted interaction outline node as a reader sees it. */
@@ -1460,6 +1546,9 @@ function firstMatchedBranch<ResultT>(
 type SubjectCaseMatch = { matched: boolean; payload: unknown }
 
 function matchSubjectCase(value: unknown, caseName: string): SubjectCaseMatch {
+  if (typeof value === 'object' && value !== null && declaredEnumCases.has(value)) {
+    return { matched: (value as TR.EnumCaseIdentity).caseName === caseName, payload: undefined }
+  }
   const entity = DataControls.EntityAvailability(value)
   if (entity) {
     if (caseName === 'error') {

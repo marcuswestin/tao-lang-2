@@ -20,15 +20,15 @@ type NetSimSource is Http with {
 }
 
 data Items / Item {
-   ItemId number (unique)
-   Title text
+   ItemId number (unique),
+   Title text,
 
-   order by ItemId
+   order by ItemId,
 }
 
 scene ItemsPage() {
    Title "Items"
-   query Items { }
+   query Items = Items with { }
    render Col() {
       guard Items {
          loading -> { Text("Loading items…") }

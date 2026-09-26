@@ -44,7 +44,7 @@ use Ingredient, Ingredients from ..
 package
 scene SkillIngredientList() {
    Title "Ingredient summary"
-   query Ingredients { }
+   query Ingredients = Ingredients with { }
    render Col() [gap 8] {
       #skillIngredients
       loop Ingredients / Ingredient {

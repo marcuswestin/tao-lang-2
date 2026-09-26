@@ -2,16 +2,16 @@
 // `FocusSession` declares `local only`, so it lives in the device-local store either way.
 workspace
 data Notes / Note {
-   Title text
+   Title text,
 
-   order by Title
+   order by Title,
 }
 
 workspace
 data FocusSessions / FocusSession {
-   Label text
-   StartedAt time (default now)
+   Label text,
+   StartedAt time (default now),
 
-   order by Label
-   local only
+   order by Label,
+   local only,
 }

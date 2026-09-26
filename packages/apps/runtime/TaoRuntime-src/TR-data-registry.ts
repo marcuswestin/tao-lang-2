@@ -13,6 +13,7 @@ let testDeclarations = new WeakMap<TaoDataSchema, WeakMap<TaoDatasourceDeclarati
 let testBoundSchemas = new WeakSet<TaoDataSchema>()
 let testValueIds = new Map<unknown, number>()
 const schemas = new Set<TaoDataSchema>()
+const scopedSchemas = new WeakSet<TaoDataSchema>()
 const globalListeners = runtimeListeners()
 let globalRevision = 0
 
@@ -24,13 +25,26 @@ export function isDataTestMode(): boolean {
   return testMode
 }
 
-export function registerDataSchema(schema: TaoDataSchema): void {
+export function registerDataSchema(schema: TaoDataSchema, scoped = false): void {
   schemas.add(schema)
+  if (scoped) {
+    scopedSchemas.add(schema)
+  }
+}
+
+/** Mounted app scopes release their schemas when their host unmounts. */
+export function unregisterDataSchema(schema: TaoDataSchema): void {
+  schemas.delete(schema)
 }
 
 /** interactionEntityHandles returns stored live rows in active-schema then schema query order. */
-export function interactionEntityHandles(entity: string): readonly unknown[] {
-  return [...schemas].flatMap(schema => schema.interactionCandidates(entity))
+export function interactionEntityHandles(
+  entity: string,
+  scope?: { ownsStore(store: TaoDataSchema): boolean },
+): readonly unknown[] {
+  return [...schemas].filter(schema => scope ? scope.ownsStore(schema) : !scopedSchemas.has(schema)).flatMap(schema =>
+    schema.interactionCandidates(entity)
+  )
 }
 
 export function serializeEntityReference(value: unknown): TaoEntityReferenceSnapshot | undefined {
@@ -38,8 +52,14 @@ export function serializeEntityReference(value: unknown): TaoEntityReferenceSnap
   return handle ? metadataOf(handle).schema.serializeReference(handle) : undefined
 }
 
-export function restoreEntityReference(reference: TaoEntityReferenceSnapshot): unknown {
+export function restoreEntityReference(
+  reference: TaoEntityReferenceSnapshot,
+  scope?: { ownsStore(store: TaoDataSchema): boolean },
+): unknown {
   for (const schema of schemas) {
+    if (scope ? !scope.ownsStore(schema) : scopedSchemas.has(schema)) {
+      continue
+    }
     const handle = schema.restoreReference(reference)
     if (handle) {
       return handle

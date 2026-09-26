@@ -19,13 +19,13 @@ guard default {
 
 workspace
 data Notes / Note {
-   Title text
+   Title text,
 }
 
 scene NotesView() {
    Title "Notes"
    state TitleDraft = ""
-   query Notes { }
+   query Notes = Notes with { }
    action AddNote() {
       create Note {
          Title: TitleDraft

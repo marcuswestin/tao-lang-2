@@ -80,17 +80,19 @@ function validateDeclaration(declaration: AST.ConfigurableDeclaration, ctx: Vali
     validateConfigurationProperties(declaration, ctx)
     return
   }
-  if (primitive !== 'nav' && primitive !== 'datasource') {
+  if (primitive !== 'nav' && primitive !== 'datasource' && primitive !== 'auth') {
     return
   }
-  const kind = primitive === 'nav' ? 'Nav' : 'Datasource'
+  const kind = primitive === 'nav' ? 'Nav' : primitive === 'auth' ? 'Auth provider' : 'Datasource'
   if (!AST.isTaoFile(declaration.$container)) {
     ctx.error(declaration, configurationValidationMessages.topLevel(kind))
   }
 
   validateConfigurationProperties(declaration, ctx)
   validateConfigurationKeyDeclarations(declaration, ctx)
-  validateConfigurationImplementations(declaration, ctx)
+  if (!AST.isAuthLibraryDeclaration(declaration, 'AuthProvider')) {
+    validateConfigurationImplementations(declaration, ctx)
+  }
 }
 
 function validateConfigurationProperties(declaration: AST.ConfigurableDeclaration, ctx: ValidationContext): void {

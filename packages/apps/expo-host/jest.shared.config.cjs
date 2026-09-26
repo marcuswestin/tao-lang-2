@@ -23,6 +23,10 @@ function starvationAdjustedTimeoutMs(budgetMs) {
 }
 
 function createRuntimeJestConfig(options) {
+  const realHttp = process.env.TAO_TEST_REAL_HTTP === '1'
+  // Capture Node's transport before Expo installs its native fetch stub, then restore it after
+  // the preset. Keep this explicit: ordinary journeys retain deterministic native mocks.
+  const preset = realHttp ? require('jest-expo/jest-preset') : undefined
   const managedCacheDirectory = process.env.TAO_TEST_JEST_CACHE_DIRECTORY
   const dependencyRoot = process.env.TAO_TEST_NODE_MODULES_ROOT ?? '<rootDir>/node_modules'
   // Inside the repository the runtime and `@shared` sit where the package layout puts them relative
@@ -31,7 +35,14 @@ function createRuntimeJestConfig(options) {
   const runtimeSourceRoot = process.env.TAO_RUNTIME_SOURCE_ROOT ?? '<rootDir>/../runtime/TaoRuntime-src'
   const sharedSourceRoot = process.env.TAO_SHARED_SOURCE_ROOT ?? '<rootDir>/../../shared/shared-src'
   return {
-    preset: 'jest-expo',
+    ...(preset === undefined ? { preset: 'jest-expo' } : {
+      ...preset,
+      setupFiles: [
+        '<rootDir>/jest-http-capture.cjs',
+        ...preset.setupFiles,
+        '<rootDir>/jest-http-restore.cjs',
+      ],
+    }),
     cacheDirectory: managedCacheDirectory ?? `${directCacheRoot(__dirname)}/data`,
     ...(managedCacheDirectory === undefined
       ? {

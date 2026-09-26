@@ -494,13 +494,13 @@ Describe('removeUnusedImports', () => {
       {
         name: 'plural-only root query',
         imports: 'Documents',
-        body: 'view Editor() { query Documents { } render Empty("ok") }',
+        body: 'view Editor() { query Documents = Documents with { } render Empty("ok") }',
         kept: ['Documents'],
       },
       {
         name: 'both explicit forms when both are used',
         imports: 'Documents, Document',
-        body: 'view Editor(Document) { query Documents { } render Empty(Document.Title) }',
+        body: 'view Editor(Document) { query Documents = Documents with { } render Empty(Document.Title) }',
         kept: ['Document', 'Documents'],
       },
       {
@@ -512,17 +512,41 @@ Describe('removeUnusedImports', () => {
       {
         name: 'plural query without the unused singular',
         imports: 'Documents, Document',
-        body: 'view Editor() { query Documents as Recent { } render Empty("ok") }',
+        body: 'view Editor() { query Recent = Documents with { } render Empty("ok") }',
         kept: ['Documents'],
       },
       {
         name: 'plural query with a local singular loop binder',
         imports: 'Documents, Document',
         body: `view Editor() {
-        query Documents { }
+        query Documents = Documents with { }
         render Col() { loop Documents / Document { Empty(Document.Title) } }
       }`,
         kept: ['Documents'],
+      },
+      {
+        name: 'singular import used by a named data field type',
+        imports: 'Documents, Document',
+        body: 'data Links / Link { Owner Document }',
+        kept: ['Document'],
+      },
+      {
+        name: 'singular import used by an implicit data field type',
+        imports: 'Documents, Document',
+        body: 'data Links / Link { Document }',
+        kept: ['Document'],
+      },
+      {
+        name: 'plural import used by an inverse data field',
+        imports: 'Documents, Document',
+        body: 'data Folders / Folder { Documents }',
+        kept: ['Documents'],
+      },
+      {
+        name: 'no singular import for a primitive data field with the same name',
+        imports: 'Document',
+        body: 'data Links / Link { Document text }',
+        kept: [],
       },
       {
         name: 'no singular import for a local same-name parameter',

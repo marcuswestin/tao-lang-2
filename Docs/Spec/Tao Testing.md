@@ -105,6 +105,34 @@ scenario's fixture already seeds through (`Tao Studio.md`).
 A fixture's `through <Action>(...)` binding is not yet executed by a test's `with` (Studio's own
 scenario fixtures share this limit); write a `with`-driven fixture without `through` until that lands.
 
+### Account fixtures
+
+A fixture may provision named application accounts, choose its initial signed-in account, and
+create rows under an explicit actor. The running app must use `TestAuth` from `@tao/auth/testing`
+for account provisioning; production auth providers reject this fixture operation.
+
+```tao
+fixture PrivateNotes {
+   account Alice { DisplayName: "Alice" }
+   account Bob { DisplayName: "Bob" }
+   signed in as Alice
+   Mine = create Note { Owner: Alice, Body: "Alice's note" }
+   create Note { Owner: Bob, Body: "Bob's note" } for Bob
+}
+```
+
+`account Name { ... }` binds an application `Account` handle with those profile fields. The
+`signed in as` clause establishes the fixture's default actor and the session presented when the
+app launches. Both named and unnamed `create` entries use that actor unless they end in
+`for <AccountName>`. The override applies only to that create; it does not switch the session or the
+actor of later entries. Field values may refer to earlier account and row bindings.
+
+Account fixture creates pass through the authored access policy. Giving a row `Owner: Bob` while
+creating as Alice does not impersonate Bob. After seeding, the running app sees only rows its
+selected account may read. Account fixtures are deterministic test setup, not credentials or a
+production provisioning endpoint. Existing fixtures without account declarations keep their
+ordinary provider-isolated row setup, and the `through` limitation above still applies.
+
 ## Tags and selectors
 
 `#tag` attaches to the immediately following render or loop:

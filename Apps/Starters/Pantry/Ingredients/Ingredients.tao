@@ -8,7 +8,7 @@ package
 scene IngredientList() {
    Title "Ingredients"
    state NewName = ""
-   query Ingredients { }
+   query Ingredients = Ingredients with { }
    action AddIngredient() {
       check NewName is not empty
       create Ingredient {

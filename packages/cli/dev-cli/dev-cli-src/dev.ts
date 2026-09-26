@@ -439,9 +439,11 @@ await runWithCommands(commands => {
   commands
     .command('merge-main')
     .description('Merge current main into this feature branch, and nothing else; no lane, no merge message.')
-    .action(async () => {
+    .option('--stash', 'Save tracked and untracked work, restore after merging, and retain the backup stash.')
+    .option('--keep-stashed', 'With --stash, leave saved work unapplied for selective interrupted-checkout recovery.')
+    .action(async (options: { stash?: boolean; keepStashed?: boolean }) => {
       try {
-        await MergeMainCommand.run()
+        await MergeMainCommand.run(options)
         Platform.runtimeProcess.exit(0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))

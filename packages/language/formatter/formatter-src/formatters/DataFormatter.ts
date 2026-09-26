@@ -4,7 +4,8 @@ import type { FormatHandlers } from '../formatting'
 // `index`, `order by`, and `local only` state storage facts about the whole entity, so they trail
 // the field list as one group with a blank line above it.
 function isStorageTail(entry: AST.Node): boolean {
-  return AST.isDataIndex(entry) || AST.isDataDefaultOrder(entry) || AST.isDataLocalOnly(entry)
+  return AST.isDataIndex(entry) || AST.isDataUnique(entry) || AST.isDataDefaultOrder(entry)
+    || AST.isDataLocalOnly(entry)
 }
 
 /** Entity policies trail storage facts as their own semantic group. */
@@ -26,10 +27,11 @@ export const DataFormatter = {
       f.node.entries,
       (previous, next) => entryGroup(previous) === entryGroup(next) ? 1 : 2,
     )
+    f.commaLineList(true)
   },
 
   EntityDataField(f) {
-    f.oneSpaceBeforeProperty('primitive', 'boolean', 'negativeName')
+    f.oneSpaceBeforeProperty('primitive', 'boolean', 'negativeName', 'typeName')
     f.oneSpaceAround('/')
     f.oneSpaceBefore('(')
     f.noSpaceAfter('(')
@@ -54,6 +56,29 @@ export const DataFormatter = {
     f.oneSpaceAfter('index')
   },
 
+  AccessDeclaration(f) {
+    f.oneSpaceAfter('access')
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(f.node.rules)
+    f.lineSeparatedList(f.node.rules)
+    f.noSpaceBefore(';')
+  },
+
+  AccessRule(f) {
+    f.oneSpaceAround('can')
+    f.commaSpacedList()
+  },
+
+  AccessGrant(f) {
+    f.oneSpaceAfter('update')
+    f.commaSpacedList()
+  },
+
+  DataUnique(f) {
+    f.oneSpaceAfter('unique')
+    f.oneSpaceAround('+')
+  },
+
   DataDefaultOrder(f) {
     f.oneSpaceAfter('order', 'by')
   },
@@ -64,6 +89,7 @@ export const DataFormatter = {
 
   EntityCommandPolicy(f) {
     f.oneSpaceAfter('commands', 'hide')
+    f.singleLineBraceBlock()
     f.commaSpacedList()
   },
 
@@ -72,7 +98,8 @@ export const DataFormatter = {
 
   EntityQueryDeclaration(f) {
     f.oneSpaceAfter('query', 'as', 'from')
-    f.oneSpaceBefore('as', 'from')
+    f.oneSpaceBefore('as', 'from', 'with')
+    f.oneSpaceAround('=')
   },
 
   QueryBlock(f) {

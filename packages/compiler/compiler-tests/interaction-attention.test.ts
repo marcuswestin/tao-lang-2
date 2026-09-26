@@ -9,9 +9,9 @@ Describe('compiler: interaction attention', () => {
       view Home() { render Text("Home") }
       action Run() { }
       data Documents / Document {
-        Title text
-        commands Finish
-        commands hide Archive
+        Title text,
+        commands { Finish },
+        commands hide { Archive }
       }
       command Finish(Document) {
         Title "Finish"

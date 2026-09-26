@@ -674,7 +674,7 @@ function studioCellRuntime(runtime: any, manifest: any) {
       },
       version: 1,
     },
-    fixture: { accounts: fixture.accounts, creates: fixture.creates },
+    fixture: { accounts: fixture.accounts, creates: fixture.creates, signedIn: fixture.signedIn },
     scenario: {
       arguments: runtime.cell.args,
       kind: scenario.subject.kind,

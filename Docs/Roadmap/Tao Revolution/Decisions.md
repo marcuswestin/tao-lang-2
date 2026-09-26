@@ -274,40 +274,44 @@ data Recipes / Recipe {
 }
 ```
 
-- **The target is omitted when the field name is the entity name** (`Household`, above), and named
-  by the `relation` trait when it is not:
+- **Auth review amendment, 2026-09-26: data entries are comma-separated**, with an optional
+  trailing comma. This applies to entries of `data` bodies, not every Tao block. A newline is
+  whitespace, not a separator. Older examples below await the implementation migration.
+- **The target is omitted when the field name is the entity name** (`Household`, above), and
+  otherwise occupies the ordinary type position:
 
 ```swift
 data Memberships / Membership {
-   Person (relation Accounts)        // named Person, pointing at the Accounts entity
+   Workspace,
+   Person Account,                   // to-one Account relation
+   Role,
+   unique Workspace + Person,         // one constraint on the pair, not two unique fields
 }
 ```
 
-Juxtaposition is _not_ used here. Inside a `data` block, fields are separated by nothing but
-layout, so a juxtaposed type is genuinely ambiguous: in
+The comma resolves the previous juxtaposition ambiguity: `Workspace, Paragraphs (owned)` is two
+fields; `Workspace Paragraphs` is one explicitly typed field. Singular and plural entity targets
+retain their to-one/to-many distinction. `Role` may infer the same-named declared value type;
+type resolution must distinguish value types from entity relations.
 
-```swift
-data Documents / Document {
-   Workspace
-   Paragraphs (owned)
-}
-```
+**One index or uniqueness constraint per keyword.** `unique Workspace + Person` constrains the
+tuple; `unique Workspace, unique Person` declares two independent constraints. `+` in this
+declaration is a field-list separator, not addition. Composite uniqueness needs implementation in
+schema, runtime, and backend enforcement; this is not only a parser change. Scalar identity and
+cross-source reference keys do not silently become composite keys.
 
-`Workspace Paragraphs` reads equally as one field named `Workspace` of type `Paragraphs` and as
-two separate relation fields, and the grammar has no newline sensitivity to break the tie. The
-`relation` trait carries the target explicitly, so nothing about a field's meaning depends on where
-a line break falls. This is the one place where the three-symbol rule of §2 does not apply, and
-the trait is required only when the names differ — the common case still writes nothing.
+Inner lists must have their own boundary rather than consuming entry commas. Existing `commands
+Save, Share` and planned `together A, B` need a spelling decision before this grammar ships; the
+[auth implementation plan](<../Plan - Auth and account data.md>) records the remaining gate.
 
 A reverse relation whose name differs from its entity names its collection the same way, which
 removes the last reason to write cardinality or a `through` path by hand:
 
 ```swift
-data Members / Member { Household Person (relation Accounts) }
+data Members / Member { Household, Person Account }
 
 data Households / Household {
-   Seats (relation Members, owned)   // named Seats, but holds the Members collection — no
-                                     // cardinality or inverse-path clause needed either way
+   Seats Members (owned),            // named Seats, holding the Members collection
 }
 ```
 
@@ -364,18 +368,18 @@ data Groceries / Grocery {
 - **Every other trait trails in one parenthesized list, and that list belongs to `data`
   declarations.** The list is closed:
 
-| Trait                   | Argument             | Meaning                                                |
-| ----------------------- | -------------------- | ------------------------------------------------------ |
-| `default <expr>`        | a value or case name | the field's value when it is not set                   |
-| `relation <Entity>`     | an entity name       | the relation target, when the field is named otherwise |
-| `required "<sentence>"` | a sentence           | completeness, never blocking (§ Correctness)           |
-| `touch on change`       | —                    | restamp this field on every write to the row           |
-| `owned`                 | —                    | cascade lifetime for a relation                        |
-| `ordered`               | —                    | store-kept positions for a relation                    |
-| `unique`                | —                    | a storage fact                                         |
-| `search`                | —                    | participates in the entity's multi-field text search   |
-| `device`                | —                    | a preference scoped to one device, so it does not sync |
-| `title`                 | —                    | the one text field that names a row to a person (§9)   |
+| Trait                   | Argument             | Meaning                                                   |
+| ----------------------- | -------------------- | --------------------------------------------------------- |
+| `default <expr>`        | a value or case name | the field's value when it is not set                      |
+| `relation <Entity>`     | legacy spelling      | replaced by the field type position in the auth amendment |
+| `required "<sentence>"` | a sentence           | completeness, never blocking (§ Correctness)              |
+| `touch on change`       | —                    | restamp this field on every write to the row              |
+| `owned`                 | —                    | cascade lifetime for a relation                           |
+| `ordered`               | —                    | store-kept positions for a relation                       |
+| `unique`                | —                    | a storage fact                                            |
+| `search`                | —                    | participates in the entity's multi-field text search      |
+| `device`                | —                    | a preference scoped to one device, so it does not sync    |
+| `title`                 | —                    | the one text field that names a row to a person (§9)      |
 
 ```swift
 data Recipes / Recipe {
@@ -427,14 +431,18 @@ gentler severity: a message that neither blocks a write nor marks a row incomple
 
 - `validate <condition> "<sentence>"` — a store invariant enforced on **every** write path
   (keystroke, draft commit, transaction, sidecar import), which rejects the write.
-- `required "<sentence>"` — completeness, which never blocks a write. It derives `Row.Incomplete`
+- `required "<sentence>"` — completeness, which never blocks a write. It derives `Row.IsComplete`
   and `Row.Problems` so a row can be built one field at a time and still know it is unfinished.
+  **Auth review amendment, 2026-09-26:** the positive boolean spelling is `IsComplete`, replacing
+  the earlier `Incomplete` sketch; callers write `check Edit.IsComplete`. This derived row/draft
+  API is still unimplemented. Completeness means all required fields are supplied, not that a
+  write is authorized, passes every `validate`, or has reached a remote server.
 - `refuse when <condition> "<sentence>"` — a domain rejection inside a transaction, before any write
   lands.
 
 ```swift
 data Recipes / Recipe {
-   Title text (required "Name this recipe")           // required: Recipe.Incomplete until set
+   Title text (required "Name this recipe")           // Recipe.IsComplete is no until set
    validate Servings >= 1 "A recipe serves at least one"   // validate: the write is rejected outright
 }
 
@@ -535,34 +543,49 @@ data Recipes / Recipe {
 ## 3. Authority
 
 - **Deny by default.** Nothing is readable or writable unless a rule grants it.
-- **Four verbs**: `read`, `create`, `change`, `delete`. Verbs may be grouped on one line.
-- **One `access <Entity> { … }` block per entity**, with verbs as bare lines:
+- **Four verbs**: `read`, `create`, `update`, `delete`. Verbs may be grouped on one line.
+- **One `access <Entity> { … }` block per entity**, with audience-first grants:
+  `<account-or-account-set> can <verbs>`. **Auth review amendment, 2026-09-26:** this replaces
+  `<verbs> to <audience>` without changing enforcement, field restrictions, or post-write
+  semantics. An account-valued relation path is written directly. Named `audience` declarations
+  are deferred until after MVP. `update` is the canonical permission verb, matching the write
+  operation; `change` is an older spelling to migrate, not an additional operation.
+
+```swift
+access Account { Account can read; Account can update DisplayName }
+access Note { Owner can read, create, delete; Owner can update Body }
+access Workspace { Workspace.Memberships.Person can read }
+access Membership { Person can read }
+```
+
+The larger examples below retain named audiences as post-MVP illustrations. They do not expand
+the reviewed MVP scope to named policies, invitations, or ownership transfers.
 
 ```swift
 access Recipe {
-   read to Family of Household
-   create, change to Cooks of Household
-   change Shared, ShareCode through StartSharing or StopSharing
-   delete to Owners of Household
+   Family of Household can read
+   Cooks of Household can create, update
+   update Shared, ShareCode through StartSharing or StopSharing
+   Owners of Household can delete
 }
 
 access Invite {
-   read to Cooks of Household or holder of Code
-   create to Cooks of Household where Role in Cook, Guest   // a cook may invite cooks and guests
-   create to Owners of Household                            // only an owner may mint an owner
-   change Used to holder of Code
-   delete to Owners of Household
+   Cooks of Household or holder of Code can read
+   Cooks of Household can create where Role in Cook, Guest   // a cook may invite cooks and guests
+   Owners of Household can create                            // only an owner may mint an owner
+   holder of Code can update Used
+   Owners of Household can delete
 }
 ```
 
 - **The composition rules are part of the language, not a convention**: grants are additive; a bare
-  `change` covers every field; a field no grant covers cannot change; and a field named in a
+  `update` covers every field; a field no grant covers cannot change; and a field named in a
   `through` grant changes _only_ that way, even for callers a broader grant covers.
-- **A grant may constrain the row as it will be** — `create to Cooks of Household where Role in
+- **A grant may constrain the row as it will be** — `Cooks of Household can create where Role in
   Cook, Guest`, above, reads the _new_ row's `Role`, which is how "a cook may invite cooks and
   guests, but only an owner may mint an owner" is two lines instead of a transaction.
 
-- **`audience Name for Entity = <path>` names a reusable set of accounts** derived from a durable
+- **Post-MVP: `audience Name for Entity = <path>` names a reusable set of accounts** derived from a durable
   relation path with a filter. The same named audience is used by both the access rules and the
   screens:
 
@@ -570,29 +593,29 @@ access Invite {
 audience Cooks for Household = Household.Memberships[Role in Owner, Cook].Person
 
 access Recipe {
-   create, change to Cooks of Household   // used by an access rule …
+   Cooks of Household can create, update   // used by an access rule …
 }
 
 // … and by a screen, so "who can cook here" is asked and answered in one place
 Text("Cooking: { Cooks of Recipe.Household }")
 ```
 
-- **Field-scoped change grants** keep everyday edits open while provenance, lifecycle, and sharing
-  fields stay closed (`change Shared, ShareCode through StartSharing or StopSharing`, above — every
-  other field stays open to `change Recipe`).
+- **Field-scoped update grants** keep everyday edits open while provenance, lifecycle, and sharing
+  fields stay closed (`update Shared, ShareCode through StartSharing or StopSharing`, above — every
+  other field stays open to `update Recipe`).
 - **Transaction-only write paths** (`through <Transaction>`) reserve sensitive mutations for one
   named atomic operation, even for a caller in the right audience (`create through JoinWithInvite`,
   below).
 - **Holder-of-secret grants** authorize whoever presents a capability. This is how invitations work.
   The grant needs no separate "authorizes" clause: presenting a `secret`-typed parameter to a
   transaction is what makes its caller `holder of <Field>` for that call, and the same access verbs
-  that grant everyday changes (`through <Transaction>`, `to holder of <Field>`) say what the holder
+  that grant everyday changes (`through <Transaction>`, `holder of <Field> can …`) say what the holder
   may do — mirroring how the store's own rules check a bearer secret against a related row rather
   than consulting a separate authorization table:
 
 ```swift
 access Invite {
-   change Used to holder of Code            // presenting Code as it is authorizes the caller
+   holder of Code can update Used           // presenting Code as it is authorizes the caller
    create through JoinWithInvite
 }
 
@@ -617,7 +640,7 @@ command Favorite(Recipe) {
    Icon "heart"
    do FavoriteRecipe(Recipe)
 }
-// shown only while `can change Recipe` — the command asks the store; nothing re-implements the rule (§8)
+// shown only while `can update Recipe` — the command asks the store; nothing re-implements the rule (§8)
 ```
 
 ---
@@ -728,9 +751,12 @@ when do LeaveKitchen(MyMembership) {
 }
 ```
 
-- **One mandatory, app-wide safety net, and it is a read net.** `guard default { … }` is declared
-  once, anonymously, and covers the states of the _subject_ a site is reading. A site names only the
-  cases it treats specially, so `unauthorized` can never be accidentally skipped:
+- **Every app has a read safety net, supplied by the standard library when omitted.** An app may
+  declare `guard default { … }` once to customize it. Resolution is per case: site override, then
+  app override, then the standard fallback. The net covers the states of the _subject_ being read.
+  Default copy is generic (for example, "Loading…"), and error text is safe for users rather than
+  raw backend diagnostics. This does not catch auth action outcomes or silently propagate a
+  receiver's availability through arbitrary member access. An app customization looks like:
 
 ```swift
 guard default {
@@ -804,16 +830,22 @@ when Recipes {
 
 ## 6. Reads
 
-- **`query Name from <path> { … }` is live and provider-backed**, with filtering, ordering, search,
+- **`query Name = <path> with { … }` is live and provider-backed**, with filtering, ordering, search,
   grouping, and limits declared next to the consumer. Views never poll or subscribe manually:
 
 ```swift
-query RecentRecipes from MyKitchen.Recipes {
+query RecentRecipes = MyKitchen.Recipes with {
    where CreatedAt > now - 7.days
    order by CreatedAt descending
    limit 20
 }
 ```
+
+- **Auth review amendment, 2026-09-26:** the named-path query above replaces the earlier
+  `query Name from <path> { … }` spelling. `query` selects the declaration, and the member path
+  ends before `with`, so neither `=` nor the existing `with` keyword introduces a structural
+  grammar ambiguity. Parser and formatter migration is pending; this does not claim that the
+  current parser accepts the new form or settle general expression-valued query sources.
 
 - **A module-level query is not part of the language today**, although it could be added and nothing
   strictly prevents it; queries live in the view whose mount owns their reactive lifetime.
@@ -824,14 +856,14 @@ query RecentRecipes from MyKitchen.Recipes {
 
 ```swift
 data Recipes / Recipe { Title text (search), Ingredients { Name text (search) } }
-query FoundRecipes from MyKitchen.Recipes { search Query }
+query FoundRecipes = MyKitchen.Recipes with { search Query }
 ```
 
 - **Grouped and aggregate queries retain their contributing source rows**, so a folded total can be
   traced back and written through:
 
 ```swift
-query AisleTotals from MyKitchen.Groceries {
+query AisleTotals = MyKitchen.Groceries with {
    group by Aisle
    Count = count()
 }
@@ -1200,6 +1232,18 @@ command New(Title text) {
 
 - **`if` is one-sided and never takes `else`.** It conditionally includes one branch and nothing
   more: `if Step.Timer is not none { StartTimerFor(Step) }`.
+- **Text in a condition is deferred until after MVP** (auth review, 2026-09-26). No coercion rule
+  is settled by this review. Keep `if Problem is not empty { Text(Problem) }`; boolean-condition
+  positions retain their current typing. Future work must address whitespace, availability, and
+  consistency across condition positions rather than inheriting host-language truthiness.
+- **Bar-form matches are the auth review's target spelling**, pending a parser/formatter migration:
+  `when Subject | Case -> Body | otherwise -> Body`. Every multi-arm match has a terminal
+  `otherwise`; a value arm contains one expression, and a render/effect arm contains one atomic
+  statement or nested terminal match, or an explicit braced block for multiple statements. The
+  terminal arm closes a nested match's arm list, but does not group multiple sibling statements.
+  Subject-less matches use the same arm boundaries. The older braced examples in this record
+  remain migration inputs. The compact boolean form below needs an explicit compatibility
+  decision before a universal replacement; this amendment does not silently remove it.
 - **`when` covers two or more outcomes, and is the value-producing form.** One word for "maybe do
   this", one word for "cover every case":
 

@@ -36,10 +36,10 @@ scene Workbench() {
       }
       set SessionDraft = ""
    }
-   query FocusSessions as CurrentSession {
+   query CurrentSession = FocusSessions with {
       limit 1
    }
-   query Notes { }
+   query Notes = Notes with { }
    render Col() [gap 10, pad 16] {
       Text("Workbench")
 

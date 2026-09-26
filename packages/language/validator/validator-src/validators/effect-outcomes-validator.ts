@@ -9,6 +9,7 @@ const effectOutcomeValidationMessages = {
   unknownOutcome: (outcome: string, effect: string) =>
     `'${outcome}' is not an outcome of ${effect}; name \`saved\`, \`rejected\`, \`error\`, or a case it declares.`,
   savedPayload: '`saved` carries no message, so it takes no name.',
+  emptyPayload: (outcome: string) => `\`${outcome}\` carries no message, so it takes no name.`,
   unhandledFailure: (effect: string, cases: readonly string[]) =>
     `${capitalized(effect)} can fail with ${
       caseList(cases)
@@ -45,7 +46,10 @@ export const EffectOutcomesValidator = {
 
 function validateOutcomes(statement: AST.WhenDoStatement, ctx: ValidationContext): void {
   const declared = new Set(ASTUtils.invocationFailureCases(statement))
-  const allowed = new Set<string>([...ASTUtils.effectOutcomeWords, ...declared])
+  const effect = ASTUtils.invokedEffect(statement)
+  const auth = AST.isAuthLibraryDeclaration(effect, 'SignIn') || AST.isAuthLibraryDeclaration(effect, 'SignOut')
+  const words = auth ? ['completed', 'cancelled', 'rejected', 'error'] : ASTUtils.effectOutcomeWords
+  const allowed = new Set<string>([...words, ...declared])
   const seen = new Set<string>()
   for (const outcome of statement.outcomes) {
     if (seen.has(outcome.case)) {
@@ -54,6 +58,9 @@ function validateOutcomes(statement: AST.WhenDoStatement, ctx: ValidationContext
     seen.add(outcome.case)
     if (!allowed.has(outcome.case)) {
       ctx.error(outcome, effectOutcomeValidationMessages.unknownOutcome(outcome.case, effectName(statement)))
+    }
+    if (['completed', 'cancelled'].includes(outcome.case) && outcome.payload) {
+      ctx.error(outcome.payload, effectOutcomeValidationMessages.emptyPayload(outcome.case))
     }
     if (outcome.case === 'saved' && outcome.payload) {
       ctx.error(outcome.payload, effectOutcomeValidationMessages.savedPayload)

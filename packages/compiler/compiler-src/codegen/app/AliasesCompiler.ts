@@ -1,12 +1,23 @@
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { AppCompiler } from './AppCompiler'
+import { authLibraryExport, withAuthContextFactory } from './auth-context'
 import { bridgeBindingName } from './injection-plan'
 
 export const AliasesCompiler = {
   /** AliasDeclaration compiles a Tao alias into a generated Tao value binding. */
   AliasDeclaration(alias: AST.AliasDeclaration, options: CodegenOptions = {}): Compiled {
+    if (authLibraryExport(alias) === 'Session') {
+      Assert(AST.isFromExpression(alias.value), 'the Session library alias has its scoped native bridge')
+      return withAuthContextFactory(
+        alias,
+        gen`${gen.scopeName(alias)} = ${
+          gen.Name({ name: bridgeBindingName(alias.value) })
+        }(_TaoAuthScope!, _Scope.SessionState)`,
+      )
+    }
     if (AST.configuredPrimitiveOfExpression(alias.value) === 'app') {
       return AppCompiler.AppValue(alias, options)
     }
@@ -15,8 +26,11 @@ export const AliasesCompiler = {
         gen.Name({ name: bridgeBindingName(alias.value) })
       }))`
     }
-    return AST.isConfiguredValue(alias.value)
-      ? gen`${gen.scopeName(alias)} = TR.Alias(${Compile.ConfiguredValue(alias.value)})`
-      : gen`${gen.scopeName(alias)} = TR.Alias(() => ${Compile.Expression(alias.value)})`
+    return withAuthContextFactory(
+      alias,
+      AST.isConfiguredValue(alias.value)
+        ? gen`${gen.scopeName(alias)} = TR.Alias(${Compile.ConfiguredValue(alias.value)})`
+        : gen`${gen.scopeName(alias)} = TR.Alias(() => ${Compile.Expression(alias.value)})`,
+    )
   },
 } as const

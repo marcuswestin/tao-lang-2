@@ -95,6 +95,7 @@ Describe('validator: workspace structure', () => {
         'Navigator',
         'AgentCommands',
         'Datasource',
+        'Auth',
         'Design',
       ])
     })

@@ -406,7 +406,13 @@ export async function lowerFeature(
   const dataBefore = await readFile(entity.path!)
   // Insert after the whole line so a trailing comment on the anchor field stays with it.
   const fieldLineEnd = dataBefore.indexOf('\n', fieldAnchor.end!)
-  stage(entity.path!, { end: fieldLineEnd, replacement: `\n   ${F} yes / no`, start: fieldLineEnd })
+  const fieldSuffix = dataBefore.slice(fieldAnchor.end!, fieldLineEnd)
+  const separator = fieldSuffix.trimStart().startsWith(',') ? '' : ','
+  stage(entity.path!, {
+    end: fieldLineEnd,
+    replacement: `${separator}${fieldSuffix}\n   ${F} yes / no,`,
+    start: fieldAnchor.end!,
+  })
   steps.push({
     action: `add field ${singular}.${F} yes / no after ${fieldAnchor.name}`,
     decidedBy: 'model',
@@ -523,20 +529,20 @@ export async function lowerFeature(
   const subjectParameter = (detail(subject)['parameters'] as string[]).find(p =>
     p.includes(`(entity ${shape.entity})`)
   )!.split(' ')[0]!
-  // `create <Singular>` in the fixture resolves through the entity's imported plural declaration.
+  // `create <Singular>` in the fixture needs that singular name explicitly imported.
   // A declaration the entry file declares itself needs no import, and importing it from a folder the project
   // may not even have is a change that cannot resolve. One-file apps declare both here.
   const entityIsLocal = entity.path === entryPath
   const subjectIsLocal = subject.path === entryPath
   const dataImport = /^use (.+) from @data$/m.exec(entryBefore)
   const dataImportNames = dataImport === null ? [] : dataImport[1]!.split(',').map(name => name.trim())
-  const dataImportEdits: Edit[] = entityIsLocal || dataImportNames.includes(shape.entity)
+  const dataImportEdits: Edit[] = entityIsLocal || dataImportNames.includes(singular)
     ? []
     : dataImport === null
-    ? [{ end: 0, replacement: `use ${shape.entity} from @data\n`, start: 0 }]
+    ? [{ end: 0, replacement: `use ${singular} from @data\n`, start: 0 }]
     : [{
       end: dataImport.index + dataImport[0].length,
-      replacement: `use ${[...dataImportNames, shape.entity].sort().join(', ')} from @data`,
+      replacement: `use ${[...dataImportNames, singular].sort().join(', ')} from @data`,
       start: dataImport.index,
     }]
   const useLine = entryBefore.split('\n').findIndex(line => /^use .* from @ui$/.test(line))
@@ -559,7 +565,7 @@ export async function lowerFeature(
   )
   steps.push({
     action: `add fixture row ${handle} = create ${singular} { ${rowFields.join(', ')} } to ${fixture.name}${
-      dataImportEdits.length === 0 ? '' : `, importing ${shape.entity} from @data`
+      dataImportEdits.length === 0 ? '' : `, importing ${singular} from @data`
     }`,
     decidedBy: 'poc-hard-coded',
     evidence: [fixture.id],
