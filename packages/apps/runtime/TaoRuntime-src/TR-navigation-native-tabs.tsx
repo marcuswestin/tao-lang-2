@@ -59,7 +59,7 @@ function NativeSelectionTabs(options: {
   onActivate: (key: string) => void
 }): React.ReactNode {
   const platform = requireReactNativeRuntime().Platform as
-    | { OS: string; isPad?: boolean; Version?: string | number }
+    | { OS: string; isPad?: boolean; isMacCatalyst?: boolean; Version?: string | number }
     | undefined
   React.useEffect(() => nativeNavigationMounted('tabs'), [])
   const TabsHost = nativeNavigationModule()!.Tabs!.Host!
@@ -84,10 +84,10 @@ function NativeSelectionTabs(options: {
       // The platform-generated More destination bypasses per-screen prevention on iOS.
       tabBarHidden: !options.observable,
       ios: {
-        tabBarControllerMode:
-          platform?.OS === 'ios' && platform.isPad && Number.parseInt(String(platform.Version), 10) >= 18
-            ? 'tabSidebar'
-            : 'automatic',
+        tabBarControllerMode: platform?.OS === 'ios' && (platform.isPad || platform.isMacCatalyst)
+            && Number.parseInt(String(platform.Version), 10) >= 18
+          ? 'tabSidebar'
+          : 'automatic',
       },
       onTabSelected: (event: {
         nativeEvent: {
