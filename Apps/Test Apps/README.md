@@ -303,6 +303,22 @@ deterministic native-module substitutes owned by the runtime test harness.
 **Does not belong here:** Location, permissions, declared failures, `when do` outcomes, raw
 Vibration, vendor enums or result objects, or app-authored native bindings.
 
+## Native Bridge
+
+A physical-device demo for generated Expo and React Native API bindings. `NativeBridge` starts at a
+surface chooser, with separate Haptics, Vibration, and Clipboard scenes and a phone Studio scenario.
+Each surface keeps generated bindings in its own `Generated/` directory; authored UI lives beside
+it. The entry's README owns launch and regeneration commands and the extension pattern.
+
+**Belongs here:** device controls for all generated Haptics enum values, React Native vibration and
+cancellation, and Clipboard text/HTML, image, URL, and subscription operations. Navigation journeys
+check that each screen is reachable and can be left without starting native effects. Package tests
+own mocked native operation and cleanup assertions; physical feedback, clipboard access prompts,
+and platform availability require device acceptance.
+
+**Does not belong here:** handwritten binding implementations, new language semantics, or the
+semantic `@tao/device` facade covered by Device Kit.
+
 ## Native Components
 
 Exercise `@tao/ui`'s published components against their platform-native implementations.

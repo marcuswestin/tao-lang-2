@@ -1,0 +1,162 @@
+use Button, Col, ScrollView, Text, TextInput, TextMultiline from @tao/ui
+use ClipboardImagePreview from ./ClipboardImagePreview.tao
+use AddClipboardListener, ClipboardEvent, ClipboardImage, EventSubscription, GetImageAsync, GetImageOptions, GetImageOptionsFormat, GetStringAsync, GetStringOptions, GetUrlAsync, HasImageAsync, HasStringAsync, HasUrlAsync, RemoveClipboardListener, SetImageAsync, SetStringAsync, SetStringOptions, SetUrlAsync, StringFormat from ./Generated/Bindings.tao
+
+type ClipboardResult is {
+   Image ClipboardImage?,
+   Url text?
+}
+
+public
+scene ClipboardDemo() {
+   Title "Clipboard · Expo"
+   state Draft = "Hello from Native Bridge"
+   state ReadText = "Nothing read yet"
+   state Status = "Ready"
+   state Result is ClipboardResult = ClipboardResult { }
+   state Listening = false
+   state EventCount = 0
+   action Ignore() { }
+   state Subscription is EventSubscription = EventSubscription {
+      Remove: Ignore
+   }
+   action CopyText() {
+      let Saved = do SetStringAsync(Text: Draft)
+      set Status = "Text write returned: { Saved }"
+   }
+   action PasteText() {
+      let Value = do GetStringAsync()
+      set ReadText = Value
+      set Status = "Text read complete"
+   }
+   action CopyHtml() {
+      let Saved = do SetStringAsync(Text: "<b>Hello from Native Bridge</b>", Options: SetStringOptions {
+         InputFormat: StringFormat_HTML
+      })
+      set Status = "HTML write returned: { Saved }"
+   }
+   action PasteHtml() {
+      let Value = do GetStringAsync(Options: GetStringOptions {
+         PreferredFormat: StringFormat_HTML
+      })
+      set ReadText = Value
+      set Status = "HTML read complete"
+   }
+   action CheckText() {
+      let Has = do HasStringAsync()
+      set Status = "Has text: { Has }"
+   }
+   action CopyImage() {
+      do SetImageAsync(Base64Image: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=")
+      set Status = "Copied a 1 × 1 sample image"
+   }
+   action PastePng() {
+      let Value = do GetImageAsync(Options: GetImageOptions {
+         Format: Png
+      })
+      set Result.Image = Value
+      set Status = "PNG read complete"
+   }
+   action PasteJpeg() {
+      let Value = do GetImageAsync(Options: GetImageOptions {
+         Format: Jpeg,
+         JpegQuality: 0.8
+      })
+      set Result.Image = Value
+      set Status = "JPEG read complete"
+   }
+   action CheckImage() {
+      let Has = do HasImageAsync()
+      set Status = "Has image: { Has }"
+   }
+   action CopyUrl() {
+      do SetUrlAsync(Url: "https://example.com/native-bridge")
+      set Status = "URL written"
+   }
+   action PasteUrl() {
+      let Value = do GetUrlAsync()
+      set Result.Url = Value
+      set Status = "URL read complete"
+   }
+   action CheckUrl() {
+      let Has = do HasUrlAsync()
+      set Status = "Has URL: { Has }"
+   }
+   action Changed(Event ClipboardEvent) {
+      set EventCount += 1
+   }
+   action Listen() {
+      check not Listening
+      let Value = do AddClipboardListener(Listener: Changed)
+      set Subscription = Value
+      set Listening = true
+   }
+   action Stop() {
+      do Subscription.Remove()
+      set Listening = false
+   }
+   action StopLegacy() {
+      do RemoveClipboardListener(Subscription)
+      set Listening = false
+   }
+   render ScrollView() {
+      Col() [screen] {
+         TextMultiline("Read and write the device clipboard. No subscription is needed. iOS may ask you to allow paste.")
+         TextMultiline("Status: { Status }")
+         TextInput(Value: Draft, Label: "Text to copy") {
+            on submit CopyText
+         }
+         Button("Copy text") {
+            on press CopyText
+         }
+         Button("Read text") {
+            on press PasteText
+         }
+         Button("Has text?") {
+            on press CheckText
+         }
+         TextMultiline("Read result: { ReadText }")
+         Button("Copy sample HTML") {
+            on press CopyHtml
+         }
+         Button("Read HTML") {
+            on press PasteHtml
+         }
+         Text("Images")
+         Button("Copy sample image") {
+            on press CopyImage
+         }
+         Button("Read PNG") {
+            on press PastePng
+         }
+         Button("Read JPEG") {
+            on press PasteJpeg
+         }
+         Button("Has image?") {
+            on press CheckImage
+         }
+         ClipboardImagePreview(Result.Image)
+         Text("URLs · iOS and macOS")
+         Button("Copy sample URL") {
+            on press CopyUrl
+         }
+         Button("Read URL") {
+            on press PasteUrl
+         }
+         Button("Has URL?") {
+            on press CheckUrl
+         }
+         TextMultiline("URL: { Result.Url }")
+         Text("Change listener")
+         TextMultiline("Start listening, then copy text above or in another app. Back automatically removes the listener.")
+         Text(when Listening "Listening" / not "Not listening")
+         Text("Clipboard changes: { EventCount }")
+         Button("Start listening", Disabled: Listening) {
+            on press Listen
+         }
+         Button("Stop listening", Disabled: not Listening) {
+            on press Stop
+         }
+         Button("Stop via deprecated API", Disabled: not Listening) {
+            on press StopLegacy
+}  }  }  }

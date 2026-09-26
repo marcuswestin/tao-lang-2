@@ -1,0 +1,22 @@
+// Generated from public native API declarations. Regenerate instead of editing.
+public
+type AndroidHaptics is one of Confirm, Reject, Gesture_Start, Gesture_End, Toggle_On, Toggle_Off, Clock_Tick, Context_Click, Drag_Start, Keyboard_Tap, Keyboard_Press, Keyboard_Release, Long_Press, Virtual_Key, Virtual_Key_Release, No_Haptics, Segment_Tick, Segment_Frequent_Tick, Text_Handle_Move
+
+public
+type ImpactFeedbackStyle is one of Light, Medium, Heavy, Soft, Rigid
+
+public
+type NotificationFeedbackType is one of Success, Warning, Error
+
+public
+action ImpactAsync(Style ImpactFeedbackStyle? default none) from ./Bindings.ts
+
+public
+action NotificationAsync(Type NotificationFeedbackType? default none) from ./Bindings.ts
+
+// Upstream platform annotation: android.
+public
+action PerformAndroidHapticsAsync(Type AndroidHaptics) from ./Bindings.ts
+
+public
+action SelectionAsync() from ./Bindings.ts

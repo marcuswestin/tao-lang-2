@@ -1,0 +1,30 @@
+use StackNav from @tao/nav
+use Button, Col, ScrollView, TextMultiline from @tao/ui
+use ClipboardDemo from ./Clipboard/Clipboard.tao
+use NativeBridgeDesign from ./Design.tao
+use HapticsDemo from ./Haptics/Haptics.tao
+use VibrationDemo from ./Vibration/Vibration.tao
+
+app NativeBridge {
+   Name "Native Bridge"
+   Design NativeBridgeDesign
+   Navigator StackNav {
+      Initial NativeBridgeHome
+}  }
+
+scene NativeBridgeHome() {
+   Title "Native Bridge"
+   render ScrollView() {
+      Col() [screen] {
+         TextMultiline("Try generated native APIs on your device. Choose a surface below.")
+         Button("Haptics · Expo") {
+            on press -> { present HapticsDemo() }
+         }
+         Button("Vibration · React Native") {
+            on press -> { present VibrationDemo() }
+         }
+         Button("Clipboard · Expo") {
+            on press -> { present ClipboardDemo() }
+         }
+         TextMultiline("Native effects run only when you press a control. Platform-specific examples are labeled.")
+}  }  }

@@ -8,6 +8,45 @@ export function taoName(name: string): string {
 /** Emit value conversions from the catalog, without provider or operation-specific branches. */
 export function nativeValueEmitter(catalog: NativeApiCatalog) {
   const records = catalog.records ?? []
+  const conversions = { to: new Set<string>(), from: new Set<string>() }
+  function requireConversion(type: NativeApiType, direction: 'to' | 'from'): void {
+    Switch.kind(type, {
+      primitive: () => {},
+      enum: type => {
+        conversions[direction].add(type.name)
+      },
+      record: type => {
+        if (conversions[direction].has(type.name)) {
+          return
+        }
+        conversions[direction].add(type.name)
+        const record = records.find(record => record.name === type.name)
+        Assert.defined(record, 'referenced native record exists')
+        // Resources use their ownership token rather than converting their disposal callback.
+        if (!record.disposal) {
+          for (const field of record.fields) {
+            requireConversion(field.type, direction)
+          }
+        }
+      },
+      nullable: type => requireConversion(type.value, direction),
+      list: type => requireConversion(type.element, direction),
+      union: () => {},
+      callback: type => {
+        for (const parameter of type.parameters) {
+          requireConversion(parameter.type, direction === 'to' ? 'from' : 'to')
+        }
+      },
+    })
+  }
+  for (const operation of catalog.operations) {
+    for (const parameter of operation.parameters) {
+      requireConversion(parameter.type, 'to')
+    }
+    if (operation.result) {
+      requireConversion(operation.result, 'from')
+    }
+  }
   const declarationNames = new Set([
     ...catalog.enums.map(type => type.name),
     ...records.map(type => type.name),
@@ -107,24 +146,28 @@ export function nativeValueEmitter(catalog: NativeApiCatalog) {
         enumeration.literal
           ? JSON.stringify(member.value)
           : `native().${enumeration.name}.${member.name}`
-      lines.push(`function to${enumeration.name}(value: unknown): ${typescriptType(type, true)} {`)
-      for (const member of enumeration.members) {
-        lines.push(
-          `  if (Object.is(value, ${enumeration.name}.${
-            enumCaseName(enumeration, member)
-          }.evaluate().jsValue)) return ${nativeValue(member)}`,
-        )
+      if (conversions.to.has(enumeration.name)) {
+        lines.push(`function to${enumeration.name}(value: unknown): ${typescriptType(type, true)} {`)
+        for (const member of enumeration.members) {
+          lines.push(
+            `  if (Object.is(value, ${enumeration.name}.${
+              enumCaseName(enumeration, member)
+            }.evaluate().jsValue)) return ${nativeValue(member)}`,
+          )
+        }
+        lines.push(`  throw new TypeError(${JSON.stringify(`Expected a declared ${enumeration.name} case.`)})`, '}', '')
       }
-      lines.push(`  throw new TypeError(${JSON.stringify(`Expected a declared ${enumeration.name} case.`)})`, '}', '')
-      lines.push(`function from${enumeration.name}(value: ${typescriptType(type, true)}): unknown {`)
-      for (const member of enumeration.members) {
-        lines.push(
-          `  if (Object.is(value, ${nativeValue(member)})) return ${enumeration.name}.${
-            enumCaseName(enumeration, member)
-          }.evaluate().jsValue`,
-        )
+      if (conversions.from.has(enumeration.name)) {
+        lines.push(`function from${enumeration.name}(value: ${typescriptType(type, true)}): unknown {`)
+        for (const member of enumeration.members) {
+          lines.push(
+            `  if (Object.is(value, ${nativeValue(member)})) return ${enumeration.name}.${
+              enumCaseName(enumeration, member)
+            }.evaluate().jsValue`,
+          )
+        }
+        lines.push(`  throw new TypeError(${JSON.stringify(`Unknown native ${enumeration.name} case.`)})`, '}', '')
       }
-      lines.push(`  throw new TypeError(${JSON.stringify(`Unknown native ${enumeration.name} case.`)})`, '}', '')
     }
     for (const record of records) {
       const type: NativeApiType = { kind: 'record', name: record.name }
@@ -148,24 +191,35 @@ export function nativeValueEmitter(catalog: NativeApiCatalog) {
           `const ${record.name}Handles = new WeakMap<${record.name}Value[${
             JSON.stringify(method)
           }], Native${record.name}>()`,
-          `function to${record.name}(value: ${record.name}Value): Native${record.name} {`,
-          `  const handle = ${record.name}Handles.get(value.${method})`,
-          `  if (!handle) throw new TypeError(${JSON.stringify(`Expected a generated ${record.name} handle.`)})`,
-          '  return handle',
-          '}',
-          '',
-          `function from${record.name}(value: Native${record.name}, lifetime: ReturnType<typeof TR.NativeSubscription>): ${record.name}Value {`,
-          `  lifetime.attach(() => value.${record.disposal}())`,
-          `  const result = { ${method}: TR.Action(() => lifetime.remove()).evaluate().jsValue }`,
-          // The structural native handle routes every disposal path through the same idempotent token.
-          `  ${record.name}Handles.set(result.${method}, { ${record.disposal}: () => lifetime.remove() })`,
-          '  return result',
-          '}',
-          '',
         )
+        if (conversions.to.has(record.name)) {
+          lines.push(
+            `function to${record.name}(value: ${record.name}Value): Native${record.name} {`,
+            `  const handle = ${record.name}Handles.get(value.${method})`,
+            `  if (!handle) throw new TypeError(${JSON.stringify(`Expected a generated ${record.name} handle.`)})`,
+            '  return handle',
+            '}',
+            '',
+          )
+        }
+        if (conversions.from.has(record.name)) {
+          lines.push(
+            `function from${record.name}(value: Native${record.name}, lifetime: ReturnType<typeof TR.NativeSubscription>): ${record.name}Value {`,
+            `  lifetime.attach(() => value.${record.disposal}())`,
+            `  const result = { ${method}: TR.Action(() => lifetime.remove()).evaluate().jsValue }`,
+            // The structural native handle routes every disposal path through the same idempotent token.
+            `  ${record.name}Handles.set(result.${method}, { ${record.disposal}: () => lifetime.remove() })`,
+            '  return result',
+            '}',
+            '',
+          )
+        }
         continue
       }
       for (const native of [false, true]) {
+        if (!conversions[native ? 'to' : 'from'].has(record.name)) {
+          continue
+        }
         const convert = native ? toNative : fromNative
         lines.push(
           `function ${native ? 'to' : 'from'}${record.name}(value: ${typescriptType(type, !native)}): ${

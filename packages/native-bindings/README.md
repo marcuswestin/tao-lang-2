@@ -65,6 +65,11 @@ synchronizer with rollback, not an atomic directory swap. Empty stale directorie
 Never manually edit generated files. Optional custom wrappers belong outside that output directory.
 See the [CLI examples](../cli/tao-cli/README.md#generated-native-bindings-proof-of-concept).
 
+The maintained [Native Bridge device demo](<../../Apps/Test Apps/Native Bridge/README.md>) combines
+Haptics, React Native Vibration, and Clipboard in one app, with generation and phone-launch commands.
+Conversion helpers are emitted only in the directions operations use, so generated files also pass
+projects that enable TypeScript's unused-local checks.
+
 ## Generated files in Git
 
 For now, the recommendation is to commit the three generated files when they are part of a maintained

@@ -170,6 +170,23 @@ values, recursive/generic records, and required `undefined` values are explicitl
 Location can next exercise permissions and richer records; Accelerometer can exercise exported instances
 and inherited generic sensor methods.
 
+## Native Bridge device demo
+
+The maintained app now lives in [Apps/Test Apps/Native Bridge](<../../../Apps/Test Apps/Native Bridge/README.md>).
+It replaces the task-local Haptics runner with a surface chooser and independent Haptics, Vibration,
+and Clipboard scenes. All binding directories are generated; UI stays outside them. Regeneration
+includes canonical source formatting, and conversion helpers are emitted only when reachable from
+operations, which satisfies strict unused-local checks in the repository.
+
+The demo exposes a remaining language gap: nullable record results can be stored and passed through
+Tao, but their fields cannot yet be inspected directly. A separate injected UI renderer previews a
+returned clipboard image without any handwritten native calls. A future language slice should settle
+nullable-value narrowing before expanding this pattern. Clipboard device acceptance remains open;
+the demo journey covers navigation and initial state, and package tests cover native contracts.
+
+The app includes a phone scenario. Physical iPhone launch uses Studio's Device panel after
+`./dev studio "Apps/Test Apps/Native Bridge" --app NativeBridge`; `tao dev --ios` selects a simulator.
+
 ## Community project assessment
 
 Snapshot from GitHub REST at **2026-09-26 16:03 UTC**. Contributors are cached associated GitHub
