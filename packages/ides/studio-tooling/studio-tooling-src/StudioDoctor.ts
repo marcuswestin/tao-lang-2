@@ -136,7 +136,8 @@ function hutchCheck(facts: StudioDoctorFacts): DoctorCheck {
       // Browser Studio never needs Hutch, so its absence must not read as broken.
       detail: 'Hutch is not installed, so only browser Studio can run',
       name: 'hutch',
-      remediation: 'Optional. Native Studio needs it: curl -fsSL https://hutch.sh/install | sh',
+      remediation:
+        'Run ./agent setup --environment to provision the pinned Hutch launcher for native Studio and landing.',
       status: 'warn',
     }
   }
