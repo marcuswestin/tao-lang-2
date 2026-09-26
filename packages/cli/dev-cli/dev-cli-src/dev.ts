@@ -103,12 +103,12 @@ await runWithCommands(commands => {
     .description('Run the opt-in real-host testing prototype, independently of existing suites.')
     .argument(
       '[mode]',
-      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, agents, or setup.',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, catalyst, agents, or setup.',
       'check',
     )
     .option(
       '--app <subject>',
-      'Explicit product or harness subject: hnreader, clockwork, or native-navigation (ios/android acceptance; device installation only).',
+      'Explicit subject: hnreader, clockwork, or native-navigation (device installs; catalyst builds a local Mac trial).',
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')

@@ -1,0 +1,105 @@
+  // Trial-host-only members: insert inside the generated AppDelegate class.
+  #if targetEnvironment(macCatalyst)
+  override func buildMenu(with builder: UIMenuBuilder) {
+    super.buildMenu(with: builder)
+    guard builder.system == UIMenuSystem.main else { return }
+    let save = UIKeyCommand(
+      title: "Save note",
+      action: #selector(catalystSaveNote(_:)),
+      input: "s",
+      modifierFlags: .command
+    )
+    let commands = UIMenu(
+      title: "",
+      identifier: UIMenu.Identifier("dev.tao.catalyst-trial.note"),
+      options: .displayInline,
+      children: [save]
+    )
+    builder.insertChild(commands, atEndOfMenu: .file)
+  }
+
+  override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+    if action == #selector(catalystSaveNote(_:)) {
+      return catalystVisibleSaveNoteItem() != nil
+    }
+    return super.canPerformAction(action, withSender: sender)
+  }
+
+  @objc private func catalystSaveNote(_ sender: Any?) {
+    // Resolve again: menu validation may predate navigation or an enabled-state update.
+    guard let item = catalystVisibleSaveNoteItem(),
+          let action = item.action,
+          let target = item.target else { return }
+    UIApplication.shared.sendAction(action, to: target, from: item, for: nil)
+  }
+
+  private func catalystVisibleSaveNoteItem() -> UIBarButtonItem? {
+    let windows = UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .filter { $0.activationState == .foregroundActive }
+      .flatMap { $0.windows }
+      .filter { $0.isKeyWindow && !$0.isHidden && $0.alpha > 0 }
+    guard windows.count == 1,
+          let window = windows.first,
+          let root = window.rootViewController else { return nil }
+
+    // Fail closed while any owned controller presents, dismisses, or transitions.
+    func isBusy(_ controller: UIViewController) -> Bool {
+      if controller.presentedViewController != nil || controller.isBeingPresented ||
+          controller.isBeingDismissed || controller.transitionCoordinator != nil {
+        return true
+      }
+      return controller.children.contains { isBusy($0) }
+    }
+    guard !isBusy(root) else { return nil }
+
+    func isVisible(_ view: UIView) -> Bool {
+      guard view.window === window else { return false }
+      var current: UIView? = view
+      while let candidate = current {
+        if candidate.isHidden || candidate.alpha <= 0 { return false }
+        current = candidate.superview
+      }
+      return !view.convert(view.bounds, to: window).intersection(window.bounds).isEmpty
+    }
+
+    var matches: [UIBarButtonItem] = []
+    func hasVisibleCommands(_ bar: UINavigationBar) -> Bool {
+      if #available(macCatalyst 16.0, *), bar.behavioralStyle == .mac {
+        return bar.currentNSToolbarSection != .none
+      }
+      return isVisible(bar)
+    }
+    func visit(_ controller: UIViewController) {
+      guard controller.isViewLoaded, isVisible(controller.view) else { return }
+      if let tabs = controller as? UITabBarController {
+        if let selected = tabs.selectedViewController { visit(selected) }
+        return
+      }
+      if let navigation = controller as? UINavigationController {
+        guard let visible = navigation.visibleViewController,
+              visible === navigation.topViewController else { return }
+        if !navigation.isNavigationBarHidden,
+           hasVisibleCommands(navigation.navigationBar),
+           navigation.navigationBar.topItem === visible.navigationItem {
+          let items = (visible.navigationItem.leftBarButtonItems ?? []) +
+            (visible.navigationItem.rightBarButtonItems ?? [])
+          matches.append(contentsOf: items.filter { item in
+            // Fixed-fixture trial lookup; production needs a declared command identity.
+            let isSave = item.accessibilityLabel == "Save note" || item.title == "Save note"
+            let isScreensItem = NSStringFromClass(type(of: item))
+              .split(separator: ".").last == "RNSBarButtonItem"
+            return isSave && isScreensItem && item.isEnabled &&
+              item.action != nil && item.target != nil && item.customView == nil && item.menu == nil
+          })
+        }
+        visit(visible)
+        return
+      }
+      controller.children.forEach { visit($0) }
+    }
+    visit(root)
+    // Ambiguous split/container layouts must not dispatch to an arbitrary document.
+    return matches.count == 1 ? matches[0] : nil
+  }
+  #endif
