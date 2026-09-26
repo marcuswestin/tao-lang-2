@@ -28,7 +28,24 @@
   and `.artifacts/logs/dev-test/2026-09-26T22-18-44-957Z-4841-34c04a93/shared.log`.
   Both ran under heavy machine contention; the runtime cause and equivalence to
   the older root-cwd defect are unproven. This evidence means the workaround
-  below is not a guarantee, and the completed feature remains unlanded.
+  below is not a guarantee.
+- **Supported-lane repair, 2026-09-26:** Instrumentation immediately after
+  `Platform.spawn` returned caught Git already exited with stdout ended, closed,
+  destroyed, empty and flowing, before a consumer could attach. The pinned
+  runtime's Node-compatible launcher resumes output on exit and can run that
+  handler before returning from spawn. The shared wrapper now owns native
+  runtime streams for standard descriptors, preserving bytes until consumers
+  attach; Node execution and auxiliary descriptor/IPC calls retain their existing
+  path. No command is retried and no timeout is increased. The delayed-consumer
+  regression in `packages/shared/shared-tests/process-output.test.ts` fails on
+  the old path with empty stdout and passes with the repair. Coverage also
+  exercises binary stdin, stderr tails, missing executables, signal exits,
+  environment/cwd and unreferenced children. Existing real Git concurrency,
+  supervision and Studio descendant-output regressions cover the affected
+  callers. Trace: `.artifacts/logs/dev-test/2026-09-26T22-26-51-081Z-87966-de2fcd97/shared.log`;
+  failing control: `.artifacts/logs/dev-test/2026-09-26T22-30-21-216Z-47315-056c8b6b/shared.log`.
+  The historical raw root-cwd invocation remains unverified, so this entry stays
+  open for that original acceptance boundary.
 - **Workaround:** Prefer `./dev test-file <path>` or `just test <pattern>`. When those are unavailable —
   a broken `./dev`, or a shared module mid-edit (DEVENV-068) — `bun test --cwd packages/<name>
   <relative-test-path>` resolves `@shared/test` correctly and reports the real stack, and a root-cwd
