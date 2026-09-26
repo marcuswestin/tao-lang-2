@@ -29,6 +29,12 @@ at `.artifacts/investigation/device-hub-effective-policy.json`.
    `Computer Use was not approved to use Device Hub` error.
 4. `await cua.listApps()` succeeded and reported `com.apple.dt.Devices` as `isRunning: true`.
    Inventory visibility is not evidence of access to the app's window or its contents.
+5. On the Developer's explicit request to try again, a further `getApp` attempt returned the same
+   timeout after 9.676 seconds, with no accessibility state or screenshot. The next proposed check
+   is System Settings → Privacy & Security → Accessibility and Screen Recording for the desktop
+   computer-use helper named in the official guidance. If either permission is disabled, the
+   Developer can enable that specific grant through the normal UI; if both are enabled, leave them
+   unchanged and investigate the timeout. Their current state and the cause remain unverified.
 
 ```text
 Computer Use server error -10005: timeoutReached
