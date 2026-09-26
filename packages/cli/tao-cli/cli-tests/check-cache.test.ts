@@ -1,8 +1,8 @@
-import { CLI, Diagnostic, FS, Platform, Repo } from '@shared'
+import { Diagnostic, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { CheckCache } from '../cli-src/check-cache'
 import { type CheckWorkspaceOutcome, runCheck, runFix } from '../cli-src/source-commands'
-import { withTaoFixture } from './test-cli-files'
+import { withGitTaoFixture, withTaoFixture } from './test-cli-files'
 
 /**
  * `tao check` skips a workspace whose inputs are byte-identical to the ones behind its last clean
@@ -64,10 +64,9 @@ Describe('tao check per-workspace stamp', () => {
   })
 
   Test('checks a standalone file at a Git root containing a directory symlink', async () => {
-    await withTaoFixture(
+    await withGitTaoFixture(
       { 'App.tao': CANONICAL_VIEW, 'linked/Sidecar.ts': 'export const value = 1\n' },
       async rootDir => {
-        await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: rootDir })
         const linkPath = FS.resolvePath('directory-link', rootDir)
         await FS.symlink('linked', linkPath)
         Expect(await Repo.filesUnder(rootDir)).toContain(linkPath)
@@ -87,7 +86,7 @@ Describe('tao check per-workspace stamp', () => {
   })
 
   Test('regenerates deleted metadata for an imported bridge on a targeted cached check', async () => {
-    await withTaoFixture({
+    await withGitTaoFixture({
       'App/.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
       'App/Project.tao': 'project {\n   id "check-cache-bridge"\n   name "Check cache bridge"\n}\n',
       'App/Main.tao': `use CountWords from ./Bridge.tao
@@ -102,7 +101,6 @@ function Total() returns number {
 `,
       'App/Words.ts': 'export function CountWords(value: string): number { return value.length }\n',
     }, async rootDir => {
-      await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: rootDir })
       const main = FS.resolvePath('App/Main.tao', rootDir)
       const metadata = FS.resolvePath('App/Bridge.tao.ts', rootDir)
       await runFix(FS.resolvePath('App', rootDir))

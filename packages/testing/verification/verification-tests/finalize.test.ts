@@ -1,5 +1,5 @@
 import { CLI, Errors, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import {
   FinalizeCommand,
   type FinalizeDependencies,
@@ -1017,65 +1017,61 @@ Describe('finalize', () => {
   })
 
   Test('finalizes a real disposable Git branch end to end', async () => {
-    const root = await FS.realPath(await mkTestDir('tao-finalize-'))
+    const root = await mkGitTestDir('tao-finalize-')
     const mainRoot = FS.resolvePath('main', root)
     const featureRoot = FS.resolvePath('feature', root)
-    try {
-      await gitCommand(root, ['init', '--quiet', '--initial-branch=main', mainRoot])
-      await gitCommand(mainRoot, ['config', 'user.name', 'Tao Test'])
-      await gitCommand(mainRoot, ['config', 'user.email', 'tao@example.test'])
-      await FS.writeText(FS.resolvePath('.gitignore', mainRoot), '.artifacts/\n')
-      await FS.writeText(FS.resolvePath('base.txt', mainRoot), 'base\n')
-      await gitCommand(mainRoot, ['add', '.gitignore', 'base.txt'])
-      await gitCommand(mainRoot, ['commit', '--quiet', '-m', 'Base'])
-      await gitCommand(mainRoot, ['worktree', 'add', '--quiet', '-b', 'feat/finalize-fixture', featureRoot])
-      await FS.writeText(FS.resolvePath('feature.txt', featureRoot), 'feature\n')
-      await gitCommand(featureRoot, ['add', 'feature.txt'])
-      await gitCommand(featureRoot, ['commit', '--quiet', '-m', 'Add the disposable finalize fixture'])
+    await initGitTestRepository(mainRoot)
+    await gitCommand(mainRoot, ['config', 'user.name', 'Tao Test'])
+    await gitCommand(mainRoot, ['config', 'user.email', 'tao@example.test'])
+    await FS.writeText(FS.resolvePath('.gitignore', mainRoot), '.artifacts/\n')
+    await FS.writeText(FS.resolvePath('base.txt', mainRoot), 'base\n')
+    await gitCommand(mainRoot, ['add', '.gitignore', 'base.txt'])
+    await gitCommand(mainRoot, ['commit', '--quiet', '-m', 'Base'])
+    await gitCommand(mainRoot, ['worktree', 'add', '--quiet', '-b', 'feat/finalize-fixture', featureRoot])
+    await FS.writeText(FS.resolvePath('feature.txt', featureRoot), 'feature\n')
+    await gitCommand(featureRoot, ['add', 'feature.txt'])
+    await gitCommand(featureRoot, ['commit', '--quiet', '-m', 'Add the disposable finalize fixture'])
 
-      const dependencies: FinalizeDependencies = {
-        canWriteFile: async () => true,
-        exists: FS.exists,
-        findGreenTree: async () => undefined,
-        isSymbolicLink: FS.isSymbolicLink,
-        key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),
-        makeProbeDirectory: FS.mkTmpDir,
-        now: () => new Date('2026-09-17T12:00:00.000Z'),
-        readJson: FS.readJson,
-        realPath: FS.realPath,
-        readText: FS.readText,
-        removeFile: FS.remove,
-        run: async (command, spec) =>
-          command === 'just'
-            ? {
-              args: [...(spec.args ?? [])],
-              command,
-              cwd: spec.cwd,
-              error: undefined,
-              exitCode: 0,
-              signal: null,
-              stderr: '',
-              stdout: '',
-            }
-            : await CLI.run(command, { ...spec, stdio: 'pipe' }),
-        writeJson: FS.writeJson,
-        writeLine: () => {},
-        writeText: FS.writeText,
-      }
-
-      const outcome = await FinalizeCommand.run({ repositoryRoot: featureRoot }, dependencies)
-
-      Expect(outcome.lines.some(line => line.includes('already contained in this branch'))).toBe(true)
-      const messagePath = FS.resolvePath('.artifacts/merge/feat/finalize-fixture.msg', featureRoot)
-      Expect(await FS.exists(messagePath)).toBe(true)
-      const draft = await FS.readText(messagePath)
-      Expect(() => validateMergeMessage(draft)).not.toThrow()
-      Expect(draft).toContain('- Add the disposable finalize fixture')
-      const statePath = FS.resolvePath('.artifacts/merge/feat/finalize-fixture.state.json', featureRoot)
-      Expect(await FS.exists(statePath)).toBe(true)
-    } finally {
-      await FS.remove(root)
+    const dependencies: FinalizeDependencies = {
+      canWriteFile: async () => true,
+      exists: FS.exists,
+      findGreenTree: async () => undefined,
+      isSymbolicLink: FS.isSymbolicLink,
+      key: async () => ({ toolchain: 'irrelevant-in-this-fixture', treeHash: 'irrelevant-in-this-fixture' }),
+      makeProbeDirectory: FS.mkTmpDir,
+      now: () => new Date('2026-09-17T12:00:00.000Z'),
+      readJson: FS.readJson,
+      realPath: FS.realPath,
+      readText: FS.readText,
+      removeFile: FS.remove,
+      run: async (command, spec) =>
+        command === 'just'
+          ? {
+            args: [...(spec.args ?? [])],
+            command,
+            cwd: spec.cwd,
+            error: undefined,
+            exitCode: 0,
+            signal: null,
+            stderr: '',
+            stdout: '',
+          }
+          : await CLI.run(command, { ...spec, stdio: 'pipe' }),
+      writeJson: FS.writeJson,
+      writeLine: () => {},
+      writeText: FS.writeText,
     }
+
+    const outcome = await FinalizeCommand.run({ repositoryRoot: featureRoot }, dependencies)
+
+    Expect(outcome.lines.some(line => line.includes('already contained in this branch'))).toBe(true)
+    const messagePath = FS.resolvePath('.artifacts/merge/feat/finalize-fixture.msg', featureRoot)
+    Expect(await FS.exists(messagePath)).toBe(true)
+    const draft = await FS.readText(messagePath)
+    Expect(() => validateMergeMessage(draft)).not.toThrow()
+    Expect(draft).toContain('- Add the disposable finalize fixture')
+    const statePath = FS.resolvePath('.artifacts/merge/feat/finalize-fixture.state.json', featureRoot)
+    Expect(await FS.exists(statePath)).toBe(true)
   })
 })
 

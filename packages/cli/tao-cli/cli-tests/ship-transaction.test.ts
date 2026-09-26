@@ -1,5 +1,5 @@
 import { CLI, FS, Time } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 import { readProjectLock } from '../cli-src/ship-lock'
 import { shipContentHash } from '../cli-src/ship-model'
 
@@ -120,27 +120,23 @@ Describe('tao ship cross-process transactions', () => {
   })
 
   Test('serializes projects that share one Git repository', async () => {
-    const root = await mkTestDir('tao-ship-repository-transaction-', { location: 'host' })
-    try {
-      await CLI.mustRun('git', { args: ['-C', root, 'init', '-q'] })
-      const projects = [FS.resolvePath('one', root), FS.resolvePath('two', root)]
-      await Promise.all(projects.map(FS.mkdir))
-      const results = await Promise.all(projects.map((project, index) =>
-        runWorker(`
-        import { withShipTransaction } from ${JSON.stringify(transactionModule)}
-        import { FS } from ${JSON.stringify(sharedModule)}
-        const marker = ${JSON.stringify(FS.resolvePath('inside.lock', root))}
-        await withShipTransaction(${JSON.stringify(project)}, async () => {
-          await FS.symlink(${JSON.stringify(String(index))}, marker)
-          await new Promise(resolve => setTimeout(resolve, 60))
-          await FS.remove(marker)
-        })
-      `)
-      ))
-      Expect(results.map(result => result.exitCode)).toEqual([0, 0])
-    } finally {
-      await FS.remove(root)
-    }
+    const root = await mkGitTestDir('tao-ship-repository-transaction-')
+    await initGitTestRepository(root)
+    const projects = [FS.resolvePath('one', root), FS.resolvePath('two', root)]
+    await Promise.all(projects.map(FS.mkdir))
+    const results = await Promise.all(projects.map((project, index) =>
+      runWorker(`
+      import { withShipTransaction } from ${JSON.stringify(transactionModule)}
+      import { FS } from ${JSON.stringify(sharedModule)}
+      const marker = ${JSON.stringify(FS.resolvePath('inside.lock', root))}
+      await withShipTransaction(${JSON.stringify(project)}, async () => {
+        await FS.symlink(${JSON.stringify(String(index))}, marker)
+        await new Promise(resolve => setTimeout(resolve, 60))
+        await FS.remove(marker)
+      })
+    `)
+    ))
+    Expect(results.map(result => result.exitCode)).toEqual([0, 0])
   })
 
   Test('admits only one independent ship process at a time', async () => {

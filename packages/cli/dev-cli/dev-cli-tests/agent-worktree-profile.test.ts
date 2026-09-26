@@ -1,5 +1,5 @@
 import { CLI, FS, Platform, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 
 const PROFILE_SCRIPT = Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh')
 const DEPENDENCY_SCRIPT = Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh')
@@ -199,32 +199,25 @@ Describe('agent worktree profile bootstrap', () => {
   })
 
   Test('warns on a detached HEAD and stays quiet on a named branch', async () => {
-    const testRoot = await mkTestDir('tao-agent-head-')
-    try {
-      const repository = FS.resolvePath('detached-repo', testRoot)
-      await FS.writeText(FS.resolvePath('file.txt', repository), 'one')
-      await git(repository, ['init', '--quiet', '--initial-branch', 'main'])
-      await git(repository, ['add', 'file.txt'])
-      await git(repository, ['-c', 'user.email=t@t', '-c', 'user.name=T', 'commit', '--quiet', '-m', 'one'])
+    const testRoot = await mkGitTestDir('tao-agent-head-')
+    const repository = FS.resolvePath('detached-repo', testRoot)
+    await initGitTestRepository(repository, { commit: { files: { 'file.txt': 'one' }, message: 'one' } })
 
-      const warn = async () =>
-        await CLI.run('zsh', {
-          args: ['-c', `source "$1"\ntao_warn_on_detached_head "$2"`, 'head-test', PROFILE_SCRIPT, repository],
-        })
+    const warn = async () =>
+      await CLI.run('zsh', {
+        args: ['-c', `source "$1"\ntao_warn_on_detached_head "$2"`, 'head-test', PROFILE_SCRIPT, repository],
+      })
 
-      const onBranch = await warn()
-      Expect(onBranch.exitCode).toBe(0)
-      Expect(onBranch.stderr).toBe('')
+    const onBranch = await warn()
+    Expect(onBranch.exitCode).toBe(0)
+    Expect(onBranch.stderr).toBe('')
 
-      await git(repository, ['checkout', '--quiet', '--detach', 'HEAD'])
-      const detached = await warn()
+    await git(repository, ['checkout', '--quiet', '--detach', 'HEAD'])
+    const detached = await warn()
 
-      Expect(detached.exitCode).toBe(0)
-      Expect(detached.stderr).toContain('detached HEAD')
-      Expect(detached.stderr).toContain('./agent start-branch feat/<name>')
-    } finally {
-      await FS.remove(testRoot)
-    }
+    Expect(detached.exitCode).toBe(0)
+    Expect(detached.stderr).toContain('detached HEAD')
+    Expect(detached.stderr).toContain('./agent start-branch feat/<name>')
   })
 
   Test('leaves Bun to choose its install backend in every checkout', async () => {

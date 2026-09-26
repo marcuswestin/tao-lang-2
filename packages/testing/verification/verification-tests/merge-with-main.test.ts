@@ -1,5 +1,5 @@
 import { CLI, Errors, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import type { MachineResourceOwner } from '../verification-src/MachineLanes'
 import {
   landedReport,
@@ -1696,161 +1696,149 @@ Describe('merge-with-main', () => {
   })
 
   Test('lands safely in disposable real Git worktrees', async () => {
-    const root = await FS.realPath(await mkTestDir('tao-merge-with-main-'))
+    const root = await mkGitTestDir('tao-merge-with-main-')
     const remoteRoot = FS.resolvePath('remote.git', root)
     // The clone is detached below, which is what a mirror is: a checkout that shows what main holds
     // without holding the ref. Nothing here has main checked out once the landing starts.
     const mirrorRoot = FS.resolvePath('main', root)
     const featureRoot = FS.resolvePath('feature', root)
-    try {
-      await gitCommand(root, ['init', '--bare', remoteRoot])
-      await gitCommand(root, ['clone', remoteRoot, mirrorRoot])
-      await gitCommand(mirrorRoot, ['config', 'user.name', 'Tao Test'])
-      await gitCommand(mirrorRoot, ['config', 'user.email', 'tao@example.test'])
-      await FS.writeText(FS.resolvePath('.gitignore', mirrorRoot), '.artifacts/\n')
-      await FS.writeText(FS.resolvePath('base.txt', mirrorRoot), 'base\n')
-      await gitCommand(mirrorRoot, ['add', '.gitignore', 'base.txt'])
-      await gitCommand(mirrorRoot, ['commit', '-m', 'Base'])
-      await gitCommand(mirrorRoot, ['branch', '-M', 'main'])
-      await gitCommand(mirrorRoot, ['push', '-u', 'origin', 'main'])
-      await gitCommand(mirrorRoot, ['worktree', 'add', '-b', 'feat/integration', featureRoot])
-      await gitCommand(mirrorRoot, ['checkout', '--detach', 'main'])
-      await FS.writeText(FS.resolvePath('feature.txt', featureRoot), 'feature\n')
-      await gitCommand(featureRoot, ['add', 'feature.txt'])
-      await gitCommand(featureRoot, ['commit', '-m', 'Feature'])
-      await gitCommand(featureRoot, ['push', '-u', 'origin', 'feat/integration'])
-      await FS.writeText(
-        FS.resolvePath('.artifacts/merge/feat/integration.msg', featureRoot),
-        'Land integration fixture\n\n- Add the disposable feature.\n',
-      )
+    await initGitTestRepository(remoteRoot, { bare: true })
+    await gitCommand(root, ['clone', remoteRoot, mirrorRoot])
+    await gitCommand(mirrorRoot, ['config', 'user.name', 'Tao Test'])
+    await gitCommand(mirrorRoot, ['config', 'user.email', 'tao@example.test'])
+    await FS.writeText(FS.resolvePath('.gitignore', mirrorRoot), '.artifacts/\n')
+    await FS.writeText(FS.resolvePath('base.txt', mirrorRoot), 'base\n')
+    await gitCommand(mirrorRoot, ['add', '.gitignore', 'base.txt'])
+    await gitCommand(mirrorRoot, ['commit', '-m', 'Base'])
+    await gitCommand(mirrorRoot, ['branch', '-M', 'main'])
+    await gitCommand(mirrorRoot, ['push', '-u', 'origin', 'main'])
+    await gitCommand(mirrorRoot, ['worktree', 'add', '-b', 'feat/integration', featureRoot])
+    await gitCommand(mirrorRoot, ['checkout', '--detach', 'main'])
+    await FS.writeText(FS.resolvePath('feature.txt', featureRoot), 'feature\n')
+    await gitCommand(featureRoot, ['add', 'feature.txt'])
+    await gitCommand(featureRoot, ['commit', '-m', 'Feature'])
+    await gitCommand(featureRoot, ['push', '-u', 'origin', 'feat/integration'])
+    await FS.writeText(
+      FS.resolvePath('.artifacts/merge/feat/integration.msg', featureRoot),
+      'Land integration fixture\n\n- Add the disposable feature.\n',
+    )
 
-      const realPhases: string[] = []
-      const dependencies: MergeWithMainDependencies = {
-        acquireLease: async () => ({ owner: realOwner, release: async () => {} }),
-        acquireVerificationPriority: async () => ({ token: 'fixture-priority', release: async () => {} }),
-        askConfirm: async () => true,
-        beginPhase: async (_repositoryRoot, name) => {
-          realPhases.push(name)
-        },
-        endDurableClaim: async () => {},
-        endPhases: async () => {},
-        exists: FS.exists,
-        isInteractive: () => false,
-        move: FS.move,
-        now: () => new Date('2026-09-03T14:15:16.789Z'),
-        readJson: FS.readJson,
-        readText: FS.readText,
-        remove: FS.remove,
-        run: async (command, spec) =>
-          command === 'just'
-            ? result(command, spec.args ?? [], spec.cwd)
-            : await CLI.run(command, { ...spec, stdio: 'pipe' }),
-        writeJson: FS.writeJson,
-        writeLine: () => {},
-        writeText: FS.writeText,
-      }
-      const outcome = await MergeWithMainCommand.run({
-        repositoryRoot: featureRoot,
-        skipVerifyFull: true,
-      }, dependencies)
-
-      Expect(outcome.mode).toBe('executed')
-      // On a real repository the transaction reports every phase it spends the lock on, in order.
-      Expect(realPhases).toEqual(['integrating', 'cheap gates', 'push', 'cleanup'])
-      Expect(await FS.exists(featureRoot)).toBe(true)
-      Expect((await gitResult(featureRoot, ['status', '--porcelain'])).stdout).toBe('')
-      Expect((await gitResult(featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(
-        (await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', 'refs/heads/merged/integration']))
-          .stdout.trim(),
-      )
-      Expect((await gitResult(featureRoot, ['symbolic-ref', '--quiet', 'HEAD'])).exitCode).toBe(1)
-      Expect((await gitResult(featureRoot, ['branch', '--list', 'feat/integration'])).stdout).toBe('')
-      const mainHead = (await gitResult(featureRoot, ['rev-parse', 'refs/heads/main'])).stdout.trim()
-      // The mirror followed main without anyone touching it, and is still clean and still detached.
-      Expect((await gitResult(mirrorRoot, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(mainHead)
-      Expect((await gitResult(mirrorRoot, ['status', '--porcelain'])).stdout).toBe('')
-      Expect((await gitResult(mirrorRoot, ['symbolic-ref', '--quiet', 'HEAD'])).exitCode).toBe(1)
-      // The landed commit carries the feature tree, and says what it squashed.
-      Expect((await gitResult(featureRoot, ['rev-parse', `${mainHead}^{tree}`])).stdout.trim())
-        .toBe((await gitResult(featureRoot, ['rev-parse', 'HEAD^{tree}'])).stdout.trim())
-      const landedMessage = (await gitResult(featureRoot, ['log', '-1', '--format=%B', mainHead])).stdout
-      Expect(landedMessage.startsWith('Land integration fixture\n\n- Add the disposable feature.\n')).toBe(true)
-      Expect(landedMessage).toContain('Squashed commit of the following:')
-      Expect(landedMessage).toContain('    Feature')
-      Expect((await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', 'refs/heads/main'])).stdout.trim())
-        .toBe(mainHead)
-      Expect(
-        (await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', 'refs/heads/merged/integration']))
-          .exitCode,
-      ).toBe(0)
-      Expect(
-        (await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', '--verify', 'refs/heads/feat/integration']))
-          .exitCode,
-      ).toBe(128)
-    } finally {
-      await FS.remove(root)
+    const realPhases: string[] = []
+    const dependencies: MergeWithMainDependencies = {
+      acquireLease: async () => ({ owner: realOwner, release: async () => {} }),
+      acquireVerificationPriority: async () => ({ token: 'fixture-priority', release: async () => {} }),
+      askConfirm: async () => true,
+      beginPhase: async (_repositoryRoot, name) => {
+        realPhases.push(name)
+      },
+      endDurableClaim: async () => {},
+      endPhases: async () => {},
+      exists: FS.exists,
+      isInteractive: () => false,
+      move: FS.move,
+      now: () => new Date('2026-09-03T14:15:16.789Z'),
+      readJson: FS.readJson,
+      readText: FS.readText,
+      remove: FS.remove,
+      run: async (command, spec) =>
+        command === 'just'
+          ? result(command, spec.args ?? [], spec.cwd)
+          : await CLI.run(command, { ...spec, stdio: 'pipe' }),
+      writeJson: FS.writeJson,
+      writeLine: () => {},
+      writeText: FS.writeText,
     }
+    const outcome = await MergeWithMainCommand.run({
+      repositoryRoot: featureRoot,
+      skipVerifyFull: true,
+    }, dependencies)
+
+    Expect(outcome.mode).toBe('executed')
+    // On a real repository the transaction reports every phase it spends the lock on, in order.
+    Expect(realPhases).toEqual(['integrating', 'cheap gates', 'push', 'cleanup'])
+    Expect(await FS.exists(featureRoot)).toBe(true)
+    Expect((await gitResult(featureRoot, ['status', '--porcelain'])).stdout).toBe('')
+    Expect((await gitResult(featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(
+      (await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', 'refs/heads/merged/integration']))
+        .stdout.trim(),
+    )
+    Expect((await gitResult(featureRoot, ['symbolic-ref', '--quiet', 'HEAD'])).exitCode).toBe(1)
+    Expect((await gitResult(featureRoot, ['branch', '--list', 'feat/integration'])).stdout).toBe('')
+    const mainHead = (await gitResult(featureRoot, ['rev-parse', 'refs/heads/main'])).stdout.trim()
+    // The mirror followed main without anyone touching it, and is still clean and still detached.
+    Expect((await gitResult(mirrorRoot, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(mainHead)
+    Expect((await gitResult(mirrorRoot, ['status', '--porcelain'])).stdout).toBe('')
+    Expect((await gitResult(mirrorRoot, ['symbolic-ref', '--quiet', 'HEAD'])).exitCode).toBe(1)
+    // The landed commit carries the feature tree, and says what it squashed.
+    Expect((await gitResult(featureRoot, ['rev-parse', `${mainHead}^{tree}`])).stdout.trim())
+      .toBe((await gitResult(featureRoot, ['rev-parse', 'HEAD^{tree}'])).stdout.trim())
+    const landedMessage = (await gitResult(featureRoot, ['log', '-1', '--format=%B', mainHead])).stdout
+    Expect(landedMessage.startsWith('Land integration fixture\n\n- Add the disposable feature.\n')).toBe(true)
+    Expect(landedMessage).toContain('Squashed commit of the following:')
+    Expect(landedMessage).toContain('    Feature')
+    Expect((await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', 'refs/heads/main'])).stdout.trim())
+      .toBe(mainHead)
+    Expect(
+      (await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', 'refs/heads/merged/integration']))
+        .exitCode,
+    ).toBe(0)
+    Expect(
+      (await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', '--verify', 'refs/heads/feat/integration']))
+        .exitCode,
+    ).toBe(128)
   })
 
   Test('an atomic lease rejection preserves all landing refs and a legacy snapshot can be aborted', async () => {
     const fixture = await realLandingFixture()
-    try {
-      const beforeFeature = await bareRef(fixture.remoteRoot, 'refs/heads/feat/integration')
-      let competingMain = ''
-      const run = fixture.dependencies.run
-      fixture.dependencies.run = async (command, spec) => {
-        if (command === 'git' && spec.args?.[0] === 'push' && spec.args.includes('--atomic')) {
-          await gitCommand(fixture.mirrorRoot, ['commit', '--allow-empty', '-m', 'Competing landing'])
-          competingMain = (await gitResult(fixture.mirrorRoot, ['rev-parse', 'HEAD'])).stdout.trim()
-          await gitCommand(fixture.mirrorRoot, ['push', 'origin', 'HEAD:refs/heads/main'])
-        }
-        return await run(command, spec)
+    const beforeFeature = await bareRef(fixture.remoteRoot, 'refs/heads/feat/integration')
+    let competingMain = ''
+    const run = fixture.dependencies.run
+    fixture.dependencies.run = async (command, spec) => {
+      if (command === 'git' && spec.args?.[0] === 'push' && spec.args.includes('--atomic')) {
+        await gitCommand(fixture.mirrorRoot, ['commit', '--allow-empty', '-m', 'Competing landing'])
+        competingMain = (await gitResult(fixture.mirrorRoot, ['rev-parse', 'HEAD'])).stdout.trim()
+        await gitCommand(fixture.mirrorRoot, ['push', 'origin', 'HEAD:refs/heads/main'])
       }
-      await Expect(MergeWithMainCommand.run({
-        repositoryRoot: fixture.featureRoot,
-        skipVerifyFull: true,
-      }, fixture.dependencies)).rejects.toThrow('The atomic remote push changed no landing refs')
-
-      Expect(await bareRef(fixture.remoteRoot, 'refs/heads/main')).toBe(competingMain)
-      Expect(await bareRef(fixture.remoteRoot, 'refs/heads/feat/integration')).toBe(beforeFeature)
-      Expect(await bareRef(fixture.remoteRoot, 'refs/heads/merged/integration')).toBeUndefined()
-      const snapshot = fixture.snapshots[0]
-      Expect(snapshot).toBeDefined()
-      const legacy = await FS.readJson<MergeSnapshot>(snapshot!)
-      Expect(legacy.phase).toBe('committed')
-      await FS.writeJson(snapshot!, { ...legacy, remoteTransport: 'broker' })
-      const aborted = await MergeWithMainCommand.run({ abortSnapshot: snapshot! }, fixture.dependencies)
-      Expect(aborted.mode).toBe('aborted')
-    } finally {
-      await FS.remove(fixture.root)
+      return await run(command, spec)
     }
+    await Expect(MergeWithMainCommand.run({
+      repositoryRoot: fixture.featureRoot,
+      skipVerifyFull: true,
+    }, fixture.dependencies)).rejects.toThrow('The atomic remote push changed no landing refs')
+
+    Expect(await bareRef(fixture.remoteRoot, 'refs/heads/main')).toBe(competingMain)
+    Expect(await bareRef(fixture.remoteRoot, 'refs/heads/feat/integration')).toBe(beforeFeature)
+    Expect(await bareRef(fixture.remoteRoot, 'refs/heads/merged/integration')).toBeUndefined()
+    const snapshot = fixture.snapshots[0]
+    Expect(snapshot).toBeDefined()
+    const legacy = await FS.readJson<MergeSnapshot>(snapshot!)
+    Expect(legacy.phase).toBe('committed')
+    await FS.writeJson(snapshot!, { ...legacy, remoteTransport: 'broker' })
+    const aborted = await MergeWithMainCommand.run({ abortSnapshot: snapshot! }, fixture.dependencies)
+    Expect(aborted.mode).toBe('aborted')
   })
 
   Test('recovers an accepted atomic push whose process result was lost', async () => {
     const fixture = await realLandingFixture()
-    try {
-      const originalRun = fixture.dependencies.run
-      fixture.dependencies.run = async (command, spec) => {
-        const outcome = await originalRun(command, spec)
-        return command === 'git' && spec.args?.[0] === 'push' && spec.args.includes('--atomic')
-          ? { ...outcome, exitCode: 1, stderr: 'connection closed after accepting push' }
-          : outcome
-      }
-      const outcome = await MergeWithMainCommand.run({
-        repositoryRoot: fixture.featureRoot,
-        skipVerifyFull: true,
-      }, fixture.dependencies)
-      Expect(outcome.mode).toBe('executed')
-      Expect(await bareRef(fixture.remoteRoot, 'refs/heads/main')).toBe(
-        (await gitResult(fixture.featureRoot, ['rev-parse', 'refs/heads/main'])).stdout.trim(),
-      )
-      Expect(await bareRef(fixture.remoteRoot, 'refs/heads/merged/integration')).toBe(
-        (await gitResult(fixture.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim(),
-      )
-      Expect(await bareRef(fixture.remoteRoot, 'refs/heads/feat/integration')).toBeUndefined()
-    } finally {
-      await FS.remove(fixture.root)
+    const originalRun = fixture.dependencies.run
+    fixture.dependencies.run = async (command, spec) => {
+      const outcome = await originalRun(command, spec)
+      return command === 'git' && spec.args?.[0] === 'push' && spec.args.includes('--atomic')
+        ? { ...outcome, exitCode: 1, stderr: 'connection closed after accepting push' }
+        : outcome
     }
+    const outcome = await MergeWithMainCommand.run({
+      repositoryRoot: fixture.featureRoot,
+      skipVerifyFull: true,
+    }, fixture.dependencies)
+    Expect(outcome.mode).toBe('executed')
+    Expect(await bareRef(fixture.remoteRoot, 'refs/heads/main')).toBe(
+      (await gitResult(fixture.featureRoot, ['rev-parse', 'refs/heads/main'])).stdout.trim(),
+    )
+    Expect(await bareRef(fixture.remoteRoot, 'refs/heads/merged/integration')).toBe(
+      (await gitResult(fixture.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim(),
+    )
+    Expect(await bareRef(fixture.remoteRoot, 'refs/heads/feat/integration')).toBeUndefined()
   })
 })
 
@@ -1862,11 +1850,11 @@ async function realLandingFixture(): Promise<{
   root: string
   snapshots: string[]
 }> {
-  const root = await FS.realPath(await mkTestDir('tao-atomic-landing-'))
+  const root = await mkGitTestDir('tao-atomic-landing-')
   const remoteRoot = FS.resolvePath('remote.git', root)
   const mirrorRoot = FS.resolvePath('main', root)
   const featureRoot = FS.resolvePath('feature', root)
-  await gitCommand(root, ['init', '--bare', remoteRoot])
+  await initGitTestRepository(remoteRoot, { bare: true })
   await gitCommand(root, ['clone', remoteRoot, mirrorRoot])
   await gitCommand(mirrorRoot, ['config', 'user.name', 'Tao Test'])
   await gitCommand(mirrorRoot, ['config', 'user.email', 'tao@example.test'])
