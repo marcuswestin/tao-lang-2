@@ -631,7 +631,11 @@ const PROCESS_ACCESS_ALLOWLIST = [
   'packages/testing/verification/verification-tests/test-ledger.test.ts',
   'packages/apps/expo-host/expo-host-tests/injections-e2e.jest-test.tsx',
   'packages/apps/expo-host/expo-host-tests/runtime.test.ts',
-  'packages/cli/tao-cli/cli-tests/test-command-cli.test.ts',
+  // Generated child-process fixtures run without the repository's Platform module.
+  'packages/cli/tao-cli/cli-tests/test-command-budget-cli.test.ts',
+  'packages/cli/tao-cli/cli-tests/test-command-fixtures.ts',
+  'packages/cli/tao-cli/cli-tests/test-command-publication-cli.test.ts',
+  'packages/cli/tao-cli/cli-tests/test-command-reporting-cli.test.ts',
   // Studio's environment reads close with its own sweep onto `Platform.runtimeProcess`.
   'packages/ides/studio/studio-src/agent-chat/AgentChatProvider.ts',
   'packages/ides/studio/studio-src/agent-chat/AgentChatServer.ts',
