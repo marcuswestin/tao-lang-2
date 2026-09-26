@@ -280,6 +280,11 @@ tests written in Tao, green in Current, for every construct introduced.
 
 ## Post-MVP targets
 
+The Developer-selected [post-MVP target inventory](Docs/Roadmap/Post-MVP%20target%20inventory.md)
+records the next server-side, data, integration, operations, cross-app, agent, and host-surface
+capabilities. Its item IDs preserve the original selection; the list does not imply priority or
+settled language syntax.
+
 - [ ] Turn a photograph of a paper UI sketch into editable Tao Studio views
   - A person draws one or more views on paper and photographs them. An agent using Tao skills and
     Studio tools identifies the drawn view boundaries and elements, then adds matching free rectangles
