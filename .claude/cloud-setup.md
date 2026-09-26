@@ -86,7 +86,10 @@ If execution stops before cleanup reports, inspect only that run's base image
 and containers with `./agent unsandboxed contributor-linux-test --inspect-run
 YYYYMMDDTHHMMSSZ-PID`. It reports matching resources without starting or removing
 them; shared images and builder caches are preserved. Inspection failure means
-resource state is unknown. Retained toolchain image ownership, once provisioned,
+resource state is unknown. For exact owned containers still present, inspection also copies
+workflow logs into its evidence directory without executing in or stopping the guest; missing
+logs are reported separately. Guest repository lanes stream their existing verbose output.
+Retained toolchain image ownership, once provisioned,
 is recorded separately in the original run's `cache-ownership.txt`.
 
 On an arm64 Docker daemon, `./agent unsandboxed contributor-linux-test --qemu-guest-base`

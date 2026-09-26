@@ -70,7 +70,7 @@ fi
 if [ -n "$inspect_run" ]; then
   docker image ls --all --filter "reference=tao-contributor-linux-base:$inspect_run" \
     --format '{{.ID}} {{.Repository}}:{{.Tag}}' > "$output/inspection-images.txt" 2> "$output/inspection-errors.log"
-  docker container ls --all --filter "name=^/tao-contributor-linux-$inspect_run-(cold|tools|cached)$" \
+  docker container ls --all --no-trunc --filter "name=^/tao-contributor-linux-$inspect_run-(cold|tools|cached)$" \
     --format '{{.ID}} {{.Names}} {{.Status}} owner={{.Label "tao.owner"}} run={{.Label "tao.run"}}' \
     > "$output/inspection-containers.txt" 2>> "$output/inspection-errors.log"
   printf 'run=%s\nstate=complete\n' "$inspect_run" > "$output/inspection.txt"
@@ -81,6 +81,24 @@ if [ -n "$inspect_run" ]; then
       printf 'No run-specific %s remain for %s.\n' "$kind" "$inspect_run"
     fi
   done
+  # Snapshot only workflow logs from exact owned container IDs. Never execute in,
+  # stop, or otherwise alter a live guest. A disappearing container may lack logs.
+  while read -r inspected_id inspected_name inspected_rest; do
+    case "$inspected_id" in ''|*[!0-9a-f]*) continue ;; esac
+    case "$inspected_name" in
+      "tao-contributor-linux-$inspect_run-cold"|"tao-contributor-linux-$inspect_run-tools"|"tao-contributor-linux-$inspect_run-cached") ;;
+      *) continue ;;
+    esac
+    if inspected_owner=$(docker inspect --format '{{index .Config.Labels "tao.owner"}} {{index .Config.Labels "tao.run"}}' "$inspected_id" 2>> "$output/inspection-errors.log"); then
+      if [ "$inspected_owner" = "contributor-linux-test $inspect_run" ]; then
+        if docker cp "$inspected_id:/workspace/.artifacts/logs" "$output/$inspected_name-logs" 2>> "$output/inspection-errors.log"; then
+          printf 'Workflow log snapshot: %s/%s-logs\n' "$output" "$inspected_name"
+        else
+          printf 'Workflow logs unavailable for %s; see inspection-errors.log.\n' "$inspected_name"
+        fi
+      fi
+    fi
+  done < "$output/inspection-containers.txt"
   printf 'Shared images and builder caches were not changed.\n'
   exit 0
 fi

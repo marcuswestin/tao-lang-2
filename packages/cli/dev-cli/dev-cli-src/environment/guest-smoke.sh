@@ -106,10 +106,10 @@ else
 fi
 record_tool_versions
 step help ./agent help
-step setup ./agent setup
-step parser ./agent test-file packages/language/parser/parser-tests/dialect.test.ts
+step setup ./agent setup --verbose
+step parser ./agent test-file packages/language/parser/parser-tests/dialect.test.ts --verbose
 result=0
-step check ./agent check || result=1
-step test ./agent test-all || result=1
-step verify ./agent verify || result=1
+step check ./agent check --verbose || result=1
+step test ./agent test-all --verbose || result=1
+step verify ./agent verify --verbose || result=1
 exit "$result"

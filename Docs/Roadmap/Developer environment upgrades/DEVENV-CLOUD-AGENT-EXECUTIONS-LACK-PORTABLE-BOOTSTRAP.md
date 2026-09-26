@@ -194,6 +194,14 @@ file before its direct JSON write finished (`2026-09-26T17-53-14-010Z-67962`). I
 rerun passed (`2026-09-26T17-54-54-210Z-86128`). Neither unrelated fixture was changed by this
 bootstrap slice; both failed logs remain as follow-up evidence.
 
+The approved `--qemu-compat` run at `1c7e62795db7babdb7540ab4a448cfe46011717e`
+(`20260926T180520Z-58111`) passed Nix installation, toolchain provisioning, cold setup,
+repeat setup, and the focused parser test. Cold bootstrap took 255 seconds; repository checks
+were still running at this observation boundary. The long captured-output interval exposed a
+diagnostic gap: guest lanes now request the existing verbose output, and read-only run inspection
+can snapshot workflow logs from exact ownership-checked container IDs. It never executes inside,
+stops, or removes the inspected guest. Final cold/cached results are still pending.
+
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published
       [reference container](https://github.com/openai/codex-universal) and

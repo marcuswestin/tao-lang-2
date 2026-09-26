@@ -49,7 +49,7 @@ Describe('contributor Linux container runner', () => {
         'info',
         'info --format {{.Architecture}} {{.Driver}} {{json .DriverStatus}}',
         'image ls --all --filter reference=tao-contributor-linux-base:20260926T161634Z-57262 --format {{.ID}} {{.Repository}}:{{.Tag}}',
-        'container ls --all --filter name=^/tao-contributor-linux-20260926T161634Z-57262-(cold|tools|cached)$ --format {{.ID}} {{.Names}} {{.Status}} owner={{.Label "tao.owner"}} run={{.Label "tao.run"}}',
+        'container ls --all --no-trunc --filter name=^/tao-contributor-linux-20260926T161634Z-57262-(cold|tools|cached)$ --format {{.ID}} {{.Names}} {{.Status}} owner={{.Label "tao.owner"}} run={{.Label "tao.run"}}',
       ])
       Expect(result.stdout).toContain('No run-specific images remain')
       Expect(result.stdout).toContain('No run-specific containers remain')
@@ -71,6 +71,33 @@ Describe('contributor Linux container runner', () => {
       Expect(failed.stdout).not.toContain('No run-specific')
       Expect(await FS.readText(`${await latestOutput(fixture)}/inspection.txt`)).toContain('state=unknown')
       Expect(await FS.exists(fixture.container)).toBe(true)
+    })
+  })
+
+  Test('snapshots logs from an exact owned live container without executing or stopping it', async () => {
+    await withFixture(async fixture => {
+      const id = '20260926T161634Z-57262'
+      const name = `tao-contributor-linux-${id}-cold`
+      await FS.writeText(
+        fixture.container,
+        `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ${name} Up 10 minutes owner=contributor-linux-test run=${id}\n`,
+      )
+      await FS.writeText(`${fixture.container}.labels`, `contributor-linux-test ${id}\n`)
+      Expect((await run(fixture, ['--inspect-run', id])).exitCode).toBe(0)
+      let calls = (await FS.readText(fixture.log)).trim().split('\n')
+      Expect(
+        calls.filter(call =>
+          call.startsWith(
+            'cp aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:/workspace/.artifacts/logs ',
+          )
+        ),
+      ).toHaveLength(1)
+      Expect(calls.some(call => /^(exec|start|stop|rm|build|commit) /u.test(call))).toBe(false)
+      Expect(await FS.exists(fixture.container)).toBe(true)
+      await FS.writeText(`${fixture.container}.labels`, 'foreign-owner another-run\n')
+      Expect((await run(fixture, ['--inspect-run', id])).exitCode).toBe(0)
+      calls = (await FS.readText(fixture.log)).trim().split('\n')
+      Expect(calls.filter(call => call.startsWith('cp '))).toHaveLength(1)
     })
   })
 
@@ -299,11 +326,11 @@ Describe('contributor Linux container runner', () => {
       Expect((await FS.readText(FS.resolvePath('calls.log', root))).trim().split('\n')).toEqual([
         '|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
         'help|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
-        'setup|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
-        'test-file packages/language/parser/parser-tests/dialect.test.ts|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
-        'check|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
-        'test-all|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
-        'verify|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
+        'setup --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
+        'test-file packages/language/parser/parser-tests/dialect.test.ts --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
+        'check --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
+        'test-all --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
+        'verify --verbose|/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin|unset',
       ])
     } finally {
       await FS.remove(root)
