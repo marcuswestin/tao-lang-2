@@ -1,4 +1,4 @@
-import { Errors, FS, Platform } from '@shared'
+import { Errors, FS, ProcessTree, type TrackedProcess } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import {
   type WorkCommand,
@@ -7,6 +7,61 @@ import {
   type WorkRunResult,
   type WorkState,
 } from '../verification-src/WorkGraph'
+
+/** Arm the short silence bound only after the fixture has a live descendant holding its pipe. */
+async function assertDescendantTimeout(
+  state: WorkState,
+  descendantPath: string,
+  releasePath: string,
+  idleMs: number,
+): Promise<void> {
+  const parentPath = FS.resolvePath('parent.pid', FS.dirname(descendantPath))
+  const owned: TrackedProcess[] = []
+  let completed = false
+  const finished = WorkGraph.run([state], { watchInterrupt: () => () => {} })
+  void finished.then(() => completed = true, () => completed = true)
+  try {
+    await until(async () => await FS.isFile(parentPath), { description: 'the fixture parent to publish its PID' })
+    const parentPid = Number((await FS.readText(parentPath)).trim())
+    const parent = ProcessTree.identities([parentPid]).get(parentPid)
+    Expect(parent).toBeDefined()
+    owned.push(parent!)
+    await until(async () => state.fullOutput.includes('ready\n') && await FS.isFile(descendantPath), {
+      description: 'the descendant to publish its PID and announce readiness',
+    })
+    const pid = Number((await FS.readText(descendantPath)).trim())
+    const tracked = ProcessTree.identities([pid]).get(pid)
+    Expect(tracked).toBeDefined()
+    owned.push(tracked!)
+    // The next and final output is the child's acknowledgement. It resets the real graph timer
+    // to this short bound, without charging interpreter startup against the behavior under test.
+    state.node.idleTimeoutMs = idleMs
+    await FS.writeText(releasePath, '')
+    await until(() => completed, {
+      description: 'graph cancellation to finish before the descendant can exit naturally',
+      timeoutMs: 10_000, // budget-ok: independent cancellation guard; fixture descendants live for 300s.
+    })
+    await finished
+    Expect(state.fullOutput).toContain('armed\n')
+    Expect(state.failure?.kind).toBe('timeout')
+    await until(() => !ProcessTree.sameProcess(ProcessTree.identities([pid]).get(pid), tracked!), {
+      description: 'the timed-out descendant to stop running, including an unreaped Linux zombie',
+    })
+  } finally {
+    // Cleanup is independent of the graph cancellation being tested and covers both owned groups.
+    for (const process of owned) {
+      if (ProcessTree.sameProcess(ProcessTree.identities([process.pid]).get(process.pid), process)) {
+        ProcessTree.signalTracked(ProcessTree.descendants(process.pid), 'SIGKILL')
+        if (ProcessTree.processGroupOf(process.pid) === process.pid) {
+          ProcessTree.signalGroup(process.pid, 'SIGKILL')
+        }
+        ProcessTree.signalTracked([process], 'SIGKILL')
+      }
+    }
+    await until(() => completed, { description: 'the forcibly cleaned fixture processes and graph to settle' })
+    await finished
+  }
+}
 
 /**
  * Scheduling is observed through an injected runner: no real processes, and every node finishes
@@ -499,38 +554,39 @@ Describe('work graph scheduling', () => {
   Test('a timeout terminates descendants that retain the command output pipe', async () => {
     const root = await mkTestDir('tao-work-graph-process-tree-')
     const descendantPath = FS.resolvePath('descendant.pid', root)
+    const releasePath = FS.resolvePath('release', root)
     const state = WorkGraph.createState({
       name: 'descendant-pipe',
       run: {
-        args: ['-c', 'sleep 1 & echo $! > "$1"; exit 0', 'work-graph', descendantPath],
+        args: [
+          '-c',
+          'echo $$ > "$3"; sleep 300 & echo $! > "$1"; echo ready; while [ ! -f "$2" ]; do sleep 0.01; done; echo armed; exit 0',
+          'work-graph',
+          descendantPath,
+          releasePath,
+          FS.resolvePath('parent.pid', root),
+        ],
         command: '/bin/sh',
       },
-      // This is the timeout under test — it fires deliberately fast so the test can observe the kill
-      // reaching a descendant that retained the output pipe, not to prove the run is fast.
-      timeoutMs: 30, // budget-ok: timeout value under test.
+      idleTimeoutMs: 30_000,
     })
-    const startedAt = Date.now()
-
-    await WorkGraph.run([state], { watchInterrupt: () => () => {} })
-
-    const descendantPid = Number((await FS.readText(descendantPath)).trim())
-    // The bound proves the kill reaches the descendant, not speed: with a 30ms timeout the whole
-    // sequence takes milliseconds alone, and the budget is for a host whose load average is in the
-    // tens (same shape as studio-dev.test.ts's stop-timeout bound).
-    Expect(Date.now() - startedAt).toBeLessThan(10_000)
-    await until(() => !Platform.processIsAlive(descendantPid), {
-      description: 'the timed-out command descendant to exit',
-    })
-    Expect(state.failure?.kind).toBe('timeout')
+    await assertDescendantTimeout(state, descendantPath, releasePath, 30)
   })
 
   Test('a timeout terminates an escaped descendant process group that retains output', async () => {
     const root = await mkTestDir('tao-work-graph-escaped-tree-')
     const descendantPath = FS.resolvePath('descendant.pid', root)
+    const releasePath = FS.resolvePath('release', root)
     const script = `
       import { writeFileSync } from 'node:fs'
       import { spawn } from 'node:child_process'
-      const child = spawn('/bin/sh', ['-c', 'trap "" TERM; sleep 3'], {
+      writeFileSync(${JSON.stringify(FS.resolvePath('parent.pid', root))}, String(process.pid))
+      const child = spawn('/bin/sh', [
+        '-c',
+        'trap "" TERM; echo ready; while [ ! -f "$1" ]; do sleep 0.01; done; echo armed; sleep 300',
+        'escaped-child',
+        ${JSON.stringify(releasePath)},
+      ], {
         detached: true,
         stdio: ['ignore', 'inherit', 'inherit'],
       })
@@ -541,23 +597,9 @@ Describe('work graph scheduling', () => {
     const state = WorkGraph.createState({
       name: 'escaped-descendant-pipe',
       run: { args: ['-e', script], command: process.execPath },
-      // This is the timeout under test — it fires deliberately fast so the test can observe the kill
-      // reaching an escaped process group, not to prove the run is fast.
-      timeoutMs: 100, // budget-ok: timeout value under test.
+      idleTimeoutMs: 30_000,
     })
-    const startedAt = Date.now()
-
-    await WorkGraph.run([state], { watchInterrupt: () => () => {} })
-
-    const descendantPid = Number((await FS.readText(descendantPath)).trim())
-    // The bound proves the kill reaches the escaped process group, not speed: with a 100ms timeout the
-    // whole sequence takes milliseconds alone, and the budget is for a host whose load average is in
-    // the tens (same shape as studio-dev.test.ts's stop-timeout bound).
-    Expect(Date.now() - startedAt).toBeLessThan(10_000)
-    await until(() => !Platform.processIsAlive(descendantPid), {
-      description: 'the escaped timed-out command descendant to exit',
-    })
-    Expect(state.failure?.kind).toBe('timeout')
+    await assertDescendantTimeout(state, descendantPath, releasePath, 100)
   })
 
   Test("records a real node's own CPU time on its WorkState once it exits", async () => {

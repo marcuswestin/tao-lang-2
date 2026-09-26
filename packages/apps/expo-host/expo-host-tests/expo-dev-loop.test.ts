@@ -30,7 +30,7 @@ import { presentIosSimulator } from '@expo-host/dev-loop/IosSimulatorPresentatio
 import { handleCommandKey } from '@expo-host/dev-loop/keyboard-input/CommandKeys'
 import Commands from '@expo-host/dev-loop/keyboard-input/Commands'
 import Run from '@expo-host/dev-loop/Run'
-import { CLI, Errors, FS, Repo, Time } from '@shared'
+import { CLI, Errors, FS, ProcessTree, Repo, Time, type TrackedProcess } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import { connect, createServer, type Server } from 'node:net'
 
@@ -338,42 +338,42 @@ Describe('Expo dev-loop command helpers', () => {
   Test('stops the complete Expo subprocess tree when Metro outlives its launcher', async () => {
     const root = await mkTestDir('tao-expo-process-tree-')
     const descendantPidPath = FS.resolvePath('descendant.pid', root)
+    const descendantReadyPath = FS.resolvePath('descendant.ready', root)
     const shellScript = [
-      '(trap "" TERM; while :; do sleep 1; done) &',
+      '(trap "" TERM; echo ready > "$1"; while :; do sleep 1; done) &',
       'descendant=$!;',
       'echo "$descendant" > "$0";',
       'wait "$descendant"',
     ].join(' ')
     const server = new ExpoServer(root, createExpoConfig(49_153), async () => {}, {
-      command: { argsPrefix: ['-c', shellScript, descendantPidPath], executable: '/bin/sh' },
+      command: { argsPrefix: ['-c', shellScript, descendantPidPath, descendantReadyPath], executable: '/bin/sh' },
       logRoot: root,
       runtimeToolchainSourceRoot: root,
       stopTimeoutMs: 25,
     })
-    let descendantPid: number | undefined
+    let descendant: TrackedProcess | undefined
     try {
       await server.start()
-      for (let attempt = 0; attempt < 100 && descendantPid === undefined; attempt += 1) {
-        if (await FS.isFile(descendantPidPath)) {
-          const candidate = Number((await FS.readText(descendantPidPath)).trim())
-          descendantPid = Number.isInteger(candidate) && candidate > 0 ? candidate : undefined
+      descendant = await until(async () => {
+        if (!await FS.isFile(descendantReadyPath) || !await FS.isFile(descendantPidPath)) {
+          return undefined
         }
-        await Time.sleep(10)
-      }
-      if (descendantPid === undefined) {
-        Errors.throwHostEnvironment('The fake Expo launcher did not start its descendant process.')
-      }
+        const pid = Number((await FS.readText(descendantPidPath)).trim())
+        return Number.isSafeInteger(pid) && pid > 1 ? ProcessTree.identities([pid]).get(pid) : undefined
+      }, { description: 'the live Expo descendant to install its SIGTERM handler' })
+      const ownedDescendant = descendant
+      const isAlive = () =>
+        ProcessTree.sameProcess(ProcessTree.identities([ownedDescendant.pid]).get(ownedDescendant.pid), ownedDescendant)
+      Expect(isAlive()).toBe(true)
 
       await server.stop()
 
-      for (let attempt = 0; attempt < 100 && await processExists(descendantPid); attempt += 1) {
-        await Time.sleep(10)
-      }
-      Expect(await processExists(descendantPid)).toBe(false)
+      await until(() => !isAlive(), { description: 'the owned Expo descendant to stop' })
+      Expect(isAlive()).toBe(false)
     } finally {
       await server.stop().catch(() => undefined)
-      if (descendantPid !== undefined) {
-        await CLI.run('/bin/kill', { args: ['-KILL', String(descendantPid)] })
+      if (descendant !== undefined) {
+        ProcessTree.signalTracked([descendant], 'SIGKILL')
       }
       await FS.remove(root)
     }
@@ -1059,7 +1059,3 @@ Describe('Expo Metro runtime link helpers', () => {
     Expect(absent).toEqual({ body: undefined, status: 404, text: 'Not found' })
   })
 })
-
-async function processExists(pid: number): Promise<boolean> {
-  return (await CLI.run('/bin/kill', { args: ['-0', String(pid)] })).exitCode === 0
-}

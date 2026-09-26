@@ -260,6 +260,26 @@ the inventory would affect reclaim safety and is not a bootstrap workaround. Oth
 journey and suite timeouts remain unresolved; neither machine contention nor instruction
 translation has yet been isolated as their cause.
 
+The first cold test-all completed with failures after 2,526 seconds, including its existing
+contention retries; verification then began in the same guest. This still tests `1c7e6279`,
+before the repairs above. Its workflow snapshot is retained under
+`.artifacts/contributor-linux/20260926T190651Z-86255/`. Additional fixture repairs replace
+process-relative clock comparisons with explicit cross-process handshakes and arm short
+descendant timeouts only after observing a live descendant. Directory-denial coverage now
+injects a deterministic filesystem failure in an isolated child: root correctly ignores the
+old `chmod 000` premise. Focused tests and deliberate regression mutations cover these
+fixtures; updated committed-head guest verification remains outstanding.
+
+The final test report also exposed standalone-installer fixtures inheriting the Linux host,
+although the published release is intentionally macOS-only. Test-local platform, ownership,
+and JSON-tool contracts now model that supported host and explicitly retain Linux rejection;
+the production release contract is unchanged. Expo descendant checks now distinguish the
+owned live process from a retained PID. Studio trust-store workers and the web-build fixture
+retain subprocess failure details instead of reporting only a numeric mismatch. The original
+guest's subsequent verification completed one Tao shard in 117 seconds; the other reached
+52 passing journeys and one 30-second WordFlower journey timeout. This demonstrates further
+progress with warmed state, without establishing the cause of the remaining timeouts.
+
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published
       [reference container](https://github.com/openai/codex-universal) and
