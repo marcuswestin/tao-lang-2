@@ -31,8 +31,8 @@ import { handleCommandKey } from '@expo-host/dev-loop/keyboard-input/CommandKeys
 import Commands from '@expo-host/dev-loop/keyboard-input/Commands'
 import Run from '@expo-host/dev-loop/Run'
 import { CLI, Errors, FS, Repo, Time } from '@shared'
-import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
-import { connect, createServer } from 'node:net'
+import { Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
+import { connect, createServer, type Server } from 'node:net'
 
 Describe('Expo dev-loop output severity', () => {
   Test('reads a child process line by its text, not by the stream it chose', () => {
@@ -381,6 +381,22 @@ Describe('Expo dev-loop command helpers', () => {
 })
 
 Describe('Expo dev-loop port helpers', () => {
+  async function listenIfSupported(server: Server, host: string): Promise<boolean> {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject)
+        server.listen({ host, ipv6Only: true, port: 0 }, resolve)
+      })
+      return true
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      if (host.includes(':') && (code === 'EAFNOSUPPORT' || code === 'EADDRNOTAVAIL')) {
+        return false
+      }
+      throw error
+    }
+  }
+
   Test('derives every Expo endpoint and start argument from the session port', () => {
     const config = createExpoConfig(49_152)
 
@@ -416,48 +432,81 @@ Describe('Expo dev-loop port helpers', () => {
     Expect(selected).toBe(49_152)
   })
 
-  Test('reserves a different dev-loop port when Expo sees the preferred port as occupied', async () => {
-    const blocker = createServer()
-    blocker.unref()
-    await new Promise<void>((resolve, reject) => {
-      blocker.once('error', reject)
-      // Expo probes a wildcard listener. On macOS, an IPv4-loopback-only probe can
-      // otherwise miss this IPv6 wildcard socket and hand Expo an occupied port.
-      blocker.listen({ port: 0 }, resolve)
-    })
-    const address = blocker.address()
-    const blockedPort = typeof address === 'object' && address !== null ? address.port : undefined
-    try {
-      if (blockedPort === undefined) {
-        Errors.throwHostEnvironment('Expected the test listener to have a TCP port.')
+  for (const host of ['0.0.0.0', '127.0.0.1', '::', '::1']) {
+    Test(`reserves a different port when ${host} already owns the preferred port`, async () => {
+      const blocker = createServer()
+      blocker.unref()
+      if (!await listenIfSupported(blocker, host)) {
+        return
       }
-      const session = await createDevLoopExpoSession(blockedPort)
+      const address = blocker.address()
+      const blockedPort = typeof address === 'object' && address !== null ? address.port : undefined
       try {
-        Expect(session.config.EXPO_PORT).not.toBe(blockedPort)
-        Expect(session.config.EXPO_PORT).toBeGreaterThan(0)
+        if (blockedPort === undefined) {
+          Errors.throwHostEnvironment('Expected the test listener to have a TCP port.')
+        }
+        const session = await createDevLoopExpoSession(blockedPort)
+        try {
+          Expect(session.config.EXPO_PORT).not.toBe(blockedPort)
+          Expect(session.config.EXPO_PORT).toBeGreaterThan(0)
+        } finally {
+          await session.releasePortReservation()
+        }
       } finally {
-        await session.releasePortReservation()
+        await new Promise<void>((resolve, reject) => {
+          blocker.close(error => error ? reject(error) : resolve())
+        })
       }
-    } finally {
-      await new Promise<void>((resolve, reject) => {
-        blocker.close(error => error ? reject(error) : resolve())
-      })
-    }
-  })
+      // A collision on a later address must release every earlier partial reservation.
+      const reused = await createDevLoopExpoSession(blockedPort)
+      try {
+        Expect(reused.config.EXPO_PORT).toBe(blockedPort)
+      } finally {
+        await reused.releasePortReservation()
+      }
+    })
+  }
 
   // A dev client that retries Metro's port connects to the reservation long before Expo starts.
-  Test('drops a client that connects to a reserved port, so releasing it does not wait', async () => {
+  Test('drops clients in both address families and releases every reserved listener', async () => {
+    const ipv6Probe = createServer()
+    const ipv6Supported = await listenIfSupported(ipv6Probe, '::1')
+    if (ipv6Supported) {
+      await new Promise<void>((resolve, reject) => {
+        ipv6Probe.close(error => error ? reject(error) : resolve())
+      })
+    }
     const session = await createDevLoopExpoSession(0)
-    const client = connect({ host: '127.0.0.1', port: session.config.EXPO_PORT })
-    const dropped = new Promise<void>(resolve => client.once('close', () => resolve()))
-    client.on('error', () => {})
+    const hosts = ipv6Supported ? ['127.0.0.1', '::1'] : ['127.0.0.1']
+    const clients = hosts.map(host => {
+      const client = connect({ host, port: session.config.EXPO_PORT })
+      const dropped = new Promise<boolean>((resolve, reject) => {
+        client.once('error', reject)
+        client.once('close', () => resolve(true))
+      })
+      return { client, dropped, host }
+    })
     try {
-      // Only a connection the reservation has accepted can hold its `close` open, so the reservation
-      // dropping it comes first. A reservation that kept it would time this test out at either wait.
-      await dropped
-      await session.releasePortReservation()
+      // Waiting for the server to drop each client proves that our listeners accepted it.
+      await Promise.all(
+        clients.map(({ dropped, host }) =>
+          until(() => dropped, { description: `the reservation to drop its ${host} client` })
+        ),
+      )
     } finally {
-      client.destroy()
+      for (const { client } of clients) {
+        client.destroy()
+      }
+      await until(async () => {
+        await session.releasePortReservation()
+        return true
+      }, { description: 'both port reservation families to close' })
+    }
+    const reused = await createDevLoopExpoSession(session.config.EXPO_PORT)
+    try {
+      Expect(reused.config.EXPO_PORT).toBe(session.config.EXPO_PORT)
+    } finally {
+      await reused.releasePortReservation()
     }
   })
 
