@@ -10,6 +10,8 @@ import {
 
 export { attachNativeHostTestControl }
 export type { NativeHostTestControl, NativeHostTestControlOptions }
+// Generated mobile test hosts consume these through this registered host-testing entry point.
+export { captureNativeNavigationDiagnostics, subscribeNativeNavigationDiagnostics } from '../TR-navigation-native-hosts'
 
 /**
  * Binds the active host-test environment to its run-scoped native URL scheme. The control URL

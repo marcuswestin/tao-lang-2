@@ -32,6 +32,10 @@ fixture. Production compiler, runtime, Expo configuration, and shared utilities 
 
 Run from the repository root. `./agent test-host` delegates to the matching `just test-host` recipe.
 Each invocation writes a unique `.artifacts/host-testing/<run-id>/` directory.
+Retention keeps at most two failed runs within the shared 4 GiB budget. When a failed build exceeds
+the remaining budget, generated app, export, dependency, and driver-build directories are removed
+first; screenshots, proof receipts, logs, and browser traces remain eligible for retention. Active
+runs and directories without trustworthy ownership receipts are preserved.
 
 ```sh
 ./agent test-host check
@@ -69,7 +73,39 @@ Native runs require an explicit target and a unique test application identifier.
 Appium XCUITest and Android emulators use Appium UiAutomator2. Both current routes execute the compiled
 Tao journey and preserve screenshots, driver receipts, server logs, and cleanup evidence. Physical iOS
 currently provides a separate Release build/install receipt. It does not report a journey verdict or
-imply physical-device UI acceptance. See [native details](native/README.md).
+imply physical-device UI acceptance. HNReader's native journey also brackets its authored steps with
+mounted-native-stack receipts, checks again immediately before and after every relaunch, and rejects any stack fallback; its toggle bar keeps enclosing chrome
+and does not claim native tab selection. Relaunch must be outside `select` blocks for these global
+host receipt checks. See [native details](native/README.md).
+
+### Native navigation acceptance
+
+```sh
+./agent unsandboxed test-host ios --app native-navigation --device <iPhone-or-iPad-simulator-UDID>
+./agent unsandboxed test-host android --app native-navigation --device <emulator-serial>
+```
+
+This subject runs the authored three-stack state-preservation journey in
+`Apps/Test Apps/Navigation/Native Navigation.test.tao`. The isolated wrapper subscribes to runtime
+host diagnostics before loading the app. Visible receipts require mounted native tab and stack hosts
+before and after the journey; any basic fallback permanently fails the receipt for that process.
+The fixture's exact title strings occur only in its headers, so its title assertions use native text
+instead of the basic host's test identifier. The iOS build enables tablet support.
+Android text presses first match exact visible text, then the exact authored accessibility label
+of a button in the same selection scope. This handles native buttons' uppercase visual titles;
+text assertions remain case-sensitive and never use that press fallback.
+Presses poll for the exact target to become visible using the same 10-second budget as assertions,
+then dispatch one click. Missing or hidden targets can be retried; transport failures and dispatched
+clicks cannot. A successful click response alone does not prove that navigation completed.
+Native input entry waits for its editable target to be visible, then types once. Input assertions
+poll for the exact visible value after transitions. Both use the same 10-second budget and propagate
+transport failures immediately; typing is never retried.
+
+Browser, export, driver, and `--fault` are explicitly unsupported for this subject.
+`device --app native-navigation --device <physical-device-ID>` performs the separately reported
+Release installation milestone; it does not run a UI journey or claim physical-device UI acceptance. `prepare` builds the isolated fixture without claiming host acceptance. The journey
+covers switching tabs, pushed stack positions, typed drafts, local counters, and native Back. It does
+not establish gesture cancellation, toolbar menus, presentation dismissal, or keyboard/safe-area layout.
 
 ## Time, randomness, and parallelism
 
