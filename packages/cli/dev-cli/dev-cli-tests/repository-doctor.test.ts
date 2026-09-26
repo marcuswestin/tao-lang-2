@@ -1,4 +1,4 @@
-import { CLI, FS, Platform, Repo } from '@shared'
+import { FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import {
   type DoctorFacts,
@@ -407,16 +407,45 @@ Describe('repository doctor', () => {
     }
   })
 
-  Test('reads this checkout without changing it', async () => {
-    const before = await CLI.run('git', { args: ['status', '--porcelain'], cwd: Repo.getRoot() })
-    const stableArtifacts = async () =>
-      (await FS.listDir(Repo.resolvePath('.artifacts'))).filter(name => !name.endsWith('.lock')).toSorted()
-    const listedBefore = await stableArtifacts()
-    const report = doctorReport(await readDoctorFacts())
-    const after = await CLI.run('git', { args: ['status', '--porcelain'], cwd: Repo.getRoot() })
+  Test('leaves existing checkout artifacts unchanged', async () => {
+    // Other lanes create artifacts and edit tracked files in the real checkout. Only this
+    // fixture belongs to the doctor invocation whose lasting writes we are checking.
+    const root = await mkTestDir('tao-doctor-artifacts-')
+    const artifactPaths = ['.artifacts/build', '.artifacts/cache', '.artifacts/logs', '.artifacts/tmp']
+    try {
+      for (const path of artifactPaths) {
+        await FS.writeText(FS.resolvePath(`${path}/existing.txt`, root), 'keep existing artifact\n')
+      }
+      const read = await readDoctorFacts(root)
 
-    Expect(await stableArtifacts()).toEqual(listedBefore)
-    Expect(after.stdout).toBe(before.stdout)
+      Expect(read.artifactRoots.filter(artifact => artifact.present).map(artifact => artifact.path).toSorted())
+        .toEqual(artifactPaths)
+      const entries: string[] = []
+      for await (const path of FS.walk(root, { includeDirectories: true, includeHidden: true })) {
+        entries.push(FS.relativePath(root, path))
+      }
+      Expect(entries.toSorted()).toEqual([
+        '.artifacts',
+        '.artifacts/build',
+        '.artifacts/build/existing.txt',
+        '.artifacts/cache',
+        '.artifacts/cache/existing.txt',
+        '.artifacts/logs',
+        '.artifacts/logs/existing.txt',
+        '.artifacts/tmp',
+        '.artifacts/tmp/existing.txt',
+      ])
+      for (const path of artifactPaths) {
+        Expect(await FS.readText(FS.resolvePath(`${path}/existing.txt`, root))).toBe('keep existing artifact\n')
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('reads this checkout with the production defaults', async () => {
+    const report = doctorReport(await readDoctorFacts())
+
     Expect(report.repositoryRoot).toBe(Repo.getRoot())
     Expect(check(report, 'dependency compatibility')?.status).toBe('pass')
     Expect(check(report, 'parser artifacts')?.status).toBe('pass')
