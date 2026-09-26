@@ -623,7 +623,7 @@ class AppiumAndroidSession implements HostSession {
 }
 
 function assertIsolatedBuild(artifactRoot: string, target: AppiumAndroidTarget, build: AppiumAndroidBuild): void {
-  if (!/^dev\.tao\.taohost(?:clockwork|hnreader)[a-z0-9]+$/u.test(target.appId)) {
+  if (!/^dev\.tao\.taohost(?:clockwork|hnreader|nativenavigation)[a-z0-9]+$/u.test(target.appId)) {
     Errors.throwUserInput('Appium Android requires an isolated dev.tao.taohost application identifier.')
   }
   if (!/^[a-f0-9]{64}$/u.test(build.compiledArtifactDigest)) {
@@ -667,6 +667,19 @@ function locatorFor(target: HostTarget): AppiumAndroidLocator {
     return { using: '-android uiautomator', value: `new UiSelector().resourceId(${JSON.stringify(target.value)})` }
   }
   if (target.kind === 'accessibility') {
+    if (target.role === 'button') {
+      return {
+        using: '-android uiautomator',
+        value: `new UiSelector().className("android.widget.Button").description(${JSON.stringify(target.name)})`,
+      }
+    }
+    if (target.role === 'textbox') {
+      const editable = 'new UiSelector().className("android.widget.EditText")'
+      return {
+        using: '-android uiautomator',
+        value: target.name === '' ? editable : `${editable}.description(${JSON.stringify(target.name)})`,
+      }
+    }
     if (target.role !== undefined) {
       return unsupported('inspect', 'Appium/UiAutomator2 cannot enforce an accessibility role for this target.')
     }

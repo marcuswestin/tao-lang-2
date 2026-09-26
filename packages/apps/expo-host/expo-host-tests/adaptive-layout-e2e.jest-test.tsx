@@ -1,11 +1,67 @@
+import { jest } from '@jest/globals'
+import TR from '@runtime/TR'
+import * as TaoReactNative from '@runtime/TR-react-native'
 import { Describe, Expect, Test } from '@shared/test'
-import { fireEvent } from '@testing-library/react-native'
+import { fireEvent, render } from '@testing-library/react-native'
+import { createElement } from 'react'
 import * as RN from 'react-native'
 import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime adaptive layout', () => {
+  Test('keeps handled taps available beside an editable child and preserves explicit keyboard props', () => {
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime')
+    try {
+      for (const [os, dismissMode] of [['ios', 'interactive'], ['android', 'on-drag']] as const) {
+        restoreRuntime.mockReturnValue({
+          ActivityIndicator: RN.ActivityIndicator,
+          Image: RN.Image,
+          KeyboardAvoidingView: RN.KeyboardAvoidingView,
+          ScrollView: RN.ScrollView,
+          Switch: RN.Switch,
+          TextInput: RN.TextInput,
+          View: RN.View,
+          Text: RN.Text,
+          Pressable: RN.Pressable,
+          Platform: { OS: os },
+        })
+        let draft = ''
+        const submissions: string[] = []
+        const children = createElement(
+          RN.View,
+          null,
+          createElement(RN.TextInput, {
+            accessibilityLabel: 'Draft',
+            autoFocus: true,
+            onChangeText: (value: string) => {
+              draft = value
+            },
+          }),
+          createElement(RN.Pressable, {
+            accessibilityLabel: 'Open detail',
+            onPress: () => submissions.push(draft),
+          }),
+        )
+        const screen = render(TR.Views.ScrollView({ children }))
+        const scroll = screen.UNSAFE_getByType(RN.ScrollView)
+        Expect(scroll.props.keyboardShouldPersistTaps).toBe('handled')
+        Expect(scroll.props.keyboardDismissMode).toBe(dismissMode)
+        fireEvent.changeText(screen.getByLabelText('Draft'), 'Keep this draft')
+        fireEvent.press(screen.getByLabelText('Open detail'))
+        Expect(submissions).toEqual(['Keep this draft'])
+        screen.rerender(TR.Views.ScrollView({ children }, {
+          nativeProps: { keyboardShouldPersistTaps: 'always', keyboardDismissMode: 'none' },
+        }))
+        Expect(screen.UNSAFE_getByType(RN.ScrollView).props.keyboardShouldPersistTaps).toBe('always')
+        Expect(screen.UNSAFE_getByType(RN.ScrollView).props.keyboardDismissMode).toBe('none')
+        screen.unmount()
+      }
+    } finally {
+      restoreRuntime.mockRestore()
+    }
+  })
+
   Test('measures Panes, preserves source order, and separates ScrollView viewport layout', async () => {
     await testCompileApp(
       `

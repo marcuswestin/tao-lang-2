@@ -307,6 +307,8 @@ function TaoScrollView({ props, runtimeProps }: {
   return createElement(
     runtime.ScrollView,
     {
+      keyboardDismissMode: runtime.Platform?.OS === 'ios' ? 'interactive' : 'on-drag',
+      keyboardShouldPersistTaps: 'handled',
       ...scrollViewProps,
       contentContainerStyle: mergedContentContainerStyle,
       style: scrollViewportStyle(style),

@@ -37,7 +37,13 @@ async function runControls(context: HostTestingContext): Promise<void> {
 
 async function runEffectBoundary(context: HostTestingContext): Promise<void> {
   const expansion = await expandHostTestSourcePatterns(Repo.getRoot())
-  const issues = await lintHostTestSources(Repo.getRoot(), { files: expansion.paths })
+  const issues = await lintHostTestSources(Repo.getRoot(), {
+    files: expansion.paths,
+    approvedEffectAdapters: {
+      'packages/testing/e2e-testing/environment/HostArtifactClock.ts':
+        'HostArtifactClock: actual calendar time for persisted cross-process retention receipts',
+    },
+  })
   await FS.writeJson(FS.resolvePath('effect-boundary.json', context.artifactRoot), { ...expansion, issues })
   if (issues.length > 0) {
     Errors.throwUserInput(`Effect boundary failed; see ${context.artifactRoot}/effect-boundary.json`)

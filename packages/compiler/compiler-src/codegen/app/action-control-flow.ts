@@ -87,22 +87,44 @@ function commandActionTarget(
 }
 
 /** Whether this callback must be allowed to interrupt a suspended `ask`. */
-export function actionBlockContainsRespond(block: AST.ActionBlock | undefined): boolean {
+export function actionBlockInterruptsAsk(
+  block: AST.ActionBlock | undefined,
+  seen: ReadonlySet<AST.ActionDeclaration> = new Set(),
+): boolean {
   return block?.statements.some(statement => {
-    if (AST.isRespondStatement(statement)) {
+    // Cancelling an asked view must cross the same suspended action as answering it. Ordinary
+    // content dismissals keep the normal root queue and cannot interrupt an unrelated ask.
+    if (
+      AST.isRespondStatement(statement)
+      || (AST.isDismissStatement(statement) && AST.findOwningView(statement)?.response !== undefined)
+    ) {
       return true
     }
+    if (AST.isDoStatement(statement)) {
+      const action = ASTUtils.resolveActionInvocation(statement).action
+      const target = AST.isCommandDeclaration(action) ? commandActionTarget(action) : action
+      if (!target) {
+        return false
+      }
+      if (AST.isActionExpression(target)) {
+        return actionBlockInterruptsAsk(target.block, seen)
+      }
+      if (target.foreign || seen.has(target)) {
+        return false
+      }
+      return actionBlockInterruptsAsk(target.block, new Set([...seen, target]))
+    }
     if (AST.isAsyncActionStatement(statement)) {
-      return actionBlockContainsRespond(statement.block)
+      return actionBlockInterruptsAsk(statement.block, seen)
     }
     if (AST.isIfActionStatement(statement)) {
-      return actionBlockContainsRespond(statement.block)
+      return actionBlockInterruptsAsk(statement.block, seen)
     }
     if (AST.isGuardActionStatement(statement)) {
-      return ASTUtils.guardBranches(statement).some(branch => actionBlockContainsRespond(branch.block))
+      return ASTUtils.guardBranches(statement).some(branch => actionBlockInterruptsAsk(branch.block, seen))
     }
     if (AST.isWhenDoStatement(statement)) {
-      return statement.outcomes.some(outcome => actionBlockContainsRespond(outcome.block))
+      return statement.outcomes.some(outcome => actionBlockInterruptsAsk(outcome.block, seen))
     }
     return false
   }) ?? false

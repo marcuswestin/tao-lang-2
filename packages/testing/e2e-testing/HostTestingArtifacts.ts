@@ -1,4 +1,5 @@
 import { FS, Platform, Repo } from '@shared'
+import { hostArtifactDate } from './environment/HostArtifactClock'
 
 /** A run owns its UUID directory until it finishes or its process is demonstrably gone. */
 type RunReceipt = {
@@ -22,7 +23,7 @@ type RetainedRun = { path: string; receipt: RunReceipt; sizeBytes: number; timeM
 
 const defaultDependencies: ArtifactDependencies = {
   isAlive: Platform.processIsAlive,
-  now: () => new Date(),
+  now: hostArtifactDate,
   pid: Platform.runtimeProcess.pid,
 }
 const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -71,7 +72,7 @@ async function finish(
   }
   const runRoot = FS.resolvePath(runId, root)
   if (status === 'passed' && !isRequestedOutput(receipt.mode)) {
-    await compactSuccessfulRun(runRoot)
+    await compactRunBuilds(runRoot, false)
   }
   const sizeBytes = await runSize(runRoot)
   await publishReceipt(root, { ...receipt, finishedAt: dependencies.now().toISOString(), sizeBytes, status })
@@ -82,13 +83,20 @@ function isRequestedOutput(mode: string): boolean {
   return mode === 'prepare' || mode === 'export'
 }
 
-/** Keep named proof logs and receipts while removing large generated app and web trees. */
-async function compactSuccessfulRun(runRoot: string): Promise<void> {
+/** Generated projects and driver builds are disposable; failure screenshots and traces are not. */
+async function compactRunBuilds(runRoot: string, preserveFailureEvidence: boolean): Promise<void> {
   for (const name of await FS.listDir(runRoot)) {
-    if (!name.startsWith('host-') && !name.startsWith('web-') && name !== 'appium-home' && name !== 'results') {
-      continue
+    const generated = name.startsWith('host-') || name.startsWith('web-') || name === 'appium-home'
+    const path = FS.resolvePath(name, runRoot)
+    if ((generated || (!preserveFailureEvidence && name === 'results')) && await FS.isDirectory(path)) {
+      await FS.remove(path)
     }
-    await FS.remove(FS.resolvePath(name, runRoot))
+  }
+  // Only the driver's Xcode build output is disposable inside appium; logs, screenshots, and
+  // session receipts are siblings. Never traverse a substituted parent symlink during cleanup.
+  const appiumRoot = FS.resolvePath('appium', runRoot)
+  if (!await FS.isSymbolicLink(appiumRoot)) {
+    await FS.remove(FS.resolvePath('xcode', appiumRoot))
   }
 }
 
@@ -155,8 +163,16 @@ async function prune(root = artifactStore(), dependencies = defaultDependencies)
     const failed = run.receipt.status !== 'passed'
     const output = isRequestedOutput(run.receipt.mode)
     const withinCount = failed ? failures < MAX_FAILURES : output ? outputs < MAX_OUTPUTS : successes < MAX_SUCCESSES
-    const withinBudget = bytes + run.sizeBytes <= MAX_RETAINED_BYTES
     const withinAge = now - run.timeMs <= MAX_FINISHED_AGE_MS
+    if (failed && withinCount && withinAge && bytes + run.sizeBytes > MAX_RETAINED_BYTES) {
+      // A native build can exceed the entire store budget by itself. Reclaim its generated
+      // inputs first so the failed journey's screenshot and proof are still available.
+      await compactRunBuilds(run.path, true)
+      run.sizeBytes = await runSize(run.path)
+      run.receipt = { ...run.receipt, sizeBytes: run.sizeBytes }
+      await publishReceipt(root, run.receipt)
+    }
+    const withinBudget = bytes + run.sizeBytes <= MAX_RETAINED_BYTES
     if (withinCount && withinBudget && withinAge) {
       bytes += run.sizeBytes
       if (failed) {

@@ -1,5 +1,5 @@
 import { Errors } from '@shared'
-import type { HostApplicationFault } from './app-build/HostBuild'
+import type { HostApplicationFault, HostSubject } from './app-build/HostBuild'
 
 export type HostTestingOptions = {
   app: string
@@ -69,16 +69,24 @@ export type HostTestingContext = Readonly<{
   runId: string
 }>
 
-type HostSubject = 'clockwork' | 'hnreader'
-
 /** parseHostTestingRequest validates the user surface and assigns one exhaustive dispatch kind. */
 export function parseHostTestingRequest(mode: string, options: HostTestingOptions): HostTestingRequest {
   const seed = Number(options.seed)
   if (!Number.isInteger(seed) || seed < 0 || seed > 0xffff_ffff) {
     Errors.throwUserInput('--seed must be an unsigned 32-bit integer.')
   }
-  if (options.app !== 'hnreader' && options.app !== 'clockwork') {
-    Errors.throwUserInput('--app must be hnreader or clockwork.')
+  if (options.app !== 'hnreader' && options.app !== 'clockwork' && options.app !== 'native-navigation') {
+    Errors.throwUserInput('--app must be hnreader, clockwork, or native-navigation.')
+  }
+  if (options.app === 'native-navigation') {
+    if (options.fault === true) {
+      Errors.throwUserInput('--fault is not supported for native-navigation.')
+    }
+    if (mode === 'browser' || mode === 'export' || mode === 'driver') {
+      Errors.throwUserInput(
+        'native-navigation acceptance requires ios or android with an explicit simulator or emulator; prepare is also available.',
+      )
+    }
   }
   const common = {
     browserChannel: options.browserChannel ?? 'chrome',
@@ -115,7 +123,7 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
       )
     }
     if (mode === 'device') {
-      return { ...common, device: options.device, kind: 'native', mode }
+      return { ...common, subject: options.app, device: options.device, kind: 'native', mode }
     }
     return { ...common, device: options.device, ...(fault === undefined ? {} : { fault }), kind: 'native', mode }
   }
@@ -123,5 +131,8 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
 }
 
 function applicationFaultFor(subject: HostSubject): HostApplicationFault {
+  if (subject === 'native-navigation') {
+    return Errors.throwUserInput('--fault is not supported for native-navigation.')
+  }
   return subject === 'clockwork' ? 'clockwork-countdown-frozen' : 'hnreader-reading-history-no-write'
 }
