@@ -51,6 +51,29 @@ const files = {
 }
 
 Describe('Studio Feed source preparation', () => {
+  for (const visibility of ['folder', 'file']) {
+    Test(`explains ${visibility}-only entity visibility before promoting a generated example`, async () => {
+      await withTaoFiles('tao-studio-feed-visibility-', {
+        'HNReader.tao': `${visibility} data Stories / Story { Title text }`,
+        '@/studio/View1.tao': viewSource,
+      }, async (paths, root) => {
+        await Expect(StudioFeedSource.prepare({
+          entity: 'Story',
+          entryPath: paths['HNReader.tao'],
+          projectRoot: root,
+          promotions: [{ entity: 'Story', fields: { Title: 'Example item' }, name: 'Feed1n4tlqo' }],
+          selectedHandle: 'Feed1n4tlqo',
+          sketch,
+          viewSource,
+        })).rejects.toThrow(
+          `Feed cannot use Story from HNReader.tao: its ${visibility} visibility does not allow imports from @/studio.`,
+        )
+        Expect(await FS.readText(paths['@/studio/View1.tao'])).toBe(viewSource)
+        Expect(await FS.exists(FS.resolvePath('@/studio/Sketches.tao', root))).toBe(false)
+      })
+    })
+  }
+
   Test('prepares a linked shared fixture, required parameter, and tagged binding without writing sources', async () => {
     await withTaoFiles('tao-studio-feed-source-', files, async (paths, root) => {
       const result = await StudioFeedSource.prepare({

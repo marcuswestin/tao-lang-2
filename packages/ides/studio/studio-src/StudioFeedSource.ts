@@ -53,7 +53,7 @@ export const StudioFeedSource = {
       imports: promotionEntities.map(declaration => ({
         collection: declaration.name,
         entity: declaration.singularName,
-        source: studioSourceImport(packageContext, fixturePath, AST.getDocument(declaration).uri.fsPath),
+        source: requireEntityImport(packageContext, fixturePath, declaration),
       })),
       promotions: request.promotions.map(row => ({
         ...row,
@@ -162,6 +162,23 @@ export const StudioFeedSource = {
     return { sources }
   },
 } as const
+
+function requireEntityImport(
+  context: Packages.Context,
+  from: string,
+  entity: AST.EntityDataDeclaration,
+): string {
+  const path = AST.getDocument(entity).uri.fsPath
+  const source = studioSourceImport(context, from, path)
+  const resolution = Packages.resolve(context, { fromFilePath: from, importPath: source })
+  Assert.input(
+    Packages.isVisible(Packages.visibilityOf(entity), resolution),
+    `Feed cannot use ${entity.singularName} from ${FS.basename(path)}: its ${
+      entity.visibility ?? 'file'
+    } visibility does not allow imports from @/studio. Move the entity to a shared model package with workspace or public visibility.`,
+  )
+  return source
+}
 
 function requireEntity(files: readonly AST.TaoFile[], name: string): AST.EntityDataDeclaration {
   const declarations = files.flatMap(file => file.statements.filter(AST.isEntityDataDeclaration))

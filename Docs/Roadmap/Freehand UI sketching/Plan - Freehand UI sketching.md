@@ -236,6 +236,9 @@ and catalog state, and concurrent external edits. The browser journey exercises 
 adapters, free and snapped binding, Keep/Discard/Undo, collection loops, and default scenario relocation.
 Imported-view insertion uses canonical source actions with loop-scope arguments and project containment.
 Native gesture feel still requires visual acceptance; landing this slice requires separate authorization.
+HNReader review exposed a misleading fixture-handle error for folder-only entities. Feed now checks
+entity visibility before fixture promotion and explains the import restriction; coverage includes
+folder-only and file-only models as well as importable public models.
 
 **Representability limits.** Existing fixture syntax represents primitive literals, `now`, and fixture
 references. Exact captured/generated timestamps, unresolved live relation IDs, cyclic fixture creation

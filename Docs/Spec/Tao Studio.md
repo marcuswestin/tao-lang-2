@@ -418,6 +418,9 @@ preview's captured entity tables. Private fields are excluded, invalid rows carr
 and each source is bounded to 250 rows per entity. Entity drops prepare a required sketch parameter;
 field drops prepare a typed free-rectangle binding or rewrite a tagged snapped leaf. Text fields offer
 explicit text and image presentations. Collection drops propose a loop with a typed row view.
+Entity drops check declaration visibility before generating the shared fixture. An entity unavailable
+to `@/studio` reports its source and visibility restriction instead of a fixture-handle error; binding
+it requires an importable model declaration under the existing package rules.
 
 Pending examples compile through immutable session source overrides, including a virtual shared
 fixture. They do not write project source or the catalog. Keep writes the view, shared fixture, and
