@@ -324,6 +324,14 @@ reusable tools image. Read-only inspection `20260926T200309Z-76264` independentl
 the cold container was absent before cached provisioning. Full cold verification evidence is
 retained in snapshot `.artifacts/contributor-linux/20260926T195929Z-56423/`.
 
+Cached tests repeated the known quiet-output and suite timeouts. One additional 120-second
+fixture timeout came from `just --dry-run verify-full`, not actual bootstrap or verification.
+The same source passed that fixture three times in the cold guest in under one second; the
+cached timeout has no established cause. Its helper now supervises the child with a 20-second
+bound and retains the complete process result on failure, so the enclosing test timeout cannot
+leave an unbounded child. This is diagnostic and lifecycle coverage, not a claimed repair of
+the emulation failure. Native Linux comparison remains pending behind the active cached run.
+
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published
       [reference container](https://github.com/openai/codex-universal) and

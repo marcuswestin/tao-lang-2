@@ -951,8 +951,14 @@ async function git(cwd: string, args: readonly string[]): Promise<void> {
 
 /** justCommands returns the commands a recipe would run, so tests assert behavior, not layout. */
 async function justCommands(name: string, ...args: string[]): Promise<string> {
-  const result = await CLI.run('just', { args: ['--dry-run', name, ...args], cwd: Repo.getRoot() })
-  Expect(result.exitCode).toBe(0)
+  const result = await CLI.run('just', {
+    args: ['--dry-run', name, ...args],
+    cwd: Repo.getRoot(),
+    processPolicy: 'test',
+    // budget-ok: a recipe dry run must terminate its child before the enclosing 120-second test timeout.
+    timeoutMs: 20_000,
+  })
+  Expect(result).toMatchObject({ exitCode: 0, signal: null, error: undefined })
   return `${result.stdout}${result.stderr}`
 }
 
