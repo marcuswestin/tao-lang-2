@@ -413,6 +413,8 @@ present DocumentInfo(Document) as overlay in WorkspaceNav
 ```
 
 The runtime gives each nav a relative host and an absolute-fill overlay layer above its content.
+Plain overlays dim the covered content with the same translucent gray backdrop as an asked view.
+Their content remains full-bleed, without the asked view's default card or centering.
 Overlays stack. Covered overlay entries remain mounted but are hidden visually and from
 accessibility; revealing them restores their state. `dismiss` or Back consumes the top overlay before
 the nav's ordinary content history. An overlay covers the nav that presented it, not the window;
