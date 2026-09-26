@@ -208,7 +208,7 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
 
   const applyWheel = (gesture: StudioCanvasWheelGesture, anchor: Readonly<{ x: number; y: number }>): void => {
     if (gesture.zoom) {
-      const notch = Math.max(-0.2, Math.min(0.2, -gesture.deltaY / 500))
+      const notch = Math.max(-0.2, Math.min(0.2, -gesture.deltaY / 250))
       zoomTo(current.z * Math.exp(notch), anchor)
       return
     }
