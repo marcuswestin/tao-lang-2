@@ -483,3 +483,17 @@ The next amd64 proof should run the existing contributor workflow on a native am
 host or hosted runner. Local ARM Linux acceptance is complete without Rosetta, global Docker
 changes, or new privileges. A Rosetta experiment or dependency/version change remains a separate
 approval decision. Actual hosted smoke tests remain outstanding for every supported harness.
+
+## Finalization integration follow-up
+
+Finalization integrated main through `f0d36ded` in `fa8365ac`. Incoming `59b4ea80` fixes
+subprocess output retention before consumers attach; `86cccd63` lowers full verification
+priority and removes the scheduler-dependent CPU-sample assertion. The only merge conflict
+was the Platform import list; Linux process signalling and procfs identities were preserved.
+Focused output, process lifetime, and cache lifecycle checks passed. These incoming process
+changes require a fresh committed-source Linux run before claiming acceptance for the merged tree.
+
+Review found that the incoming cache lifecycle fixture published readiness JSON non-atomically
+and then treated file existence as complete publication. Its receipt now writes to an owned
+temporary sibling and renames after completion. This changes only the test handshake; cache
+retention and process cleanup behavior are unchanged.
