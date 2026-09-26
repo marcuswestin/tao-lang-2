@@ -111,6 +111,11 @@ Test('real Clerk password and email-code UI sessions authorize durable Account a
     })
     await browser.addInitScript(clerkTestingTokenScript(configuration.issuer, testingToken))
     await browser.goto(staticServer.url)
+    stage = 'open email-code UI before password sign-in'
+    await browser.waitFor(`document.querySelector('[aria-label="Use email code"]') !== null`)
+    await browser.click('[aria-label="Use email code"]')
+    await browser.waitFor(`document.querySelector('input[aria-label="Email for code"]') !== null`)
+    await browser.click('[aria-label="Use email code"]')
     stage = 'password sign-in through Tao UI'
     await fill(browser, 'Account email', email)
     await fill(browser, 'Password', password)
@@ -135,10 +140,14 @@ Test('real Clerk password and email-code UI sessions authorize durable Account a
     Expect(await bodyIncludes(browser, 'Hello Clerk browser account')).toBe(false)
     stage = 'email-code sign-in through Tao UI'
     await browser.click('[aria-label="Use email code"]')
+    stage = 'enter email-code identifier'
     await fill(browser, 'Email for code', email)
     await browser.click('[aria-label="Send code"]')
+    stage = 'wait for email-code challenge'
     await fill(browser, 'Code', '424242')
+    stage = 'verify email-code challenge'
     await browser.click('[aria-label="Verify code"]')
+    stage = 'restore owned notes after email-code sign-in'
     await browser.waitFor(`document.body.textContent?.includes('Clerk password note') === true`, { timeoutMs: 60_000 })
     Expect(await bodyIncludes(browser, 'Hello Clerk browser account')).toBe(true)
     await fill(browser, 'New note', 'Clerk email-code note')
@@ -154,7 +163,16 @@ Test('real Clerk password and email-code UI sessions authorize durable Account a
   } catch (error) {
     // Neither SDK errors nor CDP exceptions are safe durable artifacts: they can embed credentials.
     primaryFailure = true
-    Errors.throwHostEnvironment(`Clerk live browser acceptance failed during: ${stage}.${clerkFailureSummary(error)}`)
+    const controls = browser === undefined ? '' : await browser.evaluate<string>(`JSON.stringify({
+      passwordEmail: !!document.querySelector('input[aria-label="Account email"]'),
+      codeEmail: !!document.querySelector('input[aria-label="Email for code"]'),
+      code: !!document.querySelector('input[aria-label="Code"]'),
+      switchMethod: !!document.querySelector('[aria-label="Use email code"]'),
+      account: !!document.querySelector('[aria-label="Account profile"]')
+    })`).catch(() => '')
+    Errors.throwHostEnvironment(
+      `Clerk live browser acceptance failed during: ${stage}.${clerkFailureSummary(error)} Controls: ${controls}`,
+    )
   } finally {
     if (previousFapi === undefined) {
       delete env['CLERK_FAPI']

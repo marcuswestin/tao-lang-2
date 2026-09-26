@@ -61,7 +61,7 @@ export type ClerkDriverSDK = {
   client?: { signIn: SignIn; signUp: SignUp; sessions: readonly Session[] }
   session?: Session | null
   setActive(input: { session: string; navigate: () => Promise<void> }): Promise<void>
-  signOut(input: { sessionId: string }): Promise<void>
+  signOut(callback: () => Promise<void>, input: { sessionId: string }): Promise<void>
   addListener(listener: () => void): () => void
 }
 type Rendezvous = {
@@ -215,7 +215,8 @@ export function createClerkDriver(configuration: Readonly<Record<string, unknown
   }
   async function revoke(host: ClerkDriverSDK, sessionId: string) {
     try {
-      await host.signOut({ sessionId })
+      // Tao owns navigation. Without a completion callback Clerk redirects and reloads the app.
+      await host.signOut(async () => {}, { sessionId })
     } catch {
       const failure = new ClerkRevocationError(sessionId)
       throw failure
@@ -367,7 +368,7 @@ export function createClerkDriver(configuration: Readonly<Record<string, unknown
       if (sessionId) {
         entry.operations += 1
         try {
-          await (sdk ?? await ready(closing.signal)).signOut({ sessionId })
+          await (sdk ?? await ready(closing.signal)).signOut(async () => {}, { sessionId })
         } finally {
           entry.operations -= 1
           release()

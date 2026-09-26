@@ -9,6 +9,7 @@ import {
 
 function fixture() {
   const calls: unknown[] = []
+  const navigations: string[] = []
   const events = new Set<() => void>()
   const session = {
     id: 'session-one',
@@ -76,8 +77,17 @@ function fixture() {
       calls.push(['activate', input.session])
       sdk.session = session
     },
-    async signOut(input) {
+    async signOut(
+      callbackOrInput: (() => void | Promise<void>) | { sessionId: string },
+      options?: { sessionId: string },
+    ) {
+      const input = typeof callbackOrInput === 'function' ? options! : callbackOrInput
       calls.push(['sign-out', input.sessionId])
+      if (typeof callbackOrInput === 'function') {
+        await callbackOrInput()
+      } else {
+        navigations.push('default-sign-out-redirect')
+      }
     },
     addListener(listener) {
       events.add(listener)
@@ -96,6 +106,7 @@ function fixture() {
     signUp,
     session,
     calls,
+    navigations,
     events,
     configuration,
     cleanup() {
@@ -107,6 +118,17 @@ function fixture() {
 const signal = () => new AbortController().signal
 
 Describe('Clerk SDK driver', () => {
+  Test('targeted logout completes without invoking Clerk default navigation', async () => {
+    const f = fixture()
+    try {
+      await f.driver.restore(signal())
+      await f.driver.signOut('session-one')
+      Expect(f.calls).toEqual([['sign-out', 'session-one']])
+      Expect(f.navigations).toEqual([])
+    } finally {
+      f.cleanup()
+    }
+  })
   Test('waits for the provider and permits cancellation before it is ready', async () => {
     const driver = createClerkDriver({})
     const abort = new AbortController()
@@ -263,6 +285,7 @@ Describe('Clerk SDK driver', () => {
       pending.resolve(f.signIn)
       await Expect(running).rejects.toThrow('cancelled')
       Expect(f.calls).toEqual([['sign-out', 'stale-session']])
+      Expect(f.navigations).toEqual([])
       Expect(f.sdk.session.id).toBe('newer-session')
     } finally {
       f.cleanup()

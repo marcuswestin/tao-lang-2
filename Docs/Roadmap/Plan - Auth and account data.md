@@ -2,8 +2,8 @@
 
 Status: local and self-hosted slice implemented, 2026-09-26. The current authorized slice includes
 TestAuth/Memory and LocalAuth/Reference, executable Auth Review journeys, and self-hosted InstantDB.
-The first Clerk adapter is implemented; live managed-provider and physical-device acceptance,
-plus advanced account lifecycle features, remain outstanding.
+The first Clerk adapter and live browser acceptance against the reference gateway are implemented.
+Clerk over InstantDB, physical-device acceptance and advanced account lifecycle features remain outstanding.
 The [decisions](<Tao Revolution/Decisions.md>) own language semantics; the
 [review record](<Auth syntax review.md>) distinguishes accepted changes from remaining choices.
 [MVP scope](<../MVP Roadmap/Developer MVP Roadmap.md>) remains authoritative for priority. This plan
@@ -384,9 +384,11 @@ journey bundles the actual Auth Review app and drives password and email-code UI
 Clerk development instance. It accepts the three Clerk credentials from the repository secrets
 store after explicit live opt-in, with environment overrides and no process-wide secret exports.
 Setup failures expose bounded API codes and known missing field names rather than raw SDK errors.
-Its testing token only bypasses bot protection. No remote acceptance is
-claimed until that journey runs with configured credentials. Clerk over real Instant storage and
-physical-device lifecycle acceptance also remain outstanding. The gateway requires an `azp` origin
+Its testing token only bypasses bot protection. The live journey passed on 2026-09-26, proving
+password sign-in, profile and owned-note persistence, reload, logout, email-code sign-in and a second
+logout against the SQLite reference gateway. The run exposed Clerk's default sign-out navigation;
+targeted logout and cancellation revocation now use the SDK completion callback so Tao owns navigation.
+Clerk over real Instant storage and physical-device lifecycle acceptance remain outstanding. The gateway requires an `azp` origin
 claim; native proofs may omit it, so native pairing needs an explicit token/origin contract before
 it can be advertised. Advanced recovery, OAuth, MFA/passkeys,
 linking, deletion and production gateway deployment are not part of this initial implementation.

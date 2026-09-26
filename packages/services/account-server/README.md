@@ -81,8 +81,10 @@ TAO_CLERK_LIVE=1 ./agent unsandboxed studio-smoke packages/ides/studio-tooling/s
 
 Without opt-in the journey explicitly skips; opted-in missing configuration fails. The test creates
 and deletes its own Clerk user, temporary project, gateway database and browser profile. If remote
-cleanup fails, it reports the synthetic user ID for manual deletion. Live acceptance has not yet
-been recorded for this adapter. The gateway requires an `azp` origin claim, which native Clerk proofs may omit. Native
+cleanup fails, it reports the synthetic user ID for manual deletion. Live browser acceptance passed
+on 2026-09-26 against the SQLite reference gateway, including both sign-in methods, profile/notes,
+reload and logout. Clerk over real Instant storage still needs its own live conformance run.
+The gateway requires an `azp` origin claim, which native Clerk proofs may omit. Native
 authentication is not a verified pairing; its token/origin contract and physical-device storage
 need separate acceptance.
 

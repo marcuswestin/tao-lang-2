@@ -293,8 +293,9 @@ The runtime mounts the SDK through an optional provider `Host`, with the same ap
 configuration passed to `connect`. The Expo SDK currently permits one mounted native Clerk app;
 its lease lasts through outstanding authentication cleanup. Credentials are managed by the SDK
 and never authored as Tao fields. Cancellation revokes a newly created SDK session; logout clears
-local access immediately, then attempts both SDK and gateway revocation. Failed SDK revocations
-retain non-secret session-ID tombstones and retry on reconnection/restoration. Each session has
+local access immediately, then attempts both SDK and gateway revocation. Both paths suppress
+Clerk's default redirect: Tao retains ownership of navigation on logout and cancellation.
+Failed SDK revocations retain non-secret session-ID tombstones and retry on reconnection/restoration. Each session has
 its own durable marker, checked again before accepting a proof exchange; another browser tab
 cannot erase that marker by saving a stale retry list.
 
