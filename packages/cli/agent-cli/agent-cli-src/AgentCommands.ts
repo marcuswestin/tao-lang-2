@@ -66,6 +66,7 @@ export const JUST_COMMANDS = [
   'verify-changed',
   'verify-full',
   'verify-full-sandbox',
+  'worktree-status',
 ] as const
 
 export type AgentCommand = (typeof JUST_COMMANDS)[number]

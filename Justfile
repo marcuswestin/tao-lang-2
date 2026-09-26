@@ -435,10 +435,15 @@ board *ARGS:
 landed *ARGS:
     ./dev landed {{ ARGS }}
 
-# Classify every worktree as reclaimable, live, or unclassified; removes nothing without --execute
+# Classify worktrees without removal by default; use ./agent unsandboxed reclaim --execute to remove
 [group('Dev')]
 reclaim *ARGS:
     ./dev reclaim {{ ARGS }}
+
+# List each worktree with its reclaim verdict and latest attached agent task
+[group('Report')]
+worktree-status:
+    ./dev worktree-status
 
 # Push this feature branch, open or reuse its pull request against main, then stream its checks
 [group('Dev')]
