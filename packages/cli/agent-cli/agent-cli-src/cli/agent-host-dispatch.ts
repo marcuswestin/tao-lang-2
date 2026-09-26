@@ -30,6 +30,17 @@ async function run(): Promise<number> {
     HCI.writeErrorLine(`Usage: ./agent unsandboxed ${prefix.join(' ')} <pid>`)
     return 2
   }
+  if (
+    target.argsPolicy === 'standalone-vm' && args.length !== 0 && (
+      args.length !== 2 || !['--diagnose', '--stop', '--collect'].includes(args[0]!)
+      || !/^tao-acceptance-[0-9]+-[0-9]+$/u.test(args[1]!)
+    )
+  ) {
+    HCI.writeErrorLine(
+      'Usage: ./agent unsandboxed standalone-cli-clean-machine [--diagnose|--stop|--collect <owned-vm>]',
+    )
+    return 2
+  }
   if (prefix.join(' ') === 'simulators run') {
     return await runSimulator(args)
   }

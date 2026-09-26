@@ -215,8 +215,8 @@ standalone-cli-acceptance: _parser-gen
 
 # Build a 0.0.0 release and run its acceptance in a fresh vanilla macOS Tart VM, retaining guest logs
 [group('Ship')]
-standalone-cli-clean-machine: _parser-gen
-    bash packages/cli/tao-cli/cli-src/standalone-clean-machine.sh
+standalone-cli-clean-machine action='' vm='': _parser-gen
+    bash packages/cli/tao-cli/cli-src/standalone-clean-machine.sh {{ quote(action) }} {{ quote(vm) }}
 
 # Run clean-machine acceptance with before/after metadata snapshots of the guest's writable macOS Data volume
 [group('Ship')]

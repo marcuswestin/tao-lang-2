@@ -28,7 +28,7 @@ const PROXY_ENV = ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https
 /** The release files a GitHub release carries; `release.json` and the notes are not the installer's. */
 const INSTALLER_FILES = ['tao-darwin-arm64.gz', 'tao-darwin-arm64.gz.sha256', 'install.sh'] as const
 
-/** A VM run mounts this directory from the host so guest output survives VM deletion. */
+/** The VM harness retrieves this guest log directory before deleting its disposable clone. */
 const ACCEPTANCE_LOG_DIR = Platform.runtimeProcess.env['TAO_ACCEPTANCE_LOG_DIR']
 let shellStep = 0
 
