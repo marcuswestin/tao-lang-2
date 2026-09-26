@@ -146,6 +146,53 @@ signalling uses the runtime API instead of assuming `/bin/kill`. No package/vers
 new dependency is needed; Windows support remains outside this slice. These changes still need
 committed-head Linux acceptance before the bootstrap can be considered complete.
 
+### Scoped guest-base result (2026-09-26)
+
+Committed head `63cef60f7de68a6b7ecd622866554f36f012f93b` ran with the explicit guest-base
+option in `20260926T174901Z-29680`. The same Ubuntu 24.04 manifest
+`sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3`
+provisioned in one second using existing builder layers; the run-specific base identity was
+`sha256:2aed676c7a506e9b2fd7ec87f93781c7a4aa946303bc949fe0fa05d8847f3204`.
+The setting passed the prior Nix registration crash and reached default-profile installation in
+both fresh guests. Both then failed with `unable to load seccomp BPF program: Invalid argument`.
+Cold bootstrap took nine seconds (guest eleven); tools bootstrap took fourteen seconds (guest
+fourteen); total wall time was twenty-eight seconds. Setup, repository tests/check/verify, and
+cached bootstrap remain unrun. The local macOS verification gate covers the portability code;
+it does not substitute for Linux execution of that code.
+
+[Nix issue 5258](https://github.com/NixOS/nix/issues/5258) reports the matching installation error
+under user-mode QEMU, even with the build sandbox disabled. Nix's internal syscall filter is a
+separate setting. Its [2.35.2 manual](https://nix.dev/manual/nix/2.35/command-ref/conf-file.html#conf-filter-syscalls)
+documents `filter-syscalls` and cautions about disabling its protection against operations such
+as setuid/setgid creation, ACLs, and extended attributes. A separate, explicit disposable-guest
+experiment with process-local `NIX_CONFIG='filter-syscalls = false'` is proposed, pending the
+Developer's decision on that security tradeoff. It has not been implemented or run. Do not
+change the default bootstrap, Docker's outer isolation, host configuration, or network policy.
+[Nix issue 15153](https://github.com/NixOS/nix/issues/15153) reports the same error class under
+Rosetta with mismatched userland/kernel architectures; Rosetta is neither tried nor established
+as the needed remedy. Native Linux execution remains a separate control; native arm64 changes
+the acceptance architecture, while native amd64 preserves it.
+
+The runner removed its cold/tools containers and run-specific base. Read-only inspection
+`20260926T174959Z-31040` independently confirmed their absence. No toolchain cache image was
+created (intended experiment tag `tao-contributor-linux-tools:26ae486aa51e0fcfcbf34c1d7a58f19d75d27e45`).
+Shared image/builder caches were preserved. Evidence remains in
+`.artifacts/contributor-linux/20260926T174901Z-29680/`, including guest logs, image/container
+metadata, timings and cleanup. No global configuration, privilege, dependency/version or
+network policy change was needed for this experiment. Actual hosted smoke tests remain outstanding.
+
+A later macOS evidence-update gate reported an unhandled `ENOENT` while
+`reclaimStaleMutex` scanned an already-removed `tao-gate-catalog-*/registry` scratch directory
+(`2026-09-26T17-51-27-148Z-51857`). The focused gate-catalog rerun passed
+(`2026-09-26T17-52-59-069Z-66921`). This is a separate observed fixture/lease-lifecycle race,
+not a cause assigned to the Linux bootstrap or new procfs adapter. Preserve the failed gate log
+for the verification owner's follow-up; no scheduler or lease behavior was changed here.
+The next gate passed that suite but hit a separate account-server fixture readiness race:
+`JSON Parse error: Unexpected EOF` at `account-server.test.ts:432`, after observing the ready
+file before its direct JSON write finished (`2026-09-26T17-53-14-010Z-67962`). Its focused
+rerun passed (`2026-09-26T17-54-54-210Z-86128`). Neither unrelated fixture was changed by this
+bootstrap slice; both failed logs remain as follow-up evidence.
+
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published
       [reference container](https://github.com/openai/codex-universal) and
