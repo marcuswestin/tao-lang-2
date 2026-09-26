@@ -746,6 +746,17 @@ export class StudioCdp {
     await this.pressKey(key, { primary: true })
   }
 
+  /** Holds a physical key across a pointer gesture, releasing it even when the gesture fails. */
+  async withKeyHeld(key: string, gesture: () => Promise<void>): Promise<void> {
+    const params = chromeKeyDetails(key)
+    await this.client.send('Input.dispatchKeyEvent', { ...params, type: 'rawKeyDown' })
+    try {
+      await gesture()
+    } finally {
+      await this.client.send('Input.dispatchKeyEvent', { ...params, type: 'keyUp' })
+    }
+  }
+
   /** pressKey sends the same physical key events Chrome receives from a keyboard. */
   async pressKey(key: string, options: StudioCdpKeyOptions = {}): Promise<void> {
     const primaryModifier = options.primary === true
@@ -885,6 +896,16 @@ export class StudioCdp {
       const rect = element.getBoundingClientRect()
       return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
     })()`)
+  }
+
+  /** Moves the physical pointer without pressing, including over embedded app content. */
+  async hover(selector: string): Promise<void> {
+    await this.client.send('Input.dispatchMouseEvent', {
+      button: 'none',
+      buttons: 0,
+      type: 'mouseMoved',
+      ...await this.elementCenter(selector, 'hover target'),
+    })
   }
 
   private collectConsoleEvent(params: unknown): void {

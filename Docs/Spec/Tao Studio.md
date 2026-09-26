@@ -551,13 +551,20 @@ runtime tests cover persistence edge cases, the depth cap, and resize gestures.
 
 The browser client implements the target frame: project toolbar, Design/Code/Run/Draw presets, command palette,
 icon rail with an agent toggle, a floating, draggable, and collapsible agent panel in the bottom left, persisted resizable and collapsible left/right/bottom panes,
-CodeMirror editor with breadcrumbs, scrolling scenario canvas, a one-column inspector whose Scenario pane
+CodeMirror editor with breadcrumbs, pannable and zoomable scenario canvas, a one-column inspector whose Scenario pane
 holds the scenario's arguments, environment, and captured state above the four-context Selection pane, and
 bottom drawer. One token sheet in the client stylesheet styles the shell, the Tao-rendered panels (through
 host-owned button, segmented, choice, and section views), and the agent panel. The command palette indexes files,
 project views, grouped scenarios, commands, and component/view insertions. The component palette uses the
 stdlib catalog plus compiler-manifest project views; drag to canvas emits position-aware source actions,
 and drag to editor inserts formatted snippets with required-parameter placeholders selected for editing.
+
+In Design, hold Space and drag to pan the canvas over either empty background or preview apps.
+For the entire time Space is held, a transparent canvas shield makes previews neutral pan surfaces:
+hover, clicks, dragging, and wheel input cannot interact with the embedded apps, including between drags.
+A focused preview suppresses mouse input immediately and forwards Space to the host. Text inputs keep
+normal Space typing, and Run keeps app interaction when the canvas does not own the gesture.
+Releasing the pointer or losing window focus ends a pan; losing focus also clears held Space.
 
 Layout inspection uses parser-owned current clauses. Style inspection carries landing provenance and
 blast radius for inline entries and local/imported bundles. The structured design surface supports color
