@@ -7,11 +7,13 @@ export async function buildDesktopApp(options: {
   outputRoot: string
   siteRoot: string
   workRoot: string
+  agents?: { buildId: string }
 }): Promise<string> {
   const host = await DesktopHost.prepare({
     appName: options.appName,
     root: FS.resolvePath('desktop-host', options.workRoot),
     siteRoot: options.siteRoot,
+    agents: options.agents,
   })
   const builtApp = await DesktopHost.build(host)
   const destination = FS.resolvePath(FS.basename(builtApp), options.outputRoot)

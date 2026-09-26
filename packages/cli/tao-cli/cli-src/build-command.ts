@@ -18,7 +18,7 @@ export type BuildRecord = {
   toolchainVersion: string
 }
 
-type BuildOptions = { appName?: string; compileOnly?: boolean; targets: readonly BuildTarget[] }
+type BuildOptions = { appName?: string; compileOnly?: boolean; targets: readonly BuildTarget[]; agents?: boolean }
 const targets = ['web', 'desktop', 'ios', 'android'] as const
 const runtimeFiles = [
   'index.ts',
@@ -32,7 +32,12 @@ const excludedSourceDirectories = new Set(['.git', '.tao', '.expo', 'node_module
 
 /** Build each requested target from the same immutable source snapshot, retaining every result. */
 export async function runTaoBuild(path: string, options: BuildOptions): Promise<number> {
-  const selectedTargets = await chooseTargets(options.targets)
+  const selectedTargets = await chooseTargets(
+    options.agents && options.targets.length === 0 ? ['desktop'] : options.targets,
+  )
+  if (options.agents && (options.compileOnly || selectedTargets.some(target => target !== 'desktop'))) {
+    Errors.throwUserInput('--agents requires a packaged desktop build.')
+  }
   const app = await chooseApp(path, options.appName)
   const buildsRoot = FS.resolvePath('.tao/builds', app.projectRoot)
   const id = `${new Date().toISOString().replaceAll(/[:.]/g, '-')}-${Platform.randomUUID().slice(0, 8)}`
@@ -82,6 +87,7 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
           outputRoot: FS.resolvePath('desktop', artifactRoot),
           siteRoot: site,
           workRoot,
+          agents: options.agents ? { buildId: id } : undefined,
         })
     }, (target, status) => progress.set(target, status))
     for (const target of selectedTargets) {

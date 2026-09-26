@@ -1,0 +1,58 @@
+use AgentCommandEntries from @data
+use Local from @tao/data/providers/local
+use Col, FormButton, Text from @tao/ui
+
+app AgentCommandsProof {
+   Name "Agent Commands"
+   Datasource Local {
+      StorageKey "AgentCommandsProof"
+   }
+   AgentCommands [AppendEntry, VerifyEntries, DisabledEntry]
+   view EntriesView()
+}
+
+action WriteEntry(Message text, Quantity number, Marked boolean) {
+   create AgentCommandEntry {
+      Message: Message,
+      Quantity: Quantity,
+      Marked: Marked
+}  }
+
+command AppendEntry(Message text, Quantity number default 37, Marked boolean default true) {
+   Title "Append entry"
+   do WriteEntry(Message: Message, Quantity: Quantity, Marked: Marked)
+}
+
+// A fixture-only observer reads the active catalog and fails unless every saved scalar matches.
+// Its ordinary action outcome proves persistence without adding a command return-value channel.
+action VerifyRows(Message text, Quantity number, Marked boolean, Count number) from ./VerifyRows.ts
+
+command VerifyEntries(Message text, Quantity number, Marked boolean, Count number) {
+   Title "Verify saved entries"
+   do VerifyRows(Message: Message, Quantity: Quantity, Marked: Marked, Count: Count)
+}
+
+command DisabledEntry() {
+   Title "Disabled entry"
+   Enabled false
+   do WriteEntry(Message: "Disabled command ran", Quantity: 0, Marked: false)
+}
+
+command UnlistedEntry() {
+   Title "Unlisted entry"
+   do WriteEntry(Message: "Unlisted command ran", Quantity: 0, Marked: false)
+}
+
+view EntriesView() {
+   query AgentCommandEntries { }
+   render Col() [gap 8, pad 16] {
+      Text("Agent command entries: { AgentCommandEntries.Count }")
+      loop AgentCommandEntries / Entry {
+         Text("{ Entry.Message }: { Entry.Quantity }")
+         Text(when Entry.Marked "Marked" / not "Unmarked")
+      }
+
+      #append
+      FormButton("Append sample") {
+         on press -> { do AppendEntry(Message: "Visible sample", Quantity: 7, Marked: true) }
+}  }  }

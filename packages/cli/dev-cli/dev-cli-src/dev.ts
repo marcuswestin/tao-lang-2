@@ -89,7 +89,7 @@ await runWithCommands(commands => {
     .description('Run the opt-in real-host testing prototype, independently of existing suites.')
     .argument(
       '[mode]',
-      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, or setup.',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, agents, or setup.',
       'check',
     )
     .option('--app <subject>', 'Explicit product or harness subject: hnreader or clockwork.', 'hnreader')
@@ -98,6 +98,11 @@ await runWithCommands(commands => {
     .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')
     .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
     .action(async (mode, options) => {
+      if (mode === 'agents') {
+        const { proveDesktopAgent } = await import('@expo-host/desktop-agent-proof')
+        await proveDesktopAgent()
+        return
+      }
       const { runHostTesting } = await import('@e2e-testing')
       await runHostTesting(mode, options)
     })
