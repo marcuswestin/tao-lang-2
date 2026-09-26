@@ -835,6 +835,13 @@ Focusing a view wraps it in a frame whose size is the occurrence's measured size
   release remain correct over iframes, reveal scrolls through the viewport coordinate space, and all
   gesture/listener registrations are disposed with their host. Zoom-menu and persistence enhancements
   listed above remain product follow-ups rather than correctness blockers.
+- **Corrected 2026-09-26.** Space is captured before child keyboard handlers can stop propagation.
+  Focused app previews forward Space to the canvas and immediately suppress app mouse handlers.
+  A transparent shield keeps previews neutral to hover, clicks, and wheel input for the entire
+  held-Space interval, including between drags. Focus loss and leaving Design clear the gesture.
+  Text entry retains Space.
+  Pan sensitivity is 0.75 for both drag and scroll; pinch/modifier-wheel zoom uses a 0.006 exponential
+  gain per delta unit, retaining the per-event cap and total zoom limits.
 
 ### Stride D — Focus-selection mode with a red outline on view frames
 
