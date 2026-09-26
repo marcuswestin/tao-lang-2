@@ -296,7 +296,7 @@ alongside the branch's agent bootstrap change.
   enforces 25,000 files/256 MiB only inside one runtime-path identity and has no parent-level
   retirement; direct Jest chooses a persistent path without entering that lifecycle. Those are
   confirmed P2 lifecycle gaps, not measured growth rates. The
-  [aggregate and direct-run cache entry](<Developer environment upgrades/DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND.md>)
+  [aggregate and direct-run cache entry](<Developer environment upgrades/Archive/DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND.md>)
   tracks them separately from the archived per-checkout fix. The legacy shared `$TMPDIR/jest_dx`
   held 13.03 GiB/760,998 files, and `$TMPDIR/tao-test-runs` 763 MiB/137,778 files; neither
   owner nor safe deletion was established. No shared state was removed.
@@ -350,7 +350,7 @@ alongside the branch's agent bootstrap change.
 - **New cache contract:** `7af60641` says `TAO_HOME` relocates every machine-wide cache, while
   managed and direct Jest still choose the login home. This is a source-confirmed contract gap,
   with no isolated `TAO_HOME` run or safe migration of existing leased roots. The
-  [aggregate and direct-run cache entry](<Developer environment upgrades/DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND.md>)
+  [aggregate and direct-run cache entry](<Developer environment upgrades/Archive/DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND.md>)
   retains its disposition alongside the measured size above.
 - **Release authenticity:** The standalone installer fetches executable and checksum from
   one mutable release before execution; prebuilt Companion download trusts an unsigned
