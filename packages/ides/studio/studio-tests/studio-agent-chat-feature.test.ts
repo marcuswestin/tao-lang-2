@@ -1,9 +1,9 @@
 // Semantic agent proof of concept: the parts of feature planning that Tao decides, without the model.
 //
-// The snapshots here are built by hand from a source string so every offset is real and the assertions are
-// about placement and validation, not about what the on-device model happens to say on a given day.
-import type { SemanticSnapshot, SnapshotNode } from '@compiler/workspace'
-import { Describe, Expect, Test } from '@shared/test'
+// Focused placement snapshots use real source offsets; import regressions validate real project files.
+import { buildSemanticSnapshot, type SemanticSnapshot, type SnapshotNode, Workspace } from '@compiler/workspace'
+import { FS } from '@shared'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import {
   type FeatureShape,
   lowerFeature,
@@ -132,6 +132,62 @@ const FLAG_SHAPE: FeatureShape = {
 }
 
 Describe('Agent feature lowering', () => {
+  Test('imports the singular fixture entity even when its plural is already imported', async () => {
+    await withTaoFiles('feature-singular-import-', {
+      'App.tao': `
+        use Stories from @data
+        use Home from @ui
+        app Reader { view Home }
+        fixture Preview { }
+      `,
+      'packages/@data/Data.tao': `
+        public data Stories / Story {
+          Title text,
+          Score number
+        }
+      `,
+      'packages/@ui/Views.tao': `
+        use Story from @data
+        use Col, Text from @tao/ui
+        public view Home() { render Text("Stories") }
+        public view StoryRow(Story) {
+          render Col() {
+            Text(Story.Title)
+          }
+        }
+      `,
+    }, async (paths, root) => {
+      const workspace = await Workspace.open(root)
+      const before = await workspace.validate(paths['App.tao'])
+      Expect(before.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+      const semantic = buildSemanticSnapshot(root, 'Reader', before.files, before.diagnostics)
+      const problems: string[] = []
+      const result = await lowerFeature(
+        semantic,
+        { ...FLAG_SHAPE },
+        path => FS.readText(FS.resolvePath(path, root)),
+        problems,
+      )
+
+      Expect(problems).toEqual([])
+      Expect(result.steps.every(step => step.status === 'ready')).toBe(true)
+      const entry = result.edits.find(edit => edit.path === 'App.tao')
+      Expect(entry?.before).toContain('use Stories from @data')
+      Expect(entry?.after).toContain('use Stories, Story from @data')
+      Expect(entry?.after).toContain('BookmarkedStory = create Story')
+      Expect(result.steps.some(step => step.action.includes('importing Story from @data'))).toBe(true)
+      for (const edit of result.edits) {
+        await FS.writeText(FS.resolvePath(edit.path, root), edit.after)
+      }
+      const compiled = await workspace.compile(paths['App.tao'], { studio: true })
+      Expect(compiled.studioManifest?.fixtures[0]?.creates).toContainEqual({
+        entity: 'Story',
+        fields: { Bookmarked: true, Score: 1, Title: 'Bookmark sample' },
+        name: 'BookmarkedStory',
+      })
+    })
+  })
+
   Test('lists every literal a view renders as a rewordable candidate', () => {
     const candidates = textCandidates(snapshot())
 
@@ -139,6 +195,46 @@ Describe('Agent feature lowering', () => {
     Expect(candidates[0]!.handle).toBe('T1')
     Expect(candidates[0]!.view).toBe('StoryRow')
     Expect(candidates[0]!.text).toBe('"{ Story.Score } points by { Story.Title }"')
+  })
+
+  Test('keeps a locally declared fixture entity free of a data import', async () => {
+    await withTaoFiles('feature-local-fixture-', {
+      'App.tao': `
+        use Col, Text from @tao/ui
+        app Reader { view Home }
+        data Stories / Story {
+          Title text,
+          Score number
+        }
+        view Home() { render Text("Stories") }
+        public view StoryRow(Story) {
+          render Col() {
+            Text(Story.Title)
+          }
+        }
+        fixture Preview { }
+      `,
+    }, async (paths, root) => {
+      const workspace = await Workspace.open(root)
+      const before = await workspace.validate(paths['App.tao'])
+      Expect(before.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+      const problems: string[] = []
+      const result = await lowerFeature(
+        buildSemanticSnapshot(root, 'Reader', before.files, before.diagnostics),
+        { ...FLAG_SHAPE },
+        path => FS.readText(FS.resolvePath(path, root)),
+        problems,
+      )
+
+      Expect(problems).toEqual([])
+      Expect(result.edits).toHaveLength(1)
+      const entry = result.edits[0]!
+      Expect(entry.after).toContain('BookmarkedStory = create Story')
+      Expect(entry.after).not.toContain('from @data')
+      await FS.writeText(paths['App.tao'], entry.after)
+      const compiled = await workspace.compile(paths['App.tao'], { studio: true })
+      Expect(compiled.studioManifest?.fixtures[0]?.creates[0]?.entity).toBe('Story')
+    })
   })
 
   Test('rewords a line in place, keeping every placeholder', async () => {

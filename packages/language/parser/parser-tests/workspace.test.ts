@@ -12,7 +12,7 @@ Describe('minimal Tao parser', () => {
       {
         'Main.tao': `
           use Sketches from ./Sketches
-          use Playlists from ./Data
+          use Playlist from ./Data
 
           view PlaylistRow(Playlist) { }
           scenarios PlaylistRow "sketch" {
@@ -22,7 +22,7 @@ Describe('minimal Tao parser', () => {
         `,
         'Data.tao': `public data Playlists / Playlist { Title text }`,
         'Sketches.tao': `
-          use Playlists from ./Data
+          use Playlist from ./Data
           public fixture Sketches {
             ChillVibes = create Playlist { Title: "Chill Vibes" }
           }

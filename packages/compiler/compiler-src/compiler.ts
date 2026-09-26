@@ -1247,9 +1247,11 @@ function declarationVisibleOutsideFile(declaration: AST.Declaration): boolean {
 
 // Most type declarations are erased, but a case set carries runtime case identities and a
 // configurable type carries a declaration identity, so both cross file boundaries as bindings.
+// Entity declarations contribute to the shared catalog rather than emitting individual bindings.
 function declarationEmitsRuntimeBinding(node: AST.Node): node is AST.Declaration {
   return AST.isDeclaration(node)
     && AST.isEmittingRuntimeBinding(node)
+    && !AST.isEntityDataDeclaration(node)
     && (!AST.isTypeDeclaration(node)
       || AST.isCaseSetTypeExpression(node.type)
       || isRuntimeConfigurableDeclaration(node))

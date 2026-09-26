@@ -156,7 +156,24 @@ lookup never climbs above the owning project root or enters a nested project. Wh
 installation lands, dependency declarations inside `project { ... }` will explicitly select which
 package surfaces from another project enter the consumer's namespace.
 
-The top-level data declaration supplies singular and plural values. The UI presents first-class
+The top-level data declaration supplies singular and plural names. Each explicit import exposes
+only the name listed:
+
+```tao
+use Workspaces, Workspace from @data // collection and entity
+use Workspaces from @data            // collection only
+use Workspace from @data             // entity only
+```
+
+These are alternative import lines. Importing `Workspaces` does not make `Workspace` available as
+an entity type or `create` target, and importing `Workspace` does not expose the `Workspaces`
+collection. A `loop Workspaces / Workspace` declares a local row binding and needs only the
+collection import. Accessing a relationship such as `Workspace.Documents` does not require an
+import of the root `Documents` collection. Local declarations and implicitly visible `folder`
+declarations retain both names. Import organization and unused-import diagnostics track each
+imported form independently.
+
+The UI presents first-class
 view values; bare `@tao/nav` selects the native kit, so `StackNav` owns the corresponding native
 transition and reads a directly presented scene's reactive `Title` and optional `Toolbar`; a plain
 view receives Back-only chrome.
