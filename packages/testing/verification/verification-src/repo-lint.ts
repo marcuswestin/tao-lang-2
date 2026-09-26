@@ -513,9 +513,9 @@ const RAW_ERROR_ALLOWLIST = [
   // The shared leaf builds the Web-standard cancellation error itself.
   'packages/shared/shared-src/core/Errors.ts:160',
   // Tests hand raw unknown failures to production boundaries to prove their classification.
-  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:44',
-  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:84',
-  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:107',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:40',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:80',
+  'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:103',
   'packages/cli/agent-cli/agent-cli-tests/claude-profiles-generation.test.ts:87',
   'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:559',
   'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx:260',
@@ -772,17 +772,25 @@ export function conventionRuleIssues(
 
 const TEST_SOURCE_PATH_PATTERN = /(?:\.test\.[cm]?[jt]sx?|\.host\.spec\.[jt]s|\.jest-test\.[jt]sx?)$/u
 const DIRECT_TEST_TEMP_DIRECTORY_PATTERN = /\b(?:FS\.mkTmpDir|(?:nodeFs|fs)\.mkdtemp(?:Sync)?)\s*\(/gu
+const DIRECT_TEST_GIT_INIT_PATTERN = /\bgit\w*\b[^\n]{0,80}?['"]init['"]/gu
 
-/** testScratchConventionIssues keeps test-created directories on the shared lifecycle. */
+/**
+ * testScratchConventionIssues keeps test-created directories on the shared lifecycle, and Git
+ * fixtures on the helpers that keep them outside this checkout and fail when `git init` does.
+ */
 export function testScratchConventionIssues(files: readonly SourceFile[]): string[] {
   return files
     .filter(file => TEST_SOURCE_PATH_PATTERN.test(file.path) || file.path.includes('/studio-smoke/'))
-    .flatMap(file =>
-      [...file.source.matchAll(DIRECT_TEST_TEMP_DIRECTORY_PATTERN)].map(match =>
+    .flatMap(file => [
+      ...[...file.source.matchAll(DIRECT_TEST_TEMP_DIRECTORY_PATTERN)].map(match =>
         `${file.path}:${lineNumber(file.source, match.index)} creates a test directory directly; `
         + 'use `mkTestDir` for fixtures or `Repo.mkScratchDir` for host specs.'
-      )
-    )
+      ),
+      ...[...file.source.matchAll(DIRECT_TEST_GIT_INIT_PATTERN)].map(match =>
+        `${file.path}:${lineNumber(file.source, match.index)} runs \`git init\` directly; `
+        + 'use `mkGitTestDir` and `initGitTestRepository`, which keep the repository outside this checkout.'
+      ),
+    ])
     .sort()
 }
 

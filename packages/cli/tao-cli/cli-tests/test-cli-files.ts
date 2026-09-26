@@ -1,5 +1,5 @@
 import { FS, Platform, Text } from '@shared'
-import { withTaoFiles } from '@shared/test'
+import { initGitTestRepository, mkGitTestDir, withTaoFiles } from '@shared/test'
 import { Writable } from 'node:stream'
 import type { InPlace } from '../cli-src/in-place-files'
 import { runTaoCli } from '../cli-src/tao-cli'
@@ -116,6 +116,25 @@ export async function withTaoHome<T>(rootDir: string, run: () => Promise<T>): Pr
       Platform.runtimeProcess.env['TAO_HOME'] = previousHome
     }
   }
+}
+
+/**
+ * withGitTaoFixture is `withTaoFixture` for a test that needs its fixture to be its own Git
+ * repository. The root sits in the OS temporary directory, outside every checkout, and a failing
+ * test keeps it for debugging.
+ */
+export async function withGitTaoFixture(
+  files: Record<string, string>,
+  testsFunction: (rootDir: string) => Promise<void>,
+): Promise<void> {
+  await withoutInheritedNoCache(async () => {
+    const rootDir = await mkGitTestDir('tao-cli-git-test-')
+    await initGitTestRepository(rootDir)
+    for (const [relativePath, source] of Object.entries(files)) {
+      await FS.writeText(FS.resolvePath(relativePath, rootDir), source)
+    }
+    await withTaoHome(rootDir, () => testsFunction(rootDir))
+  })
 }
 
 /** withoutInheritedNoCache runs one fixture with the lane's cache opt-out out of the way, then restores it. */

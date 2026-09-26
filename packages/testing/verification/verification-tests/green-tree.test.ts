@@ -1,5 +1,5 @@
 import { CLI, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 import { GeneratedEvidence } from '../verification-src/GeneratedEvidence'
 import { GreenTree, type GreenTreeKey, type GreenTreeRecord } from '../verification-src/GreenTree'
 
@@ -13,8 +13,8 @@ async function git(cwd: string, ...args: string[]): Promise<string> {
 }
 
 async function repository(): Promise<string> {
-  const root = await mkTestDir('tao-green-tree-')
-  await git(root, 'init', '--quiet', '--initial-branch=main')
+  const root = await mkGitTestDir('tao-green-tree-')
+  await initGitTestRepository(root)
   await git(root, 'config', 'user.email', 'tests@example.invalid')
   await git(root, 'config', 'user.name', 'Tests')
   await FS.writeText(FS.resolvePath('tracked.txt', root), 'one\n')
@@ -221,90 +221,78 @@ Describe('green tree records', () => {
 
   Test('the tree hash follows the working tree, staged or not, and the untracked files in it', async () => {
     const root = await repository()
-    try {
-      const clean = await GreenTree.hashTree(root)
-      Expect(await GreenTree.hashTree(root)).toBe(clean)
+    const clean = await GreenTree.hashTree(root)
+    Expect(await GreenTree.hashTree(root)).toBe(clean)
 
-      await FS.writeText(FS.resolvePath('tracked.txt', root), 'two\n')
-      const edited = await GreenTree.hashTree(root)
-      Expect(edited).not.toBe(clean)
-      await git(root, 'add', 'tracked.txt')
-      // Staging the same content is the same tree.
-      Expect(await GreenTree.hashTree(root)).toBe(edited)
+    await FS.writeText(FS.resolvePath('tracked.txt', root), 'two\n')
+    const edited = await GreenTree.hashTree(root)
+    Expect(edited).not.toBe(clean)
+    await git(root, 'add', 'tracked.txt')
+    // Staging the same content is the same tree.
+    Expect(await GreenTree.hashTree(root)).toBe(edited)
 
-      await FS.writeText(FS.resolvePath('new.txt', root), 'new\n')
-      const withUntracked = await GreenTree.hashTree(root)
-      Expect(withUntracked).not.toBe(edited)
-      await FS.writeText(FS.resolvePath('new.txt', root), 'changed\n')
-      Expect(await GreenTree.hashTree(root)).not.toBe(withUntracked)
+    await FS.writeText(FS.resolvePath('new.txt', root), 'new\n')
+    const withUntracked = await GreenTree.hashTree(root)
+    Expect(withUntracked).not.toBe(edited)
+    await FS.writeText(FS.resolvePath('new.txt', root), 'changed\n')
+    Expect(await GreenTree.hashTree(root)).not.toBe(withUntracked)
 
-      // Moving the exact same bytes from the diff into HEAD does not change the visible tree.
-      const beforeCommit = await GreenTree.hashTree(root)
-      await git(root, 'add', '.')
-      await git(root, 'commit', '--quiet', '--message', 'same visible tree')
-      Expect(await GreenTree.hashTree(root)).toBe(beforeCommit)
+    // Moving the exact same bytes from the diff into HEAD does not change the visible tree.
+    const beforeCommit = await GreenTree.hashTree(root)
+    await git(root, 'add', '.')
+    await git(root, 'commit', '--quiet', '--message', 'same visible tree')
+    Expect(await GreenTree.hashTree(root)).toBe(beforeCommit)
 
-      // An ignored file is derived state and never part of the identity.
-      await FS.mkdir(FS.resolvePath('ignored', root))
-      const before = await GreenTree.hashTree(root)
-      await FS.writeText(FS.resolvePath('ignored/output.txt', root), 'anything\n')
-      Expect(await GreenTree.hashTree(root)).toBe(before)
-    } finally {
-      await FS.remove(root)
-    }
+    // An ignored file is derived state and never part of the identity.
+    await FS.mkdir(FS.resolvePath('ignored', root))
+    const before = await GreenTree.hashTree(root)
+    await FS.writeText(FS.resolvePath('ignored/output.txt', root), 'anything\n')
+    Expect(await GreenTree.hashTree(root)).toBe(before)
   })
 
   Test('the tree hash includes Git-visible executable and symlink modes', async () => {
     const root = await repository()
-    try {
-      const clean = await GreenTree.hashTree(root)
+    const clean = await GreenTree.hashTree(root)
 
-      await FS.chmod(FS.resolvePath('script.sh', root), 0o644)
-      Expect(await git(root, 'status', '--short')).toContain('script.sh')
-      Expect(await GreenTree.hashTree(root)).not.toBe(clean)
-      await FS.chmod(FS.resolvePath('script.sh', root), 0o755)
-      Expect(await GreenTree.hashTree(root)).toBe(clean)
+    await FS.chmod(FS.resolvePath('script.sh', root), 0o644)
+    Expect(await git(root, 'status', '--short')).toContain('script.sh')
+    Expect(await GreenTree.hashTree(root)).not.toBe(clean)
+    await FS.chmod(FS.resolvePath('script.sh', root), 0o755)
+    Expect(await GreenTree.hashTree(root)).toBe(clean)
 
-      const untracked = FS.resolvePath('untracked-script.sh', root)
-      await FS.writeText(untracked, '#!/bin/sh\necho untracked\n')
-      await FS.chmod(untracked, 0o644)
-      const untrackedNonExecutable = await GreenTree.hashTree(root)
-      await FS.chmod(untracked, 0o645)
-      Expect(await GreenTree.hashTree(root)).not.toBe(untrackedNonExecutable)
+    const untracked = FS.resolvePath('untracked-script.sh', root)
+    await FS.writeText(untracked, '#!/bin/sh\necho untracked\n')
+    await FS.chmod(untracked, 0o644)
+    const untrackedNonExecutable = await GreenTree.hashTree(root)
+    await FS.chmod(untracked, 0o645)
+    Expect(await GreenTree.hashTree(root)).not.toBe(untrackedNonExecutable)
 
-      await FS.remove(FS.resolvePath('current-target', root))
-      await FS.symlink('target-two.txt', FS.resolvePath('current-target', root))
-      Expect(await git(root, 'status', '--short')).toContain('current-target')
-      Expect(await GreenTree.hashTree(root)).not.toBe(clean)
-    } finally {
-      await FS.remove(root)
-    }
+    await FS.remove(FS.resolvePath('current-target', root))
+    await FS.symlink('target-two.txt', FS.resolvePath('current-target', root))
+    Expect(await git(root, 'status', '--short')).toContain('current-target')
+    Expect(await GreenTree.hashTree(root)).not.toBe(clean)
   })
 
   Test('the fingerprint hash is the tree hash, and its paths name what moved', async () => {
     const root = await repository()
-    try {
-      const before = await GreenTree.fingerprint(root)
-      // The two entry points must never be able to disagree about what the tree is.
-      Expect(before.hash).toBe(await GreenTree.hashTree(root))
-      Expect(GreenTree.changedPaths(before, before)).toEqual([])
-      Expect([...before.paths.keys()]).toContain('tracked.txt')
+    const before = await GreenTree.fingerprint(root)
+    // The two entry points must never be able to disagree about what the tree is.
+    Expect(before.hash).toBe(await GreenTree.hashTree(root))
+    Expect(GreenTree.changedPaths(before, before)).toEqual([])
+    Expect([...before.paths.keys()]).toContain('tracked.txt')
 
-      await FS.writeText(FS.resolvePath('tracked.txt', root), 'rewritten\n')
-      await FS.writeText(FS.resolvePath('added.txt', root), 'added\n')
-      await FS.remove(FS.resolvePath('script.sh', root))
+    await FS.writeText(FS.resolvePath('tracked.txt', root), 'rewritten\n')
+    await FS.writeText(FS.resolvePath('added.txt', root), 'added\n')
+    await FS.remove(FS.resolvePath('script.sh', root))
 
-      const after = await GreenTree.fingerprint(root)
-      Expect(after.hash).toBe(await GreenTree.hashTree(root))
-      Expect(after.hash).not.toBe(before.hash)
-      Expect(GreenTree.changedPaths(before, after)).toEqual(['added.txt', 'script.sh', 'tracked.txt'])
-      // Direction does not change which paths disagree.
-      Expect(GreenTree.changedPaths(after, before)).toEqual(['added.txt', 'script.sh', 'tracked.txt'])
-      Expect(after.paths.has('script.sh')).toBe(false)
-      Expect(GreenTree.changedPaths(after, after)).toEqual([])
-    } finally {
-      await FS.remove(root)
-    }
+    const after = await GreenTree.fingerprint(root)
+    Expect(after.hash).toBe(await GreenTree.hashTree(root))
+    Expect(after.hash).not.toBe(before.hash)
+    Expect(GreenTree.changedPaths(before, after)).toEqual(['added.txt', 'script.sh', 'tracked.txt'])
+    // Direction does not change which paths disagree.
+    Expect(GreenTree.changedPaths(after, before)).toEqual(['added.txt', 'script.sh', 'tracked.txt'])
+    Expect(after.paths.has('script.sh')).toBe(false)
+    Expect(GreenTree.changedPaths(after, after)).toEqual([])
   })
 
   Test('a lane finds its own record and a superset lane record, never a stranger', async () => {

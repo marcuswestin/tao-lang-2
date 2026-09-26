@@ -1,5 +1,5 @@
-import { CLI, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { FS } from '@shared'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 import { createHash } from 'node:crypto'
 import {
   runStudioReview,
@@ -23,10 +23,10 @@ const renderer = {
 
 Describe('Studio visual review', () => {
   Test('captures each ready viewport and releases both browser and Studio launch', async () => {
-    const root = await mkTestDir('tao-studio-review-test-')
+    const root = await mkGitTestDir('tao-studio-review-test-')
     const projectRoot = FS.resolvePath('project', root)
     const artifactRoot = FS.resolvePath('output', root)
-    await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: root })
+    await initGitTestRepository(root)
     await FS.mkdir(projectRoot)
     const surface = {
       cells: [{
@@ -49,69 +49,65 @@ Describe('Studio visual review', () => {
     let browserClosed = false
     let studioStopped = false
     let navigatedTo = ''
-    try {
-      const result = await runStudioReview(projectRoot, { artifactRoot }, {
-        launchBrowser: async () => ({
-          browserEvents: () => [{
-            kind: 'console',
-            level: 'error',
-            text: 'secret-token=never-write-this',
-            timestamp: 17,
-          }],
-          captureElementScreenshotAt: async (path, selector) => {
-            captureSelectors.push(selector)
-            await FS.writeText(path, 'stable pixels')
-            return path
-          },
-          close: async () => {
-            browserClosed = true
-          },
-          evaluate: async <Result>(expression: string) => {
-            return (expression.includes('rawManifest') ? surface : true) as Result
-          },
-          goto: async url => {
-            navigatedTo = url
-          },
-          rendererFingerprint: async () => renderer,
-          waitFor: async () => {},
-        }),
-        now: () => new Date('2026-09-03T12:00:00.000Z'),
-        randomId: () => '12345678-rest',
-        startStudio: async () => ({
-          output: () => 'Studio ready',
-          readiness: {
-            artifactRoot: '/tmp/studio',
-            launchId: 'launch-1',
-            lifecycleLogPath: '/tmp/studio/lifecycle.jsonl',
-            manifestPath: '/tmp/studio/launch.json',
-            mode: 'browser',
-            previewUrl: 'http://127.0.0.1:42001',
-            projectRoot,
-            sessionId: 'session-1',
-            sessionUrl: 'http://127.0.0.1:42000/sessions/session-1',
-            studioUrl: 'http://127.0.0.1:42000',
-            version: 1,
-          },
-          stop: async () => {
-            studioStopped = true
-          },
-        }),
-      })
+    const result = await runStudioReview(projectRoot, { artifactRoot }, {
+      launchBrowser: async () => ({
+        browserEvents: () => [{
+          kind: 'console',
+          level: 'error',
+          text: 'secret-token=never-write-this',
+          timestamp: 17,
+        }],
+        captureElementScreenshotAt: async (path, selector) => {
+          captureSelectors.push(selector)
+          await FS.writeText(path, 'stable pixels')
+          return path
+        },
+        close: async () => {
+          browserClosed = true
+        },
+        evaluate: async <Result>(expression: string) => {
+          return (expression.includes('rawManifest') ? surface : true) as Result
+        },
+        goto: async url => {
+          navigatedTo = url
+        },
+        rendererFingerprint: async () => renderer,
+        waitFor: async () => {},
+      }),
+      now: () => new Date('2026-09-03T12:00:00.000Z'),
+      randomId: () => '12345678-rest',
+      startStudio: async () => ({
+        output: () => 'Studio ready',
+        readiness: {
+          artifactRoot: '/tmp/studio',
+          launchId: 'launch-1',
+          lifecycleLogPath: '/tmp/studio/lifecycle.jsonl',
+          manifestPath: '/tmp/studio/launch.json',
+          mode: 'browser',
+          previewUrl: 'http://127.0.0.1:42001',
+          projectRoot,
+          sessionId: 'session-1',
+          sessionUrl: 'http://127.0.0.1:42000/sessions/session-1',
+          studioUrl: 'http://127.0.0.1:42000',
+          version: 1,
+        },
+        stop: async () => {
+          studioStopped = true
+        },
+      }),
+    })
 
-      Expect(navigatedTo).toBe('http://127.0.0.1:42000/sessions/session-1')
-      Expect(captureSelectors).toHaveLength(2)
-      Expect(captureSelectors.every(selector => selector.endsWith('> .studio-preview-cell-viewport'))).toBe(true)
-      Expect(browserClosed).toBe(true)
-      Expect(studioStopped).toBe(true)
-      Expect((await FS.readJson<StudioReviewManifest>(result.manifestPath)).cells[0]?.status).toBe('captured')
-      Expect(await FS.readJson(FS.resolvePath('logs/browser-events.json', artifactRoot))).toEqual([{
-        kind: 'console',
-        level: 'error',
-        timestamp: 17,
-      }])
-    } finally {
-      await FS.remove(root)
-    }
+    Expect(navigatedTo).toBe('http://127.0.0.1:42000/sessions/session-1')
+    Expect(captureSelectors).toHaveLength(2)
+    Expect(captureSelectors.every(selector => selector.endsWith('> .studio-preview-cell-viewport'))).toBe(true)
+    Expect(browserClosed).toBe(true)
+    Expect(studioStopped).toBe(true)
+    Expect((await FS.readJson<StudioReviewManifest>(result.manifestPath)).cells[0]?.status).toBe('captured')
+    Expect(await FS.readJson(FS.resolvePath('logs/browser-events.json', artifactRoot))).toEqual([{
+      kind: 'console',
+      level: 'error',
+      timestamp: 17,
+    }])
   })
 
   Test('classifies structural, rendering, and environment changes without inventing a pixel verdict', () => {

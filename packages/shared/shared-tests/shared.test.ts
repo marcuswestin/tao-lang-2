@@ -4,6 +4,8 @@ import {
   Describe,
   Expect,
   fakeTerminal,
+  initGitTestRepository,
+  mkGitTestDir,
   mkTestDir,
   runCleanups,
   settle,
@@ -163,6 +165,57 @@ Describe('FS', () => {
 
     Expect(FS.pathIsWithin(await FS.realPath(directory), await FS.realPath(FS.tmpdir()))).toBe(true)
     Expect(FS.pathIsWithin(directory, Repo.resolvePath('.artifacts/scratch'))).toBe(false)
+  })
+
+  Test('git cannot climb from a half-made fixture repository in worktree scratch into this checkout', async () => {
+    const directory = await mkTestDir('tao-git-ceiling-')
+    await FS.mkdir(FS.resolvePath('.git', directory))
+    const result = await CLI.run('git', { args: ['rev-parse', '--show-toplevel'], cwd: directory, stdio: 'pipe' })
+
+    Expect(result.exitCode).not.toBe(0)
+    Expect(result.stdout.trim()).not.toBe(Repo.getRoot())
+  })
+
+  Test('a Git test repository lives in host temp and holds its own first commit', async () => {
+    const root = await mkGitTestDir('tao-git-fixture-')
+    await initGitTestRepository(root, { commit: { files: { 'README.md': 'fixture\n' }, message: 'Fixture' } })
+    const git = async (...args: string[]) =>
+      (await CLI.mustRun('git', { args: ['-C', root, ...args], stdio: 'pipe' })).stdout.trim()
+
+    Expect(FS.pathIsWithin(root, await FS.realPath(FS.tmpdir()))).toBe(true)
+    Expect(await git('rev-parse', '--show-toplevel')).toBe(root)
+    Expect(await git('branch', '--show-current')).toBe('main')
+    Expect(await git('log', '--format=%s')).toBe('Fixture')
+  })
+
+  Test("the Bun test runner keeps a failed test's Git fixture and removes a passing one's", async () => {
+    const suiteRoot = await mkTestDir('tao-git-fixture-runner-')
+    const testModule = FS.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts', Repo.getRoot())
+    const fixturePath = FS.resolvePath('git-fixture.test.ts', suiteRoot)
+    await FS.writeText(
+      fixturePath,
+      `import { Expect, mkGitTestDir, Test } from ${JSON.stringify(testModule)};\n`
+        + `for (const passes of [true, false]) {\n`
+        + `  Test(passes ? 'passes' : 'fails', async () => {\n`
+        + `    const directory = await mkGitTestDir('tao-git-fixture-kept-');\n`
+        + `    process.stdout.write((passes ? 'PASSED=' : 'FAILED=') + directory + '\\n');\n`
+        + `    Expect(passes).toBe(true);\n`
+        + `  });\n`
+        + `}\n`,
+    )
+    const result = await CLI.run('bun', { args: ['test', fixturePath], cwd: Repo.getRoot(), stdio: 'pipe' })
+    const passed = /PASSED=(\S+)/u.exec(result.stdout)?.[1]
+    const failed = /FAILED=(\S+)/u.exec(result.stdout)?.[1]
+    if (failed !== undefined) {
+      cleanupPaths.push(failed)
+    }
+
+    Expect(result.exitCode).toBe(1)
+    Expect(passed).toBeDefined()
+    Expect(failed).toBeDefined()
+    Expect(await FS.exists(passed!)).toBe(false)
+    Expect(await FS.exists(failed!)).toBe(true)
+    Expect(result.stderr).toContain(`Kept the failed test's Git fixture for debugging: ${failed}`)
   })
 
   Test('an absolute fixture prefix cannot silently move a test to host temp', async () => {
