@@ -8,9 +8,10 @@ import {
   type SpawnSyncReturns,
 } from 'node:child_process'
 import { createHash, createPrivateKey, sign, timingSafeEqual } from 'node:crypto'
-import { availableParallelism, loadavg } from 'node:os'
-import type { Readable } from 'node:stream'
-import { throwHostEnvironment, throwUnexpected } from './core/Errors'
+import { EventEmitter } from 'node:events'
+import { availableParallelism, constants, getPriority, loadavg, setPriority } from 'node:os'
+import { Readable, Writable } from 'node:stream'
+import { asError, throwHostEnvironment, throwUnexpected } from './core/Errors'
 
 export type ProcessEnv = NodeJS.ProcessEnv
 export type ProcessSignal = NodeJS.Signals
@@ -39,6 +40,26 @@ export function cpuCount(): number {
  */
 export function loadAverage(): number {
   return loadavg()[0] ?? 0
+}
+
+/** processPriority returns this process's OS scheduling priority (larger values mean less priority). */
+export function processPriority(): number {
+  return getPriority()
+}
+
+/**
+ * lowerProcessPriority lets interactive work take precedence over this process and its future
+ * children. Call only at a dedicated command boundary: restoring priority can require privileges.
+ * Preserve an already lower priority, including when a nested command applies the policy again.
+ */
+export function lowerProcessPriority(): void {
+  try {
+    if (getPriority() < constants.priority.PRIORITY_BELOW_NORMAL) {
+      setPriority(constants.priority.PRIORITY_BELOW_NORMAL)
+    }
+  } catch (cause) {
+    throwHostEnvironment('Could not lower command scheduling priority.', { cause })
+  }
 }
 
 /** processIsAlive reports whether a process id still exists, without signalling it. */
@@ -148,13 +169,162 @@ export type SpawnSyncOptions = Omit<NodeSpawnSyncOptions, 'encoding' | 'env'> & 
   env?: ProcessEnv
 }
 
-/** spawn starts a child process. */
-export function spawn(command: string, options: SpawnOptions = {}): ChildProcess {
+type SpawnedChild = EventEmitter & {
+  pid?: number
+  exitCode: number | null
+  signalCode: NodeJS.Signals | null
+  stdin: Writable | null
+  stdout: Readable | null
+  stderr: Readable | null
+  stdio: (Readable | Writable | null | undefined)[]
+  channel?: ChildProcess['channel']
+  kill: (signal?: NodeJS.Signals) => boolean
+  unref: () => void
+}
+
+type StandardStdio = 'pipe' | 'ignore' | 'inherit'
+
+/** spawn starts a child process, retaining piped output until its consumers attach. */
+export function spawn(command: string, options: SpawnOptions = {}): SpawnedChild {
+  const stdio = bufferedStdio(options)
+  if (runtimeBunVersion !== undefined && stdio !== undefined) {
+    return spawnBuffered(command, options, stdio)
+  }
   const { args = [], env, ...spawnOptions } = options
   return spawnProcess(command, [...args], {
     ...spawnOptions,
     env: env === undefined ? undefined : { ...process.env, ...env },
   })
+}
+
+function bufferedStdio(options: SpawnOptions): [StandardStdio, StandardStdio, StandardStdio] | undefined {
+  // Preserve Node's option validation and auxiliary descriptor/IPC contracts for uncommon calls.
+  if (
+    Object.entries(options).some(([key, value]) =>
+      value !== undefined && !['args', 'cwd', 'detached', 'env', 'stdio'].includes(key)
+    )
+  ) {
+    return undefined
+  }
+  if (options.cwd !== undefined && typeof options.cwd !== 'string') {
+    return undefined
+  }
+  const stdio = options.stdio ?? 'pipe'
+  const descriptors = typeof stdio === 'string' ? [stdio, stdio, stdio] : [...stdio]
+  if (descriptors.length > 3) {
+    return undefined
+  }
+  const standard = [0, 1, 2].map(index => descriptors[index] ?? 'pipe')
+  if (!standard.every(descriptor => ['pipe', 'ignore', 'inherit'].includes(descriptor as string))) {
+    return undefined
+  }
+  return standard as [StandardStdio, StandardStdio, StandardStdio]
+}
+
+function spawnBuffered(
+  command: string,
+  options: SpawnOptions,
+  stdio: [StandardStdio, StandardStdio, StandardStdio],
+): SpawnedChild {
+  // Bun's Node adapter can re-enter its exit handler during spawn and auto-drain pipes before
+  // returning the child. Native streams retain those bytes without an exit-triggered resume.
+  let subprocess: Bun.Subprocess | undefined
+  const child: SpawnedChild = Object.assign(new EventEmitter(), {
+    pid: undefined as number | undefined,
+    exitCode: null as number | null,
+    signalCode: null as NodeJS.Signals | null,
+    stdin: null as Writable | null,
+    stdout: null as Readable | null,
+    stderr: null as Readable | null,
+    stdio: [null, null, null] as SpawnedChild['stdio'],
+    kill(signal: NodeJS.Signals = 'SIGTERM') {
+      if (subprocess === undefined || child.exitCode !== null || child.signalCode !== null) {
+        return false
+      }
+      subprocess.kill(signal)
+      return true
+    },
+    unref() {
+      subprocess?.unref()
+    },
+  })
+  try {
+    subprocess = Bun.spawn([command, ...(options.args ?? [])], {
+      cwd: options.cwd as string | undefined,
+      detached: options.detached,
+      // Native Bun's omitted env uses its startup snapshot, not later process.env changes.
+      env: { ...process.env, ...options.env },
+      stdin: stdio[0],
+      stdout: stdio[1],
+      stderr: stdio[2],
+    })
+  } catch (error) {
+    const failure = asError(error)
+    const code = (failure as NodeJS.ErrnoException).code
+    if (!['ENOENT', 'EACCES', 'EAGAIN', 'EMFILE', 'ENFILE'].includes(code ?? '')) {
+      throw error
+    }
+    process.nextTick(() => {
+      child.emit('error', failure)
+      child.emit('close', -1, null)
+    })
+    return child
+  }
+  const native = subprocess
+  child.pid = native.pid
+  if (stdio[0] === 'pipe') {
+    const sink = native.stdin as Bun.FileSink
+    child.stdin = new Writable({
+      write(chunk, _encoding, callback) {
+        try {
+          sink.write(chunk)
+          Promise.resolve(sink.flush()).then(() => callback(), error => callback(asError(error)))
+        } catch (error) {
+          callback(asError(error))
+        }
+      },
+      final(callback) {
+        try {
+          Promise.resolve(sink.end()).then(() => callback(), error => callback(asError(error)))
+        } catch (error) {
+          callback(asError(error))
+        }
+      },
+      destroy(error, callback) {
+        try {
+          Promise.resolve(sink.end()).then(() => callback(error), failure => callback(error ?? asError(failure)))
+        } catch (failure) {
+          callback(error ?? asError(failure))
+        }
+      },
+    })
+  }
+  if (stdio[1] === 'pipe') {
+    child.stdout = Readable.fromWeb(native.stdout as unknown as Parameters<typeof Readable.fromWeb>[0])
+  }
+  if (stdio[2] === 'pipe') {
+    child.stderr = Readable.fromWeb(native.stderr as unknown as Parameters<typeof Readable.fromWeb>[0])
+  }
+  child.stdio = [child.stdin, child.stdout, child.stderr]
+  let exited = false
+  let closed = false
+  const complete = () => {
+    if (!closed && exited && [child.stdout, child.stderr].every(stream => stream === null || stream.closed)) {
+      closed = true
+      child.emit('close', child.exitCode, child.signalCode)
+    }
+  }
+  child.stdout?.once('close', complete)
+  child.stderr?.once('close', complete)
+  void native.exited.then(() => {
+    exited = true
+    child.exitCode = native.exitCode
+    child.signalCode = native.signalCode
+    child.stdin?.destroy()
+    child.emit('exit', child.exitCode, child.signalCode)
+    complete()
+  })
+  return child
 }
 
 // Completion owns its event sources until the output is drained or the caller disposes them.
@@ -166,7 +336,7 @@ const pendingChildCompletions = new Set<() => void>()
  * The native close event remains the completion path for spawn failures, which have no exit event.
  */
 export function onChildProcessClose(
-  child: ChildProcess,
+  child: SpawnedChild,
   listener: (exitCode: number | null, signal: NodeJS.Signals | null) => void,
 ): () => void {
   const streams = [child.stdout, child.stderr].filter(stream => stream !== null)
