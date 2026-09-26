@@ -9,9 +9,9 @@ import {
 } from 'node:child_process'
 import { createHash, createPrivateKey, sign, timingSafeEqual } from 'node:crypto'
 import { EventEmitter } from 'node:events'
-import { availableParallelism, loadavg } from 'node:os'
+import { availableParallelism, constants, getPriority, loadavg, setPriority } from 'node:os'
 import { Readable, Writable } from 'node:stream'
-import { asError, throwUnexpected } from './core/Errors'
+import { asError, throwHostEnvironment, throwUnexpected } from './core/Errors'
 
 export type ProcessEnv = NodeJS.ProcessEnv
 export type ProcessSignal = NodeJS.Signals
@@ -40,6 +40,26 @@ export function cpuCount(): number {
  */
 export function loadAverage(): number {
   return loadavg()[0] ?? 0
+}
+
+/** processPriority returns this process's OS scheduling priority (larger values mean less priority). */
+export function processPriority(): number {
+  return getPriority()
+}
+
+/**
+ * lowerProcessPriority lets interactive work take precedence over this process and its future
+ * children. Call only at a dedicated command boundary: restoring priority can require privileges.
+ * Preserve an already lower priority, including when a nested command applies the policy again.
+ */
+export function lowerProcessPriority(): void {
+  try {
+    if (getPriority() < constants.priority.PRIORITY_BELOW_NORMAL) {
+      setPriority(constants.priority.PRIORITY_BELOW_NORMAL)
+    }
+  } catch (cause) {
+    throwHostEnvironment('Could not lower command scheduling priority.', { cause })
+  }
 }
 
 /** processIsAlive reports whether a process id still exists, without signalling it. */

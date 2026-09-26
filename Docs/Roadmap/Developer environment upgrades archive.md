@@ -74,6 +74,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-COLD-VM-CHROME-STARTUP — Cold VM Chrome startup](<Developer environment upgrades/Archive/DEVENV-COLD-VM-CHROME-STARTUP.md>) — Resolved
 - [DEVENV-COMPANION-INSTALL-SKIPS-NATIVE-CONFIGURATION — Companion install skips native configuration](<Developer environment upgrades/Archive/DEVENV-COMPANION-INSTALL-SKIPS-NATIVE-CONFIGURATION.md>) — Resolved
 - [DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS — Compiled test store rename is denied in managed shells](<Developer environment upgrades/Archive/DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS.md>) — Resolved
+- [DEVENV-CPU-SAMPLE-TEST-ASSUMES-UNCONTENDED-SCHEDULING — CPU sample test assumes uncontended scheduling](<Developer environment upgrades/Archive/DEVENV-CPU-SAMPLE-TEST-ASSUMES-UNCONTENDED-SCHEDULING.md>) — Resolved
 - [DEVENV-DEV-SHELL-WRITES-COMPLETION-DUMP-IN-SOURCE — Dev shell writes completion dump in source](<Developer environment upgrades/Archive/DEVENV-DEV-SHELL-WRITES-COMPLETION-DUMP-IN-SOURCE.md>) — Resolved
 - [DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH — Emulator exit can report a prior launch's failure](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>) — Resolved
 - [DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION — A fixed short `timeoutMs` around real work loses to contention](<Developer environment upgrades/Archive/DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION.md>) — Resolved
