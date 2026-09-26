@@ -19,6 +19,8 @@ printf 'devenv|%s|%s\\n' "$PWD" "$DEVENV_TUI" >> "$TAO_TEST_DEVENV_LOG"
 shift 2
 if [ "\${1:-}" = -- ]; then shift; fi
 export TAO_TEST_PINNED_ENV=yes
+export TAO_DEVENV=1
+export DEVENV_ROOT="$PWD"
 export SHELL=/bin/false
 ${shellHook}
 exec "$@"
@@ -46,6 +48,10 @@ exit "\${TAO_TEST_SETUP_EXIT:-0}"
       `#!/bin/sh
 printf 'interactive|%s|%s\\n' "$TAO_TEST_PINNED_ENV" "$*" >> "$TAO_TEST_DEVENV_LOG"
 printf '%s\\n%s\\n' "$ZDOTDIR" "$TAO_ORIGINAL_ZDOTDIR" > "$TAO_TEST_STARTUP_ENV"
+if [ "$TAO_TEST_REENTER" = yes ]; then
+  /bin/sh "$DEVENV_ROOT/enter-tao-dev-env" || exit "$?"
+  printf 'resumed\\n' >> "$TAO_TEST_DEVENV_LOG"
+fi
 if [ "$TAO_TEST_COLD_SETUP" = yes ]; then
   cd "$DEVENV_ROOT/packages"
   printf '%s\\n' "$PATH" > "$DEVENV_ROOT/interactive-path.log"
@@ -64,13 +70,89 @@ exit "\${TAO_TEST_SHELL_EXIT:-0}"
     PATH: `${bin}:/usr/bin:/bin`,
     SHELL: FS.resolvePath('zsh', bin),
     ZDOTDIR: undefined,
-    DEVENV_ROOT: fixture,
+    TAO_DEVENV: undefined,
+    DEVENV_ROOT: undefined,
     TAO_TEST_DEVENV_LOG: FS.resolvePath('calls.log', fixture),
     TAO_TEST_STARTUP_ENV: FS.resolvePath('startup-env.log', fixture),
   }
 }
 
 Describe('interactive Tao development shell', () => {
+  Test('returns to the active shell without repeating setup or entering another shell', async () => {
+    const fixture = await mkTestDir('tao-dev-shell-')
+    try {
+      const env = await prepareFixture(fixture)
+      const result = await CLI.run('/bin/sh', {
+        args: [FS.resolvePath('enter-tao-dev-env', fixture)],
+        cwd: fixture,
+        env: { ...env, TAO_TEST_REENTER: 'yes' },
+      })
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toContain('already active')
+      Expect((await FS.readText(FS.resolvePath('calls.log', fixture))).trim().split('\n')).toEqual([
+        `devenv|${fixture}|false`,
+        'setup|yes|setup',
+        'interactive|yes|-i',
+        'resumed',
+      ])
+    } finally {
+      await FS.remove(fixture)
+    }
+  })
+
+  Test('recognizes an existing environment through a checkout alias before requiring devenv', async () => {
+    const root = await mkTestDir('tao-dev-shell-')
+    const fixture = FS.resolvePath('checkout with spaces', root)
+    const alias = FS.resolvePath('checkout alias', root)
+    try {
+      const env = await prepareFixture(fixture)
+      await FS.symlink(fixture, alias)
+      const result = await CLI.run('/bin/sh', {
+        args: [FS.resolvePath('enter-tao-dev-env', alias)],
+        cwd: root,
+        env: { ...env, PATH: '/usr/bin:/bin', TAO_DEVENV: '1', DEVENV_ROOT: alias },
+      })
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toContain('already active')
+      Expect(await FS.exists(FS.resolvePath('calls.log', fixture))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.artifacts/cache/dev-shell/zsh', fixture))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('enters the checkout when environment markers are incomplete or belong to a different checkout', async () => {
+    const root = await mkTestDir('tao-dev-shell-')
+    try {
+      for (
+        const [index, markers] of ([
+          { active: undefined, root: 'same' },
+          { active: '0', root: 'same' },
+          { active: '1', root: 'unset' },
+          { active: '1', root: 'missing' },
+          { active: '1', root: 'other' },
+        ] as const).entries()
+      ) {
+        const fixture = FS.resolvePath(`checkout-${index}`, root)
+        const env = await prepareFixture(fixture)
+        const roots = { same: fixture, unset: undefined, missing: FS.resolvePath('missing', root), other: root }
+        const result = await CLI.run('/bin/sh', {
+          args: [FS.resolvePath('enter-tao-dev-env', fixture)],
+          cwd: fixture,
+          env: { ...env, TAO_DEVENV: markers.active, DEVENV_ROOT: roots[markers.root] },
+        })
+        Expect(result.exitCode).toBe(0)
+        Expect((await FS.readText(FS.resolvePath('calls.log', fixture))).trim().split('\n')).toEqual([
+          `devenv|${fixture}|false`,
+          'setup|yes|setup',
+          'interactive|yes|-i',
+        ])
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('finds freshly installed dependency tools from a subdirectory after first setup', async () => {
     const fixture = await mkTestDir('tao-dev-shell-')
     try {

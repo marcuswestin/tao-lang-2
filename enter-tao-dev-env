@@ -9,6 +9,13 @@ fi
 repository=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 cd "$repository"
 
+# Existing shells already carry these markers, including shells entered without this wrapper.
+if [ "${TAO_DEVENV:-}" = 1 ] && [ -n "${DEVENV_ROOT:-}" ] &&
+  [ "$(CDPATH= cd -- "$DEVENV_ROOT" 2>/dev/null && pwd -P)" = "$repository" ]; then
+  printf 'Tao development environment is already active for this checkout; keeping the current shell.\n'
+  exit 0
+fi
+
 if ! command -v devenv >/dev/null 2>&1; then
   printf 'Tao development needs devenv and Nix installed before this shell can start.\n' >&2
   exit 1

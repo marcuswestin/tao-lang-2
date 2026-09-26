@@ -61,8 +61,9 @@ git clone <repository> tao && cd tao
 ```
 
 The entry script enters the pinned environment once, runs `./agent setup`, and opens your interactive
-shell in that same environment. A failed setup stops entry. Run it again when you return to the
-checkout; type `exit` to leave. Then:
+shell in that same environment. A failed setup stops entry. Running it again inside this checkout's
+active environment returns immediately without repeating setup or nesting another shell. A different
+checkout still enters its own environment. Type `exit` to leave. Then:
 
 | Command      | What it does                                                                          |
 | ------------ | ------------------------------------------------------------------------------------- |
