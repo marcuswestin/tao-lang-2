@@ -11,6 +11,8 @@ type CanvasRect = Readonly<{ bottom: number; left: number; right: number; top: n
 
 const minimumScale = 0.1
 const maximumScale = 4
+const panSensitivity = 0.75
+const zoomSensitivity = 0.006
 const zoomStops = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4] as const
 
 type MutableState = { x: number; y: number; z: number }
@@ -208,12 +210,12 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
 
   const applyWheel = (gesture: StudioCanvasWheelGesture, anchor: Readonly<{ x: number; y: number }>): void => {
     if (gesture.zoom) {
-      const notch = Math.max(-0.2, Math.min(0.2, -gesture.deltaY / 250))
+      const notch = Math.max(-0.2, Math.min(0.2, -gesture.deltaY * zoomSensitivity))
       zoomTo(current.z * Math.exp(notch), anchor)
       return
     }
-    current.x -= gesture.deltaX
-    current.y -= gesture.deltaY
+    current.x -= gesture.deltaX * panSensitivity
+    current.y -= gesture.deltaY * panSensitivity
     publish()
   }
 
@@ -280,8 +282,8 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     if (event.pointerId !== panning) {
       return
     }
-    current.x += event.clientX - lastPoint.x
-    current.y += event.clientY - lastPoint.y
+    current.x += (event.clientX - lastPoint.x) * panSensitivity
+    current.y += (event.clientY - lastPoint.y) * panSensitivity
     lastPoint = { x: event.clientX, y: event.clientY }
     publish()
   }

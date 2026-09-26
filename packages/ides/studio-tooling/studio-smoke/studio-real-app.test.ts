@@ -140,14 +140,14 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
       const before = await canvasTranslation(browser!)
       // Start over an embedded app, then drag again over the canvas with Space still held.
       await browser!.dragBy('.studio-preview-cell iframe', { x: 40, y: 20 })
-      Expect(await canvasTranslation(browser!)).toEqual({ x: before.x + 40, y: before.y + 20 })
+      Expect(await canvasTranslation(browser!)).toEqual({ x: before.x + 30, y: before.y + 15 })
       Expect(
         await browser!.evaluate<string>(
           `document.querySelector('.studio-preview')?.dataset.canvasPanReady ?? ''`,
         ),
       ).toBe('true')
       await browser!.dragBy('.studio-preview', { x: -20, y: -10 }, { offset: { x: 20, y: 20 } })
-      Expect(await canvasTranslation(browser!)).toEqual({ x: before.x + 20, y: before.y + 10 })
+      Expect(await canvasTranslation(browser!)).toEqual({ x: before.x + 15, y: before.y + 7.5 })
     })
     await browser.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === undefined`)
     Expect(
@@ -203,14 +203,14 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
       await browser!.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === 'true'`)
       const before = await canvasTranslation(browser!)
       await browser!.dragBy('.studio-preview-cell iframe', { x: 30, y: 15 })
-      Expect(await canvasTranslation(browser!)).toEqual({ x: before.x + 30, y: before.y + 15 })
+      Expect(await canvasTranslation(browser!)).toEqual({ x: before.x + 22.5, y: before.y + 11.25 })
       // Between drags the preview remains a neutral surface: no hover, press or wheel reaches it.
       await browser!.hover('.studio-canvas-zoom')
       await browser!.hover('.studio-preview-cell iframe')
       await browser!.click('.studio-preview-cell iframe')
       await browser!.wheel('.studio-preview-cell iframe', { x: 0, y: 10 })
       await browser!.waitFor(`new DOMMatrix(getComputedStyle(
-        document.querySelector('.studio-preview > .studio-preview-grid')).transform).f === ${before.y + 5}`)
+        document.querySelector('.studio-preview > .studio-preview-grid')).transform).f === ${before.y + 3.75}`)
       Expect(await browser!.evaluateInFrame(previewUrl, 'window.__taoPointerEvents')).toEqual([])
     })
     await browser.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === undefined`)
