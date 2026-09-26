@@ -11,6 +11,14 @@ development program complete. Before that landing:
 - [x] Remove the task-only VM and browser routes from `./agent unsandboxed capabilities`, leaving
       that command read-only; use the dedicated `standalone-cli-clean-machine` host operation for the gate.
 
+Temporary exception authorized on 2026-09-26: `./agent unsandboxed capabilities
+--HACK-standalone-cli-clean-machine` invokes the existing clean-machine recipe with its mandatory
+audit and browser click. It changes host behavior only when that explicit flag is present; ordinary
+capability reporting stays read-only. The alias is an experiment, not evidence that guest SSH is fixed.
+
+- [ ] Before archiving this task, remove `--HACK-standalone-cli-clean-machine`, its dispatch, and
+      temporary help text; retain the dedicated VM command and confirm ordinary capabilities remain read-only.
+
 Follow-up work after this intermediate landing continues on `feat/standalone-cli-followups`
 (to be created from the landed `main`), before closing the standalone development effort:
 
