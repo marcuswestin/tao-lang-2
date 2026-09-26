@@ -1,5 +1,6 @@
 import { Errors, FS, Platform } from '@shared'
 import { Describe, Expect, mkTestDir, Test, testOverrideSlot, withCapturedOutput } from '@shared/test'
+import { runAgentClient } from '../cli-src/agent-client'
 import { runAppAgentCommand } from '../cli-src/agents-command'
 import { runTaoCli } from '../cli-src/tao-cli'
 
@@ -38,6 +39,61 @@ const pong = {
 }
 
 Describe('packaged app agent client', () => {
+  Test('bundled client discovers names, resolves a command, and never retries a lost execution response', async () => {
+    await withFixture(async bundle => {
+      const calls: { method: string; params?: unknown }[] = []
+      let exitCode = 0
+      const restoreExit = exitCodeSlot.install(code => exitCode = code)
+      const restoreFetch = fetchSlot.install(
+        (async (_url, options) => {
+          const body = JSON.parse(String(options?.body))
+          calls.push({ method: body.method, params: body.params })
+          if (body.method === 'run') {
+            return new Response('lost', { status: 502 })
+          }
+          return Response.json({
+            version: 1,
+            id: body.id,
+            ok: true,
+            result: body.method === 'ping' ? pong : [
+              { id: 'Items/Add', name: 'Add' },
+            ],
+          })
+        }) as typeof fetch,
+      )
+      try {
+        const discovery = await withCapturedOutput(() => runAgentClient(bundle, ['bun', 'agents', 'commands']))
+        Expect(JSON.parse(discovery.stdout)).toEqual({ ok: true, result: [{ id: 'Items/Add', name: 'Add' }] })
+        Expect(exitCode).toBe(0)
+        calls.length = 0
+        const invoked = await withCapturedOutput(() =>
+          runAgentClient(bundle, [
+            'bun',
+            'agents',
+            'run',
+            'Add',
+            '--args',
+            '{"Message":"hello","Quantity":3,"Marked":false}',
+          ])
+        )
+        Expect(JSON.parse(invoked.stdout)).toMatchObject({ ok: false, error: { code: 'outcome_unknown' } })
+        Expect(exitCode).toBe(1)
+        Expect(calls.map(call => call.method)).toEqual(['ping', 'ping', 'commands', 'ping', 'run'])
+        Expect(calls.at(-1)?.params).toEqual({
+          commandId: 'Items/Add',
+          args: { Message: 'hello', Quantity: 3, Marked: false },
+        })
+        calls.length = 0
+        const rejected = await withCapturedOutput(() => runAgentClient(bundle, ['bun', 'agents', 'run', 'Unlisted']))
+        Expect(JSON.parse(rejected.stdout)).toMatchObject({ ok: false, error: { code: 'invalid_command' } })
+        Expect(calls.some(call => call.method === 'run')).toBe(false)
+      } finally {
+        restoreFetch()
+        restoreExit()
+      }
+    })
+  })
+
   Test('start reuses the authenticated matching session without launching another process', async () => {
     await withFixture(async bundle => {
       const calls: unknown[] = []

@@ -2,15 +2,13 @@ import { Assert, CLI, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
 import { DesktopHost } from './desktop-host'
 
 /** Real packaged macOS proof; reached only through the explicit host-testing lane. */
-export async function proveDesktopAgent(options: { demo?: boolean } = {}): Promise<void> {
+export async function proveDesktopAgent(): Promise<void> {
   Assert.input(Platform.hostPlatform === 'darwin', 'The background app proof requires macOS.')
   const id = Platform.randomUUID()
   const root = Repo.resolvePath(`.artifacts/scratch/background-app-rpc/${id}`)
   await FS.mkdir(root)
-  if (!options.demo) {
-    await provePing(id, root)
-  }
-  await proveCommands(id, root, options.demo === true)
+  await provePing(id, root)
+  await proveCommands(id, root)
 }
 
 async function provePing(id: string, root: string): Promise<void> {
@@ -68,7 +66,7 @@ type CommandMetadata = {
 }
 type ClientReply = { ok: true; result: unknown } | { ok: false; error: { code: string; message: string } }
 
-async function proveCommands(id: string, root: string, demo: boolean): Promise<void> {
+async function proveCommands(id: string, root: string): Promise<void> {
   const fixture = FS.resolvePath('fixture', root)
   await FS.copyDirectory(Repo.resolvePath('Apps/Test Apps/Agent Commands'), fixture)
   const appName = `AgentCommandsProof${id.replaceAll('-', '')}`
@@ -80,9 +78,6 @@ async function proveCommands(id: string, root: string, demo: boolean): Promise<v
   const env: Platform.ProcessEnv = { ...Platform.runtimeProcess.env, TAO_AGENT_STATE_ROOT: stateRoot }
   delete env['TAO_AGENT_MODE']
   const cli = Repo.resolvePath('packages/cli/tao-cli/cli-src/tao-cli.ts')
-  if (demo) {
-    HCI.writeLine('Building the AgentCommands example with tao build --agents…')
-  }
   const build = await CLI.run(Platform.runtimeProcess.execPath, {
     args: [cli, 'build', fixture, '--agents', '--app', appName],
     env,
@@ -92,7 +87,7 @@ async function proveCommands(id: string, root: string, demo: boolean): Promise<v
   await FS.writeJson(FS.resolvePath('command-build.json', root), build)
   Assert(build.exitCode === 0, 'the Local fixture builds as a real static packaged app', { build })
   const buildsRoot = FS.resolvePath('.tao/builds', fixture)
-  const records = (await FS.listDir(buildsRoot)).filter(name => !name.startsWith('.'))
+  const records = (await FS.listDir(buildsRoot)).filter(name => !name.startsWith('.') && name !== 'agents')
   Assert(records.length === 1, 'the isolated fixture has exactly one build record', { records })
   const record = await FS.readJson<{
     appName: string
@@ -105,16 +100,10 @@ async function proveCommands(id: string, root: string, demo: boolean): Promise<v
     { record },
   )
   const app = record.results.desktop.artifact
-  if (demo) {
-    HCI.writeLine(`Built app: ${app}`)
-  }
   let requestIndex = 0
   let started = false
   let visible: CLI.StartedCommand | undefined
   async function request(action: string, invocation?: { commandId: string; args: unknown }): Promise<ClientReply> {
-    if (demo) {
-      HCI.writeLine(`\ntao agents ${action} — new CLI process`)
-    }
     const result = await CLI.run(Platform.runtimeProcess.execPath, {
       args: [
         cli,
@@ -130,9 +119,6 @@ async function proveCommands(id: string, root: string, demo: boolean): Promise<v
     })
     await FS.writeJson(FS.resolvePath(`command-${++requestIndex}-${action}.json`, root), result)
     const value = JSON.parse(result.stdout) as ClientReply
-    if (demo) {
-      HCI.writeLine(JSON.stringify(value, null, 2))
-    }
     Assert(result.exitCode === (value.ok ? 0 : 1), 'the client exit status agrees with its structured outcome', {
       result,
     })
@@ -175,18 +161,6 @@ async function proveCommands(id: string, root: string, demo: boolean): Promise<v
       { pong },
     )
     const commands = await discover()
-    if (demo) {
-      const append = commands.find(command => command.name === 'AppendEntry')
-      Assert.defined(append, 'the built app exposes AppendEntry')
-      const args = { Message: 'Hello from just agents-demo', Quantity: 3, Marked: true }
-      HCI.writeLine(`Invoking ${append.name} with ${JSON.stringify(args)}`)
-      await invoke(append, args)
-      await success('stop')
-      started = false
-      await FS.writeJson(FS.resolvePath('demo.json', root), { app, commandId: append.id, args, passed: true })
-      HCI.writeLine(`\nDemo complete. App stopped. Build and CLI logs: ${root}`)
-      return
-    }
     Assert(
       commands.length === 3 && !commands.some(command => command.name === 'UnlistedEntry'),
       'only the explicit allowlist is exposed',

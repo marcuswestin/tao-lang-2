@@ -1,5 +1,5 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
-import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
 import { FinalizeCommand, LandCommand, MergeMainCommand, StartBranchCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
@@ -100,8 +100,12 @@ await runWithCommands(commands => {
     .option('--demo', 'For agents: build the example, print discovery, invoke one command, then stop.')
     .action(async (mode, options) => {
       if (mode === 'agents') {
+        if (options.demo) {
+          await CLI.mustRun('just', { args: ['agents-demo'], cwd: Repo.getRoot(), stdio: 'inherit' })
+          return
+        }
         const { proveDesktopAgent } = await import('@expo-host/desktop-agent-proof')
-        await proveDesktopAgent({ demo: options.demo === true })
+        await proveDesktopAgent()
         return
       }
       const { runHostTesting } = await import('@e2e-testing')

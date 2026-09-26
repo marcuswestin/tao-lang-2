@@ -1,5 +1,6 @@
 import { DesktopHost } from '@expo-host'
 import { CLI, Errors, FS, HCI, Platform, Repo, TaoResources } from '@shared'
+import { AgentClientBuild } from './agent-client-build'
 import { TaoAppModules } from './app-modules'
 import { StandaloneResources } from './standalone-resources'
 
@@ -156,6 +157,10 @@ async function buildBinary(outfile: string, release?: { releases: string; versio
   await FS.writeText(
     FS.resolvePath(`${TaoResources.HOST_DIRECTORY}/expo-host-src/desktop-agent-host.js`, staging),
     await DesktopHost.agentHostSource(),
+  )
+  await FS.writeText(
+    FS.resolvePath(`${TaoResources.HOST_DIRECTORY}/expo-host-src/agent-client.js`, staging),
+    await AgentClientBuild.source(),
   )
   await makeHostInstallable(repoRoot, FS.resolvePath(TaoResources.HOST_DIRECTORY, staging))
   await recordManagedNode(repoRoot, staging)

@@ -125,7 +125,8 @@ function createCommands(): Command {
     .option('--app <name>', 'Select a named app.')
     .option('--web', 'Export a static web artifact.')
     .option('--desktop', 'Build a locally runnable macOS app.')
-    .option('--agents', 'Include a background agent service (defaults to the desktop target).')
+    .option('--agents', 'Build a background app service and bundled client executable (defaults to desktop).')
+    .option('--output <directory>', 'Retain builds in this directory instead of the project’s .tao/builds.')
     .option('--ios', 'Show the status of local iOS builds.')
     .option('--android', 'Show the status of local Android builds.')
     .option('--compile-only', 'Retain generated source without exporting or packaging.')
@@ -136,6 +137,7 @@ function createCommands(): Command {
         options: {
           app?: string
           agents?: boolean
+          output?: string
           web?: boolean
           desktop?: boolean
           ios?: boolean
@@ -153,6 +155,7 @@ function createCommands(): Command {
             await runTaoBuild(path, {
               appName: options.app,
               agents: options.agents,
+              output: options.output,
               compileOnly: options.compileOnly,
               targets,
             }),

@@ -8,10 +8,21 @@ From the repository root, run the complete example with:
 just agents-demo
 ```
 
-This builds an isolated copy of the Local-backed `Agent Commands` test app, starts it in the background,
-prints its available commands, and invokes `AppendEntry` through a separate CLI process. It prints the
-transaction receipt and stops the app afterward. Each run retains its build and request logs under
-`.artifacts/scratch/background-app-rpc/`.
+The recipe contains these three shell commands:
+
+```sh
+./tao build "Apps/Test Apps/Agent Commands" --agents --app AgentCommandsProof --output .artifacts/agents-demo
+./.artifacts/agents-demo/agents commands
+./.artifacts/agents-demo/agents run AppendEntry --args '{"Message":"Hello from just agents-demo","Quantity":3,"Marked":true}' --stop-after
+```
+
+The first line builds the Local-backed example app and a Bun-bundled native client executable.
+The second starts the app in the background and lists its exposed commands. The third invokes
+`AppendEntry` in a separate client process, prints the transaction receipt, and stops the app.
+Builds remain in dated directories under `.artifacts/agents-demo`; `agents` links to the latest
+successful build’s executable. Each dated build retains its own executable, which can stop that
+build if it is still running after a rebuild. Repeated demo runs append another entry to the same Local store.
+Keep the executable beside its retained builds when moving the output directory.
 
 Build an app whose `AgentCommands` property explicitly lists the supported module commands:
 
@@ -25,15 +36,21 @@ tao agents stop --app "/path/MyApp.app"
 ```
 
 Use the `.app` artifact path printed by the build. `--agents` selects desktop when no target is
-specified and requires a packaged desktop build. The existing Tao CLI is the client; the app contains
-the server. Running the artifact needs no Metro or Expo server. Dependency versions are unchanged.
+specified and requires a packaged desktop build. It also builds an `agents` client executable beside
+the retained builds; `--output <directory>` chooses their root. Both clients use the same RPC code;
+the app contains the server. Running the executable needs no separate Bun installation, Metro, or
+Expo server. Dependency versions are unchanged.
 
 Every request command writes one JSON response to stdout. Diagnostics go to stderr; failures exit
 nonzero. Start waits for an authenticated host handshake. Discovery initializes the normal app in a
 hidden, inactive webview and waits for its configured data stores. The app may have a Dock icon.
 The app's provider configuration and authentication apply in that webview.
 
-Copy canonical command IDs from discovery. `--args` is a JSON object with case-sensitive slot names;
+Copy canonical command IDs from discovery;
+the bundled client also accepts an unambiguous exposed command name. Its `commands` and `run`
+operations start the app on demand; `run --stop-after` stops it after the request, and `stop` can
+be used separately. Execution is never automatically retried.
+`--args` is a JSON object with case-sensitive slot names;
 only text, finite numbers, and booleans are accepted, without coercion. Omitted optional slots retain
 their defaults. Transaction failures are returned as failures even when the app contains the original
 action error. Completion waits for queued provider persistence, not remote synchronization or detached

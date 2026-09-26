@@ -115,7 +115,9 @@ test-host *ARGS:
 # Build the agent-command example, list commands, invoke one in a separate CLI process, and stop (macOS)
 [group('Run')]
 agents-demo: _parser-gen
-    ./dev test-host agents --demo
+    ./tao build "Apps/Test Apps/Agent Commands" --agents --app AgentCommandsProof --output .artifacts/agents-demo
+    ./.artifacts/agents-demo/agents commands
+    ./.artifacts/agents-demo/agents run AppendEntry --args '{"Message":"Hello from just agents-demo","Quantity":3,"Marked":true}' --stop-after
 
 # Run an explicit slow Studio smoke file in an isolated lane
 [group('Host proofs')]

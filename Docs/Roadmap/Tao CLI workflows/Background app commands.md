@@ -1,6 +1,8 @@
 # Background app commands
 
-The macOS proof of concept keeps the installed app as server and the existing Tao CLI as client.
+The macOS proof of concept keeps the installed app as server. The existing Tao CLI and a generated,
+Bun-bundled app-specific executable share the RPC client; neither creates another app runtime.
+`just agents-demo` exposes build, discovery, and invocation as three explicit shell commands.
 The first packaged background ping-pong gate precedes hidden runtime discovery and execution.
 The current contract and usage live in [Tao Actions](../../Spec/Tao%20Actions.md#app-command-exposure)
 and the [CLI README](../../../packages/cli/tao-cli/README.md).

@@ -1,5 +1,6 @@
 import Runtime, { HostDependencies, RuntimeToolchainPaths } from '@expo-host'
-import { CLI, Errors, FS, HCI, Platform } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { AgentClientBuild } from './agent-client-build'
 import { buildDesktopApp } from './desktop-build'
 import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
 import { selectTaoDevApp } from './dev-app-selection'
@@ -16,9 +17,16 @@ export type BuildRecord = {
   sourceDigest?: string
   targets: BuildTarget[]
   toolchainVersion: string
+  agentExecutable?: string
 }
 
-type BuildOptions = { appName?: string; compileOnly?: boolean; targets: readonly BuildTarget[]; agents?: boolean }
+type BuildOptions = {
+  appName?: string
+  compileOnly?: boolean
+  targets: readonly BuildTarget[]
+  agents?: boolean
+  output?: string
+}
 const targets = ['web', 'desktop', 'ios', 'android'] as const
 const runtimeFiles = [
   'index.ts',
@@ -28,7 +36,7 @@ const runtimeFiles = [
   'metro.config.cjs',
   'package.json',
 ] as const
-const excludedSourceDirectories = new Set(['.git', '.tao', '.expo', 'node_modules'])
+const excludedSourceDirectories = new Set(['.git', '.tao', '.artifacts', '.expo', 'node_modules'])
 
 /** Build each requested target from the same immutable source snapshot, retaining every result. */
 export async function runTaoBuild(path: string, options: BuildOptions): Promise<number> {
@@ -39,10 +47,17 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
     Errors.throwUserInput('--agents requires a packaged desktop build.')
   }
   const app = await chooseApp(path, options.appName)
-  const buildsRoot = FS.resolvePath('.tao/builds', app.projectRoot)
+  const buildsRoot = options.output ? FS.resolvePath(options.output) : FS.resolvePath('.tao/builds', app.projectRoot)
+  if (
+    FS.pathIsWithin(buildsRoot, app.projectRoot)
+    && !['.tao', '.artifacts'].includes(FS.relativePath(app.projectRoot, buildsRoot).split('/')[0]!)
+  ) {
+    Errors.throwUserInput('Build output inside the source project must be under .tao or .artifacts.')
+  }
   const id = `${new Date().toISOString().replaceAll(/[:.]/g, '-')}-${Platform.randomUUID().slice(0, 8)}`
   const artifactRoot = FS.resolvePath(id, buildsRoot)
-  const workRoot = FS.resolvePath(`.work-${id}`, buildsRoot)
+  // Git-aware package discovery intentionally includes explicitly requested scratch projects.
+  const workRoot = await Repo.mkScratchDirOrHost('tao-build-')
   const snapshotRoot = FS.resolvePath('source', workRoot)
   const snapshotApp = FS.resolvePath(FS.relativePath(app.projectRoot, app.appPath), snapshotRoot)
   const record: BuildRecord = {
@@ -58,7 +73,9 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
       (await FS.readJson<{ version: string }>(FS.resolvePath('package.json', RuntimeToolchainPaths.packageRoot)))
         .version,
   }
-  await ensureBuildsIgnored(app.projectRoot)
+  if (!options.output) {
+    await ensureBuildsIgnored(app.projectRoot)
+  }
   const progress = new BuildProgress(selectedTargets, id)
   try {
     progress.start()
@@ -80,15 +97,19 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
       }
       const site = FS.resolvePath('site', target === 'web' ? FS.resolvePath('web', artifactRoot) : workRoot)
       await exportWeb(snapshotApp, app.appName, workRoot, site, target)
-      return target === 'web'
-        ? await finishWebArtifact(site)
-        : await buildDesktopApp({
-          appName: app.appName,
-          outputRoot: FS.resolvePath('desktop', artifactRoot),
-          siteRoot: site,
-          workRoot,
-          agents: options.agents ? { buildId: id } : undefined,
-        })
+      if (target === 'web') {
+        return await finishWebArtifact(site)
+      }
+      const desktop = await buildDesktopApp({
+        appName: app.appName,
+        outputRoot: FS.resolvePath('desktop', artifactRoot),
+        siteRoot: site,
+        agents: options.agents ? { buildId: id } : undefined,
+      })
+      if (options.agents) {
+        record.agentExecutable = await AgentClientBuild.build(desktop, buildsRoot, workRoot)
+      }
+      return desktop
     }, (target, status) => progress.set(target, status))
     for (const target of selectedTargets) {
       if (record.results[target]?.status === 'failed') {
@@ -111,6 +132,9 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
     }
   }
   HCI.writeLine(`Build record: ${FS.displayPath(FS.resolvePath('build.json', artifactRoot))}`)
+  if (record.agentExecutable) {
+    HCI.writeLine(`Agent CLI: ${FS.displayPath(record.agentExecutable)}`)
+  }
   return selectedTargets.some(target => record.results[target]?.status !== 'succeeded') ? 1 : 0
 }
 
