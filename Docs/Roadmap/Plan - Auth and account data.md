@@ -409,6 +409,15 @@ and account-data persistence on the phone remain manual acceptance work.
 Advanced recovery, OAuth, MFA/passkeys,
 linking, deletion and production gateway deployment are not part of this initial implementation.
 
+Studio visual follow-through on 2026-09-26 used a fresh HNReader session from `586b3861`.
+The preview started in Run and Bookmarks navigation responded. Edit mode displayed a selection
+outline on rendered text; switching back to Run restored Back navigation. An explicit Code layout
+survived a page reload. The Browser button opened the standalone app in Chrome, where Bookmarks
+navigation also responded. These interactions were observed in Chrome; the in-app browser rendered
+the preview but its iframe click automation returned stale-target errors. No phone acceptance is
+implied. A fresh Clerk review still needs worktree-local secret materialization before physical
+registration, profile, note persistence, email-code login, and logout isolation can be checked.
+
 ## Original implementation seams
 
 These describe the starting checkout, not the implementation above; retain them as the checklist
