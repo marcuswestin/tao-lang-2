@@ -6,17 +6,17 @@ import { Expect, mkTestDir, runCleanups, Test } from '@shared/test'
 import { openStudioPreviewSession } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from '../studio-tooling-src/StudioPreviewRuntime'
-import { clerkLiveConfiguration, clerkTestingTokenScript } from './clerk-testing-token'
+import { clerkFailureSummary, clerkTestingTokenScript, loadClerkLiveConfiguration } from './clerk-testing-token'
 
 /**
  * Explicit remote acceptance: a development Clerk instance with password and email-code enabled,
  * without required MFA/session tasks. Supply TAO_CLERK_LIVE=1, CLERK_PUBLISHABLE_KEY,
- * CLERK_SECRET_KEY and CLERK_JWT_KEY through the invoking environment. Never reads dotenv files.
+ * CLERK_SECRET_KEY and CLERK_JWT_KEY through the invoking environment or the repository secrets store.
  * Run with ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-auth.test.ts
  */
 Test('real Clerk password and email-code UI sessions authorize durable Account and Note data', async () => {
   const env = Platform.runtimeProcess.env
-  const configuration = clerkLiveConfiguration(env)
+  const configuration = await loadClerkLiveConfiguration(env)
   if (configuration === undefined) {
     Platform.runtimeConsole.warn(
       'Skipped: real Clerk browser acceptance requires TAO_CLERK_LIVE=1 and development instance keys.',
@@ -86,21 +86,24 @@ Test('real Clerk password and email-code UI sessions authorize durable Account a
       prefixedOutput: { processName: 'clerk-browser-export' },
     })
 
-    stage = 'create development test user and testing token'
+    stage = 'request Clerk testing token'
     clerk = createClerkClient({ secretKey: configuration.secretKey, publishableKey: configuration.publishableKey })
     await clerkSetup({
       publishableKey: configuration.publishableKey,
       secretKey: configuration.secretKey,
       dotenv: false,
     })
+    stage = 'validate Clerk testing token instance'
     const testingToken = env['CLERK_TESTING_TOKEN']
     if (!testingToken || `https://${env['CLERK_FAPI']}` !== configuration.issuer) {
       Errors.throwHostEnvironment('Clerk testing setup did not return the configured instance and testing token.')
     }
     const email = `tao-${crypto.randomUUID()}+clerk_test@example.com`
     const password = `Tao!${crypto.randomUUID()}a7`
+    stage = 'create development test user'
     const user = await clerk.users.createUser({ emailAddress: [email], password, skipPasswordChecks: true })
     userId = user.id
+    stage = 'launch disposable browser'
     // No screenshots, network captures, browser console dumps, or serialized auth state: the
     // authored password field is plain text and browser failures may include signed request URLs.
     browser = await StudioCdp.launchChrome({
@@ -148,10 +151,10 @@ Test('real Clerk password and email-code UI sessions authorize durable Account a
     await signOut(browser)
     Expect(await bodyIncludes(browser, 'Clerk email-code note')).toBe(false)
     Expect(await bodyIncludes(browser, 'Clerk password note')).toBe(false)
-  } catch {
+  } catch (error) {
     // Neither SDK errors nor CDP exceptions are safe durable artifacts: they can embed credentials.
     primaryFailure = true
-    Errors.throwHostEnvironment(`Clerk live browser acceptance failed during: ${stage}.`)
+    Errors.throwHostEnvironment(`Clerk live browser acceptance failed during: ${stage}.${clerkFailureSummary(error)}`)
   } finally {
     if (previousFapi === undefined) {
       delete env['CLERK_FAPI']

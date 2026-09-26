@@ -381,7 +381,10 @@ the experimental offline SDK cache is not enabled.
 Focused tests cover SDK translations, stale completions, revocation retries, renewal deadlines,
 issuer/origin/audience/signature checks, and database mode isolation. A separate opt-in browser
 journey bundles the actual Auth Review app and drives password and email-code UI against a dedicated
-Clerk development instance. Its testing token only bypasses bot protection. No remote acceptance is
+Clerk development instance. It accepts the three Clerk credentials from the repository secrets
+store after explicit live opt-in, with environment overrides and no process-wide secret exports.
+Setup failures expose bounded API codes and known missing field names rather than raw SDK errors.
+Its testing token only bypasses bot protection. No remote acceptance is
 claimed until that journey runs with configured credentials. Clerk over real Instant storage and
 physical-device lifecycle acceptance also remain outstanding. The gateway requires an `azp` origin
 claim; native proofs may omit it, so native pairing needs an explicit token/origin contract before

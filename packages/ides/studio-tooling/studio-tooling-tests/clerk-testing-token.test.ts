@@ -1,6 +1,11 @@
 import { CLI, Platform } from '@shared'
 import { Expect, Test } from '@shared/test'
-import { clerkLiveConfiguration, clerkTestingTokenScript } from '../studio-smoke/clerk-testing-token'
+import {
+  clerkFailureSummary,
+  clerkLiveConfiguration,
+  clerkTestingTokenScript,
+  loadClerkLiveConfiguration,
+} from '../studio-smoke/clerk-testing-token'
 import { StudioCdp, type StudioCdpTransport } from '../studio-tooling-src/StudioCdp'
 
 Test('Clerk browser setup is opt-in, requires all keys, and rejects production instances', () => {
@@ -18,6 +23,69 @@ Test('Clerk browser setup is opt-in, requires all keys, and rejects production i
   Expect(() => clerkLiveConfiguration({ ...env, CLERK_PUBLISHABLE_KEY: 'pk_live_synthetic' })).toThrow('development')
   Expect(() => clerkLiveConfiguration({ ...env, CLERK_PUBLISHABLE_KEY: 'pk_test_aW52YWxpZA==' })).toThrow(
     'Frontend API',
+  )
+})
+
+Test('Clerk stored credentials require explicit opt-in and do not mutate the process environment', async () => {
+  let reads = 0
+  const readSecrets = async () => {
+    reads++
+    return {
+      TAO_CLERK_LIVE: '1',
+      CLERK_PUBLISHABLE_KEY: 'pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk',
+      CLERK_SECRET_KEY: 'sk_test_stored',
+      CLERK_JWT_KEY: '-----BEGIN PUBLIC KEY-----\nsynthetic\n-----END PUBLIC KEY-----',
+      UNRELATED_SECRET: 'must-not-be-forwarded',
+    }
+  }
+  Expect(await loadClerkLiveConfiguration({}, readSecrets)).toBeUndefined()
+  Expect(reads).toBe(0)
+  const env = { TAO_CLERK_LIVE: '1', CLERK_SECRET_KEY: 'sk_test_override' }
+  Expect(await loadClerkLiveConfiguration(env, readSecrets)).toEqual({
+    issuer: 'https://example.clerk.accounts.dev',
+    publishableKey: 'pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk',
+    secretKey: 'sk_test_override',
+    jwtKey: '-----BEGIN PUBLIC KEY-----\nsynthetic\n-----END PUBLIC KEY-----',
+  })
+  Expect(env).toEqual({ TAO_CLERK_LIVE: '1', CLERK_SECRET_KEY: 'sk_test_override' })
+  Expect(reads).toBe(1)
+  await Expect(loadClerkLiveConfiguration({ ...env, CLERK_SECRET_KEY: '' }, readSecrets)).rejects.toThrow(
+    'CLERK_SECRET_KEY',
+  )
+})
+
+Test('Clerk diagnostics expose bounded codes and known missing fields without SDK messages or credentials', () => {
+  Expect(clerkFailureSummary({
+    status: 422,
+    message: 'sk_test_never_print',
+    errors: [
+      { code: 'form_param_missing', message: 'secret', meta: { value: 'secret' } },
+      { code: 'sk_test_never_print' },
+    ],
+  })).toBe(' HTTP 422. Clerk codes: form_param_missing.')
+  Expect(clerkFailureSummary({ status: 'sk_test_secret', errors: [{ code: 'unknown' }] })).toBe('')
+  Expect(clerkFailureSummary('sk_test_secret')).toBe('')
+  Expect(clerkFailureSummary({
+    status: 422,
+    errors: [{ code: 'form_data_missing', longMessage: 'Missing phone_number for sk_test_never_print' }],
+  })).toBe(' HTTP 422. Clerk codes: form_data_missing. Required fields: phone_number.')
+})
+
+Test('complete Clerk environment configuration never opens the stored secrets', async () => {
+  let reads = 0
+  const configuration = await loadClerkLiveConfiguration({
+    TAO_CLERK_LIVE: '1',
+    CLERK_PUBLISHABLE_KEY: 'pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk',
+    CLERK_SECRET_KEY: 'sk_test_environment',
+    CLERK_JWT_KEY: 'environment-public-key',
+  }, async () => {
+    reads++
+    return {}
+  })
+  Expect(configuration?.secretKey).toBe('sk_test_environment')
+  Expect(reads).toBe(0)
+  await Expect(loadClerkLiveConfiguration({ TAO_CLERK_LIVE: '1' }, async () => ({}))).rejects.toThrow(
+    'just secrets add CLERK_PUBLISHABLE_KEY',
   )
 })
 

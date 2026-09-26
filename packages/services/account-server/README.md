@@ -68,9 +68,12 @@ The opt-in browser test uses real Tao UI, synthetic `+clerk_test` addresses and 
 it does not use the helper that bypasses authentication with a backend ticket.
 
 Configure a dedicated development instance with password and email-code sign-in enabled, no
-required MFA/session tasks, and local browser origins allowed. Supply `CLERK_PUBLISHABLE_KEY`,
-`CLERK_SECRET_KEY` and the PEM `CLERK_JWT_KEY` through your shell's secure environment. No dotenv
-files are loaded, and no secret is needed in Tao source. From the repository root run:
+required phone number, MFA or session tasks, and local browser origins allowed. Supply `CLERK_PUBLISHABLE_KEY`,
+`CLERK_SECRET_KEY` and the PEM `CLERK_JWT_KEY` through your shell's secure environment, or add each
+with `just secrets add <NAME>` and run `just secrets` once to decrypt the repository store. Explicit
+environment values take precedence. Stored values are loaded only after live opt-in; the journey
+selects the three Clerk entries without exporting them into the process environment. No secret is
+needed in Tao source. From the repository root run:
 
 ```sh
 TAO_CLERK_LIVE=1 ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-auth.test.ts
