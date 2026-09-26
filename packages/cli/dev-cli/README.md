@@ -25,8 +25,12 @@ runtime, and CoreSimulator. `--json` provides the structured report. Missing pre
 visible instead of being inferred from a successful download.
 
 Add `--apply` to perform the installation steps. When Xcode is missing, download the requested
-version from [Apple Developer Downloads](https://developer.apple.com/download/applications/), then
-pass its local `.xip` path with `--archive`. The workflow uses Apple's archive/signature validation,
+version from [Apple Developer Downloads](https://developer.apple.com/download/applications/) into
+Downloads, keeping Apple's filename. The workflow automatically selects a single completed `.xip`
+whose filename matches the requested version; incomplete downloads and other versions are ignored.
+If several match, it lists them and asks for `--archive`; that option also selects an archive in
+another location or with a renamed filename. The extracted version and signature are still verified
+before installation. The workflow uses Apple's archive/signature validation,
 extracts under `.artifacts/ios-setup`, copies into a unique staging directory under `/Applications`,
 and publishes the validated application alongside the existing installation. It refuses to replace
 an occupied destination. Apple sign-in, license acceptance, and administrator steps remain

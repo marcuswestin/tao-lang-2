@@ -9,7 +9,7 @@ type Options = {
   repositoryRoot?: string
   hostPlatform?: string
   runCommand?: typeof CLI.run
-  files?: Pick<typeof FS, 'exists' | 'isFile' | 'isSymbolicLink' | 'listDir' | 'mkdir' | 'writeJson'>
+  files?: Pick<typeof FS, 'exists' | 'homeDir' | 'isFile' | 'isSymbolicLink' | 'listDir' | 'mkdir' | 'writeJson'>
 }
 
 type Receipt = {
@@ -18,6 +18,7 @@ type Receipt = {
   status: 'needs-action' | 'ready'
   defaultDeveloperDirectory?: string | null
   selectedXcode?: string
+  selectedArchive?: string
   macOS?: string
   sdk?: string
   xcodeBuild?: string
@@ -235,13 +236,51 @@ async function run(options: Options): Promise<number> {
       await disk(root, 50)
       await disk('/Applications', 50)
       receipt.remaining.push(`Install Xcode ${options.xcodeVersion} side by side at ${target}.`)
-      if (!options.archive) {
+      let archive = options.archive ? FS.resolvePath(options.archive, root) : undefined
+      if (!archive) {
+        const downloads = FS.resolvePath('Downloads', files.homeDir())
+        const archives: string[] = []
+        if (await files.exists(downloads)) {
+          let names: string[]
+          try {
+            names = await files.listDir(downloads)
+          } catch (error) {
+            Errors.throwHostEnvironment(
+              `Cannot inspect ${downloads}: ${
+                Errors.messageOf(error)
+              }. Use --archive to select a local .xip explicitly.`,
+            )
+          }
+          for (const name of names) {
+            const version = /^Xcode[_ -](\d+(?:\.\d+){0,2})(?:[_ -].*)?\.xip$/i.exec(name)?.[1]
+            const path = FS.resolvePath(name, downloads)
+            if (
+              version && matchesVersion(version, options.xcodeVersion) && !/[\x00-\x1f]/.test(name)
+              && await files.isFile(path) && !await files.isSymbolicLink(path)
+            ) {
+              archives.push(path)
+            }
+          }
+        }
+        if (archives.length > 1) {
+          receipt.remaining.push(
+            `Several Xcode ${options.xcodeVersion} archives were found; choose one with --archive:`,
+            ...archives,
+          )
+          return await finish()
+        }
+        archive = archives[0]
+        if (!archive) {
+          receipt.remaining.push(`No completed Xcode ${options.xcodeVersion} .xip found in ${downloads}.`)
+        }
+      }
+      if (!archive) {
         receipt.remaining.push(
-          `Download the requested Xcode .xip from ${APPLE_DOWNLOADS} (Apple sign-in may be required); rerun with --archive /absolute/path/Xcode.xip --apply.`,
+          `Download the requested Xcode .xip from ${APPLE_DOWNLOADS} into Downloads, keeping Apple's filename (Apple sign-in may be required), then rerun with --apply. Use --archive for another location or filename.`,
         )
         return await finish()
       }
-      const archive = FS.resolvePath(options.archive, root)
+      receipt.selectedArchive = archive
       if (!await files.isFile(archive)) {
         Errors.throwUserInput(`Xcode archive does not exist: ${archive}`)
       }
@@ -413,6 +452,9 @@ async function run(options: Options): Promise<number> {
       HCI.writeLine(JSON.stringify(receipt, null, 2))
     } else {
       HCI.writeLine(`iOS setup: ${receipt.status}. Xcode: ${receipt.selectedXcode ?? 'missing'}.`)
+      if (receipt.selectedArchive) {
+        HCI.writeLine(`Xcode archive: ${receipt.selectedArchive}`)
+      }
       for (const step of receipt.remaining) {
         HCI.writeLine(step)
       }

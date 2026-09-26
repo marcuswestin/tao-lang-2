@@ -6,6 +6,7 @@ type Invocation = { name: string; spec: CLI.CommandSpec }
 type InstallState = { paths: Set<string>; failCopyOnce?: boolean; installed?: string }
 
 async function setup(fixture: {
+  xcodeVersion?: string
   installed?: string
   installedVersion?: string
   runtime?: string
@@ -13,6 +14,8 @@ async function setup(fixture: {
   firstLaunch?: boolean
   apply?: boolean
   archive?: string
+  downloads?: string[]
+  downloadDirectories?: string[]
   defaultChanged?: boolean
   afterImport?: string
   archiveExists?: boolean
@@ -29,12 +32,13 @@ async function setup(fixture: {
 } = {}) {
   const calls: Invocation[] = []
   const writes: string[] = []
+  const listings: string[] = []
   let defaults = 0
   const state = fixture.installState ?? { paths: new Set<string>(), installed: fixture.installed }
   let imported = false
   const result = await withCapturedOutput(async () =>
     await IosSetupCommand.run({
-      xcodeVersion: '27.1',
+      xcodeVersion: fixture.xcodeVersion ?? '27.1',
       runtimeVersion: '27.1',
       apply: fixture.apply,
       archive: fixture.archive,
@@ -42,12 +46,22 @@ async function setup(fixture: {
       hostPlatform: 'darwin',
       json: true,
       files: {
+        homeDir: () => '/Users/test',
         exists: async path =>
-          state.paths.has(path) || path === state.installed
+          path === '/Users/test/Downloads' && fixture.downloads !== undefined
+          || state.paths.has(path) || path === state.installed
           || path === `${state.installed}/Contents/Developer/usr/bin/xcodebuild`,
-        isFile: async () => fixture.archiveExists ?? false,
+        isFile: async path =>
+          path.startsWith('/Users/test/Downloads/')
+            ? (fixture.downloads ?? []).includes(path.split('/').at(-1)!)
+              && !(fixture.downloadDirectories ?? []).includes(path.split('/').at(-1)!)
+            : fixture.archiveExists ?? false,
         isSymbolicLink: async path => path === '/Applications/Xcode-27.1.app' && (fixture.targetSymlink ?? false),
         listDir: async path => {
+          listings.push(path)
+          if (path === '/Users/test/Downloads') {
+            return fixture.downloads ?? []
+          }
           if (path.includes('/runtime-')) {
             return ['iOS.simruntime.dmg']
           }
@@ -154,10 +168,12 @@ async function setup(fixture: {
   return {
     calls,
     writes,
+    listings,
     code: result.result,
     receipt: JSON.parse(result.stdout) as {
       status: string
       selectedXcode?: string
+      selectedArchive?: string
       xcodeBuild?: string
       remaining: string[]
       runtimeAvailable: boolean
@@ -168,6 +184,74 @@ async function setup(fixture: {
 }
 
 Describe('explicit iOS dependency setup', () => {
+  Test('detects a major-only archive filename for the equivalent point-zero request', async () => {
+    const result = await setup({ xcodeVersion: '27.0', downloads: ['Xcode_27_Universal.xip'] })
+    Expect(result.receipt.selectedArchive).toBe('/Users/test/Downloads/Xcode_27_Universal.xip')
+  })
+
+  Test('detects the completed requested archive and reports it without installing in plan mode', async () => {
+    const result = await setup({
+      downloads: [
+        'Xcode_27.1_beta.xip',
+        'Xcode_27.10.xip',
+        'Xcode_27.0.xip',
+        'Xcode_27.1_beta_2.xip.download',
+        'Xcode_27.1_beta_3.xip.crdownload',
+        'Xcode_27.1_directory.xip',
+      ],
+      downloadDirectories: ['Xcode_27.1_directory.xip'],
+    })
+    Expect(result.receipt.selectedArchive).toBe('/Users/test/Downloads/Xcode_27.1_beta.xip')
+    Expect(result.writes).toEqual([])
+    Expect(result.calls.some(call => call.name.endsWith('/xip'))).toBe(false)
+  })
+
+  Test('applies a detected archive and still verifies its extracted version before copying', async () => {
+    const result = await setup({ downloads: ['Xcode_27.1_beta.xip'], apply: true })
+    Expect(result.code).toBe(0)
+    Expect(result.calls.find(call => call.name.endsWith('/xip'))?.spec.args).toEqual([
+      '--expand',
+      '/Users/test/Downloads/Xcode_27.1_beta.xip',
+    ])
+    const wrong = await setup({ downloads: ['Xcode_27.1_beta.xip'], archiveVersion: '27.0', apply: true })
+    Expect(wrong.code).toBe(1)
+    Expect(wrong.receipt.remaining.join('\n')).toContain('Archive contains Xcode 27.0; requested 27.1.')
+    Expect(wrong.calls.some(call => call.name.endsWith('/ditto'))).toBe(false)
+  })
+
+  Test('lists ambiguous downloads without extracting or choosing the newest beta', async () => {
+    const result = await setup({ downloads: ['Xcode_27.1_beta.xip', 'Xcode_27.1_beta_2.xip'], apply: true })
+    Expect(result.code).toBe(1)
+    Expect(result.receipt.selectedArchive).toBeUndefined()
+    Expect(result.receipt.remaining).toContain('/Users/test/Downloads/Xcode_27.1_beta.xip')
+    Expect(result.receipt.remaining).toContain('/Users/test/Downloads/Xcode_27.1_beta_2.xip')
+    Expect(result.calls.some(call => call.name.endsWith('/xip'))).toBe(false)
+  })
+
+  Test('an explicit archive or installed Xcode skips Downloads inspection', async () => {
+    const explicit = await setup({
+      archive: '/Downloads/renamed.xip',
+      archiveExists: true,
+      downloads: ['Xcode_27.1_beta.xip', 'Xcode_27.1_beta_2.xip'],
+      apply: true,
+    })
+    Expect(explicit.code).toBe(0)
+    Expect(explicit.receipt.selectedArchive).toBe('/Downloads/renamed.xip')
+    Expect(explicit.listings).not.toContain('/Users/test/Downloads')
+    const installed = await setup({ installed: '/Applications/Xcode.app', downloads: ['Xcode_27.1_beta.xip'] })
+    Expect(installed.code).toBe(0)
+    Expect(installed.listings).not.toContain('/Users/test/Downloads')
+  })
+
+  Test('explains where to download when only incomplete or different-version archives exist', async () => {
+    const result = await setup({ downloads: ['Xcode_27.1.xip.download', 'Xcode_27.10.xip'], apply: true })
+    Expect(result.code).toBe(1)
+    Expect(result.receipt.remaining.join('\n')).toContain(
+      'No completed Xcode 27.1 .xip found in /Users/test/Downloads.',
+    )
+    Expect(result.calls.some(call => call.name.endsWith('/xip'))).toBe(false)
+  })
+
   Test('plans without writes or installers and hands off a missing Apple archive', async () => {
     const result = await setup()
     Expect(result.code).toBe(1)

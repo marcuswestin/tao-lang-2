@@ -554,7 +554,7 @@ await runWithCommands(commands => {
     .requiredOption('--runtime-version <version>', 'The explicit iOS Simulator runtime version, such as 27.1.')
     .option(
       '--archive <path>',
-      'An Apple-downloaded Xcode .xip archive to install when the requested version is missing.',
+      'Override automatic detection of the requested Xcode .xip in Downloads.',
     )
     .option('--apply', 'Apply the printed installation plan; otherwise only inspect and report requirements.')
     .option('--json', 'Print the structured setup report.')
