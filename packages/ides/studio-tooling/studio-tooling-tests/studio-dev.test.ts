@@ -3,6 +3,7 @@ import { stopStudioProcessTree, type StudioProcessTree } from '@expo-host/dev-lo
 import { CLI, Errors, FS, Platform, ProjectDevSession, Repo, Time } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { startStudioSessionServer, StudioClientAssets, StudioDeviceGateway, StudioDeviceTrustStore } from '@studio'
+import { StudioBrowser } from '../studio-tooling-src/StudioBrowser'
 import { startStudioClientDevReload, StudioClientDevReload } from '../studio-tooling-src/StudioClientDevReload'
 import {
   createRecentProjectStore,
@@ -192,7 +193,7 @@ Describe('Studio native wrapper foundation', () => {
       userStateRoot: FS.resolvePath('state', root),
     }, {
       async startSessionServer(manager, options) {
-        Expect(typeof options?.openBrowser).toBe('function')
+        Expect(options?.openBrowser).toBe(StudioBrowser.open)
         return await startStudioSessionServer(manager, options)
       },
     })

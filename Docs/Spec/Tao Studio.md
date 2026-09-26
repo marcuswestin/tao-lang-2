@@ -559,6 +559,11 @@ project views, grouped scenarios, commands, and component/view insertions. The c
 stdlib catalog plus compiler-manifest project views; drag to canvas emits position-aware source actions,
 and drag to editor inserts formatted snippets with required-parameter placeholders selected for editing.
 
+New preview connections begin in Run interaction mode. The workbench initially uses the Run layout,
+while preserving an explicitly saved layout preference. The toolbar Browser action opens the
+session's standalone app URL in Chrome; Device launches the companion. Browser
+launch accepts no caller-provided URL and reports an unavailable preview or opener failure in Studio.
+
 In Design, hold Space while dragging or scrolling to pan the canvas over either empty background or preview apps.
 Without Space, scrolling belongs to the embedded app and neither left- nor middle-button dragging pans.
 Pinch and modifier-wheel zoom remain available without Space.
@@ -566,10 +571,6 @@ For the entire time Space is held, a transparent canvas shield makes previews ne
 hover, clicks, dragging, and wheel input cannot interact with the embedded apps, including between drags.
 A focused preview suppresses mouse input immediately and forwards Space to the host. Text inputs keep
 normal Space typing, and Run keeps app interaction when the canvas does not own the gesture.
-New preview connections begin in Run interaction mode. The workbench initially uses the Run layout,
-while preserving an explicitly saved layout preference. The toolbar Browser action opens the
-session's standalone app URL in the host's default browser; Device launches the companion. Browser
-launch accepts no caller-provided URL and reports an unavailable preview or opener failure in Studio.
 Releasing Space or the pointer, or losing window focus, ends a pan; losing focus also clears held Space.
 Canvas shortcuts (⌘/Ctrl+0 fit, 1 reset, +/− zoom) also work from focused previews outside text entry.
 The zoom menu offers Fit all, 100%, Zoom to selection, and Zoom to focused frame; unavailable targets

@@ -10,7 +10,7 @@ import {
   type StudioRecentProject,
   StudioSessionManager,
 } from '@studio'
-import betterOpen from 'better-opn'
+import { StudioBrowser } from './StudioBrowser'
 import { createRecentProjectStore, openStudioProjectResource } from './StudioDev'
 
 export type StudioPackagedServiceOptions = {
@@ -144,9 +144,7 @@ export async function startStudioPackagedService(
       canvasViewportStore,
       compileOnStart: false,
       deviceGateway,
-      openBrowser: async url => {
-        await betterOpen(url)
-      },
+      openBrowser: StudioBrowser.open,
     })
   } catch (error) {
     return await rollbackPackagedStart(error, [

@@ -41,8 +41,8 @@ New previews start in **Run**, so clicks and typing go to the app. **Mode: Run**
 **Edit** for source selection. The initial workbench layout is Run too; an explicitly saved
 layout remains respected.
 
-The toolbar **Browser** button opens the current project's standalone app in the host's default
-web browser, from either browser or native Studio. It uses the same running Metro preview and
+The toolbar **Browser** button opens the current project's standalone app in Chrome, from either
+browser or native Studio. It uses the same running Metro preview and
 leaves Studio open. **Device** opens the companion launcher described below. Browser runs require
 web-compatible app adapters; a native-only authentication configuration still needs the device.
 
