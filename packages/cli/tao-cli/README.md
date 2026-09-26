@@ -41,8 +41,11 @@ the retained builds; `--output <directory>` chooses their root. Both clients use
 the app contains the server. Running the executable needs no separate Bun installation, Metro, or
 Expo server. Dependency versions are unchanged.
 
-Every request command writes one JSON response to stdout. Diagnostics go to stderr; failures exit
-nonzero. Start waits for an authenticated host handshake. Discovery initializes the normal app in a
+`commands` prints a readable catalog by default, including names, titles, descriptions, canonical IDs,
+argument types, and requiredness (`?` marks optional arguments). Enabled state is shown only when known.
+Use `agents commands --json` or `tao agents commands --app "/path/MyApp.app" --json` for the original
+JSON response envelope. Other request commands write one JSON response to stdout. Diagnostics go to
+stderr; failures exit nonzero. Start waits for an authenticated host handshake. Discovery initializes the normal app in a
 hidden, inactive webview and waits for its configured data stores. The app may have a Dock icon.
 The app's provider configuration and authentication apply in that webview.
 

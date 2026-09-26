@@ -168,7 +168,7 @@ function createCommands(): Command {
     )
 
   const agents = commands.command('agents').description('Control a packaged app background service.')
-  for (const action of ['start', 'ping', 'stop', 'commands'] as const) {
+  for (const action of ['start', 'ping', 'stop'] as const) {
     agents.command(action)
       .requiredOption('--app <bundle>', 'Path to the packaged macOS .app bundle.')
       .description(`${action[0]!.toUpperCase()}${action.slice(1)} the app background service.`)
@@ -182,6 +182,15 @@ function createCommands(): Command {
         }
       })
   }
+  agents.command('commands')
+    .requiredOption('--app <bundle>', 'Path to the packaged macOS .app bundle.')
+    .option('--json', 'Print the machine-readable JSON response.')
+    .description('List the app’s exposed commands.')
+    .action(async (options: { app: string; json?: boolean }) => {
+      const { runAppAgentCommand } = await import('./agents-command')
+      const { printAgentCommands } = await import('./agent-command-output')
+      printAgentCommands(await runAppAgentCommand('commands', options.app), options.json)
+    })
   agents.command('run')
     .argument('<command-id>', 'Canonical command id returned by agents commands.')
     .requiredOption('--app <bundle>', 'Path to the packaged macOS .app bundle.')

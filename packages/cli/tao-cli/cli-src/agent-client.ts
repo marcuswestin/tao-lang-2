@@ -1,14 +1,17 @@
 import { Command } from '@commander-js/extra-typings'
 import { Errors, HCI, Platform } from '@shared'
+import { printAgentCommands } from './agent-command-output'
 import { runAppAgentCommand } from './agents-command'
 
 /** Entry point shared by generated app-specific executables. The app owns all runtime state. */
 export async function runAgentClient(bundle: string, argv = Platform.runtimeProcess.argv): Promise<void> {
   const cli = new Command().name('agents').description('Discover and execute this app’s exposed commands.')
-  cli.command('commands').description('Start the app if needed and list exposed commands.').action(async () => {
-    const started = await runAppAgentCommand('start', bundle)
-    print(started.ok ? await runAppAgentCommand('commands', bundle) : started)
-  })
+  cli.command('commands').description('Start the app if needed and list exposed commands.')
+    .option('--json', 'Print the machine-readable JSON response.')
+    .action(async options => {
+      const started = await runAppAgentCommand('start', bundle)
+      printAgentCommands(started.ok ? await runAppAgentCommand('commands', bundle) : started, options.json)
+    })
   cli.command('run').argument('<command>', 'Canonical command id or unique exposed command name.')
     .option('--args <json>', 'Named JSON arguments.', '{}')
     .option('--stop-after', 'Stop the app after the request settles.')

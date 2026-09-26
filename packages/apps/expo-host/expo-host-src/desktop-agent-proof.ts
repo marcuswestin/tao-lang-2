@@ -109,6 +109,7 @@ async function proveCommands(id: string, root: string): Promise<void> {
         cli,
         'agents',
         action,
+        ...(action === 'commands' ? ['--json'] : []),
         ...(invocation ? [invocation.commandId, '--args', JSON.stringify(invocation.args)] : []),
         '--app',
         app,

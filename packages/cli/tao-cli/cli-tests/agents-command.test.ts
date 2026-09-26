@@ -42,6 +42,17 @@ Describe('packaged app agent client', () => {
   Test('bundled client discovers names, resolves a command, and never retries a lost execution response', async () => {
     await withFixture(async bundle => {
       const calls: { method: string; params?: unknown }[] = []
+      const catalog = [{
+        id: 'Items/Add',
+        name: 'Add',
+        title: 'Add an item',
+        description: 'Save an item to the app.',
+        parameters: [{ name: 'Message', type: 'text', required: true }, {
+          name: 'Marked',
+          type: 'boolean',
+          required: false,
+        }],
+      }, { id: 'Items/Disabled', name: 'Disabled', title: 'Disabled', enabled: false, parameters: [] }]
       let exitCode = 0
       const restoreExit = exitCodeSlot.install(code => exitCode = code)
       const restoreFetch = fetchSlot.install(
@@ -55,15 +66,42 @@ Describe('packaged app agent client', () => {
             version: 1,
             id: body.id,
             ok: true,
-            result: body.method === 'ping' ? pong : [
-              { id: 'Items/Add', name: 'Add' },
-            ],
+            result: body.method === 'ping' ? pong : catalog,
           })
         }) as typeof fetch,
       )
       try {
         const discovery = await withCapturedOutput(() => runAgentClient(bundle, ['bun', 'agents', 'commands']))
-        Expect(JSON.parse(discovery.stdout)).toEqual({ ok: true, result: [{ id: 'Items/Add', name: 'Add' }] })
+        Expect(discovery.stdout).toBe([
+          'Available commands (2)',
+          '',
+          'Add(Message: text, Marked?: boolean)',
+          '  Add an item',
+          '  Save an item to the app.',
+          '  ID: Items/Add',
+          '  Enabled: evaluated when run',
+          '',
+          'Disabled()',
+          '  ID: Items/Disabled',
+          '  Enabled: no',
+          '',
+          '? marks an optional argument. Pass arguments with --args as a JSON object.',
+          '',
+        ].join('\n'))
+        const taoDiscovery = await withCapturedOutput(() =>
+          runTaoCli(['bun', 'tao', 'agents', 'commands', '--app', bundle])
+        )
+        Expect(taoDiscovery.stdout).toBe(discovery.stdout)
+        for (
+          const invoke of [
+            () => runAgentClient(bundle, ['bun', 'agents', 'commands', '--json']),
+            () => runTaoCli(['bun', 'tao', 'agents', 'commands', '--app', bundle, '--json']),
+          ]
+        ) {
+          const json = await withCapturedOutput(invoke)
+          Expect(JSON.parse(json.stdout)).toEqual({ ok: true, result: catalog })
+          Expect(json.stdout.trim().split('\n')).toHaveLength(1)
+        }
         Expect(exitCode).toBe(0)
         calls.length = 0
         const invoked = await withCapturedOutput(() =>
