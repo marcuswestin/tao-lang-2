@@ -435,7 +435,7 @@ board *ARGS:
 landed *ARGS:
     ./dev landed {{ ARGS }}
 
-# Classify every worktree as reclaimable, live, or unclassified; removes nothing without --execute
+# Report Git state and local Codex/Claude task links for every worktree; removes nothing without --execute
 [group('Dev')]
 reclaim *ARGS:
     ./dev reclaim {{ ARGS }}
