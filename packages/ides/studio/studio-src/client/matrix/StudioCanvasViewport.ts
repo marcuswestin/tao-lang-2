@@ -94,6 +94,7 @@ export function revealCanvasNode(node: Element | null | undefined): boolean {
 }
 
 export type StudioCanvasViewportControls = Readonly<{
+  cancelPan: () => void
   dispose: () => void
   /** fit frames the whole surface inside the host, the way ⌘0 does in a drawing tool. */
   fit: () => void
@@ -104,6 +105,8 @@ export type StudioCanvasViewportControls = Readonly<{
   reveal: (node: Element) => void
   /** iframeWheel forwards wheel/pinch gestures that cannot bubble across the iframe boundary. */
   iframeWheel: (gesture: StudioCanvasWheelGesture, frame: Element) => void
+  /** Space presses in a focused preview cannot bubble into the parent document. */
+  iframePanKey: (held: boolean, frame: Element) => void
   zoomTo: (scale: number, anchor?: Readonly<{ x: number; y: number }>) => void
 }>
 
@@ -248,38 +251,63 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
 
   let panning: number | undefined
   let spaceHeld = false
+  let lastPoint = { x: 0, y: 0 }
+  const previousTabIndex = host.getAttribute('tabindex')
+  host.tabIndex = -1
+  const setSpaceHeld = (held: boolean): void => {
+    spaceHeld = held
+    if (held) {
+      host.dataset['canvasPanReady'] = 'true'
+    } else {
+      delete host.dataset['canvasPanReady']
+    }
+  }
   /** The canvas pans on the middle button, or on the left button while space is held. */
   const startsPan = (event: PointerEvent): boolean => event.button === 1 || (event.button === 0 && spaceHeld)
   const onPointerDown = (event: PointerEvent): void => {
-    if (panning !== undefined || !startsPan(event)) {
+    if (deps.enabled?.() === false || panning !== undefined || !startsPan(event)) {
       return
     }
     panning = event.pointerId
+    lastPoint = { x: event.clientX, y: event.clientY }
     host.setPointerCapture?.(event.pointerId)
     host.dataset['canvasPanning'] = 'true'
+    host.focus({ preventScroll: true })
     event.preventDefault()
+    event.stopPropagation()
   }
   const onPointerMove = (event: PointerEvent): void => {
     if (event.pointerId !== panning) {
       return
     }
-    current.x += event.movementX
-    current.y += event.movementY
+    current.x += event.clientX - lastPoint.x
+    current.y += event.clientY - lastPoint.y
+    lastPoint = { x: event.clientX, y: event.clientY }
     publish()
   }
-  const endPan = (event: PointerEvent): void => {
-    if (event.pointerId !== panning) {
+  const releasePan = (): void => {
+    if (panning === undefined) {
       return
     }
+    const pointerId = panning
     panning = undefined
     try {
-      host.releasePointerCapture?.(event.pointerId)
+      host.releasePointerCapture?.(pointerId)
     } catch {
       // The capture was already gone.
     }
     delete host.dataset['canvasPanning']
   }
-  host.addEventListener('pointerdown', onPointerDown)
+  const endPan = (event: PointerEvent): void => {
+    if (event.pointerId === panning) {
+      releasePan()
+    }
+  }
+  const onBlur = (): void => {
+    setSpaceHeld(false)
+    releasePan()
+  }
+  host.addEventListener('pointerdown', onPointerDown, true)
   host.addEventListener('pointermove', onPointerMove)
   host.addEventListener('pointerup', endPan)
   host.addEventListener('pointercancel', endPan)
@@ -289,9 +317,10 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     if (deps.enabled?.() === false) {
       return
     }
-    if (event.key === ' ' && !isTypingTarget(event.target)) {
-      spaceHeld = true
-      host.dataset['canvasPanReady'] = 'true'
+    if (event.key === ' ' && !event.isComposing && !isTypingTarget(event.target)) {
+      event.preventDefault()
+      event.stopPropagation()
+      setSpaceHeld(true)
       return
     }
     if (!(event.metaKey || event.ctrlKey) || isTypingTarget(event.target)) {
@@ -313,12 +342,17 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
   }
   const onKeyUp = (event: KeyboardEvent): void => {
     if (event.key === ' ') {
-      spaceHeld = false
-      delete host.dataset['canvasPanReady']
+      if (spaceHeld) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      setSpaceHeld(false)
     }
   }
-  document.addEventListener('keydown', onKeyDown)
-  document.addEventListener('keyup', onKeyUp)
+  // The product host's keyboard handlers can stop bubbling before it reaches document.
+  document.addEventListener('keydown', onKeyDown, true)
+  document.addEventListener('keyup', onKeyUp, true)
+  document.defaultView?.addEventListener('blur', onBlur)
 
   const reveal = (node: Element): void => {
     if (revealCanvasNode(node)) {
@@ -335,27 +369,48 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     applyWheel(gesture, canvasIframeGestureAnchor(hostRect, frameRect, gesture))
   }
 
+  const iframePanKey = (held: boolean, frame: Element): void => {
+    if (!host.contains(frame) || (held && deps.enabled?.() === false)) {
+      return
+    }
+    // Starting a pan focuses the host, which blurs the iframe. The parent now owns keyup;
+    // that focus-transfer notification must not disarm a still-held Space between drags.
+    if (!held && panning !== undefined) {
+      return
+    }
+    setSpaceHeld(held)
+  }
+
   applyCanvasViewport(host)
   return {
+    cancelPan: onBlur,
     dispose() {
       if (disposed) {
         return
       }
       disposed = true
+      onBlur()
       pill.removeEventListener('click', onPillClick)
       host.removeEventListener('wheel', onWheel)
-      host.removeEventListener('pointerdown', onPointerDown)
+      host.removeEventListener('pointerdown', onPointerDown, true)
       host.removeEventListener('pointermove', onPointerMove)
       host.removeEventListener('pointerup', endPan)
       host.removeEventListener('pointercancel', endPan)
       host.removeEventListener('lostpointercapture', endPan)
-      document.removeEventListener('keydown', onKeyDown)
-      document.removeEventListener('keyup', onKeyUp)
+      document.removeEventListener('keydown', onKeyDown, true)
+      document.removeEventListener('keyup', onKeyUp, true)
+      document.defaultView?.removeEventListener('blur', onBlur)
+      if (previousTabIndex === null) {
+        host.removeAttribute('tabindex')
+      } else {
+        host.setAttribute('tabindex', previousTabIndex)
+      }
       pill.remove()
       delete host.dataset['canvasPanReady']
       delete host.dataset['canvasPanning']
     },
     fit,
+    iframePanKey,
     iframeWheel,
     reset,
     reveal,
@@ -375,5 +430,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
     return false
   }
-  return target.closest('input, textarea, select, [contenteditable="true"], .cm-content') !== null
+  return target.closest(
+    'input, textarea, select, [contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"], [role="textbox"], .cm-content',
+  ) !== null
 }

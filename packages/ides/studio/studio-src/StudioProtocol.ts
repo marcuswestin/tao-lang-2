@@ -682,7 +682,16 @@ export type StudioPreviewCanvasGestureMessage = {
   zoom: boolean
 }
 
-/** Parent-owned mode state tells a preview synchronously whether its wheel gestures belong to Canvas. */
+/** Space held inside a preview gives the Design canvas ownership of the next drag. */
+export type StudioPreviewCanvasPanKeyMessage = {
+  channel: typeof studioProtocolChannel
+  held: boolean
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-canvas-pan-key'
+}
+
+/** Parent-owned mode state tells a preview synchronously whether its canvas gestures belong to Canvas. */
 type StudioCanvasGestureOwnershipMessage = {
   channel: typeof studioProtocolChannel
   identity: StudioPreviewIdentity
@@ -769,6 +778,7 @@ export type StudioWindowMessage =
   | StudioPreviewLogMessage
   | StudioPreviewDebugMessage
   | StudioPreviewCanvasGestureMessage
+  | StudioPreviewCanvasPanKeyMessage
   | StudioDebugCommandMessage
   | StudioPreviewLayoutMeasurementsMessage
   | StudioPreviewLensRenderMessage
@@ -865,6 +875,7 @@ const windowMessageParsers: {
   'highlight-source': parseHighlightSource,
   'preview-applied': parsePreviewApplied,
   'preview-canvas-gesture': parsePreviewCanvasGesture,
+  'preview-canvas-pan-key': parsePreviewCanvasPanKey,
   'preview-console': parsePreviewLog,
   'preview-debug': parsePreviewDebug,
   'preview-fixture-capture-failed': parsePreviewFixtureCaptureFailed,
@@ -1106,6 +1117,13 @@ function parsePreviewCanvasGesture(value: StudioJsonObject): StudioPreviewCanvas
     type: 'preview-canvas-gesture',
     zoom: value['zoom'],
   })
+}
+
+function parsePreviewCanvasPanKey(value: StudioJsonObject): StudioPreviewCanvasPanKeyMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  return identity === undefined || typeof value['held'] !== 'boolean'
+    ? undefined
+    : envelope({ held: value['held'], identity, type: 'preview-canvas-pan-key' })
 }
 
 function parseCanvasGestureOwnership(value: StudioJsonObject): StudioCanvasGestureOwnershipMessage | undefined {

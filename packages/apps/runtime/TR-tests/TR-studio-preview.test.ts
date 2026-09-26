@@ -194,6 +194,96 @@ Describe('Studio preview runtime bridge', () => {
     cleanup()
   })
 
+  Test('forwards claimed Space transitions once and leaves startup, typing, and Run layout keys alone', () => {
+    const fake = previewHost([])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    let cancellations = 0
+    let stopped = 0
+    const space = {
+      key: ' ',
+      preventDefault: () => {
+        cancellations += 1
+      },
+      stopImmediatePropagation: () => {
+        stopped += 1
+      },
+    }
+    const panMessages = () =>
+      fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-canvas-pan-key')
+    fake.dispatchDocument('keydown', space)
+    Expect(panMessages()).toEqual([])
+    Expect(cancellations).toBe(0)
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
+    const target = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
+    for (const tagName of ['INPUT', 'TEXTAREA', 'SELECT']) {
+      fake.dispatchDocument('keydown', { ...space, target: { ...target, tagName } })
+    }
+    for (const editable of ['', 'true', 'plaintext-only']) {
+      fake.dispatchDocument('keydown', {
+        ...space,
+        target: {
+          ...target,
+          parentElement: { ...target, getAttribute: (name: string) => name === 'contenteditable' ? editable : null },
+        },
+      })
+    }
+    fake.dispatchDocument('keydown', { ...space, isComposing: true })
+    fake.dispatchDocument('keydown', { ...space, taoStudioJourney: true })
+    fake.dispatchDocument('keydown', { ...space, key: 'Enter' })
+    Expect(panMessages()).toEqual([])
+    Expect(cancellations).toBe(0)
+    fake.dispatchDocument('keydown', space)
+    fake.dispatchDocument('keydown', { ...space, repeat: true })
+    Expect(panMessages()).toEqual([{
+      message: {
+        channel: 'tao-studio',
+        held: true,
+        identity: { appName: 'Demo', previewInstanceId: 'preview-1', project: '/project' },
+        protocolVersion: 1,
+        type: 'preview-canvas-pan-key',
+      },
+      targetOrigin: 'http://127.0.0.1:5500',
+    }])
+    Expect(cancellations).toBe(2)
+    Expect(stopped).toBe(2)
+    fake.dispatchDocument('keyup', space)
+    fake.dispatchDocument('keyup', space)
+    Expect(panMessages().map(post => (post.message as { held: boolean }).held)).toEqual([true, false])
+    Expect(cancellations).toBe(3)
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(false, fake.parent))
+    fake.dispatchDocument('keydown', space)
+    Expect(cancellations).toBe(3)
+    Expect(panMessages()).toHaveLength(2)
+    cleanup()
+  })
+
+  Test('releases held iframe Space on blur, ownership loss, and disposal without duplicate releases', () => {
+    const fake = previewHost([])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    const heldStates = () =>
+      fake.messages.flatMap(post => {
+        const message = post.message as { held?: boolean; type?: string }
+        return message.type === 'preview-canvas-pan-key' ? [message.held] : []
+      })
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
+    fake.dispatchDocument('keydown', { key: ' ' })
+    fake.dispatchWindow('blur', {})
+    fake.dispatchWindow('blur', {})
+    Expect(heldStates()).toEqual([true, false])
+    fake.dispatchDocument('keydown', { key: ' ' })
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(false, fake.parent))
+    fake.dispatchDocument('keyup', { key: ' ' })
+    Expect(heldStates()).toEqual([true, false, true, false])
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
+    fake.dispatchDocument('keydown', { key: ' ' })
+    cleanup()
+    Expect(heldStates()).toEqual([true, false, true, false, true, false])
+    Expect(fake.listenerCount()).toBe(0)
+    fake.dispatchDocument('keydown', { key: ' ' })
+    fake.dispatchDocument('keyup', { key: ' ' })
+    Expect(heldStates()).toEqual([true, false, true, false, true, false])
+  })
+
   Test('cancels iframe gestures only while the parent advertises Design canvas ownership', () => {
     const fake = previewHost([])
     const cleanup = mountStudioPreviewBridge(config, fake.host)

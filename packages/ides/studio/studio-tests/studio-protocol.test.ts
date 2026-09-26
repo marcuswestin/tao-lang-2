@@ -82,6 +82,30 @@ Describe('Studio session paths and routes', () => {
     Expect(StudioProtocol.parseMessage({ ...gesture, zoom: 'yes' })).toBeUndefined()
   })
 
+  Test('accepts only authenticated preview Space transitions with an explicit boolean state', () => {
+    const message = {
+      channel: studioProtocolChannel,
+      held: true,
+      identity,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-canvas-pan-key',
+    }
+    const event = { data: message, origin: expectation.origin, source: previewWindow }
+    Expect(StudioProtocol.parseWindowMessage(event, expectation)).toMatchObject({ held: true, type: message.type })
+    Expect(StudioProtocol.parseWindowMessage({ ...event, data: { ...message, held: false } }, expectation))
+      .toMatchObject({ held: false, type: message.type })
+    for (const held of ['true', 1, null, undefined]) {
+      Expect(StudioProtocol.parseWindowMessage({ ...event, data: { ...message, held } }, expectation)).toBeUndefined()
+    }
+    Expect(StudioProtocol.parseWindowMessage({ ...event, source: {} }, expectation)).toBeUndefined()
+    Expect(StudioProtocol.parseWindowMessage({ ...event, origin: 'https://untrusted.example' }, expectation))
+      .toBeUndefined()
+    Expect(StudioProtocol.parseWindowMessage({
+      ...event,
+      data: { ...message, identity: { ...identity, previewInstanceId: 'stale-preview' } },
+    }, expectation)).toBeUndefined()
+  })
+
   Test('parses explicit parent canvas-gesture ownership and rejects ambiguous state', () => {
     const ownership = {
       channel: studioProtocolChannel,

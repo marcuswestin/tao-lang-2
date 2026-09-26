@@ -140,6 +140,7 @@ type StudioPreviewDocumentEvent =
   | 'click'
   | 'input'
   | 'keydown'
+  | 'keyup'
   | 'mousedown'
   | 'mouseleave'
   | 'mousemove'
@@ -821,6 +822,7 @@ export function mountStudioPreviewBridge(
   let postedHoverKey: string | undefined
   let interactionMode: 'edit' | 'run' = 'edit'
   let canvasGesturesOwned = false
+  let canvasPanKeyHeld = false
   let recording: StudioJourneyRecording | undefined
   let measurementQueued = false
   let stopped = false
@@ -1002,6 +1004,32 @@ export function mountStudioPreviewBridge(
     redrawOverlay()
     scheduleLayoutMeasurements()
   }
+  const releaseCanvasPanKey = () => {
+    if (canvasPanKeyHeld) {
+      canvasPanKeyHeld = false
+      postToStudio(host, config, 'preview-canvas-pan-key', { held: false })
+    }
+  }
+  const onCanvasPanKeyDown = (event: StudioPreviewPointerEvent) => {
+    if (
+      !canvasGesturesOwned || event.key !== ' ' || event.isComposing === true
+      || event.taoStudioJourney === true || isCanvasPanTypingTarget(previewElementFromEvent(event))
+    ) {
+      return
+    }
+    blockAppPointerEvent(event)
+    if (!canvasPanKeyHeld) {
+      canvasPanKeyHeld = true
+      disarmDrag()
+      postToStudio(host, config, 'preview-canvas-pan-key', { held: true })
+    }
+  }
+  const onCanvasPanKeyUp = (event: StudioPreviewPointerEvent) => {
+    if (event.key === ' ' && canvasPanKeyHeld && event.taoStudioJourney !== true) {
+      blockAppPointerEvent(event)
+      releaseCanvasPanKey()
+    }
+  }
   const onCanvasWheel = (event: StudioPreviewPointerEvent) => {
     if (
       !canvasGesturesOwned
@@ -1154,6 +1182,9 @@ export function mountStudioPreviewBridge(
     'set-canvas-gestures': message => {
       if (typeof message['owned'] === 'boolean') {
         canvasGesturesOwned = message['owned']
+        if (!canvasGesturesOwned) {
+          releaseCanvasPanKey()
+        }
       }
     },
     'set-interaction-mode': message => {
@@ -1185,6 +1216,8 @@ export function mountStudioPreviewBridge(
     ['click', onRecordedClick, true],
     ['input', onRecordedInput, true],
     ['blur', onRecordedBlur, true],
+    ['keydown', onCanvasPanKeyDown, true],
+    ['keyup', onCanvasPanKeyUp, true],
     ['keydown', onRecordedKeyDown, true],
     ['mousedown', onMouseDown, true],
     ['mouseleave', disarmDrag],
@@ -1196,6 +1229,7 @@ export function mountStudioPreviewBridge(
   ]
   const windowListeners: readonly Parameters<StudioPreviewHost['window']['addEventListener']>[] = [
     ['blur', disarmDrag],
+    ['blur', releaseCanvasPanKey],
     ['message', onMessage],
     ['resize', onResize],
     ['scroll', redrawOverlay],
@@ -1218,6 +1252,7 @@ export function mountStudioPreviewBridge(
   )
 
   return () => {
+    releaseCanvasPanKey()
     stopped = true
     // A preview instance owns its debugger pause and clock hold. Releasing the bridge must release
     // both before a replacement instance starts, without letting the old pause publish a resumed
@@ -1380,6 +1415,22 @@ function recordingControl(
 
 function previewElementFromEvent(event: StudioPreviewPointerEvent): StudioPreviewElement | undefined {
   return isStudioElement(event.target) ? event.target : undefined
+}
+
+/** Text entry retains Space even when a containing preview belongs to the Design canvas. */
+function isCanvasPanTypingTarget(element: StudioPreviewElement | undefined): boolean {
+  for (let current = element; current !== undefined && current !== null; current = current.parentElement ?? undefined) {
+    const tag = current.tagName?.toLowerCase()
+    const editable = current.getAttribute('contenteditable')
+    if (
+      tag === 'input' || tag === 'textarea' || tag === 'select'
+      || current.getAttribute('role') === 'textbox'
+      || editable === '' || editable === 'true' || editable === 'plaintext-only'
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 function isJourneySubmitKey(event: StudioPreviewPointerEvent, element: StudioPreviewElement): boolean {
