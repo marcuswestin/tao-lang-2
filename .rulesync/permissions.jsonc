@@ -107,7 +107,7 @@
   "agentHostCommands": [
     "land", "finalize", "merge-main", "landed", "capabilities", "open-pr", "fix-agent-config",
     "test-host", "studio-smoke", "studio-proof-real-app", "admission-experiment",
-    "native-module-check",
+    "native-module-check", "reclaim --execute",
     "prepare-release studio", "prepare-release ide-extension",
     "app-dev", "studio", "studio-native",
     "local-instantdb start", "local-instantdb stop",

@@ -435,7 +435,7 @@ board *ARGS:
 landed *ARGS:
     ./dev landed {{ ARGS }}
 
-# Classify every worktree as reclaimable, live, or unclassified; removes nothing without --execute
+# Classify worktrees without removal by default; use ./agent unsandboxed reclaim --execute to remove
 [group('Dev')]
 reclaim *ARGS:
     ./dev reclaim {{ ARGS }}
