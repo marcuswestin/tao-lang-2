@@ -1,6 +1,7 @@
 import { CLI, FS, Repo, Text } from '@shared'
 import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import { branchWarnings, commitMessageWarnings } from '../agent-cli-src/agent-hooks/CommitChecks'
+import { installGitHooks as writeGitHooks } from '../agent-cli-src/agent-hooks/GitHooksInstaller'
 import { PIPE_WARNING, PREFIX_WARNING, shellHabitWarnings } from '../agent-cli-src/agent-hooks/ShellHabits'
 import { subagentBrief } from '../agent-cli-src/agent-hooks/SubagentBrief'
 
@@ -63,6 +64,32 @@ const COMMIT_MESSAGE_CASES: ReadonlyArray<readonly [string, string, number]> = [
 ]
 
 Describe('agent hooks', () => {
+  Test('the Git hook starts with POSIX sh and selects the managed Bun', async () => {
+    const root = await mkGitTestDir('tao-posix-git-hook-')
+    try {
+      await initGitTestRepository(root)
+      const bun = FS.resolvePath('.devenv/profile/bin/bun', root)
+      await FS.writeText(bun, '#!/bin/sh\nprintf "managed-bun:%s\\n" "$*"\n')
+      await FS.chmod(bun, 0o755)
+      const result = await CLI.run('/bin/sh', { args: [GIT_HOOKS, 'install'], cwd: root })
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stderr).toBe('')
+      Expect(result.stdout).toContain('managed-bun:run ')
+      Expect(result.stdout).toContain('GitHooksEntry.ts install')
+      const shim = FS.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh', root)
+      await FS.writeText(shim, await FS.readText(GIT_HOOKS))
+      await FS.chmod(shim, 0o755)
+      const hooks = FS.resolvePath('.git/hooks', root)
+      await writeGitHooks(hooks)
+      const installed = await CLI.run('/bin/sh', { args: [FS.resolvePath('pre-commit', hooks)], cwd: root })
+      Expect(installed.exitCode).toBe(0)
+      Expect(installed.stderr).toBe('')
+      Expect(installed.stdout).toContain('GitHooksEntry.ts pre-commit')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('reports the shell habits a command shows, and stays silent otherwise', () => {
     const reported = SHELL_CASES.map(([command]) => `${command}\t${shellHabitWarnings(command).join(',')}`)
 

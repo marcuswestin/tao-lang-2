@@ -10,7 +10,7 @@ import {
 import { createHash, createPrivateKey, sign, timingSafeEqual } from 'node:crypto'
 import { availableParallelism, loadavg } from 'node:os'
 import type { Readable } from 'node:stream'
-import { throwUnexpected } from './core/Errors'
+import { throwHostEnvironment, throwUnexpected } from './core/Errors'
 
 export type ProcessEnv = NodeJS.ProcessEnv
 export type ProcessSignal = NodeJS.Signals
@@ -52,6 +52,25 @@ export function processIsAlive(pid: number): boolean {
   } catch (error) {
     // EPERM means the process exists and belongs to somebody else; only ESRCH means it is gone.
     return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+/** signalProcess signals one PID or Unix process group without requiring a kill executable. */
+export function signalProcess(pid: number, signal: ProcessSignal | 0): boolean {
+  if (!Number.isSafeInteger(pid) || Math.abs(pid) <= 1 || Math.abs(pid) > 2_147_483_647) {
+    throwUnexpected('Expected a process ID or process group ID greater than one.')
+  }
+  if (hostPlatform !== 'darwin' && hostPlatform !== 'linux') {
+    throwHostEnvironment(`Process signalling is not implemented on ${hostPlatform}.`)
+  }
+  try {
+    process.kill(pid, signal)
+    return true
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code === 'ESRCH') {
+      return false
+    }
+    throwHostEnvironment(`Could not send ${signal} to process ${pid}.`, { cause })
   }
 }
 

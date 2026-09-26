@@ -3,7 +3,12 @@
 set -eu
 
 case "${1:-}" in cold|cached|tools) mode=$1 ;; *) exit 2 ;; esac
-[ "$#" -eq 1 ] || exit 2
+qemu_guest_base=0
+case "$#" in
+  1) ;;
+  2) [ "$2" = --qemu-guest-base ] && qemu_guest_base=1 || exit 2 ;;
+  *) exit 2 ;;
+esac
 cd "$(dirname "$0")/../../../../.."
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 logs="$PWD/.artifacts/contributor-linux/guest-$mode"
@@ -27,6 +32,9 @@ step() {
   step_result=0
   (
     producer_result=0
+    if [ "$qemu_guest_base" -eq 1 ]; then
+      set -- QEMU_GUEST_BASE=0x800000000000 "$@"
+    fi
     env -i HOME=/root USER=root TERM=dumb PATH="$PATH" "$@" 2>&1 || producer_result=$?
     printf '%s\n' "$producer_result" > "$logs/$label.exit-code"
   ) | tee "$logs/$label.log" || step_result=$?

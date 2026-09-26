@@ -89,6 +89,15 @@ them; shared images and builder caches are preserved. Inspection failure means
 resource state is unknown. Retained toolchain image ownership, once provisioned,
 is recorded separately in the original run's `cache-ownership.txt`.
 
+On an arm64 Docker daemon, `./agent unsandboxed contributor-linux-test --qemu-guest-base`
+runs the same cold/cached sequence with the fixed, process-local
+`QEMU_GUEST_BASE=0x800000000000` experiment from [Nix issue 16184](https://github.com/NixOS/nix/issues/16184).
+The guest explicitly carries this setting through its clean environment; the tool-cache identity
+is separate from the default run. It does not change Docker settings, emulator registration,
+guest architecture, Nix version/checksum, or installation ownership. Default and hosted setup
+remain unchanged. A passing experiment would establish this local workaround, not native amd64
+or hosted acceptance; Nix derivation builders may clear environment variables again.
+
 Actual fresh and cached hosted runs remain to be proved for each provider. Local
 script tests establish dispatch and failure behavior; they do not prove provider
 network access, Nix installation privileges, or a hosted verification run.

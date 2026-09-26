@@ -4,10 +4,15 @@ set -eu
 
 mode=both
 probe=0
+qemu_guest_base=0
 inspect_run=
 case "$#" in
   0) ;;
-  1) [ "$1" = --probe ] && probe=1 || { printf 'Expected --probe.\n' >&2; exit 2; } ;;
+  1) case "$1" in
+       --probe) probe=1 ;;
+       --qemu-guest-base) qemu_guest_base=1 ;;
+       *) printf 'Expected --probe or --qemu-guest-base.\n' >&2; exit 2 ;;
+     esac ;;
   2) case "$1" in
        --mode) case "$2" in cold|cached|both) mode=$2 ;; *) printf 'Expected cold, cached, or both.\n' >&2; exit 2 ;; esac ;;
        --inspect-run)
@@ -19,7 +24,7 @@ case "$#" in
          inspect_run=$2 ;;
        *) exit 2 ;;
      esac ;;
-  *) printf 'Usage: contributor-linux-test [--probe | --mode cold|cached|both | --inspect-run YYYYMMDDTHHMMSSZ-PID]\n' >&2; exit 2 ;;
+  *) printf 'Usage: contributor-linux-test [--probe | --qemu-guest-base | --mode cold|cached|both | --inspect-run YYYYMMDDTHHMMSSZ-PID]\n' >&2; exit 2 ;;
 esac
 
 root=$(git rev-parse --show-toplevel)
@@ -48,6 +53,15 @@ probe_host() {
 }
 probe_host
 [ "$probe" -eq 0 ] || exit 0
+
+# Explicit, process-local diagnostic for NixOS/nix#16184. Never alter Docker's
+# emulator registration or apply the workaround to native amd64 acceptance.
+if [ "$qemu_guest_base" -eq 1 ]; then
+  case "$(cut -d ' ' -f 1 "$output/docker-storage.txt")" in
+    aarch64|arm64) ;;
+    *) printf 'The QEMU guest-base experiment requires an arm64 Docker daemon.\n' >&2; exit 2 ;;
+  esac
+fi
 
 # Inspection never builds, starts, or removes resources. Successful empty listings prove
 # absence; daemon errors leave state=unknown rather than silently claiming cleanup.
@@ -147,6 +161,7 @@ case "$(cut -d ' ' -f 1 "$output/docker-storage.txt")" in
   aarch64|arm64) printf 'daemon_emulation=required-for-linux-amd64; implementation-runtime-dependent\n' ;;
   *) printf 'daemon_emulation=unknown; inspect docker-storage.txt\n' ;;
 esac >> "$output/resources.txt"
+printf 'qemu_guest_base_experiment=%s\n' "$qemu_guest_base" >> "$output/resources.txt"
 base_owned=1
 stream_log "$output/base-build.log" base-build docker build --platform linux/amd64 --target base --tag "$base" "$output/context"
 docker image inspect "$base" > "$output/base-image.json"
@@ -154,6 +169,7 @@ docker image inspect --format '{{.Id}}' "$base" > "$output/base-identity.txt"
 # Hash exact tool inputs and the base identity; never retain a dependency install or host profile.
 git ls-tree HEAD bootstrap-tao-dev-env devenv.lock "$environment" > "$output/cache-inputs"
 cat "$output/base-identity.txt" >> "$output/cache-inputs"
+printf 'qemu_guest_base_experiment=%s\n' "$qemu_guest_base" >> "$output/cache-inputs"
 cache_key=$(git hash-object "$output/cache-inputs")
 cache="tao-contributor-linux-tools:$cache_key"
 rm "$output/cache-inputs"
@@ -174,11 +190,15 @@ run_guest() {
   # Keep the intended identity before contacting Docker: a client can fail after
   # the daemon has created it. Cleanup still checks both ownership labels.
   container=$guest_container
+  set -- "$guest_mode"
+  if [ "$qemu_guest_base" -eq 1 ]; then
+    set -- "$@" --qemu-guest-base
+  fi
   if docker create --name "$guest_container" --platform linux/amd64 --cpus 4 --memory 16g --memory-swap 16g \
     --label tao.owner=contributor-linux-test --label "tao.run=$run" \
     "$guest_image" /bin/sh -c \
-    'tar -xf /tmp/checkout.tar -C /workspace && rm /tmp/checkout.tar && exec /usr/bin/timeout --signal=TERM --kill-after=30s 7200 /bin/sh /workspace/packages/cli/dev-cli/dev-cli-src/environment/guest-smoke.sh "$1"' \
-    contributor-linux "$guest_mode" > "$guest_output/container-id.txt"; then
+    'tar -xf /tmp/checkout.tar -C /workspace && rm /tmp/checkout.tar && exec /usr/bin/timeout --signal=TERM --kill-after=30s 7200 /bin/sh /workspace/packages/cli/dev-cli/dev-cli-src/environment/guest-smoke.sh "$@"' \
+    contributor-linux "$@" > "$guest_output/container-id.txt"; then
     if docker cp "$archive" "$container:/tmp/checkout.tar"; then
       stream_log "$guest_output/console.log" "$guest_mode" docker start --attach "$container" || guest_result=$?
     else

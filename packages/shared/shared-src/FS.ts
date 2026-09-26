@@ -1,6 +1,7 @@
 import {
   type Dirent,
   existsSync as nodeExistsSync,
+  readdirSync as nodeReaddirSync,
   readFileSync as nodeReadFileSync,
   realpathSync as nodeRealpathSync,
   rmSync as nodeRmSync,
@@ -1275,6 +1276,11 @@ export async function replaceSymlink(targetPath: string, linkPath: string): Prom
 /** listDir lists direct child names for a directory, sorted for platform-independent order. */
 export async function listDir(inputPath: string): Promise<string[]> {
   return (await nodeFs.readdir(inputPath)).sort()
+}
+
+/** listDirSync lists direct child names for synchronous host inspection. */
+export function listDirSync(inputPath: string): string[] {
+  return nodeReaddirSync(inputPath).sort()
 }
 
 /** walk yields files under a path according to the provided filters. */

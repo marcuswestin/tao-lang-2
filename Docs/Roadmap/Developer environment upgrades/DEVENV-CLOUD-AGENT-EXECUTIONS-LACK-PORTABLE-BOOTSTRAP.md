@@ -1,6 +1,6 @@
 # DEVENV-CLOUD-AGENT-EXECUTIONS-LACK-PORTABLE-BOOTSTRAP — Cloud agent executions lack a portable bootstrap
 
-- **Status:** Blocked
+- **Status:** In progress
 - **Section:** Deferred
 - **Area:** Agent workflow; cloud development environment
 - **Impact:** A cloud agent container without zsh or the pinned Nix/devenv profile cannot start the repository's `./agent` workflow, so it cannot set up, test, or verify a checkout.
@@ -105,10 +105,10 @@ It does not identify the precise QEMU or Nix defect, or prove that native amd64 
 The [version-pinned upstream installer](https://github.com/NixOS/nix/blob/2.35.2/scripts/install-nix-from-tarball.sh#L181-L184)
 maps that error to `nix-store --load-db`, before profile installation. Its root-install warning
 does not establish the cause of the crash. [Docker's known issues](https://docs.docker.com/desktop/troubleshoot-and-support/troubleshoot/known-issues/)
-describe Intel containers on Apple Silicon as best effort, including QEMU crashes. The required
-next intervention is a native x86_64 Linux execution host for the same committed-head test, or a
-separately approved host-emulation repair. Do not change the pinned Nix version, guest architecture,
-single-user/root-store policy, pending markers, or global Docker settings to bypass this result.
+describe Intel containers on Apple Silicon as best effort, including QEMU crashes. The initial
+handoff proposed native x86_64 execution or an approved host-emulation repair; subsequent research
+identified the narrower process-local experiment below. The pinned Nix version, guest architecture,
+single-user/root-store policy, pending markers, and global Docker settings remain unchanged.
 No repository dependency installation, focused test, check, test-all, or verify lane started.
 Cached setup was unrun because tool-image provisioning failed. Overall wall time was 76 seconds;
 the cold guest took 15 seconds including provisioning/collection, and the tools guest 10 seconds.
@@ -126,6 +126,25 @@ Read-only Tart inspection found no local VMs in the default `/Users/ro/.tart` st
 The mounted-image inventory contained only simulator images, with no Tart disk. No clone deletion
 or lease recovery was performed by this task. Keep the Linux evidence until the blocker is resolved.
 Actual hosted smoke tests for all supported harnesses remain outstanding.
+
+### Scoped emulation and process portability follow-up
+
+The Developer authorized a local experiment after [Nix issue 16184](https://github.com/NixOS/nix/issues/16184)
+reported a matching startup fault in 2.35.1 under arm64 QEMU, with the unchanged binary starting
+when `QEMU_GUEST_BASE=0x800000000000` is supplied. This is adjacent evidence, not proof for this
+checkout's pinned 2.35.2. The runner's explicit `--qemu-guest-base` option requires an arm64
+Docker daemon, carries the fixed setting through guest environment clearing, and separates its
+tool-cache identity from the default acceptance run. It neither changes emulator registration nor
+adds privileges. Rosetta and global Docker changes require a separate decision.
+
+Source inspection also found portability gaps after installation: Git-hook entries assumed
+`/bin/zsh`, process-group lookup was Darwin-only, and Linux process tracking depended on an
+undeclared `ps` executable. The hook now uses POSIX `sh`. Process tracking keeps the existing
+macOS libproc implementation and adds Linux procfs inspection behind the same API, including
+kernel start identities, process groups, exit races, and explicit inspection failures. Linux
+signalling uses the runtime API instead of assuming `/bin/kill`. No package/version change or
+new dependency is needed; Windows support remains outside this slice. These changes still need
+committed-head Linux acceptance before the bootstrap can be considered complete.
 
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published

@@ -11,7 +11,7 @@ const abandoned: number[] = []
 
 AfterEach(() => {
   for (const pid of abandoned.splice(0)) {
-    Platform.spawnSync('/bin/kill', { args: ['-KILL', '--', String(pid)], stdio: 'ignore' })
+    Platform.signalProcess(pid, 'SIGKILL')
   }
 })
 
@@ -206,6 +206,14 @@ Describe('CLI process policy', () => {
 })
 
 Describe('ProcessTree', () => {
+  Test('native signalling rejects broadcast IDs and reports a missing process', () => {
+    for (const pid of [0, 1, -1, 1.5, NaN, 2_147_483_648]) {
+      Expect(() => Platform.signalProcess(pid, 0)).toThrow(/Expected a process ID/u)
+    }
+    Expect(Platform.signalProcess(Platform.runtimeProcess.pid, 0)).toBe(true)
+    Expect(Platform.signalProcess(2_147_483_647, 0)).toBe(false)
+  })
+
   Test('descendants reports a grandchild with its start identity, deepest first', async () => {
     const started = await startTree({ processPolicy: 'server' })
 

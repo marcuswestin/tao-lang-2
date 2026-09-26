@@ -137,6 +137,29 @@ Describe('contributor Linux container runner', () => {
     })
   })
 
+  Test('scopes the fixed QEMU experiment to guest arguments and a separate tool cache', async () => {
+    await withFixture(async fixture => {
+      Expect((await run(fixture)).exitCode).toBe(0)
+      const baseline = await FS.readText(`${await latestOutput(fixture)}/cache-ownership.txt`)
+      Expect((await run(fixture, ['--qemu-guest-base'])).exitCode).toBe(0)
+      const output = await latestOutput(fixture)
+      Expect(await FS.readText(`${output}/resources.txt`)).toContain('qemu_guest_base_experiment=1')
+      Expect(await FS.readText(`${output}/cache-ownership.txt`)).not.toBe(baseline)
+      const calls = (await FS.readText(fixture.log)).trim().split('\n')
+      const creates = calls.filter(call => call.startsWith('create ') && call.endsWith('--qemu-guest-base'))
+      Expect(creates).toHaveLength(3)
+      for (const [index, mode] of ['cold', 'tools', 'cached'].entries()) {
+        Expect(creates[index]).toContain(`contributor-linux ${mode} --qemu-guest-base`)
+        Expect(creates[index]).not.toContain('--privileged')
+        Expect(creates[index]).not.toContain('--env')
+      }
+      const native = { ...fixture, env: { ...fixture.env, TAO_TEST_DOCKER_ARCH: 'x86_64' } }
+      const rejected = await run(native, ['--qemu-guest-base'])
+      Expect(rejected.exitCode).toBe(2)
+      Expect(rejected.stderr).toContain('requires an arm64 Docker daemon')
+    })
+  })
+
   Test('cleans an owned container when creation succeeds but its client reports failure', async () => {
     await withFixture(async fixture => {
       const result = await run(fixture, ['--mode', 'cold'], 'create-after')
@@ -285,7 +308,7 @@ Describe('contributor Linux container runner', () => {
       await FS.writeText(guest, await FS.readText(Repo.resolvePath(`${ENVIRONMENT}/guest-smoke.sh`)))
       await writeVersionTools(root)
       const bootstrap = FS.resolvePath('bootstrap-tao-dev-env', root)
-      await FS.writeText(bootstrap, '#!/bin/sh\nprintf "%s\\n" "$*"\n')
+      await FS.writeText(bootstrap, '#!/bin/sh\nprintf "%s|%s\\n" "$*" "${QEMU_GUEST_BASE-unset}"\n')
       await FS.chmod(bootstrap, 0o755)
       const result = await CLI.run('/bin/sh', {
         // Model the empty guest base and keep disk accounting away from the host.
@@ -294,6 +317,13 @@ Describe('contributor Linux container runner', () => {
       })
       Expect(result.exitCode).toBe(0)
       Expect(result.stdout).toContain('--install-nix --tools-only')
+      Expect(result.stdout).toContain('--install-nix --tools-only|unset')
+      const experiment = await CLI.run('/bin/sh', {
+        args: ['-c', 'command() { return 1; }; du() { :; }; df() { :; }; . "$0"', guest, 'tools', '--qemu-guest-base'],
+        cwd: root,
+      })
+      Expect(experiment.exitCode).toBe(0)
+      Expect(experiment.stdout).toContain('--install-nix --tools-only|0x800000000000')
       const versions = await FS.readText(
         FS.resolvePath('.artifacts/contributor-linux/guest-tools/tool-versions.log', root),
       )
@@ -346,7 +376,7 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
         'printf "%s\\n" "$*" >> "$TAO_TEST_DOCKER_LOG"',
         'case "$1" in',
         '  version) [ "$TAO_TEST_DOCKER_FAILURE" != version ] || exit 6; printf "Docker fixture\\n" ;;',
-        '  info) printf "aarch64 overlayfs fixture\\n" ;;',
+        '  info) printf "%s overlayfs fixture\\n" "${TAO_TEST_DOCKER_ARCH:-aarch64}" ;;',
         '  build) printf "base build output\\n" ;;',
         '  create)',
         '    [ "$TAO_TEST_DOCKER_FAILURE" != create-before ] || exit 9',
