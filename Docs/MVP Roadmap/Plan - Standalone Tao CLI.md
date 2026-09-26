@@ -18,8 +18,9 @@ fix networking; the host application's Local Network permission did.
 - [x] Remove the temporary capabilities alias, dispatch, and help before archiving this task;
       retain the dedicated VM command and ordinary read-only capability reporting.
 
-Follow-up work after this intermediate landing continues on `feat/standalone-cli-followups`
-(to be created from the landed `main`), before closing the standalone development effort:
+The intermediate slice landed on 2026-09-26 as `9ba5058d`. The first follow-up,
+`feat/standalone-cli-followups`, replaces SSH with `tart exec` and audits the stopped VM disk.
+Subsequent slices still need to complete these tasks before closing the standalone development effort:
 
 - [ ] Move the remaining human recipes into `./dev`, make `dev` available in the entered shell,
       and retire `Justfile` after the replacement workflows are proven.
@@ -951,7 +952,33 @@ above; where the two disagree, these are later and win.
     inside the ordinary test suite, a local `tart` virtual machine as the gate before publication,
     and the `macos-26` GitHub runner as a regression gate once the public repository exists.
 
-    _Gate implementation in progress 2026-09-25._ `./agent unsandboxed
+    _Current transport 2026-09-26._ `./agent unsandboxed standalone-cli-clean-machine`
+    provisions a fresh stopped vanilla clone with the SHA-256-pinned Tart guest agent 0.10.0,
+    compiled test drivers, release files, and browser fixture. It mounts only that clone's raw
+    disk while stopped, selects its APFS Data volume, checks guest ownership, and detaches before
+    booting. A user LaunchAgent runs the guest agent. Tart 2.32.1 or newer then runs readiness
+    probes and acceptance through `tart exec`; no SSH, password, guest IP discovery, or shared
+    folders are used. The host scans the stopped disk before boot and after acceptance, using its
+    ordinary filesystem permissions. An in-guest scan through the new LaunchAgent instead blocked
+    on a Desktop privacy prompt; the offline scan requires no guest privacy changes. Guest logs
+    are copied from the stopped disk into `logs/guest` before deletion, including after an acceptance
+    failure. The snapshots include boot and shutdown activity and normalize remounted device numbers.
+    Host timeouts bound RPC commands; stopping the disposable VM terminates any remaining guest work.
+    An interrupted mount, failed detach, or failed evidence collection retains the clone
+    with a `disk-attached` marker instead of booting or deleting a potentially mounted disk.
+    The audit permits the explicit `/Users/admin/tao-harness/logs` fixture directory while still
+    rejecting writes to its input directory. The guest agent and browser are testing fixtures;
+    the Tao product still receives no preinstalled Node, Bun, Homebrew, or Xcode tools.
+    The fresh gate passed in 148 seconds on 2026-09-26, including installed CLI workflows,
+    the counter browser click, and zero disallowed metadata changes. Evidence is retained at
+    `.artifacts/standalone-vm/tao-acceptance-1790404661-65809/logs/`; guest step logs are under
+    `logs/guest/steps`. The snapshots report 165/164 unreadable OS paths and no other mounts;
+    this remains an incomplete metadata audit, not proof of every transient write or file content.
+    `--diagnose <owned-vm>` collects process/privacy logs, `--stop <owned-vm>` stops a stuck
+    guest without RPC, and `--collect <owned-vm>` recovers evidence from a stopped retained clone.
+    Recovery is limited to this checkout's run names and refuses collection while its runner is active.
+
+    _Original SSH implementation, historical evidence from 2026-09-25._ `./agent unsandboxed
     standalone-cli-clean-machine` builds the release and runs a local driver that clones a disposable
     `macos-tahoe-vanilla` VM, boots it headless, mounts only the release and the existing acceptance
     compiled for the guest as read-only inputs, and writes guest step logs to a host mount. It uses
@@ -966,7 +993,7 @@ above; where the two disagree, these are later and win.
     returned `No route to host` throughout the 240-second boot deadline. The guest acceptance did
     not start; no hidden dependency finding is claimed. Its logs remain under
     `.artifacts/standalone-vm/tao-acceptance-1790359337-42764/logs/`. The driver now streams clone
-    and acceptance output to both the terminal and log, and reports SSH wait progress every 15 seconds.
+    and acceptance output to both the terminal and log, and reported SSH wait progress every 15 seconds.
     A second run from Terminal.app reached guest SSH in 22 seconds, so the earlier route failure was
     specific to the app-launched process. The guest then exposed a separate release blocker: the
     Nix-provided Bun compiler embedded its `/nix/store` ICU path in both the release and acceptance
@@ -994,8 +1021,7 @@ above; where the two disagree, these are later and win.
     The earlier vanilla-guest pass predates the mandatory audit and browser driver. A later run from this task's managed shell
     built the inputs and cloned the VM, but guest SSH remained unreachable with `No route to host`
     through the 240-second deadline; its logs are under
-    `.artifacts/standalone-vm/tao-acceptance-1790376059-89012/logs/`. The SSH readiness loop
-    requires two successful probes and retries a transient second failure within its boot deadline.
+    `.artifacts/standalone-vm/tao-acceptance-1790376059-89012/logs/`. That SSH transport has now been removed.
 
     **Tart host troubleshooting.** Tart's installer notes that macOS gives VM addresses a default
     DHCP lease of 86,400 seconds. This gate uses Tart's default network, even though `softnet` is

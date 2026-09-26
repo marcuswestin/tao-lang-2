@@ -1,5 +1,5 @@
 export type HostCommandTarget = {
-  argsPolicy?: 'none' | 'pid'
+  argsPolicy?: 'none' | 'pid' | 'standalone-vm'
   command: string
   /** Environment the tool needs whatever shell dispatches it, merged over the inherited one. */
   env?: Readonly<Record<string, string>>
@@ -35,7 +35,11 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   // operations and a hand-written placement step.
   'companion-host-build': { command: './dev', fixedArgs: ['companion-host-build'] },
   'standalone-cli-vm-setup': { command: 'just', fixedArgs: ['standalone-cli-vm-setup'], argsPolicy: 'none' },
-  'standalone-cli-clean-machine': { command: 'just', fixedArgs: ['standalone-cli-clean-machine'], argsPolicy: 'none' },
+  'standalone-cli-clean-machine': {
+    command: 'just',
+    fixedArgs: ['standalone-cli-clean-machine'],
+    argsPolicy: 'standalone-vm',
+  },
   'simulators list': { command: 'xcrun', fixedArgs: ['simctl', 'list', 'devices'] },
   'simulators boot': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
   'simulators run': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },

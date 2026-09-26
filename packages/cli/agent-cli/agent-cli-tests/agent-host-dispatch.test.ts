@@ -193,4 +193,49 @@ Describe('named host command dispatch', () => {
       await FS.remove(root)
     }
   })
+
+  Test('validates VM recovery arguments before Just can interpret extra recipes or options', async () => {
+    const root = await mkTestDir('tao-vm-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('just.log', root)
+      const just = FS.resolvePath('just', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["standalone-cli-clean-machine"] }')
+      await FS.writeText(just, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.chmod(just, 0o755)
+      const env = { PATH: root, TAO_HOST_LOG: log }
+      for (
+        const args of [
+          ['--diagnose', 'tao-acceptance-1-2', 'fix'],
+          ['--dry-run'],
+          ['--justfile', '/tmp/untrusted'],
+          ['--stop', '../other'],
+        ]
+      ) {
+        const denied = await CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'standalone-cli-clean-machine', ...args],
+          cwd: root,
+          env,
+        })
+        Expect(denied.exitCode).toBe(2)
+        Expect(await FS.exists(log)).toBe(false)
+      }
+      for (
+        const args of [[], ['--diagnose', 'tao-acceptance-1-2'], ['--stop', 'tao-acceptance-1-2'], [
+          '--collect',
+          'tao-acceptance-1-2',
+        ]]
+      ) {
+        const accepted = await CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'standalone-cli-clean-machine', ...args],
+          cwd: root,
+          env,
+        })
+        Expect(accepted.exitCode).toBe(0)
+        Expect((await FS.readText(log)).trim().split('\n')).toEqual(['standalone-cli-clean-machine', ...args])
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
 })

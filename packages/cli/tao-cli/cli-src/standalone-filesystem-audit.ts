@@ -27,8 +27,18 @@ type AuditScope = { guestHome: string; guestTemp: string; root: string }
 const REPORT_LIMIT = 200
 
 async function main(args: string[]): Promise<void> {
-  if (args[0] === 'snapshot' && args.length === 3) {
+  if (args[0] === 'snapshot' && (args.length === 3 || args.length === 4)) {
     const snapshot = await capture(FS.resolvePath(args[1]!))
+    if (args[3] !== undefined) {
+      const logicalRoot = FS.resolvePath(args[3])
+      const logical = (path: string) => FS.resolvePath(FS.relativePath(snapshot.root, path), logicalRoot)
+      snapshot.entries = Object.fromEntries(
+        Object.entries(snapshot.entries).map(([path, entry]) => [logical(path), entry]),
+      )
+      snapshot.issues = snapshot.issues.map(issue => ({ ...issue, path: logical(issue.path) }))
+      snapshot.skippedMounts = snapshot.skippedMounts.map(logical)
+      snapshot.root = logicalRoot
+    }
     await FS.writeText(FS.resolvePath(args[2]!), `${JSON.stringify(snapshot)}\n`)
     HCI.writeLine(
       `Filesystem audit: recorded ${Object.keys(snapshot.entries).length} entries, `
@@ -61,7 +71,7 @@ async function main(args: string[]): Promise<void> {
     return
   }
   Errors.throwUserInput(
-    'Usage: filesystem-audit snapshot <root> <output.json> | compare <before.json> <after.json> <diff.json> <report.txt> [scope.json]',
+    'Usage: filesystem-audit snapshot <root> <output.json> [logical-root] | compare <before.json> <after.json> <diff.json> <report.txt> [scope.json]',
   )
 }
 
@@ -127,7 +137,8 @@ function compare(before: Snapshot, after: Snapshot): Diff {
     const old = before.entries[path]
     if (old === undefined) {
       diff.added.push(path)
-    } else if (JSON.stringify(old) !== JSON.stringify(after.entries[path])) {
+      // A stopped VM disk gets a new host device number when remounted. It is not a file mutation.
+    } else if (JSON.stringify({ ...old, device: 0 }) !== JSON.stringify({ ...after.entries[path], device: 0 })) {
       diff.changed.push({ after: after.entries[path]!, before: old, path })
     }
   }
@@ -154,6 +165,7 @@ function violations(diff: Diff, scope: AuditScope): string[] {
   const acceptanceHome = FS.resolvePath('home', acceptanceRoot)
   const guestHome = onVolume(scope.guestHome)
   const guestTemp = onVolume(scope.guestTemp)
+  const fixtureLogs = FS.resolvePath('tao-harness/logs', guestHome)
   const permittedHome = ['.tao', 'a-tally-counter', 'a-reading-list'].map(name => FS.resolvePath(name, acceptanceHome))
   const permittedHarness = ['releases', 'releases.json', 'watchman-bin']
     .map(name => FS.resolvePath(name, acceptanceRoot))
@@ -190,8 +202,35 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     'com.apple.managedappdistributionagent',
     'com.apple.nsurlsessiond',
     'com.apple.CloudTelemetry',
+    'com.apple.HomeKit',
+    'com.apple.akd',
+    'com.apple.amsaccountsd',
+    'com.apple.containermanagerd',
+    'com.apple.remindd',
   ].map(name => FS.resolvePath(`Library/Caches/${name}`, guestHome))
   const guestSystem = [
+    // The base image's login shell runs outside the isolated acceptance HOME.
+    '.zsh_sessions',
+    'Library/Accessibility',
+    'Library/Accounts',
+    'Library/Contacts',
+    'Library/DoNotDisturb',
+    'Library/FrontBoard',
+    'Library/IntelligencePlatform',
+    'Library/Logs/Assistant',
+    'Library/Sharing/AirDropHashDB',
+    'Library/Sharing/AutoUnlock',
+    'Library/Shortcuts',
+    'Library/Spotlight/ExtensionsCache',
+    'Library/StatusKit',
+    'Library/com.apple.AppleMediaServices',
+    'Library/com.apple.bluetooth.services.cloud',
+    'Library/com.apple.iTunesCloud',
+    'Library/HTTPStorages/com.apple.akd',
+    'Library/HTTPStorages/com.apple.amsaccountsd',
+    'Library/HTTPStorages/com.apple.appleaccountd',
+    'Library/HTTPStorages/com.apple.appstoreagent',
+    'Library/HTTPStorages/com.apple.itunescloudd',
     'Library/AppleMediaServices',
     'Library/Application Scripts',
     'Library/Application Support',
@@ -228,6 +267,9 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     '/System/Library/AssetsV2',
     '/System/Library/Caches',
     '/Library/Trial',
+    '/Library/Application Support/CrashReporter',
+    '/Library/Application Support/com.apple.TCC',
+    '/Library/Caches/com.apple.amsengagementd.classicdatavault',
     '/Library/Logs/DiagnosticReports',
     '/Library/Preferences',
     '/Library/Caches/com.apple.iconservices.store',
@@ -244,12 +286,78 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     '/Library/Caches',
     '/Library/Keychains',
     '/Library/Keychains/apsd.keychain',
+    '/Library/Keychains/System.keychain',
+    '/Library/Keychains/system-keychain-2.db-shm',
+    '/Library/Keychains/system-keychain-2.db-wal',
+    '/Library/Application Support',
+    '/Library/Bluetooth',
+    ...['other', 'paired'].flatMap(kind =>
+      ['', '-shm', '-wal'].map(suffix => `/Library/Bluetooth/com.apple.MobileBluetooth.ledevices.${kind}.db${suffix}`)
+    ),
+    '/Library/SystemExtensions',
+    '/Library/SystemExtensions/.staging',
+    '/MobileSoftwareUpdate',
+    '/MobileSoftwareUpdate/restore.log',
+    '/Volumes',
+    '/Volumes/Macintosh HD',
     '/Library/Logs',
     '/Library/Updates',
     '/Library/Updates/ProductMetadata.plist',
     '/private',
     '/private/var',
     '/private/var/run/mds',
+    '/private/var/dirs_cleaner',
+    '/private/var/networkd',
+    '/private/var/networkd/db',
+    '/private/var/networkd/db/netusage.sqlite-shm',
+    '/private/var/networkd/db/netusage.sqlite-wal',
+    '/private/var/sntpd',
+    '/private/var/sntpd/state.bin',
+    '/private/var/rpc',
+    '/private/var/rpc/ncacn_np',
+    ...['lsarpc', 'mdssvc', 'srvsvc', 'wkssvc'].map(name => `/private/var/rpc/ncacn_np/${name}`),
+    '/private/var/rpc/ncalrpc',
+    ...['NETLOGON', 'lsarpc', 'srvsvc', 'wkssvc'].map(name => `/private/var/rpc/ncalrpc/${name}`),
+    '/private/var/run',
+    ...[
+      '.sim_diagnosticd_socket',
+      'MobileAssetCriticalDomainsUpdated.plist',
+      'MobileAssetStartupActivation.doneThisBoot',
+      'automount.initialized',
+      'bootSessionMA.txt',
+      'com.apple.AssetCache',
+      'com.apple.AssetCache/AssetCache.pid',
+      'com.apple.DumpPanic.finishedThisBoot',
+      'com.apple.WindowServer.didRunThisBoot',
+      'com.apple.logind.didRunThisBoot',
+      'com.apple.loginwindow.didRunThisBoot',
+      'com.apple.mdmclient.daemon.didRunThisBoot',
+      'com.apple.security.cryptexd',
+      'com.apple.security.cryptexd/codex.system',
+      ...['boot-session', 'bootstrap', 'live', 'remote', 'stage'].map(name =>
+        `com.apple.security.cryptexd/codex.system/${name}`
+      ),
+      ...['init', 'mnt', 'shdw'].map(name => `com.apple.security.cryptexd/${name}`),
+      'cupsd',
+      'diskarbitrationd.pid',
+      'filesystemui.socket',
+      'kdc.pid',
+      'mDNSResponder',
+      'portmap.socket',
+      'pppconfd',
+      'resolv.conf',
+      'syslog',
+      'syslog.pid',
+      'systemkeychaincheck.done',
+      'systemkeychaincheck.socket',
+      'usbmuxd',
+      'utmpx',
+      'vpncontrol.sock',
+    ].map(name => `/private/var/run/${name}`),
+    '/private/tmp/.AppleMiniSetupDidRun',
+    '/private/tmp/.appleLogoTransition',
+    '/private/tmp/.skipHello',
+    '/private/tmp/powerlog',
     '/private/tmp',
   ].map(onVolume)
   const guestParents = [
@@ -258,6 +366,9 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     FS.resolvePath('Library/Caches', guestHome),
     FS.resolvePath('Library/Caches/com.apple.nsservicescache.plist', guestHome),
     FS.resolvePath('Library/Assistant', guestHome),
+    FS.resolvePath('Library/Assistant/assistantdDidLaunch', guestHome),
+    FS.resolvePath('Library/Sharing', guestHome),
+    FS.resolvePath('Library/Spotlight', guestHome),
     FS.resolvePath('Library/Assistant/sync_flagcom.apple.siri.applications', guestHome),
     FS.resolvePath('Library/homeenergyd', guestHome),
     FS.resolvePath('Library/HTTPStorages', guestHome),
@@ -270,6 +381,22 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     ),
     FS.resolvePath('Pictures', guestHome),
   ]
+  // These exact artifacts shipped in the VM baseline; only their cleanup is expected.
+  const baselineMount = onVolume('/private/tmp/tmp-mount-3nVTcs')
+  const removedBaselineArtifacts = [
+    baselineMount,
+    FS.resolvePath('BlobRegistryFiles-bghqW6Fr', guestTemp),
+    FS.resolvePath('CFNetworkDownload_TZj7l3.tmp', guestTemp),
+  ]
+  const runtimeRoot = onVolume('/private/var/run')
+  const launchdDirectory = (path: string) =>
+    /^com\.apple\.launchd\.[A-Za-z0-9]+$/.test(
+      FS.relativePath(runtimeRoot, path),
+    )
+  const launchdPath = (path: string) =>
+    /^com\.apple\.launchd\.[A-Za-z0-9]+(?:\/Listeners)?$/.test(
+      FS.relativePath(runtimeRoot, path),
+    )
   const allowedSystem = [...system, ...guestSystem, ...guestCache]
   const changed = [
     ...diff.added,
@@ -286,12 +413,43 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     if ([...forbiddenExternal, ...forbiddenTemp].some(forbidden => FS.pathIsWithin(path, forbidden))) {
       return true
     }
+    if (removedBaselineArtifacts.includes(path)) {
+      return !diff.removed.includes(path)
+    }
+    if (launchdPath(path)) {
+      return false
+    }
+    if (FS.pathIsWithin(path, fixtureLogs)) {
+      return false
+    }
     if (FS.pathIsWithin(path, guestTemp)) {
       const child = path.slice(guestTemp.length + 1).split('/')[0] ?? ''
       return path !== guestTemp && !child.startsWith('com.apple.')
         && !child.startsWith('com.google.Chrome.') && !child.startsWith('.com.google.Chrome.')
-        && !['.LINKS', 'TemporaryItems', 'duetexpertd', 'diagnosticextensionsd', 'proactived', 'contentlinkingd']
-          .includes(child)
+        && ![
+          '.LINKS',
+          'TemporaryItems',
+          'duetexpertd',
+          'diagnosticextensionsd',
+          'proactived',
+          'contentlinkingd',
+          '.AddressBookLocks',
+          'AudioComponentRegistrar',
+          'AudioConverterService',
+          'CrashHandlerService',
+          'SandboxHelper',
+          'SpeechModelCache',
+          'StatusKitAgent',
+          'assessmentagent',
+          'betaenrollmentagent',
+          'heard',
+          'homed',
+          'icdd',
+          'itunescloudd',
+          'mobiletimerd',
+          'studentd',
+          'talagent',
+        ].includes(child)
     }
     return ![diff.root, ...systemParents, ...guestParents].includes(path)
       && !allowedSystem.some(allowed => FS.pathIsWithin(path, allowed))
@@ -344,6 +502,18 @@ function violations(diff: Diff, scope: AuditScope): string[] {
   ].filter(path => {
     if (FS.pathIsWithin(path, acceptanceRoot)) {
       return true
+    }
+    if ([...forbiddenExternal, ...forbiddenTemp].some(forbidden => FS.pathIsWithin(path, forbidden))) {
+      return true
+    }
+    if (
+      path === baselineMount && diff.removed.includes(path)
+      && !diff.afterIssues.some(issue => issue.path === path) && !diff.afterSkippedMounts.includes(path)
+    ) {
+      return false
+    }
+    if (launchdDirectory(path)) {
+      return false
     }
     if ([onVolume('/Volumes/My Shared Files'), onVolume('/home')].includes(path)) {
       return false
