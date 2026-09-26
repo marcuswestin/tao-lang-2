@@ -59,6 +59,40 @@ Describe('standalone filesystem audit', () => {
       await FS.writeText(FS.resolvePath('acceptance/home/.tao/cache/bun/package', volume), 'expected')
       await FS.writeText(FS.resolvePath('acceptance/home/a-tally-counter/App.tao', volume), 'expected')
       await FS.writeText(FS.resolvePath('private/var/db/os-state', volume), 'expected OS change')
+      await FS.writeText(
+        FS.resolvePath('admin/Library/Caches/com.apple.parsecd/Cohorts/cohorts.sqlite', volume),
+        'OS cache',
+      )
+      await FS.writeText(FS.resolvePath('admin/Library/Caches/com.apple.itunescloudd/Cache.db-wal', volume), 'OS cache')
+      await FS.writeText(FS.resolvePath('admin/Library/Assistant/sync_flagcom.apple.siri.applications', volume), '')
+      await FS.mkdir(FS.resolvePath('admin/Library/homeenergyd', volume))
+      await FS.writeText(
+        FS.resolvePath('admin/Library/HTTPStorages/com.apple.askpermissiond/httpstorages.sqlite-shm', volume),
+        'OS cache',
+      )
+      await FS.writeText(FS.resolvePath('admin/Library/Safari/IgnoredSiriSuggestedSites.db-shm', volume), 'OS cache')
+      await FS.writeText(FS.resolvePath('Library/Keychains/apsd.keychain', volume), 'OS keychain')
+      for (
+        const path of [
+          'admin/Library/Caches/com.apple.managedappdistributionagent/Cache.db',
+          'admin/Library/Caches/com.apple.nsurlsessiond/Downloads/com.apple.bird/file',
+          'admin/Library/Caches/com.apple.nsservicescache.plist',
+          'admin/Library/Caches/com.apple.CloudTelemetry/XPCService/com.apple.identityservicesd/eventcache/cache.db-shm',
+          'admin/Library/Logs/com.apple.CloudTelemetry/XPCService/com.apple.identityservicesd/messageLog.txt',
+          'admin/Library/HTTPStorages/com.apple.amsondevicestoraged/httpstorages.sqlite',
+          'admin/Library/HTTPStorages/com.apple.managedappdistributionagent/httpstorages.sqlite',
+          'admin/Library/Assistant/SiriVocabulary/Modules/Task/Registry',
+          'admin/Library/Photos/Libraries/Syndication.photoslibrary/resources/derivatives/thumbs/thumbnailConfiguration',
+          'Library/Logs/DiagnosticReports/tao.diag',
+          'Library/Updates/ProductMetadata.plist',
+          'tmp/proactived/file',
+          'tmp/contentlinkingd/file',
+          'tmp/com.google.Chrome.123/SingletonCookie',
+          'tmp/.com.google.Chrome.456',
+        ]
+      ) {
+        await FS.writeText(FS.resolvePath(path, volume), 'OS service write')
+      }
       await run('snapshot', volume, after)
       await run('compare', before, after, diffPath, reportPath, scopePath)
       Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toEqual([])
@@ -79,6 +113,34 @@ Describe('standalone filesystem audit', () => {
       })
       Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations)
         .toContain(FS.resolvePath('admin/unexpected', volume))
+
+      const unexpected = [
+        'admin/Library/Caches/com.apple.parsecd-unknown/file',
+        'admin/Library/Caches/com.apple.unknown/file',
+        'admin/Library/Assistant/unexpected',
+        'admin/Library/homeenergyd/unexpected',
+        'admin/Library/HTTPStorages/unknown/file',
+        'admin/Library/Safari/unexpected',
+        'Library/Keychains/unexpected',
+        'Library/Updates/unexpected',
+        'Library/Logs/unexpected',
+        'admin/Library/Logs/unexpected',
+        'tmp/com.google.ChromeUnknown/file',
+        'tmp/tao-test-runs/leak',
+        'acceptance/home/Library/Caches/com.apple.parsecd/file',
+      ]
+      for (const path of unexpected) {
+        await FS.writeText(FS.resolvePath(path, volume), 'unexpected')
+      }
+      await run('snapshot', volume, after)
+      const adjacent = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: ['run', AUDIT, 'compare', before, after, diffPath, reportPath, scopePath],
+      })
+      Expect(adjacent.exitCode).not.toBe(0)
+      const violations = (await FS.readJson<{ violations: string[] }>(diffPath)).violations
+      for (const path of unexpected) {
+        Expect(violations).toContain(FS.resolvePath(path, volume))
+      }
     } finally {
       await FS.remove(fixture)
     }
@@ -97,10 +159,11 @@ Describe('standalone filesystem audit', () => {
       const unknown = FS.resolvePath('private/var/unknown', volume)
       const library = FS.resolvePath('Library/unknown', volume)
       const expectedOs = FS.resolvePath('private/var/db/locked', volume)
+      const spotlight = FS.resolvePath('private/var/run/mds', volume)
       await FS.writeJson(before, { entries: {}, issues: [], root: volume, skippedMounts: [] })
       await FS.writeJson(after, {
-        entries: { [acceptance]: { kind: 'directory' } },
-        issues: [unknown, library, expectedOs].map(path => ({ error: 'permission denied', path })),
+        entries: { [acceptance]: { kind: 'directory' }, [spotlight]: { kind: 'directory' } },
+        issues: [unknown, library, expectedOs, spotlight].map(path => ({ error: 'permission denied', path })),
         root: volume,
         skippedMounts: [],
       })
@@ -114,6 +177,8 @@ Describe('standalone filesystem audit', () => {
       Expect(violations).toContain(`unobservable: ${unknown}`)
       Expect(violations).toContain(`unobservable: ${library}`)
       Expect(violations).not.toContain(`unobservable: ${expectedOs}`)
+      Expect(violations).not.toContain(spotlight)
+      Expect(violations).not.toContain(`unobservable: ${spotlight}`)
     } finally {
       await FS.remove(fixture)
     }

@@ -36,6 +36,7 @@ cleanup() {
       status=1
     fi
   fi
+  rm -f "$input/browser.tar"
   printf 'Clean-machine: total %ss\n' "$(($(date +%s) - overall_started))"
   printf 'Clean-machine logs: %s\n' "$logs"
   exit "$status"
@@ -112,6 +113,9 @@ if ! step 'compile the filesystem auditor for the guest' "$portable_bun" build -
 fi
 cat "$logs/audit-compile.log"
 
+# Archive on the host: traversing Chrome's framework symlinks through VirtioFS can fail with ELOOP.
+step 'archive the browser bundle for the guest' /usr/bin/tar --no-xattrs -cf "$input/browser.tar" -C "$browser_app" .
+
 cat > "$input/run.sh" <<'GUEST'
 #!/bin/sh
 set -eu
@@ -119,9 +123,12 @@ cd /
 export PATH=/usr/bin:/bin
 export TAO_ACCEPTANCE_LOG_DIR='/Volumes/My Shared Files/tao-logs/steps'
 export TAO_ACCEPTANCE_BROWSER_DRIVER='/Volumes/My Shared Files/tao-input/browser-click'
-export TAO_STUDIO_CHROME_PATH='/Volumes/My Shared Files/tao-browser/Contents/MacOS/Google Chrome'
+export TAO_STUDIO_CHROME_PATH="$HOME/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 test -x "$TAO_ACCEPTANCE_BROWSER_DRIVER" || { echo 'The browser click driver is missing.' >&2; exit 1; }
-test -x "$TAO_STUDIO_CHROME_PATH" || { echo 'The shared browser is missing.' >&2; exit 1; }
+echo 'Clean-machine: copying the browser bundle to the guest disk...'
+mkdir -p "$HOME/Applications/Google Chrome.app"
+/usr/bin/tar -xf '/Volumes/My Shared Files/tao-input/browser.tar' -C "$HOME/Applications/Google Chrome.app"
+test -x "$TAO_STUDIO_CHROME_PATH" || { echo 'The guest browser is missing.' >&2; exit 1; }
 for tool in brew bun node; do
   if command -v "$tool" >/dev/null 2>&1; then
     echo "The vanilla guest unexpectedly has $tool on PATH." >&2
@@ -162,7 +169,7 @@ fi
 printf 'Clean-machine: booting %s headless...\n' "$name"
 boot_started=$(date +%s)
 tart run --no-graphics --dir="tao-input:$input:ro" --dir="tao-logs:$logs" \
-  --dir="tao-browser:$browser_app:ro" "$name" > "$logs/boot.log" 2>&1 &
+  "$name" > "$logs/boot.log" 2>&1 &
 vm_pid=$!
 started=1
 

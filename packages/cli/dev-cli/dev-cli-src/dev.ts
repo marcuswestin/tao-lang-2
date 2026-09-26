@@ -1,5 +1,5 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
-import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
 import { FinalizeCommand, LandCommand, MergeMainCommand, StartBranchCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
@@ -470,25 +470,9 @@ await runWithCommands(commands => {
 
   commands
     .command('capabilities')
-    .description('Report host capabilities; the explicit temporary HACK flag runs standalone VM acceptance.')
+    .description('Report host capabilities.')
     .option('--json', 'Print a versioned structured report.')
-    .option(
-      '--HACK-standalone-cli-clean-machine',
-      'Temporary: run the existing standalone VM gate; remove before task archive.',
-    )
-    .action(async (options: { HACKStandaloneCliCleanMachine?: boolean; json?: boolean } = {}) => {
-      // Developer-authorized temporary alias, 2026-09-26. Removal is tracked in the standalone CLI plan.
-      if (options.HACKStandaloneCliCleanMachine === true) {
-        if (options.json === true) {
-          Errors.throwUserInput('The temporary standalone VM flag cannot be combined with --json.')
-        }
-        const result = await CLI.run('just', {
-          args: ['standalone-cli-clean-machine'],
-          cwd: Repo.getRoot(),
-          stdio: 'inherit',
-        })
-        Platform.runtimeProcess.exit(result.exitCode)
-      }
+    .action(async (options: { json?: boolean } = {}) => {
       Platform.runtimeProcess.exit(await AgentCapabilitiesCommand.run({ json: options.json === true }))
     })
 

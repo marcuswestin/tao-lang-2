@@ -472,7 +472,7 @@ worktree-status:
 open-pr *ARGS:
     ./dev open-pr {{ ARGS }}
 
-# Report host capabilities; the explicit temporary HACK flag runs standalone VM acceptance
+# Report host capabilities
 [group('Report')]
 capabilities *ARGS:
     ./dev capabilities {{ ARGS }}

@@ -295,7 +295,7 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
         },
         onOutput: (_stream, chunk) => HCI.write(String(chunk)),
         processPolicy: 'test',
-        timeoutMs: 180_000,
+        timeoutMs: 300_000,
       })
       if (ACCEPTANCE_LOG_DIR !== undefined) {
         await FS.writeText(FS.resolvePath('browser-click.log', ACCEPTANCE_LOG_DIR), click.stdout + click.stderr)

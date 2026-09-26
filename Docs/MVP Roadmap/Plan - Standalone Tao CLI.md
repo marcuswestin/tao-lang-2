@@ -6,18 +6,17 @@ The standalone macOS CLI, installer, pinned toolchain, interactive developer she
 gate may land as an intermediate slice. This does not declare the broader contributor or native
 development program complete. Before that landing:
 
-- [ ] Run the current vanilla Tart gate with its mandatory filesystem audit and browser click;
+- [x] Run the current vanilla Tart gate with its mandatory filesystem audit and browser click;
       inspect any unexpected writes before changing the allowlist, and retain its guest logs.
 - [x] Remove the task-only VM and browser routes from `./agent unsandboxed capabilities`, leaving
       that command read-only; use the dedicated `standalone-cli-clean-machine` host operation for the gate.
 
-Temporary exception authorized on 2026-09-26: `./agent unsandboxed capabilities
---HACK-standalone-cli-clean-machine` invokes the existing clean-machine recipe with its mandatory
-audit and browser click. It changes host behavior only when that explicit flag is present; ordinary
-capability reporting stays read-only. The alias is an experiment, not evidence that guest SSH is fixed.
+The temporary `--HACK-standalone-cli-clean-machine` capabilities alias, authorized on 2026-09-26,
+was removed after the dedicated VM operation reached the guest from this task. The alias did not
+fix networking; the host application's Local Network permission did.
 
-- [ ] Before archiving this task, remove `--HACK-standalone-cli-clean-machine`, its dispatch, and
-      temporary help text; retain the dedicated VM command and confirm ordinary capabilities remain read-only.
+- [x] Remove the temporary capabilities alias, dispatch, and help before archiving this task;
+      retain the dedicated VM command and ordinary read-only capability reporting.
 
 Follow-up work after this intermediate landing continues on `feat/standalone-cli-followups`
 (to be created from the landed `main`), before closing the standalone development effort:
@@ -985,8 +984,14 @@ above; where the two disagree, these are later and win.
     `filesystem-diff.txt` in that run's `logs/`, then deletes the VM as usual. The scanner does not
     enter other mounted volumes, records unreadable paths, and compares metadata rather than file
     contents; macOS background writes and files created and deleted between snapshots remain
-    limitations. The earlier vanilla-guest pass predates the mandatory audit and browser driver;
-    those additions still need one passing guest run. A later run from this task's managed shell
+    limitations. The current gate passed from this task on 2026-09-26 in 170 seconds, including
+    the browser counter click and zero disallowed metadata changes. Its retained logs are
+    `.artifacts/standalone-vm/tao-acceptance-1790402495-12335/logs/`. Chrome's signed bundle is
+    archived on the host without extended attributes and extracted onto the guest disk before
+    the baseline; direct framework traversal through the shared mount failed on symlinks.
+    Cold macOS launch assessment took about 30 seconds, so only the guest browser driver uses
+    a 120-second startup budget. The disposable VM and host browser archive are removed afterward.
+    The earlier vanilla-guest pass predates the mandatory audit and browser driver. A later run from this task's managed shell
     built the inputs and cloned the VM, but guest SSH remained unreachable with `No route to host`
     through the 240-second deadline; its logs are under
     `.artifacts/standalone-vm/tao-acceptance-1790376059-89012/logs/`. The SSH readiness loop

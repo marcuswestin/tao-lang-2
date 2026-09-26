@@ -185,6 +185,11 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     'com.apple.feedbacklogger',
     'com.apple.askpermissiond',
     'com.apple.proactive.eventtracker',
+    'com.apple.parsecd',
+    'com.apple.itunescloudd',
+    'com.apple.managedappdistributionagent',
+    'com.apple.nsurlsessiond',
+    'com.apple.CloudTelemetry',
   ].map(name => FS.resolvePath(`Library/Caches/${name}`, guestHome))
   const guestSystem = [
     'Library/AppleMediaServices',
@@ -199,12 +204,18 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     'Library/Finance',
     'Library/Group Containers',
     'Library/HomeKit',
+    'Library/HTTPStorages/com.apple.askpermissiond',
+    'Library/HTTPStorages/com.apple.amsondevicestoraged',
+    'Library/HTTPStorages/com.apple.managedappdistributionagent',
+    'Library/Assistant/SiriVocabulary',
     'Library/IdentityServices',
     'Library/Keychains',
+    'Library/Logs/com.apple.CloudTelemetry',
     'Library/Messages',
     'Library/Metadata',
     'Library/Passes',
     'Library/PersonalizationPortrait',
+    'Library/Photos/Libraries/Syndication.photoslibrary',
     'Library/Preferences',
     'Library/Suggestions',
     'Library/Trial',
@@ -217,6 +228,7 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     '/System/Library/AssetsV2',
     '/System/Library/Caches',
     '/Library/Trial',
+    '/Library/Logs/DiagnosticReports',
     '/Library/Preferences',
     '/Library/Caches/com.apple.iconservices.store',
     '/private/var/db',
@@ -230,14 +242,32 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     '/System/Library',
     '/Library',
     '/Library/Caches',
+    '/Library/Keychains',
+    '/Library/Keychains/apsd.keychain',
+    '/Library/Logs',
+    '/Library/Updates',
+    '/Library/Updates/ProductMetadata.plist',
     '/private',
     '/private/var',
+    '/private/var/run/mds',
     '/private/tmp',
   ].map(onVolume)
   const guestParents = [
     guestHome,
     FS.resolvePath('Library', guestHome),
     FS.resolvePath('Library/Caches', guestHome),
+    FS.resolvePath('Library/Caches/com.apple.nsservicescache.plist', guestHome),
+    FS.resolvePath('Library/Assistant', guestHome),
+    FS.resolvePath('Library/Assistant/sync_flagcom.apple.siri.applications', guestHome),
+    FS.resolvePath('Library/homeenergyd', guestHome),
+    FS.resolvePath('Library/HTTPStorages', guestHome),
+    FS.resolvePath('Library/Logs', guestHome),
+    FS.resolvePath('Library/Safari', guestHome),
+    FS.resolvePath('Library/Photos', guestHome),
+    FS.resolvePath('Library/Photos/Libraries', guestHome),
+    ...['', '-shm', '-wal'].map(suffix =>
+      FS.resolvePath(`Library/Safari/IgnoredSiriSuggestedSites.db${suffix}`, guestHome)
+    ),
     FS.resolvePath('Pictures', guestHome),
   ]
   const allowedSystem = [...system, ...guestSystem, ...guestCache]
@@ -259,7 +289,9 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     if (FS.pathIsWithin(path, guestTemp)) {
       const child = path.slice(guestTemp.length + 1).split('/')[0] ?? ''
       return path !== guestTemp && !child.startsWith('com.apple.')
-        && !['.LINKS', 'TemporaryItems', 'duetexpertd', 'diagnosticextensionsd'].includes(child)
+        && !child.startsWith('com.google.Chrome.') && !child.startsWith('.com.google.Chrome.')
+        && !['.LINKS', 'TemporaryItems', 'duetexpertd', 'diagnosticextensionsd', 'proactived', 'contentlinkingd']
+          .includes(child)
     }
     return ![diff.root, ...systemParents, ...guestParents].includes(path)
       && !allowedSystem.some(allowed => FS.pathIsWithin(path, allowed))

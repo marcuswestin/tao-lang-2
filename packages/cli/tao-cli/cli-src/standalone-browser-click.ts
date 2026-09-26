@@ -8,7 +8,13 @@ if (url === undefined || !url.startsWith('http://127.0.0.1:')) {
 
 try {
   HCI.writeLine('Standalone browser click: launching Chrome...')
-  const browser = await StudioCdp.launchChrome({ useMockKeychain: true })
+  const browserStarted = Date.now()
+  const browser = await StudioCdp.launchChrome({
+    // A fresh macOS guest assesses the entire signed bundle before its first instruction executes.
+    startupTimeoutMs: 120_000,
+    useMockKeychain: true,
+  })
+  HCI.writeLine(`Standalone browser click: Chrome ready in ${Date.now() - browserStarted}ms.`)
   try {
     HCI.writeLine(`Standalone browser click: opening ${url}...`)
     await browser.goto(url)
