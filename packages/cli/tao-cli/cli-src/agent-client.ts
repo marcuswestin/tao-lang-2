@@ -29,7 +29,15 @@ export async function runAgentClient(bundle: string, argv = Platform.runtimeProc
         return
       }
       let result = await runAppAgentCommand('commands', bundle)
-      if (result.ok) {
+      if (!result.ok) {
+        result = {
+          ...result,
+          error: {
+            ...result.error,
+            message: `Command discovery failed. No command was submitted. ${result.error.message}`,
+          },
+        }
+      } else {
         const catalog = result.result as { id: string; name: string }[]
         const matches = catalog.filter(entry => entry.id === command || entry.name === command)
         result = matches.length === 1
@@ -39,16 +47,17 @@ export async function runAgentClient(bundle: string, argv = Platform.runtimeProc
             error: { code: 'invalid_command', message: 'Choose a canonical id or unique name from commands.' },
           }
       }
+      print(result)
       if (options.stopAfter) {
         const stopped = await runAppAgentCommand('stop', bundle)
         if (!stopped.ok) {
-          HCI.writeErrorLine(JSON.stringify(stopped))
-          if (result.ok) {
-            result = stopped
-          }
+          HCI.writeErrorLine(JSON.stringify({
+            ...stopped,
+            error: { ...stopped.error, message: `App shutdown failed: ${stopped.error.message}` },
+          }))
+          Platform.runtimeProcess.setExitCode(1)
         }
       }
-      print(result)
     })
   cli.command('stop').description('Stop the background app.').action(async () =>
     print(await runAppAgentCommand('stop', bundle))

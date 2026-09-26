@@ -1,4 +1,4 @@
-import { Errors, FS, Platform } from '@shared'
+import { CLI, Errors, FS, Platform, Text } from '@shared'
 import { Describe, Expect, mkTestDir, Test, testOverrideSlot, withCapturedOutput } from '@shared/test'
 import { runAgentClient } from '../cli-src/agent-client'
 import { runAppAgentCommand } from '../cli-src/agents-command'
@@ -18,6 +18,14 @@ const fetchSlot = testOverrideSlot({ read: () => globalThis.fetch, write: value 
 const exitCodeSlot = testOverrideSlot({
   read: () => Platform.runtimeProcess.setExitCode,
   write: value => Platform.runtimeProcess.setExitCode = value,
+})
+const stdoutWriteSlot = testOverrideSlot({
+  read: () => Platform.runtimeProcess.stdout.write,
+  write: value => Platform.runtimeProcess.stdout.write = value,
+})
+const stderrWriteSlot = testOverrideSlot({
+  read: () => Platform.runtimeProcess.stderr.write,
+  write: value => Platform.runtimeProcess.stderr.write = value,
 })
 const metadata = { protocolVersion: 1, appId: 'test.agent.client', appName: 'Client test', buildId: 'build-one' }
 const session = {
@@ -152,6 +160,176 @@ Describe('packaged app agent client', () => {
         })
       } finally {
         restore()
+      }
+    })
+  })
+
+  Test('bundled run reports its primary result before shutdown and preserves receipts when cleanup fails', async () => {
+    for (
+      const scenario of [
+        { primary: 'discovery', cleanupFails: true },
+        { primary: 'lost-run', cleanupFails: true },
+        { primary: 'rejected-run', cleanupFails: false },
+        { primary: 'success', cleanupFails: true },
+        { primary: 'success', cleanupFails: false },
+      ] as const
+    ) {
+      await withFixture(async (bundle, sessionPath) => {
+        const events: string[] = []
+        const methods: string[] = []
+        const receipt = { rootId: 'saved-entry', status: 'succeeded', value: 'Saved' }
+        const rejected = {
+          code: 'command_failed',
+          message: 'Write denied.',
+          details: { receipt: { status: 'failed' } },
+        }
+        let exitCode = 0
+        const child = CLI.start(Platform.runtimeProcess.execPath, {
+          args: ['-e', 'setInterval(() => {}, 1000)'],
+          stdio: 'pipe',
+        })
+        Expect(child.pid).toBeDefined()
+        await FS.writeJson(sessionPath, { ...session, pid: child.pid, launcherPid: child.pid })
+        const childPong = { ...pong, pid: child.pid, launcherPid: child.pid }
+        const restoreExit = exitCodeSlot.install(code => exitCode = code)
+        const restoreFetch = fetchSlot.install(
+          (async (_url, options) => {
+            const body = JSON.parse(String(options?.body))
+            methods.push(body.method)
+            if (body.method === 'ping') {
+              return Response.json({ version: 1, id: body.id, ok: true, result: childPong })
+            }
+            if (body.method === 'shutdown') {
+              events.push('shutdown')
+              if (scenario.cleanupFails) {
+                return Response.json({
+                  version: 1,
+                  id: body.id,
+                  ok: false,
+                  error: { code: 'busy', message: 'Still working.' },
+                })
+              }
+              child.kill()
+              await child.waitForClose()
+              await FS.remove(sessionPath)
+              return Response.json({ version: 1, id: body.id, ok: true, result: 'stopped' })
+            }
+            if (body.method === 'commands') {
+              if (scenario.primary === 'discovery') {
+                throw new DOMException('The operation timed out.', 'TimeoutError')
+              }
+              return Response.json({ version: 1, id: body.id, ok: true, result: [{ id: 'Items/Add', name: 'Add' }] })
+            }
+            if (scenario.primary === 'lost-run') {
+              throw Errors.abortError('The connection was interrupted.')
+            }
+            return Response.json(
+              scenario.primary === 'rejected-run'
+                ? { version: 1, id: body.id, ok: false, error: rejected }
+                : { version: 1, id: body.id, ok: true, result: receipt },
+            )
+          }) as typeof fetch,
+        )
+        try {
+          const output = await withCapturedOutput(async () => {
+            const stdout = Platform.runtimeProcess.stdout
+            const stderr = Platform.runtimeProcess.stderr
+            const writeOut = stdout.write.bind(stdout)
+            const writeErr = stderr.write.bind(stderr)
+            const restoreOut = stdoutWriteSlot.install(chunk => {
+              events.push('primary')
+              return writeOut(chunk)
+            })
+            const restoreErr = stderrWriteSlot.install(chunk => {
+              events.push('cleanup-error')
+              return writeErr(chunk)
+            })
+            try {
+              await runAgentClient(bundle, ['bun', 'agents', 'run', 'Add', '--stop-after'])
+            } finally {
+              restoreErr()
+              restoreOut()
+            }
+          })
+          const primary = JSON.parse(output.stdout)
+          Expect(output.stdout.trim().split('\n')).toHaveLength(1)
+          if (scenario.primary === 'discovery') {
+            Expect(primary).toEqual({
+              ok: false,
+              error: {
+                code: 'transport_error',
+                message:
+                  'Command discovery failed. No command was submitted. The app commands request timed out after 30 seconds: The operation timed out.',
+              },
+            })
+          } else if (scenario.primary === 'lost-run') {
+            Expect(primary).toEqual({
+              ok: false,
+              error: {
+                code: 'outcome_unknown',
+                message:
+                  'The app run request failed: The connection was interrupted. The command outcome is unknown; it may have run. It was not retried.',
+              },
+            })
+          } else if (scenario.primary === 'rejected-run') {
+            Expect(primary).toEqual({ ok: false, error: rejected })
+          } else {
+            Expect(primary).toEqual({ ok: true, result: receipt })
+          }
+          Expect(methods).toEqual(
+            scenario.primary === 'discovery'
+              ? ['ping', 'ping', 'commands', 'ping', 'shutdown']
+              : ['ping', 'ping', 'commands', 'ping', 'run', 'ping', 'shutdown'],
+          )
+          Expect(events).toEqual(
+            scenario.cleanupFails ? ['primary', 'shutdown', 'cleanup-error'] : ['primary', 'shutdown'],
+          )
+          Expect(exitCode).toBe(scenario.primary === 'success' && !scenario.cleanupFails ? 0 : 1)
+          if (scenario.cleanupFails) {
+            Expect(JSON.parse(Text.stripAnsi(output.stderr))).toEqual({
+              ok: false,
+              error: { code: 'busy', message: 'App shutdown failed: Still working.' },
+            })
+          } else {
+            Expect(output.stderr).toBe('')
+          }
+        } finally {
+          restoreFetch()
+          restoreExit()
+          child.kill()
+          await child.waitForClose()
+          child.dispose()
+        }
+      })
+    }
+  })
+
+  Test('transport diagnostics name the failed method and retain the original failure without retrying', async () => {
+    await withFixture(async bundle => {
+      for (const method of ['ping', 'commands', 'shutdown'] as const) {
+        const methods: string[] = []
+        const restore = fetchSlot.install(
+          (async (_url, options) => {
+            const body = JSON.parse(String(options?.body))
+            methods.push(body.method)
+            if (body.method === method) {
+              throw Errors.abortError('The connection was interrupted.')
+            }
+            return Response.json({ version: 1, id: body.id, ok: true, result: pong })
+          }) as typeof fetch,
+        )
+        try {
+          Expect(await runAppAgentCommand(method === 'shutdown' ? 'stop' : method, bundle)).toEqual({
+            ok: false,
+            error: {
+              code: 'transport_error',
+              message: `The app ${method} request failed: The connection was interrupted.`,
+            },
+          })
+          Expect(methods).toEqual(method === 'ping' ? ['ping'] : ['ping', method])
+        } finally {
+          restore()
+        }
       }
     })
   })

@@ -130,6 +130,18 @@ async function proveCommands(id: string, root: string): Promise<void> {
     Assert(value.ok, `packaged command app ${action} succeeds`, { value })
     return value.result
   }
+  async function bundled(args: string[]): Promise<unknown> {
+    const result = await CLI.run(FS.resolvePath('agents', buildsRoot), {
+      args,
+      env,
+      processPolicy: 'test',
+      timeoutMs: 60_000,
+    })
+    await FS.writeJson(FS.resolvePath(`command-${++requestIndex}-bundled.json`, root), result)
+    const value = JSON.parse(result.stdout) as ClientReply
+    Assert(result.exitCode === 0 && value.ok, 'the bundled client completes a separate invocation', { args, result })
+    return value.result
+  }
   async function discover(): Promise<CommandMetadata[]> {
     let commands: CommandMetadata[] | undefined
     let last: ClientReply | undefined
@@ -195,10 +207,16 @@ async function proveCommands(id: string, root: string): Promise<void> {
       { before, discoveredState, pong },
     )
     const values = { Message: `Hidden append ${id}`, Quantity: 37, Marked: true }
+    HCI.writeLine('Leaving the hidden command app idle for 45 seconds before the next request…')
+    await Time.sleep(45_000)
+    const afterIdle = await bundled(['commands', '--json']) as CommandMetadata[]
+    Assert(afterIdle.some(command => command.id === append.id), 'discovery still responds after hidden idle')
     await invoke(verify, { ...values, Count: 0 })
     const refusal = await request('run', { commandId: disabled.id, args: {} })
     Assert(!refusal.ok && refusal.error.code === 'command_rejected', 'disabled execution is rejected', { refusal })
-    await invoke(append, { Message: values.Message })
+    HCI.writeLine('Leaving the hidden app idle again before a separate bundled run…')
+    await Time.sleep(45_000)
+    await bundled(['run', 'AppendEntry', '--args', JSON.stringify({ Message: values.Message })])
     await invoke(verify, { ...values, Count: 1 })
     const failure = await request('run', { commandId: verify.id, args: { ...values, Count: 2 } })
     Assert(!failure.ok && failure.error.code === 'failed', 'an action failure is a structured failed outcome', {
@@ -214,7 +232,7 @@ async function proveCommands(id: string, root: string): Promise<void> {
       'discovery and command execution create no onscreen windows',
       { after, pong },
     )
-    await success('stop')
+    await bundled(['run', 'VerifyEntries', '--args', JSON.stringify({ ...values, Count: 1 }), '--stop-after'])
     started = false
     const stopped = await request('ping')
     Assert(!stopped.ok && stopped.error.code === 'not_running', 'stop retires the background service', { stopped })

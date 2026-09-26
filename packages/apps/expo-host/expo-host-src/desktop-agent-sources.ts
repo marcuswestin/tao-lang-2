@@ -115,6 +115,15 @@ function initialize(): Promise<void> {
         preload, hidden: background, activate: !background,
         frame: { x: 120, y: 100, width: 1200, height: 800 },
       })
+      if (background) {
+        // Native evaluation wakes an idle hidden WebKit view; its socket can stay
+        // connected while JavaScript is suspended. Deliver each request once.
+        const view = window.webview
+        rpc.setTransport({
+          ...view.createTransport(),
+          send: message => view.sendHostMessageToWebviewViaExecute(message),
+        })
+      }
       window.on('close', () => {
         state = 'failed'
         rejectReady?.(host.environmentError('The app window was closed.'))

@@ -147,7 +147,10 @@ export async function runAppAgentCommand(
       child.dispose()
     }
   } catch (error) {
-    return failure('agent_unavailable', Errors.formatForUser(error))
+    return failure(
+      'agent_unavailable',
+      `The app background service ${action} operation failed: ${Errors.messageOf(error)}`,
+    )
   }
 }
 
@@ -202,19 +205,20 @@ async function request(
   params?: { commandId: string; args: unknown },
 ): Promise<AgentResult> {
   const id = Platform.randomUUID()
+  const signal = AbortSignal.timeout(requestTimeoutMs[method])
   try {
     const response = await fetch(session.url, {
       method: 'POST',
       headers: { authorization: `Bearer ${session.capability}`, 'content-type': 'application/json' },
       body: JSON.stringify({ version: 1, id, method, ...(params ? { params } : {}) }),
-      signal: AbortSignal.timeout(requestTimeoutMs[method]) as unknown as RequestInit['signal'],
+      signal: signal as unknown as RequestInit['signal'],
       redirect: 'error',
     })
     const value: unknown = await response.json()
     if (!isRecord(value) || value['version'] !== 1 || value['id'] !== id) {
       return method === 'run'
-        ? unknownRunOutcome()
-        : failure('invalid_response', 'The app returned an invalid response or request identity.')
+        ? unknownRunOutcome('The run response or request identity was invalid.')
+        : failure('invalid_response', `The app returned an invalid ${method} response or request identity.`)
     }
     const error = value['error']
     if (value['ok'] === false && isRecord(error) && nonempty(error['code']) && nonempty(error['message'])) {
@@ -230,20 +234,24 @@ async function request(
     return response.ok && value['ok'] === true && Object.hasOwn(value, 'result')
       ? { ok: true, result: value['result'] }
       : method === 'run'
-      ? unknownRunOutcome()
-      : failure('invalid_response', 'The app returned an invalid response.')
+      ? unknownRunOutcome('The run response was invalid.')
+      : failure('invalid_response', `The app returned an invalid ${method} response.`)
   } catch (error) {
+    const timedOut = signal.aborted || (isRecord(error) && error['name'] === 'TimeoutError')
+    const message = `The app ${method} request ${
+      timedOut ? `timed out after ${requestTimeoutMs[method] / 1_000} seconds` : 'failed'
+    }: ${Errors.messageOf(error)}`
     if (method === 'run') {
-      return unknownRunOutcome()
+      return unknownRunOutcome(message)
     }
-    return failure('transport_error', `Could not reach the app background service: ${Errors.formatForUser(error)}`)
+    return failure('transport_error', message)
   }
 }
 
-function unknownRunOutcome(): AgentResult {
+function unknownRunOutcome(reason: string): AgentResult {
   return failure(
     'outcome_unknown',
-    'The command response was lost or timed out. Its outcome is unknown; it may have run. It was not retried.',
+    `${reason} The command outcome is unknown; it may have run. It was not retried.`,
   )
 }
 
