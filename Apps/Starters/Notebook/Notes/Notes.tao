@@ -1,6 +1,6 @@
 use Checkbox, Col, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
-use Notes from ..
+use Note, Notes from ..
 
 // The notes feature: the list a person lands on, one row of it, and the detail of one note.
 package

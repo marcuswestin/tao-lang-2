@@ -1,4 +1,4 @@
-use Notebook, Notes from ./
+use Note, Notebook from ./
 use NoteRow from ./Notes
 
 // Deterministic data for Studio previews and the device matrix.
