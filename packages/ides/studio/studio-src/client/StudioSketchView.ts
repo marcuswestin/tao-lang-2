@@ -445,6 +445,14 @@ export const StudioSketchView = {
     const snapStates = new Map<string, StudioSketchSnapUiState>()
     let selected: Readonly<{ rectId: string; rectIds: ReadonlySet<string>; sketchId: string }> | undefined
     let outerGesture: StudioSketchOuterGesture | undefined
+    let disposed = false
+    let inlineEdit: {
+      cancel(): void
+      invalidated: boolean
+      pending: boolean
+      rect: StudioSketchRect
+      sketchId: string
+    } | undefined
     let gate = StudioSketchRenderGate.initial()
     const gestureLock: StudioSketchGestureLock = {
       begin() {
@@ -460,12 +468,18 @@ export const StudioSketchView = {
     }
 
     const applyChange = (change: StudioSketchRectChange): void => {
-      sketches = StudioSketchChanges.settle(sketches, change)
+      sketches = StudioSketchChanges.settle(gate.deferred?.sketches ?? sketches, change)
       selected = { rectId: change.rect.id, rectIds: new Set([change.rect.id]), sketchId: change.sketchId }
       render(sketches)
     }
-    const commit = (change: StudioSketchRectChange): Promise<void> | void => {
+    const commit = (
+      change: StudioSketchRectChange,
+      current: () => boolean = () => true,
+    ): Promise<void> | void => {
       const settle = (authoritative: readonly StudioSketch[] | void): void => {
+        if (disposed || !current()) {
+          return
+        }
         if (authoritative === undefined) {
           applyChange(change)
         } else {
@@ -477,14 +491,14 @@ export const StudioSketchView = {
         if (result instanceof Promise) {
           return result.then(settle, error => {
             options.onError?.(error)
-            render(sketches)
+            render(gate.deferred?.sketches ?? sketches)
           })
         } else {
           settle(result)
         }
       } catch (error) {
         options.onError?.(error)
-        render(sketches)
+        render(gate.deferred?.sketches ?? sketches)
       }
     }
 
@@ -492,6 +506,9 @@ export const StudioSketchView = {
       nextSketches: readonly StudioSketch[],
       nextSourceVersions?: Readonly<Record<string, string>>,
     ): void => {
+      if (disposed) {
+        return
+      }
       if (nextSourceVersions !== undefined) {
         viewSourceVersions = { ...viewSourceVersions, ...nextSourceVersions }
       }
@@ -501,7 +518,94 @@ export const StudioSketchView = {
         renderNow(nextSketches)
       }
     }
+    const receive = (
+      nextSketches: readonly StudioSketch[],
+      nextSourceVersions?: Readonly<Record<string, string>>,
+    ): void => {
+      const edit = inlineEdit
+      const rect = nextSketches.find(sketch => sketch.id === edit?.sketchId)?.rects.find(candidate =>
+        candidate.id === edit?.rect.id
+      )
+      render(nextSketches, nextSourceVersions)
+      if (edit !== undefined && (rect === undefined || !StudioSketchChanges.equal(rect, edit.rect))) {
+        edit.invalidated = true
+        if (!edit.pending) {
+          edit.cancel()
+        }
+      }
+    }
+    const editText = (sketchId: string, rect: StudioSketchRect, element: HTMLElement): void => {
+      if (disposed || inlineEdit !== undefined || rect.kind !== 'Text') {
+        return
+      }
+      const input = document.createElement('textarea')
+      input.ariaLabel = 'Rectangle text'
+      input.dataset['taoStudioSketchTextEditor'] = rect.id
+      input.value = rect.content ?? ''
+      input.style.boxSizing = 'border-box'
+      input.style.height = '100%'
+      input.style.resize = 'none'
+      input.style.width = '100%'
+      const edit = {
+        cancel: (): void => {
+          if (inlineEdit !== edit) {
+            return
+          }
+          inlineEdit = undefined
+          render(gate.deferred?.sketches ?? sketches)
+          gestureLock.end()
+        },
+        invalidated: false,
+        pending: false,
+        rect,
+        sketchId,
+      }
+      inlineEdit = edit
+      gestureLock.begin()
+      selected = { rectId: rect.id, rectIds: new Set([rect.id]), sketchId }
+      element.replaceChildren(input)
+      for (const type of ['pointerdown', 'pointerup', 'click', 'dblclick']) {
+        input.addEventListener(type, event => event.stopPropagation())
+      }
+      input.addEventListener('keydown', event => {
+        event.stopPropagation()
+        if (inlineEdit !== edit || edit.pending || event.isComposing) {
+          return
+        }
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          edit.cancel()
+        }
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          if (input.value === (rect.content ?? '')) {
+            edit.cancel()
+            return
+          }
+          edit.pending = true
+          input.disabled = true
+          StudioSketchPointerRelease.afterCommit(
+            () =>
+              commit(
+                { kind: 'update', rect: { ...rect, content: input.value }, sketchId },
+                () => inlineEdit === edit && !edit.invalidated,
+              ),
+            edit.cancel,
+          )
+        }
+      })
+      input.addEventListener('blur', () => {
+        if (!edit.pending) {
+          edit.cancel()
+        }
+      })
+      input.focus()
+      input.select()
+    }
     const renderNow = (nextSketches: readonly StudioSketch[], nextSourceVersion?: string): void => {
+      if (disposed) {
+        return
+      }
       sketches = nextSketches
       currentSourceVersion = nextSourceVersion ?? currentSourceVersion
       if (selected !== undefined) {
@@ -535,9 +639,11 @@ export const StudioSketchView = {
           (authoritative, version) => {
             viewSourceVersions[sketch.view] = version
             currentSourceVersion = version
-            render(authoritative)
+            receive(authoritative)
           },
           gestureLock,
+          editText,
+          () => inlineEdit !== undefined || disposed,
           options.onError,
         )
       )
@@ -545,7 +651,10 @@ export const StudioSketchView = {
       renderInspector(inspector, sketches, selected, commit)
     }
     workspace.addEventListener('pointerdown', event => {
-      if (event.target !== workspace || outerGesture !== undefined || !primaryPointer(event)) {
+      if (
+        disposed || inlineEdit !== undefined || event.target !== workspace || outerGesture !== undefined
+        || !primaryPointer(event)
+      ) {
         return
       }
       outerGesture = StudioSketchOuterDrawing.begin(outerGesture, event.pointerId, relativePoint(workspace, event))
@@ -633,9 +742,11 @@ export const StudioSketchView = {
     render(sketches)
     return {
       dispose() {
+        disposed = true
+        inlineEdit?.cancel()
         workspace.remove()
       },
-      render,
+      render: receive,
     }
   },
 } as const
@@ -658,6 +769,8 @@ function renderSketch(
   onUndoSnap: StudioSketchViewOptions['onUndoSnap'],
   renderAuthoritative: (sketches: readonly StudioSketch[], sourceVersion: string) => void,
   gestureLock: StudioSketchGestureLock,
+  editText: (sketchId: string, rect: StudioSketchRect, element: HTMLElement) => void,
+  editingText: () => boolean,
   onError: StudioSketchViewOptions['onError'],
 ): HTMLElement {
   // The frame stacks the toolbar above the board and the proposal below it. Nothing but rectangles
@@ -720,12 +833,31 @@ function renderSketch(
   if (selection()?.sketchId === sketch.id) {
     state = { ...state, selectedId: selection()?.rectId }
   }
+  const rectElements = new Map<string, HTMLElement>()
   const paint = (): void => {
+    if (editingText()) {
+      return
+    }
     const selectedIds = selection()?.sketchId === sketch.id
       ? selection()?.rectIds ?? new Set<string>()
       : new Set<string>()
-    const children = state.rects.map(rect => rectElement(document, rect, selectedIds.has(rect.id), beginResize))
-    board.replaceChildren(gapIndicator, ...children)
+    if (!board.contains(gapIndicator)) {
+      board.append(gapIndicator)
+    }
+    for (const [id, element] of rectElements) {
+      if (!state.rects.some(rect => rect.id === id)) {
+        element.remove()
+        rectElements.delete(id)
+      }
+    }
+    for (const rect of state.rects) {
+      const existing = rectElements.get(rect.id)
+      const element = rectElement(document, rect, selectedIds.has(rect.id), beginResize, existing)
+      if (existing === undefined) {
+        rectElements.set(rect.id, element)
+        board.append(element)
+      }
+    }
     // The toolbar and board stay attached; re-inserting the board would momentarily disconnect the
     // element holding pointer capture. Only the proposal comes and goes.
     frame.querySelector(':scope > [data-tao-studio-sketch-snap-proposal]')?.remove()
@@ -1002,7 +1134,7 @@ function renderSketch(
   }
   const point = (event: PointerEvent): StudioSketchPoint => relativePoint(board, event)
   const beginResize = (event: PointerEvent, handle: StudioSketchResizeHandle): void => {
-    if (activePointer !== undefined || !primaryPointer(event)) {
+    if (editingText() || activePointer !== undefined || !primaryPointer(event)) {
       return
     }
     event.stopPropagation()
@@ -1014,6 +1146,9 @@ function renderSketch(
     event.preventDefault()
   }
   board.addEventListener('pointerdown', event => {
+    if (editingText()) {
+      return
+    }
     const target = event.target as HTMLElement | null
     const begins = StudioSketchBoardInput.beginsGesture({
       ...(activePointer === undefined ? {} : { activePointer }),
@@ -1053,6 +1188,18 @@ function renderSketch(
     capturePointer(event.pointerId)
     event.preventDefault()
     paint()
+  })
+  board.addEventListener('dblclick', event => {
+    if (editingText() || activePointer !== undefined || event.button !== 0) {
+      return
+    }
+    const rect = StudioSketchGeometry.hit(state.rects, relativePoint(board, event))
+    const element = rect === undefined ? undefined : rectElements.get(rect.id)
+    if (rect?.kind === 'Text' && element !== undefined) {
+      event.preventDefault()
+      event.stopPropagation()
+      editText(sketch.id, rect, element)
+    }
   })
   board.addEventListener('pointermove', event => {
     if (state.gesture === undefined || event.pointerId !== activePointer) {
@@ -1144,7 +1291,7 @@ function primaryPointer(event: PointerEvent): boolean {
  * canvas transform, so the offset it yields is in screen pixels and has to be divided by the zoom
  * to land where the person is actually pointing on the surface.
  */
-function relativePoint(element: HTMLElement, event: PointerEvent): StudioSketchPoint {
+function relativePoint(element: HTMLElement, event: MouseEvent): StudioSketchPoint {
   const bounds = element.getBoundingClientRect()
   const scale = canvasScale(element)
   return { x: (event.clientX - bounds.left) / scale, y: (event.clientY - bounds.top) / scale }
@@ -1176,8 +1323,9 @@ function rectElement(
   rect: StudioSketchRect,
   selected: boolean,
   beginResize: (event: PointerEvent, handle: StudioSketchResizeHandle) => void,
+  existing?: HTMLElement,
 ): HTMLElement {
-  const element = document.createElement('div')
+  const element = existing ?? document.createElement('div')
   element.dataset['taoStudioSketchRect'] = rect.id
   element.dataset['taoStudioSketchRectKind'] = rect.kind
   element.style.height = `${rect.height}px`
@@ -1185,7 +1333,12 @@ function rectElement(
   element.style.position = 'absolute'
   element.style.top = `${rect.y}px`
   element.style.width = `${rect.width}px`
+  // Keep the hit element attached between the two clicks of a native double-click.
+  if (existing !== undefined && (element.dataset['selected'] === 'true') === selected) {
+    return element
+  }
   element.textContent = rect.content ?? rect.kind
+  delete element.dataset['selected']
   if (selected) {
     element.dataset['selected'] = 'true'
     for (const handle of handles) {

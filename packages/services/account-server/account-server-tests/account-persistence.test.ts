@@ -6,6 +6,93 @@ import { AccountStore } from '../account-server-src/AccountStore'
 import { testAccountPolicy } from './fixtures/account-policy'
 
 Describe('Account persistence ownership', () => {
+  Test('refuses switching authentication mode or issuer without changing existing local sessions', async () => {
+    const root = await mkTestDir('account-auth-mode-')
+    const options = {
+      databasePath: FS.resolvePath('accounts.sqlite', root),
+      issuer: 'local-test',
+      resource: 'notes',
+      policy: testAccountPolicy,
+    }
+    const clerk = {
+      issuer: 'https://example.clerk.accounts.dev',
+      jwtKey: 'configured-public-key',
+      authorizedParties: ['https://app.example.test'],
+    }
+    let server: AccountServer | undefined
+    try {
+      server = await AccountServer.start(options)
+      const response = await fetch(`${server.url}/v1/auth/sign-up`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'old@example.test', password: 'valid-password', resource: 'notes' }),
+      })
+      Expect(response.status).toBe(200)
+      const session = await response.json() as { token: string; accountId: string }
+      await server.stop()
+      server = undefined
+      await Expect(tryStartingServer({ ...options, clerk })).rejects.toThrow('another authentication mode or issuer')
+      await Expect(tryStartingServer({ ...options, issuer: 'another-local-issuer' })).rejects.toThrow(
+        'another authentication mode or issuer',
+      )
+      server = await AccountServer.start(options)
+      const resumed = await fetch(`${server.url}/v1/auth/session`, {
+        headers: { authorization: `Bearer ${session.token}` },
+      })
+      Expect(resumed.status).toBe(200)
+      Expect((await resumed.json() as { accountId: string }).accountId).toBe(session.accountId)
+      await server.stop()
+      server = undefined
+
+      const clerkOptions = { ...options, databasePath: FS.resolvePath('clerk.sqlite', root), clerk }
+      server = await AccountServer.start(clerkOptions)
+      Expect((await fetch(`${server.url}/v1/data`, { headers: { authorization: `Bearer ${session.token}` } })).status)
+        .toBe(401)
+      await server.stop()
+      server = undefined
+      await Expect(tryStartingServer({ ...clerkOptions, clerk: undefined })).rejects.toThrow(
+        'another authentication mode or issuer',
+      )
+      await Expect(
+        tryStartingServer({ ...clerkOptions, clerk: { ...clerk, issuer: 'https://other.clerk.accounts.dev' } }),
+      )
+        .rejects.toThrow('another authentication mode or issuer')
+    } finally {
+      await server?.stop()
+      await FS.remove(root)
+    }
+  })
+
+  Test('requires explicit migration of populated legacy auth databases before Clerk claims them', async () => {
+    const root = await mkTestDir('account-auth-legacy-')
+    const path = FS.resolvePath('accounts.sqlite', root)
+    const local = new AccountStore(path, testAccountPolicy)
+    const identity = local.register('legacy@example.test', 'legacy-hash', 'local-test')
+    local.close()
+    try {
+      await Expect(tryStartingServer({
+        databasePath: path,
+        issuer: 'local-test',
+        resource: 'notes',
+        policy: testAccountPolicy,
+        clerk: {
+          issuer: 'https://example.clerk.accounts.dev',
+          jwtKey: 'configured-public-key',
+          authorizedParties: ['https://app.example.test'],
+        },
+      })).rejects.toThrow('explicit migration before using Clerk')
+      const retained = new AccountStore(path, testAccountPolicy)
+      try {
+        Expect(retained.password('legacy@example.test')?.subject).toBe(identity.subject)
+        Expect(retained.provision('local-test', identity.subject)).toEqual(identity)
+      } finally {
+        retained.close()
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('rejects malformed or incomplete Instant deployment configuration before connecting', async () => {
     const root = await mkTestDir('account-persistence-config-')
     try {
@@ -88,3 +175,9 @@ Describe('Account persistence ownership', () => {
     }
   })
 })
+
+async function tryStartingServer(options: Parameters<typeof AccountServer.start>[0]): Promise<void> {
+  // Keep negative transition tests leak-free even when a mutation unexpectedly permits startup.
+  const server = await AccountServer.start(options)
+  await server.stop()
+}

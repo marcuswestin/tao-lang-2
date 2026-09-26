@@ -8,6 +8,10 @@
     ".": "./studio-tooling-src/StudioReview.ts",
     "./studio-review": "./studio-tooling-src/StudioReview.ts"
   },
+  "devDependencies": {
+    "@clerk/backend": "3.20.1",
+    "@clerk/testing": "2.2.39"
+  },
   "dependencies": {
     "better-opn": "^3.0.2",
     "chokidar": "^5.0.0",

@@ -496,7 +496,7 @@ Describe('Expo runtime: presentation surfaces', () => {
         }
 
         view Cover() {
-          render Text("Cover body")
+          render Button("Cover body") { on press -> { dismiss } }
         }
       `,
       async screen => {
@@ -513,12 +513,22 @@ Describe('Expo runtime: presentation surfaces', () => {
         Expect(hasAncestorOfType(screen.getByText('Cover body'), RN.Modal)).toBe(true)
         ExpectScreen(screen).toHaveText('Open cover')
 
-        // The platform dismissing the sheet itself (swiped down) takes the sheet and what it hosts:
-        // the stack cannot keep a sheet the platform no longer shows.
+        // The covering overlay owns interaction. Native swipe dismissal is prevented, and a
+        // stale native close callback cannot dismiss either layer while it is covered.
+        Expect(screen.UNSAFE_getByType(RN.Modal).props.allowSwipeDismissal).toBe(false)
         await act(async () => {
           screen.UNSAFE_getByType(RN.Modal).props.onRequestClose()
         })
+        ExpectScreen(screen).toHaveText('Cover body')
+        ExpectScreen(screen).toHaveText('Open cover')
+        await act(async () => {
+          fireEvent.press(screen.getByText('Cover body'))
+        })
         Expect(screen.queryByText('Cover body')).toBeNull()
+        Expect(screen.UNSAFE_getByType(RN.Modal).props.allowSwipeDismissal).toBe(true)
+        await act(async () => {
+          screen.UNSAFE_getByType(RN.Modal).props.onRequestClose()
+        })
         Expect(screen.queryByText('Open cover')).toBeNull()
         ExpectScreen(screen).toHaveText('Open sheet')
       },

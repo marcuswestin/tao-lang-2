@@ -15,6 +15,7 @@ import {
   type HostJourneySelection,
   runHostJourney,
 } from '../../journey/HostJourney'
+import { assertNativeInputValue, enterNativeInput } from '../AppiumNativeInputs'
 import type { AppiumXcuiTestDeepLinkSession } from './AppiumXcuiTestController'
 
 export type AppiumIosHostFault = Readonly<{
@@ -143,6 +144,9 @@ export function appiumIosJourneyAdapter(
     capabilities: [
       'advanceTime',
       'assertNavigationTitle',
+      'assertInputValue',
+      'back',
+      'textInput',
       'assertText',
       'press',
       'relaunch',
@@ -173,15 +177,34 @@ export function appiumIosJourneyAdapter(
               next.milliseconds,
               appName === 'Clockwork' ? 'controlReceipt' : 'tao-host-control-receipt',
             ),
-          back: unsupportedJourneyOperation,
-          enter: unsupportedJourneyOperation,
+          back: async () => {
+            const observation = await observe(session, { kind: 'accessibility', role: 'navigation-back', name: 'Back' })
+            await session.perform({
+              expectedRevision: session.descriptor().revision,
+              kind: 'click',
+              lease: session.descriptor().lease,
+              observation,
+            })
+          },
+          enter: async next => await enterNativeInput(session, next.selector, next.target, next.value, next.selections),
           expect: async next =>
             await assertText(session, next.text, next.missing, next.selections, next.source.filePath),
           expectCheckboxState: unsupportedJourneyOperation,
           expectFocusRegion: unsupportedJourneyOperation,
           expectGroup: unsupportedJourneyOperation,
-          expectInputValue: unsupportedJourneyOperation,
-          expectNavigationTitle: async next => await assertNavigationTitle(session, next.title, next.source.filePath),
+          expectInputValue: async next =>
+            await assertNativeInputValue(
+              session,
+              next.selector,
+              next.target,
+              next.value,
+              next.selections,
+              next.source.filePath,
+            ),
+          expectNavigationTitle: async next =>
+            appName === 'NativeNavigation'
+              ? await assertText(session, next.title, false, [], next.source.filePath)
+              : await assertNavigationTitle(session, next.title, next.source.filePath),
           expectTarget: unsupportedJourneyOperation,
           expectToolbarCommand: unsupportedJourneyOperation,
           expectVerbs: unsupportedJourneyOperation,
@@ -282,7 +305,7 @@ async function assertNavigationTitle(session: HostSession, title: string, source
 async function assertReady(session: HostSession, appName: string): Promise<void> {
   const observation = await observe(session, {
     kind: 'tag',
-    value: appName === 'HNReaderStub' ? 'tao-host-ready' : 'hostReady',
+    value: appName === 'Clockwork' ? 'hostReady' : 'tao-host-ready',
   })
   if (!observation.visible) {
     throw new HostControlError('assertion', `Appium XCUITest did not display the host-ready marker for '${appName}'.`)

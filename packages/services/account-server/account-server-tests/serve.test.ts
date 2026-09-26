@@ -95,4 +95,93 @@ Describe('Account reference service launcher', () => {
       await FS.remove(root)
     }
   })
+
+  Test('rejects malformed Clerk deployment files without echoing their contents', async () => {
+    const root = await mkTestDir('tao-account-clerk-launcher-')
+    const config = FS.resolvePath('clerk.json', root)
+    const valid = {
+      issuer: 'https://example.clerk.accounts.dev',
+      jwtKey: 'private-test-marker',
+      authorizedParties: ['https://app.example.test'],
+    }
+    try {
+      for (
+        const configuration of [
+          null,
+          [],
+          {},
+          { ...valid, jwtKey: '' },
+          { ...valid, authorizedParties: [] },
+          { ...valid, issuer: 'http://example.clerk.accounts.dev' },
+          { ...valid, issuer: 'https://example.clerk.accounts.dev/path' },
+          { ...valid, authorizedParties: [''] },
+          { ...valid, authorizedParties: 'https://app.example.test' },
+          { ...valid, audience: [] },
+          { ...valid, audience: 1 },
+          { ...valid, audience: [''] },
+          { ...valid, jwksURL: 'https://attacker.example.test' },
+          { ...valid, actor: 'forged' },
+        ]
+      ) {
+        await FS.writeJson(config, configuration)
+        let failure: unknown
+        try {
+          await startAccountServerFromArguments(['--policy', 'unused.json', '--clerk-config', config])
+        } catch (error) {
+          failure = error
+        }
+        Expect(failure).toBeInstanceOf(Errors.UserInputError)
+        Expect(Errors.messageOf(failure)).toContain('Clerk')
+        Expect(Errors.messageOf(failure)).not.toContain('private-test-marker')
+      }
+      await FS.writeText(config, '{"jwtKey":"private-test-marker"')
+      await Expect(startAccountServerFromArguments(['--policy', 'unused.json', '--clerk-config', config]))
+        .rejects.toThrow('Unable to read the Clerk configuration file')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('loads optional Clerk deployment configuration and enables the exchange route', async () => {
+    const root = await mkTestDir('tao-account-clerk-config-')
+    const config = FS.resolvePath('clerk.json', root)
+    const policy = FS.resolvePath('policy.json', root)
+    await FS.writeJson(config, {
+      issuer: 'https://example.clerk.accounts.dev',
+      jwtKey: 'configured-public-key',
+      authorizedParties: ['https://app.example.test'],
+      audience: ['notes'],
+    })
+    await FS.writeJson(policy, {
+      accountEntity: 'Account',
+      entities: { Account: { fields: ['DisplayName'], grants: [{ principal: [], operations: ['read'] }] } },
+    })
+    let server: Awaited<ReturnType<typeof startAccountServerFromArguments>> | undefined
+    try {
+      server = await startAccountServerFromArguments([
+        '--policy',
+        policy,
+        '--clerk-config',
+        config,
+        '--database',
+        FS.resolvePath('accounts.sqlite', root),
+        '--port',
+        '0',
+        '--resource',
+        'notes',
+      ])
+      const response = await fetch(`${server.url}/v1/auth/clerk/exchange`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer invalid.token.signature' },
+        body: JSON.stringify({ resource: 'notes' }),
+      })
+      Expect(response.status).toBe(401)
+      Expect(await response.json()).toEqual({
+        error: { code: 'unauthorized', message: 'The Clerk session was not accepted.' },
+      })
+    } finally {
+      await server?.stop()
+      await FS.remove(root)
+    }
+  })
 })

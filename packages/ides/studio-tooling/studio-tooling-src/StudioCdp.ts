@@ -258,6 +258,30 @@ export class StudioCdp {
     })
   }
 
+  /** Sends two physical clicks at the same point so Chrome performs native double-click recognition. */
+  async doubleClick(selector: string): Promise<void> {
+    const point = await this.elementPointAtOffset(selector, { x: 12, y: 12 }, {
+      element: 'double-click target',
+      gesture: 'double-click',
+    })
+    for (const clickCount of [1, 2]) {
+      await this.client.send('Input.dispatchMouseEvent', {
+        button: 'left',
+        buttons: 1,
+        clickCount,
+        type: 'mousePressed',
+        ...point,
+      })
+      await this.client.send('Input.dispatchMouseEvent', {
+        button: 'left',
+        buttons: 0,
+        clickCount,
+        type: 'mouseReleased',
+        ...point,
+      })
+    }
+  }
+
   /** Clicks one point inside an element's box, for targets whose own center is not the live hit area. */
   async clickAtOffset(selector: string, offset: Point): Promise<void> {
     await this.clickAt(await this.elementPointAtOffset(selector, offset, { element: 'clickable', gesture: 'click' }))
@@ -962,6 +986,11 @@ export class StudioCdp {
       text,
     }, details['timestamp']))
   }
+
+  /** Installs page-world setup before scripts execute in each subsequently loaded document. */
+  async addInitScript(source: string): Promise<void> {
+    await this.client.send('Page.addScriptToEvaluateOnNewDocument', { source })
+  }
 }
 
 function chromeKeyDetails(key: string): { code: string; key: string; windowsVirtualKeyCode: number } {
@@ -981,8 +1010,11 @@ function chromeKeyDetails(key: string): { code: string; key: string; windowsVirt
 
 const chromeNamedKeys: Readonly<Record<string, { code: string; windowsVirtualKeyCode: number }>> = {
   ' ': { code: 'Space', windowsVirtualKeyCode: 32 },
+  '+': { code: 'Equal', windowsVirtualKeyCode: 187 },
+  '-': { code: 'Minus', windowsVirtualKeyCode: 189 },
   '.': { code: 'Period', windowsVirtualKeyCode: 190 },
   '/': { code: 'Slash', windowsVirtualKeyCode: 191 },
+  '=': { code: 'Equal', windowsVirtualKeyCode: 187 },
   ArrowDown: { code: 'ArrowDown', windowsVirtualKeyCode: 40 },
   ArrowLeft: { code: 'ArrowLeft', windowsVirtualKeyCode: 37 },
   ArrowRight: { code: 'ArrowRight', windowsVirtualKeyCode: 39 },

@@ -14,6 +14,7 @@ import {
   type StartedStudioServer,
   startStudioFileWatcher,
   startStudioSessionServer,
+  StudioCanvasViewportStore,
   StudioDeviceGateway,
   StudioDeviceTrustStore,
   type StudioPreviewSession,
@@ -107,6 +108,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   let trustStore: StudioDeviceTrustStore | undefined
   const userStateRoot = options.userStateRoot ?? Repo.resolvePath('.artifacts/user/studio')
   const recentProjects = createRecentProjectStore(FS.resolvePath('recent-projects.json', userStateRoot))
+  const canvasViewportStore = new StudioCanvasViewportStore(FS.resolvePath('project-viewports', userStateRoot))
   const mode = options.native === true ? 'native' : 'browser'
   const artifactRoot = FS.resolvePath(`launches/${mode}`, userStateRoot)
   let launch: StudioLaunchRecord | undefined
@@ -213,6 +215,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       )
     }
     server = await startStudioSessionServer(manager, {
+      canvasViewportStore,
       agentSecrets,
       clientAssets: studioClientReload?.clientAssets,
       clientReloadRevision: studioClientReload?.revision,
@@ -342,6 +345,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
           () => manager?.closeAll(),
           () => foundationModels?.stop(),
           () => trustStore?.flush(),
+          () => canvasViewportStore.flush(),
           () =>
             recentProjects.flush().catch(error => {
               HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)

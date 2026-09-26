@@ -91,6 +91,15 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       filePath: nodePath.resolve(runtimeSourceRoot, 'TR.ts'),
     }
   }
+  // Copied standard-library sidecars also import runtime leaf modules. Keep these pointed at the
+  // same runtime as the public entry point, then let Metro select the platform file and extension.
+  if (/^@runtime\/TR-[A-Za-z0-9-]+$/.test(moduleName)) {
+    return context.resolveRequest(
+      context,
+      nodePath.resolve(runtimeSourceRoot, moduleName.slice('@runtime/'.length)),
+      platform,
+    )
+  }
   if (moduleName === '@shared/core') {
     return {
       type: 'sourceFile',

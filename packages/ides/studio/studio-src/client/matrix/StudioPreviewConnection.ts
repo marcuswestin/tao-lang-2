@@ -9,6 +9,7 @@ import type {
 import type {
   StudioJsonObject,
   StudioLensRenderSample,
+  StudioPreviewLayoutMeasurementsMessage,
   StudioRuntimeCaptureArtifact,
   StudioSourceActionEnvelope,
   StudioSourceActionIdentity,
@@ -55,6 +56,7 @@ export type StudioPreviewConnection = {
   journeyReplayStatus?: 'failed' | 'pending' | 'settled'
   lensNotifyQueued?: boolean
   lensSamples?: readonly StudioLensRenderSample[]
+  layoutMeasurements?: StudioPreviewLayoutMeasurementsMessage
   replayRuntimeCapture?: (capture: StudioRuntimeCaptureArtifact) => Promise<void>
   runtimeCaptureRequest?: {
     reject: (error: Error) => void

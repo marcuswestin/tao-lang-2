@@ -58,11 +58,19 @@ without erasing compatible coverage:
 
 Exercise the navigation layer: the native stack, the portable basic kit, platform sheet and overlay
 presentation, the split surface, the root-view app form, the shell that renders a navigator as
-ordinary content, and the toggle bar that replaces a stack's header. Ten `app` declarations share
+ordinary content, and the toggle bar that replaces a stack's header. Eleven `app` declarations share
 the folder, one or more per source file, and each check picks its app with `run`.
 
 **Belongs here:**
 
+- _Native navigation acceptance_ (`Native Navigation.tao`, app `NativeNavigation`): three automatic
+  tabs with independent native-default stacks; tab switching retains stack positions, editable
+  drafts, and local counters; four toolbar commands, including a reactive enabled state; a sheet,
+  an overlay above it, and an answered or dismissed `ask`; scrollable notes for keyboard and
+  safe-area acceptance. Behavioral journeys cover host titles, commands, Back, and restoration of
+  the selected tab and all stack histories. Device acceptance must separately inspect platform
+  chrome, all four commands, interrupted back gestures, sheet dismissal, scrolling, and keyboard
+  insets; the deterministic test host does not prove those native behaviors.
 - _Native stack_ (`Navigation MVP.tao`): an `app` with `Name` and a configured
   `Navigator StackNav { Initial <view> }` taken from the bare, native-default `@tao/nav` root;
   presented `view` declarations with typed parameters; `present Detail(Name: "…")` with required
@@ -406,4 +414,8 @@ Provider-neutral sessions, custom and supplied sign-in UI, current account reads
 and owner-scoped notes. AuthReview uses the deterministic adapter; AuthReviewLocal binds the same
 UI to the localhost reference service at port4738. Backend policy, durable offline data and identity
 isolation are verified separately by the reference server/provider tests; only completed Tao
-journeys establish the user-facing behavior. Implementation and live-service acceptance in progress.
+journeys establish the user-facing behavior. AuthReviewClerk selects the managed adapter with a
+placeholder publishable key; configure its development instance and gateway before use. Its opt-in
+browser journey passed on 2026-09-26 against the SQLite reference gateway, including real password
+and email-code UI, profile and note persistence, reload and logout. Clerk over InstantDB and
+physical-device acceptance remain outstanding.

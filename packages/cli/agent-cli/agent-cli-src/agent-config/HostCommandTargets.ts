@@ -1,5 +1,5 @@
 export type HostCommandTarget = {
-  argsPolicy?: 'none' | 'pid' | 'standalone-vm'
+  argsPolicy?: 'none' | 'pid' | 'standalone-vm' | 'studio-list' | 'studio-stop'
   command: string
   /** Environment the tool needs whatever shell dispatches it, merged over the inherited one. */
   env?: Readonly<Record<string, string>>
@@ -26,6 +26,8 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   // first, since Studio's highlighter reads the generated grammar.
   'studio': { command: 'just', fixedArgs: ['studio'], server: true },
   'studio-native': { command: 'just', fixedArgs: ['studio-native'], server: true },
+  'studio-ps': { command: './dev', fixedArgs: ['studio-ps'], argsPolicy: 'studio-list' },
+  'studio-stop': { command: './dev', fixedArgs: ['studio-stop'], argsPolicy: 'studio-stop' },
   'docker-desktop start': { command: 'open', fixedArgs: ['-a', 'Docker'], argsPolicy: 'none' },
   // The local InstantDB stack is Docker Compose; running its two recipes on the host keeps the Docker
   // socket, which is root-equivalent, out of every agent sandbox.

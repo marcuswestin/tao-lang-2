@@ -313,7 +313,7 @@ export class InstantAccountStore {
         method: 'POST',
         headers: this.#headers(),
         body: JSON.stringify({ steps }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(30_000) as NonNullable<Parameters<typeof fetch>[1]>['signal'],
       })
       return response.ok
     } catch {
@@ -329,7 +329,7 @@ export class InstantAccountStore {
         method: body === undefined ? 'GET' : 'POST',
         headers: { ...this.#headers(), ...(guest ? { 'As-Guest': 'true' } : {}) },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(30_000) as NonNullable<Parameters<typeof fetch>[1]>['signal'],
       })
       if (!response.ok) {
         rejectAccountRequest('unavailable', 'The Instant account service is unavailable.')

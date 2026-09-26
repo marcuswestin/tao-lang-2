@@ -137,7 +137,7 @@ Describe('Studio preview runtime bridge', () => {
     Expect(instance.render()).toMatchObject({ props: { error: failure } })
   })
 
-  Test('collects finite non-negative render geometry relative to the cell content root', () => {
+  Test('collects finite signed render positions relative to the cell content root', () => {
     const measured = renderElement('/project/Main.tao', 10, 20, {
       height: 40,
       left: 25,
@@ -159,7 +159,31 @@ Describe('Studio preview runtime bridge', () => {
       rect: { height: 40, width: 80, x: 15, y: 15 },
       renderId: '/project/Main.tao:10:20',
       studioRectId: 'art',
+      viewportRect: { height: 40, width: 80, x: 25, y: 35 },
+    }, {
+      elementName: 'Button',
+      rect: { height: 10, width: 10, x: -5, y: 15 },
+      renderId: '/project/Main.tao:30:40',
+      viewportRect: { height: 10, width: 10, x: 5, y: 35 },
     }])
+  })
+
+  Test('retains a partially clipped nested-scroll row with a stationary body and rejects invalid geometry', () => {
+    const row = { height: 20, width: 40, left: -3, top: -5 }
+    const rectangles = [row, { ...row, height: -1 }, { ...row, width: -1 }, { ...row, top: Number.NaN }, {
+      ...row,
+      left: Number.POSITIVE_INFINITY,
+    }]
+    const elements = rectangles.map((rect, index) =>
+      renderElement('/project/Main.tao', index * 10, index * 10 + 5, rect, { elementName: 'Text' })
+    )
+    Expect(collectStudioPreviewLayoutMeasurements(elements, { height: 200, width: 200, left: 0, top: 0 }))
+      .toEqual([{
+        elementName: 'Text',
+        rect: { height: 20, width: 40, x: -3, y: -5 },
+        renderId: '/project/Main.tao:0:5',
+        viewportRect: { height: 20, width: 40, x: -3, y: -5 },
+      }])
   })
 
   Test('coalesces layout reporting after apply and resize', async () => {
@@ -191,6 +215,147 @@ Describe('Studio preview runtime bridge', () => {
     await Promise.resolve()
     Expect(fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-layout-measurements'))
       .toHaveLength(2)
+    cleanup()
+  })
+
+  Test('refreshes viewport geometry on nested and root scroll and before publishing a selection', async () => {
+    const rect = { height: 20, width: 40, left: 25, top: 35 }
+    const element = renderElement('/project/Main.tao', 10, 20, rect, { elementName: 'Text' })
+    const fake = previewHost([element])
+    const rootRect = { height: 200, width: 200, left: 10, top: 20 }
+    fake.host.document.body = {
+      appendChild: overlay => fake.overlays.push(overlay as FakeOverlay),
+      getBoundingClientRect: () => rootRect,
+    }
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    const layoutMessages = () =>
+      fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-layout-measurements')
+    await Promise.resolve()
+    Expect(layoutMessages()).toHaveLength(1)
+    Object.assign(rootRect, { left: -30, top: -50 })
+    Object.assign(rect, { left: -15, top: -20 })
+    fake.dispatchDocument('scroll', { target: element })
+    fake.dispatchDocument('scroll', { target: element })
+    await Promise.resolve()
+    Expect(layoutMessages()).toHaveLength(2)
+    Expect(layoutMessages().at(-1)?.message).toMatchObject({
+      measurements: [{
+        rect: { height: 20, width: 40, x: 15, y: 30 },
+        viewportRect: { height: 20, width: 40, x: -15, y: -20 },
+      }],
+    })
+    Object.assign(rect, { top: 10 })
+    fake.dispatchWindow('scroll', {})
+    fake.dispatchDocument('scroll', {})
+    await Promise.resolve()
+    Expect(layoutMessages()).toHaveLength(3)
+    Expect(layoutMessages().at(-1)?.message).toMatchObject({
+      measurements: [{ viewportRect: { height: 20, width: 40, x: -15, y: 10 } }],
+    })
+    Object.assign(rect, { left: -5, top: -10 })
+    fake.dispatchDocument('scroll', { target: element })
+    fake.dispatchDocument('click', { target: element })
+    Expect(fake.messages.slice(-2).map(post => (post.message as { type: string }).type))
+      .toEqual(['preview-layout-measurements', 'preview-select-source'])
+    Expect(layoutMessages()).toHaveLength(4)
+    Expect(layoutMessages().at(-1)?.message).toMatchObject({
+      measurements: [{
+        rect: { height: 20, width: 40, x: 25, y: 40 },
+        viewportRect: { height: 20, width: 40, x: -5, y: -10 },
+      }],
+    })
+    await Promise.resolve()
+    Expect(layoutMessages()).toHaveLength(4)
+    cleanup()
+    fake.dispatchDocument('scroll', {})
+    fake.dispatchWindow('scroll', {})
+    await Promise.resolve()
+    Expect(layoutMessages()).toHaveLength(4)
+  })
+
+  Test('forwards Design canvas shortcuts from the focused iframe and claims only those keys', () => {
+    const fake = previewHost([])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    const appKeys: string[] = []
+    let cancellations = 0
+    fake.host.document.addEventListener('keydown', event => appKeys.push(event.key ?? ''))
+    const key = {
+      key: '0',
+      metaKey: true,
+      preventDefault: () => {
+        cancellations += 1
+      },
+    }
+    fake.dispatchDocument('keydown', key)
+    Expect(appKeys).toEqual(['0'])
+    Expect(cancellations).toBe(0)
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
+    appKeys.length = 0
+    for (const modifier of [{ metaKey: true }, { ctrlKey: true }]) {
+      for (const value of ['0', '1', '=', '+', '-']) {
+        fake.dispatchDocument('keydown', { ...modifier, key: value, preventDefault: key.preventDefault })
+      }
+    }
+    fake.dispatchDocument('keydown', { ...key, key: '+', repeat: true })
+    const shortcuts = fake.messages.filter(post =>
+      (post.message as { type?: string }).type === 'preview-canvas-shortcut'
+    )
+    Expect(shortcuts.map(post => (post.message as { command: string }).command))
+      .toEqual([
+        'fit',
+        'reset',
+        'zoom-in',
+        'zoom-in',
+        'zoom-out',
+        'fit',
+        'reset',
+        'zoom-in',
+        'zoom-in',
+        'zoom-out',
+        'zoom-in',
+      ])
+    Expect(shortcuts[0]).toEqual({
+      message: {
+        channel: 'tao-studio',
+        command: 'fit',
+        identity: { appName: 'Demo', previewInstanceId: 'preview-1', project: '/project' },
+        protocolVersion: 1,
+        type: 'preview-canvas-shortcut',
+      },
+      targetOrigin: 'http://127.0.0.1:5500',
+    })
+    Expect(cancellations).toBe(11)
+    Expect(appKeys).toEqual([])
+    fake.dispatchDocument('keydown', { key: '0', preventDefault: key.preventDefault })
+    fake.dispatchDocument('keydown', { ...key, key: 's' })
+    fake.dispatchDocument('keydown', { ...key, key: 'toString' })
+    fake.dispatchDocument('keydown', { ...key, isComposing: true })
+    fake.dispatchDocument('keydown', { ...key, taoStudioJourney: true })
+    const target = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
+    for (const tagName of ['INPUT', 'TEXTAREA', 'SELECT']) {
+      fake.dispatchDocument('keydown', { ...key, target: { ...target, tagName } })
+    }
+    fake.dispatchDocument('keydown', {
+      ...key,
+      target: { ...target, getAttribute: (name: string) => name === 'role' ? 'textbox' : null },
+    })
+    for (const editable of ['', 'true', 'plaintext-only']) {
+      fake.dispatchDocument('keydown', {
+        ...key,
+        target: {
+          ...target,
+          parentElement: { ...target, getAttribute: (name: string) => name === 'contenteditable' ? editable : null },
+        },
+      })
+    }
+    Expect(appKeys).toEqual(['0', 's', 'toString', '0', '0', '0', '0', '0', '0', '0', '0', '0'])
+    Expect(cancellations).toBe(11)
+    Expect(fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-canvas-shortcut'))
+      .toHaveLength(11)
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(false, fake.parent))
+    fake.dispatchDocument('keydown', key)
+    Expect(appKeys).toHaveLength(13)
+    Expect(cancellations).toBe(11)
     cleanup()
   })
 
@@ -342,7 +507,7 @@ Describe('Studio preview runtime bridge', () => {
     cleanup()
   })
 
-  Test('shields owned wheel input and preserves journey wheel input only while Space is held', () => {
+  Test('pans wheel input only while Space is held and keeps modifier zoom available', () => {
     const fake = previewHost([])
     const cleanup = mountStudioPreviewBridge(config, fake.host)
     let appWheels = 0
@@ -371,14 +536,21 @@ Describe('Studio preview runtime bridge', () => {
     Expect(cancellations).toBe(1)
     Expect(fake.messages).toHaveLength(before)
     fake.dispatchDocument('keyup', { key: ' ' })
+    const released = fake.messages.length
     fake.dispatchDocument('wheel', wheel)
     Expect(appWheels).toBe(2)
-    Expect(cancellations).toBe(2)
-    Expect(fake.messages.at(-1)?.message).toMatchObject({ type: 'preview-canvas-gesture', deltaY: 5 })
+    Expect(cancellations).toBe(1)
+    Expect(fake.messages).toHaveLength(released)
+    for (const modifier of [{ ctrlKey: true }, { metaKey: true }]) {
+      fake.dispatchDocument('wheel', { ...wheel, ...modifier })
+      Expect(fake.messages.at(-1)?.message).toMatchObject({ type: 'preview-canvas-gesture', deltaY: 5, zoom: true })
+    }
+    Expect(cancellations).toBe(3)
+    Expect(fake.messages).toHaveLength(released + 2)
     fake.dispatchWindow('message', canvasGestureOwnershipMessage(false, fake.parent))
     fake.dispatchDocument('wheel', wheel)
-    Expect(appWheels).toBe(3)
-    Expect(cancellations).toBe(2)
+    Expect(appWheels).toBe(5)
+    Expect(cancellations).toBe(3)
     cleanup()
   })
 

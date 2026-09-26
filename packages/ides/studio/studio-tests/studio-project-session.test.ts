@@ -1800,6 +1800,21 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
       `${session.projectRoot}/Garden.tao:1:2`,
       { height: 40, width: 60 },
     )).toEqual({ height: 30, id: 'title', kind: 'Text', width: 60, x: 0, y: 10 })
+    // A clipped row may be zoomed in the viewport but must not become negative source-layout geometry.
+    session.recordPreviewLayoutMeasurements({
+      ...layoutMessage,
+      measurements: [{
+        ...layoutMessage.measurements[0],
+        rect: { height: 30, width: 80, x: 12, y: -5 },
+        viewportRect: { height: 30, width: 80, x: 12, y: -5 },
+      }],
+    })
+    Expect(session.previewLayoutMeasurement(
+      { ...registered.identity, previewInstanceId: 'cell-preview-1' },
+      `${session.projectRoot}/Garden.tao:1:2`,
+    )).toBeUndefined()
+    session.recordPreviewLayoutMeasurements(layoutMessage)
+
     const file = await session.readFile('Garden.tao')
     const cellSourceAction = {
       action: { component: 'Text', kind: 'insert-component' },

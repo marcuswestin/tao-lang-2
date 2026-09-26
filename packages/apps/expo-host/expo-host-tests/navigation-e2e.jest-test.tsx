@@ -7,15 +7,18 @@ import {
   overrideNavigationCommandIconForTest,
 } from '@runtime/TR-navigation-command-button'
 import { RuntimeHostReadChannel } from '@runtime/TR-navigation-host-slots'
+import type { RuntimeStackNav } from '@runtime/TR-navigation-mounts'
 import { overrideNativeNavigationModuleForTest } from '@runtime/TR-navigation-native-hosts'
 import { NativeStackSurface, NativeToolbar } from '@runtime/TR-navigation-native-stack'
+import type { useNativeHeaderToolbar } from '@runtime/TR-navigation-native-toolbar'
 import { navigationContentAccessibilityTestId } from '@runtime/TR-navigation-surfaces'
 import * as TaoReactNative from '@runtime/TR-react-native'
 import { Errors, FS, HCI, Repo } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { act, fireEvent, fireEventAsync, render } from '@testing-library/react-native'
-import { createElement, type ReactElement, useState } from 'react'
+import { type ComponentProps, createElement, forwardRef, type ReactElement, useState } from 'react'
 import * as RN from 'react-native'
+import type { HeaderBarButtonItem } from 'react-native-screens'
 import { RuntimeToolchainPaths } from '../expo-host-src/runtime-toolchain-paths'
 import {
   compileAndRenderApp,
@@ -615,6 +618,100 @@ Describe('Expo runtime', () => {
     Expect(dismiss).toHaveBeenCalledTimes(2)
     Expect(goes).toEqual([-1])
     ExpectScreen(screen).toHaveText('Home')
+  })
+
+  Test('blocks covered sheet swipes and stale native callbacks until a fresh uncovered dismissal', async () => {
+    const view = (name: string) => TR.Navigation.View({ name, render: () => createElement(RN.Text, null, name) })
+    const stack = configuredStack('Protected sheet stack', view('Sheet home'))
+    const app = TR.Navigation.App({ name: 'Protected sheet app', navigator: () => stack, auxiliaries: () => ({}) })
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+    const dismiss = jest.spyOn(app, 'dismiss')
+    await act(async () =>
+      TR.Navigation.PresentOverlay({ app, navigation: stack }, stack, view('Protected sheet'), {}, { sheet: true })
+    )
+    const modal = () => screen.UNSAFE_getByType(RN.Modal).props
+    const originalDismiss = modal().onRequestClose
+    Expect(modal().allowSwipeDismissal).toBe(true)
+    await act(async () => TR.Navigation.PresentOverlay({ app, navigation: stack }, stack, view('Sheet overlay'), {}))
+    Expect(modal().allowSwipeDismissal).toBe(false)
+    await act(async () => originalDismiss())
+    Expect(dismiss).not.toHaveBeenCalled()
+    ExpectScreen(screen).toHaveText('Sheet overlay')
+    await act(async () => app.back())
+    Expect(modal().allowSwipeDismissal).toBe(true)
+    await act(async () => originalDismiss())
+    Expect(dismiss).not.toHaveBeenCalled()
+    const beforeAskDismiss = modal().onRequestClose
+    await act(async () => {
+      void TR.Navigation.Ask({ app, navigation: stack }, view('Sheet ask'), {})
+    })
+    Expect(modal().allowSwipeDismissal).toBe(false)
+    await act(async () => beforeAskDismiss())
+    Expect(dismiss).not.toHaveBeenCalled()
+    ExpectScreen(screen).toHaveText('Sheet ask')
+    await act(async () => app.back())
+    Expect(modal().allowSwipeDismissal).toBe(true)
+    const finalDismiss = modal().onRequestClose
+    await act(async () => finalDismiss())
+    Expect(dismiss).toHaveBeenCalledTimes(1)
+    ExpectScreen(screen).toHaveText('Sheet home')
+    Expect(screen.queryByText('Protected sheet')).toBeNull()
+    await act(async () =>
+      TR.Navigation.PresentOverlay({ app, navigation: stack }, stack, view('Replacement sheet'), {}, { sheet: true })
+    )
+    await act(async () => finalDismiss())
+    Expect(dismiss).toHaveBeenCalledTimes(1)
+    ExpectScreen(screen).toHaveText('Replacement sheet')
+  })
+
+  Test('handles Android modal Back one overlay or ask at a time before its sheet', async () => {
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ActivityIndicator: RN.ActivityIndicator,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      TextInput: RN.TextInput,
+      View: RN.View,
+      Text: RN.Text,
+      Pressable: RN.Pressable,
+      Modal: RN.Modal,
+      Platform: { OS: 'android' },
+    })
+    try {
+      const view = (name: string) => TR.Navigation.View({ name, render: () => createElement(RN.Text, null, name) })
+      const stack = configuredBasicStack('Android modal stack', view('Android home'))
+      const app = TR.Navigation.App({ name: 'Android modal app', navigator: () => stack, auxiliaries: () => ({}) })
+      const screen = render(createElement(TR.Navigation.AppHost, { app }))
+      const dismiss = jest.spyOn(app, 'dismiss')
+      await act(async () =>
+        TR.Navigation.PresentOverlay({ app, navigation: stack }, stack, view('Android sheet'), {}, { sheet: true })
+      )
+      await act(async () =>
+        TR.Navigation.PresentOverlay({ app, navigation: stack }, stack, view('Android overlay'), {})
+      )
+      await act(async () => screen.UNSAFE_getByType(RN.Modal).props.onRequestClose())
+      Expect(dismiss).toHaveBeenCalledTimes(1)
+      Expect(screen.queryByText('Android overlay')).toBeNull()
+      ExpectScreen(screen).toHaveText('Android sheet')
+      let answer: unknown
+      await act(async () => {
+        void TR.Navigation.Ask({ app, navigation: stack }, view('Android ask'), {}).then(value => {
+          answer = value.evaluate().jsValue
+        })
+      })
+      await act(async () => screen.UNSAFE_getByType(RN.Modal).props.onRequestClose())
+      Expect(answer).toBe(null)
+      Expect(dismiss).toHaveBeenCalledTimes(2)
+      Expect(screen.queryByText('Android ask')).toBeNull()
+      ExpectScreen(screen).toHaveText('Android sheet')
+      await act(async () => screen.UNSAFE_getByType(RN.Modal).props.onRequestClose())
+      Expect(dismiss).toHaveBeenCalledTimes(3)
+      Expect(screen.queryByText('Android sheet')).toBeNull()
+      ExpectScreen(screen).toHaveText('Android home')
+    } finally {
+      restoreRuntime.mockRestore()
+    }
   })
 
   Test('contains stacked asks and dismisses only the top ask through accessibility escape', async () => {
@@ -1307,44 +1404,54 @@ Describe('Expo runtime', () => {
       )
     }
 
-    const home = TR.Navigation.View({
-      name: 'Chrome',
-      render: (_arguments, _taoProps, host) => createElement(Chrome, { host }),
-    })
-    const stack = configuredBasicStack('Basic chrome', home)
-    const app = TR.Navigation.App({ name: 'Basic chrome app', navigator: () => stack, auxiliaries: () => ({}) })
-    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+    const SupportedIcon = Object.assign(
+      (props: { name: string; testID: string }) =>
+        createElement(RN.Text, { testID: props.testID }, `FontAwesome:${props.name}`),
+      { hasIcon: (name: string) => name === 'check' },
+    )
+    const restoreIcon = overrideNavigationCommandIconForTest(SupportedIcon)
+    try {
+      const home = TR.Navigation.View({
+        name: 'Chrome',
+        render: (_arguments, _taoProps, host) => createElement(Chrome, { host }),
+      })
+      const stack = configuredBasicStack('Basic chrome', home)
+      const app = TR.Navigation.App({ name: 'Basic chrome app', navigator: () => stack, auxiliaries: () => ({}) })
+      const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-    Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Document')
-    Expect(screen.getByTestId(navigationCommandIconTestId('checkmark'))).toBeDefined()
-    Expect(screen.getByLabelText('First').props.accessibilityLabel).toBe('First')
-    Expect(screen.getByLabelText('Second').props.accessibilityState).toEqual({ disabled: true })
-    Expect(screen.queryByLabelText('Third')).toBeNull()
-    await fireEventAsync.press(screen.getByLabelText('More'))
-    Expect(screen.getAllByRole('button').map(button => button.props.accessibilityLabel)).toEqual([
-      'First',
-      'Second',
-      'More',
-      'Add ten',
-      'Enable second',
-      'Rename',
-    ])
-    Expect(screen.getAllByRole('menuitem').map(item => item.props.accessibilityLabel)).toEqual([
-      'Third',
-      'Fourth',
-    ])
+      Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Document')
+      Expect(screen.getByTestId(navigationCommandIconTestId('checkmark')).props.children).toBe('FontAwesome:check')
+      Expect(screen.getByLabelText('First').props.accessibilityLabel).toBe('First')
+      Expect(screen.getByLabelText('Second').props.accessibilityState).toEqual({ disabled: true })
+      Expect(screen.queryByLabelText('Third')).toBeNull()
+      await fireEventAsync.press(screen.getByLabelText('More'))
+      Expect(screen.getAllByRole('button').map(button => button.props.accessibilityLabel)).toEqual([
+        'First',
+        'Second',
+        'More',
+        'Add ten',
+        'Enable second',
+        'Rename',
+      ])
+      Expect(screen.getAllByRole('menuitem').map(item => item.props.accessibilityLabel)).toEqual([
+        'Third',
+        'Fourth',
+      ])
 
-    await fireEventAsync.press(screen.getByLabelText('Third'))
-    Expect(screen.queryByLabelText('Third')).toBeNull()
-    await fireEventAsync.press(screen.getByLabelText('First'))
-    ExpectScreen(screen).toHaveText('Count 2')
-    await fireEventAsync.press(screen.getByLabelText('Add ten'))
-    await fireEventAsync.press(screen.getByLabelText('First'))
-    ExpectScreen(screen).toHaveText('Count 13')
-    await fireEventAsync.press(screen.getByLabelText('Enable second'))
-    Expect(screen.getByLabelText('Second').props.accessibilityState).toEqual({ disabled: false })
-    await fireEventAsync.press(screen.getByLabelText('Rename'))
-    Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Updated document')
+      await fireEventAsync.press(screen.getByLabelText('Third'))
+      Expect(screen.queryByLabelText('Third')).toBeNull()
+      await fireEventAsync.press(screen.getByLabelText('First'))
+      ExpectScreen(screen).toHaveText('Count 2')
+      await fireEventAsync.press(screen.getByLabelText('Add ten'))
+      await fireEventAsync.press(screen.getByLabelText('First'))
+      ExpectScreen(screen).toHaveText('Count 13')
+      await fireEventAsync.press(screen.getByLabelText('Enable second'))
+      Expect(screen.getByLabelText('Second').props.accessibilityState).toEqual({ disabled: false })
+      await fireEventAsync.press(screen.getByLabelText('Rename'))
+      Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Updated document')
+    } finally {
+      restoreIcon()
+    }
   })
 
   Test('renders native toolbar icons and keeps its trailing command suffix behind More', async () => {
@@ -1389,6 +1496,95 @@ Describe('Expo runtime', () => {
     }
   })
 
+  Test('uses Android system header colors and spaced icon actions without losing fallback labels', async () => {
+    const platformColor = (...resource_paths: string[]) => ({ resource_paths })
+    const runtime = {
+      ActivityIndicator: RN.ActivityIndicator,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      TextInput: RN.TextInput,
+      View: RN.View,
+      Text: RN.Text,
+      Pressable: RN.Pressable,
+      Modal: RN.Modal,
+      Platform: { OS: 'android' },
+      PlatformColor: platformColor,
+    }
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue(runtime)
+    let header: Record<string, any> = {}
+    const restoreNative = overrideNativeNavigationModuleForTest({
+      ScreenStack: props => createElement(RN.View, null, props.children),
+      ScreenStackHeaderRightView: props => createElement(RN.View, null, props.children),
+      ScreenStackItem: props => {
+        header = props.headerConfig
+        return createElement(RN.View, null, props.children, props.headerConfig.children)
+      },
+    })
+    const Icon = Object.assign(
+      (props: { color: unknown; name: string; size: number; testID: string }) =>
+        createElement(
+          RN.Text,
+          { style: { color: props.color as any, fontSize: props.size }, testID: props.testID },
+          `glyph:${props.name}`,
+        ),
+      { hasIcon: (name: string) => name === 'check' || name === 'ellipsis' },
+    )
+    const restoreIcon = overrideNavigationCommandIconForTest(Icon)
+    try {
+      const invoked: string[] = []
+      const host = new RuntimeHostReadChannel()
+      host.publish({
+        header: true,
+        title: 'Android toolbar',
+        toolbar: [
+          navigationCommand({ icon: 'checkmark', invoke: () => invoked.push('First'), label: 'First' }).read(),
+          navigationCommand({ icon: 'unknown-icon', invoke: () => invoked.push('Fallback'), label: 'Fallback' }).read(),
+          navigationCommand({ invoke: () => invoked.push('Third'), label: 'Third' }).read(),
+        ],
+      })
+      const home = TR.Navigation.View({ name: 'Android toolbar home', render: () => null })
+      const props = {
+        entries: [{ arguments: {}, host, instanceId: 97, presentable: home }],
+        navigation: configuredStack('Android toolbar stack', home) as RuntimeStackNav,
+      }
+      const screen = render(createElement(NativeStackSurface, props))
+      Expect(header).toMatchObject({
+        backgroundColor: { resource_paths: ['?android:attr/colorBackground'] },
+        color: { resource_paths: ['?android:attr/colorForeground'] },
+        titleColor: { resource_paths: ['?android:attr/colorForeground'] },
+      })
+      Expect(screen.queryByText('First')).toBeNull()
+      Expect(screen.queryByText('More')).toBeNull()
+      Expect(screen.getByText('Fallback')).toBeDefined()
+      Expect(RN.StyleSheet.flatten(screen.getByLabelText('First').props.style)).toMatchObject({
+        minHeight: 48,
+        minWidth: 48,
+        paddingHorizontal: 12,
+      })
+      Expect(RN.StyleSheet.flatten(screen.getByTestId(navigationCommandIconTestId('checkmark')).props.style))
+        .toMatchObject({
+          color: { resource_paths: ['?android:attr/colorForeground'] },
+          fontSize: 24,
+        })
+      Expect(screen.getByTestId(navigationCommandIconTestId('ellipsis')).props.children).toBe('glyph:ellipsis')
+      await fireEventAsync.press(screen.getByLabelText('First'))
+      await fireEventAsync.press(screen.getByLabelText('More'))
+      await fireEventAsync.press(screen.getByLabelText('Third'))
+      Expect(invoked).toEqual(['First', 'Third'])
+      restoreRuntime.mockReturnValue({ ...runtime, Platform: { OS: 'ios' } })
+      screen.rerender(createElement(NativeStackSurface, props))
+      Expect(header['backgroundColor']).toBeUndefined()
+      Expect(header['color']).toBeUndefined()
+      Expect(header['titleColor']).toBeUndefined()
+    } finally {
+      restoreIcon()
+      restoreNative()
+      restoreRuntime.mockRestore()
+    }
+  })
+
   Test('adapts native stack entries to pinned screenId and headerConfig props', async () => {
     const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
       ActivityIndicator: RN.ActivityIndicator,
@@ -1411,10 +1607,12 @@ Describe('Expo runtime', () => {
         return createElement(RN.View, null, props.children)
       },
       ScreenStackHeaderRightView: props => createElement(RN.View, { testID: 'native-right' }, props.children),
-      ScreenStackItem: props => {
-        itemProps.push(props)
-        return createElement(RN.View, null, props.children, props.headerConfig.children)
-      },
+      ScreenStackItem: forwardRef<RN.View, ComponentProps<typeof import('react-native-screens')['ScreenStackItem']>>(
+        (props, _ref) => {
+          itemProps.push(props)
+          return createElement(RN.View, null, props.children, props.headerConfig?.children)
+        },
+      ),
     })
     try {
       const host = new RuntimeHostReadChannel()
@@ -1444,7 +1642,10 @@ Describe('Expo runtime', () => {
       }))
 
       Expect(screen.getAllByText('Native content')).toHaveLength(2)
-      Expect(screen.getByTestId('native-right')).toBeDefined()
+      Expect(screen.queryByTestId('native-right')).toBeNull()
+      Expect(itemProps[1]?.['headerConfig'].headerRightBarButtonItems).toMatchObject([
+        { accessibilityLabel: 'Native command', title: 'Native command', type: 'button' },
+      ])
       Expect(itemProps).toHaveLength(2)
       Expect(itemProps[0]?.['screenId']).toBe('41')
       Expect(itemProps[1]?.['screenId']).toBe('42')
@@ -1481,11 +1682,198 @@ Describe('Expo runtime', () => {
     }
   })
 
+  Test('updates native toolbar callbacks and prevents covered stack gestures before native dismissal', async () => {
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ActivityIndicator: RN.ActivityIndicator,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      TextInput: RN.TextInput,
+      View: RN.View,
+      Text: RN.Text,
+      Pressable: RN.Pressable,
+      Modal: RN.Modal,
+      Platform: { OS: 'ios' },
+    })
+    const items = new Map<string, Record<string, any>>()
+    const restoreNative = overrideNativeNavigationModuleForTest({
+      ScreenStack: props => createElement(RN.View, null, props.children),
+      ScreenStackItem: forwardRef<RN.View, ComponentProps<typeof import('react-native-screens')['ScreenStackItem']>>(
+        (props, _ref) => {
+          items.set(props.screenId, props)
+          return createElement(RN.View, null, props.children)
+        },
+      ),
+    })
+    try {
+      const invoked: string[] = []
+      const commands = ['First', 'Second', 'Third', 'Fourth'].map(label =>
+        navigationCommand({ icon: 'checkmark', invoke: () => invoked.push(label), label }).read()
+      )
+      const host = new RuntimeHostReadChannel()
+      host.publish({ header: true, title: 'Toolbar', toolbar: commands })
+      const home = TR.Navigation.View({ name: 'Native lifecycle home', render: () => null })
+      const stack = configuredStack('Native lifecycle', home)
+      const entries = [{ arguments: {}, host, instanceId: 73, presentable: home }]
+      const screen = render(createElement(NativeStackSurface, { entries, navigation: stack as any }))
+      const current = () => items.get('73')!
+      const original = current()['headerConfig'].headerRightBarButtonItems
+      const pinnedItems: HeaderBarButtonItem[] = original as ReturnType<typeof useNativeHeaderToolbar>['items']
+      Expect(pinnedItems.map(item => [item.type, item.type === 'spacing' ? undefined : item.title])).toEqual([
+        ['button', 'First'],
+        ['button', 'Second'],
+        ['menu', 'More'],
+      ])
+      Expect(original[0]).toMatchObject({
+        accessibilityLabel: 'First',
+        identifier: commands[0]!.identity,
+        icon: { name: 'checkmark', type: 'sfSymbol' },
+      })
+      Expect(original[2].menu.items.map((item: any) => item.title)).toEqual(['Third', 'Fourth'])
+      act(() => original[2].menu.items[0].onPress())
+      Expect(invoked).toEqual(['Third'])
+      act(() =>
+        host.publish({
+          header: true,
+          toolbar: commands.map((command, index) => ({
+            ...command,
+            enabled: index !== 1,
+            invoke: () => invoked.push(`Updated ${index}`),
+            label: `Updated ${index}`,
+          })),
+        })
+      )
+      Expect(current()['headerConfig'].headerRightBarButtonItems[1]).toMatchObject({
+        disabled: true,
+        title: 'Updated 1',
+      })
+      act(() => {
+        original[0].onPress()
+        original[1].onPress()
+        original[2].menu.items[0].onPress()
+      })
+      Expect(invoked).toEqual(['Third', 'Updated 0', 'Updated 2'])
+      Expect(
+        TR.Interaction.Outline.read().nodes.filter(node => node.provenance['command'])
+          .map(node => node.label),
+      ).toEqual(['Updated 0', 'Updated 1', 'Updated 2', 'Updated 3'])
+      Expect(current()).toMatchObject({ gestureEnabled: true, preventNativeDismiss: false })
+      Expect(current()['onHeaderBackButtonClicked']).toBeUndefined()
+      screen.rerender(createElement(NativeStackSurface, {
+        entries,
+        navigation: stack as any,
+        taoProps: { navigationHostActive: false },
+      }))
+      Expect(current()).toMatchObject({ gestureEnabled: false, preventNativeDismiss: true })
+      Expect(current()['headerConfig'].headerRightBarButtonItems).toEqual([])
+      act(() => original[0].onPress())
+      Expect(invoked).toEqual(['Third', 'Updated 0', 'Updated 2'])
+      screen.unmount()
+      Expect(TR.Interaction.Outline.read().nodes.filter(node => node.provenance['command'])).toEqual([])
+    } finally {
+      restoreNative()
+      restoreRuntime.mockRestore()
+    }
+  })
+
+  Test('protects native content from overlay and ask gestures and reconciles completed multi-pop once', async () => {
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ActivityIndicator: RN.ActivityIndicator,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      TextInput: RN.TextInput,
+      View: RN.View,
+      Text: RN.Text,
+      Pressable: RN.Pressable,
+      Modal: RN.Modal,
+      Platform: { OS: 'ios' },
+    })
+    const items = new Map<string, Record<string, any>>()
+    const restoreNative = overrideNativeNavigationModuleForTest({
+      ScreenStack: props => createElement(RN.View, null, props.children),
+      ScreenStackItem: forwardRef<RN.View, ComponentProps<typeof import('react-native-screens')['ScreenStackItem']>>(
+        (props, _ref) => {
+          items.set(props.screenId, props)
+          return createElement(RN.View, null, props.children)
+        },
+      ),
+    })
+    try {
+      const view = (name: string) => TR.Navigation.View({ name, render: () => createElement(RN.Text, null, name) })
+      const home = view('Gesture home')
+      const detail = view('Gesture detail')
+      const notice = view('Gesture notice')
+      const stack = configuredStack('Gesture stack', home) as RuntimeStackNav
+      const app = TR.Navigation.App({ name: 'Gesture app', navigator: () => stack, auxiliaries: () => ({}) })
+      render(createElement(TR.Navigation.AppHost, { app }))
+      act(() => {
+        stack.present(detail, {})
+        stack.present(detail, {})
+      })
+      const top = () => [...items.values()].at(-1)!
+      const nativePop = top()['onDismissed']
+      const attemptNativePop = (count: number): boolean => {
+        // RNSScreenStack scans every controller removed by a back-history selection, including
+        // inactive retained screens between the current screen and the destination.
+        const removed = [...items.values()].slice(-count)
+        if (removed.some(item => item['preventNativeDismiss'])) {
+          return false
+        }
+        top()['onDismissed']({ nativeEvent: { dismissCount: count } })
+        return true
+      }
+      Expect(stack.depth).toBe(3)
+      await act(async () => TR.Navigation.PresentOverlay(undefined, stack, notice, {}))
+      Expect(top()).toMatchObject({ gestureEnabled: false, preventNativeDismiss: true })
+      // A prevented native dismissal/cancel never consumes the overlay or the retained content.
+      act(() => Expect(attemptNativePop(2)).toBe(false))
+      Expect(stack.depth).toBe(3)
+      act(() => stack.back())
+      Expect(top()).toMatchObject({ gestureEnabled: true, preventNativeDismiss: false })
+      let result: unknown
+      await act(async () => {
+        void TR.Navigation.Ask({ app, navigation: stack }, notice, {}).then(value => {
+          result = value
+        })
+      })
+      Expect(top()).toMatchObject({ gestureEnabled: false, preventNativeDismiss: true })
+      Expect(stack.depth).toBe(3)
+      await act(async () => stack.back())
+      Expect(result).toBeDefined()
+      Expect(top()).toMatchObject({ gestureEnabled: true, preventNativeDismiss: false })
+      act(() => Expect(attemptNativePop(2)).toBe(true))
+      Expect(stack.depth).toBe(1)
+      act(() => nativePop({ nativeEvent: { dismissCount: 2 } }))
+      Expect(stack.depth).toBe(1)
+      restoreRuntime.mockReturnValue({
+        ...TaoReactNative.requireReactNativeRuntime(),
+        Platform: { OS: 'android' },
+      })
+      act(() => stack.present(detail, {}))
+      Expect(stack.depth).toBe(2)
+      const androidTop = top()
+      Expect(typeof androidTop['onHeaderBackButtonClicked']).toBe('function')
+      act(() => androidTop['onHeaderBackButtonClicked']())
+      Expect(stack.depth).toBe(1)
+      act(() => androidTop['onDismissed']({ nativeEvent: { dismissCount: 1 } }))
+      Expect(stack.depth).toBe(1)
+    } finally {
+      restoreNative()
+      restoreRuntime.mockRestore()
+    }
+  })
+
   Test('gives a native StackNav inside a JS selection item definite height', () => {
     const restoreNative = overrideNativeNavigationModuleForTest({
       ScreenStack: props =>
         createElement(RN.View, { testID: 'selected-native-stack', style: props.style }, props.children),
-      ScreenStackItem: props => createElement(RN.View, null, props.children),
+      ScreenStackItem: forwardRef<RN.View, ComponentProps<typeof import('react-native-screens')['ScreenStackItem']>>((
+        props,
+        _ref,
+      ) => createElement(RN.View, null, props.children)),
     })
     try {
       const home = TR.Navigation.View({
