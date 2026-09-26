@@ -32,15 +32,22 @@ export function startStudioProcessTree(command: string, spec: StudioProcessTreeS
   child.stdout?.on('data', chunk => spec.onOutput?.('stdout', Buffer.from(chunk)))
   child.stderr?.on('data', chunk => spec.onOutput?.('stderr', Buffer.from(chunk)))
   child.on('error', error => spec.onError?.(error))
+  let releaseCompletion = () => {}
   const close = new Promise<CLI.CommandCloseResult>(resolve => {
-    child.once(spec.settleOnExit === true ? 'exit' : 'close', (exitCode, signal) => resolve({ exitCode, signal }))
+    releaseCompletion = Platform.onChildProcessClose(child, (exitCode, signal) => resolve({ exitCode, signal }))
   })
+  const completion = spec.settleOnExit === true
+    ? new Promise<CLI.CommandCloseResult>(resolve => {
+      child.once('exit', (exitCode, signal) => resolve({ exitCode, signal }))
+    })
+    : close
   return {
     async closeOutput() {
       child.stdout?.destroy()
       child.stderr?.destroy()
     },
     dispose() {
+      releaseCompletion()
       child.stdin?.destroy()
       child.stdout?.destroy()
       child.stderr?.destroy()
@@ -66,7 +73,7 @@ export function startStudioProcessTree(command: string, spec: StudioProcessTreeS
       return Platform.spawnSync(probe.command, { args: probe.args, stdio: 'ignore' }).status === 0
     },
     onceClose(listener) {
-      child.once('close', listener)
+      void close.then(result => listener(result.exitCode, result.signal))
     },
     onceError(listener) {
       child.once('error', listener)
@@ -74,7 +81,7 @@ export function startStudioProcessTree(command: string, spec: StudioProcessTreeS
     get signalCode() {
       return child.signalCode
     },
-    waitForClose: () => close,
+    waitForClose: () => completion,
   }
 }
 

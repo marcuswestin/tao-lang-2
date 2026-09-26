@@ -353,8 +353,9 @@ function startCommand(
   })
 
   let spawnError: Error | undefined
+  let releaseCompletion = () => {}
   const closePromise = new Promise<CommandCloseResult>(resolve => {
-    child.once('close', (exitCode, signal) => {
+    releaseCompletion = Platform.onChildProcessClose(child, (exitCode, signal) => {
       closed = true
       clearBounds()
       if (escalation !== undefined) {
@@ -374,6 +375,7 @@ function startCommand(
     command,
     cwd: spec.cwd,
     dispose: () => {
+      releaseCompletion()
       child.stdin?.destroy()
       child.stdout?.destroy()
       child.stderr?.destroy()
@@ -399,10 +401,7 @@ function startCommand(
     },
     kill: signal => stopProcessTree(signal ?? 'SIGTERM'),
     onceClose: listener => {
-      child.once('close', (exitCode, signal) => {
-        const result = closeResultFor(exitCode, signal)
-        listener(result.exitCode, result.signal)
-      })
+      void closePromise.then(result => listener(result.exitCode, result.signal))
     },
     onceError: listener => {
       child.once('error', listener)

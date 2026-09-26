@@ -804,9 +804,11 @@ stands between `A2` and done, in the order to take it:
 7. **Publishing `0.4.0`**, waiting on the public repository, its GitHub Releases (`R11`), and the
    licence (`R1`).
 
-Meanwhile about half of all verification-lane runs fail on tests that spawn `git` and hang for their
-whole timeout (`DEVENV-TESTS-THAT-SPAWN-GIT-HANG-THEIR-WHOLE-TIMEOUT-IN-LANES`), which slows every
-landing this work needs.
+The Git subprocess timeouts recorded in `DEVENV-TESTS-THAT-SPAWN-GIT-HANG-THEIR-WHOLE-TIMEOUT-IN-LANES`
+are repaired: pending promise assertions no longer re-enter the runtime, and command completion joins
+process exit with drained output pipes. Ten repeated uncached verification runs completed without the
+original 120-second stalls; separate socket and runtime-journey timeout observations remain in the
+developer-environment backlog.
 
 ## Uncertain, and how to settle it
 
