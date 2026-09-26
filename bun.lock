@@ -128,6 +128,15 @@
         "tao-instantdb": "workspace:*",
         "tao-shared": "workspace:*",
       },
+      "devDependencies": {
+        "@types/react": "~19.2.0",
+        "react": "19.2.3",
+        "react-native": "0.86.3",
+      },
+      "peerDependencies": {
+        "react": "^19.2.3",
+        "react-native": "^0.86.3",
+      },
     },
     "packages/cli/agent-cli": {
       "name": "tao-agent-cli",
@@ -365,6 +374,12 @@
       "version": "1.0.0",
       "dependencies": {
         "@instantdb/react-native": "1.0.22",
+        "tao-shared": "workspace:*",
+      },
+    },
+    "packages/services/account-server": {
+      "name": "tao-account-server",
+      "dependencies": {
         "tao-shared": "workspace:*",
       },
     },
@@ -2799,6 +2814,8 @@
 
     "tao": ["tao@workspace:packages/ides/ide-extension"],
 
+    "tao-account-server": ["tao-account-server@workspace:packages/services/account-server"],
+
     "tao-agent-cli": ["tao-agent-cli@workspace:packages/cli/agent-cli"],
 
     "tao-appium-driver": ["tao-appium-driver@workspace:packages/testing/appium-driver"],
@@ -3668,6 +3685,8 @@
     "tao-expo-host/react": ["react@19.2.3", "", {}, "sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA=="],
 
     "tao-runtime/react": ["react@19.2.3", "", {}, "sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA=="],
+
+    "tao-stdlib/react": ["react@19.2.3", "", {}, "sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA=="],
 
     "tao-studio/react": ["react@19.2.3", "", {}, "sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA=="],
 

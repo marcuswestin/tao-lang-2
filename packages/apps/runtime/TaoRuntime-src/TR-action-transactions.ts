@@ -1,7 +1,20 @@
 import { Arrays } from './core/RuntimeCore'
 import { type TestActionStubContext, TestActionStubs } from './TR-action-test-stubs'
 import { journalSettle, journalStart, type TaoDebugJournalEntry } from './TR-debug-journal'
-import { recordActionFailureFrames, reportActionFailure, reportUnownedFailure, TaoActionFailure } from './TR-errors'
+import {
+  recordActionFailureFrames,
+  reportActionFailure,
+  reportUnownedFailure,
+  TaoActionFailure,
+  type TaoActionFailureReport,
+} from './TR-errors'
+
+/** A receipt belongs to one root, including roots whose contained failure never rejects. */
+export type TaoActionReceipt = Readonly<{
+  outcome: 'committed' | 'failed' | 'abandoned'
+  failure?: TaoActionFailureReport
+}>
+const actionReceipts = new Map<(receipt: TaoActionReceipt) => void, number>()
 
 export type TaoDeclaredFailure = Readonly<{
   case: { evaluate(): { jsValue: unknown } }
@@ -52,9 +65,14 @@ class ActionTransaction {
   committed = false
   journal: TaoDebugJournalEntry | undefined
   failure: unknown
+  failureReport: TaoActionFailureReport | undefined
   settled = false
 
-  constructor(readonly launch: number, readonly testStubs: TestActionStubContext) {}
+  constructor(
+    readonly launch: number,
+    readonly testStubs: TestActionStubContext,
+    readonly receipt?: (receipt: TaoActionReceipt) => void,
+  ) {}
 
   pushFrame(name: string): void {
     this.frames.push(name)
@@ -168,6 +186,15 @@ let rootQueue: Promise<void> = Promise.resolve()
 let queuedRoots = 0
 let externalEffectRevision = 0
 
+/** Let an external invocation read committed state after already admitted roots settle. */
+export async function settleActionRoots(): Promise<void> {
+  let pending: Promise<void>
+  do {
+    pending = rootQueue
+    await pending
+  } while (pending !== rootQueue)
+}
+
 /** TaoActionContinuation is the compiler-carried transaction identity for one async action root. */
 export type TaoActionContinuation = Readonly<{ transaction?: object }>
 
@@ -205,6 +232,11 @@ export function actionTestStubContext(): TestActionStubContext {
  */
 export function beginActionLaunch(): void {
   launchGeneration += 1
+  for (const [receipt, launch] of actionReceipts) {
+    if (launch !== launchGeneration) {
+      receipt({ outcome: 'abandoned' })
+    }
+  }
   rootQueue = Promise.resolve()
   queuedRoots = 0
 }
@@ -233,14 +265,23 @@ export function runAction(
   join = false,
   interrupt = false,
   testStubs = TestActionStubs.capture(),
+  onReceipt?: (receipt: TaoActionReceipt) => void,
 ): void | Promise<void> {
   if (join && activeTransaction) {
     return runJoinedAction(activeTransaction, name, body)
   }
   const suspendedTransaction = interrupt ? activeTransaction : undefined
   const launch = launchGeneration
+  const receipt = onReceipt === undefined ? undefined : (value: TaoActionReceipt) => {
+    if (actionReceipts.delete(receipt!)) {
+      onReceipt(value)
+    }
+  }
+  if (receipt) {
+    actionReceipts.set(receipt, launch)
+  }
   const run = (): void | Promise<void> => {
-    const transaction = new ActionTransaction(launch, testStubs)
+    const transaction = new ActionTransaction(launch, testStubs, receipt)
     let pending = false
     activeTransaction = transaction
     transaction.pushFrame(name)
@@ -318,7 +359,14 @@ function finishRootFailure(
   if (abandonedByLaunch(transaction)) {
     return
   }
-  reportActionFailure(error, transaction, name, arguments_, name === 'async' ? error : undefined)
+  transaction.failureReport = reportActionFailure(
+    error,
+    transaction,
+    name,
+    arguments_,
+    name === 'async' ? error : undefined,
+    transaction.receipt !== undefined,
+  )
 }
 
 function finishRoot(transaction: ActionTransaction, suspendedTransaction?: ActionTransaction): void {
@@ -340,12 +388,17 @@ function finishRoot(transaction: ActionTransaction, suspendedTransaction?: Actio
     }
   }
   if (abandonedByLaunch(transaction)) {
+    transaction.receipt?.({ outcome: 'abandoned' })
     // An `async` body the ended launch queued belongs to that launch as much as its caller does.
     return
   }
   for (const detached of transaction.detached) {
     void enqueueDetached(detached.body, detached.testStubs)
   }
+  transaction.receipt?.({
+    outcome: transaction.committed ? 'committed' : 'failed',
+    ...(transaction.failureReport ? { failure: transaction.failureReport } : {}),
+  })
 }
 
 function settleJournal(transaction: ActionTransaction): void {

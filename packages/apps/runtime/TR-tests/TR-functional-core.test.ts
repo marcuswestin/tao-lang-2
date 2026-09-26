@@ -54,7 +54,24 @@ Describe('TR functional core', () => {
     Expect(TR.IsCase(TR.Value([]), 'empty').jsValue).toBe(true)
 
     const confirmResult = TR.Enum(identity('ConfirmResult'), ['Confirmed', 'Cancelled'])
+    Expect(
+      TR.WhenCase(confirmResult['Confirmed']!, [['Confirmed', () => TR.Value('matched')]], () => TR.Value('missed'))
+        .jsValue,
+    ).toBe('matched')
+    Expect(
+      TR.WhenCaseRender(
+        confirmResult['Cancelled']!,
+        [['Confirmed', () => 'wrong'], ['Cancelled', () => 'cancelled']],
+        () => 'missed',
+      ),
+    ).toBe('cancelled')
+    Expect(TR.WhenCaseRender(TR.Value({ caseName: 'Confirmed' }), [['Confirmed', () => 'forged']], () => 'safe')).toBe(
+      'safe',
+    )
     const otherResult = TR.Enum(identity('OtherResult'), ['Confirmed'])
+    TR.Enum(identity('ConfirmResult'), ['Confirmed', 'Cancelled'])
+    Expect(TR.WhenCaseRender(confirmResult['Confirmed']!, [['Confirmed', () => 'original mount']], () => 'missed'))
+      .toBe('original mount')
     Expect(TR.IsCase(confirmResult['Confirmed']!, confirmResult['Confirmed']!).jsValue).toBe(true)
     Expect(TR.IsCase(confirmResult['Confirmed']!, otherResult['Confirmed']!).jsValue).toBe(false)
     Expect(TR.IsCase(TR.Value(false), TR.Value(false)).jsValue).toBe(true)

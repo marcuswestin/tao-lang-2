@@ -1,0 +1,9 @@
+use AuthProvider from @tao/auth
+
+public
+type LocalAuth is AuthProvider with {
+   Endpoint text
+   Resource text
+
+   provider LocalAuthProvider from ./LocalAuth.ts
+}

@@ -90,7 +90,7 @@ export function unhandledOutcomeCases(
   seen: ReadonlySet<EffectDeclaration> = new Set(),
 ): string[] {
   const named = new Set(statement.outcomes.map(outcome => outcome.case))
-  if (named.has('rejected')) {
+  if (named.has('rejected') || statement.otherwise) {
     return []
   }
   return invocationFailureCases(statement, seen).filter(failureCase => !named.has(failureCase))

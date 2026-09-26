@@ -10,14 +10,14 @@ const prelude = `
   use Memory from @tao/data/providers/memory
   use StackNav from @tao/nav
   ${stubView('Main')}
-  data Stories / Story { HnId number (unique) Title text }
-  data Comments / Comment { Story HnId number (unique) Text text }
+  data Stories / Story { HnId number (unique), Title text }
+  data Comments / Comment { Story, HnId number (unique), Text text }
 `
 
 /** twoStores is the well-formed shape every rejection below deviates from in one way. */
 const twoStores = `
   ${prelude}
-  data Bookmarks / Bookmark { Story (reference) Note text (default "") }
+  data Bookmarks / Bookmark { Story (reference), Note text (default "") }
   datasource Feed = Memory { Data { Stories, Comments } }
   datasource StubFeed = Memory { Data { Stories, Comments } }
   datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
@@ -63,7 +63,7 @@ Describe('validator: multiple datasources', () => {
     'accepts a reference that names its target when the field name differs',
     accepts(`
       ${prelude}
-      data Bookmarks / Bookmark { Kept (reference Story) }
+      data Bookmarks / Bookmark { Kept Story (reference) }
       datasource Feed = Memory { Data { Stories, Comments } }
       datasource Personal = Local { StorageKey "personal" Data { Bookmarks } }
       app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
@@ -105,7 +105,7 @@ Describe('validator: multiple datasources', () => {
     rejects(
       `
         ${prelude}
-        data Bookmarks / Bookmark { Story (reference Stories) }
+        data Bookmarks / Bookmark { Story Stories (reference) }
         app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Memory { } }
       `,
       dataValidationMessages.referenceTarget('Story', 'Stories'),
@@ -181,7 +181,7 @@ Describe('validator: multiple datasources', () => {
     rejects(
       `
         ${prelude}
-        data Sessions / Session { Label text  local only }
+        data Sessions / Session { Label text,  local only }
         datasource Feed = Memory { Data { Stories, Sessions, Ghosts } }
         app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Feed }
       `,
@@ -274,8 +274,8 @@ Describe('validator: multiple datasources', () => {
     rejects(
       `
         ${prelude}
-        data Boards / Board { Title text (unique) Notes }
-        data Notes / Note { Board (reference) Text text }
+        data Boards / Board { Title text (unique), Notes }
+        data Notes / Note { Board (reference), Text text }
         app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource Memory { } }
       `,
       dataValidationMessages.inverseOfReference('Board.Notes', 'Note', 'Board'),
@@ -311,8 +311,8 @@ Describe('validator: multiple datasources', () => {
           app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
         `,
         'Data.tao': `
-          public data Stories / Story { HnId number (unique) Title text }
-          public data Bookmarks / Bookmark { Story Note text }
+          public data Stories / Story { HnId number (unique), Title text }
+          public data Bookmarks / Bookmark { Story, Note text }
         `,
       },
       datasourceMembershipMessages.crossDatasourceRelation('Bookmark', 'Story', 'Story'),
@@ -333,8 +333,8 @@ Describe('validator: multiple datasources', () => {
         app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
       `,
       'Data.tao': `
-        public data Stories / Story { HnId number (unique) Title text }
-        public data Bookmarks / Bookmark { Story (reference) Note text }
+        public data Stories / Story { HnId number (unique), Title text }
+        public data Bookmarks / Bookmark { Story (reference), Note text }
       `,
     }),
   )

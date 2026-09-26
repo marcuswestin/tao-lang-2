@@ -12,37 +12,43 @@ A declaration names its plural collection first and its stored singular entity s
 
 ```tao
 data Workspaces / Workspace {
-   Name text
-   CreatedAt time (default now)
-   Pinned yes / no
-   Documents (relation Documents, owned)
-   index CreatedAt
-   order by CreatedAt
+   Name text,
+   CreatedAt time (default now),
+   Pinned yes / no,
+   Documents (owned),
+   index CreatedAt,
+   order by CreatedAt,
 }
 
 data Documents / Document {
-   Title text
-   Body text (default "")
-   Final yes / Draft no
-   Public yes / Private no (default Public)
-   CreatedAt time (default now)
-   Workspace (relation Workspace)
-   Paragraphs (owned)
-   index CreatedAt
-   order by CreatedAt
+   Title text,
+   Body text (default ""),
+   Final yes / Draft no,
+   Public yes / Private no (default Public),
+   CreatedAt time (default now),
+   Workspace,
+   Paragraphs (owned),
+   index CreatedAt,
+   order by CreatedAt,
 }
 
 data Paragraphs / Paragraph {
-   Text text
-   Ordering number
-   Document
-   index Ordering
-   order by Ordering
+   Text text,
+   Ordering number,
+   Document,
+   index Ordering,
+   order by Ordering,
 }
 ```
 
-Fields use `Name type (modifiers)`. Primitive types are `text`, `number`, `boolean`, and `time`.
-Modifiers are parenthesized and comma-separated. Literal defaults are values of the field's type.
+Every entry in a data block is separated by a comma, including fields, storage facts, and command
+policies. A trailing comma is optional; a newline alone does not separate entries. Fields use
+`Name Type (traits)`. Primitive types are `text`, `number`, `boolean`, and `time`; named scalar value
+types and named case sets are also supported. A field may omit its type when its name resolves to
+that type: after `type DisplayName is text`, `DisplayName` is a text field; after
+`type Role is one of Reader, Editor`, `Role` is a case-set field. `State Role?` names an optional
+field of that case set. Traits are parenthesized and comma-separated. Literal defaults are values
+of the field's type.
 `now` is an ordinary expression that reads the runtime clock. As a field default it is preserved in
 generated schema metadata as a clock default and sampled separately for every create rather than
 evaluated while parsing or compiling; the text literal `"now"` remains ordinary text.
@@ -54,17 +60,17 @@ its case name, as in `Final yes / Draft no`. The `no` side is the default unless
 They exercise declaration syntax and do not require product journeys. Writes, `is <Case>` tests,
 and boolean query filters use named declared cases rather than raw spelling conventions.
 
-Indexes are separate statements, one default `order by` may be declared for the entity, and
+Indexes are separate entries, one default `order by` may be declared for the entity, and
 `local only` states that the entity is stored on the device whatever the app binds as its
-`Datasource`. The three are entity-level storage facts and trail the field list as one group:
+`Datasource`. These are entity-level storage facts and trail the field list as one group:
 
 ```tao
 data FocusSessions / FocusSession {
-   EndsAt time
-   PausedAt time (default now)
-   Paused yes / Running no
+   EndsAt time,
+   PausedAt time (default now),
+   Paused yes / Running no,
 
-   local only
+   local only,
 }
 ```
 
@@ -75,10 +81,16 @@ a stored `relation` may not cross between them: both ends must declare `local on
 same holds for two collections held by different datasources, and `reference` is the link that
 crosses either boundary (see _References across datasources_).
 
-`unique` marks one primitive field as the entity's external identity — the reconciliation key a
-query-driven datasource upserts by (see _The Http datasource_ below). It is a storage fact stated
-on the field, legal only on primitive fields, declared at most once per field, and carried by at
-most one field per entity, so reconciliation never depends on field order.
+The field trait `(unique)` selects the entity's external reconciliation key, used by `Http` fills
+and cross-store references. It is legal on a scalar primitive field, including a named scalar type
+or case-named boolean, at most once per field and on at most one field per entity.
+
+An entity-level `unique Field` or `unique Field + OtherField` declares an independent uniqueness
+constraint. More than one such entry is allowed. Its fields must exist, must not repeat within the
+constraint, and must be stored values or to-one relations rather than inverse collections. For
+example, `unique Workspace + Person` allows one membership per pair. These constraints are emitted
+in the runtime schema and backend policy; the local reference backend enforces them transactionally.
+They do not select or replace the `(unique)` reconciliation key.
 
 `title` marks the one `text` field that names a row to a person. It is legal only on a `text`
 field, declared at most once per field, and carried by at most one field per entity. The
@@ -104,18 +116,143 @@ reserved field names, and `required` may appear at most once per field. The stor
 
 ```tao
 data Notes / Note {
-   Title text (required "Give the note a title")
-   Summary text (default "", required "Summarize the note")
+   Title text (required "Give the note a title"),
+   Summary text (default "", required "Summarize the note"),
 }
 ```
 
 A bare singular name such as `Workspace` is a stored to-one relationship when it names another
 entity. A bare plural name such as `Paragraphs` is an inferred inverse to-many relationship. The
-`relation` modifier states the related declaration explicitly when inference is insufficient.
+explicit type states the related declaration when its field name differs: `Owner Account` is a
+stored to-one relationship, while `Members Accounts` is an inverse collection. The singular or
+plural target keeps its exact meaning; Tao does not singularize it. An inverse requires one
+unambiguous stored back-link. `(relation Account)` is retired and receives a migration diagnostic.
 `owned` belongs on the owner's inverse collection: deleting that owner transitively deletes
 the related rows in the collection. A stored to-one relationship does not declare cascade policy;
 without owner-side `owned`, deletion is restricted while another row refers to the target.
 Relationship values are live entity handles, not text IDs.
+
+## Accounts, authentication, and access
+
+Authentication is configured independently of storage through the app's `Auth` slot. `@tao/auth`
+exports `Account`, `Session`, `SignIn`, `SignOut`, `SignInFlow`, `SignInView`, and `AccountView`.
+`Account` binds to the current app's ordinary `Accounts / Account` entity; credentials, provider
+subjects, and session tokens are not application fields. An alias such as `let Me = Account`
+remains reactive and resolves in the mounted caller's scope, including inside module actions.
+Separate mounts and accounts receive separate data instances.
+
+`Session.State` is a named case set: `Restoring`, `SignedOut`, `Authenticating`, `ChallengeRequired`,
+`ReauthenticationRequired`, `SignedIn`, and `Error`. Session state and the availability of the
+account row are separate. Use an entity availability guard before reading account fields; session
+restoration cannot be treated as a signed-out result. Account changes invalidate old asynchronous
+callbacks and credentials and clear the departing account's live data. Sign-out waits for the
+provider's durable cleanup before reporting completion.
+
+Access declarations live at file level and name a singular protected entity:
+
+```tao
+data Accounts / Account {
+   DisplayName text,
+   Notes,
+}
+
+data Notes / Note {
+   Owner Account,
+   Body text,
+}
+
+access Account {
+   Account can read;
+   Account can update DisplayName
+}
+
+access Note {
+   Owner can read, create, delete;
+   Owner can update Body
+}
+```
+
+An actor path starts from the protected row and must reach an `Account` or a collection of
+accounts. The row's singular name may prefix that path: `Workspace.Memberships.Person can read`
+is a membership rule when `Memberships` is the workspace's inverse collection and `Person Account`
+is its stored account relation. The backend compares the reached account with its verified caller;
+the client cannot supply an actor or grant itself a policy. An update grant must explicitly list
+its mutable stored fields. Inverse collections cannot be updated by a grant; change their stored
+back-link instead. The example deliberately grants no update of `Owner`.
+
+The compiler emits `TaoDataPolicy.json` from entity shape, relationships, uniqueness constraints,
+and access declarations. The local reference service loads that trusted policy at startup. It
+defaults to denial, checks read/create/update/delete grants and field-scoped updates, evaluates
+writes against the resulting relationship state, and commits a multi-row submission atomically.
+Its durable operation receipts make retrying the same accepted submission idempotent. A client
+query, filtered UI, or cached snapshot is not an authorization boundary.
+
+### Local reference integration
+
+`LocalAuth` in `@tao/auth/local` and `Reference` in `@tao/data/providers/reference` connect to the
+same local account service. The application account schema and access declarations above supply
+its domain data; the provider supplies the verified session:
+
+```tao
+use Account from @tao/auth
+use LocalAuth from @tao/auth/local
+use Reference from @tao/data/providers/reference
+
+let Me = Account
+
+app NotesApp {
+   Auth LocalAuth {
+      Endpoint "http://localhost:4738"
+      Resource "notes"
+   }
+   Datasource Reference {
+      ServerURL "http://localhost:4738"
+      Resource "notes"
+      Offline { Me, Me.Notes }
+   }
+   view NotesHome
+}
+```
+
+The local service implements email/password registration and sign-in, resource-bound sessions,
+expiry and revocation, server-owned issuer/subject-to-account mapping, and durable SQLite rows,
+constraints, and receipts. Email is a login handle, not a verified contact claim. This is a
+localhost reference implementation; it does not establish a managed identity-provider deployment,
+MFA, passkeys, account linking, recovery, or native InstantDB authentication.
+
+The service can instead store application rows and operation receipts in self-hosted InstantDB,
+selected by trusted `--instant-config PATH` configuration. App source and the LocalAuth/Reference
+protocol stay the same; SQLite retains credentials, sessions, keys, and identity mappings. Each
+Instant transaction atomically commits changed entity rows, an idempotency receipt, and a unique
+revision guard. Startup and acknowledged revocation advance that revision to fence older requests.
+This deployment requires deny-all direct-client rules and one gateway using its original identity
+database. Policy migration, copied databases running extra gateways, and distributed failover are
+unsupported. Live tests exercise the actual Tao app, transaction races, and process/offline recovery.
+
+An authenticated datasource must declare that it enforces authenticated authority. `Reference`
+declares server authority; `Memory` declares test authority and is usable with `TestAuth`.
+The runtime rejects unsupported pairings before calling the provider. The existing InstantDB
+snapshot and Local adapters do not opt in: client-side filtering is not remote authorization.
+
+`Offline` declares the working set persisted by `Reference`; it is not permission to fetch a row.
+The current compiler supports the current account and its direct inverse collections, such as
+`Me` and `Me.Notes`. Pending writes are retained with that working set in an authenticated encrypted
+checkpoint. Storage failure occurs before a write is reported queued. Logout removes live access
+and accessible native key material after persistence drains, while encrypted pending work remains
+recoverable only after the same account is verified again. The supplied `AccountView` keeps profile
+edits separate from the published account row until the backend acknowledges them.
+
+Native key custody uses the secure-vault boundary; focused tests exercise that boundary through a
+simulated vault and do not certify a physical device. Browser keys remain in memory, so a cold
+browser process must authenticate online before recovering its encrypted checkpoint. Browser
+cold-offline startup and protection from a compromised same-origin script are not claimed.
+Concurrent mounts in one JavaScript runtime share a serialized checkpoint and accepted snapshot;
+they must use the same schema and offline working set. Browser persistence additionally requires
+Web Locks and refuses a second tab holding that checkpoint. Native multi-process writers are not
+supported by this implementation. These coordination tests use an injected host lease and do not
+establish live browser or physical-device acceptance.
+The service's [README](../../packages/services/account-server/README.md) owns startup and protocol
+operational details. Deterministic account fixtures use `TestAuth`, described in `Tao Testing.md`.
 
 ## App datasource configuration
 
@@ -235,14 +372,14 @@ A `reference` is the link that may cross:
 
 ```tao
 data Bookmarks / Bookmark {
-   Story (reference)
-   Note text (default "")
+   Story (reference),
+   Note text (default ""),
 }
 ```
 
 A reference stores the target's `unique` value rather than its row id. Like `unique` and `owned` it
-is a bare storage fact; `(reference Story)` names the target only when the field name is not the
-entity's. It names one singular entity, which must declare a `unique` field, and it owns nothing:
+is a bare storage fact; `Kept Story (reference)` names the target when the field name differs.
+It names one singular entity, which must declare a `unique` field, and it owns nothing:
 `owned` may not accompany it, and deleting one side never reaches the other.
 
 A reference that holds a value always reads as an entity handle, so a guard can tell what state its
@@ -256,8 +393,8 @@ returns it. A cleared reference reads as `none`.
 A reference resolves only among the stores its own project mounts, never against every store in the
 process, so two projects running side by side — as Studio runs them — cannot answer each other's
 references. There is no inferred inverse
-across stores; `query Bookmarks { where Story == Story }` is the inverse, and equality by that stored
-value is the only comparison a reference supports. A reference is legal within one store too — it is
+across stores; `query Bookmarks = Bookmarks with { where Story == Story }` is the inverse. Equality
+by that stored value is the only comparison a reference supports. A reference is legal within one store too — it is
 the weaker link, not a cross-store exception.
 
 The storage key belongs to the configured provider—not to a display `Name`, source filename, or
@@ -450,26 +587,28 @@ Queries are reactive lists. Inside a view they are declared in unconditional def
 root-render placement, before first use and before control flow.
 
 ```tao
-query Workspaces { }
+query Workspaces = Workspaces
 
-query Drafts from Workspace.Documents {
+query Drafts = Workspace.Documents with {
    where is Draft
 }
 
-query FinishedDocuments from Workspace.Documents {
+query FinishedDocuments = Workspace.Documents with {
    where is Final
    order by CreatedAt desc
 }
 
-query Found from Workspace.Documents {
+query Found = Workspace.Documents with {
    search Find
    order by Title
 }
 ```
 
-The source is either a root plural or a plural relationship. A query may keep the source name or
-use `Name from Source`; the `Source as Name` form renames a root plural only, since a relationship
-path cannot be a bare source name. Repeated `where` clauses combine with AND. Primitive
+The canonical declaration is `query Name = Source`, optionally followed by `with { ... }`.
+The source is a root plural or a plural relationship, including one reached through an account
+alias. `query Workspaces = Workspaces` keeps the collection's name. The previous `query Source`,
+`query Source as Name`, and `query Name from Source` heads remain accepted for migration and are
+formatted into the canonical binding form. Repeated `where` clauses combine with AND. Primitive
 comparisons support `==`, `!=`, `<`, `<=`, `>`, and `>=`; boolean cases are filtered by case name.
 Boolean filters use `where is <Case>`. One explicit order may override the source entity's default
 order. One `limit <count>` clause caps the result after filtering and ordering; the count is a
@@ -650,8 +789,9 @@ Text(Document.Title)
 none applies, the entity is available and execution or rendering falls through to the statements
 after the guard. A matched action guard skips the rest of its action block; a matched render guard
 renders its branch instead of the rest of its enclosing render block. A deleted handle becomes
-`missing` while retaining `.Id`. Memory and Local currently produce loading, missing, and error;
-`unauthorized` is the implemented provider-neutral case reserved for a provider that can report it.
+`missing` while retaining `.Id`. Memory and Local produce loading, missing, and error. Auth-scoped
+account reads also distinguish session restoration from an absent or unauthorized account; a
+`SignedIn` session does not by itself prove that its application account row is available.
 
 ### The read net
 

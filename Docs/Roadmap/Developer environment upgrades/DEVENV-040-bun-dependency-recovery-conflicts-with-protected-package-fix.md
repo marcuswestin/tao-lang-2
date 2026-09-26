@@ -21,6 +21,16 @@
   sandbox now runs `./agent help`, `test-host`, and focused `test-file` commands successfully.
   No dependency-tree removal was needed. This clears that session's blocker without establishing
   that the protected-package recovery defect itself is fixed.
+- **Additional evidence (2026-09-26):** Registering the local account-server workspace in `68b8`
+  made `./agent setup --refresh-lockfile` fail on `keytar@7.9.0 (clonefile)`. The approved
+  unsandboxed command retry returned the same failure. The new server's focused test was blocked
+  in dependency bootstrap before running. Source edits were preserved and implementation stopped;
+  no dependency-tree removal, move, or alternate install backend was attempted. The current
+  workflow directs a fresh unsandboxed session followed by `./agent setup`.
+  After the Developer's recovery, dependencies linked successfully. The later setup failure came
+  from disposable permission-render staging, repaired under
+  DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE. Setup completed at 09:39 UTC and local
+  account-server tests ran; this task no longer has a dependency-install blocker.
 - **Workaround:** First move the stale `node_modules` directory intact to a unique path under
   `/private/tmp`, without reading or deleting its contents, then run `bun install --frozen-lockfile`.
   If both recursive removal and that atomic move are denied, continue the branch in a fresh linked

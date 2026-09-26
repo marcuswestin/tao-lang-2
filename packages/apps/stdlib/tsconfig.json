@@ -3,6 +3,8 @@
   "include": [
     "stdlib-src/**/*",
     "stdlib-tests/**/*",
+    "@tao/auth/**/*.ts",
+    "@tao/auth/**/*.tsx",
     "@tao/data/**/*.ts",
     "@tao/linking/**/*.ts"
   ],

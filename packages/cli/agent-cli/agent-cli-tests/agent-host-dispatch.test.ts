@@ -5,6 +5,37 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const DISPATCHER = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts')
 
 Describe('named host command dispatch', () => {
+  Test('launches only Docker Desktop and propagates launch failure', async () => {
+    const root = await mkTestDir('tao-docker-desktop-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const bin = FS.resolvePath('bin', root)
+      const log = FS.resolvePath('open.log', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["docker-desktop start"] }')
+      const open = FS.resolvePath('open', bin)
+      await FS.writeText(open, '#!/bin/zsh\nprintf "%s\\n" "$@" >> "$TAO_HOST_LOG"\nexit "${TAO_OPEN_EXIT:-0}"\n')
+      await FS.chmod(open, 0o755)
+      const invoke = (args: string[], exitCode = '0') =>
+        CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'docker-desktop', ...args],
+          cwd: root,
+          env: {
+            PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+            TAO_HOST_LOG: log,
+            TAO_OPEN_EXIT: exitCode,
+          },
+        })
+      Expect((await invoke(['start'])).exitCode).toBe(0)
+      Expect(await FS.readText(log)).toBe('-a\nDocker\n')
+      Expect((await invoke(['start', '-a', 'Terminal'])).exitCode).toBe(2)
+      Expect((await invoke(['stop'])).exitCode).toBe(2)
+      Expect(await FS.readText(log)).toBe('-a\nDocker\n')
+      Expect((await invoke(['start'], '1')).exitCode).toBe(1)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('routes only reclaim execution through the named host target', async () => {
     const root = await mkTestDir('tao-reclaim-host-')
     try {

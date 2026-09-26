@@ -1,5 +1,6 @@
 import React from 'react'
 import { appFramePadding, AppSurfaceFrame, requireSafeAreaContext } from './TR-app-shell'
+import { AuthControls } from './TR-auth'
 import { createElement } from './TR-create-element'
 import { DataControls } from './TR-data'
 import { TaoErrorBoundary } from './TR-error-containment'
@@ -24,15 +25,23 @@ import type { TaoProps } from './TR-TaoProps'
 import { WindowLayer, WindowLayerProvider, WindowLayerRegistry } from './TR-window-layer'
 
 export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
+  const scope = AuthControls.UseOptionalContext()
+  const app = scope ? scope.app(props.app) : props.app
+  const mountedProps = { ...props, app }
+  React.useEffect(() => {
+    if (scope) {
+      app.commitRegistration()
+    }
+  }, [app, scope])
   return createElement(
     TaoErrorBoundary,
     {
-      app: props.app,
+      app,
       boundaryId: `app:${props.app.declaration.canonicalIdentity?.canonical ?? props.app.definition.name}`,
       frame: { boundary: 'app', declaration: props.app.definition.name },
-      stateKey: props.app.snapshot(),
+      stateKey: app.snapshot(),
     },
-    createElement(NavigationAppHostContent, props),
+    createElement(NavigationAppHostContent, mountedProps),
   )
 }
 

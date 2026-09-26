@@ -1,0 +1,8 @@
+workspace
+data AgentCommandEntries / AgentCommandEntry {
+   Message text,
+   Quantity number,
+   Marked boolean,
+
+   order by Message,
+}

@@ -10,6 +10,12 @@ export type TaoSyncWriteFailure = Readonly<{
 type TaoSyncWriteRecord = Readonly<{
   id: string
   message?: string
+  recovery?: readonly Readonly<{
+    entity: string
+    id: string
+    operation: 'create' | 'update' | 'delete'
+    fields?: Readonly<Record<string, unknown>>
+  }>[]
 }>
 
 /** TaoSyncEntityWriteStatus summarizes every unresolved submission affecting one entity row. */

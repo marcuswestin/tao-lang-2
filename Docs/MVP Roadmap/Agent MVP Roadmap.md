@@ -439,6 +439,20 @@ shell-completion tail. Each is a plan-and-execute task on its own.
   mounted design, including refinements. `rules { }` and rule checks are deferred past MVP. The
   plan's "Design values tranche" and "Design rules — deferred past MVP" sections carry the detail.
 
+Additional pre-MVP follow-ups requested in the 2026-09-26 auth design review:
+
+- **Drafts and completeness, separate from auth:** keep the new/edit draft and queued-submission
+  lifecycle discussion separate from auth. Main already provides required-field completeness;
+  auth reuses that implementation rather than introducing a second contract.
+
+- **Auth and account data:** follow the sequenced
+  [implementation plan](<../Roadmap/Plan - Auth and account data.md>) for syntax, provider-neutral
+  sessions, backend-enforced owner/member rules, supplied/custom UI, and offline data.
+  This plan does not settle the remainder of R5's authority cluster.
+
+**Post-MVP deferrals:** text truthiness and named audiences. Neither is an auth prerequisite.
+Scope and review history: [Auth syntax review](<../Roadmap/Auth syntax review.md>).
+
 ### A15 — Studio's simulated-user lane — **done**
 
 Closed by `34132956`. The journey ran ten consecutive green runs in a normal terminal and

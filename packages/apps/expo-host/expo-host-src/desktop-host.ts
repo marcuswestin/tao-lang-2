@@ -1,4 +1,6 @@
-import { CLI, Errors, FS, Platform } from '@shared'
+import { CLI, Errors, FS, Platform, TaoResources } from '@shared'
+import { agentMainSource, agentRendererSource, agentRPCSchemaSource } from './desktop-agent-sources'
+import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
 const electrobunVersion = '2.0.2-beta.12'
 const hutchCliVersion = '0.24.3'
@@ -6,9 +8,11 @@ const hutchCliVersion = '0.24.3'
 type DesktopHostProject = { root: string; hutch: string }
 
 /** A generated local Electrobun shell for both Metro development and packaged static exports. */
-export const DesktopHost = { prepare, build, runDev } as const
+export const DesktopHost = { prepare, build, runDev, agentHostSource } as const
 
-async function prepare(options: { appName: string; root: string; siteRoot?: string }): Promise<DesktopHostProject> {
+async function prepare(
+  options: { appName: string; root: string; siteRoot?: string; agents?: { buildId: string } },
+): Promise<DesktopHostProject> {
   if (Platform.hostPlatform !== 'darwin') {
     Errors.throwHostEnvironment('Local Tao desktop .app builds require macOS.')
   }
@@ -30,13 +34,41 @@ async function prepare(options: { appName: string; root: string; siteRoot?: stri
   })
   await FS.writeText(
     FS.resolvePath('electrobun.config.ts', root),
-    configSource(options.appName, options.siteRoot !== undefined),
+    configSource(options.appName, options.siteRoot !== undefined, options.agents !== undefined),
   )
-  await FS.writeText(FS.resolvePath('src/bun/index.ts', root), mainSource())
+  const manifest = options.agents === undefined ? undefined : {
+    protocolVersion: 1,
+    appId: appIdentifier(options.appName),
+    appName: options.appName,
+    buildId: options.agents.buildId,
+  }
+  await FS.writeText(FS.resolvePath('src/bun/index.ts', root), manifest ? agentMainSource(manifest) : mainSource())
+  if (manifest) {
+    await FS.writeText(FS.resolvePath('src/agent-rpc.ts', root), agentRPCSchemaSource)
+    await FS.writeText(FS.resolvePath('src/agent/index.ts', root), agentRendererSource)
+    await FS.writeJson(FS.resolvePath('tao-agent.json', root), manifest)
+    await FS.writeText(FS.resolvePath('src/bun/agent-host.js', root), await agentHostSource())
+  }
   if (options.siteRoot !== undefined) {
     await FS.copyDirectory(options.siteRoot, FS.resolvePath('site', root))
   }
   return { hutch, root }
+}
+
+/** Installed Tao carries this bundle because its resource tree has no repository TypeScript aliases. */
+async function agentHostSource(): Promise<string> {
+  if (TaoResources.declaredRoot() !== undefined) {
+    return await FS.readText(FS.resolvePath('expo-host-src/desktop-agent-host.js', RuntimeToolchainPaths.packageRoot))
+  }
+  const bundle = await Bun.build({
+    entrypoints: [FS.resolvePath('expo-host-src/desktop-agent-host.ts', RuntimeToolchainPaths.packageRoot)],
+    target: 'bun',
+  })
+  const output = bundle.outputs[0]
+  if (!bundle.success || output === undefined) {
+    Errors.throwUnexpected(`Could not bundle the app command host: ${bundle.logs.map(log => log.message).join('\n')}`)
+  }
+  return await output.text()
 }
 
 async function build(project: DesktopHostProject): Promise<string> {
@@ -95,22 +127,28 @@ async function hutchExecutable(): Promise<string> {
   return Errors.throwHostEnvironment('Hutch is required for Tao desktop builds. Install Hutch, then retry.')
 }
 
-function configSource(appName: string, includeSite: boolean): string {
+function appIdentifier(appName: string): string {
+  const name = appName.trim()
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'app'
+  return `dev.tao.local.${slug}.${Platform.sha256Hex(name).slice(0, 8)}`
+}
+
+function configSource(appName: string, includeSite: boolean, agents = false): string {
   const name = appName.trim()
   if (!name || /[/:\\]/.test(name)) {
     Errors.throwUserInput('Desktop app name must be a non-empty file name.')
   }
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'app'
-  const identifier = `dev.tao.local.${slug}.${Platform.sha256Hex(name).slice(0, 8)}`
+  const identifier = appIdentifier(name)
   return [
     "import type { ElectrobunConfig } from 'electrobun'",
     'export default {',
     `  app: { name: ${JSON.stringify(name)}, identifier: ${JSON.stringify(identifier)}, version: '0.0.1' },`,
-    '  runtime: { exitOnLastWindowClosed: true },',
+    `  runtime: { exitOnLastWindowClosed: ${!agents} },`,
     '  build: {',
     "    mainProcess: 'bun',",
     "    bun: { entrypoint: 'src/bun/index.ts' },",
-    includeSite ? "    copy: { 'site': 'site' }," : '',
+    agents ? "    views: { agent: { entrypoint: 'src/agent/index.ts', format: 'iife' } }," : '',
+    `    copy: { ${includeSite ? "'site': 'site'," : ''} ${agents ? "'tao-agent.json': 'tao-agent.json'," : ''} },`,
     '    mac: { bundleCEF: false, codesign: false, notarize: false, createDmg: false },',
     '  },',
     '} satisfies ElectrobunConfig',

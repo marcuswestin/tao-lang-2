@@ -401,7 +401,7 @@ Describe('validator: apps and views', () => {
       }
       view Stack() {
         state Count = 0
-        query Workspaces { }
+        query Workspaces = Workspaces with { }
         action AddOne() { set Count += 1 }
         render Col() {
           @@content

@@ -8,6 +8,7 @@ type TaoFileCompileOptions = CodegenOptions & {
   bridgeTypes?: string
   configurationTypes?: string
   dataEntities?: readonly AST.EntityDataDeclaration[]
+  dataAccess?: readonly AST.AccessDeclaration[]
   emitDataCatalog?: boolean
   importLines?: string[]
   scopeBindings?: string[]
@@ -43,6 +44,7 @@ export const FilesCompiler = {
       } as const
       ${opts.selectedAppName ? gen`export default TaoApps[${gen.jsLiteral(opts.selectedAppName)}]` : gen.noop()}
     `
+    // Module-scope hook aliases let Fast Refresh resolve them without forcing an app remount.
     return gen`
       import React from 'react'
       void React
@@ -50,6 +52,7 @@ export const FilesCompiler = {
 
       ${gen.textLines(importLines)}
 
+      ${apps.length > 0 ? gen`const useTaoGeneratedAgentCommands = TR.Agent.useCommands` : gen.noop()}
       ${
       apps.length > 0 && (opts.studio || activeFixtureStores().length > 0)
         ? gen`
@@ -63,7 +66,11 @@ export const FilesCompiler = {
       ${gen.textLines(scopeBindings)}
       ${gen.textLines(viewRegistrations)}
 
-      ${(opts.emitDataCatalog ?? dataEntities.length > 0) ? Compile.DataCatalog(dataEntities) : gen.noop()}
+      ${
+      (opts.emitDataCatalog ?? dataEntities.length > 0)
+        ? Compile.DataCatalog(dataEntities, opts.dataAccess)
+        : gen.noop()
+    }
       ${Compile.OutlineTable(taoFile)}
 
       ${

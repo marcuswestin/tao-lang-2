@@ -1,4 +1,4 @@
-import { AST, Langium } from '@parser'
+import { AST, Langium, Parser } from '@parser'
 import { Assert } from '@shared'
 import { type EmbeddedTsFormatter, ensureEmbeddedTsFormatter } from './embedded-ts'
 import { Format } from './Format'
@@ -9,6 +9,7 @@ import {
   type FormattedNodeType,
   taoTabSize,
 } from './formatting'
+import { assignedQuerySource } from './query-syntax'
 
 /** TaoFormatter formats Tao documents by dispatching per-node Format handlers. */
 export class TaoFormatter extends Langium.AbstractFormatter {
@@ -20,6 +21,16 @@ export class TaoFormatter extends Langium.AbstractFormatter {
     document: Langium.LangiumDocument,
     params: Langium.DocumentFormattingParams,
   ): Promise<Langium.TextEdit[]> {
+    const assigned = document.parseResult.parserErrors.length === 0
+      ? assignedQuerySource(document as AST.Document)
+      : undefined
+    if (assigned !== undefined) {
+      const parsed = await Parser.parseCode(assigned, { validation: false, uri: document.uri })
+      const migrated = parsed.entry.document
+      Assert(migrated.parseResult.parserErrors.length === 0, 'assigned query migration preserves valid syntax')
+      const migratedEdits = await new TaoFormatter().formatDocument(migrated, params)
+      return [wholeDocumentEdit(document, applyTextEdits(migrated, migratedEdits))]
+    }
     const taoParams = { ...params, options: { ...params.options, tabSize: taoTabSize, insertSpaces: true } }
     const edits = await super.formatDocument(document, taoParams)
     const formatted = applyTextEdits(document as AST.Document, edits)

@@ -406,7 +406,13 @@ export async function lowerFeature(
   const dataBefore = await readFile(entity.path!)
   // Insert after the whole line so a trailing comment on the anchor field stays with it.
   const fieldLineEnd = dataBefore.indexOf('\n', fieldAnchor.end!)
-  stage(entity.path!, { end: fieldLineEnd, replacement: `\n   ${F} yes / no`, start: fieldLineEnd })
+  const fieldSuffix = dataBefore.slice(fieldAnchor.end!, fieldLineEnd)
+  const separator = fieldSuffix.trimStart().startsWith(',') ? '' : ','
+  stage(entity.path!, {
+    end: fieldLineEnd,
+    replacement: `${separator}${fieldSuffix}\n   ${F} yes / no,`,
+    start: fieldAnchor.end!,
+  })
   steps.push({
     action: `add field ${singular}.${F} yes / no after ${fieldAnchor.name}`,
     decidedBy: 'model',

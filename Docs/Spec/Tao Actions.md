@@ -89,9 +89,10 @@ Every module emits a table of the commands it declares and registers it at load 
 table records each command's identity, its slots and whether each names an entity, and the value to
 run, so a verb surface can ask which commands act on what a person has in front of them.
 
-Entity `commands A, B` entries order the default verbs and `commands hide C` withholds a command
-unless a view explicitly lists it. A view's `Commands { ... }` promotes applicable commands and
-`hide X` excludes inherited defaults. The target verb layer folds view promotions, rendered inner
+Entity `commands { A, B }` entries order the default verbs and `commands hide { C }` withholds a command
+unless a view explicitly lists it. These data entries are comma-separated like fields and storage
+facts. A view's `Commands { ... }` promotes applicable commands and `hide X` excludes inherited
+defaults. The target verb layer folds view promotions, rendered inner
 controls, entity defaults, then remaining applicable commands. Identical visible labels fold onto
 the first verb in that priority order, retaining its provenance, so a generated verb surface never
 presents indistinguishable duplicate choices; duplicate registrations of one command also fold.
@@ -99,6 +100,39 @@ presents indistinguishable duplicate choices; duplicate registrations of one com
 At the implemented boundary, module-level command catalogs belong to the compiled project: app
 variants and sibling app declarations in that project share the catalog. A separate running-app
 ownership boundary requires an authored ownership construct and is not inferred from app variants.
+
+### App command exposure
+
+An app may expose a subset of module commands to the local command client:
+
+```tao
+app MyApp {
+   Name "My app"
+   Navigator Main
+   AgentCommands [AppendCommand]
+}
+```
+
+The primitive app property is `AgentCommands list of command is []`. Its value is a literal list of
+direct references to module commands, including imported commands. App variants replace the list
+using ordinary app-property replacement. The initial desktop bridge accepts only text, number, and
+boolean slots. View-local commands, derived command values, and entity slots are rejected.
+
+Discovery returns only this list, with canonical identities and named scalar inputs. A command whose
+enabled state needs arguments is not advertised as definitely enabled. Execution validates named JSON
+arguments without coercion, retains omitted defaults, then evaluates `Enabled` with the bound values.
+Exposure makes this command surface available to the local capability holder; datasource permissions
+and the app's existing authentication still apply.
+Exposed commands bind to the mounted app's auth scope, and persistence waits on that scope's
+store instances. The command client cannot supply an account identity or credentials.
+
+The installed app owns execution and storage. A completion receipt identifies the root action
+transaction as committed, failed, or abandoned, and waits for its queued provider persistence. It does
+not promise remote synchronization or completion of detached `async` work. A missing response or
+timeout leaves the outcome unknown and must not trigger an automatic retry. Commands needing an
+interactive dialog are unsuitable for the background proof of concept.
+
+See [desktop command client](../../packages/cli/tao-cli/README.md) for building and controlling the app.
 
 ## Shortcuts
 
@@ -232,8 +266,32 @@ failure-report ladder below, with the fallback naming the verb. Each outcome app
 named case must belong to the verb's effective failure contract. An outcome block is a nested action block,
 so `check` is rejected inside one as it is inside `if` and `guard`. There is no `queued` outcome yet.
 
-A failure the site names no outcome for leaves exactly as a plain `do` failure would: it aborts the root
-and publishes the root's report. A handled failure publishes no report. External effects that already ran
+Authentication verbs from `@tao/auth` use `completed` for success, not `saved`, and may return
+`cancelled`; neither outcome binds a payload. `rejected -> Problem` and `error -> Message` remain
+available. `SignIn()` keeps its presented flow open through a required challenge, returning
+`completed` on success and `cancelled` when the user cancels. `SignOut()` completes after durable auth cleanup.
+An account's data row may still be unavailable after authentication completes; guard that row
+before reading its fields.
+
+The terminal bar form is also supported:
+
+```tao
+use SignIn from @tao/auth
+
+action Enter() {
+   when do SignIn()
+      | completed -> { do OpenWorkspace() }
+      | cancelled -> { }
+      | otherwise -> { do ShowSignInProblem() }
+}
+```
+
+A bar match requires its final `| otherwise ->` arm. An arm may contain one action statement or
+an explicit block; multiple statements require a block. The fallback handles outcomes not named
+by earlier arms. The braced form above remains supported and has no implicit fallback.
+
+A failure the site names no outcome or fallback for leaves exactly as a plain `do` failure would:
+it aborts the root and publishes the root's report. A handled failure publishes no report. External effects that already ran
 cannot be undone, so they stay recorded and still make a later report ineligible for retry. A `respond`
 or `async` block queued by the rolled-back verb is dropped with its writes. Row ids stay monotonic: a row
 the rolled-back verb created never lends its id to a later row. A `runs latest` call that a newer call

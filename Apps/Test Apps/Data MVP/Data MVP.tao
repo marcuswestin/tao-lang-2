@@ -12,32 +12,32 @@ app DataMVPApp {
 
 workspace
 data Workspaces / Workspace {
-   Name text
-   CreatedAt time (default now)
-   Tasks (owned)
+   Name text,
+   CreatedAt time (default now),
+   Tasks (owned),
 
-   index CreatedAt
-   order by Name
+   index CreatedAt,
+   order by Name,
 }
 
 workspace
 data Tasks / Task {
-   Title text
-   Done yes / Open no
-   Workspace
+   Title text,
+   Done yes / Open no,
+   Workspace,
 
-   order by Title
+   order by Title,
 }
 
 scene MainView() {
    Title "Data MVP"
    state WorkspaceDraft = ""
    state TaskDraft = ""
-   query Workspaces { }
-   query Tasks as OpenTasks {
+   query Workspaces = Workspaces with { }
+   query OpenTasks = Tasks with {
       where is Open
    }
-   query Tasks as CompletedTasks {
+   query CompletedTasks = Tasks with {
       where is Done
    }
    action AddWorkspace() {

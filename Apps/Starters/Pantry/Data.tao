@@ -3,21 +3,21 @@
 // One ingredient in the kitchen and how much of it is left.
 package
 data Ingredients / Ingredient {
-   Name text (title)
-   Quantity number (default 0)
-   InStock yes / no
-   AddedAt time (default now)
+   Name text (title),
+   Quantity number (default 0),
+   InStock yes / no,
+   AddedAt time (default now),
 
-   order by AddedAt
+   order by AddedAt,
 }
 
 // One recipe: its steps, how long it takes, and whether it is a favorite.
 package
 data Recipes / Recipe {
-   Title text (title)
-   Steps text (default "")
-   Minutes number (default 0)
-   Favorite yes / no
+   Title text (title),
+   Steps text (default ""),
+   Minutes number (default 0),
+   Favorite yes / no,
 
-   order by Title
+   order by Title,
 }

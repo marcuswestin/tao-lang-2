@@ -193,7 +193,8 @@ export function reportActionFailure(
   action: string,
   arguments_: readonly unknown[],
   unownedError?: unknown,
-): void {
+  owned = false,
+): TaoActionFailureReport {
   const failure = actionFailureReport(error, transaction, action, arguments_)
   actionHistory.push(failure)
   if (actionHistory.length > 50) {
@@ -202,9 +203,10 @@ export function reportActionFailure(
   for (const listener of actionFailureListeners) {
     listener(failure)
   }
-  if (actionFailureListeners.size === 0) {
+  if (actionFailureListeners.size === 0 && !owned) {
     reportUnownedFailure(unownedError ?? new TaoActionFailure(failure.case, failure.message))
   }
+  return failure
 }
 
 /**

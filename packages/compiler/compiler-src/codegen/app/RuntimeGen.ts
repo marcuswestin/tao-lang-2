@@ -5,6 +5,7 @@ import type { InlineInjection } from './injection-plan'
 type TaoFileCompileOptions = {
   bridgeTypes?: string
   configurationTypes?: string
+  dataAccess?: readonly AST.AccessDeclaration[]
   dataEntities?: readonly AST.EntityDataDeclaration[]
   emitDataCatalog?: boolean
   importLines?: string[]

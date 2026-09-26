@@ -26,6 +26,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   // first, since Studio's highlighter reads the generated grammar.
   'studio': { command: 'just', fixedArgs: ['studio'], server: true },
   'studio-native': { command: 'just', fixedArgs: ['studio-native'], server: true },
+  'docker-desktop start': { command: 'open', fixedArgs: ['-a', 'Docker'], argsPolicy: 'none' },
   // The local InstantDB stack is Docker Compose; running its two recipes on the host keeps the Docker
   // socket, which is root-equivalent, out of every agent sandbox.
   'local-instantdb start': { command: 'just', fixedArgs: ['start-local-instantdb'], argsPolicy: 'none' },

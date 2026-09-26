@@ -29,13 +29,13 @@ app TestWorldDevApp {
 }
 
 data Notes / Note {
-   Title text
+   Title text,
 }
 
 scene Main() {
    Title "Test World"
    state Draft = ""
-   query Notes { }
+   query Notes = Notes with { }
    action Add() {
       create Note {
          Title: Draft

@@ -1,5 +1,5 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
-import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
 import { FinalizeCommand, LandCommand, MergeMainCommand, StartBranchCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
@@ -103,7 +103,7 @@ await runWithCommands(commands => {
     .description('Run the opt-in real-host testing prototype, independently of existing suites.')
     .argument(
       '[mode]',
-      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, or setup.',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, agents, or setup.',
       'check',
     )
     .option('--app <subject>', 'Explicit product or harness subject: hnreader or clockwork.', 'hnreader')
@@ -111,7 +111,17 @@ await runWithCommands(commands => {
     .option('--seed <seed>', 'Unsigned 32-bit deterministic application seed.', '12345')
     .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')
     .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
+    .option('--demo', 'For agents: build the example, print discovery, invoke one command, then stop.')
     .action(async (mode, options) => {
+      if (mode === 'agents') {
+        if (options.demo) {
+          await CLI.mustRun('just', { args: ['agents-demo'], cwd: Repo.getRoot(), stdio: 'inherit' })
+          return
+        }
+        const { proveDesktopAgent } = await import('@expo-host/desktop-agent-proof')
+        await proveDesktopAgent()
+        return
+      }
       const { runHostTesting } = await import('@e2e-testing')
       await runHostTesting(mode, options)
     })
@@ -429,9 +439,11 @@ await runWithCommands(commands => {
   commands
     .command('merge-main')
     .description('Merge current main into this feature branch, and nothing else; no lane, no merge message.')
-    .action(async () => {
+    .option('--stash', 'Save tracked and untracked work, restore after merging, and retain the backup stash.')
+    .option('--keep-stashed', 'With --stash, leave saved work unapplied for selective interrupted-checkout recovery.')
+    .action(async (options: { stash?: boolean; keepStashed?: boolean }) => {
       try {
-        await MergeMainCommand.run()
+        await MergeMainCommand.run(options)
         Platform.runtimeProcess.exit(0)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))

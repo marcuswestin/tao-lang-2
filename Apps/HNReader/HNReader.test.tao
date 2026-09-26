@@ -43,10 +43,10 @@ datasource UnavailableBookmarkStore = Local {
 
 scene HistoryAvailabilityHarness() {
    Title "History availability"
-   query Stories as ProbeStories {
+   query ProbeStories = Stories with {
       order by Rank
    }
-   query ReadingEntries {
+   query ReadingEntries = ReadingEntries with {
       order by OpenedAt desc
    }
    render ScrollView() [screen] {

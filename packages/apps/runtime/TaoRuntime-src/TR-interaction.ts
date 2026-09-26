@@ -1,3 +1,5 @@
+import type { TaoActionReceipt } from './TR-action-transactions'
+import { RuntimeAssert } from './TR-assert'
 import type { Evaluable } from './TR-navigation-presentables'
 
 /** TaoCommandFills are the slot values one binding supplied, keyed by slot name. */
@@ -9,6 +11,7 @@ type TaoCommandAction = {
     jsValue: {
       invoke(...arguments_: Evaluable[]): unknown
       invokeJoined?(...arguments_: Evaluable[]): void | Promise<void>
+      invokeReceipt?(...arguments_: Evaluable[]): Promise<TaoActionReceipt>
     }
   }
 }
@@ -122,10 +125,23 @@ export class RuntimeCommand {
     })
   }
 
+  /** binding reads an explicitly captured execution context or authored slot. */
+  binding(name: string): Evaluable | undefined {
+    return this.fills[name]
+  }
+
   /** member evaluates one member of this command, preferring what this binding refined. */
   member(name: string): Evaluable | undefined {
     const reading = this.overrides[name] ?? this.declaration().members?.[name]
     return reading?.(this.fills)
+  }
+
+  /** Invoke the existing action root and observe its transaction, rather than its void result. */
+  invokeReceipt(): Promise<TaoActionReceipt> {
+    const declaration = this.declaration()
+    const value = declaration.action(this.fills).evaluate().jsValue
+    RuntimeAssert.defined(value.invokeReceipt, 'an externally exposed command invokes a runtime action')
+    return value.invokeReceipt(...(declaration.arguments?.(this.fills) ?? []))
   }
 
   private run(joined: boolean, arguments_: readonly Evaluable[]): unknown {

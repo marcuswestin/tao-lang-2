@@ -104,6 +104,7 @@
     "native-module-check", "reclaim --execute",
     "prepare-release studio", "prepare-release ide-extension",
     "app-dev", "studio", "studio-native",
+    "docker-desktop start",
     "local-instantdb start", "local-instantdb stop",
     "companion-host-build",
     "standalone-cli-vm-setup", "standalone-cli-clean-machine", "contributor-linux-test",

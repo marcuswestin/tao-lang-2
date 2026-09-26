@@ -491,7 +491,11 @@ function validateFixtureBinding(check: AST.TestDeclaration, run: AST.RunStep, ct
     return
   }
   const bound = new Set(bindings.flatMap(binding => ASTUtils.datasourceCollectionNames(binding.declaration!) ?? []))
-  for (const binding of AST.fixtureValueDeclarations(fixture).filter(AST.isFixtureCreateBinding)) {
+  for (
+    const binding of fixture.block.entries.filter(entry =>
+      AST.isFixtureCreateBinding(entry) || AST.isFixtureCreateStatement(entry)
+    )
+  ) {
     const entity = binding.entity.ref
     if (entity && !bound.has(entity.name)) {
       ctx.error(run, testValidationMessages.fixtureAppBinding(fixture.name, entity.singularName, app.name))

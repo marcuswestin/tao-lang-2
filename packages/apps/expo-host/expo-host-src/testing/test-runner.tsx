@@ -252,7 +252,7 @@ function fixtureCell(fixture: TestCompiler.Fixture): TR.StudioCellRuntime {
       scheme: { requested: 'system' },
       version: 1,
     },
-    fixture: { accounts: [], creates: fixture.creates },
+    fixture: { accounts: fixture.accounts, creates: fixture.creates, signedIn: fixture.signedIn },
     scenario: { kind: 'app', prepare: [], subjectId: '' },
   }
 }
@@ -479,9 +479,10 @@ async function dispatchInteraction(dispatch: () => void): Promise<void> {
   await act(async () => {})
 }
 
-/** settleData waits out data loads, query fills, and saves so assertions read a quiet store. */
+/** settleData waits out finite auth operations, data loads, query fills, and saves. */
 async function settleData(): Promise<void> {
   await act(async () => {
+    await TR.Auth.SettleAll()
     await TR.Data.SettleAll()
   })
 }

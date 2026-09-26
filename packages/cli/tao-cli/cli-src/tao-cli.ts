@@ -125,6 +125,8 @@ function createCommands(): Command {
     .option('--app <name>', 'Select a named app.')
     .option('--web', 'Export a static web artifact.')
     .option('--desktop', 'Build a locally runnable macOS app.')
+    .option('--agents', 'Build a background app service and bundled client executable (defaults to desktop).')
+    .option('--output <directory>', 'Retain builds in this directory instead of the project’s .tao/builds.')
     .option('--ios', 'Show the status of local iOS builds.')
     .option('--android', 'Show the status of local Android builds.')
     .option('--compile-only', 'Retain generated source without exporting or packaging.')
@@ -134,6 +136,8 @@ function createCommands(): Command {
         path: string,
         options: {
           app?: string
+          agents?: boolean
+          output?: string
           web?: boolean
           desktop?: boolean
           ios?: boolean
@@ -144,8 +148,17 @@ function createCommands(): Command {
         try {
           const { runTaoBuild } = await import('./build-command')
           const targets = (['web', 'desktop', 'ios', 'android'] as const).filter(target => options[target] === true)
+          if (options.agents && targets.length === 0) {
+            targets.push('desktop')
+          }
           Platform.runtimeProcess.setExitCode(
-            await runTaoBuild(path, { appName: options.app, compileOnly: options.compileOnly, targets }),
+            await runTaoBuild(path, {
+              appName: options.app,
+              agents: options.agents,
+              output: options.output,
+              compileOnly: options.compileOnly,
+              targets,
+            }),
           )
         } catch (error) {
           HCI.writeErrorLine(Errors.formatForUser(error))
@@ -153,6 +166,55 @@ function createCommands(): Command {
         }
       },
     )
+
+  const agents = commands.command('agents').description('Control a packaged app background service.')
+  for (const action of ['start', 'ping', 'stop'] as const) {
+    agents.command(action)
+      .requiredOption('--app <bundle>', 'Path to the packaged macOS .app bundle.')
+      .description(`${action[0]!.toUpperCase()}${action.slice(1)} the app background service.`)
+      .action(async (options: { app: string }) => {
+        const { runAppAgentCommand } = await import('./agents-command')
+        const result = await runAppAgentCommand(action, options.app)
+        HCI.writeLine(JSON.stringify(result))
+        if (!result.ok) {
+          HCI.writeErrorLine(result.error.message)
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      })
+  }
+  agents.command('commands')
+    .requiredOption('--app <bundle>', 'Path to the packaged macOS .app bundle.')
+    .option('--json', 'Print the machine-readable JSON response.')
+    .description('List the app’s exposed commands.')
+    .action(async (options: { app: string; json?: boolean }) => {
+      const { runAppAgentCommand } = await import('./agents-command')
+      const { printAgentCommands } = await import('./agent-command-output')
+      printAgentCommands(await runAppAgentCommand('commands', options.app), options.json)
+    })
+  agents.command('run')
+    .argument('<command-id>', 'Canonical command id returned by agents commands.')
+    .requiredOption('--app <bundle>', 'Path to the packaged macOS .app bundle.')
+    .requiredOption('--args <json>', 'Command arguments as a JSON value.')
+    .description('Run one app command; a lost response is never retried automatically.')
+    .action(async (commandId: string, options: { app: string; args: string }) => {
+      let args: unknown
+      try {
+        args = JSON.parse(options.args)
+      } catch {
+        const message = '--args must contain valid JSON.'
+        HCI.writeLine(JSON.stringify({ ok: false, error: { code: 'invalid_params', message } }))
+        HCI.writeErrorLine(message)
+        Platform.runtimeProcess.setExitCode(1)
+        return
+      }
+      const { runAppAgentCommand } = await import('./agents-command')
+      const result = await runAppAgentCommand('run', options.app, { commandId, args })
+      HCI.writeLine(JSON.stringify(result))
+      if (!result.ok) {
+        HCI.writeErrorLine(result.error.message)
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
 
   commands
     .command('clean')

@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationContext } from '../validation'
+import { validateAgentCommands } from './agent-commands-validator'
 import { validateReferenceBlock } from './configured-values-validator'
 import { reportPresentationBindingDiagnostic } from './navigation-validator'
 import { primitiveSlots } from './workspace-index'
@@ -45,6 +46,7 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
     ...AST.appValueDeclarationsInFile(file).filter(app => !AST.isAppDeclaration(app)),
   ]
   for (const app of apps) {
+    validateAgentCommands(app, ctx)
     if (AST.isAppDeclaration(app)) {
       validateAppDeclaration(app, ctx)
     }
@@ -157,7 +159,7 @@ function validateAppProperties(
       ctx.error(slot.node, appValidationMessages.propertyDuplicate(appName, slot.name))
     }
     seen.add(slot.name)
-    if (slot.sugar) {
+    if (slot.sugar || slot.name === 'AgentCommands') {
       continue
     }
     if (slot.block) {

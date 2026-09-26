@@ -185,6 +185,24 @@ configured `Datasource`.
 diagnostic, which are package tests; the emitted two-catalog shape, which is a compiler test; remote
 providers, sync, or credentials; navigation beyond the app's root stack.
 
+## Agent Commands
+
+Exercise an explicit `AgentCommands` allowlist over a Local-backed app. A scalar-parameter command
+writes the same catalog rendered by its ordinary visible UI. A disabled command and an unlisted
+command establish the exposure boundary. The Tao journey proves the shared command's visible write
+and relaunch behavior in the Memory-backed test harness.
+
+The opt-in packaged macOS proof additionally builds an isolated copy, discovers canonical command
+identities, omits numeric and boolean arguments to prove their compiled defaults, runs the write
+without an onscreen window or focus change, stops, and launches the same
+bundle visibly. A fixture-only foreign action checks exact rows through the runtime's existing
+catalog reader; its ordinary success or failure outcome verifies durable Local storage in both
+launch modes. It adds no command return-value or inspection protocol.
+
+**Does not belong here:** invalid allowlists or arguments, transport authentication, renderer failure
+injection, remote providers, navigation, or broader product workflows. Package tests own diagnostics
+and protocol failure boundaries.
+
 ## Language Core
 
 Exercise the executable language core: expressions, pure functions, control flow, view-local state,
@@ -381,3 +399,11 @@ saves offline and shows an injected snapshot save error through `guard … error
 
 **Does not belong here:** live CloudKit or InstantDB transport acceptance, account policy, and
 atomic backend rejection. Those need provider and device evidence.
+
+## Auth Review
+
+Provider-neutral sessions, custom and supplied sign-in UI, current account reads, profile editing,
+and owner-scoped notes. AuthReview uses the deterministic adapter; AuthReviewLocal binds the same
+UI to the localhost reference service at port4738. Backend policy, durable offline data and identity
+isolation are verified separately by the reference server/provider tests; only completed Tao
+journeys establish the user-facing behavior. Implementation and live-service acceptance in progress.

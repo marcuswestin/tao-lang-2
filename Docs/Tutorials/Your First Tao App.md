@@ -168,12 +168,12 @@ Add the entity after `design`:
 
 ```tao edit after=design
 data Books / Book {
-   Title text
-   Author text (default "Unknown")
-   Finished yes / Reading no
-   AddedAt time (default now)
+   Title text,
+   Author text (default "Unknown"),
+   Finished yes / Reading no,
+   AddedAt time (default now),
 
-   order by AddedAt
+   order by AddedAt,
 }
 ```
 
@@ -219,7 +219,7 @@ And replace `scene BookList()` with this, followed by a new `view BookRow(Book)`
 ```tao edit
 scene BookList() {
    Title "Reading List"
-   query Books { }
+   query Books = Books with { }
    render ScrollView() [screen] {
       Col() [width max 960, centered, gap 10] {
          Text("Reading List") [title]
@@ -243,7 +243,7 @@ view BookRow(Book) {
 
 Four new ideas:
 
-- **`query Books { }`** is a reactive list. Declare it before you use it; when rows change, the
+- **`query Books = Books with { }`** is a reactive list. Declare it before you use it; when rows change, the
   screen re-renders.
 - **`guard`** handles a value's exceptional states. If a case matches, it renders and the rest of
   the enclosing block does not — so the lines after it can assume the data is there. `error ->
@@ -275,7 +275,7 @@ change:
 scene BookList() {
    Title "Reading List"
    state NewTitle = ""
-   query Books { }
+   query Books = Books with { }
    action AddBook() {
       check NewTitle is not empty
       create Book {
@@ -497,11 +497,11 @@ becomes a `Panes` with one column each:
 scene BookList() {
    Title "Reading List"
    state NewTitle = ""
-   query Books { }
-   query Books as CurrentlyReading {
+   query Books = Books with { }
+   query CurrentlyReading = Books with {
       where is Reading
    }
-   query Books as FinishedBooks {
+   query FinishedBooks = Books with {
       where is Finished
    }
    action AddBook() {
@@ -652,12 +652,12 @@ design ReadingListDesign {
 }
 
 data Books / Book {
-   Title text
-   Author text (default "Unknown")
-   Finished yes / Reading no
-   AddedAt time (default now)
+   Title text,
+   Author text (default "Unknown"),
+   Finished yes / Reading no,
+   AddedAt time (default now),
 
-   order by AddedAt
+   order by AddedAt,
 }
 
 nav LibraryStack = StackNav {
@@ -681,11 +681,11 @@ nav ReadingListNavigator = SelectionNav {
 scene BookList() {
    Title "Reading List"
    state NewTitle = ""
-   query Books { }
-   query Books as CurrentlyReading {
+   query Books = Books with { }
+   query CurrentlyReading = Books with {
       where is Reading
    }
-   query Books as FinishedBooks {
+   query FinishedBooks = Books with {
       where is Finished
    }
    action AddBook() {

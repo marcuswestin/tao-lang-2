@@ -4,6 +4,9 @@ import { collapsesToOneLine, type FormatHandlers } from '../formatting'
 export const StatementsFormatter = {
   /** Block formats `{ }` bodies with one indented statement per line. */
   Block(f) {
+    if (!f.node.$cstNode?.text.startsWith('{')) {
+      return
+    }
     f.oneSpaceBefore('{')
     // A conditional branch reads as one line when its body is a single statement that fits.
     if (isConditionalBranch(f.node.$container) && collapsesToOneLine(f.node, f.node.statements)) {
@@ -50,6 +53,10 @@ export const StatementsFormatter = {
   /** WhenRenderStatement puts each branch and its required fallback on an indented line. */
   WhenRenderStatement(f) {
     f.oneSpaceAfter('when')
+    if (f.node.otherwise?.barSyntax) {
+      f.indentedLines([...f.node.branches, f.node.otherwise])
+      return
+    }
     f.oneSpaceBefore('{')
     f.indentedBraceBlock([...f.node.branches, f.node.otherwise])
     f.lineSeparatedList([...f.node.branches, f.node.otherwise])
@@ -57,7 +64,11 @@ export const StatementsFormatter = {
 
   /** WhenRenderBranch spaces its condition against the branch arrow. */
   WhenRenderBranch(f) {
+    f.oneSpaceAfter('|')
     f.oneSpaceBefore('->')
+    if (!f.node.block.$cstNode?.text.startsWith('{')) {
+      f.oneSpaceAfter('->')
+    }
     if (f.node.payload !== undefined) {
       f.oneSpaceAfter('->')
     }
@@ -65,7 +76,11 @@ export const StatementsFormatter = {
 
   /** WhenRenderOtherwise spaces the fallback keyword against the branch arrow. */
   WhenRenderOtherwise(f) {
+    f.oneSpaceAfter('|')
     f.oneSpaceBefore('->')
+    if (!f.node.block.$cstNode?.text.startsWith('{')) {
+      f.oneSpaceAfter('->')
+    }
   },
 
   /** IfRenderStatement separates its boolean condition from its one-sided child block. */

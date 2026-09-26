@@ -1,0 +1,12 @@
+// Reference connects to the local account/data server. Authentication is supplied by the app's
+// Auth provider; credentials never belong in datasource configuration.
+public
+type Reference is datasource with {
+   ServerURL text
+   Resource text
+   PollEvery duration is 1.s
+   Offline list of data is []
+   StorageLimitBytes number is 16777216
+
+   provider ReferenceProvider from ./Reference.ts
+}

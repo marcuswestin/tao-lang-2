@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST, Langium, type ParsedFile } from '@parser'
 import { Assert, FS, Switch } from '@shared'
+import { authLibraryExport } from './codegen/app/auth-context'
 import { ConfigurationCompiler, isRuntimeConfigurableDeclaration } from './codegen/app/ConfigurationCompiler'
 
 type BridgeContract = { arity?: string; exportName: string; path: string; result?: string; type: string }
@@ -58,12 +59,23 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
     if (exportName === undefined) {
       continue
     }
+    const contextual = AST.getDocument(bridge).uri.path.endsWith('/@tao/auth/Auth.tao')
+    if (contextual && exportName === 'Session') {
+      contracts.push({
+        exportName,
+        path: bridge.path,
+        arity: '2',
+        result: 'TR.Evaluable',
+        type: '(scope: TR.AuthScope, cases: Readonly<Record<string, TR.Evaluable>>) => TR.Evaluable',
+      })
+      continue
+    }
     const result = bridgedResultType(bridge)
     if (result === undefined) {
       continue
     }
     const type = AST.isFunctionCallExpression(expression)
-      ? `(${
+      ? `(${contextual ? 'scope: TR.AuthScope, ' : ''}${
         expression.argumentList?.arguments.map((argument, index) =>
           `arg${index}: ${foreignActionParameterType(Type.ofArgument(argument))}`
         ).join(', ') ?? ''
@@ -78,7 +90,7 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
     const actionValue = result.kind === 'primitive' && result.primitive === 'action'
     contracts.push({
       ...(AST.isFunctionCallExpression(expression)
-        ? { arity: String(expression.argumentList?.arguments.length ?? 0) }
+        ? { arity: String((expression.argumentList?.arguments.length ?? 0) + (contextual ? 1 : 0)) }
         : actionValue
         ? { arity: String(result.parameters.length), result: 'void | Promise<void>' }
         : {}),
@@ -89,6 +101,16 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
   }
   for (const action of AST.streamAllContents(file).filter(AST.isActionDeclaration)) {
     if (action.foreign === undefined) {
+      continue
+    }
+    if (authLibraryExport(action)) {
+      contracts.push({
+        arity: '1',
+        exportName: action.name,
+        path: action.foreign.path,
+        result: 'TR.Action<[]>',
+        type: '(scope: TR.AuthScope) => TR.Action<[]>',
+      })
       continue
     }
     // The compiler fills Tao defaults before invoking the handwritten implementation.
@@ -121,7 +143,10 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
       ? []
       : [`Slots: { ${foreign.slots.map(slot => `${JSON.stringify(slot.name)}: any`).join('; ')} }`]
     const children = foreign.content === 'content' ? ['children?: any'] : []
-    const props = [...parameters, 'Layout: any', 'Tag: any', ...slots, ...children]
+    const authProps = authLibraryExport(view)
+      ? ['Auth?: TR.AuthScope', ...(view.name === 'AccountView' ? ['Account?: TR.Evaluable'] : [])]
+      : []
+    const props = [...parameters, ...authProps, 'Layout: any', 'Tag: any', ...slots, ...children]
     contracts.push({
       exportName: view.name,
       path: foreign.path,
@@ -130,7 +155,7 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
   }
   for (const declaration of file.statements.filter(AST.isConfigurableDeclaration)) {
     const primitive = AST.configurationPrimitiveOf(declaration)
-    if (primitive !== 'nav' && primitive !== 'datasource') {
+    if (primitive !== 'nav' && primitive !== 'datasource' && primitive !== 'auth') {
       continue
     }
     const implementation = directConfigurationImplementation(declaration)
@@ -141,7 +166,9 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
       arity: '0',
       exportName: implementation.exportName,
       path: implementation.path,
-      type: `() => ${primitive === 'nav' ? 'TR.NavKind' : 'TR.DataProvider'}`,
+      type: `() => ${
+        primitive === 'nav' ? 'TR.NavKind' : primitive === 'auth' ? 'TR.AuthProvider' : 'TR.DataProvider'
+      }`,
     })
   }
   return contracts
@@ -269,7 +296,7 @@ function moduleFor(contracts: readonly BridgeContract[], file: AST.TaoFile): str
     AST.isCaseSetTypeExpression(declaration.type)
   )
   if (
-    contracts.some(contract => contract.type.includes('TR.ActionValue<') || contract.type.includes('TR.Value<'))
+    contracts.some(contract => contract.type.includes('TR.'))
     || caseSets.length > 0
     || contracts.some(contract => contract.type.includes('TR.NavKind') || contract.type.includes('TR.DataProvider'))
     || contracts.some(contract => contract.type.includes('TR.VisualNativeRoot'))

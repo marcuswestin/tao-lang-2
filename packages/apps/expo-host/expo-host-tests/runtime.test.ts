@@ -758,7 +758,18 @@ Describe('Tao runtime app generation', () => {
         for await (const path of FS.walk(generatedRoot)) {
           generatedFiles.push(FS.relativePath(generatedRoot, path))
         }
-        Expect(generatedFiles.toSorted()).toEqual(['App.injection-1.tsx', 'App.tsx'])
+        Expect(generatedFiles.toSorted()).toEqual([
+          'App.injection-1.tsx',
+          'App.tsx',
+          'modules/external/Auth.files/Auth.ts',
+          'modules/external/Auth.files/AuthFlow.ts',
+          'modules/external/Auth.files/AuthViews.tsx',
+          'modules/external/Auth.tao.tsx',
+          'modules/external/AuthFlow.ts',
+          'modules/external/AuthViews.files/AuthFlow.ts',
+          'modules/external/AuthViews.files/AuthViews.tsx',
+          'modules/external/Prelude.tao.tsx',
+        ])
       },
     )
   })
@@ -799,6 +810,14 @@ Describe('Tao runtime app generation', () => {
           'TaoAppRefresh.tsx',
           'TaoStudioManifest.ts',
           'TaoStudioPublication.ts',
+          'modules/external/Auth.files/Auth.ts',
+          'modules/external/Auth.files/AuthFlow.ts',
+          'modules/external/Auth.files/AuthViews.tsx',
+          'modules/external/Auth.tao.tsx',
+          'modules/external/AuthFlow.ts',
+          'modules/external/AuthViews.files/AuthFlow.ts',
+          'modules/external/AuthViews.files/AuthViews.tsx',
+          'modules/external/Prelude.tao.tsx',
         ])
       },
     )
