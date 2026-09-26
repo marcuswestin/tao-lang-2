@@ -17,6 +17,25 @@ Describe('Account reference service launcher', () => {
     }
   })
 
+  Test('rejects malformed Instant configuration without exposing its credentials', async () => {
+    const root = await mkTestDir('tao-account-instant-launcher-', { location: 'host' })
+    try {
+      const config = FS.resolvePath('instant.json', root)
+      await FS.writeJson(config, { apiURI: 'http://127.0.0.1:9020', adminToken: 'private-test-token' })
+      let failure: unknown
+      try {
+        await startAccountServerFromArguments(['--policy', 'unused.json', '--instant-config', config])
+      } catch (error) {
+        failure = error
+      }
+      Expect(failure).toBeInstanceOf(Errors.UserInputError)
+      Expect(Errors.messageOf(failure)).toContain('apiURI, appId, and adminToken')
+      Expect(Errors.messageOf(failure)).not.toContain('private-test-token')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('launches the real CLI with trusted metadata and loopback HTTP', async () => {
     const root = await mkTestDir('tao-account-launcher-', { location: 'host' })
     const policy = FS.resolvePath('TaoDataPolicy.json', root)

@@ -1,7 +1,7 @@
 # Plan — Auth and account data
 
-Status: implementation in progress, 2026-09-26. The current authorized slice is TestAuth/Memory
-and LocalAuth/Reference, with executable Auth Review journeys, followed by self-hosted InstantDB.
+Status: local and self-hosted slice implemented, 2026-09-26. The current authorized slice includes
+TestAuth/Memory and LocalAuth/Reference, executable Auth Review journeys, and self-hosted InstantDB.
 Clerk and advanced managed-provider lifecycle acceptance remain later work.
 The [decisions](<Tao Revolution/Decisions.md>) own language semantics; the
 [review record](<Auth syntax review.md>) distinguishes accepted changes from remaining choices.
@@ -330,11 +330,35 @@ Implementation decisions made within the authorized slice:
   requires Web Locks and rejects a second tab; native multi-process writers remain unsupported.
   A reproduced lost-write race now has restart, duplicate-acknowledgement, and stale-logout tests.
 
-Self-hosted InstantDB acceptance remains outstanding. On 2026-09-26 its named host start command
-still reported that it ran inside a sandbox after an escalation request. No live Instant result is
-claimed. The temporary capabilities alias referenced from the standalone CLI task was removed
-there and did not itself grant host permissions; this task preserves the named host boundary.
-Clerk and physical-device lifecycle acceptance remain outside this first local slice.
+Self-hosted InstantDB now uses the same LocalAuth/Reference app through an Instant-backed account
+gateway. The actual Tao journey and independent admin reads establish that profiles and notes
+persist in individual Instant entities. Live conformance also exercises owner/field/membership
+denials, duplicate tuple races, batch rollback, ambiguous responses, retry receipts, process death,
+and offline checkpoint recovery. The stack was started externally; named host capabilities now
+work. No permission alias or sandbox bypass was added.
+
+Decisions for this local deployment:
+
+- SQLite owns credentials, sessions, encryption keys, and stable external identity mappings.
+  Instant owns application rows and operation receipts; it is not a replica of SQLite row storage.
+- Backend selection is trusted gateway configuration (`--instant-config PATH`). App source,
+  session actions, policies, and the Reference wire protocol remain unchanged. Admin credentials
+  never enter the client. The old Instant snapshot adapter still rejects authenticated pairing.
+- One gateway owns its original identity database. A lifetime SQLite lock rejects a second process;
+  an immutable remote binding rejects another database or policy. Copying the identity database
+  to run additional gateways, policy migration, and distributed failover are unsupported.
+- Fresh unique revision and receipt records commit atomically with all entity changes. On an
+  uncertain result the gateway checks the receipt and reloads authority state before retrying.
+  Startup and acknowledged revocation consume a revision to fence old in-flight requests.
+- Stable local identity commits before remote Account provisioning; sign-in repairs interruption
+  before returning a session. Storage modes cannot be silently switched on an existing database.
+- Startup verifies literal deny-all programs for managed entities and schema writes before
+  accepting application data. Administrator mutation after startup remains a deployment boundary.
+
+Live tests require `TAO_INSTANT_LIVE_API_URL` and create isolated ephemeral apps; an unset variable
+reports skipped tests. They do not replace browser or physical-device acceptance. The task's
+verification record owns the final integration evidence. Clerk and physical-device lifecycle
+acceptance remain outside this first local slice.
 
 ## Original implementation seams
 

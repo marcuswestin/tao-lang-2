@@ -1,6 +1,7 @@
-import { Platform, Switch } from '@shared'
+import { Platform } from '@shared'
 import { Database } from 'bun:sqlite'
 import type { AccountProtocol } from 'tao-shared/auth'
+import { canonicalJSON, proposeAccountRows } from './AccountChanges'
 import { type AccountPolicy, canAccess, rejectAccountRequest, validateAccountRows } from './AccountPolicy'
 
 type Identity = { accountId: string; issuer: string; subject: string }
@@ -10,13 +11,17 @@ type StoredSession = Identity & { expiresAt: number; resource: string }
 export class AccountStore {
   readonly #db: Database
   readonly #policy: AccountPolicy
+  readonly #localEntities: boolean
 
-  constructor(path: string, policy: AccountPolicy) {
+  constructor(path: string, policy: AccountPolicy, localEntities = true) {
+    this.#localEntities = localEntities
     this.#policy = structuredClone(policy)
     this.#db = new Database(path, { create: true, strict: true })
     this.#db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA busy_timeout = 5000;
+      CREATE TABLE IF NOT EXISTS authority (id INTEGER PRIMARY KEY CHECK(id = 1), value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS persistenceMode (id INTEGER PRIMARY KEY CHECK(id = 1), value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS identities (issuer TEXT NOT NULL, subject TEXT NOT NULL, accountId TEXT NOT NULL UNIQUE, PRIMARY KEY (issuer, subject));
       CREATE TABLE IF NOT EXISTS passwords (email TEXT PRIMARY KEY, subject TEXT NOT NULL UNIQUE, hash TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, accountId TEXT NOT NULL, issuer TEXT NOT NULL, subject TEXT NOT NULL, expiresAt INTEGER NOT NULL, resource TEXT NOT NULL);
@@ -26,10 +31,42 @@ export class AccountStore {
       CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id = 1), revision INTEGER NOT NULL);
       INSERT OR IGNORE INTO state VALUES (1, 0);
     `)
+    try {
+      this.#db.transaction(() => {
+        const mode = this.#db.query<{ value: string }, []>('SELECT value FROM persistenceMode WHERE id = 1').get()
+        const requested = localEntities ? 'local' : 'instant'
+        if (mode !== null && mode.value !== requested) {
+          rejectAccountRequest('unavailable', 'This account database belongs to another persistence mode.')
+        }
+        if (mode === null && !localEntities) {
+          const existing = this.#db.query<{ count: number }, []>(
+            'SELECT ((SELECT count(*) FROM identities) + (SELECT count(*) FROM passwords) + (SELECT count(*) FROM sessions) + (SELECT count(*) FROM rows)) AS count',
+          ).get()!
+          if (existing.count !== 0) {
+            rejectAccountRequest(
+              'unavailable',
+              'An existing local account database requires an explicit migration before using Instant.',
+            )
+          }
+        }
+        this.#db.query('INSERT OR IGNORE INTO persistenceMode VALUES (1, ?)').run(requested)
+      }).immediate()
+    } catch (error) {
+      this.#db.close()
+      throw error
+    }
   }
 
   close(): void {
     this.#db.close()
+  }
+
+  /** Stable identity of this auth database, bound permanently to its remote app. */
+  authorityId(): string {
+    return this.#db.transaction(() => {
+      this.#db.query('INSERT OR IGNORE INTO authority VALUES (1, ?)').run(Platform.randomUUID())
+      return this.#db.query<{ value: string }, []>('SELECT value FROM authority WHERE id = 1').get()!.value
+    }).immediate()
   }
 
   password(email: string): { subject: string; hash: string } | null {
@@ -63,8 +100,10 @@ export class AccountStore {
     }
     const accountId = Platform.randomUUID()
     this.#db.query('INSERT INTO identities VALUES (?, ?, ?)').run(issuer, subject, accountId)
-    this.#put({ entity: this.#policy.accountEntity, fields: {}, id: accountId })
-    this.#db.query('UPDATE state SET revision = revision + 1').run()
+    if (this.#localEntities) {
+      this.#put({ entity: this.#policy.accountEntity, fields: {}, id: accountId })
+      this.#db.query('UPDATE state SET revision = revision + 1').run()
+    }
     return { accountId, issuer, subject }
   }
 
@@ -93,6 +132,13 @@ export class AccountStore {
 
   revoke(token: string): void {
     this.#db.query('DELETE FROM sessions WHERE hash = ?').run(Platform.sha256Hex(token))
+  }
+
+  /** Includes expired sessions: their previously admitted remote writes still need fencing. */
+  hasSession(token: string, resource?: string): boolean {
+    return this.#db.query<{ hash: string }, [string, string | null, string | null]>(
+      'SELECT hash FROM sessions WHERE hash = ? AND (? IS NULL OR resource = ?)',
+    ).get(Platform.sha256Hex(token), resource ?? null, resource ?? null) !== null
   }
 
   signOut(token: string, resource: string): void {
@@ -145,57 +191,7 @@ export class AccountStore {
         return JSON.parse(previous.receipt) as AccountProtocol.Receipt
       }
       const before = this.#rows()
-      const proposed = structuredClone(before)
-      const touched = new Set<string>()
-      for (const operation of request.operations) {
-        const key = JSON.stringify([operation.entity, operation.id])
-        if (touched.has(key)) {
-          rejectAccountRequest('invalid', 'Each row may appear once per transaction.')
-        }
-        touched.add(key)
-        const index = proposed.findIndex(row => row.entity === operation.entity && row.id === operation.id)
-        Switch.kind(operation, {
-          create: value => {
-            if (index >= 0) {
-              rejectAccountRequest('conflict', 'Row already exists.')
-            }
-            if (value.entity === this.#policy.accountEntity) {
-              rejectAccountRequest('forbidden', 'Accounts require trusted provisioning.')
-            }
-            proposed.push({ entity: value.entity, id: value.id, fields: value.fields })
-          },
-          delete: () => {
-            if (index < 0) {
-              rejectAccountRequest('forbidden', 'Write is not authorized.')
-            }
-            proposed.splice(index, 1)
-          },
-          update: value => {
-            if (index < 0) {
-              rejectAccountRequest('forbidden', 'Write is not authorized.')
-            }
-            proposed[index] = { ...proposed[index]!, fields: { ...proposed[index]!.fields, ...value.fields } }
-          },
-        })
-      }
-      for (const operation of request.operations) {
-        const source = operation.kind === 'delete' ? before : proposed
-        const row = source.find(candidate => candidate.entity === operation.entity && candidate.id === operation.id)!
-        const changed = operation.kind === 'update' ? Object.keys(operation.fields) : []
-        if (
-          !canAccess(
-            this.#policy,
-            operation.kind === 'delete' ? before : proposed,
-            row,
-            session.accountId,
-            operation.kind,
-            changed,
-          )
-        ) {
-          rejectAccountRequest('forbidden', 'Write is not authorized.')
-        }
-      }
-      validateAccountRows(this.#policy, proposed)
+      const proposed = proposeAccountRows(this.#policy, before, request.operations, session.accountId)
       for (const operation of request.operations) {
         if (operation.kind === 'delete') {
           this.#db.query('DELETE FROM rows WHERE entity = ? AND id = ?').run(operation.entity, operation.id)
@@ -244,18 +240,4 @@ export class AccountStore {
   #revision(): number {
     return this.#db.query<{ revision: number }, []>('SELECT revision FROM state WHERE id = 1').get()!.revision
   }
-}
-
-/** Object field order is transport trivia, while operation and array order remain meaningful. */
-function canonicalJSON(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(canonicalJSON).join(',')}]`
-  }
-  if (value !== null && typeof value === 'object') {
-    const record = value as Record<string, unknown>
-    return `{${
-      Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${canonicalJSON(record[key])}`).join(',')
-    }}`
-  }
-  return JSON.stringify(value)
 }

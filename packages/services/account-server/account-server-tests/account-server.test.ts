@@ -1,45 +1,8 @@
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import type { AccountProtocol } from 'tao-shared/auth'
-import { type AccountPolicy, AccountServer } from '../account-server-src/AccountServer'
-
-const policy: AccountPolicy = {
-  accountEntity: 'Account',
-  entities: {
-    Account: {
-      fields: ['DisplayName', 'VerifiedEmail'],
-      grants: [{ operations: ['read'], principal: [] }, {
-        operations: ['update'],
-        principal: [],
-        updateFields: ['DisplayName'],
-      }],
-    },
-    Note: {
-      fields: ['Owner', 'Body'],
-      fieldTypes: { Body: 'text' },
-      relations: { Owner: { entity: 'Account' } },
-      grants: [{ operations: ['read', 'create', 'delete'], principal: ['Owner'] }, {
-        operations: ['update'],
-        principal: ['Owner'],
-        updateFields: ['Body'],
-      }],
-    },
-    Workspace: {
-      fields: ['Owner', 'Title'],
-      relations: { Owner: { entity: 'Account' }, Memberships: { entity: 'Membership', inverse: 'Workspace' } },
-      grants: [{ operations: ['read'], principal: ['Memberships', 'Person'] }],
-    },
-    Membership: {
-      fields: ['Workspace', 'Person', 'Role'],
-      relations: { Workspace: { entity: 'Workspace' }, Person: { entity: 'Account' } },
-      unique: [['Workspace', 'Person']],
-      grants: [{ operations: ['read'], principal: ['Person'] }, {
-        operations: ['create'],
-        principal: ['Workspace', 'Owner'],
-      }],
-    },
-  },
-}
+import { AccountServer } from '../account-server-src/AccountServer'
+import { testAccountPolicy as policy } from './fixtures/account-policy'
 
 Describe('Local account reference authority', () => {
   Test('verifies passwords, resource binding, session expiry/revocation and durable restart', async () => {
@@ -173,7 +136,7 @@ Describe('Local account reference authority', () => {
     await fixture(async ({ server }) => {
       const alice = await register(server, 'alice')
       const bob = await register(server, 'bob')
-      server.seed([{ entity: 'Workspace', id: 'workspace', fields: { Owner: alice.accountId, Title: 'Shared' } }])
+      await server.seed([{ entity: 'Workspace', id: 'workspace', fields: { Owner: alice.accountId, Title: 'Shared' } }])
       Expect((await snapshot(server, bob)).rows.some(row => row.id === 'workspace')).toBe(false)
       const membership: AccountProtocol.Operation = {
         kind: 'create',
@@ -234,10 +197,10 @@ Describe('Local account reference authority', () => {
       Expect(
         (await mutate(context.server, alice, 'stable-id', [{ kind: 'delete', entity: 'Note', id: 'durable' }])).status,
       ).toBe(409)
-      const one = context.server.provision('verified-provider', 'subject')
-      Expect(context.server.provision('verified-provider', 'subject')).toEqual(one)
-      Expect(context.server.provision('another-provider', 'subject').accountId).not.toBe(one.accountId)
-      context.server.revoke(alice.token)
+      const one = await context.server.provision('verified-provider', 'subject')
+      Expect(await context.server.provision('verified-provider', 'subject')).toEqual(one)
+      Expect((await context.server.provision('another-provider', 'subject')).accountId).not.toBe(one.accountId)
+      await context.server.revoke(alice.token)
       Expect((await mutate(context.server, alice, 'stable-id', transaction)).status).toBe(401)
     })
   })
@@ -288,7 +251,7 @@ Describe('Local account reference authority', () => {
     await fixture(async context => {
       const alice = await register(context.server, 'alice')
       const bob = await register(context.server, 'bob')
-      context.server.seed([{
+      await context.server.seed([{
         entity: 'Workspace',
         id: 'workspace',
         fields: { Owner: alice.accountId, Title: 'Shared' },
@@ -324,7 +287,7 @@ Describe('Local account reference authority', () => {
         )
         Expect(writes.map(response => response.status)).toEqual([200, 200])
         Expect(await writes[0]!.json()).toEqual(await writes[1]!.json())
-        context.server.revoke(alice.token)
+        await context.server.revoke(alice.token)
         Expect((await mutate(second, alice, 'one-receipt', operations)).status).toBe(401)
       } finally {
         for (const child of children) {
