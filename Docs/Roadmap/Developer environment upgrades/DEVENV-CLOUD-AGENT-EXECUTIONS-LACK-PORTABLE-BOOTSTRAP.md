@@ -51,8 +51,22 @@ and a failed Docker request leaves inspection state unknown. This deliberately e
 runner's accepted arguments without expanding the wrapper's host command list.
 
 The initial regeneration could update the ordinary adapter but could not write protected
-configuration. The repository's named configuration-repair operation regenerated those outputs;
-effective session network refresh and cold/cached proof still require a subsequent committed run.
+configuration. The repository's named configuration-repair operation regenerated those outputs.
+The committed retry at `4239801005055a714e4c2ba56bd47799ee32fa9a`, run
+`20260926T164953Z-90322`, still failed at `auth.docker.io` in the same execution session,
+although the regenerated repository profile explicitly allows it. Host dispatch and the Docker
+probe again succeeded; image provisioning, cold bootstrap, cached bootstrap, and Linux repository
+verification remain unrun beyond image metadata fetching. No proxy or global configuration was
+changed. Resume from a fresh session that loads this branch's regenerated policy; if it still
+rejects the allowed hostname, resolve that effective managed policy before another Linux attempt.
+
+Read-only host inspections `20260926T164951Z-90236` and `20260926T165003Z-90435` confirmed
+that neither failed run retained its run-specific base image or any cold/tools/cached container.
+No toolchain cache image was created; shared image and builder caches were untouched. All run and
+inspection evidence is under `.artifacts/contributor-linux/` in the verification worktree.
+Focused tests, including an intentional mutation of failure-state reporting, and the per-commit
+macOS verification passed. Those checks establish runner behavior, not Linux portability or
+hosted-cloud compatibility.
 
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published
