@@ -51,6 +51,12 @@ direct state mutation, command syntax, router or restoration behavior.
 Build, runtime, visual and developer appearance acceptance are separate. No appearance acceptance
 is inferred from compilation or the focused mobile regression.
 
+On 2026-09-26, after confirming the repaired tapping behavior, the developer accepted the local
+proof of concept as sufficient for now and authorized landing. The offered additional tab-retention
+and narrow-window checks were declined. Remaining resize, keyboard, appearance and accessibility
+checks are deferred, not observed passes. Production Catalyst support and physical iPhone/iPad
+acceptance remain separate follow-ups.
+
 On 2026-09-26, run `f1360b84-d74d-4667-8334-509753325f36` built and locally signed NativeNavigation
 with Xcode 27. Both arm64 and x86_64 Mach-O slices report `MACCATALYST`; the bundle declares device
 family 6. Source-integrity and generated-manifest receipts confirm unchanged protected inputs.
