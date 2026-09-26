@@ -19,6 +19,11 @@ Follow-up work after this intermediate landing continues on `feat/standalone-cli
 - [ ] Update contributor, workflow, troubleshooting, and agent documentation for the final shell,
       `./agent`, and `./dev` design in one pass. Until then, correct only documentation needed to keep
       this intermediate landing truthful.
+- [ ] Prove contributor workflows in a fresh isolated Ubuntu environment and actual sessions for
+      every supported cloud harness before closing this effort. Use cached tool images with fresh
+      checkouts, test cold and cached setup, and retain per-harness portable verification evidence;
+      the [cloud bootstrap task](<../Roadmap/Developer environment upgrades/DEVENV-CLOUD-AGENT-EXECUTIONS-LACK-PORTABLE-BOOTSTRAP.md>)
+      owns the proposed resource limits and acceptance checklist.
 
 The additional CLI guest harness, native toolchain setup, prepared VM images, Expo authentication
 decision, and cloud execution bootstrap remain separate follow-ups. Their current status is tracked
