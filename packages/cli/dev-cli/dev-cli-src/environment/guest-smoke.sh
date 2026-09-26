@@ -4,9 +4,14 @@ set -eu
 
 case "${1:-}" in cold|cached|tools) mode=$1 ;; *) exit 2 ;; esac
 qemu_guest_base=0
+qemu_nix_filter=0
 case "$#" in
   1) ;;
-  2) [ "$2" = --qemu-guest-base ] && qemu_guest_base=1 || exit 2 ;;
+  2) case "$2" in
+       --qemu-guest-base) qemu_guest_base=1 ;;
+       --qemu-compat) qemu_guest_base=1; qemu_nix_filter=1 ;;
+       *) exit 2 ;;
+     esac ;;
   *) exit 2 ;;
 esac
 cd "$(dirname "$0")/../../../../.."
@@ -34,6 +39,11 @@ step() {
     producer_result=0
     if [ "$qemu_guest_base" -eq 1 ]; then
       set -- QEMU_GUEST_BASE=0x800000000000 "$@"
+    fi
+    # Explicit emulation diagnostic: QEMU user mode cannot load Nix's inner
+    # syscall filter. Docker's outer isolation and default bootstrap stay intact.
+    if [ "$qemu_nix_filter" -eq 1 ]; then
+      set -- 'NIX_CONFIG=filter-syscalls = false' "$@"
     fi
     env -i HOME=/root USER=root TERM=dumb PATH="$PATH" "$@" 2>&1 || producer_result=$?
     printf '%s\n' "$producer_result" > "$logs/$label.exit-code"

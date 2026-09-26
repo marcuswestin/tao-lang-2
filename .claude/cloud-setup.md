@@ -98,6 +98,13 @@ guest architecture, Nix version/checksum, or installation ownership. Default and
 remain unchanged. A passing experiment would establish this local workaround, not native amd64
 or hosted acceptance; Nix derivation builders may clear environment variables again.
 
+The separately authorized `./agent unsandboxed contributor-linux-test --qemu-compat`
+adds process-local `NIX_CONFIG='filter-syscalls = false'` to that experiment. QEMU user mode
+cannot load Nix's inner syscall filter; this option removes that inner restriction on builders
+while retaining Docker's outer isolation, network policy, and default bootstrap settings. It
+requires an arm64 daemon and uses another separate tool-cache identity. No host configuration,
+additional capabilities, privileged container, or Rosetta change is made.
+
 Actual fresh and cached hosted runs remain to be proved for each provider. Local
 script tests establish dispatch and failure behavior; they do not prove provider
 network access, Nix installation privileges, or a hosted verification run.

@@ -165,8 +165,9 @@ under user-mode QEMU, even with the build sandbox disabled. Nix's internal sysca
 separate setting. Its [2.35.2 manual](https://nix.dev/manual/nix/2.35/command-ref/conf-file.html#conf-filter-syscalls)
 documents `filter-syscalls` and cautions about disabling its protection against operations such
 as setuid/setgid creation, ACLs, and extended attributes. A separate, explicit disposable-guest
-experiment with process-local `NIX_CONFIG='filter-syscalls = false'` is proposed, pending the
-Developer's decision on that security tradeoff. It has not been implemented or run. Do not
+experiment with process-local `NIX_CONFIG='filter-syscalls = false'` was subsequently approved
+by the Developer and implemented as `--qemu-compat`, retaining the guest-base setting and a
+separate tool-cache identity. Committed-head execution evidence follows when available. Do not
 change the default bootstrap, Docker's outer isolation, host configuration, or network policy.
 [Nix issue 15153](https://github.com/NixOS/nix/issues/15153) reports the same error class under
 Rosetta with mismatched userland/kernel architectures; Rosetta is neither tried nor established

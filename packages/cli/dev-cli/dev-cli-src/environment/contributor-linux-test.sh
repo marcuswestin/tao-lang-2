@@ -5,13 +5,15 @@ set -eu
 mode=both
 probe=0
 qemu_guest_base=0
+qemu_nix_filter=0
 inspect_run=
 case "$#" in
   0) ;;
   1) case "$1" in
        --probe) probe=1 ;;
        --qemu-guest-base) qemu_guest_base=1 ;;
-       *) printf 'Expected --probe or --qemu-guest-base.\n' >&2; exit 2 ;;
+       --qemu-compat) qemu_guest_base=1; qemu_nix_filter=1 ;;
+       *) printf 'Expected --probe, --qemu-guest-base, or --qemu-compat.\n' >&2; exit 2 ;;
      esac ;;
   2) case "$1" in
        --mode) case "$2" in cold|cached|both) mode=$2 ;; *) printf 'Expected cold, cached, or both.\n' >&2; exit 2 ;; esac ;;
@@ -24,7 +26,7 @@ case "$#" in
          inspect_run=$2 ;;
        *) exit 2 ;;
      esac ;;
-  *) printf 'Usage: contributor-linux-test [--probe | --qemu-guest-base | --mode cold|cached|both | --inspect-run YYYYMMDDTHHMMSSZ-PID]\n' >&2; exit 2 ;;
+  *) printf 'Usage: contributor-linux-test [--probe | --qemu-guest-base | --qemu-compat | --mode cold|cached|both | --inspect-run YYYYMMDDTHHMMSSZ-PID]\n' >&2; exit 2 ;;
 esac
 
 root=$(git rev-parse --show-toplevel)
@@ -162,6 +164,7 @@ case "$(cut -d ' ' -f 1 "$output/docker-storage.txt")" in
   *) printf 'daemon_emulation=unknown; inspect docker-storage.txt\n' ;;
 esac >> "$output/resources.txt"
 printf 'qemu_guest_base_experiment=%s\n' "$qemu_guest_base" >> "$output/resources.txt"
+printf 'qemu_nix_filter_disabled=%s\n' "$qemu_nix_filter" >> "$output/resources.txt"
 base_owned=1
 stream_log "$output/base-build.log" base-build docker build --platform linux/amd64 --target base --tag "$base" "$output/context"
 docker image inspect "$base" > "$output/base-image.json"
@@ -170,6 +173,7 @@ docker image inspect --format '{{.Id}}' "$base" > "$output/base-identity.txt"
 git ls-tree HEAD bootstrap-tao-dev-env devenv.lock "$environment" > "$output/cache-inputs"
 cat "$output/base-identity.txt" >> "$output/cache-inputs"
 printf 'qemu_guest_base_experiment=%s\n' "$qemu_guest_base" >> "$output/cache-inputs"
+printf 'qemu_nix_filter_disabled=%s\n' "$qemu_nix_filter" >> "$output/cache-inputs"
 cache_key=$(git hash-object "$output/cache-inputs")
 cache="tao-contributor-linux-tools:$cache_key"
 rm "$output/cache-inputs"
@@ -191,7 +195,9 @@ run_guest() {
   # the daemon has created it. Cleanup still checks both ownership labels.
   container=$guest_container
   set -- "$guest_mode"
-  if [ "$qemu_guest_base" -eq 1 ]; then
+  if [ "$qemu_nix_filter" -eq 1 ]; then
+    set -- "$@" --qemu-compat
+  elif [ "$qemu_guest_base" -eq 1 ]; then
     set -- "$@" --qemu-guest-base
   fi
   if docker create --name "$guest_container" --platform linux/amd64 --cpus 4 --memory 16g --memory-swap 16g \
