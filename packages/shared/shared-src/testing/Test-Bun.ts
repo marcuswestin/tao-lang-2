@@ -16,6 +16,8 @@ export {
   AfterEach,
   Describe,
   Expect,
+  initGitTestRepository,
+  mkGitTestDir,
   mkTestDir,
   MockModule,
   setClockForTest,

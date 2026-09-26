@@ -1,5 +1,5 @@
-import { CLI, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { FS } from '@shared'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 import {
   CONVENTION_RULES,
   conventionRuleIssues,
@@ -41,6 +41,17 @@ Describe('repo lint contracts', () => {
       `${path}:1 creates a test directory directly; use \`mkTestDir\` for fixtures or \`Repo.mkScratchDir\` for host specs.`,
     ])
     Expect(testScratchConventionIssues([{ path: 'packages/shared/shared-src/fixture.ts', source }])).toEqual([])
+  })
+
+  Test('requires test Git repositories to use the checked fixture helpers', () => {
+    const path = 'packages/shared/shared-tests/fixture.test.ts'
+    const init = `'${'init'}'`
+    const source = `await git(root, ${init}, '-q')\n`
+      + `await CLI.mustRun('git', { args: [${init}, '--quiet'], cwd: root })\n`
+      + `await initGitTestRepository(root)\n`
+    const detail = 'runs `git init` directly; use `mkGitTestDir` and `initGitTestRepository`, which keep the '
+      + 'repository outside this checkout.'
+    Expect(testScratchConventionIssues([{ path, source }])).toEqual([`${path}:1 ${detail}`, `${path}:2 ${detail}`])
   })
 
   Test('keeps the language benchmark in bench and out of correctness gates', () => {
@@ -325,25 +336,21 @@ _bench-check:
   })
 
   Test('scans untracked worktree sources while preserving ignores and repository boundaries', async () => {
-    const root = await mkTestDir('tao-repo-lint-worktree-', { location: 'host' })
-    try {
-      await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: root })
-      await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
-      await FS.writeText(FS.resolvePath('.gitignore', root), 'packages/ignored/\n')
-      await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
-      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root), absorbed)
-      await FS.writeText(FS.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next', root), absorbed)
-      const source = `const failure = ${rawError('unclassified')}\n`
-      await FS.writeText(FS.resolvePath('Apps/Sample/NewAdapter.ts', root), source)
-      await FS.writeText(FS.resolvePath('packages/ignored/Ignored.ts', root), source)
-      await FS.writeText(FS.resolvePath('packages/tool/_gen_output/Ignored.ts', root), source)
-      await FS.writeText(FS.resolvePath('Outside.ts', root), source)
-      await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
+    const root = await mkGitTestDir('tao-repo-lint-worktree-')
+    await initGitTestRepository(root)
+    await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
+    await FS.writeText(FS.resolvePath('.gitignore', root), 'packages/ignored/\n')
+    await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
+    await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root), absorbed)
+    await FS.writeText(FS.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next', root), absorbed)
+    const source = `const failure = ${rawError('unclassified')}\n`
+    await FS.writeText(FS.resolvePath('Apps/Sample/NewAdapter.ts', root), source)
+    await FS.writeText(FS.resolvePath('packages/ignored/Ignored.ts', root), source)
+    await FS.writeText(FS.resolvePath('packages/tool/_gen_output/Ignored.ts', root), source)
+    await FS.writeText(FS.resolvePath('Outside.ts', root), source)
+    await FS.writeText(FS.resolvePath(DEV_ENTRY_PATH, root), importFrom('@shared'))
 
-      Expect(await repoLintIssues(root)).toEqual([rawErrorIssue('Apps/Sample/NewAdapter.ts')])
-    } finally {
-      await FS.remove(root)
-    }
+    Expect(await repoLintIssues(root)).toEqual([rawErrorIssue('Apps/Sample/NewAdapter.ts')])
   })
 
   Test('ignores Tao-owned project state when checking absorbed source parity', () => {

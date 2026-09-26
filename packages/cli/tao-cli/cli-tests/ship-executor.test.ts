@@ -1,5 +1,5 @@
 import { CLI, Errors, FS } from '@shared'
-import { Describe, Expect, fakeTerminal, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, fakeTerminal, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 import type { AppStoreConnectClient } from '../cli-src/app-store-connect-client'
 import type { PreparedShip } from '../cli-src/ship-command'
 import { configureBetaDistribution, executePreparedShip, ShipExecutorTesting } from '../cli-src/ship-executor'
@@ -195,106 +195,102 @@ Describe('tao ship TestFlight distribution', () => {
 Describe('tao ship filesystem-only execution', () => {
   for (const failure of [false, true]) {
     Test(`preserves Git HEAD, refs, and index when checkpoint writes ${failure ? 'fail' : 'succeed'}`, async () => {
-      const root = await mkTestDir('tao-ship-execute-git-')
-      try {
-        await git(root, 'init', '-q')
-        await git(root, 'config', 'user.email', 'test@example.com')
-        await git(root, 'config', 'user.name', 'Tao Test')
-        const sourcePath = FS.resolvePath('App.tao', root)
-        const lockPath = FS.resolvePath('.tao-project/lock.jsonc', root)
-        await FS.writeText(sourcePath, 'project { id "notes" name "Notes" version "1.2.2" DefaultApp Notes }\n')
-        await git(root, 'add', '.')
-        await git(root, 'commit', '-qm', 'Previous release')
-        const previousCommit = await git(root, 'rev-parse', 'HEAD')
-        await FS.writeText(sourcePath, `${await FS.readText(sourcePath)}app Notes { view Main }\nview Main() { }\n`)
-        await git(root, 'add', '.')
-        await git(root, 'commit', '-qm', 'New release notes')
-        const currentCommit = await git(root, 'rev-parse', 'HEAD')
-        await FS.writeText(FS.resolvePath('User.txt', root), 'already staged\n')
-        await git(root, 'add', 'User.txt')
-        const indexBefore = await FS.readFile(FS.resolvePath('.git/index', root))
-        const refsBefore = await git(root, 'show-ref')
-        const entry: ShipLockEntry = {
-          accepted: {
-            bundleIdentifier: 'com.devtao.notes',
-            issuerId: 'issuer',
-            keyId: 'key',
-            namespace: 'com.devtao',
-          },
-          appStoreAppId: 'app-1',
-          identity: 'notes/Notes',
-          inputHash: 'input',
-          lastBuild: {
-            buildId: 'build-7',
-            commit: currentCommit,
-            number: '7',
-            processed: false,
-            releaseNotesFromCommit: previousCommit,
-            version: '1.2.3',
-          },
-          provenance: { at: '2026-09-16T00:00:00.000Z', command: 'tao ship', version: 1 },
-          status: 'accepted',
-        }
-        const lock: TaoProjectLock = { schemaVersion: 1, ship: { apps: { [entry.identity]: entry } } }
-        const prepared = {
-          actions: [],
-          app: {
-            displayName: 'Notes',
-            hasLocalDatasourceEndpoint: false,
-            isVariant: false,
-            name: 'Notes',
-            sourcePath,
-            usesDevDatasource: false,
-          },
-          buildNumber: '7',
+      const root = await mkGitTestDir('tao-ship-execute-git-')
+      await initGitTestRepository(root)
+      await git(root, 'config', 'user.email', 'test@example.com')
+      await git(root, 'config', 'user.name', 'Tao Test')
+      const sourcePath = FS.resolvePath('App.tao', root)
+      const lockPath = FS.resolvePath('.tao-project/lock.jsonc', root)
+      await FS.writeText(sourcePath, 'project { id "notes" name "Notes" version "1.2.2" DefaultApp Notes }\n')
+      await git(root, 'add', '.')
+      await git(root, 'commit', '-qm', 'Previous release')
+      const previousCommit = await git(root, 'rev-parse', 'HEAD')
+      await FS.writeText(sourcePath, `${await FS.readText(sourcePath)}app Notes { view Main }\nview Main() { }\n`)
+      await git(root, 'add', '.')
+      await git(root, 'commit', '-qm', 'New release notes')
+      const currentCommit = await git(root, 'rev-parse', 'HEAD')
+      await FS.writeText(FS.resolvePath('User.txt', root), 'already staged\n')
+      await git(root, 'add', 'User.txt')
+      const indexBefore = await FS.readFile(FS.resolvePath('.git/index', root))
+      const refsBefore = await git(root, 'show-ref')
+      const entry: ShipLockEntry = {
+        accepted: {
           bundleIdentifier: 'com.devtao.notes',
-          channel: 'notes',
-          entry,
-          git: await inspectShipGit(root, { excludePaths: [lockPath] }),
-          inputHash: 'input',
-          issues: [],
-          lock,
-          project: {
-            apps: [],
-            defaultApp: 'Notes',
-            id: 'notes',
-            name: 'Notes',
-            primaryAppName: 'Notes',
-            projectSourcePath: sourcePath,
-            root,
-            version: '1.2.2',
-          },
-          reuseBuild: true,
+          issuerId: 'issuer',
+          keyId: 'key',
+          namespace: 'com.devtao',
+        },
+        appStoreAppId: 'app-1',
+        identity: 'notes/Notes',
+        inputHash: 'input',
+        lastBuild: {
+          buildId: 'build-7',
+          commit: currentCommit,
+          number: '7',
+          processed: false,
+          releaseNotesFromCommit: previousCommit,
           version: '1.2.3',
-          versionBumped: true,
-        } satisfies PreparedShip
-        let notes = ''
-        const apple = testAppleClient({
-          failDistribution: failure,
-          onNotes: value => {
-            notes = value
-          },
-        })
-        const execution = executePreparedShip(
-          prepared,
-          { betaRecipients: [], ...fakeTerminal() },
-          { appleClient: apple },
-        )
-        if (failure) {
-          await Expect(execution).rejects.toThrow('forced distribution failure')
-        } else {
-          await execution
-          Expect(notes).toContain('New release notes')
-        }
-
-        Expect(await git(root, 'rev-parse', 'HEAD')).toBe(currentCommit)
-        Expect(await git(root, 'show-ref')).toBe(refsBefore)
-        Expect(await FS.readFile(FS.resolvePath('.git/index', root))).toEqual(indexBefore)
-        Expect(await FS.exists(lockPath)).toBe(true)
-        Expect(await FS.readText(sourcePath)).toContain('version "1.2.3"')
-      } finally {
-        await FS.remove(root)
+        },
+        provenance: { at: '2026-09-16T00:00:00.000Z', command: 'tao ship', version: 1 },
+        status: 'accepted',
       }
+      const lock: TaoProjectLock = { schemaVersion: 1, ship: { apps: { [entry.identity]: entry } } }
+      const prepared = {
+        actions: [],
+        app: {
+          displayName: 'Notes',
+          hasLocalDatasourceEndpoint: false,
+          isVariant: false,
+          name: 'Notes',
+          sourcePath,
+          usesDevDatasource: false,
+        },
+        buildNumber: '7',
+        bundleIdentifier: 'com.devtao.notes',
+        channel: 'notes',
+        entry,
+        git: await inspectShipGit(root, { excludePaths: [lockPath] }),
+        inputHash: 'input',
+        issues: [],
+        lock,
+        project: {
+          apps: [],
+          defaultApp: 'Notes',
+          id: 'notes',
+          name: 'Notes',
+          primaryAppName: 'Notes',
+          projectSourcePath: sourcePath,
+          root,
+          version: '1.2.2',
+        },
+        reuseBuild: true,
+        version: '1.2.3',
+        versionBumped: true,
+      } satisfies PreparedShip
+      let notes = ''
+      const apple = testAppleClient({
+        failDistribution: failure,
+        onNotes: value => {
+          notes = value
+        },
+      })
+      const execution = executePreparedShip(
+        prepared,
+        { betaRecipients: [], ...fakeTerminal() },
+        { appleClient: apple },
+      )
+      if (failure) {
+        await Expect(execution).rejects.toThrow('forced distribution failure')
+      } else {
+        await execution
+        Expect(notes).toContain('New release notes')
+      }
+
+      Expect(await git(root, 'rev-parse', 'HEAD')).toBe(currentCommit)
+      Expect(await git(root, 'show-ref')).toBe(refsBefore)
+      Expect(await FS.readFile(FS.resolvePath('.git/index', root))).toEqual(indexBefore)
+      Expect(await FS.exists(lockPath)).toBe(true)
+      Expect(await FS.readText(sourcePath)).toContain('version "1.2.3"')
     })
   }
 })
