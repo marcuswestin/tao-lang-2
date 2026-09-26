@@ -112,6 +112,11 @@ companion-host-publish:
 test-host *ARGS:
     ./dev test-host {{ ARGS }}
 
+# Build the agent-command example, list commands, invoke one in a separate CLI process, and stop (macOS)
+[group('Run')]
+agents-demo: _parser-gen
+    ./dev test-host agents --demo
+
 # Run an explicit slow Studio smoke file in an isolated lane
 [group('Host proofs')]
 studio-smoke test_file="packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts" run_id="local":

@@ -2,6 +2,17 @@
 
 ## Background app commands (macOS proof of concept)
 
+From the repository root, run the complete example with:
+
+```sh
+just agents-demo
+```
+
+This builds an isolated copy of the Local-backed `Agent Commands` test app, starts it in the background,
+prints its available commands, and invokes `AppendEntry` through a separate CLI process. It prints the
+transaction receipt and stops the app afterward. Each run retains its build and request logs under
+`.artifacts/scratch/background-app-rpc/`.
+
 Build an app whose `AgentCommands` property explicitly lists the supported module commands:
 
 ```sh
