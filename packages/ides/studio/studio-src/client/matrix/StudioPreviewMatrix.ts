@@ -105,7 +105,7 @@ async function connectWholeAppPreview(
   iframe.title = `${handshake.identity.appName} live preview`
   StudioDrawCanvas.retain(parent, () => parent.replaceChildren(iframe))
   StudioDrawCanvas.ensure(parent)
-  return { iframe, interactionMode: 'edit', origin, previewInstanceId }
+  return { iframe, interactionMode: 'run', origin, previewInstanceId }
 }
 
 function connectionGroups(
@@ -181,7 +181,7 @@ async function connectCellPreview(
     cellIdentity,
     expectedRevision: manifest.compileRevision,
     iframe,
-    interactionMode: 'edit',
+    interactionMode: 'run',
     origin,
     previewInstanceId,
   }
@@ -225,7 +225,7 @@ export async function refreshCellPreviews(
   const previousByCell = new Map(
     previews.flatMap(preview => preview.cell === undefined ? [] : [[preview.cell.cellId, preview] as const]),
   )
-  const interactionMode = previews[0]?.interactionMode ?? 'edit'
+  const interactionMode = previews[0]?.interactionMode ?? 'run'
   const setInteractionMode = previews[0]?.setInteractionMode
   const nextConnections = await Promise.all(manifest.cells.map(async cell => {
     const previous = previousByCell.get(cell.cellId)

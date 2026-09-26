@@ -835,7 +835,7 @@ export function mountStudioPreviewBridge(
   let drag: StudioDrag | undefined
   let suppressNextClick = false
   let postedHoverKey: string | undefined
-  let interactionMode: 'edit' | 'run' = 'edit'
+  let interactionMode: 'edit' | 'run' = 'run'
   let canvasGesturesOwned = false
   let canvasPanKeyHeld = false
   let recording: StudioJourneyRecording | undefined

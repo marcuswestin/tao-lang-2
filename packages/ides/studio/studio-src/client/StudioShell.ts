@@ -7,6 +7,7 @@ export type StudioClientConfig = {
 
 export type StudioClientView = {
   appPicker: HTMLSelectElement
+  browser: HTMLButtonElement
   breadcrumbs: HTMLElement
   commandButton: HTMLButtonElement
   commandInput: HTMLInputElement
@@ -139,9 +140,9 @@ export const StudioWorkbenchState = {
     try {
       const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined)
       const val = store?.getItem(layoutPresetStorageKey)
-      return val === 'code' || val === 'draw' || val === 'run' || val === 'design' ? val : 'design'
+      return val === 'code' || val === 'draw' || val === 'run' || val === 'design' ? val : 'run'
     } catch {
-      return 'design'
+      return 'run'
     }
   },
   saveLayoutPreset(storage: Pick<Storage, 'setItem'> | undefined, preset: StudioLayoutPreset): void {
@@ -211,10 +212,11 @@ export function studioShellMarkup(): string {
         <div class="studio-toolbar-actions">
           <span class="studio-status" role="status">Connecting…</span>
           <button class="studio-canvas-focus" type="button" hidden title="Show the selected element's view on its own and edit only that view">Focus view</button>
+          <button class="studio-browser" type="button" title="Open app in browser">Browser</button>
           <button class="studio-device" type="button" aria-haspopup="dialog" aria-expanded="false" title="Physical device">${
     studioIcon('phone', 'small')
   }Device</button>
-          <button class="studio-interaction-mode" type="button">Mode: Edit</button>
+          <button class="studio-interaction-mode" type="button">Mode: Run</button>
           <button class="studio-reload" type="button" title="Reload preview" aria-label="Reload preview">${
     studioIcon('reload')
   }</button>
@@ -332,6 +334,7 @@ export function createStudioShell(
     commandOverlay: requiredElement(root, '.studio-command-overlay'),
     commandResults: requiredElement(root, '.studio-command-results'),
     canvasFocus: requiredButton(root, '.studio-canvas-focus'),
+    browser: requiredButton(root, '.studio-browser'),
     device: requiredButton(root, '.studio-device'),
     devicePopover: requiredElement(root, '.studio-device-popover'),
     drawerContent: requiredElement(root, '.studio-drawer-content'),

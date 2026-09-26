@@ -39,6 +39,8 @@ const expected = [
   'local-instantdb start',
   'local-instantdb stop',
   'companion-host-build',
+  'studio-companion-install',
+  'clerk-review',
   'standalone-cli-vm-setup',
   'standalone-cli-clean-machine',
   'contributor-linux-test',

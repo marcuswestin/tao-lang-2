@@ -107,7 +107,7 @@
     "docker-desktop start",
     "watchman start", "watchman status", "watchman stop",
     "local-instantdb start", "local-instantdb stop",
-    "companion-host-build",
+    "companion-host-build", "studio-companion-install", "clerk-review",
     "standalone-cli-vm-setup", "standalone-cli-clean-machine", "contributor-linux-test",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators open-url", "simulators uninstall", "simulators open",

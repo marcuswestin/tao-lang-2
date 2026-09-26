@@ -201,6 +201,8 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     // The manual edit is a real CodeMirror save between previewing and approving the reverse diff.
     await browser.click('.studio-agent-collapse')
     await browser.waitFor(`document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'true'`)
+    await browser.click('[data-preset="code"]')
+    await browser.waitFor(`document.querySelector('.studio-editor .cm-content')?.checkVisibility() === true`)
     const appliedSource = await FS.readText(sourcePath)
     const manualSource = appliedSource.replace('Text("Agent")', 'Text("Manual")')
     await browser.click('.cm-content')

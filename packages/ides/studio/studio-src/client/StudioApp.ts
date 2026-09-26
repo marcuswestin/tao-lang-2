@@ -28,7 +28,7 @@ import { StudioDrawerPanels } from './app/StudioDrawerPanels'
 import { StudioEditorSession } from './app/StudioEditorSession'
 import { StudioInspection } from './app/StudioInspection'
 import { StudioMountSignal } from './app/StudioMountSignal'
-import { mountStudioPreviewReload, StudioPreviewNotice } from './app/StudioPreviewStatus'
+import { mountStudioBrowserLaunch, mountStudioPreviewReload, StudioPreviewNotice } from './app/StudioPreviewStatus'
 import {
   connectStudioPreviewMessages,
   forwardPreviewCanvasGesture,
@@ -99,6 +99,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
   const disposeDialogs = StudioDialog.mount({ container: root, signal })
   // The tabs' EditorViews are document models; the editor a person sees is the one Tao mounts.
   const focusVisibleEditor = (): void => root.querySelector<HTMLElement>('.studio-editor .cm-content')?.focus()
+  let disposeBrowserLaunch: (() => void) | undefined
   let partialSession: StudioEditorSession | undefined
   let partialPreviews: Awaited<ReturnType<typeof connectPreviews>> = []
   let partialDevicePanel: ReturnType<typeof createStudioDevicePanel> | undefined
@@ -482,6 +483,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       selectedOwner: () => inspection.selectedOwnerIdentity(),
       status: view.status,
     })
+    disposeBrowserLaunch = mountStudioBrowserLaunch({
+      available: config.previewUrl !== undefined,
+      button: view.browser,
+      onError: error => showSourceActionError(view.status, error),
+      open: () => StudioApiClient.browserOpen(),
+      status: view.status,
+    })
     mountStudioPreviewReload(
       view.reload,
       view.status,
@@ -713,6 +721,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       root.removeEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership)
       betaShip.dispose()
       devicePanel.dispose()
+      disposeBrowserLaunch?.()
       disconnectPreviewMessages()
       canvasFocus.dispose()
       canvasViewport?.dispose()
@@ -731,6 +740,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     view.dispose()
     partialSession?.dispose()
     partialDevicePanel?.dispose()
+    disposeBrowserLaunch?.()
     disconnectPreviews(partialPreviews)
     if (!StudioMountSignal.isAbortError(error)) {
       view.status.dataset['state'] = 'error'

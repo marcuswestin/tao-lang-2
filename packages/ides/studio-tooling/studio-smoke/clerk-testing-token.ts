@@ -115,3 +115,10 @@ function installTestingFetch(
     return original(request ? new target.Request(url.toString(), request) : url.toString(), init)
   }
 }
+
+/** CLI merges overrides with the parent environment; explicit undefined removes inherited Clerk keys. */
+export function clerkChildEnvironment(env: Readonly<Record<string, string | undefined>>) {
+  return Object.fromEntries(
+    Object.entries(env).map(([key, value]) => [key, key.startsWith('CLERK_') ? undefined : value]),
+  )
+}

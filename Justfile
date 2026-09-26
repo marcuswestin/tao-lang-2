@@ -45,6 +45,11 @@ github-setup:
 secrets *ARGS:
     ./dev secrets {{ ARGS }}
 
+# Guide Clerk development setup and store its credentials encrypted; --instructions prints the steps
+[group('Setup')]
+setup-clerk *ARGS:
+    ./dev setup-clerk {{ ARGS }}
+
 # Launch the agent harness with the Bash sandbox off; switch a running session with /sandbox
 [group('Sessions')]
 session-unsandboxed *ARGS:
@@ -86,6 +91,11 @@ stop-local-instantdb:
 [group('Run')]
 auth-review-server *ARGS:
     bun run packages/services/account-server/account-server-src/serve.ts {{ ARGS }}
+
+# Review Clerk sign-in and local InstantDB data in Tao Companion; requires saved development credentials
+[group('Run')]
+clerk-review *ARGS: _parser-gen
+    ./dev clerk-review {{ ARGS }}
 
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]

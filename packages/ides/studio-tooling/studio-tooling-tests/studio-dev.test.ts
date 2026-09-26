@@ -2,7 +2,8 @@ import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { stopStudioProcessTree, type StudioProcessTree } from '@expo-host/dev-loop/StudioProcessTree'
 import { CLI, Errors, FS, Platform, ProjectDevSession, Repo, Time } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
-import { StudioClientAssets, StudioDeviceGateway, StudioDeviceTrustStore } from '@studio'
+import { startStudioSessionServer, StudioClientAssets, StudioDeviceGateway, StudioDeviceTrustStore } from '@studio'
+import { StudioBrowser } from '../studio-tooling-src/StudioBrowser'
 import { startStudioClientDevReload, StudioClientDevReload } from '../studio-tooling-src/StudioClientDevReload'
 import {
   createRecentProjectStore,
@@ -179,7 +180,7 @@ Describe('Studio native wrapper foundation', () => {
     })
   })
 
-  Test('starts and tears down the packaged Studio data and device authorities', async () => {
+  Test('provides browser launch tooling and tears down the packaged Studio authorities', async () => {
     const root = await mkTestDir('tao-studio-packaged-data-')
     const bundlePath = FS.resolvePath('studio.js', root)
     await FS.writeText(bundlePath, 'globalThis.__TAO_STUDIO_PACKAGED__ = true')
@@ -190,6 +191,11 @@ Describe('Studio native wrapper foundation', () => {
       testCommandPath: FS.resolvePath('tao', root),
       testNodePath: Platform.runtimeProcess.execPath,
       userStateRoot: FS.resolvePath('state', root),
+    }, {
+      async startSessionServer(manager, options) {
+        Expect(options?.openBrowser).toBe(StudioBrowser.open)
+        return await startStudioSessionServer(manager, options)
+      },
     })
     const probe = `http://127.0.0.1:${service.devDataPort}/data/probe`
     const deviceProbe = `http://127.0.0.1:${service.deviceGatewayPort}/device/probe`
