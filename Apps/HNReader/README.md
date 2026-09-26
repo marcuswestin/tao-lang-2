@@ -6,7 +6,8 @@ datasources.md`). Both are specified in `Docs/Spec/Tao Data.md`.
 
 ```text
 Apps/HNReader/
-  HNReader.tao        entities, design, screens, and both app variants
+  @model/Data.tao     shared entities, importable throughout this project
+  HNReader.tao        datasources, design, screens, and both app variants
   HNReader.test.tao   journeys, run against the stub variant
   HNAdapter.ts        the Algolia HN API adapter — every API-specific mapping
   StubAdapter.ts      a deterministic in-repo feed with the same declared shapes
@@ -52,6 +53,10 @@ deterministic basic fallback. Opening a story URL uses `OpenUrl` from `@tao/link
 skips the external launch while tests run.
 
 ## Things to know before extending it
+
+- **The model is shared across project packages.** `@model/Data.tao` gives the four entity declarations
+  `workspace` visibility. The app, journeys, and scenario fixtures import from `@model`; Studio Feed
+  can use the same entities from generated sketches and their shared fixture in `@/studio`.
 
 - **`Rank` is the order the API returned, not news.ycombinator.com's ranking.** Algolia's
   `search?tags=front_page` returns the front-page _set_ ordered by points, so the rendered

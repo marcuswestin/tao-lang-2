@@ -239,6 +239,9 @@ Native gesture feel still requires visual acceptance; landing this slice require
 HNReader review exposed a misleading fixture-handle error for folder-only entities. Feed now checks
 entity visibility before fixture promotion and explains the import restriction; coverage includes
 folder-only and file-only models as well as importable public models.
+HNReader's entities now live in a workspace-visible `@model` package so its generated Story examples
+can bind into sketches without changing language visibility rules. A real HNReader regression covers
+the generated row, shared fixture, required parameter, field binding, and overlay compilation.
 
 **Representability limits.** Existing fixture syntax represents primitive literals, `now`, and fixture
 references. Exact captured/generated timestamps, unresolved live relation IDs, cyclic fixture creation
