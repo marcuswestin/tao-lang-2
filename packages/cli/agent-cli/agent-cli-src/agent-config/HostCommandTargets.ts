@@ -15,6 +15,7 @@ const UTF8_LOCALE = { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' } as const
 
 /** Implementations for named host operations. Permissions still come solely from agentHostCommands. */
 export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> = {
+  'merge-recover': { command: './dev', fixedArgs: ['merge-recover'] },
   // Keep read-only reclaim sandboxed; only its guarded removal action needs host filesystem access.
   'reclaim --execute': { command: './dev', fixedArgs: ['reclaim', '--execute'], argsPolicy: 'none' },
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
@@ -33,6 +34,8 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   // sequence; naming the whole build keeps an agent from stitching it together from lower-level
   // operations and a hand-written placement step.
   'companion-host-build': { command: './dev', fixedArgs: ['companion-host-build'] },
+  'standalone-cli-vm-setup': { command: 'just', fixedArgs: ['standalone-cli-vm-setup'], argsPolicy: 'none' },
+  'standalone-cli-clean-machine': { command: 'just', fixedArgs: ['standalone-cli-clean-machine'], argsPolicy: 'none' },
   'simulators list': { command: 'xcrun', fixedArgs: ['simctl', 'list', 'devices'] },
   'simulators boot': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
   'simulators run': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
@@ -64,8 +67,6 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'processes list': { command: 'ps', fixedArgs: ['-axo', 'pid=,ppid=,lstart=,command='], argsPolicy: 'none' },
   'processes started': { command: 'ps', fixedArgs: ['-o', 'lstart=', '-p'], argsPolicy: 'pid' },
   'start-branch': { command: './dev', fixedArgs: ['start-branch'] },
-  // Trust only this checkout's .envrc, from the worktree root selected by ./agent.
-  'direnv allow': { command: 'direnv', fixedArgs: ['allow'], argsPolicy: 'none' },
 }
 
 /** A named operation has a fixed implementation; suffix argv passes through without a shell. */

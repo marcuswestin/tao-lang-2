@@ -52,17 +52,16 @@ web.
 <!-- The standalone CLI release replaces this section with its one-line install (macOS on Apple Silicon first). -->
 
 The standalone `tao` command for macOS on Apple Silicon is on its way. Until it ships, run Tao from
-a checkout on macOS with [Nix](https://nixos.org), [direnv](https://direnv.net), and
-[devenv](https://devenv.sh) installed:
+a checkout on macOS with [Nix](https://nixos.org) and [devenv](https://devenv.sh) installed:
 
 ```sh
 git clone <repository> tao && cd tao
-direnv allow && direnv exec . ./agent setup
+./enter-tao-dev-env
 ./tao create "A reading list"
 ```
 
-The first `./agent setup` builds the pinned toolchain into the checkout; from then on `direnv`
-activates it whenever you enter the directory, and `./agent setup` alone keeps it current. Then:
+The entry script builds the pinned toolchain, runs `./agent setup`, and opens an interactive
+development shell. Run it again when you return to the checkout; type `exit` to leave. Then:
 
 | Command      | What it does                                                                          |
 | ------------ | ------------------------------------------------------------------------------------- |

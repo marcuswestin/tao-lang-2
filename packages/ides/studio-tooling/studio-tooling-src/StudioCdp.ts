@@ -64,6 +64,8 @@ type Point = {
 
 type StudioCdpOptions = {
   artifactRoot?: string
+  startupTimeoutMs?: number
+  useMockKeychain?: boolean
 }
 
 type StudioCdpKeyOptions = {
@@ -137,6 +139,7 @@ export class StudioCdp {
         '--disable-gpu',
         '--no-default-browser-check',
         '--no-first-run',
+        ...(options.useMockKeychain ? ['--use-mock-keychain'] : []),
         'about:blank',
       ],
       onOutput(stream, chunk) {
@@ -145,7 +148,7 @@ export class StudioCdp {
       stdio: 'pipe',
     })
     try {
-      const port = await waitForActivePort(userDataRoot, command, startupOutput)
+      const port = await waitForActivePort(userDataRoot, command, startupOutput, options.startupTimeoutMs)
       const target = await waitForTarget(`http://127.0.0.1:${port}`)
       const client = await CdpClient.connect(requireWebSocketUrl(target))
       const studio = new StudioCdp(client, async () => {
@@ -1161,6 +1164,7 @@ async function waitForActivePort(
   userDataRoot: string,
   command: CLI.StartedCommand,
   startupOutput: readonly string[] = [],
+  timeoutMs = 20_000,
 ): Promise<number> {
   const path = FS.resolvePath('DevToolsActivePort', userDataRoot)
   const port = await Time.pollUntil(async () => {
@@ -1181,11 +1185,14 @@ async function waitForActivePort(
       )
     }
     return undefined
-  }, { intervalMs: 100, timeoutMs: 20_000 })
+  }, { intervalMs: 100, timeoutMs })
   if (port !== undefined) {
     return port
   }
-  Errors.throwHostEnvironment('Timed out waiting for Chrome DevToolsActivePort.')
+  const diagnostic = startupOutput.join('').trim().slice(-4_000)
+  Errors.throwHostEnvironment(
+    `Timed out waiting for Chrome DevToolsActivePort.${diagnostic === '' ? '' : `\n${diagnostic}`}`,
+  )
 }
 
 async function waitForTarget(baseUrl: string, urlPrefix?: string): Promise<ChromeTarget> {

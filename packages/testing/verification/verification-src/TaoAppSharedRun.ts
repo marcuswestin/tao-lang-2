@@ -19,7 +19,12 @@ function attach(states: readonly TestNodeState[], logRoot: string, repositoryRoo
     name: prepareName,
     needs: [...new Set(shards.flatMap(shard => shard.node.needs ?? []))],
     priority: Math.max(0, ...shards.map(shard => shard.node.priority ?? 0)),
-    run: { args: ['test', '--shared-prepare', handoff, ...roots], command: './tao', cwd: repositoryRoot },
+    run: {
+      args: ['test', '--shared-prepare', handoff, ...roots],
+      command: './tao',
+      cwd: repositoryRoot,
+      env: testHomeEnv(repositoryRoot),
+    },
     timeoutMs: 900_000,
   })
 
@@ -36,10 +41,20 @@ function attach(states: readonly TestNodeState[], logRoot: string, repositoryRoo
     cost: 1,
     name: finalizeName,
     needs: shards.map(shard => shard.name),
-    run: { args: ['test', '--shared-finalize', handoff], command: './tao', cwd: repositoryRoot },
+    run: {
+      args: ['test', '--shared-finalize', handoff],
+      command: './tao',
+      cwd: repositoryRoot,
+      env: testHomeEnv(repositoryRoot),
+    },
     timeoutMs: 300_000,
   })
   return [...states, prepare, finalize]
 }
 
-export const TaoAppSharedRun = { attach }
+/** All processes of one shared run must resolve the same disposable Tao cache root. */
+function testHomeEnv(repositoryRoot: string): Record<string, string> {
+  return { TAO_HOME: FS.resolvePath('.artifacts/testing/tao-home', repositoryRoot) }
+}
+
+export const TaoAppSharedRun = { attach, testHomeEnv }

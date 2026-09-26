@@ -207,7 +207,7 @@ function formatSpawnError(command: string, error: Error): string {
   const code = (error as NodeJS.ErrnoException).code
   const hint = code === 'ENOENT'
     ? ` '${command}' was not found on PATH — the devenv profile may not be active; run `
-      + `'direnv allow && direnv exec . ./agent setup'.`
+      + `'./enter-tao-dev-env'.`
     : ''
   return `spawn error: ${error.message}${hint}\n`
 }

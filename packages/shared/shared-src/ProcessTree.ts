@@ -65,7 +65,8 @@ function ffi(): BunFfi {
  * process group. Each PID carries its OS start identity so a later signal cannot hit a reused PID.
  */
 function descendantProcesses(rootPid: number): TrackedProcess[] {
-  if (process.platform === 'darwin') {
+  // Jest loads @shared on macOS, but its Node process cannot resolve bun:ffi.
+  if (process.platform === 'darwin' && Platform.runtimeBunVersion !== undefined) {
     return darwinDescendantProcesses(rootPid)
   }
   const byParent = new Map<number, TrackedProcess[]>()
@@ -251,14 +252,13 @@ function sameProcess(current: TrackedProcess | undefined, expected: TrackedProce
 
 /**
  * currentProcessIdentities answers for exactly the PIDs it was asked about; a PID that is gone is
- * absent from the result. Outside Darwin the only reading available is `ps`, whose `lstart` has
+ * absent from the result. Outside Bun on Darwin the reading is `ps`, whose `lstart` has
  * one-second granularity — enough to catch a PID the kernel handed on minutes later, not enough to
- * catch one reused inside the same second. Darwin's libproc start time is microsecond-precise and
- * needs no subprocess, which is why it is the primary path and the one every lane on this host
- * takes.
+ * catch one reused inside the same second. Bun on Darwin uses libproc's microsecond-precise start
+ * time without a subprocess; Node-based Jest cannot load bun:ffi and uses the process table.
  */
 function currentProcessIdentities(pids: readonly number[]): Map<number, TrackedProcess> {
-  if (process.platform !== 'darwin') {
+  if (process.platform !== 'darwin' || Platform.runtimeBunVersion === undefined) {
     // Filtered to the asked-about PIDs: the table is every process on the host, and handing the
     // whole of it back made callers that pair each entry with its expected identity look up
     // processes they never asked about and find nothing.

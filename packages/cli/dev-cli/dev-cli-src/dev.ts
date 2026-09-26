@@ -10,11 +10,13 @@ import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/Ru
 import { TestRunner } from '@verification/TestRunner'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
+import { devZshCompletion } from './completion/DevCompletion'
 import { readAgentCapabilities, unavailableLandingCapabilities } from './doctor/AgentCapabilities'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
+import { MergeRecovery } from './git/MergeRecovery'
 import { OpenPrCommand } from './pr/OpenPrCommand'
 
 /*
@@ -83,6 +85,18 @@ async function runReleaseAction(action: () => Promise<void>): Promise<void> {
 /** Repository development CLI behind `./dev`: package tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
   commands.name('dev')
+
+  commands
+    .command('completion')
+    .description('Print completion generated from the registered dev commands.')
+    .argument('<shell>', 'zsh')
+    .action((shell: string) => {
+      if (shell !== 'zsh') {
+        HCI.writeErrorLine(`Unsupported completion shell: ${shell}. Use zsh.`)
+        Platform.runtimeProcess.exit(2)
+      }
+      HCI.write(devZshCompletion(commands))
+    })
 
   commands
     .command('test-host')
@@ -426,6 +440,21 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('merge-recover')
+    .description('Abort an in-progress merge, or explicitly reset a partial merge to ORIG_HEAD on the host.')
+    .option('--reset-to <sha>', 'Full pre-merge commit SHA; required when Git left no MERGE_HEAD.')
+    .option('--hard', 'Discard tracked worktree changes if git reset --merge cannot recover them.')
+    .action(async (options: { hard?: boolean; resetTo?: string } = {}) => {
+      try {
+        await MergeRecovery.run(options)
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('start-branch')
     .description('Start a new feat/* branch at fetched origin/main after checking every checkout write.')
     .argument('<name>', 'Full feat/* branch name.')
@@ -441,7 +470,7 @@ await runWithCommands(commands => {
 
   commands
     .command('capabilities')
-    .description('Report which host capabilities this agent environment can use without changing anything.')
+    .description('Report host capabilities.')
     .option('--json', 'Print a versioned structured report.')
     .action(async (options: { json?: boolean } = {}) => {
       Platform.runtimeProcess.exit(await AgentCapabilitiesCommand.run({ json: options.json === true }))

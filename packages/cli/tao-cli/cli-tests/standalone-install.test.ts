@@ -9,19 +9,22 @@ const INSTALL_SCRIPT = Repo.resolvePath('packages/cli/tao-cli/cli-src/standalone
 const STAND_IN = '#!/bin/sh\n[ "$1" = --version ] && [ "$(pwd)" = / ] && [ -z "${TAO_VERSION:-}" ] && echo 0.4.0\n'
 
 Describe('standalone install script', () => {
-  Test('installs the release under the Tao home and links it into a user bin directory on PATH', async () => {
+  Test('installs and links the release inside the Tao home only', async () => {
     await withRelease(async ({ home, install }) => {
-      const userBin = FS.resolvePath('.local/bin', home)
+      const userBin = FS.resolvePath('.tao/bin', home)
       await FS.mkdir(userBin)
 
       const result = await install({ PATH: `${userBin}:/usr/bin:/bin` })
 
       Expect(result.exitCode).toBe(0)
       Expect(result.stdout).toContain('Downloading Tao 0.4.0')
-      const installed = FS.resolvePath('.local/share/tao/versions/0.4.0/tao', home)
+      const installed = FS.resolvePath('.tao/versions/0.4.0/tao', home)
       Expect(await FS.isFile(installed)).toBe(true)
+      Expect(await FS.isSymbolicLink(installed)).toBe(false)
+      Expect(await FS.isSymbolicLink(FS.resolvePath('tao', userBin))).toBe(true)
       Expect(await FS.realPath(FS.resolvePath('tao', userBin))).toBe(await FS.realPath(installed))
       Expect(result.stdout).not.toContain('export PATH')
+      Expect(await FS.exists(FS.resolvePath('.local', home))).toBe(false)
     })
   })
 
@@ -30,7 +33,24 @@ Describe('standalone install script', () => {
       const result = await install({ PATH: '/usr/bin:/bin' })
 
       Expect(result.exitCode).toBe(0)
-      Expect(result.stdout).toContain(`export PATH="${FS.resolvePath('.local/share/tao/bin', home)}:$PATH"`)
+      Expect(result.stdout).toContain(`export PATH="${FS.resolvePath('.tao/bin', home)}:$PATH"`)
+    })
+  })
+
+  Test('links through the first writable user-owned directory already on PATH', async () => {
+    await withRelease(async ({ home, install }) => {
+      const userBin = FS.resolvePath('bin', home)
+      await FS.mkdir(userBin)
+
+      const result = await install({ PATH: `${userBin}:/usr/bin:/bin` })
+
+      Expect(result.exitCode).toBe(0)
+      Expect(await FS.isSymbolicLink(FS.resolvePath('tao', userBin))).toBe(true)
+      Expect(await FS.realPath(FS.resolvePath('tao', userBin)))
+        .toBe(await FS.realPath(FS.resolvePath('.tao/versions/0.4.0/tao', home)))
+      Expect(await FS.isSymbolicLink(FS.resolvePath('.tao/bin/tao', home))).toBe(true)
+      Expect(result.stdout).toContain(`Linked tao in ${userBin}`)
+      Expect(result.stdout).not.toContain('export PATH')
     })
   })
 
@@ -44,13 +64,13 @@ Describe('standalone install script', () => {
     })
   })
 
-  Test('ignores relative XDG_DATA_HOME and installs under the default home', async () => {
+  Test('ignores XDG_DATA_HOME and installs under the single default home', async () => {
     await withRelease(async ({ home, install }) => {
-      const result = await install({ PATH: '/usr/bin:/bin', XDG_DATA_HOME: 'relative-data' })
+      const result = await install({ PATH: '/usr/bin:/bin', XDG_DATA_HOME: '/other-data' })
 
       Expect(result.exitCode).toBe(0)
-      Expect(await FS.isFile(FS.resolvePath('.local/share/tao/versions/0.4.0/tao', home))).toBe(true)
-      Expect(await FS.exists(FS.resolvePath('relative-data', home))).toBe(false)
+      Expect(await FS.isFile(FS.resolvePath('.tao/versions/0.4.0/tao', home))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('.local', home))).toBe(false)
     })
   })
 
@@ -61,7 +81,7 @@ Describe('standalone install script', () => {
 
       Expect(result.exitCode).toBe(0)
       Expect(await FS.isFile(FS.resolvePath('versions/0.4.0/tao', declared))).toBe(true)
-      Expect(await FS.exists(FS.resolvePath('.local/share/tao', home))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao', home))).toBe(false)
     })
   })
 
@@ -90,7 +110,7 @@ Describe('standalone install script', () => {
 
       Expect(result.exitCode).not.toBe(0)
       Expect(result.stderr).toContain('does not match its published checksum')
-      Expect(await FS.exists(FS.resolvePath('.local/share/tao/versions/0.4.0', home))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/versions/0.4.0', home))).toBe(false)
     })
   })
 
@@ -174,7 +194,13 @@ async function withRelease(run: (release: Release) => Promise<void>): Promise<vo
         CLI.run('/bin/sh', {
           args: [INSTALL_SCRIPT],
           cwd: home,
-          env: { HOME: home, TAO_RELEASES: `file://${releases}`, TAO_RELEASE_INDEX_URL: `file://${listing}`, ...env },
+          env: {
+            HOME: home,
+            TAO_HOME: '',
+            TAO_RELEASES: `file://${releases}`,
+            TAO_RELEASE_INDEX_URL: `file://${listing}`,
+            ...env,
+          },
         }),
     })
   } finally {

@@ -24,6 +24,7 @@ export type TestProcess = {
   args: readonly string[]
   command: string
   cwd?: string
+  env?: Record<string, string>
   /** Repository-relative files this process executes. */
   files: readonly string[]
   testReport?: NativeTestReport
@@ -187,7 +188,12 @@ function nodeState(
     priority: tuning.priority,
     run: ({ slots }) => {
       const admitted = suite.buildProcess(name, files, slots)
-      return { args: [...admitted.args], command: admitted.command, cwd: admitted.cwd }
+      return {
+        args: [...admitted.args],
+        command: admitted.command,
+        cwd: admitted.cwd,
+        ...(admitted.env === undefined ? {} : { env: admitted.env }),
+      }
     },
     // One process that cannot be split is a floor on the whole run; the scheduler packs around it.
     serial: tuning.serial ?? (shardCount === 1 && cost === undefined),

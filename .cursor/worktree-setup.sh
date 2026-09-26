@@ -7,4 +7,4 @@
 # worktrees.json is plain JSON with no room for comments, which is why this script exists.
 set -e
 cd "${0:A:h}/.."
-exec ./agent setup
+exec devenv shell --no-tui ./agent setup
