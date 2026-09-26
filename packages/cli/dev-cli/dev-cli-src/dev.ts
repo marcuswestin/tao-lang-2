@@ -548,6 +548,22 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('setup-ios')
+    .description('Inspect or install a requested side-by-side Xcode and iOS Simulator runtime.')
+    .requiredOption('--xcode-version <version>', 'The explicit Xcode version to use, such as 27.1.')
+    .requiredOption('--runtime-version <version>', 'The explicit iOS Simulator runtime version, such as 27.1.')
+    .option(
+      '--archive <path>',
+      'An Apple-downloaded Xcode .xip archive to install when the requested version is missing.',
+    )
+    .option('--apply', 'Apply the printed installation plan; otherwise only inspect and report requirements.')
+    .option('--json', 'Print the structured setup report.')
+    .action(async (options) => {
+      const { IosSetupCommand } = await import('./ios-setup/IosSetupCommand')
+      Platform.runtimeProcess.exit(await IosSetupCommand.run(options))
+    })
+
+  commands
     .command('board')
     .description(
       'Show every worktree, the machine-wide lane and lease registry, and whether this machine is busy, without changing anything.',

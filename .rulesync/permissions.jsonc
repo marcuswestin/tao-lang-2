@@ -106,7 +106,7 @@
     "app-dev", "studio", "studio-native", "studio-ps", "studio-stop",
     "docker-desktop start",
     "local-instantdb start", "local-instantdb stop",
-    "companion-host-build",
+    "companion-host-build", "setup-ios",
     "standalone-cli-vm-setup", "standalone-cli-clean-machine",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators open-url", "simulators uninstall", "simulators open",

@@ -233,6 +233,13 @@ shared-companion decision.
 
 ### A8 — A managed toolchain and a requirements graph
 
+Repository iOS setup is the first bounded slice: `just setup-ios` / the named `setup-ios` host
+operation inspects explicit Xcode and simulator-runtime versions, supports a side-by-side local
+Xcode archive installation and Apple's runtime download/import, and hands off account, license,
+and administrator steps. The [developer workflow documentation](../../packages/cli/dev-cli/README.md#ios-simulator-setup)
+owns its commands and limits. Public CLI integration, a shared target requirements graph, Android
+installation, and complete clean-machine acceptance remain open.
+
 A build should never fail with a Gradle stack trace on a machine that was missing a JDK. Each target
 (web, iOS simulator, iOS device, Android emulator, Android device, ship) declares its requirements,
 each requirement knows how to detect, install, and verify itself, and the CLI shows one plan with
@@ -240,9 +247,9 @@ sizes and licenses before it downloads anything.
 
 - Shape: installs under a Tao-owned directory without administrator rights wherever possible — the
   Android command-line tools, SDK packages, emulator, system images, and a JDK are fully
-  automatable on every OS; Xcode is a guided walkthrough (App Store or Apple download, license
-  acceptance, `xcodebuild -runFirstLaunch`, simulator runtime download) because it cannot be
-  automated; every download is pinned per Tao version and checksum-verified; `tao doctor` reports
+  automatable on every OS; Xcode combines archive installation and simulator runtime downloads
+  with guided Apple account, license, and administrator steps; every download is pinned per Tao
+  version and checksum-verified; `tao doctor` reports
   the same graph without installing.
 - Context: `packages/cli/dev-cli` doctor, `packages/cli/tao-cli/cli-src/ship-*`, the environment discussion this
   roadmap came out of.

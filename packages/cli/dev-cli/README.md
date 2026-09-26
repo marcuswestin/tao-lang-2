@@ -1,4 +1,4 @@
-# Repository lanes
+# Repository development workflows
 
 How `check`, `verify`, `verify-full`, and `./agent test` behave when several worktrees of this
 repository are working at once. `packages/testing/verification` owns the scheduler and the gate
@@ -8,6 +8,43 @@ operational half — what is shared, what is not, and how a lane reports a failu
 Several agents and people work in linked worktrees beside the primary checkout (`<checkout>.worktrees/`),
 under `~/.codex/worktrees/`, in older ones still under `.claude/worktrees/`, and elsewhere. Every one of them is a full checkout with its own `node_modules`, its own `_gen_*`
 trees, and its own `.artifacts/`. What they cannot have their own copy of is the machine.
+
+## iOS Simulator setup
+
+`setup-ios` is an explicit host setup workflow. Ordinary `./agent setup` continues to install
+repository dependencies and generate adapters; starting a session does not download Xcode or install
+Apple system components. From the repository root, inspect a requested pair of versions:
+
+```sh
+./agent unsandboxed setup-ios --xcode-version 27.1 --runtime-version 27.1
+```
+
+The human menu exposes the same implementation as `just setup-ios`. The report inventories the
+host, searches for a matching Xcode, checks first-launch readiness, the simulator SDK, the requested
+runtime, and CoreSimulator. `--json` provides the structured report. Missing prerequisites remain
+visible instead of being inferred from a successful download.
+
+Add `--apply` to perform the installation steps. When Xcode is missing, download the requested
+version from [Apple Developer Downloads](https://developer.apple.com/download/applications/), then
+pass its local `.xip` path with `--archive`. The workflow uses Apple's archive/signature validation,
+extracts under `.artifacts/ios-setup`, copies into a unique staging directory under `/Applications`,
+and publishes the validated application alongside the existing installation. It refuses to replace
+an occupied destination. Apple sign-in, license acceptance, and administrator steps remain
+explicit handoffs; it does not accept licenses or run `sudo` automatically.
+
+The selected Xcode applies through each child process's `DEVELOPER_DIR`. Neither the system's
+`xcode-select` setting nor shell startup files change. This separates the application bundles,
+but first-launch components and simulator runtimes use shared Apple services. Read the reported
+effects before applying, and recheck service health after installation. The workflow records its
+artifacts and remaining steps so the same request can resume after a download or manual setup.
+Interrupted attempts retain their staging directories for inspection; receipts identify their
+cleanup conditions. A retry uses fresh staging rather than trusting a partial copy or runtime export.
+
+This first slice sets up a simulator toolchain. Use `companion-host-build --platform ios-simulator`
+to build Tao's native host afterward, with `DEVELOPER_DIR` set to the selected Xcode's
+`Contents/Developer` directory for that command. Signing, provisioning, and release distribution
+remain separate workflows. A ready toolchain does not prove an app rendered or that its layout
+works on a particular simulator.
 
 ## What a lane takes
 

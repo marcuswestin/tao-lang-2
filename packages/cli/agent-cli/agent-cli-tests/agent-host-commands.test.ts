@@ -36,6 +36,7 @@ const expected = [
   'local-instantdb start',
   'local-instantdb stop',
   'companion-host-build',
+  'setup-ios',
   'standalone-cli-vm-setup',
   'standalone-cli-clean-machine',
   'simulators list',
@@ -124,6 +125,7 @@ Describe('agent host command permissions', () => {
       fixedArgs: ['simctl', 'list', 'devices'],
     })
     Expect(hostCommandTarget(['start-branch'])).toEqual({ command: './dev', fixedArgs: ['start-branch'] })
+    Expect(hostCommandTarget(['setup-ios'])).toEqual({ command: './dev', fixedArgs: ['setup-ios'] })
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 42] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun simctl list devices'] })).toThrow()

@@ -102,6 +102,7 @@ Examples:
   ./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
   ./agent unsandboxed prepare-release ide-extension
   ./agent unsandboxed capabilities
+  ./agent unsandboxed setup-ios --xcode-version 27.1 --runtime-version 27.1
   ./agent unsandboxed land --dry-run
   ./agent unsandboxed merge-main
   ./agent unsandboxed merge-recover

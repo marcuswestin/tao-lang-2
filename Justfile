@@ -112,6 +112,11 @@ studio-companion-simulator simulator="":
 companion-host-build *ARGS:
     ./dev companion-host-build {{ ARGS }}
 
+# Inspect or install a requested side-by-side Xcode and iOS runtime; --apply installs, agents use the named host operation
+[group('Setup')]
+setup-ios *ARGS:
+    ./dev setup-ios {{ ARGS }}
+
 # Publish the built Companion hosts to their GitHub release, where tao dev downloads them; needs gh
 [group('Run')]
 companion-host-publish:
