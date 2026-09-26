@@ -4,10 +4,10 @@
 - **Section:** Deferred
 - **Area:** Agent workflow; cloud development environment
 - **Impact:** A cloud agent container without zsh or the pinned Nix/devenv profile cannot start the repository's `./agent` workflow, so it cannot set up, test, or verify a checkout.
-- **Evidence:** On 2026-09-25, a cloud execution reported that `./agent` required zsh and a Nix/devenv profile, neither of which was present in its container. The interactive local shell has landed. The 2026-09-26 continuation on `feat/cloud-contributor-continuation` provisioned Ubuntu successfully, then reproduced a QEMU-reported segmentation fault during pinned Nix installation in two fresh amd64 containers. Linux setup, repository verification, and hosted runs remain unproved; see the run evidence below.
+- **Evidence:** On 2026-09-25, a cloud execution reported that `./agent` required zsh and a Nix/devenv profile, neither of which was present in its container. The 2026-09-26 continuation on `feat/cloud-contributor-continuation` now passes Ubuntu cold and cached bootstrap, repeat setup, parser tests, and source checks with an explicitly approved process-local QEMU compatibility mode. Full Linux verification still fails on the earlier tested commit; narrow portability repairs are committed, but updated-source Linux and actual hosted proof remain outstanding. See per-phase evidence below.
 - **Workaround:** Run the workflow on a prepared local Mac until a cloud environment is supported.
-- **Proposed change:** After the standalone developer-shell branch lands, provide a portable cloud bootstrap or a declared cloud image with the pinned tools. Make `./agent` discover and use that environment without assuming zsh or a preexisting local Nix/devenv profile. Keep local and cloud tool versions aligned and report missing host-only capabilities explicitly. Cover every supported cloud harness, including the editor-based cloud workflow.
-- **Dependencies:** The standalone developer-shell work has landed. Complete this task before closing the broader standalone development effort. The Linux Nix 2.35.2 bootstrap dependency is approved and its archive checksum is pinned from the official installer. Host access and the initial download policy now have successful evidence. Further acceptance needs an amd64 execution environment that can run the pinned Nix installer; no host configuration or dependency-version change is authorized by this finding.
+- **Proposed change:** Complete committed-source Linux acceptance of the implemented portable bootstrap and shared pinned tools, then verify actual hosted setup and caching for every supported harness. Preserve noninteractive setup without preinstalled zsh, shared local/cloud versions, explicit host-only capability boundaries, and owned resource cleanup.
+- **Dependencies:** The standalone developer-shell work has landed. Complete this task before closing the broader standalone development effort. Nix 2.35.2 remains checksum-pinned; the existing task inventory's Python runtime is approved from locked nixpkgs without a pin change. Host access, initial downloads, and process-local QEMU bootstrap compatibility have successful evidence. Native ARM is a separate control for translation cost, not amd64 acceptance. Rosetta, global configuration, and further dependency/version changes remain outside this authorization.
 - **Acceptance:** Reproduce contributor setup locally in an isolated Ubuntu environment, then prove the workflow in an actual fresh cloud session for each supported harness. Bootstrap a checkout without preinstalled zsh or a Nix/devenv profile; run `./agent help`, `./agent setup`, a focused test, and the portable check/test/verify lanes. Record per-harness evidence and explicitly identify unavailable macOS-only lanes. Local success alone does not close the task.
 - **Source:** Developer request, 2026-09-25.
 
@@ -265,6 +265,18 @@ that executable explicitly. Rewriting or skipping the inventory would affect rec
 and is not a bootstrap workaround. Other observed
 journey and suite timeouts remain unresolved; neither machine contention nor instruction
 translation has yet been isolated as their cause.
+
+The dependency review also exposed a macOS-only default task-store lookup. On Linux it could
+report an installed editor's task index as absent, allowing an otherwise idle worktree to appear
+reclaimable. The lookup now uses each supported OS's default directory and honors Linux's
+absolute configuration-directory override; malformed, inaccessible, or incomplete installed
+state remains unavailable. A real SQLite fixture with an attached Linux task prevents both
+reclaim classification and stale removal; deliberately restoring the wrong OS path fails that
+safety assertion. This covers default profiles only, not arbitrary custom data directories.
+The [editor's storage guidance](https://forum.cursor.com/t/agents-panel-right-sidebar-lost-session-list-no-way-to-restore/153481/4),
+[Electron app-data contract](https://www.electronjs.org/docs/latest/api/app#appgetpathname), and
+[XDG directory specification](https://specifications.freedesktop.org/basedir/latest/) document
+the relevant defaults and override rules. Tests use owned fixture databases, never live indexes.
 
 The first cold test-all completed with failures after 2,526 seconds, including its existing
 contention retries; verification then began in the same guest. This still tests `1c7e6279`,
