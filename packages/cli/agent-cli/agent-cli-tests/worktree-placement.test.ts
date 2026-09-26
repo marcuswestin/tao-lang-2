@@ -1,5 +1,5 @@
 import { CLI, FS, Platform, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import { createWorktree, removeWorktree, siblingWorktreeRoot } from '../agent-cli-src/agent-hooks/WorktreePlacement'
 
 const GIT_IDENTITY = ['-c', 'user.name=Test', '-c', 'user.email=test@example.com']
@@ -10,18 +10,10 @@ async function git(cwd: string, ...args: string[]): Promise<CLI.CommandResult> {
 
 /** withCheckout runs `body` against a fresh repository with one commit, in a directory of its own. */
 async function withCheckout(body: (primary: string, parent: string) => Promise<void>): Promise<void> {
-  const parent = await mkTestDir('tao-worktree-placement-')
+  const parent = await mkGitTestDir('tao-worktree-placement-')
   const primary = FS.resolvePath('repo', parent)
-  try {
-    await FS.mkdir(primary)
-    await git(primary, 'init', '-q', '-b', 'main')
-    await FS.writeText(FS.resolvePath('README.md', primary), 'fixture\n')
-    await git(primary, 'add', 'README.md')
-    await git(primary, 'commit', '-q', '-m', 'fixture')
-    await body(primary, parent)
-  } finally {
-    await FS.remove(parent)
-  }
+  await initGitTestRepository(primary, { commit: { files: { 'README.md': 'fixture\n' }, message: 'fixture' } })
+  await body(primary, parent)
 }
 
 async function branchOf(worktree: string): Promise<string> {

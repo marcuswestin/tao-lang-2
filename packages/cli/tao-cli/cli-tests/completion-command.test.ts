@@ -116,7 +116,8 @@ async function withShellHome(
   overrides: ShellHomeOverrides,
   testFunction: (homeDir: string) => Promise<void>,
 ): Promise<void> {
-  const homeDir = await mkTestDir('tao-completion-test')
+  // Host temp: the agent sandbox refuses shell startup files such as `.zshrc` inside a checkout.
+  const homeDir = await mkTestDir('tao-completion-test', { location: 'host' })
   const env = Platform.runtimeProcess.env
   const original = {
     HOME: env['HOME'],

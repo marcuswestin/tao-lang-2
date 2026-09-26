@@ -1,5 +1,5 @@
 import { CLI, Errors, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import {
   DeveloperBranchCommand,
   type DeveloperWorkflowDependencies,
@@ -257,56 +257,52 @@ Describe('developer workflow', () => {
   })
 
   Test('syncs and branches in a disposable real repository', async () => {
-    const root = await FS.realPath(await mkTestDir('tao-developer-workflow-'))
+    const root = await mkGitTestDir('tao-developer-workflow-')
     const remoteRoot = FS.resolvePath('remote.git', root)
     const checkout = FS.resolvePath('checkout', root)
     const mirror = FS.resolvePath('mirror', root)
-    try {
-      await git(root, ['init', '--bare', remoteRoot])
-      await git(root, ['clone', remoteRoot, checkout])
-      await git(checkout, ['config', 'user.name', 'Mira Example'])
-      await git(checkout, ['config', 'user.email', 'mira@example.test'])
-      await FS.writeText(FS.resolvePath('base.txt', checkout), 'base\n')
-      await git(checkout, ['add', 'base.txt'])
-      await git(checkout, ['commit', '-m', 'Base'])
-      await git(checkout, ['branch', '-M', 'main'])
-      await git(checkout, ['push', '-u', 'origin', 'main'])
-      await git(checkout, ['worktree', 'add', '--detach', mirror, 'main'])
-      // Another landing moved main on the remote while this checkout was on its own branch.
-      const clone = FS.resolvePath('lander', root)
-      await git(root, ['clone', remoteRoot, clone])
-      await git(clone, ['config', 'user.name', 'Other Agent'])
-      await git(clone, ['config', 'user.email', 'other@example.test'])
-      await FS.writeText(FS.resolvePath('landed.txt', clone), 'landed\n')
-      await git(clone, ['add', 'landed.txt'])
-      await git(clone, ['commit', '-m', 'Landed elsewhere'])
-      await git(clone, ['push', 'origin', 'HEAD:main'])
+    await initGitTestRepository(remoteRoot, { bare: true })
+    await git(root, ['clone', remoteRoot, checkout])
+    await git(checkout, ['config', 'user.name', 'Mira Example'])
+    await git(checkout, ['config', 'user.email', 'mira@example.test'])
+    await FS.writeText(FS.resolvePath('base.txt', checkout), 'base\n')
+    await git(checkout, ['add', 'base.txt'])
+    await git(checkout, ['commit', '-m', 'Base'])
+    await git(checkout, ['branch', '-M', 'main'])
+    await git(checkout, ['push', '-u', 'origin', 'main'])
+    await git(checkout, ['worktree', 'add', '--detach', mirror, 'main'])
+    // Another landing moved main on the remote while this checkout was on its own branch.
+    const clone = FS.resolvePath('lander', root)
+    await git(root, ['clone', remoteRoot, clone])
+    await git(clone, ['config', 'user.name', 'Other Agent'])
+    await git(clone, ['config', 'user.email', 'other@example.test'])
+    await FS.writeText(FS.resolvePath('landed.txt', clone), 'landed\n')
+    await git(clone, ['add', 'landed.txt'])
+    await git(clone, ['commit', '-m', 'Landed elsewhere'])
+    await git(clone, ['push', 'origin', 'HEAD:main'])
 
-      const lines: string[] = []
-      const dependencies: DeveloperWorkflowDependencies = {
-        repositoryRoot: checkout,
-        run: async (command, spec) => await CLI.run(command, { ...spec, stdio: 'pipe' }),
-        writeLine: line => lines.push(line),
-      }
-      await DeveloperBranchCommand.run('', dependencies)
-      Expect((await gitResult(checkout, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout.trim()).toBe('dev/mira')
-
-      await FS.writeText(FS.resolvePath('mine.txt', checkout), 'mine\n')
-      await git(checkout, ['add', 'mine.txt'])
-      await git(checkout, ['commit', '-m', 'My work'])
-
-      const outcome = await SyncMainCommand.run(dependencies)
-      Expect(outcome.conflicted).toBe(false)
-      const mainHead = (await gitResult(checkout, ['rev-parse', 'refs/heads/main'])).stdout.trim()
-      Expect((await gitResult(checkout, ['rev-parse', 'refs/remotes/origin/main'])).stdout.trim()).toBe(mainHead)
-      // The mirror followed main, and the branch now contains both sides.
-      Expect((await gitResult(mirror, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(mainHead)
-      Expect(await FS.exists(FS.resolvePath('landed.txt', checkout))).toBe(true)
-      Expect(await FS.exists(FS.resolvePath('mine.txt', checkout))).toBe(true)
-      Expect((await gitResult(checkout, ['status', '--porcelain'])).stdout).toBe('')
-    } finally {
-      await FS.remove(root)
+    const lines: string[] = []
+    const dependencies: DeveloperWorkflowDependencies = {
+      repositoryRoot: checkout,
+      run: async (command, spec) => await CLI.run(command, { ...spec, stdio: 'pipe' }),
+      writeLine: line => lines.push(line),
     }
+    await DeveloperBranchCommand.run('', dependencies)
+    Expect((await gitResult(checkout, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout.trim()).toBe('dev/mira')
+
+    await FS.writeText(FS.resolvePath('mine.txt', checkout), 'mine\n')
+    await git(checkout, ['add', 'mine.txt'])
+    await git(checkout, ['commit', '-m', 'My work'])
+
+    const outcome = await SyncMainCommand.run(dependencies)
+    Expect(outcome.conflicted).toBe(false)
+    const mainHead = (await gitResult(checkout, ['rev-parse', 'refs/heads/main'])).stdout.trim()
+    Expect((await gitResult(checkout, ['rev-parse', 'refs/remotes/origin/main'])).stdout.trim()).toBe(mainHead)
+    // The mirror followed main, and the branch now contains both sides.
+    Expect((await gitResult(mirror, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(mainHead)
+    Expect(await FS.exists(FS.resolvePath('landed.txt', checkout))).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('mine.txt', checkout))).toBe(true)
+    Expect((await gitResult(checkout, ['status', '--porcelain'])).stdout).toBe('')
   })
 })
 

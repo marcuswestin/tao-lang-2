@@ -1,6 +1,5 @@
-import { CLI } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { checkedProjectFile, runTaoCliForTest, withTaoFixture } from './test-cli-files'
+import { checkedProjectFile, runTaoCliForTest, withGitTaoFixture, withTaoFixture } from './test-cli-files'
 
 Describe('tao semantic commands', () => {
   Test(
@@ -105,7 +104,7 @@ Describe('tao semantic commands', () => {
   })
 
   Test('ignores stale Git-ignored Tao sources and behavior tests just as Studio discovery does', async () => {
-    await withTaoFixture({
+    await withGitTaoFixture({
       ...checkedProjectFile,
       '.gitignore': 'stale/\n',
       'App.tao': `
@@ -130,8 +129,6 @@ Describe('tao semantic commands', () => {
       'stale/Old.tao': 'app Stale { view Old }\nview Old() { do Unused() }\n',
       'stale/Old.test.tao': 'suite Old { test "shows stale welcome" { expect text "Welcome" } }\n',
     }, async root => {
-      await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: root })
-
       const facts = JSON.parse((await runTaoCliForTest(['facts', root, 'App.tao', 'Demo'])).stdout) as {
         facts: Array<{ kind: string; subject: string }>
       }

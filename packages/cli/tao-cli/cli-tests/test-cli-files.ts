@@ -1,5 +1,5 @@
 import { FS, Platform, Text } from '@shared'
-import { withTaoFiles } from '@shared/test'
+import { initGitTestRepository, mkGitTestDir, withTaoFiles } from '@shared/test'
 import { Writable } from 'node:stream'
 import type { InPlace } from '../cli-src/in-place-files'
 import { runTaoCli } from '../cli-src/tao-cli'
@@ -98,6 +98,25 @@ export async function withTaoFixture(
       location: 'host',
       verbatim: true,
     })
+  })
+}
+
+/**
+ * withGitTaoFixture is `withTaoFixture` for a test that needs its fixture to be its own Git
+ * repository. The root sits in the OS temporary directory, outside every checkout, and a failing
+ * test keeps it for debugging.
+ */
+export async function withGitTaoFixture(
+  files: Record<string, string>,
+  testsFunction: (rootDir: string) => Promise<void>,
+): Promise<void> {
+  await withoutInheritedNoCache(async () => {
+    const rootDir = await mkGitTestDir('tao-cli-git-test-')
+    await initGitTestRepository(rootDir)
+    for (const [relativePath, source] of Object.entries(files)) {
+      await FS.writeText(FS.resolvePath(relativePath, rootDir), source)
+    }
+    await testsFunction(rootDir)
   })
 }
 
