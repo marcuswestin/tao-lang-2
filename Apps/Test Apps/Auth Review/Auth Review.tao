@@ -5,7 +5,7 @@ use TestAuth from @tao/auth/testing
 use Memory from @tao/data/providers/memory
 use Reference from @tao/data/providers/reference
 use StackNav from @tao/nav
-use Col, FormButton, Text, TextInput from @tao/ui
+use Col, FormButton, Text, TextInput, TextMultiline from @tao/ui
 
 app AuthReview {
    Name "Auth Review"
@@ -120,7 +120,7 @@ view Login() {
          on press PresentLogin
       }
       if PresentedProblem is not empty {
-         Text(PresentedProblem)
+         TextMultiline(PresentedProblem)
       }
 
       #toggleSignIn
@@ -143,7 +143,7 @@ view Login() {
                }
 
                #password
-               TextInput(Value: Flow.Password, Label: "Password") {
+               TextInput(Value: Flow.Password, Label: "Password", Secure: true) {
                   on submit -> { do Flow.Submit() }
                }
 
@@ -159,7 +159,7 @@ view Login() {
                      do Flow.Submit()
                }  }
                if Flow.Problem is not empty {
-                  Text(Flow.Problem)
+                  TextMultiline(Flow.Problem)
                }
 
                #cancelSignIn
@@ -198,7 +198,7 @@ view CodeLogin(Flow LoginFlow, Supplied boolean) {
                   on press -> { do Flow.Verify() }
             }  }
             if Flow.Problem is not empty {
-               Text(Flow.Problem)
+               TextMultiline(Flow.Problem)
             }
             if Flow.Step == "Cancelled" {
                Text("Sign in cancelled")

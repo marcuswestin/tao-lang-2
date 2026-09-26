@@ -399,6 +399,10 @@ request has no Origin header; any present claim must still match the configured 
 Browser requests, including null or empty Origin headers, retain the strict policy. This trusts a
 verified bearer session and does not attest a physical device. `just clerk-review` prepares a
 development gateway and local InstantDB behind Studio for manual Companion review.
+The authored iPhone scenario has mounted on a connected phone. Manual review exposed an unmasked
+custom password input and truncated failure text; secure input and wrapped messages address those.
+Known Clerk configuration errors now have fixed messages distinct from rejected credentials; the
+reported phone sign-in failure still requires a fresh attempt to identify its underlying cause.
 Advanced recovery, OAuth, MFA/passkeys,
 linking, deletion and production gateway deployment are not part of this initial implementation.
 
