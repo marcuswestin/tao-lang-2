@@ -16,7 +16,7 @@ Root `AGENTS.md` owns the hard constraints on branches and the Git index; the wa
 
 - Read `git worktree list` before any operation that moves a ref. A branch checked out elsewhere is not yours to move, and never write to another worktree's files, index, or branch.
 - In a linked worktree, `./agent` reuses the primary checkout's pinned devenv profile (run
-  `direnv allow && direnv exec . ./agent setup` only when it reports no shared profile), and remove a
+  `./enter-tao-dev-env` in that worktree when it reports no shared profile), and remove a
   worktree you created once its branch is merged or abandoned.
 - Git operations that replace protected paths can half-succeed inside the sandbox: HEAD and most
   files move, but protected paths stay dirty. To bring `main` into a feature branch, run

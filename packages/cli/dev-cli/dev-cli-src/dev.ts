@@ -1,5 +1,5 @@
 import { runWithCommands } from '@cli-kit/RunWithCommands'
-import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
 import { FinalizeCommand, LandCommand, MergeMainCommand, StartBranchCommand } from '@verification/Finalize'
 import { runGates } from '@verification/GateRunner'
@@ -472,73 +472,7 @@ await runWithCommands(commands => {
     .command('capabilities')
     .description('Report which host capabilities this agent environment can use without changing anything.')
     .option('--json', 'Print a versioned structured report.')
-    // Temporary bridge approved for this task: remove before landing this branch.
-    .option('--temporary-clean-machine', 'Run the clean-machine VM gate through this host operation temporarily.')
-    .option('--temporary-vm-diagnose', 'Inspect Tart VM and host bridge state for this task temporarily.')
-    .option('--temporary-browser-host', 'Run the compiled standalone browser journey on this host temporarily.')
-    .option('--temporary-browser-diagnose', 'Inspect the host browser journey processes temporarily.')
-    .action(async (options: {
-      temporaryBrowserDiagnose?: boolean
-      json?: boolean
-      temporaryBrowserHost?: boolean
-      temporaryCleanMachine?: boolean
-      temporaryVmDiagnose?: boolean
-    } = {}) => {
-      if (options.temporaryCleanMachine === true) {
-        const result = await CLI.run('just', { args: ['standalone-cli-clean-machine'], stdio: 'inherit' })
-        Platform.runtimeProcess.exit(result.exitCode ?? 1)
-      }
-      if (options.temporaryVmDiagnose === true) {
-        for (
-          const [command, args] of [
-            ['tart', ['list']],
-            ['ifconfig', ['bridge100']],
-          ] as const
-        ) {
-          HCI.writeLine(`VM diagnostic: ${command} ${args.join(' ')}`)
-          await CLI.run(command, { args, stdio: 'inherit' })
-        }
-        Platform.runtimeProcess.exit(0)
-      }
-      if (options.temporaryBrowserHost === true) {
-        const root = Repo.getRoot()
-        const logs = FS.resolvePath('.artifacts/standalone-browser-host/logs', root)
-        const driver = FS.resolvePath('.artifacts/standalone-browser-host/browser-click', root)
-        await FS.mkdir(logs)
-        const portable = await CLI.mustRun('bash', {
-          args: ['packages/cli/tao-cli/cli-src/standalone-bun.sh'],
-          cwd: root,
-        })
-        const compiled = await CLI.run(portable.stdout.trim(), {
-          args: ['build', '--compile', 'packages/cli/tao-cli/cli-src/standalone-browser-click.ts', '--outfile', driver],
-          cwd: root,
-          stdio: 'inherit',
-        })
-        if (compiled.exitCode !== 0) {
-          Platform.runtimeProcess.exit(compiled.exitCode ?? 1)
-        }
-        const result = await CLI.run('just', {
-          args: ['standalone-cli-acceptance'],
-          cwd: root,
-          env: {
-            ...Platform.runtimeProcess.env,
-            TAO_ACCEPTANCE_BROWSER_DRIVER: driver,
-            TAO_ACCEPTANCE_LOG_DIR: logs,
-            TAO_STUDIO_CHROME_PATH: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-          },
-          stdio: 'inherit',
-        })
-        Platform.runtimeProcess.exit(result.exitCode ?? 1)
-      }
-      if (options.temporaryBrowserDiagnose === true) {
-        const result = await CLI.mustRun('ps', { args: ['-axo', 'pid=,ppid=,command='] })
-        for (const line of result.stdout.split('\n')) {
-          if (/standalone-browser|standalone-acceptance|tao dev|remote-debugging-port=0|expo start/u.test(line)) {
-            HCI.writeLine(line.slice(0, 350))
-          }
-        }
-        Platform.runtimeProcess.exit(0)
-      }
+    .action(async (options: { json?: boolean } = {}) => {
       Platform.runtimeProcess.exit(await AgentCapabilitiesCommand.run({ json: options.json === true }))
     })
 

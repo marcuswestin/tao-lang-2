@@ -1,5 +1,28 @@
 # Plan - Standalone Tao CLI
 
+## Intermediate landing boundary (2026-09-25)
+
+The standalone macOS CLI, installer, pinned toolchain, interactive developer shell, and clean-machine
+gate may land as an intermediate slice. This does not declare the broader contributor or native
+development program complete. Before that landing:
+
+- [ ] Run the current vanilla Tart gate with its mandatory filesystem audit and browser click;
+      inspect any unexpected writes before changing the allowlist, and retain its guest logs.
+- [x] Remove the task-only VM and browser routes from `./agent unsandboxed capabilities`, leaving
+      that command read-only; use the dedicated `standalone-cli-clean-machine` host operation for the gate.
+
+Follow-up work after this intermediate landing, before closing the standalone development effort:
+
+- [ ] Move the remaining human recipes into `./dev`, make `dev` available in the entered shell,
+      and retire `Justfile` after the replacement workflows are proven.
+- [ ] Update contributor, workflow, troubleshooting, and agent documentation for the final shell,
+      `./agent`, and `./dev` design in one pass. Until then, correct only documentation needed to keep
+      this intermediate landing truthful.
+
+The additional CLI guest harness, native toolchain setup, prepared VM images, Expo authentication
+decision, and cloud execution bootstrap remain separate follow-ups. Their current status is tracked
+in this plan and the developer-environment ledger as applicable.
+
 Implementation update (2026-09-22): the first `tao dev` slice now generates its Expo host in the
 selected project's `.tao/dev/runtime`, keeps Expo and dev-data state in that project, and uses a
 shared CLI/Studio owner with retained `.tao/sessions/` records. Bare `tao dev` opens no target.
@@ -940,14 +963,19 @@ above; where the two disagree, these are later and win.
     seconds, acceptance passed in 66 seconds, and the gate completed in 86 seconds. Its retained logs
     are under `.artifacts/standalone-vm/tao-acceptance-1790362625-11421/logs/`.
 
-    The opt-in `just standalone-cli-clean-machine-audit` runs the same acceptance
-    with metadata inventories of the guest's writable macOS Data volume before installation and
-    after the tests. It retains the temporary projects until the second snapshot, writes
+    The current `standalone-cli-clean-machine` gate always runs a compiled browser click driver
+    and metadata inventories of the guest's writable macOS Data volume before installation and
+    after the tests. The old `standalone-cli-clean-machine-audit` recipe currently reaches the
+    same gate. It retains the temporary projects until the second snapshot, writes
     `filesystem-before.json`, `filesystem-after.json`, `filesystem-diff.json`, and a bounded
     `filesystem-diff.txt` in that run's `logs/`, then deletes the VM as usual. The scanner does not
     enter other mounted volumes, records unreadable paths, and compares metadata rather than file
     contents; macOS background writes and files created and deleted between snapshots remain
-    limitations. This audit variant has not yet been run in a Tart guest. The SSH readiness loop now
+    limitations. The earlier vanilla-guest pass predates the mandatory audit and browser driver;
+    those additions still need one passing guest run. A later run from this task's managed shell
+    built the inputs and cloned the VM, but guest SSH remained unreachable with `No route to host`
+    through the 240-second deadline; its logs are under
+    `.artifacts/standalone-vm/tao-acceptance-1790376059-89012/logs/`. The SSH readiness loop
     requires two successful probes and retries a transient second failure within its boot deadline.
 
     **Tart host troubleshooting.** Tart's installer notes that macOS gives VM addresses a default

@@ -81,7 +81,7 @@ function tao_link_primary_devenv_profile() {
   return 1
 }
 
-# Activate only a pinned devenv profile; callers own any explicit direnv trust fallback.
+# Activate only a pinned devenv profile; callers use the shell entry script if none exists.
 function tao_activate_devenv_profile() {
   local worktree_dir="$1"
   local devenv_profile="$2"
