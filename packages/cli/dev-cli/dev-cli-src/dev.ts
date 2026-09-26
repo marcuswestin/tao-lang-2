@@ -605,6 +605,20 @@ await runWithCommands(commands => {
     .action(async () => Platform.runtimeProcess.exit(await ReclaimCommand.status()))
 
   commands
+    .command('setup-clerk')
+    .description('Guide Clerk development setup and save credentials in the encrypted repository store.')
+    .option('--instructions', 'Print setup steps without opening a browser or changing credentials.')
+    .action(async (options: { instructions?: boolean }) => {
+      const { runSetupClerk } = await import('./clerk/SetupClerkCommand')
+      try {
+        Platform.runtimeProcess.exit(await runSetupClerk(options))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('secrets')
     .description('Decrypt the repository secrets into .env.secrets, or add, list, or set up.')
     .argument('[action]', 'add <KEY> [note], list, or setup. Omit to decrypt everything.')

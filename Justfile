@@ -45,6 +45,11 @@ github-setup:
 secrets *ARGS:
     ./dev secrets {{ ARGS }}
 
+# Guide Clerk development setup and store its credentials encrypted; --instructions prints the steps
+[group('Setup')]
+setup-clerk *ARGS:
+    ./dev setup-clerk {{ ARGS }}
+
 # Launch the agent harness with the Bash sandbox off; switch a running session with /sandbox
 [group('Sessions')]
 session-unsandboxed *ARGS:
