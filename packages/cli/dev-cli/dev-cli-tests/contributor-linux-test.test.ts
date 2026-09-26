@@ -93,6 +93,8 @@ Describe('contributor Linux container runner', () => {
         ),
       ).toHaveLength(1)
       Expect(calls.some(call => /^(exec|start|stop|rm|build|commit) /u.test(call))).toBe(false)
+      Expect(calls.filter(call => call.startsWith('top '))).toHaveLength(1)
+      Expect(calls.filter(call => call.startsWith('stats --no-stream '))).toHaveLength(1)
       Expect(await FS.exists(fixture.container)).toBe(true)
       await FS.writeText(`${fixture.container}.labels`, 'foreign-owner another-run\n')
       Expect((await run(fixture, ['--inspect-run', id])).exitCode).toBe(0)
@@ -287,6 +289,36 @@ Describe('contributor Linux container runner', () => {
     })
   })
 
+  Test('tool cache ignores attestations but tracks ordered layers and complete runtime config', async () => {
+    await withFixture(async fixture => {
+      const contents = 'linux/amd64 ["sha256:one","sha256:two"] {"WorkingDir":"/workspace"}'
+      const runWith = (baseId: string, baseContents = contents) =>
+        run({
+          ...fixture,
+          env: { ...fixture.env, TAO_TEST_DOCKER_BASE_ID: baseId, TAO_TEST_DOCKER_BASE_CONTENTS: baseContents },
+        }, ['--mode', 'cached'])
+      Expect((await runWith('sha256:first-attestation')).exitCode).toBe(0)
+      const initial = await FS.readText(`${await latestOutput(fixture)}/cache-ownership.txt`)
+      Expect(await FS.readText(`${await latestOutput(fixture)}/base-cache-identity.txt`)).toBe(`${contents}\n`)
+      Expect((await runWith('sha256:second-attestation')).exitCode).toBe(0)
+      Expect(await FS.readText(`${await latestOutput(fixture)}/base-identity.txt`)).toContain('second-attestation')
+      Expect(await FS.readText(`${await latestOutput(fixture)}/cache-ownership.txt`)).toBe(initial)
+      for (
+        const changed of [
+          contents.replace('sha256:one', 'sha256:new'),
+          contents.replace('["sha256:one","sha256:two"]', '["sha256:two","sha256:one"]'),
+          contents.replace('/workspace', '/another'),
+        ]
+      ) {
+        Expect((await runWith('sha256:second-attestation', changed)).exitCode).toBe(0)
+        Expect(await FS.readText(`${await latestOutput(fixture)}/cache-ownership.txt`)).not.toBe(initial)
+      }
+      Expect((await runWith('sha256:invalid', 'invalid')).exitCode).toBe(1)
+      const calls = (await FS.readText(fixture.log)).trim().split('\n')
+      Expect(calls.filter(call => call.startsWith('commit '))).toHaveLength(4)
+    })
+  })
+
   Test('runs guest wrappers with a clean PATH and preserves a failed check through later passing lanes', async () => {
     const root = await mkGitTestDir('tao-contributor-linux-guest-')
     try {
@@ -449,7 +481,14 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
         '      case "$3" in',
         '        tao-contributor-linux-tools:*) [ -f "$TAO_TEST_DOCKER_CACHE" ] && [ "$(cat "$TAO_TEST_DOCKER_CACHE")" = "$3" ] || exit 1 ;;',
         '      esac',
-        '      printf "sha256:fixture-base\\n"',
+        '      if [ "$3" = --format ] && [ "$4" != "{{.Id}}" ]; then',
+        '        expected=\'{{if and (eq .Os "linux") (eq .Architecture "amd64") .RootFS.Layers .Config}}linux/amd64 {{json .RootFS.Layers}} {{json .Config}}{{else}}invalid{{end}}\'',
+        '        [ "$4" = "$expected" ] || exit 12',
+        '        default_contents=\'linux/amd64 ["sha256:layer"] {"WorkingDir":"/workspace"}\'',
+        '        printf "%s\\n" "${TAO_TEST_DOCKER_BASE_CONTENTS:-$default_contents}"',
+        '      else',
+        '        printf "%s\\n" "${TAO_TEST_DOCKER_BASE_ID:-sha256:fixture-base}"',
+        '      fi',
         '    fi ;;',
         '  start) printf "guest output before failure\\n"; case "$3" in *-"$TAO_TEST_DOCKER_FAILURE") exit 7 ;; esac ;;',
         '  cp) case "$2" in *:/workspace/*) mkdir -p "$3" ;; esac ;;',

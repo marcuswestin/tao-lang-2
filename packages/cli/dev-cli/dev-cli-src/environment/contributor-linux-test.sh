@@ -91,6 +91,8 @@ if [ -n "$inspect_run" ]; then
     esac
     if inspected_owner=$(docker inspect --format '{{index .Config.Labels "tao.owner"}} {{index .Config.Labels "tao.run"}}' "$inspected_id" 2>> "$output/inspection-errors.log"); then
       if [ "$inspected_owner" = "contributor-linux-test $inspect_run" ]; then
+        docker top "$inspected_id" -eo pid,ppid,stat,etime,time,args > "$output/$inspected_name-processes.txt" 2>> "$output/inspection-errors.log" || true
+        docker stats --no-stream --format '{{json .}}' "$inspected_id" > "$output/$inspected_name-stats.json" 2>> "$output/inspection-errors.log" || true
         if docker cp "$inspected_id:/workspace/.artifacts/logs" "$output/$inspected_name-logs" 2>> "$output/inspection-errors.log"; then
           printf 'Workflow log snapshot: %s/%s-logs\n' "$output" "$inspected_name"
         else
@@ -187,9 +189,17 @@ base_owned=1
 stream_log "$output/base-build.log" base-build docker build --platform linux/amd64 --target base --tag "$base" "$output/context"
 docker image inspect "$base" > "$output/base-image.json"
 docker image inspect --format '{{.Id}}' "$base" > "$output/base-identity.txt"
+# Build attestations can change the manifest-list ID without changing executable
+# contents. Keep that ID as evidence, but key tools on ordered layers and config.
+docker image inspect --format '{{if and (eq .Os "linux") (eq .Architecture "amd64") .RootFS.Layers .Config}}linux/amd64 {{json .RootFS.Layers}} {{json .Config}}{{else}}invalid{{end}}' "$base" > "$output/base-cache-identity.txt"
+IFS= read -r base_cache_identity < "$output/base-cache-identity.txt"
+case "$base_cache_identity" in
+  'linux/amd64 ['*'] {'*'}') ;;
+  *) printf 'Cannot establish the base image filesystem/configuration identity.\n' >&2; exit 1 ;;
+esac
 # Hash exact tool inputs and the base identity; never retain a dependency install or host profile.
 git ls-tree HEAD bootstrap-tao-dev-env devenv.lock "$environment" > "$output/cache-inputs"
-cat "$output/base-identity.txt" >> "$output/cache-inputs"
+cat "$output/base-cache-identity.txt" >> "$output/cache-inputs"
 printf 'qemu_guest_base_experiment=%s\n' "$qemu_guest_base" >> "$output/cache-inputs"
 printf 'qemu_nix_filter_disabled=%s\n' "$qemu_nix_filter" >> "$output/cache-inputs"
 cache_key=$(git hash-object "$output/cache-inputs")

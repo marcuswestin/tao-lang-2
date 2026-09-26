@@ -199,8 +199,31 @@ The approved `--qemu-compat` run at `1c7e62795db7babdb7540ab4a448cfe46011717e`
 repeat setup, and the focused parser test. Cold bootstrap took 255 seconds; repository checks
 were still running at this observation boundary. The long captured-output interval exposed a
 diagnostic gap: guest lanes now request the existing verbose output, and read-only run inspection
-can snapshot workflow logs from exact ownership-checked container IDs. It never executes inside,
+can snapshot workflow logs and fixed process/resource observations from exact ownership-checked container IDs. It never executes inside,
 stops, or removes the inspected guest. Final cold/cached results are still pending.
+
+Cold checks subsequently passed in 677 seconds. Process snapshots during the quiet interval
+showed active bridge typechecking, not an established hang. Docker reported an effective 7.746 GiB
+memory ceiling despite the requested 16 GiB; no OOM was observed. The first full test run then
+exposed a timeout exit-code difference (143 versus null) and two Tao app shards exceeding the
+240-second no-output bound while QEMU workers had accumulated CPU time. These need separate
+repository fixes or diagnostic evidence; cold/cached acceptance is not yet established.
+The timeout fixture now explicitly replaces the shell with `sleep` when asserting direct signal
+termination, and separately verifies a timed-out shell's numeric exit status is preserved.
+The Tao verification child now explicitly selects line output: its previous noninteractive quiet
+mode suppressed the very progress observed by the graph's silence bound. A real piped-child
+regression failed before that fix and passed afterward. Neither fix raises a timeout or changes
+process-result semantics; subsequent committed-head Linux execution remains required.
+
+Repeated base builds also produced different image-list IDs with identical ordered rootfs
+layers and complete runtime configuration. The tools cache now hashes that execution content
+and validates linux/amd64, retaining the full image ID separately as evidence. This avoids
+invalidating reusable tools solely because build attestations changed; changed layers, their
+order, or runtime configuration still invalidate the cache. Docker documents attestations as
+[image-index metadata](https://docs.docker.com/build/metadata/attestations/), and the
+[OCI image configuration](https://github.com/opencontainers/image-spec/blob/main/config.md)
+defines ordered filesystem DiffIDs and execution parameters. The focused fixture checks both
+reuse and invalidation without creating isolation resources.
 
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published

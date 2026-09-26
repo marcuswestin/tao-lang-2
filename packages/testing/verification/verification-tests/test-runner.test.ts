@@ -1,4 +1,4 @@
-import { FS, Repo, TaoTestProtocol } from '@shared'
+import { FS, Platform, Repo, TaoTestProtocol } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { FlakeTolerance } from '../verification-src/FlakeTolerance'
 import { MachineLanes } from '../verification-src/MachineLanes'
@@ -110,6 +110,48 @@ Describe('test runner suite registry', () => {
     Expect(TestRunner.completeRun({ kind: 'full', pattern: '' })).toBe(true)
     Expect(TestRunner.completeRun({ kind: 'full', pattern: 'one package only' })).toBe(false)
     Expect(TestRunner.completeRun({ kind: 'changed', pattern: '' })).toBe(false)
+  })
+
+  Test('Tao verification streams runner progress into its graph before the child completes', async () => {
+    const { byName } = await discover({
+      files: new Map([['tao-apps', ['Apps/WordFlower']]]),
+      kind: 'changed',
+      suites: new Set(['tao-apps']),
+    })
+    const command = processOf(byName, 'tao-apps')
+    const outputModule = Repo.resolvePath('packages/cli/tao-cli/cli-src/test-output.ts')
+    // Exercise the real CLI output policy in a piped child, including a quiet parent preference.
+    // Only the expensive compiled journeys are replaced by one existing runner output line.
+    const script = `
+      const { TestOutput } = await import(${JSON.stringify(outputModule)});
+      const args = ${JSON.stringify(command.args)};
+      const option = args.indexOf('--output');
+      const writer = TestOutput.createWriter(TestOutput.resolveMode(option < 0 ? undefined : args[option + 1]));
+      writer?.write(Buffer.from('PASS journey entrypoint\\n'));
+      writer?.flush();
+    `
+    const state = WorkGraph.createState({
+      name: 'tao-apps',
+      run: {
+        args: ['--eval', script],
+        command: Platform.runtimeProcess.execPath,
+        cwd: Repo.getRoot(),
+        env: { TAO_OUTPUT_MODE: 'quiet' },
+      },
+    })
+    const progress: string[] = []
+    await WorkGraph.run([state], {
+      jobs: 1,
+      onEvent: event => {
+        if (event.kind === 'output') {
+          Expect(event.state.status).toBe('running')
+          progress.push(event.output)
+        }
+      },
+      watchInterrupt: () => () => {},
+    })
+    Expect(state.status).toBe('passed')
+    Expect(progress.join('')).toContain('PASS journey entrypoint\n')
   })
 
   Test('gives concurrent process-heavy developer tests a contention-safe timeout', async () => {
@@ -424,7 +466,7 @@ Describe('test runner suite registry', () => {
     Expect(argsOf(byName, 'cli/dev-cli').some(argument => argument.startsWith('--changed'))).toBe(false)
     Expect(argsOf(byName, 'cli/dev-cli')).not.toContain('--pass-with-no-tests')
     Expect(argsOf(byName, 'runtime-jest').some(argument => argument.startsWith('--changedSince'))).toBe(false)
-    Expect(argsOf(byName, 'tao-apps')).toEqual(['test', 'Apps/WordFlower'])
+    Expect(argsOf(byName, 'tao-apps')).toEqual(['test', '--output', 'lines', 'Apps/WordFlower'])
     Expect(processOf(byName, 'tao-apps').env?.['TAO_HOME'])
       .toBe(Repo.resolvePath('.artifacts/testing/tao-home'))
     Expect(byName.get('tao-apps')?.files).toEqual(['Apps/WordFlower'])
@@ -447,7 +489,7 @@ Describe('test runner suite registry', () => {
     const { byName, selected } = await discover()
     const inventory = await TestRunner.suiteInventory()
 
-    Expect(argsOf(byName, 'tao-apps')).toEqual(['test', 'Apps'])
+    Expect(argsOf(byName, 'tao-apps')).toEqual(['test', '--output', 'lines', 'Apps'])
     Expect(inventory.packageSuites).toContain('cli/dev-cli')
     Expect(inventory.packageSuites).toContain('cli/agent-cli')
     Expect(inventory.packageSuites).toContain('shared')

@@ -87,8 +87,9 @@ and containers with `./agent unsandboxed contributor-linux-test --inspect-run
 YYYYMMDDTHHMMSSZ-PID`. It reports matching resources without starting or removing
 them; shared images and builder caches are preserved. Inspection failure means
 resource state is unknown. For exact owned containers still present, inspection also copies
-workflow logs into its evidence directory without executing in or stopping the guest; missing
-logs are reported separately. Guest repository lanes stream their existing verbose output.
+workflow logs and fixed process/resource snapshots into its evidence directory without
+executing in or stopping the guest; missing logs are reported separately and snapshot errors
+remain in `inspection-errors.log`. Guest repository lanes stream their existing verbose output.
 Retained toolchain image ownership, once provisioned,
 is recorded separately in the original run's `cache-ownership.txt`.
 
