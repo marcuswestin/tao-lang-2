@@ -1,10 +1,13 @@
-import { Errors } from '@shared'
+import { Errors, FS } from '@shared'
 import type { HostApplicationFault, HostSubject } from './app-build/HostBuild'
 
 export type HostTestingOptions = {
   app: string
   browserChannel?: string
   device?: string
+  developerDir?: string
+  output?: string
+  buildOnly?: boolean
   fault?: boolean
   seed: string
 }
@@ -41,6 +44,9 @@ export type SimulatorNativeHostTestingRequest = Readonly<{
   seed: number
   browserChannel: string
   device: string
+  developerDir?: string
+  output?: string
+  buildOnly?: boolean
   fault?: HostApplicationFault
 }>
 
@@ -52,6 +58,7 @@ type PhysicalIosInstallRequest = Readonly<{
   seed: number
   browserChannel: string
   device: string
+  developerDir?: string
 }>
 
 export type NativeHostTestingRequest = SimulatorNativeHostTestingRequest | PhysicalIosInstallRequest
@@ -62,6 +69,7 @@ export type CatalystHostTestingRequest = Readonly<{
   subject: 'native-navigation' | 'hnreader'
   seed: number
   browserChannel: string
+  developerDir?: string
 }>
 
 export type HostTestingRequest =
@@ -80,6 +88,24 @@ export type HostTestingContext = Readonly<{
 
 /** parseHostTestingRequest validates the user surface and assigns one exhaustive dispatch kind. */
 export function parseHostTestingRequest(mode: string, options: HostTestingOptions): HostTestingRequest {
+  if (options.buildOnly === true && mode !== 'ios') {
+    Errors.throwUserInput('--build-only is supported only for ios.')
+  }
+  if (options.output !== undefined && mode !== 'ios') {
+    Errors.throwUserInput('--output is supported only for ios.')
+  }
+  if (options.developerDir !== undefined) {
+    if (mode !== 'ios' && mode !== 'device' && mode !== 'catalyst') {
+      Errors.throwUserInput('--developer-dir is supported only for ios, device, or catalyst.')
+    }
+    if (
+      !FS.isAbsolute(options.developerDir) || /[\x00-\x1f]/u.test(options.developerDir)
+      || !FS.resolvePath(options.developerDir).endsWith('.app/Contents/Developer')
+    ) {
+      Errors.throwUserInput('--developer-dir must be an absolute Xcode .app/Contents/Developer directory.')
+    }
+  }
+  const developer = options.developerDir === undefined ? {} : { developerDir: FS.resolvePath(options.developerDir) }
   const seed = Number(options.seed)
   if (!Number.isInteger(seed) || seed < 0 || seed > 0xffff_ffff) {
     Errors.throwUserInput('--seed must be an unsigned 32-bit integer.')
@@ -106,7 +132,7 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
     if (options.app === 'clockwork' || options.fault === true || options.device !== undefined) {
       Errors.throwUserInput('Catalyst builds require --app native-navigation or hnreader, without --device or --fault.')
     }
-    return { ...common, subject: options.app, kind: 'catalyst', mode }
+    return { ...common, ...developer, subject: options.app, kind: 'catalyst', mode }
   }
   if (mode === 'driver') {
     if (options.fault === true) {
@@ -138,9 +164,18 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
       )
     }
     if (mode === 'device') {
-      return { ...common, subject: options.app, device: options.device, kind: 'native', mode }
+      return { ...common, ...developer, subject: options.app, device: options.device, kind: 'native', mode }
     }
-    return { ...common, device: options.device, ...(fault === undefined ? {} : { fault }), kind: 'native', mode }
+    return {
+      ...common,
+      ...developer,
+      ...(options.output === undefined ? {} : { output: options.output }),
+      ...(options.buildOnly ? { buildOnly: true } : {}),
+      device: options.device,
+      ...(fault === undefined ? {} : { fault }),
+      kind: 'native',
+      mode,
+    }
   }
   return Errors.throwUserInput(`Unknown host-testing mode '${mode}'.`)
 }

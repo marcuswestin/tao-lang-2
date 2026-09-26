@@ -176,6 +176,8 @@
           // artifact CDN during native builds. These network rules do not grant a host escape.
           "repo1.maven.org",
           "repo.reactnative.dev",
+          // CocoaPods resolves native iOS podspecs through its official metadata CDN.
+          "cdn.cocoapods.org",
           "cache.nixos.org",
           "*.cachix.org",
           "*.anthropic.com",

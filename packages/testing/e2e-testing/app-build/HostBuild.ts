@@ -282,7 +282,8 @@ function hostAppConfig(appId: string, runId: string, subject: HostSubject): stri
           name: appId,
           platforms: ['ios', 'android', 'web'],
           plugins: [
-            ['expo-build-properties', { ios: { enableSceneSupport: true } }],
+            // Clerk's native pod requires iOS 17; an older target skips it after registering its Swift packages.
+            ['expo-build-properties', { ios: { deploymentTarget: '17.0', enableSceneSupport: true } }],
           ],
           scheme: `taohostpoc-${runId}`,
           slug: appId.replaceAll('.', '-'),

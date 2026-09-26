@@ -232,6 +232,7 @@
         "exp.host",
         "repo1.maven.org",
         "repo.reactnative.dev",
+        "cdn.cocoapods.org",
         "cache.nixos.org",
         "*.cachix.org",
         "*.anthropic.com",

@@ -55,6 +55,20 @@ runs and directories without trustworthy ownership receipts are preserved.
 ./agent unsandboxed test-host catalyst --app hnreader
 ```
 
+For a side-by-side Xcode installation, pass `--developer-dir /Applications/Xcode-27.1.app/Contents/Developer`
+to `ios`, `device`, or `catalyst`. The selected toolchain applies to the command's children; it does
+not change the global Xcode selection or the parent environment.
+Apple native runs supply a UTF-8 locale for CocoaPods even outside the development shell.
+The generated iOS host targets iOS 17 or later, matching its installed Clerk native dependency.
+
+For manual simulator review, `ios --build-only` builds and installs the selected app without running
+an Appium journey. It leaves the app installed and reports build/install evidence only. Add
+`--output .artifacts/ios-review/hnreader` to retain `Application.app` and `build.json`, including SDK,
+Xcode, bundle identity, and executable digest, outside the automatically pruned native build tree.
+The output must be a new directory; existing output is never replaced. Remove that directory and
+uninstall the uniquely identified app after manual review. Neither installation nor an export is
+evidence that the app rendered correctly.
+
 `catalyst` builds an isolated local Release app with the Mac interface idiom and retains it under
 `.artifacts/catalyst/<run-id>/`. It accepts only NativeNavigation and HNReader, without `--device`
 or `--fault`. The trial copies and hash-guards its slider and screens compatibility patches, preserves source

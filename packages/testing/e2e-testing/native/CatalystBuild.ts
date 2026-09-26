@@ -187,6 +187,7 @@ export async function runCatalystBuild(
     requireCondition(info.UIDeviceFamily?.includes(6) === true, 'Built app does not declare the Mac device family.')
     await recordedCommand('binary-platform', 'xcrun', {
       args: ['vtool', '-show-build', FS.resolvePath(`Contents/MacOS/${executable}`, appPath)],
+      env,
     }, root)
     requireCondition(
       /platform\s+MACCATALYST\b/u.test(await FS.readText(FS.resolvePath('binary-platform.log', root))),
