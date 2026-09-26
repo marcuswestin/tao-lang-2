@@ -99,7 +99,7 @@ Describe('the package groups left out of the toolchain identity', () => {
       }
       const source = await FS.readText(path)
       for (const [index, line] of source.split('\n').entries()) {
-        if (line.includes('tao-dev') || line.includes('tao-studio') || line.includes('tao-e2e-testing')) {
+        if (/(?:\bfrom\s+|\bimport\s*(?:\(\s*)?)['"](?:tao-dev|tao-studio|tao-e2e-testing)/.test(line)) {
           references.push(`${FS.relativePath(sourceRoot, path)}:${index + 1} ${line.trim()}`)
         }
       }

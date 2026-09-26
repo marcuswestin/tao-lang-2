@@ -86,7 +86,12 @@ Describe('standalone filesystem audit', () => {
     try {
       await FS.mkdir(volume)
       await FS.mkdir(FS.resolvePath('admin/tao-harness/logs', volume))
-      await FS.writeJson(scopePath, { guestHome: '/admin', guestTemp: '/tmp', root: '/acceptance' })
+      await FS.writeJson(scopePath, {
+        guestHome: '/admin',
+        guestTemp: '/tmp',
+        root: '/acceptance',
+        browserProfiles: ['/tmp/tao-studio-chrome-E2iYLY'],
+      })
       await run('snapshot', volume, before)
       await FS.writeText(FS.resolvePath('acceptance/home/.tao/cache/bun/package', volume), 'expected')
       await FS.writeText(FS.resolvePath('admin/tao-harness/logs/steps/acceptance.log', volume), 'fixture log')
@@ -122,6 +127,7 @@ Describe('standalone filesystem audit', () => {
           'tmp/contentlinkingd/file',
           'tmp/com.google.Chrome.123/SingletonCookie',
           'tmp/.com.google.Chrome.456',
+          'tmp/tao-studio-chrome-E2iYLY/Default/Cache/data',
         ]
       ) {
         await FS.writeText(FS.resolvePath(path, volume), 'OS service write')
@@ -161,6 +167,9 @@ Describe('standalone filesystem audit', () => {
         'Library/Logs/unexpected',
         'admin/Library/Logs/unexpected',
         'tmp/com.google.ChromeUnknown/file',
+        'tmp/tao-studio-chrome-unexpected/file',
+        'tmp/tao-studio-chrome-ABC123/Default/Cache/data',
+        'tmp/tao-studio-chrome-E2iYLY-adjacent/file',
         'tmp/tao-test-runs/leak',
         'acceptance/home/Library/Caches/com.apple.parsecd/file',
       ]
@@ -328,6 +337,165 @@ Describe('standalone filesystem audit', () => {
       }
     },
   )
+
+  Test('bounds Xcode allowances by profile, artifact shape, and observed operation', async () => {
+    const fixture = await mkTestDir('tao-filesystem-xcode-')
+    const before = FS.resolvePath('before.json', fixture)
+    const after = FS.resolvePath('after.json', fixture)
+    const diffPath = FS.resolvePath('diff.json', fixture)
+    const reportPath = FS.resolvePath('diff.txt', fixture)
+    const scopePath = FS.resolvePath('scope.json', fixture)
+    const scope = { guestHome: '/admin', guestTemp: '/tmp', root: '/acceptance' }
+    const cryptex = '/private/var/run/com.apple.security.cryptexd'
+    const added = [
+      '/Library/Developer/CoreSimulator/Images/images.plist',
+      '/admin/Library/Developer/CoreSimulator/Devices/device_set.plist',
+      '/admin/Library/Logs/CoreSimulator/CoreSimulator.log',
+      '/private/tmp/tart-guest-agent.log',
+      '/private/tmp/tart-guest-daemon.log',
+      '/private/var/tmp',
+      '/private/var/tmp/SoftwareUpdateCore_NRD/EventReporterPersistedState',
+      '/private/var/tmp/SoftwareUpdateCore_NRD/EventReporterPersistedState/SUCoreEventReporterState.state',
+      '/private/var/tmp/SoftwareUpdateCore_NRD/RecorderSplunkRecords',
+      '/tmp/xcrun_db',
+      `${cryptex}/codex.system/boot-session/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0`,
+      `${cryptex}/codex.system/live/com.apple.MobileAsset.MetalToolchain-v27.1.266.1`,
+      `${cryptex}/mnt/com.apple.XROS.SimulatorRuntime-v24.13.362.0.FzizPR`,
+    ]
+    const removed = [
+      '/private/var/run/hdiejectd.pid',
+      '/tmp/adb.501.log',
+      '/tmp/hsperfdata_admin',
+      '/tmp/metrickitd',
+      '/tmp/cryptex.personalize.2MZ61Q',
+      '/tmp/cryptex.personalize.2MZ61Q/im4m',
+      '/tmp/cryptex_personalized_manifest.0jUyTJ',
+      `${cryptex}/codex.system/stage/protex.8FXdTX`,
+    ]
+    const timestamps = [
+      '/admin/.rbenv/shims',
+      '/tmp/assistantd',
+      '/tmp/assistantd/TemporaryItems',
+      '/tmp/siriknowledged',
+    ]
+    const unexpected = [
+      '/Library/Developer/CoreSimulator-adjacent/file',
+      '/admin/Library/Developer/CoreSimulator-adjacent/file',
+      '/admin/Library/Logs/CoreSimulator-adjacent/file',
+      '/private/tmp/tart-guest-agent.log/unexpected',
+      '/private/tmp/tart-guest-daemon.log-adjacent',
+      '/private/tmp/unexpected',
+      '/private/var/tmp/unexpected',
+      '/private/var/tmp/SoftwareUpdateCore_NRD/unexpected',
+      '/private/var/tmp/SoftwareUpdateCore_NRD/RecorderSplunkRecords/unexpected',
+      '/admin/.rbenv/shims/ruby',
+      '/admin/.rbenv/versions/ruby',
+      '/admin/unexpected',
+      '/tmp/adb.502.log',
+      '/tmp/xcrun_db/unexpected',
+      '/tmp/assistantd/unexpected',
+      '/tmp/siriknowledged/unexpected',
+      '/tmp/hsperfdata_admin/unexpected',
+      '/tmp/metrickitd/unexpected',
+      '/tmp/cryptex.personalize.2MZ61Q/unexpected',
+      '/tmp/cryptex.personalize.2MZ61Q-adjacent/im4m',
+      '/tmp/cryptex_personalized_manifest.0jUyTJ/unexpected',
+      `${cryptex}/unknown`,
+      `${cryptex}/mnt/com.apple.Unknown-v24.1.434.0.ABC123`,
+      `${cryptex}/codex.system/live/com.apple.iPhoneOS.SimulatorRuntime-v24.1.434.0/unexpected`,
+      '/admin/.tao/cache/leak',
+      '/admin/.bun/cache/leak',
+      '/admin/.expo/leak',
+      '/admin/Library/Caches/bun/leak',
+      '/tmp/tao-test-runs/leak',
+      '/tmp/metro-cache/leak',
+      '/acceptance/home/Library/Developer/CoreSimulator/leak',
+    ]
+    const entries = (paths: string[], modifiedMs = 1) =>
+      Object.fromEntries(paths.map(path => [`/guest${path}`, { kind: 'directory', mode: 0o755, modifiedMs }]))
+    const unreadable = [added[10]!, added[11]!, added[12]!]
+    const snapshot = { issues: [], root: '/guest', skippedMounts: [] }
+    const baseline = {
+      ...snapshot,
+      entries: entries([...removed, ...timestamps]),
+      issues: [{ error: 'permission denied', path: `/guest${removed[7]}` }],
+    }
+    const observed = {
+      ...snapshot,
+      entries: { ...entries(['/acceptance/home/.tao', ...added]), ...entries(timestamps, 2) },
+      issues: unreadable.map(path => ({ error: 'permission denied', path: `/guest${path}` })),
+    }
+    const compare = () =>
+      CLI.run(Platform.runtimeProcess.execPath, {
+        args: ['run', AUDIT, 'compare', before, after, diffPath, reportPath, scopePath],
+      })
+    try {
+      await FS.writeJson(before, baseline)
+      await FS.writeJson(after, observed)
+      await FS.writeJson(scopePath, { ...scope, vmProfile: 'xcode' })
+      Expect((await compare()).exitCode).toBe(0)
+      Expect(await FS.readJson(diffPath)).toMatchObject({ incomplete: true, violations: [] })
+
+      for (const vmProfile of [undefined, 'vanilla']) {
+        await FS.writeJson(scopePath, { ...scope, vmProfile })
+        Expect((await compare()).exitCode).not.toBe(0)
+        const { violations } = await FS.readJson<{ violations: string[] }>(diffPath)
+        for (const path of [...added, ...removed, ...timestamps]) {
+          Expect(violations).toContain(`/guest${path}`)
+        }
+        Expect(violations).toContain(`unobservable: /guest${unreadable[0]}`)
+      }
+
+      await FS.writeJson(scopePath, { ...scope, vmProfile: 'xcode' })
+      await FS.writeJson(after, {
+        ...observed,
+        entries: { ...observed.entries, ...entries(unexpected) },
+        issues: [
+          ...observed.issues,
+          ...unexpected.map(path => ({ error: 'permission denied', path: `/guest${path}` })),
+        ],
+      })
+      Expect((await compare()).exitCode).not.toBe(0)
+      const { violations } = await FS.readJson<{ violations: string[] }>(diffPath)
+      for (const path of unexpected) {
+        Expect(violations).toContain(`/guest${path}`)
+        Expect(violations).toContain(`unobservable: /guest${path}`)
+      }
+
+      // Cleanup exceptions must never authorize creating or modifying their matching artifacts.
+      for (const operation of ['added', 'changed'] as const) {
+        await FS.writeJson(before, operation === 'added' ? { ...snapshot, entries: {} } : baseline)
+        await FS.writeJson(after, {
+          ...observed,
+          entries: { ...observed.entries, ...entries(removed, 2), ...entries(timestamps, 2) },
+        })
+        Expect((await compare()).exitCode).not.toBe(0)
+        const result = await FS.readJson<{ violations: string[] }>(diffPath)
+        for (const path of [...removed, ...(operation === 'added' ? timestamps : [])]) {
+          Expect(result.violations).toContain(`/guest${path}`)
+        }
+      }
+      await FS.writeJson(before, baseline)
+      await FS.writeJson(after, {
+        ...observed,
+        entries: {
+          ...observed.entries,
+          '/guest/admin/.rbenv/shims': { kind: 'directory', mode: 0o777, modifiedMs: 2 },
+        },
+      })
+      Expect((await compare()).exitCode).not.toBe(0)
+      Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain('/guest/admin/.rbenv/shims')
+
+      for (const vmProfile of ['unknown', '', null]) {
+        await FS.writeJson(scopePath, { ...scope, vmProfile })
+        const result = await compare()
+        Expect(result.exitCode).not.toBe(0)
+        Expect(result.stderr).toContain('Invalid filesystem audit VM profile:')
+      }
+    } finally {
+      await FS.remove(fixture)
+    }
+  })
 
   Test('permits only removal of exact baseline temporary artifacts and keeps incomplete evidence', async () => {
     const fixture = await mkTestDir('tao-filesystem-baseline-cleanup-')

@@ -22,8 +22,9 @@ The intermediate slice landed on 2026-09-26 as `9ba5058d`. The first follow-up,
 `feat/standalone-cli-followups`, replaces SSH with `tart exec` and audits the stopped VM disk.
 Subsequent slices still need to complete these tasks before closing the standalone development effort:
 
-- [ ] Move the remaining human recipes into `./dev`, make `dev` available in the entered shell,
-      and retire `Justfile` after the replacement workflows are proven.
+- [ ] **After MVP:** move the remaining human recipes into `./dev`, make `dev` available in the entered
+      shell, and retire `Justfile` after the replacement workflows are proven. This is deferred by
+      the Developer on 2026-09-26 and does not block MVP or the current VM work.
 - [ ] Update contributor, workflow, troubleshooting, and agent documentation for the final shell,
       `./agent`, and `./dev` design in one pass. Until then, correct only documentation needed to keep
       this intermediate landing truthful.
@@ -36,6 +37,74 @@ Subsequent slices still need to complete these tasks before closing the standalo
 The additional CLI guest harness, native toolchain setup, prepared VM images, Expo authentication
 decision, and cloud execution bootstrap remain separate follow-ups. Their current status is tracked
 in this plan and the developer-environment ledger as applicable.
+
+### Follow-up order decided 2026-09-26
+
+1. Expand the installed CLI's VM acceptance into named scenarios with retained results, reusing
+   the current compiled driver and browser automation. Keep compiler/runtime unit tests in their
+   existing suites. Add wider CLI behavior, then packaged Studio/native coverage as those products
+   supply usable guest artifacts; distinguish unavailable product lanes from passing coverage.
+2. Add versioned prepared VM bases and disposable clones, retaining the vanilla first-install lane.
+   Serialize this task's VM runs so only one guest runs at once. Record image identity, prerequisites,
+   and cleanup ownership; native/contributor images must not weaken the vanilla dependency checks.
+3. Contributor/cloud bootstrap is a separate workstream, owned by the linked cloud bootstrap task.
+
+Scope confirmed by the Developer: test supported behavior and prepare images in this slice;
+track native product fixes separately. A prepared Xcode image is prerequisite evidence, not proof
+that installed Tao can already launch or ship a native app.
+
+The guest driver now retains named scenario results in `logs/guest/steps/acceptance-summary.json`.
+It checks negative diagnostics, canonical formatting, semantic coverage and deliberately failing
+Tao tests, alongside installation and normal CLI use. Browser coverage includes repeated counter
+clicks, reload and editing Tao source while the development server runs, with screenshots and
+browser errors retained. Compiler/runtime unit suites remain outside this installed-product lane.
+
+Prepared bases use digest-pinned upstream Tart images and fresh disposable clones:
+
+- `./agent unsandboxed standalone-cli-clean-machine` tests the vanilla first-install environment.
+- `./agent unsandboxed standalone-cli-clean-machine --prepare-base xcode` caches the pinned Xcode
+  image and runs the same acceptance and audit, recording Xcode and available iOS runtime inventory.
+- `./agent unsandboxed standalone-cli-clean-machine --base xcode` reuses that cached image for a
+  fresh clone. Both forms qualify only after acceptance and the filesystem audit pass; provenance
+  is recorded in `.artifacts/standalone-vm/bases/xcode.json` with a link to that run's evidence.
+
+An account-wide lease serializes these workflows across checkouts. Each boot also checks for other
+running Tart guests and disables clipboard sharing. The workflow never stops unrelated guests.
+After an interrupted runner exits, `--recover-lease <owned-vm>` checks process identity, running
+VMs and mounted disks before releasing its stale lease; stopped clones and logs remain for inspection.
+The contributor base awaits the separate portable-bootstrap workstream. No new cloud or native
+product coverage is implied by preparing an image.
+
+Expanded vanilla evidence (2026-09-26): all 17 scenarios and the mandatory metadata audit passed
+in 170 seconds, with zero disallowed changes. Logs:
+`.artifacts/standalone-vm/tao-acceptance-1790416514-95869/logs/`. This includes the final compiled
+driver's source-edit/browser proof and recorded Chrome profile ownership. The audit still reports
+unreadable macOS-owned paths and cannot observe transient writes or attribute writers inside
+allowed OS locations.
+
+Prepared Xcode evidence (2026-09-26): all 17 scenarios and the profile-specific audit passed
+in 175 seconds from the cached image, with zero disallowed changes. Logs:
+`.artifacts/standalone-vm/tao-acceptance-1790416757-6120/logs/`. The recorded image has Xcode 27.0
+(`27A266a`) and available iOS 27.0 simulator runtime, Homebrew 7.0.6 and Node 24.21.0. The initial
+62.1 GB compressed image pull took 2,085 seconds; subsequent clones took at most one second.
+Native tool state is allowed only in the Xcode profile, including named CoreSimulator/cryptex
+locations; observed baseline temporary artifacts are permitted to be removed, not recreated.
+This qualifies the prepared environment, without claiming a native Tao app build or simulator launch.
+
+Packaged Studio remains a separate product lane: its existing `prepare-release studio` entry
+refuses a private update repository. A 2026-09-26 attempt stopped with that diagnostic before
+packaging. Resolve its public release prerequisite or provide an explicitly local packaging proof
+before claiming guest coverage of the packaged desktop application.
+
+Later: native dependency installation with explicit consent; Expo credential handling; installed
+iOS/Android development and shipping proof; the decided Bun test-runner spike; signing/notarization
+and public release prerequisites; interrupted mount/recovery fault tests; inspection of older
+retained VM clones; and a protected host helper outside the editable repository. Keep the final
+workflow documentation pass with the post-MVP Just migration.
+
+The temporary capabilities alias remains removed. If a temporary host route is proposed again,
+it must respect the session's actual host permissions; a repository alias cannot grant them.
+The Developer requests an explicit check-in before removing any temporary route added in this pass.
 
 Implementation update (2026-09-22): the first `tao dev` slice now generates its Expo host in the
 selected project's `.tao/dev/runtime`, keeps Expo and dev-data state in that project, and uses a
