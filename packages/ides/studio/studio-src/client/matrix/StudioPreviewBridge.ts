@@ -5,6 +5,7 @@ import { StudioInspector, type StudioInspectorSelection } from '../../StudioInsp
 import {
   type StudioDebugCommandMessage,
   type StudioPreviewCanvasGestureMessage,
+  type StudioPreviewCanvasPanKeyMessage,
   type StudioPreviewIdentity,
   type StudioPreviewRuntimeUpdateMessage,
   StudioProtocol,
@@ -36,6 +37,7 @@ type StudioPreviewMessageActions = {
   activate?: () => void
   applySourceAction: (envelope: StudioSourceActionEnvelope) => Promise<void>
   canvasGesture?: (gesture: StudioPreviewCanvasGestureMessage) => void
+  canvasPanKey?: (message: StudioPreviewCanvasPanKeyMessage) => void
   changed?: () => void
   inspect: (selection: StudioInspectorSelection) => void
   reveal?: () => void
@@ -227,6 +229,7 @@ export async function handlePreviewMessage(
     'preview-applied': type => receivePreviewApplied(preview, received(message, type), handshake),
     'preview-console': type => receiveConsole(preview, received(message, type), actions),
     'preview-canvas-gesture': type => actions.canvasGesture?.(received(message, type)),
+    'preview-canvas-pan-key': type => actions.canvasPanKey?.(received(message, type)),
     'preview-debug': type => receiveDebug(preview, received(message, type), actions),
     'preview-fixture-capture-failed': type => receiveFixtureCapture(preview, received(message, type), actions),
     'preview-fixture-captured': type => receiveFixtureCapture(preview, received(message, type), actions),
