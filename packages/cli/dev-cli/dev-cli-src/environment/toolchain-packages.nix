@@ -18,6 +18,8 @@ in
     pkgs.gh
     pkgs.git
     pkgs.just
+    # Read-only worktree/task inventory uses Python's standard SQLite module.
+    pkgs.python3
     pkgs.ripgrep
     pkgs.watchman
     pkgs.zsh

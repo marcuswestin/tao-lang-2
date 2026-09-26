@@ -396,7 +396,7 @@ Describe('contributor Linux container runner', () => {
       const versions = await FS.readText(
         FS.resolvePath('.artifacts/contributor-linux/guest-cached/tool-versions.log', root),
       )
-      for (const tool of ['bun', 'node', 'zsh', 'just', 'nix']) {
+      for (const tool of ['bun', 'node', 'zsh', 'just', 'python3', 'nix']) {
         Expect(versions).toContain(`${tool} (${root}/.devenv/profile/bin/${tool}): ${tool} fixture-version --version`)
       }
       Expect((await FS.readText(FS.resolvePath('calls.log', root))).trim().split('\n')).toEqual([
@@ -448,7 +448,7 @@ Describe('contributor Linux container runner', () => {
       const versions = await FS.readText(
         FS.resolvePath('.artifacts/contributor-linux/guest-tools/tool-versions.log', root),
       )
-      for (const tool of ['bun', 'node', 'zsh', 'just', 'nix']) {
+      for (const tool of ['bun', 'node', 'zsh', 'just', 'python3', 'nix']) {
         Expect(versions).toContain(`${tool} (${root}/.devenv/profile/bin/${tool}): ${tool} fixture-version --version`)
       }
       Expect(await FS.exists(FS.resolvePath('.git', root))).toBe(false)
@@ -461,7 +461,7 @@ Describe('contributor Linux container runner', () => {
 type Fixture = { root: string; log: string; container: string; env: Platform.ProcessEnv }
 
 async function writeVersionTools(root: string): Promise<void> {
-  for (const tool of ['bun', 'node', 'zsh', 'just', 'nix']) {
+  for (const tool of ['bun', 'node', 'zsh', 'just', 'python3', 'nix']) {
     const executable = FS.resolvePath(`.devenv/profile/bin/${tool}`, root)
     await FS.writeText(executable, `#!/bin/sh\nprintf '${tool} fixture-version %s\\n' "$*"\n`)
     await FS.chmod(executable, 0o755)

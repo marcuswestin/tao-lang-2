@@ -59,7 +59,7 @@ step() {
 
 record_tool_versions() {
   step tool-versions /bin/sh -eu -c '
-    for tool in bun node zsh just; do
+    for tool in bun node zsh just python3; do
       executable="$PWD/.devenv/profile/bin/$tool"
       printf "%s (%s): " "$tool" "$executable"
       "$executable" --version

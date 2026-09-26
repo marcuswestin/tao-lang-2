@@ -254,9 +254,15 @@ liveness and signalling, including Linux zombie handling, and retain failed-spaw
 Focused host tests cover these repairs; guest execution is still pending.
 
 The task-inventory test also could not spawn `python3` (exit -2); neither the Ubuntu base nor
-portable toolchain declares that existing runtime requirement. Adding Python from the existing
-locked nixpkgs was proposed for Developer approval; it has not been added. Rewriting or skipping
-the inventory would affect reclaim safety and is not a bootstrap workaround. Other observed
+portable toolchain declared that existing runtime requirement. The Developer approved adding
+Python from the existing locked nixpkgs on 2026-09-26. It is now declared in the shared toolchain:
+the production worktree/task inventory uses its standard SQLite and JSON modules on both macOS
+and Linux, so making it Linux-only would retain an undeclared macOS dependency. The current Mac
+resolved `/opt/homebrew/bin/python3`, with no Python executable in its linked managed profile.
+Ordinary setup completed without changing dependency pins or lockfiles; the next environment
+build and Linux run must prove the managed Python executable. Guest version evidence now requires
+that executable explicitly. Rewriting or skipping the inventory would affect reclaim safety
+and is not a bootstrap workaround. Other observed
 journey and suite timeouts remain unresolved; neither machine contention nor instruction
 translation has yet been isolated as their cause.
 
@@ -285,15 +291,22 @@ Cold verification finished with failures after 3,439 seconds. The complete cold 
 The final retry exposed three more root-sensitive preview rollback fixtures and a simulator
 archive test that assumes macOS `ditto`. The rollback fixtures now inject exact filesystem
 failures in isolated children while exercising real generation and recovery; deliberate
-rollback-order mutations fail their assertions. The archive boundary remains under repair.
+rollback-order mutations fail their assertions. The simulator archive fixture now retains real
+macOS `ditto` integration and uses a child-local Python standard-library ZIP command fixture on
+Linux. Production extraction is unchanged. Tests validate real archive bytes, the extraction
+invocation, installed content, manifest, archive removal, and rejection of the wrong bundle;
+suppressed-extraction and bypassed-bundle-validation mutations fail. A host probe separately
+exercises the portable ZIP fixture, including malformed archives and unsupported arguments.
+This does not establish macOS symbolic-link/mode fidelity on Linux or enable Linux simulators.
 These are repository portability failures, not evidence that another Ubuntu image is needed.
 
 The same run then provisioned its reusable tools in 79 seconds (147 host seconds including
 image capture), producing
 `sha256:625bbfdcf61f769765b0eabf45d3207c46185a4c9cde61110bcacb1087560942`.
 Its cached guest reused those tools, completed bootstrap/setup in 76 seconds, repeated setup
-in 24 seconds, and passed the parser test in 50 seconds. Cached check/test/verify are still
-running against the original `1c7e6279` source, not the subsequent repairs. The runner removed
+in 24 seconds, passed the parser test in 50 seconds, and completed checks in 856 seconds.
+Cached test/verify are still running against the original `1c7e6279` source, not the subsequent
+repairs. The runner removed
 the completed cold and tools containers; it retains the active cached guest, base image, and
 reusable tools image. Read-only inspection `20260926T200309Z-76264` independently confirmed
 the cold container was absent before cached provisioning. Full cold verification evidence is
