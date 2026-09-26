@@ -8,6 +8,7 @@ type Options = {
   json?: boolean
   repositoryRoot?: string
   hostPlatform?: string
+  hostArch?: string
   runCommand?: typeof CLI.run
   terminal?: Pick<typeof HCI, 'isInteractive' | 'askText'>
   files?: Pick<typeof FS, 'exists' | 'homeDir' | 'isFile' | 'isSymbolicLink' | 'listDir' | 'mkdir' | 'writeJson'>
@@ -458,14 +459,54 @@ async function run(options: Options): Promise<number> {
       notice(
         `Downloading iOS ${options.runtimeVersion} Simulator runtime... This can take several minutes and may update shared CoreSimulator components.`,
       )
-      await requireSuccess('/usr/bin/xcodebuild', [
+      const download = await command('/usr/bin/xcodebuild', [
         '-downloadPlatform',
         'iOS',
         '-buildVersion',
         options.runtimeVersion,
         '-exportPath',
         downloads,
+        '-architectureVariant',
+        (options.hostArch ?? Platform.hostArch) === 'arm64' ? 'arm64' : 'universal',
       ], selected)
+      if (download.exitCode !== 0 || download.error) {
+        const diagnostic = (download.stderr || download.stdout || download.error?.message || 'no diagnostic').trim()
+        receipt.remaining.push(`Simulator runtime download failed: ${diagnostic}`)
+        const instructions = `In Xcode at ${
+          quote(selected)
+        }, open Xcode > Settings > Components. Find iOS ${options.runtimeVersion} under Platform Support, or use the + button under Other Installed Platforms to select that exact version. Click Get or Download & Install and wait for installation to finish. Developer Documentation is a separate download. Leave the default Xcode selection unchanged, then return to this Terminal. If that runtime is not listed, stop here; another iOS version does not satisfy this request.`
+        receipt.remaining.push(instructions)
+        if (options.json || !terminal.isInteractive()) {
+          return await finish()
+        }
+        await save()
+        notice(receipt.remaining.join('\n'))
+        if (!await waitToContinue(`Press Enter to open ${selected}, or type q and Enter to stop`)) {
+          return await finish()
+        }
+        notice(`Opening ${selected}...`)
+        await requireSuccess('/usr/bin/open', [selected])
+        if (
+          !await waitToContinue(
+            'After installing the simulator runtime in Xcode, press Enter to continue, or type q and Enter to stop',
+          )
+        ) {
+          return await finish()
+        }
+        receipt.runtimeAvailable = false
+        receipt.simulatorHealthy = false
+        notice('Checking the installed runtime and CoreSimulator service...')
+        await inspectRuntime(selected)
+        if (receipt.runtimeAvailable && receipt.simulatorHealthy) {
+          receipt.remaining = []
+          receipt.status = 'ready'
+        } else {
+          receipt.remaining.push(
+            `iOS ${options.runtimeVersion} is still unavailable. Complete its runtime installation, then rerun the same command.`,
+          )
+        }
+        return await finish()
+      }
       const images = (await files.listDir(downloads)).filter(name => name.endsWith('.dmg'))
       if (images.length !== 1) {
         Errors.throwHostEnvironment(

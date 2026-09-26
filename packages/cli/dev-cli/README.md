@@ -44,6 +44,14 @@ Xcode after Enter. After completing Apple's prompts, return to the terminal and 
 the command rechecks readiness before continuing the simulator setup. Type `q` and Enter at either
 prompt to stop. Inspection, JSON, and noninteractive runs provide instructions without opening Xcode.
 
+Runtime downloads specify the requested version and architecture explicitly: `arm64` for native
+Apple silicon processes, `universal` for Intel or Rosetta processes. If the command-line download
+fails, interactive `--apply` offers to open Xcode after Enter and guides installation through
+Settings > Components. Return to the terminal and press Enter after installing the requested iOS
+runtime; the command checks the actual simulator inventory before reporting ready. Developer
+Documentation and a different iOS version do not satisfy that check. JSON and noninteractive runs
+report the download error and Components instructions without opening Xcode or waiting.
+
 The selected Xcode applies through each child process's `DEVELOPER_DIR`. Neither the system's
 `xcode-select` setting nor shell startup files change. This separates the application bundles,
 but first-launch components and simulator runtimes use shared Apple services. Read the reported

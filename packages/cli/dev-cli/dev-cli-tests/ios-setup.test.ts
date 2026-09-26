@@ -7,6 +7,7 @@ type InstallState = { paths: Set<string>; failCopyOnce?: boolean; installed?: st
 
 async function setup(fixture: {
   xcodeVersion?: string
+  hostArch?: string
   installed?: string
   installedVersion?: string
   runtime?: string
@@ -15,12 +16,13 @@ async function setup(fixture: {
   apply?: boolean
   json?: boolean
   interactive?: boolean
-  answers?: { answer: string; downloads?: string[]; firstLaunchComplete?: boolean }[]
+  answers?: { answer: string; downloads?: string[]; firstLaunchComplete?: boolean; installedRuntime?: string }[]
   archive?: string
   downloads?: string[]
   downloadDirectories?: string[]
   defaultChanged?: boolean
   afterImport?: string
+  runtimeDownloadError?: string
   archiveExists?: boolean
   archiveVersion?: string
   targetSymlink?: boolean
@@ -45,6 +47,7 @@ async function setup(fixture: {
   let defaults = 0
   const state = fixture.installState ?? { paths: new Set<string>(), installed: fixture.installed }
   let imported = false
+  let installedRuntime = fixture.runtime ?? '27.1'
   const result = await withCapturedOutput(async () =>
     await IosSetupCommand.run({
       xcodeVersion: fixture.xcodeVersion ?? '27.1',
@@ -53,6 +56,7 @@ async function setup(fixture: {
       archive: fixture.archive,
       repositoryRoot: '/repo',
       hostPlatform: 'darwin',
+      hostArch: fixture.hostArch ?? 'arm64',
       json: fixture.json ?? true,
       terminal: {
         isInteractive: () => fixture.interactive ?? false,
@@ -61,6 +65,7 @@ async function setup(fixture: {
           events.push('prompt')
           const reply = fixture.answers?.[prompts.length - 1]
           downloads = reply?.downloads ?? downloads
+          installedRuntime = reply?.installedRuntime ?? installedRuntime
           if (reply?.firstLaunchComplete) {
             firstLaunchPending = false
           }
@@ -155,6 +160,10 @@ async function setup(fixture: {
         if (args.includes('-importPlatform')) {
           imported = true
         }
+        if (args.includes('-downloadPlatform') && fixture.runtimeDownloadError) {
+          exitCode = 1
+          stderr = fixture.runtimeDownloadError
+        }
         if (name.endsWith('/df')) {
           stdout = `Filesystem 1024-blocks Used Available Capacity Mounted\n/dev/disk 200000000 1000000 ${
             fixture.lowDisk || fixture.lowDiskAfterPrompt && prompts.length > 0 ? 1000 : 199000000
@@ -173,7 +182,7 @@ async function setup(fixture: {
           stdout = JSON.stringify({
             runtimes: [{
               identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-27-1',
-              version: imported ? fixture.afterImport ?? fixture.runtime ?? '27.1' : fixture.runtime ?? '27.1',
+              version: imported ? fixture.afterImport ?? installedRuntime : installedRuntime,
               isAvailable: true,
             }],
           })
@@ -545,12 +554,77 @@ Describe('explicit iOS dependency setup', () => {
       '-exportPath',
     ])
     Expect(download?.spec.args?.[5]).toMatch(/^\/repo\/\.artifacts\/ios-setup\/27\.1-27\.1\/runtime-[a-f0-9-]+$/)
+    Expect(download?.spec.args?.slice(6)).toEqual(['-architectureVariant', 'arm64'])
+    Expect(download?.spec.env?.['DEVELOPER_DIR']).toBe('/Applications/Xcode.app/Contents/Developer')
     Expect(result.calls.filter(call => call.spec.args?.includes('runtimes')).length).toBe(2)
     const mismatch = await setup({ installed: '/Applications/Xcode.app', runtime: '27.0', apply: true })
     Expect(mismatch.code).toBe(1)
     Expect(mismatch.receipt.runtimeAvailable).toBe(false)
     const retryDownload = mismatch.calls.find(call => call.spec.args?.includes('-downloadPlatform'))
     Expect(retryDownload?.spec.args?.[5]).not.toBe(download?.spec.args?.[5])
+  })
+
+  Test('uses the universal runtime variant for Intel or Rosetta processes', async () => {
+    const result = await setup({
+      hostArch: 'x64',
+      installed: '/Applications/Xcode.app',
+      runtime: '27.0',
+      afterImport: '27.1',
+      apply: true,
+    })
+    Expect(result.code).toBe(0)
+    Expect(result.calls.find(call => call.spec.args?.includes('-downloadPlatform'))?.spec.args?.slice(6)).toEqual([
+      '-architectureVariant',
+      'universal',
+    ])
+  })
+
+  Test('guides a failed runtime download through Xcode and verifies the requested version', async () => {
+    for (const runtime of ['27.1', '27.2']) {
+      const result = await setup({
+        installed: '/Applications/Xcode-27.1.app',
+        runtime: '27.0',
+        apply: true,
+        json: false,
+        interactive: true,
+        runtimeDownloadError: 'iOS 27.1 is not available for download.',
+        answers: [{ answer: '' }, { answer: '', installedRuntime: runtime }],
+      })
+      Expect(result.code).toBe(runtime === '27.1' ? 0 : 1)
+      Expect(result.receipt.runtimeAvailable).toBe(runtime === '27.1')
+      Expect(result.output).toContain('Settings > Components')
+      Expect(result.output).toContain('Developer Documentation is a separate download')
+      Expect(result.prompts.length).toBe(2)
+      const open = result.calls.find(call => call.name === '/usr/bin/open')
+      Expect(open?.spec.args).toEqual(['/Applications/Xcode-27.1.app'])
+      Expect(result.events.indexOf('prompt')).toBeLessThan(result.events.indexOf('/usr/bin/open'))
+      Expect(result.calls.filter(call => call.spec.args?.includes('runtimes')).length).toBe(2)
+      Expect(result.calls.some(call => call.spec.args?.includes('-importPlatform'))).toBe(false)
+    }
+  })
+
+  Test('keeps failed runtime downloads unattended or cancellable without importing an export', async () => {
+    for (
+      const mode of [{ json: true, interactive: true }, { json: false, interactive: false }, {
+        json: false,
+        interactive: true,
+      }]
+    ) {
+      const result = await setup({
+        installed: '/Applications/Xcode.app',
+        runtime: '27.0',
+        apply: true,
+        ...mode,
+        runtimeDownloadError: 'iOS 27.1 is not available for download.',
+        answers: [{ answer: 'q' }],
+      })
+      Expect(result.code).toBe(1)
+      Expect(result.receipt.remaining.join('\n')).toContain('iOS 27.1 is not available for download.')
+      Expect(result.receipt.remaining.join('\n')).toContain('Settings > Components')
+      Expect(result.prompts.length).toBe(!mode.json && mode.interactive ? 1 : 0)
+      Expect(result.calls.some(call => call.name === '/usr/bin/open' || call.spec.args?.includes('-importPlatform')))
+        .toBe(false)
+    }
   })
 
   Test('validates extracted archive metadata before reserving an install destination', async () => {
