@@ -5,6 +5,71 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const DISPATCHER = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts')
 
 Describe('named host command dispatch', () => {
+  Test('bounds Studio lifecycle selectors and preserves stop failures', async () => {
+    const root = await mkTestDir('tao-studio-lifecycle-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('dev.log', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["studio-ps", "studio-stop"] }')
+      const dev = FS.resolvePath('dev', root)
+      await FS.writeText(dev, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\nexit "${TAO_DEV_EXIT:-0}"\n')
+      await FS.chmod(dev, 0o755)
+      const invoke = (args: string[], exitCode = '0') =>
+        CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, ...args],
+          cwd: root,
+          env: { TAO_HOST_LOG: log, TAO_DEV_EXIT: exitCode },
+        })
+      const valid = [
+        ['studio-ps'],
+        ['studio-ps', '--json'],
+        ['studio-ps', '--help'],
+        ['studio-stop'],
+        ['studio-stop', '--help'],
+        ['studio-stop', '-h'],
+        ['studio-stop', '--all'],
+        ['studio-stop', '--json'],
+        ['studio-stop', '--all', '--json'],
+        ['studio-stop', '--json', '--all'],
+        ['studio-stop', '--launch', 'browser-owned-id'],
+        ['studio-stop', '--launch', 'browser-owned-id', '--json'],
+        ['studio-stop', '--json', '--launch', 'browser-owned-id'],
+      ]
+      for (const args of valid) {
+        Expect((await invoke(args)).exitCode).toBe(0)
+        Expect((await FS.readText(log)).trim().split('\n')).toEqual(args)
+      }
+      await FS.remove(log)
+      const invalid = [
+        ['studio-ps', '--all'],
+        ['studio-ps', '--launch', 'browser-owned-id'],
+        ['studio-ps', '--json', '--json'],
+        ['studio-ps', '--help', '--json'],
+        ['studio-stop', '--launch'],
+        ['studio-stop', '--launch', '--all'],
+        ['studio-stop', '--all', '--launch', 'browser-owned-id'],
+        ['studio-stop', '--launch', 'browser-owned-id', '--all'],
+        ['studio-stop', '--all', '--all'],
+        ['studio-stop', '--json', '--json'],
+        ['studio-stop', '--launch', '../foreign'],
+        ['studio-stop', '--launch', ''],
+        ['studio-stop', '--launch', 'a'.repeat(129)],
+        ['studio-stop', '--launch', 'first', '--launch', 'second'],
+        ['studio-stop', '--pid', '123'],
+        ['studio-stop', '--signal', 'KILL'],
+        ['studio-stop', '--root', '/tmp'],
+        ['studio-stop', '123'],
+      ]
+      for (const args of invalid) {
+        Expect((await invoke(args)).exitCode).toBe(2)
+      }
+      Expect(await FS.exists(log)).toBe(false)
+      Expect((await invoke(['studio-stop', '--launch', 'browser-owned-id'], '1')).exitCode).toBe(1)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('launches only Docker Desktop and propagates launch failure', async () => {
     const root = await mkTestDir('tao-docker-desktop-host-')
     try {

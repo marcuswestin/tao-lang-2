@@ -216,6 +216,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector('#state')?.textContent === 'zoom hit 1 / background 0'`,
       )
       await browser.click('[data-tao-studio-canvas-zoom]')
+      await browser.click('[data-tao-studio-canvas-zoom-action="1"]')
       await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-zoom]')?.textContent === '100%'`)
 
       await browser.click('.studio-rail-button[data-panel="files"]')

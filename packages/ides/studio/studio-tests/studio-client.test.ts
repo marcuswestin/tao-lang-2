@@ -1,7 +1,7 @@
 import { EditorState, type Transaction } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
 import { Errors, Time } from '@shared'
-import { Deferred, Expect, Test, until } from '@shared/test'
+import { Deferred, Expect, Test, testOverrideSlot, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
 import { mountStudioCanvasFocus, StudioCanvasFocusLane } from '../studio-src/client/app/StudioCanvasFocus'
 import { studioInspectionRequest } from '../studio-src/client/app/StudioInspection'
@@ -2541,6 +2541,129 @@ Test('Studio selection from a second scenario group makes that cell active for t
     path: 'Garden.tao',
     sourceVersion: 'source-2',
   })).toBeUndefined()
+})
+
+const previewMeasurementsSlot = testOverrideSlot({
+  read: () => StudioApiClient.previewLayoutMeasurements,
+  write: value => {
+    ;(StudioApiClient as { previewLayoutMeasurements: typeof value }).previewLayoutMeasurements = value
+  },
+})
+
+Test('Studio retains current layout identity before publication and rejects stale geometry', async () => {
+  const contentWindow = {}
+  const preview = previewConnection('preview-layout', 'default', contentWindow)
+  const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
+  const snapshots: unknown[] = []
+  const restore = previewMeasurementsSlot.install(async () => {
+    snapshots.push(preview.layoutMeasurements)
+  })
+  const data = {
+    channel: studioProtocolChannel,
+    identity: { ...preview.cellIdentity, previewInstanceId: preview.previewInstanceId },
+    measurements: [{ elementName: 'Text', renderId: 'selected', rect: { height: 20, width: 40, x: 10, y: 30 } }],
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-layout-measurements',
+  }
+  const actions = { async applySourceAction() {}, inspect() {} }
+  const receive = (message: unknown) =>
+    handlePreviewMessage(
+      {
+        data: message,
+        origin: preview.origin,
+        source: contentWindow,
+      } as MessageEvent,
+      preview,
+      handshake,
+      async () => undefined,
+      actions,
+    )
+  try {
+    await receive(data)
+    Expect(snapshots).toEqual([data])
+    for (const field of ['cellRevision', 'compileRevision', 'manifestRevision'] as const) {
+      await receive({ ...data, identity: { ...data.identity, [field]: field === 'manifestRevision' ? 'stale' : 0 } })
+    }
+    Expect(preview.layoutMeasurements).toEqual(data)
+    Expect(snapshots).toEqual([data, data, data, data])
+    await receive({
+      ...data,
+      measurements: [{ ...data.measurements[0], rect: { height: 20, width: -1, x: 10, y: 30 } }],
+    })
+    Expect(snapshots).toHaveLength(4)
+    Expect(preview.layoutMeasurements).toEqual(data)
+  } finally {
+    restore()
+  }
+})
+
+Test('Studio canvas shortcuts reach only the authenticated preview bridge', async () => {
+  const contentWindow = {}
+  const preview = previewConnection('preview-shortcuts', 'default', contentWindow)
+  const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
+  const commands: string[] = []
+  const actions = {
+    async applySourceAction() {},
+    canvasShortcut: (message: { command: string }) => commands.push(message.command),
+    inspect() {},
+  }
+  const data = {
+    channel: studioProtocolChannel,
+    command: 'fit',
+    identity: { ...preview.cellIdentity, previewInstanceId: preview.previewInstanceId },
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-canvas-shortcut',
+  }
+  const event = { data, origin: preview.origin, source: contentWindow } as unknown as MessageEvent
+  for (const command of ['fit', 'reset', 'zoom-in', 'zoom-out']) {
+    await handlePreviewMessage(
+      { ...event, data: { ...data, command } } as MessageEvent,
+      preview,
+      handshake,
+      async () => undefined,
+      actions,
+    )
+  }
+  Expect(commands).toEqual(['fit', 'reset', 'zoom-in', 'zoom-out'])
+  for (
+    const invalid of [
+      { ...event, source: {} },
+      { ...event, origin: 'https://untrusted.example' },
+      { ...event, data: { ...data, command: 'reload' } },
+      { ...event, data: { ...data, identity: { ...data.identity, previewInstanceId: 'stale' } } },
+      { ...event, data: { ...data, identity: { ...data.identity, project: '/other' } } },
+    ]
+  ) {
+    await handlePreviewMessage(invalid as MessageEvent, preview, handshake, async () => undefined, actions)
+  }
+  Expect(commands).toEqual(['fit', 'reset', 'zoom-in', 'zoom-out'])
+})
+
+Test('Studio wires a canvas shortcut to the iframe that sent it', () => {
+  const first = previewConnection('preview-first', 'first', {})
+  const second = previewConnection('preview-second', 'second', {})
+  const received: { command: string; iframe: HTMLIFrameElement }[] = []
+  const listener = studioPreviewMessageListener({
+    activePreview: new StudioActivePreview([first, second]),
+    handshake: { identity: { appName: 'Garden', project: '/workspace' } },
+    onCanvasShortcut: (command: string, iframe: HTMLIFrameElement) => received.push({ command, iframe }),
+    previews: [first, second],
+  } as never)
+  const event = {
+    data: {
+      channel: studioProtocolChannel,
+      command: 'zoom-in',
+      identity: { ...second.cellIdentity, previewInstanceId: second.previewInstanceId },
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-canvas-shortcut',
+    },
+    origin: second.origin,
+    source: second.iframe.contentWindow,
+  } as MessageEvent
+  listener({ ...event, source: {} } as MessageEvent)
+  Expect(received).toEqual([])
+  listener(event)
+  Expect(received).toEqual([{ command: 'zoom-in', iframe: second.iframe }])
 })
 
 Test('Studio preview message wiring dispatches one editor selection per incoming source pick', async () => {

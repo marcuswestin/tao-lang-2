@@ -6,6 +6,7 @@ import {
   type StudioDebugCommandMessage,
   type StudioPreviewCanvasGestureMessage,
   type StudioPreviewCanvasPanKeyMessage,
+  type StudioPreviewCanvasShortcutMessage,
   type StudioPreviewIdentity,
   type StudioPreviewRuntimeUpdateMessage,
   StudioProtocol,
@@ -38,6 +39,7 @@ type StudioPreviewMessageActions = {
   applySourceAction: (envelope: StudioSourceActionEnvelope) => Promise<void>
   canvasGesture?: (gesture: StudioPreviewCanvasGestureMessage) => void
   canvasPanKey?: (message: StudioPreviewCanvasPanKeyMessage) => void
+  canvasShortcut?: (message: StudioPreviewCanvasShortcutMessage) => void
   changed?: () => void
   inspect: (selection: StudioInspectorSelection) => void
   reveal?: () => void
@@ -230,6 +232,7 @@ export async function handlePreviewMessage(
     'preview-console': type => receiveConsole(preview, received(message, type), actions),
     'preview-canvas-gesture': type => actions.canvasGesture?.(received(message, type)),
     'preview-canvas-pan-key': type => actions.canvasPanKey?.(received(message, type)),
+    'preview-canvas-shortcut': type => actions.canvasShortcut?.(received(message, type)),
     'preview-debug': type => receiveDebug(preview, received(message, type), actions),
     'preview-fixture-capture-failed': type => receiveFixtureCapture(preview, received(message, type), actions),
     'preview-fixture-captured': type => receiveFixtureCapture(preview, received(message, type), actions),
@@ -240,7 +243,11 @@ export async function handlePreviewMessage(
     'preview-journey-step-recorded': type => receiveJourneyRecording(preview, received(message, type), actions),
     'preview-lens-render': type => receiveLensRender(preview, received(message, type), actions),
     'preview-layout-measurements': async type => {
-      await StudioApiClient.previewLayoutMeasurements(received(message, type)).catch(ignoreSupersededPreviewReport)
+      const measurement = received(message, type)
+      if (preview.cellIdentity === undefined || matchesExactPreviewCellIdentity(preview, measurement.identity)) {
+        preview.layoutMeasurements = measurement
+      }
+      await StudioApiClient.previewLayoutMeasurements(measurement).catch(ignoreSupersededPreviewReport)
     },
     'preview-runtime-capture-failed': type => receiveRuntimeCapture(preview, received(message, type)),
     'preview-runtime-captured': type => receiveRuntimeCapture(preview, received(message, type)),
