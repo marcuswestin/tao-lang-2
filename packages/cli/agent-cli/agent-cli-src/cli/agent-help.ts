@@ -126,6 +126,8 @@ Watchman is one shared daemon per user. status does not start it; start is idemp
 watchman stop disconnects subscriptions in every worktree. Startup uses the primary checkout's
 pinned client so removing a linked worktree does not break the daemon's launch path.
 
+setup --environment builds this checkout's pinned Nix environment, then runs setup without opening
+an interactive shell. Use it when native tools such as Hutch are missing or the toolchain changed.
 setup installs with a frozen lockfile. After adding, removing, or moving a workspace package, or
 changing a package.json dependency, setup --refresh-lockfile is the one install that rewrites
 bun.lock.

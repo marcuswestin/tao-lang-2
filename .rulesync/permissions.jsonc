@@ -165,6 +165,9 @@
           "github.com",
           "*.github.com",
           "*.githubusercontent.com",
+          // Pinned native Studio launcher, engine, and runtime release artifacts.
+          "hutch.blackboard.sh",
+          "electrobun-artifacts.blackboard.sh",
           "expo.dev",
           "*.expo.dev",
           "*.expo.io",

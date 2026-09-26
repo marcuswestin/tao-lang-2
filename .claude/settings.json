@@ -220,6 +220,8 @@
         "github.com",
         "*.github.com",
         "*.githubusercontent.com",
+        "hutch.blackboard.sh",
+        "electrobun-artifacts.blackboard.sh",
         "expo.dev",
         "*.expo.dev",
         "*.expo.io",

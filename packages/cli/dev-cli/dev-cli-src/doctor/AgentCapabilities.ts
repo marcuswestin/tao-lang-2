@@ -1,4 +1,4 @@
-import { CLI, Platform, Repo } from '@shared'
+import { CLI, FS, Platform, Repo } from '@shared'
 
 type CapabilityStatus = 'available' | 'denied' | 'unavailable'
 
@@ -17,7 +17,7 @@ export type CapabilityReport = {
   version: 1
 }
 
-const LANDING_REQUIRED_CAPABILITIES = new Set(['Watchman socket', 'CoreSimulator service'])
+const LANDING_REQUIRED_CAPABILITIES = new Set(['Watchman socket', 'CoreSimulator service', 'Hutch native launcher'])
 
 export type ProbeResult = {
   error?: unknown
@@ -32,6 +32,7 @@ export type CapabilityProbe = {
   display: string
   name: string
   remediation?: string
+  requiredVersion?: string
   successfulExitCodes?: readonly number[]
 }
 
@@ -106,6 +107,19 @@ export function classifyCapability(probe: CapabilityProbe, result: ProbeResult):
   const output = `${result.stderr}\n${result.stdout}`.trim()
   const successfulExitCodes = probe.successfulExitCodes ?? [0]
   if (result.error === undefined && result.exitCode !== null && successfulExitCodes.includes(result.exitCode)) {
+    if (probe.requiredVersion !== undefined) {
+      const version = output.match(/(?:^|\s)v?(\d+\.\d+\.\d+(?:[-+][\w.-]+)?)(?=\s|$)/)?.[1]
+      if (version !== probe.requiredVersion) {
+        return {
+          command: probe.display,
+          detail: `Expected version ${probe.requiredVersion}; `
+            + (version === undefined ? 'no version reported' : `found ${version}`),
+          name: probe.name,
+          remediation: probe.remediation,
+          status: 'unavailable',
+        }
+      }
+    }
     return { command: probe.display, detail: 'available', name: probe.name, status: 'available' }
   }
   const fallback = result.error instanceof Error ? result.error.message : `exit ${result.exitCode ?? 'unknown'}`
@@ -128,13 +142,23 @@ export function unavailableLandingCapabilities(report: CapabilityReport): readon
   return report.checks.filter(check => LANDING_REQUIRED_CAPABILITIES.has(check.name) && check.status !== 'available')
 }
 
-/** readAgentCapabilities probes host seams without editing files, opening apps, or signalling processes. */
+/** readAgentCapabilities probes host seams without installing tools, opening apps, or signalling processes. */
 export async function readAgentCapabilities(
   dependencies: ReadCapabilitiesDependencies = {},
 ): Promise<CapabilityReport> {
   const runProbe = dependencies.runProbe
     ?? (async (probe: CapabilityProbe) => await CLI.run(probe.command, { args: [...probe.args], stdio: 'pipe' }))
-  const checks = await Promise.all(PROBES.map(async probe => {
+  const hutchRelease = await FS.readJson<{ version: string }>(Repo.resolvePath('nix/hutch-release.json'))
+  const probes: readonly CapabilityProbe[] = [...PROBES, {
+    // The development environment supplies the pinned launcher on PATH; never install during a probe.
+    args: ['--version'],
+    command: 'hutch',
+    display: 'hutch --version',
+    name: 'Hutch native launcher',
+    remediation: 'Run ./agent setup --environment to provision the pinned Hutch launcher, then retry landing.',
+    requiredVersion: hutchRelease.version,
+  }]
+  const checks = await Promise.all(probes.map(async probe => {
     try {
       return classifyCapability(probe, await runProbe(probe))
     } catch (error) {
