@@ -46,6 +46,25 @@ function createCommands(): Command {
     .version(TaoVersion.current(), '-v, --version', 'Print the Tao release this is, or `development` from source.')
 
   commands
+    .command('bridge')
+    .argument('<package>', 'Installed package whose public API should be imported.')
+    .requiredOption('--source <source>', 'Source adapter: expo or react-native.')
+    .option('--export <name>', 'Import one public object, such as React Native Vibration.')
+    .option('--from <directory>', 'Resolve installed declarations from this directory.', '.')
+    .requiredOption('--out <directory>', 'Write generated bindings into a new directory.')
+    .description('Generate experimental Tao bindings for supported native API actions.')
+    .action(async (packageName, options) => {
+      try {
+        const { generateNativeBindingFiles } = await import('./native-bindings/native-binding-command')
+        const files = await generateNativeBindingFiles(packageName, options)
+        HCI.writeSuccess(`Generated native bindings in ${FS.displayPath(FS.dirname(files[0]!))}\n`)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
     .command('create')
     .argument('<description>', 'What the app is, in a sentence. URLs and image paths in it are read.')
     .option('--id <id>', 'Checked-in project id and directory name. Suggested from the name when omitted.')

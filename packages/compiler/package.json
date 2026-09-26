@@ -7,6 +7,7 @@
   "exports": {
     ".": "./compiler-src/compiler.ts",
     "./bridge-metadata": "./compiler-src/bridge-metadata.ts",
+    "./native-bindings": "./compiler-src/native-bindings.ts",
     "./workspace": "./compiler-src/workspace/index.ts"
   },
   "dependencies": {

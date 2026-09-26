@@ -1,5 +1,54 @@
 # Tao CLI
 
+## Generated native bindings (proof of concept)
+
+`tao bridge` imports the public declarations of an already installed package. Expo and React Native
+have separate source adapters feeding the same catalog and Tao/TypeScript emitter. From this repository:
+
+```sh
+./agent tao bridge expo-haptics --source expo --from packages/apps/expo-host --out .artifacts/haptics
+./agent tao bridge react-native --source react-native --export Vibration --from packages/apps/expo-host --out .artifacts/vibration
+```
+
+Choose a fresh output directory. The command writes `Bindings.tao`, its generated `Bindings.ts`
+implementation, and a versioned `bindings.json` catalog with package version, declaration path,
+declaration hash, platform annotations and diagnostics. It refuses an existing destination or any
+unsupported public value in the selected surface. It installs no packages and executes no native code.
+Keep the two binding files together in the consuming Tao project, where the same upstream package
+must be resolvable. Use ordinary Tao imports:
+
+```tao
+use SelectionAsync, ImpactAsync, NotificationAsync, PerformAndroidHapticsAsync,
+   ImpactFeedbackStyle, NotificationFeedbackType, AndroidHaptics from ./Bindings.tao
+
+action Feedback() {
+   do SelectionAsync()
+   do ImpactAsync()
+   do ImpactAsync(Style: Soft)
+   do NotificationAsync(Type: Warning)
+   do PerformAndroidHapticsAsync(Type: Gesture_Start)
+}
+```
+
+The complete installed Haptics surface is generated without a Haptics-specific template or mapping:
+four methods and all 27 cases across three enums. Missing optional arguments stay omitted at the
+upstream call, preserving Expo's own defaults. Tao `none` represents omission here. Async actions
+return the native promise to Tao's existing action runtime; native rejection follows its existing
+failure channel. Android-only methods retain their upstream behavior; the generator does not add
+cross-platform fallbacks or configure native builds.
+
+Supported inputs are non-generic, non-overloaded actions returning `void` or `Promise<void>`, exported
+non-const enums with constant member values, primitive parameters, arrays, and primitive unions such as Vibration's number-or-list
+pattern. Unsupported result values, callbacks, objects, rest parameters and complex types produce
+diagnostics. This is a narrow binding generator, not yet a complete importer for every Expo/RN API.
+The catalog and source interface leave room for future metadata readers. A direct Android SDK source
+also needs a native execution backend; adding a reader alone does not provide one.
+
+Generation tests run Tao validation and sidecar checking against installed declarations. Runtime
+tests feed untouched generated files through compilation and exercise the Expo module boundary.
+Physical-device feedback, native linking and packaged CLI acceptance remain separate checks.
+See [findings and next steps](../../../Docs/Roadmap/Bridge%20React%20Native%20and%20Expo%20APIs%20into%20Tao/Findings%20-%20Generated%20native%20bindings.md).
+
 ## Background app commands (macOS proof of concept)
 
 From the repository root, run the complete example with:

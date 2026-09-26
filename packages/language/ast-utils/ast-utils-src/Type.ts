@@ -1011,7 +1011,10 @@ class TypeResolutionContext {
     if (parameter.inlineType) {
       return this.ofDefinition(parameter.inlineType)
     }
-    return parameter.type ? this.ofReference(parameter.type) : unresolvedType()
+    const declared = parameter.type ? this.ofReference(parameter.type) : unresolvedType()
+    return parameter.optional
+      ? { kind: 'union', members: [declared, primitiveType('none')] }
+      : declared
   }
 
   ofExpression(expression: AST.Expression): TaoType {
@@ -1248,7 +1251,12 @@ class TypeResolutionContext {
   ofDefinition(definition: AST.TypeDefinition): TaoType {
     return this.withoutCycles(definition, () =>
       Switch.type(definition, {
-        ParameterTypeDeclaration: declaration => withNominal(this.ofTypeExpression(declaration.type), declaration),
+        ParameterTypeDeclaration: declaration => {
+          const declared = withNominal(this.ofTypeExpression(declaration.type), declaration)
+          return declaration.optional
+            ? { kind: 'union', members: [declared, primitiveType('none')] }
+            : declared
+        },
         TypeDeclaration: declaration => {
           const target = declaration.aliasTarget?.member.ref
           if (AST.isTypeDeclaration(target)) {

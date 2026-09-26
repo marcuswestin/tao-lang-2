@@ -336,6 +336,20 @@ export async function mkdir(inputPath: string): Promise<void> {
   await nodeFs.mkdir(inputPath, { recursive: true })
 }
 
+/** mkdirExclusive creates missing parents and atomically claims a new directory; false means it already exists. */
+export async function mkdirExclusive(inputPath: string): Promise<boolean> {
+  await mkdir(dirname(inputPath))
+  try {
+    await nodeFs.mkdir(inputPath)
+    return true
+  } catch (error) {
+    if (fileErrorCode(error) === 'EEXIST') {
+      return false
+    }
+    throw error
+  }
+}
+
 /** remove deletes a path recursively if it exists. */
 export async function remove(inputPath: string): Promise<void> {
   await nodeFs.rm(inputPath, { force: true, recursive: true })
