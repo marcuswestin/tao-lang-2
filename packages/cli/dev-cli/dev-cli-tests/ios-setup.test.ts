@@ -15,7 +15,7 @@ async function setup(fixture: {
   apply?: boolean
   json?: boolean
   interactive?: boolean
-  answers?: { answer: string; downloads?: string[] }[]
+  answers?: { answer: string; downloads?: string[]; firstLaunchComplete?: boolean }[]
   archive?: string
   downloads?: string[]
   downloadDirectories?: string[]
@@ -41,6 +41,7 @@ async function setup(fixture: {
   const events: string[] = []
   let receiptJson: string | undefined
   let downloads = fixture.downloads
+  let firstLaunchPending = fixture.firstLaunch
   let defaults = 0
   const state = fixture.installState ?? { paths: new Set<string>(), installed: fixture.installed }
   let imported = false
@@ -60,6 +61,9 @@ async function setup(fixture: {
           events.push('prompt')
           const reply = fixture.answers?.[prompts.length - 1]
           downloads = reply?.downloads ?? downloads
+          if (reply?.firstLaunchComplete) {
+            firstLaunchPending = false
+          }
           return reply?.answer ?? 'q'
         },
       },
@@ -99,7 +103,7 @@ async function setup(fixture: {
       },
       runCommand: async (name, spec = {}) => {
         calls.push({ name, spec })
-        events.push(name)
+        events.push(spec.args?.includes('-checkFirstLaunchStatus') ? 'check-first-launch' : name)
         const args = spec.args ?? []
         let stdout = ''
         let stderr = ''
@@ -159,7 +163,7 @@ async function setup(fixture: {
         if (args.includes('-version')) {
           stdout = 'Xcode 27.1\nBuild version 18B42'
         }
-        if (args.includes('-checkFirstLaunchStatus') && fixture.firstLaunch) {
+        if (args.includes('-checkFirstLaunchStatus') && firstLaunchPending) {
           exitCode = 1
         }
         if (args.includes('--show-sdk-version')) {
@@ -208,6 +212,92 @@ async function setup(fixture: {
 }
 
 Describe('explicit iOS dependency setup', () => {
+  Test('opens the selected Xcode after Enter and rechecks first launch before continuing', async () => {
+    const result = await setup({
+      installed: '/Applications/Xcode-27.1.app',
+      firstLaunch: true,
+      apply: true,
+      json: false,
+      interactive: true,
+      answers: [{ answer: '' }, { answer: '', firstLaunchComplete: true }],
+    })
+    Expect(result.code).toBe(0)
+    Expect(result.receipt.remaining).toEqual([])
+    Expect(result.output).toContain("review and accept Apple's license if you agree")
+    Expect(result.output).toContain('let required components finish installing')
+    Expect(result.prompts).toEqual([
+      'Press Enter to open /Applications/Xcode-27.1.app, or type q and Enter to stop',
+      'After completing setup in Xcode, press Enter to continue, or type q and Enter to stop',
+    ])
+    Expect(result.calls.find(call => call.name === '/usr/bin/open')?.spec.args).toEqual([
+      '/Applications/Xcode-27.1.app',
+    ])
+    Expect(
+      result.events.filter(event =>
+        ['check-first-launch', 'prompt', '/usr/bin/open', '/usr/bin/xcrun'].includes(event)
+      ),
+    )
+      .toEqual([
+        'check-first-launch',
+        'prompt',
+        '/usr/bin/open',
+        'prompt',
+        'check-first-launch',
+        '/usr/bin/xcrun',
+        '/usr/bin/xcrun',
+        '/usr/bin/xcrun',
+      ])
+  })
+
+  Test('does not open Xcode or wait for first launch in plan, JSON, or noninteractive runs', async () => {
+    for (
+      const mode of [
+        { apply: false, json: false, interactive: true },
+        { apply: true, json: true, interactive: true },
+        { apply: true, json: false, interactive: false },
+      ]
+    ) {
+      const result = await setup({ ...mode, installed: '/Applications/Xcode.app', firstLaunch: true })
+      Expect(result.code).toBe(1)
+      Expect(result.prompts).toEqual([])
+      Expect(result.calls.some(call => call.name === '/usr/bin/open')).toBe(false)
+      Expect(result.output).toContain('Open Xcode to complete these steps')
+    }
+  })
+
+  Test('allows quitting before opening Xcode or while waiting for its setup', async () => {
+    for (const answers of [[{ answer: 'q' }], [{ answer: '' }, { answer: 'q' }]]) {
+      const result = await setup({
+        installed: '/Applications/Xcode.app',
+        firstLaunch: true,
+        apply: true,
+        json: false,
+        interactive: true,
+        answers,
+      })
+      Expect(result.code).toBe(1)
+      Expect(result.calls.filter(call => call.name === '/usr/bin/open').length).toBe(answers.length - 1)
+      Expect(result.calls.filter(call => call.spec.args?.includes('-checkFirstLaunchStatus')).length).toBe(1)
+      Expect(result.calls.some(call => call.name === '/usr/bin/xcrun')).toBe(false)
+      Expect(result.receipt.remaining.join('\n')).toContain('Stopped')
+    }
+  })
+
+  Test('pressing Enter after opening Xcode does not imply first-launch completion', async () => {
+    const result = await setup({
+      installed: '/Applications/Xcode.app',
+      firstLaunch: true,
+      apply: true,
+      json: false,
+      interactive: true,
+      answers: [{ answer: '' }, { answer: '' }],
+    })
+    Expect(result.code).toBe(1)
+    Expect(result.calls.filter(call => call.spec.args?.includes('-checkFirstLaunchStatus')).length).toBe(2)
+    Expect(result.receipt.remaining.join('\n')).toContain('Xcode setup is still incomplete')
+    Expect(result.calls.some(call => call.name === '/usr/bin/xcrun')).toBe(false)
+  })
+
   Test('passes the Apple identity requirement as inline codesign source rather than a filename', async () => {
     const result = await setup({ installed: '/Applications/Xcode.app' })
     const verification = result.calls.find(call => call.name === '/usr/bin/codesign')
@@ -401,7 +491,7 @@ Describe('explicit iOS dependency setup', () => {
   Test('hands license and first-launch work to the user without accepting it', async () => {
     const result = await setup({ installed: '/Applications/Xcode.app', firstLaunch: true, apply: true })
     Expect(result.code).toBe(1)
-    Expect(result.receipt.remaining.join('\n')).toContain("open '/Applications/Xcode.app'")
+    Expect(result.receipt.remaining.join('\n')).toContain("Xcode at '/Applications/Xcode.app' needs first-launch setup")
     Expect(
       result.calls.some(call =>
         call.name.includes('sudo') || call.spec.args?.includes('-license')

@@ -135,9 +135,13 @@ async function run(options: Options): Promise<number> {
     }
   }
   const firstLaunch = (app: string) =>
-    `Open ${quote(app)} and complete Apple's license, administrator and first-launch prompts. Command: open ${
+    `Xcode at ${
       quote(app)
-    }. Then rerun setup-ios with the same options.`
+    } needs first-launch setup. In Xcode, review and accept Apple's license if you agree, authorize requested administrator steps, and let required components finish installing. Leave the default Xcode selection unchanged, then return to this Terminal.`
+  const waitToContinue = async (message: string) => {
+    const answer = await terminal.askText({ message })
+    return !['q', 'quit'].includes(answer.trim().toLowerCase())
+  }
   const inspectRuntime = async (app: string) => {
     receipt.sdk = await requireSuccess('/usr/bin/xcrun', ['--sdk', 'iphonesimulator', '--show-sdk-version'], app)
     if (!VERSION.test(receipt.sdk) || !atLeast(receipt.sdk, options.runtimeVersion)) {
@@ -293,10 +297,9 @@ async function run(options: Options): Promise<number> {
         notice(missing)
         notice(instruction)
         waitedForDownload = true
-        const answer = await terminal.askText({
-          message: 'Press Enter when the download is complete to continue, or type q and Enter to stop',
-        })
-        if (['q', 'quit'].includes(answer.trim().toLowerCase())) {
+        if (
+          !await waitToContinue('Press Enter when the download is complete to continue, or type q and Enter to stop')
+        ) {
           receipt.remaining.push('Stopped before installation; rerun the same command when the download is ready.')
           return await finish()
         }
@@ -405,7 +408,33 @@ async function run(options: Options): Promise<number> {
     const launch = await command('/usr/bin/xcodebuild', ['-checkFirstLaunchStatus'], selected)
     if (launch.exitCode !== 0 || launch.error) {
       receipt.remaining.push(firstLaunch(selected))
-      return await finish()
+      if (!options.apply || options.json || !terminal.isInteractive()) {
+        receipt.remaining.push('Open Xcode to complete these steps, then rerun setup-ios with the same options.')
+        return await finish()
+      }
+      await save()
+      notice(firstLaunch(selected))
+      if (!await waitToContinue(`Press Enter to open ${selected}, or type q and Enter to stop`)) {
+        receipt.remaining.push('Stopped before opening Xcode; rerun the same command when ready.')
+        return await finish()
+      }
+      notice(`Opening ${selected}...`)
+      await requireSuccess('/usr/bin/open', [selected])
+      if (
+        !await waitToContinue('After completing setup in Xcode, press Enter to continue, or type q and Enter to stop')
+      ) {
+        receipt.remaining.push('Stopped while waiting for Xcode setup; rerun the same command when ready.')
+        return await finish()
+      }
+      notice('Rechecking Xcode first-launch readiness...')
+      const recheck = await command('/usr/bin/xcodebuild', ['-checkFirstLaunchStatus'], selected)
+      if (recheck.exitCode !== 0 || recheck.error) {
+        receipt.remaining.push(
+          'Xcode setup is still incomplete. Finish its setup prompts, then rerun the same command.',
+        )
+        return await finish()
+      }
+      receipt.remaining = []
     }
     await inspectRuntime(selected)
     if (!receipt.runtimeAvailable) {

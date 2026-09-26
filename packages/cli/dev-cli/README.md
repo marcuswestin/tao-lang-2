@@ -39,6 +39,10 @@ extracts under `.artifacts/ios-setup`, copies into a unique staging directory un
 and publishes the validated application alongside the existing installation. It refuses to replace
 an occupied destination. Apple sign-in, license acceptance, and administrator steps remain
 explicit handoffs; it does not accept licenses or run `sudo` automatically.
+When first-launch setup is needed, interactive `--apply` explains the steps and opens the selected
+Xcode after Enter. After completing Apple's prompts, return to the terminal and press Enter again;
+the command rechecks readiness before continuing the simulator setup. Type `q` and Enter at either
+prompt to stop. Inspection, JSON, and noninteractive runs provide instructions without opening Xcode.
 
 The selected Xcode applies through each child process's `DEVELOPER_DIR`. Neither the system's
 `xcode-select` setting nor shell startup files change. This separates the application bundles,
