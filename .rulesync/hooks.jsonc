@@ -6,7 +6,7 @@
   // harness-neutral: discover the worktree root through Git so a harness launched from any
   // repository subdirectory reaches the same script, and use no field one harness does not document.
   "hooks": {
-    // Every harness reaches the repository's one setup entry, `./agent setup`, before an agent's
+    // Every local harness reaches the repository's one setup entry, `./agent setup`, before an agent's
     // first command. Worktrunk runs it from its blocking `pre-start` hook (.config/wt.toml) and
     // Cursor from its worktree setup (.cursor/worktrees.json); a worktree Claude Code or Codex
     // creates itself — `--worktree`, `isolation: "worktree"`, a background session — passes
@@ -16,13 +16,17 @@
     // processes outside the Bash sandbox, which matters for Claude Code: its sandbox denies the
     // writes a dependency install needs under paths it protects.
     //
-    // The script runs `./agent setup` — the entrypoint rather than `just setup` because it
+    // The POSIX script runs `./agent setup` — the entrypoint rather than `just setup` because it
     // activates the pinned devenv profile itself, which a fresh worktree has not done yet; it is
     // idempotent and returns in well under a second once a checkout is bootstrapped, so it runs
     // unconditionally — and then, when Claude Code hands it CLAUDE_ENV_FILE, exports that profile's
     // bin directory onto the PATH of every later Bash tool command. Setup stays quiet; after it
     // completes, the model-routing notice reaches the agent only when the routing table looks
-    // behind the models this machine runs.
+    // behind the models this machine runs. Every verified Claude Code cloud Linux session first
+    // enters bootstrap-tao-dev-env --install-nix, which checks the locked tool identity even for
+    // cached profiles and calls the same setup entry. Hosted Codex uses explicit environment
+    // setup/maintenance, and Cursor cloud uses .cursor/environment.json;
+    // .claude/cloud-setup.md documents all three.
     "sessionStart": [
       {
         "type": "command",

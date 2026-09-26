@@ -3,6 +3,7 @@ import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test 
 
 const PROFILE_SCRIPT = Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh')
 const DEPENDENCY_SCRIPT = Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh')
+const SHELL_SCRIPT = 'packages/cli/dev-cli/dev-cli-src/environment/repo-shell.sh'
 
 type ProfileFixture = {
   commonGitDir: string
@@ -373,6 +374,10 @@ Describe('agent worktree profile bootstrap', () => {
       const devPath = FS.resolvePath('dev', fixture.worktree)
       await FS.writeText(devPath, await FS.readText(Repo.resolvePath('dev')))
       await FS.writeText(
+        FS.resolvePath(SHELL_SCRIPT, fixture.worktree),
+        await FS.readText(Repo.resolvePath(SHELL_SCRIPT)),
+      )
+      await FS.writeText(
         FS.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh', fixture.worktree),
         await FS.readText(PROFILE_SCRIPT),
       )
@@ -381,7 +386,7 @@ Describe('agent worktree profile bootstrap', () => {
 
       Expect(result.exitCode).not.toBe(0)
       Expect(result.stderr).toContain('pinned devenv profile is unavailable')
-      Expect(result.stderr).toContain('./enter-tao-dev-env')
+      Expect(result.stderr).toContain('./bootstrap-tao-dev-env')
     } finally {
       await FS.remove(testRoot)
     }
@@ -1096,6 +1101,7 @@ async function makeExecutable(path: string): Promise<void> {
 
 async function copyBootstrapScripts(worktree: string): Promise<void> {
   await Promise.all([
+    FS.writeText(FS.resolvePath(SHELL_SCRIPT, worktree), await FS.readText(Repo.resolvePath(SHELL_SCRIPT))),
     FS.writeText(FS.resolvePath('agent', worktree), await FS.readText(Repo.resolvePath('agent'))),
     FS.writeText(FS.resolvePath('dev', worktree), await FS.readText(Repo.resolvePath('dev'))),
     FS.writeText(

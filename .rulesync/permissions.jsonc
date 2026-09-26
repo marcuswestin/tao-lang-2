@@ -106,7 +106,7 @@
     "app-dev", "studio", "studio-native",
     "local-instantdb start", "local-instantdb stop",
     "companion-host-build",
-    "standalone-cli-vm-setup", "standalone-cli-clean-machine",
+    "standalone-cli-vm-setup", "standalone-cli-clean-machine", "contributor-linux-test",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators open-url", "simulators uninstall", "simulators open",
     "devices list", "devices apps", "devices launch",

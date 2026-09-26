@@ -35,6 +35,7 @@ const expected = [
   'companion-host-build',
   'standalone-cli-vm-setup',
   'standalone-cli-clean-machine',
+  'contributor-linux-test',
   'simulators list',
   'simulators boot',
   'simulators run',
