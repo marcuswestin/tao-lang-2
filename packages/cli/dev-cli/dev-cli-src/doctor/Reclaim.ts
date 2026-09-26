@@ -38,6 +38,7 @@ export type ReclaimDependencies = {
   registryRoot?: string
   run?: typeof CLI.run
   readThreads?: (paths: readonly string[]) => Promise<WorktreeThreadInventory>
+  inSandbox?: () => boolean
   /** The worktree asking. Injected by tests; nothing may reclaim the ground it is standing on. */
   thisRoot?: string
 }
@@ -193,6 +194,11 @@ export async function execute(
   report: ReclaimReport,
   dependencies: ReclaimDependencies = {},
 ): Promise<readonly ReclaimRemoval[]> {
+  if ((dependencies.inSandbox ?? CLI.inAgentSandbox)()) {
+    Errors.throwHostEnvironment(
+      'Reclaim cannot remove worktrees inside an agent sandbox: Git may unregister a worktree before the sandbox denies directory deletion. Run --execute from a normal Terminal.',
+    )
+  }
   const run = dependencies.run ?? CLI.run
   const readThreads = dependencies.readThreads ?? readWorktreeThreads
   const removals: ReclaimRemoval[] = []
@@ -232,9 +238,8 @@ export async function execute(
 }
 
 /**
- * removeWorktree names the sandbox denial rather than letting it read as a Git failure. `git
- * worktree remove` fails before deleting anything under the agent sandbox, so the worktree survives
- * intact and the only thing missing is the shell it needed.
+ * removeWorktree names a sandbox denial rather than letting it read as a generic Git failure.
+ * A denial can happen after Git unregisters the checkout, so its directory must be inspected.
  */
 async function removeWorktree(path: string, run: typeof CLI.run): Promise<ReclaimRemoval> {
   const result = await run('git', { args: ['worktree', 'remove', path], cwd: Repo.getRoot(), stdio: 'pipe' })
@@ -245,8 +250,8 @@ async function removeWorktree(path: string, run: typeof CLI.run): Promise<Reclai
   return {
     outcome: 'failed',
     path,
-    reason: /operation not permitted/iu.test(stderr)
-      ? 'the sandbox denied the removal; nothing was deleted. Re-run --execute from an unsandboxed shell.'
+    reason: CLI.isSandboxDenial(result)
+      ? 'the sandbox denied directory deletion; Git may already have unregistered the worktree. Inspect the registry and directory before retrying from a normal Terminal.'
       : stderr.trim().split('\n')[0] ?? 'git worktree remove failed',
   }
 }

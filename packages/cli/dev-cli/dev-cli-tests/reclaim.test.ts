@@ -259,7 +259,7 @@ Describe('reclaim', () => {
     const { candidate, registryRoot, run } = await scenario({ calls })
     const report = await reclaim({ readThreads: noThreads, registryRoot, run })
 
-    const removals = await execute(report, { readThreads: noThreads, registryRoot, run })
+    const removals = await execute(report, { inSandbox: () => false, readThreads: noThreads, registryRoot, run })
 
     Expect(removals).toEqual([{ outcome: 'removed', path: candidate }])
     Expect(calls).toContain(routeKey('git', ['worktree', 'remove', candidate], Repo.getRoot()))
@@ -274,7 +274,12 @@ Describe('reclaim', () => {
     // The machine goes busy between the report and the action — the case a five-minute-old snapshot
     // gets wrong, and the reason the liveness signals are re-read per item.
     const busy = await scenario({ calls, candidatePath: first.candidate, laneOnCandidate: true })
-    const removals = await execute(report, { readThreads: noThreads, registryRoot: busy.registryRoot, run: busy.run })
+    const removals = await execute(report, {
+      inSandbox: () => false,
+      readThreads: noThreads,
+      registryRoot: busy.registryRoot,
+      run: busy.run,
+    })
 
     Expect(removals).toEqual([
       { outcome: 'skipped-now-live', path: first.candidate, reason: 'took a lane since the report' },
@@ -301,22 +306,32 @@ Describe('reclaim', () => {
         }],
       },
     })
-    const removals = await execute(report, { readThreads: attached, registryRoot, run })
+    const removals = await execute(report, { inSandbox: () => false, readThreads: attached, registryRoot, run })
     Expect(removals).toEqual([{ outcome: 'skipped-now-live', path: candidate, reason: 'attached to an agent task' }])
     Expect(calls).not.toContain(routeKey('git', ['worktree', 'remove', candidate], Repo.getRoot()))
   })
 
-  Test('a sandbox denial is reported as needing an unsandboxed shell, not as a git failure', async () => {
+  Test('execute refuses a sandbox before Git can unregister a worktree', async () => {
+    const calls: string[] = []
+    const { candidate, registryRoot, run } = await scenario({ calls })
+    const report = await reclaim({ readThreads: noThreads, registryRoot, run })
+
+    await Expect(execute(report, { inSandbox: () => true, readThreads: noThreads, registryRoot, run }))
+      .rejects.toThrow('Run --execute from a normal Terminal')
+    Expect(calls).not.toContain(routeKey('git', ['worktree', 'remove', candidate], Repo.getRoot()))
+  })
+
+  Test('a late sandbox denial warns that Git may already have unregistered the worktree', async () => {
     const { candidate, registryRoot, run } = await scenario({
       removeResult: { exitCode: 1, stderr: "fatal: failed to delete '<path>': Operation not permitted" },
     })
     const report = await reclaim({ readThreads: noThreads, registryRoot, run })
 
-    const removals = await execute(report, { readThreads: noThreads, registryRoot, run })
+    const removals = await execute(report, { inSandbox: () => false, readThreads: noThreads, registryRoot, run })
 
     Expect(removals[0]?.path).toBe(candidate)
     Expect(removals[0]?.outcome).toBe('failed')
-    Expect(removals[0]?.reason).toContain('unsandboxed shell')
-    Expect(removals[0]?.reason).toContain('nothing was deleted')
+    Expect(removals[0]?.reason).toContain('normal Terminal')
+    Expect(removals[0]?.reason).toContain('may already have unregistered')
   })
 })
