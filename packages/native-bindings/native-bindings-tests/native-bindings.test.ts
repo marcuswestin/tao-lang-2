@@ -47,7 +47,7 @@ Describe('native binding generation', () => {
     Expect(generated.diagnostics).toEqual([])
   })
 
-  Test('reads only public declarations, follows reexports, and reports unsupported results and overloads', async () => {
+  Test('reads only public declarations, follows reexports, and reports unsupported shapes and overloads', async () => {
     await withTaoFiles('native-bindings-test', {
       'node_modules/expo-example/package.json': JSON.stringify({
         name: 'expo-example',
@@ -73,13 +73,12 @@ export declare function privateToModule(): void;
         packageName: 'expo-example',
         fromDirectory: root,
       })
-      Expect(generated.catalog.operations.map(operation => operation.name)).toEqual(['choose'])
+      Expect(generated.catalog.operations.map(operation => operation.name)).toEqual(['choose', 'fetchValue'])
       Expect(generated.catalog.enums).toEqual([{
         name: 'Choice',
         members: [{ name: 'First', value: 'first' }, { name: 'Second', value: 'second' }],
       }])
       Expect(generated.diagnostics.map(diagnostic => diagnostic.symbol).sort()).toEqual([
-        'fetchValue',
         'overloaded',
         'unionArray',
       ])
@@ -264,7 +263,7 @@ export declare function requiredAbsent(value: string | undefined): void;
       const workingBinding = await FS.readText(FS.resolvePath('Bindings.ts', options.out))
       await FS.writeText(
         FS.resolvePath('node_modules/expo-replace/index.d.ts', root),
-        'export declare function unsupported(): { value: number };',
+        'export declare function unsupported(): Map<string, number>;',
       )
       await Expect(generateNativeBindingFiles('expo-replace', options)).rejects.toThrow(
         'Cannot generate the complete binding',

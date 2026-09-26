@@ -1,4 +1,4 @@
-import { Assert, Errors, FS, Platform, Repo, TaoResources } from '@shared'
+import { Assert, Errors, FS, Platform, Repo, Switch, TaoResources } from '@shared'
 import type * as TS from 'typescript'
 import type {
   NativeApiCatalog,
@@ -9,6 +9,7 @@ import type {
   NativeApiSource,
   NativeApiType,
 } from './native-api'
+import { type NativeResourceContract, nativeTypeReader } from './typescript-api-types'
 
 type EnumReflection = { declaration: NativeApiEnum; types: readonly TS.Type[] }
 
@@ -16,6 +17,7 @@ type EnumReflection = { declaration: NativeApiEnum; types: readonly TS.Type[] }
 export async function readTypeScriptApi(
   source: string,
   request: NativeApiImport,
+  resources: readonly NativeResourceContract[] = [],
 ): ReturnType<NativeApiSource['read']> {
   const resourceRoot = TaoResources.declaredRoot()
   const typescriptPath = resourceRoot === undefined
@@ -110,6 +112,34 @@ export async function readTypeScriptApi(
     Assert.input(declaration !== undefined, `Export '${request.exportName}' has no value declaration.`)
     candidates = checker.getPropertiesOfType(checker.getTypeOfSymbolAtLocation(actual, declaration))
   }
+  const excluded = [...new Set(request.exclude ?? [])].sort()
+  for (const name of excluded) {
+    Assert.input(
+      candidates.some(symbol => symbol.name === name),
+      `No public native export '${name}' exists to exclude.`,
+    )
+  }
+  candidates = candidates.filter(symbol => !excluded.includes(symbol.name))
+  const types = nativeTypeReader(ts, checker, resources, enums)
+  function assertValue(type: NativeApiType, resourceAllowed = false): void {
+    Switch.kind(type, {
+      primitive: () => undefined,
+      enum: () => undefined,
+      callback: () => Errors.throwUserInput('Nested callbacks require an explicit resource contract.'),
+      nullable: type => assertValue(type.value),
+      list: type => assertValue(type.element),
+      union: type => type.members.forEach(member => assertValue(member)),
+      record: type => {
+        const record = types.records.find(record => record.name === type.name)
+        Assert.defined(record, 'referenced native record exists')
+        if (record.disposal) {
+          Assert.input(resourceAllowed, 'Nested native resources require an explicit ownership mapping.')
+        } else {
+          record.fields.forEach(field => assertValue(field.type))
+        }
+      },
+    })
+  }
   const operations: NativeApiOperation[] = []
   for (const exportedSymbol of candidates) {
     const symbol = unalias(exportedSymbol)
@@ -134,43 +164,50 @@ export async function readTypeScriptApi(
     const signature = signatures[0]!
     const result = checker.getReturnTypeOfSignature(signature)
     const awaited = checker.getAwaitedType(result)
-    if (signature.typeParameters?.length || awaited === undefined || !(awaited.flags & ts.TypeFlags.Void)) {
+    if (signature.typeParameters?.length || awaited === undefined) {
       diagnostics.push({
         symbol: exportedSymbol.name,
-        reason: 'This proof of concept supports non-generic void or Promise<void> actions.',
+        reason: 'Generic operations or unresolved promise results are not supported.',
       })
       continue
     }
+    const rollbackTypes = types.checkpoint()
     try {
-      const parameters = signature.parameters.map(parameter => {
-        const parameterDeclaration = parameter.valueDeclaration
-        Assert.input(
-          parameterDeclaration !== undefined && ts.isParameter(parameterDeclaration),
-          'A parameter declaration is required.',
-        )
-        Assert.input(parameterDeclaration.dotDotDotToken === undefined, 'Rest parameters are not supported.')
-        const type = checker.getTypeOfSymbolAtLocation(parameter, parameterDeclaration)
-        const optional = parameterDeclaration.questionToken !== undefined
-          || parameterDeclaration.initializer !== undefined
-        Assert.input(
-          optional || !type.isUnion() || !type.types.some(member => member.flags & ts.TypeFlags.Undefined),
-          'Required parameters accepting undefined need an explicit absence mapping.',
-        )
-        return {
-          name: parameter.name,
-          type: readType(type, ts, checker, enums),
-          optional,
+      const parameters = types.parameters(
+        signature,
+        exportedSymbol.name.charAt(0).toUpperCase() + exportedSymbol.name.slice(1),
+      )
+      const returned = awaited.flags & ts.TypeFlags.Void
+        ? undefined
+        : types.read(awaited, `${exportedSymbol.name.charAt(0).toUpperCase() + exportedSymbol.name.slice(1)}Result`)
+      Assert.input(returned?.kind !== 'callback', 'Returned callbacks need an explicit resource contract.')
+      if (returned) {
+        assertValue(returned, true)
+      }
+      for (const parameter of parameters) {
+        if (parameter.type.kind === 'callback') {
+          parameter.type.parameters.forEach(argument => assertValue(argument.type))
+        } else {
+          assertValue(parameter.type, true)
         }
-      })
+      }
+      if (parameters.some(parameter => parameter.type.kind === 'callback')) {
+        Assert.input(
+          returned?.kind === 'record' && types.records.some(record => record.name === returned.name && record.disposal),
+          'Callback operations must return a supported owned subscription.',
+        )
+      }
       const platforms = symbol.getJsDocTags(checker).filter(tag => tag.name === 'platform')
         .flatMap(tag => ts.displayPartsToString(tag.text).split(/\s+/).filter(Boolean))
       operations.push({
         name: exportedSymbol.name,
         parameters,
+        ...(returned === undefined ? {} : { result: returned }),
         asynchronous: awaited !== result,
         platforms,
       })
     } catch (error) {
+      rollbackTypes()
       diagnostics.push({ symbol: exportedSymbol.name, reason: Errors.asError(error).message })
     }
   }
@@ -192,6 +229,10 @@ export async function readTypeScriptApi(
       '\n',
     ])),
     enums: enums.map(item => item.declaration).toSorted((left, right) => left.name.localeCompare(right.name)),
+    ...(types.records.length === 0
+      ? {}
+      : { records: types.records.toSorted((left, right) => left.name.localeCompare(right.name)) }),
+    ...(excluded.length === 0 ? {} : { excluded }),
     operations: operations.toSorted((left, right) => left.name.localeCompare(right.name)),
   }
   return { catalog, diagnostics }
@@ -227,50 +268,6 @@ function runtimeExports(
     }
   }
   return symbols.filter((_, index) => !unavailable.has(index))
-}
-
-function readType(
-  type: TS.Type,
-  ts: typeof TS,
-  checker: TS.TypeChecker,
-  enums: readonly EnumReflection[],
-): NativeApiType {
-  const present = type.isUnion() ? type.types.filter(member => !(member.flags & ts.TypeFlags.Undefined)) : [type]
-  const enumeration = enums.find(item => present.length > 0 && present.every(member => item.types.includes(member)))
-  if (enumeration !== undefined) {
-    Assert.input(present.length === enumeration.types.length, 'Narrowed enum subsets require an explicit mapping.')
-    return { kind: 'enum', name: enumeration.declaration.name }
-  }
-  if (type.flags & ts.TypeFlags.String) {
-    return { kind: 'primitive', name: 'text' }
-  }
-  if (type.flags & ts.TypeFlags.Number) {
-    return { kind: 'primitive', name: 'number' }
-  }
-  if (
-    type.flags & ts.TypeFlags.Boolean
-    || present.length === 2 && present.every(member => member.flags & ts.TypeFlags.BooleanLiteral)
-  ) {
-    return { kind: 'primitive', name: 'boolean' }
-  }
-  if (checker.isArrayType(type)) {
-    const element = checker.getTypeArguments(type as TS.TypeReference)[0]
-    Assert.defined(element, 'array has an element type')
-    const item = readType(element, ts, checker, enums)
-    Assert.input(item.kind !== 'union', 'Arrays of unions require a named element type.')
-    return { kind: 'list', element: item }
-  }
-  if (type.isUnion() && present.length > 0) {
-    const members = present.map(member => readType(member, ts, checker, enums))
-    Assert.input(
-      members.every(member =>
-        member.kind === 'primitive' || member.kind === 'list' && member.element.kind === 'primitive'
-      ),
-      'Only primitive and primitive-list unions are supported.',
-    )
-    return members.length === 1 ? members[0]! : { kind: 'union', members }
-  }
-  return Errors.throwUserInput(`Unsupported native API type '${checker.typeToString(type)}'.`)
 }
 
 async function findPackageRoot(declaration: string): Promise<string> {

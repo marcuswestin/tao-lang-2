@@ -26,10 +26,12 @@ The sole public entry is `native-bindings-src/native-bindings.ts`. Implementatio
 - `native-api.ts`: source interface and source-neutral catalog types.
 - `native-binding-sources.ts`: Expo and React Native adapters.
 - `typescript-api-source.ts`: TypeScript symbol resolution and supported-shape extraction.
+- `typescript-api-types.ts`: structural value reflection and adapter-declared resource contracts.
 - `generate.ts`: common Tao declarations, JavaScript calls, and catalog emitter.
+- `emit-values.ts`: generated enum, record, callback, and resource conversions.
 - `write-bindings.ts`: source selection, diagnostics, and safe output publication.
 
-`NativeBindings.generate({ source, packageName, fromDirectory, exportName? })` returns the catalog,
+`NativeBindings.generate({ source, packageName, fromDirectory, exportName?, exclude? })` returns the catalog,
 diagnostics, and generated text without writing. `generateNativeBindingFiles` is the CLI-facing
 writer. New readers implement `NativeApiSource`; they do not require source-specific emitter branches.
 The current invocation backend calls JavaScript modules in Expo/React Native. A future direct
@@ -47,11 +49,13 @@ From the repository root, with dependencies already installed:
 ```sh
 ./tao bridge expo-haptics --source expo --from packages/apps/expo-host --out .artifacts/haptics
 ./tao bridge react-native --source react-native --export Vibration --from packages/apps/expo-host --out .artifacts/vibration
+./tao bridge expo-clipboard --source expo --from packages/apps/expo-host --out .artifacts/clipboard/Generated --exclude ClipboardPasteButton isPasteButtonAvailable
 ```
 
 For an app, set `--from` to the project resolving the upstream package and `--out` to a dedicated
 generated directory inside that project. The command executes no native package code. Unsupported
-API shapes fail before publication, preserving the previous output.
+API shapes fail before publication, preserving the previous output. `--exclude` explicitly records
+omitted exported names in the catalog; it does not silently ignore unsupported exports.
 
 The output directory is wholly disposable. Reruns replace changed files, remove stale files, and
 leave identical files untouched. The generated catalog identifies an existing directory as owned;
@@ -73,14 +77,37 @@ generated bindings does not make them editable: changes still come from regenera
 is integrated into setup/build, reconsider this policy and add a regeneration drift check. The measured
 runtime is small enough that speed alone does not justify committing generated bindings.
 
-## Next surface
+## Clipboard coverage
 
-Start with [Expo Clipboard](https://docs.expo.dev/versions/latest/sdk/clipboard/): text reads and writes
-introduce asynchronous string/boolean results and optional named option records. Then extend the same
-module to images for required fields, string-literal unions, nullable results, and nested returned
-records. This gives smaller steps than Location's permissions and subscriptions or Sensors' instance
-methods and disposable callbacks. Decide how Tao exposes result-bearing asynchronous calls before
-implementing that slice; the current generator supports only `void` and `Promise<void>` operations.
+[Expo Clipboard](https://docs.expo.dev/versions/latest/sdk/clipboard/) generation supports its 11
+text, image, URL, and listener operations from the installed TypeScript declarations. Returned strings,
+booleans, nullable images, nested records, optional option fields, enums, and string-literal cases pass
+through the shared catalog and emitter. Omitted optional fields preserve upstream defaults.
+Colliding enum cases receive their type name as a prefix: `StringFormat_HTML` and
+`ContentType_HTML` remain distinct Tao cases with their original native values. Tao code uses the
+unqualified cases after importing their types.
+
+Foreign actions declare `returns T`; an action body uses `let Result = do SetStringAsync("Hi")`
+followed by `set Copied = Result` to await a boolean and update writable boolean state. This is an
+illustrative fragment using the implemented result-binding syntax. Native Tao action bodies cannot
+return values, and result-bearing foreign actions cannot use `runs latest`.
+
+Reading and writing need no subscription. Listeners observe changes and belong to the lexical mounted
+view owning the calling action. They dispose on unmount or through the returned subscription's `Remove`
+action. Deprecated `RemoveClipboardListener` uses the same idempotent disposal. Disposed listeners
+ignore arriving events and queued callbacks; already executing callbacks are not cancelled. Registration
+outside an owned mounted view fails before native registration, and failed transactions or savepoints
+dispose subscriptions created by the rolled-back work.
+
+The command above explicitly excludes `ClipboardPasteButton` and `isPasteButtonAvailable`;
+components and exported constants remain unsupported. This is operation coverage, not full Clipboard
+package coverage. Nested resources, arbitrary callback values, recursive/generic records, and required
+values containing `undefined` are rejected with diagnostics. Resource lifetime semantics come from the
+Expo adapter's reusable `expo-modules-core.EventSubscription` contract; TypeScript method signatures
+alone cannot infer ownership. No Clipboard-specific sidecar code is handwritten.
+
+Generated-binding tests compile the untouched output and exercise it in a mounted Tao app against a
+mock native module. Host/device acceptance remains outstanding. No dependencies were added.
 
 The [PoC findings](<../../Docs/Roadmap/Bridge React Native and Expo APIs into Tao/Findings - Generated native bindings.md>)
 record measurements, current limitations, and the broader research.

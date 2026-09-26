@@ -5,7 +5,10 @@ import { readTypeScriptApi } from './typescript-api-source'
 /** ExpoApiSource imports the public module surface of an installed Expo package. */
 export const ExpoApiSource: NativeApiSource = {
   name: 'expo',
-  read: request => readTypeScriptApi('expo', request),
+  read: request =>
+    readTypeScriptApi('expo', request, [
+      { packageName: 'expo-modules-core', typeName: 'EventSubscription', disposal: 'remove' },
+    ]),
 }
 
 /** ReactNativeApiSource imports one public React Native object, retaining its method receiver. */

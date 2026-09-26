@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
+import { BridgeMetadata } from '../../bridge-metadata'
 import { foreignActionTestStubKey } from '../../foreign-action-test-stubs'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
@@ -45,6 +46,7 @@ export const ActionsCompiler = {
         })
       }, {
         name: ${gen.jsLiteral(action.name)},
+        ${AST.findOwningView(action) ? gen`owner: _TaoActionOwner,` : gen``}
         ${actionBlockContainsRespond(action.block) ? gen`interrupt: true,` : gen``}
       })
     `,
@@ -150,7 +152,8 @@ export const ActionsCompiler = {
         return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
           ${Compile.ActionBlockBody(action.block)}
         })
-      }${actionBlockContainsRespond(action.block) ? gen`, { interrupt: true }` : gen``})
+      }, { ${AST.findOwningView(action) ? gen`owner: _TaoActionOwner,` : gen``}
+        ${actionBlockContainsRespond(action.block) ? gen`interrupt: true,` : gen``} })
     `
   },
 
@@ -177,6 +180,7 @@ export const ActionsCompiler = {
       AsyncActionStatement: Compile.AsyncActionStatement,
       CreateStatement: Compile.CreateStatement,
       AskStatement: Compile.AskStatement,
+      ActionResultStatement: Compile.ActionResultStatement,
       CheckStatement: Compile.CheckStatement,
       ContextualPresentStatement: Compile.ContextualPresentStatement,
       DeleteStatement: Compile.DeleteStatement,
@@ -237,6 +241,14 @@ export const ActionsCompiler = {
       return TR.BlockScope(_Scope, async _Scope => {
         ${Compile.ActionBlockBody(statement.block)}
       })
+    })`
+  },
+
+  ActionResultStatement(statement: AST.ActionResultStatement): Compiled {
+    const invocation = statement.invocation
+    const type = BridgeMetadata.resultType(Type.ofValueDeclaration(statement))
+    return gen`${gen.scopeName(statement)} = await TR.DoResult<${type}>(${Compile.Expression(invocation.action)}${
+      Compile.ActionArguments(invocation)
     })`
   },
 
@@ -466,7 +478,8 @@ function compileForeignAction(action: AST.ActionDeclaration): Compiled {
     }`)
   }],
     { ${action.runsLatest ? gen`runs: "latest", ` : gen``}requiredArguments: ${requiredArguments},
-      testStubKey: ${gen.jsLiteral(foreignActionTestStubKey(action))} },
+      testStubKey: ${gen.jsLiteral(foreignActionTestStubKey(action))},
+      ${AST.findOwningView(action) ? gen`owner: _TaoActionOwner,` : gen``} },
   )`
 }
 

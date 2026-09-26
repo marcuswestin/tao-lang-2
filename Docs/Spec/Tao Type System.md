@@ -522,7 +522,18 @@ statements would infer. `runs latest` is valid only on a foreign action and reta
 not-yet-started argument set while one call is in flight; the detailed transaction and skipped-call
 contract is specified in [Tao Actions](Tao%20Actions.md).
 The generated bridge contract checks its plain JavaScript parameter types and `void` or promised
-`void` completion. Entity parameters are structural records of their declared fields.
+`void` completion when no result is declared. A named foreign action with `returns T` instead checks
+`T` or `Promise<T>` completion. `let Name = do Action(...)` awaits that result and binds an immutable
+local value of the declared type for the following statements. Nullable results use `returns T?`.
+Only foreign actions declare results; result-bearing actions cannot use `runs latest`.
+The ordinary `from` expression remains synchronous and does not unwrap promises.
+Entity parameters are structural records of their declared fields.
+
+Generated native bindings also convert structural option and result records, including nested records,
+optional fields, enum fields, string-literal cases, and nullable values. Missing optional fields stay
+omitted rather than overriding upstream defaults. Listener callback payloads use the same conversion;
+their subscription's `Remove` member is an action. Subscription ownership and disposal follow
+[Tao Actions](Tao%20Actions.md#native-listener-ownership).
 Configuration implementation factories are checked against the declared nav or datasource protocol.
 
 A view may publish the same typed boundary directly:

@@ -2,17 +2,32 @@
 export type NativeApiType =
   | { kind: 'primitive'; name: 'text' | 'number' | 'boolean' }
   | { kind: 'enum'; name: string }
+  | { kind: 'record'; name: string }
+  | { kind: 'nullable'; value: NativeApiType }
+  | { kind: 'callback'; parameters: NativeApiParameter[] }
   | { kind: 'list'; element: NativeApiType }
   | { kind: 'union'; members: NativeApiType[] }
 
 export type NativeApiEnum = {
   name: string
   members: { name: string; value: string | number }[]
+  /** Literal unions have no upstream enum object; their constants come from the declaration. */
+  literal?: true
+}
+
+export type NativeApiParameter = { name: string; type: NativeApiType; optional: boolean }
+
+export type NativeApiRecord = {
+  name: string
+  fields: NativeApiParameter[]
+  /** Verified source-adapter contract, never inferred merely from a method named remove. */
+  disposal?: string
 }
 
 export type NativeApiOperation = {
   name: string
-  parameters: { name: string; type: NativeApiType; optional: boolean }[]
+  parameters: NativeApiParameter[]
+  result?: NativeApiType
   asynchronous: boolean
   platforms: string[]
 }
@@ -25,6 +40,8 @@ export type NativeApiCatalog = {
   declaration: string
   declarationHash: string
   enums: NativeApiEnum[]
+  records?: NativeApiRecord[]
+  excluded?: string[]
   operations: NativeApiOperation[]
 }
 
@@ -34,6 +51,7 @@ export type NativeApiImport = {
   packageName: string
   fromDirectory: string
   exportName?: string
+  exclude?: readonly string[]
 }
 
 /** NativeApiSource is the extension seam for Expo, React Native, and future metadata readers. */

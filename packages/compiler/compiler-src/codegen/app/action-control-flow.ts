@@ -37,7 +37,7 @@ export function actionBlockRequiresAsync(
       return AST.isParameterDeclaration(statement.target.ref)
     }
     if (
-      AST.isAskStatement(statement)
+      AST.isAskStatement(statement) || AST.isActionResultStatement(statement)
       || AST.isGuardActionStatement(statement) || AST.isIfActionStatement(statement)
       || AST.isWhenDoStatement(statement)
     ) {

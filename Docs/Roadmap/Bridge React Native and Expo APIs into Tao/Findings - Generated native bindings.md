@@ -85,16 +85,16 @@ The Developer exercised the generated Haptics demo on a connected physical iPhon
 the feedback works. This is a manual device observation, not exhaustive acceptance of all API cases;
 Android and the packaged CLI's resource layout remain unverified. No third-party dependency or native host
 configuration changed. Unsupported exported values fail the CLI
-instead of producing a silently incomplete binding. Current support excludes result-bearing actions,
-records, callback subscriptions, overloads, generic functions and complex unions.
+instead of producing a silently incomplete binding. That initial proof of concept excluded
+result-bearing actions, records, and callback subscriptions; the Clipboard extension below adds them.
+Overloads, generic functions, and arbitrary complex unions remain outside this coverage.
 
 Recommended next slices:
 
 1. Complete the generated Haptics fixture's iOS acceptance and run it on Android; verify each supported platform's real behavior
    and deliberate unsupported-platform outcomes. Preserve raw upstream semantics in this import layer.
-2. Add Expo Clipboard text APIs for asynchronous string/boolean results and optional named records,
-   then image APIs for nullable and nested results. Decide the Tao outcome/resource surface before
-   hiding a result in mutable state. Then add callbacks with explicit disposal/lifetimes.
+2. Complete host/device acceptance for the Clipboard text, image, URL, and listener extension below,
+   including visible state changes from returned values and subscription disposal on view unmount.
 3. Add generated-diff review for locked package versions and persistent naming policy. Check compiler
    condition and dependency provenance, source licensing, and shipped CLI packaging before broad rollout.
 4. Add an Android metadata reader only when its invocation backend is chosen. The source-neutral catalog
@@ -123,26 +123,52 @@ outputs, caches, or compiler intermediates. Reconsider ignoring bindings once se
 regenerates them; the measured runtime itself is not a reason to commit them. A future drift check should
 regenerate and compare against committed output.
 
-## Next binding surface: Clipboard
+## Clipboard extension
 
 [Expo Clipboard](https://docs.expo.dev/versions/latest/sdk/clipboard/) is already installed in the host
-at 57.0.2 and introduces new shapes in small increments:
+at 57.0.2. The generator now supports all 11 text, image, URL, and listener operations in its installed
+public TypeScript declarations through the same source adapter, catalog, and emitter:
 
 1. `getStringAsync(options?): Promise<string>`, `setStringAsync(text, options?): Promise<boolean>`,
    and `hasStringAsync(): Promise<boolean>` add usable asynchronous results. `GetStringOptions` and
    `SetStringOptions` add optional named records with enum fields. Preserve omitted fields and upstream
-   defaults. The acceptance test should use results to change visible Tao state through generated bindings.
+   defaults. Acceptance must use results to change visible Tao state through generated bindings.
 2. `getImageAsync(options): Promise<ClipboardImage | null>` adds required/optional record fields,
    a `'png' | 'jpeg'` literal union, nullable results, and a nested `{ data, size: { width, height } }`
    result. This extends the same adapter/catalog/emitter instead of introducing another source.
-3. Event listeners add callback argument conversion and subscription disposal; paste UI and
-   platform-specific methods remain separate coverage. A text-only slice must not claim full Clipboard support.
+3. Event listeners add callback argument conversion and subscription disposal. The subscription owns
+   a generated `Remove` action; deprecated `RemoveClipboardListener` invokes the same idempotent
+   lifetime. Reading and writing Clipboard do not require subscribing.
 
-Before implementing step 1, settle Tao's representation of result-bearing asynchronous operations and
-record arguments against existing language features. This package extraction changes no language syntax.
-Location can then exercise permissions and richer records; Accelerometer can exercise exported instances,
-inherited generic sensor methods, streaming measurements, and listener lifetimes. Neither is a smaller
-first step than Clipboard.
+The Developer chose `action Read() returns text from ./Bindings.ts` and local
+`let Pasted = do Read()` result binding: await completion, then expose an immutable value to following
+statements with ordinary joined transaction/failure semantics. Native Tao action bodies cannot return
+values, and result-bearing foreign actions cannot use `runs latest`.
+
+Listeners belong to the lexical mounted view owning the calling action and dispose automatically on
+unmount. Registration without such an owner fails before native registration. Disposal ignores newly
+arriving events and queued callbacks that have not started; already executing callbacks continue.
+Failed transactions and savepoints dispose subscriptions created by their rolled-back work.
+
+Use explicit exclusions for the unsupported component and constant:
+
+```sh
+./tao bridge expo-clipboard --source expo --from packages/apps/expo-host --out .artifacts/clipboard/Generated --exclude ClipboardPasteButton isPasteButtonAvailable
+```
+
+The catalog records those excluded names. This does not claim full Clipboard package coverage;
+components and exported constants remain unsupported. Generated files are regenerated, never edited by
+hand. No dependencies were added. Automated tests compile the untouched output and exercise text,
+image, and listener behavior through a mounted Tao app with a mocked native module. Host/device
+acceptance remains outstanding; these tests do not prove native clipboard behavior.
+
+Colliding enum names receive a generated type prefix (`StringFormat_HTML`, `ContentType_HTML`).
+The Expo adapter identifies the shared `expo-modules-core.EventSubscription` disposal contract;
+the emitter has no Clipboard-specific method implementations. Nested resources, arbitrary callback
+values, recursive/generic records, and required `undefined` values are explicitly rejected.
+
+Location can next exercise permissions and richer records; Accelerometer can exercise exported instances
+and inherited generic sensor methods.
 
 ## Community project assessment
 

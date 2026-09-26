@@ -50,6 +50,7 @@ function createCommands(): Command {
     .argument('<package>', 'Installed package whose public API should be imported.')
     .requiredOption('--source <source>', 'Source adapter: expo or react-native.')
     .option('--export <name>', 'Import one public object, such as React Native Vibration.')
+    .option('--exclude <names...>', 'Explicitly omit named public exports and record them in the generated catalog.')
     .option('--from <directory>', 'Resolve installed declarations from this directory.', '.')
     .requiredOption(
       '--out <directory>',

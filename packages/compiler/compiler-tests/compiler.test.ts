@@ -127,7 +127,7 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.Do(_Scope.Increment.evaluate())')
     Expect(compiled.code).not.toContain('await TR.Do(_Scope.Increment.evaluate())')
     Expect(compiled.code).toContain('_Scope.AskFirst = TR.Action(async () =>')
-    Expect(compiled.code).toContain('{ interrupt: true }')
+    Expect(compiled.code).toMatch(/owner: _TaoActionOwner,\s*interrupt: true/)
   })
 
   Test('lowers app persisted state as a writable SplitNav width binding', async () => {

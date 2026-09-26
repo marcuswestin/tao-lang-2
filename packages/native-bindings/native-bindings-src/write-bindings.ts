@@ -5,7 +5,7 @@ import { ExpoApiSource, ReactNativeApiSource } from './native-binding-sources'
 /** generateNativeBindingFiles regenerates a complete supported import in a wholly generated directory. */
 export async function generateNativeBindingFiles(
   packageName: string,
-  options: { source: string; from: string; out: string; export?: string },
+  options: { source: string; from: string; out: string; export?: string; exclude?: string[] },
 ): Promise<string[]> {
   const source = [ExpoApiSource, ReactNativeApiSource].find(source => source.name === options.source)
   Assert.input(source !== undefined, `Unknown native API source '${options.source}'. Choose expo or react-native.`)
@@ -16,6 +16,7 @@ export async function generateNativeBindingFiles(
     packageName,
     fromDirectory: FS.resolvePath(options.from),
     ...(options.export === undefined ? {} : { exportName: options.export }),
+    ...(options.exclude === undefined ? {} : { exclude: options.exclude }),
   })
   Assert.input(
     generated.diagnostics.length === 0,
