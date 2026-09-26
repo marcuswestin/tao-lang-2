@@ -6,7 +6,10 @@
  * person zooms or pans.
  */
 
-type StudioCanvasViewportState = Readonly<{ x: number; y: number; z: number }>
+import { Switch } from '@shared/core'
+import type { StudioCanvasViewport, StudioPreviewCanvasShortcutMessage } from '../../StudioProtocol'
+
+type StudioCanvasViewportState = StudioCanvasViewport
 type CanvasRect = Readonly<{ bottom: number; left: number; right: number; top: number }>
 
 const minimumScale = 0.1
@@ -18,6 +21,7 @@ const zoomStops = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4] as const
 type MutableState = { x: number; y: number; z: number }
 
 const states = new WeakMap<HTMLElement, MutableState>()
+const listeners = new WeakMap<HTMLElement, (next: StudioCanvasViewportState) => void>()
 
 function state(host: HTMLElement): MutableState {
   const existing = states.get(host)
@@ -92,6 +96,7 @@ export function revealCanvasNode(node: Element | null | undefined): boolean {
   current.x += delta.x
   current.y += delta.y
   applyCanvasViewport(host)
+  listeners.get(host)?.({ ...current })
   return true
 }
 
@@ -109,6 +114,7 @@ export type StudioCanvasViewportControls = Readonly<{
   iframeWheel: (gesture: StudioCanvasWheelGesture, frame: Element) => void
   /** Space presses in a focused preview cannot bubble into the parent document. */
   iframePanKey: (held: boolean, frame: Element) => void
+  iframeShortcut: (command: StudioPreviewCanvasShortcutMessage['command'], frame: Element) => void
   zoomTo: (scale: number, anchor?: Readonly<{ x: number; y: number }>) => void
 }>
 
@@ -116,6 +122,11 @@ export type StudioCanvasViewportDeps = Readonly<{
   /** Canvas shortcuts and forwarded iframe gestures are active only in the Design preset. */
   enabled?: () => boolean
   host: HTMLElement
+  initialState?: StudioCanvasViewportState
+  /** Target rectangles use browser viewport coordinates, including the current canvas transform. */
+  selectionBounds?: () => CanvasRect | undefined
+  focusedBounds?: () => CanvasRect | undefined
+  onGestureEnd?: () => void
   /** Runs after every pan or zoom, so a caller can persist the viewport. */
   onChange?: (next: StudioCanvasViewportState) => void
 }>
@@ -141,14 +152,20 @@ export function canvasIframeGestureAnchor(
 }
 
 /**
- * mountCanvasViewport gives the host Figma's gestures: wheel or two-finger scroll pans, the same
- * with a modifier zooms around the pointer, a drag with space held or the middle button pans, and
- * the zoom pill in the corner shows and resets the scale.
+ * mountCanvasViewport owns canvas navigation: held-Space wheel or drag pans, pinch or modifier
+ * wheel zooms around the pointer, and the zoom menu frames the canvas or its current selection.
  */
 export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanvasViewportControls {
   const { host } = deps
   const document = host.ownerDocument
   const current = state(host)
+  const initial = deps.initialState
+  if (initial !== undefined && [initial.x, initial.y, initial.z].every(Number.isFinite)) {
+    Object.assign(current, { ...initial, z: clampScale(initial.z) })
+  }
+  if (deps.onChange !== undefined) {
+    listeners.set(host, deps.onChange)
+  }
   let disposed = false
 
   const publish = (): void => {
@@ -159,7 +176,10 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
   const pill = document.createElement('button')
   pill.className = 'studio-canvas-zoom'
   pill.type = 'button'
-  pill.title = 'Zoom to fit; hold a modifier and scroll to zoom'
+  pill.title = 'Canvas zoom'
+  pill.setAttribute('aria-label', 'Canvas zoom')
+  pill.setAttribute('aria-haspopup', 'menu')
+  pill.setAttribute('aria-expanded', 'false')
   pill.dataset['taoStudioCanvasZoom'] = 'true'
   host.append(pill)
 
@@ -205,7 +225,124 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     publish()
   }
 
-  const onPillClick = (): void => (current.z === 1 ? fit() : reset())
+  const frameBounds = (target: CanvasRect | undefined): void => {
+    if (target === undefined) {
+      return
+    }
+    const bounds = host.getBoundingClientRect()
+    const width = (target.right - target.left) / current.z
+    const height = (target.bottom - target.top) / current.z
+    if (width <= 0 || height <= 0 || bounds.width <= 0 || bounds.height <= 0) {
+      return
+    }
+    const x = (target.left - bounds.left - current.x) / current.z
+    const y = (target.top - bounds.top - current.y) / current.z
+    const padding = Math.min(32, bounds.width / 8, bounds.height / 8)
+    const z = clampScale(Math.min((bounds.width - padding * 2) / width, (bounds.height - padding * 2) / height))
+    Object.assign(current, {
+      x: (bounds.width - width * z) / 2 - x * z,
+      y: (bounds.height - height * z) / 2 - y * z,
+      z,
+    })
+    publish()
+  }
+  const shortcut = (command: StudioPreviewCanvasShortcutMessage['command']): void => {
+    Switch(command, {
+      fit,
+      reset,
+      'zoom-in': () => zoomTo(nextStop(current.z, 1)),
+      'zoom-out': () => zoomTo(nextStop(current.z, -1)),
+    })
+    deps.onGestureEnd?.()
+  }
+  const menu = document.createElement('div')
+  menu.className = 'studio-canvas-zoom-menu'
+  menu.dataset['taoStudioCanvasZoom'] = 'menu'
+  menu.setAttribute('role', 'menu')
+  menu.setAttribute('aria-label', 'Canvas zoom')
+  menu.hidden = true
+  const closeMenu = (restoreFocus = false): void => {
+    menu.hidden = true
+    pill.setAttribute('aria-expanded', 'false')
+    if (restoreFocus) {
+      pill.focus({ preventScroll: true })
+    }
+  }
+  const choices = [
+    { label: 'Fit all', action: fit },
+    { label: '100%', action: reset },
+    {
+      label: 'Zoom to selection',
+      action: () => frameBounds(deps.selectionBounds?.()),
+      available: deps.selectionBounds,
+    },
+    {
+      label: 'Zoom to focused frame',
+      action: () => frameBounds(deps.focusedBounds?.()),
+      available: deps.focusedBounds,
+    },
+  ].map((choice, index) => {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = choice.label
+    button.setAttribute('role', 'menuitem')
+    button.dataset['taoStudioCanvasZoomAction'] = String(index)
+    button.addEventListener('click', () => {
+      if (deps.enabled?.() === false || button.disabled) {
+        return
+      }
+      choice.action()
+      closeMenu(true)
+      deps.onGestureEnd?.()
+    })
+    menu.append(button)
+    return { button, available: choice.available, needsTarget: index > 1 }
+  })
+  const onPillClick = (): void => {
+    if (deps.enabled?.() === false) {
+      return
+    }
+    if (!menu.hidden) {
+      closeMenu()
+      return
+    }
+    for (const choice of choices) {
+      choice.button.disabled = choice.needsTarget && choice.available?.() === undefined
+    }
+    menu.hidden = false
+    pill.setAttribute('aria-expanded', 'true')
+    choices[0]?.button.focus({ preventScroll: true })
+  }
+  const onMenuKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      closeMenu(true)
+      return
+    }
+    if (event.key === 'Tab') {
+      closeMenu()
+      return
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') {
+      return
+    }
+    event.preventDefault()
+    const enabled = choices.map(choice => choice.button).filter(button => !button.disabled)
+    const index = enabled.findIndex(button => button === document.activeElement)
+    const next = event.key === 'Home' ? 0 : event.key === 'End'
+      ? enabled.length - 1
+      : (index + (event.key === 'ArrowDown' ? 1 : -1) + enabled.length) % enabled.length
+    enabled[next]?.focus({ preventScroll: true })
+  }
+  const onOutsidePointer = (event: PointerEvent): void => {
+    if (!menu.hidden && event.target instanceof Node && !menu.contains(event.target) && event.target !== pill) {
+      closeMenu()
+    }
+  }
+  menu.addEventListener('keydown', onMenuKey)
+  document.addEventListener('pointerdown', onOutsidePointer, true)
+  host.append(menu)
   pill.addEventListener('click', onPillClick)
 
   const applyWheel = (gesture: StudioCanvasWheelGesture, anchor: Readonly<{ x: number; y: number }>): void => {
@@ -221,6 +358,12 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
 
   const onWheel = (event: WheelEvent): void => {
     if (deps.enabled?.() === false) {
+      return
+    }
+    // A clipped canvas must not scroll its host or outer workbench when panning is disarmed.
+    // Ordinary iframe scrolling stays inside its own document and never reaches this listener.
+    event.preventDefault()
+    if (!spaceHeld && !event.ctrlKey && !event.metaKey) {
       return
     }
     const bounds = host.getBoundingClientRect()
@@ -264,8 +407,8 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
       delete host.dataset['canvasPanReady']
     }
   }
-  /** The canvas pans on the middle button, or on the left button while space is held. */
-  const startsPan = (event: PointerEvent): boolean => event.button === 1 || (event.button === 0 && spaceHeld)
+  /** Space explicitly gives the canvas ownership of left- or middle-button dragging. */
+  const startsPan = (event: PointerEvent): boolean => spaceHeld && (event.button === 0 || event.button === 1)
   const onPointerDown = (event: PointerEvent): void => {
     if (deps.enabled?.() === false || panning !== undefined || !startsPan(event)) {
       return
@@ -299,6 +442,7 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
       // The capture was already gone.
     }
     delete host.dataset['canvasPanning']
+    deps.onGestureEnd?.()
   }
   const endPan = (event: PointerEvent): void => {
     if (event.pointerId === panning) {
@@ -306,6 +450,7 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     }
   }
   const onBlur = (): void => {
+    closeMenu()
     setSpaceHeld(false)
     releasePan()
   }
@@ -325,21 +470,20 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
       setSpaceHeld(true)
       return
     }
-    if (!(event.metaKey || event.ctrlKey) || isTypingTarget(event.target)) {
+    if (event.isComposing || !(event.metaKey || event.ctrlKey) || isTypingTarget(event.target)) {
       return
     }
-    if (event.key === '0') {
+    const command = event.key === '0' ? 'fit' : event.key === '1'
+      ? 'reset'
+      : event.key === '=' || event.key === '+'
+      ? 'zoom-in'
+      : event.key === '-'
+      ? 'zoom-out'
+      : undefined
+    if (command !== undefined) {
       event.preventDefault()
-      fit()
-    } else if (event.key === '1') {
-      event.preventDefault()
-      reset()
-    } else if (event.key === '=' || event.key === '+') {
-      event.preventDefault()
-      zoomTo(nextStop(current.z, 1))
-    } else if (event.key === '-') {
-      event.preventDefault()
-      zoomTo(nextStop(current.z, -1))
+      event.stopPropagation()
+      shortcut(command)
     }
   }
   const onKeyUp = (event: KeyboardEvent): void => {
@@ -349,6 +493,7 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
         event.stopPropagation()
       }
       setSpaceHeld(false)
+      releasePan()
     }
   }
   // The product host's keyboard handlers can stop bubbling before it reaches document.
@@ -357,13 +502,11 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
   document.defaultView?.addEventListener('blur', onBlur)
 
   const reveal = (node: Element): void => {
-    if (revealCanvasNode(node)) {
-      deps.onChange?.({ ...current })
-    }
+    revealCanvasNode(node)
   }
 
   const iframeWheel = (gesture: StudioCanvasWheelGesture, frame: Element): void => {
-    if (deps.enabled?.() === false || !host.contains(frame)) {
+    if (deps.enabled?.() === false || !host.contains(frame) || (!gesture.zoom && !spaceHeld)) {
       return
     }
     const hostRect = host.getBoundingClientRect()
@@ -391,8 +534,12 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
         return
       }
       disposed = true
+      listeners.delete(host)
       onBlur()
       pill.removeEventListener('click', onPillClick)
+      menu.removeEventListener('keydown', onMenuKey)
+      document.removeEventListener('pointerdown', onOutsidePointer, true)
+      menu.remove()
       host.removeEventListener('wheel', onWheel)
       host.removeEventListener('pointerdown', onPointerDown, true)
       host.removeEventListener('pointermove', onPointerMove)
@@ -413,6 +560,11 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     },
     fit,
     iframePanKey,
+    iframeShortcut(command, frame) {
+      if (!disposed && deps.enabled?.() !== false && host.contains(frame)) {
+        shortcut(command)
+      }
+    },
     iframeWheel,
     reset,
     reveal,
