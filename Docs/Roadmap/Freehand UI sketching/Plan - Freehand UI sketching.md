@@ -942,3 +942,24 @@ size equals the occurrence size within 1 px, Focus tool outlines the owner not t
 dwell-to-enter lands as a child, empty states present) and a screenshot pair in
 `.artifacts/studio-smoke/` reviewed by eye before landing. The simulated lane runs in `verify-full`
 and met "Figma-at-home strides"'s ten-green-runs condition on 2026-09-20.
+
+## Post-MVP target — paper sketch to editable Studio views
+
+**Goal.** A person draws one or more UI views on paper, takes a photo, and gives it to an agent
+equipped with Tao skills and Studio tools. The agent interprets the drawing and adds free rectangles
+matching its view boundaries and elements to Studio sketch views. Those rectangles use the existing
+Studio catalog and typed, versioned Studio actions; the photograph does not become Tao source.
+
+**Continuation.** The person can correct, move, resize, retype, or add rectangles with the ordinary
+freehand tools. They can snap any chosen rectangles into flowing Tao layout when ready, or leave the
+sketch free and continue drawing. The import does not silently snap rectangles, invent data bindings,
+or require the person to accept the agent's interpretation as final.
+
+**First acceptance journey.** Photograph a paper drawing containing two distinct views and several
+labelled boxes. Import it into Studio, inspect the proposed rectangles, correct one, draw one more,
+then snap part of one view while the remaining rectangles stay free and editable. Reopen the project
+and confirm both the snapped source and free rectangles persist.
+
+**Open before implementation.** Decide where capture and import enter Studio, how a photo selects a
+new or existing view, what the agent may infer from ambiguous strokes or handwriting, and how the
+person reviews or undoes the import. This is a post-MVP extension, outside the FS-D20 sequence.

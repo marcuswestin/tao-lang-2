@@ -278,6 +278,21 @@ tests written in Tao, green in Current, for every construct introduced.
 - [ ] Complete canonical app and v1 hardening
   - Build WordFlower end to end, close gaps, tighten diagnostics and docs, remove stale drift, and validate `verify`.
 
+## Post-MVP targets
+
+The Developer-selected [post-MVP target inventory](Docs/Roadmap/Post-MVP%20target%20inventory.md)
+records the next server-side, data, integration, operations, cross-app, agent, and host-surface
+capabilities. Its item IDs preserve the original selection; the list does not imply priority or
+settled language syntax.
+
+- [ ] Turn a photograph of a paper UI sketch into editable Tao Studio views
+  - A person draws one or more views on paper and photographs them. An agent using Tao skills and
+    Studio tools identifies the drawn view boundaries and elements, then adds matching free rectangles
+    to Studio sketch views. The person reviews the result and continues with Studio's ordinary tools:
+    snap chosen rectangles into Tao layout, or keep drawing and editing the free sketch. Import does
+    not snap or bind elements on the person's behalf. The target and its first acceptance journey are
+    in `Docs/Roadmap/Freehand UI sketching/Plan - Freehand UI sketching.md`.
+
 ## Backlog
 
 Product and codebase backlog, unordered.
