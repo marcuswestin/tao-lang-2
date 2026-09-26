@@ -424,6 +424,31 @@ Describe('TR.Views explicit visual props', () => {
     Expect(input!.props['placeholderTextColor']).toBe('#edf3ee8c')
   })
 
+  Test('masks secure inputs without changing their bound value or ordinary input behavior', () => {
+    let entered = ''
+    const secure = renderRuntimeElement(TR.Views.TextInput({
+      label: 'Password',
+      onChange: value => {
+        entered = value
+      },
+      secure: true,
+      value: 'private-value',
+    }))
+    const [, input] = fragmentChildren(secure)
+    Expect(input!.props['secureTextEntry']).toBe(true)
+    Expect(input!.props['autoCapitalize']).toBe('none')
+    Expect(input!.props['autoCorrect']).toBe(false)
+    Expect(input!.props['value']).toBe('private-value')
+    ;(input!.props['onChangeText'] as (value: string) => void)('replacement')
+    Expect(entered).toBe('replacement')
+
+    const ordinary = renderRuntimeElement(TR.Views.TextInput({ label: 'Name', value: 'Alice' }))
+    const [, plain] = fragmentChildren(ordinary)
+    Expect(plain!.props['secureTextEntry']).toBe(false)
+    Expect(plain!.props['autoCapitalize']).toBe(undefined)
+    Expect(plain!.props['autoCorrect']).toBe(undefined)
+  })
+
   Test('keeps identical bundle names local to each mounted app', () => {
     const light = styledApp('Light', '#ffffff')
     const dark = styledApp('Dark', '#000000')

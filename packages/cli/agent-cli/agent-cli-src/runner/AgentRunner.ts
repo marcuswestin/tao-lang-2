@@ -42,9 +42,9 @@ const TERMINATION_SIGNALS: readonly Platform.ProcessSignal[] = ['SIGINT', 'SIGTE
  * `./agent` commands whose own implementation can prompt over `HCI` when interactive, found by
  * reading every `JUST_COMMANDS` implementation for an `HCI.ask*` or `isInteractive` call:
  * `land-unlock --force`'s "Has it really stopped?" confirmation before breaking another worktree's
- * landing lock (`dev-cli-src/dev.ts`). Nothing else `./agent` exposes reaches one.
+ * landing lock (`dev-cli-src/dev.ts`), and `setup-clerk`'s hidden credential prompts.
  */
-const PROMPTING_COMMANDS = new Set(['land-unlock'])
+const PROMPTING_COMMANDS = new Set(['land-unlock', 'setup-clerk'])
 
 /** RunAgentCommandOptions describes one `./agent <command>` invocation. `spawnCommand`/`spawnArgs`
  * are separate from `command` so a test can point the runner at a tiny probe script instead of
