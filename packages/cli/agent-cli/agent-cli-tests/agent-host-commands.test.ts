@@ -30,6 +30,7 @@ const expected = [
   'app-dev',
   'studio',
   'studio-native',
+  'docker-desktop start',
   'local-instantdb start',
   'local-instantdb stop',
   'companion-host-build',
