@@ -350,12 +350,11 @@ export function formatReclaimReport(report: ReclaimReport): string {
   }
   const rows = report.worktrees.map(worktree => {
     const branch = worktree.branch ?? `detached at ${worktree.head}`
-    const recent = [...worktree.associations]
+    const ordered = [...worktree.associations]
       .sort((left, right) => (right.lastActivityAt ?? '').localeCompare(left.lastActivityAt ?? ''))
-      .slice(0, 3)
     const threads = worktree.associations.length === 0
       ? '              Agent task: provider unknown; title unknown; description unknown — check app task associations.'
-      : recent.map(association =>
+      : ordered.map(association =>
         [
           `              Agent task: ${association.provider} ${association.id}`,
           `                Title: ${association.title}`,
@@ -368,11 +367,6 @@ export function formatReclaimReport(report: ReclaimReport): string {
           }`,
         ].join('\n')
       ).join('\n')
-        + (worktree.associations.length > recent.length
-          ? `\n              ${
-            worktree.associations.length - recent.length
-          } older task records omitted here; use ./dev reclaim --json for all.`
-          : '')
     return `${worktree.verdict.toUpperCase().padEnd(13)} ${FS.displayPath(worktree.path)}\n`
       + `              Branch: ${branch} — ${worktree.evidence.join('; ')}\n${threads}`
   })

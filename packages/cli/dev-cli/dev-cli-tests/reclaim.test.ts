@@ -52,7 +52,7 @@ const PRIMARY = '/repo/primary'
 
 /** scenario builds one machine: a primary checkout, the worktree asking, and one candidate. */
 async function scenario(options: {
-  association?: ThreadAssociation
+  association?: ThreadAssociation | readonly ThreadAssociation[]
   calls?: string[]
   candidateClean?: boolean
   /** Where the candidate worktree lives. Pass an existing one to build a second registry over the
@@ -105,7 +105,7 @@ async function scenario(options: {
     byPath: new Map(paths.map(path => [
       path,
       path === candidate && options.association !== undefined
-        ? [options.association]
+        ? Array.isArray(options.association) ? options.association : [options.association]
         : [],
     ])),
     coverage: ['fixture association index'],
@@ -254,5 +254,20 @@ Describe('reclaim', () => {
       { outcome: 'skipped-now-live', path: first.candidate, reason: 'still associated with an agent task' },
     ])
     Expect(calls).not.toContain(routeKey('git', ['worktree', 'remove', first.candidate], Repo.getRoot()))
+  })
+
+  Test('the text report names every attached task, even when several share one worktree', async () => {
+    const attached = Array.from({ length: 4 }, (_, index) => ({
+      ...attachedTask,
+      id: `01a0baed-bea6-7cd3-a354-0eee871a9a1${index}`,
+      title: `Attached task ${index}`,
+    }))
+    const { associations, registryRoot, run } = await scenario({ association: attached })
+
+    const rendered = formatReclaimReport(await reclaim({ associations, registryRoot, run }))
+
+    for (const task of attached) {
+      Expect(rendered).toContain(`Title: ${task.title}`)
+    }
   })
 })
