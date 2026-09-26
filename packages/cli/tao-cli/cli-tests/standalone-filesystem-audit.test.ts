@@ -338,6 +338,117 @@ Describe('standalone filesystem audit', () => {
     },
   )
 
+  Test('allows only the observed Chrome install shape and News directory timestamp in both profiles', async () => {
+    const fixture = await mkTestDir('tao-filesystem-browser-install-')
+    const before = FS.resolvePath('before.json', fixture)
+    const after = FS.resolvePath('after.json', fixture)
+    const diffPath = FS.resolvePath('diff.json', fixture)
+    const reportPath = FS.resolvePath('diff.txt', fixture)
+    const scopePath = FS.resolvePath('scope.json', fixture)
+    const root = '/guest/tmp/scoped_dirgxOAsr'
+    const marker = `${root}/.com.google.Chrome.eTe4CV`
+    const manifest = `${root}/CRX_INSTALL/manifest.json`
+    const news = '/guest/admin/Library/News/com.apple.news.public-com.apple.news.private-production'
+    const directory = { kind: 'directory', mode: 0o755, modifiedMs: 1 }
+    const file = { kind: 'file', mode: 0o644, modifiedMs: 1 }
+    const snapshot = { issues: [], root: '/guest', skippedMounts: [] }
+    const installation = {
+      [root]: directory,
+      [marker]: file,
+      [manifest]: file,
+      [`${root}/CRX_INSTALL`]: directory,
+      [`${root}/CRX_INSTALL/_locales/en/messages.json`]: file,
+    }
+    const baseline = { ...snapshot, entries: { [news]: directory } }
+    const observed = {
+      ...snapshot,
+      entries: {
+        '/guest/acceptance/home/.tao': directory,
+        [news]: { ...directory, modifiedMs: 2 },
+        ...installation,
+      },
+    }
+    const compare = () =>
+      CLI.run(Platform.runtimeProcess.execPath, {
+        args: ['run', AUDIT, 'compare', before, after, diffPath, reportPath, scopePath],
+      })
+    try {
+      for (const vmProfile of ['vanilla', 'xcode']) {
+        await FS.writeJson(scopePath, { guestHome: '/admin', guestTemp: '/tmp', root: '/acceptance', vmProfile })
+        await FS.writeJson(before, baseline)
+        await FS.writeJson(after, observed)
+        Expect((await compare()).exitCode).toBe(0)
+        Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toEqual([])
+
+        // An existing marker and manifest also qualify when both were observed changing.
+        await FS.writeJson(before, { ...baseline, entries: { ...baseline.entries, ...installation } })
+        await FS.writeJson(after, {
+          ...observed,
+          entries: {
+            ...observed.entries,
+            [marker]: { ...file, modifiedMs: 2 },
+            [manifest]: { ...file, modifiedMs: 2 },
+          },
+        })
+        Expect((await compare()).exitCode).toBe(0)
+
+        const unexpected = [
+          '/guest/tmp/scoped_dirABC123/unexpected',
+          `${root}/unexpected`,
+          `${root}/CRX_INSTALL-adjacent/file`,
+          `${marker}/unexpected`,
+          `${root}/.com.google.Chrome.eTe4CV-adjacent`,
+          `${news}/unexpected`,
+          `${news}-adjacent`,
+        ]
+        for (const malformed of ['scoped_dirgxOAsr-adjacent', 'scoped_dirshort', 'nested/scoped_dirgxOAsr']) {
+          unexpected.push(
+            `/guest/tmp/${malformed}`,
+            `/guest/tmp/${malformed}/.com.google.Chrome.eTe4CV`,
+            `/guest/tmp/${malformed}/CRX_INSTALL/manifest.json`,
+          )
+        }
+        await FS.writeJson(before, baseline)
+        await FS.writeJson(after, {
+          ...observed,
+          entries: { ...observed.entries, ...Object.fromEntries(unexpected.map(path => [path, file])) },
+        })
+        Expect((await compare()).exitCode).not.toBe(0)
+        const result = await FS.readJson<{ violations: string[] }>(diffPath)
+        for (const path of unexpected) {
+          Expect(result.violations).toContain(path)
+        }
+
+        for (const missing of [marker, manifest]) {
+          await FS.writeJson(after, {
+            ...observed,
+            entries: Object.fromEntries(Object.entries(observed.entries).filter(([path]) => path !== missing)),
+          })
+          Expect((await compare()).exitCode).not.toBe(0)
+          Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain(root)
+          // A removed artifact cannot be the evidence that authorizes the remaining install tree.
+          await FS.writeJson(before, { ...baseline, entries: { ...baseline.entries, [missing]: file } })
+          Expect((await compare()).exitCode).not.toBe(0)
+          Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain(root)
+          await FS.writeJson(before, baseline)
+        }
+
+        await FS.writeJson(before, { ...snapshot, entries: {} })
+        await FS.writeJson(after, observed)
+        Expect((await compare()).exitCode).not.toBe(0)
+        Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain(news)
+        await FS.writeJson(before, baseline)
+        for (const replacement of [{ ...directory, mode: 0o777 }, file]) {
+          await FS.writeJson(after, { ...observed, entries: { ...observed.entries, [news]: replacement } })
+          Expect((await compare()).exitCode).not.toBe(0)
+          Expect((await FS.readJson<{ violations: string[] }>(diffPath)).violations).toContain(news)
+        }
+      }
+    } finally {
+      await FS.remove(fixture)
+    }
+  })
+
   Test('bounds Xcode allowances by profile, artifact shape, and observed operation', async () => {
     const fixture = await mkTestDir('tao-filesystem-xcode-')
     const before = FS.resolvePath('before.json', fixture)

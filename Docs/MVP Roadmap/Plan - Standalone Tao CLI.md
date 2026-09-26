@@ -72,6 +72,9 @@ An account-wide lease serializes these workflows across checkouts. Each boot als
 running Tart guests and disables clipboard sharing. The workflow never stops unrelated guests.
 After an interrupted runner exits, `--recover-lease <owned-vm>` checks process identity, running
 VMs and mounted disks before releasing its stale lease; stopped clones and logs remain for inspection.
+Use `--audit-results <owned-vm>` to recheck saved snapshots under the current policy without starting
+a guest. It writes `filesystem-policy-replay.json` and `.txt`, preserves the original reports, and
+does not qualify a base or claim a new guest execution.
 The contributor base awaits the separate portable-bootstrap workstream. No new cloud or native
 product coverage is implied by preparing an image.
 
@@ -81,6 +84,10 @@ in 170 seconds, with zero disallowed changes. Logs:
 driver's source-edit/browser proof and recorded Chrome profile ownership. The audit still reports
 unreadable macOS-owned paths and cannot observe transient writes or attribute writers inside
 allowed OS locations.
+An integrated-main rerun also exercised all scenarios, but found Chrome extension-unpack artifacts
+and a timestamp-only Apple News directory change. The policy now recognizes those narrow shapes;
+replay of its saved snapshots reports zero disallowed changes, preserving the original failed report
+under `.artifacts/standalone-vm/tao-acceptance-1790417133-38374/logs/`.
 
 Prepared Xcode evidence (2026-09-26): all 17 scenarios and the profile-specific audit passed
 in 175 seconds from the cached image, with zero disallowed changes. Logs:

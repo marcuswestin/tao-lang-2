@@ -441,6 +441,18 @@ function violations(diff: Diff, scope: AuditScope): string[] {
         === JSON.stringify({ ...change.after, device: 0, modifiedMs: 0 })
     ).map(change => change.path),
   )
+  const newsDirectory = FS.resolvePath(
+    'Library/News/com.apple.news.public-com.apple.news.private-production',
+    guestHome,
+  )
+  // Recognize the observed extension-install shape, without attributing who wrote it.
+  const retainedChanges = new Set([...diff.added, ...diff.changed.map(change => change.path)])
+  const chromeInstallRoots = new Set(
+    [...retainedChanges].filter(path =>
+      /^scoped_dir[A-Za-z0-9]{6}\/\.com\.google\.Chrome\.[A-Za-z0-9]{6}$/.test(FS.relativePath(guestTemp, path))
+      && retainedChanges.has(FS.resolvePath('CRX_INSTALL/manifest.json', FS.dirname(path)))
+    ).map(path => FS.dirname(path)),
+  )
   const cryptexRoot = onVolume('/private/var/run/com.apple.security.cryptexd')
   const xcodeCryptex = (path: string) => {
     if (scope.vmProfile !== 'xcode') {
@@ -481,6 +493,7 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     if (
       xcodeExact.includes(path) || xcodeCryptex(path) || xcodeRemoved(path)
       || (scope.vmProfile === 'xcode' && xcodeTimestampDirectories.includes(path) && timestampChanged.has(path))
+      || (path === newsDirectory && timestampChanged.has(path))
     ) {
       return false
     }
@@ -495,6 +508,15 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     }
     if (FS.pathIsWithin(path, guestTemp)) {
       if (scope.vmProfile === 'xcode' && path === FS.resolvePath('xcrun_db', guestTemp)) {
+        return false
+      }
+      if (
+        [...chromeInstallRoots].some(root =>
+          path === root || FS.pathIsWithin(path, FS.resolvePath('CRX_INSTALL', root))
+          || (FS.dirname(path) === root && /^\.com\.google\.Chrome\.[A-Za-z0-9]{6}$/.test(FS.basename(path))
+            && retainedChanges.has(path))
+        )
+      ) {
         return false
       }
       const child = path.slice(guestTemp.length + 1).split('/')[0] ?? ''

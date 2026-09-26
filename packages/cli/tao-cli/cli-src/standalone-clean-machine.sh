@@ -30,14 +30,20 @@ case "$profile" in
   vanilla) image='ghcr.io/cirruslabs/macos-tahoe-vanilla@sha256:eeec54bfe1f076e27786c5d92b89187a05b1d109b5071eb2dcdf02d596e34640' ;;
   xcode) image='ghcr.io/cirruslabs/macos-tahoe-xcode@sha256:71d9dc1d6c4614b7ecbb328753124912b43425fc8cf1c4085d7f352026df6601' ;;
 esac
-if [ "$#" -eq 2 ] && { [ "$1" = --diagnose ] || [ "$1" = --stop ] || [ "$1" = --collect ] || [ "$1" = --recover-lease ]; }; then
+if [ "$#" -eq 2 ] && { [ "$1" = --diagnose ] || [ "$1" = --stop ] || [ "$1" = --collect ] || [ "$1" = --recover-lease ] || [ "$1" = --audit-results ]; }; then
   owned_name="$2"
   if [[ ! "$owned_name" =~ ^tao-acceptance-[0-9]+-[0-9]+$ ]] || [ ! -d "$(pwd)/.artifacts/standalone-vm/$owned_name/logs" ]; then
     printf 'Expected a VM run owned by this checkout.\n' >&2
     exit 2
   fi
   owned_root="$(pwd)/.artifacts/standalone-vm/$owned_name"
-  if [ "$1" = --diagnose ]; then
+  if [ "$1" = --audit-results ]; then
+    "$bun_bin" run packages/cli/tao-cli/cli-src/standalone-filesystem-audit.ts compare \
+      "$owned_root/logs/filesystem-before.json" "$owned_root/logs/filesystem-after.json" \
+      "$owned_root/logs/filesystem-policy-replay.json" "$owned_root/logs/filesystem-policy-replay.txt" \
+      "$owned_root/logs/guest/steps/audit-scope.json"
+    printf 'Saved snapshot policy replay only; no guest was run or base qualified.\n'
+  elif [ "$1" = --diagnose ]; then
     "$bun_bin" run "$vm_helper" exec "$owned_name" 10000 /bin/ps -axo pid=,command= > "$owned_root/logs/guest-processes.log"
     "$bun_bin" run "$vm_helper" exec "$owned_name" 15000 /usr/bin/log show --last 10m --style compact \
       --predicate 'subsystem == "com.apple.TCC"' > "$owned_root/logs/guest-privacy.log"
@@ -59,7 +65,7 @@ if [ "$#" -eq 2 ] && { [ "$1" = --diagnose ] || [ "$1" = --stop ] || [ "$1" = --
   exit
 fi
 if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != --audit ]; }; then
-  printf 'Usage: %s [--prepare-base|--base vanilla|xcode | --diagnose|--stop|--collect|--recover-lease <owned-vm>]\n' "$0" >&2
+  printf 'Usage: %s [--prepare-base|--base vanilla|xcode | --diagnose|--stop|--collect|--recover-lease|--audit-results <owned-vm>]\n' "$0" >&2
   exit 2
 fi
 created=0
