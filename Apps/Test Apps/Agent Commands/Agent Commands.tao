@@ -1,4 +1,4 @@
-use AgentCommandEntries from @data
+use AgentCommandEntries, AgentCommandEntry from @data
 use Local from @tao/data/providers/local
 use Col, FormButton, Text from @tao/ui
 

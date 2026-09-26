@@ -1,4 +1,4 @@
-use Ingredients, Pantry, Recipes from ./
+use Ingredient, Pantry, Recipe from ./
 use IngredientRow from ./Ingredients
 use RecipeRow from ./Recipes
 

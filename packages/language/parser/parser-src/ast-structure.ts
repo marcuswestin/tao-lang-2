@@ -157,12 +157,14 @@ export function configurableTypeAliasResolution(
     : { kind: 'invalid', target: current }
 }
 
-/** resolvedImportedDeclarations returns every requested declaration, preserving type/value namespace peers. */
+/** resolvedImportedDeclarations returns requested declarations, preserving identity across data forms and namespace peers. */
 export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AST.Declaration[] {
   const names = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
   const declarations = resolvedUseTargets.get(useStatement)
     ?? useStatement.importedDeclarations.map(reference => reference.ref).filter(AST.isDeclaration)
-  return declarations.filter(declaration => names.has(declaration.name))
+  return [...new Set(declarations)].filter(declaration =>
+    names.has(declaration.name) || (AST.isEntityDataDeclaration(declaration) && names.has(declaration.singularName))
+  )
 }
 
 type ArgumentListOwner =
@@ -692,10 +694,11 @@ function visibleTypeDeclaration(node: AST.Node, name: string): AST.TypeDeclarati
   return visibleFileDeclarations(node, AST.isTypeDeclaration).find(declaration => declaration.name === name)
 }
 
-/** visibleFileDeclarations returns a file's own and use-imported declarations matching `guard`. */
+/** visibleFileDeclarations returns local, folder-visible and imported declarations, optionally selecting one import form. */
 export function visibleFileDeclarations<DeclarationT extends AST.Node>(
   node: AST.Node,
   guard: (candidate: unknown) => candidate is DeclarationT,
+  importedName?: (declaration: DeclarationT) => string,
 ): DeclarationT[] {
   const root = findRoot(node)
   if (!AST.isTaoFile(root)) {
@@ -707,12 +710,29 @@ export function visibleFileDeclarations<DeclarationT extends AST.Node>(
       declarations.push(statement)
     }
   }
+  const currentPath = AST.getDocument(root).uri.path
+  const currentDirectory = currentPath.slice(0, currentPath.lastIndexOf('/'))
+  for (const file of visibleWorkspaceFiles.get(root) ?? []) {
+    const path = AST.getDocument(file).uri.path
+    if (file === root || isTestSidecarPath(path) || path.slice(0, path.lastIndexOf('/')) !== currentDirectory) {
+      continue
+    }
+    for (const statement of file.statements) {
+      if (guard(statement) && 'visibility' in statement && statement.visibility === 'folder') {
+        declarations.push(statement)
+      }
+    }
+  }
   for (const statement of root.statements) {
     if (!AST.isUseStatement(statement)) {
       continue
     }
     for (const declaration of resolvedImportedDeclarations(statement)) {
-      if (guard(declaration)) {
+      if (
+        guard(declaration)
+        && (!importedName
+          || statement.importedDeclarations.some(reference => reference.$refText === importedName(declaration)))
+      ) {
         declarations.push(declaration)
       }
     }
@@ -766,8 +786,11 @@ export function visibleValueDeclarations<DeclarationT extends AST.Declaration>(
   }
   for (const statement of root.statements) {
     if (AST.isUseStatement(statement)) {
+      const names = new Set(statement.importedDeclarations.map(reference => reference.$refText))
       for (const declaration of resolvedImportedDeclarations(statement)) {
-        add(declaration)
+        if (names.has(declaration.name)) {
+          add(declaration)
+        }
       }
     }
   }

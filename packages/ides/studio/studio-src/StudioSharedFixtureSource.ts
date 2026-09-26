@@ -68,6 +68,7 @@ function canonicalImports(
   imports: readonly StudioSharedFixtureEntityImport[],
 ): readonly StudioSharedFixtureEntityImport[] {
   const byCollection = new Map<string, StudioSharedFixtureEntityImport>()
+  const byEntity = new Map<string, StudioSharedFixtureEntityImport>()
   for (const entry of imports) {
     requireIdentifier(entry.collection, 'entity collection')
     requireIdentifier(entry.entity, 'entity')
@@ -78,7 +79,15 @@ function canonicalImports(
     if (previous !== undefined && !sameEntityImport(previous, entry)) {
       Errors.throwUserInput(`Studio shared fixture import conflicts for ${entry.collection}.`)
     }
+    const previousEntity = byEntity.get(entry.entity)
+    if (
+      previousEntity !== undefined
+      && (previousEntity.collection !== entry.collection || !sameEntityImport(previousEntity, entry))
+    ) {
+      Errors.throwUserInput(`Studio shared fixture import conflicts for ${entry.entity}.`)
+    }
     byCollection.set(entry.collection, entry)
+    byEntity.set(entry.entity, entry)
   }
   return [...byCollection.values()].toSorted((left, right) =>
     left.source.localeCompare(right.source) || left.collection.localeCompare(right.collection)
@@ -184,7 +193,7 @@ function initialSource(
   imports: readonly StudioSharedFixtureEntityImport[],
   promotions: readonly StudioSharedFixturePromotion[],
 ): string {
-  const uses = imports.map(entry => `use ${entry.collection} from ${entry.source}`).join('\n')
+  const uses = imports.map(entry => `use ${entry.entity} from ${entry.source}`).join('\n')
   const rows = promotions.map(promotionSource).join('\n')
   return `${studioGeneratedSourceHeader}\n\n${uses}${uses === '' ? '' : '\n\n'}public fixture Sketches {\n${rows}\n}\n`
 }
@@ -198,10 +207,10 @@ async function addMissingImports(
   const missing: StudioSharedFixtureEntityImport[] = []
   for (const entry of imports) {
     const matchingName = uses.filter(use =>
-      use.importedDeclarations.some(declaration => declaration.$refText === entry.collection)
+      use.importedDeclarations.some(declaration => declaration.$refText === entry.entity)
     )
     if (matchingName.some(use => use.importPath !== entry.source)) {
-      Errors.throwUserInput(`Studio shared fixture import conflicts for ${entry.collection}.`)
+      Errors.throwUserInput(`Studio shared fixture import conflicts for ${entry.entity}.`)
     }
     if (matchingName.length === 0) {
       missing.push(entry)
@@ -211,7 +220,7 @@ async function addMissingImports(
     return source
   }
   const offset = document.parseResult.value.statements[0]?.$cstNode?.offset ?? source.length
-  const insertion = `${missing.map(entry => `use ${entry.collection} from ${entry.source}`).join('\n')}\n\n`
+  const insertion = `${missing.map(entry => `use ${entry.entity} from ${entry.source}`).join('\n')}\n\n`
   return await Formatter.formatCode(`${source.slice(0, offset)}${insertion}${source.slice(offset)}`)
 }
 

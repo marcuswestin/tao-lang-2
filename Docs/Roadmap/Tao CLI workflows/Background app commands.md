@@ -19,3 +19,7 @@ JavaScript delivery path so an idle WebKit view wakes without showing a window; 
 Client failures identify the failed RPC method. Failed discovery explicitly reports that execution
 was never submitted, and a shutdown failure cannot replace a command's execution receipt.
 Generated app hooks use module-scope aliases so Fast Refresh preserves app state during Studio edits.
+
+Successful packaged acceptance runs remove only their newly created WebKit profile after the tracked
+app processes have exited. Failed runs retain the profile for diagnosis; existing profiles are never
+claimed for cleanup. The proof records the removed path in `profile-cleanup.json` beside its logs.

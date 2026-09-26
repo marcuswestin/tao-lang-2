@@ -19,6 +19,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Capability (Decisions §)                                    | Forcing app · feature                                                         | Tier     | Test status               |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------- | -------- | ------------------------- |
 | Types, typed slots, unit values (§2)                        | WordFlower · everywhere; units: focused-writing mode                          | MVP      | in Current                |
+| Independent data import names (§1)                          | WordFlower · fixtures and workspace list with row creation                    | MVP      | in Current[^19]           |
 | Convertible unit families, dimensional arithmetic (§2)      | Hearth · a search radius in km; Skillet · step timers and total time          | Post-MVP | —                         |
 | Entities, relations, yes/no poles (§2)                      | WordFlower · workspaces, documents, paragraphs                                | MVP      | partially in Current      |
 | `relation` trait for a differently-named relation (§2)      | Skillet · `Person (relation Accounts)`; Wayfare · `Seats`                     | Post-MVP | —                         |
@@ -243,3 +244,7 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     the harness level because Tao tests cannot select a layout direction. `through` fixture
     bindings remain unexecuted, and the synthetic viewport applies one layout pass. The remaining
     world controls are a separate tranche.
+
+[^19]: Workspace and document journeys exercise singular-only fixture imports, both names in the
+    workspace UI, and plural-only focus queries. Language tests reject the missing opposite form
+    and preserve local loop binders and folder visibility.

@@ -1,6 +1,7 @@
+import { Workspace } from '@compiler/workspace'
 import { AST, Parser } from '@parser'
 import { Errors } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { StudioSharedFixtureSource } from '../studio-src/StudioSharedFixtureSource'
 
 const playlistImport = { collection: 'Playlists', entity: 'Playlist', source: '../../Data/Music' }
@@ -25,8 +26,8 @@ Describe('Studio shared fixture source', () => {
       { handle: 'Ada', kind: 'fixture-reference' },
       { handle: 'Focus', kind: 'fixture-reference' },
     ])
-    Expect(result.source).toContain('use Accounts from ../../Data/Accounts')
-    Expect(result.source).toContain('use Playlists from ../../Data/Music')
+    Expect(result.source).toContain('use Account from ../../Data/Accounts')
+    Expect(result.source).toContain('use Playlist from ../../Data/Music')
     Expect(result.source).toContain('public fixture Sketches {')
     Expect(result.source).toContain('Ada = create Account {')
     Expect(result.source).toContain('Active: true,')
@@ -45,6 +46,54 @@ Describe('Studio shared fixture source', () => {
       ],
     })
     Expect(reordered.source).toBe(result.source)
+  })
+
+  for (const existingImport of [undefined, '', 'use Notes from ./Data.tao', 'use Note from ./Data.tao']) {
+    Test(`resolves promoted singular entities with ${existingImport ?? 'a new fixture'}`, async () => {
+      const request = {
+        imports: [{ collection: 'Notes', entity: 'Note', source: './Data.tao' }],
+        promotions: [{ entity: 'Note', fields: { Title: 'First note' }, name: 'FirstNote' }],
+        ...(existingImport === undefined ? {} : { source: `${existingImport}\npublic fixture Sketches { }` }),
+      }
+      const result = await StudioSharedFixtureSource.promote(request)
+      await withTaoFiles('tao-studio-shared-fixture-import-', {
+        'Data.tao': 'workspace data Notes / Note { Title text }',
+        'Sketches.tao': result.source,
+      }, async paths => {
+        const validated = await Workspace.validate(paths['Sketches.tao'])
+        Expect(validated.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+        const file = validated.entry.ast
+        const names = file.statements.filter(AST.isUseStatement)
+          .flatMap(statement => statement.importedDeclarations.map(reference => reference.$refText))
+        Expect(names.filter(name => name === 'Note')).toEqual(['Note'])
+        Expect(names.includes('Notes')).toBe(existingImport === 'use Notes from ./Data.tao')
+        const fixture = file.statements.find(AST.isFixtureDeclaration)!
+        const row = fixture.block.entries.find(AST.isFixtureCreateBinding)!
+        Expect.Is(row.entity.ref, AST.isEntityDataDeclaration)
+        Expect(row.entity.ref.name).toBe('Notes')
+        Expect(AST.getDocument(row.entity.ref).uri.fsPath).toBe(paths['Data.tao'])
+      })
+      const repeated = await StudioSharedFixtureSource.promote({ ...request, source: result.source })
+      Expect(repeated.source).toBe(result.source)
+    })
+  }
+
+  Test('rejects an existing singular import from a conflicting source', async () => {
+    await Expect(StudioSharedFixtureSource.promote({
+      imports: [{ collection: 'Notes', entity: 'Note', source: './Data.tao' }],
+      promotions: [{ entity: 'Note', fields: { Title: 'First note' }, name: 'FirstNote' }],
+      source: 'use Note from ./Other.tao\npublic fixture Sketches { }',
+    })).rejects.toThrow('Studio shared fixture import conflicts for Note.')
+  })
+
+  Test('rejects conflicting requested singular imports even when collection names differ', async () => {
+    await Expect(StudioSharedFixtureSource.promote({
+      imports: [
+        { collection: 'Notes', entity: 'Note', source: './Data.tao' },
+        { collection: 'OtherNotes', entity: 'Note', source: './Other.tao' },
+      ],
+      promotions: [{ entity: 'Note', fields: { Title: 'First note' }, name: 'FirstNote' }],
+    })).rejects.toThrow('Studio shared fixture import conflicts for Note.')
   })
 
   Test('extends existing imports and rows and is idempotent', async () => {

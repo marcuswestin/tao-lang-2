@@ -107,10 +107,62 @@ export async function insertCapturedFixture(
       return `${create.name} = create ${create.entity} { ${fixtureFieldsSource(create.fields)} }`
     }),
   ]
-  const suffix = document.textDocument.getText().endsWith('\n') ? '' : '\n'
+  const source = document.textDocument.getText()
+  const suffix = source.endsWith('\n') ? '' : '\n'
   return await Formatter.formatCode(
-    `${document.textDocument.getText()}${suffix}\nfixture ${request.fixtureName} {\n${entries.join('\n')}\n}\n`,
+    applySourceEdits(source, [
+      ...capturedFixtureImportEdits(document.parseResult.value, request.plan.creates.map(create => create.entity)),
+      {
+        end: source.length,
+        replacement: `${suffix}\nfixture ${request.fixtureName} {\n${entries.join('\n')}\n}\n`,
+        start: source.length,
+      },
+    ]),
   )
+}
+
+function capturedFixtureImportEdits(file: AST.TaoFile, entityNames: readonly string[]): SourceEdit[] {
+  const visibleNames = new Set(
+    AST.visibleFileDeclarations(file, AST.isEntityDataDeclaration, entity => entity.singularName)
+      .map(entity => entity.singularName),
+  )
+  const uses = file.statements.filter(AST.isUseStatement)
+  const additions = new Map<AST.UseStatement, Set<string>>()
+  for (const name of new Set(entityNames)) {
+    if (visibleNames.has(name)) {
+      continue
+    }
+    const matchingUses = uses.filter(use =>
+      AST.resolvedImportedDeclarations(use).some(declaration =>
+        AST.isEntityDataDeclaration(declaration) && declaration.singularName === name
+      )
+    )
+    const targets = new Set(
+      matchingUses.flatMap(use =>
+        AST.resolvedImportedDeclarations(use).filter(declaration =>
+          AST.isEntityDataDeclaration(declaration) && declaration.singularName === name
+        )
+      ),
+    )
+    if (targets.size !== 1) {
+      Errors.throwUserInput(`Studio captured entity is not uniquely available in this source file: ${name}`)
+    }
+    const use = matchingUses[0]!
+    const names = additions.get(use) ?? new Set(use.importedDeclarations.map(reference => reference.$refText))
+    names.add(name)
+    additions.set(use, names)
+  }
+  return [...additions].map(([use, names]) => {
+    const node = use.$cstNode
+    if (node === undefined) {
+      Errors.throwUserInput('Studio captured entity import has no editable source range.')
+    }
+    return {
+      end: node.end,
+      replacement: `use ${[...names].toSorted().join(', ')}${use.importPath ? ` from ${use.importPath}` : ''}`,
+      start: node.offset,
+    }
+  })
 }
 
 function fixtureFieldsSource(fields: Readonly<Record<string, StudioScenarioArgumentValue>>): string {
