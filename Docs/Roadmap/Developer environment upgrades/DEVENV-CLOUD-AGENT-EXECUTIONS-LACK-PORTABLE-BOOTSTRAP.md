@@ -7,7 +7,7 @@
 - **Evidence:** On 2026-09-25, a cloud execution reported that `./agent` required zsh and a Nix/devenv profile, neither of which was present in its container. The interactive local shell has landed. The contributor bootstrap is in progress on `feat/cloud-contributor-bootstrap`; focused shell and lifecycle tests pass, but Linux installation and hosted runs remain unproved.
 - **Workaround:** Run the workflow on a prepared local Mac until a cloud environment is supported.
 - **Proposed change:** After the standalone developer-shell branch lands, provide a portable cloud bootstrap or a declared cloud image with the pinned tools. Make `./agent` discover and use that environment without assuming zsh or a preexisting local Nix/devenv profile. Keep local and cloud tool versions aligned and report missing host-only capabilities explicitly. Cover every supported cloud harness, including the editor-based cloud workflow.
-- **Dependencies:** The standalone developer-shell work has landed. Complete this task before closing the broader standalone development effort. The Linux Nix 2.35.2 bootstrap dependency is approved and its archive checksum is pinned from the official installer. The container test needs a host session that loads the new named permission.
+- **Dependencies:** The standalone developer-shell work has landed. Complete this task before closing the broader standalone development effort. The Linux Nix 2.35.2 bootstrap dependency is approved and its archive checksum is pinned from the official installer. The container test needs both named host access and a session whose effective network policy permits its downloads.
 - **Acceptance:** Reproduce contributor setup locally in an isolated Ubuntu environment, then prove the workflow in an actual fresh cloud session for each supported harness. Bootstrap a checkout without preinstalled zsh or a Nix/devenv profile; run `./agent help`, `./agent setup`, a focused test, and the portable check/test/verify lanes. Record per-harness evidence and explicitly identify unavailable macOS-only lanes. Local success alone does not close the task.
 - **Source:** Developer request, 2026-09-25.
 
@@ -18,12 +18,41 @@ existing lockfile pins. `bootstrap-tao-dev-env` is the explicit noninteractive e
 a profile and calls the existing `./agent setup`. Root launchers select the profile's zsh through
 POSIX shell. The dedicated `./agent unsandboxed contributor-linux-test` command snapshots committed
 source into cold and cached Ubuntu guests. Its focused tests do not constitute a Linux run.
-The first host probe was refused because the current session had not loaded that new permission.
+An earlier task intermittently hit the wrapper's process-inspection guard. That message alone
+does not establish why process inspection failed or whether a named permission was loaded.
 The Developer's Terminal probe passed on 2026-09-26: Docker Desktop 4.88.1, Engine 29.7.2,
 `linux/arm64`, using the containerd overlayfs snapshotter. The planned `linux/amd64` guest requires
 emulation. This establishes host access, not a guest bootstrap or verification run.
 The proposed 30 GiB disk allowance remains a measured budget, not an enforced container quota.
 Provider setup instructions live in `.claude/cloud-setup.md`; actual hosted proof remains open.
+
+### Network investigation, 2026-09-26
+
+A fresh worktree at `15910aeb61c87d4376f8042bc911f345b2f0dc9c` passed standalone host
+capabilities and the Docker probe. The full run `20260926T161634Z-57262` reached Ubuntu image
+metadata fetching before the execution service rejected `auth.docker.io` as outside the active
+network allowlist. No Linux bootstrap or repository test started. Its build log stopped at
+`load metadata for docker.io/library/ubuntu:24.04`; no cleanup or final result was recorded.
+This network failure is separate from the earlier process-inspection guard.
+
+The follow-up branch `feat/cloud-contributor-network` adds exact token, registry, and documented
+blob delivery hosts from [Docker's allowlist](https://docs.docker.com/desktop/setup/allow-list/),
+`releases.nixos.org` used directly by the checksum-pinned installer, and the fixed amd64 base's
+`archive.ubuntu.com` / `security.ubuntu.com` APT hosts documented in
+[Ubuntu's package sources](https://ubuntu.com/server/docs/how-to/software/snapshot-service/).
+GitHub, package registries, Nix binary cache, and Cachix already have rules. Only the token-host
+denial was observed; subsequent downloads and redirects remain unproved. General Docker/CDN
+wildcards and unrestricted networking are not needed for this evidence-backed starting set.
+
+Direct Docker inspection from the managed shell was denied at its Unix socket. The runner now
+has a read-only `--inspect-run YYYYMMDDTHHMMSSZ-PID` mode for exact run base-image and container
+inventory through its existing named host operation. It never removes resources or prunes caches,
+and a failed Docker request leaves inspection state unknown. This deliberately expands the
+runner's accepted arguments without expanding the wrapper's host command list.
+
+The initial regeneration could update the ordinary adapter but could not write protected
+configuration. The repository's named configuration-repair operation regenerated those outputs;
+effective session network refresh and cold/cached proof still require a subsequent committed run.
 
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published

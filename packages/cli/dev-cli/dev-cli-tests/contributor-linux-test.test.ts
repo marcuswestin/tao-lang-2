@@ -29,6 +29,62 @@ Describe('contributor Linux container runner', () => {
     })
   })
 
+  Test('rejects inspection paths, patterns, and option injection before consulting Docker', async () => {
+    await withFixture(async fixture => {
+      for (
+        const id of ['../run', '*', '--all', '20260926T161634Z-', '20260926T161634Z-x-123', '20260926T161634Z-123/']
+      ) {
+        Expect((await run(fixture, ['--inspect-run', id])).exitCode).toBe(2)
+      }
+      Expect(await FS.exists(fixture.log)).toBe(false)
+    })
+  })
+
+  Test('inspects only the selected run without creating or removing Docker resources', async () => {
+    await withFixture(async fixture => {
+      const result = await run(fixture, ['--inspect-run', '20260926T161634Z-57262'])
+      Expect(result.exitCode).toBe(0)
+      Expect((await FS.readText(fixture.log)).trim().split('\n')).toEqual([
+        'version',
+        'info',
+        'info --format {{.Architecture}} {{.Driver}} {{json .DriverStatus}}',
+        'image ls --all --filter reference=tao-contributor-linux-base:20260926T161634Z-57262 --format {{.ID}} {{.Repository}}:{{.Tag}}',
+        'container ls --all --filter name=^/tao-contributor-linux-20260926T161634Z-57262-(cold|tools|cached)$ --format {{.ID}} {{.Names}} {{.Status}} owner={{.Label "tao.owner"}} run={{.Label "tao.run"}}',
+      ])
+      Expect(result.stdout).toContain('No run-specific images remain')
+      Expect(result.stdout).toContain('No run-specific containers remain')
+      const output = await latestOutput(fixture)
+      Expect(await FS.readText(`${output}/inspection.txt`)).toContain('state=complete')
+      Expect(await FS.exists(`${output}/checkout.tar`)).toBe(false)
+    })
+  })
+
+  Test('reports retained inspection resources and keeps daemon failures unknown', async () => {
+    await withFixture(async fixture => {
+      await FS.writeText(fixture.container, 'retained-container\n')
+      const result = await run(fixture, ['--inspect-run', '20260926T161634Z-57262'])
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toContain('retained-container')
+      Expect(result.stdout).not.toContain('No run-specific containers remain')
+      const failed = await run(fixture, ['--inspect-run', '20260926T161634Z-57262'], 'disconnected')
+      Expect(failed.exitCode).toBe(5)
+      Expect(failed.stdout).not.toContain('No run-specific')
+      Expect(await FS.readText(`${await latestOutput(fixture)}/inspection.txt`)).toContain('state=unknown')
+      Expect(await FS.exists(fixture.container)).toBe(true)
+    })
+  })
+
+  Test('records unknown inspection state before the first Docker request can fail', async () => {
+    await withFixture(async fixture => {
+      const result = await run(fixture, ['--inspect-run', '20260926T161634Z-57262'], 'version')
+      Expect(result.exitCode).toBe(6)
+      const output = await latestOutput(fixture)
+      Expect(result.stdout).toContain(`Contributor Linux evidence: ${output}`)
+      Expect(await FS.readText(`${output}/inspection.txt`)).toContain('state=unknown')
+      Expect((await FS.readText(fixture.log)).trim()).toBe('version')
+    })
+  })
+
   Test('uses committed sources and bounded independent cold, tools, and cached containers', async () => {
     await withFixture(async fixture => {
       await FS.writeText(FS.resolvePath('untracked-secret.txt', fixture.root), 'private')
@@ -289,7 +345,7 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
         '#!/bin/sh',
         'printf "%s\\n" "$*" >> "$TAO_TEST_DOCKER_LOG"',
         'case "$1" in',
-        '  version) printf "Docker fixture\\n" ;;',
+        '  version) [ "$TAO_TEST_DOCKER_FAILURE" != version ] || exit 6; printf "Docker fixture\\n" ;;',
         '  info) printf "aarch64 overlayfs fixture\\n" ;;',
         '  build) printf "base build output\\n" ;;',
         '  create)',

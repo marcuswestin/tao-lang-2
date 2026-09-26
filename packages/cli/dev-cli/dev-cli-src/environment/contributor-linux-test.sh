@@ -4,12 +4,22 @@ set -eu
 
 mode=both
 probe=0
+inspect_run=
 case "$#" in
   0) ;;
   1) [ "$1" = --probe ] && probe=1 || { printf 'Expected --probe.\n' >&2; exit 2; } ;;
-  2) [ "$1" = --mode ] || exit 2
-     case "$2" in cold|cached|both) mode=$2 ;; *) printf 'Expected cold, cached, or both.\n' >&2; exit 2 ;; esac ;;
-  *) printf 'Usage: contributor-linux-test [--probe | --mode cold|cached|both]\n' >&2; exit 2 ;;
+  2) case "$1" in
+       --mode) case "$2" in cold|cached|both) mode=$2 ;; *) printf 'Expected cold, cached, or both.\n' >&2; exit 2 ;; esac ;;
+       --inspect-run)
+         case "$2" in
+           [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z-*) ;;
+           *) printf 'Expected a contributor run ID: YYYYMMDDTHHMMSSZ-PID.\n' >&2; exit 2 ;;
+         esac
+         case "${2#*-}" in ''|*[!0-9]*) exit 2 ;; esac
+         inspect_run=$2 ;;
+       *) exit 2 ;;
+     esac ;;
+  *) printf 'Usage: contributor-linux-test [--probe | --mode cold|cached|both | --inspect-run YYYYMMDDTHHMMSSZ-PID]\n' >&2; exit 2 ;;
 esac
 
 root=$(git rev-parse --show-toplevel)
@@ -19,6 +29,10 @@ run="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 output="$root/.artifacts/contributor-linux/$run"
 mkdir -p "$output"
 printf '%s\n' "$output" > "$root/.artifacts/contributor-linux/latest.txt"
+printf 'Contributor Linux evidence: %s\n' "$output"
+if [ -n "$inspect_run" ]; then
+  printf 'run=%s\nstate=unknown\n' "$inspect_run" > "$output/inspection.txt"
+fi
 
 probe_host() {
   uname -m > "$output/host-architecture.txt"
@@ -33,8 +47,27 @@ probe_host() {
   cat "$output/docker-storage.txt" "$output/disk-budget.txt"
 }
 probe_host
-printf 'Contributor Linux evidence: %s\n' "$output"
 [ "$probe" -eq 0 ] || exit 0
+
+# Inspection never builds, starts, or removes resources. Successful empty listings prove
+# absence; daemon errors leave state=unknown rather than silently claiming cleanup.
+if [ -n "$inspect_run" ]; then
+  docker image ls --all --filter "reference=tao-contributor-linux-base:$inspect_run" \
+    --format '{{.ID}} {{.Repository}}:{{.Tag}}' > "$output/inspection-images.txt" 2> "$output/inspection-errors.log"
+  docker container ls --all --filter "name=^/tao-contributor-linux-$inspect_run-(cold|tools|cached)$" \
+    --format '{{.ID}} {{.Names}} {{.Status}} owner={{.Label "tao.owner"}} run={{.Label "tao.run"}}' \
+    > "$output/inspection-containers.txt" 2>> "$output/inspection-errors.log"
+  printf 'run=%s\nstate=complete\n' "$inspect_run" > "$output/inspection.txt"
+  for kind in images containers; do
+    if [ -s "$output/inspection-$kind.txt" ]; then
+      cat "$output/inspection-$kind.txt"
+    else
+      printf 'No run-specific %s remain for %s.\n' "$kind" "$inspect_run"
+    fi
+  done
+  printf 'Shared images and builder caches were not changed.\n'
+  exit 0
+fi
 
 started=$(date +%s)
 base="tao-contributor-linux-base:$run"

@@ -64,6 +64,31 @@ outbound traffic, configure its allowlist and proxy/CA trust for those downloads
 Do not disable certificate verification. In particular, Claude Code's GitHub
 proxy can reject release assets from repositories not attached to the session.
 
+The local Ubuntu runner also needs Docker Hub's token host `auth.docker.io`,
+registry `registry-1.docker.io`, and documented blob host
+`production.cloudfront.docker.com` ([Docker's allowlist](https://docs.docker.com/desktop/setup/allow-list/)).
+Its amd64 base uses `archive.ubuntu.com` and `security.ubuntu.com` for APT, and the
+pinned Nix archive comes directly from `releases.nixos.org`. GitHub, Nix's binary
+cache, Cachix, and the package registry hosts are already in the canonical rules.
+These are justified starting endpoints, not proof that every download or redirect
+has been exercised. Add any further destination only from observed failure and
+verified ownership; do not open general CDN wildcards or disable the proxy.
+
+Named host execution and network access are separate: passing
+`./agent unsandboxed capabilities` does not prove image downloads can pass the
+session's network policy. After canonical policy edits, regenerate adapters with
+`./agent setup`; protected adapter writes use the named
+`./agent unsandboxed fix-agent-config` operation. A session that still rejects a
+newly allowed domain must be restarted with the regenerated repository policy
+before retrying, rather than bypassing its proxy.
+
+If execution stops before cleanup reports, inspect only that run's base image
+and containers with `./agent unsandboxed contributor-linux-test --inspect-run
+YYYYMMDDTHHMMSSZ-PID`. It reports matching resources without starting or removing
+them; shared images and builder caches are preserved. Inspection failure means
+resource state is unknown. Retained toolchain image ownership, once provisioned,
+is recorded separately in the original run's `cache-ownership.txt`.
+
 Actual fresh and cached hosted runs remain to be proved for each provider. Local
 script tests establish dispatch and failure behavior; they do not prove provider
 network access, Nix installation privileges, or a hosted verification run.
