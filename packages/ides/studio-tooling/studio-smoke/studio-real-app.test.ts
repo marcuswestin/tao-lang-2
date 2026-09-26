@@ -7,6 +7,15 @@ import {
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
 
+async function canvasTranslation(browser: StudioCdp): Promise<{ x: number; y: number }> {
+  return await browser.evaluate(`(() => {
+    const grid = document.querySelector('.studio-preview > .studio-preview-grid')
+    if (!(grid instanceof HTMLElement)) throw new Error('Missing Studio canvas grid')
+    const matrix = new DOMMatrix(getComputedStyle(grid).transform)
+    return { x: matrix.e, y: matrix.f }
+  })()`)
+}
+
 const fastRefreshSource = `use Button, Col, Number, Text from @tao/ui
 
 app RefreshSmoke { view MainView }
@@ -123,6 +132,31 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     // The native button renders its title uppercase on web, and innerText reports the transformed text.
     await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('Increment') === true`)
 
+    await browser.click('[data-preset="design"]')
+    await browser.waitFor(`document.querySelector('.studio-canvas-zoom') !== null`)
+    await browser.clickAtOffset('.studio-preview-cell iframe', { x: 100, y: 250 })
+    await browser.withKeyHeld(' ', async () => {
+      await browser!.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === 'true'`)
+      const before = await canvasTranslation(browser!)
+      // Start over an embedded app, then drag again over the canvas with Space still held.
+      await browser!.dragBy('.studio-preview-cell iframe', { x: 40, y: 20 })
+      Expect(await canvasTranslation(browser!)).toEqual({ x: before.x + 30, y: before.y + 15 })
+      Expect(
+        await browser!.evaluate<string>(
+          `document.querySelector('.studio-preview')?.dataset.canvasPanReady ?? ''`,
+        ),
+      ).toBe('true')
+      await browser!.dragBy('.studio-preview', { x: -20, y: -10 }, { offset: { x: 20, y: 20 } })
+      Expect(await canvasTranslation(browser!)).toEqual({ x: before.x + 15, y: before.y + 7.5 })
+    })
+    await browser.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === undefined`)
+    Expect(
+      await browser.evaluate<string>(
+        `document.querySelector('.studio-preview')?.dataset.canvasPanning ?? ''`,
+      ),
+    ).toBe('')
+    await browser.pressShortcut('1')
+
     await browser.evaluate(`(() => {
       const frame = document.querySelector('.studio-preview-cell iframe')
       if (!(frame instanceof HTMLIFrameElement)) throw new Error('Missing Studio preview iframe')
@@ -153,7 +187,54 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     // person would press it, and the drag after it happens back in Edit mode.
     await setInteractionMode(browser, 'run')
     await pressIncrementOnce(browser, previewUrl)
+    await browser.evaluateInFrame(
+      previewUrl,
+      `(() => {
+      window.__taoPointerEvents = []
+      for (const type of ['pointerover', 'pointermove', 'pointerdown', 'pointerup', 'mouseover',
+        'mousemove', 'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu', 'wheel', 'dragstart']) {
+        document.addEventListener(type, () => window.__taoPointerEvents.push(type), true)
+      }
+      return true
+    })()`,
+    )
+    // The app button now has focus: Space must cross the iframe boundary, and must not press it.
+    await browser.withKeyHeld(' ', async () => {
+      await browser!.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === 'true'`)
+      const before = await canvasTranslation(browser!)
+      await browser!.dragBy('.studio-preview-cell iframe', { x: 30, y: 15 })
+      Expect(await canvasTranslation(browser!)).toEqual({ x: before.x + 22.5, y: before.y + 11.25 })
+      // Between drags the preview remains a neutral surface: no hover, press or wheel reaches it.
+      await browser!.hover('.studio-canvas-zoom')
+      await browser!.hover('.studio-preview-cell iframe')
+      await browser!.click('.studio-preview-cell iframe')
+      await browser!.wheel('.studio-preview-cell iframe', { x: 0, y: 10 })
+      await browser!.waitFor(`new DOMMatrix(getComputedStyle(
+        document.querySelector('.studio-preview > .studio-preview-grid')).transform).f === ${before.y + 3.75}`)
+      Expect(await browser!.evaluateInFrame(previewUrl, 'window.__taoPointerEvents')).toEqual([])
+    })
+    await browser.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === undefined`)
+    await browser.pressShortcut('1')
+    await browser.hover('.studio-canvas-zoom')
+    await browser.hover('.studio-preview-cell iframe')
+    await browser.clickAtOffset('.studio-preview-cell iframe', { x: 100, y: 250 })
+    const resumedEvents = await browser.evaluateInFrame<string[]>(previewUrl, 'window.__taoPointerEvents')
+    Expect(resumedEvents).toContain('pointermove')
+    Expect(resumedEvents).toContain('mousedown')
+    Expect(resumedEvents).toContain('click')
+    await browser.evaluateInFrame(
+      previewUrl,
+      `(() => {
+      // Observe message delivery before attempting a synthetic edit drag.
+      window.__taoSmokeMode = 'pending'
+      window.addEventListener('message', event => {
+        if (event.data?.type === 'set-interaction-mode') window.__taoSmokeMode = event.data.mode
+      })
+      return true
+    })()`,
+    )
     await setInteractionMode(browser, 'edit')
+    await browser.waitForInFrame(previewUrl, `window.__taoSmokeMode === 'edit'`)
 
     const compileRevision = await waitForCompileAfter(browser, -1)
     await dragThirdBetweenFirstAndSecond(browser, previewUrl)

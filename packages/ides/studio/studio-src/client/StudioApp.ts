@@ -11,7 +11,11 @@ import {
   publishStudioProductHostState,
   registerStudioProductHostActions,
 } from '../StudioProductHostProtocol'
-import type { StudioDebugCommandMessage, StudioPreviewCanvasGestureMessage } from '../StudioProtocol'
+import type {
+  StudioDebugCommandMessage,
+  StudioPreviewCanvasGestureMessage,
+  StudioPreviewCanvasPanKeyMessage,
+} from '../StudioProtocol'
 import { mountStudioAgentChat } from './app/StudioAgentPanelWiring'
 import { StudioAppNavigation } from './app/StudioAppNavigation'
 import { mountStudioBetaShip } from './app/StudioBetaShip'
@@ -272,6 +276,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       onReveal: advanceEditorReveal,
       onCanvasGesture: (preview: (typeof previews)[number], gesture: StudioPreviewCanvasGestureMessage) =>
         forwardPreviewCanvasGesture(canvasViewport, preview, gesture),
+      onCanvasPanKey: (preview: (typeof previews)[number], message: StudioPreviewCanvasPanKeyMessage) =>
+        canvasViewport?.iframePanKey(message.held, preview.iframe),
       preview: view.preview,
       previews,
       publish,
@@ -280,6 +286,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     const wirePreview = wireStudioPreviews(previewWiring)
     const publishCanvasGestureOwnership = (): void => {
+      if (!canvasGesturesOwned()) {
+        canvasViewport?.cancelPan()
+      }
       for (const preview of previews) {
         postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned())
       }

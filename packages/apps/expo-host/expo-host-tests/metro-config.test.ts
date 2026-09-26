@@ -100,6 +100,27 @@ Describe('Expo Metro configuration', () => {
     Expect(() => config.resolver.resolveRequest(missingContext, 'react', 'ios')).toThrow()
   })
 
+  Test('resolves copied sidecar runtime submodules through Metro with their platform and origin preserved', () => {
+    const calls: Array<{ moduleName: string; originModulePath: string; platform: string | null }> = []
+    const resolved: MetroResolution = {
+      filePath: Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-reactive.ts'),
+      type: 'sourceFile',
+    }
+    const context: MetroResolutionContext = {
+      originModulePath: '/isolated/_gen_tao-app/modules/external/AuthFlow.ts',
+      resolveRequest(nextContext, moduleName, platform) {
+        calls.push({ moduleName, originModulePath: nextContext.originModulePath, platform })
+        return resolved
+      },
+    }
+    Expect(config.resolver.resolveRequest(context, '@runtime/TR-reactive', 'web')).toBe(resolved)
+    Expect(calls).toEqual([{
+      moduleName: Repo.resolvePath('packages/apps/runtime/TaoRuntime-src/TR-reactive'),
+      originModulePath: '/isolated/_gen_tao-app/modules/external/AuthFlow.ts',
+      platform: 'web',
+    }])
+  })
+
   Test('delegates every other module to Metro resolution with its origin preserved', () => {
     const expected: MetroResolution = { filePath: '/resolved/module.js', type: 'sourceFile' }
     const calls: Array<{ moduleName: string; originModulePath: string; platform: string | null }> = []
@@ -133,9 +154,10 @@ Describe('Expo Metro configuration', () => {
       }
       const probe = `
         const config = require(${JSON.stringify(Repo.resolvePath('packages/apps/expo-host/metro.config.cjs'))})
-        const context = { originModulePath: '/app/index.ts', resolveRequest: () => ({ filePath: 'fell through' }) }
+        const context = { originModulePath: '/app/index.ts', resolveRequest: (_context, name) => ({ filePath: name + '.ts' }) }
         await Bun.write(Bun.stdout, JSON.stringify({
           runtime: config.resolver.resolveRequest(context, '@tao/runtime', 'web').filePath,
+          runtimeReactive: config.resolver.resolveRequest(context, '@runtime/TR-reactive', 'web').filePath,
           sharedCore: config.resolver.resolveRequest(context, '@shared/core', 'web').filePath,
           watchFolders: config.watchFolders,
           nodeModulesPaths: config.resolver.nodeModulesPaths,
@@ -153,11 +175,13 @@ Describe('Expo Metro configuration', () => {
       const loaded = JSON.parse(result.stdout) as {
         nodeModulesPaths: string[]
         runtime: string
+        runtimeReactive: string
         sharedCore: string
         watchFolders: string[]
       }
 
       Expect(loaded.runtime).toBe(FS.resolvePath('TR.ts', runtime))
+      Expect(loaded.runtimeReactive).toBe(FS.resolvePath('TR-reactive.ts', runtime))
       Expect(loaded.sharedCore).toBe(FS.resolvePath('shared-core.ts', sharedCore))
       const installedDependencies = await FS.realPath(dependencies)
       Expect(loaded.watchFolders).toContain(installedDependencies)
