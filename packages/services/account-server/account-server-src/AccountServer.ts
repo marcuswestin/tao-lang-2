@@ -2,6 +2,7 @@ import { Errors, FS } from '@shared'
 import type { AccountProtocol } from 'tao-shared/auth'
 import { type AccountPolicy, accountPolicyFromJSON, rejectAccountRequest } from './AccountPolicy'
 import { AccountStore } from './AccountStore'
+import { clerkAccountIdentity, type ClerkAccountOptions, validateClerkAccountOptions } from './ClerkAccountIdentity'
 import { InstantAccountStore } from './InstantAccountStore'
 
 export type { AccountPolicy } from './AccountPolicy'
@@ -10,6 +11,7 @@ export type { AccountPolicy } from './AccountPolicy'
 export type AccountServerOptions = {
   allowedOrigins?: readonly string[]
   clock?: () => number
+  clerk?: ClerkAccountOptions
   databasePath: string
   issuer: string
   instant?: { apiURI: string; appId: string; adminToken: string }
@@ -37,7 +39,11 @@ export class AccountServer {
     store: AccountStore,
     instant?: InstantAccountStore,
   ) {
-    this.#options = { ...options, policy: structuredClone(options.policy) }
+    this.#options = {
+      ...options,
+      clerk: options.clerk && structuredClone(options.clerk),
+      policy: structuredClone(options.policy),
+    }
     this.#dummyHash = dummyHash
     this.#store = store
     this.#instant = instant
@@ -52,6 +58,9 @@ export class AccountServer {
 
   static async start(options: AccountServerOptions): Promise<AccountServer> {
     accountPolicyFromJSON(options.policy)
+    if (options.clerk !== undefined) {
+      validateClerkAccountOptions(options.clerk)
+    }
     if (!options.issuer || !options.resource || !Object.hasOwn(options.policy.entities, options.policy.accountEntity)) {
       Errors.throwUserInput('The account server requires an issuer, resource, and Account entity.')
     }
@@ -65,6 +74,7 @@ export class AccountServer {
     const store = new AccountStore(options.databasePath, options.policy, options.instant === undefined)
     let instant: InstantAccountStore | undefined
     try {
+      store.bindAuthentication(options.clerk === undefined ? 'local' : 'clerk', options.clerk?.issuer ?? options.issuer)
       instant = options.instant === undefined ? undefined : await InstantAccountStore.open(
         options.instant,
         options.policy,
@@ -176,7 +186,43 @@ export class AccountServer {
 
   async #route(request: Request): Promise<unknown> {
     const path = new URL(request.url).pathname
+    if (request.method === 'POST' && path === '/v1/auth/clerk/exchange') {
+      const clerk = this.#options.clerk
+      if (clerk === undefined) {
+        rejectAccountRequest('unauthorized', 'Clerk sign-in is not configured.')
+      }
+      const body = await readObject(request)
+      exactKeys(body, ['resource'])
+      if (body['resource'] !== this.#options.resource) {
+        rejectAccountRequest('unauthorized', 'The requested resource is not available.')
+      }
+      const authorization = request.headers.get('authorization') ?? ''
+      if (!/^Bearer [A-Za-z0-9_.-]+$/.test(authorization)) {
+        rejectAccountRequest('unauthorized', 'Sign in to continue.')
+      }
+      const proof = await clerkAccountIdentity(authorization.slice(7), clerk, () => this.#now())
+      return this.#serialize(async () => {
+        if (proof.expiresAt <= this.#now()) {
+          rejectAccountRequest('unauthorized', 'The Clerk session expired. Sign in again.')
+        }
+        const identity = this.#store.provision(proof.issuer, proof.subject)
+        await this.#instant?.provision(identity.accountId)
+        await this.#pruneExpiredSessions()
+        const now = this.#now()
+        if (proof.expiresAt <= now) {
+          rejectAccountRequest('unauthorized', 'The Clerk session expired. Sign in again.')
+        }
+        return this.#store.createSession(
+          identity,
+          this.#options.resource,
+          Math.min(proof.expiresAt, now + (this.#options.sessionLifetimeMs ?? 60 * 60 * 1000)),
+        )
+      })
+    }
     if (request.method === 'POST' && (path === '/v1/auth/sign-in' || path === '/v1/auth/sign-up')) {
+      if (this.#options.clerk !== undefined) {
+        rejectAccountRequest('unauthorized', 'Use Clerk to sign in to this account service.')
+      }
       const body = await readObject(request)
       exactKeys(body, ['email', 'password', 'resource'])
       const email = text(body['email']).trim().toLowerCase()
@@ -251,6 +297,16 @@ export class AccountServer {
       rejectAccountRequest('unauthorized', 'The email or password was not accepted.')
     }
     return this.#store.provision(this.#options.issuer, stored.subject)
+  }
+
+  async #pruneExpiredSessions(): Promise<void> {
+    const cutoff = this.#now()
+    if (this.#store.hasExpiredSessions(cutoff)) {
+      // Expired credentials can still have admitted remote writes in flight. Fence those before
+      // forgetting them, just as sign-out does. Keep the cutoff fixed across the async barrier.
+      await this.#instant?.barrier()
+      this.#store.pruneExpiredSessions(cutoff)
+    }
   }
 
   #now(): number {

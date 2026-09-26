@@ -406,4 +406,8 @@ Provider-neutral sessions, custom and supplied sign-in UI, current account reads
 and owner-scoped notes. AuthReview uses the deterministic adapter; AuthReviewLocal binds the same
 UI to the localhost reference service at port4738. Backend policy, durable offline data and identity
 isolation are verified separately by the reference server/provider tests; only completed Tao
-journeys establish the user-facing behavior. Implementation and live-service acceptance in progress.
+journeys establish the user-facing behavior. AuthReviewClerk selects the managed adapter with a
+placeholder publishable key; configure its development instance and gateway before use. Its opt-in
+browser journey passed on 2026-09-26 against the SQLite reference gateway, including real password
+and email-code UI, profile and note persistence, reload and logout. Clerk over InstantDB and
+physical-device acceptance remain outstanding.
