@@ -543,6 +543,115 @@ Describe('compiler: language lowering', () => {
     }, { location: 'host' })
   })
 
+  Test('compiles an explicitly imported singular data name for projected inputs and creation', async () => {
+    await withTaoFiles('tao-singular-data-import-', {
+      'Main.tao': `
+        use Workspace from @bar
+        type WorkspaceInput is Workspace { Name }
+        app Notes { view Main }
+        view Main() {
+          state Input = WorkspaceInput { Name: "Home" }
+          action Add() { create Workspace with Input }
+          render Empty()
+        }
+        ${stubView('Empty')}
+      `,
+      'packages/@bar/Data.tao': 'public data Workspaces / Workspace { Name text }',
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao']!)
+      const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
+
+      Expect(code).toBeDefined()
+      Expect(code).toMatch(/import \{ _TaoDataCatalog \} from '[^']*Data\.tao'/u)
+      Expect(code).toMatch(
+        /TR\.Data\.CreateWith\(\s*TR\.Auth\.Store\(_TaoAuthScope, _Scope\._TaoDataCatalog\),\s*"Workspace",/u,
+      )
+      Expect(code).toContain('_Scope.Input.evaluate()')
+      Expect(code).toContain('["Name"]: TR.Value("Home").jsValue')
+    })
+  })
+
+  Test('compiles both explicitly imported data names through one shared catalog binding', async () => {
+    await withTaoFiles('tao-dual-data-import-', {
+      'Main.tao': `
+        use Workspaces, Workspace from @bar
+        app Notes { view Main }
+        view Main() {
+          query Workspaces = Workspaces with { }
+          action Add() { create Workspace { Name: "Home" } }
+          render Empty()
+        }
+        ${stubView('Empty')}
+      `,
+      'packages/@bar/Data.tao': 'public data Workspaces / Workspace { Name text }',
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao']!)
+      const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
+
+      Expect(code).toBeDefined()
+      Expect(code?.match(/^import .*_TaoDataCatalog.*$/gmu)).toHaveLength(1)
+      Expect(code).toMatch(/import \{ _TaoDataCatalog \} from '[^']*Data\.tao'/u)
+      Expect(code).toMatch(
+        /TR\.Data\.Create\(\s*TR\.Auth\.Store\(_TaoAuthScope, _Scope\._TaoDataCatalog\),\s*"Workspace",/u,
+      )
+      Expect(code).toContain('_Scope.Workspaces = TR.Data.Query(')
+      Expect(code?.match(/TR\.Use\(_Scope, '_TaoDataCatalog'/gu)).toHaveLength(1)
+      const dataCode = result.files.find(file => file.sourcePath === paths['packages/@bar/Data.tao'])?.code
+      Expect(dataCode).toContain('export const _TaoDataCatalog = _Scope._TaoDataCatalog')
+      Expect(dataCode).not.toContain('export const Workspaces')
+    })
+  })
+
+  Test('compiles a local singular loop binder with only the plural data name imported', async () => {
+    await withTaoFiles('tao-plural-data-import-', {
+      'Main.tao': `
+        use Workspaces from @bar
+        use Col, Text from @tao/ui
+        app Notes { view Main }
+        view Main() {
+          query Workspaces = Workspaces with { }
+          render Col() { loop Workspaces / Workspace { Text(Workspace.Name) } }
+        }
+      `,
+      'packages/@bar/Data.tao': 'public data Workspaces / Workspace { Name text }',
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao']!)
+      const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
+
+      Expect(code).toBeDefined()
+      Expect(code).toMatch(/import \{ _TaoDataCatalog \} from '[^']*Data\.tao'/u)
+      Expect(code).toContain('_Scope.Workspaces = TR.Data.Query(')
+      Expect(code).toContain('TR.ForEach(_Scope.Workspaces.evaluate()')
+      Expect(code).toContain('TR.Member(_Scope.Workspace.evaluate(), ["Name"])')
+    })
+  })
+
+  Test('compiles both folder-visible data names from a sibling without an explicit import', async () => {
+    await withTaoFiles('tao-folder-data-names-', {
+      'Main.tao': `
+        type WorkspaceInput is Workspace { Name }
+        app Notes { view Main }
+        view Main() {
+          query Workspaces = Workspaces with { }
+          action Add() { create Workspace { Name: "Home" } }
+          render Empty()
+        }
+        ${stubView('Empty')}
+      `,
+      'Data.tao': 'folder data Workspaces / Workspace { Name text }',
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao']!)
+      const code = result.files.find(file => file.relativePath === 'App.tsx')?.code
+
+      Expect(code).toBeDefined()
+      Expect(code).toContain("import { _TaoDataCatalog } from './modules/Data.tao'")
+      Expect(code).toMatch(
+        /TR\.Data\.Create\(\s*TR\.Auth\.Store\(_TaoAuthScope, _Scope\._TaoDataCatalog\),\s*"Workspace",/u,
+      )
+      Expect(code).toContain('_Scope.Workspaces = TR.Data.Query(')
+    })
+  })
+
   Test('keeps one catalog for an app whose datasource claims no collections', async () => {
     const compiled = await Compiler.compileCode(`
       use Memory from @tao/data/providers/memory

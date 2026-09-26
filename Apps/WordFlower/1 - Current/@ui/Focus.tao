@@ -1,4 +1,4 @@
-use FocusSessions from @data
+use FocusSession, FocusSessions from @data
 use primary from @tao/keys
 use Interval from @tao/time
 use Col, Row, Text from @tao/ui

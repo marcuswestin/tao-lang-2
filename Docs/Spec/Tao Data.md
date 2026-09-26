@@ -41,6 +41,11 @@ data Paragraphs / Paragraph {
 }
 ```
 
+Across an import boundary, name each form the file uses: `use Workspaces, Workspace from @data`.
+The plural exposes the collection, and the singular exposes the entity type and `create` target;
+either may be imported alone. A loop's local row binder needs no singular import. See
+[Tao Packages](<Tao Packages.md>) for import and visibility rules.
+
 Every entry in a data block is separated by a comma, including fields, storage facts, and command
 policies. A trailing comma is optional; a newline alone does not separate entries. Fields use
 `Name Type (traits)`. Primitive types are `text`, `number`, `boolean`, and `time`; named scalar value

@@ -52,7 +52,7 @@ or poll; actions settle synchronous Tao updates before the next step.
 Fixtures and scenarios are Studio metadata, not test setup:
 
 ```tao SkillScenario.tao
-use Ingredients, Pantry from ./
+use Ingredient, Pantry from ./
 
 fixture SkillSample {
    Salt = create Ingredient {

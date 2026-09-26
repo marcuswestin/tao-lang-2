@@ -225,7 +225,7 @@ Describe('Tao Studio scenario runtime', () => {
         use Memory from @tao/data/providers/memory
         use StackNav from @tao/nav
         use Text from @tao/ui
-        use Workspaces from ./Data.tao
+        use Workspace from ./Data.tao
         use WorkspaceRow from ./Workspaces.tao
 
         app Preview {
@@ -252,7 +252,7 @@ Describe('Tao Studio scenario runtime', () => {
         }
       `,
       'Workspaces.tao': `
-        use Workspaces from ./Data.tao
+        use Workspace from ./Data.tao
         use Col, FormButton, Text from @tao/ui
 
         workspace view WorkspaceRow(Workspace) {

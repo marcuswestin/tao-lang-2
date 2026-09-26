@@ -40,6 +40,14 @@ use Button, TextField from @design-kit
 use Recipe as SharedRecipe from ../Sharing
 ```
 
+- **Data imports select names independently.** A `data Workspaces / Workspace` declaration
+  supplies two names; `use Workspaces, Workspace from @data` imports both. Import only
+  `Workspaces` when using the collection, or only `Workspace` when using the entity type or
+  creating a row. Importing one never implicitly imports the other. The list uses ordinary
+  commas, because the declaration already establishes the pair. A local binder such as
+  `loop Workspaces / Workspace` introduces its own row name and needs only the collection
+  import. Existing file-local and implicit folder visibility still expose both names.
+
 - **Five visibility modifiers, narrowest first**, and a declaration carries the narrowest that works:
   `file` (the default) keeps it to its source file; `folder` reaches the rest of its folder with no
   `use` line; `package` reaches the rest of its package; `workspace` reaches any file in the

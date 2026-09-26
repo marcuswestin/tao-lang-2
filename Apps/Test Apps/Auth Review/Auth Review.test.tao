@@ -1,4 +1,4 @@
-use AuthReview, Notes from ./
+use AuthReview from ./
 
 test "Auth review" {
    test "reports cancellation from the presented sign-in action" {

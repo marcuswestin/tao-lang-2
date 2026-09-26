@@ -1495,6 +1495,7 @@ Test(
   async () => {
     // verbatim: the diff below asserts exact line numbers and text, which indent-stripping would shift.
     await withTaoFiles('tao-studio-capture-diff-', {
+      'Data.tao': 'folder data Accounts / Account { Name text }\n',
       'Garden.tao': 'app Garden {\n   view Main\n}\n\nview Main() {\n   render Text("Before")\n}\n',
     }, async (paths, root) => {
       const session = await StudioProjectSession.open({

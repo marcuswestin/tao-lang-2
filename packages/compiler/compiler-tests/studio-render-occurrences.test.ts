@@ -38,7 +38,7 @@ Describe('compiler: Studio render occurrences', () => {
     await withTaoFiles('tao-studio-shared-fixture-', {
       'Data.tao': `public data Playlists / Playlist { Title text }`,
       'Main.tao': `
-        use Playlists from ./Data
+        use Playlist from ./Data
         use Sketches from ./Sketches
         app Preview { view Main }
         view Main() { render Native() }
@@ -51,7 +51,7 @@ Describe('compiler: Studio render occurrences', () => {
         }
       `,
       'Sketches.tao': `
-        use Playlists from ./Data
+        use Playlist from ./Data
         public fixture Sketches {
           ChillVibes = create Playlist { Title: "Chill Vibes" }
         }
@@ -329,7 +329,7 @@ Describe('compiler: Studio render occurrences', () => {
     await withTaoFiles('tao-studio-preview-manifest-', {
       'Main.tao': `
         type Tone is one of Neutral, Good
-        use Accounts, Detail from ./More.tao
+        use Account, Detail from ./More.tao
 
         app Preview { view Main }
         view Main() { render Native() }
@@ -434,7 +434,7 @@ Describe('compiler: Studio render occurrences', () => {
       Expect(generated?.code).toContain('"formatVersion":2')
       Expect(generated?.code).toContain(JSON.stringify(paths['Main.tao']))
       Expect(compiled.code).toContain(
-        "import { _TaoDataCatalog, Accounts, Detail } from './modules/More.tao'",
+        "import { _TaoDataCatalog, Detail } from './modules/More.tao'",
       )
       Expect(compiled.code).toContain('const useTaoGeneratedStudioScenario = TR.Studio.Environment.useScenario')
       Expect(compiled.code).toContain('const useTaoGeneratedStudioFixture = TR.Studio.Environment.useFixture')
