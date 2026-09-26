@@ -4,9 +4,9 @@
 - **Section:** Deferred
 - **Area:** Agent workflow; cloud development environment
 - **Impact:** A cloud agent container without zsh or the pinned Nix/devenv profile cannot start the repository's `./agent` workflow, so it cannot set up, test, or verify a checkout.
-- **Evidence:** On 2026-09-25, a cloud execution reported that `./agent` required zsh and a Nix/devenv profile, neither of which was present in its container. The 2026-09-26 continuation on `feat/cloud-contributor-continuation` now passes Ubuntu cold and cached bootstrap, repeat setup, parser tests, and source checks with an explicitly approved process-local QEMU compatibility mode. Full Linux verification still fails on the earlier tested commit; narrow portability repairs are committed, but updated-source Linux and actual hosted proof remain outstanding. See per-phase evidence below.
-- **Workaround:** Run the workflow on a prepared local Mac until a cloud environment is supported.
-- **Proposed change:** Complete committed-source Linux acceptance of the implemented portable bootstrap and shared pinned tools, then verify actual hosted setup and caching for every supported harness. Preserve noninteractive setup without preinstalled zsh, shared local/cloud versions, explicit host-only capability boundaries, and owned resource cleanup.
+- **Evidence:** On 2026-09-25, a cloud execution could not start without zsh or the pinned profile. On 2026-09-26, committed `7996e033657e3a7ddccd8a392f5a977057c17431` passed the complete cold and cached native ARM Ubuntu contributor workflow, including bootstrap, setup, parser tests, checks, all tests, and verification. Default amd64 emulation and actual hosted acceptance are distinct; see the evidence below.
+- **Workaround:** On Apple Silicon, run `./agent unsandboxed contributor-linux-test --native-arm64` for local Linux contributor acceptance. It does not establish amd64 or actual hosted compatibility.
+- **Proposed change:** Retain committed-source native Linux acceptance of the implemented portable bootstrap and shared pinned tools, resolve or qualify the default amd64 emulation boundary, then verify actual hosted setup and caching for every supported harness. Preserve noninteractive setup without preinstalled zsh, shared local/cloud versions, explicit host-only capability boundaries, and owned resource cleanup.
 - **Dependencies:** The standalone developer-shell work has landed. Complete this task before closing the broader standalone development effort. Nix 2.35.2 remains checksum-pinned; the existing task inventory's Python runtime is approved from locked nixpkgs without a pin change. Host access, initial downloads, and process-local QEMU bootstrap compatibility have successful evidence. Native ARM is a separate control for translation cost, not amd64 acceptance. Rosetta, global configuration, and further dependency/version changes remain outside this authorization.
 - **Acceptance:** Reproduce contributor setup locally in an isolated Ubuntu environment, then prove the workflow in an actual fresh cloud session for each supported harness. Bootstrap a checkout without preinstalled zsh or a Nix/devenv profile; run `./agent help`, `./agent setup`, a focused test, and the portable check/test/verify lanes. Record per-harness evidence and explicitly identify unavailable macOS-only lanes. Local success alone does not close the task.
 - **Source:** Developer request, 2026-09-25.
@@ -413,3 +413,73 @@ Incoming `./agent setup --environment` uses the full devenv environment and requ
 launcher prerequisites. Fresh Linux continues to enter through `bootstrap-tao-dev-env`;
 that entry installs the pinned tools before invoking setup. The incoming full environment's
 Hutch package is separate from the portable contributor profile.
+
+## Native cold and cached acceptance completed
+
+Run `20260926T230749Z-43918` passed at `7996e033657e3a7ddccd8a392f5a977057c17431`
+using `./agent unsandboxed contributor-linux-test --native-arm64`. Host access and image
+provisioning succeeded separately. The source was committed HEAD with no dirty edits.
+The full run took 1350 seconds, including image provisioning and evidence collection.
+
+| Phase                       | Cold | Cached |
+| --------------------------- | ---- | ------ |
+| Bootstrap                   | 238s | 25s    |
+| Repeat setup                | 1s   | 2s     |
+| Parser tests                | 3s   | 3s     |
+| Source checks               | 30s  | 32s    |
+| Complete tests              | 168s | 209s   |
+| Verification                | 305s | 307s   |
+| Guest phase with collection | 756s | 584s   |
+
+Both guests confirmed Nix 2.35.2 and managed Python 3.13.12. The cold guest had a fresh
+single-user store; the cached guest reused only the locked tools image, with fresh checkout
+dependencies. Verification reused its own exact-tree source-check evidence for three nodes;
+Studio smoke and native/UI host lanes were not exercised. Neither QEMU workaround nor Rosetta
+was enabled. These runs prove local ARM Linux behavior, not amd64 or hosted acceptance.
+
+- Ubuntu 24.04 manifest: `sha256:008173c23f95b170204355c12626cb5a965d779a7e1283b09e9cffbb1bf33ca3`.
+- Run base image: `sha256:8d6fa8b329ef1608b095cf46de1d16c7a8cea935c005a18d64e231ce945aaef2`.
+- Reused tools image: `sha256:fe941be7d173ed62368420c1617b6e85c98a45e6797567a0eea5e90159bfab50`,
+  tagged `tao-contributor-linux-tools:f1357ff472ba023ac11e47c71eb127d218595023`.
+- Evidence: `.artifacts/contributor-linux/20260926T230749Z-43918/`, including per-phase
+  `guest/steps.tsv`, tool versions, complete workflow logs, image metadata, and cleanup logs.
+- Independent cleanup inspection: `20260926T233031Z-56492` confirmed no run-specific
+  containers or base images remain. Reusable ARM and earlier amd64 tools images and shared
+  builder caches were preserved. No older Tart clones were deleted.
+
+The preceding native run at `03b54882` finished in 1679 seconds: cold 941 seconds, cached
+729 seconds. Tests and verification failed only the incoming Watchman fixture. The one-line
+POSIX shell repair at `7996e033` passed focused dispatch coverage and the per-commit gate.
+The repaired inspector and isolated doctor assertions passed in both runs. The existing doctor
+ledger now records that repair as incoming, pending landing and subsequent verification.
+
+One host gate repeated the intermittent successful Git child with empty captured stdout.
+Its focused test and complete gate retry passed; neither a runtime cause nor a sandbox denial
+was established. Failure log: `.artifacts/logs/verify-changed/2026-09-26T22-47-11-550Z-92905-ad7adaf6/shared.log`;
+successful retry: `.artifacts/logs/agent/verify-changed/2026-09-26T22-53-51-504Z-52371.log`.
+This observation remains separate from successful native Linux acceptance.
+
+## Default amd64 blocker reconfirmed on the repaired commit
+
+After native cleanup, default run `20260926T233041Z-57627` tested the same `7996e033`
+without compatibility overrides. Image provisioning passed in 2 seconds. Cold Nix installation
+failed in 14 seconds, and tool-image Nix installation failed in 11 seconds; the entire run
+took 30 seconds. Both failed during upstream store registration, before `./agent setup`:
+
+```text
+qemu: uncaught target signal 11 (Segmentation fault) - core dumped
+Segmentation fault
+unable to register valid paths
+```
+
+Cached amd64 setup and repository verification were unrun because no default tool image could
+be provisioned. This reproduces the external QEMU/Nix boundary on the repaired source; it does
+not identify the precise upstream defect. The base image was
+`sha256:2f7d115281e90d6a9f88b0a3faa7bca02db0af2cb3fbca966d876c41b4c05cd7`.
+Independent inspection `20260926T233200Z-76562` confirmed no run-specific containers or base
+image remained. No new tools image was created; reusable caches were preserved.
+
+The next amd64 proof should run the existing contributor workflow on a native amd64 Linux
+host or hosted runner. Local ARM Linux acceptance is complete without Rosetta, global Docker
+changes, or new privileges. A Rosetta experiment or dependency/version change remains a separate
+approval decision. Actual hosted smoke tests remain outstanding for every supported harness.
