@@ -1,6 +1,6 @@
 # DEVENV-TESTS-THAT-SPAWN-GIT-HANG-THEIR-WHOLE-TIMEOUT-IN-LANES — Tests that spawn `git` hang for their whole timeout in half of the lanes that run them
 
-- **Status:** Candidate
+- **Status:** In progress
 - **Section:** External
 - **Area:** Test execution
 - **Impact:** `verify-changed` failed in 5 of 10 runs on one branch, on tests its diff never touched,
@@ -29,3 +29,5 @@
 - **Acceptance:** Ten consecutive `verify-changed` runs that select `testing/verification` and
   `cli/dev-cli` pass without a 120-second timeout.
 - **Source:** 2026-09-24 `feat/standalone-version-pin`, while gating the standalone CLI's version pin.
+
+- **Investigation (2026-09-26):** On `feat/git-test-timeout`, the pinned Bun 1.4.2 synchronously re-enters its event loop in pending `.resolves`/`.rejects` assertions. The [upstream diagnosis](https://github.com/oven-sh/bun/issues/33261) describes dropped subprocess pipe/exit notifications. A repository regression reproduces the failure with 34 concurrent `git --version` children and a pending assertion in the first child's completion: batch zero fails its named 30-second close wait. Awaiting the input in the shared `Expect` wrapper before invoking the native matcher makes all 20 batches (680 children) finish in 720ms. The scheduling assertion also fails before the fix and passes afterward. No Git timeout or runtime version was increased. Disabling the repair reproduced the Git stall again. Deep review corrected native handling of custom thenables. Across ten uncached broad `verify-changed` runs, `testing/verification` passed every initial run (18.5–26.8s) without retry. Eight whole lanes passed. Repetition five still timed out the two fingerprint probes and the Studio artifact shell; both passed their isolated retries. Repetitions five and ten failed Node compiler-worker teardown. The original ten-green-lane acceptance is not met, so this combined entry remains open. The fingerprint probe needs per-command lifecycle evidence before calling it the same Git defect. See [Studio completion](DEVENV-STUDIO-ARTIFACT-SHELL-LOSES-COMPLETION.md) and [Node teardown](DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI.md).

@@ -22,13 +22,13 @@ Describe('Studio project ownership', () => {
     await FS.writeText(FS.resolvePath('Project.tao', root), 'project { id "owned" name "Owned" }')
     const owner = await ProjectDevSession.acquire(root, 'cli')
     try {
-      await Expect(async () =>
+      await Expect(
         openStudioProjectResource({ projectPath: root }, {
           entryPath: undefined,
           isStopping: () => false,
           stop: () => {},
-        })
-      ).toThrow(`already owned by cli session ${owner.record.id}`)
+        }),
+      ).rejects.toThrow(`already owned by cli session ${owner.record.id}`)
     } finally {
       await owner.release()
       await FS.remove(root)
