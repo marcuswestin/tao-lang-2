@@ -226,6 +226,13 @@ The point of the release is to learn what people want. Nothing collects that tod
   worth adding a command to. The discussion links currently point at the default `ideas` and `q-a`
   categories.
 
+### A18 — Liquid Glass by default
+
+- [ ] **Before MVP:** implement Liquid Glass as Tao's default appearance, so newly created apps
+      use it without opting in.
+- Developer decision: requested 2026-09-26. Define platform fallbacks and accessibility behavior
+  in the implementation plan, and verify the default in a newly created app before closing this item.
+
 ## Environment reach
 
 Reducing what a developer's machine must already have. The prebuilt-host half follows `R7`'s
