@@ -39,6 +39,10 @@ Test(
       await browser.setViewport(1_440, 900)
       await browser.goto(studio.readiness.sessionUrl)
       await browser.waitFor(`document.querySelectorAll('.studio-preview-cell').length === 2`, { timeoutMs: 30_000 })
+      await browser.click('[data-preset="design"]')
+      await browser.waitFor(
+        `document.querySelector('[data-studio-section="Environment"] input[aria-label="Latency ms"]')?.checkVisibility() === true`,
+      )
       await setInteractionMode(browser, 'run')
 
       // Baseline: both cells start online with no latency, so both load their fixture rows unaided.

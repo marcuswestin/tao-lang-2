@@ -115,3 +115,51 @@ export function mountStudioPreviewReload(
     }
   })
 }
+
+/** Opens the standalone app through the host, including when Studio runs in a native window. */
+export function mountStudioBrowserLaunch(
+  options: Readonly<{
+    button: HTMLButtonElement
+    available: boolean
+    open: () => Promise<unknown>
+    onError: (error: unknown) => void
+    status: HTMLElement
+  }>,
+): () => void {
+  const { button, status } = options
+  let disposed = false
+  let opening = false
+  button.disabled = !options.available
+  button.title = options.available ? 'Open app in browser' : 'Start the app preview to open it in a browser'
+  const launch = async (): Promise<void> => {
+    if (disposed || opening || !options.available) {
+      return
+    }
+    opening = true
+    button.disabled = true
+    status.textContent = 'Opening app in browser…'
+    try {
+      await options.open()
+      if (!disposed) {
+        status.textContent = 'Opened app in browser'
+      }
+    } catch (error) {
+      if (!disposed) {
+        options.onError(error)
+      }
+    } finally {
+      opening = false
+      if (!disposed) {
+        button.disabled = false
+      }
+    }
+  }
+  const listener = (): void => {
+    void launch()
+  }
+  button.addEventListener('click', listener)
+  return () => {
+    disposed = true
+    button.removeEventListener('click', listener)
+  }
+}

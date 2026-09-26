@@ -156,8 +156,8 @@ view Number(Value number) {
 }
 
 public
-view TextInput(mutable Value text, Change action(text), Submit action(), Label text, Placeholder text default "", Id text default "", Disabled boolean default false) {
-   render inject Value, Submit, Label, Placeholder, Id, Disabled, Layout @@layout, Tag @@tag ```ts
+view TextInput(mutable Value text, Change action(text), Submit action(), Label text, Placeholder text default "", Id text default "", Disabled boolean default false, Secure boolean default false) {
+   render inject Value, Submit, Label, Placeholder, Id, Disabled, Secure, Layout @@layout, Tag @@tag ```ts
       return TR.Views.TextInput(
         {
           layout: Layout,
@@ -167,6 +167,7 @@ view TextInput(mutable Value text, Change action(text), Submit action(), Label t
           placeholder: Placeholder,
           id: Id,
           disabled: Disabled,
+          secure: Secure,
           onChange: value => Value.change(value),
           onSubmit: () => Submit.invoke(),
         },

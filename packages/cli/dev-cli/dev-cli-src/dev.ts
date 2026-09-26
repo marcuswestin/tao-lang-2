@@ -628,6 +628,36 @@ await runWithCommands(commands => {
     .action(async () => Platform.runtimeProcess.exit(await ReclaimCommand.status()))
 
   commands
+    .command('setup-clerk')
+    .description('Guide Clerk development setup and save credentials in the encrypted repository store.')
+    .option('--instructions', 'Print setup steps without opening a browser or changing credentials.')
+    .action(async (options: { instructions?: boolean }) => {
+      const { runSetupClerk } = await import('./clerk/SetupClerkCommand')
+      try {
+        Platform.runtimeProcess.exit(await runSetupClerk(options))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('clerk-review')
+    .description('Run Clerk and local InstantDB in Studio for a connected iPhone review.')
+    .option('--host <ipv4>', 'The Mac LAN IPv4 address reachable from the phone; detected when omitted.')
+    .option('--instant-url <origin>', 'Local InstantDB API origin.', 'http://127.0.0.1:9020')
+    .option('--no-browser', 'Start Studio without opening the Mac browser.')
+    .action(async (options: { host?: string; instantUrl?: string; browser?: boolean }) => {
+      const { runClerkReview } = await import('./clerk/ClerkReviewCommand')
+      try {
+        Platform.runtimeProcess.exit(await runClerkReview(options))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('secrets')
     .description('Decrypt the repository secrets into .env.secrets, or add, list, or set up.')
     .argument('[action]', 'add <KEY> [note], list, or setup. Omit to decrypt everything.')

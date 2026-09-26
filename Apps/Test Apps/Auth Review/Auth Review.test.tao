@@ -1,6 +1,20 @@
 use AuthReview from ./
 
 test "Auth review" {
+   test "fills review credentials without submitting either sign-in flow" {
+      run AuthReview
+      press #fillEmail
+      expect #email input value "narcvs+tao-clerk-test@gmail.com"
+      expect #password input value ""
+      press #fillPassword
+      expect #password input value "TaoReview!Violet-27-River"
+      expect missing text "Signed in"
+      press #toggleMethod
+      press #fillCodeEmail
+      expect #codeEmail input value "narcvs+tao-clerk-test@gmail.com"
+      expect missing text "Enter your code"
+      expect missing text "Signed in"
+   }
    test "reports cancellation from the presented sign-in action" {
       run AuthReview
       press #presentSignIn
@@ -47,6 +61,8 @@ test "Auth review" {
       enter "alice@example.com" into #codeEmail
       press #sendCode
       expect text "Enter your code"
+      expect text "Resend code"
+      expect missing text "Send code"
       expect missing text "Signed in"
       enter "wrong" into #code
       press #verifyCode
@@ -62,6 +78,11 @@ test "Auth review" {
       press #sendCode
       press #cancelCode
       expect text "Sign in cancelled"
+      expect missing text "Enter your code"
+      press #retryCode
+      expect text "Email-code sign in"
+      press #sendCode
+      expect text "Enter your code"
       expect missing text "Signed in"
    }
    test "completes the same email flow through supplied UI" {

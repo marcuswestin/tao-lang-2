@@ -2,8 +2,8 @@
 
 Status: local and self-hosted slice implemented, 2026-09-26. The current authorized slice includes
 TestAuth/Memory and LocalAuth/Reference, executable Auth Review journeys, and self-hosted InstantDB.
-The first Clerk adapter and live browser acceptance against the reference gateway are implemented.
-Clerk over InstantDB, physical-device acceptance and advanced account lifecycle features remain outstanding.
+The first Clerk adapter and live browser acceptance against SQLite and InstantDB gateways are implemented.
+Physical-device acceptance and advanced account lifecycle features remain outstanding.
 The [decisions](<Tao Revolution/Decisions.md>) own language semantics; the
 [review record](<Auth syntax review.md>) distinguishes accepted changes from remaining choices.
 [MVP scope](<../MVP Roadmap/Developer MVP Roadmap.md>) remains authoritative for priority. This plan
@@ -388,10 +388,41 @@ Its testing token only bypasses bot protection. The live journey passed on 2026-
 password sign-in, profile and owned-note persistence, reload, logout, email-code sign-in and a second
 logout against the SQLite reference gateway. The run exposed Clerk's default sign-out navigation;
 targeted logout and cancellation revocation now use the SDK completion callback so Tao owns navigation.
-Clerk over real Instant storage and physical-device lifecycle acceptance remain outstanding. The gateway requires an `azp` origin
-claim; native proofs may omit it, so native pairing needs an explicit token/origin contract before
-it can be advertised. Advanced recovery, OAuth, MFA/passkeys,
+The same journey passed against local InstantDB on 2026-09-26, independently querying Account and
+Note rows and proving direct guest reads are denied. `just setup-clerk` guides saved Dashboard
+settings, validates matching development keys, retrieves the public signing key and stores the
+three credentials encrypted. It preserves concurrent unrelated secret-store edits and refuses
+conflicting credential/recipient changes. Physical-device lifecycle acceptance remains outstanding.
+The gateway defaults to requiring an `azp` origin claim. The approved native opt-in,
+`allowMissingAuthorizedPartyWithoutOrigin`, accepts a missing claim only when the actual HTTP
+request has no Origin header; any present claim must still match the configured authorized parties.
+Browser requests, including null or empty Origin headers, retain the strict policy. This trusts a
+verified bearer session and does not attest a physical device. `just clerk-review` prepares a
+development gateway and local InstantDB behind Studio for manual Companion review.
+The authored iPhone scenario has mounted on a connected phone. Manual review exposed an unmasked
+custom password input and truncated failure text; secure input and wrapped messages address those.
+Known Clerk configuration errors now have fixed messages distinct from rejected credentials.
+Follow-up phone review identified Clerk rejecting registration with a password equal to the email.
+Separate review fill values, compact scrolling input rows, explicit sign-in/registration selection,
+and a visible verification-code step address the observed form issues. Completed real registration
+and account-data persistence on the phone remain manual acceptance work.
+Advanced recovery, OAuth, MFA/passkeys,
 linking, deletion and production gateway deployment are not part of this initial implementation.
+
+Studio visual follow-through on 2026-09-26 used a fresh HNReader session from `586b3861`.
+The preview started in Run and Bookmarks navigation responded. Edit mode displayed a selection
+outline on rendered text; switching back to Run restored Back navigation. An explicit Code layout
+survived a page reload. The Browser button opened the standalone app in Chrome, where Bookmarks
+navigation also responded. These interactions were observed in Chrome; the in-app browser rendered
+the preview but its iframe click automation returned stale-target errors. No phone acceptance is
+implied. Worktree-local secrets were then materialized, and a fresh real browser journey passed with Clerk
+and local InstantDB. Physical password sign-in reached the generic failure message; it has not yet
+proved physical-device account persistence. The automated iOS simulator journey passed password and
+email-code sign-in, profile and note writes against real InstantDB, process relaunch restoration,
+and sign-out isolation after relaunch on 2026-09-26. Its explicit pre-MVP lane is tracked in
+[initial release QA](<../MVP Roadmap/Plan - Initial release QA.md#live-native-authentication-acceptance>).
+Physical registration, profile, note persistence, email-code login, and logout isolation remain
+separate acceptance work.
 
 ## Original implementation seams
 

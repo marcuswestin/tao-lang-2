@@ -1,6 +1,7 @@
 import { CLI, Platform } from '@shared'
 import { Expect, Test } from '@shared/test'
 import {
+  clerkChildEnvironment,
   clerkFailureSummary,
   clerkLiveConfiguration,
   clerkTestingTokenScript,
@@ -154,4 +155,13 @@ Test('browser init scripts are registered in the page world before navigation', 
   } finally {
     await browser.close()
   }
+})
+
+Test('Clerk child overrides remove inherited credentials instead of reintroducing them through a merge', () => {
+  const parent = { CLERK_SECRET_KEY: 'sentinel-private-key', CLERK_TESTING_TOKEN: 'sentinel-token', PATH: '/tools' }
+  const inherited = { ...parent, ...clerkChildEnvironment(parent) }
+  Expect(inherited.CLERK_SECRET_KEY).toBeUndefined()
+  Expect(inherited.CLERK_TESTING_TOKEN).toBeUndefined()
+  Expect(inherited.PATH).toBe('/tools')
+  Expect(parent.CLERK_SECRET_KEY).toBe('sentinel-private-key')
 })

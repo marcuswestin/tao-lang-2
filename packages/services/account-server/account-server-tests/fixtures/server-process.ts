@@ -5,4 +5,11 @@ const [, , configuration, ready] = Platform.runtimeProcess.argv
 Assert.defined(configuration, 'server process configuration path')
 Assert.defined(ready, 'server process readiness path')
 const server = await AccountServer.start(await FS.readJson<AccountServerOptions>(configuration))
-await FS.writeJson(ready, { url: server.url })
+// The parent treats file existence as readiness, so publish only the complete JSON document.
+const temporary = `${ready}.${Platform.randomUUID()}.tmp`
+try {
+  await FS.writeJson(temporary, { url: server.url })
+  await FS.move(temporary, ready)
+} finally {
+  await FS.remove(temporary)
+}
