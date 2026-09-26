@@ -5,7 +5,7 @@ import { foreignActionTestStubKey } from '../../foreign-action-test-stubs'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import {
-  actionBlockContainsRespond,
+  actionBlockInterruptsAsk,
   actionBlockRequiresAsync,
   actionInstrumentationEnabled,
   actionInvocationRequiresAsync,
@@ -45,7 +45,7 @@ export const ActionsCompiler = {
         })
       }, {
         name: ${gen.jsLiteral(action.name)},
-        ${actionBlockContainsRespond(action.block) ? gen`interrupt: true,` : gen``}
+        ${actionBlockInterruptsAsk(action.block) ? gen`interrupt: true,` : gen``}
       })
     `,
     )
@@ -150,7 +150,7 @@ export const ActionsCompiler = {
         return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
           ${Compile.ActionBlockBody(action.block)}
         })
-      }${actionBlockContainsRespond(action.block) ? gen`, { interrupt: true }` : gen``})
+      }${actionBlockInterruptsAsk(action.block) ? gen`, { interrupt: true }` : gen``})
     `
   },
 
