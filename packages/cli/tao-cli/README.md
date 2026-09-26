@@ -73,5 +73,9 @@ fails explicitly. Earlier desktop installs with random origins are not migrated 
 CloudKit integration, entity discovery/retrieval, entity arguments, view-local commands, arbitrary
 return values, and interactive authentication flows are outside this proof of concept.
 
+The regular CLI suite includes `agent-client-build.test.ts`: it builds and relocates the native
+client, lists commands in readable and JSON formats, and runs a fixture command through the real
+loopback RPC server in a separate process. It checks the received scalar arguments and execution receipt.
+
 Repository acceptance: `./agent unsandboxed test-host agents` builds actual pinned-toolchain apps,
 checks background launch and RPC, and exercises the dedicated Local-backed command app.
