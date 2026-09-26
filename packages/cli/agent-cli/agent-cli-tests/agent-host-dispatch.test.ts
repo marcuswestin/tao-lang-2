@@ -5,6 +5,35 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const DISPATCHER = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts')
 
 Describe('named host command dispatch', () => {
+  Test('routes only reclaim execution through the named host target', async () => {
+    const root = await mkTestDir('tao-reclaim-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('dev.log', root)
+      await FS.writeText(source, '{ "agentHostCommands": ["reclaim --execute"] }')
+      const dev = FS.resolvePath('dev', root)
+      await FS.writeText(dev, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.chmod(dev, 0o755)
+      const executed = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, 'reclaim', '--execute'],
+        cwd: root,
+        env: { TAO_HOST_LOG: log },
+      })
+      Expect(executed.exitCode).toBe(0)
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual(['reclaim', '--execute'])
+
+      const rejected = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [DISPATCHER, source, 'reclaim', '--execute', '--report-json'],
+        cwd: root,
+        env: { TAO_HOST_LOG: log },
+      })
+      Expect(rejected.exitCode).toBe(2)
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual(['reclaim', '--execute'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('forwards only the selected release preparation target as argv', async () => {
     const root = await mkTestDir('tao-release-host-')
     try {

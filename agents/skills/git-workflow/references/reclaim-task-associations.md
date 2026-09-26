@@ -1,7 +1,8 @@
 # Reclaiming a worktree attached to an agent task
 
-`./agent reclaim` reports the Git branch, preservation ref, and task records it can read locally.
-It rechecks known task links before `--execute`, but an absent local record does not prove that no
+`./agent reclaim` reports the Git branch, preservation ref, and task records it can read locally
+through the shared `worktree-status` inventory. It rechecks known task links before `--execute`,
+but an absent local record does not prove that no
 Codex, Claude Code, or Cursor task can still use the checkout. Do this agent check before proposing
 removal or running `--execute`:
 
@@ -19,4 +20,6 @@ removal or running `--execute`:
    unknown. Preserve the worktree while any task is attached or any provider cannot be checked.
 
 The command's description is a bounded first-message excerpt from local history. An app summary
-may be different, and a session file's modification time is not a conversation timestamp.
+may be different, and a session file's modification time is not a conversation timestamp. The
+local inventory reports the latest Codex turn's subject when its history database is readable;
+verify the subject in the app for a decision to remove a worktree.

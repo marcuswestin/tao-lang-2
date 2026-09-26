@@ -548,11 +548,20 @@ await runWithCommands(commands => {
     )
     .option('--execute', 'Remove the reclaimable worktrees, re-checking each one for liveness as it acts.')
     .option('--json', 'Print a versioned structured report instead of the table.')
-    .action(async (options: { execute?: boolean; json?: boolean } = {}) => {
+    .option('--report-json', 'Print a versioned structured report through ./agent instead of the table.')
+    .action(async (options: { execute?: boolean; json?: boolean; reportJson?: boolean } = {}) => {
       Platform.runtimeProcess.exit(
-        await ReclaimCommand.run({ execute: options.execute === true, json: options.json === true }),
+        await ReclaimCommand.run({
+          execute: options.execute === true,
+          json: options.json === true || options.reportJson === true,
+        }),
       )
     })
+
+  commands
+    .command('worktree-status')
+    .description('Report every Git worktree and its latest matching Codex, Claude, or Cursor task; removes nothing.')
+    .action(async () => Platform.runtimeProcess.exit(await ReclaimCommand.status()))
 
   commands
     .command('secrets')

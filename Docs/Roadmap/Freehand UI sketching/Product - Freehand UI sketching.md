@@ -99,6 +99,9 @@ cell and delegates initial Pencil input to a native sidecar.
 - The companion until its app shell exists, Tao rectangle rendering has landed, and the required
   physical-device proof can run.
 - Shrinking the native sidecar toward ink-only as Tao gesture primitives land.
+- Photographing a paper sketch and having an agent add matching, editable Studio rectangles is a
+  post-MVP input path. It reuses Draw and Snap; the photo import does not make flow or data-binding
+  decisions. See the post-MVP target in `Plan - Freehand UI sketching.md`.
 
 ### L1 tranche decisions
 

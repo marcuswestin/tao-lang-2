@@ -1,7 +1,8 @@
-import { type CLI, FS, Platform, Repo } from '@shared'
+import { CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
-import { execute, formatReclaimReport, reclaim } from '../dev-cli-src/doctor/Reclaim'
-import type { ThreadAssociation, ThreadAssociationInventory } from '../dev-cli-src/doctor/ThreadAssociations'
+import { Database } from 'bun:sqlite'
+import { execute, formatReclaimReport, formatWorktreeStatus, reclaim } from '../dev-cli-src/doctor/Reclaim'
+import type { WorktreeThreadInventory } from '../dev-cli-src/doctor/WorktreeThreads'
 
 /**
  * Every seam here is a fake, for the same reason `board`'s tests fake theirs and for one more: this
@@ -50,9 +51,13 @@ function porcelainListing(worktrees: readonly { branch?: string; head: string; p
 const HEAD = 'a'.repeat(40)
 const PRIMARY = '/repo/primary'
 
+const noThreads = async (paths: readonly string[]): Promise<WorktreeThreadInventory> => ({
+  byPath: Object.fromEntries(paths.map(path => [path, []])),
+  providers: { claude: 'ok', codex: 'ok', cursor: 'ok' },
+})
+
 /** scenario builds one machine: a primary checkout, the worktree asking, and one candidate. */
 async function scenario(options: {
-  association?: ThreadAssociation | readonly ThreadAssociation[]
   calls?: string[]
   candidateClean?: boolean
   /** Where the candidate worktree lives. Pass an existing one to build a second registry over the
@@ -101,34 +106,93 @@ async function scenario(options: {
     ]: { stdout: options.containingRefs ?? 'origin/merged/some-task\n' },
     [routeKey('git', ['worktree', 'remove', candidate], Repo.getRoot())]: options.removeResult ?? {},
   }, options.calls)
-  const associations = async (paths: readonly string[]): Promise<ThreadAssociationInventory> => ({
-    byPath: new Map(paths.map(path => [
-      path,
-      path === candidate && options.association !== undefined
-        ? Array.isArray(options.association) ? options.association : [options.association]
-        : [],
-    ])),
-    coverage: ['fixture association index'],
-  })
-  return { associations, candidate, registryRoot, run }
-}
-
-const attachedTask: ThreadAssociation = {
-  createdAt: '2026-09-19T18:28:58.000Z',
-  description: 'Improve testing and merge scheduling',
-  id: '01a0baed-bea6-7cd3-a354-0eee871a9a15',
-  label: 'NEXT',
-  lastActivity: 'User: identify the task sending continuation messages',
-  lastActivityAt: '2026-09-20T16:59:37.000Z',
-  provider: 'Codex',
-  title: 'Improve Tao testing and merges',
+  return { candidate, registryRoot, run }
 }
 
 Describe('reclaim', () => {
-  Test('reports a clean, idle, preserved worktree as reclaimable with its evidence', async () => {
-    const { associations, candidate, registryRoot, run } = await scenario({})
+  Test('local task indexes match exact worktree paths across the three apps', async () => {
+    const home = await mkTestDir('tao-thread-index-')
+    const worktree = FS.resolvePath('checkout', home)
+    await FS.mkdir(worktree)
+    const codexRoot = FS.resolvePath('.codex', home)
+    await FS.mkdir(codexRoot)
+    const codex = new Database(FS.resolvePath('state_5.sqlite', codexRoot))
+    codex.run(
+      'CREATE TABLE threads (id TEXT, cwd TEXT, name TEXT, title TEXT, first_user_message TEXT, created_at INTEGER, updated_at INTEGER, created_at_ms INTEGER, updated_at_ms INTEGER, archived INTEGER, thread_source TEXT, thread_section_id TEXT)',
+    )
+    codex.run('CREATE TABLE thread_sections (id TEXT, name TEXT)')
+    codex.run("INSERT INTO thread_sections VALUES ('next', 'NEXT')")
+    codex.run(
+      "INSERT INTO threads VALUES ('codex-1', ?, 'Codex title', '', 'Codex description', 1, 2, 1000, 2000, 0, 'user', 'next')",
+      [worktree],
+    )
+    codex.close()
+    const history = new Database(FS.resolvePath('thread_history_1.sqlite', codexRoot))
+    history.run(
+      'CREATE TABLE thread_turns (thread_id TEXT, turn_id TEXT, rollout_ordinal INTEGER, completed_at INTEGER)',
+    )
+    history.run(
+      'CREATE TABLE thread_items (thread_id TEXT, turn_id TEXT, item_type TEXT, rollout_ordinal INTEGER, item_json TEXT)',
+    )
+    history.run("INSERT INTO thread_turns VALUES ('codex-1', 'turn-1', 1, 1790300000)")
+    history.run('INSERT INTO thread_items VALUES (?, ?, ?, ?, ?)', [
+      'codex-1',
+      'turn-1',
+      'userMessage',
+      1,
+      JSON.stringify({ content: [{ text: 'Review the worktree cleanup', type: 'text' }] }),
+    ])
+    history.close()
 
-    const report = await reclaim({ associations, registryRoot, run })
+    const claudeProject = FS.resolvePath('.claude/projects/project', home)
+    await FS.mkdir(claudeProject)
+    await FS.writeText(
+      FS.resolvePath('claude-1.jsonl', claudeProject),
+      JSON.stringify({
+        cwd: worktree,
+        message: { content: 'Claude description', role: 'user' },
+        sessionId: 'claude-1',
+        timestamp: '2026-09-25T12:00:00Z',
+        type: 'user',
+      }) + '\n',
+    )
+    const cursorRoot = FS.resolvePath('Library/Application Support/Cursor/User/globalStorage', home)
+    await FS.mkdir(cursorRoot)
+    const cursor = new Database(FS.resolvePath('state.vscdb', cursorRoot))
+    cursor.run(
+      'CREATE TABLE composerHeaders (composerId TEXT, createdAt INTEGER, lastUpdatedAt INTEGER, isArchived INTEGER, value TEXT)',
+    )
+    cursor.run('INSERT INTO composerHeaders VALUES (?, ?, ?, ?, ?)', [
+      'cursor-1',
+      1_790_000_000_000,
+      1_790_000_010_000,
+      1,
+      JSON.stringify({
+        name: 'Cursor title',
+        subtitle: 'Cursor description',
+        workspaceIdentifier: { uri: { fsPath: worktree } },
+      }),
+    ])
+    cursor.close()
+
+    const result = await CLI.run('python3', {
+      args: [Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/doctor/worktree_thread_inventory.py')],
+      stdin: JSON.stringify({ home, paths: [worktree, `${worktree}-other`] }),
+    })
+    Expect(result.exitCode).toBe(0)
+    const inventory = JSON.parse(result.stdout) as WorktreeThreadInventory
+    Expect(inventory.providers).toEqual({ claude: 'ok', codex: 'ok', cursor: 'ok' })
+    Expect(inventory.byPath[worktree]?.map(thread => thread.app).toSorted()).toEqual(['claude', 'codex', 'cursor'])
+    Expect(inventory.byPath[`${worktree}-other`]).toEqual([])
+    Expect(inventory.byPath[worktree]?.find(thread => thread.app === 'cursor')?.archived).toBe(true)
+    Expect(inventory.byPath[worktree]?.find(thread => thread.app === 'codex')?.label).toBe('NEXT')
+    Expect(inventory.byPath[worktree]?.find(thread => thread.app === 'codex')?.lastActivity)
+      .toBe('User: Review the worktree cleanup')
+  })
+  Test('reports a clean, idle, preserved worktree as reclaimable with its evidence', async () => {
+    const { candidate, registryRoot, run } = await scenario({})
+
+    const report = await reclaim({ readThreads: noThreads, registryRoot, run })
 
     const row = report.worktrees.find(worktree => worktree.path === candidate)
     Expect(row?.verdict).toBe('reclaimable')
@@ -136,9 +200,9 @@ Describe('reclaim', () => {
   })
 
   Test('never reclaims the worktree it is running in, or the primary checkout', async () => {
-    const { associations, registryRoot, run } = await scenario({})
+    const { registryRoot, run } = await scenario({})
 
-    const report = await reclaim({ associations, registryRoot, run })
+    const report = await reclaim({ readThreads: noThreads, registryRoot, run })
 
     const byPath = new Map(report.worktrees.map(worktree => [worktree.path, worktree]))
     Expect(byPath.get(Repo.getRoot())?.verdict).toBe('live')
@@ -146,9 +210,9 @@ Describe('reclaim', () => {
   })
 
   Test('a worktree holding a lane is live, not reclaimable', async () => {
-    const { associations, candidate, registryRoot, run } = await scenario({ laneOnCandidate: true })
+    const { candidate, registryRoot, run } = await scenario({ laneOnCandidate: true })
 
-    const report = await reclaim({ associations, registryRoot, run })
+    const report = await reclaim({ readThreads: noThreads, registryRoot, run })
 
     const row = report.worktrees.find(worktree => worktree.path === candidate)
     Expect(row?.verdict).toBe('live')
@@ -156,9 +220,9 @@ Describe('reclaim', () => {
   })
 
   Test('uncommitted changes make a worktree live', async () => {
-    const { associations, candidate, registryRoot, run } = await scenario({ candidateClean: false })
+    const { candidate, registryRoot, run } = await scenario({ candidateClean: false })
 
-    const report = await reclaim({ associations, registryRoot, run })
+    const report = await reclaim({ readThreads: noThreads, registryRoot, run })
 
     const row = report.worktrees.find(worktree => worktree.path === candidate)
     Expect(row?.verdict).toBe('live')
@@ -166,21 +230,64 @@ Describe('reclaim', () => {
   })
 
   Test('a commit no preserved ref contains is unclassified, never reclaimable', async () => {
-    const { associations, candidate, registryRoot, run } = await scenario({ containingRefs: '' })
+    const { candidate, registryRoot, run } = await scenario({ containingRefs: '' })
 
-    const report = await reclaim({ associations, registryRoot, run })
+    const report = await reclaim({ readThreads: noThreads, registryRoot, run })
 
     const row = report.worktrees.find(worktree => worktree.path === candidate)
     Expect(row?.verdict).toBe('unclassified')
     Expect(row?.evidence.at(-1)).toContain('reachable from neither main nor any origin/merged/* ref')
   })
 
+  Test('an attached task protects an otherwise reclaimable worktree', async () => {
+    const { candidate, registryRoot, run } = await scenario({})
+    const readThreads = async (paths: readonly string[]): Promise<WorktreeThreadInventory> => ({
+      ...await noThreads(paths),
+      byPath: {
+        [candidate]: [{
+          app: 'codex',
+          archived: true,
+          createdAt: null,
+          description: 'Review',
+          id: 'task-1',
+          label: 'NEXT',
+          lastActivity: 'User: Review the worktree cleanup',
+          lastActivityAt: null,
+          path: candidate,
+          title: 'Attached task',
+        }],
+      },
+    })
+    const report = await reclaim({ readThreads, registryRoot, run })
+    const row = report.worktrees.find(worktree => worktree.path === candidate)
+    Expect(row?.verdict).toBe('live')
+    Expect(row?.threads[0]?.title).toBe('Attached task')
+    Expect(formatWorktreeStatus(report)).toContain(
+      'codex archived: Attached task — Review; created unknown; active unknown',
+    )
+    const full = formatReclaimReport(report)
+    Expect(full).toContain('Title: Attached task')
+    Expect(full).toContain('Description: Review')
+    Expect(full).toContain('App label: NEXT; created: unknown')
+    Expect(full).toContain('Last activity: unknown — User: Review the worktree cleanup')
+  })
+
+  Test('an unreadable installed task index leaves an unmatched worktree unclassified', async () => {
+    const { candidate, registryRoot, run } = await scenario({})
+    const readThreads = async (paths: readonly string[]): Promise<WorktreeThreadInventory> => ({
+      ...await noThreads(paths),
+      providers: { claude: 'ok', codex: 'unavailable: database', cursor: 'ok' },
+    })
+    const report = await reclaim({ readThreads, registryRoot, run })
+    Expect(report.worktrees.find(worktree => worktree.path === candidate)?.verdict).toBe('unclassified')
+  })
+
   Test('execute removes a reclaimable worktree', async () => {
     const calls: string[] = []
-    const { associations, candidate, registryRoot, run } = await scenario({ calls })
-    const report = await reclaim({ associations, registryRoot, run })
+    const { candidate, registryRoot, run } = await scenario({ calls })
+    const report = await reclaim({ readThreads: noThreads, registryRoot, run })
 
-    const removals = await execute(report, { associations, registryRoot, run })
+    const removals = await execute(report, { inSandbox: () => false, readThreads: noThreads, registryRoot, run })
 
     Expect(removals).toEqual([{ outcome: 'removed', path: candidate }])
     Expect(calls).toContain(routeKey('git', ['worktree', 'remove', candidate], Repo.getRoot()))
@@ -189,14 +296,15 @@ Describe('reclaim', () => {
   Test('execute refuses a worktree that took a lane after the report was gathered', async () => {
     const calls: string[] = []
     const first = await scenario({ calls })
-    const report = await reclaim({ associations: first.associations, registryRoot: first.registryRoot, run: first.run })
+    const report = await reclaim({ readThreads: noThreads, registryRoot: first.registryRoot, run: first.run })
     Expect(report.worktrees.some(worktree => worktree.verdict === 'reclaimable')).toBe(true)
 
     // The machine goes busy between the report and the action — the case a five-minute-old snapshot
     // gets wrong, and the reason the liveness signals are re-read per item.
     const busy = await scenario({ calls, candidatePath: first.candidate, laneOnCandidate: true })
     const removals = await execute(report, {
-      associations: busy.associations,
+      inSandbox: () => false,
+      readThreads: noThreads,
       registryRoot: busy.registryRoot,
       run: busy.run,
     })
@@ -207,67 +315,51 @@ Describe('reclaim', () => {
     Expect(calls).not.toContain(routeKey('git', ['worktree', 'remove', first.candidate], Repo.getRoot()))
   })
 
-  Test('a sandbox denial is reported as needing an unsandboxed shell, not as a git failure', async () => {
-    const { associations, candidate, registryRoot, run } = await scenario({
+  Test('execute rechecks tasks and keeps a worktree attached after the report', async () => {
+    const calls: string[] = []
+    const { candidate, registryRoot, run } = await scenario({ calls })
+    const report = await reclaim({ readThreads: noThreads, registryRoot, run })
+    const attached = async (paths: readonly string[]): Promise<WorktreeThreadInventory> => ({
+      ...await noThreads(paths),
+      byPath: {
+        [candidate]: [{
+          app: 'claude',
+          archived: false,
+          createdAt: null,
+          description: '',
+          id: 'task-2',
+          lastActivityAt: null,
+          path: candidate,
+          title: 'New task',
+        }],
+      },
+    })
+    const removals = await execute(report, { inSandbox: () => false, readThreads: attached, registryRoot, run })
+    Expect(removals).toEqual([{ outcome: 'skipped-now-live', path: candidate, reason: 'attached to an agent task' }])
+    Expect(calls).not.toContain(routeKey('git', ['worktree', 'remove', candidate], Repo.getRoot()))
+  })
+
+  Test('execute refuses a sandbox before Git can unregister a worktree', async () => {
+    const calls: string[] = []
+    const { candidate, registryRoot, run } = await scenario({ calls })
+    const report = await reclaim({ readThreads: noThreads, registryRoot, run })
+
+    await Expect(execute(report, { inSandbox: () => true, readThreads: noThreads, registryRoot, run }))
+      .rejects.toThrow('Run --execute from a normal Terminal')
+    Expect(calls).not.toContain(routeKey('git', ['worktree', 'remove', candidate], Repo.getRoot()))
+  })
+
+  Test('a late sandbox denial warns that Git may already have unregistered the worktree', async () => {
+    const { candidate, registryRoot, run } = await scenario({
       removeResult: { exitCode: 1, stderr: "fatal: failed to delete '<path>': Operation not permitted" },
     })
-    const report = await reclaim({ associations, registryRoot, run })
+    const report = await reclaim({ readThreads: noThreads, registryRoot, run })
 
-    const removals = await execute(report, { associations, registryRoot, run })
+    const removals = await execute(report, { inSandbox: () => false, readThreads: noThreads, registryRoot, run })
 
     Expect(removals[0]?.path).toBe(candidate)
     Expect(removals[0]?.outcome).toBe('failed')
-    Expect(removals[0]?.reason).toContain('unsandboxed shell')
-    Expect(removals[0]?.reason).toContain('nothing was deleted')
-  })
-
-  Test('a clean worktree attached to a Codex task is live and retains task details in the report', async () => {
-    const { associations, candidate, registryRoot, run } = await scenario({ association: attachedTask })
-
-    const report = await reclaim({ associations, registryRoot, run })
-    const row = report.worktrees.find(worktree => worktree.path === candidate)
-
-    Expect(row?.verdict).toBe('live')
-    Expect(row?.associations).toEqual([attachedTask])
-    Expect(row?.evidence).toContain('still associated with an agent task')
-    const rendered = formatReclaimReport(report)
-    Expect(rendered).toContain('Branch: detached at')
-    Expect(rendered).toContain('Agent task: Codex 01a0baed-bea6-7cd3-a354-0eee871a9a15')
-    Expect(rendered).toContain('Title: Improve Tao testing and merges')
-    Expect(rendered).toContain('Description: Improve testing and merge scheduling')
-    Expect(rendered).toContain('App label: NEXT; created: 2026-09-19T18:28:58.000Z')
-  })
-
-  Test('execute rechecks task attachment before removal', async () => {
-    const calls: string[] = []
-    const first = await scenario({ calls })
-    const report = await reclaim({ associations: first.associations, registryRoot: first.registryRoot, run: first.run })
-    const attached = await scenario({ association: attachedTask, calls, candidatePath: first.candidate })
-
-    const removals = await execute(report, {
-      associations: attached.associations,
-      registryRoot: attached.registryRoot,
-      run: attached.run,
-    })
-
-    Expect(removals).toEqual([
-      { outcome: 'skipped-now-live', path: first.candidate, reason: 'still associated with an agent task' },
-    ])
-    Expect(calls).not.toContain(routeKey('git', ['worktree', 'remove', first.candidate], Repo.getRoot()))
-  })
-
-  Test('the text report names every attached task, even when several share one worktree', async () => {
-    const attached = Array.from({ length: 4 }, (_, index) => ({
-      ...attachedTask,
-      id: `01a0baed-bea6-7cd3-a354-0eee871a9a1${index}`,
-      title: `Attached task ${index}`,
-    }))
-    const { associations, registryRoot, run } = await scenario({ association: attached })
-
-    const rendered = formatReclaimReport(await reclaim({ associations, registryRoot, run }))
-
-    for (const task of attached) {
-      Expect(rendered).toContain(`Title: ${task.title}`)
-    }
+    Expect(removals[0]?.reason).toContain('normal Terminal')
+    Expect(removals[0]?.reason).toContain('may already have unregistered')
   })
 })

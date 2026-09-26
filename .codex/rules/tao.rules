@@ -13,6 +13,7 @@ prefix_rule(pattern=["./agent","unsandboxed","studio-smoke"], decision="allow", 
 prefix_rule(pattern=["./agent","unsandboxed","studio-proof-real-app"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","admission-experiment"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","native-module-check"], decision="allow", justification="Repository-approved host command.")
+prefix_rule(pattern=["./agent","unsandboxed","reclaim","--execute"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","prepare-release","studio"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","prepare-release","ide-extension"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["./agent","unsandboxed","app-dev"], decision="allow", justification="Repository-approved host command.")

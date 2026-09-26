@@ -3,10 +3,11 @@ import { LandingLock } from '@verification/LandingLock'
 import { MachineLanes, type MachineResourceOwner } from '@verification/MachineLanes'
 import { parseWorktreePorcelain } from './Board'
 import {
-  discoverThreadAssociations,
-  type ThreadAssociation,
-  type ThreadAssociationInventory,
-} from './ThreadAssociations'
+  readWorktreeThreads,
+  threadInventoryAvailable,
+  type WorktreeThread,
+  type WorktreeThreadInventory,
+} from './WorktreeThreads'
 
 /**
  * `reclaim` is the verdict `board` deliberately refuses to draw. `board` is a read-only picture of
@@ -34,9 +35,10 @@ const PROTECTED_PATH_FRAGMENT = '/.artifacts/merge/'
 const RESOURCE_LEASE_SUFFIX = '.lease'
 
 export type ReclaimDependencies = {
-  associations?: (paths: readonly string[]) => Promise<ThreadAssociationInventory>
   registryRoot?: string
   run?: typeof CLI.run
+  readThreads?: (paths: readonly string[]) => Promise<WorktreeThreadInventory>
+  inSandbox?: () => boolean
   /** The worktree asking. Injected by tests; nothing may reclaim the ground it is standing on. */
   thisRoot?: string
 }
@@ -44,10 +46,10 @@ export type ReclaimDependencies = {
 /**
  * A verdict says what was proved, not how confident the command feels.
  *
- * - `reclaimable` — the tree is clean, no local task record or machine liveness signal was found,
- *   and the commit is reachable from `main` or an `origin/merged/*` ref. Unavailable provider records
- *   still require an agent check before deletion.
- * - `live` — a local task record, lane, resource lease, landing lock, uncommitted changes, or
+ * - `reclaimable` — no local task link or machine liveness signal was found, the tree is clean, and
+ *   the commit is reachable from `main` or an `origin/merged/*` ref. Cloud-only task ownership
+ *   still needs an app check before removal.
+ * - `live` — a local task link, lane, resource lease, landing lock, uncommitted changes, or a
  *   protected path was found. Reported so the count adds up, never acted on.
  * - `unclassified` — neither was proved. An unreadable worktree, a commit reachable from nothing,
  *   a Git command that failed. This is the class that keeps the command honest: it is where
@@ -57,7 +59,6 @@ type ReclaimVerdict = 'live' | 'reclaimable' | 'unclassified'
 
 /** ReclaimWorktree is one checkout with its verdict and the evidence that produced it. */
 type ReclaimWorktree = {
-  associations: readonly ThreadAssociation[]
   branch?: string
   detached: boolean
   /** Why this verdict, in the order the checks ran. Always populated: a verdict with no evidence
@@ -65,6 +66,7 @@ type ReclaimWorktree = {
   evidence: readonly string[]
   head: string
   path: string
+  threads: readonly WorktreeThread[]
   verdict: ReclaimVerdict
 }
 
@@ -77,7 +79,7 @@ export type ReclaimRemoval = {
 
 /** ReclaimReport is the versioned `--json` shape of `reclaim`. */
 export type ReclaimReport = {
-  associationCoverage: readonly string[]
+  providers: WorktreeThreadInventory['providers']
   removals?: readonly ReclaimRemoval[]
   version: 2
   worktrees: readonly ReclaimWorktree[]
@@ -97,23 +99,12 @@ export async function reclaim(dependencies: ReclaimDependencies = {}): Promise<R
   const thisRoot = await canonicalPath(dependencies.thisRoot ?? Repo.getRoot())
   const records = await listWorktrees(run)
   const live = await readLiveRoots(dependencies.registryRoot)
+  const threads = await (dependencies.readThreads ?? readWorktreeThreads)(records.map(record => record.path))
   const primary = records[0]?.path
   const worktrees = await Promise.all(
-    records.map(async record => await classify(record, { live, primary, run, thisRoot })),
+    records.map(async record => await classify(record, { live, primary, run, thisRoot, threads })),
   )
-  const inventory = await (dependencies.associations ?? discoverThreadAssociations)(worktrees.map(tree => tree.path))
-  const withAssociations = worktrees.map(tree => {
-    const associations = inventory.byPath.get(tree.path) ?? []
-    return associations.length > 0 && tree.verdict === 'reclaimable'
-      ? {
-        ...tree,
-        associations,
-        evidence: [...tree.evidence, 'still associated with an agent task'],
-        verdict: 'live' as const,
-      }
-      : { ...tree, associations }
-  })
-  return { associationCoverage: inventory.coverage, version: 2, worktrees: withAssociations }
+  return { providers: threads.providers, version: 2, worktrees }
 }
 
 type ClassifyContext = {
@@ -121,6 +112,7 @@ type ClassifyContext = {
   primary?: string
   run: typeof CLI.run
   thisRoot: string
+  threads: WorktreeThreadInventory
 }
 
 /**
@@ -131,9 +123,16 @@ type ClassifyContext = {
 async function classify(
   record: { branch?: string; detached: boolean; head: string; path: string },
   context: ClassifyContext,
-): Promise<Omit<ReclaimWorktree, 'associations'>> {
-  const row = { branch: record.branch, detached: record.detached, head: record.head.slice(0, 10), path: record.path }
+): Promise<ReclaimWorktree> {
   const path = await canonicalPath(record.path)
+  const attached = context.threads.byPath[path] ?? []
+  const row = {
+    branch: record.branch,
+    detached: record.detached,
+    head: record.head.slice(0, 10),
+    path: record.path,
+    threads: attached,
+  }
 
   if (path === context.thisRoot) {
     return { ...row, evidence: ['this worktree is the one running reclaim'], verdict: 'live' }
@@ -149,6 +148,12 @@ async function classify(
   }
   if (context.live.busy.has(path)) {
     return { ...row, evidence: ['holds a lane, a resource lease, or the landing lock'], verdict: 'live' }
+  }
+  if (attached.length > 0) {
+    return { ...row, evidence: [`attached to ${attached.length} agent task(s)`], verdict: 'live' }
+  }
+  if (!threadInventoryAvailable(context.threads)) {
+    return { ...row, evidence: ['an installed agent task index could not be read'], verdict: 'unclassified' }
   }
   if (!await FS.isDirectory(record.path)) {
     return {
@@ -189,14 +194,15 @@ export async function execute(
   report: ReclaimReport,
   dependencies: ReclaimDependencies = {},
 ): Promise<readonly ReclaimRemoval[]> {
+  if ((dependencies.inSandbox ?? CLI.inAgentSandbox)()) {
+    Errors.throwHostEnvironment(
+      'Reclaim cannot remove worktrees inside an agent sandbox: Git may unregister a worktree before the sandbox denies directory deletion. Run --execute from a normal Terminal.',
+    )
+  }
   const run = dependencies.run ?? CLI.run
+  const readThreads = dependencies.readThreads ?? readWorktreeThreads
   const removals: ReclaimRemoval[] = []
   for (const worktree of report.worktrees.filter(candidate => candidate.verdict === 'reclaimable')) {
-    const currentAssociations = await (dependencies.associations ?? discoverThreadAssociations)([worktree.path])
-    if ((currentAssociations.byPath.get(worktree.path)?.length ?? 0) > 0) {
-      removals.push({ outcome: 'skipped-now-live', path: worktree.path, reason: 'still associated with an agent task' })
-      continue
-    }
     const live = await readLiveRoots(dependencies.registryRoot)
     const path = await canonicalPath(worktree.path)
     if (!live.registryAvailable || live.busy.has(path)) {
@@ -204,6 +210,17 @@ export async function execute(
         outcome: 'skipped-now-live',
         path: worktree.path,
         reason: live.registryAvailable ? 'took a lane since the report' : 'the lane registry became unreadable',
+      })
+      continue
+    }
+    const threads = await readThreads([path])
+    if (!threadInventoryAvailable(threads) || (threads.byPath[path] ?? []).length > 0) {
+      removals.push({
+        outcome: 'skipped-now-live',
+        path: worktree.path,
+        reason: threadInventoryAvailable(threads)
+          ? 'attached to an agent task'
+          : 'an agent task index became unreadable',
       })
       continue
     }
@@ -221,9 +238,8 @@ export async function execute(
 }
 
 /**
- * removeWorktree names the sandbox denial rather than letting it read as a Git failure. `git
- * worktree remove` fails before deleting anything under the agent sandbox, so the worktree survives
- * intact and the only thing missing is the shell it needed.
+ * removeWorktree names a sandbox denial rather than letting it read as a generic Git failure.
+ * A denial can happen after Git unregisters the checkout, so its directory must be inspected.
  */
 async function removeWorktree(path: string, run: typeof CLI.run): Promise<ReclaimRemoval> {
   const result = await run('git', { args: ['worktree', 'remove', path], cwd: Repo.getRoot(), stdio: 'pipe' })
@@ -234,8 +250,8 @@ async function removeWorktree(path: string, run: typeof CLI.run): Promise<Reclai
   return {
     outcome: 'failed',
     path,
-    reason: /operation not permitted/iu.test(stderr)
-      ? 'the sandbox denied the removal; nothing was deleted. Re-run --execute from an unsandboxed shell.'
+    reason: CLI.isSandboxDenial(result)
+      ? 'the sandbox denied directory deletion; Git may already have unregistered the worktree. Inspect the registry and directory before retrying from a normal Terminal.'
       : stderr.trim().split('\n')[0] ?? 'git worktree remove failed',
   }
 }
@@ -348,35 +364,29 @@ export function formatReclaimReport(report: ReclaimReport): string {
   for (const worktree of report.worktrees) {
     counts[worktree.verdict] += 1
   }
-  const rows = report.worktrees.map(worktree => {
-    const branch = worktree.branch ?? `detached at ${worktree.head}`
-    const ordered = [...worktree.associations]
-      .sort((left, right) => (right.lastActivityAt ?? '').localeCompare(left.lastActivityAt ?? ''))
-    const threads = worktree.associations.length === 0
-      ? '              Agent task: provider unknown; title unknown; description unknown — check app task associations.'
-      : ordered.map(association =>
-        [
-          `              Agent task: ${association.provider} ${association.id}`,
-          `                Title: ${association.title}`,
-          `                Description: ${association.description}`,
-          `                App label: ${association.label ?? 'unknown'}; created: ${
-            association.createdAt ?? 'unknown'
+  const rows = report.worktrees.map(worktree =>
+    [
+      `${worktree.verdict.toUpperCase().padEnd(13)} ${FS.displayPath(worktree.path)}`,
+      `              ${worktree.branch ?? `detached at ${worktree.head}`} — ${worktree.evidence.join('; ')}`,
+      ...(worktree.threads.length === 0
+        ? ['              Agent task: no matching local record; check app task associations.']
+        : worktree.threads.flatMap(thread => [
+          `              Agent task: ${thread.app}${thread.archived ? ' (archived)' : ''} ${thread.id}`,
+          `                Title: ${thread.title}`,
+          `                Description: ${thread.description || 'unknown'}`,
+          `                App label: ${thread.label ?? 'unknown'}; created: ${thread.createdAt ?? 'unknown'}`,
+          `                Last activity: ${thread.lastActivityAt ?? 'unknown'} — ${
+            thread.lastActivity ?? 'inspect the task in the app for the subject'
           }`,
-          `                Last activity: ${association.lastActivityAt ?? 'unknown'} — ${
-            association.lastActivity ?? 'inspect in app'
-          }`,
-        ].join('\n')
-      ).join('\n')
-    return `${worktree.verdict.toUpperCase().padEnd(13)} ${FS.displayPath(worktree.path)}\n`
-      + `              Branch: ${branch} — ${worktree.evidence.join('; ')}\n${threads}`
-  })
+        ])),
+    ].join('\n')
+  )
   const summary = `${counts.reclaimable} reclaimable, ${counts.live} live, ${counts.unclassified} unclassified`
   const sections = [
     report.worktrees.length === 0 ? '(no worktrees found)' : rows.join('\n'),
     '',
     summary,
-    'Task coverage: ',
-    ...report.associationCoverage.map(note => `  ${note}`),
+    `Task indexes: ${Object.entries(report.providers).map(([app, status]) => `${app}=${status}`).join(', ')}`,
     ...(report.removals === undefined
       ? counts.reclaimable === 0
         ? []
@@ -394,4 +404,38 @@ export function formatReclaimReport(report: ReclaimReport): string {
       ]),
   ]
   return sections.join('\n')
+}
+
+/** formatWorktreeStatus prints one compact entry per checkout; `reclaim --json` retains every task. */
+export function formatWorktreeStatus(report: ReclaimReport): string {
+  const shorten = (value: string, limit: number): string =>
+    value.length > limit ? `${value.slice(0, limit - 1)}…` : value
+  const date = (value: string | null): string => {
+    if (value === null) {
+      return 'unknown'
+    }
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.valueOf()) ? value : `${parsed.toISOString().slice(0, 16)}Z`
+  }
+  const rows = report.worktrees.flatMap(worktree => {
+    const latest = worktree.threads[0]
+    const task = latest === undefined
+      ? 'no matching task'
+      : `${latest.app}${latest.archived ? ' archived' : ''}: ${shorten(latest.title, 48)}`
+        + ` — ${shorten(latest.description || 'no description', 64)}`
+        + `; created ${date(latest.createdAt)}; active ${date(latest.lastActivityAt)}`
+        + (worktree.threads.length === 1 ? '' : `; +${worktree.threads.length - 1} other task(s)`)
+    return [
+      `${worktree.verdict.toUpperCase().padEnd(12)} ${FS.displayPath(worktree.path)}`
+      + ` — ${worktree.branch ?? `detached ${worktree.head}`}`,
+      `  ${task}`,
+    ]
+  })
+  return [
+    ...rows,
+    `${
+      report.worktrees.filter(row => row.verdict === 'reclaimable').length
+    } would be attempted by reclaim --execute; no worktrees removed.`,
+    `Task indexes: ${Object.entries(report.providers).map(([app, status]) => `${app}=${status}`).join(', ')}`,
+  ].join('\n')
 }
