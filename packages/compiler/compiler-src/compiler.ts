@@ -316,7 +316,11 @@ function compileValidatedInput(
   }
 
   const studioManifest = studio
-    ? compileStudioPreviewManifest(sourceFiles, selectedAppName, context.sourceRoot)
+    ? compileStudioPreviewManifest(
+      sourceFiles.filter(file => !FS.pathIsWithin(file.path, context.packagesContext.stdlibRoot)),
+      selectedAppName,
+      context.sourceRoot,
+    )
     : undefined
   if (studioManifest !== undefined) {
     compiledFiles.push({

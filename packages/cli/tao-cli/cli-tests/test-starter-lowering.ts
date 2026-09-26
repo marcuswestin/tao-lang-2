@@ -53,7 +53,7 @@ export async function expectStarterReproducedFromItsPlan(directory: string): Pro
 
     const checkedIn = Repo.resolvePath(`Apps/Starters/${starter.directory}`)
     if (UPDATE_STARTERS) {
-      await FS.synchronizeDirectoryFiles(generated, checkedIn)
+      await updateStarterFiles(generated, checkedIn)
     }
     Expect(await projectFilesUnder(generated)).toEqual(await projectFilesUnder(checkedIn))
     for (const relativePath of await projectFilesUnder(generated)) {
@@ -66,6 +66,73 @@ export async function expectStarterReproducedFromItsPlan(directory: string): Pro
   }
 }
 
+/** updateStarterFiles publishes authored files without traversing an installed dependency tree. */
+export async function updateStarterFiles(generated: string, checkedIn: string): Promise<void> {
+  const boundary = Repo.resolvePath('.')
+  await FS.withFileMutationLock(checkedIn, boundary, async () => {
+    const sources = await checkedProjectFiles(generated, boundary, false)
+    const targets = await checkedProjectFiles(checkedIn, boundary, true)
+    for (const relativePath of sources) {
+      const source = FS.resolvePath(relativePath, generated)
+      const target = FS.resolvePath(relativePath, checkedIn)
+      await FS.mkdirWithinBoundary(FS.dirname(target), boundary)
+      if (await FS.isSymbolicLink(target)) {
+        Errors.throwUnexpected(`Refusing to update a starter symbolic link: ${target}`)
+      }
+      await FS.copyFile(source, target)
+    }
+    const wanted = new Set(sources)
+    for (const relativePath of targets) {
+      if (!wanted.has(relativePath)) {
+        await FS.removeFileWithinBoundary(FS.resolvePath(relativePath, checkedIn), boundary)
+      }
+    }
+  })
+}
+
+async function checkedProjectFiles(
+  directory: string,
+  boundary: string,
+  preserveDependencies: boolean,
+): Promise<string[]> {
+  if (!FS.pathIsWithin(directory, boundary)) {
+    Errors.throwUnexpected(`Starter path is outside the repository: ${directory}`)
+  }
+  let ancestor = directory
+  while (true) {
+    if ((await FS.entryMetadata(ancestor)).kind !== 'directory') {
+      Errors.throwUnexpected(`Starter directory is not an ordinary directory: ${ancestor}`)
+    }
+    if (ancestor === boundary) {
+      break
+    }
+    ancestor = FS.dirname(ancestor)
+  }
+  const files: string[] = []
+  for await (
+    const path of FS.walk(directory, {
+      excludeDirectory: name => name === 'node_modules',
+      includeDirectories: true,
+      includeHidden: true,
+    })
+  ) {
+    if (FS.basename(path) === 'node_modules') {
+      if (preserveDependencies) {
+        continue
+      }
+      Errors.throwUnexpected(`Generated starter contains dependencies: ${path}`)
+    }
+    const kind = (await FS.entryMetadata(path)).kind
+    if (kind !== 'directory' && kind !== 'file') {
+      Errors.throwUnexpected(`Starter project entry is not an ordinary file or directory: ${path}`)
+    }
+    if (kind === 'file') {
+      files.push(FS.relativePath(directory, path))
+    }
+  }
+  return files.sort()
+}
+
 /** projectFilesUnder lists the project files a starter comparison covers, in a stable order. */
 async function projectFilesUnder(directory: string): Promise<string[]> {
   const paths: string[] = []
@@ -75,6 +142,9 @@ async function projectFilesUnder(directory: string): Promise<string[]> {
       includeHidden: true,
     })
   ) {
+    if (FS.basename(path) === 'node_modules') {
+      continue
+    }
     paths.push(FS.relativePath(directory, path))
   }
   return paths.sort()

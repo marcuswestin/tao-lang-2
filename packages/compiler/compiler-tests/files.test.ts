@@ -666,7 +666,21 @@ Describe('compiler: files and packages', () => {
         const relativePaths = allFiles.map(file => file.relativePath)
 
         Expect(sourceModules).toHaveLength(3)
-        Expect(allFiles).toHaveLength(5)
+        Expect(relativePaths.toSorted()).toEqual([
+          'App.tsx',
+          'modules/external/Auth.files/Auth.ts',
+          'modules/external/Auth.files/AuthFlow.ts',
+          'modules/external/Auth.files/AuthViews.tsx',
+          'modules/external/Auth.tao.tsx',
+          'modules/external/AuthFlow.ts',
+          'modules/external/AuthViews.files/AuthFlow.ts',
+          'modules/external/AuthViews.files/AuthViews.tsx',
+          'modules/external/Prelude.tao.tsx',
+          'modules/external/Views.tao-2.injection-1.tsx',
+          'modules/external/Views.tao-2.tsx',
+          'modules/external/Views.tao.injection-1.tsx',
+          'modules/external/Views.tao.tsx',
+        ])
         Expect(new Set(relativePaths).size).toBe(relativePaths.length)
         Expect(relativePaths).toContain('modules/external/Views.tao.tsx')
         Expect(relativePaths).toContain('modules/external/Views.tao-2.tsx')

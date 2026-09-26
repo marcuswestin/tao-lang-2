@@ -1,12 +1,14 @@
 # DEVENV-TEST-FIXTURE-CLEANUP-DENIED-IN-MANAGED-WORKTREES — Test fixture cleanup denied in managed worktrees
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Test fixture ownership and managed-shell verification
 - **Impact:** The full verification lane cannot produce a green record in this task because disposable checkout directories cannot be removed or renamed. Cleanup errors also obscure successful assertions and can leave fixture-residue assertions failing.
 - **Evidence:** On 2026-09-26, `./agent verify` on `feat/auth-account-data` failed across suites using the default `mkTestDir` checkout location. Logs are under `.artifacts/logs/verify/2026-09-26T10-00-51-655Z-6812-9727aa07/`; `shared.log`, `compiler.log`, and `runtime-jest.log` show `EPERM` from removal of owned `.artifacts/scratch` fixtures. The Tao-app lane also fails renaming its checkout-local compiled-test cache. Types, lint, packaging, and the account-server suite pass. Exact Auth Review journeys pass with a task-owned `TAO_HOME` under the writable cache root. Named escalated host commands still report a sandbox in this task.
+- **Resolution:** On 2026-09-26 the resumed managed session no longer reproduced the directory-lifecycle denial. The unchanged shared fixture suite passed all 98 tests (`.artifacts/logs/dev-test/2026-09-26T15-10-45-242Z-35755-ba4b0f74/summary.json`); the broader `verify-changed` run at 15:15 completed cleanup normally and exposed separate source/fixture regressions, rather than EPERM failures. Named host capabilities also reported no sandbox. No global test-root relocation or relaxed cleanup assertion was needed. Full branch acceptance remains recorded separately by final verification.
 - **Workaround:** Focused fixtures that explicitly support host temporary storage run there with their normal owned cleanup. A normal-Terminal full verification retry is still needed; no successful host full run is claimed. Do not weaken cleanup assertions or delete unrelated fixture/cache trees.
 - **Proposed change:** Reconcile the intentional checkout fixture default with the managed host's directory-lifecycle restriction. Keep ownership, failure retention, Git-discovery ceilings, and concurrent-test isolation explicit; either restore a supported removable temporary location for disposable fixtures or repair the host execution boundary. Do not globally relocate persistent artifacts to make a gate green.
 - **Dependencies:** Archived DEVENV-064 records the earlier directory-lifecycle boundary. DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE separately repairs disposable production gate staging; it does not change `mkTestDir` or the Tao test lane's cache selection.
 - **Acceptance:** Full verification completes in the supported managed environment; fixtures are removed on success, retained only according to the failure policy, and cannot reach the enclosing checkout's Git repository. A failed cleanup remains visible without replacing the primary failure.
 - **Source:** 2026-09-26 auth/account-data final verification.
+- **Archived:** 2026-09-26

@@ -1,5 +1,6 @@
+import { Packages, Type } from '@ast-utils'
 import { RuntimeToolchainPaths } from '@expo-host'
-import { AST, Parser } from '@parser'
+import { AST, Parser, URI } from '@parser'
 import { CLI, Errors, FS, Json, Repo } from '@shared'
 import { shipInputHash } from './ship-model'
 
@@ -38,12 +39,19 @@ export async function runtimeFingerprint(runtimeRoot: string, runner: CommandRun
 /** dataSchemaFingerprint hashes only the storage semantics of authored entity-data declarations. */
 export async function dataSchemaFingerprint(projectRoot: string): Promise<string> {
   const schemas: ReturnType<typeof canonicalEntitySchema>[] = []
-  for (const path of await Repo.filesUnder(projectRoot, { extensions: ['.tao'] })) {
-    if (path.endsWith('.test.tao')) {
-      continue
+  const paths = (await Repo.filesUnder(projectRoot, { extensions: ['.tao'] }))
+    .filter(path => !path.endsWith('.test.tao'))
+  const packages = Packages.createResolver(await Packages.createContext(projectRoot))
+  const parsedFiles = await Parser.parseEntries(Parser.createContext({ packages }), paths.map(path => URI.file(path)), {
+    validation: false,
+  })
+  for (const parsed of parsedFiles) {
+    for (const file of parsed.files) {
+      const syntax = file.document.parseResult
+      if (syntax.lexerErrors.length > 0 || syntax.parserErrors.length > 0) {
+        Errors.throwUserInput(`Cannot fingerprint data schema: '${file.path}' contains invalid Tao syntax.`)
+      }
     }
-    const source = await FS.readText(path)
-    const parsed = await Parser.parseCode(source, { validation: false })
     for (const entity of parsed.entry.ast.statements.filter(AST.isEntityDataDeclaration)) {
       schemas.push(canonicalEntitySchema(entity))
     }
@@ -58,6 +66,8 @@ function canonicalEntitySchema(entity: AST.EntityDataDeclaration) {
     negativeName: field.negativeName ?? null,
     optional: field.optional,
     primitive: field.primitive ?? null,
+    storedValueType: canonicalStoredValueType(field),
+    typeName: field.typeName ?? null,
     traits: (field.traits?.traits ?? []).map(canonicalTrait).toSorted(compareCanonicalValues),
   })).toSorted((left, right) => left.name.localeCompare(right.name))
   const indexes = entity.block.entries.filter(AST.isDataIndex)
@@ -66,6 +76,11 @@ function canonicalEntitySchema(entity: AST.EntityDataDeclaration) {
   const orders = entity.block.entries.filter(AST.isDataDefaultOrder)
     .map(order => ({ direction: order.direction ?? 'asc', fieldName: order.fieldName }))
     .toSorted(compareCanonicalValues)
+  // A composite constraint compares the same tuple of values in every row. Reordering its
+  // components or independent constraints does not change which rows violate uniqueness.
+  const unique = entity.block.entries.filter(AST.isDataUnique)
+    .map(constraint => constraint.fieldNames.toSorted((left, right) => left.localeCompare(right)))
+    .toSorted(compareCanonicalValues)
   return {
     fields,
     indexes,
@@ -73,8 +88,20 @@ function canonicalEntitySchema(entity: AST.EntityDataDeclaration) {
     name: entity.name,
     orders,
     singularName: entity.singularName,
+    unique,
     visibility: entity.visibility ?? null,
   }
+}
+
+function canonicalStoredValueType(field: AST.EntityDataField) {
+  const type = Type.dataFieldType(field)
+  if (type.kind === 'enum') {
+    return { kind: 'enum', cases: AST.caseSetCasesOf(type.declaration).map(AST.caseSetCaseName).toSorted() }
+  }
+  if (type.kind === 'primitive') {
+    return { kind: type.primitive }
+  }
+  return null
 }
 
 function canonicalTrait(trait: AST.Trait): Readonly<Record<string, unknown>> {

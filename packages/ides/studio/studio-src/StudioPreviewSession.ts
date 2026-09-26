@@ -142,7 +142,11 @@ function matrixManifest(
     fixtures: compiler.fixtures.map(fixture => ({
       fixtureId: fixture.id,
       label: fixture.name,
-      plan: jsonObject({ accounts: fixture.accounts, creates: fixture.creates, signedIn: fixture.signedIn }),
+      plan: jsonObject({
+        accounts: fixture.accounts,
+        creates: fixture.creates,
+        ...(fixture.signedIn === undefined ? {} : { signedIn: fixture.signedIn }),
+      }),
       source: taoSource(fixture.source),
     })),
     generationDeclarations: compiler.generationDeclarations,
