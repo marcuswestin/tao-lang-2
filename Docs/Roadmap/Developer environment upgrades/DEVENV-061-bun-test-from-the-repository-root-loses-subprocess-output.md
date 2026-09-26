@@ -17,6 +17,18 @@
   `bun test packages/dev/dev-tests/merge-with-main.test.ts` from the root gave complete output including
   subprocess stack traces, and was the only way to see a failure while `./dev` itself was mid-edit and
   broken; `bun test --cwd packages/<name> <relative-path>` was reliable throughout.
+- **Recurrence, 2026-09-26:** The supported landing and focused-test entry points
+  also returned empty captured output on `feat/summary-cache-cleanup` after
+  integrating main at `f6cb6a19`. The unchanged shared regression
+  `settles every Git child when an assertion starts in a child completion`
+  observed exit code zero and empty stdout from `git --version` at
+  `packages/shared/shared-tests/expect-async.test.ts:34`. The landing's full lane
+  failed, and `./agent test-file packages/shared/shared-tests/expect-async.test.ts`
+  reproduced it. Logs: `.artifacts/logs/verify-full/2026-09-26T22-17-15-087Z-89452-a8136230/shared.log`
+  and `.artifacts/logs/dev-test/2026-09-26T22-18-44-957Z-4841-34c04a93/shared.log`.
+  Both ran under heavy machine contention; the runtime cause and equivalence to
+  the older root-cwd defect are unproven. This evidence means the workaround
+  below is not a guarantee, and the completed feature remains unlanded.
 - **Workaround:** Prefer `./dev test-file <path>` or `just test <pattern>`. When those are unavailable —
   a broken `./dev`, or a shared module mid-edit (DEVENV-068) — `bun test --cwd packages/<name>
   <relative-test-path>` resolves `@shared/test` correctly and reports the real stack, and a root-cwd
