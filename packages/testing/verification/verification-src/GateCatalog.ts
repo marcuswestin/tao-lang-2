@@ -192,10 +192,10 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // work for longer than that and be killed for it. That is starvation, not a hang, so it is the
   // computed deadline's question to answer rather than a fixed number chosen once and left behind as
   // the floor beneath it rose.
-  // A quiet complete run of the pre-rename suite used 13 shards and finished with a 32s longest
-  // shard. An unmeasured new worktree otherwise runs all 47 files in one 100s+ process, and busy
-  // runs cannot teach wall-time history. Start below that measured width until this tree learns.
-  ['cli/tao-cli', { coldShardCount: 8 }],
+  // Fresh history needs enough units to balance the expensive bridge and CLI integration files.
+  // Eight initial shards still grouped a 24s tail after splitting those files; twelve lets the
+  // scheduler spread the work within its existing CPU budget until measured costs take over.
+  ['cli/tao-cli', { coldShardCount: 12 }],
   ['language/validator', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
 
   // Jest's own worker pool already parallelizes the whole run, so splitting it into single-worker

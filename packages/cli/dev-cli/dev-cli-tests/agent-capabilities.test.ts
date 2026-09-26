@@ -1,6 +1,7 @@
 import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
+  type CapabilityProbe,
   classifyCapability,
   readAgentCapabilities,
   unavailableLandingCapabilities,
@@ -102,7 +103,7 @@ Describe('agent capabilities', () => {
       runProbe: async candidate =>
         candidate.name === 'CoreSimulator service'
           ? { exitCode: 1, stderr: 'service unavailable', stdout: '' }
-          : availableProbe(),
+          : availableProbe(candidate),
     })
 
     Expect(unavailableLandingCapabilities(report).map(check => check.name)).toEqual(['CoreSimulator service'])
@@ -116,7 +117,7 @@ Describe('agent capabilities', () => {
         probed.push(candidate)
         return candidate.command === 'docker'
           ? { exitCode: 1, stderr: 'Cannot connect to the Docker daemon: operation not permitted', stdout: '' }
-          : { exitCode: 0, stderr: '', stdout: 'ok' }
+          : availableProbe(candidate)
       },
     })
 
@@ -126,6 +127,11 @@ Describe('agent capabilities', () => {
       args: ['-axo', 'pid=,ppid=,lstart=,command='],
       command: 'ps',
       display: 'ps -axo pid=,ppid=,lstart=,command=',
+    })
+    Expect(probed.find(candidate => candidate.command === 'hutch')).toMatchObject({
+      args: ['--version'],
+      command: 'hutch',
+      display: 'hutch --version',
     })
     Expect(report.checks.length).toBe(probed.length)
     Expect(report.checks.find(check => check.name === 'Docker daemon')?.status).toBe('denied')
@@ -139,7 +145,7 @@ Describe('agent capabilities', () => {
         if (candidate.command === 'ps') {
           Errors.throwHostEnvironment('posix_spawn denied by sandbox')
         }
-        return availableProbe()
+        return availableProbe(candidate)
       },
     })
 
@@ -149,8 +155,65 @@ Describe('agent capabilities', () => {
     })
     Expect(report.checks.filter(check => check.status === 'available').length).toBe(report.checks.length - 1)
   })
+
+  Test('blocks landing when the native launcher is missing even though the other required probes pass', async () => {
+    const report = await readAgentCapabilities({
+      runProbe: async candidate =>
+        candidate.command === 'hutch'
+          ? { exitCode: 127, stderr: 'hutch: command not found', stdout: '' }
+          : availableProbe(candidate),
+    })
+
+    Expect(unavailableLandingCapabilities(report)).toMatchObject([{
+      command: 'hutch --version',
+      detail: 'hutch: command not found',
+      name: 'Hutch native launcher',
+      status: 'unavailable',
+    }])
+  })
+
+  Test('rejects unsupported or unidentified Hutch versions despite a successful exit', async () => {
+    for (
+      const [stdout, detail] of [
+        ['Hutch 0.24.2', 'Expected version 0.24.3; found 0.24.2'],
+        ['Hutch 0.24.30', 'Expected version 0.24.3; found 0.24.30'],
+        ['Hutch 0.24.3-beta.1', 'Expected version 0.24.3; found 0.24.3-beta.1'],
+        ['ok', 'Expected version 0.24.3; no version reported'],
+      ] as const
+    ) {
+      const report = await readAgentCapabilities({
+        runProbe: async candidate =>
+          candidate.command === 'hutch'
+            ? { exitCode: 0, stderr: '', stdout }
+            : availableProbe(candidate),
+      })
+
+      Expect(unavailableLandingCapabilities(report)).toMatchObject([{
+        detail,
+        name: 'Hutch native launcher',
+        status: 'unavailable',
+      }])
+    }
+  })
+
+  Test('accepts the pinned Hutch launcher from PATH without running installation commands', async () => {
+    const probed: CapabilityProbe[] = []
+    const report = await readAgentCapabilities({
+      runProbe: async candidate => {
+        probed.push(candidate)
+        return availableProbe(candidate)
+      },
+    })
+
+    Expect(report.checks.find(check => check.name === 'Hutch native launcher')).toMatchObject({ status: 'available' })
+    Expect(unavailableLandingCapabilities(report)).toEqual([])
+    Expect(probed.filter(candidate => candidate.command === 'hutch').map(candidate => candidate.args))
+      .toEqual([['--version']])
+  })
 })
 
-async function availableProbe(): Promise<{ exitCode: number; stderr: string; stdout: string }> {
-  return { exitCode: 0, stderr: '', stdout: 'ok' }
+async function availableProbe(
+  candidate: CapabilityProbe,
+): Promise<{ exitCode: number; stderr: string; stdout: string }> {
+  return { exitCode: 0, stderr: '', stdout: candidate.command === 'hutch' ? 'Hutch 0.24.3' : 'ok' }
 }

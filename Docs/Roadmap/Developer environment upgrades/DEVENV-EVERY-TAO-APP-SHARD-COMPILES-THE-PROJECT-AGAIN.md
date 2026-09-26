@@ -13,7 +13,7 @@
   completes in **3.58s wall warm** for 29 tests (Jest 2.76s; roughly 9.2s cold), against a ledger
   that recorded the same work at 66.2s — a figure produced by one observation per invocation across
   cold, contended shards rather than by the tests themselves. On `feat/verification-throughput`,
-  `test-command-cli.test.ts` proves one prepared corpus runs across two roots without recompilation;
+  `test-command-shared-cli.test.ts` proves one prepared corpus runs across two roots without recompilation;
   `tao-app-shared-run.test.ts` proves the graph publishes it only after both shards pass. These focused
   checks do not yet establish the wall-time acceptance below on an idle machine. An initial
   2026-09-22 full lane was blocked by `EPERM` renaming a generated directory into
