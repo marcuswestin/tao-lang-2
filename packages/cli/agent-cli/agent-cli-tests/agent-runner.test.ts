@@ -167,7 +167,7 @@ Describe('agent runner', () => {
       Expect(captured.result).toBe(1)
       Expect(captured.stdout).toContain('spawn error:')
       Expect(captured.stdout).toContain('was not found on PATH')
-      Expect(captured.stdout).toContain('./agent setup')
+      Expect(captured.stdout).toContain('./enter-tao-dev-env')
 
       const latestPath = FS.resolvePath('.artifacts/logs/agent/probe/latest.log', scratch)
       Expect(await FS.readText(latestPath)).toContain('was not found on PATH')

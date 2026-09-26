@@ -22,15 +22,10 @@ const BUILD_ROOT = '.artifacts/build'
 const RELEASE_ROOT = '.artifacts/release'
 const ENTRY_POINT = 'packages/cli/tao-cli/cli-src/tao-standalone.ts'
 const INSTALL_SCRIPT = 'packages/cli/tao-cli/cli-src/standalone-install.sh'
+const PORTABLE_BUN_SCRIPT = 'packages/cli/tao-cli/cli-src/standalone-bun.sh'
 
 /** RELEASES_PLACEHOLDER is the token in the install script that a release replaces with its URL. */
 const RELEASES_PLACEHOLDER = '@TAO_RELEASES@'
-
-/**
- * MINIMUM_DARWIN_BUN is the first Bun whose compiled binary macOS 27 will run: earlier ones append
- * their payload after the code signature, and the kernel kills the result on launch.
- */
-const MINIMUM_DARWIN_BUN = '1.4.2'
 
 /** A release version is plain semver, because the install script puts it in a download URL. */
 const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
@@ -41,6 +36,7 @@ const RELEASE_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
  */
 const KNOWN_GAPS = [
   '`tao dev` serves the web target from the standalone binary; the iOS Simulator and Android do not open from it yet.',
+  '`tao ship` cannot prebuild an iCloud-backed app from the standalone binary because its host lacks the tao-icloud config plugin.',
   '`tao review` is not in the standalone binary.',
   'The binary is not signed or notarized yet.',
 ] as const
@@ -142,8 +138,8 @@ async function buildRelease(version: string, releasesOption: string | undefined)
  * build also stamps in its version and where its releases are published.
  */
 async function buildBinary(outfile: string, release?: { releases: string; version: string }): Promise<void> {
-  assertBunCanCompile()
   const repoRoot = Repo.getRoot()
+  const portableBun = (await CLI.mustRun('bash', { args: [PORTABLE_BUN_SCRIPT], cwd: repoRoot })).stdout.trim()
   const staging = FS.resolvePath(`${BUILD_ROOT}/standalone/${TaoResources.INSTALLED_DIRECTORY}`, repoRoot)
   const archive = FS.resolvePath(`${BUILD_ROOT}/standalone/${StandaloneResources.PAYLOAD_FILE_NAME}`, repoRoot)
 
@@ -162,7 +158,7 @@ async function buildBinary(outfile: string, release?: { releases: string; versio
     FS.resolvePath(`${TaoResources.HOST_DIRECTORY}/expo-host-src/agent-client.js`, staging),
     await AgentClientBuild.source(),
   )
-  await makeHostInstallable(repoRoot, FS.resolvePath(TaoResources.HOST_DIRECTORY, staging))
+  await makeHostInstallable(repoRoot, FS.resolvePath(TaoResources.HOST_DIRECTORY, staging), portableBun)
   await recordManagedNode(repoRoot, staging)
   const fileCount = await packTree(staging, archive)
   HCI.logProcessInfo('standalone', `Packed ${fileCount} resource files into ${FS.relativePath(repoRoot, archive)}.`)
@@ -175,11 +171,29 @@ async function buildBinary(outfile: string, release?: { releases: string; versio
     `TAO_RELEASES_URL=${JSON.stringify(release.releases)}`,
   ]
   const defines = ['--define', 'TAO_STANDALONE=true', ...stamp]
-  await CLI.mustRun(Platform.runtimeProcess.execPath, {
+  await CLI.mustRun(portableBun, {
     args: ['build', '--compile', ...defines, '--outfile', FS.resolvePath(outfile, repoRoot), ENTRY_POINT, archive],
     cwd: repoRoot,
     stdio: 'inherit',
   })
+  await assertSystemLibraryDependencies(FS.resolvePath(outfile, repoRoot))
+}
+
+/** A release must not retain the build host's Nix store or other private dylib paths. */
+async function assertSystemLibraryDependencies(binary: string): Promise<void> {
+  const dependencies = (await CLI.mustRun('otool', { args: ['-L', binary] })).stdout
+    .split('\n')
+    .slice(1)
+    .map(line => line.trim().split(' ')[0] ?? '')
+    .filter(Boolean)
+  const privateDependencies = dependencies.filter(path =>
+    !path.startsWith('/usr/lib/') && !path.startsWith('/System/Library/')
+  )
+  if (privateDependencies.length > 0) {
+    Errors.throwHostEnvironment(
+      `The standalone binary links to build-host libraries: ${privateDependencies.join(', ')}.`,
+    )
+  }
 }
 
 /**
@@ -192,7 +206,7 @@ async function buildBinary(outfile: string, release?: { releases: string; versio
  * repository's lock, so they can drift from it. Its tsconfig stops extending the repository's base,
  * which Expo's TypeScript resolver cannot follow outside the repository.
  */
-async function makeHostInstallable(repoRoot: string, stagedHost: string): Promise<void> {
+async function makeHostInstallable(repoRoot: string, stagedHost: string, portableBun: string): Promise<void> {
   const manifest = await FS.readJson<HostManifest>(FS.resolvePath(HOST_MANIFEST, repoRoot))
   const dependencies: Record<string, string> = {}
   for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
@@ -222,7 +236,7 @@ async function makeHostInstallable(repoRoot: string, stagedHost: string): Promis
     compilerOptions: { ...baseOptions, ...tsconfig.compilerOptions },
   })
 
-  await CLI.mustRun(Platform.runtimeProcess.execPath, {
+  await CLI.mustRun(portableBun, {
     args: ['install', '--lockfile-only', '--cwd', stagedHost],
     cwd: repoRoot,
   })
@@ -341,14 +355,4 @@ function releaseNotes(version: string, releases: string): string {
 function optionValue(args: readonly string[], name: string): string | undefined {
   const index = args.indexOf(name)
   return index === -1 ? undefined : args[index + 1]
-}
-
-function assertBunCanCompile(): void {
-  if (Platform.hostPlatform === 'darwin' && !Platform.semverSatisfies(Bun.version, `>=${MINIMUM_DARWIN_BUN}`)) {
-    Errors.throwHostEnvironment(
-      `Bun ${Bun.version} compiles binaries that macOS kills on launch; ${MINIMUM_DARWIN_BUN} or later is `
-        + 'required, and devenv pins it. A shell still on an older Bun has a devenv profile built '
-        + 'before that pin: reload it with `direnv reload`.',
-    )
-  }
 }

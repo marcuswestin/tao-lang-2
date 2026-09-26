@@ -381,7 +381,7 @@ Describe('agent worktree profile bootstrap', () => {
 
       Expect(result.exitCode).not.toBe(0)
       Expect(result.stderr).toContain('pinned devenv profile is unavailable')
-      Expect(result.stderr).toContain('direnv allow && direnv exec . ./agent setup')
+      Expect(result.stderr).toContain('./enter-tao-dev-env')
     } finally {
       await FS.remove(testRoot)
     }
@@ -393,7 +393,7 @@ Describe('agent worktree profile bootstrap', () => {
       const fixture = await createProfileFixture(testRoot, true)
       const commandLog = FS.resolvePath('commands.log', testRoot)
       await copyBootstrapScripts(fixture.worktree)
-      await writeBootstrapBun(FS.resolvePath('bin/bun', testRoot))
+      await writeBootstrapBun(FS.resolvePath('bin/bun', fixture.primaryProfile))
 
       const dev = await CLI.run(FS.resolvePath('dev', fixture.worktree), {
         args: ['--help'],
@@ -425,7 +425,7 @@ Describe('agent worktree profile bootstrap', () => {
       const buildRoot = FS.resolvePath('.artifacts/build/agent-dev', fixture.worktree)
       const outputText = FS.resolvePath('packages/cli/cli-kit/cli-kit-src/OutputText.ts', fixture.worktree)
       await copyBootstrapScripts(fixture.worktree)
-      await writeBootstrapBun(FS.resolvePath('bin/bun', testRoot))
+      await writeBootstrapBun(FS.resolvePath('bin/bun', fixture.primaryProfile))
       await Promise.all([
         FS.mkdir(FS.resolvePath('node_modules', fixture.worktree)),
         FS.writeText(FS.resolvePath('package.json', fixture.worktree), '{}'),
@@ -469,7 +469,7 @@ Describe('agent worktree profile bootstrap', () => {
       const fixture = await createProfileFixture(testRoot, true)
       const commandLog = FS.resolvePath('commands.log', testRoot)
       await copyBootstrapScripts(fixture.worktree)
-      await writeBootstrapBun(FS.resolvePath('bin/bun', testRoot))
+      await writeBootstrapBun(FS.resolvePath('bin/bun', fixture.primaryProfile))
 
       const dev = await CLI.run(FS.resolvePath('dev', fixture.worktree), {
         args: ['--help'],
@@ -862,7 +862,9 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands).not.toContain('manual-check')
     Expect(await justRecipeNames()).not.toContain('_verify-full-smoke-launch')
     Expect(await justCommands('ship-bundle-proof')).toContain(
-      'bun run packages/apps/expo-host/expo-host-src/testing/verify-release-bundle.ts',
+      `"${
+        Repo.resolvePath('.devenv/profile/bin/bun')
+      }" run packages/apps/expo-host/expo-host-src/testing/verify-release-bundle.ts`,
     )
     Expect(await justCommands('studio-canary')).toContain('./dev studio-canary')
     Expect(await justCommands('studio-manual-checks')).toContain('./dev studio-manual-checks')
@@ -1061,9 +1063,11 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
   await Promise.all([makeExecutable(fakeGetconf), makeExecutable(fakeGit)])
   if (withPrimaryProfile) {
     const primaryNode = FS.resolvePath('bin/node', primaryProfile)
+    const primaryBun = FS.resolvePath('bin/bun', primaryProfile)
     await FS.mkdir(FS.resolvePath('libexec/android-sdk', primaryProfile))
     await FS.writeText(primaryNode, '#!/bin/zsh\nprint -r -- v24.test\n')
-    await makeExecutable(primaryNode)
+    await FS.writeText(primaryBun, '#!/bin/zsh\nprint -r -- 1.4.2\n')
+    await Promise.all([makeExecutable(primaryNode), makeExecutable(primaryBun)])
   }
   return {
     commonGitDir,

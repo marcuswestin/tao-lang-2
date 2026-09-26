@@ -291,7 +291,7 @@ Describe('Jest transform cache lifecycle', () => {
     })
   })
 
-  Test('direct Jest relocates with TAO_HOME and XDG_CACHE_HOME without touching an old root', async () => {
+  Test('direct Jest relocates with TAO_HOME and keeps the single default home', async () => {
     await withCache(async parent => {
       const direct = require('../jest-direct-cache.cjs') as {
         root: (runtimeRoot: string) => string
@@ -299,10 +299,11 @@ Describe('Jest transform cache lifecycle', () => {
         finish: (root: string, lease: string) => Promise<void>
       }
       const env = Platform.runtimeProcess.env
-      const before = { tao: env['TAO_HOME'], xdg: env['XDG_CACHE_HOME'] }
+      const before = { tao: env['TAO_HOME'], xdg: env['XDG_CACHE_HOME'], home: env['HOME'] }
       try {
         env['TAO_HOME'] = FS.resolvePath('home', parent)
         env['XDG_CACHE_HOME'] = FS.resolvePath('xdg', parent)
+        env['HOME'] = FS.resolvePath('default-home', parent)
         const homeRoot = direct.root('/runtime/one')
         Expect(homeRoot).toContain('/home/cache/jest-standalone-v2/')
         const old = FS.resolvePath('home/cache/jest-standalone/old/data/transform', parent)
@@ -311,7 +312,7 @@ Describe('Jest transform cache lifecycle', () => {
         await direct.finish(homeRoot, lease)
         Expect(await FS.readText(old)).toBe('legacy')
         delete env['TAO_HOME']
-        Expect(direct.root('/runtime/one')).toContain('/xdg/tao/jest-standalone-v2/')
+        Expect(direct.root('/runtime/one')).toContain('/default-home/.tao/cache/jest-standalone-v2/')
       } finally {
         if (before.tao === undefined) {
           delete env['TAO_HOME']
@@ -322,6 +323,11 @@ Describe('Jest transform cache lifecycle', () => {
           delete env['XDG_CACHE_HOME']
         } else {
           env['XDG_CACHE_HOME'] = before.xdg
+        }
+        if (before.home === undefined) {
+          delete env['HOME']
+        } else {
+          env['HOME'] = before.home
         }
       }
     })

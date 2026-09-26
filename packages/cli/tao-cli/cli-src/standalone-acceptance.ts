@@ -28,6 +28,10 @@ const PROXY_ENV = ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https
 /** The release files a GitHub release carries; `release.json` and the notes are not the installer's. */
 const INSTALLER_FILES = ['tao-darwin-arm64.gz', 'tao-darwin-arm64.gz.sha256', 'install.sh'] as const
 
+/** The VM harness retrieves this guest log directory before deleting its disposable clone. */
+const ACCEPTANCE_LOG_DIR = Platform.runtimeProcess.env['TAO_ACCEPTANCE_LOG_DIR']
+let shellStep = 0
+
 try {
   const release = Platform.runtimeProcess.argv[2]
   if (release === undefined) {
@@ -48,6 +52,13 @@ async function accept(release: string): Promise<void> {
 
   const root = await FS.realPath(await FS.mkTmpDir('tao-standalone-acceptance-'))
   try {
+    if (ACCEPTANCE_LOG_DIR !== undefined && Platform.runtimeProcess.env['TAO_ACCEPTANCE_AUDIT_FILESYSTEM'] === '1') {
+      await FS.writeJson(FS.resolvePath('audit-scope.json', ACCEPTANCE_LOG_DIR), {
+        guestHome: Platform.runtimeProcess.env['HOME'],
+        guestTemp: await FS.realPath(FS.tmpdir()),
+        root,
+      })
+    }
     if (Repo.tryGetRoot(root) !== undefined) {
       Errors.throwHostEnvironment(
         `The acceptance must run outside a checkout, and ${root} is inside one. Point TMPDIR elsewhere.`,
@@ -63,7 +74,7 @@ async function accept(release: string): Promise<void> {
       { tag_name: `v${version}`, draft: false, prerelease: false },
     ])
     const home = FS.resolvePath('home', root)
-    const userBin = FS.resolvePath('.local/bin', home)
+    const userBin = FS.resolvePath('.tao/bin', home)
     await FS.mkdir(userBin)
     const environment = await newcomerEnvironment(root, home, userBin, `file://${releases}`, `file://${listing}`)
     const shell = newcomerShell(environment)
@@ -86,7 +97,7 @@ async function accept(release: string): Promise<void> {
     await shell(project, 'tao check .')
     await shell(project, 'tao compile App.tao')
 
-    const installed = FS.resolvePath(`.local/share/tao/versions/${version}`, home)
+    const installed = FS.resolvePath(`.tao/versions/${version}`, home)
     const generated = FS.resolvePath('resources/host/_gen_tao-app/App.tsx', installed)
     if (!await FS.isFile(generated)) {
       Errors.throwUnexpected(`tao compile reported success but wrote no ${generated}.`)
@@ -130,16 +141,88 @@ async function accept(release: string): Promise<void> {
     if (second.includes(HOST_INSTALL_NOTICE)) {
       Errors.throwUnexpected('A second project installed the host again instead of sharing the first install.')
     }
+    if (Platform.runtimeProcess.env['TAO_ACCEPTANCE_BROWSER_DRIVER'] !== undefined) {
+      await prepareBrowserClickProject(environment, project)
+    }
     await devLoopServesWeb(environment, project, 'ATallyCounter')
     HCI.logProcessInfo(
       'standalone',
       `Accepted Tao ${version}: installed through curl | sh, then create with its tests, check, compile,`
         + ' test, build --compile-only, build --web in two projects sharing one host install, and tao dev'
-        + ' serving web, outside a checkout.',
+        + ' serving web and a browser click when the VM driver is present, outside a checkout.',
     )
   } finally {
-    await FS.remove(root)
+    // The audit snapshots the projects and temporary home after acceptance returns. The VM is
+    // disposable, so it owns removal after the second snapshot instead of this process.
+    if (Platform.runtimeProcess.env['TAO_ACCEPTANCE_AUDIT_FILESYSTEM'] !== '1') {
+      // Dotslash extracts React Native DevTools with read-only directories. Make this test's
+      // private copy writable before removing the throwaway home.
+      const dotslash = FS.resolvePath('home/.tao/cache/dotslash', root)
+      if (await FS.isDirectory(dotslash)) {
+        for await (const path of FS.walk(dotslash, { includeDirectories: true, includeHidden: true })) {
+          if (await FS.isDirectory(path)) {
+            await FS.chmod(path, 0o755)
+          }
+        }
+      }
+      await FS.remove(root)
+    }
   }
+}
+
+/** Replace the generated app after its own acceptance steps with a deterministic browser journey. */
+async function prepareBrowserClickProject(environment: Platform.ProcessEnv, project: string): Promise<void> {
+  const appFile = FS.resolvePath('App.tao', project)
+  const otherSources: string[] = []
+  for await (
+    const path of FS.walk(project, {
+      extensions: ['.tao'],
+      excludeDirectory: name => name.startsWith('.') || name === 'node_modules',
+    })
+  ) {
+    if (path !== appFile) {
+      otherSources.push(path)
+    }
+  }
+  for (const path of otherSources) {
+    await FS.remove(path)
+  }
+  await FS.writeText(
+    appFile,
+    `use StackNav from @tao/nav
+use Button, Col, Text from @tao/ui
+
+project {
+   id "a-tally-counter"
+   name "Browser Click"
+   version "0.1.0"
+   DefaultApp ATallyCounter
+   remote none
+}
+
+app ATallyCounter {
+   Name "Browser Click"
+   Navigator StackNav {
+      Initial CounterView
+   }
+}
+
+scene CounterView() {
+   Title "Browser Click"
+   state Count = 0
+   render Col() {
+      Text("Browser clicks: { Count }")
+      Button("Increment") {
+         on press -> { set Count += 1 }
+      }
+   }
+}
+`,
+  )
+  const shell = newcomerShell(environment)
+  await shell(project, 'tao fix App.tao')
+  await shell(project, 'tao check .')
+  await shell(project, 'tao build --web')
 }
 
 /**
@@ -200,9 +283,35 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
     if (response.status !== 200 || !bundle.includes(appName)) {
       Errors.throwUnexpected(`tao dev's Metro answered ${response.status} without ${appName} in its web bundle.`)
     }
+    const browserDriver = Platform.runtimeProcess.env['TAO_ACCEPTANCE_BROWSER_DRIVER']
+    if (browserDriver !== undefined) {
+      const click = await CLI.run(browserDriver, {
+        args: [`http://127.0.0.1:${port}/`],
+        cwd: project,
+        env: {
+          ...environment,
+          HOME: Platform.runtimeProcess.env['HOME'],
+          TAO_STUDIO_CHROME_PATH: Platform.runtimeProcess.env['TAO_STUDIO_CHROME_PATH'],
+        },
+        onOutput: (_stream, chunk) => HCI.write(String(chunk)),
+        processPolicy: 'test',
+        timeoutMs: 300_000,
+      })
+      if (ACCEPTANCE_LOG_DIR !== undefined) {
+        await FS.writeText(FS.resolvePath('browser-click.log', ACCEPTANCE_LOG_DIR), click.stdout + click.stderr)
+      }
+      if (click.exitCode !== 0) {
+        Errors.throwHostEnvironment(
+          `The compiled browser click failed (exit ${click.exitCode}):\n${click.stdout}${click.stderr}`,
+        )
+      }
+    }
   } finally {
     dev.kill('SIGTERM')
     await dev.waitForClose()
+    if (ACCEPTANCE_LOG_DIR !== undefined) {
+      await FS.writeText(FS.resolvePath('dev-loop.log', ACCEPTANCE_LOG_DIR), output)
+    }
   }
 }
 
@@ -250,11 +359,21 @@ async function newcomerEnvironment(
  */
 function newcomerShell(environment: Platform.ProcessEnv) {
   return async (cwd: string, script: string): Promise<string> => {
+    const startedAt = Date.now()
     const result = await CLI.run('/bin/sh', {
       args: ['-c', script],
       cwd,
       env: environment,
     })
+    if (ACCEPTANCE_LOG_DIR !== undefined) {
+      const name = `step-${String(++shellStep).padStart(2, '0')}.log`
+      await FS.writeText(
+        FS.resolvePath(name, ACCEPTANCE_LOG_DIR),
+        `cwd: ${cwd}\ncommand: ${script}\nexit: ${result.exitCode}\nms: ${
+          Date.now() - startedAt
+        }\n\n${result.stdout}${result.stderr}`,
+      )
+    }
     if (result.exitCode !== 0) {
       Errors.throwUnexpected(`\`${script}\` failed (exit ${result.exitCode}):\n${result.stdout}${result.stderr}`)
     }

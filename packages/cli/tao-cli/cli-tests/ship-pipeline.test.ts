@@ -86,6 +86,58 @@ Describe('tao ship Apple command pipeline', () => {
     }
   })
 
+  Test('uses the installed binary for Expo and supplies Node to native subprocesses', async () => {
+    const runtimeRoot = await mkTestDir('tao-installed-ship-pipeline-')
+    try {
+      const binary = '/installed/versions/0.4.0/tao'
+      const metro = { TAO_RUNTIME_SOURCE_ROOT: '/installed/versions/0.4.0/resources/runtime' }
+      const plan = planShipPipeline({
+        archivePath: '/tmp/App.xcarchive',
+        exportPath: '/tmp/export',
+        issuerId: 'issuer',
+        keyId: 'key',
+        keyPath: '/key.p8',
+        runtimeRoot,
+        teamId: 'TEAM123456',
+        xcodeProjectName: 'App',
+      }, {
+        expoCommand: (_root, args) => ({
+          command: binary,
+          args: ['--bun', `${runtimeRoot}/node_modules/.bin/expo`, ...args],
+          env: {
+            ...metro,
+            BUN_BE_BUN: '1',
+          },
+        }),
+        expoEnvironment: () => metro,
+        hostInstallRoot: '/installed/versions/0.4.0/host',
+      })
+      const node = `${runtimeRoot}/.artifacts/ship/bin/node`
+      Expect(plan.prebuild).toEqual({
+        command: binary,
+        args: ['--bun', `${runtimeRoot}/node_modules/.bin/expo`, 'prebuild', '--platform', 'ios', '--no-install'],
+        cwd: runtimeRoot,
+        env: { ...metro, BUN_BE_BUN: '1' },
+      })
+      for (const invocation of [plan.installPods, plan.archive, plan.exportArchive]) {
+        Expect(invocation.env?.['TAO_RUNTIME_SOURCE_ROOT']).toBe(metro.TAO_RUNTIME_SOURCE_ROOT)
+        Expect(invocation.env?.['PATH']?.startsWith(`${runtimeRoot}/.artifacts/ship/bin:`)).toBe(true)
+      }
+      const seen: string[] = []
+      await runShipPipeline(plan, async (command) => {
+        if (command === 'pod') {
+          Expect(await FS.readText(node)).toBe(`#!/bin/sh\nBUN_BE_BUN=1 exec '${binary}' "$@"\n`)
+          Expect(await FS.readText(`${runtimeRoot}/ios/.xcode.env.local`)).toBe(`export NODE_BINARY='${node}'\n`)
+        }
+        seen.push(command)
+        return {}
+      })
+      Expect(seen).toEqual([binary, 'pod', 'xcodebuild', 'xcodebuild'])
+    } finally {
+      await FS.remove(runtimeRoot)
+    }
+  })
+
   Test('derives an unsigned archive proof with signing disabled', () => {
     Expect(
       planUnsignedArchive({

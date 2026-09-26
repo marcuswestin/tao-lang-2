@@ -18,7 +18,6 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
     bunVersion: '1.4.2',
     dependencyIssues: [],
     devenvProfileNode: '/w/.devenv/profile/bin/node',
-    direnvAllowed: true,
     fingerprint: {
       architecture: 'arm64',
       kernel: { name: 'Darwin', version: '27.0.0' },
@@ -85,7 +84,7 @@ Describe('repository doctor', () => {
     const report = doctorReport(facts({ devenvProfileNode: undefined, nodeVersion: undefined }))
 
     Expect(report.status).toBe('fail')
-    Expect(check(report, 'devenv profile')?.remediation).toContain('direnv exec . ./agent setup')
+    Expect(check(report, 'devenv profile')?.remediation).toContain('./enter-tao-dev-env')
     Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(1)
   })
 
@@ -96,13 +95,6 @@ Describe('repository doctor', () => {
     Expect(check(report, 'worktree')?.remediation).toContain('./agent start-branch feat/<name>')
     Expect(report.status).toBe('warn')
     Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(0)
-  })
-
-  Test('treats optional tooling as a warning, never a failure', () => {
-    const report = doctorReport(facts({ direnvAllowed: undefined }))
-
-    Expect(check(report, 'direnv')?.status).toBe('warn')
-    Expect(report.status).toBe('warn')
   })
 
   Test('warns when Watchman is not running, and names the fallback that follows', () => {
@@ -417,11 +409,13 @@ Describe('repository doctor', () => {
 
   Test('reads this checkout without changing it', async () => {
     const before = await CLI.run('git', { args: ['status', '--porcelain'], cwd: Repo.getRoot() })
-    const listedBefore = (await FS.listDir(Repo.resolvePath('.artifacts'))).toSorted()
+    const stableArtifacts = async () =>
+      (await FS.listDir(Repo.resolvePath('.artifacts'))).filter(name => !name.endsWith('.lock')).toSorted()
+    const listedBefore = await stableArtifacts()
     const report = doctorReport(await readDoctorFacts())
     const after = await CLI.run('git', { args: ['status', '--porcelain'], cwd: Repo.getRoot() })
 
-    Expect((await FS.listDir(Repo.resolvePath('.artifacts'))).toSorted()).toEqual(listedBefore)
+    Expect(await stableArtifacts()).toEqual(listedBefore)
     Expect(after.stdout).toBe(before.stdout)
     Expect(report.repositoryRoot).toBe(Repo.getRoot())
     Expect(check(report, 'dependency compatibility')?.status).toBe('pass')

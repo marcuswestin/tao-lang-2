@@ -253,6 +253,9 @@ export function setTestRuntime(nextRuntime: TestRuntime): void {
   copyFunctionProperties(Describe, nextRuntime.describe)
   copyFunctionProperties(Expect, nextRuntime.expect)
   copyFunctionProperties(Test, nextRuntime.test)
+  // Bun exposes skip lazily, so Reflect.ownKeys does not enumerate it.
+  Test['skip'] = nextRuntime.test['skip']
+  Describe['skip'] = nextRuntime.describe['skip']
   // `copyFunctionProperties` carries the runner's own statics (`expect.any`, `expect.objectContaining`,
   // …) across; these two are Tao's and are restored after it, in case a runner ever spells them too.
   Expect.Is = ExpectIs

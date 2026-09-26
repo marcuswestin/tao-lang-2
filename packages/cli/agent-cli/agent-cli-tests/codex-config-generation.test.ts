@@ -157,22 +157,24 @@ Describe('Codex config generation', () => {
     })
   })
 
-  Test('renders only wrapper host prefixes from the canonical list', () => {
+  Test('renders one host prefix per operation while keeping deeper argv for runtime dispatch', () => {
     const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(canonicalRules))
 
     Expect(rendered.split('\n').filter(line => line.startsWith('prefix_rule('))).toEqual([
-      'prefix_rule(pattern=["./agent","unsandboxed","land"], decision="allow", justification="Repository-approved host command.")',
-      'prefix_rule(pattern=["./agent","unsandboxed","simulators","list"], decision="allow", justification="Repository-approved host command.")',
+      'prefix_rule(pattern=["./agent","unsandboxed","land"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")',
+      'prefix_rule(pattern=["./agent","unsandboxed","simulators"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")',
     ])
   })
 
-  Test('grants host access to each local release preparation target without admitting other targets', async () => {
+  Test('keeps the release targets in the dispatcher list behind their operation rule', async () => {
     const source = await FS.readText(Repo.resolvePath('.rulesync/permissions.jsonc'))
     const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(source))
 
-    Expect(rendered).toContain('pattern=["./agent","unsandboxed","prepare-release","studio"], decision="allow"')
-    Expect(rendered).toContain('pattern=["./agent","unsandboxed","prepare-release","ide-extension"], decision="allow"')
-    Expect(rendered).not.toContain('pattern=["./agent","unsandboxed","prepare-release"], decision="allow"')
+    Expect(rendered).toContain('pattern=["./agent","unsandboxed","prepare-release"], decision="allow"')
+    Expect(rendered).not.toContain('pattern=["./agent","unsandboxed","prepare-release","studio"')
+    Expect(rendered).not.toContain('pattern=["./agent","unsandboxed"], decision="allow"')
+    Expect(source).toContain('"prepare-release studio"')
+    Expect(source).toContain('"prepare-release ide-extension"')
   })
 
   Test('grants both harnesses the same caches outside the worktree', () => {
@@ -187,7 +189,7 @@ Describe('Codex config generation', () => {
     // harness is keeping.
     Expect(filesystem['~/.bun']).toBe('write')
     Expect(filesystem['~/.cache']).toBe('write')
-    // The default profile must have no denied reads or Codex cannot run its exact host rules.
+    // The default profile must have no denied reads or Codex cannot run its host rule.
     Expect(filesystem['~/.ssh/**']).toBeUndefined()
   })
 
@@ -231,8 +233,8 @@ Describe('Codex config generation', () => {
       await FS.writeText(
         FS.resolvePath('.rulesync/permissions.jsonc', root),
         canonicalRules.replace(
-          '"agentHostCommands": ["land", "simulators list"]',
-          '"agentHostCommands": ["land", "simulators boot"]',
+          '"allowWrite": ["~/.bun", "~/.cache"]',
+          '"allowWrite": ["~/.bun", "~/.cache", "~/.other"]',
         ),
       )
       await Expect(CodexConfigGenerator.generate({

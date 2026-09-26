@@ -109,7 +109,7 @@ const WORKFLOW_PATHS = [
   'agent',
   'dev',
   'tao',
-  '.envrc',
+  'enter-tao-dev-env',
 ]
 const WORKFLOW_PREFIXES = [
   '.rulesync/',

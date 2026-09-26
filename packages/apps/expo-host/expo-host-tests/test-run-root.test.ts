@@ -1,10 +1,26 @@
-import { FS, TaoHome } from '@shared'
+import { FS, Platform, TaoHome } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { RuntimeToolchainPaths } from '../expo-host-src/runtime-toolchain-paths'
 import { TestHarnessFiles } from '../expo-host-src/testing/test-harness-files'
 import { TestRunRoot } from '../expo-host-src/testing/test-run-root'
 
 const HOUR_MS = 60 * 60 * 1000
+
+/** Keep an outside-checkout Tao home writable in the managed test sandbox. */
+async function withIsolatedTaoHome(run: () => Promise<void>): Promise<void> {
+  const fixture = await mkTestDir('tao-test-home-', { location: 'host' })
+  const previous = Platform.runtimeProcess.env['TAO_HOME']
+  Platform.runtimeProcess.env['TAO_HOME'] = FS.resolvePath('.tao', fixture)
+  try {
+    await run()
+  } finally {
+    if (previous === undefined) {
+      delete Platform.runtimeProcess.env['TAO_HOME']
+    } else {
+      Platform.runtimeProcess.env['TAO_HOME'] = previous
+    }
+  }
+}
 
 /** withRuntimePackageRoot runs one test against a throwaway runtime package root. */
 async function withRuntimePackageRoot(run: (runtimePackageRoot: string) => Promise<void>): Promise<void> {
@@ -127,49 +143,55 @@ async function listGenerated(runtimePackageRoot: string, relativePath = ''): Pro
 }
 
 Describe('generated test run roots', () => {
-  Test('the default runtime stores compiled apps in Tao cache outside the checkout', async () => {
-    const runRoot = await TestRunRoot.create('tao-test-command')
-    const appPath = await compiledApp(runRoot, {
-      app: 'export default function App() { return null }\n',
-      files: { 'modules/probe.ts': 'export const probe = true\n' },
-    })
+  Test('the selected Tao home stores compiled apps outside the checkout', async () => {
+    await withIsolatedTaoHome(async () => {
+      const runRoot = await TestRunRoot.create('tao-test-command')
+      const appPath = await compiledApp(runRoot, {
+        app: 'export default function App() { return null }\n',
+        files: { 'modules/probe.ts': 'export const probe = true\n' },
+      })
 
-    Expect(FS.pathIsWithin(runRoot, TaoHome.cacheRoot())).toBe(true)
-    Expect(FS.pathIsWithin(runRoot, FS.resolvePath('tao-test-runs', FS.tmpdir()))).toBe(false)
-    Expect(TestRunRoot.generatedRoot()).toBe(TestRunRoot.hostGeneratedRoot(RuntimeToolchainPaths.packageRoot))
-    Expect(await FS.isFile(appPath)).toBe(true)
-    Expect(await FS.isFile(FS.resolvePath('modules/probe.ts', FS.dirname(appPath)))).toBe(true)
-    await TestRunRoot.discard(runRoot)
-    Expect(await FS.exists(runRoot)).toBe(false)
+      Expect(FS.pathIsWithin(runRoot, TaoHome.cacheRoot())).toBe(true)
+      Expect(FS.pathIsWithin(runRoot, FS.resolvePath('tao-test-runs', FS.tmpdir()))).toBe(false)
+      Expect(TestRunRoot.generatedRoot()).toBe(TestRunRoot.hostGeneratedRoot(RuntimeToolchainPaths.packageRoot))
+      Expect(await FS.isFile(appPath)).toBe(true)
+      Expect(await FS.isFile(FS.resolvePath('modules/probe.ts', FS.dirname(appPath)))).toBe(true)
+      await TestRunRoot.discard(runRoot)
+      Expect(await FS.exists(runRoot)).toBe(false)
+    })
   })
 
-  Test('keeps the default generated store in Tao cache outside a managed worktree', async () => {
-    const runRoot = await TestRunRoot.create('tao-test-default-root')
-    try {
-      Expect(FS.pathIsWithin(runRoot, TaoHome.cacheRoot())).toBe(true)
-    } finally {
-      await TestRunRoot.discard(runRoot)
-    }
+  Test('keeps the selected generated store outside a managed worktree', async () => {
+    await withIsolatedTaoHome(async () => {
+      const runRoot = await TestRunRoot.create('tao-test-default-root')
+      try {
+        Expect(FS.pathIsWithin(runRoot, TaoHome.cacheRoot())).toBe(true)
+      } finally {
+        await TestRunRoot.discard(runRoot)
+      }
+    })
   })
 
   Test('records ownership when the CLI passes the explicit host root', async () => {
-    const runtimePackageRoot = await mkTestDir('tao-test-explicit-host-root-')
-    const generatedRoot = TestRunRoot.hostGeneratedRoot(runtimePackageRoot)
-    const identityRoot = FS.dirname(generatedRoot)
-    const runRoot = await TestRunRoot.create('tao-test-command', { runtimePackageRoot, generatedRoot })
-    try {
-      const owner = await FS.readJson<Record<string, unknown>>(
-        FS.resolvePath(`${process.pid}.json`, FS.resolvePath('.owners', identityRoot)),
-      )
+    await withIsolatedTaoHome(async () => {
+      const runtimePackageRoot = await mkTestDir('tao-test-explicit-host-root-')
+      const generatedRoot = TestRunRoot.hostGeneratedRoot(runtimePackageRoot)
+      const identityRoot = FS.dirname(generatedRoot)
+      const runRoot = await TestRunRoot.create('tao-test-command', { runtimePackageRoot, generatedRoot })
+      try {
+        const owner = await FS.readJson<Record<string, unknown>>(
+          FS.resolvePath(`${process.pid}.json`, FS.resolvePath('.owners', identityRoot)),
+        )
 
-      Expect(FS.pathIsWithin(runRoot, TaoHome.cacheRoot())).toBe(true)
-      Expect(owner['pid']).toBe(process.pid)
-      Expect(typeof owner['updatedAt']).toBe('string')
-      Expect(owner['version']).toBe(1)
-    } finally {
-      await FS.remove(identityRoot)
-      await FS.remove(runtimePackageRoot)
-    }
+        Expect(FS.pathIsWithin(runRoot, TaoHome.cacheRoot())).toBe(true)
+        Expect(owner['pid']).toBe(process.pid)
+        Expect(typeof owner['updatedAt']).toBe('string')
+        Expect(owner['version']).toBe(1)
+      } finally {
+        await FS.remove(identityRoot)
+        await FS.remove(runtimePackageRoot)
+      }
+    })
   })
 
   Test('bounds aggregate roots while preserving live, uncertain, and receipt-less identities', async () => {

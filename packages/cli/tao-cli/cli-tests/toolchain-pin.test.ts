@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Platform } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { latestStableRelease, readReleasePages } from '../cli-src/check-for-updates'
 import { mergeProjectLocks, readProjectLock, writeProjectLock, writeToolchainPin } from '../cli-src/ship-lock'
@@ -88,6 +88,62 @@ Describe('toolchain pin', () => {
         ownVersion: '0.5.0',
         taoHome: FS.resolvePath('empty-home', project),
       })).rejects.toThrow('This project names Tao 0.4.0, which is not installed')
+    })
+  })
+
+  Test('asks before downloading a pin, checks its hash and version, and preserves the default binary', async () => {
+    await withProject('0.4.0', async project => {
+      const home = FS.resolvePath('tao-home', project)
+      const defaultBinary = FS.resolvePath('bin/tao', home)
+      const versionProbe = FS.resolvePath('version-probe.txt', project)
+      await FS.writeText(defaultBinary, 'the default release stays here\n')
+      const script =
+        `#!/bin/sh\nif [ "$1" = "--version" ]; then\n  printf '%s|%s|%s\\n' "$PWD" "\${TAO_VERSION:-unset}" "$*" > '${versionProbe}'\n  echo 0.4.0\nfi\n`
+      const archive = new Uint8Array(Bun.gzipSync(new TextEncoder().encode(script)))
+      const checksum = new TextEncoder().encode(`${Platform.sha256Hex(archive)}  tao-darwin-arm64.gz\n`)
+      const questions: string[] = []
+      const downloads: string[] = []
+      const options = {
+        cwd: project,
+        env: { PATH: '/usr/bin:/bin', TAO_VERSION: '0.4.0' },
+        interactive: true,
+        ownVersion: '0.5.0',
+        taoHome: home,
+        releasesUrl: 'https://example.invalid/releases',
+        confirmDownload: async (question: string) => {
+          questions.push(question)
+          return false
+        },
+        downloadBytes: async (url: string) => {
+          downloads.push(url)
+          return url.endsWith('.sha256') ? checksum : archive
+        },
+      }
+
+      await Expect(ToolchainPin.delegate(['check'], options)).rejects.toThrow('install.sh | TAO_VERSION=0.4.0 sh')
+      Expect(questions).toHaveLength(1)
+      Expect(questions[0]).toContain('Download it now')
+      Expect(downloads).toHaveLength(0)
+
+      await Expect(ToolchainPin.delegate(['check'], {
+        ...options,
+        confirmDownload: async () => true,
+        downloadBytes: async url => url.endsWith('.sha256') ? new TextEncoder().encode('wrong') : archive,
+      })).rejects.toThrow('does not match its published checksum')
+      Expect(await FS.isFile(ToolchainPin.versionBinary('0.4.0', home))).toBe(false)
+
+      Expect(
+        await ToolchainPin.delegate(['check'], {
+          ...options,
+          confirmDownload: async () => true,
+        }),
+      ).toEqual({ exitCode: 0 })
+      Expect(downloads).toEqual([
+        'https://example.invalid/releases/download/v0.4.0/tao-darwin-arm64.gz',
+        'https://example.invalid/releases/download/v0.4.0/tao-darwin-arm64.gz.sha256',
+      ])
+      Expect(await FS.readText(versionProbe)).toBe('/|unset|--version\n')
+      Expect(await FS.readText(defaultBinary)).toBe('the default release stays here\n')
     })
   })
 

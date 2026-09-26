@@ -9,8 +9,6 @@ import React from 'react'
 import * as RN from 'react-native'
 import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 
-registerRuntimeE2ELifecycle()
-
 const catalog = `
   use Col, FormButton, Text from @tao/ui
   use Memory from @tao/data/providers/memory
@@ -26,6 +24,8 @@ function nodes(kind?: TR.OutlineNode['kind']): readonly TR.OutlineNode[] {
 }
 
 Describe('interaction outline runtime', () => {
+  registerRuntimeE2ELifecycle()
+
   Test('renders a web selectable row as a group and leaves its nested controls independent', async () => {
     const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
       ActivityIndicator: RN.ActivityIndicator,
