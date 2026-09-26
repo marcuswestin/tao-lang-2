@@ -118,6 +118,10 @@ function createCommands(): Command {
     .command('dev')
     .argument('[path]', 'Tao file or directory whose runnable apps should be discovered.', '.')
     .option('--app <name>', 'Select a uniquely named app without prompting.')
+    .option(
+      '--device <name-or-id>',
+      'Open a physical device by name, identifier, or Android serial after Metro starts.',
+    )
     .option('--ios', 'Open an iOS simulator after Metro starts.')
     .option('--android', 'Open Android after Metro starts.')
     .option('--web', 'Open the web app after Metro starts.')
@@ -126,7 +130,7 @@ function createCommands(): Command {
     .action(
       async (
         path: string,
-        options: { android?: boolean; app?: string; desktop?: boolean; ios?: boolean; web?: boolean },
+        options: { android?: boolean; app?: string; desktop?: boolean; device?: string; ios?: boolean; web?: boolean },
       ) => {
         try {
           // Command implementations load lazily so completion and help paths stay fast.
@@ -134,7 +138,9 @@ function createCommands(): Command {
           const startupTargets = (['ios', 'android', 'web', 'desktop'] as const).filter(target =>
             options[target] === true
           )
-          Platform.runtimeProcess.setExitCode(await runTaoDev(path, { appName: options.app, startupTargets }))
+          Platform.runtimeProcess.setExitCode(
+            await runTaoDev(path, { appName: options.app, device: options.device, startupTargets }),
+          )
         } catch (error) {
           HCI.writeErrorLine(Errors.formatForUser(error))
           Platform.runtimeProcess.setExitCode(1)

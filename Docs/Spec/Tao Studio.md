@@ -124,6 +124,10 @@ preparation or replay steps. Local `tao dev` also launches the ordinary app; sce
 remain metadata there. Removing the last scenario during a Studio session returns the device to the
 ordinary app once the matching bundle is loaded.
 
+For direct physical-device development without Studio, `tao dev --device <name-or-id>` opens the
+ordinary app in the installed Tao Companion. It shares the device-launch contract with Studio,
+but starts no Studio gateway or scenario host. Stop Studio's session first if it owns that project.
+
 ## Studio compilation manifest
 
 Preview compilation emits `TaoStudioManifest.ts` with format version 2. Production compilation does

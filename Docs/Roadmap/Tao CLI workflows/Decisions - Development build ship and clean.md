@@ -43,15 +43,18 @@ command help describes what is implemented now.
 
 - Bare `tao dev` starts the live development session and Metro, but opens no simulator, browser,
   desktop window, or device. Startup flags `--ios`, `--android`, `--web`, and `--desktop` open only
-  requested targets and may be combined.
+  requested targets and may be combined. `--device <name-or-id>` opens a physical device directly;
+  it accepts an iPhone/iPad name or ID, or an Android serial, and may accompany the other flags.
 - TUI keys: `d` opens the desktop Tao app; `p` opens a connected physical device; `x` restarts the
   dev process; `i` opens an iOS simulator; `a` opens Android; `w` opens web; and `r` reloads the app.
   The previous meanings of `d` and `p` move to `p` and `x` respectively. Other useful dev controls
   need not be removed merely because these keys changed.
-- `p` uses the sole compatible connected device when there is one and asks which to use when there
-  are several. The general physical-iOS dev path is deferred and must say explicitly that it is
-  unavailable; supported Android physical-device behavior remains. Do not silently route a device
-  request through Expo Go.
+- `p` uses the sole connected device when there is one and asks which to use when there are several.
+  Physical iOS opens the installed Tao Companion through its development-client link to the local
+  Metro server, without Studio or scenario replay. Missing Companion or native launch failures
+  produce actionable diagnostics and leave Metro running for a retry. Android keeps its existing
+  prepared-runtime path. An explicit device selector never falls back to a different device, and
+  duplicate device names require an ID. Phone and Mac must share a reachable network.
 - Desktop is a first-class Tao target through Electrobun, not another name for a browser tab or for
   Tao Studio. The browser and desktop display the same Tao app; their bundles need not be byte-for-
   byte identical. Desktop-native capabilities are available only in the Electrobun host, and their

@@ -9,22 +9,31 @@ Clipboard scenes. More native surfaces should join this app as they become suppo
 From the repository root, in your regular terminal:
 
 ```sh
-./dev studio "Apps/Test Apps/Native Bridge" --app NativeBridge
+./tao dev "Apps/Test Apps/Native Bridge" --app NativeBridge --device roPhone
 ```
 
-Unlock roPhone. In Studio's Device panel, choose **roPhone → Open this app on device · cable** (or
-**· LAN**). The installed Tao Companion opens this session and launches the app directly. Keep the
-terminal running. This demo intentionally declares no scenarios: opening it applies no scenario
-fixtures, environment overrides, preparation or replay steps.
+Unlock roPhone, trust this Mac, and keep both on the same network. The command opens the installed
+Tao Companion directly, starts the ordinary app, and watches source changes. Keep the terminal
+running. If Studio already has this project open, stop that session first with Ctrl+C. Only one
+development session may own the project.
 
-If Tao Companion is not installed, install it once before starting Studio:
+If Tao Companion is not installed, install it once:
 
 ```sh
 ./dev studio-companion-install --device roPhone
 ```
 
-`./tao dev --ios` opens a simulator; the physical-phone workflow above uses Studio. A simulator
-cannot prove physical haptic feedback. Native operations happen only after pressing a control.
+`--device` accepts a phone name or ID; `--ios` opens a simulator. A simulator cannot prove physical
+haptic feedback. Native operations happen only after pressing a control. This demo declares no
+scenarios, and ordinary `tao dev` applies no scenario preparation or replay.
+
+For the Studio editor and device inspector, the separate workflow remains:
+
+```sh
+./dev studio "Apps/Test Apps/Native Bridge" --app NativeBridge
+```
+
+Choose **Device → roPhone → Open this app on device** in Studio.
 
 ## What to try
 

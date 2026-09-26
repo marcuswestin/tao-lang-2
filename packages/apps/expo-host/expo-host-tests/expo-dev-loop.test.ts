@@ -21,7 +21,6 @@ import {
   expoGoUrl,
   iosPhysicalDevicesFromDevicectl,
   openPhysicalDevice,
-  physicalIosUnsupportedMessage,
   runDevicectlJson,
 } from '@expo-host/dev-loop/expo-runner/physical-device'
 import { simulatorOpenFailure } from '@expo-host/dev-loop/expo-runner/run-targets'
@@ -31,7 +30,7 @@ import { handleCommandKey } from '@expo-host/dev-loop/keyboard-input/CommandKeys
 import Commands from '@expo-host/dev-loop/keyboard-input/Commands'
 import Run from '@expo-host/dev-loop/Run'
 import { CLI, Errors, FS, Repo, Time } from '@shared'
-import { Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import { connect, createServer, type Server } from 'node:net'
 
 Describe('Expo dev-loop output severity', () => {
@@ -154,6 +153,19 @@ Describe('Expo dev-loop command helpers', () => {
     await targets.openStartupTargets()
   })
 
+  Test('a stopped session does not begin a requested physical-device launch', async () => {
+    const targets = createExpoTargets(
+      createExpoConfig(49_152),
+      {
+        waitForMetro: async () => {
+          Errors.throwUnexpected('A stopped physical-device launch waited for Metro.')
+        },
+      } as unknown as ExpoMetroSession,
+      {} as ReturnType<typeof createAndroid>,
+    )
+    Expect(await targets.openPhysicalDevice('roPhone', () => true)).toBe(false)
+  })
+
   Test('quits on q and opens app selection only on s', async () => {
     const actions: string[] = []
     const context = {
@@ -174,6 +186,46 @@ Describe('Expo dev-loop command helpers', () => {
     await handleCommandKey('s', context)
 
     Expect(actions).toEqual(['finish:0', 'select-app'])
+  })
+
+  Test('Ctrl-C cancels a phone launch started with the p shortcut', async () => {
+    await withPhysicalPhone(async phone => {
+      const probeStarted = Deferred()
+      const finishProbe = Deferred<unknown>()
+      const installed = { result: { apps: [{ bundleIdentifier: 'com.devtao.studio.companion' }] } }
+      phone.reply(() => {
+        probeStarted.resolve()
+        return finishProbe.promise
+      })
+      let stopped = false
+      const context = {
+        appPath: '/repo/App.tao',
+        expo: {
+          ...ExpoRunner.createSession(49_152),
+          openPhysicalDevice: (_device?: string, shouldStop?: () => boolean) =>
+            phone.open({ device: 'roPhone', shouldStop }),
+        },
+        finish: async () => {
+          stopped = true
+        },
+        repoRoot: '/repo',
+        restart: async () => {},
+        selectApp: async () => {},
+        shouldStop: () => stopped,
+        stopServices: async () => {},
+      }
+      await withCapturedOutput(async () => {
+        const opening = handleCommandKey('p', context)
+        try {
+          await probeStarted.promise
+          await handleCommandKey('\u0003', context)
+        } finally {
+          finishProbe.resolve(installed)
+          await opening
+        }
+      })
+      Expect(phone.commands).toHaveLength(1)
+    })
   })
 
   Test('routes target-opening shortcuts through the selected Expo session', async () => {
@@ -581,6 +633,15 @@ Describe('Expo dev-loop port helpers', () => {
 })
 
 Describe('Expo session scheme', () => {
+  Test('local dev sessions identify the Companion for physical-device links', async () => {
+    const session = await createDevLoopExpoSession(49_152)
+    try {
+      Expect(session.config.EXPO_START_ARGS.slice(-2)).toEqual(['--scheme', 'taostudiocompanion'])
+    } finally {
+      await session.releasePortReservation()
+    }
+  })
+
   Test('passes a custom scheme to Expo only when one is requested', () => {
     Expect(createExpoConfig(8_099).EXPO_START_ARGS).not.toContain('--scheme')
     Expect(createExpoConfig(8_099, { scheme: 'taostudiocompanion' }).EXPO_START_ARGS).toEqual([
@@ -654,46 +715,93 @@ en7: flags=8863
     Expect(expoGoUrl('169.254.37.4')).toBe('exp://169.254.37.4:8081')
   })
 
-  Test('sends a physical iPhone to the Tao Companion instead of the Expo Go account wall', () => {
-    const message = physicalIosUnsupportedMessage({ id: 'PHONE-1', name: 'example-phone' })
-
-    Expect(message).toBe(
-      'Cannot open this Tao app on example-phone: Expo Go on iPhone now requires an Expo account signed in both on '
-        + 'the phone and in the terminal running Metro, and Tao runs Metro under its own Expo home, so that '
-        + 'sign-in never reaches it. Run this app on example-phone through the Tao Companion development build '
-        + 'instead: `just studio-companion-install device="example-phone"` once from a Tao checkout with Xcode, then '
-        + "open the app from Tao Studio's Device popover.",
-    )
+  Test('opens the named iPhone in Companion at this session LAN port without prompting', async () => {
+    await withPhysicalPhone(async phone => {
+      const captured = await withCapturedOutput(() => phone.open({ device: 'roPhone' }))
+      Expect(captured.result).toBe(true)
+      Expect(phone.commands).toEqual([
+        ['device', 'info', 'apps', '--device', 'PHONE-1', '--bundle-id', 'com.devtao.studio.companion'],
+        [
+          'device',
+          'process',
+          'launch',
+          '--device',
+          'PHONE-1',
+          '--terminate-existing',
+          '--payload-url',
+          'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8099',
+          'com.devtao.studio.companion',
+        ],
+      ])
+      Expect(captured.stdout + captured.stderr).toContain('opened roPhone (Tao Companion)')
+    })
   })
 
-  Test('rejects a physical iPhone through the production target without probing LAN or launching Expo Go', async () => {
-    const config = createExpoConfig(8_099)
-    const android = createAndroid(config, {} as ExpoMetroSession, {
-      requireAdb: async () => {},
+  Test('accepts a device ID and does not launch a different or ambiguously named phone', async () => {
+    await withPhysicalPhone(async phone => {
+      await withCapturedOutput(() => phone.open({ device: 'PHONE-2' }))
+      Expect(phone.commands.at(-1)?.[4]).toBe('PHONE-2')
+      phone.commands.length = 0
+      await Expect(phone.open({ device: 'missing' })).rejects.toThrow('No connected device matches "missing"')
+      phone.devices.push({ id: 'PHONE-3', name: 'roPhone' })
+      await Expect(phone.open({ device: 'roPhone' })).rejects.toThrow('More than one connected device')
+      Expect(phone.commands).toEqual([])
     })
-    android.listPhysicalDevices = async () => []
-    let lanLookups = 0
-    const captured = await withCapturedOutput(() =>
-      openPhysicalDevice(
-        config,
-        { waitForMetro: async () => {} } as unknown as ExpoMetroSession,
-        android,
-        {
-          detectLanHost: async () => {
-            lanLookups += 1
-            return '192.168.1.20'
-          },
-          listIosDevices: async () => [{ id: 'PHONE-1', name: 'example-phone' }],
-        },
-      )
-    )
+  })
 
-    Expect(captured.result).toBe(false)
-    Expect(lanLookups).toBe(0)
-    const output = `${captured.stdout}${captured.stderr}`
-    Expect(output).toContain('requires an Expo account signed in both on the phone and in the terminal')
-    Expect(output).toContain('just studio-companion-install device="example-phone"')
-    Expect(output).not.toContain('opened Expo Go')
+  Test('the interactive physical-device action can open a selected iPhone', async () => {
+    await withPhysicalPhone(async phone => {
+      const captured = await withCapturedOutput(() =>
+        phone.open({
+          selectDevice: async () => 'ios:PHONE-2',
+        })
+      )
+      Expect(captured.result).toBe(true)
+      Expect(phone.commands.at(-1)?.[4]).toBe('PHONE-2')
+    })
+  })
+
+  Test('names the install command when Companion is absent and does not launch', async () => {
+    await withPhysicalPhone(async phone => {
+      phone.reply(() => ({ result: { apps: [] } }))
+      const captured = await withCapturedOutput(() => phone.open({ device: 'roPhone' }))
+      Expect(captured.result).toBe(false)
+      Expect(captured.stdout + captured.stderr).toContain("./dev studio-companion-install --device 'roPhone'")
+      Expect(phone.commands).toHaveLength(1)
+    })
+  })
+
+  Test('reports native probe and launch failures without claiming the app opened', async () => {
+    await withPhysicalPhone(async phone => {
+      phone.reply(args =>
+        args[1] === 'info'
+          ? { result: { apps: [{ bundleIdentifier: 'com.devtao.studio.companion' }] } }
+          : { error: { userInfo: { NSLocalizedDescription: { string: 'Device is locked' } } } }
+      )
+      const captured = await withCapturedOutput(() => phone.open({ device: 'roPhone' }))
+      Expect(captured.result).toBe(false)
+      Expect(captured.stdout + captured.stderr).toContain('Device is locked')
+      Expect(captured.stdout + captured.stderr).not.toContain('opened roPhone')
+      phone.commands.length = 0
+      phone.reply(() => ({ result: {} }))
+      const malformed = await withCapturedOutput(() => phone.open({ device: 'roPhone' }))
+      Expect(malformed.result).toBe(false)
+      Expect(malformed.stdout + malformed.stderr).toContain('without an app list')
+      Expect(phone.commands).toHaveLength(1)
+    })
+  })
+
+  Test('does not launch after shutdown while probing the phone', async () => {
+    await withPhysicalPhone(async phone => {
+      let stopped = false
+      phone.reply(() => {
+        stopped = true
+        return { result: { apps: [{ bundleIdentifier: 'com.devtao.studio.companion' }] } }
+      })
+      const captured = await withCapturedOutput(() => phone.open({ device: 'roPhone', shouldStop: () => stopped }))
+      Expect(captured.result).toBe(false)
+      Expect(phone.commands).toHaveLength(1)
+    })
   })
 
   Test('opens only the selected connected Android device when several are available', async () => {
@@ -722,6 +830,44 @@ en7: flags=8863
     )
     Expect(result).toBe(true)
     Expect(opened).toEqual(['ANDROID-B'])
+  })
+
+  Test('does not open an Android phone after shutdown during runtime or port preparation', async () => {
+    for (const stopDuring of ['prepare', 'reverse']) {
+      const config = createExpoConfig(8_099)
+      const android = createAndroid(config, {} as ExpoMetroSession, { requireAdb: async () => {} })
+      let stopped = false
+      const actions: string[] = []
+      android.listPhysicalDevices = async () => ['PHONE-1']
+      android.prepareRuntimeOnSerial = async () => {
+        actions.push('prepare')
+        stopped = stopDuring === 'prepare'
+      }
+      android.reverseMetroPort = async () => {
+        actions.push('reverse')
+        stopped = true
+        return true
+      }
+      android.openRuntimeOnSerial = async () => {
+        actions.push('open')
+        return 'companion'
+      }
+      const captured = await withCapturedOutput(() =>
+        openPhysicalDevice(
+          config,
+          { waitForMetro: async () => {} } as unknown as ExpoMetroSession,
+          android,
+          {
+            device: 'PHONE-1',
+            detectLanHost: async () => '192.168.1.20',
+            listIosDevices: async () => [],
+            shouldStop: () => stopped,
+          },
+        )
+      )
+      Expect(captured.result).toBe(false)
+      Expect(actions).toEqual(stopDuring === 'prepare' ? ['prepare'] : ['prepare', 'reverse'])
+    }
   })
 
   Test('names why an emulator exited before booting, from the last line of its log', () => {
@@ -1059,6 +1205,65 @@ Describe('Expo Metro runtime link helpers', () => {
     Expect(absent).toEqual({ body: undefined, status: 404, text: 'Not found' })
   })
 })
+
+/** Exercises the real device target and JSON process adapter without a connected phone. */
+async function withPhysicalPhone(
+  check: (phone: {
+    commands: string[][]
+    devices: { id: string; name: string }[]
+    open(options: {
+      device?: string
+      selectDevice?: (choices: readonly { label: string; value: string }[]) => Promise<string>
+      shouldStop?: () => boolean
+    }): Promise<boolean>
+    reply(value: (args: readonly string[]) => unknown): void
+  }) => Promise<void>,
+): Promise<void> {
+  const tmpRoot = await mkTestDir('tao-physical-launch-')
+  const commands: string[][] = []
+  const devices = [{ id: 'PHONE-1', name: 'roPhone' }, { id: 'PHONE-2', name: 'Another phone' }]
+  let reply: (args: readonly string[]) => unknown = () => ({
+    result: { apps: [{ bundleIdentifier: 'com.devtao.studio.companion' }] },
+  })
+  const config = createExpoConfig(8_099)
+  const android = createAndroid(config, {} as ExpoMetroSession, { requireAdb: async () => {} })
+  android.listPhysicalDevices = async () => []
+  const run = (async (command: string, spec: CLI.CommandSpec) => {
+    Expect(command).toBe('xcrun')
+    const args = [...(spec.args ?? [])]
+    Expect(args[0]).toBe('devicectl')
+    const outputAt = args.indexOf('--json-output')
+    const operation = args.slice(1, outputAt)
+    commands.push(operation)
+    await FS.writeJson(args[outputAt + 1]!, await reply(operation))
+    return { exitCode: 0, signal: null, stderr: '', stdout: '' }
+  }) as typeof CLI.run
+  try {
+    await check({
+      commands,
+      devices,
+      open: options =>
+        openPhysicalDevice(
+          config,
+          { waitForMetro: async () => {} } as unknown as ExpoMetroSession,
+          android,
+          {
+            detectLanHost: async () => '192.168.1.20',
+            listIosDevices: async () => devices,
+            run,
+            selectDevice: async () => Errors.throwUnexpected('Explicit device must not prompt'),
+            tmpRoot,
+            ...options,
+          },
+        ),
+      reply: value => {
+        reply = value
+      },
+    })
+  } finally {
+    await FS.remove(tmpRoot)
+  }
+}
 
 async function processExists(pid: number): Promise<boolean> {
   return (await CLI.run('/bin/kill', { args: ['-0', String(pid)] })).exitCode === 0
