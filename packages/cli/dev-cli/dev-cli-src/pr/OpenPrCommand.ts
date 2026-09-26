@@ -2,11 +2,12 @@ import { CLI, Errors, FS, HCI, Repo } from '@shared'
 
 /*
  * `open-pr` is the one command that pushes a feature branch, opens (or reuses) its pull request
- * against `main`, and stays attached to watch its checks. The Developer runs it by hand and an agent
- * runs it unattended, so every `git` and `gh` invocation is behind the injected `run` seam below
- * rather than a direct `CLI.run` call — the house pattern `android.ts`'s `compatibility.requireAdb ??
- * requireAdb` uses for the same reason: a test can script every answer without a real remote or a
- * real `gh`.
+ * against `main`, and stays attached to watch the checks opening it starts. The repository's
+ * workflows run only when a pull request opens, so a push to a reused one has none to watch. The
+ * Developer runs it by hand and an agent runs it unattended, so every `git` and `gh` invocation is
+ * behind the injected `run` seam below rather than a direct `CLI.run` call — the house pattern
+ * `android.ts`'s `compatibility.requireAdb ?? requireAdb` uses for the same reason: a test can script
+ * every answer without a real remote or a real `gh`.
  *
  * It never merges, never enables auto-merge, and never force-pushes; those stay a person's or
  * `./dev land`'s decision, not this command's.
@@ -50,13 +51,18 @@ export type OpenPrOptions = {
 
 /** OpenPrResult reports what the command printed and how it concluded. */
 export type OpenPrResult = {
-  /** 0 when every check on the pushed commit succeeded, 1 when any failed or none appeared. */
+  /**
+   * 0 when every check on a newly opened pull request succeeded, or when the push went to a reused
+   * one, which starts no checks; 1 when any failed or none appeared.
+   */
   exitCode: number
   lines: string[]
 }
 
 type PullRequest = {
   number: number
+  /** Whether this run opened the pull request, which is the only event its workflows run on. */
+  opened: boolean
   url: string
 }
 
@@ -88,7 +94,14 @@ export const OpenPrCommand = {
     const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
     await pushBranch(dependencies, root, branch, report)
     const pr = await ensurePullRequest(dependencies, root, branch, report)
-    const exitCode = await awaitChecksOnHead(dependencies, root, pr.number, headSha, report)
+    if (!pr.opened) {
+      report(
+        `PASS  Pushed ${headSha.slice(0, 8)} to #${pr.number}; its workflows run when a pull request opens, not on`
+          + ` later pushes, so this push started no checks. To check it anyway, ${rerunByHand(branch)}`,
+      )
+      return { exitCode: 0, lines }
+    }
+    const exitCode = await awaitChecksOnHead(dependencies, root, pr.number, headSha, branch, report)
       ? await streamChecks(dependencies, root, pr.number, options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS, report)
       : 1
 
@@ -178,7 +191,7 @@ async function ensurePullRequest(
   const existing = await findExistingPullRequest(dependencies, root, branch)
   if (existing !== undefined) {
     report(`PASS  Reusing the existing pull request for ${branch}: #${existing.number} ${existing.url}`)
-    return existing
+    return { ...existing, opened: false }
   }
 
   const draft = await draftTitleAndBody(dependencies, root, branch)
@@ -191,21 +204,21 @@ async function ensurePullRequest(
   const url = lastNonEmptyLine(created.stdout)
   const number = parsePullRequestNumber(url)
   report(`PASS  Opened pull request #${number} for ${branch}: ${url}`)
-  return { number, url }
+  return { number, opened: true, url }
 }
 
 async function findExistingPullRequest(
   dependencies: OpenPrDependencies,
   root: string,
   branch: string,
-): Promise<PullRequest | undefined> {
+): Promise<Omit<PullRequest, 'opened'> | undefined> {
   const result = await dependencies.run('gh', {
     args: ['pr', 'list', '--head', branch, '--state', 'open', '--json', 'number,url', '--limit', '1'],
     cwd: root,
     stdio: 'pipe',
   })
   assertCommandSucceeded(result)
-  return parseJson<PullRequest[]>(result.stdout, [])[0]
+  return parseJson<Omit<PullRequest, 'opened'>[]>(result.stdout, [])[0]
 }
 
 /**
@@ -236,20 +249,22 @@ function splitMergeMessage(source: string): { body: string; title: string } {
 }
 
 /**
- * GitHub creates a push's check runs some seconds after the push, and until it has, `gh pr checks`
- * answers for what it last saw: no checks at all, or the previous commit's already-finished ones.
- * Watching straight after the push reported the first real run as over before its workflow had
- * started, so this waits until the pull request's head is the pushed commit and that commit carries
- * at least one check. None appearing within the window is reported as a failure, not a pass: this
- * command exists to observe CI, and a silent pass is how it misled its first user. The usual cause
- * is a pull request that conflicts with its base, which GitHub runs no `pull_request` workflow for;
- * mergeability is only read out at the end because GitHub recomputes it after each push.
+ * GitHub creates a newly opened pull request's check runs some seconds after it opens, and until it
+ * has, `gh pr checks` answers that there are none. Watching straight away reported the first real
+ * run as over before its workflow had started, so this waits until the pull request's head is the
+ * pushed commit and that commit carries at least one check. None appearing within the window is
+ * reported as a failure, not a pass: this command exists to observe CI, and a silent pass is how it
+ * misled its first user. The usual cause is a pull request that conflicts with its base, which GitHub
+ * runs no `pull_request` workflow for, and since the workflows run only on opening, a later push
+ * that resolves the conflict starts none either; mergeability is only read out at the end because
+ * GitHub recomputes it after each push.
  */
 async function awaitChecksOnHead(
   dependencies: OpenPrDependencies,
   root: string,
   prNumber: number,
   headSha: string,
+  branch: string,
   report: (line: string) => void,
 ): Promise<boolean> {
   const attempts = Math.ceil(CHECKS_APPEAR_WITHIN_MS / CHECKS_APPEAR_POLL_MS)
@@ -274,7 +289,8 @@ async function awaitChecksOnHead(
       report(
         head.mergeable === 'CONFLICTING'
           ? `${noChecks}: the pull request conflicts with ${MAIN_BRANCH}, and GitHub runs no pull_request`
-            + ` workflow until it merges cleanly. Merge ${MAIN_BRANCH} into this branch and run open-pr again.`
+            + ` workflow until it merges cleanly. Merge ${MAIN_BRANCH} into this branch, push it with open-pr,`
+            + ` then ${rerunByHand(branch)}`
           : `${noChecks}. Actions may be disabled for this repository, or no workflow matches this branch.`,
       )
       return false
@@ -380,6 +396,10 @@ function reportOutcome(checks: readonly CheckStatus[], report: (line: string) =>
     report(`FAIL  ${check.name}: ${check.link}`)
   }
   return 1
+}
+
+function rerunByHand(branch: string): string {
+  return `run each workflow by hand with \`gh workflow run <workflow file> --ref ${branch}\`.`
 }
 
 function lastNonEmptyLine(text: string): string {

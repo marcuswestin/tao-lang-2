@@ -1,9 +1,11 @@
 name: Companion hosts
 
-# Build and check the host kit on pull requests that can change it. Release publication stays
-# separate until the repository and its compatible hosts are public.
+# Build and check the host kit when a pull request that can change it opens; later pushes to the
+# branch start no run, and `workflow_dispatch` reruns it by hand. Release publication stays separate
+# until the repository and its compatible hosts are public.
 on:
   pull_request:
+    types: [opened]
     paths:
       - '.github/workflows/companion-hosts.yml'
       - 'bun.lock'

@@ -38,7 +38,8 @@ export const JUST_COMMANDS = [
   'merge-main',
   'model-audit',
   'native-module-check',
-  // Pushes the branch, opens or reuses its pull request, and stays attached to stream its checks —
+  // Pushes the branch, opens or reuses its pull request, and stays attached to stream the checks a
+  // newly opened one starts —
   // the one command both the Developer and an agent run to get GitHub's own CI signal without a
   // second spelling.
   'open-pr',
@@ -66,6 +67,7 @@ export const JUST_COMMANDS = [
   'verify-changed',
   'verify-full',
   'verify-full-sandbox',
+  'worktree-status',
 ] as const
 
 export type AgentCommand = (typeof JUST_COMMANDS)[number]

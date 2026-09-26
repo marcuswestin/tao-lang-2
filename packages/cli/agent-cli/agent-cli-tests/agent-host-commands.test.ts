@@ -24,6 +24,7 @@ const expected = [
   'studio-proof-real-app',
   'admission-experiment',
   'native-module-check',
+  'reclaim --execute',
   'prepare-release studio',
   'prepare-release ide-extension',
   'app-dev',
@@ -78,6 +79,8 @@ Describe('agent host command permissions', () => {
     Expect(hostCommandKind(['prepare-release', 'ide-extension'], prefixes)).toBe('named')
     Expect(hostCommandKind(['prepare-release', 'other'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
+    Expect(hostCommandKind(['reclaim', '--execute'], prefixes)).toBe('named')
+    Expect(hostCommandKind(['reclaim', '--report-json'], prefixes)).toBeUndefined()
     Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(['merge-recover', ...expected.slice(13)])
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {

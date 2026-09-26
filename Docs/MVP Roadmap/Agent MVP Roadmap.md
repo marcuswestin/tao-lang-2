@@ -270,7 +270,8 @@ from the development loop, which no virtualization approach can do.
   version, which `companion-native-parity.test.ts` enforces, and claims the iCloud (CloudDocuments,
   CloudKit) and push entitlements `tao-icloud` asks for. `.github/workflows/pull-request.yml` proves
   the pull-request trigger with a job that verifies nothing, and `./agent open-pr` pushes a branch,
-  opens or reuses its pull request, and watches the pushed commit's checks to a verdict.
+  opens or reuses its pull request, and watches the pushed commit's checks to a verdict. Since
+  2026-09-25 both workflows run only when a pull request opens, never on a later push to its branch.
 - Landed 2026-09-22, the Android emulator lane: `just companion-host-build` builds the Companion as
   a debug APK into `.artifacts/hosts/<version>-<kit digest>/android/` beside a `tao-host.json` naming its native
   kit, and `tao dev --android` installs a host whose kit covers its own and opens the app in it in
@@ -317,8 +318,8 @@ from the development loop, which no virtualization approach can do.
      dev-loop documentation so no command or message offers Expo Go as a Tao app runtime. Verify
      both cache-hit and fresh-download launches, missing-host and failed-install messages, and the
      Android USB-reverse and LAN cases before declaring the retirement done.
-- CI host-build workflow (2026-09-25; hosted run still unproved): relevant pull requests check the
-  Companion's native-kit parity and build Android on `ubuntu-24.04` and iOS Simulator on `macos-26`.
+- CI host-build workflow (2026-09-25; hosted run still unproved): opening a relevant pull request
+  checks the Companion's native-kit parity and build Android on `ubuntu-24.04` and iOS Simulator on `macos-26`.
   It does not publish a host; the first hosted result must establish that both runners can build it.
 - Local host proof 2026-09-25 from `68a36b1a`: after `./agent unsandboxed direnv allow`, the named
   `companion-host-build --platform ios-simulator` operation completed with `** BUILD SUCCEEDED **`

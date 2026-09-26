@@ -200,15 +200,18 @@ export function querySearchTerm(search: () => Evaluable): string {
 }
 
 /**
- * matchesSearch reuses the attention matcher's locale-aware word-prefix subsequence rule over one
- * row's `(search)` field values, so a query's `search` clause narrows exactly like keyboard
- * narrowing and the command palette do. A blank term matches every row.
+ * matchesSearch reuses the attention matcher's locale-aware word-prefix subsequence rule for each
+ * `(search)` field. One field must match the whole term; words from separate fields do not combine.
+ * A blank term matches every row.
  */
 export function matchesSearch(row: StoredRow, fields: readonly string[], term: string): boolean {
-  const corpus = fields
-    .map(field => row[field])
-    .filter((value): value is string => typeof value === 'string')
-  return matchesNarrowing(corpus, term)
+  if (matchesNarrowing([], term)) {
+    return true
+  }
+  return fields.some(field => {
+    const value = row[field]
+    return typeof value === 'string' && matchesNarrowing([value], term)
+  })
 }
 
 export function compare(left: unknown, right: unknown): number {

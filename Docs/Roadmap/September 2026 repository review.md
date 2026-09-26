@@ -380,3 +380,159 @@ Jest entry and the distinct current aggregate/direct-run entry. Focused controls
 new emulator, installer, Studio retry, and warning repairs. The locked broad gate and landed
 archive ref remain to be established;
 host/device, packaged installation, and publication acceptance are outside this pass.
+
+## September 25 pass — local `main` from `7af60641` through `e94c3e1a`
+
+The September review landed on local `main` as `d296b239`. This pass accounted for that integration
+and all 41 later first-parent landings through `e94c3e1a`. Three read-only reviewers split the
+language/app, tooling, and Studio/device/release seams, with overlap on host commands and behavior
+tests. A different reviewer challenged every surviving candidate against the current tree. The
+Developer excluded code that creates or cleans temporary state because that work is underway
+elsewhere; the computer-wide inventory below remained in scope. The two confirmed defects repaired
+on this branch have focused regressions that failed before the fixes and passed afterward.
+
+| Landing    | Current-tree disposition                                                                             |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| `d296b239` | Prior review integrated; its stated external and cache limits remain separate follow-ups.            |
+| `42947205` | Standalone host repair on this branch; prerelease install/update policy is deferred until after MVP. |
+| `8f5d1335` | Watcher diagnosis accepted; no surviving code finding.                                               |
+| `a8b343eb` | Named host operations and source naming accepted; no surviving finding.                              |
+| `75803526` | Required-form behavior accepted; no surviving finding.                                               |
+| `6a77293c` | MVP scope decision record; no implementation finding in this pass.                                   |
+| `66c56ded` | Parser generation before Studio launch accepted.                                                     |
+| `cd931b43` | Guard removal accepted; no surviving finding.                                                        |
+| `c1f688d3` | Android opening path accepted statically; physical-phone run unproved.                               |
+| `79ba8d37` | Write Rules tranche accepted; no surviving finding.                                                  |
+| `d1dcbe36` | Model audit accepted; live audit found no observed routing drift.                                    |
+| `7a53736f` | Search split fields incorrectly; runtime repair on this branch.                                      |
+| `60b31061` | Landing priority accepted; no surviving finding.                                                     |
+| `48c17795` | Project-root temp boundary accepted; no surviving finding.                                           |
+| `36c8eb1d` | Search tranche inherits the `7a53736f` finding; no second defect.                                    |
+| `c4649bb0` | Phrases behavior accepted; no surviving finding.                                                     |
+| `19d7b5aa` | Read Net runtime guard accepted; no surviving finding.                                               |
+| `c1197bd7` | Native-quit temporary-state cleanup implementation excluded at Developer request.                    |
+| `652bb18f` | Read Net WordFlower absorption accepted; no surviving finding.                                       |
+| `02d67258` | Phrases WordFlower absorption accepted; no surviving finding.                                        |
+| `f0eff354` | Node-free release plan recorded; distribution acceptance remains external.                           |
+| `e878db96` | Full-verification fail-fast accepted; no surviving finding.                                          |
+| `fe0000e7` | Deferred host-runner design record; no implementation finding.                                       |
+| `97d1e71c` | Host watching route accepted; no surviving finding.                                                  |
+| `3500a7ef` | Watchman warning accepted; no surviving finding.                                                     |
+| `e355b5b1` | Design-values MVP accepted; no surviving finding.                                                    |
+| `b1aa717a` | Attribution and harness naming guidance accepted.                                                    |
+| `40cb4b83` | Feature-branch preflight accepted; no surviving finding.                                             |
+| `f10e7429` | Temporary-state lifecycle implementation excluded; other touched behavior had no finding.            |
+| `81915fd7` | Claude permission regeneration accepted; no surviving finding.                                       |
+| `019b791b` | Effect outcomes accepted; no surviving finding.                                                      |
+| `dfee240a` | A9 host plan and device evidence record; later host/device acceptance remains distinct.              |
+| `0ce75de6` | Device and fixture clauses accepted; physical-device acceptance unproved.                            |
+| `7fb6ece7` | Host teardown guidance retirement accepted; no surviving finding.                                    |
+| `70fd4685` | Older Revolution ideas retained in live roadmaps; no implementation finding.                         |
+| `f3db1c63` | Foreign-action behavior accepted; WordFlower Markdown export scope is deferred until after MVP.      |
+| `d88cd3a7` | Local iOS build and CI configuration accepted; hosted CI and device install unproved.                |
+| `d97e4721` | WordFlower phone/starter journey accepted as test behavior, not physical-phone proof.                |
+| `b857f362` | Test-world controls accepted; no surviving finding.                                                  |
+| `3450278e` | TypeScript bridge contracts accepted; no surviving finding.                                          |
+| `08d9701f` | Bridge cache recovery accepted; no surviving finding.                                                |
+| `e94c3e1a` | Temporary-state lifecycle implementation excluded; other touched behavior had no finding.            |
+
+### Confirmed repairs and decisions
+
+- **Query search:** `TR-data-values.ts` let a multiword search match words spread across different
+  `(search)` fields. The [implemented data contract](<../Spec/Tao Data.md>) requires the whole term
+  to match at least one field. A new three-row runtime query regression failed before the repair and
+  passed after matching each field separately; blank-term behavior remains intact.
+- **Installed host:** `host-dependencies.ts` trusted a matching lockfile stamp even after required
+  `node_modules` packages disappeared. A regression removed the install after stamping it and
+  exercised concurrent callers; it failed before the repair and passed after requiring the Expo and
+  Jest package manifests before reuse. The real installed binary was not exercised.
+- **Post-MVP product choices:** The standalone build and toolchain pin support explicit prerelease
+  versions, but the shell installer rejects `TAO_VERSION` with a prerelease suffix and the update
+  comparison treats the same-core stable release as equal. WordFlower exports only document title
+  and body while authored outline paragraphs are saved separately. The Developer deferred both
+  choices—explicit prerelease installation/update behavior and whether outline paragraphs belong
+  in Markdown export—until after MVP. Neither behavior was changed in this pass.
+
+### Read-only computer inventory
+
+On September 25, `./agent reclaim` classified 16 registered Tao worktrees as reclaimable, 15 live,
+and five unclassified; it removed nothing. A new worktree appeared while this pass ran, so those
+counts are a snapshot. Three worktree-parent roots occupied about 84 GiB in total:
+`~/.codex/worktrees` 49.5 GiB, `~/code/tao-lang-2.worktrees` 9.1 GiB, and
+`~/code/tao-lang-2/.claude/worktrees` 24.1 GiB. The largest, clean and reclaimable
+`~/.codex/worktrees/40f2/tao-lang-2`, occupied 39.2 GiB, including 31.3 GiB under
+`.artifacts/host-testing`. Five Git worktree registrations point into a missing `ba42` checkout.
+An additional 1.2 GiB `b2c3` directory has a broken `.git` pointer, while the older 0.8 GiB
+`db77` directory points at another live worktree's Git metadata. Neither was deleted or classified
+as safe to reclaim.
+At the original snapshot, `reclaimable` meant a clean Git checkout with no active Tao lane, lease,
+or landing lock, whose commit was preserved by a ref; task associations were not yet checked. A
+later Codex task-list check found that both `~/.codex/worktrees/40f2/tao-lang-2` and
+`~/.codex/worktrees/a83b/tao-lang-2` still
+have Codex tasks attached despite the original Git-only reclaimable verdict. The larger tree's
+task is `-- PAIR XXX OLD -- Improve Tao testing and merges` (ID
+`01a0baed-bea6-7cd3-a354-0eee871a9a15`), filed under **NEXT**. It was created September 19
+at 18:28 UTC to discuss test quality and parallel landing. The app summary reads “specific branch
+worktree archive thread”; its last conversation turn was September 20 at 16:59 UTC, identifying
+the other task that had sent unwanted continuation messages after the Developer had paused this
+one. The app's September 25 19:48 UTC metadata update is not a new conversation turn. The updated
+`reclaim` command now reports local task links and treats a
+known attachment as live. Cursor and cloud-only associations still need an app check before removal.
+Outside those roots, `~/code/tao-lang-port-review` (about 41 MiB) and its 17 MiB zip have been
+present for roughly 112 days; `~/code/tao-lang-2-wt` is empty. An additional
+`/private/tmp/tao-ship-spike.LQfgo8` root occupies about 0.91 GiB. Their owners were not
+established, so they were preserved.
+
+| Root at snapshot                                                | Allocated size |        Files |                  Oldest file age | Disposition                                                           |
+| --------------------------------------------------------------- | -------------: | -----------: | -------------------------------: | --------------------------------------------------------------------- |
+| `~/.cache/tao/jest-transform-cache`                             |       7.54 GiB |      403,092 |                         2.2 days | Existing aggregate-cache owner; no lifecycle code reviewed.           |
+| `~/.cache/tao/jest-standalone`                                  |       5.36 GiB |      494,534 |                         2.2 days | Existing direct-Jest owner; no cleanup attempted.                     |
+| `~/.cache/tao/jest-transform-cache-v2` and `jest-standalone-v2` |       1.13 GiB |       95,855 |                         0.2 days | Newer cache roots; ownership/liveness not established here.           |
+| `~/.cache/tao/test-runs`                                        |       0.65 GiB |      120,331 |                         0.2 days | Existing retained test state; preserve active runs.                   |
+| `$TMPDIR/tao-*`                                                 |       5.54 GiB |      396,241 | copied-file mtime up to 422 days | Three standalone acceptance roots hold about 4.55 GiB; owner unknown. |
+| `$TMPDIR/jest_dx`                                               |       0.03 GiB |        1,500 |                         0.2 days | Legacy root remains separate.                                         |
+| `/private/tmp/tao-ship-spike.LQfgo8`                            |       0.91 GiB | not measured |       root modified 0.2 days ago | Owner unknown; preserve.                                              |
+
+The current `$TMPDIR` had 25,571 immediate entries, including 10,241 `tao-*`, 5,700
+`model-audit-*`, 4,935 `landing-lock-*`, and 2,380 `reclaim-*` entries. Their shallow root
+modification times were within about a day, while older mtimes inside copied trees do not establish
+when the roots were created. File count could matter to OS cleanup even where bytes are small.
+This inventory is observational, not a machine-wide deletion instruction. The disk had 2.5 TiB
+available at the snapshot.
+
+### Other checks and limits
+
+- `./agent model-audit` found no machine-observed routing mismatch. Current official model and
+  pricing documents give no per-completed-task evidence for a tier switch; the table was not
+  changed. `DEVENV-094` still needs its quiet-machine ten-lane experiment, and `DEVENV-055` remains
+  owned by its native-host proof. Existing cache/host-artifact entries are being handled elsewhere.
+- `bun audit --json` still reported one moderate
+  [`uuid` advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq). The installed `xcode`
+  parent calls only `uuid.v4()` without a caller buffer; no affected call was demonstrated through
+  that parent. Appium produced no additional audit record. The pinned Nixpkgs glibc patch still
+  lacks six later CVE-tagged fixes; Linux closure and exposure remain unproved. The
+  [advisory register](<Dependency advisory follow-up.md>) retains the Developer as owner and the
+  September 28 review date.
+- `./agent unsandboxed studio-proof-real-app` passed a real HNReader compile/edit/undo and a Metro
+  drag-refresh proof. It did not force the prior publication-skew race. An Android emulator was
+  already running, so this pass did not exercise the new-emulator exit-log path. Local simulator
+  compilation, hosted CI, physical-phone installation, signing, publication, Cloud, and packaged
+  standalone acceptance remain distinct.
+- `./agent verify` passed after the two repairs and the reviewed report changes. Two Tao lanes
+  overlapped during this run; the runner reported contention separately from test failures.
+- [OpenAI's Codex cloud documentation](https://learn.chatgpt.com/docs/environments/cloud-environment)
+  says cloud chats use a default `universal` **container** image. The published
+  [`codex-universal` Dockerfile](https://github.com/openai/codex-universal/blob/main/Dockerfile)
+  starts from Ubuntu 24.04, but its [README](https://github.com/openai/codex-universal) says the
+  pullable image is similar to, not identical with, the hosted environment; no hosted digest is
+  published. [Anthropic's Claude Code cloud documentation](https://code.claude.com/docs/en/cloud-environments)
+  says each hosted session gets a fresh Ubuntu 24.04 x86_64 **VM**, with no named public base-image
+  tag or digest in that documentation. This interprets “Cloud Code” as Claude Code.
+- Cloud dependency setup is cached rather than necessarily downloaded for every new task. Codex
+  caches setup-script container state for up to 12 hours and runs an optional maintenance script
+  when resuming the cache; environment changes can invalidate it. Claude Code snapshots the
+  setup-script filesystem, including installed packages and pulled Docker images, for later
+  sessions until roughly seven-day expiry or configuration changes. Claude's `SessionStart` hooks
+  still run on every new or resumed session, so a repository dependency install placed there can
+  repeat; its documentation notes Bun compatibility issues with the hosted proxy. These are
+  vendor-documented behaviors, not measured Tao cloud-run timing.
