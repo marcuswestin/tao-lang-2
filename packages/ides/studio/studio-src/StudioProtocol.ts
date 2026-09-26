@@ -1,6 +1,6 @@
 import type { TaoSchemeCapability } from '@runtime/TR-scheme'
 import type { TaoStudioLensCause, TaoStudioLensRenderSample } from '@runtime/TR-studio-lens'
-import { TaoStudioProtocolVersions } from '@runtime/TR-studio-protocol'
+import { parseTaoStudioFeedDrop, type TaoStudioFeedDrop, TaoStudioProtocolVersions } from '@runtime/TR-studio-protocol'
 import type { StudioDeviceStateEvent } from './device/StudioDeviceStatus'
 import type {
   StudioCompileCompletion,
@@ -98,6 +98,7 @@ export type StudioDeleteFileRequest = {
 
 export type StudioMoveGeneratedSourceRequest = {
   path: string
+  relocateScenarios?: boolean
   sourceVersion: string
   targetPackage: string
   writeId: string
@@ -495,6 +496,16 @@ export type StudioPreviewSourceMessage = {
   type: 'preview-hover-source' | 'preview-select-source'
 }
 
+export type StudioPreviewFeedDropMessage = {
+  channel: typeof studioProtocolChannel
+  drop: TaoStudioFeedDrop
+  identity: StudioPreviewSourceIdentity
+  protocolVersion: typeof studioProtocolVersion
+  renderId: string
+  studioRectId?: string
+  type: 'preview-feed-drop'
+}
+
 export type StudioHighlightSourceMessage = {
   channel: typeof studioProtocolChannel
   identity: StudioPreviewSourceIdentity
@@ -800,6 +811,7 @@ export type StudioWindowMessage =
   | StudioPreviewCanvasGestureMessage
   | StudioPreviewCanvasPanKeyMessage
   | StudioPreviewCanvasShortcutMessage
+  | StudioPreviewFeedDropMessage
   | StudioDebugCommandMessage
   | StudioPreviewLayoutMeasurementsMessage
   | StudioPreviewLensRenderMessage
@@ -900,6 +912,7 @@ const windowMessageParsers: {
   'preview-canvas-shortcut': parsePreviewCanvasShortcut,
   'preview-console': parsePreviewLog,
   'preview-debug': parsePreviewDebug,
+  'preview-feed-drop': parsePreviewFeedDrop,
   'preview-fixture-capture-failed': parsePreviewFixtureCaptureFailed,
   'preview-fixture-captured': parsePreviewFixtureCaptured,
   'preview-hover-source': parsePreviewSource,
@@ -1697,6 +1710,35 @@ function parsePreviewSource(value: StudioJsonObject): StudioPreviewSourceMessage
     identity,
     range,
     type,
+  })
+}
+
+function parsePreviewFeedDrop(value: StudioJsonObject): StudioPreviewFeedDropMessage | undefined {
+  const identity = parsePreviewSourceIdentity(value['identity'])
+  const drop = parseTaoStudioFeedDrop(value['drop'])
+  const renderId = value['renderId']
+  const studioRectId = value['studioRectId']
+  if (
+    identity === undefined || drop === undefined || !nonEmptyString(renderId)
+    || (studioRectId !== undefined && !nonEmptyString(studioRectId))
+  ) {
+    return undefined
+  }
+  const range = renderId.slice(identity.path.length + 1).split(':')
+  if (
+    !renderId.startsWith(`${identity.path}:`) || range.length !== 2
+    || !range.every(part => /^\d+$/.test(part))
+    || !Number.isSafeInteger(Number(range[0])) || !Number.isSafeInteger(Number(range[1]))
+    || Number(range[0]) > Number(range[1])
+  ) {
+    return undefined
+  }
+  return envelope({
+    drop,
+    identity,
+    renderId,
+    ...(studioRectId === undefined ? {} : { studioRectId }),
+    type: 'preview-feed-drop',
   })
 }
 

@@ -263,3 +263,73 @@ export function StudioDataTableTitle(datasource: string, entity: string): string
 export function StudioPanelSelected(tab: string, panel: string): boolean {
   return tab === panel
 }
+
+/** Native drag boundary; selection and field content are authored by the Tao panel. */
+export function StudioFeedDrag(
+  props:
+    & TaoStudioHostVisualProps
+    & Readonly<{ Payload: string; Label: string; Disabled: boolean; children?: React.ReactNode }>,
+): React.ReactElement {
+  return (
+    <div
+      className="studio-feed-drag"
+      data-testid={props.Tag}
+      draggable={!props.Disabled}
+      onDragStart={event => {
+        if (props.Disabled) {
+          event.preventDefault()
+          return
+        }
+        event.stopPropagation()
+        event.dataTransfer.effectAllowed = 'copy'
+        event.dataTransfer.setData('application/x-tao-studio-feed', props.Payload)
+      }}
+      style={props.Layout?.style}
+      title={props.Label}
+    >
+      {props.children}
+    </div>
+  )
+}
+
+export function StudioFeedEntityPayload(Entity: string): string {
+  return JSON.stringify({ type: 'select-entity', entity: Entity })
+}
+
+export function StudioFeedSourcePayload(Source: string): string {
+  return JSON.stringify({ type: 'select-source', source: Source })
+}
+
+export function StudioFeedSeedPayload(Seed: string): string {
+  return JSON.stringify({ type: 'set-seed', seed: Seed })
+}
+
+/** Tao supplies selection state/action; the native row adds browser dragging and button semantics. */
+export function StudioFeedRowControl(
+  props:
+    & TaoStudioHostVisualProps
+    & Readonly<{ Payload: string; Label: string; Selected: boolean; Disabled: boolean; Select: TaoStudioHostAction }>,
+): React.ReactElement {
+  return (
+    <button
+      aria-pressed={props.Selected}
+      className="studio-feed-row"
+      data-testid={props.Tag}
+      disabled={props.Disabled}
+      draggable={!props.Disabled}
+      onClick={() => void props.Select.invoke()}
+      onDragStart={event => {
+        if (props.Disabled) {
+          event.preventDefault()
+          return
+        }
+        event.dataTransfer.effectAllowed = 'copy'
+        event.dataTransfer.setData('application/x-tao-studio-feed', props.Payload)
+      }}
+      style={props.Layout?.style}
+      type="button"
+    >
+      {props.Label}
+    </button>
+  )
+}

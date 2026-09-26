@@ -16,6 +16,7 @@ import {
   type StudioPreviewElement,
   type StudioPreviewHost,
 } from '../TaoRuntime-src/TR-studio-preview'
+import { parseTaoStudioFeedDrop, taoStudioFeedMime } from '../TaoRuntime-src/TR-studio-protocol'
 import { Clock } from '../TaoRuntime-src/TR-units'
 
 Describe('Studio cell publication bootstrap', () => {
@@ -101,6 +102,121 @@ const config: StudioPreviewConfig = {
 }
 
 Describe('Studio preview runtime bridge', () => {
+  Test('captures Feed drops on the nearest rendered leaf with trusted source identity and blocks app handlers', () => {
+    const leaf = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 80 }, {
+      studioRectId: 'title',
+    })
+    const nested = { ...leaf, closest: () => leaf, getAttribute: () => null }
+    const fake = previewHost([leaf])
+    const cleanup = mountStudioPreviewBridge({
+      ...config,
+      cellId: 'cell-1',
+      cellRevision: 2,
+      manifestRevision: 'manifest-1',
+    }, fake.host)
+    let appEvents = 0
+    let cancelled = 0
+    fake.host.document.addEventListener('drop', () => {
+      appEvents += 1
+    })
+    fake.host.document.addEventListener('pointerdown', () => {
+      appEvents += 1
+    })
+    const drop = { entity: 'Playlist', kind: 'field', path: ['Title'], presentation: 'text', rowId: 'opaque-row' }
+    const transfer = { dropEffect: 'none', getData: () => JSON.stringify(drop), types: [taoStudioFeedMime] }
+    const event = {
+      dataTransfer: transfer,
+      preventDefault: () => {
+        cancelled += 1
+      },
+      target: nested,
+    }
+    fake.dispatchDocument('dragover', event)
+    Expect(transfer.dropEffect).toBe('copy')
+    fake.dispatchDocument('pointerdown', { target: nested })
+    fake.dispatchDocument('drop', event)
+    const messages = fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-feed-drop')
+    Expect(messages).toEqual([{
+      message: {
+        channel: 'tao-studio',
+        drop,
+        identity: {
+          appName: 'Demo',
+          cellId: 'cell-1',
+          cellRevision: 2,
+          compileRevision: 7,
+          manifestRevision: 'manifest-1',
+          occurrence: { nodeKind: 'render', renderOwner: 'MainView' },
+          path: '/project/Main.tao',
+          previewInstanceId: 'preview-1',
+          project: '/project',
+          sourceVersion: 'version-1',
+        },
+        protocolVersion: 1,
+        renderId: '/project/Main.tao:10:20',
+        studioRectId: 'title',
+        type: 'preview-feed-drop',
+      },
+      targetOrigin: config.parentOrigin,
+    }])
+    Expect(appEvents).toBe(0)
+    Expect(cancelled).toBe(2)
+    fake.dispatchDocument('drop', { target: nested, dataTransfer: { ...transfer, types: ['text/plain'] } })
+    Expect(appEvents).toBe(1)
+    cleanup()
+  })
+
+  Test('rejects malformed Feed data, stale source targets, Run mode, and active Space canvas gestures', () => {
+    const leaf = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 80 })
+    const stale = renderElement('/project/Removed.tao', 10, 20, { height: 20, left: 0, top: 0, width: 80 })
+    const fake = previewHost([leaf, stale])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    const payload = { entity: 'Playlist', kind: 'collection', path: ['Tracks'], rowId: 'opaque-row' }
+    const event = { target: leaf, dataTransfer: { getData: () => JSON.stringify(payload), types: [taoStudioFeedMime] } }
+    for (
+      const malformed of [
+        'bad json',
+        JSON.stringify({ ...payload, path: [] }),
+        JSON.stringify({ ...payload, source: 'unsafe' }),
+      ]
+    ) {
+      fake.dispatchDocument('drop', { ...event, dataTransfer: { ...event.dataTransfer, getData: () => malformed } })
+    }
+    fake.dispatchDocument('drop', { ...event, target: stale })
+    fake.dispatchWindow('message', interactionModeMessage('run', fake.parent))
+    fake.dispatchDocument('drop', event)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
+    fake.dispatchDocument('keydown', { key: ' ' })
+    fake.dispatchDocument('dragover', event)
+    fake.dispatchDocument('drop', event)
+    Expect(fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-feed-drop')).toEqual([])
+    fake.dispatchDocument('keyup', { key: ' ' })
+    fake.dispatchDocument('drop', event)
+    Expect(fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-feed-drop'))
+      .toMatchObject([{ message: { drop: payload, renderId: '/project/Main.tao:10:20' } }])
+    cleanup()
+    Expect(fake.listenerCount()).toBe(0)
+  })
+
+  Test('validates bounded Feed transfer payloads without carrying arbitrary fields', () => {
+    const valid = {
+      entity: 'Playlist',
+      kind: 'field',
+      path: ['Owner', 'Name'],
+      presentation: 'text',
+      rowId: 'opaque-row',
+    }
+    Expect(parseTaoStudioFeedDrop(valid)).toEqual(valid)
+    for (
+      const patch of [{ path: [] }, { path: ['not.a.path'] }, { rowId: '' }, { presentation: 'html' }, {
+        arbitrary: true,
+      }]
+    ) {
+      Expect(parseTaoStudioFeedDrop({ ...valid, ...patch })).toBeUndefined()
+    }
+  })
+
   Test('clears a caught preview failure when the reset key changes', () => {
     const child = { type: 'stateful-preview' } as unknown as ReactNode
     const Boundary = StudioPreview.ErrorBoundary

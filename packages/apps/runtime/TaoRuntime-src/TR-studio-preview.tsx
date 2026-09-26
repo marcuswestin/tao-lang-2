@@ -20,7 +20,7 @@ import {
   waitForTaoJourneyTarget,
 } from './TR-studio-journey'
 import { StudioLensHost, type TaoStudioLensRenderSample } from './TR-studio-lens'
-import { TaoStudioProtocolVersions } from './TR-studio-protocol'
+import { parseTaoStudioFeedDrop, taoStudioFeedMime, TaoStudioProtocolVersions } from './TR-studio-protocol'
 import RuntimeSwitch from './TR-switch'
 import type { TaoStudioIdentity } from './TR-TaoProps'
 import { Clock } from './TR-units'
@@ -97,6 +97,7 @@ type StudioPreviewPointerEvent = {
   ctrlKey?: boolean
   deltaX?: number
   deltaY?: number
+  dataTransfer?: { dropEffect?: string; getData(type: string): string; types: readonly string[] }
   isComposing?: boolean
   key?: string
   metaKey?: boolean
@@ -142,6 +143,11 @@ type StudioPreviewDocumentEvent =
   | 'contextmenu'
   | 'dblclick'
   | 'dragstart'
+  | 'dragenter'
+  | 'dragleave'
+  | 'dragover'
+  | 'dragend'
+  | 'drop'
   | 'input'
   | 'keydown'
   | 'keyup'
@@ -838,6 +844,7 @@ export function mountStudioPreviewBridge(
   let interactionMode: 'edit' | 'run' = 'edit'
   let canvasGesturesOwned = false
   let canvasPanKeyHeld = false
+  let feedDragActive = false
   let recording: StudioJourneyRecording | undefined
   let measurementQueued = false
   let stopped = false
@@ -1073,8 +1080,59 @@ export function mountStudioPreviewBridge(
     }
   }
   const onCanvasPanPointer = (event: StudioPreviewPointerEvent) => {
-    if (canvasPanKeyHeld && event.taoStudioJourney !== true) {
+    if ((canvasPanKeyHeld || feedDragActive) && event.taoStudioJourney !== true) {
       blockAppPointerEvent(event)
+    }
+  }
+  const isFeedDrag = (event: StudioPreviewPointerEvent): boolean =>
+    event.taoStudioJourney !== true && event.dataTransfer?.types.includes(taoStudioFeedMime) === true
+  const endFeedDrag = () => {
+    feedDragActive = false
+  }
+  const onFeedDragOver = (event: StudioPreviewPointerEvent) => {
+    if (!isFeedDrag(event)) {
+      return
+    }
+    feedDragActive = true
+    blockAppPointerEvent(event)
+    disarmDrag()
+    if (event.dataTransfer !== undefined) {
+      event.dataTransfer.dropEffect = editingGesture(event) && !canvasPanKeyHeld ? 'copy' : 'none'
+    }
+  }
+  const onFeedDrop = (event: StudioPreviewPointerEvent) => {
+    if (!isFeedDrag(event)) {
+      return
+    }
+    endFeedDrag()
+    blockAppPointerEvent(event)
+    suppressNextClick = true
+    if (!editingGesture(event) || canvasPanKeyHeld) {
+      return
+    }
+    const target = renderTargetFromEvent(event)
+    const sourceVersion = target === undefined ? undefined : sourceVersionFor(config, target.identity.sourcePath)
+    if (target === undefined || sourceVersion === undefined) {
+      return
+    }
+    let raw: unknown
+    try {
+      const text = event.dataTransfer!.getData(taoStudioFeedMime)
+      if (text.length > 16_384) {
+        return
+      }
+      raw = JSON.parse(text)
+    } catch {
+      return
+    }
+    const drop = parseTaoStudioFeedDrop(raw)
+    if (drop !== undefined) {
+      postToStudio(host, config, 'preview-feed-drop', {
+        drop,
+        identity: occurrenceIdentity(config, target.identity, sourceVersion),
+        renderId: renderId(target.identity),
+        ...(target.identity.studioRectId === undefined ? {} : { studioRectId: target.identity.studioRectId }),
+      })
     }
   }
   const onCanvasWheel = (event: StudioPreviewPointerEvent) => {
@@ -1290,6 +1348,11 @@ export function mountStudioPreviewBridge(
   const documentListeners: readonly Readonly<Parameters<StudioPreviewHost['document']['addEventListener']>>[] = [
     // This capture barrier is synchronous; the parent's iframe shield arrives through postMessage.
     ...canvasPanPointerEvents.map(type => [type, onCanvasPanPointer, true] as const),
+    ['dragenter', onFeedDragOver, true],
+    ['dragover', onFeedDragOver, true],
+    ['drop', onFeedDrop, true],
+    ['dragleave', endFeedDrag, true],
+    ['dragend', endFeedDrag, true],
     ['click', onClick, true],
     ['click', onRecordedClick, true],
     ['input', onRecordedInput, true],
@@ -1310,6 +1373,7 @@ export function mountStudioPreviewBridge(
   const windowListeners: readonly Parameters<StudioPreviewHost['window']['addEventListener']>[] = [
     ['blur', disarmDrag],
     ['blur', releaseCanvasPanKey],
+    ['blur', endFeedDrag],
     ['message', onMessage],
     ['resize', onGeometryChange],
     ['scroll', onGeometryChange],

@@ -3445,7 +3445,9 @@ Test('Studio source mutations share one envelope and bind undo to the file the e
   })
   const replies: Array<() => Response> = []
   const requests: string[] = []
-  globalThis.fetch = (async (input: string | URL | Request) => {
+  const requestBodies: unknown[] = []
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    requestBodies.push(init?.body === undefined ? undefined : JSON.parse(String(init.body)))
     requests.push(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url)
     const reply = replies.shift()
     if (reply === undefined) {
@@ -3567,6 +3569,25 @@ Test('Studio source mutations share one envelope and bind undo to the file the e
       'inspector',
     ])
     Expect(mutations.canUndo()).toBe(false)
+    Expect(replies).toHaveLength(0)
+
+    // Imported parameterized views use the selected source gap even when no editor is mounted.
+    replies.push(() => result('checkpoint-imported-view'))
+    mutations.insertProjectView({
+      label: 'View1',
+      snippet: { placeholders: [{ start: 16, end: 24 }], text: 'View1(Playlist: Playlist)' },
+      sourcePath: '/workspace/@/studio/View1.tao',
+      viewName: 'View1',
+    })
+    await until(() => !mutations.busy(), { description: 'the imported view insertion', intervalMs: 0 })
+    Expect(requestBodies.at(-1)).toMatchObject({
+      action: {
+        beforeId: selected.renderId,
+        kind: 'insert-project-view',
+        viewName: 'View1',
+        viewSourcePath: '/workspace/@/studio/View1.tao',
+      },
+    })
     Expect(replies).toHaveLength(0)
   } finally {
     globalThis.fetch = previousFetch

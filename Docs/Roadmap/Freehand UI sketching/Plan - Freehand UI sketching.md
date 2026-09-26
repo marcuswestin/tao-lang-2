@@ -3,8 +3,8 @@
 The implementation plan for freehand UI sketching decided in
 `Product - Freehand UI sketching.md`'s "Design record" section (FS-D1–FS-D20). Read that design
 record first; this plan cites the decisions rather than reopening their alternatives. L1, the `@`
-tooling, Slice 1 (Draw), and Slice 2 (Snap) have landed; the Slice 3 (Feed) server foundations are
-green. "Figma-at-home strides" and "Canvas-first design mode" below are two additional, currently
+tooling, Slice 1 (Draw), and Slice 2 (Snap) have landed; Slice 3 (Feed) is implemented on
+`feat/studio-feed-client` and awaits visual acceptance and landing. "Figma-at-home strides" and "Canvas-first design mode" below are two additional, currently
 active bodies of work that polish the landed slices and the Studio canvas UI without reopening
 FS-D1–FS-D20 or reordering the FS-D20 sequence.
 
@@ -228,12 +228,21 @@ step; do not change the settled heuristic to fit individual screens invisibly.
 
 ## Slice 3 — Feed
 
-**Implementation status (2026-09-04).** Foundations are green and committed: shared fixture imports,
-entity-aware preview manifests, deterministic four-source inventory, canonical shared-fixture source,
-typed entity/field source actions, durable free/snapped field bindings, and scope-derived arguments for
-parameterized project-view insertion. The slice remains open until Studio exposes the row/chip browser
-and lands entity/field drop, atomic Keep, Move-to-package scenario relocation, and their browser
-journey; "Figma-at-home strides" Stride 3 below is the work that finishes it.
+**Implementation status (2026-09-26).** The Feed branch adds the Tao-owned four-source row/chip browser,
+entity and typed field drops, collection loop proposals, transient source-overlay compilation, a
+multi-file Keep with rollback and Undo Keep, and default-on Move-to-package scenario relocation.
+Server lifecycle tests exercise partial writes, failed compilation/catalog persistence, stale source
+and catalog state, and concurrent external edits. The browser journey exercises the panel and drag
+adapters, free and snapped binding, Keep/Discard/Undo, collection loops, and default scenario relocation.
+Imported-view insertion uses canonical source actions with loop-scope arguments and project containment.
+Native gesture feel still requires visual acceptance; landing this slice requires separate authorization.
+
+**Representability limits.** Existing fixture syntax represents primitive literals, `now`, and fixture
+references. Exact captured/generated timestamps, unresolved live relation IDs, cyclic fixture creation
+dependencies, and unsupported scenario argument expressions are rejected explicitly. Optional field
+binding needs a source fallback. Moving into an authored package keeps its existing import boundaries;
+app-private dependencies must be made package-compatible before moving the view. No language semantics
+are weakened for the visual workflow.
 
 **Decisions.** FS-D6, FS-D16.
 

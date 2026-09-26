@@ -16,7 +16,12 @@ export type StudioProductHostActions = Readonly<{
   deleteFile: (path: string, sourceVersion: string) => Promise<void>
   insertComponent: (component: string) => void
   insertProjectView: (viewName: string) => void
-  moveGeneratedSource: (path: string, sourceVersion: string, targetPackage: string) => Promise<void>
+  moveGeneratedSource: (
+    path: string,
+    sourceVersion: string,
+    targetPackage: string,
+    relocateScenarios?: boolean,
+  ) => Promise<void>
   applyInspectorAction: (action: StudioCanonicalSourceAction, proposed: boolean) => Promise<void>
   openFile: (path: string) => Promise<void>
   openScreen: (subjectId: string) => Promise<void>
@@ -104,7 +109,15 @@ type StudioProductHostRequest =
   | Readonly<{ kind: 'delete-file'; path: string; sourceVersion: string }>
   | Readonly<{ component: string; kind: 'insert-component' }>
   | Readonly<{ kind: 'insert-project-view'; viewName: string }>
-  | Readonly<{ kind: 'move-generated-source'; path: string; sourceVersion: string; targetPackage: string }>
+  | Readonly<
+    {
+      kind: 'move-generated-source'
+      path: string
+      sourceVersion: string
+      targetPackage: string
+      relocateScenarios?: boolean
+    }
+  >
   | Readonly<{ kind: 'open-file'; path: string }>
   | Readonly<{ kind: 'open-screen'; subjectId: string }>
   | Readonly<{ kind: 'open-source'; path: string; sourceVersion: string; start: number }>
@@ -243,11 +256,12 @@ export async function requestStudioProductHostMoveGeneratedSource(
   path: string,
   sourceVersion: string,
   targetPackage: string,
+  relocateScenarios = true,
 ): Promise<void> {
   assertStudioProductHostPath(path)
   assertSourceVersion(sourceVersion)
   Assert.input(targetPackage.trim() !== '', 'Move to package requires a target package.')
-  await requestFileAction({ kind: 'move-generated-source', path, sourceVersion, targetPackage })
+  await requestFileAction({ kind: 'move-generated-source', path, sourceVersion, targetPackage, relocateScenarios })
 }
 
 export async function requestStudioProductHostInsertComponent(component: string): Promise<void> {
@@ -335,7 +349,7 @@ async function execute(actions: StudioProductHostActions, action: StudioProductH
     'insert-component': async inserted => actions.insertComponent(inserted.component),
     'insert-project-view': async inserted => actions.insertProjectView(inserted.viewName),
     'move-generated-source': async moved =>
-      await actions.moveGeneratedSource(moved.path, moved.sourceVersion, moved.targetPackage),
+      await actions.moveGeneratedSource(moved.path, moved.sourceVersion, moved.targetPackage, moved.relocateScenarios),
     'open-file': async opened => await actions.openFile(opened.path),
     'open-screen': async opened => await actions.openScreen(opened.subjectId),
     'open-source': async opened => await actions.openSource(opened.path, opened.sourceVersion, opened.start),

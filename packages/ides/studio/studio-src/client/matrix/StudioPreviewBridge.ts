@@ -7,6 +7,7 @@ import {
   type StudioPreviewCanvasGestureMessage,
   type StudioPreviewCanvasPanKeyMessage,
   type StudioPreviewCanvasShortcutMessage,
+  type StudioPreviewFeedDropMessage,
   type StudioPreviewIdentity,
   type StudioPreviewRuntimeUpdateMessage,
   StudioProtocol,
@@ -41,6 +42,7 @@ type StudioPreviewMessageActions = {
   canvasPanKey?: (message: StudioPreviewCanvasPanKeyMessage) => void
   canvasShortcut?: (message: StudioPreviewCanvasShortcutMessage) => void
   changed?: () => void
+  feedDrop?: (message: StudioPreviewFeedDropMessage) => Promise<void>
   inspect: (selection: StudioInspectorSelection) => void
   reveal?: () => void
 }
@@ -236,6 +238,16 @@ export async function handlePreviewMessage(
     'preview-debug': type => receiveDebug(preview, received(message, type), actions),
     'preview-fixture-capture-failed': type => receiveFixtureCapture(preview, received(message, type), actions),
     'preview-fixture-captured': type => receiveFixtureCapture(preview, received(message, type), actions),
+    'preview-feed-drop': async type => {
+      const drop = received(message, type)
+      Assert.input(
+        matchesExactPreviewCellIdentity(preview, drop.identity),
+        'The Feed drop belongs to an outdated preview. Wait for the current preview and try again.',
+      )
+      Assert.input(preview.interactionMode === 'edit', 'Switch to Edit mode before dropping a Feed field.')
+      Assert.input(actions.feedDrop !== undefined, 'Feed drops are not connected to this preview.')
+      await actions.feedDrop(drop)
+    },
     'preview-hover-source': ignored,
     'preview-journey-recording-state': type => receiveJourneyRecording(preview, received(message, type), actions),
     'preview-journey-replay-failed': type => receiveJourneyReplay(preview, received(message, type)),

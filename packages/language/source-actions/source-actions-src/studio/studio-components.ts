@@ -1,7 +1,7 @@
-import { Type } from '@ast-utils'
+import { Packages, Type } from '@ast-utils'
 import Formatter from '@formatter'
 import { AST } from '@parser'
-import { Errors } from '@shared'
+import { Errors, FS } from '@shared'
 import { assertNoSyntaxErrors } from '../source-actions-utils'
 import type {
   StudioComponentKind,
@@ -10,6 +10,7 @@ import type {
   StudioInsertSpacerPatchRequest,
   StudioRenderGap,
   StudioToggleFlowDirectionPatchRequest,
+  StudioWorkspaceDesignContext,
 } from './studio-contract'
 import { setRenderLayoutEntryEdits } from './studio-layout-entries'
 import {
@@ -31,7 +32,7 @@ import {
   requireExactKeys,
   requireIdentifier,
 } from './studio-source-text'
-import { ensureUiNamesImported } from './studio-use-imports'
+import { ensureNamedImport, ensureUiNamesImported } from './studio-use-imports'
 
 const studioComponentSnippets: Readonly<Record<StudioComponentKind, string>> = {
   Box: 'Box() {\n   Text("New box")\n}',
@@ -87,18 +88,11 @@ export async function insertComponent(
   return await Formatter.formatCode(ensureUiComponentImport(inserted, document.parseResult.value, component))
 }
 
-async function insertViewRender(
-  document: AST.Document,
-  insertion: string,
-  gap: StudioRenderGap = {},
-): Promise<string> {
-  return await Formatter.formatCode(insertStudioSnippetAtGap(document, insertion, gap))
-}
-
 /** insertProjectView binds required parameters from the exact target gap's lexical scope. */
 export async function insertProjectView(
   document: AST.Document,
   request: StudioInsertProjectViewPatchRequest,
+  context: StudioWorkspaceDesignContext = {},
 ): Promise<string> {
   assertNoSyntaxErrors(document)
   validateInsertProjectViewRequest(request)
@@ -107,18 +101,36 @@ export async function insertProjectView(
     document.parseResult.value,
     request.viewName,
     AST.findOwningView(target.block)?.name,
+    request.viewSourcePath,
+    context.files,
   )
   const arguments_ = projectViewArguments(
     view,
     visibleInsertionValues(target.block, target.offset),
     request.bindings ?? {},
   )
-  return await insertViewRender(document, `${request.viewName}(${arguments_})`, request)
+  const inserted = insertStudioSnippetAtGap(document, `${request.viewName}(${arguments_})`, request)
+  const importPath = await projectViewImport(document.parseResult.value, view, context.files)
+  return await Formatter.formatCode(
+    importPath === undefined
+      ? inserted
+      : ensureNamedImport(inserted, document.parseResult.value, view.name, importPath),
+  )
 }
 
 function validateInsertProjectViewRequest(request: StudioInsertProjectViewPatchRequest): void {
-  requireExactKeys(request, ['afterId', 'beforeId', 'bindings', 'kind', 'viewName'], 'Insert project view request')
+  requireExactKeys(
+    request,
+    ['afterId', 'beforeId', 'bindings', 'kind', 'viewName', 'viewSourcePath'],
+    'Insert project view request',
+  )
   requireIdentifier(request.viewName, 'project view')
+  if (
+    request.viewSourcePath !== undefined
+    && (typeof request.viewSourcePath !== 'string' || request.viewSourcePath.length === 0)
+  ) {
+    Errors.throwUserInput('Studio project-view source path must name a source file.')
+  }
   if (request.bindings === undefined) {
     return
   }
@@ -138,8 +150,17 @@ function requireInsertableProjectView(
   file: AST.TaoFile,
   viewName: string,
   targetViewName: string | undefined,
+  sourcePath?: string,
+  files: readonly AST.TaoFile[] = [file],
 ): AST.ViewDeclaration {
-  const views = file.statements.filter(AST.isViewDeclaration).filter(candidate => candidate.name === viewName)
+  const imported = file.statements.filter(AST.isUseStatement).flatMap(AST.resolvedImportedDeclarations)
+  const declarations = sourcePath === undefined
+    ? [...file.statements, ...imported]
+    : files.flatMap(candidate => candidate.statements)
+  const views = [...new Set(declarations.filter(AST.isViewDeclaration))]
+    .filter(candidate =>
+      candidate.name === viewName && (sourcePath === undefined || AST.getDocument(candidate).uri.fsPath === sourcePath)
+    )
   const view = views.length === 1 ? views[0] : undefined
   if (view === undefined) {
     Errors.throwUserInput(
@@ -152,6 +173,53 @@ function requireInsertableProjectView(
     Errors.throwUserInput(`Cannot insert project view ${viewName} into its own render block.`)
   }
   return view
+}
+
+async function projectViewImport(
+  file: AST.TaoFile,
+  view: AST.ViewDeclaration,
+  files: readonly AST.TaoFile[] = [file],
+): Promise<string | undefined> {
+  if (view.$container === file) {
+    return undefined
+  }
+  if (view.visibility !== 'public') {
+    Errors.throwUserInput(`Studio can only import a public project view: ${view.name}`)
+  }
+  const existing = file.statements.filter(AST.isUseStatement)
+    .filter(use => use.importedDeclarations.some(reference => reference.$refText === view.name))
+  if (existing.length > 0) {
+    if (existing.every(use => AST.resolvedImportedDeclarations(use).includes(view))) {
+      return undefined
+    }
+    Errors.throwUserInput(`Studio project-view import conflicts for ${view.name}.`)
+  }
+  if (file.statements.some(statement => AST.isDeclaration(statement) && statement.name === view.name)) {
+    Errors.throwUserInput(`Studio project-view import conflicts for ${view.name}.`)
+  }
+  const fromFilePath = AST.getDocument(file).uri.fsPath
+  const viewPath = AST.getDocument(view).uri.fsPath
+  const context = await Packages.createContext(FS.dirname(fromFilePath))
+  const owner = [...context.index.packages.entries()].flatMap(([name, paths]) => paths.map(path => ({ name, path })))
+    .filter(candidate => FS.pathIsWithin(viewPath, candidate.path)).toSorted((left, right) =>
+      right.path.length - left.path.length
+    )[0]
+  const relative = owner === undefined
+    ? FS.relativePath(FS.dirname(fromFilePath), viewPath)
+    : FS.relativePath(owner.path, FS.dirname(viewPath))
+  const importPath = owner === undefined
+    ? (relative.startsWith('.') ? relative : `./${relative}`)
+    : `${owner.name}${relative === '' || relative === '.' ? '' : `/${relative}`}`
+  const resolution = Packages.resolve(context, { fromFilePath, importPath })
+  if (
+    !Packages.declarationIsImportableFromUse(view, resolution) || !Packages.targetMatches(context, resolution, {
+      filePath: viewPath,
+      workspaceFilePaths: new Set(files.map(candidate => AST.getDocument(candidate).uri.fsPath)),
+    })
+  ) {
+    Errors.throwUserInput(`Studio cannot import project view ${view.name} across this package boundary.`)
+  }
+  return importPath
 }
 
 function projectViewArguments(

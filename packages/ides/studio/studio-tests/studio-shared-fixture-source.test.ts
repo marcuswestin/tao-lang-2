@@ -8,6 +8,23 @@ const playlistImport = { collection: 'Playlists', entity: 'Playlist', source: '.
 const accountImport = { collection: 'Accounts', entity: 'Account', source: '../../Data/Accounts' }
 
 Describe('Studio shared fixture source', () => {
+  Test('rejects package traversal and source injection in fixture imports', async () => {
+    for (
+      const source of [
+        '@model/Data.tao',
+        '@model/../Data.tao',
+        '@model/Data.tao\nview Injected() {}',
+        '/absolute/Data.tao',
+        '@model//Data.tao',
+      ]
+    ) {
+      await Expect(StudioSharedFixtureSource.promote({
+        imports: [{ ...playlistImport, source }],
+        promotions: [{ entity: 'Playlist', fields: { Title: 'Focus' }, name: 'Focus' }],
+      })).rejects.toThrow('import must be a relative or project-package source path')
+    }
+  })
+
   Test('creates deterministic public Sketches source for multiple entities', async () => {
     const result = await StudioSharedFixtureSource.promote({
       imports: [playlistImport, accountImport],

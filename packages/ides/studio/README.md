@@ -354,8 +354,19 @@ fixture-backed arguments to a generated sketch group, bind a tagged snapped leaf
 and insert parameterized project views using exact-type values visible at the target gap. Catalog
 `bind-rect` persists the corresponding structured binding for free and snapped rectangles.
 
-This does not yet constitute the complete Slice 3 gesture: the client row/chip browser, atomic Keep
-transaction, entity/field drop wiring, and scenario relocation during Move to package remain open.
+The Tao-owned Data panel provides four-source rows and typed draggable field chips. Feed drafts use
+immutable compiler source overlays, so previews can have required entity parameters and shared fixture
+arguments before anything is written. Keep persists view, fixture, and catalog together; Discard drops
+the overlay, and Undo Keep restores the whole operation. Conflicting source edits are preserved.
+Collection drops propose a typed loop and row view. Move to package defaults to relocating scenarios
+into the app's `Scenarios.tao`, subject to normal package visibility and import rules.
+
+The `studio-feed-browser`, `studio-feed-draft`, `studio-feed-source`, `studio-feed-loop-source`,
+`studio-feed-session`, `studio-feed-controller`, and `studio-preview-feed-overlays` tests own the new
+boundaries. The simulated-user browser lane invokes `studio-feed-journey.ts` through the actual panel
+and drag adapters, with simulated preview messages crossing the iframe identity boundary; runtime tests
+own native Feed drag hit-testing. Fixture syntax currently cannot preserve arbitrary captured timestamps; unsupported
+rows and optional bindings without a fallback report an error rather than changing their meaning.
 
 Run the focused Draw, Snap, and Feed-foundation contracts with the repository's installed profile:
 
@@ -372,6 +383,9 @@ just studio-smoke packages/ides/studio-tooling/studio-smoke/studio-simulated-use
 It must run on a host where Chrome can expose DevTools. Its Draw path creates a 360 by 76 sketch and
 persists a free rectangle. Its Snap path covers playlist flow, reload, repeated partial Snap by gap
 drop, retained-position Unsnap, overlap Cancel/Apply, and source/catalog Undo.
+Its Feed path exercises all four sources, free and snapped binding, transient previews, Keep,
+Discard, collection-loop Keep/Undo, and Move with default scenario relocation. The preview is simulated;
+runtime event tests separately cover native Feed drag hit-testing and stale identity rejection.
 
 ## Smoke lanes
 

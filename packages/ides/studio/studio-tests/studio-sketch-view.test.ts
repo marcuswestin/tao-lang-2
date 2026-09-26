@@ -1034,3 +1034,24 @@ function dataSelectorName(selector: string): string | undefined {
     'taoStudio',
   )
 }
+
+Test('free sketch rectangles render transient text and images without writing catalog content', () => {
+  const { dom, host, mounted, changes } = mountTextEditor()
+  const sketch = testSketch()
+  mounted.render([sketch], undefined, { 'sketch-1': { front: { text: 'Feed title', label: 'Title' } } })
+  Expect(dom.find(host, 'taoStudioSketchRect', 'front').textContent).toBe('Feed title')
+  Expect(sketch.rects.find(rect => rect.id === 'front')?.content).toBe('Front')
+  mounted.render([sketch], undefined, {
+    'sketch-1': {
+      front: { text: 'https://example.test/a.png', imageUrl: 'https://example.test/a.png', label: 'Cover' },
+    },
+  })
+  const image = dom.find(host, 'taoStudioSketchRect', 'front').children.find(child => child.tagName === 'img')
+  Expect(image).toBeDefined()
+  Expect((image as unknown as { src: string; alt: string }).src).toBe('https://example.test/a.png')
+  Expect((image as unknown as { src: string; alt: string }).alt).toBe('Cover')
+  mounted.render([sketch], undefined, {})
+  Expect(dom.find(host, 'taoStudioSketchRect', 'front').textContent).toBe('Front')
+  Expect(changes).toEqual([])
+  mounted.dispose()
+})

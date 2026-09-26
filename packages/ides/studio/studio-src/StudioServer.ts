@@ -1,5 +1,5 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
-import { CLI, Errors, Json, Repo, Switch } from '@shared'
+import { Assert, CLI, Errors, Json, Repo, Switch } from '@shared'
 import type { AgentChatProvider } from './agent-chat/AgentChatProvider'
 import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
@@ -756,6 +756,8 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
   },
   dataFill: async ({ datasource, request }) => jsonReply(await datasource.fill(dataFillRequest(await request.json()))),
   canvasViewport: bodyTo((session, body) => session.saveCanvasViewport(body)),
+  feedBrowse: bodyTo((session, body) => session.browseFeed(body)),
+  feedAction: bodyTo((session, body) => session.applyFeedAction(body)),
   file: async ({ session, url }) =>
     jsonReply(await session.readFile(requiredQuery(url, 'path', 'Missing Studio file path.'))),
   fileCreate: bodyTo((session, body) => session.createFile(createFileRequest(body)), 201),
@@ -968,11 +970,17 @@ function renameFileRequest(value: unknown): StudioRenameFileRequest {
 }
 
 function moveGeneratedSourceRequest(value: unknown): StudioMoveGeneratedSourceRequest {
-  return requiredStrings(
+  const request = requiredStrings(
     value,
     ['path', 'sourceVersion', 'targetPackage', 'writeId'],
     'Expected path, targetPackage, sourceVersion, and writeId to move generated source.',
   )
+  const relocateScenarios = (value as Record<string, unknown>)['relocateScenarios']
+  Assert.input(
+    relocateScenarios === undefined || typeof relocateScenarios === 'boolean',
+    'Expected a boolean scenario relocation choice.',
+  )
+  return { ...request, ...(relocateScenarios === undefined ? {} : { relocateScenarios }) }
 }
 
 function deleteFileRequest(value: unknown): StudioDeleteFileRequest {

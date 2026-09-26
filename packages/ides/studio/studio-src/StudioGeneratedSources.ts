@@ -226,5 +226,5 @@ function authoredSource(content: string): string {
   const header = `${studioGeneratedSourceHeader}\n`
   Assert.input(content.startsWith(header), 'Generated Studio source is missing its ownership header.')
   // A file written before the header sat flush against the source still moves out cleanly.
-  return content.slice(header.length).replace(/^\n+/u, '').replace(/^[ \t]*#studio_rect_[0-9a-f]+\n/gimu, '')
+  return content.slice(header.length).replace(/^\n+/u, '')
 }
