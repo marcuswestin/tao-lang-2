@@ -1,3 +1,5 @@
+use AuthProvider from @tao/auth
+
 // Core primitives are compiler-known opaque types. `is` declares a nominal refinement, and `with`
 // pins the supplied-slot contract that ordinary Tao declarations fill.
 primitive item
@@ -80,5 +82,6 @@ primitive app with {
    Name text,
    Navigator nav,
    Datasource list of datasource is [],
+   Auth AuthProvider is none,
    Design design is none,
 }

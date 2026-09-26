@@ -187,6 +187,7 @@ ConfigurationEntry:
     | key=USE_IMPORT_PATH block=ConfigurationBlock
     | label=ID ':' expression=Expression
     | name=ID ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)
+    | memberReference=MemberAccessExpression
     | reference=[ListedDeclaration:ID]
     | expression=NonIdentifierConstructorEntryValue;
 
@@ -230,9 +231,11 @@ ConfigurationReference:
 // `when` subject stops before `{`, which is what distinguishes a block from a bare item constructor,
 // and it stops before `/`, which is what leaves the compact form's separator visible.
 WhenExpression:
-    'when' subject=WhenSubjectExpression
-    ('{' branches+=WhenBranch+ otherwise=WhenOtherwise '}'
-        | positive=WhenSubjectExpression ('/' negativeLabel=CompactNegativeLabel negative=WhenSubjectExpression)?);
+    'when' (subject=WhenSubjectExpression
+    ('{' branches+=WhenBranch* otherwise=WhenOtherwise '}'
+        | branches+=BarWhenBranch* otherwise=BarWhenOtherwise
+        | positive=WhenSubjectExpression ('/' negativeLabel=CompactNegativeLabel negative=WhenSubjectExpression)?)
+        | branches+=PredicateWhenBranch* otherwise=BarWhenOtherwise);
 
 CompactNegativeLabel returns string:
     'not' | ID;
@@ -285,8 +288,17 @@ WhenSubjectPrimaryExpression infers Expression:
 WhenBranch:
     case=SubjectCaseName '->' value=OrExpression;
 
+BarWhenBranch infers WhenBranch:
+    barSyntax?='|' case=SubjectCaseName '->' value=OrExpression;
+
+PredicateWhenBranch infers WhenBranch:
+    barSyntax?='|' condition=OrExpression '->' value=OrExpression;
+
 WhenOtherwise:
     'otherwise' '->' value=OrExpression;
+
+BarWhenOtherwise infers WhenOtherwise:
+    barSyntax?='|' 'otherwise' '->' value=OrExpression;
 
 SubjectExpression infers Expression:
     '(' Expression ')' | ListLiteral | MemberAccessExpression | FunctionCallExpression | InterpolatedString
@@ -296,7 +308,7 @@ SubjectCaseName returns string:
     BuiltInSubjectCaseName | ID;
 
 BuiltInSubjectCaseName returns string:
-    'empty' | 'loading' | 'refreshing' | 'stale' | 'missing' | 'unauthorized' | 'error' | 'true' | 'false';
+    'empty' | 'loading' | 'refreshing' | 'stale' | 'missing' | 'unauthorized' | 'error' | 'true' | 'false' | 'yes' | 'no';
 
 CasePayload:
     name=ID;

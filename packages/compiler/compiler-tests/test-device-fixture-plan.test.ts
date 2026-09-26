@@ -57,7 +57,7 @@ Describe('compiler: test device and fixture plan IR', () => {
           use WordFlower from ./
 
           data Households / Household { Name text }
-          data Recipes / Recipe { Household Title text }
+          data Recipes / Recipe { Household, Title text }
           fixture StarterWorkspace {
             Home = create Household { Name: "Home" }
             Shakshuka = create Recipe { Household: Home, Title: "Shakshuka" }
@@ -74,6 +74,7 @@ Describe('compiler: test device and fixture plan IR', () => {
       plan => {
         Expect(plan.suites[0]?.checks[0]?.fixture).toEqual({
           name: 'StarterWorkspace',
+          accounts: [],
           creates: [
             { entity: 'Household', fields: { Name: 'Home' }, name: 'Home' },
             {

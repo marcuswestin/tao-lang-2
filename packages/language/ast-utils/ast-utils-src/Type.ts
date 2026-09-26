@@ -168,8 +168,9 @@ export class Type {
   }
 
   /** ofValueDeclaration resolves the runtime value type introduced by one linked value declaration. */
-  static ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
-    return new TypeResolutionContext().ofValueDeclaration(declaration)
+  static ofValueDeclaration(declaration: AST.ValueDeclaration | undefined, context?: AST.Node): TaoType {
+    const resolution = new TypeResolutionContext()
+    return context ? resolution.ofContextualValue(declaration, context) : resolution.ofValueDeclaration(declaration)
   }
 
   /** ofFunctionReturn resolves an explicit function result or infers it from every return statement. */
@@ -506,9 +507,9 @@ export class Type {
     return undefined
   }
 
-  /** completenessMemberType resolves `Incomplete` and `Problems`, which `required` derives (§2). */
+  /** completenessMemberType resolves completeness flags and problems derived from required fields. */
   static completenessMemberType(member: string): TaoType | undefined {
-    if (member === 'Incomplete') {
+    if (member === 'Incomplete' || member === 'IsIncomplete' || member === 'IsComplete') {
       return primitiveType('boolean')
     }
     return member === 'Problems' ? { kind: 'list', element: primitiveType('text') } : undefined
@@ -588,7 +589,8 @@ export class Type {
    * the same as the entity it references. */
   static dataFieldRelationName(field: DataFieldDefinition): string {
     const traits = field.traits?.traits ?? []
-    return traits.find(trait => trait.relationName)?.relationName
+    return field.typeName
+      ?? traits.find(trait => trait.relationName)?.relationName
       ?? traits.find(trait => trait.referenceName)?.referenceName
       ?? field.name
   }
@@ -609,7 +611,7 @@ export class Type {
       return undefined
     }
     const relationName = Type.dataFieldRelationName(field)
-    return Type.topLevelDataEntities(field).find(entity =>
+    return Type.visibleDataEntities(field).find(entity =>
       entity.singularName === relationName || entity.name === relationName
     )
   }
@@ -620,7 +622,7 @@ export class Type {
       return false
     }
     const relationName = Type.dataFieldRelationName(field)
-    return Type.topLevelDataEntities(field).some(entity => entity.name === relationName)
+    return Type.visibleDataEntities(field).some(entity => entity.name === relationName)
   }
 
   /** topLevelDataEntities returns the current provider-neutral catalog declarations in a file. */
@@ -641,7 +643,8 @@ export class Type {
     }
     const relation = Type.dataFieldRelationEntity(field)
     if (!relation) {
-      return unresolvedType()
+      const definition = visibleTypeDeclaration(field, field.typeName ?? field.name)
+      return definition ? Type.ofDefinition(definition) : unresolvedType()
     }
     return Type.dataFieldIsInverseRelation(field)
       ? { kind: 'list', element: { kind: 'entity', entity: relation } }
@@ -1046,7 +1049,7 @@ class TypeResolutionContext {
       StringLiteral: () => primitiveType('text'),
       TypedConstructor: constructor => Type.ofConstructorReference(constructor.type),
       UnaryExpression: unary => this.unaryExpressionType(unary),
-      ValueReference: reference => this.ofValueDeclaration(reference.target.ref),
+      ValueReference: reference => this.ofContextualValue(reference.target.ref, reference),
     })
   }
 
@@ -1117,7 +1120,15 @@ class TypeResolutionContext {
         ? primitiveType('color')
         : unresolvedType()
     }
-    return this.atMemberPath(this.ofValueDeclaration(target), expression.members)
+    return this.atMemberPath(this.ofContextualValue(target, expression), expression.members)
+  }
+
+  ofContextualValue(declaration: AST.ValueDeclaration | undefined, context: AST.Node): TaoType {
+    if (AST.isAuthLibraryDeclaration(declaration, 'Account')) {
+      const entity = Type.visibleDataEntities(context).find(candidate => candidate.singularName === 'Account')
+      return entity ? { kind: 'entity', entity } : unresolvedType()
+    }
+    return this.ofValueDeclaration(declaration)
   }
 
   ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {

@@ -253,6 +253,7 @@ type TaoTestFixtureValue =
 
 /** TaoTestFixtureCreate declares one row a `with <fixture>` clause creates before a check launches. */
 type TaoTestFixtureCreate = {
+  account?: string
   entity: string
   fields: Readonly<Record<string, TaoTestFixtureValue>>
   name: string
@@ -260,6 +261,8 @@ type TaoTestFixtureCreate = {
 
 /** TaoTestFixture declares the rows a check's effective fixture creates. */
 type TaoTestFixture = {
+  accounts: readonly { name: string; fields: Readonly<Record<string, TaoTestFixtureValue>> }[]
+  signedIn?: string
   creates: readonly TaoTestFixtureCreate[]
   name: string
 }
@@ -364,20 +367,30 @@ function compileDevice(device: AST.TestDeviceClause): TaoTestDevice {
  * Studio's own current limit, and a validated `with <fixture>` never reaches here with one.
  */
 function compileFixture(fixture: AST.FixtureDeclaration): TaoTestFixture {
-  const creates = fixture.block.entries.filter(AST.isFixtureCreateBinding)
+  const creates = fixture.block.entries.filter(entry =>
+    AST.isFixtureCreateBinding(entry) || AST.isFixtureCreateStatement(entry)
+  )
+  const signedIn = fixture.block.entries.find(AST.isFixtureSignedInClause)?.account.$refText
   return {
     name: fixture.name,
-    creates: creates.map(binding => {
+    accounts: fixture.block.entries.filter(AST.isFixtureAccountDeclaration).map(account => ({
+      name: account.name,
+      fields: Object.fromEntries(account.block.fields.map(field => [field.name, compileFixtureValue(field.value)])),
+    })),
+    ...(signedIn ? { signedIn } : {}),
+    creates: creates.map((binding, index) => {
+      const name = AST.isFixtureCreateBinding(binding) ? binding.name : `_Created${index + 1}`
       Assert(binding.through === undefined, 'validated test fixture has no through binding', {
-        binding: binding.name,
+        binding: name,
         fixture: fixture.name,
       })
       const entity = binding.entity.ref
-      Assert.defined(entity, 'validated fixture create binding references an entity', { binding: binding.name })
+      Assert.defined(entity, 'validated fixture create binding references an entity', { binding: name })
       return {
         entity: entity.singularName,
         fields: Object.fromEntries(binding.block.fields.map(field => [field.name, compileFixtureValue(field.value)])),
-        name: binding.name,
+        name,
+        ...(binding.account?.$refText ?? signedIn ? { account: binding.account?.$refText ?? signedIn } : {}),
       }
     }),
   }

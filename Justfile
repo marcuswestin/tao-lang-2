@@ -82,6 +82,11 @@ start-local-instantdb:
 stop-local-instantdb:
     {{ LOCAL_INSTANTDB_COMPOSE }} down
 
+# Run the local auth/data reference backend with an explicit compiler-emitted --policy file
+[group('Run')]
+auth-review-server *ARGS:
+    bun run packages/services/account-server/account-server-src/serve.ts {{ ARGS }}
+
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
 studio project="Apps/HNReader": _parser-gen
@@ -308,9 +313,9 @@ report-test-stats limit="20":
 finalize check='false' fresh='false' redraft='false':
     ./dev finalize {{ if check == "true" { "--check" } else { "" } }} {{ if fresh == "true" { "--fresh" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }}
 
-# Merge current main into this feature branch and nothing else; agents use ./agent unsandboxed merge-main when main writes paths the sandbox protects
-merge-main:
-    ./dev merge-main
+# Merge main; --stash saves/restores dirty work, --stash --keep-stashed retains it for selective recovery; use ./agent unsandboxed merge-main for protected paths
+merge-main *args:
+    ./dev merge-main {{ args }}
 
 # Switch this checkout to your own dev/* branch, creating it from main the first time
 [group('Mine')]

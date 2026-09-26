@@ -122,6 +122,11 @@ export class RuntimeCommand {
     })
   }
 
+  /** binding reads an explicitly captured execution context or authored slot. */
+  binding(name: string): Evaluable | undefined {
+    return this.fills[name]
+  }
+
   /** member evaluates one member of this command, preferring what this binding refined. */
   member(name: string): Evaluable | undefined {
     const reading = this.overrides[name] ?? this.declaration().members?.[name]

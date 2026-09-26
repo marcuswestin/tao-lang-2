@@ -53,7 +53,7 @@ export async function expectStarterReproducedFromItsPlan(directory: string): Pro
 
     const checkedIn = Repo.resolvePath(`Apps/Starters/${starter.directory}`)
     if (UPDATE_STARTERS) {
-      await FS.copyDirectory(generated, checkedIn)
+      await FS.synchronizeDirectoryFiles(generated, checkedIn)
     }
     Expect(await projectFilesUnder(generated)).toEqual(await projectFilesUnder(checkedIn))
     for (const relativePath of await projectFilesUnder(generated)) {

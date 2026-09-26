@@ -1,0 +1,53 @@
+// Authentication is an ordinary provider contract selected by the app's Auth slot.
+public
+type AuthProvider is { }
+
+public
+type SessionState is one of Restoring, SignedOut, Authenticating, ChallengeRequired, ReauthenticationRequired, SignedIn, Error
+
+public
+type AuthSession is {
+   State SessionState
+}
+
+// These exports are bound to the mounted app at each read by the compiler.
+public
+let Account = none
+
+public
+let Session is AuthSession = Session from ./Auth.ts
+
+public
+action SignIn() from ./Auth.ts
+
+public
+action SignOut() from ./Auth.ts
+
+public
+type LoginFlow is {
+   Step text
+   Email text
+   Password text
+   Code text
+   Registration boolean
+   Running boolean
+   Problem text
+   RetryAfter duration
+   SendCode action()
+   Verify action()
+   Resend action()
+   Submit action()
+   Cancel action()
+   Reset action()
+}
+
+public
+function SignInFlow(Method text default "Password") returns LoginFlow {
+   return SignInFlow(Method: Method) from ./AuthFlow.ts
+}
+
+public
+view SignInView(Flow LoginFlow?) from ./AuthViews.tsx
+
+public
+view AccountView() from ./AuthViews.tsx

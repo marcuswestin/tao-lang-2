@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen, ReadNetBinding, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { compileAccountBinding, needsAuthContext } from './auth-context'
 import { activeDataStorePlan, activeFixtureStores } from './data-store-context'
 import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
 import { configuredDeclarationOfValue } from './ExpressionsCompiler'
@@ -45,7 +46,13 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
   const configuration = crossModuleBase ? directAppConfiguration(app) : ASTUtils.effectiveAppConfiguration(app)
   const baseReference = crossModuleBase ? appDefinitionReference(crossModuleBase) : undefined
   const inheritedConfiguration = crossModuleBase ? ASTUtils.effectiveAppConfiguration(crossModuleBase) : undefined
-  const navigator = compileResolvedAppProperty(configuration.get('Navigator'), 'Navigator', baseReference)
+  const authNavigation = needsAuthContext(root) || needsAuthContext(app)
+  const navigator = compileResolvedAppProperty(
+    configuration.get('Navigator'),
+    'Navigator',
+    baseReference,
+    authNavigation,
+  )
   Assert.defined(navigator, 'validated app value has a Navigator')
   const name = compileResolvedAppProperty(
     configuration.get('Name'),
@@ -56,6 +63,11 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     configuration.get('Design'),
     'Design',
     inheritedConfiguration?.has('Design') ? baseReference : undefined,
+  )
+  const auth = compileResolvedAppProperty(
+    configuration.get('Auth'),
+    'Auth',
+    inheritedConfiguration?.has('Auth') ? baseReference : undefined,
   )
   const restoration = effectiveRestorationPolicy(app)
   const definition = { name: `_TaoAppDefinition_${app.name}` }
@@ -82,8 +94,13 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     ${gen.list(declaredAppActions, Compile.ActionDeclaration)}
     const ${gen.Name(definition)} = TR.Navigation.App({
       declaration: ${rootDeclaration},
+      ${auth ? gen`auth: () => ${auth},` : gen.noop()}
       name: ${name ? gen`${name}.evaluate().jsValue as string` : gen.jsLiteral(app.name)},
-      navigator: () => ${navigator},
+      navigator: ${
+    authNavigation
+      ? gen`(_TaoAuthScope?: TR.AuthScope) => { void _TaoAuthScope; return ${navigator} }`
+      : gen`() => ${navigator}`
+  },
       useSetup: () => {
         ${
     crossModuleBase
@@ -103,8 +120,12 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       : gen.noop()
   }
       ${options.readNet ? gen`readNet: () => ${gen.scopeName({ name: ReadNetBinding })},` : gen.noop()}
-      auxiliaries: () => ({
-        ${crossModuleBase ? gen`...${baseReference}.definition.auxiliaries(),` : gen.noop()}
+      auxiliaries: ${authNavigation ? gen`(_TaoAuthScope?: TR.AuthScope)` : gen`()`} => ({
+        ${
+    crossModuleBase
+      ? gen`...${baseReference}.definition.auxiliaries(${authNavigation ? gen`_TaoAuthScope` : gen.noop()}),`
+      : gen.noop()
+  }
         ${
     gen.list(auxiliaries, auxiliary =>
       gen`${gen.jsLiteral(auxiliary.name.slice(1))}: ${Compile.ConfiguredValue(auxiliary.value)},`)
@@ -113,7 +134,19 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     })
     function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
       ${gen.Name(definition)}.definition.useSetup?.()
-      ${datasources ? gen`TR.Data.UseAppDatasources(${gen.Name(definition)}.definition)` : gen.noop()}
+      ${
+    auth
+      ? gen`const _TaoAuthScope = TR.Auth.UseScope(${gen.Name(definition)}.definition.auth?.())
+      ${compileAccountBinding()}`
+      : gen.noop()
+  }
+      ${
+    datasources
+      ? auth
+        ? gen`TR.Auth.UseDatasources(_TaoAuthScope, ${gen.Name(definition)}.definition.datasources?.() ?? [])`
+        : gen`TR.Data.UseAppDatasources(${gen.Name(definition)}.definition)`
+      : gen.noop()
+  }
       ${
     options.localDataCatalog
       ? gen`TR.Data.UseConfigured(
@@ -122,12 +155,12 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
         )`
       : gen.noop()
   }
-      ${compileFixtureSeed(options)}
-      ${compileStudioSubject(options, app)}
+      ${compileFixtureSeed(options, auth !== undefined)}
+      ${compileStudioSubject(options, app, auth !== undefined)}
       ${fixtureSeedInScope(options) ? gen`if (!_TaoFixtureSeed.ready) return null` : gen.noop()}
-      return <TR.AppShell>
+      return ${auth ? gen`<TR.Auth.Host scope={_TaoAuthScope}>` : gen.noop()}<TR.AppShell>
         <TR.Navigation.AppHost app={${gen.Name(definition)}} />
-      </TR.AppShell>
+      </TR.AppShell>${auth ? gen`</TR.Auth.Host>` : gen.noop()}
     }
     ${compileStudioSubjects(options, app, definition)}
     ${gen.scopeName(app)} = ${gen.Name(definition)}
@@ -155,12 +188,14 @@ function fixtureSeedInScope(options: CodegenOptions): boolean {
  * `compileStudioSubject` below reuses this same result for its focused-view path rather than calling
  * the hook a second time, so a Studio-compiled app renders it exactly once either way.
  */
-function compileFixtureSeed(options: CodegenOptions): Compiled {
+function compileFixtureSeed(options: CodegenOptions, auth: boolean): Compiled {
   if (!fixtureSeedInScope(options)) {
     return gen.noop()
   }
   const plan = activeDataStorePlan()
-  return gen`const _TaoFixtureSeed = useTaoGeneratedStudioFixture(${plan ? compileStudioStores() : 'undefined'})`
+  return gen`const _TaoFixtureSeed = useTaoGeneratedStudioFixture(${plan ? compileStudioStores(auth) : 'undefined'}${
+    auth ? gen`, _TaoAuthScope` : gen.noop()
+  })`
 }
 
 /**
@@ -170,7 +205,7 @@ function compileFixtureSeed(options: CodegenOptions): Compiled {
  * chain returns `never` without narrowing afterwards, so the guard reads as `??` rather than an
  * `if`, which keeps the entry a defined factory for `TR.Studio.SubjectHost` below.
  */
-function compileStudioSubject(options: CodegenOptions, app: { name: string }): Compiled {
+function compileStudioSubject(options: CodegenOptions, app: { name: string }, auth: boolean): Compiled {
   if (!options.studio) {
     return gen.noop()
   }
@@ -186,7 +221,11 @@ function compileStudioSubject(options: CodegenOptions, app: { name: string }): C
           TR.Studio.Environment.Argument(value, _TaoFixtureSeed.handles),
         ]),
       )
-      return <TR.AppShell><TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} /></TR.AppShell>
+      return ${
+    auth ? gen`<TR.Auth.Host scope={_TaoAuthScope}>` : gen.noop()
+  }<TR.AppShell><TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} /></TR.AppShell>${
+    auth ? gen`</TR.Auth.Host>` : gen.noop()
+  }
     }
   `
 }
@@ -195,11 +234,14 @@ function compileStudioSubject(options: CodegenOptions, app: { name: string }): C
  * compileStudioStores lists every store a fixture may seed, including the device-local companion.
  * Passing the default catalog by name missed collections a `Data` slot moved elsewhere.
  */
-function compileStudioStores(): Compiled {
+function compileStudioStores(auth: boolean): Compiled {
   const plan = activeDataStorePlan()
   Assert.defined(plan, 'a fixture-seeding compile with a data catalog has a store plan')
   return gen`[${
-    gen.join(activeFixtureStores(), store => gen`${gen.scopeName({ name: store.binding })}`, { separator: ', ' })
+    gen.join(activeFixtureStores(), store =>
+      auth
+        ? gen`TR.Auth.Store(_TaoAuthScope, ${gen.scopeName({ name: store.binding })})`
+        : gen`${gen.scopeName({ name: store.binding })}`, { separator: ', ' })
   }]`
 }
 
@@ -401,21 +443,27 @@ function applyDirectConfigurationBlock(
 
 function compileResolvedAppProperty(
   property: ASTUtils.EffectiveAppProperty | undefined,
-  name: 'Name' | 'Navigator' | 'Design',
+  name: 'Name' | 'Navigator' | 'Design' | 'Auth',
   base: Compiled | undefined,
+  authNavigation = false,
 ): Compiled | undefined {
+  if (name === 'Auth' && property?.value && AST.isNoneLiteral(property.value)) {
+    return undefined
+  }
   let result = property?.value
     ? name === 'Design' && AST.isNoneLiteral(property.value)
       ? gen`undefined`
       : compileAppPropertySource(property.value)
     : base
-    ? inheritedAppProperty(base, name)
+    ? inheritedAppProperty(base, name, authNavigation)
     : undefined
   if (!result) {
     return undefined
   }
   for (const patch of property?.patches ?? []) {
-    if (name === 'Navigator') {
+    if (name === 'Auth') {
+      result = gen`TR.Auth.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
+    } else if (name === 'Navigator') {
       result = gen`TR.Navigation.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
     } else {
       Assert(false, `validated app ${name} cannot be patched`)
@@ -426,15 +474,16 @@ function compileResolvedAppProperty(
 
 function inheritedAppProperty(
   base: Compiled,
-  name: 'Name' | 'Navigator' | 'Design',
+  name: 'Name' | 'Navigator' | 'Design' | 'Auth',
+  authNavigation: boolean,
 ): Compiled {
   if (name === 'Name') {
     return gen`TR.Value(${base}.definition.name)`
   }
   if (name === 'Navigator') {
-    return gen`${base}.definition.navigator()`
+    return gen`${base}.definition.navigator(${authNavigation ? gen`_TaoAuthScope` : gen.noop()})`
   }
-  return gen`${base}.definition.design?.()`
+  return name === 'Auth' ? gen`${base}.definition.auth?.()` : gen`${base}.definition.design?.()`
 }
 
 /** PlannedDatasourceBinding is one datasource an app binds, with the store it fills. */

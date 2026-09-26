@@ -65,29 +65,29 @@ Describe('Tao formatter data declarations', () => {
     formats(
       `
         data Workspaces/Workspace{
-        Name text
-        CreatedAt time(default now)
-        Pinned yes / no
-        Documents(owned,ordered)
-        index CreatedAt
+        Name text,
+        CreatedAt time(default now),
+        Pinned yes / no,
+        Documents(owned,ordered),
+        index CreatedAt,
         order by CreatedAt desc}
-        data Documents/Document{Final yes /       Draft no(default Draft) Workspace Author(relation   Accounts)}
+        data Documents/Document{Final yes /       Draft no(default Draft), Workspace, Author Accounts}
       `,
       `
         data Workspaces / Workspace {
-           Name text
-           CreatedAt time (default now)
-           Pinned yes / no
-           Documents (owned, ordered)
+           Name text,
+           CreatedAt time (default now),
+           Pinned yes / no,
+           Documents (owned, ordered),
 
-           index CreatedAt
+           index CreatedAt,
            order by CreatedAt desc
         }
 
         data Documents / Document {
-           Final yes / Draft no (default Draft)
-           Workspace
-           Author (relation Accounts)
+           Final yes / Draft no (default Draft),
+           Workspace,
+           Author Accounts
         }
       `,
     ),
@@ -97,22 +97,22 @@ Describe('Tao formatter data declarations', () => {
     'groups local only with the other entity storage facts and formats a recovery-parsed module query',
     formats(
       `
-        data FocusSessions/FocusSession{Label text
-        index Label
-        order by Label
+        data FocusSessions/FocusSession{Label text,
+        index Label,
+        order by Label,
         local    only}
-        query FocusSessions as CurrentSession{limit 1}
+        query CurrentSession = FocusSessions with {limit 1}
       `,
       `
         data FocusSessions / FocusSession {
-           Label text
+           Label text,
 
-           index Label
-           order by Label
+           index Label,
+           order by Label,
            local only
         }
 
-        query FocusSessions as CurrentSession {
+        query CurrentSession = FocusSessions with {
            limit 1
         }
       `,
@@ -499,11 +499,11 @@ Describe('Tao formatter views and blocks', () => {
   Test(
     'formats current query and loop headers',
     formats(
-      `view Main(Workspace){render Col(){query Drafts from Workspace.Documents{where   is   Draft}\nloop Drafts/Document{Text(Document.Title)}}}`,
+      `view Main(Workspace){render Col(){query Drafts = Workspace.Documents with {where   is   Draft}\nloop Drafts/Document{Text(Document.Title)}}}`,
       `
         view Main(Workspace) {
            render Col() {
-              query Drafts from Workspace.Documents {
+              query Drafts = Workspace.Documents with {
                  where is Draft
               }
               loop Drafts / Document {
@@ -516,11 +516,11 @@ Describe('Tao formatter views and blocks', () => {
   Test(
     'formats query order and limit clauses',
     formats(
-      `view Main(Workspace){render Col(){query Drafts from Workspace.Documents{order   by   Ordering desc\nlimit   20}\nloop Drafts/Document{Text(Document.Title)}}}`,
+      `view Main(Workspace){render Col(){query Drafts = Workspace.Documents with {order   by   Ordering desc\nlimit   20}\nloop Drafts/Document{Text(Document.Title)}}}`,
       `
         view Main(Workspace) {
            render Col() {
-              query Drafts from Workspace.Documents {
+              query Drafts = Workspace.Documents with {
                  order by Ordering desc
                  limit 20
               }
@@ -534,12 +534,12 @@ Describe('Tao formatter views and blocks', () => {
   Test(
     'formats a query search clause',
     formats(
-      `view Main(){state Find=""\nrender Col(){query Documents as Found{search   Find\norder   by   Title}\nloop Found/Document{Text(Document.Title)}}}`,
+      `view Main(){state Find=""\nrender Col(){query Found = Documents with {search   Find\norder   by   Title}\nloop Found/Document{Text(Document.Title)}}}`,
       `
         view Main() {
            state Find = ""
            render Col() {
-              query Documents as Found {
+              query Found = Documents with {
                  search Find
                  order by Title
               }

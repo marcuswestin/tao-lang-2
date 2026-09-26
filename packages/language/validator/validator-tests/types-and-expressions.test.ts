@@ -63,7 +63,7 @@ Describe('validator: types and expressions', () => {
   Test(
     'accepts copied projected inputs and bulk data updates',
     accepts(`
-      data Documents / Document { Title text Body text Owner text CreatedAt time }
+      data Documents / Document { Title text, Body text, Owner text, CreatedAt time }
       type DocumentInput is Document { Title, Body }
       type DraftFields is { Title text, Body text }
       app EditorApp { view Main }
@@ -100,7 +100,7 @@ Describe('validator: types and expressions', () => {
   Test(
     'types the completeness members that required derives on rows and projections',
     accepts(`
-      data Documents / Document { Title text (required "Name this document") Body text }
+      data Documents / Document { Title text (required "Name this document"), Body text }
       type DocumentInput is Document { Title, Body }
       type BodyInput is Document without { Title }
       app EditorApp { view Main }
@@ -141,8 +141,8 @@ Describe('validator: types and expressions', () => {
     rejects(
       `
         data Documents / Document {
-          Problems text
-          Incomplete text
+          Problems text,
+          Incomplete text,
           Title text (required "Name it", required "Name it again")
         }
       `,
@@ -197,7 +197,7 @@ Describe('validator: types and expressions', () => {
   Test(
     'accepts a create from a projection that covers every field a create must supply',
     accepts(`
-      data Workspaces / Workspace { Name text (required "Name this workspace") Pinned yes / no }
+      data Workspaces / Workspace { Name text (required "Name this workspace"), Pinned yes / no }
       type WorkspaceInput is Workspace { Name }
       app EditorApp { view Main }
       view Main() {
@@ -213,8 +213,8 @@ Describe('validator: types and expressions', () => {
     'rejects a create from another entity, a to-many field, or a projection missing a needed field',
     rejects(
       `
-        data Workspaces / Workspace { Name text Motto text Documents (owned) }
-        data Documents / Document { Title text Workspace }
+        data Workspaces / Workspace { Name text, Motto text, Documents (owned) }
+        data Documents / Document { Title text, Workspace }
         type NameOnly is Workspace { Name }
         type WithDocuments is Workspace { Name, Motto, Documents }
         type TitleOnly is Document { Title }
@@ -265,7 +265,7 @@ Describe('validator: types and expressions', () => {
     'rejects incompatible copy targets and projected input widening',
     rejects(
       `
-        data Documents / Document { Title text Body text }
+        data Documents / Document { Title text, Body text }
         type DocumentInput is Document { Title, Body }
         type TitleInput is Document { Title }
         app EditorApp { view Main }
@@ -832,7 +832,7 @@ function caseScopeApp(body: string, declarations = ''): string {
     app ScopeApp { view Main }
     view Main() {
       ${declarations}
-      query Workspaces { }
+      query Workspaces = Workspaces with { }
       render Col() { ${body} }
     }
     ${stubContainer('Col')}

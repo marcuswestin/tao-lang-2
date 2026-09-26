@@ -3,6 +3,7 @@ import { AST, codeProjectRoot, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, Errors, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
+import { authPolicy } from './auth-policy'
 import { BridgeMetadata } from './bridge-metadata'
 import { withActionInstrumentation } from './codegen/app/action-control-flow'
 import {
@@ -67,6 +68,7 @@ type ImportTarget = {
 
 type DataCatalogPlan = {
   entities: readonly AST.EntityDataDeclaration[]
+  access: readonly AST.AccessDeclaration[]
   /** localOnly is whether any entity carries the `local only` storage fact, which adds a catalog. */
   localOnly: boolean
   /** localUserPaths are the files that reference the companion catalog's bindings. */
@@ -304,6 +306,14 @@ function compileValidatedInput(
       debug: options.debug === true,
     })
   )
+
+  if (dataCatalog?.access.length) {
+    compiledFiles.push({
+      relativePath: 'TaoDataPolicy.json',
+      sourcePath: entryPath,
+      code: JSON.stringify(authPolicy(dataCatalog.entities, dataCatalog.access), null, 2),
+    })
+  }
 
   const studioManifest = studio
     ? compileStudioPreviewManifest(sourceFiles, selectedAppName, context.sourceRoot)
@@ -559,6 +569,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
                     ? undefined
                     : RuntimeGen.ConfigurationTypes(file.ast),
                   dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+                  dataAccess: ownsDataCatalog ? dataCatalog.access : [],
                   emitDataCatalog: ownsDataCatalog,
                   importLines,
                   localDataCatalog: usesLocalDataCatalog,
@@ -937,6 +948,7 @@ function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string):
   )
   return {
     entities,
+    access: sourceFiles.flatMap(file => file.ast.statements.filter(AST.isAccessDeclaration)),
     localOnly: entities.some(Type.dataEntityIsLocalOnly),
     localUserPaths,
     ownerPath,
@@ -963,7 +975,10 @@ function fileUsesDataCatalog(file: ParsedFile): boolean {
   if (AST.appValueDeclarationsInFile(file.ast).some(app => ASTUtils.appBoundDatasources(app).length > 0)) {
     return true
   }
-  return AST.streamAllContents(file.ast).some(node => AST.isEntityQueryDeclaration(node) || AST.isCreateStatement(node))
+  return AST.streamAllContents(file.ast).some(node =>
+    AST.isEntityQueryDeclaration(node) || AST.isCreateStatement(node)
+    || (AST.isValueReference(node) && AST.isAuthLibraryDeclaration(node.target.ref, 'Account'))
+  )
 }
 
 function addResolvedImport(imports: ResolvedImports, sourcePath: string, binding: string): void {

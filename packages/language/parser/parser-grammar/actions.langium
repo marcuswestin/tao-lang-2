@@ -81,10 +81,20 @@ DoStatement:
 // declares; `saved` and `rejected` are validated words rather than keywords, so both stay usable as
 // names elsewhere.
 WhenDoStatement:
-    'when' invocation=DoStatement '{' outcomes+=WhenDoOutcome+ '}';
+    'when' invocation=DoStatement ('{' outcomes+=WhenDoOutcome+ '}'
+      | outcomes+=BarWhenDoOutcome* otherwise=WhenDoOtherwise);
 
 WhenDoOutcome:
-    case=SubjectCaseName '->' payload=CasePayload? block=ActionBlock;
+    case=SubjectCaseName '->' payload=CasePayload? block=(ActionBlock | AtomicActionBlock);
+
+BarWhenDoOutcome infers WhenDoOutcome:
+    barSyntax?='|' case=SubjectCaseName '->' payload=CasePayload? block=(ActionBlock | AtomicActionBlock);
+
+WhenDoOtherwise:
+    barSyntax?='|' 'otherwise' '->' block=(ActionBlock | AtomicActionBlock);
+
+AtomicActionBlock infers ActionBlock:
+    statements+=ActionStatement;
 
 ActionTargetExpression:
     ActionExpression | NamedActionTarget;

@@ -1,5 +1,6 @@
 import Formatter from '@formatter'
 import type { AST } from '@parser'
+import { migrateRelationTraits } from './data-actions'
 import { moveFlatCatalogIntoBlocks, renameLegacyVisualHeads } from './design-actions'
 import { canonicalizeTopLevel } from './files-actions'
 import {
@@ -52,6 +53,7 @@ async function moveRendersLast(document: AST.Document): Promise<string | undefin
  * Each later fix reads the reparsed result of the one before it.
  */
 const sourceFixes: readonly ((document: AST.Document) => string | undefined)[] = [
+  migrateRelationTraits,
   renameLegacyVisualHeads,
   moveFlatCatalogIntoBlocks,
   moveViewRendersLast,

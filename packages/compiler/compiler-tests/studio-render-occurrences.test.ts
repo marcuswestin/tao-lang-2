@@ -439,18 +439,18 @@ Describe('compiler: Studio render occurrences', () => {
 
         workspace
         data Workspaces / Workspace {
-          Name text (required "Use a realistic workspace name.")
-          Summary text?
-          CreatedAt time (default now)
-          Pinned yes / no
+          Name text (required "Use a realistic workspace name."),
+          Summary text?,
+          CreatedAt time (default now),
+          Pinned yes / no,
           Documents (owned)
         }
 
         workspace
         data Documents / Document {
-          Title text (default "Untitled")
-          Score number (default 0)
-          Public yes / Private no (default Public)
+          Title text (default "Untitled"),
+          Score number (default 0),
+          Public yes / Private no (default Public),
           Workspace
         }
 

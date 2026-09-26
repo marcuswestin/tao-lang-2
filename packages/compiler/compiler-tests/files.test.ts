@@ -45,7 +45,7 @@ Describe('compiler: files and packages', () => {
       }
     `)
 
-    Expect(compiled.files).toHaveLength(2)
+    Expect(compiled.files.filter(file => !file.relativePath.startsWith('modules/'))).toHaveLength(2)
     Expect(compiled.files[0]?.relativePath).toBe('App.tsx')
     Expect(compiled.files[1]?.relativePath).toBe('App.injection-1.tsx')
     Expect(compiled.files[0]?.code).toContain("import __tao_injection_1__ from './App.injection-1'")

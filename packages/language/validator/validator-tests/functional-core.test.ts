@@ -238,7 +238,7 @@ Describe('validator: functional core', () => {
     accepts(`
       data Documents / Document { Final yes / Draft no }
       view Main() {
-        query Documents { }
+        query Documents = Documents with { }
         render Stack(){
           guard Documents { loading -> { Text("Loading") } }
           if Documents is refreshing { Text("Refreshing") }
@@ -273,7 +273,7 @@ Describe('validator: functional core', () => {
       }
       data Documents / Document { Title text }
       view Main(Document) {
-        query Documents as Recent { }
+        query Recent = Documents with { }
         render Stack(){
           guard Document
           guard Recent

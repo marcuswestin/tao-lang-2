@@ -491,7 +491,7 @@ function typePropertyOwner(property: AST.TypeProperty): AST.TypeDefinition | und
 }
 
 function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: ValidationContext): void {
-  let current = Type.ofValueDeclaration(memberAccess.target.ref)
+  let current = Type.ofValueDeclaration(memberAccess.target.ref, memberAccess)
   if (current.kind === 'unresolved') {
     return
   }

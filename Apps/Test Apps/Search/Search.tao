@@ -11,15 +11,15 @@ app SearchApp {
 }
 
 data Documents / Document {
-   Title text (search, title)
-   Body text (default "", search)
-   Owner text (default "")
+   Title text (search, title),
+   Body text (default "", search),
+   Owner text (default ""),
 }
 
 scene MainView() {
    Title "Search"
    state Find = ""
-   query Documents as Found {
+   query Found = Documents with {
       search Find
       order by Title
    }

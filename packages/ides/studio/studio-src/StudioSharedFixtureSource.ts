@@ -48,7 +48,7 @@ export const StudioSharedFixtureSource = {
       source = request.source
       let document = await parseSource(source)
       const fixture = requireSketchesFixture(document)
-      promotions = orderPromotions(canonical, new Set(fixture.block.entries.map(entry => entry.name)))
+      promotions = orderPromotions(canonical, new Set(AST.fixtureValueDeclarations(fixture).map(entry => entry.name)))
       source = await addMissingImports(source, document, imports)
       document = await parseSource(source)
       source = await addMissingPromotions(source, requireSketchesFixture(document), promotions)
@@ -222,7 +222,7 @@ async function addMissingPromotions(
 ): Promise<string> {
   const additions: StudioSharedFixturePromotion[] = []
   for (const promotion of promotions) {
-    const existing = fixture.block.entries.find(entry => entry.name === promotion.name)
+    const existing = AST.fixtureValueDeclarations(fixture).find(entry => entry.name === promotion.name)
     if (existing === undefined) {
       additions.push(promotion)
       continue

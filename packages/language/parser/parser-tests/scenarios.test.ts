@@ -6,7 +6,7 @@ Describe('parser: fixtures and scenarios', () => {
   Test('parses and links grouped app-running scenarios with clause overrides', async () => {
     const result = await testParseCode(`
       data Households / Household { Name text }
-      data Recipes / Recipe { Household Title text Servings number }
+      data Recipes / Recipe { Household, Title text, Servings number }
       action StartKitchen(Sam item) { }
       view Main() { }
       app Skillet { view Main }

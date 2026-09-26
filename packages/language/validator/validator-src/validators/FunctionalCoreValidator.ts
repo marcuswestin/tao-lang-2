@@ -40,7 +40,7 @@ const messages = {
   invalidCasePayload: "Only an 'error -> Name' case may introduce an error-message value.",
   listElement: 'List elements must have compatible types.',
   renderControlPlacement: '`when`, `guard`, `if`, and `for` rendering must be nested inside a render child block.',
-  subjectCases: '`when` and `guard` subjects must be text, list, query, entity, or boolean values.',
+  subjectCases: '`when` and `guard` subjects must be text, list, query, entity, enum, or boolean values.',
   unaryBoolean: "Unary 'not' requires a boolean value.",
   unaryNumber: "Unary '-' requires a number value.",
   dimensional: (left: string, operator: string, right: string) =>
@@ -68,7 +68,7 @@ export const FunctionalCoreValidator = {
     },
     [AST.CaseTestExpression.$type]: validateCaseTestExpression,
     [AST.WhenExpression.$type]: (expression, ctx) => {
-      validateSubjectCases(expression.subject, expression.branches, ctx)
+      validateWhenBranches(expression.subject, expression.branches, ctx)
       validateCompatibleBranches(AST.whenExpressionOutcomes(expression).values, ctx)
       validateCompactWhen(expression, ctx)
     },
@@ -81,7 +81,7 @@ export const FunctionalCoreValidator = {
     },
     [AST.ListLiteral.$type]: validateList,
     [AST.WhenRenderStatement.$type]: (statement, ctx) => {
-      validateSubjectCases(statement.subject, statement.branches, ctx)
+      validateWhenBranches(statement.subject, statement.branches, ctx)
       validateRenderControlPlacement(statement, ctx)
     },
     [AST.GuardRenderStatement.$type]: (statement, ctx) => {
@@ -189,7 +189,7 @@ function isSupportedInterpolationType(type: ASTUtils.TaoType): boolean {
  * and the mandatory label before the second branch is `not` or the subject's own no-pole alias.
  */
 function validateCompactWhen(expression: AST.WhenExpression, ctx: ValidationContext): void {
-  if (!expression.positive) {
+  if (!expression.positive || !expression.subject) {
     return
   }
   const subject = Type.ofExpression(expression.subject)
@@ -269,7 +269,7 @@ function validateCaseTestExpression(expression: AST.CaseTestExpression, ctx: Val
     if (category === 'unresolved') {
       return
     }
-    if (!allowedCases(category).has(expression.builtinCase)) {
+    if (!allowedCases(category).has(AST.canonicalSubjectCase(expression.builtinCase))) {
       ctx.error(
         expression.value,
         expression.builtinCase === 'empty'
@@ -328,6 +328,22 @@ function validateCheck(statement: AST.CheckStatement, ctx: ValidationContext): v
   }
 }
 
+function validateWhenBranches(
+  subject: AST.Expression | undefined,
+  branches: readonly (AST.WhenBranch | AST.WhenRenderBranch)[],
+  ctx: ValidationContext,
+): void {
+  if (subject) {
+    validateSubjectCases(subject, branches, ctx)
+    return
+  }
+  for (const branch of branches) {
+    if (branch.condition) {
+      validateIfCondition(branch.condition, ctx)
+    }
+  }
+}
+
 function validateSubjectCases(
   subject: AST.Expression,
   branches: readonly SubjectCaseBranch[],
@@ -340,14 +356,21 @@ function validateSubjectCases(
   if (category === 'unsupported') {
     ctx.error(subject, messages.subjectCases)
   }
-  const allowed = allowedCases(category)
+  const subjectType = Type.ofExpression(subject)
+  const allowed = subjectType.kind === 'enum'
+    ? new Set(AST.caseSetCasesOf(subjectType.declaration).map(AST.caseSetCaseName))
+    : allowedCases(category)
   const seen = new Set<string>()
   for (const branch of branches) {
-    if (seen.has(branch.case)) {
+    if (branch.case === undefined) {
+      continue
+    }
+    const name = AST.canonicalSubjectCase(branch.case)
+    if (seen.has(name)) {
       ctx.error(branch, messages.duplicateCase(branch.case))
     }
-    seen.add(branch.case)
-    if (!allowed.has(branch.case)) {
+    seen.add(name)
+    if (!allowed.has(name)) {
       ctx.error(branch, messages.invalidCase(branch.case, subjectCaseLabel(category)))
     }
     if ('payload' in branch && branch.payload && branch.case !== 'error') {
@@ -430,7 +453,7 @@ function projectGuardDefaults(
   return byProject.get(projectRootOf(statement)) ?? [statement]
 }
 
-type SubjectCaseCategory = 'boolean' | 'entity' | 'list' | 'query' | 'text' | 'unresolved' | 'unsupported'
+type SubjectCaseCategory = 'enum' | 'boolean' | 'entity' | 'list' | 'query' | 'text' | 'unresolved' | 'unsupported'
 
 function subjectCaseCategory(subject: AST.Expression): SubjectCaseCategory {
   if (
@@ -446,13 +469,14 @@ function subjectCaseCategory(subject: AST.Expression): SubjectCaseCategory {
     list: () => 'list',
     item: () => 'unsupported',
     entity: () => 'entity',
-    enum: () => 'unsupported',
+    enum: () => 'enum',
     union: () => 'unsupported',
   })
 }
 
 function allowedCases(category: SubjectCaseCategory): ReadonlySet<string> {
   return Switch(category, {
+    enum: () => new Set<string>(),
     boolean: () => new Set(['true', 'false']),
     entity: () => new Set(['loading', 'missing', 'unauthorized', 'error']),
     list: () => new Set(['empty']),

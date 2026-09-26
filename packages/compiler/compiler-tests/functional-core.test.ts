@@ -48,7 +48,7 @@ Describe('compiler: functional core', () => {
       view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
     `)
 
-    Expect(compiled.files).toHaveLength(3)
+    Expect(compiled.files.filter(file => !file.relativePath.startsWith('modules/'))).toHaveLength(3)
     Expect(compiled.files[0]?.code).toContain('TR.WhenCase(')
     Expect(compiled.files[0]?.code).toContain('TR.WhenCaseRender(')
     Expect(compiled.files[0]?.code).toContain('if (await TR.GuardAction(')
@@ -86,7 +86,7 @@ Describe('compiler: functional core', () => {
       view Main() {
         state Result = Confirmed
         state Ready = true
-        query Documents { }
+        query Documents = Documents with { }
         action Close() {
           if Result is Confirmed { toggle Ready }
         }
@@ -129,7 +129,7 @@ Describe('compiler: functional core', () => {
       }
       data Documents / Document { Title text }
       view Main() {
-        query Documents { }
+        query Documents = Documents with { }
         render Stack() {
           guard Documents
           Text("Ready")

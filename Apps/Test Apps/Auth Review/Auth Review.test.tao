@@ -1,0 +1,123 @@
+use AuthReview, Notes from ./
+
+test "Auth review" {
+   test "reports cancellation from the presented sign-in action" {
+      run AuthReview
+      press #presentSignIn
+      expect text "Sign in"
+      press "Cancel"
+      expect text "Presented sign in cancelled"
+      expect missing text "Signed in"
+   }
+   test "completes the presented sign-in action" {
+      run AuthReview
+      press #presentSignIn
+      enter "alice@example.com" into label "Email"
+      press "Send code"
+      enter "123456" into label "Code"
+      press "Verify"
+      expect text "Signed in"
+   }
+   test "opens signed out and keeps custom sign-in input local" {
+      run AuthReview
+
+      expect text "Sign in to your notes"
+      enter "alice@example.com" into #email
+      expect #email input value "alice@example.com"
+      expect missing text "Signed in"
+   }
+   test "signs in with the headless action and signs out" {
+      run AuthReview
+      enter "alice@example.com" into #email
+      enter "test-password" into #password
+      press #submitSignIn
+      expect text "Signed in"
+      press #signOut
+      expect text "Sign in to your notes"
+      expect missing text "Signed in"
+   }
+   test "offers supplied sign-in UI" {
+      run AuthReview
+      press #toggleSignIn
+      expect text "Sign in"
+   }
+   test "retries a rejected code in custom UI" {
+      run AuthReview
+      press #toggleMethod
+      enter "alice@example.com" into #codeEmail
+      press #sendCode
+      expect text "Enter your code"
+      expect missing text "Signed in"
+      enter "wrong" into #code
+      press #verifyCode
+      expect text "The code was not accepted. Try again."
+      enter "123456" into #code
+      press #verifyCode
+      expect text "Signed in"
+   }
+   test "cancels a pending email challenge" {
+      run AuthReview
+      press #toggleMethod
+      enter "alice@example.com" into #codeEmail
+      press #sendCode
+      press #cancelCode
+      expect text "Sign in cancelled"
+      expect missing text "Signed in"
+   }
+   test "completes the same email flow through supplied UI" {
+      run AuthReview
+      press #toggleMethod
+      press #toggleSignIn
+      enter "alice@example.com" into label "Email"
+      press "Send code"
+      enter "123456" into label "Code"
+      press "Verify"
+      expect text "Signed in"
+   }
+}
+
+fixture AliceNotes {
+   account Alice {
+      DisplayName: "Alice"
+   }
+   account Bob {
+      DisplayName: "Bob"
+   }
+   signed in as Alice
+   create Note {
+      Owner: Alice,
+      Body: "Alice private note"
+   }
+   create Note {
+      Owner: Bob,
+      Body: "Bob private note"
+   } for Bob
+}
+
+test "Account data" with AliceNotes {
+   test "keeps profile edits local until submission" {
+      run AuthReview
+      enter "Alicia" into label "Display name"
+      expect text "Hello Alice"
+      expect missing text "Hello Alicia"
+      press "Save profile"
+      expect text "Hello Alicia"
+   }
+   test "loads the signed-in profile and only its linked notes" {
+      run AuthReview
+
+      expect text "Hello Alice"
+      expect text "Alice private note"
+      expect missing text "Bob private note"
+   }
+   test "creates a note with the bound account and clears it on sign-out" {
+      run AuthReview
+      enter "New private note" into #newNote
+      press #addNote
+      expect text "New private note"
+      press #signOut
+      expect missing text "New private note"
+      expect missing text "Alice private note"
+      expect text "Sign in to your notes"
+   }
+}

@@ -3,41 +3,41 @@ workspace
 data Workspaces / Workspace { // the plural collection, then the singular entity it stores
    // `title` names a workspace to a person; `required` marks it unfinished until it has a name,
    // without ever blocking a write.
-   Name text (required "Name this workspace", title)
+   Name text (required "Name this workspace", title),
    // Modifiers take values: `now` is a runtime default sampled separately for each create.
-   CreatedAt time (default now)
-   Pinned yes / no // without an explicit default, a yes/no field defaults to no
-   Documents (owned) // deleting this owner also deletes its Documents
+   CreatedAt time (default now),
+   Pinned yes / no, // without an explicit default, a yes/no field defaults to no
+   Documents (owned), // deleting this owner also deletes its Documents
 
-   index CreatedAt
-   order by CreatedAt
+   index CreatedAt,
+   order by CreatedAt,
 }
 
 workspace
 data Documents / Document {
-   Title text (required "Name this document", search, title) // `search`: a query's `search` reads it
-   Body text (default "", search)
-   Final yes / Draft no // an optional no-case alias name
-   Public yes / Private no (default Public) // an explicit default may select either case
-   CreatedAt time (default now)
-   Workspace
-   Paragraphs (owned)
+   Title text (required "Name this document", search, title), // `search`: a query's `search` reads it
+   Body text (default "", search),
+   Final yes / Draft no, // an optional no-case alias name
+   Public yes / Private no (default Public), // an explicit default may select either case
+   CreatedAt time (default now),
+   Workspace,
+   Paragraphs (owned),
 
-   index CreatedAt
-   order by CreatedAt
+   index CreatedAt,
+   order by CreatedAt,
 
-   commands Finish, Duplicate
-   commands hide Delete
+   commands { Finish, Duplicate },
+   commands hide { Delete },
 }
 
 workspace
 data Paragraphs / Paragraph {
-   Text text
-   Ordering number
-   Document
+   Text text,
+   Ordering number,
+   Document,
 
-   index Ordering
-   order by Ordering
+   index Ordering,
+   order by Ordering,
 }
 
 // A focused writing session. `local only` is an entity-level storage fact, beside `index` and
@@ -46,11 +46,11 @@ data Paragraphs / Paragraph {
 // it survive navigation and relaunch, and lets each consumer query it locally.
 workspace
 data FocusSessions / FocusSession {
-   EndsAt time // absolute, so a running session survives relaunch correctly
-   PausedAt time (default now) // read only while paused; resuming re-anchors EndsAt from it
-   Paused yes / Running no
+   EndsAt time, // absolute, so a running session survives relaunch correctly
+   PausedAt time (default now), // read only while paused; resuming re-anchors EndsAt from it
+   Paused yes / Running no,
 
-   local only
+   local only,
 }
 
 // Entity commands live with the entity policy they participate in, so the data package never

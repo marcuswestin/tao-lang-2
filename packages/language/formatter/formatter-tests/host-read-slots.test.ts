@@ -55,13 +55,13 @@ Describe('formatter: host-read slots and commands', () => {
     'formats a command head as a view`s, and its members and invocation one to a line',
     formats(
       `
-        data Documents / Document { Title text Final yes / Draft no }
+        data Documents / Document { Title text, Final yes / Draft no }
         package command Finish( Document ){Title "Finish document" Enabled Document.Final is Draft do -> { update Document { Final } }}
         command Archive(Paper   Document,Count number default 1){Title "Archive" do -> { update Paper { Final } }}
       `,
       `
         data Documents / Document {
-           Title text
+           Title text,
            Final yes / Draft no
         }
 
