@@ -28,6 +28,7 @@ export type ReactNativeRuntime = {
   RefreshControl?: any
   FlatList?: any
   Platform?: { OS: string }
+  PlatformColor?: (...names: string[]) => unknown
   Pressable: React.ComponentType<any>
   ScrollView: React.ComponentType<any>
   Switch: React.ComponentType<any>

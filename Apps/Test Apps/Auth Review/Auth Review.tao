@@ -1,4 +1,5 @@
 use Account, AccountView, LoginFlow, Session, SignIn, SignInFlow, SignInView, SignOut from @tao/auth
+use Clerk from @tao/auth/clerk
 use LocalAuth from @tao/auth/local
 use TestAuth from @tao/auth/testing
 use Memory from @tao/data/providers/memory
@@ -29,6 +30,14 @@ app AuthReviewLocal = AuthReview with {
          Me,
          Me.Notes
 }  }  }
+
+// Configure a Clerk development instance and a trusted gateway before running this variant.
+app AuthReviewClerk = AuthReviewLocal with {
+   Auth Clerk {
+      PublishableKey "pk_test_REPLACE_WITH_YOUR_KEY"
+      Endpoint "http://127.0.0.1:4738"
+      Resource "auth-review"
+}  }
 
 let Me = Account
 

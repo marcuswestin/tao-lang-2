@@ -2,6 +2,7 @@ import { AppiumNoSuchElementError } from '@appium-driver'
 import type { HostAction, HostObservation, HostRevision, HostSession } from '@host-control'
 import { expect, test } from '@playwright/test'
 import { Errors, FS, Repo } from '@shared'
+import { assertNativeInputValue, enterNativeInput } from '../AppiumNativeInputs'
 import {
   type AppiumElement,
   type AppiumLease,
@@ -875,3 +876,75 @@ class Deferred {
     this.#resolve()
   }
 }
+
+test('native back identifies the navigation bar button even when the previous title labels it', async () => {
+  const client = new FakeClient('native-back')
+  const session = await open(appiumController(client, new FakeLeases(), simulator('SIM-NATIVE-BACK')))
+  try {
+    const observation = await session.observe({
+      expectedRevision: revision,
+      target: { kind: 'accessibility', name: 'Back', role: 'navigation-back' },
+    })
+    expect(observation.visible).toBe(true)
+    expect(client.sessions[0]?.locators).toEqual([
+      {
+        using: '-ios class chain',
+        value: '**/XCUIElementTypeNavigationBar[`visible == true`]/XCUIElementTypeButton[1]',
+      },
+    ])
+  } finally {
+    await session.close(session.descriptor().lease)
+  }
+})
+
+test('tagged input entry and value assertions use its editable child, never the empty wrapper', async () => {
+  const client = new FakeClient('editable-child')
+  const remote = client.sessions[0]!
+  const wrapper = new FakeElement(remote, 'wrapper', '')
+  const input = new FakeElement(remote, 'editable', '')
+  let value = ''
+  const typedTargets: string[] = []
+  input.getText = async () => value
+  input.sendKeys = async text => {
+    value = text
+    typedTargets.push(input.id)
+  }
+  wrapper.sendKeys = async () => {
+    Errors.throwUnexpected('The input wrapper is not editable.')
+  }
+  remote.findElement = async locator => {
+    remote.locators.push(locator)
+    return locator.using === 'accessibility id' ? wrapper : input
+  }
+  remote.findElementFrom = async (scope, locator) => {
+    expect(scope.id).toBe('wrapper')
+    remote.locators.push(locator)
+    return input
+  }
+  const session = await open(appiumController(client, new FakeLeases(), simulator('SIM-EDITABLE')))
+  try {
+    await enterNativeInput(session, 'tag', 'nativeDraft', 'Keep this draft', [])
+    await assertNativeInputValue(session, 'tag', 'nativeDraft', 'Keep this draft', [], 'Native Navigation.test.tao')
+    await assertNativeInputValue(session, 'label', 'Note draft', 'Keep this draft', [], 'Native Navigation.test.tao')
+    expect(typedTargets).toEqual(['editable'])
+    expect(remote.locators).toEqual([
+      { using: 'accessibility id', value: 'nativeDraft' },
+      {
+        using: '-ios predicate string',
+        value: 'type IN {"XCUIElementTypeTextField", "XCUIElementTypeSecureTextField", "XCUIElementTypeTextView"}',
+      },
+      { using: 'accessibility id', value: 'nativeDraft' },
+      {
+        using: '-ios predicate string',
+        value: 'type IN {"XCUIElementTypeTextField", "XCUIElementTypeSecureTextField", "XCUIElementTypeTextView"}',
+      },
+      {
+        using: '-ios predicate string',
+        value:
+          'type IN {"XCUIElementTypeTextField", "XCUIElementTypeSecureTextField", "XCUIElementTypeTextView"} AND label == "Note draft"',
+      },
+    ])
+  } finally {
+    await session.close(session.descriptor().lease)
+  }
+})

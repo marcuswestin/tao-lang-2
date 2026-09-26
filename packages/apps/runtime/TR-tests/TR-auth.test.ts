@@ -386,6 +386,30 @@ Describe('mounted app authentication', () => {
     harness.scope.dispose()
   })
 
+  Test('observes provider account transitions through a signed-out interval', async () => {
+    const harness = authHarness({ restore: async () => alice })
+    await harness.scope.restore()
+    const contexts: TR.DataProviderContext[] = []
+    const store = bind(harness.scope, contexts)
+    const previous = store.entity('Account', 'account-a')
+    harness.emit({ state: 'SignedOut' })
+    Expect(harness.scope.session.identity).toBeUndefined()
+    Expect(TR.Data.EntityAvailability(previous)?.status).not.toBe('available')
+    harness.emit(bob)
+    Expect(harness.scope.session.identity?.accountId).toBe('account-b')
+    Expect(harness.stopped()).toBe(0)
+    harness.scope.dispose()
+    Expect(harness.stopped()).toBe(1)
+  })
+
+  Test('observes provider sign-in after an initially signed-out restore', async () => {
+    const harness = authHarness()
+    await harness.scope.restore()
+    harness.emit(alice)
+    Expect(harness.scope.session.identity?.accountId).toBe('account-a')
+    harness.scope.dispose()
+  })
+
   Test('rejects captured subscription callbacks after logout and disposes the live subscription once', async () => {
     const harness = authHarness({ restore: async () => alice })
     await harness.scope.restore()
@@ -488,7 +512,7 @@ Describe('mounted app authentication', () => {
     harness.scope.dispose()
   })
 
-  Test('releases a synchronous subscription that invalidates the session during setup', async () => {
+  Test('retains synchronous signed-out notifications until explicit disposal', async () => {
     let stops = 0
     const harness = authHarness({
       restore: async () => alice,
@@ -501,7 +525,7 @@ Describe('mounted app authentication', () => {
     })
     await harness.scope.restore()
     Expect(harness.scope.session.state).toBe('SignedOut')
-    Expect(stops).toBe(1)
+    Expect(stops).toBe(0)
     harness.scope.dispose()
     Expect(stops).toBe(1)
   })

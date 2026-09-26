@@ -19,8 +19,21 @@ fi
 export DEVENV_TUI=false
 devenv shell --no-tui ./agent setup
 if [ "${SHELL##*/}" = zsh ]; then
+  # System zshrc runs compinit before our zshrc can restore the user's ZDOTDIR.
+  # Keep its dump beside a startup link in the checkout's disposable cache, not in source.
+  shell_cache="$repository/.artifacts/cache/dev-shell/zsh"
+  shell_startup="$repository/packages/cli/dev-cli/dev-cli-src/shell/.zshrc"
+  mkdir -p "$shell_cache"
+  if [ "$(readlink "$shell_cache/.zshrc" 2>/dev/null || true)" != "$shell_startup" ]; then
+    # Publish atomically so simultaneous shell launches never see a missing startup file.
+    shell_link="$shell_cache/.zshrc.$$"
+    trap 'rm -f "$shell_link"' 0
+    ln -s "$shell_startup" "$shell_link"
+    mv -f "$shell_link" "$shell_cache/.zshrc"
+    trap - 0
+  fi
   export TAO_ORIGINAL_ZDOTDIR="${ZDOTDIR:-$HOME}"
-  export ZDOTDIR="$repository/packages/cli/dev-cli/dev-cli-src/shell"
+  export ZDOTDIR="$shell_cache"
   exec devenv shell --no-tui -- zsh -i
 fi
 exec devenv shell --no-tui

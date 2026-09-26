@@ -5,9 +5,10 @@ import {
   appiumFault,
   cleanupAppiumNativeHostProof,
   parseAndroidAvdName,
+  requireNativeNavigationHosts,
   shouldReleaseAppiumTargetLease,
 } from '../AppiumNativeHostProofCommand'
-import type { HostJourney } from '../journey/HostJourney'
+import { type HostJourney, runHostJourney } from '../journey/HostJourney'
 
 test("escapes Android control query separators for adb's device-side shell parse", () => {
   expect(androidShellUrl('taohost://control?runId=one&advanceMs=1000')).toBe(
@@ -122,4 +123,93 @@ test('retains a target lease when driver cleanup was ambiguous', async () => {
   } finally {
     await FS.remove(artifactRoot)
   }
+})
+
+test('requires actual native-host receipts before and after the authored navigation journey', () => {
+  const authored = { kind: 'press' as const, selector: 'label' as const, source: source(10), text: 'Library' }
+  const journey: HostJourney = {
+    version: 1,
+    sourcePath: 'Native Navigation.test.tao',
+    check: {
+      name: 'switch tabs',
+      source: source(1),
+      run: { appName: 'NativeNavigation', appSourcePath: 'Native Navigation.tao', source: source(1) },
+      steps: [authored],
+    },
+  }
+  const guarded = requireNativeNavigationHosts(journey)
+  expect(guarded.check.steps).toEqual([
+    expect.objectContaining({ kind: 'expect', missing: false, text: 'Native navigation host: tabs and stack' }),
+    authored,
+    expect.objectContaining({ kind: 'expect', missing: false, text: 'Native navigation host: tabs and stack' }),
+  ])
+  expect(journey.check.steps).toEqual([authored])
+  const hnreader = requireNativeNavigationHosts(journey, 'hnreader')
+  expect(hnreader.check.steps).toEqual([
+    expect.objectContaining({ kind: 'expect', missing: false, text: 'Native navigation host: stack' }),
+    authored,
+    expect.objectContaining({ kind: 'expect', missing: false, text: 'Native navigation host: stack' }),
+  ])
+})
+
+for (const fallbackAt of ['before relaunch', 'after relaunch'] as const) {
+  test(`native receipts stop on fallback ${fallbackAt} before a new lifetime can hide it`, async () => {
+    const journey: HostJourney = {
+      version: 1,
+      sourcePath: 'HNReader.test.tao',
+      check: {
+        name: 'restores history',
+        source: source(1),
+        run: { appName: 'HNReaderStub', appSourcePath: 'HNReader.tao', source: source(1) },
+        steps: [
+          { kind: 'press', selector: 'label', text: 'Before relaunch', source: source(10) },
+          { kind: 'relaunch', fresh: false, source: source(11) },
+          { kind: 'press', selector: 'label', text: 'After relaunch', source: source(12) },
+        ],
+      },
+    }
+    const operations: string[] = []
+    let native = true
+    await expect(runHostJourney(requireNativeNavigationHosts(journey, 'hnreader'), {
+      capabilities: ['runApplication', 'assertText', 'press', 'relaunch'],
+      async execute(operation) {
+        operations.push(operation.kind)
+        if (operation.kind === 'expect' && !native) {
+          Errors.throwHostEnvironment('native stack fallback receipt')
+        }
+        if (operation.kind === 'press') {
+          // A later action could restore a native-looking receipt. It must not erase the failed boundary.
+          native = operation.text === 'After relaunch' || fallbackAt !== 'before relaunch'
+        }
+        if (operation.kind === 'relaunch') {
+          native = fallbackAt !== 'after relaunch'
+        }
+      },
+    })).rejects.toThrow('native stack fallback receipt')
+    expect(operations).toEqual(
+      fallbackAt === 'before relaunch'
+        ? ['run', 'expect', 'press', 'expect']
+        : ['run', 'expect', 'press', 'expect', 'relaunch', 'expect'],
+    )
+  })
+}
+
+test('native acceptance rejects a scoped relaunch instead of looking for global receipts inside a selection', () => {
+  const journey: HostJourney = {
+    version: 1,
+    sourcePath: 'HNReader.test.tao',
+    check: {
+      name: 'scoped relaunch',
+      source: source(1),
+      run: { appName: 'HNReaderStub', appSourcePath: 'HNReader.tao', source: source(1) },
+      steps: [{
+        kind: 'select',
+        tag: 'reading',
+        index: 1,
+        source: source(10),
+        steps: [{ kind: 'relaunch', fresh: false, source: source(11) }],
+      }],
+    },
+  }
+  expect(() => requireNativeNavigationHosts(journey, 'hnreader')).toThrow('relaunch outside select blocks')
 })

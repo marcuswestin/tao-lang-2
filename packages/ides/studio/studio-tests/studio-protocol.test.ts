@@ -82,6 +82,52 @@ Describe('Studio session paths and routes', () => {
     Expect(StudioProtocol.parseMessage({ ...gesture, zoom: 'yes' })).toBeUndefined()
   })
 
+  Test('accepts only authenticated preview Space transitions with an explicit boolean state', () => {
+    const message = {
+      channel: studioProtocolChannel,
+      held: true,
+      identity,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-canvas-pan-key',
+    }
+    const event = { data: message, origin: expectation.origin, source: previewWindow }
+    Expect(StudioProtocol.parseWindowMessage(event, expectation)).toMatchObject({ held: true, type: message.type })
+    Expect(StudioProtocol.parseWindowMessage({ ...event, data: { ...message, held: false } }, expectation))
+      .toMatchObject({ held: false, type: message.type })
+    for (const held of ['true', 1, null, undefined]) {
+      Expect(StudioProtocol.parseWindowMessage({ ...event, data: { ...message, held } }, expectation)).toBeUndefined()
+    }
+    Expect(StudioProtocol.parseWindowMessage({ ...event, source: {} }, expectation)).toBeUndefined()
+    Expect(StudioProtocol.parseWindowMessage({ ...event, origin: 'https://untrusted.example' }, expectation))
+      .toBeUndefined()
+    Expect(StudioProtocol.parseWindowMessage({
+      ...event,
+      data: { ...message, identity: { ...identity, previewInstanceId: 'stale-preview' } },
+    }, expectation)).toBeUndefined()
+  })
+
+  Test('accepts only authenticated known canvas shortcuts', () => {
+    const message = {
+      channel: studioProtocolChannel,
+      identity,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-canvas-shortcut',
+      command: 'fit',
+    }
+    const event = { data: message, origin: expectation.origin, source: previewWindow }
+    for (const command of ['fit', 'reset', 'zoom-in', 'zoom-out']) {
+      Expect(StudioProtocol.parseWindowMessage({ ...event, data: { ...message, command } }, expectation)).toMatchObject(
+        { command },
+      )
+    }
+    for (const command of ['delete', '', null, 1]) {
+      Expect(StudioProtocol.parseMessage({ ...message, command })).toBeUndefined()
+    }
+    Expect(StudioProtocol.parseWindowMessage({ ...event, source: {} }, expectation)).toBeUndefined()
+    Expect(StudioProtocol.parseWindowMessage({ ...event, origin: 'https://untrusted.example' }, expectation))
+      .toBeUndefined()
+  })
+
   Test('parses explicit parent canvas-gesture ownership and rejects ambiguous state', () => {
     const ownership = {
       channel: studioProtocolChannel,
@@ -316,7 +362,7 @@ Describe('Studio protocol v1', () => {
     })).toMatchObject({ step: { action: 'press', kind: 'unresolved' } })
   })
 
-  Test('parses finite non-negative preview layout measurements and rejects invalid geometry', () => {
+  Test('parses signed preview positions with nonnegative sizes and rejects invalid geometry', () => {
     const message = {
       channel: studioProtocolChannel,
       identity,
@@ -334,9 +380,17 @@ Describe('Studio protocol v1', () => {
       measurements: message.measurements,
       type: 'preview-layout-measurements',
     })
+    const viewportRect = { x: -10, y: -20, width: 80, height: 40 }
+    Expect(StudioProtocol.parseMessage({ ...message, measurements: [{ ...message.measurements[0], viewportRect }] }))
+      .toMatchObject({ measurements: [{ viewportRect }] })
+    for (const bad of [{ ...viewportRect, x: NaN }, { ...viewportRect, width: -1 }, 'rect']) {
+      Expect(
+        StudioProtocol.parseMessage({ ...message, measurements: [{ ...message.measurements[0], viewportRect: bad }] }),
+      ).toBeUndefined()
+    }
     Expect(StudioProtocol.parseMessage({
       ...message,
-      measurements: [{ ...message.measurements[0], rect: { height: 40, width: 80, x: -1, y: 20 } }],
+      measurements: [{ ...message.measurements[0], rect: { height: -1, width: 80, x: 15, y: 20 } }],
     })).toBeUndefined()
     Expect(StudioProtocol.parseMessage({
       ...message,

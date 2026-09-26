@@ -86,3 +86,21 @@ function stubRemote(overrides: Partial<AppiumSession>): AppiumSession {
     ...overrides,
   }
 }
+
+test('Android Back invokes the native keycode instead of typing the word into an input', async () => {
+  const scripts: Array<{ args: readonly unknown[]; script: string }> = []
+  let keyboardActions = 0
+  const remote = stubRemote({
+    actions: async () => {
+      keyboardActions += 1
+    },
+    executeScript: async <T>(script: string, args: readonly unknown[] = []): Promise<T> => {
+      scripts.push({ args, script })
+      return undefined as T
+    },
+  })
+  const session = await appiumAndroidClient({ createSession: async () => remote }).createSession({})
+  await session.pressKey('Back')
+  expect(scripts).toEqual([{ script: 'mobile: pressKey', args: [{ keycode: 4 }] }])
+  expect(keyboardActions).toBe(0)
+})

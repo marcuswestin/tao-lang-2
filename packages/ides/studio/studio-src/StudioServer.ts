@@ -5,6 +5,7 @@ import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
 import type { StudioDeviceLauncher } from './device/StudioDeviceLauncher'
 import type { StudioDeviceStateEvent } from './device/StudioDeviceStatus'
+import type { StudioCanvasViewportStore } from './StudioCanvasViewportStore'
 import { type StudioClientAssetProvider, StudioClientAssets } from './StudioClientAssets'
 import { StudioFixtureGeneration } from './StudioFixtureGeneration'
 import { StudioHighlight } from './StudioHighlight'
@@ -67,6 +68,7 @@ export type StudioServerOptions = {
    */
   agentSecrets?: Readonly<Record<string, string>>
   allowedOrigins?: readonly string[]
+  canvasViewportStore?: StudioCanvasViewportStore
   clientAssets?: StudioClientAssetProvider
   clientReloadRevision?: () => number
   compileOnStart?: boolean
@@ -93,7 +95,7 @@ export type StartedStudioServer = {
   hostname: string
   manager: StudioSessionManager
   port: number
-  stop: () => void
+  stop: () => void | Promise<void>
   url: string
 }
 
@@ -214,6 +216,9 @@ export async function startStudioSessionServer(
       return
     }
     const resource = manager.require(sessionId)
+    if (options.canvasViewportStore !== undefined) {
+      resource.session.setCanvasViewportStore(options.canvasViewportStore)
+    }
     const datasource = new StudioServerDatasource(resource.session)
     dataSources.set(sessionId, datasource)
     sessionSubscriptions.set(sessionId, [
@@ -379,7 +384,7 @@ export async function startStudioSessionServer(
     hostname,
     manager,
     port,
-    stop() {
+    async stop() {
       unsubscribeManager()
       for (const subscriptions of sessionSubscriptions.values()) {
         for (const unsubscribe of subscriptions) {
@@ -395,7 +400,8 @@ export async function startStudioSessionServer(
         closeClients(clients, 'Studio server stopped')
       }
       eventClients.clear()
-      server.stop(true)
+      await server.stop(true)
+      await options.canvasViewportStore?.flush()
     },
     url,
   }
@@ -749,6 +755,7 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
       : jsonReply(await fixtureGeneration.generate(manifest, await request.json()))
   },
   dataFill: async ({ datasource, request }) => jsonReply(await datasource.fill(dataFillRequest(await request.json()))),
+  canvasViewport: bodyTo((session, body) => session.saveCanvasViewport(body)),
   file: async ({ session, url }) =>
     jsonReply(await session.readFile(requiredQuery(url, 'path', 'Missing Studio file path.'))),
   fileCreate: bodyTo((session, body) => session.createFile(createFileRequest(body)), 201),

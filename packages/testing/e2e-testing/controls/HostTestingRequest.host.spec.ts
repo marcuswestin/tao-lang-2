@@ -38,3 +38,27 @@ test('requires explicit native targets and keeps application faults out of contr
   )
   expect(() => parseHostTestingRequest('unknown', base)).toThrow("Unknown host-testing mode 'unknown'.")
 })
+
+test('native navigation has explicit simulator targets and cannot silently run an unrelated browser or fault proof', () => {
+  const native = { app: 'native-navigation', seed: '12345' }
+  for (const mode of ['ios', 'android', 'device']) {
+    expect(parseHostTestingRequest(mode, { ...native, device: 'owned-target' })).toMatchObject({
+      kind: 'native',
+      mode,
+      subject: 'native-navigation',
+      device: 'owned-target',
+    })
+    expect(() => parseHostTestingRequest(mode, native)).toThrow('Native proofs require --device')
+  }
+  expect(parseHostTestingRequest('prepare', native)).toMatchObject({ mode: 'prepare', subject: 'native-navigation' })
+  for (const mode of ['browser', 'export', 'driver']) {
+    expect(() => parseHostTestingRequest(mode, { ...native, device: 'physical-id' })).toThrow(
+      'native-navigation acceptance requires ios or android',
+    )
+  }
+  for (const mode of ['ios', 'prepare', 'check']) {
+    expect(() => parseHostTestingRequest(mode, { ...native, fault: true, device: 'owned-target' })).toThrow(
+      '--fault is not supported for native-navigation.',
+    )
+  }
+})

@@ -272,6 +272,14 @@ export type StudioSketchSnapUndoResult = Readonly<{
 }>
 
 /** The first message on the session event socket, and the body of `GET /api/protocol`. */
+export type StudioCanvasViewport = Readonly<{ x: number; y: number; z: number }>
+
+export type StudioCanvasViewportSaveRequest = Readonly<{
+  clientId: string
+  sequence: number
+  viewport: StudioCanvasViewport
+}>
+
 export type StudioSessionHandshake = {
   apps: readonly StudioAppVariant[]
   capabilities: {
@@ -302,6 +310,7 @@ export type StudioSessionHandshake = {
   identity: StudioProjectIdentity
   previewManifest?: StudioPreviewManifestV2
   sketchCatalog: StudioSketchCatalogSnapshot
+  canvasViewport?: StudioCanvasViewport
   protocolVersion: typeof studioProtocolVersion
   type: 'handshake'
 }
@@ -655,6 +664,8 @@ type StudioPreviewSchemeMessage = {
 }
 
 export type StudioPreviewLayoutMeasurement = {
+  /** Geometry in the iframe viewport, which changes when an app scrolls. */
+  viewportRect?: Readonly<{ height: number; width: number; x: number; y: number }>
   elementName: string
   rect: Readonly<{ height: number; width: number; x: number; y: number }>
   renderId: string
@@ -682,7 +693,25 @@ export type StudioPreviewCanvasGestureMessage = {
   zoom: boolean
 }
 
-/** Parent-owned mode state tells a preview synchronously whether its wheel gestures belong to Canvas. */
+/** Space held inside a preview gives the Design canvas ownership of the next drag. */
+export type StudioPreviewCanvasPanKeyMessage = {
+  channel: typeof studioProtocolChannel
+  held: boolean
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-canvas-pan-key'
+}
+
+/** Canvas commands from an authenticated focused preview. */
+export type StudioPreviewCanvasShortcutMessage = {
+  channel: typeof studioProtocolChannel
+  command: 'fit' | 'reset' | 'zoom-in' | 'zoom-out'
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-canvas-shortcut'
+}
+
+/** Parent-owned mode state tells a preview synchronously whether its canvas gestures belong to Canvas. */
 type StudioCanvasGestureOwnershipMessage = {
   channel: typeof studioProtocolChannel
   identity: StudioPreviewIdentity
@@ -769,6 +798,8 @@ export type StudioWindowMessage =
   | StudioPreviewLogMessage
   | StudioPreviewDebugMessage
   | StudioPreviewCanvasGestureMessage
+  | StudioPreviewCanvasPanKeyMessage
+  | StudioPreviewCanvasShortcutMessage
   | StudioDebugCommandMessage
   | StudioPreviewLayoutMeasurementsMessage
   | StudioPreviewLensRenderMessage
@@ -865,6 +896,8 @@ const windowMessageParsers: {
   'highlight-source': parseHighlightSource,
   'preview-applied': parsePreviewApplied,
   'preview-canvas-gesture': parsePreviewCanvasGesture,
+  'preview-canvas-pan-key': parsePreviewCanvasPanKey,
+  'preview-canvas-shortcut': parsePreviewCanvasShortcut,
   'preview-console': parsePreviewLog,
   'preview-debug': parsePreviewDebug,
   'preview-fixture-capture-failed': parsePreviewFixtureCaptureFailed,
@@ -1063,8 +1096,20 @@ function parsePreviewLayoutMeasurements(
     const coordinates = ['height', 'width', 'x', 'y'] as const
     if (
       coordinates.some(coordinate =>
-        typeof rect[coordinate] !== 'number' || !Number.isFinite(rect[coordinate]) || rect[coordinate] < 0
+        typeof rect[coordinate] !== 'number' || !Number.isFinite(rect[coordinate])
+        || ((coordinate === 'height' || coordinate === 'width') && rect[coordinate] < 0)
       ) || renderIds.has(raw['renderId'])
+    ) {
+      return undefined
+    }
+    const viewportRect = raw['viewportRect']
+    if (
+      viewportRect !== undefined
+      && (!isObject(viewportRect)
+        || coordinates.some(coordinate =>
+          typeof viewportRect[coordinate] !== 'number' || !Number.isFinite(viewportRect[coordinate])
+          || ((coordinate === 'width' || coordinate === 'height') && viewportRect[coordinate] < 0)
+        ))
     ) {
       return undefined
     }
@@ -1076,6 +1121,9 @@ function parsePreviewLayoutMeasurements(
     measurements.push({
       elementName: raw['elementName'],
       rect: { height, width, x, y },
+      ...(viewportRect === undefined
+        ? {}
+        : { viewportRect: viewportRect as NonNullable<StudioPreviewLayoutMeasurement['viewportRect']> }),
       renderId: raw['renderId'],
       ...(raw['studioRectId'] === undefined ? {} : { studioRectId: raw['studioRectId'] }),
     })
@@ -1106,6 +1154,26 @@ function parsePreviewCanvasGesture(value: StudioJsonObject): StudioPreviewCanvas
     type: 'preview-canvas-gesture',
     zoom: value['zoom'],
   })
+}
+
+function parsePreviewCanvasPanKey(value: StudioJsonObject): StudioPreviewCanvasPanKeyMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  return identity === undefined || typeof value['held'] !== 'boolean'
+    ? undefined
+    : envelope({ held: value['held'], identity, type: 'preview-canvas-pan-key' })
+}
+
+function parsePreviewCanvasShortcut(value: StudioJsonObject): StudioPreviewCanvasShortcutMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const command = value['command']
+  return identity === undefined
+      || (command !== 'fit' && command !== 'reset' && command !== 'zoom-in' && command !== 'zoom-out')
+    ? undefined
+    : envelope({
+      command: command as StudioPreviewCanvasShortcutMessage['command'],
+      identity,
+      type: 'preview-canvas-shortcut',
+    })
 }
 
 function parseCanvasGestureOwnership(value: StudioJsonObject): StudioCanvasGestureOwnershipMessage | undefined {

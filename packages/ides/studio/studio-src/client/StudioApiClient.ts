@@ -7,6 +7,8 @@ import type { StudioCompileSnapshot, StudioWriteAcknowledgement } from '../Studi
 import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import {
+  type StudioCanvasViewport,
+  type StudioCanvasViewportSaveRequest,
   type StudioCheckpointSummary,
   type StudioCreateFileRequest,
   type StudioCreateFileResult,
@@ -226,6 +228,13 @@ export const StudioApiClient = {
   },
 
   aiAvailability: async (): Promise<StudioAIAvailability> => await get(routes.aiAvailability),
+  saveCanvasViewport: async (body: StudioCanvasViewportSaveRequest, keepalive = false): Promise<StudioCanvasViewport> =>
+    await response<StudioCanvasViewport>(
+      await fetch(studioSessionPath(routes.canvasViewport.path), {
+        ...StudioTransport.jsonPostInit(body),
+        keepalive,
+      }),
+    ),
   betaShip: async (): Promise<StudioBetaShipResult> => await request(routes.shipBeta, {}),
   captureFixture: async <Result>(body: unknown): Promise<Result> => await request(routes.sourceAction, body),
   cellInstance: async (body: unknown, signal?: AbortSignal): Promise<unknown> =>

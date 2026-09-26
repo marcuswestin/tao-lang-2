@@ -1,0 +1,166 @@
+use SelectionNav, StackNav from @tao/nav
+use Button, Col, ScrollView, Text, TextInput from @tao/ui
+
+app NativeNavigation {
+   Name "Native Navigation"
+   Navigator NativeTabs
+}
+
+nav NativeNotesStack = StackNav {
+   Initial NativeNotes
+}
+
+nav NativeLibraryStack = StackNav {
+   Initial NativeLibrary
+}
+
+nav NativeSettingsStack = StackNav {
+   Initial NativeSettings
+}
+
+nav NativeTabs = SelectionNav {
+   Initial @notes
+   Display "automatic"
+   @notes {
+      Label "Notes"
+      Icon "pencil"
+      Content NativeNotesStack
+   }
+   @library {
+      Label "Library"
+      Icon "book"
+      Content NativeLibraryStack
+   }
+   @settings {
+      Label "Settings"
+      Icon "gear"
+      Content NativeSettingsStack
+}  }
+
+type NativeAnswer is one of NativeApproved
+
+scene NativeNotes() {
+   Title "Notes workspace"
+   state Draft = ""
+   state Saved = "Nothing saved"
+   state Confirmations = 0
+   action SaveNote() {
+      check Draft is not empty
+      set Saved = Draft
+      set Draft = ""
+   }
+   action OpenNativeSheet() {
+      present NativeSheet() as sheet
+   }
+   action OpenNativeOverlay() {
+      present NativeOverlay() as overlay
+   }
+   action ConfirmNote() {
+      let Answer = ask NativeConfirmation()
+      if Answer is NativeApproved {
+         set Confirmations += 1
+   }  }
+   command SaveNoteCommand() {
+      Title "Save note"
+      Icon "checkmark"
+      Enabled Draft is not empty
+      do SaveNote()
+   }
+   command SheetCommand() {
+      Title "Show sheet"
+      Icon "square.and.arrow.up"
+      do OpenNativeSheet()
+   }
+   command OverlayCommand() {
+      Title "Show overlay"
+      do OpenNativeOverlay()
+   }
+   command ConfirmCommand() {
+      Title "Confirm note"
+      do ConfirmNote()
+   }
+   Toolbar { SaveNoteCommand, SheetCommand, OverlayCommand, ConfirmCommand }
+   render ScrollView() [fill, gap 12, pad 16] {
+      Text("Saved note: { Saved }")
+      Text("Confirmations: { Confirmations }")
+
+      #nativeDraft
+      TextInput(Value: Draft, Label: "Note draft", Placeholder: "Write a note") {
+         on submit SaveNote
+      }
+      Button("Open note detail") {
+         on press -> { present NativeDetail(Name: "Note detail") }
+      }
+      loop [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20] / Line {
+         Text("Notebook line { Line }") [pad vertical 12]
+      }
+      Text("End of notebook")
+}  }
+
+scene NativeLibrary() {
+   Title "Library workspace"
+   state Visits = 0
+   render Col() [fill, gap 12, pad 16] {
+      Text("Library visits: { Visits }")
+      Button("Count library visit") {
+         on press -> { set Visits += 1 }
+      }
+      Button("Open library detail") {
+         on press -> { present NativeDetail(Name: "Library detail") }
+}  }  }
+
+scene NativeSettings() {
+   Title "Settings workspace"
+   state Nickname = ""
+   state Profile = "Not set"
+   action ApplyNickname() {
+      set Profile = Nickname
+   }
+   render Col() [fill, gap 12, pad 16] {
+      #nativeNickname
+      TextInput(Value: Nickname, Label: "Nickname", Placeholder: "Choose a nickname") {
+         on submit ApplyNickname
+      }
+      Text("Profile: { Profile }")
+      Button("Open settings detail") {
+         on press -> { present NativeDetail(Name: "Settings detail") }
+}  }  }
+
+scene NativeDetail(Name text) {
+   Title Name
+   state Taps = 0
+   render Col() [fill, gap 12, pad 16] {
+      Text("{ Name } taps: { Taps }")
+      Button("Count detail tap") {
+         on press -> { set Taps += 1 }
+}  }  }
+
+view NativeSheet() {
+   render Col() [gap 12, pad 16] {
+      Text("Native sheet content")
+      Button("Cover this sheet") {
+         on press -> { present NativeOverlay() as overlay }
+      }
+      Button("Close native sheet") {
+         on press -> { dismiss }
+}  }  }
+
+view NativeOverlay() {
+   render Col() [gap 12, pad 16] {
+      Text("Native overlay content")
+      Button("Close native overlay") {
+         on press -> { dismiss }
+}  }  }
+
+view NativeConfirmation() responds NativeAnswer {
+   action Cancel() {
+      dismiss
+   }
+   render Col() [gap 12, pad 16] {
+      Text("Confirm this note?")
+      Button("Approve note") {
+         on press -> { respond NativeApproved }
+      }
+      Button("Cancel confirmation") {
+         on press -> { do Cancel() }
+}  }  }

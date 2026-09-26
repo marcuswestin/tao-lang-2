@@ -11,11 +11,17 @@ import {
   publishStudioProductHostState,
   registerStudioProductHostActions,
 } from '../StudioProductHostProtocol'
-import type { StudioDebugCommandMessage, StudioPreviewCanvasGestureMessage } from '../StudioProtocol'
+import type {
+  StudioDebugCommandMessage,
+  StudioPreviewCanvasGestureMessage,
+  StudioPreviewCanvasPanKeyMessage,
+} from '../StudioProtocol'
 import { mountStudioAgentChat } from './app/StudioAgentPanelWiring'
 import { StudioAppNavigation } from './app/StudioAppNavigation'
 import { mountStudioBetaShip } from './app/StudioBetaShip'
 import { mountStudioCanvasFocus } from './app/StudioCanvasFocus'
+import { StudioCanvasPersistence } from './app/StudioCanvasPersistence'
+import { studioCanvasSelectionBounds } from './app/StudioCanvasTargets'
 import { isStudioCommandPaletteShortcut, mountStudioCommandPalette } from './app/StudioCommandPaletteWiring'
 import { connectStudioEvents, StudioCompileStatus, StudioStatusLine } from './app/StudioCompileEvents'
 import { StudioDrawerPanels } from './app/StudioDrawerPanels'
@@ -272,6 +278,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       onReveal: advanceEditorReveal,
       onCanvasGesture: (preview: (typeof previews)[number], gesture: StudioPreviewCanvasGestureMessage) =>
         forwardPreviewCanvasGesture(canvasViewport, preview, gesture),
+      onCanvasPanKey: (preview: (typeof previews)[number], message: StudioPreviewCanvasPanKeyMessage) =>
+        canvasViewport?.iframePanKey(message.held, preview.iframe),
+      onCanvasShortcut: (
+        command: import('../StudioProtocol').StudioPreviewCanvasShortcutMessage['command'],
+        iframe: HTMLIFrameElement,
+      ) => canvasViewport?.iframeShortcut(command, iframe),
       preview: view.preview,
       previews,
       publish,
@@ -280,6 +292,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     const wirePreview = wireStudioPreviews(previewWiring)
     const publishCanvasGestureOwnership = (): void => {
+      if (!canvasGesturesOwned()) {
+        canvasViewport?.cancelPan()
+      }
       for (const preview of previews) {
         postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned())
       }
@@ -423,9 +438,37 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     })
     // The preview area is a canvas before it is a list: zoom and pan come up before anything is
     // selected, so the whole app can be seen at once and one view brought close.
+    const canvasPersistence = new StudioCanvasPersistence({
+      clientId: crypto.randomUUID(),
+      save: (request, keepalive) => StudioApiClient.saveCanvasViewport(request, keepalive),
+      onError: error => showSourceActionError(view.status, error),
+    })
+    const flushCanvas = (): void => {
+      void canvasPersistence.flush(true)
+    }
+    const onCanvasVisibility = (): void => {
+      if (document.visibilityState === 'hidden') {
+        flushCanvas()
+      }
+    }
+    window.addEventListener('pagehide', flushCanvas)
+    document.addEventListener('visibilitychange', onCanvasVisibility)
     canvasViewport = mountCanvasViewport({
       enabled: () => root.dataset['layoutPreset'] === 'design',
       host: view.preview,
+      initialState: handshake.canvasViewport,
+      onChange: next => canvasPersistence.changed(next),
+      onGestureEnd: () => {
+        void canvasPersistence.flush()
+      },
+      selectionBounds: () => studioCanvasSelectionBounds(view.preview, inspection.selected(), previews),
+      focusedBounds: () => {
+        const focused = StudioMatrixView.focusedView(view.preview)
+        return focused === undefined
+          ? undefined
+          : [...view.preview.querySelectorAll<HTMLElement>('[data-tao-studio-group-view-id]')]
+            .find(group => group.dataset['taoStudioGroupViewId'] === focused)?.getBoundingClientRect()
+      },
     })
     const canvasFocus = mountStudioCanvasFocus({
       button: view.canvasFocus,
@@ -673,6 +716,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       disconnectPreviewMessages()
       canvasFocus.dispose()
       canvasViewport?.dispose()
+      window.removeEventListener('pagehide', flushCanvas)
+      document.removeEventListener('visibilitychange', onCanvasVisibility)
+      canvasPersistence.dispose()
       view.dispose()
       search.dispose()
       drawer.dispose()

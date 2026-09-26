@@ -136,16 +136,31 @@ type StudioPreviewOverlay = StudioPreviewElement & {
 
 /** The document events this bridge listens for; registration and removal name the same set. */
 type StudioPreviewDocumentEvent =
+  | 'auxclick'
   | 'blur'
   | 'click'
+  | 'contextmenu'
+  | 'dblclick'
+  | 'dragstart'
   | 'input'
   | 'keydown'
+  | 'keyup'
   | 'mousedown'
+  | 'mouseenter'
   | 'mouseleave'
   | 'mousemove'
   | 'mouseover'
   | 'mouseout'
   | 'mouseup'
+  | 'pointercancel'
+  | 'pointerdown'
+  | 'pointerenter'
+  | 'pointerleave'
+  | 'pointermove'
+  | 'pointerout'
+  | 'pointerover'
+  | 'pointerup'
+  | 'scroll'
   | 'wheel'
 
 type StudioPreviewWindowEvent = 'blur' | 'message' | 'resize' | 'scroll'
@@ -195,6 +210,7 @@ export type StudioPreviewLayoutMeasurement = {
   rect: { height: number; width: number; x: number; y: number }
   renderId: string
   studioRectId?: string
+  viewportRect?: { height: number; width: number; x: number; y: number }
 }
 
 type StudioRenderGap = {
@@ -821,6 +837,7 @@ export function mountStudioPreviewBridge(
   let postedHoverKey: string | undefined
   let interactionMode: 'edit' | 'run' = 'edit'
   let canvasGesturesOwned = false
+  let canvasPanKeyHeld = false
   let recording: StudioJourneyRecording | undefined
   let measurementQueued = false
   let stopped = false
@@ -842,7 +859,11 @@ export function mountStudioPreviewBridge(
       return
     }
     measurementQueued = true
-    queueMicrotask(postLayoutMeasurements)
+    queueMicrotask(() => {
+      if (measurementQueued) {
+        postLayoutMeasurements()
+      }
+    })
   }
 
   /**
@@ -998,13 +1019,69 @@ export function mountStudioPreviewBridge(
     )
     positionOverlay(overlay, target.element.getBoundingClientRect())
   }
-  const onResize = () => {
+  const onGeometryChange = () => {
     redrawOverlay()
     scheduleLayoutMeasurements()
+  }
+  const releaseCanvasPanKey = () => {
+    if (canvasPanKeyHeld) {
+      canvasPanKeyHeld = false
+      postToStudio(host, config, 'preview-canvas-pan-key', { held: false })
+    }
+  }
+  const onCanvasShortcutKeyDown = (event: StudioPreviewPointerEvent) => {
+    if (
+      !canvasGesturesOwned || !(event.metaKey === true || event.ctrlKey === true) || event.isComposing === true
+      || event.taoStudioJourney === true || isCanvasTypingTarget(previewElementFromEvent(event))
+    ) {
+      return
+    }
+    const commands: Readonly<Record<string, 'fit' | 'reset' | 'zoom-in' | 'zoom-out'>> = {
+      '0': 'fit',
+      '1': 'reset',
+      '=': 'zoom-in',
+      '+': 'zoom-in',
+      '-': 'zoom-out',
+    }
+    if (event.key === undefined || !Object.hasOwn(commands, event.key)) {
+      return
+    }
+    blockAppPointerEvent(event)
+    postToStudio(host, config, 'preview-canvas-shortcut', { command: commands[event.key] })
+  }
+  const onCanvasPanKeyDown = (event: StudioPreviewPointerEvent) => {
+    if (
+      !canvasGesturesOwned || event.key !== ' ' || event.isComposing === true
+      || event.taoStudioJourney === true || isCanvasTypingTarget(previewElementFromEvent(event))
+    ) {
+      return
+    }
+    blockAppPointerEvent(event)
+    if (!canvasPanKeyHeld) {
+      canvasPanKeyHeld = true
+      hoverTarget = undefined
+      postedHoverKey = undefined
+      disarmDrag()
+      redrawOverlay()
+      postToStudio(host, config, 'preview-canvas-pan-key', { held: true })
+    }
+  }
+  const onCanvasPanKeyUp = (event: StudioPreviewPointerEvent) => {
+    if (event.key === ' ' && canvasPanKeyHeld && event.taoStudioJourney !== true) {
+      blockAppPointerEvent(event)
+      releaseCanvasPanKey()
+    }
+  }
+  const onCanvasPanPointer = (event: StudioPreviewPointerEvent) => {
+    if (canvasPanKeyHeld && event.taoStudioJourney !== true) {
+      blockAppPointerEvent(event)
+    }
   }
   const onCanvasWheel = (event: StudioPreviewPointerEvent) => {
     if (
       !canvasGesturesOwned
+      || (!canvasPanKeyHeld && event.ctrlKey !== true && event.metaKey !== true)
+      || (canvasPanKeyHeld && event.taoStudioJourney === true)
       || event.clientX === undefined
       || event.clientY === undefined
       || event.deltaX === undefined
@@ -1013,8 +1090,12 @@ export function mountStudioPreviewBridge(
       return
     }
     // Cancellation is synchronous and happens only after the parent has advertised that Design
-    // owns the gesture. Run and startup retain the embedded app's native scrolling and zooming.
-    event.preventDefault?.()
+    // owns the gesture. Ordinary scrolling belongs to the app unless Space is held.
+    if (canvasPanKeyHeld) {
+      blockAppPointerEvent(event)
+    } else {
+      event.preventDefault?.()
+    }
     postToStudio(host, config, 'preview-canvas-gesture', {
       clientX: event.clientX,
       clientY: event.clientY,
@@ -1041,6 +1122,7 @@ export function mountStudioPreviewBridge(
     sourceTarget = undefined
     selectedTarget = target
     redrawOverlay()
+    postLayoutMeasurements()
     postSourceMessage(host, config, 'preview-select-source', target.identity)
   }
   const onMouseDown = (event: StudioPreviewPointerEvent) => {
@@ -1154,6 +1236,9 @@ export function mountStudioPreviewBridge(
     'set-canvas-gestures': message => {
       if (typeof message['owned'] === 'boolean') {
         canvasGesturesOwned = message['owned']
+        if (!canvasGesturesOwned) {
+          releaseCanvasPanKey()
+        }
       }
     },
     'set-interaction-mode': message => {
@@ -1180,11 +1265,38 @@ export function mountStudioPreviewBridge(
 
   // One table drives both halves of the bridge's lifetime: the cleanup below removes exactly what
   // was added, which two hand-written sequences could not promise.
-  const documentListeners: readonly Parameters<StudioPreviewHost['document']['addEventListener']>[] = [
+  const canvasPanPointerEvents: readonly StudioPreviewDocumentEvent[] = [
+    'auxclick',
+    'click',
+    'contextmenu',
+    'dblclick',
+    'dragstart',
+    'mousedown',
+    'mouseenter',
+    'mouseleave',
+    'mousemove',
+    'mouseover',
+    'mouseout',
+    'mouseup',
+    'pointercancel',
+    'pointerdown',
+    'pointerenter',
+    'pointerleave',
+    'pointermove',
+    'pointerout',
+    'pointerover',
+    'pointerup',
+  ]
+  const documentListeners: readonly Readonly<Parameters<StudioPreviewHost['document']['addEventListener']>>[] = [
+    // This capture barrier is synchronous; the parent's iframe shield arrives through postMessage.
+    ...canvasPanPointerEvents.map(type => [type, onCanvasPanPointer, true] as const),
     ['click', onClick, true],
     ['click', onRecordedClick, true],
     ['input', onRecordedInput, true],
     ['blur', onRecordedBlur, true],
+    ['keydown', onCanvasShortcutKeyDown, true],
+    ['keydown', onCanvasPanKeyDown, true],
+    ['keyup', onCanvasPanKeyUp, true],
     ['keydown', onRecordedKeyDown, true],
     ['mousedown', onMouseDown, true],
     ['mouseleave', disarmDrag],
@@ -1192,13 +1304,15 @@ export function mountStudioPreviewBridge(
     ['mouseover', onMouseOver],
     ['mouseout', onMouseOut],
     ['mouseup', onMouseUp, true],
+    ['scroll', onGeometryChange, true],
     ['wheel', onCanvasWheel, true],
   ]
   const windowListeners: readonly Parameters<StudioPreviewHost['window']['addEventListener']>[] = [
     ['blur', disarmDrag],
+    ['blur', releaseCanvasPanKey],
     ['message', onMessage],
-    ['resize', onResize],
-    ['scroll', redrawOverlay],
+    ['resize', onGeometryChange],
+    ['scroll', onGeometryChange],
   ]
   for (const [type, listener, capture] of documentListeners) {
     host.document.addEventListener(type, listener, capture)
@@ -1218,6 +1332,7 @@ export function mountStudioPreviewBridge(
   )
 
   return () => {
+    releaseCanvasPanKey()
     stopped = true
     // A preview instance owns its debugger pause and clock hold. Releasing the bridge must release
     // both before a replacement instance starts, without letting the old pause publish a resumed
@@ -1243,7 +1358,7 @@ export function mountStudioPreviewBridge(
   }
 }
 
-/** collectStudioPreviewLayoutMeasurements reads mounted render geometry relative to the cell content root. */
+/** Collect root-relative geometry for source layout and viewport geometry for canvas selection. */
 export function collectStudioPreviewLayoutMeasurements(
   elements: ArrayLike<StudioPreviewElement>,
   rootRect: StudioPreviewRect,
@@ -1265,7 +1380,8 @@ export function collectStudioPreviewLayoutMeasurements(
     const id = renderId(target.identity)
     if (
       renderIds.has(id)
-      || Object.values(measurement).some(value => !Number.isFinite(value) || value < 0)
+      || Object.values(measurement).some(value => !Number.isFinite(value))
+      || measurement.height < 0 || measurement.width < 0
     ) {
       continue
     }
@@ -1274,6 +1390,7 @@ export function collectStudioPreviewLayoutMeasurements(
       elementName: target.identity.elementName,
       rect: measurement,
       renderId: id,
+      viewportRect: { height: rect.height, width: rect.width, x: rect.left, y: rect.top },
       ...(target.identity.studioRectId === undefined ? {} : { studioRectId: target.identity.studioRectId }),
     })
   }
@@ -1380,6 +1497,22 @@ function recordingControl(
 
 function previewElementFromEvent(event: StudioPreviewPointerEvent): StudioPreviewElement | undefined {
   return isStudioElement(event.target) ? event.target : undefined
+}
+
+/** Text entry retains Space even when a containing preview belongs to the Design canvas. */
+function isCanvasTypingTarget(element: StudioPreviewElement | undefined): boolean {
+  for (let current = element; current !== undefined && current !== null; current = current.parentElement ?? undefined) {
+    const tag = current.tagName?.toLowerCase()
+    const editable = current.getAttribute('contenteditable')
+    if (
+      tag === 'input' || tag === 'textarea' || tag === 'select'
+      || current.getAttribute('role') === 'textbox'
+      || editable === '' || editable === 'true' || editable === 'plaintext-only'
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 function isJourneySubmitKey(event: StudioPreviewPointerEvent, element: StudioPreviewElement): boolean {

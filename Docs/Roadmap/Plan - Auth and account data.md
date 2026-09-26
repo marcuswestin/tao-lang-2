@@ -2,7 +2,8 @@
 
 Status: local and self-hosted slice implemented, 2026-09-26. The current authorized slice includes
 TestAuth/Memory and LocalAuth/Reference, executable Auth Review journeys, and self-hosted InstantDB.
-Clerk and advanced managed-provider lifecycle acceptance remain later work.
+The first Clerk adapter and live browser acceptance against the reference gateway are implemented.
+Clerk over InstantDB, physical-device acceptance and advanced account lifecycle features remain outstanding.
 The [decisions](<Tao Revolution/Decisions.md>) own language semantics; the
 [review record](<Auth syntax review.md>) distinguishes accepted changes from remaining choices.
 [MVP scope](<../MVP Roadmap/Developer MVP Roadmap.md>) remains authoritative for priority. This plan
@@ -361,6 +362,36 @@ Live tests require `TAO_INSTANT_LIVE_API_URL` and create isolated ephemeral apps
 reports skipped tests. They do not replace browser or physical-device acceptance. The task's
 verification record owns the final integration evidence. Clerk and physical-device lifecycle
 acceptance remain outside this first local slice.
+
+## Clerk implementation and remaining acceptance
+
+`@tao/auth/clerk` now binds `PublishableKey`, `Endpoint` and `Resource` through the existing Auth
+slot. It uses the real Expo SDK through a provider-owned host, custom/supplied Tao flows, and the
+same Reference datasource. Password/email-code registration and login, required email verification,
+email Device Trust, restoration, refresh, account changes, cancellation and logout are implemented.
+Unsupported MFA, session tasks and other instance requirements fail closed.
+
+The trusted gateway verifies pinned public-key Clerk proofs offline, binds issuer/subject to the
+local Account, and limits its opaque resource session to the proof deadline. Its database is bound
+to one auth mode and issuer; local-password routes cannot bypass Clerk. SQLite and Instant data
+storage remain unchanged. Interrupted SDK logout persists non-secret session-ID tombstones;
+restoration will not silently reuse an abandoned session. Real restore/renewal requires connectivity;
+the experimental offline SDK cache is not enabled.
+
+Focused tests cover SDK translations, stale completions, revocation retries, renewal deadlines,
+issuer/origin/audience/signature checks, and database mode isolation. A separate opt-in browser
+journey bundles the actual Auth Review app and drives password and email-code UI against a dedicated
+Clerk development instance. It accepts the three Clerk credentials from the repository secrets
+store after explicit live opt-in, with environment overrides and no process-wide secret exports.
+Setup failures expose bounded API codes and known missing field names rather than raw SDK errors.
+Its testing token only bypasses bot protection. The live journey passed on 2026-09-26, proving
+password sign-in, profile and owned-note persistence, reload, logout, email-code sign-in and a second
+logout against the SQLite reference gateway. The run exposed Clerk's default sign-out navigation;
+targeted logout and cancellation revocation now use the SDK completion callback so Tao owns navigation.
+Clerk over real Instant storage and physical-device lifecycle acceptance remain outstanding. The gateway requires an `azp` origin
+claim; native proofs may omit it, so native pairing needs an explicit token/origin contract before
+it can be advertised. Advanced recovery, OAuth, MFA/passkeys,
+linking, deletion and production gateway deployment are not part of this initial implementation.
 
 ## Original implementation seams
 

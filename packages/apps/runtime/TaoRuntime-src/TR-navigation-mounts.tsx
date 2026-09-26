@@ -788,10 +788,19 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     // native screen, matching the JS surface's covered-content contract. Where no native host
     // exists (web, checks, a platform without the module), the JS bar below renders instead.
     if (display === 'automatic' && this.nativeSurface) {
+      const activePresentable = this.activeItem().entries.at(-1)?.presentable
+      const observable = taoProps?.navigationHostActive !== false
+        && !(activePresentable !== undefined
+          && isNavigation(activePresentable)
+          && activePresentable.contentIsCovered())
       const native = renderNativeSelectionTabs({
         activeKey: this.activeKey,
+        observable,
         items: this.items.map(item => ({
-          content: this.itemEntryLevels(item, taoProps),
+          content: createElement(LevelHiddenContext.Provider, {
+            children: this.itemEntryLevels(item, taoProps),
+            hidden: item.key !== this.activeKey,
+          }),
           iconName: selectionItemIconName(item.definition),
           key: item.key,
           title: String(item.definition.label.evaluate().jsValue),
@@ -877,7 +886,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
   override ownsWindowSurface(): boolean {
     const display = this.display()
     return display === 'toggle'
-      || display === 'automatic' && this.nativeSurface && nativeSelectionTabsAvailable()
+      || display === 'automatic' && this.nativeSurface && nativeSelectionTabsAvailable(this.items.length)
   }
 
   /**

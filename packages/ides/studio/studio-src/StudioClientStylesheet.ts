@@ -584,14 +584,32 @@ kbd {
 .studio-preview[data-canvas-surface="on"] > .studio-preview-grid > .studio-preview-group > .studio-preview-group-cells {
   overflow: visible;
 }
-.studio-preview[data-canvas-panning="true"] { cursor: grabbing; }
 .studio-preview[data-canvas-pan-ready="true"] { cursor: grab; }
+.studio-preview[data-canvas-panning="true"] { cursor: grabbing; }
+/* Keep one transparent surface above every preview for the entire held-Space gesture, including
+   between drags. Pointer hit testing targets the canvas host, never an embedded app or edit handle. */
+.studio-preview[data-canvas-pan-ready="true"]::after,
+.studio-preview[data-canvas-panning="true"]::after {
+  content: ""; cursor: inherit; inset: 0; pointer-events: auto; position: absolute; z-index: 6;
+}
 .studio-canvas-zoom {
   background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 999px; bottom: 12px;
   color: var(--studio-text-muted); cursor: pointer; font: 11px var(--studio-mono); padding: 5px 11px; position: absolute;
   right: 12px; z-index: 5;
 }
 .studio-canvas-zoom:hover { color: var(--studio-text); }
+.studio-canvas-zoom-menu {
+  background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px;
+  bottom: 46px; box-shadow: 0 8px 24px #0004; display: grid; min-width: 190px; padding: 5px;
+  position: absolute; right: 12px; z-index: 5;
+}
+.studio-canvas-zoom-menu[hidden] { display: none; }
+.studio-canvas-zoom-menu button {
+  background: transparent; border: 0; border-radius: 4px; color: var(--studio-text); cursor: pointer;
+  font: 12px var(--studio-sans); padding: 8px 10px; text-align: left;
+}
+.studio-canvas-zoom-menu button:hover, .studio-canvas-zoom-menu button:focus-visible { background: var(--studio-stroke); }
+.studio-canvas-zoom-menu button:disabled { color: var(--studio-text-muted); cursor: default; opacity: .5; }
 .studio-preview-group { display: grid; gap: 10px; min-width: 0; width: 100%; }
 .studio-preview-group-label { color: var(--studio-text); font-size: 12.5px; font-weight: 600; margin: 0; position: sticky; left: 0; }
 .studio-preview-group-cells {

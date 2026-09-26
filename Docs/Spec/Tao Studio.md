@@ -551,13 +551,32 @@ runtime tests cover persistence edge cases, the depth cap, and resize gestures.
 
 The browser client implements the target frame: project toolbar, Design/Code/Run/Draw presets, command palette,
 icon rail with an agent toggle, a floating, draggable, and collapsible agent panel in the bottom left, persisted resizable and collapsible left/right/bottom panes,
-CodeMirror editor with breadcrumbs, scrolling scenario canvas, a one-column inspector whose Scenario pane
+CodeMirror editor with breadcrumbs, pannable and zoomable scenario canvas, a one-column inspector whose Scenario pane
 holds the scenario's arguments, environment, and captured state above the four-context Selection pane, and
 bottom drawer. One token sheet in the client stylesheet styles the shell, the Tao-rendered panels (through
 host-owned button, segmented, choice, and section views), and the agent panel. The command palette indexes files,
 project views, grouped scenarios, commands, and component/view insertions. The component palette uses the
 stdlib catalog plus compiler-manifest project views; drag to canvas emits position-aware source actions,
 and drag to editor inserts formatted snippets with required-parameter placeholders selected for editing.
+
+In Design, hold Space while dragging or scrolling to pan the canvas over either empty background or preview apps.
+Without Space, scrolling belongs to the embedded app and neither left- nor middle-button dragging pans.
+Pinch and modifier-wheel zoom remain available without Space.
+For the entire time Space is held, a transparent canvas shield makes previews neutral pan surfaces:
+hover, clicks, dragging, and wheel input cannot interact with the embedded apps, including between drags.
+A focused preview suppresses mouse input immediately and forwards Space to the host. Text inputs keep
+normal Space typing, and Run keeps app interaction when the canvas does not own the gesture.
+Releasing Space or the pointer, or losing window focus, ends a pan; losing focus also clears held Space.
+Canvas shortcuts (⌘/Ctrl+0 fit, 1 reset, +/− zoom) also work from focused previews outside text entry.
+The zoom menu offers Fit all, 100%, Zoom to selection, and Zoom to focused frame; unavailable targets
+are disabled. Selection framing uses current iframe viewport measurements. Free sketches have their separate Draw surface.
+Studio restores canvas position and zoom per canonical project path from its user-state directory,
+independently of the server port and project source/catalog revisions. Saved updates are ordered and
+flushed on gesture end and page lifecycle transitions.
+
+Double-click a free Text rectangle to edit its content in place. Enter commits a changed value;
+Escape, leaving the editor, or unchanged Enter cancels. Existing line breaks are preserved. Incoming
+changes to the edited rectangle invalidate the edit rather than overwriting newer geometry or content.
 
 Layout inspection uses parser-owned current clauses. Style inspection carries landing provenance and
 blast radius for inline entries and local/imported bundles. The structured design surface supports color

@@ -1,7 +1,7 @@
 import Runtime from '@expo-host'
-import { CLI, Errors, FS, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, Platform, Repo, Switch } from '@shared'
 
-type HostSubject = 'clockwork' | 'hnreader'
+export type HostSubject = 'clockwork' | 'hnreader' | 'native-navigation'
 export type HostApplicationFault = 'clockwork-countdown-frozen' | 'hnreader-reading-history-no-write'
 export type HostFaultProvenance = Readonly<{
   expectedVisibleAssertion: string
@@ -49,7 +49,7 @@ export async function prepareHostApp(options: PrepareHostAppOptions): Promise<Ho
   await FS.symlink(FS.resolvePath('node_modules', runtimeToolchainRoot), FS.resolvePath('node_modules', root))
   const sourcePath = FS.resolvePath(subject.sourcePath, repositoryRoot)
   const entrySourceDigest = Platform.sha256Hex(await FS.readText(sourcePath))
-  const appId = `dev.tao.taohost${options.subject}${options.runId.replaceAll('-', '')}`
+  const appId = `dev.tao.taohost${options.subject.replaceAll('-', '')}${options.runId.replaceAll('-', '')}`
   await Runtime.generateApp(sourcePath, { appName: subject.appName, runtimePackageRoot: root })
   const fault = options.fault === undefined
     ? undefined
@@ -62,7 +62,7 @@ export async function prepareHostApp(options: PrepareHostAppOptions): Promise<Ho
     subject: options.subject,
   })
   await FS.writeText(FS.resolvePath('index.ts', root), hostEntrypoint(repositoryRoot))
-  await FS.writeText(FS.resolvePath('app.json', root), hostAppConfig(appId, options.runId))
+  await FS.writeText(FS.resolvePath('app.json', root), hostAppConfig(appId, options.runId, options.subject))
   return { appId, compiledArtifactDigest, entrySourceDigest, ...(fault === undefined ? {} : { fault }), root }
 }
 
@@ -99,9 +99,17 @@ export async function exportHostWeb(build: HostBuild, options: { artifactRoot: s
 }
 
 function subjectSource(subject: HostSubject): { appName: string; sourcePath: string } {
-  return subject === 'hnreader'
-    ? { appName: 'HNReaderStub', sourcePath: 'Apps/HNReader/HNReader.tao' }
-    : { appName: 'Clockwork', sourcePath: 'packages/testing/e2e-testing/fixtures/Clockwork/Clockwork.tao' }
+  return Switch(subject, {
+    hnreader: () => ({ appName: 'HNReaderStub', sourcePath: 'Apps/HNReader/HNReader.tao' }),
+    clockwork: () => ({
+      appName: 'Clockwork',
+      sourcePath: 'packages/testing/e2e-testing/fixtures/Clockwork/Clockwork.tao',
+    }),
+    'native-navigation': () => ({
+      appName: 'NativeNavigation',
+      sourcePath: 'Apps/Test Apps/Navigation/Native Navigation.tao',
+    }),
+  })
 }
 
 async function applyApplicationFault(
@@ -168,20 +176,109 @@ export function hostEntrypoint(repositoryRoot: string): string {
     'packages/apps/runtime/TaoRuntime-src/host-testing/RuntimeHostTestControl.ts',
     repositoryRoot,
   )
-  return `import { registerRootComponent } from 'expo'\nimport { createElement, type ComponentType, useEffect, useState } from 'react'\nimport { Platform, SafeAreaView as View, Text } from 'react-native'\nimport { installNativeHostTestControl } from ${
+  return `import { registerRootComponent } from 'expo'
+import { createElement, type ComponentType, useEffect, useState } from 'react'
+import { Platform, SafeAreaView as View, Text } from 'react-native'
+import { captureNativeNavigationDiagnostics, installNativeHostTestControl, subscribeNativeNavigationDiagnostics } from ${
     JSON.stringify(nativeControl)
-  }\nimport { installRuntimeHostTestControl } from ${
-    JSON.stringify(runtimeControl)
-  }\nimport config from './HostTestConfig.json'\n\nconst environment = installRuntimeHostTestControl(config)\nlet latestNativeControlReceipt: string | undefined\nlet publishNativeControlReceipt: ((receipt: string) => void) | undefined\nconst nativeControl = Platform.OS === 'web'\n  ? undefined\n  : installNativeHostTestControl(environment, {\n    onAdvance(snapshot) {\n      const advanceMs = snapshot.lastControlAdvanceMs\n      if (advanceMs === undefined) {\n        return\n      }\n      latestNativeControlReceipt = \`Control received: advance \${advanceMs}ms\`\n      publishNativeControlReceipt?.(latestNativeControlReceipt)\n    },\n  })\nif (nativeControl !== undefined) {\n  void nativeControl.ready\n}\n\nconst generatedApp = require('./_gen_tao-app/App') as { default: ComponentType }\nconst readiness = \`Host ready: run \${config.runId} · seed \${config.seed}\`\nconst HostApp: ComponentType = () => {\n  const [nativeControlReceipt, setNativeControlReceipt] = useState(latestNativeControlReceipt)\n  useEffect(() => {\n    const publish = (receipt: string): void => setNativeControlReceipt(receipt)\n    publishNativeControlReceipt = publish\n    if (latestNativeControlReceipt !== undefined) {\n      publish(latestNativeControlReceipt)\n    }\n    return () => {\n      if (publishNativeControlReceipt === publish) {\n        publishNativeControlReceipt = undefined\n      }\n    }\n  }, [])\n  if (config.subject !== 'hnreader') {\n    return createElement(generatedApp.default)\n  }\n  return createElement(\n    View,\n    { style: { flex: 1 } },\n    createElement(Text, { accessibilityLabel: readiness, testID: 'tao-host-ready' }, readiness),\n    nativeControlReceipt === undefined\n      ? null\n      : createElement(\n        Text,\n        { accessibilityLabel: nativeControlReceipt, testID: 'tao-host-control-receipt' },\n        nativeControlReceipt,\n      ),\n    createElement(generatedApp.default),\n  )\n}\n\nregisterRootComponent(HostApp)\n`
+  }
+import { installRuntimeHostTestControl } from ${JSON.stringify(runtimeControl)}
+import config from './HostTestConfig.json'
+
+const environment = installRuntimeHostTestControl(config)
+let latestNativeControlReceipt: string | undefined
+let publishNativeControlReceipt: ((receipt: string) => void) | undefined
+const nativeControl = Platform.OS === 'web'
+  ? undefined
+  : installNativeHostTestControl(environment, {
+    onAdvance(snapshot) {
+      const advanceMs = snapshot.lastControlAdvanceMs
+      if (advanceMs === undefined) {
+        return
+      }
+      latestNativeControlReceipt = \`Control received: advance \${advanceMs}ms\`
+      publishNativeControlReceipt?.(latestNativeControlReceipt)
+    },
+  })
+if (nativeControl !== undefined) {
+  void nativeControl.ready
 }
-function hostAppConfig(appId: string, runId: string): string {
+
+// Subscribe before loading the app so even its first fallback remains a failed receipt.
+let navigationFallback = false
+const mountedNativeHosts = new Set<string>()
+let publishNavigationReceipt: ((receipt: string) => void) | undefined
+const requiresNavigationReceipt = Platform.OS !== 'web' && (config.subject === 'native-navigation' || config.subject === 'hnreader')
+const navigationReceipt = (): string => navigationFallback
+  ? 'Native navigation host: fallback'
+  : mountedNativeHosts.has('stack') && (config.subject === 'hnreader' || mountedNativeHosts.has('tabs'))
+    ? config.subject === 'hnreader' ? 'Native navigation host: stack' : 'Native navigation host: tabs and stack'
+    : 'Native navigation host: waiting'
+if (requiresNavigationReceipt) {
+  const receiveDiagnostics = (): void => {
+    for (const diagnostic of captureNativeNavigationDiagnostics()) {
+      if (diagnostic.kind !== 'host' || (config.subject === 'hnreader' && diagnostic.host !== 'stack')) continue
+      if (diagnostic.implementation === 'basic') navigationFallback = true
+      if (diagnostic.implementation === 'native' && diagnostic.platform === Platform.OS) {
+        mountedNativeHosts.add(diagnostic.host)
+      }
+    }
+    publishNavigationReceipt?.(navigationReceipt())
+  }
+  subscribeNativeNavigationDiagnostics(receiveDiagnostics)
+  receiveDiagnostics()
+}
+const generatedApp = require('./_gen_tao-app/App') as { default: ComponentType }
+const readiness = \`Host ready: run \${config.runId} · seed \${config.seed}\`
+const HostApp: ComponentType = () => {
+  const [nativeControlReceipt, setNativeControlReceipt] = useState(latestNativeControlReceipt)
+  const [navigationHostReceipt, setNavigationHostReceipt] = useState(navigationReceipt())
+  useEffect(() => {
+    const publish = (receipt: string): void => setNativeControlReceipt(receipt)
+    const publishNavigation = (receipt: string): void => setNavigationHostReceipt(receipt)
+    publishNativeControlReceipt = publish
+    publishNavigationReceipt = publishNavigation
+    publishNavigation(navigationReceipt())
+    if (latestNativeControlReceipt !== undefined) {
+      publish(latestNativeControlReceipt)
+    }
+    return () => {
+      if (publishNativeControlReceipt === publish) publishNativeControlReceipt = undefined
+      if (publishNavigationReceipt === publishNavigation) publishNavigationReceipt = undefined
+    }
+  }, [])
+  if (config.subject !== 'hnreader' && config.subject !== 'native-navigation') {
+    return createElement(generatedApp.default)
+  }
+  return createElement(
+    View,
+    { style: { flex: 1 } },
+    createElement(Text, { accessibilityLabel: readiness, testID: 'tao-host-ready' }, readiness),
+    requiresNavigationReceipt
+      ? createElement(Text, { accessibilityLabel: navigationHostReceipt, testID: 'tao-native-navigation-host' }, navigationHostReceipt)
+      : null,
+    nativeControlReceipt === undefined
+      ? null
+      : createElement(
+        Text,
+        { accessibilityLabel: nativeControlReceipt, testID: 'tao-host-control-receipt' },
+        nativeControlReceipt,
+      ),
+    createElement(generatedApp.default),
+  )
+}
+
+registerRootComponent(HostApp)
+`
+}
+function hostAppConfig(appId: string, runId: string, subject: HostSubject): string {
   return `${
     JSON.stringify(
       {
         expo: {
           android: { package: appId, softwareKeyboardLayoutMode: 'pan' },
           experiments: { autolinkingModuleResolution: true },
-          ios: { bundleIdentifier: appId },
+          ios: { bundleIdentifier: appId, ...(subject === 'native-navigation' ? { supportsTablet: true } : {}) },
           name: appId,
           platforms: ['ios', 'android', 'web'],
           plugins: [
