@@ -1,0 +1,87 @@
+--- a/ios/RNSScreenStack.mm
++++ b/ios/RNSScreenStack.mm
+@@ -19,6 +19,9 @@
+ #import "RNSScreenWindowTraits.h"
+ #import "RNSScrollViewFinder.h"
+ #import "RNSTabsScreenViewController.h"
++#if TARGET_OS_MACCATALYST
++#import "RNSTabsScreenComponentView.h"
++#endif
+ #import "UIScrollView+RNScreens.h"
+ #import "UIView+RNSUtility.h"
+ #import "integrations/RNSDismissibleModalProtocol.h"
+@@ -168,6 +171,10 @@
+ #endif
+ 
+ @implementation RNSScreenStackView {
++#if TARGET_OS_MACCATALYST
++  BOOL _catalystTabParentSizing;
++  UIViewAutoresizing _catalystPreviousAutoresizingMask;
++#endif
+   UINavigationController *_controller;
+   NSMutableArray<RNSScreenView *> *_reactSubviews;
+   BOOL _invalidated;
+@@ -723,8 +730,51 @@
+   [self setModalViewControllers:modalControllers];
+ }
+ 
++#if TARGET_OS_MACCATALYST
++// Trial compatibility: UIKit owns a tiled tab pane's bounds, while Fabric initially
++// sizes the tab's nested stack against the complete tabs host. Native screens already
++// publish their corrected bounds back to Fabric through RNSScreen.updateBounds.
++- (void)catalystSyncDirectTabParentBounds
++{
++  UIView *parent = self.superview;
++  BOOL isDirectTabChild = [parent isKindOfClass:RNSTabsScreenComponentView.class];
++  if (!isDirectTabChild) {
++    if (_catalystTabParentSizing) {
++      self.autoresizingMask = _catalystPreviousAutoresizingMask;
++      _catalystTabParentSizing = NO;
++    }
++    return;
++  }
++  if (!_catalystTabParentSizing) {
++    _catalystPreviousAutoresizingMask = self.autoresizingMask;
++    _catalystTabParentSizing = YES;
++    self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
++  }
++  if (!CGRectEqualToRect(self.frame, parent.bounds)) {
++    self.frame = parent.bounds;
++    [self setNeedsLayout];
++  }
++}
++
++- (void)didMoveToSuperview
++{
++  [super didMoveToSuperview];
++  [self catalystSyncDirectTabParentBounds];
++}
++
++- (void)updateLayoutMetrics:(const react::LayoutMetrics &)layoutMetrics
++           oldLayoutMetrics:(const react::LayoutMetrics &)oldLayoutMetrics
++{
++  [super updateLayoutMetrics:layoutMetrics oldLayoutMetrics:oldLayoutMetrics];
++  [self catalystSyncDirectTabParentBounds];
++}
++#endif
++
+ - (void)layoutSubviews
+ {
++#if TARGET_OS_MACCATALYST
++  [self catalystSyncDirectTabParentBounds];
++#endif
+   [super layoutSubviews];
+   _controller.view.frame = self.bounds;
+ 
+--- a/ios/tabs/host/RNSTabsHostComponentView.mm
++++ b/ios/tabs/host/RNSTabsHostComponentView.mm
+@@ -291,6 +291,9 @@
+       _tabBarControllerMode = rnscreens::conversion::UITabBarControllerModeFromRNSTabsHostTabBarControllerMode(
+           newComponentProps.tabBarControllerMode);
+       _controller.mode = _tabBarControllerMode;
++#if TARGET_OS_MACCATALYST
++      _controller.sidebar.preferredLayout = UITabBarControllerSidebarLayoutTile;
++#endif
+     } else
+ #endif // Check for iOS >= 18
+       if (newComponentProps.tabBarControllerMode != react::RNSTabsHostIOSTabBarControllerMode::Automatic) {
