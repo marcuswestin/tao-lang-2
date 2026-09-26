@@ -41,6 +41,11 @@ data Paragraphs / Paragraph {
 }
 ```
 
+Across an import boundary, name each form the file uses: `use Workspaces, Workspace from @data`.
+The plural exposes the collection, and the singular exposes the entity type and `create` target;
+either may be imported alone. A loop's local row binder needs no singular import. See
+[Tao Packages](<Tao Packages.md>) for import and visibility rules.
+
 Fields use `Name type (modifiers)`. Primitive types are `text`, `number`, `boolean`, and `time`.
 Modifiers are parenthesized and comma-separated. Literal defaults are values of the field's type.
 `now` is an ordinary expression that reads the runtime clock. As a field default it is preserved in

@@ -1976,40 +1976,52 @@ Describe('Studio source-action patch bus', () => {
     } as unknown as StudioSourcePatchRequest)).rejects.toThrow('unsupported fields')
   })
 
-  Test('adds an imported entity parameter and fixture argument to every sketch scenario', async () => {
-    await withTaoFiles('tao-source-actions-sketch-feed-', {
-      'Data.tao': `workspace data Playlists / Playlist { Cover text Title text Score number }\n`,
-      'View1.tao': `
-        use Placeholder from @tao/ui
-        public view View1() { render Placeholder("View1") [width 360, height 76] }
-        fixture Sketches {
-          ChillVibes = create Playlist { Cover: "cover.png", Title: "Chill Vibes", Score: 7 }
-          MorningRun = create Playlist { Cover: "run.png", Title: "Morning Run", Score: 12 }
-        }
-        scenarios View1 "sketch" {
-          device phone
-          scenario "first" { render () }
-          scenario "second" { render () }
-        }
-      `,
-    }, async paths => {
-      const parsed = await Workspace.parse(paths['View1.tao'])
-      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, addEntityRequest(), {
-        files: parsed.files.map(file => file.ast),
-      })
-      const updated = await Workspace.shared(FS.dirname(paths['View1.tao'])).then(workspace =>
-        workspace.parseSource(patch.content, parsed.entry.document.uri)
-      )
+  for (const existingImport of ['', 'use Playlists from ./Data.tao']) {
+    Test(
+      `adds an imported entity parameter to every sketch scenario with ${existingImport || 'no data import'}`,
+      async () => {
+        await withTaoFiles('tao-source-actions-sketch-feed-', {
+          'Data.tao': `workspace data Playlists / Playlist { Cover text Title text Score number }\n`,
+          'View1.tao': `
+          use Placeholder from @tao/ui
+          ${existingImport}
+          public view View1() { render Placeholder("View1") [width 360, height 76] }
+          fixture Sketches {
+            ChillVibes = create Playlist { Cover: "cover.png", Title: "Chill Vibes", Score: 7 }
+            MorningRun = create Playlist { Cover: "run.png", Title: "Morning Run", Score: 12 }
+          }
+          scenarios View1 "sketch" {
+            device phone
+            scenario "first" { render () }
+            scenario "second" { render () }
+          }
+        `,
+        }, async paths => {
+          const parsed = await Workspace.parse(paths['View1.tao'])
+          const patch = await SourceActions.applyStudioPatch(parsed.entry.document, addEntityRequest(), {
+            files: parsed.files.map(file => file.ast),
+          })
+          const updated = await Workspace.shared(FS.dirname(paths['View1.tao'])).then(workspace =>
+            workspace.parseSource(patch.content, parsed.entry.document.uri)
+          )
 
-      Expect(patch.content).toContain('use Playlists from ./Data.tao')
-      Expect(patch.content).toContain('public\nview View1(Playlist)')
-      Expect(patch.content).toContain('fixture Sketches\n   device phone')
-      Expect(patch.content).toContain('scenario "first" {\n      render (Playlist: ChillVibes)')
-      Expect(patch.content).toContain('scenario "second" {\n      render (Playlist: MorningRun)')
-      Expect(updated.entry.document.parseResult.lexerErrors).toEqual([])
-      Expect(updated.entry.document.parseResult.parserErrors).toEqual([])
-    })
-  })
+          Expect(patch.content).toContain(
+            existingImport === '' ? 'use Playlist from ./Data.tao' : 'use Playlist, Playlists from ./Data.tao',
+          )
+          const entityImport = updated.entry.ast.statements.filter(AST.isUseStatement)
+            .flatMap(statement => statement.importedDeclarations)
+            .find(reference => reference.$refText === 'Playlist')
+          Expect.Is(entityImport?.ref, AST.isEntityDataDeclaration)
+          Expect(patch.content).toContain('public\nview View1(Playlist)')
+          Expect(patch.content).toContain('fixture Sketches\n   device phone')
+          Expect(patch.content).toContain('scenario "first" {\n      render (Playlist: ChillVibes)')
+          Expect(patch.content).toContain('scenario "second" {\n      render (Playlist: MorningRun)')
+          Expect(updated.entry.document.parseResult.lexerErrors).toEqual([])
+          Expect(updated.entry.document.parseResult.parserErrors).toEqual([])
+        })
+      },
+    )
+  }
 
   Test('rejects incomplete sketch scenario bindings and arbitrary source text', async () => {
     const document = await parseDocument(`

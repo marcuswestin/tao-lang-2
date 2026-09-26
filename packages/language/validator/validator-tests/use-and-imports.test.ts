@@ -1,8 +1,12 @@
+import { Type } from '@ast-utils'
+import { AST } from '@parser'
 import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { useValidationCodes } from '../validator-src/diagnostic-codes'
 import Validator from '../validator-src/validator'
+import { dataValidationMessages } from '../validator-src/validators/data-validator'
 import { injectionValidationMessages } from '../validator-src/validators/injections-validator'
+import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import { useValidationMessages } from '../validator-src/validators/use-validator'
 import {
   accepts,
@@ -493,7 +497,7 @@ Describe('validator: use organization', () => {
   )
 
   Test(
-    'treats plural data imports referenced through their singular entity type as used',
+    'keeps a plural data import unused and its singular entity type unavailable',
     checksFiles(
       {
         'Main.tao': `
@@ -505,10 +509,10 @@ Describe('validator: use organization', () => {
         'Schema.tao': 'workspace data Documents / Document { Title text }',
       },
       result => {
-        Expect(validationErrorMessages(result)).toEqual([])
+        Expect(validationErrorMessages(result)).toContain(typeValidationMessages.unknownType('Document'))
         Expect(
           result.diagnostics.some(diagnostic => diagnostic.message === useValidationMessages.unusedImport('Documents')),
-        ).toBe(false)
+        ).toBe(true)
       },
     ),
   )
@@ -552,5 +556,221 @@ Describe('validator: imported declaration regressions', () => {
         Expect(validationErrorMessages(result)).toEqual([])
       },
     ),
+  )
+})
+
+Describe('validator: explicit data import forms', () => {
+  const schema = 'workspace data Workspaces / Workspace { Name text }'
+
+  Test(
+    'imports a singular entity for type references and creates',
+    acceptsFiles({
+      'Main.tao': importingApp(
+        'use Workspace from ./Schema.tao',
+        'render Text("Ready")',
+        `view Editor(Workspace) { render Text(Workspace.Name) }
+         fixture Starter { Home = create Workspace { Name: "Home" } }
+         ${stubView('Text', 'Value text')}`,
+      ),
+      'Schema.tao': schema,
+    }),
+  )
+
+  Test(
+    'imports both data forms from a named package',
+    acceptsFiles({
+      'Main.tao': importingApp(
+        'use Workspaces, Workspace from @records',
+        'query Workspaces { } render Text("Rows: { Workspaces.Count }")',
+        `view Editor(Workspace) { render Text(Workspace.Name) }
+         ${stubView('Text', 'Value text')}`,
+      ),
+      'Packages/@records/Schema.tao': schema,
+    }),
+  )
+
+  for (const name of ['Workspaces', 'Workspace']) {
+    Test(
+      `diagnoses a duplicate ${name} import in one statement`,
+      rejectsFiles({
+        'Main.tao': importingApp(
+          `use ${name}, ${name} from ./Schema.tao`,
+          'render Text("Ready")',
+          stubView('Text', 'Value text'),
+        ),
+        'Schema.tao': schema,
+      }, useValidationMessages.duplicateImport(name)),
+    )
+  }
+
+  Test(
+    'keeps the plural collection unavailable after a singular-only import',
+    rejectsFiles({
+      'Main.tao': importingApp(
+        'use Workspace from ./Schema.tao',
+        'query Workspaces { } render Text("Ready")',
+        stubView('Text', 'Value text'),
+      ),
+      'Schema.tao': schema,
+    }, dataValidationMessages.querySource),
+  )
+
+  Test(
+    'requires the singular import for a create even when the plural is imported',
+    rejectsFiles({
+      'Main.tao': importingApp(
+        'use Workspaces from ./Schema.tao',
+        'query Workspaces { } render Text("Ready")',
+        `fixture Starter { Home = create Workspace { Name: "Home" } }
+         ${stubView('Text', 'Value text')}`,
+      ),
+      'Schema.tao': schema,
+    }, "No data entity named 'Workspace' is in scope."),
+  )
+
+  Test(
+    'imports both forms with ordinary commas',
+    checksFiles({
+      'Main.tao': importingApp(
+        'use Workspaces, Workspace from ./Schema.tao',
+        'query Workspaces { } render Text("Rows: { Workspaces.Count }")',
+        `view Editor(Workspace) { render Text(Workspace.Name) }
+         ${stubView('Text', 'Value text')}`,
+      ),
+      'Schema.tao': schema,
+    }, result => {
+      Expect(validationErrorMessages(result)).toEqual([])
+      Expect(result.diagnostics.filter(diagnostic => diagnostic.code === useValidationCodes.unusedImport)).toEqual([])
+    }),
+  )
+
+  Test(
+    'needs only the plural import for a local singular loop binder',
+    acceptsFiles({
+      'Main.tao': importingApp(
+        'use Col from @tao/ui\nuse Workspaces from ./Schema.tao',
+        'query Workspaces { } render Col() { loop Workspaces / Workspace { Text(Workspace.Name) } }',
+        stubView('Text', 'Value text'),
+      ),
+      'Schema.tao': schema,
+    }),
+  )
+
+  Test(
+    'keeps an explicit singular import unused when only a local loop binder has that name',
+    checksFiles({
+      'Main.tao': importingApp(
+        'use Col from @tao/ui\nuse Workspaces, Workspace from ./Schema.tao',
+        'query Workspaces { } render Col() { loop Workspaces / Workspace { Text(Workspace.Name) } }',
+        stubView('Text', 'Value text'),
+      ),
+      'Schema.tao': schema,
+    }, result => {
+      Expect(validationErrorMessages(result)).toEqual([])
+      Expect(
+        result.diagnostics.filter(diagnostic => diagnostic.code === useValidationCodes.unusedImport)
+          .map(diagnostic => diagnostic.message),
+      ).toEqual([useValidationMessages.unusedImport('Workspace')])
+    }),
+  )
+
+  Test(
+    'keeps both forms implicitly visible for folder data declarations',
+    acceptsFiles({
+      'Main.tao': importingApp(
+        '',
+        'query Workspaces { } render Text("Rows: { Workspaces.Count }")',
+        `view Editor(Workspace) { render Text(Workspace.Name) }
+         fixture Starter { Home = create Workspace { Name: "Home" } }
+         ${stubView('Text', 'Value text')}`,
+      ),
+      'Schema.tao': schema.replace('workspace ', 'folder '),
+    }),
+  )
+
+  Test(
+    'resolves file-local data before same-name folder declarations in every data scope',
+    checksFiles({
+      'Main.tao': importingApp(
+        '',
+        'query Workspaces { order by LocalName } render Text("Rows: { Workspaces.Count }")',
+        `file data Workspaces / Workspace { LocalName text }
+         view Editor(Workspace) { render Text(Workspace.LocalName) }
+         fixture Starter { Home = create Workspace { LocalName: "Home" } }
+         ${stubView('Text', 'Value text')}`,
+      ),
+      'Schema.tao': 'folder data Workspaces / Workspace { SiblingName text }',
+    }, result => {
+      Expect(validationErrorMessages(result)).toEqual([])
+      const root = result.entry.ast
+      const local = root.statements.find(AST.isEntityDataDeclaration)
+      Expect.Is(local, AST.isEntityDataDeclaration)
+      const contents = [...AST.streamAllContents(root)]
+      const query = contents.find(AST.isEntityQueryDeclaration)
+      Expect.Is(query, AST.isEntityQueryDeclaration)
+      const reference = contents.filter(AST.isNamedTypeReference).find(type => type.root === 'Workspace')
+      Expect.Is(reference, AST.isNamedTypeReference)
+      const create = contents.find(AST.isFixtureCreateBinding)
+      Expect.Is(create, AST.isFixtureCreateBinding)
+      Expect(Type.queryEntity(query)).toBe(local)
+      Expect(Type.entityOfReference(reference)).toBe(local)
+      Expect(create.entity.ref).toBe(local)
+      Expect(
+        Type.visibleDataEntities(root).map(entity =>
+          entity.block.entries.filter(AST.isEntityDataField).map(field => field.name)
+        ),
+      ).toEqual([['LocalName'], ['SiblingName']])
+      const declarations = AST.visibleFileDeclarations(root, AST.isEntityDataDeclaration)
+      Expect(declarations).toHaveLength(2)
+      Type.visibleDataEntities(root).forEach((entity, index) => Expect(declarations[index]).toBe(entity))
+    }),
+  )
+
+  Test(
+    'diagnoses a repeated singular import',
+    rejectsFiles({
+      'Main.tao': importingApp(
+        'use Workspace from ./Schema.tao\nuse Workspace from ./Schema.tao',
+        'render Text("Ready")',
+        stubView('Text', 'Value text'),
+      ),
+      'Schema.tao': schema,
+    }, useValidationMessages.repeatedImport('Workspace')),
+  )
+
+  Test(
+    'diagnoses collisions between imported singular forms',
+    rejectsFiles({
+      'Main.tao': importingApp('use Workspace from ./Schemas', 'render Text("Ready")', stubView('Text', 'Value text')),
+      'Schemas/First.tao': schema,
+      'Schemas/Second.tao': 'workspace data OtherWorkspaces / Workspace { Name text }',
+    }, useValidationMessages.ambiguousImport('Workspace', './Schemas')),
+  )
+
+  Test(
+    'diagnoses collisions between imported and local singular types',
+    rejectsFiles({
+      'Main.tao': importingApp(
+        'use Workspace from ./Schema.tao',
+        'render Text("Ready")',
+        `type Workspace is text
+${stubView('Text', 'Value text')}`,
+      ),
+      'Schema.tao': schema,
+    }, useValidationMessages.localDeclarationCollision('Workspace')),
+  )
+
+  Test(
+    'keeps a collection and a different entity with the same spelling in separate namespaces',
+    acceptsFiles({
+      'Main.tao': importingApp(
+        'use Entries from ./Schema.tao',
+        'query Entries { } render Text("Rows: { Entries.Count }")',
+        `view Editor(Entries) { render Text(Entries.Label) }
+         ${stubView('Text', 'Value text')}`,
+      ),
+      'Schema.tao': `workspace data Entries / Entry { Name text }
+                     workspace data Groups / Entries { Label text }`,
+    }),
   )
 })

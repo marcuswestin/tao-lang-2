@@ -555,7 +555,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     }
     const declarations = [
       ...root.statements.filter(AST.isEntityDataDeclaration),
-      ...this.importedDeclarations(node, AST.isEntityDataDeclaration),
+      ...this.importedDeclarations(node, AST.isEntityDataDeclaration, declaration => declaration.singularName),
     ]
     const descriptions = declarations.map(declaration =>
       this.descriptions.createDescription(declaration, declaration.singularName, AST.getDocument(declaration))
@@ -724,7 +724,16 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   private createUseImportScope(useStatement: AST.UseStatement): Langium.Scope {
-    return this.createScopeForNodes(this.collectTargetDeclarations(useStatement))
+    return this.createImportTargetScope(this.collectTargetDeclarations(useStatement))
+  }
+
+  private createImportTargetScope(declarations: AST.Declaration[]): Langium.Scope {
+    return this.createScope(declarations.flatMap(declaration => {
+      const names = AST.isEntityDataDeclaration(declaration)
+        ? [declaration.name, declaration.singularName]
+        : [declaration.name]
+      return names.map(name => this.descriptions.createDescription(declaration, name, AST.getDocument(declaration)))
+    }))
   }
 
   /** A namespace name resolves only against this file's own use-package statements. */
@@ -747,7 +756,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (!AST.isUsePackageStatement(statement)) {
       return this.createScopeForNodes([])
     }
-    return this.createScopeForNodes(this.collectTargetDeclarations(statement))
+    return this.createImportTargetScope(this.collectTargetDeclarations(statement))
   }
 
   private importedCaseSetCases(node: AST.Node): AST.CaseSetCase[] {
@@ -785,6 +794,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   private importedDeclarations<DeclarationT extends AST.Declaration>(
     node: AST.Node,
     isDeclaration: (node: AST.Node) => node is DeclarationT,
+    importedName: (declaration: DeclarationT) => string = declaration => declaration.name,
   ): DeclarationT[] {
     const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
@@ -797,7 +807,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     for (const useStatement of root.statements.filter(AST.isUseStatement)) {
       const importedNames = new Set(useStatement.importedDeclarations.map(reference => reference.$refText))
       for (const statement of this.collectTargetDeclarations(useStatement, currentPath)) {
-        if (AST.isDeclaration(statement) && isDeclaration(statement) && importedNames.has(statement.name)) {
+        if (AST.isDeclaration(statement) && isDeclaration(statement) && importedNames.has(importedName(statement))) {
           declarations.push(statement)
         }
       }
@@ -888,8 +898,8 @@ function entityDataForValueDeclaration(
   if (AST.isParameterDeclaration(declaration)) {
     const type = declaration.inlineType ? declaration.inlineType.type : declaration.type
     if (AST.isNamedTypeReference(type) && type.members.length === 0) {
-      return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
-        entity.singularName === type.root
+      return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration, entity => entity.singularName).find(
+        entity => entity.singularName === type.root,
       )
     }
   }
@@ -958,7 +968,8 @@ function entityDataForQuery(query: AST.EntityQueryDeclaration): AST.EntityDataDe
     return entityDataForCollection(query.source, query)
   }
   const sourceName = query.sourceName ?? query.name
-  return AST.visibleFileDeclarations(query, AST.isEntityDataDeclaration).find(entity => entity.name === sourceName)
+  return AST.visibleFileDeclarations(query, AST.isEntityDataDeclaration, entity => entity.name)
+    .find(entity => entity.name === sourceName)
 }
 
 type ScopeCarrier =

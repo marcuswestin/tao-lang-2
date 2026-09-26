@@ -151,7 +151,7 @@ export async function addSketchEntityParameter(
   const imported = ensureNamedImport(
     changed,
     file,
-    request.entity.declarationName,
+    request.entity.parameterName,
     request.entity.importPath,
   )
   return await formatAndReparse(document, imported)

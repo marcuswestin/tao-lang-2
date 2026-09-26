@@ -1,4 +1,4 @@
-use Documents, Workspaces from @data
+use Document, Workspace from @data
 use WordFlowerDrawerNavigator, WordFlowerNavigator, WordFlowerTabsNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
@@ -6,6 +6,11 @@ use Spinner, TextMultiline from @tao/ui
 use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
+//
+// EXPLICIT DATA IMPORTS. Each used collection or entity name is imported independently with
+// commas. This fixture file needs only Document and Workspace; @ui/Workspaces needs both
+// Workspace and Workspaces. A loop's local row binder and relationship member access do not
+// import another declaration name. Folder-visible declarations retain their existing scope.
 //
 // BRIDGE METADATA. The build stamp and Markdown export sidecars import their generated, source-
 // adjacent Tao contract types. Tao writes those ignored modules during compilation and checks the

@@ -1,6 +1,6 @@
 use Checkbox, Col, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
-use Ingredients from ..
+use Ingredient, Ingredients from ..
 
 // The ingredients feature: the list a person lands on, one row of it, and the detail of one
 // ingredient.

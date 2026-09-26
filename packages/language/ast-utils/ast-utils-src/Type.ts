@@ -408,7 +408,8 @@ export class Type {
   /** entityOfReference resolves a top-level entity's singular type name. */
   static entityOfReference(reference: AST.NamedTypeReference): DataEntityDefinition | undefined {
     return reference.members.length === 0
-      ? Type.visibleDataEntities(reference).find(entity => entity.singularName === reference.root)
+      ? AST.visibleFileDeclarations(reference, AST.isEntityDataDeclaration, entity => entity.singularName)
+        .find(entity => entity.singularName === reference.root)
       : undefined
   }
 
@@ -558,7 +559,8 @@ export class Type {
       return source.kind === 'list' && source.element?.kind === 'entity' ? source.element.entity : undefined
     }
     const sourceName = query.sourceName ?? query.name
-    return Type.visibleDataEntities(query).find(entity => entity.name === sourceName)
+    return AST.visibleFileDeclarations(query, AST.isEntityDataDeclaration, entity => entity.name)
+      .find(entity => entity.name === sourceName)
   }
 
   /** dataEntityName returns the durable singular name stored in provider envelopes. */

@@ -286,7 +286,7 @@ function featureFile(entity: CreationEntity, _names: ProjectNames): string {
 
   return `use ${uiViews.join(', ')} from @tao/ui
 use FormButton from @tao/ui/basic
-use ${entity.plural} from ..
+use ${[entity.plural, entity.singular].sort().join(', ')} from ..
 
 ${
     commentLines(
@@ -443,7 +443,7 @@ ${fields}
 ${scenarios}
 }`
   })
-  return `use ${[names.app, ...plan.entities.map(entity => entity.plural)].sort().join(', ')} from ./
+  return `use ${[names.app, ...plan.entities.map(entity => entity.singular)].sort().join(', ')} from ./
 ${rowImports}
 
 // Deterministic data for Studio previews and the device matrix.

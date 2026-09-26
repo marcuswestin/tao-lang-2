@@ -69,7 +69,7 @@ Describe('tao create lowering', () => {
       await runFix(generated, { cwd: root })
       const workspace = await Workspace.open(generated)
       const problems: string[] = []
-      for (const entry of ['App.tao', 'FieldNotes.test.tao']) {
+      for (const entry of ['App.tao', 'Scenarios.tao', 'FieldNotes.test.tao']) {
         const result = await workspace.validate(FS.resolvePath(entry, generated))
         problems.push(
           ...result.diagnostics.filter(diagnostic => diagnostic.severity === 'error').map(d =>

@@ -1,5 +1,9 @@
+import { Workspace } from '@compiler/workspace'
+import { AST } from '@parser'
 import { FS, Text } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
+import { useValidationCodes } from '@validator/diagnostic-codes'
+import { TaoCodeActionProvider } from '../source-actions-src/langium-code-actions'
 import SourceActions from '../source-actions-src/source-actions'
 import {
   organized,
@@ -479,32 +483,144 @@ Describe('removeUnusedImports', () => {
     )
   })
 
-  Test('keeps plural data imports used through their singular entity type', async () => {
-    await withTaoFiles(
-      'tao-source-actions-data-import-',
+  for (
+    const example of [
       {
-        'Main.tao': `
-        use Documents from ./Schema.tao
+        name: 'singular-only entity type',
+        imports: 'Document',
+        body: 'view Editor(Document) { render Empty(Document.Title) }',
+        kept: ['Document'],
+      },
+      {
+        name: 'plural-only root query',
+        imports: 'Documents',
+        body: 'view Editor() { query Documents { } render Empty("ok") }',
+        kept: ['Documents'],
+      },
+      {
+        name: 'both explicit forms when both are used',
+        imports: 'Documents, Document',
+        body: 'view Editor(Document) { query Documents { } render Empty(Document.Title) }',
+        kept: ['Document', 'Documents'],
+      },
+      {
+        name: 'singular type without the unused plural',
+        imports: 'Documents, Document',
+        body: 'view Editor(Document) { render Empty(Document.Title) }',
+        kept: ['Document'],
+      },
+      {
+        name: 'plural query without the unused singular',
+        imports: 'Documents, Document',
+        body: 'view Editor() { query Documents as Recent { } render Empty("ok") }',
+        kept: ['Documents'],
+      },
+      {
+        name: 'plural query with a local singular loop binder',
+        imports: 'Documents, Document',
+        body: `view Editor() {
+        query Documents { }
+        render Col() { loop Documents / Document { Empty(Document.Title) } }
+      }`,
+        kept: ['Documents'],
+      },
+      {
+        name: 'no singular import for a local same-name parameter',
+        imports: 'Document',
+        body: 'view Editor(Document text) { render Empty(Document) }',
+        kept: [],
+      },
+      {
+        name: 'no singular import for a local same-name alias',
+        imports: 'Document',
+        body: 'view Editor() { let Document = "local" render Empty(Document) }',
+        kept: [],
+      },
+      {
+        name: 'no singular import for a local same-name state',
+        imports: 'Document',
+        body: 'view Editor() { state Document = "local" render Empty(Document) }',
+        kept: [],
+      },
+      {
+        name: 'neither unused form',
+        imports: 'Documents, Document',
+        body: 'view Editor() { render Empty("ok") }',
+        kept: [],
+      },
+    ]
+  ) {
+    for (const operation of ['removeUnusedImports', 'organizeSource'] as const) {
+      Test(`${operation} keeps ${example.name}`, async () => {
+        await withTaoFiles('tao-source-actions-data-import-', {
+          'Main.tao': `
+            use ${example.imports} from ./Schema.tao
+            ${example.body}
+            view Empty(Value text) { render inject \`\`\`ts return null \`\`\` }
+            view Col() { render inject Content @@content \`\`\`ts return Content \`\`\` }
+          `,
+          'Schema.tao': 'workspace data Documents / Document { Title text }',
+        }, async paths => {
+          const source = await FS.readText(paths['Main.tao']!)
+          const document = await parseRawDocumentAt(source, paths['Main.tao']!)
+          Expect(document.parseResult.lexerErrors).toEqual([])
+          Expect(document.parseResult.parserErrors).toEqual([])
+          const uses = document.parseResult.value.statements.filter(AST.isUseStatement)
+          Expect(uses[0]!.importedDeclarations.every(reference => reference.ref !== undefined)).toBe(true)
+          if (example.name.includes('loop binder')) {
+            const references = AST.streamAllContents(document.parseResult.value)
+              .filter(AST.isMemberAccessExpression)
+            Expect(references.some(reference => AST.isForStatement(reference.target.ref))).toBe(true)
+          }
+          if (example.name.includes('local same-name')) {
+            const reference = AST.streamAllContents(document.parseResult.value)
+              .filter(AST.isValueReference).find(reference => reference.target.$refText === 'Document')
+            Expect(reference?.target.ref).toBeDefined()
+            Expect(AST.findRoot(reference!.target.ref!)).toBe(document.parseResult.value)
+          }
+          const updated = await SourceActions[operation](document) ?? source
+          const reparsed = await parseRawDocumentAt(updated, paths['Main.tao']!)
+          const imports = reparsed.parseResult.value.statements.filter(AST.isUseStatement)
+            .flatMap(statement => statement.importedDeclarations.map(reference => reference.$refText))
+          Expect(imports.toSorted()).toEqual(example.kept)
+          Expect(await SourceActions[operation](reparsed)).toBeUndefined()
+          if (example.name.includes('local same-name')) {
+            const validated = await Workspace.validate(paths['Main.tao']!)
+            const unused = validated.diagnostics.filter(diagnostic =>
+              diagnostic.code === useValidationCodes.unusedImport
+            )
+            Expect(unused).toHaveLength(1)
+          }
+        })
+      })
+    }
+  }
 
-        workspace view Editor(Document) {
-          render Empty()
-        }
-        view Empty() {
-          render inject \`\`\`ts
-            return null
-          \`\`\`
-        }
+  Test('unused-import quickfix removes only the unused data form', async () => {
+    await withTaoFiles('tao-source-actions-data-quickfix-', {
+      'Main.tao': `
+        use Documents, Document from ./Schema.tao
+        view Editor(Document) { render inject \`\`\`ts return null \`\`\` }
       `,
-        'Schema.tao': 'workspace data Documents / Document { Title text }',
-      },
-      async paths => {
-        const source = await FS.readText(paths['Main.tao']!)
-        const document = await parseRawDocumentAt(source, paths['Main.tao']!)
-
-        const updated = await SourceActions.removeUnusedImports(document)
-        Expect(updated ?? source).toContain('use Documents from ./Schema.tao')
-      },
-    )
+      'Schema.tao': 'workspace data Documents / Document { Title text }',
+    }, async paths => {
+      const validated = await Workspace.validate(paths['Main.tao']!)
+      const document = validated.entry.document
+      const unused = validated.diagnostics.filter(diagnostic => diagnostic.code === useValidationCodes.unusedImport)
+        .map(diagnostic => ({ code: diagnostic.code, message: diagnostic.message, range: diagnostic.range! }))
+      Expect(unused).toHaveLength(1)
+      Expect(unused[0]!.range).toBeDefined()
+      const actions = await new TaoCodeActionProvider().getCodeActions(document, {
+        textDocument: { uri: document.uri.toString() },
+        range: unused[0]!.range,
+        context: { diagnostics: unused, only: ['quickfix'] },
+      })
+      Expect(actions).toHaveLength(1)
+      Expect(actions[0]!.title).toBe('Tao: Remove unused imports')
+      const edit = actions[0]!.edit!.changes![document.uri.toString()]![0]!
+      Expect(edit.newText).toContain('use Document from ./Schema.tao')
+      Expect(edit.newText).not.toContain('use Documents')
+    })
   })
 
   Test('keeps same-name declarations inferred by bare app property configurations', async () => {

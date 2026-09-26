@@ -51,7 +51,7 @@ Describe('Expo runtime `on <device>` and `with <fixture>` test clauses', () => {
       'tao-test-fixture-runtime-',
       {
         'Main.test.tao': `
-          use WordFlowerFixtureApp, Workspaces from ./
+          use WordFlowerFixtureApp, Workspace from ./
 
           fixture StarterWorkspace {
             Home = create Workspace { Name: "Home" }
