@@ -6,12 +6,14 @@ import { Expect, mkTestDir, runCleanups, Test } from '@shared/test'
 import { openStudioPreviewSession } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from '../studio-tooling-src/StudioPreviewRuntime'
+import { assertClerkInstantData, type ClerkInstantFixture, withClerkInstant } from './clerk-instant'
 import { clerkFailureSummary, clerkTestingTokenScript, loadClerkLiveConfiguration } from './clerk-testing-token'
 
 /**
  * Explicit remote acceptance: a development Clerk instance with password and email-code enabled,
  * without required MFA/session tasks. Supply TAO_CLERK_LIVE=1, CLERK_PUBLISHABLE_KEY,
  * CLERK_SECRET_KEY and CLERK_JWT_KEY through the invoking environment or the repository secrets store.
+ * Also set TAO_INSTANT_LIVE_API_URL=http://localhost:9020 to prove the same UI against real Instant storage.
  * Run with ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-auth.test.ts
  */
 Test('real Clerk password and email-code UI sessions authorize durable Account and Note data', async () => {
@@ -23,6 +25,14 @@ Test('real Clerk password and email-code UI sessions authorize durable Account a
     )
     return
   }
+  await withClerkInstant(env['TAO_INSTANT_LIVE_API_URL'], instant => runClerkBrowser(configuration, instant))
+}, 300_000)
+
+async function runClerkBrowser(
+  configuration: NonNullable<Awaited<ReturnType<typeof loadClerkLiveConfiguration>>>,
+  instant: ClerkInstantFixture | undefined,
+) {
+  const env = Platform.runtimeProcess.env
   const artifactBase = env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT'] ?? Repo.resolvePath('.artifacts/studio-smoke/clerk')
   await FS.mkdir(artifactBase)
   const artifactRoot = await mkTestDir('clerk-live-')
@@ -57,7 +67,7 @@ Test('real Clerk password and email-code UI sessions authorize durable Account a
     if (policyFile === undefined) {
       Errors.throwUnexpected('Auth Review must emit its account data policy.')
     }
-    gateway = await startGateway(artifactRoot, policyFile.code, configuration, staticServer.url)
+    gateway = await startGateway(artifactRoot, policyFile.code, configuration, staticServer.url, instant)
     const configuredSource = source.replaceAll('pk_test_REPLACE_WITH_YOUR_KEY', configuration.publishableKey)
       .replaceAll('http://127.0.0.1:4738', gateway.url)
     await FS.writeText(FS.resolvePath('Auth Review.tao', projectRoot), configuredSource)
@@ -134,6 +144,13 @@ Test('real Clerk password and email-code UI sessions authorize durable Account a
     await browser.waitFor(`document.body.textContent?.includes('Clerk password note') === true`, { timeoutMs: 60_000 })
     Expect(await bodyIncludes(browser, 'Hello Clerk browser account')).toBe(true)
 
+    if (instant !== undefined) {
+      stage = 'independently verify password profile and note in Instant'
+      await assertClerkInstantData(instant, ['Clerk password note'], step => {
+        stage = step
+      })
+    }
+
     stage = 'sign-out clears account data'
     await signOut(browser)
     Expect(await bodyIncludes(browser, 'Clerk password note')).toBe(false)
@@ -157,6 +174,12 @@ Test('real Clerk password and email-code UI sessions authorize durable Account a
     await browser.waitFor(`document.body.textContent?.includes('Clerk email-code note') === true`, {
       timeoutMs: 60_000,
     })
+    if (instant !== undefined) {
+      stage = 'independently verify email-code profile and both notes in Instant'
+      await assertClerkInstantData(instant, ['Clerk password note', 'Clerk email-code note'], step => {
+        stage = step
+      })
+    }
     await signOut(browser)
     Expect(await bodyIncludes(browser, 'Clerk email-code note')).toBe(false)
     Expect(await bodyIncludes(browser, 'Clerk password note')).toBe(false)
@@ -209,7 +232,7 @@ Test('real Clerk password and email-code UI sessions authorize durable Account a
       { label: 'remove disposable state', run: () => FS.remove(artifactRoot) },
     ], { channel: 'clerk-live-cleanup', subject: 'Clerk live browser acceptance' })
   }
-}, 300_000)
+}
 
 async function fill(browser: StudioCdp, label: string, value: string): Promise<void> {
   const selector = `input[aria-label=${JSON.stringify(label)}]`
@@ -247,6 +270,7 @@ async function startGateway(
   policy: string,
   configuration: { issuer: string; jwtKey: string },
   origin: string,
+  instant: ClerkInstantFixture | undefined,
 ) {
   const policyPath = FS.resolvePath('TaoDataPolicy.json', root)
   const clerkPath = FS.resolvePath('clerk-public-trust.json', root)
@@ -257,6 +281,10 @@ async function startGateway(
     jwtKey: configuration.jwtKey,
     authorizedParties: [origin],
   })
+  const instantPath = FS.resolvePath('instant-private.json', root)
+  if (instant !== undefined) {
+    await FS.writeJson(instantPath, instant.instant, { mode: 0o600 })
+  }
   const command = CLI.start(Repo.resolvePath('agent'), {
     args: [
       'auth-review-server',
@@ -264,6 +292,7 @@ async function startGateway(
       policyPath,
       '--clerk-config',
       clerkPath,
+      ...(instant === undefined ? [] : ['--instant-config', instantPath]),
       '--database',
       FS.resolvePath('accounts.sqlite', root),
       '--port',

@@ -409,5 +409,6 @@ isolation are verified separately by the reference server/provider tests; only c
 journeys establish the user-facing behavior. AuthReviewClerk selects the managed adapter with a
 placeholder publishable key; configure its development instance and gateway before use. Its opt-in
 browser journey passed on 2026-09-26 against the SQLite reference gateway, including real password
-and email-code UI, profile and note persistence, reload and logout. Clerk over InstantDB and
-physical-device acceptance remain outstanding.
+and email-code UI, profile and note persistence, reload and logout. The same journey passed with
+local InstantDB storage and independent row/guest-access checks on 2026-09-26. Physical-device
+acceptance remains outstanding.

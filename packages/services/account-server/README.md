@@ -73,17 +73,38 @@ required phone number, MFA or session tasks, and local browser origins allowed. 
 with `just secrets add <NAME>` and run `just secrets` once to decrypt the repository store. Explicit
 environment values take precedence. Stored values are loaded only after live opt-in; the journey
 selects the three Clerk entries without exporting them into the process environment. No secret is
-needed in Tao source. From the repository root run:
+needed in Tao source.
+
+For guided setup, run `just setup-clerk` in a terminal (`just setup-clerk --instructions` only
+prints the steps). The wizard opens each Dashboard page after a keypress, asks you to confirm
+that settings are saved, validates development keys, retrieves the matching public signing key,
+and encrypts the three entries in the existing repository secret store. Authentication settings
+remain Dashboard steps because ordinary Backend API keys do not configure them. Run `just secrets`
+afterward to refresh the local decrypted store. This is repository development tooling, not a
+published Tao CLI command. Run the browser acceptance from the repository root:
 
 ```sh
 TAO_CLERK_LIVE=1 ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-auth.test.ts
 ```
 
+To run the same real Clerk UI journey with local InstantDB storage, start the stack and explicitly
+select its endpoint:
+
+```sh
+./agent unsandboxed local-instantdb start
+TAO_CLERK_LIVE=1 TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-auth.test.ts
+```
+
+The Instant variant creates an isolated expiring app, independently reads persisted account and
+note rows, and checks that direct guest access is denied. It still requires internet access for
+Clerk. An unavailable or invalid configured Instant endpoint fails instead of selecting SQLite.
+
 Without opt-in the journey explicitly skips; opted-in missing configuration fails. The test creates
 and deletes its own Clerk user, temporary project, gateway database and browser profile. If remote
 cleanup fails, it reports the synthetic user ID for manual deletion. Live browser acceptance passed
 on 2026-09-26 against the SQLite reference gateway, including both sign-in methods, profile/notes,
-reload and logout. Clerk over real Instant storage still needs its own live conformance run.
+reload and logout. The same journey passed against local InstantDB on 2026-09-26, with independent
+profile/note reads and direct guest-access denial.
 The gateway requires an `azp` origin claim, which native Clerk proofs may omit. Native
 authentication is not a verified pairing; its token/origin contract and physical-device storage
 need separate acceptance.

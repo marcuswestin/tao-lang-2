@@ -2,8 +2,8 @@
 
 Status: local and self-hosted slice implemented, 2026-09-26. The current authorized slice includes
 TestAuth/Memory and LocalAuth/Reference, executable Auth Review journeys, and self-hosted InstantDB.
-The first Clerk adapter and live browser acceptance against the reference gateway are implemented.
-Clerk over InstantDB, physical-device acceptance and advanced account lifecycle features remain outstanding.
+The first Clerk adapter and live browser acceptance against SQLite and InstantDB gateways are implemented.
+Physical-device acceptance and advanced account lifecycle features remain outstanding.
 The [decisions](<Tao Revolution/Decisions.md>) own language semantics; the
 [review record](<Auth syntax review.md>) distinguishes accepted changes from remaining choices.
 [MVP scope](<../MVP Roadmap/Developer MVP Roadmap.md>) remains authoritative for priority. This plan
@@ -388,7 +388,12 @@ Its testing token only bypasses bot protection. The live journey passed on 2026-
 password sign-in, profile and owned-note persistence, reload, logout, email-code sign-in and a second
 logout against the SQLite reference gateway. The run exposed Clerk's default sign-out navigation;
 targeted logout and cancellation revocation now use the SDK completion callback so Tao owns navigation.
-Clerk over real Instant storage and physical-device lifecycle acceptance remain outstanding. The gateway requires an `azp` origin
+The same journey passed against local InstantDB on 2026-09-26, independently querying Account and
+Note rows and proving direct guest reads are denied. `just setup-clerk` guides saved Dashboard
+settings, validates matching development keys, retrieves the public signing key and stores the
+three credentials encrypted. It preserves concurrent unrelated secret-store edits and refuses
+conflicting credential/recipient changes. Physical-device lifecycle acceptance remains outstanding.
+The gateway requires an `azp` origin
 claim; native proofs may omit it, so native pairing needs an explicit token/origin contract before
 it can be advertised. Advanced recovery, OAuth, MFA/passkeys,
 linking, deletion and production gateway deployment are not part of this initial implementation.
