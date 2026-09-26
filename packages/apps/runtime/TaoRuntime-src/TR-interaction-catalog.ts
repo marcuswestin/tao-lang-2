@@ -24,6 +24,7 @@ import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-
 import { type TaoProps, TaoPropsControls, type TaoVisualLayout } from './TR-TaoProps'
 
 export type TaoCommandSlotDescription = Readonly<{
+  scalarType?: 'text' | 'number' | 'boolean'
   entity: boolean
   name: string
   required: boolean

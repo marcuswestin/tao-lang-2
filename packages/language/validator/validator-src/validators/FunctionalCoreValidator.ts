@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
+import { isAgentCommandsList } from './agent-commands-validator'
 import { FunctionsValidator } from './functions-validator'
 
 const messages = {
@@ -484,6 +485,9 @@ function validateCompatibleBranches(
 }
 
 function validateList(list: AST.ListLiteral, ctx: ValidationContext): void {
+  if (isAgentCommandsList(list)) {
+    return
+  }
   const resolvedElements = list.elements
     .map(element => ({ element, type: Type.ofExpression(element) }))
     .filter(({ type }) => type.kind !== 'unresolved')

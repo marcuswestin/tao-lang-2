@@ -1057,6 +1057,20 @@ export class RuntimeDataSchema {
     }
   }
 
+  /** Await this selected app store and surface provider failures swallowed by its save queue. */
+  async settleForCommand(): Promise<void> {
+    let pending: Promise<void>
+    do {
+      pending = this.saveQueue
+      await this.settle()
+    } while (pending !== this.saveQueue)
+    if (this.status !== 'ready') {
+      throw new HostEnvironmentError(this.error || `Datasource '${this.name}' is ${this.status}.`, {
+        details: { datasource: this.name, status: this.status },
+      })
+    }
+  }
+
   setStatus(status: DataStatus, message: string): void {
     this.failedSaveSequence = undefined
     this.errorRecoverable = false

@@ -79,6 +79,7 @@ primitive datasource with {
 primitive app with {
    Name text,
    Navigator nav,
+   AgentCommands list of command is [],
    Datasource list of datasource is [],
    Design design is none,
 }

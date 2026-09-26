@@ -93,6 +93,7 @@ Describe('validator: workspace structure', () => {
       Expect(appPrimitive?.slots?.properties.map(property => property.name)).toEqual([
         'Name',
         'Navigator',
+        'AgentCommands',
         'Datasource',
         'Design',
       ])

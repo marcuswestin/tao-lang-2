@@ -1,10 +1,34 @@
-import { CLI, Errors, FS, Repo } from '@shared'
+import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import { type BuildRecord, executeBuildTargets } from '../cli-src/build-command'
 
 const fixtureRoot = Repo.resolvePath('packages/testing/e2e-testing/fixtures/Clockwork')
 
 Describe('Tao local build and clean CLI', () => {
+  Test('resolves project packages while retaining output in an ignored artifact directory', async () => {
+    const output = Repo.resolvePath(`.artifacts/build-output-test-${Platform.randomUUID()}`)
+    try {
+      const built = await runTao([
+        'build',
+        'Apps/Test Apps/Agent Commands',
+        '--app',
+        'AgentCommandsProof',
+        '--web',
+        '--compile-only',
+        '--output',
+        output,
+      ])
+      Expect(built.exitCode).toBe(0)
+      const builds = await FS.listDir(output)
+      Expect(builds).toHaveLength(1)
+      const record = await FS.readJson<BuildRecord>(FS.resolvePath(`${builds[0]}/build.json`, output))
+      Expect(record.results.web?.status).toBe('succeeded')
+      Expect(record.projectRoot).toBe(Repo.resolvePath('Apps/Test Apps/Agent Commands'))
+    } finally {
+      await FS.remove(output)
+    }
+  })
+
   Test('runs selected targets together and retains both success and failure', async () => {
     const web = Deferred<string>()
     const desktop = Deferred<string>()
