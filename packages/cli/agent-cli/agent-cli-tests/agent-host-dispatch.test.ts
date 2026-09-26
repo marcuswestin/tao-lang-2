@@ -5,6 +5,41 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const DISPATCHER = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts')
 
 Describe('named host command dispatch', () => {
+  Test('bounds Watchman management to fixed lifecycle actions', async () => {
+    const root = await mkTestDir('tao-watchman-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('dev.log', root)
+      await FS.writeText(
+        source,
+        JSON.stringify({
+          agentHostCommands: ['watchman start', 'watchman status', 'watchman stop'],
+        }),
+      )
+      const dev = FS.resolvePath('dev', root)
+      await FS.writeText(dev, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\nexit "${TAO_DEV_EXIT:-0}"\n')
+      await FS.chmod(dev, 0o755)
+      const invoke = (args: string[], exitCode = '0') =>
+        CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'watchman', ...args],
+          cwd: root,
+          env: { TAO_HOST_LOG: log, TAO_DEV_EXIT: exitCode },
+        })
+      for (const action of ['start', 'status', 'stop']) {
+        Expect((await invoke([action])).exitCode).toBe(0)
+        Expect(await FS.readText(log)).toBe(`watchman\n${action}\n`)
+      }
+      await FS.remove(log)
+      for (const args of [[], ['watch-del-all'], ['start', '--sockname', '/foreign'], ['stop', '--help']]) {
+        Expect((await invoke(args)).exitCode).toBe(2)
+      }
+      Expect(await FS.exists(log)).toBe(false)
+      Expect((await invoke(['start'], '7')).exitCode).toBe(7)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('bounds Studio lifecycle selectors and preserves stop failures', async () => {
     const root = await mkTestDir('tao-studio-lifecycle-host-')
     try {

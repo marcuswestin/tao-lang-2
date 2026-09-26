@@ -63,7 +63,8 @@ git clone <repository> tao && cd tao
 The entry script enters the pinned environment once, runs `./agent setup`, and opens your interactive
 shell in that same environment. A failed setup stops entry. Running it again inside this checkout's
 active environment returns immediately without repeating setup or nesting another shell. A different
-checkout still enters its own environment. Type `exit` to leave. Then:
+checkout still enters its own environment. `./enter-tao-dev-env --setup-only` explicitly refreshes
+the pinned environment and runs setup without an interactive shell. Type `exit` to leave. Then:
 
 | Command      | What it does                                                                          |
 | ------------ | ------------------------------------------------------------------------------------- |

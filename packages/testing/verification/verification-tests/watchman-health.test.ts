@@ -64,7 +64,7 @@ Describe('Watchman health', () => {
 
     Expect(watchman?.status).toBe('warn')
     Expect(watchman?.detail).toContain('fall back to crawling')
-    Expect(watchman?.remediation).toContain('/clone/.devenv/profile/bin/watchman version')
+    Expect(watchman?.remediation).toContain('./agent unsandboxed watchman start')
   })
 
   Test('fails a watch root that encloses the checkout and names the one to remove', () => {
@@ -95,7 +95,8 @@ Describe('Watchman health', () => {
 
     Expect(inWorktree?.status).toBe('warn')
     Expect(missing?.status).toBe('warn')
-    Expect(missing?.remediation).toContain('/clone/.devenv/profile/bin/watchman version')
+    Expect(missing?.remediation).toContain('./agent unsandboxed watchman stop')
+    Expect(missing?.remediation).toContain('./agent unsandboxed watchman start')
   })
 
   Test('tells a denied socket from a missing or abandoned one by whether the socket file exists', async () => {
