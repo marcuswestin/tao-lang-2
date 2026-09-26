@@ -13,6 +13,9 @@ async function setup(fixture: {
   serviceFailure?: boolean
   firstLaunch?: boolean
   apply?: boolean
+  json?: boolean
+  interactive?: boolean
+  answers?: { answer: string; downloads?: string[] }[]
   archive?: string
   downloads?: string[]
   downloadDirectories?: string[]
@@ -27,12 +30,17 @@ async function setup(fixture: {
   deviceDiagnostic?: string
   extractedApps?: string[]
   lowDisk?: boolean
+  lowDiskAfterPrompt?: boolean
   installState?: InstallState
   publishCollision?: boolean
 } = {}) {
   const calls: Invocation[] = []
   const writes: string[] = []
   const listings: string[] = []
+  const prompts: string[] = []
+  const events: string[] = []
+  let receiptJson: string | undefined
+  let downloads = fixture.downloads
   let defaults = 0
   const state = fixture.installState ?? { paths: new Set<string>(), installed: fixture.installed }
   let imported = false
@@ -44,23 +52,34 @@ async function setup(fixture: {
       archive: fixture.archive,
       repositoryRoot: '/repo',
       hostPlatform: 'darwin',
-      json: true,
+      json: fixture.json ?? true,
+      terminal: {
+        isInteractive: () => fixture.interactive ?? false,
+        askText: async options => {
+          prompts.push(options.message)
+          events.push('prompt')
+          const reply = fixture.answers?.[prompts.length - 1]
+          downloads = reply?.downloads ?? downloads
+          return reply?.answer ?? 'q'
+        },
+      },
       files: {
         homeDir: () => '/Users/test',
         exists: async path =>
-          path === '/Users/test/Downloads' && fixture.downloads !== undefined
+          path === '/Users/test/Downloads' && downloads !== undefined
           || state.paths.has(path) || path === state.installed
           || path === `${state.installed}/Contents/Developer/usr/bin/xcodebuild`,
         isFile: async path =>
           path.startsWith('/Users/test/Downloads/')
-            ? (fixture.downloads ?? []).includes(path.split('/').at(-1)!)
+            ? (downloads ?? []).includes(path.split('/').at(-1)!)
               && !(fixture.downloadDirectories ?? []).includes(path.split('/').at(-1)!)
             : fixture.archiveExists ?? false,
         isSymbolicLink: async path => path === '/Applications/Xcode-27.1.app' && (fixture.targetSymlink ?? false),
         listDir: async path => {
           listings.push(path)
           if (path === '/Users/test/Downloads') {
-            return fixture.downloads ?? []
+            events.push('scan')
+            return downloads ?? []
           }
           if (path.includes('/runtime-')) {
             return ['iOS.simruntime.dmg']
@@ -73,12 +92,14 @@ async function setup(fixture: {
         mkdir: async path => {
           writes.push(path)
         },
-        writeJson: async path => {
+        writeJson: async (path, value) => {
           writes.push(path)
+          receiptJson = JSON.stringify(value)
         },
       },
       runCommand: async (name, spec = {}) => {
         calls.push({ name, spec })
+        events.push(name)
         const args = spec.args ?? []
         let stdout = ''
         let stderr = ''
@@ -132,7 +153,7 @@ async function setup(fixture: {
         }
         if (name.endsWith('/df')) {
           stdout = `Filesystem 1024-blocks Used Available Capacity Mounted\n/dev/disk 200000000 1000000 ${
-            fixture.lowDisk ? 1000 : 199000000
+            fixture.lowDisk || fixture.lowDiskAfterPrompt && prompts.length > 0 ? 1000 : 199000000
           } 1% /\n`
         }
         if (args.includes('-version')) {
@@ -169,8 +190,11 @@ async function setup(fixture: {
     calls,
     writes,
     listings,
+    prompts,
+    events,
+    output: result.stdout,
     code: result.result,
-    receipt: JSON.parse(result.stdout) as {
+    receipt: JSON.parse(receiptJson ?? (fixture.json === false ? '{}' : result.stdout)) as {
       status: string
       selectedXcode?: string
       selectedArchive?: string
@@ -184,6 +208,76 @@ async function setup(fixture: {
 }
 
 Describe('explicit iOS dependency setup', () => {
+  Test('rechecks free space consumed while waiting for the download before extraction', async () => {
+    const result = await setup({
+      apply: true,
+      json: false,
+      interactive: true,
+      downloads: [],
+      lowDiskAfterPrompt: true,
+      answers: [{ answer: '', downloads: ['Xcode_27.1_beta.xip'] }],
+    })
+    Expect(result.code).toBe(1)
+    Expect(result.prompts.length).toBe(1)
+    Expect(result.receipt.remaining.join('\n')).toContain('Need at least 50 GiB free')
+    Expect(result.calls.some(call => call.name.endsWith('/xip'))).toBe(false)
+  })
+
+  Test('guides the download and resumes installation in the same interactive command', async () => {
+    const result = await setup({
+      apply: true,
+      json: false,
+      interactive: true,
+      downloads: [],
+      answers: [{ answer: '', downloads: ['Xcode_27.1_beta.xip'] }],
+    })
+    Expect(result.code).toBe(0)
+    Expect(result.prompts).toEqual([
+      'Press Enter when the download is complete to continue, or type q and Enter to stop',
+    ])
+    Expect(result.output).toContain('https://developer.apple.com/download/applications/')
+    Expect(result.output).toContain('download Xcode 27.1 into /Users/test/Downloads')
+    Expect(result.receipt.selectedArchive).toBe('/Users/test/Downloads/Xcode_27.1_beta.xip')
+    Expect(result.receipt.remaining).toEqual([])
+    Expect(result.events.filter(event => ['scan', 'prompt', '/usr/bin/xip'].includes(event))).toEqual([
+      'scan',
+      'prompt',
+      'scan',
+      '/usr/bin/xip',
+    ])
+  })
+
+  Test('rescans after early Enter and stops without extraction when the user quits', async () => {
+    const result = await setup({
+      apply: true,
+      json: false,
+      interactive: true,
+      downloads: [],
+      answers: [{ answer: '', downloads: ['Xcode_27.1_beta.xip.download'] }, { answer: 'q' }],
+    })
+    Expect(result.code).toBe(1)
+    Expect(result.prompts.length).toBe(2)
+    Expect(result.calls.some(call => call.name.endsWith('/xip'))).toBe(false)
+    Expect(result.receipt.remaining.join('\n')).toContain('Stopped before installation')
+    Expect(result.receipt.remaining.filter(step => step.startsWith('No completed')).length).toBe(1)
+  })
+
+  Test('does not wait for input in plan, JSON, or noninteractive runs', async () => {
+    for (
+      const mode of [
+        { apply: false, json: false, interactive: true },
+        { apply: true, json: true, interactive: true },
+        { apply: true, json: false, interactive: false },
+      ]
+    ) {
+      const result = await setup({ ...mode, downloads: [] })
+      Expect(result.code).toBe(1)
+      Expect(result.prompts).toEqual([])
+      Expect(result.calls.some(call => call.name.endsWith('/xip'))).toBe(false)
+      Expect(result.output).toContain('Rerun with --apply after downloading.')
+    }
+  })
+
   Test('detects a major-only archive filename for the equivalent point-zero request', async () => {
     const result = await setup({ xcodeVersion: '27.0', downloads: ['Xcode_27_Universal.xip'] })
     Expect(result.receipt.selectedArchive).toBe('/Users/test/Downloads/Xcode_27_Universal.xip')

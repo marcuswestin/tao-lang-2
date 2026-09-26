@@ -556,7 +556,7 @@ await runWithCommands(commands => {
       '--archive <path>',
       'Override automatic detection of the requested Xcode .xip in Downloads.',
     )
-    .option('--apply', 'Apply the printed installation plan; otherwise only inspect and report requirements.')
+    .option('--apply', 'Install requested components; in a terminal, wait for missing Xcode downloads and resume.')
     .option('--json', 'Print the structured setup report.')
     .action(async (options) => {
       const { IosSetupCommand } = await import('./ios-setup/IosSetupCommand')

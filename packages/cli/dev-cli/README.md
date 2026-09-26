@@ -28,6 +28,10 @@ Add `--apply` to perform the installation steps. When Xcode is missing, download
 version from [Apple Developer Downloads](https://developer.apple.com/download/applications/) into
 Downloads, keeping Apple's filename. The workflow automatically selects a single completed `.xip`
 whose filename matches the requested version; incomplete downloads and other versions are ignored.
+If no archive is found during interactive `--apply`, it prints the Apple download link and destination,
+then waits for Enter and scans again. Once the download is complete, installation continues in the
+same command. Type `q` and Enter to stop. Inspection, `--json`, and noninteractive runs report the
+missing download and exit without waiting.
 If several match, it lists them and asks for `--archive`; that option also selects an archive in
 another location or with a renamed filename. The extracted version and signature are still verified
 before installation. The workflow uses Apple's archive/signature validation,

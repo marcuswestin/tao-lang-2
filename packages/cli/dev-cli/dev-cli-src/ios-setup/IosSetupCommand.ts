@@ -9,6 +9,7 @@ type Options = {
   repositoryRoot?: string
   hostPlatform?: string
   runCommand?: typeof CLI.run
+  terminal?: Pick<typeof HCI, 'isInteractive' | 'askText'>
   files?: Pick<typeof FS, 'exists' | 'homeDir' | 'isFile' | 'isSymbolicLink' | 'listDir' | 'mkdir' | 'writeJson'>
 }
 
@@ -61,6 +62,7 @@ async function run(options: Options): Promise<number> {
   }
   const files = options.files ?? FS
   const execute = options.runCommand ?? CLI.run
+  const terminal = options.terminal ?? HCI
   const root = options.repositoryRoot ?? Repo.getRoot()
   const target = `/Applications/Xcode-${options.xcodeVersion}.app`
   const work = FS.resolvePath(`.artifacts/ios-setup/${options.xcodeVersion}-${options.runtimeVersion}`, root)
@@ -237,7 +239,8 @@ async function run(options: Options): Promise<number> {
       await disk('/Applications', 50)
       receipt.remaining.push(`Install Xcode ${options.xcodeVersion} side by side at ${target}.`)
       let archive = options.archive ? FS.resolvePath(options.archive, root) : undefined
-      if (!archive) {
+      let waitedForDownload = false
+      while (!archive) {
         const downloads = FS.resolvePath('Downloads', files.homeDir())
         const archives: string[] = []
         if (await files.exists(downloads)) {
@@ -270,15 +273,35 @@ async function run(options: Options): Promise<number> {
           return await finish()
         }
         archive = archives[0]
-        if (!archive) {
-          receipt.remaining.push(`No completed Xcode ${options.xcodeVersion} .xip found in ${downloads}.`)
+        if (archive) {
+          break
         }
-      }
-      if (!archive) {
+        const missing = `No completed Xcode ${options.xcodeVersion} .xip found in ${downloads}.`
+        const instruction =
+          `Open ${APPLE_DOWNLOADS}, sign in if requested, and download Xcode ${options.xcodeVersion} into ${downloads}, keeping Apple's filename. Wait for the .xip download to finish.`
         receipt.remaining.push(
-          `Download the requested Xcode .xip from ${APPLE_DOWNLOADS} into Downloads, keeping Apple's filename (Apple sign-in may be required), then rerun with --apply. Use --archive for another location or filename.`,
+          missing,
+          instruction,
         )
-        return await finish()
+        if (!options.apply || options.json || !terminal.isInteractive()) {
+          receipt.remaining.push(
+            'Rerun with --apply after downloading. Use --archive for another location or filename.',
+          )
+          return await finish()
+        }
+        await save()
+        notice(missing)
+        notice(instruction)
+        waitedForDownload = true
+        const answer = await terminal.askText({
+          message: 'Press Enter when the download is complete to continue, or type q and Enter to stop',
+        })
+        if (['q', 'quit'].includes(answer.trim().toLowerCase())) {
+          receipt.remaining.push('Stopped before installation; rerun the same command when the download is ready.')
+          return await finish()
+        }
+        // Reinspect after every response; pressing Enter is not evidence of a completed download.
+        receipt.remaining.splice(-2)
       }
       receipt.selectedArchive = archive
       if (!await files.isFile(archive)) {
@@ -286,6 +309,10 @@ async function run(options: Options): Promise<number> {
       }
       if (!options.apply) {
         return await finish()
+      }
+      if (waitedForDownload) {
+        await disk(root, 50)
+        await disk('/Applications', 50)
       }
       notice(
         `Will expand Apple's signed archive and install ${target}. Later runtime download/import can change shared CoreSimulator components for every Xcode. The global Xcode selection will be checked and preserved.`,
