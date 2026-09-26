@@ -13,10 +13,12 @@ import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 
 type CommandRole = 'button' | 'menuitem'
+type NavigationIconImage = { uri: string; width?: number; height?: number; scale?: number }
 
 type FontAwesomeIcon = React.ComponentType<any> & {
   getRawGlyphMap?: () => Readonly<Record<string, number>>
-  hasIcon?: (name: string) => boolean
+  hasIcon?: (name: string, style?: string) => boolean
+  getImageSource?: (name: string, size: number, color: string) => Promise<NavigationIconImage | null>
 }
 
 /** NavigationCommandButton keeps icon metadata visual while the accessible name remains Label. */
@@ -26,6 +28,8 @@ export function NavigationCommandButton(props: {
   hostRef?: React.RefObject<TaoAccessibilityHost | null>
   /** iconOnly draws just the glyph where one resolves; the label stays the accessible name. */
   iconOnly?: boolean
+  /** nativeHeader opts the Android header into platform color and minimum touch sizing. */
+  nativeHeader?: boolean
   onInvoke?: () => void
   outlineIdentity?: string
   role?: CommandRole
@@ -34,7 +38,9 @@ export function NavigationCommandButton(props: {
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
   const designStyle = mountedDesignStyle(props.taoProps, 'NavigationChromeButton', 'row')
-  const textStyle = navigationTextStyle(designStyle)
+  const nativeHeader = props.nativeHeader && runtime.Platform?.OS === 'android'
+  const color = nativeHeader ? runtime.PlatformColor?.('?android:attr/colorForeground') : undefined
+  const textStyle = { ...navigationTextStyle(designStyle), ...(color === undefined ? {} : { color }) }
   const Icon = props.command.icon ? fontAwesomeIcon() : undefined
   const icon = supportedIcon(props.command.icon, Icon)
   const fallbackGlyph = props.command.icon ? iconFallbacks[props.command.icon]?.fallback : undefined
@@ -75,7 +81,9 @@ export function NavigationCommandButton(props: {
       },
       onPressOut: () => InteractionControls.Pressed(occurrence, false),
       ref: host,
-      style: [designStyle, { opacity: props.command.enabled ? 1 : 0.5 }],
+      style: [designStyle, nativeHeader ? nativeHeaderButtonStyle : undefined, {
+        opacity: props.command.enabled ? 1 : 0.5,
+      }],
       testID: props.testID,
     },
     createElement(
@@ -84,9 +92,9 @@ export function NavigationCommandButton(props: {
       icon
         ? createElement(Icon!, {
           accessible: false,
-          color: designStyle?.['color'],
+          color: color ?? designStyle?.['color'],
           name: icon.glyph as any,
-          size: 16,
+          size: nativeHeader ? 24 : 16,
           testID: navigationCommandIconTestId(icon.source),
         })
         : fallbackGlyph
@@ -124,8 +132,17 @@ function supportedIcon(
     return undefined
   }
   const glyph = iconFallbacks[name]?.fontAwesome ?? name
-  const supported = Icon.hasIcon?.(glyph) ?? Icon.getRawGlyphMap?.()[glyph] !== undefined
+  const supported = Icon.hasIcon
+    ? ['regular', 'solid', 'brand'].some(style => Icon.hasIcon!(glyph, style))
+    : Icon.getRawGlyphMap?.()[glyph] !== undefined
   return supported ? { glyph, source: name } : undefined
+}
+
+/** navigationIconImageSource uses the same portable names for native bitmap-backed tab icons. */
+export async function navigationIconImageSource(name: string): Promise<NavigationIconImage | undefined> {
+  const Icon = fontAwesomeIcon()
+  const icon = supportedIcon(name, Icon)
+  return icon ? (await Icon?.getImageSource?.(icon.glyph, 24, '#000000')) ?? undefined : undefined
 }
 
 let cachedFontAwesomeIcon: FontAwesomeIcon | null | undefined
@@ -156,6 +173,13 @@ function fontAwesomeIcon(): FontAwesomeIcon | undefined {
 export const navigationCommandIconTestId = (name: string): string => `__tao_navigation_command_icon:${name}`
 
 const commandContentStyle = { alignItems: 'center', flexDirection: 'row', gap: 6 } as const
+const nativeHeaderButtonStyle = {
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: 48,
+  minWidth: 48,
+  paddingHorizontal: 12,
+} as const
 const iconFallbacks: Readonly<Record<string, { fallback: string; fontAwesome: string }>> = Object.freeze({
   checkmark: { fallback: '✓', fontAwesome: 'check' },
   'chevron.left': { fallback: '‹', fontAwesome: 'chevron-left' },
