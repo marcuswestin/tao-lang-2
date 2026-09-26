@@ -7,7 +7,12 @@ const ENTRY = `${ENVIRONMENT}/contributor-linux-test.sh`
 Describe('contributor Linux container runner', () => {
   Test('rejects extra arguments before consulting Docker', async () => {
     await withFixture(async fixture => {
-      for (const args of [['--mode', 'host'], ['--probe', '--privileged'], ['--mode'], ['--mount', '/']]) {
+      for (
+        const args of [['--mode', 'host'], ['--probe', '--privileged'], ['--mode'], ['--mount', '/'], [
+          '--native-arm64',
+          '--qemu-compat',
+        ]]
+      ) {
         const result = await run(fixture, args)
         Expect(result.exitCode).toBe(2)
       }
@@ -161,7 +166,7 @@ Describe('contributor Linux container runner', () => {
       const calls = (await FS.readText(fixture.log)).trim().split('\n')
       Expect(calls.filter(call => call.startsWith('create '))).toHaveLength(3)
       Expect(calls.filter(call => call.startsWith('rm --force '))).toHaveLength(3)
-      Expect(calls.filter(call => call.startsWith('cp ') && call.includes(':/workspace/.artifacts/'))).toHaveLength(3)
+      Expect(calls.filter(call => call.startsWith('cp ') && call.includes(':/workspace/.artifacts/'))).toHaveLength(5)
       Expect(calls.some(call => call.startsWith('commit '))).toBe(true)
     })
   })
@@ -195,6 +200,45 @@ Describe('contributor Linux container runner', () => {
         Expect(rejected.exitCode).toBe(2)
         Expect(rejected.stderr).toContain('requires an arm64 Docker daemon')
       }
+    })
+  })
+
+  Test('runs the native ARM control without QEMU settings and keeps its cache separate', async () => {
+    await withFixture(async fixture => {
+      Expect((await run(fixture)).exitCode).toBe(0)
+      const baseline = await FS.readText(`${await latestOutput(fixture)}/cache-ownership.txt`)
+      const native = {
+        ...fixture,
+        env: {
+          ...fixture.env,
+          TAO_TEST_DOCKER_IMAGE_FORMAT:
+            '{{if and (eq .Os "linux") (eq .Architecture "arm64") .RootFS.Layers .Config}}linux/arm64 {{json .RootFS.Layers}} {{json .Config}}{{else}}invalid{{end}}',
+          TAO_TEST_DOCKER_BASE_CONTENTS: 'linux/arm64 ["sha256:layer"] {"WorkingDir":"/workspace"}',
+        },
+      }
+      Expect((await run(native, ['--native-arm64'])).exitCode).toBe(0)
+      const output = await latestOutput(fixture)
+      const resources = await FS.readText(`${output}/resources.txt`)
+      Expect(resources).toContain('platform=linux/arm64')
+      Expect(resources).toContain('daemon_emulation=not-required')
+      Expect(resources).toContain('qemu_guest_base_experiment=0')
+      Expect(resources).toContain('qemu_nix_filter_disabled=0')
+      Expect(await FS.readText(`${output}/cache-ownership.txt`)).not.toBe(baseline)
+      const calls = (await FS.readText(fixture.log)).trim().split('\n')
+      Expect(calls.filter(call => call.startsWith('build --platform linux/arm64 '))).toHaveLength(1)
+      const creates = calls.filter(call => call.startsWith('create ') && call.includes('--platform linux/arm64 '))
+      Expect(creates).toHaveLength(3)
+      for (const call of creates) {
+        Expect(call).not.toContain('--qemu')
+      }
+      Expect(
+        (await run({ ...native, env: { ...native.env, TAO_TEST_DOCKER_ARCH: 'x86_64' } }, ['--native-arm64'])).exitCode,
+      ).toBe(2)
+      // A daemon returning an image for the wrong architecture must not seed the cache.
+      Expect(
+        (await run({ ...native, env: { ...native.env, TAO_TEST_DOCKER_BASE_CONTENTS: 'invalid' } }, ['--native-arm64']))
+          .exitCode,
+      ).toBe(1)
     })
   })
 
@@ -483,7 +527,7 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
         '      esac',
         '      if [ "$3" = --format ] && [ "$4" != "{{.Id}}" ]; then',
         '        expected=\'{{if and (eq .Os "linux") (eq .Architecture "amd64") .RootFS.Layers .Config}}linux/amd64 {{json .RootFS.Layers}} {{json .Config}}{{else}}invalid{{end}}\'',
-        '        [ "$4" = "$expected" ] || exit 12',
+        '        [ "$4" = "${TAO_TEST_DOCKER_IMAGE_FORMAT:-$expected}" ] || exit 12',
         '        default_contents=\'linux/amd64 ["sha256:layer"] {"WorkingDir":"/workspace"}\'',
         '        printf "%s\\n" "${TAO_TEST_DOCKER_BASE_CONTENTS:-$default_contents}"',
         '      else',

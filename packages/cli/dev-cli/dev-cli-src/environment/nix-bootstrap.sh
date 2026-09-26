@@ -10,9 +10,15 @@ if [ "$(uname -s)" != Linux ]; then
   printf 'Nix bootstrap supports Linux only.\n' >&2
   exit 1
 fi
+# SHA-256 values published by https://releases.nixos.org/nix/nix-2.35.2/install.
 case "$(uname -m)" in
-  x86_64) system=x86_64-linux ;;
-  *) printf 'Nix bootstrap supports Linux x86_64 only.\n' >&2; exit 1 ;;
+  x86_64)
+    system=x86_64-linux
+    archive_sha256=0c3960a9792331a22081c3c7a5d8465db9b17c50b3acdf18587fa4c6f2cb1158 ;;
+  aarch64)
+    system=aarch64-linux
+    archive_sha256=4d0302a2910f5eec1c33b8deef634f04899a75737e7001ec49908d003ae5efda ;;
+  *) printf 'Nix bootstrap supports Linux x86_64 and aarch64 only.\n' >&2; exit 1 ;;
 esac
 
 # Setup hooks can overlap before the parent acquires its profile-build lock.
@@ -39,10 +45,8 @@ for nix_bin in "$(command -v nix-build || true)" "$HOME/.nix-profile/bin/nix-bui
   fi
 done
 
-# SHA-256 published by https://releases.nixos.org/nix/nix-2.35.2/install.
 version=2.35.2
 archive_name="nix-$version-$system"
-archive_sha256=0c3960a9792331a22081c3c7a5d8465db9b17c50b3acdf18587fa4c6f2cb1158
 for required in curl sha256sum tar xz mktemp readlink; do
   if ! command -v "$required" >/dev/null 2>&1; then
     printf 'Nix bootstrap needs %s from the Linux base image.\n' "$required" >&2

@@ -225,6 +225,24 @@ order, or runtime configuration still invalidate the cache. Docker documents att
 defines ordered filesystem DiffIDs and execution parameters. The focused fixture checks both
 reuse and invalidation without creating isolation resources.
 
+The same run reached runtime journeys but exceeded a 30-second Jest case bound and the
+300-second runtime suite bound; Studio also exceeded its suite bound. A separate “Unfinished”
+journey diagnostic was interleaved and does not identify the navigation test's stalled phase.
+Other suites, including compiler (276 seconds), parser (171 seconds), and shared process tests
+(33 seconds), completed. Concurrent host verification reached substantial machine contention,
+so these timings do not isolate QEMU's contribution. No deadline was raised.
+
+An explicit `--native-arm64` Ubuntu control is now available on an arm64 Docker daemon. It keeps
+default amd64 acceptance separate, uses the same dependency pins, Nix 2.35.2's published ARM
+checksum, and unchanged resource/test limits, with neither QEMU environment workaround. This
+follows Docker's [native architecture guidance](https://docs.docker.com/build/building/multi-platform/)
+to distinguish Linux behavior from translation cost. The
+[published Nix installer](https://releases.nixos.org/nix/nix-2.35.2/install) owns both architecture
+checksums. ARM success alone will not establish amd64 or hosted acceptance. Full workflow logs
+are now collected before each ordinary guest is removed, preserving detail beyond bounded
+console reports. This control has focused fixture coverage; execution remains pending until
+the sole active isolation run ends.
+
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published
       [reference container](https://github.com/openai/codex-universal) and

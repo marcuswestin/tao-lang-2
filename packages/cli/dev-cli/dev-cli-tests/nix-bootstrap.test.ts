@@ -2,13 +2,17 @@ import { Assert, CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 
 const SCRIPT = 'packages/cli/dev-cli/dev-cli-src/environment/nix-bootstrap.sh'
-const ARCHIVE = 'nix-2.35.2-x86_64-linux'
+const CHECKSUMS = {
+  x86_64: '0c3960a9792331a22081c3c7a5d8465db9b17c50b3acdf18587fa4c6f2cb1158',
+  aarch64: '4d0302a2910f5eec1c33b8deef634f04899a75737e7001ec49908d003ae5efda',
+}
 
 type Fixture = {
   root: string
   bin: string
   script: string
   calls: string
+  archiveName: string
   env: Platform.ProcessEnv
 }
 
@@ -17,13 +21,17 @@ async function executable(path: string, body: string): Promise<void> {
   await FS.chmod(path, 0o755)
 }
 
-async function withFixture(run: (fixture: Fixture) => Promise<void>): Promise<void> {
+async function withFixture(
+  run: (fixture: Fixture) => Promise<void>,
+  architecture: keyof typeof CHECKSUMS = 'x86_64',
+): Promise<void> {
   const root = await mkTestDir('nix-bootstrap-')
   try {
     const bin = FS.resolvePath('bin', root)
     const script = FS.resolvePath(SCRIPT, root)
     const calls = FS.resolvePath('calls', root)
-    const archive = FS.resolvePath(`${ARCHIVE}.tar.xz`, root)
+    const archiveName = `nix-2.35.2-${architecture}-linux`
+    const archive = FS.resolvePath(`${archiveName}.tar.xz`, root)
     const home = FS.resolvePath('home', root)
     await FS.mkdir(home)
     for (const tool of ['cp', 'mkdir', 'mktemp', 'mv', 'readlink', 'rm', 'sha256sum', 'tar', 'xz']) {
@@ -56,7 +64,7 @@ printf 'download\\n' >> "$TAO_TEST_CALLS"
 [ "$3" = --proto ] && [ "$4" = '=https' ]
 [ "$5" = --proto-redir ] && [ "$6" = '=https' ]
 [ "$7" = --output ]
-[ "$9" = 'https://releases.nixos.org/nix/nix-2.35.2/nix-2.35.2-x86_64-linux.tar.xz' ]
+[ "$9" = 'https://releases.nixos.org/nix/nix-2.35.2/${archiveName}.tar.xz' ]
 if [ "\${TAO_TEST_DOWNLOAD_FAIL:-}" = yes ]; then
   printf partial > "$8"
   exit 22
@@ -64,7 +72,7 @@ fi
 cp "$TAO_TEST_ARCHIVE" "$8"`,
     )
     await executable(
-      FS.resolvePath(`payload/${ARCHIVE}/install`, root),
+      FS.resolvePath(`payload/${archiveName}/install`, root),
       `
 printf 'install %s\\n' "$*" >> "$TAO_TEST_CALLS"
 printf '%s\\n' "\${NIX_CONFIG:-}" > "$TAO_TEST_INSTALL_CONFIG"
@@ -77,12 +85,12 @@ printf '#!/bin/sh\\nexit 0\\n' > "$HOME/.nix-profile/bin/nix-build"
 "$TAO_TEST_CHMOD" +x "$HOME/.nix-profile/bin/nix-build"
 if [ "\${TAO_TEST_INSTALL_FAIL_AFTER_PROFILE:-}" = yes ]; then exit 23; fi`,
     )
-    await CLI.mustRun('tar', { args: ['-cJf', archive, '-C', FS.resolvePath('payload', root), ARCHIVE] })
+    await CLI.mustRun('tar', { args: ['-cJf', archive, '-C', FS.resolvePath('payload', root), archiveName] })
     const digest = Platform.sha256Hex(await FS.readFile(archive))
     // The fixture substitutes its local archive digest and system-profile path only;
     // download policy and the real checksum check remain production behavior.
     const source = (await FS.readText(Repo.resolvePath(SCRIPT)))
-      .replace(/^archive_sha256=.+$/m, `archive_sha256=${digest}`)
+      .replace(CHECKSUMS[architecture], digest)
       .replaceAll('/nix/var/nix/profiles/default', `${root}/system-profile`)
       .replace('mkdir -p /nix\n', `mkdir -p "${root}/nix"\n`)
     await FS.writeText(script, source)
@@ -93,9 +101,11 @@ if [ "\${TAO_TEST_INSTALL_FAIL_AFTER_PROFILE:-}" = yes ]; then exit 23; fi`,
       bin,
       script,
       calls,
+      archiveName,
       env: {
         PATH: bin,
         HOME: home,
+        TAO_TEST_ARCH: architecture,
         TAO_TEST_CALLS: calls,
         TAO_TEST_ARCHIVE: archive,
         TAO_TEST_CHMOD: chmod,
@@ -160,23 +170,46 @@ Describe('explicit Nix bootstrap', () => {
     })
   })
 
-  Test('rejects a changed archive before executing its installer and removes the download', async () => {
+  Test('installs the pinned ARM Linux archive with the same scoped root configuration', async () => {
     await withFixture(async fixture => {
-      await FS.writeText(
-        FS.resolvePath(`payload/${ARCHIVE}/install`, fixture.root),
-        'printf "tampered installer executed\\n" >> "$TAO_TEST_CALLS"\nexit 42\n',
-      )
-      await CLI.mustRun('tar', {
-        args: ['-cJf', fixture.env['TAO_TEST_ARCHIVE']!, '-C', FS.resolvePath('payload', fixture.root), ARCHIVE],
-      })
       const result = await bootstrap(fixture)
-      Expect(result.exitCode).toBe(1)
-      Expect(result.stderr).toContain('checksum verification failed')
-      Expect(await FS.readText(fixture.calls)).toBe('download\n')
-      Expect(await FS.exists(FS.resolvePath('home/.nix-profile', fixture.root))).toBe(false)
-      Expect(await FS.exists(FS.resolvePath('nix', fixture.root))).toBe(false)
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toContain('Nix 2.35.2 for aarch64-linux')
+      Expect(await FS.readText(fixture.calls)).toBe(
+        'download\ninstall --no-daemon --no-channel-add --no-modify-profile --yes\n',
+      )
+      Expect(await FS.readText(fixture.env['TAO_TEST_INSTALL_CONFIG']!)).toBe(
+        'store = local\nbuild-users-group =\nsandbox = false\n',
+      )
       await expectDownloadsRemoved(fixture)
-    })
+    }, 'aarch64')
+  })
+
+  Test('rejects a changed archive before executing its installer and removes the download', async () => {
+    for (const architecture of ['x86_64', 'aarch64'] as const) {
+      await withFixture(async fixture => {
+        await FS.writeText(
+          FS.resolvePath(`payload/${fixture.archiveName}/install`, fixture.root),
+          'printf "tampered installer executed\\n" >> "$TAO_TEST_CALLS"\nexit 42\n',
+        )
+        await CLI.mustRun('tar', {
+          args: [
+            '-cJf',
+            fixture.env['TAO_TEST_ARCHIVE']!,
+            '-C',
+            FS.resolvePath('payload', fixture.root),
+            fixture.archiveName,
+          ],
+        })
+        const result = await bootstrap(fixture)
+        Expect(result.exitCode).toBe(1)
+        Expect(result.stderr).toContain('checksum verification failed')
+        Expect(await FS.readText(fixture.calls)).toBe('download\n')
+        Expect(await FS.exists(FS.resolvePath('home/.nix-profile', fixture.root))).toBe(false)
+        Expect(await FS.exists(FS.resolvePath('nix', fixture.root))).toBe(false)
+        await expectDownloadsRemoved(fixture)
+      }, architecture)
+    }
   })
 
   Test('reuses PATH, user-profile, and system-profile installations without downloading or configuring', async () => {
@@ -195,7 +228,7 @@ Describe('explicit Nix bootstrap', () => {
 
   Test('rejects unsupported operating systems and architectures before downloading', async () => {
     await withFixture(async fixture => {
-      for (const env of [{ TAO_TEST_OS: 'Darwin' }, { TAO_TEST_ARCH: 'aarch64' }]) {
+      for (const env of [{ TAO_TEST_OS: 'Darwin' }, { TAO_TEST_ARCH: 'riscv64' }]) {
         const result = await bootstrap(fixture, env)
         Expect(result.exitCode).toBe(1)
         Expect(result.stderr).toContain('supports Linux')

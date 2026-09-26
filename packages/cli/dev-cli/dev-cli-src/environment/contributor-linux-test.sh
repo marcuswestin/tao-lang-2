@@ -3,6 +3,8 @@
 set -eu
 
 mode=both
+platform=linux/amd64
+image_arch=amd64
 probe=0
 qemu_guest_base=0
 qemu_nix_filter=0
@@ -11,9 +13,10 @@ case "$#" in
   0) ;;
   1) case "$1" in
        --probe) probe=1 ;;
+       --native-arm64) platform=linux/arm64; image_arch=arm64 ;;
        --qemu-guest-base) qemu_guest_base=1 ;;
        --qemu-compat) qemu_guest_base=1; qemu_nix_filter=1 ;;
-       *) printf 'Expected --probe, --qemu-guest-base, or --qemu-compat.\n' >&2; exit 2 ;;
+       *) printf 'Expected --probe, --native-arm64, --qemu-guest-base, or --qemu-compat.\n' >&2; exit 2 ;;
      esac ;;
   2) case "$1" in
        --mode) case "$2" in cold|cached|both) mode=$2 ;; *) printf 'Expected cold, cached, or both.\n' >&2; exit 2 ;; esac ;;
@@ -26,7 +29,7 @@ case "$#" in
          inspect_run=$2 ;;
        *) exit 2 ;;
      esac ;;
-  *) printf 'Usage: contributor-linux-test [--probe | --qemu-guest-base | --qemu-compat | --mode cold|cached|both | --inspect-run YYYYMMDDTHHMMSSZ-PID]\n' >&2; exit 2 ;;
+  *) printf 'Usage: contributor-linux-test [--probe | --native-arm64 | --qemu-guest-base | --qemu-compat | --mode cold|cached|both | --inspect-run YYYYMMDDTHHMMSSZ-PID]\n' >&2; exit 2 ;;
 esac
 
 root=$(git rev-parse --show-toplevel)
@@ -62,6 +65,13 @@ if [ "$qemu_guest_base" -eq 1 ]; then
   case "$(cut -d ' ' -f 1 "$output/docker-storage.txt")" in
     aarch64|arm64) ;;
     *) printf 'The QEMU guest-base experiment requires an arm64 Docker daemon.\n' >&2; exit 2 ;;
+  esac
+fi
+
+if [ "$platform" = linux/arm64 ]; then
+  case "$(cut -d ' ' -f 1 "$output/docker-storage.txt")" in
+    aarch64|arm64) ;;
+    *) printf 'The native ARM control requires an arm64 Docker daemon.\n' >&2; exit 2 ;;
   esac
 fi
 
@@ -173,28 +183,28 @@ mkdir "$output/context"
 git show "HEAD:$environment/Dockerfile" > "$output/context/Dockerfile"
 git archive --format=tar HEAD bootstrap-tao-dev-env devenv.lock "$environment" > "$output/tools.tar"
 printf '%s\n' \
-  'platform=linux/amd64' 'guest_cpus=4' 'guest_memory_bytes=17179869184' \
+  "platform=$platform" 'guest_cpus=4' 'guest_memory_bytes=17179869184' \
   'guest_memory_swap_bytes=17179869184' 'guest_timeout_seconds=7200' \
   'base_image_build_cpu_memory_limits=not-enforced' \
   'host_only_native_ui_lanes=unrun' \
   'source=git archive HEAD; uncommitted changes excluded' > "$output/resources.txt"
-case "$(cut -d ' ' -f 1 "$output/docker-storage.txt")" in
-  x86_64|amd64) printf 'daemon_emulation=not-required\n' ;;
-  aarch64|arm64) printf 'daemon_emulation=required-for-linux-amd64; implementation-runtime-dependent\n' ;;
+case "$image_arch:$(cut -d ' ' -f 1 "$output/docker-storage.txt")" in
+  amd64:x86_64|amd64:amd64|arm64:aarch64|arm64:arm64) printf 'daemon_emulation=not-required\n' ;;
+  amd64:aarch64|amd64:arm64) printf 'daemon_emulation=required-for-linux-amd64; implementation-runtime-dependent\n' ;;
   *) printf 'daemon_emulation=unknown; inspect docker-storage.txt\n' ;;
 esac >> "$output/resources.txt"
 printf 'qemu_guest_base_experiment=%s\n' "$qemu_guest_base" >> "$output/resources.txt"
 printf 'qemu_nix_filter_disabled=%s\n' "$qemu_nix_filter" >> "$output/resources.txt"
 base_owned=1
-stream_log "$output/base-build.log" base-build docker build --platform linux/amd64 --target base --tag "$base" "$output/context"
+stream_log "$output/base-build.log" base-build docker build --platform "$platform" --target base --tag "$base" "$output/context"
 docker image inspect "$base" > "$output/base-image.json"
 docker image inspect --format '{{.Id}}' "$base" > "$output/base-identity.txt"
 # Build attestations can change the manifest-list ID without changing executable
 # contents. Keep that ID as evidence, but key tools on ordered layers and config.
-docker image inspect --format '{{if and (eq .Os "linux") (eq .Architecture "amd64") .RootFS.Layers .Config}}linux/amd64 {{json .RootFS.Layers}} {{json .Config}}{{else}}invalid{{end}}' "$base" > "$output/base-cache-identity.txt"
+docker image inspect --format '{{if and (eq .Os "linux") (eq .Architecture "'"$image_arch"'") .RootFS.Layers .Config}}'"$platform"' {{json .RootFS.Layers}} {{json .Config}}{{else}}invalid{{end}}' "$base" > "$output/base-cache-identity.txt"
 IFS= read -r base_cache_identity < "$output/base-cache-identity.txt"
 case "$base_cache_identity" in
-  'linux/amd64 ['*'] {'*'}') ;;
+  "$platform ["*'] {'*'}') ;;
   *) printf 'Cannot establish the base image filesystem/configuration identity.\n' >&2; exit 1 ;;
 esac
 # Hash exact tool inputs and the base identity; never retain a dependency install or host profile.
@@ -228,7 +238,7 @@ run_guest() {
   elif [ "$qemu_guest_base" -eq 1 ]; then
     set -- "$@" --qemu-guest-base
   fi
-  if docker create --name "$guest_container" --platform linux/amd64 --cpus 4 --memory 16g --memory-swap 16g \
+  if docker create --name "$guest_container" --platform "$platform" --cpus 4 --memory 16g --memory-swap 16g \
     --label tao.owner=contributor-linux-test --label "tao.run=$run" \
     "$guest_image" /bin/sh -c \
     'tar -xf /tmp/checkout.tar -C /workspace && rm /tmp/checkout.tar && exec /usr/bin/timeout --signal=TERM --kill-after=30s 7200 /bin/sh /workspace/packages/cli/dev-cli/dev-cli-src/environment/guest-smoke.sh "$@"' \
@@ -241,6 +251,12 @@ run_guest() {
     docker inspect --size "$container" > "$guest_output/container.json" || guest_result=$?
     docker cp "$container:/workspace/.artifacts/contributor-linux/guest-$guest_mode" "$guest_output/guest" \
       > "$guest_output/collect.log" 2>&1 || guest_result=$?
+    # Keep complete workflow failures before disposing of the guest, not only
+    # the bounded reports printed by its outer commands. Tools-only has no lanes.
+    if [ "$guest_mode" != tools ]; then
+      docker cp "$container:/workspace/.artifacts/logs" "$guest_output/workflow-logs" \
+        >> "$guest_output/collect.log" 2>&1 || guest_result=$?
+    fi
     if [ "$guest_mode" = tools ] && [ "$guest_result" -eq 0 ]; then
       docker commit "$container" "$cache" > "$guest_output/image-id.txt" || guest_result=$?
     fi

@@ -112,3 +112,11 @@ additional capabilities, privileged container, or Rosetta change is made.
 Actual fresh and cached hosted runs remain to be proved for each provider. Local
 script tests establish dispatch and failure behavior; they do not prove provider
 network access, Nix installation privileges, or a hosted verification run.
+
+For a native Linux control on Apple Silicon, run
+`./agent unsandboxed contributor-linux-test --native-arm64`. This explicitly selects Ubuntu
+24.04 arm64 and the architecture-specific checksum for the same Nix 2.35.2 release, using
+unchanged dependency pins and test deadlines. It requires an arm64 Docker daemon and applies
+neither QEMU workaround. Its image/cache identity and evidence state the selected architecture.
+Default amd64 acceptance remains separate; an ARM result does not prove native or emulated
+amd64 behavior. Normal guest collection retains full workflow logs before container removal.
