@@ -243,6 +243,23 @@ are now collected before each ordinary guest is removed, preserving detail beyon
 console reports. This control has focused fixture coverage; execution remains pending until
 the sole active isolation run ends.
 
+Further cold-run failures exposed additional clean-machine assumptions. Remaining configured
+hook shims required `/bin/zsh`; simple entries now use POSIX sh, while worktree fallback and
+atomic delegation logging use Bash features supported by macOS's Bash 3.2 and Ubuntu. Existing
+hook paths remain unchanged. A configuration test no longer assumes a clone lives under
+`~/code/tao-lang-2`; it verifies the actual shared Git directory. Interactive shell fixtures resolve
+the managed zsh executable, and merge fixtures configure their own identity and assert an actual
+conflict before testing recovery. Studio process fixtures now use the portable process API for
+liveness and signalling, including Linux zombie handling, and retain failed-spawn details.
+Focused host tests cover these repairs; guest execution is still pending.
+
+The task-inventory test also could not spawn `python3` (exit -2); neither the Ubuntu base nor
+portable toolchain declares that existing runtime requirement. Adding Python from the existing
+locked nixpkgs was proposed for Developer approval; it has not been added. Rewriting or skipping
+the inventory would affect reclaim safety and is not a bootstrap workaround. Other observed
+journey and suite timeouts remain unresolved; neither machine contention nor instruction
+translation has yet been isolated as their cause.
+
 - [ ] Verify each supported cloud harness's current OS, architecture, setup hooks, caching, and
       network constraints before choosing the final image. Compare the published
       [reference container](https://github.com/openai/codex-universal) and
