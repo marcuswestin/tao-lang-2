@@ -641,6 +641,7 @@ shell with no source-level opt-in or opt-out. The `app-shell-*` suites in
 A plain `present … as overlay` (no `ask`, no `as sheet`, no `as toast`) is full-bleed by decision:
 it is the escape hatch for a scrim, a spinner layer, or a custom layer that must reach the window
 edges, so the runtime adds no inset and its content is the author's to inset (`Decisions.md` §10).
+Its default backdrop dims the covered content like an asked view, without adding a card or centering.
 It draws in its navigator's overlay lane, which fills that navigator's own surface — the true window
 under a navigator that owns its window, and the padded content box under one that does not, where
 the lane sits inside the enclosing `AppSurfaceFrame` and so stops short of the window edges by at
