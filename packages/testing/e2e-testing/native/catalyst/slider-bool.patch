@@ -1,0 +1,11 @@
+--- a/ios/RNCSliderComponentView.mm
++++ b/ios/RNCSliderComponentView.mm
+@@ -23,7 +23,7 @@
+ {
+     RNCSlider *slider;
+     UIImage *_image;
+-    BOOL _isSliding;
++    bool _isSliding;
+ }
+ 
+ + (ComponentDescriptorProvider)componentDescriptorProvider

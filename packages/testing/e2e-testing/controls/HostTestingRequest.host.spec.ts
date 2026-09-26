@@ -3,6 +3,23 @@ import { parseHostTestingRequest } from '../HostTestingRequest'
 
 const base = { app: 'clockwork', seed: '12345' }
 
+test('Catalyst is a local build for the two review apps with no mobile target or injected fault', () => {
+  for (const app of ['native-navigation', 'hnreader']) {
+    expect(parseHostTestingRequest('catalyst', { ...base, app })).toMatchObject({
+      kind: 'catalyst',
+      mode: 'catalyst',
+      subject: app,
+    })
+    expect(() => parseHostTestingRequest('catalyst', { ...base, app, device: 'phone' })).toThrow(
+      'without --device or --fault',
+    )
+  }
+  expect(() => parseHostTestingRequest('catalyst', base)).toThrow('require --app native-navigation or hnreader')
+  expect(() => parseHostTestingRequest('catalyst', { ...base, app: 'hnreader', fault: true })).toThrow(
+    'without --device or --fault',
+  )
+})
+
 test('dispatches maintenance, driver, browser-build, and native modes without widening their authority', () => {
   expect(parseHostTestingRequest('lint', base)).toMatchObject({ kind: 'maintenance', mode: 'lint' })
   expect(parseHostTestingRequest('driver', base)).toMatchObject({ kind: 'driver', mode: 'driver' })
