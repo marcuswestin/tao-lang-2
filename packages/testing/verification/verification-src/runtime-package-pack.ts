@@ -10,7 +10,7 @@ const packCheckVersion = '0.0.0-pack-check'
 /** checkRuntimePackagePack validates the private runtime payload with temporary release metadata. */
 async function checkRuntimePackagePack(): Promise<string> {
   const runtimeRoot = Repo.resolvePath('packages/apps/runtime')
-  const packRoot = await Repo.mkScratchDir('tao-runtime-pack-')
+  const packRoot = await FS.mkTmpDir('tao-runtime-pack-')
 
   try {
     const manifest = await FS.readJson<RuntimeManifest>(FS.resolvePath('package.json', runtimeRoot))

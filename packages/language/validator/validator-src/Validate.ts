@@ -1,6 +1,7 @@
 import { AST } from '@parser'
 import { NodeValidation, type NodeValidationChecks } from './node-validation'
 import type { ValidationContext } from './validation'
+import { accessValidationChecks } from './validators/access-validator'
 import { ActionsValidator } from './validators/ActionsValidator'
 import { AliasesValidator } from './validators/aliases-validator'
 import { AppValidator } from './validators/app-validator'
@@ -65,6 +66,7 @@ const nodeValidationChecks = NodeValidation.compile(
     FunctionalCoreValidator.checks,
     PhrasesValidator.checks,
     dataValidationChecks,
+    accessValidationChecks,
     DesignValidator.checks,
     colorValueValidationChecks,
     configurationValidationChecks,

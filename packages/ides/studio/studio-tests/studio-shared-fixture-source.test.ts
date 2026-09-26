@@ -1,3 +1,4 @@
+import { AST, Parser } from '@parser'
 import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { StudioSharedFixtureSource } from '../studio-src/StudioSharedFixtureSource'
@@ -67,6 +68,61 @@ Describe('Studio shared fixture source', () => {
     Expect(extended.source).toContain('Focus = create Playlist {')
     Expect(extended.source).toContain('Title: "Focus"')
     Expect(repeated.source).toBe(extended.source)
+  })
+
+  Test('preserves signed-in defaults and unnamed operations when extending and reopening a fixture', async () => {
+    const request = {
+      imports: [playlistImport],
+      promotions: [{
+        entity: 'Playlist',
+        fields: { Owner: { handle: 'Ada', kind: 'fixture-reference' as const }, Title: 'Promoted' },
+        name: 'Featured',
+      }],
+    }
+    const extended = await StudioSharedFixtureSource.promote({
+      ...request,
+      source: `
+        public fixture Sketches {
+          account Ada { Name: "Ada" }
+          account Bob { Name: "Bob" }
+          signed in as Ada
+          // Keep the anonymous setup operation and its inherited actor.
+          create Playlist { Owner: Ada, Title: "Private" }
+          create Playlist { Owner: Bob, Title: "Seeded" } through Seed() for Bob
+        }
+      `,
+    })
+    const parsed = await Parser.parseCode(extended.source, { validation: false })
+    Expect(parsed.entry.document.parseResult.parserErrors).toEqual([])
+    const fixture = parsed.entry.ast.statements.find(AST.isFixtureDeclaration)!
+    Expect(fixture.block.entries.map(entry => entry.$type)).toEqual([
+      'FixtureAccountDeclaration',
+      'FixtureAccountDeclaration',
+      'FixtureSignedInClause',
+      'FixtureCreateStatement',
+      'FixtureCreateStatement',
+      'FixtureCreateBinding',
+    ])
+    const signedIn = fixture.block.entries.find(AST.isFixtureSignedInClause)!
+    Expect(signedIn.account.$refText).toBe('Ada')
+    const operations = fixture.block.entries.filter(AST.isFixtureCreateStatement)
+    Expect(operations[0]!.entity.$refText).toBe('Playlist')
+    Expect(operations[0]!.account).toBeUndefined()
+    Expect(operations[0]!.block.fields.map(field => field.name)).toEqual(['Owner', 'Title'])
+    const title = operations[0]!.block.fields[1]!.value
+    Expect.Is(title, AST.isStringLiteral)
+    Expect(title.value).toBe('Private')
+    Expect(operations[1]!.account?.$refText).toBe('Bob')
+    Expect(operations[1]!.through?.action.$refText).toBe('Seed')
+    const promoted = fixture.block.entries.find(AST.isFixtureCreateBinding)!
+    Expect(promoted.name).toBe('Featured')
+    const owner = promoted.block.fields[0]!.value
+    Expect.Is(owner, AST.isFixtureValueReference)
+    Expect(owner.target.$refText).toBe('Ada')
+    Expect(extended.source).toContain('// Keep the anonymous setup operation and its inherited actor.')
+    Expect(extended.handles).toEqual([{ handle: 'Featured', kind: 'fixture-reference' }])
+    const reopened = await StudioSharedFixtureSource.promote({ ...request, source: extended.source })
+    Expect(reopened.source).toBe(extended.source)
   })
 
   Test('orders promoted rows after their fixture-handle dependencies rather than by name', async () => {

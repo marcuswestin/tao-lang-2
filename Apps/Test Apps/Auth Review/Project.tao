@@ -1,0 +1,5 @@
+project {
+   id "auth-review"
+   name "Auth Review"
+   version "0.1.0"
+}

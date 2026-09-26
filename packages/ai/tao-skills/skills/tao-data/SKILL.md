@@ -9,24 +9,24 @@ Top-level `data Plural / Singular` declarations define stored rows. Primitive fi
 `text`, `number`, `boolean`, and `time`. A case-named boolean uses `Done yes / Pending no`; a bare
 `Flag yes / no` has an unnamed false side. Implemented field traits include literal/default `now`,
 `title`, and `unique`. Entity storage entries include `index`, one default `order by`, and
-`local only`.
+`local only`. Separate data entries with commas; use `unique Workspace + Person` for a composite constraint.
 
 ```tao SkillData.tao
 data SkillProjects / SkillProject {
-   Name text (title)
-   Tasks (relation SkillTasks, owned)
+   Name text (title),
+   Tasks SkillTasks (owned),
 
-   order by Name
+   order by Name,
 }
 
 data SkillTasks / SkillTask {
-   Title text (title)
-   Done yes / Pending no
-   CreatedAt time (default now)
-   Project (relation SkillProject)
+   Title text (title),
+   Done yes / Pending no,
+   CreatedAt time (default now),
+   Project SkillProject,
 
-   index CreatedAt
-   order by CreatedAt desc
+   index CreatedAt,
+   order by CreatedAt desc,
 }
 ```
 
@@ -42,7 +42,7 @@ no publication remote; it does not configure app data.
 
 ## Queries and writes
 
-- `query Things { }` reads a root entity; `query Name from Parent.Children { }` reads a relation.
+- `query Things { }` reads a root entity; `query Name = Parent.Children with { }` reads a relation.
 - Add repeated `where` clauses, one `order by Field [asc|desc]`, and `limit N`. Root queries may use
   `query Things as Name`. Queries and lists expose `.Count` and `is empty`.
 - Guard first-fill `loading`/`error`; `empty` means a ready zero-row result. `refreshing` and `stale`

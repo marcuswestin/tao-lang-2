@@ -7,7 +7,7 @@ Describe('compiler: Studio preview fixture values', () => {
     await withTaoFiles('tao-studio-fixture-values-', {
       'Main.tao': `
         data Documents / Document {
-          Title text
+          Title text,
           Archived yes / no
         }
 

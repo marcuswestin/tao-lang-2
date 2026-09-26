@@ -14,6 +14,11 @@ export const ConfigurationCompiler = {
     const implementation = AST.configurationImplementationOf(declaration)
     Assert.defined(implementation, 'validated configurable declaration has one implementation')
     const factory = configurationFactory(declaration, implementation)
+    if (AST.configurationPrimitiveOf(declaration) === 'auth') {
+      return gen`${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })} = TR.Auth.Declaration(
+        ${gen.jsLiteral(declaration.name)}, ${factory},
+      )`
+    }
     return AST.configurationPrimitiveOf(declaration) === 'nav'
       ? gen`${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })} = TR.Navigation.Declaration(
           ${gen.jsLiteral(declaration.name)},
@@ -68,6 +73,7 @@ export function isRuntimeConfigurableDeclaration(
   }
   const primitive = AST.configurationPrimitiveOf(declaration)
   return primitive === 'nav' || primitive === 'datasource'
+    || (primitive === 'auth' && !AST.isAuthLibraryDeclaration(declaration, 'AuthProvider'))
 }
 
 /** isTransparentConfigurableAlias identifies a pass-through with no declaration identity of its own. */

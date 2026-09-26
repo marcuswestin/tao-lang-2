@@ -144,30 +144,30 @@ design HNDesign {
 
 folder
 data Stories / Story {
-   HnId number (unique)
-   Title text
-   Url text (default "")
-   Score number
-   Author text
-   CommentCount number
+   HnId number (unique),
+   Title text,
+   Url text (default ""),
+   Score number,
+   Author text,
+   CommentCount number,
    // A story's front-page rank, or 0 for a story that reached the store some other way. Feeds over
    // one entity share its rows, so a feed's query filters on its own materialized field.
-   Rank number (default 0)
-   Comments (owned)
+   Rank number (default 0),
+   Comments (owned),
 
-   order by Rank
+   order by Rank,
 }
 
 folder
 data Comments / Comment {
-   Story
-   HnId number (unique)
-   Author text
-   Text text
-   Depth number
-   Ordering number
+   Story,
+   HnId number (unique),
+   Author text,
+   Text text,
+   Depth number,
+   Ordering number,
 
-   order by Ordering
+   order by Ordering,
 }
 
 // The reader's own rows, in the other datasource. `reference` is what a link across that boundary
@@ -176,27 +176,27 @@ data Comments / Comment {
 // bookmark alone, reading as missing until the feed serves it again.
 folder
 data Bookmarks / Bookmark {
-   Story (reference)
-   Note text (default "")
-   CreatedAt time (default now)
+   Story (reference),
+   Note text (default ""),
+   CreatedAt time (default now),
 
-   order by CreatedAt
+   order by CreatedAt,
 }
 
 // One local row per story. StoryHnId is its stable reconciliation key, while Story is the
 // cross-datasource handle whose missing state remains observable.
 folder
 data ReadingEntries / ReadingEntry {
-   StoryHnId number (unique)
-   Story (reference)
-   OpenedAt time (default now)
+   StoryHnId number (unique),
+   Story (reference),
+   OpenedAt time (default now),
 
-   order by OpenedAt desc
+   order by OpenedAt desc,
 }
 
 scene FrontPage() {
    Title "Hacker News"
-   query Stories as TopStories {
+   query TopStories = Stories with {
       where Rank >= 1
       limit 30
    }
@@ -238,7 +238,7 @@ scene FrontPage() {
 // relaunches; each Story reference still reports honestly when its remote row is unavailable.
 scene ReadingPage() {
    Title "Reading"
-   query ReadingEntries {
+   query ReadingEntries = ReadingEntries with {
       order by OpenedAt desc
    }
    render Col() [screen] {
@@ -262,7 +262,7 @@ scene ReadingPage() {
 // query keeps repeat opens on the update path, and the unique scalar gives the row stable identity.
 folder
 view TrackedStoryRow(Story) {
-   query ReadingEntries as ExistingHistory {
+   query ExistingHistory = ReadingEntries with {
       where Story == Story
       limit 1
    }
@@ -338,7 +338,7 @@ scene StoryScreen(Story) {
    }
    // The write lands in the other datasource, and the story it names stays where the feed put it. The
    // query reads that other datasource by the story's own id, so a kept story cannot be kept twice.
-   query Bookmarks as Kept {
+   query Kept = Bookmarks with {
       where Story == Story
    }
    action KeepStory() {
@@ -352,7 +352,7 @@ scene StoryScreen(Story) {
       do KeepStory()
    }
    Toolbar { Open, Keep }
-   query Thread from Story.Comments { }
+   query Thread = Story.Comments with { }
    render Col() [screen] {
       ScrollView() {
          Row() [threadWrap] {
@@ -384,7 +384,7 @@ scene StoryScreen(Story) {
 // touch the feed; only the story each bookmark names comes from there.
 scene BookmarkList() {
    Title "Bookmarks"
-   query Bookmarks { }
+   query Bookmarks = Bookmarks with { }
    render Col() [screen] {
       when Bookmarks {
          empty -> { Col() [pad 10] {

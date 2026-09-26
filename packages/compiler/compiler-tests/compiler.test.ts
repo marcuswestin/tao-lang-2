@@ -17,7 +17,7 @@ const fence = '```'
 Describe('compiler: language lowering', () => {
   Test('lowers copied projected inputs and bulk updates through the runtime copy and update APIs', async () => {
     const compiled = await Compiler.compileCode(`
-      data Documents / Document { Title text Body text Owner text CreatedAt time }
+      data Documents / Document { Title text, Body text, Owner text, CreatedAt time }
       type DocumentInput is Document { Title, Body }
       app EditorApp { view Main }
       view Main() { render Empty() }
@@ -36,7 +36,7 @@ Describe('compiler: language lowering', () => {
 
   Test('lowers completeness members with their required sentences and creates from an input', async () => {
     const compiled = await Compiler.compileCode(`
-      data Documents / Document { Title text (required "Name this document") Body text }
+      data Documents / Document { Title text (required "Name this document"), Body text }
       type DocumentInput is Document { Title, Body }
       type BodyInput is Document { Body }
       app EditorApp { view Main }
@@ -315,24 +315,24 @@ Describe('compiler: language lowering', () => {
       use Local from @tao/data/providers/local
       use StackNav from @tao/nav
       data Workspaces / Workspace {
-        Name text (unique)
-        CreatedAt time (default now)
-        Pinned yes / no
-        Documents (owned)
-        index CreatedAt
+        Name text (unique),
+        CreatedAt time (default now),
+        Pinned yes / no,
+        Documents (owned),
+        index CreatedAt,
         order by CreatedAt desc
       }
       data Documents / Document {
-        Title text (title)
-        Final yes / Draft no
-        Public yes / Private no (default Public)
-        Workspace
+        Title text (title),
+        Final yes / Draft no,
+        Public yes / Private no (default Public),
+        Workspace,
         Paragraphs (owned)
       }
       data Paragraphs / Paragraph {
-        Text text
-        Ordering number
-        Document
+        Text text,
+        Ordering number,
+        Document,
         order by Ordering
       }
       app Notes {
@@ -342,7 +342,7 @@ Describe('compiler: language lowering', () => {
       }
       scene Main() {
         Title "Main"
-        query Workspaces { limit 25 }
+        query Workspaces = Workspaces with { limit 25 }
         action Add() { create Workspace { Name: "Home" } }
         render Text("Main")
       }
@@ -350,7 +350,7 @@ Describe('compiler: language lowering', () => {
         action AddDocument() { create Document { Title: "Draft", Workspace } }
         render Col() {
           Text("Detail")
-          query Drafts from Workspace.Documents { where is Draft }
+          query Drafts = Workspace.Documents with { where is Draft }
           Text("Drafts: { Drafts.Count }")
           loop Drafts / Draft { Text(Draft.Title) }
         }
@@ -392,8 +392,8 @@ Describe('compiler: language lowering', () => {
       use Memory from @tao/data/providers/memory
       use StackNav from @tao/nav
       data Documents / Document {
-        Title text (search, title)
-        Body text (default "", search)
+        Title text (search, title),
+        Body text (default "", search),
         Owner text (default "")
       }
       app Notes {
@@ -404,7 +404,7 @@ Describe('compiler: language lowering', () => {
       scene Main() {
         Title "Main"
         state Find = ""
-        query Documents as Found {
+        query Found = Documents with {
           search Find
           order by Title
         }
@@ -424,8 +424,8 @@ Describe('compiler: language lowering', () => {
       use Local from @tao/data/providers/local
       use Memory from @tao/data/providers/memory
       use StackNav from @tao/nav
-      data Stories / Story { HnId number (unique) Title text }
-      data Bookmarks / Bookmark { Story (reference) Note text (default "") }
+      data Stories / Story { HnId number (unique), Title text }
+      data Bookmarks / Bookmark { Story (reference), Note text (default "") }
       datasource Feed = Memory {
         Data { Stories }
       }
@@ -440,8 +440,8 @@ Describe('compiler: language lowering', () => {
       }
       scene Main() {
         Title "Reader"
-        query Stories { }
-        query Bookmarks { }
+        query Stories = Stories with { }
+        query Bookmarks = Bookmarks with { }
         action Save(Story) { create Bookmark { Story, Note: "kept" } }
         render Text("{ Stories.Count }{ Bookmarks.Count }")
       }
@@ -459,9 +459,15 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code.slice(compiled.code.indexOf("name: 'Stories',")))
       .toContain('collection: "Stories"')
     // Reads and writes reach the store that holds their collection.
-    Expect(compiled.code).toContain('TR.Data.Query(\n      _Scope._TaoDataCatalog_Stories,')
-    Expect(compiled.code).toContain('TR.Data.Query(\n      _Scope._TaoDataCatalog_Bookmarks,')
-    Expect(compiled.code).toContain('TR.Data.Create(\n              _Scope._TaoDataCatalog_Bookmarks,')
+    Expect(compiled.code).toContain(
+      'TR.Data.Query(\n      TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog_Stories),',
+    )
+    Expect(compiled.code).toContain(
+      'TR.Data.Query(\n      TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog_Bookmarks),',
+    )
+    Expect(compiled.code).toContain(
+      'TR.Data.Create(\n              TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog_Bookmarks),',
+    )
     // The app mounts both, and the patch on the listed name layers an app-local copy over the bound declaration
     // without touching the declaration itself.
     Expect(compiled.code).toContain('TR.Data.UseAppDatasources(_TaoAppDefinition_Reader.definition)')
@@ -534,15 +540,15 @@ Describe('compiler: language lowering', () => {
       Expect(code).toContain('TR.Data.Patch(_Scope.Personal.evaluate(), {')
       Expect(code).toContain('"StorageKey": TR.Value("prod")')
       Expect(code).toContain('_Scope.Feed.evaluate()')
-    })
+    }, { location: 'host' })
   })
 
   Test('keeps one catalog for an app whose datasource claims no collections', async () => {
     const compiled = await Compiler.compileCode(`
       use Memory from @tao/data/providers/memory
       use StackNav from @tao/nav
-      data Stories / Story { HnId number (unique) Title text }
-      data Bookmarks / Bookmark { Story (relation Story) }
+      data Stories / Story { HnId number (unique), Title text }
+      data Bookmarks / Bookmark { Story Story }
       datasource Everything = Memory { }
       app Reader {
         Name "Reader"
@@ -551,8 +557,8 @@ Describe('compiler: language lowering', () => {
       }
       scene Main() {
         Title "Reader"
-        query Stories { }
-        query Bookmarks { }
+        query Stories = Stories with { }
+        query Bookmarks = Bookmarks with { }
         render Text("{ Stories.Count }{ Bookmarks.Count }")
       }
       view Text(Value text) { render inject ${tsFence} return null ${fence} }
@@ -569,7 +575,7 @@ Describe('compiler: language lowering', () => {
       use StackNav from @tao/nav
       data Notes / Note { Title text }
       data FocusSessions / FocusSession {
-        Label text
+        Label text,
 
         local only
       }
@@ -580,10 +586,10 @@ Describe('compiler: language lowering', () => {
       }
       scene Main() {
         Title "Sessions"
-        query FocusSessions as CurrentSession { limit 1 }
+        query CurrentSession = FocusSessions with { limit 1 }
         action Start() { create FocusSession { Label: "Focus" } }
         action Write() { create Note { Title: "Note" } }
-        query Notes { }
+        query Notes = Notes with { }
         render Text("{ CurrentSession.Count }{ Notes.Count }")
       }
       view Text(Value text) { render inject ${tsFence} return null ${fence} }
@@ -618,10 +624,16 @@ Describe('compiler: language lowering', () => {
       'useTaoGeneratedStudioFixture([_Scope._TaoDataCatalog, _Scope._TaoLocalDataCatalog])',
     )
     // Reads and writes route to the catalog that stores the entity.
-    Expect(compiled.code).toContain('_Scope.CurrentSession = TR.Data.Query(\n      _Scope._TaoLocalDataCatalog,')
-    Expect(compiled.code).toContain('_Scope.Notes = TR.Data.Query(\n      _Scope._TaoDataCatalog,')
-    Expect(compiled.code).toContain('_Scope._TaoLocalDataCatalog,\n              "FocusSession",')
-    Expect(compiled.code).toContain('_Scope._TaoDataCatalog,\n              "Note",')
+    Expect(compiled.code).toContain(
+      '_Scope.CurrentSession = TR.Data.Query(\n      TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog),',
+    )
+    Expect(compiled.code).toContain(
+      '_Scope.Notes = TR.Data.Query(\n      TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog),',
+    )
+    Expect(compiled.code).toContain(
+      'TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog),\n              "FocusSession",',
+    )
+    Expect(compiled.code).toContain('TR.Auth.Store(_TaoAuthScope, _Scope._TaoDataCatalog),\n              "Note",')
   })
 
   Test('imports the companion catalog into an app root that configures no datasource', async () => {
@@ -630,7 +642,7 @@ Describe('compiler: language lowering', () => {
       'Catalog.tao': `
         workspace
         data FocusSessions / FocusSession {
-          Label text
+          Label text,
 
           local only
         }
@@ -639,7 +651,7 @@ Describe('compiler: language lowering', () => {
         use FocusSessions from ./Catalog
         workspace
         view Board() {
-          query FocusSessions { }
+          query FocusSessions = FocusSessions with { }
           render Label("{ FocusSessions.Count }")
         }
         view Label(Value text) { render inject ${tsFence} return null ${fence} }
@@ -663,7 +675,7 @@ Describe('compiler: language lowering', () => {
       )
       Expect(appModule?.code).not.toContain('_Scope._TaoDataCatalog')
       Expect(appModule?.code).toContain('useTaoGeneratedStudioFixture([_Scope._TaoLocalDataCatalog])')
-    })
+    }, { location: 'host' })
   })
 
   Test('imports a synced catalog into an app root that configures no datasource', async () => {
@@ -677,7 +689,7 @@ Describe('compiler: language lowering', () => {
         use Notes from ./Catalog
         workspace
         view Board() {
-          query Notes { }
+          query Notes = Notes with { }
           render Label("{ Notes.Count }")
         }
         view Label(Value text) { render inject ${tsFence} return null ${fence} }
@@ -692,7 +704,7 @@ Describe('compiler: language lowering', () => {
 
       Expect(appModule?.code).toContain("import { _TaoDataCatalog } from './modules/Catalog.tao'")
       Expect(appModule?.code).toContain('useTaoGeneratedStudioFixture([_Scope._TaoDataCatalog])')
-    })
+    }, { location: 'host' })
   })
 
   Test("inherits, patches, or replaces a base's datasources across a module boundary", async () => {
@@ -717,7 +729,7 @@ Describe('compiler: language lowering', () => {
         use Text from @tao/ui
         data Records / Record { Label text }
         public app PackageApp { Name "Package app" view PackageHome }
-        view PackageHome() { query Records { } render Text("{ Records.Count }") }
+        view PackageHome() { query Records = Records with { } render Text("{ Records.Count }") }
       `,
     }, async paths => {
       const result = await Workspace.compile(paths['Main.tao']!, {
@@ -746,7 +758,7 @@ Describe('compiler: language lowering', () => {
       Expect(definitionOf('OwnApp')).toContain(
         'datasources: () => [{\n            store: _Scope._TaoDataCatalog,\n            source: TR.Data.Configure(_Scope.__tao_type_Memory, {',
       )
-    })
+    }, { location: 'host' })
   })
 
   Test('emits no companion local catalog for a project without local only entities', async () => {
@@ -761,7 +773,7 @@ Describe('compiler: language lowering', () => {
       }
       scene Main() {
         Title "Notebook"
-        query Notes { }
+        query Notes = Notes with { }
         render Text("{ Notes.Count }")
       }
       view Text(Value text) { render inject ${tsFence} return null ${fence} }
@@ -785,7 +797,7 @@ Describe('compiler: language lowering', () => {
       }
       scene Main() {
         Title "Notebook"
-        query Notes { }
+        query Notes = Notes with { }
         render Text("{ Notes.Count }")
       }
       view Text(Value text) { render inject ${tsFence} return null ${fence} }
@@ -930,7 +942,7 @@ Describe('compiler: language lowering', () => {
       `
       use Memory from @tao/data/providers/memory
       use StackNav from @tao/nav
-      data Stories / Story { HnId number (unique) Title text }
+      data Stories / Story { HnId number (unique), Title text }
       data Bookmarks / Bookmark { Story (reference) }
       datasource Feed = Memory { Data { Stories } }
       datasource StubFeed = Feed with { }
@@ -958,7 +970,7 @@ Describe('compiler: language lowering', () => {
       `
       use Memory from @tao/data/providers/memory
       use StackNav from @tao/nav
-      data Stories / Story { HnId number (unique) Title text }
+      data Stories / Story { HnId number (unique), Title text }
       data Bookmarks / Bookmark { Story (reference) }
       datasource Feed = Memory { Data { Stories } }
       datasource Personal = Memory { Data { Bookmarks } }
@@ -1426,14 +1438,16 @@ Describe('compiler: language lowering', () => {
     Expect(code).toContain('"Toolbar": () => [ _Scope.Save ]')
     Expect(code).toContain('_Scope.Save = TR.Interaction.Command({ name: "Save", slots: [],')
     Expect(code).toContain(
-      'action: _TaoFills => TR.BlockScope(_Scope, _Scope => { return _Scope.SaveDocument.evaluate() })',
+      'action: _TaoFills => TR.BlockScope(_Scope, _Scope => { const _TaoAuthScope = _TaoFills["__taoAuth"]?.evaluate().jsValue as TR.AuthScope | undefined void _TaoAuthScope return _Scope.SaveDocument.evaluate() })',
     )
     Expect(code).toContain(
-      '"Title": _TaoFills => TR.BlockScope(_Scope, _Scope => { return TR.Value("Save document") })',
+      '"Title": _TaoFills => TR.BlockScope(_Scope, _Scope => { const _TaoAuthScope = _TaoFills["__taoAuth"]?.evaluate().jsValue as TR.AuthScope | undefined void _TaoAuthScope return TR.Value("Save document") })',
     )
-    Expect(code).toContain('"Icon": _TaoFills => TR.BlockScope(_Scope, _Scope => { return TR.Value("checkmark") })')
     Expect(code).toContain(
-      '"Enabled": _TaoFills => TR.BlockScope(_Scope, _Scope => { return _Scope.CanSave.evaluate() })',
+      '"Icon": _TaoFills => TR.BlockScope(_Scope, _Scope => { const _TaoAuthScope = _TaoFills["__taoAuth"]?.evaluate().jsValue as TR.AuthScope | undefined void _TaoAuthScope return TR.Value("checkmark") })',
+    )
+    Expect(code).toContain(
+      '"Enabled": _TaoFills => TR.BlockScope(_Scope, _Scope => { const _TaoAuthScope = _TaoFills["__taoAuth"]?.evaluate().jsValue as TR.AuthScope | undefined void _TaoAuthScope return _Scope.CanSave.evaluate() })',
     )
     Expect(code).toContain('TR.Interaction.UseCommands({ module: "@workspace/source", commands: [')
     Expect(code).toContain('__taoHost={_NavigationHost}')
@@ -1447,7 +1461,7 @@ Describe('compiler: language lowering', () => {
     const compiled = await Compiler.compileCode(`
       app HostApp { view Home }
       data Documents / Document {
-        Title text
+        Title text,
         Final yes / Draft no
       }
       command Finish(Document) {
@@ -1468,7 +1482,7 @@ Describe('compiler: language lowering', () => {
     Expect(code).toContain('_Scope.Finish = TR.Interaction.Command({ name: "Finish", slots: ["Document"],')
     Expect(code.match(/_Scope.Document = _TaoFills\["Document"\]/g)).toHaveLength(5)
     Expect(code).toContain(
-      '"Summary": _TaoFills => TR.BlockScope(_Scope, _Scope => { _Scope.Document = _TaoFills["Document"]',
+      '"Summary": _TaoFills => TR.BlockScope(_Scope, _Scope => { const _TaoAuthScope = _TaoFills["__taoAuth"]?.evaluate().jsValue as TR.AuthScope | undefined void _TaoAuthScope _Scope.Document = _TaoFills["Document"]',
     )
     Expect(code).toContain('TR.Interaction.RegisterCommands({ module: "@workspace/source", commands: [')
     Expect(code).toContain('name: "Document", type: "Document", entity: true,')
@@ -1513,7 +1527,9 @@ Describe('compiler: language lowering', () => {
     `)
 
     const code = compiled.code.replace(/\s+/g, ' ')
-    Expect(code).toContain('action: _TaoFills => TR.BlockScope(_Scope, _Scope => { return _Scope.Deliver.evaluate() })')
+    Expect(code).toContain(
+      'action: _TaoFills => TR.BlockScope(_Scope, _Scope => { const _TaoAuthScope = _TaoFills["__taoAuth"]?.evaluate().jsValue as TR.AuthScope | undefined void _TaoAuthScope return _Scope.Deliver.evaluate() })',
+    )
     Expect(code.indexOf('_Scope.Send = TR.Interaction.Command')).toBeLessThan(
       code.indexOf('_Scope.Deliver = TR.Action'),
     )

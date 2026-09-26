@@ -66,7 +66,7 @@ export async function testCompileApps(
       screens[appName] = await RuntimeTesting.compileAndRenderApp(paths['App.tao'], { appName })
     }
     await testsFunction(screens)
-  })
+  }, { location: 'host' })
 }
 
 /** testCompileFiles compiles temporary Tao files, renders the entry file, and runs screen assertions. */
@@ -84,5 +84,5 @@ export async function testCompileFiles(
     const screen = await RuntimeTesting.compileAndRenderApp(FS.resolvePath(entryFile, rootDir))
 
     await testsFunction(screen)
-  })
+  }, { location: 'host' })
 }

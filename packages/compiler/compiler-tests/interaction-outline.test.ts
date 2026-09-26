@@ -9,19 +9,19 @@ function outlineApp(body: string, extra = ''): string {
   return `
     use Col, FormButton, Image, Text, TextInput, TextMultiline from @tao/ui
     data Documents / Document {
-      Title text (title)
-      Body text (default "")
+      Title text (title),
+      Body text (default ""),
       Workspace
     }
     data Workspaces / Workspace {
-      Name text (title)
-      CreatedAt time (default now)
+      Name text (title),
+      CreatedAt time (default now),
       Documents (owned)
     }
     app OutlineApp { view Main }
     view Main() {
-      query Documents { }
-      query Workspaces { }
+      query Documents = Documents with { }
+      query Workspaces = Workspaces with { }
       state Draft = ""
       render Col() {
         ${body}

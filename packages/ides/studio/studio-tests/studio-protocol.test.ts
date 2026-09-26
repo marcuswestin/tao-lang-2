@@ -518,6 +518,22 @@ Describe('Studio protocol v1', () => {
       ...message,
       fixture: { ...message.fixture, creates: [{ ...message.fixture.creates[0], fields: { Bad: null } }] },
     })).toBe(undefined)
+    const authenticatedFixture = {
+      ...message.fixture,
+      accounts: [{ name: 'Alice', fields: { DisplayName: 'Alice' } }],
+      signedIn: 'Alice',
+      creates: [{ ...message.fixture.creates[0], account: 'Alice' }],
+    }
+    Expect(StudioProtocol.parseMessage({ ...message, fixture: authenticatedFixture })).toMatchObject({
+      fixture: authenticatedFixture,
+    })
+    Expect(StudioProtocol.parseMessage({ ...message, fixture: { ...authenticatedFixture, signedIn: 1 } })).toBe(
+      undefined,
+    )
+    Expect(StudioProtocol.parseMessage({
+      ...message,
+      fixture: { ...authenticatedFixture, creates: [{ ...authenticatedFixture.creates[0], account: '' }] },
+    })).toBe(undefined)
   })
 
   Test('validates versioned runtime failure captures and rejects unsafe or duplicate domains', () => {

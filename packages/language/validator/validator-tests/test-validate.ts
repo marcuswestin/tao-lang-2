@@ -22,7 +22,7 @@ export async function withValidatedFiles<
     : { ...files, 'Project.tao': 'project { id "tao-validator-test" name "Validator test" }' }
   await withTaoFiles('tao-validator-', fixtureFiles, async paths => {
     await testFunction(await Workspace.validate(paths[entryFile]))
-  })
+  }, { location: 'host' })
 }
 
 export type TaoFiles = Record<string, string>

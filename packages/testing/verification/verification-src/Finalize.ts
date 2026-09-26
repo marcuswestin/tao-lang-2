@@ -385,22 +385,101 @@ export const LandCommand = {
  * commands (`agents/skills`, `.claude/settings.json`), so inside a sandbox this refuses before
  * starting, exactly as `finalize` does. Run as `./agent unsandboxed merge-main`, the same integration
  * completes on the host, which is the one sanctioned way for an agent to bring such a main in
- * without landing.
+ * without landing. Dirty work needs explicit --stash; --keep-stashed saves a mixed checkout for
+ * selective restoration instead of replaying those partial integration bytes after the merge.
  */
+type MergeMainOptions = Pick<FinalizeOptions, 'repositoryRoot'> & {
+  /** Save dirty tracked and untracked work, then restore it after a successful merge. */
+  stash?: boolean
+  /** Leave the backup saved for selective recovery of an interrupted checkout. */
+  keepStashed?: boolean
+}
+
 export const MergeMainCommand = {
   async run(
-    options: Pick<FinalizeOptions, 'repositoryRoot'> = {},
+    options: MergeMainOptions = {},
     dependencies: FinalizeDependencies = defaultDependencies,
   ): Promise<{ lines: string[]; mergedNow: boolean }> {
     const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
     const lines: string[] = []
     await assertOnFeatureBranch(dependencies, root, 'merge-main')
+    if (options.keepStashed === true && options.stash !== true) {
+      Errors.throwUserInput('--keep-stashed requires --stash.')
+    }
+    let stash: string | undefined
+    if (options.stash === true) {
+      await assertNoMergeInProgress(dependencies, root)
+      const status = await git(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])
+      if (status.stdout !== '') {
+        stash = await saveMergeWork(dependencies, root, 'dirty work')
+      }
+    }
     await assertCleanWorktree(dependencies, root, 'merge-main')
     const integration = await integrateMain(dependencies, root, false, lines, 'merge-main')
+    if (stash !== undefined && options.keepStashed !== true) {
+      const restored = await dependencies.run('git', {
+        args: ['stash', 'apply', '--index', stash],
+        cwd: root,
+        stdio: 'pipe',
+      })
+      if (restored.exitCode !== 0 || restored.error !== undefined || restored.signal !== null) {
+        Errors.throwUserInput(
+          `Main merged, but restoring saved work needs attention. Backup ${stash} is retained.\n${restored.stderr}`,
+        )
+      }
+      lines.push(`PASS  Restored tracked and untracked work; backup stash ${stash} is retained.`)
+    }
+    if (stash !== undefined && options.keepStashed === true) {
+      lines.push(
+        `NOTE  Saved work has not been restored. Backup stash ${stash} is retained for selective restoration; `
+          + 'do not apply an interrupted-checkout backup wholesale.',
+      )
+    }
     writeLines(dependencies, lines)
     return { lines, mergedNow: integration.integratedNow }
   },
 } as const
+
+async function assertNoMergeInProgress(dependencies: FinalizeDependencies, root: string): Promise<void> {
+  for (const marker of ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply']) {
+    const path = (await git(dependencies, root, ['rev-parse', '--git-path', marker])).stdout.trim()
+    if (await dependencies.exists(FS.resolvePath(path, root))) {
+      Errors.throwUserInput(`merge-main refuses while ${marker} exists; finish the existing operation first.`)
+    }
+  }
+}
+
+/** Never pop: even a failed cleanup or restoration must leave the backup reachable. */
+async function saveMergeWork(dependencies: FinalizeDependencies, root: string, purpose: string): Promise<string> {
+  const label = `merge-main ${purpose} ${dependencies.now().toISOString()} ${root}`
+  const saved = await dependencies.run('git', {
+    args: ['stash', 'push', '--include-untracked', '--message', label],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  // Stash creation can succeed before checkout cleanup fails. Report the reachable backup before
+  // checking the exit code, and never attempt another checkout automatically after that failure.
+  const reference = await dependencies.run('git', {
+    args: ['rev-parse', '--verify', 'refs/stash'],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (reference.exitCode !== 0) {
+    assertCommandSucceeded(saved)
+    Errors.throwHostEnvironment('Saving merge work produced no reachable stash; the merge was not started.')
+  }
+  const sha = reference.stdout.trim()
+  const subject = (await git(dependencies, root, ['show', '-s', '--format=%s', sha])).stdout.trim()
+  if (!subject.endsWith(`: ${label}`)) {
+    Errors.throwHostEnvironment(
+      'The shared stash changed concurrently. The merge was not started; '
+        + `inspect git stash list for this backup label: ${label}`,
+    )
+  }
+  dependencies.writeLine(`NOTE  Retained ${purpose} backup: ${sha}. It will never be dropped automatically.`)
+  assertCommandSucceeded(saved)
+  return sha
+}
 
 /** Start a new feature branch at freshly fetched origin/main after proving checkout writes safe. */
 export const StartBranchCommand = {

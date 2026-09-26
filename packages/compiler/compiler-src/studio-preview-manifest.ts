@@ -67,6 +67,7 @@ type StudioPreviewScenarioStep =
   | { kind: 'advance'; milliseconds: number }
 
 type StudioPreviewFixtureManifest = {
+  signedIn?: string
   accounts: readonly {
     fields: Readonly<Record<string, StudioPreviewFixtureValue>>
     name: string
@@ -259,16 +260,20 @@ function generationFieldDefault(field: AST.EntityDataField): GenerationField['de
 }
 
 function compileFixture(fixture: AST.FixtureDeclaration): StudioPreviewFixtureManifest {
+  const signedIn = fixture.block.entries.find(AST.isFixtureSignedInClause)?.account.$refText
   return {
+    ...(signedIn ? { signedIn } : {}),
     accounts: fixture.block.entries.filter(AST.isFixtureAccountDeclaration).map(account => ({
       fields: fieldsOf(account.block),
       name: account.name,
     })),
-    creates: fixture.block.entries.filter(AST.isFixtureCreateBinding).map(binding => ({
-      ...(binding.account?.$refText === undefined ? {} : { account: binding.account.$refText }),
+    creates: fixture.block.entries.filter(entry =>
+      AST.isFixtureCreateBinding(entry) || AST.isFixtureCreateStatement(entry)
+    ).map((binding, index) => ({
+      ...(binding.account?.$refText ?? signedIn ? { account: binding.account?.$refText ?? signedIn } : {}),
       entity: binding.entity.$refText,
       fields: fieldsOf(binding.block),
-      name: binding.name,
+      name: AST.isFixtureCreateBinding(binding) ? binding.name : `_Created${index + 1}`,
       ...(binding.through === undefined
         ? {}
         : {

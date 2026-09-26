@@ -1292,6 +1292,164 @@ Describe('merge-main', () => {
   })
 })
 
+/** Disposable repositories keep failure/restore coverage on Git's real stash semantics. */
+async function mergeStashFixture() {
+  const root = await mkGitTestDir('tao-merge-stash-')
+  await initGitTestRepository(root, {
+    commit: { files: { '.gitignore': '.artifacts/\n', 'work.txt': 'base\n', 'incoming.txt': 'old\n' } },
+  })
+  const readGit = async (args: string[]): Promise<string> => {
+    const output = await CLI.mustRun('git', { args, cwd: root, stdio: 'pipe' })
+    return output.stdout.trim()
+  }
+  await readGit(['config', 'user.name', 'Tao Test'])
+  await readGit(['config', 'user.email', 'tao@example.test'])
+  await readGit(['branch', 'feat/stash-fixture'])
+  await FS.writeText(FS.resolvePath('incoming.txt', root), 'new\n')
+  await readGit(['add', 'incoming.txt'])
+  await readGit(['commit', '--quiet', '-m', 'Advance main'])
+  const main = await readGit(['rev-parse', 'HEAD'])
+  await readGit(['switch', '--quiet', 'feat/stash-fixture'])
+  const baseline = await readGit(['rev-parse', 'HEAD'])
+  const fake = fakeDependencies()
+  const calls: string[][] = []
+  const dependencies: FinalizeDependencies = {
+    ...fake.dependencies,
+    exists: FS.exists,
+    makeProbeDirectory: FS.mkTmpDir,
+    removeFile: FS.remove,
+    run: async (command, spec) => {
+      calls.push([...(spec.args ?? [])])
+      return CLI.run(command, { ...spec, stdio: 'pipe' })
+    },
+  }
+  const dirty = async (): Promise<void> => {
+    await FS.writeText(FS.resolvePath('work.txt', root), 'staged\n')
+    await readGit(['add', 'work.txt'])
+    await FS.writeText(FS.resolvePath('work.txt', root), 'unstaged\n')
+    await FS.writeText(FS.resolvePath('untracked.txt', root), 'untracked\n')
+  }
+  return { baseline, calls, dependencies, dirty, lines: fake.lines, main, readGit, root }
+}
+
+Describe('merge-main saved work', () => {
+  Test('requires explicit stash opt-in for keep-stashed', async () => {
+    const fake = fakeDependencies()
+    await Expect(MergeMainCommand.run({ keepStashed: true, repositoryRoot: '/repo' }, fake.dependencies))
+      .rejects.toThrow('--keep-stashed requires --stash')
+    Expect(fake.calls.some(call => call.args[0] === 'stash')).toBe(false)
+  })
+
+  Test('restores staged, unstaged and untracked bytes while retaining the exact backup', async () => {
+    const fixture = await mergeStashFixture()
+    await fixture.dirty()
+    const outcome = await MergeMainCommand.run({ repositoryRoot: fixture.root, stash: true }, fixture.dependencies)
+    Expect(outcome.mergedNow).toBe(true)
+    Expect(await fixture.readGit(['rev-parse', 'HEAD'])).toBe(fixture.main)
+    Expect(await fixture.readGit(['show', ':work.txt'])).toBe('staged')
+    Expect(await FS.readText(FS.resolvePath('work.txt', fixture.root))).toBe('unstaged\n')
+    Expect(await FS.readText(FS.resolvePath('untracked.txt', fixture.root))).toBe('untracked\n')
+    const stash = await fixture.readGit(['rev-parse', 'refs/stash'])
+    Expect(fixture.calls.some(args => args.join(' ') === `stash apply --index ${stash}`)).toBe(true)
+    Expect(await fixture.readGit(['show', `${stash}^3:untracked.txt`])).toBe('untracked')
+    Expect(fixture.calls.some(args => args[0] === 'stash' && ['pop', 'drop'].includes(args[1]!))).toBe(false)
+  })
+
+  Test('keeps interrupted checkout bytes saved and finishes main without replaying them', async () => {
+    const fixture = await mergeStashFixture()
+    await fixture.dirty()
+    await FS.writeText(FS.resolvePath('incoming.txt', fixture.root), 'new\n')
+    const outcome = await MergeMainCommand.run(
+      { repositoryRoot: fixture.root, stash: true, keepStashed: true },
+      fixture.dependencies,
+    )
+    Expect(await fixture.readGit(['rev-parse', 'HEAD'])).toBe(fixture.main)
+    Expect(await fixture.readGit(['status', '--porcelain=v1'])).toBe('')
+    Expect(await FS.readText(FS.resolvePath('work.txt', fixture.root))).toBe('base\n')
+    Expect(await fixture.readGit(['show', 'refs/stash:work.txt'])).toBe('unstaged')
+    Expect(await fixture.readGit(['show', 'refs/stash:incoming.txt'])).toBe('new')
+    Expect(await fixture.readGit(['show', 'refs/stash^3:untracked.txt'])).toBe('untracked')
+    Expect(fixture.calls.some(args => args[0] === 'stash' && args[1] === 'apply')).toBe(false)
+    Expect(outcome.lines.some(line => line.includes('Saved work has not been restored'))).toBe(true)
+  })
+
+  Test('retains the backup when merge fails and does not reapply it into a partial checkout', async () => {
+    const fixture = await mergeStashFixture()
+    await fixture.dirty()
+    const run = fixture.dependencies.run
+    fixture.dependencies.run = async (command, spec) =>
+      spec.args?.[0] === 'merge'
+        ? result(spec.args, spec.cwd, '', 1, 'checkout write denied')
+        : run(command, spec)
+    await Expect(MergeMainCommand.run({ repositoryRoot: fixture.root, stash: true }, fixture.dependencies))
+      .rejects.toThrow('checkout write denied')
+    Expect(await fixture.readGit(['rev-parse', 'HEAD'])).toBe(fixture.baseline)
+    Expect(await fixture.readGit(['show', 'refs/stash:work.txt'])).toBe('unstaged')
+    Expect(await fixture.readGit(['show', 'refs/stash^3:untracked.txt'])).toBe('untracked')
+    Expect(fixture.calls.some(args => args[0] === 'stash' && args[1] === 'apply')).toBe(false)
+  })
+
+  Test('reports a saved backup even if stash checkout cleanup fails', async () => {
+    const fixture = await mergeStashFixture()
+    await fixture.dirty()
+    const run = fixture.dependencies.run
+    fixture.dependencies.run = async (command, spec) => {
+      const output = await run(command, spec)
+      return spec.args?.[0] === 'stash' && spec.args[1] === 'push'
+        ? { ...output, exitCode: 1, stderr: 'stash cleanup denied' }
+        : output
+    }
+    await Expect(MergeMainCommand.run({ repositoryRoot: fixture.root, stash: true }, fixture.dependencies))
+      .rejects.toThrow()
+    const stash = await fixture.readGit(['rev-parse', 'refs/stash'])
+    Expect(fixture.lines.some(line => line.includes(stash))).toBe(true)
+    Expect(await fixture.readGit(['show', `${stash}^3:untracked.txt`])).toBe('untracked')
+    Expect(fixture.calls.some(args => args[0] === 'merge')).toBe(false)
+  })
+
+  Test('leaves a restoration failure and its immutable backup for manual resolution', async () => {
+    const fixture = await mergeStashFixture()
+    await fixture.dirty()
+    const run = fixture.dependencies.run
+    fixture.dependencies.run = async (command, spec) =>
+      spec.args?.[0] === 'stash' && spec.args[1] === 'apply'
+        ? result(spec.args, spec.cwd, '', 1, 'restore conflict')
+        : run(command, spec)
+    await Expect(MergeMainCommand.run({ repositoryRoot: fixture.root, stash: true }, fixture.dependencies))
+      .rejects.toThrow('restoring saved work needs attention')
+    Expect(await fixture.readGit(['rev-parse', 'HEAD'])).toBe(fixture.main)
+    Expect(await fixture.readGit(['show', 'refs/stash:work.txt'])).toBe('unstaged')
+    Expect(await fixture.readGit(['show', 'refs/stash^3:untracked.txt'])).toBe('untracked')
+  })
+
+  Test('does not disturb an existing merge operation', async () => {
+    const fixture = await mergeStashFixture()
+    await fixture.dirty()
+    await FS.writeText(FS.resolvePath('.git/MERGE_HEAD', fixture.root), `${fixture.main}\n`)
+    await Expect(MergeMainCommand.run({ repositoryRoot: fixture.root, stash: true }, fixture.dependencies))
+      .rejects.toThrow('MERGE_HEAD exists')
+    Expect(await FS.readText(FS.resolvePath('work.txt', fixture.root))).toBe('unstaged\n')
+    Expect(fixture.calls.some(args => args[0] === 'stash')).toBe(false)
+  })
+
+  Test('stops when the shared stash reference moves and identifies its own backup label', async () => {
+    const fixture = await mergeStashFixture()
+    await fixture.dirty()
+    const run = fixture.dependencies.run
+    fixture.dependencies.run = async (command, spec) =>
+      spec.args?.join(' ') === 'rev-parse --verify refs/stash'
+        ? result(spec.args, spec.cwd, `${fixture.main}\n`)
+        : run(command, spec)
+    const failure = await MergeMainCommand.run({ repositoryRoot: fixture.root, stash: true }, fixture.dependencies)
+      .catch(error => error)
+    const message = Errors.formatForUser(failure)
+    Expect(message).toContain('shared stash changed concurrently')
+    Expect(message).toContain(`merge-main dirty work 2026-09-17T12:00:00.000Z ${fixture.root}`)
+    Expect(await fixture.readGit(['show', 'refs/stash:work.txt'])).toBe('unstaged')
+    Expect(fixture.calls.some(args => args[0] === 'merge' || (args[0] === 'stash' && args[1] === 'apply'))).toBe(false)
+  })
+})
+
 Describe('start-branch', () => {
   Test('refuses a protected checkout path before switching, naming its host command', async () => {
     const fake = fakeDependencies({

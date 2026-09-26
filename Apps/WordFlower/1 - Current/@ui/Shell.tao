@@ -10,7 +10,7 @@ use FormButton from @tao/ui/basic
 // lives on its mount and a branch that unmounted it would drop where the person was.
 workspace
 scene WordFlowerShell(Navigator nav) {
-   query FocusSessions as CurrentSession {
+   query CurrentSession = FocusSessions with {
       limit 1
    }
    render Col() [fill] {

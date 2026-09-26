@@ -77,6 +77,15 @@ async function runOutcome(
 }
 
 Describe('Tao effect outcomes', () => {
+  Test('uses otherwise only after specific success and failure handlers', async () => {
+    const rejected = await runOutcome(schema => failingExport(schema, 'Offline'), ['otherwise', 'rejected'])
+    Expect(rejected.ran).toEqual(['rejected: Offline sentence.'])
+    const fallback = await runOutcome(schema => failingExport(schema, 'Offline'), ['otherwise'])
+    Expect(fallback.ran).toEqual(['otherwise: Offline sentence.'])
+    const saved = await runOutcome(schema => failingExport(schema, 'none'), ['otherwise'])
+    Expect(saved.ran).toEqual(['otherwise: '])
+  })
+
   Test('runs saved after the verb finishes and keeps its writes', async () => {
     const { ran, reports, schema, tail } = await runOutcome(
       schema => failingExport(schema, 'none'),

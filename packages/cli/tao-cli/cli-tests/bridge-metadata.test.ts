@@ -56,7 +56,7 @@ Describe('TypeScript bridge metadata', () => {
     await withTaoFixture({
       ...checkedProjectFile,
       'Main.tao': `data Documents / Document {
-   Title text
+   Title text,
    Body text
 }
 

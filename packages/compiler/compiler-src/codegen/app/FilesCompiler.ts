@@ -8,6 +8,7 @@ type TaoFileCompileOptions = CodegenOptions & {
   bridgeTypes?: string
   configurationTypes?: string
   dataEntities?: readonly AST.EntityDataDeclaration[]
+  dataAccess?: readonly AST.AccessDeclaration[]
   emitDataCatalog?: boolean
   importLines?: string[]
   scopeBindings?: string[]
@@ -65,7 +66,11 @@ export const FilesCompiler = {
       ${gen.textLines(scopeBindings)}
       ${gen.textLines(viewRegistrations)}
 
-      ${(opts.emitDataCatalog ?? dataEntities.length > 0) ? Compile.DataCatalog(dataEntities) : gen.noop()}
+      ${
+      (opts.emitDataCatalog ?? dataEntities.length > 0)
+        ? Compile.DataCatalog(dataEntities, opts.dataAccess)
+        : gen.noop()
+    }
       ${Compile.OutlineTable(taoFile)}
 
       ${

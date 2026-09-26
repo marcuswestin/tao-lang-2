@@ -37,7 +37,7 @@ scene WorkspaceList() {
    state Input = WorkspaceInput {
       Name: ""
    }
-   query Workspaces { }
+   query Workspaces = Workspaces with { }
    action AddWorkspace() {
       if Input.Incomplete {
          present WorkspaceNameNotice() as overlay
@@ -118,11 +118,11 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
    state Find = ""
    // `search` keeps the rows whose `(search)` fields match the term the way keyboard narrowing
    // does, word prefixes in order; a blank term keeps every row.
-   query Drafts from Workspace.Documents {
+   query Drafts = Workspace.Documents with {
       where is Draft // filters by boolean case name, mirroring `update Document { Final }`
       search Find
    }
-   query FinishedDocuments from Workspace.Documents {
+   query FinishedDocuments = Workspace.Documents with {
       where is Final
       search Find
    }
@@ -220,7 +220,7 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
 
 workspace
 view WorkspaceChooser() {
-   query Workspaces { }
+   query Workspaces = Workspaces with { }
    render Col() [screen, readableWidth, centeredLayout, gapWide] {
       Col() [hero] {
          Text("YOUR LIBRARY") [eyebrow]
@@ -237,7 +237,7 @@ view WorkspaceChooser() {
 }  }  }
 
 view WorkspaceDocuments(Workspace) {
-   query Documents from Workspace.Documents { }
+   query Documents = Workspace.Documents with { }
    render Col() [screen, readableWidth, centeredLayout, gapWide] {
       Col() [hero] {
          Text("{ Workspace.Name }") [eyebrow]

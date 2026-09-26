@@ -1,5 +1,5 @@
 import { RuntimeAssert } from './TR-assert'
-import type { TaoDataField, TaoDataSchemaDefinition } from './TR-data'
+import type { TaoDataEntity, TaoDataField, TaoDataSchemaDefinition } from './TR-data'
 import RuntimeSwitch from './TR-switch'
 
 export function validateDefinition(definition: TaoDataSchemaDefinition): void {
@@ -9,6 +9,13 @@ export function validateDefinition(definition: TaoDataSchemaDefinition): void {
     { schema: definition.name },
   )
   for (const [entityName, entity] of Object.entries(definition.entities)) {
+    for (const fields of entity.uniqueConstraints ?? []) {
+      RuntimeAssert.input(
+        fields.length > 0 && new Set(fields).size === fields.length
+          && fields.every(name => entity.fields[name] !== undefined),
+        `Unique constraint on '${entityName}' must name distinct declared fields.`,
+      )
+    }
     for (const [fieldName, field] of Object.entries(entity.fields)) {
       RuntimeAssert.input(fieldName !== 'Id', `Entity '${entityName}' cannot declare reserved field 'Id'.`, {
         entityName,
@@ -73,6 +80,12 @@ function validatePrimitiveFieldDefinition(
   field: TaoDataField,
   kind: Exclude<TaoDataField['kind'], 'reference' | 'relation'>,
 ): void {
+  if (kind === 'enum') {
+    RuntimeAssert.input(
+      !!field.cases?.length && new Set(field.cases).size === field.cases.length,
+      `Enum field '${fieldPath}' must declare distinct cases.`,
+    )
+  }
   RuntimeAssert.input(
     !field.onDelete && !field.relation,
     `Primitive field '${fieldPath}' cannot declare relationship metadata.`,
@@ -91,13 +104,13 @@ function validatePrimitiveFieldDefinition(
     return
   }
   RuntimeAssert.input(
-    valueMatchesKind(field.defaultValue, kind),
+    valueMatchesField(field.defaultValue, field),
     `Default for '${fieldPath}' does not match ${kind}.`,
     { fieldPath },
   )
 }
 
-export function valueMatchesKind(
+function valueMatchesKind(
   value: unknown,
   kind: Exclude<TaoDataField['kind'], 'reference' | 'relation'>,
 ): boolean {
@@ -105,6 +118,42 @@ export function valueMatchesKind(
     boolean: () => typeof value === 'boolean',
     number: () => typeof value === 'number' && Number.isFinite(value),
     text: () => typeof value === 'string',
+    enum: () => typeof value === 'string',
     time: () => typeof value === 'number' && Number.isFinite(value),
   })
+}
+
+export function valueMatchesField(value: unknown, field: TaoDataField): boolean {
+  if (value === null || value === undefined) {
+    return field.optional === true
+  }
+  return field.kind === 'enum'
+    ? typeof value === 'string' && field.cases?.includes(value) === true
+    : field.kind === 'relation' || field.kind === 'reference'
+    ? typeof value === 'string' || (field.kind === 'reference' && typeof value === 'number')
+    : valueMatchesKind(value, field.kind)
+}
+
+/** Uniqueness compares typed tuples; any absent component makes that row distinct. */
+export function validateUniqueRows(
+  entityName: string,
+  entity: TaoDataEntity,
+  rows: readonly Readonly<Record<string, unknown>>[],
+): void {
+  const constraints = [
+    ...Object.entries(entity.fields).filter(([, field]) => field.unique).map(([name]) => [name]),
+    ...(entity.uniqueConstraints ?? []),
+  ]
+  for (const fields of constraints) {
+    const keys = new Set<string>()
+    for (const row of rows) {
+      const tuple = fields.map(field => row[field])
+      if (tuple.some(value => value === null || value === undefined)) {
+        continue
+      }
+      const key = JSON.stringify(tuple)
+      RuntimeAssert.input(!keys.has(key), `Unique constraint '${entityName}.${fields.join(' + ')}' is already used.`)
+      keys.add(key)
+    }
+  }
 }

@@ -6,6 +6,7 @@
 
 export const JUST_COMMANDS = [
   'admission-experiment',
+  'auth-review-server',
   'bench',
   'board',
   'capabilities',

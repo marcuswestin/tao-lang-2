@@ -37,7 +37,7 @@ Describe('Expo runtime', () => {
             view PackageHome
           }
           view PackageHome() {
-            query Records { }
+            query Records = Records with { }
             render Text("Cross-module app { Records.Count }")
           }
         `,
@@ -66,7 +66,7 @@ Describe('Expo runtime', () => {
           data Records / Record { Label text }
           public app PackageApp { Name "Package app" view PackageHome }
           view PackageHome() {
-            query Records { }
+            query Records = Records with { }
             render Text("Patched app { Records.Count }")
           }
         `,

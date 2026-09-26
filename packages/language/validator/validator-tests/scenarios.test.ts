@@ -32,7 +32,7 @@ Describe('validator: fixtures and scenarios', () => {
     'accepts the decided app-running scenario controls',
     accepts(`
       data Households / Household { Name text }
-      data Recipes / Recipe { Household Title text Servings number }
+      data Recipes / Recipe { Household, Title text, Servings number }
       action StartKitchen(Sam item) { }
       view Main() {
         render inject ${tsFence}
@@ -263,7 +263,7 @@ Describe('validator: fixtures and scenarios', () => {
     'validates fixture rows, scenario clause counts, dimensions, and pseudolocale direction',
     rejects(
       `
-        data Stories / Story { Title text Count number }
+        data Stories / Story { Title text, Count number }
         fixture Broken {
           Lead = create Story { Title: 4, Unknown: "x" }
           Lead = create Story { Title: "duplicate", Count: 1 }

@@ -5,21 +5,27 @@ import "./visibility"
 import "./terminals"
 
 entry DataGrammarEntrypoint:
-    EntityDataDeclaration | EntityQueryDeclaration | CreateStatement | UpdateStatement | DeleteStatement;
+    EntityDataDeclaration | AccessDeclaration | EntityQueryDeclaration | CreateStatement | UpdateStatement | DeleteStatement;
 
 EntityDataDeclaration:
     visibility=DeclarationVisibility? 'data' name=ID '/' singularName=ID block=EntityDataDeclarationBlock;
 
 EntityDataDeclarationBlock:
-    '{' entries+=(EntityDataField | DataIndex | DataDefaultOrder | DataLocalOnly | EntityCommandPolicy)* '}';
+    '{' (entries+=EntityDataEntry (',' entries+=EntityDataEntry)* ','?)? '}';
+
+EntityDataEntry:
+    EntityDataField | DataIndex | DataUnique | DataDefaultOrder | DataLocalOnly | EntityCommandPolicy;
 
 EntityDataField:
-    name=ID (primitive=DataPrimitiveType | boolean?='yes' '/' negativeName=ID? 'no')?
+    name=ID (primitive=DataPrimitiveType | boolean?='yes' '/' negativeName=ID? 'no' | typeName=ID)?
     optional?='?'? traits=TraitList?;
 
 // Storage facts about the whole entity trail its fields, rather than riding one field's traits.
 DataIndex:
     'index' fieldName=ID;
+
+DataUnique:
+    'unique' fieldNames+=ID ('+' fieldNames+=ID)*;
 
 DataDefaultOrder:
     'order' 'by' fieldName=ID direction=OrderDirection?;
@@ -33,7 +39,7 @@ DataLocalOnly:
 // when a view promotes them. `commands` and `hide` are audited lowercase vocabulary; command names
 // remain references, so the policy never creates a parallel stringly-typed catalog.
 EntityCommandPolicy:
-    'commands' hide?='hide'? commands+=[CommandDeclaration:ID] (',' commands+=[CommandDeclaration:ID])*;
+    'commands' hide?='hide'? '{' commands+=[CommandDeclaration:ID] (',' commands+=[CommandDeclaration:ID])* ','? '}';
 
 DataPrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time';
@@ -41,7 +47,8 @@ DataPrimitiveType returns string:
 // A query is a local reactive read owned by a view. The broad diagnostic statement grammar also
 // recognizes it at file level so validation can leave the door open with a tailored explanation.
 EntityQueryDeclaration:
-    'query' (sourceName=ID 'as' name=ID | name=ID ('from' source=MemberAccessExpression)?) block=QueryBlock?;
+    'query' (name=ID '=' (source=MemberAccessExpression | sourceName=ID) ('with' block=QueryBlock)?
+      | (sourceName=ID 'as' name=ID | name=ID ('from' source=MemberAccessExpression)?) block=QueryBlock?);
 
 QueryBlock:
     '{' clauses+=QueryClause* '}';
@@ -88,3 +95,16 @@ DataWriteBlock:
 
 DataWriteField:
     (label=ID ':')? value=Expression;
+
+// Rules name account paths rooted at the protected row; verified callers are supplied by the backend.
+AccessDeclaration:
+    'access' entity=[EntityDataDeclaration:ID] '{' (rules+=AccessRule ';'?)+ '}';
+
+AccessRule:
+    actorPath+=ID ('.' actorPath+=ID)* 'can' grants+=AccessGrant (',' grants+=AccessGrant)*;
+
+AccessGrant:
+    operation='update' (fields+=ID (',' fields+=ID)*)? | operation=AccessOperation;
+
+AccessOperation returns string:
+    'read' | 'create' | 'delete';

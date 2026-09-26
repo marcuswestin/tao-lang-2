@@ -545,6 +545,35 @@ export function isImportableValueDeclaration(node: AST.Node): node is Importable
 /** ConfigurableDeclaration is an ordinary type whose primitive family is app, nav, or datasource. */
 export type ConfigurableDeclaration = AST.TypeDeclaration
 
+/** ConfigurationFamily includes the library-defined auth provider contract without a new keyword. */
+export type ConfigurationFamily = AST.ConfigurationPrimitive | 'auth'
+
+/** isAuthLibraryDeclaration recognizes contextual exports by their canonical package source. */
+export function isAuthLibraryDeclaration(declaration: AST.Node | undefined, name: string): boolean {
+  return (AST.isTypeDeclaration(declaration) || AST.isAliasDeclaration(declaration)
+    || AST.isActionDeclaration(declaration) || AST.isFunctionDeclaration(declaration)
+    || AST.isViewDeclaration(declaration))
+    && declaration.name === name
+    && getDocument(declaration).uri.path.endsWith('/@tao/auth/Auth.tao')
+}
+
+/** authAccountPath identifies symbolic current-account scopes without reading a live session. */
+export function authAccountPath(expression: AST.Expression, seen = new Set<AST.Node>()): string[] | undefined {
+  if (!AST.isValueReference(expression) && !AST.isMemberAccessExpression(expression)) {
+    return undefined
+  }
+  const declaration = expression.target.ref
+  const members = AST.isMemberAccessExpression(expression) ? expression.members : []
+  if (isAuthLibraryDeclaration(declaration, 'Account')) {
+    return members
+  }
+  if (!AST.isAliasDeclaration(declaration) || seen.has(declaration)) {
+    return undefined
+  }
+  const root = authAccountPath(declaration.value, new Set(seen).add(declaration))
+  return root ? [...root, ...members] : undefined
+}
+
 /** ConfigurationProperty is one ordinary type slot or one keyed-item property. */
 export type ConfigurationProperty = AST.TypeProperty | AST.ConfigurationPropertyDeclaration
 
@@ -557,11 +586,14 @@ export function isConfigurableDeclaration(node: AST.Node): node is ConfigurableD
 export function configurationPrimitiveOf(
   declaration: AST.TypeDeclaration,
   seen: Set<AST.TypeDeclaration> = new Set(),
-): AST.ConfigurationPrimitive | undefined {
+): ConfigurationFamily | undefined {
   if (seen.has(declaration)) {
     return undefined
   }
   seen.add(declaration)
+  if (isAuthLibraryDeclaration(declaration, 'AuthProvider')) {
+    return 'auth'
+  }
   if (declaration.aliasTarget) {
     const target = declaration.aliasTarget.member.ref
     return AST.isTypeDeclaration(target) ? configurationPrimitiveOf(target, seen) : undefined
@@ -644,7 +676,7 @@ export function configurationPropertyIsKey(property: ConfigurationProperty): boo
 function configurationPrimitiveOfTypeExpression(
   type: AST.TypeExpression,
   seen: Set<AST.TypeDeclaration>,
-): AST.ConfigurationPrimitive | undefined {
+): ConfigurationFamily | undefined {
   const base = AST.isDerivedTypeExpression(type) ? type.base : type
   if (AST.isPrimitiveTypeReference(base)) {
     return AST.isConfigurationPrimitive(base.primitive) ? base.primitive : undefined
@@ -829,7 +861,7 @@ export function isConcreteAppValueDeclaration(
 function configuredPrimitiveOfValueDeclaration(
   declaration: AST.RefinementBaseDeclaration | undefined,
   seen: Set<AST.AliasDeclaration> = new Set(),
-): AST.ConfigurationPrimitive | undefined {
+): ConfigurationFamily | undefined {
   if (AST.isAppDeclaration(declaration)) {
     return declaration.value ? configuredPrimitiveOfExpression(declaration.value, seen) : 'app'
   }
@@ -853,7 +885,7 @@ function configuredPrimitiveOfValueDeclaration(
 export function configuredPrimitiveOfExpression(
   expression: AST.Expression,
   seen: Set<AST.AliasDeclaration> = new Set(),
-): AST.ConfigurationPrimitive | undefined {
+): ConfigurationFamily | undefined {
   if (AST.isPrimitiveConfigurationConstructor(expression)) {
     return expression.primitive
   }
@@ -1060,6 +1092,11 @@ export function blockStatementOf<StatementT extends AST.OwnedBlockStatement, Val
 
 export function blockStatements(owner: AST.BlockStatementOwner): readonly AST.OwnedBlockStatement[] {
   return (owner.block?.statements || []) as readonly AST.OwnedBlockStatement[]
+}
+
+/** canonicalSubjectCase gives yes/no arms the same runtime cases as boolean subjects. */
+export function canonicalSubjectCase(name: string): string {
+  return name === 'yes' ? 'true' : name === 'no' ? 'false' : name
 }
 
 /**

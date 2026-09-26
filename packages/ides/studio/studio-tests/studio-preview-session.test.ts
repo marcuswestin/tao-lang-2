@@ -216,19 +216,24 @@ Test(
   },
 )
 
-Test('Studio preview session preserves compiler entity parameter semantics', async () => {
+Test('Studio preview session preserves compiler entity parameter and fixture account semantics', async () => {
   const previewRuntimeRoot = await mkTestDir('tao-studio-entity-parameter-runtime-')
   try {
     await withTaoFiles(
       'tao-studio-entity-parameter-project-',
       {
         'Music.tao': `
+          data Accounts / Account { DisplayName text }
           workspace data Playlists / Playlist { Title text }
           app Music { view Main }
           view Main() { render Native() }
           view PlaylistRow(Playlist) { render Native() }
           view Native() { render inject \`\`\`ts return null \`\`\` }
-          fixture Sketches { Featured = create Playlist { Title: "Focus" } }
+          fixture Sketches {
+            account Alice { DisplayName: "Alice" }
+            signed in as Alice
+            Featured = create Playlist { Title: "Focus" }
+          }
           scenarios PlaylistRow "states" {
             fixture Sketches
             device phone
@@ -248,6 +253,11 @@ Test('Studio preview session preserves compiler entity parameter semantics', asy
             Errors.throwUnexpected(compiled.message)
           }
           const manifest = preview.session.previewManifest()!
+          Expect(manifest.fixtures.map(fixture => fixture.plan)).toEqual([{
+            accounts: [{ fields: { DisplayName: 'Alice' }, name: 'Alice' }],
+            creates: [{ account: 'Alice', entity: 'Playlist', fields: { Title: 'Focus' }, name: 'Featured' }],
+            signedIn: 'Alice',
+          }])
           const subject = manifest.subjects.find(candidate =>
             candidate.kind === 'view' && candidate.viewName === 'PlaylistRow'
           )!

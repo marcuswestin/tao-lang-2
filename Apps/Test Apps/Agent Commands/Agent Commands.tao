@@ -44,7 +44,7 @@ command UnlistedEntry() {
 }
 
 view EntriesView() {
-   query AgentCommandEntries { }
+   query AgentCommandEntries = AgentCommandEntries with { }
    render Col() [gap 8, pad 16] {
       Text("Agent command entries: { AgentCommandEntries.Count }")
       loop AgentCommandEntries / Entry {
