@@ -1,6 +1,6 @@
 # Tao Agent Guide
 
-Tao is a UI-app programming language that compiles to TSX for Expo and React Native. This repository is a clean, stepwise reimplementation of `~/code/tao-lang`; use the old repository as reference, not source to copy.
+Tao compiles UI apps to Expo/React Native TSX. This reimplements `~/code/tao-lang`; use that repository as reference, not source to copy.
 
 The Developer is Tao's author, project lead, and language designer, and decides language semantics, roadmap priority, and product behavior.
 
@@ -41,6 +41,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 ## Permissions
 
 - Research the open web, run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack, all without asking.
+- Keep the desktop undisturbed whenever hidden or headless execution suffices; `quiet-ui-workflows` owns UI launches and control.
 - Bash uses an OS sandbox. The harness grants one host exception per named `./agent unsandboxed X` operation; its editable wrapper admits only named argv prefixes from `.rulesync/permissions.jsonc`, then runs repository code and children on the host. Deeper subcommands are checked by the wrapper, not separately granted by the harness. Use named simulator, device, build, remote, and process operations from `./agent help`, never raw host-tool names after `unsandboxed`. For an unlisted host operation, diagnose read-only, name it, and pause for the Developer's explicit approval; `environment-recovery` owns the details.
 - Before intentionally changing what any `./agent unsandboxed` operation can run, accept, or reach—including its permission rules, wrapper, dispatch, target, or called implementation—obtain the Developer's approval for that change, unless the current request already authorizes it as necessary to achieve its stated goal. Approval for one behavior change does not cover later ones. After an authorized pass that intentionally changes unsandboxed behavior, clearly tell the Developer what changed.
 - Land only with the Developer's authorization for this slice, lasting through retries. Use `./agent unsandboxed land`. On a host or queued-merge failure, stop and surface the intervention (`verification-lanes`).
