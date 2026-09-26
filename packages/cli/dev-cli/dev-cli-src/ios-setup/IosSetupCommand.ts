@@ -115,7 +115,7 @@ async function run(options: Options): Promise<number> {
       '--strict',
       '--verbose=2',
       '-R',
-      'anchor apple and identifier "com.apple.dt.Xcode"',
+      '=anchor apple and identifier "com.apple.dt.Xcode"',
       app,
     ])
     await requireSuccess('/usr/sbin/spctl', ['--assess', '--verbose', app])
@@ -327,6 +327,7 @@ async function run(options: Options): Promise<number> {
       await save()
       await files.mkdir(stage)
       // Apple's xip verifies the signed archive; never fall back to raw xar extraction.
+      notice(`Extracting Xcode from ${archive}... This can take several minutes.`)
       await requireSuccess('/usr/bin/xip', ['--expand', archive], undefined, stage)
       const extractedApps = (await files.listDir(stage)).filter(name => name.endsWith('.app'))
       if (extractedApps.length !== 1) {
@@ -341,6 +342,7 @@ async function run(options: Options): Promise<number> {
       if (await files.isSymbolicLink(extracted)) {
         Errors.throwHostEnvironment('Refusing a symbolic-link Xcode application in the archive.')
       }
+      notice('Extraction complete. Verifying the Xcode signature and version...')
       await signed(extracted)
       const version = await plist(extracted, 'CFBundleShortVersionString')
       if (!matchesVersion(version, options.xcodeVersion)) {
@@ -362,12 +364,15 @@ async function run(options: Options): Promise<number> {
       })
       await save()
       await requireSuccess('/bin/mkdir', [installStage])
+      notice(`Copying Xcode into /Applications... This can take several minutes.`)
       await requireSuccess('/usr/bin/ditto', [extracted, stagedApp])
+      notice('Copy complete. Verifying the copied Xcode application...')
       await signed(stagedApp)
       if (!matchesVersion(await plist(stagedApp, 'CFBundleShortVersionString'), options.xcodeVersion)) {
         Errors.throwHostEnvironment('The staged Xcode version changed during installation.')
       }
       // The parent destination prevents mv from nesting an app inside an occupied app bundle.
+      notice(`Finishing Xcode installation at ${target}...`)
       await requireSuccess('/bin/mv', ['-n', stagedApp, '/Applications/'])
       if (await files.exists(stagedApp)) {
         Errors.throwHostEnvironment(
@@ -385,8 +390,12 @@ async function run(options: Options): Promise<number> {
       receipt.selectedXcode = target
       await save()
       receipt.remaining = []
+      notice(`Xcode installed at ${target}.`)
     }
     const selected = receipt.selectedXcode
+    if (options.apply) {
+      notice('Checking Xcode signature, first-launch readiness, and simulator availability...')
+    }
     await signed(selected)
     const minimum = await plist(selected, 'LSMinimumSystemVersion')
     if (!VERSION.test(minimum) || !atLeast(receipt.macOS, minimum)) {
@@ -405,9 +414,6 @@ async function run(options: Options): Promise<number> {
     }
     if (!receipt.runtimeAvailable && options.apply) {
       const downloads = `${work}/runtime-${runId}`
-      notice(
-        `Downloading/importing iOS ${options.runtimeVersion} with ${selected}; Apple's operation may update shared CoreSimulator components. No license is accepted automatically.`,
-      )
       receipt.ownedPaths.push({
         path: downloads,
         purpose: 'Apple runtime export',
@@ -420,6 +426,9 @@ async function run(options: Options): Promise<number> {
       })
       await save()
       await files.mkdir(downloads)
+      notice(
+        `Downloading iOS ${options.runtimeVersion} Simulator runtime... This can take several minutes and may update shared CoreSimulator components.`,
+      )
       await requireSuccess('/usr/bin/xcodebuild', [
         '-downloadPlatform',
         'iOS',
@@ -434,9 +443,11 @@ async function run(options: Options): Promise<number> {
           `Expected one Apple runtime image in ${downloads}; inspect the export before retrying.`,
         )
       }
+      notice(`Installing iOS ${options.runtimeVersion} Simulator runtime... This can take several minutes.`)
       await requireSuccess('/usr/bin/xcodebuild', ['-importPlatform', `${downloads}/${images[0]}`], selected)
       receipt.runtimeAvailable = false
       receipt.simulatorHealthy = false
+      notice('Checking the installed runtime and CoreSimulator service...')
       await inspectRuntime(selected)
     }
     if (!receipt.runtimeAvailable) {

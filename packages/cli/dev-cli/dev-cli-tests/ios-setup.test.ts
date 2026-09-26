@@ -208,6 +208,20 @@ async function setup(fixture: {
 }
 
 Describe('explicit iOS dependency setup', () => {
+  Test('passes the Apple identity requirement as inline codesign source rather than a filename', async () => {
+    const result = await setup({ installed: '/Applications/Xcode.app' })
+    const verification = result.calls.find(call => call.name === '/usr/bin/codesign')
+    Expect(verification?.spec.args).toEqual([
+      '--verify',
+      '--deep',
+      '--strict',
+      '--verbose=2',
+      '-R',
+      '=anchor apple and identifier "com.apple.dt.Xcode"',
+      '/Applications/Xcode.app',
+    ])
+  })
+
   Test('rechecks free space consumed while waiting for the download before extraction', async () => {
     const result = await setup({
       apply: true,
