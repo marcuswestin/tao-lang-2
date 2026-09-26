@@ -2,9 +2,9 @@
   "name": "tao-account-server",
   "private": true,
   "type": "module",
-  "module": "account-server-src/AccountServer.ts",
+  "module": "account-server-src/account-server.ts",
   "exports": {
-    ".": "./account-server-src/AccountServer.ts"
+    ".": "./account-server-src/account-server.ts"
   },
   "dependencies": {
     "@clerk/backend": "3.20.1",

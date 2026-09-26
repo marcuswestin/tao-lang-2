@@ -92,6 +92,11 @@ stop-local-instantdb:
 auth-review-server *ARGS:
     bun run packages/services/account-server/account-server-src/serve.ts {{ ARGS }}
 
+# Review Clerk sign-in and local InstantDB data in Tao Companion; requires saved development credentials
+[group('Run')]
+clerk-review *ARGS: _parser-gen
+    ./dev clerk-review {{ ARGS }}
+
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
 studio project="Apps/HNReader": _parser-gen

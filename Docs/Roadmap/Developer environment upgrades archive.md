@@ -72,6 +72,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-112 — The human landing recipe rejected the landing dry-run flag](<Developer environment upgrades/Archive/DEVENV-112-human-landing-recipe-rejected-dry-run.md>) — Resolved
 - [DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD — Agent-config recovery can download dprint plugins](<Developer environment upgrades/Archive/DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD.md>) — Resolved
 - [DEVENV-COLD-VM-CHROME-STARTUP — Cold VM Chrome startup](<Developer environment upgrades/Archive/DEVENV-COLD-VM-CHROME-STARTUP.md>) — Resolved
+- [DEVENV-COMPANION-INSTALL-SKIPS-NATIVE-CONFIGURATION — Companion install skips native configuration](<Developer environment upgrades/Archive/DEVENV-COMPANION-INSTALL-SKIPS-NATIVE-CONFIGURATION.md>) — Resolved
 - [DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS — Compiled test store rename is denied in managed shells](<Developer environment upgrades/Archive/DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS.md>) — Resolved
 - [DEVENV-DEV-SHELL-WRITES-COMPLETION-DUMP-IN-SOURCE — Dev shell writes completion dump in source](<Developer environment upgrades/Archive/DEVENV-DEV-SHELL-WRITES-COMPLETION-DUMP-IN-SOURCE.md>) — Resolved
 - [DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH — Emulator exit can report a prior launch's failure](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>) — Resolved

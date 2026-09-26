@@ -419,4 +419,7 @@ placeholder publishable key; configure its development instance and gateway befo
 browser journey passed on 2026-09-26 against the SQLite reference gateway, including real password
 and email-code UI, profile and note persistence, reload and logout. The same journey passed with
 local InstantDB storage and independent row/guest-access checks on 2026-09-26. Physical-device
-acceptance remains outstanding.
+acceptance remains outstanding. `just clerk-review` configures this app from the encrypted development
+credentials, starts its local InstantDB gateway, and opens Studio for manual iPhone review. Install
+Tao Companion with `just studio-companion-install roPhone`, keep the phone and Mac on the same
+network, then choose the phone in Studio and open the app. Clerk sign-in requires Internet access.

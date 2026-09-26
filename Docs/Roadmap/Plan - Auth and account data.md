@@ -393,9 +393,13 @@ Note rows and proving direct guest reads are denied. `just setup-clerk` guides s
 settings, validates matching development keys, retrieves the public signing key and stores the
 three credentials encrypted. It preserves concurrent unrelated secret-store edits and refuses
 conflicting credential/recipient changes. Physical-device lifecycle acceptance remains outstanding.
-The gateway requires an `azp` origin
-claim; native proofs may omit it, so native pairing needs an explicit token/origin contract before
-it can be advertised. Advanced recovery, OAuth, MFA/passkeys,
+The gateway defaults to requiring an `azp` origin claim. The approved native opt-in,
+`allowMissingAuthorizedPartyWithoutOrigin`, accepts a missing claim only when the actual HTTP
+request has no Origin header; any present claim must still match the configured authorized parties.
+Browser requests, including null or empty Origin headers, retain the strict policy. This trusts a
+verified bearer session and does not attest a physical device. `just clerk-review` prepares a
+development gateway and local InstantDB behind Studio for manual Companion review.
+Advanced recovery, OAuth, MFA/passkeys,
 linking, deletion and production gateway deployment are not part of this initial implementation.
 
 ## Original implementation seams

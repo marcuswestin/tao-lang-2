@@ -184,6 +184,9 @@ Describe('Account reference service launcher', () => {
           { ...valid, audience: [] },
           { ...valid, audience: 1 },
           { ...valid, audience: [''] },
+          { ...valid, allowMissingAuthorizedPartyWithoutOrigin: 'true' },
+          { ...valid, allowMissingAuthorizedPartyWithoutOrigin: 1 },
+          { ...valid, allowMissingAuthorizedPartyWithoutOrigin: null },
           { ...valid, jwksURL: 'https://attacker.example.test' },
           { ...valid, actor: 'forged' },
         ]
@@ -216,6 +219,7 @@ Describe('Account reference service launcher', () => {
       jwtKey: 'configured-public-key',
       authorizedParties: ['https://app.example.test'],
       audience: ['notes'],
+      allowMissingAuthorizedPartyWithoutOrigin: true,
     })
     await FS.writeJson(policy, {
       accountEntity: 'Account',
@@ -244,6 +248,35 @@ Describe('Account reference service launcher', () => {
       Expect(await response.json()).toEqual({
         error: { code: 'unauthorized', message: 'The Clerk session was not accepted.' },
       })
+    } finally {
+      await server?.stop()
+      await FS.remove(root)
+    }
+  })
+
+  Test('binds an explicitly configured host while keeping loopback as the default', async () => {
+    const root = await mkTestDir('tao-account-host-')
+    const policy = FS.resolvePath('policy.json', root)
+    await FS.writeJson(policy, {
+      accountEntity: 'Account',
+      entities: { Account: { fields: [], grants: [{ principal: [], operations: ['read'] }] } },
+    })
+    let server: Awaited<ReturnType<typeof startAccountServerFromArguments>> | undefined
+    try {
+      server = await startAccountServerFromArguments([
+        '--policy',
+        policy,
+        '--database',
+        FS.resolvePath('accounts.sqlite', root),
+        '--host',
+        '0.0.0.0',
+        '--port',
+        '0',
+      ])
+      const url = new URL(server.url)
+      Expect(url.hostname).toBe('0.0.0.0')
+      url.hostname = '127.0.0.1'
+      Expect((await fetch(new URL('/v1/data', url))).status).toBe(401)
     } finally {
       await server?.stop()
       await FS.remove(root)
