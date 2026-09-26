@@ -77,6 +77,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION — A fixed short `timeoutMs` around real work loses to contention](<Developer environment upgrades/Archive/DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION.md>) — Resolved
 - [DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE — Gate scratch cleanup denied in managed worktree](<Developer environment upgrades/Archive/DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE.md>) — Resolved
 - [DEVENV-GUEST-AGENT-AUDIT-PRIVACY — Guest agent audit privacy](<Developer environment upgrades/Archive/DEVENV-GUEST-AGENT-AUDIT-PRIVACY.md>) — Resolved
+- [DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND — Host-test artifacts accumulate without bound](<Developer environment upgrades/Archive/DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND.md>) — Resolved
 - [DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND — Jest's transform cache grows without bound](<Developer environment upgrades/Archive/DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND.md>) — Resolved
 - [DEVENV-LANDING-SNAPSHOTS-MAIN-BEFORE-WAITING-FOR-THE-LOCK — A landing that queues behind another loses to every landing that finishes while it waits](<Developer environment upgrades/Archive/DEVENV-LANDING-SNAPSHOTS-MAIN-BEFORE-WAITING-FOR-THE-LOCK.md>) — Resolved
 - [DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS — Setup can retain an old transitive package link](<Developer environment upgrades/Archive/DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS.md>) — Resolved

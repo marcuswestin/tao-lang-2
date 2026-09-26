@@ -18,7 +18,8 @@ are written against the current model.
 ### FOLLOW-NAV-001: Selection, Split, And Keyed Navigation
 
 Static `SelectionNav` with keyed items, `Initial @key`, `Display`, adaptive drawer display, and
-target-only activation (`present App@key`) ship in Current. Still open here: `SplitNav`, dynamic selection, `key of Items` typing,
+target-only activation (`present App@key`) and logical `SplitNav` ship in Current. Still open here:
+native adaptive split-container hosting and pane-collapse semantics, dynamic selection, `key of Items` typing,
 compiler-created selection/split items, keyed and relative path segments beyond app auxiliaries,
 directional delegation, pane reveal, and occurrence-key behavior. `Panes()` now in Current is a
 responsive visual layout container, not a navigation kind and not an implicit `SplitNav` decision.
@@ -65,6 +66,19 @@ policy, and native-dismiss races. Durable continuations remain out of scope unde
 The absorbed WordFlower tranche migrated executable sources to `let`, retired the former binding and
 visibility spellings, removed obsolete source navigation APIs, and added Current/Test App coverage.
 Future work adds source actions only where a later migration is semantically mechanical.
+
+### FOLLOW-NAV-006: Native Platform Acceptance
+
+The native adapter repair keeps the locked dependency tuple and Tao reducer/restoration semantics.
+Automatic tabs use `Tabs.Host`/`Tabs.Screen`; iOS headers use native buttons and ordered menus;
+iPad automatic tabs request system tab/sidebar adaptation. Implementation and platform acceptance
+are separate: see [Native navigation acceptance](<Native navigation acceptance.md>) for evidence,
+physical-device and accessibility gaps, the bounded Catalyst gate, and the Android trial verdict.
+
+Search tabs, badges, accessories, custom minimization, large-title options, richer sheet detents,
+guards and public routes remain deferred. Android native menu/sheet fidelity, full predictive Back,
+native rails and further Material components are separate follow-ups. No dependency upgrade or
+renderer replacement is implied by the adapter repair.
 
 ## Deferred Design
 
