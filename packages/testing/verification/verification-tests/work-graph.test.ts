@@ -8,6 +8,21 @@ import {
   type WorkState,
 } from '../verification-src/WorkGraph'
 
+async function publishedProcess(path: string): Promise<TrackedProcess | undefined> {
+  if (!await FS.isFile(path)) {
+    return undefined
+  }
+  const text = (await FS.readText(path)).trim()
+  if (!/^\d+$/.test(text)) {
+    return undefined
+  }
+  const pid = Number(text)
+  if (!Number.isSafeInteger(pid) || pid <= 1) {
+    return undefined
+  }
+  return ProcessTree.identities([pid]).get(pid)
+}
+
 /** Arm the short silence bound only after the fixture has a live descendant holding its pipe. */
 async function assertDescendantTimeout(
   state: WorkState,
@@ -21,18 +36,18 @@ async function assertDescendantTimeout(
   const finished = WorkGraph.run([state], { watchInterrupt: () => () => {} })
   void finished.then(() => completed = true, () => completed = true)
   try {
-    await until(async () => await FS.isFile(parentPath), { description: 'the fixture parent to publish its PID' })
-    const parentPid = Number((await FS.readText(parentPath)).trim())
-    const parent = ProcessTree.identities([parentPid]).get(parentPid)
-    Expect(parent).toBeDefined()
-    owned.push(parent!)
-    await until(async () => state.fullOutput.includes('ready\n') && await FS.isFile(descendantPath), {
-      description: 'the descendant to publish its PID and announce readiness',
+    const parent = await until(() => publishedProcess(parentPath), {
+      description: 'the fixture parent to publish a valid PID with a live identity',
     })
-    const pid = Number((await FS.readText(descendantPath)).trim())
-    const tracked = ProcessTree.identities([pid]).get(pid)
-    Expect(tracked).toBeDefined()
-    owned.push(tracked!)
+    owned.push(parent)
+    const tracked = await until(
+      async () => state.fullOutput.includes('ready\n') && await publishedProcess(descendantPath),
+      {
+        description: 'the descendant to publish a valid PID with a live identity and announce readiness',
+      },
+    )
+    const pid = tracked.pid
+    owned.push(tracked)
     // The next and final output is the child's acknowledgement. It resets the real graph timer
     // to this short bound, without charging interpreter startup against the behavior under test.
     state.node.idleTimeoutMs = idleMs
@@ -44,7 +59,7 @@ async function assertDescendantTimeout(
     await finished
     Expect(state.fullOutput).toContain('armed\n')
     Expect(state.failure?.kind).toBe('timeout')
-    await until(() => !ProcessTree.sameProcess(ProcessTree.identities([pid]).get(pid), tracked!), {
+    await until(() => !ProcessTree.sameProcess(ProcessTree.identities([pid]).get(pid), tracked), {
       description: 'the timed-out descendant to stop running, including an unreaped Linux zombie',
     })
   } finally {
