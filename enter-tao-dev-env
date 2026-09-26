@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 0 ]; then
+  printf 'Usage: ./enter-tao-dev-env\n' >&2
+  exit 2
+fi
+
+repository=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+cd "$repository"
+
+if ! command -v devenv >/dev/null 2>&1; then
+  printf 'Tao development needs devenv and Nix installed before this shell can start.\n' >&2
+  exit 1
+fi
+
+# One setup runs in the pinned environment before the interactive shell begins. The second
+# devenv invocation reuses its evaluated profile and keeps the shell active until the user exits.
+export DEVENV_TUI=false
+devenv shell --no-tui ./agent setup
+if [ "${SHELL##*/}" = zsh ]; then
+  export TAO_ORIGINAL_ZDOTDIR="${ZDOTDIR:-$HOME}"
+  export ZDOTDIR="$repository/packages/cli/dev-cli/dev-cli-src/shell"
+  exec devenv shell --no-tui -- zsh -i
+fi
+exec devenv shell --no-tui

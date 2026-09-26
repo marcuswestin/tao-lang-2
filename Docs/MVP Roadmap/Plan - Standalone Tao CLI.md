@@ -1,5 +1,41 @@
 # Plan - Standalone Tao CLI
 
+## Intermediate landing boundary (2026-09-25)
+
+The standalone macOS CLI, installer, pinned toolchain, interactive developer shell, and clean-machine
+gate may land as an intermediate slice. This does not declare the broader contributor or native
+development program complete. Before that landing:
+
+- [x] Run the current vanilla Tart gate with its mandatory filesystem audit and browser click;
+      inspect any unexpected writes before changing the allowlist, and retain its guest logs.
+- [x] Remove the task-only VM and browser routes from `./agent unsandboxed capabilities`, leaving
+      that command read-only; use the dedicated `standalone-cli-clean-machine` host operation for the gate.
+
+The temporary `--HACK-standalone-cli-clean-machine` capabilities alias, authorized on 2026-09-26,
+was removed after the dedicated VM operation reached the guest from this task. The alias did not
+fix networking; the host application's Local Network permission did.
+
+- [x] Remove the temporary capabilities alias, dispatch, and help before archiving this task;
+      retain the dedicated VM command and ordinary read-only capability reporting.
+
+Follow-up work after this intermediate landing continues on `feat/standalone-cli-followups`
+(to be created from the landed `main`), before closing the standalone development effort:
+
+- [ ] Move the remaining human recipes into `./dev`, make `dev` available in the entered shell,
+      and retire `Justfile` after the replacement workflows are proven.
+- [ ] Update contributor, workflow, troubleshooting, and agent documentation for the final shell,
+      `./agent`, and `./dev` design in one pass. Until then, correct only documentation needed to keep
+      this intermediate landing truthful.
+- [ ] Prove contributor workflows in a fresh isolated Ubuntu environment and actual sessions for
+      every supported cloud harness before closing this effort. Use cached tool images with fresh
+      checkouts, test cold and cached setup, and retain per-harness portable verification evidence;
+      the [cloud bootstrap task](<../Roadmap/Developer environment upgrades/DEVENV-CLOUD-AGENT-EXECUTIONS-LACK-PORTABLE-BOOTSTRAP.md>)
+      owns the proposed resource limits and acceptance checklist.
+
+The additional CLI guest harness, native toolchain setup, prepared VM images, Expo authentication
+decision, and cloud execution bootstrap remain separate follow-ups. Their current status is tracked
+in this plan and the developer-environment ledger as applicable.
+
 Implementation update (2026-09-22): the first `tao dev` slice now generates its Expo host in the
 selected project's `.tao/dev/runtime`, keeps Expo and dev-data state in that project, and uses a
 shared CLI/Studio owner with retained `.tao/sessions/` records. Bare `tao dev` opens no target.
@@ -757,8 +793,9 @@ overlap with `A3` and `A8`.
 
 ## Remaining work
 
-As of 2026-09-25, with slices 1–5, 7, 8, and the `tao review` part of 9 on `main`, this is what
-stands between `A2` and done, in the order to take it:
+As of 2026-09-25, with slices 1–5, 7, 8, and the `tao review` part of 9 on `main`, the
+clean-machine acceptance passed for the current web commands. This is what stands between `A2` and
+done, in the order to take it:
 
 1. **The iOS Simulator and Android from an installed `tao dev`.** `run-targets.ts:114` and
    `android.ts:236,484` resolve the runtime toolchain through the repository and throw outside a
@@ -769,10 +806,7 @@ stands between `A2` and done, in the order to take it:
    verification on 2026-09-25 but has not yet opened a Simulator from an installed binary; the
    acceptance's failure check should match any `did not open ` line, because a Companion link is not
    an `exp://` one. Android's `android.ts:257` takes the same fix.
-2. **The clean-machine gate** of implementation decision 10: the acceptance run inside a fresh,
-   vanilla macOS `tart` virtual machine, to catch a dependency on something the development Mac
-   already has. It needs `tart` installed and a macOS image of tens of GB.
-3. **Moving `tao test` onto `bun test`**, which removes the managed Node, decided 2026-09-25 over
+2. **Moving `tao test` onto `bun test`**, which removes the managed Node, decided 2026-09-25 over
    running Jest under Bun (uncertainty 1). The journeys need little of Jest itself — `describe`,
    `test`, `expect`, and one setup file mocking `expo-clipboard`, `expo-haptics`, and `Share` —
    and most of `jest-expo`: its Babel transform of React Native's Flow-typed sources, platform
@@ -784,7 +818,7 @@ stands between `A2` and done, in the order to take it:
    then move `jest.*` calls to runner-neutral names and remove Jest, including from the
    repository's own `expo-host` tests. Unproven: nobody has published React Native Testing Library
    running under `bun test`, so a spike on one starter's journeys comes first.
-4. **`tao ship` without Node.** A spike on 2026-09-25 ran the iOS chain from an installed release
+3. **`tao ship` without Node.** A spike on 2026-09-25 ran the iOS chain from an installed release
    with no Node on `PATH`: `expo prebuild` succeeds under the binary acting as Bun, despite Expo's
    documentation asking for Node; `pod install` and a Release `xcodebuild` for the Simulator,
    JavaScript bundle included, succeed when a two-line `node` script that runs
@@ -794,14 +828,25 @@ stands between `A2` and done, in the order to take it:
    `pod install` and `xcodebuild` and name it as `NODE_BINARY` in `ios/.xcode.env.local`; and pass
    `RuntimeToolchainPaths.expoEnvironment()` to all three, because Metro otherwise climbs to
    repository paths that do not exist in an install. Signing, export, and upload were not run, and
-   the spike's Mac also had a Node elsewhere, so the clean-machine gate is what proves none leaks.
+   the spike's Mac also had a Node elsewhere, so a later clean-machine ship acceptance must prove none leaks.
    Android builds call `node` from Gradle and have not been tried.
-5. **Signing and notarization, and the Foundation Models helper**, both waiting on the Developer ID
+
+   _In progress 2026-09-25._ The installed pipeline now starts Expo prebuild and export and
+   Expo's fingerprint script through the Tao binary; it prepares a version-owned `node` bridge
+   for CocoaPods and Xcode and supplies the installed Metro paths. A scratch 0.0.0 release ran
+   prebuild, export, and fingerprint with `PATH=/usr/bin:/bin`. Unit coverage proves the bridge's
+   command plan and files. CocoaPods, the Simulator build, signing, and upload remain unproved on
+   this branch. The standalone host still lacks the iCloud config plugin, now listed in release gaps.
+4. **Signing and notarization, and the Foundation Models helper**, both waiting on the Developer ID
    certificate; `tao dev` is then re-checked under the hardened runtime (uncertainty 5).
-6. **A test for downloading a missing pinned release interactively**, the one slice-8 path no test
+5. **A test for downloading a missing pinned release interactively**, the one slice-8 path no test
    covers, because neither the acceptance nor an agent sandbox has a terminal to answer the question
    (`DEVENV-082`). A pseudo-terminal harness or an injectable prompt would cover it.
-7. **Publishing `0.4.0`**, waiting on the public repository, its GitHub Releases (`R11`), and the
+
+   _Covered on this branch 2026-09-25._ The test injects the prompt and release bytes, checks a
+   refusal and a bad checksum, observes the version query from `/` without `TAO_VERSION`, and
+   verifies that installing a pin leaves `bin/tao` unchanged.
+6. **Publishing `0.4.0`**, waiting on the public repository, its GitHub Releases (`R11`), and the
    licence (`R1`).
 
 The Git subprocess timeouts recorded in `DEVENV-TESTS-THAT-SPAWN-GIT-HANG-THEIR-WHOLE-TIMEOUT-IN-LANES`
@@ -828,7 +873,7 @@ developer-environment backlog.
    setup, which reuses `jest-expo`'s native-module definitions (Expo SDK 56 and later) but moves the
    journeys off Jest. The Vitest React Native projects themselves require Node, and Expo documents
    only Jest. **Decided 2026-09-25:** Bun's own runner, with a harness Tao owns (Remaining work,
-   item 3); the two Jest-under-Bun experiments are dropped.
+   item 2); the two Jest-under-Bun experiments are dropped.
 2. **Is a `bun install`-resolved host reproducible enough for `tao ship`?** `ship-fingerprints`
    hashes the runtime. Settle by installing the same lockfile twice on different machines and
    comparing the fingerprint.
@@ -907,6 +952,61 @@ above; where the two disagree, these are later and win.
 10. **Clean-machine acceptance** runs in three tiers: a throwaway `$HOME` with a scrubbed `PATH`
     inside the ordinary test suite, a local `tart` virtual machine as the gate before publication,
     and the `macos-26` GitHub runner as a regression gate once the public repository exists.
+
+    _Gate implementation in progress 2026-09-25._ `./agent unsandboxed
+    standalone-cli-clean-machine` builds the release and runs a local driver that clones a disposable
+    `macos-tahoe-vanilla` VM, boots it headless, mounts only the release and the existing acceptance
+    compiled for the guest as read-only inputs, and writes guest step logs to a host mount. It uses
+    SSH because [Tart's guest agent](https://tart.run/blog/2025/06/01/bridging-the-gaps-with-the-tart-guest-agent/)
+    is included in non-vanilla images only. The [vanilla image](https://github.com/cirruslabs/macos-image-templates)
+    has no added software; the guest checks for Homebrew and Xcode tools before testing. The same acceptance driver
+    passed locally as a compiled executable, and a 0.0.0 release passed host acceptance in about
+    50 seconds. The Developer approved installing Tart and its image on 2026-09-25. The named
+    setup operation trusts Tart's `softnet` dependency formula individually before installing Tart;
+    Homebrew rejects the dependency otherwise. The first VM run on 2026-09-25 cloned the vanilla
+    image in 1,241 seconds. `tart run` stayed alive and `tart ip` returned `192.168.64.2`, but SSH
+    returned `No route to host` throughout the 240-second boot deadline. The guest acceptance did
+    not start; no hidden dependency finding is claimed. Its logs remain under
+    `.artifacts/standalone-vm/tao-acceptance-1790359337-42764/logs/`. The driver now streams clone
+    and acceptance output to both the terminal and log, and reports SSH wait progress every 15 seconds.
+    A second run from Terminal.app reached guest SSH in 22 seconds, so the earlier route failure was
+    specific to the app-launched process. The guest then exposed a separate release blocker: the
+    Nix-provided Bun compiler embedded its `/nix/store` ICU path in both the release and acceptance
+    executables. The builder now compiles with a SHA-pinned official Bun 1.4.2 binary and rejects
+    non-system dynamic library paths; the guest acceptance uses the same compiler. A third run from
+    Terminal.app passed the full acceptance in the vanilla guest on 2026-09-25: SSH was ready in 15
+    seconds, acceptance passed in 66 seconds, and the gate completed in 86 seconds. Its retained logs
+    are under `.artifacts/standalone-vm/tao-acceptance-1790362625-11421/logs/`.
+
+    The current `standalone-cli-clean-machine` gate always runs a compiled browser click driver
+    and metadata inventories of the guest's writable macOS Data volume before installation and
+    after the tests. The old `standalone-cli-clean-machine-audit` recipe currently reaches the
+    same gate. It retains the temporary projects until the second snapshot, writes
+    `filesystem-before.json`, `filesystem-after.json`, `filesystem-diff.json`, and a bounded
+    `filesystem-diff.txt` in that run's `logs/`, then deletes the VM as usual. The scanner does not
+    enter other mounted volumes, records unreadable paths, and compares metadata rather than file
+    contents; macOS background writes and files created and deleted between snapshots remain
+    limitations. The current gate passed from this task on 2026-09-26 in 170 seconds, including
+    the browser counter click and zero disallowed metadata changes. Its retained logs are
+    `.artifacts/standalone-vm/tao-acceptance-1790402495-12335/logs/`. Chrome's signed bundle is
+    archived on the host without extended attributes and extracted onto the guest disk before
+    the baseline; direct framework traversal through the shared mount failed on symlinks.
+    Cold macOS launch assessment took about 30 seconds, so only the guest browser driver uses
+    a 120-second startup budget. The disposable VM and host browser archive are removed afterward.
+    The earlier vanilla-guest pass predates the mandatory audit and browser driver. A later run from this task's managed shell
+    built the inputs and cloned the VM, but guest SSH remained unreachable with `No route to host`
+    through the 240-second deadline; its logs are under
+    `.artifacts/standalone-vm/tao-acceptance-1790376059-89012/logs/`. The SSH readiness loop
+    requires two successful probes and retries a transient second failure within its boot deadline.
+
+    **Tart host troubleshooting.** Tart's installer notes that macOS gives VM addresses a default
+    DHCP lease of 86,400 seconds. This gate uses Tart's default network, even though `softnet` is
+    installed as a dependency, so repeated disposable VM runs could exhaust available leases.
+    If many runs later fail to obtain an IP address, inspect that cause before changing host
+    settings. [Tart's DHCP FAQ](https://tart.run/faq/#changing-the-default-dhcp-lease-time)
+    suggests reducing the lease to 600 seconds with
+    `sudo defaults write /Library/Preferences/SystemConfiguration/com.apple.InternetSharing.default.plist bootpd -dict DHCPLeaseTimeSecs -int 600`.
+    This is a persistent host change, not part of the setup or gate; do not apply it preemptively.
 
 ## Deferred approaches worth revisiting
 

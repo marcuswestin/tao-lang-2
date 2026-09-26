@@ -156,6 +156,37 @@ export async function isSymbolicLink(inputPath: string): Promise<boolean> {
   return catching(async () => (await nodeFs.lstat(inputPath)).isSymbolicLink(), false)
 }
 
+/** entryMetadata describes one directory entry without following a symlink or mounted path. */
+export async function entryMetadata(inputPath: string): Promise<{
+  device: number
+  gid: number
+  kind: 'directory' | 'file' | 'other' | 'symlink'
+  linkTarget?: string
+  mode: number
+  modifiedMs: number
+  size: number
+  uid: number
+}> {
+  const stats = await nodeFs.lstat(inputPath)
+  const kind = stats.isDirectory()
+    ? 'directory'
+    : stats.isFile()
+    ? 'file'
+    : stats.isSymbolicLink()
+    ? 'symlink'
+    : 'other'
+  return {
+    device: stats.dev,
+    gid: stats.gid,
+    kind,
+    ...(kind === 'symlink' ? { linkTarget: await nodeFs.readlink(inputPath) } : {}),
+    mode: stats.mode,
+    modifiedMs: stats.mtimeMs,
+    size: stats.size,
+    uid: stats.uid,
+  }
+}
+
 /** realPath resolves symlinks and filesystem indirections for an existing path. */
 export async function realPath(inputPath: string): Promise<string> {
   return nodeFs.realpath(inputPath)

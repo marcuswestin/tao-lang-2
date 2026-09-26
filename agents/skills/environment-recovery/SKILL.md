@@ -27,17 +27,13 @@ behind it.
 - `./agent setup` bootstraps dependencies and the CLI build on every `./agent` call, so a stale
   worktree repairs itself by being used; `dev-automation` owns how each harness reaches it.
 - In a linked worktree `./agent` reuses the primary checkout's pinned profile, or prints the
-  fallback itself (`direnv allow && direnv exec . ./agent setup`) when it finds none.
-- When direnv blocks this checkout's `.envrc` and the sandbox denies its allowlist write, review the
-  file and run `./agent unsandboxed direnv allow`. Trust stays an explicit per-worktree action.
+  fallback itself (`./enter-tao-dev-env`) when it finds none.
 - The session-start hook puts `.devenv/profile/bin` on each tool shell's PATH — call `bun`,
-  `bunx`, `dprint`, `just`, and `node` directly. Exports do not persist between tool calls, so if
-  `which bun` shows a shell without it, prefix the affected invocation with
-  `$PWD/.devenv/profile/bin/` rather than trying to fix the shell.
-- `direnv exec .` works unsandboxed and fails sandboxed — it needs the nix daemon socket the
-  sandbox denies, surfacing as `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'`
-  or, misleadingly, `Failed to get attribute 'config.cachix.enable'`. Neither means the lock is
-  broken.
+  `bunx`, `dprint`, `just`, and `node` directly for inspection when needed; repository workflows
+  still enter through `./agent`. Exports do not persist between tool calls, so if a diagnostic
+  shell lacks the profile, use its explicit `.devenv/profile/bin/` path.
+- Build a missing profile through `./enter-tao-dev-env` in a regular terminal. A sandbox denial
+  from Nix's daemon socket does not mean the pinned lock is broken.
 
 ## Denied installs
 

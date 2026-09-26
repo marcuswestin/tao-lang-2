@@ -26,9 +26,12 @@ type PermissionLists = { allow?: string[]; ask?: string[]; deny?: string[] }
 const PERMISSION_LIST_KEYS = new Set(['allow', 'ask', 'deny'])
 
 function hostShapes(prefixes: readonly (readonly string[])[]): string[] {
-  return prefixes.flatMap(prefix => [
-    `./agent unsandboxed ${prefix.join(' ')}`,
-    `./agent unsandboxed ${prefix.join(' ')} *`,
+  // A harness rule stops at the first operation name. The editable wrapper checks any subcommand
+  // and forwarded argv before dispatch; the remaining host-side gap is tracked in the DEVENV backlog.
+  const operations = [...new Set(prefixes.map(prefix => prefix[0]))]
+  return operations.flatMap(operation => [
+    `./agent unsandboxed ${operation}`,
+    `./agent unsandboxed ${operation} *`,
   ])
 }
 
@@ -87,7 +90,7 @@ function withoutRemovedKeys(
 
 /**
  * Finish the settings rulesync renders: drop what the `claudecode` source block no longer has, when
- * given it, then add exact Claude Bash approvals and sandbox exclusions for the host commands.
+ * given it, then add one Claude Bash approval and sandbox exclusion per first operation name.
  */
 export function renderClaudeHostSettings(
   content: string,

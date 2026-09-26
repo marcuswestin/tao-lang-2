@@ -60,6 +60,10 @@ type DelegateOptions = {
   ownVersion?: string
   /** taoHome is the Tao home's root, `TaoHome.root()` unless a test gives its own. */
   taoHome?: string
+  /** Test seams for the terminal decision and published release bytes. */
+  confirmDownload?: (message: string) => Promise<boolean>
+  downloadBytes?: (url: string) => Promise<Uint8Array>
+  releasesUrl?: string
 }
 
 /**
@@ -162,7 +166,7 @@ async function delegate(args: readonly string[], options: DelegateOptions = {}):
  * every other project's default.
  */
 async function installVersion(request: VersionRequest, options: DelegateOptions): Promise<void> {
-  const releases = TaoVersion.releases()
+  const releases = options.releasesUrl ?? TaoVersion.releases()
   if (releases === undefined) {
     Errors.throwHostEnvironment(`${describe(request)} names Tao ${request.version}, which is not installed.`)
   }
@@ -170,18 +174,18 @@ async function installVersion(request: VersionRequest, options: DelegateOptions)
   if (!HCI.isInteractive(options)) {
     Errors.throwUserInput(`${missing} Install it with:\n\n  ${installCommand(request.version)}\n`)
   }
-  const approved = await HCI.askConfirm({
-    ...options,
-    defaultValue: true,
-    message: `${missing} Download it now (about 30 MB)?`,
-  })
+  const question = `${missing} Download it now (about 30 MB)?`
+  const approved = options.confirmDownload === undefined
+    ? await HCI.askConfirm({ ...options, defaultValue: true, message: question })
+    : await options.confirmDownload(question)
   if (!approved) {
     Errors.throwUserInput(`${missing} Install it with:\n\n  ${installCommand(request.version)}\n`)
   }
   const download = `${releases}/download/v${request.version}`
+  const fetchReleaseBytes = options.downloadBytes ?? fetchBytes
   const [archive, checksum] = await Promise.all([
-    fetchBytes(`${download}/${ASSET}`),
-    fetchBytes(`${download}/${ASSET}.sha256`),
+    fetchReleaseBytes(`${download}/${ASSET}`),
+    fetchReleaseBytes(`${download}/${ASSET}.sha256`),
   ])
   const expected = new TextDecoder().decode(checksum).trim().split(/\s+/)[0]
   if (expected === undefined || expected !== Platform.sha256Hex(archive)) {

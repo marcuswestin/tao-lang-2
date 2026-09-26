@@ -2,7 +2,7 @@ import Workspace from '@compiler/workspace'
 import { Assert, CLI, FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { runFix } from '../cli-src/source-commands'
-import { runTaoCliForTest } from './test-cli-files'
+import { runTaoCliForTest, withTaoHome } from './test-cli-files'
 
 /*
  * `Docs/Tutorials/Your First Tao App.md` is the main learning path, so its snippets are the first
@@ -113,7 +113,7 @@ Describe('Docs tutorials', () => {
       const directory = FS.resolvePath('reading-list', root)
       await FS.writeText(FS.resolvePath('ReadingList.tao', directory), finishedFile(blocks))
 
-      const run = await runTaoCliForTest(['test', directory])
+      const run = await withTaoHome(root, () => runTaoCliForTest(['test', directory]))
 
       const output = `${run.stdout}${run.stderr}`
       Expect(output).toContain('Found 1 Tao test file')

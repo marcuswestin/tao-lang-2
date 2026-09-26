@@ -16,6 +16,7 @@ in
   apple.sdk = null;
 
   enterShell = ''
+    export PATH="$DEVENV_ROOT:$PATH"
     for bin_dir in "$DEVENV_ROOT/node_modules/.bin" "$DEVENV_ROOT/packages/shared/node_modules/.bin"; do
       if [ -d "$bin_dir" ]; then
         export PATH="$bin_dir:$PATH"

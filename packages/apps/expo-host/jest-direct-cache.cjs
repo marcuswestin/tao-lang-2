@@ -22,10 +22,7 @@ function cacheHome() {
     }
     return path.join(declared, 'cache')
   }
-  const xdg = process.env.XDG_CACHE_HOME
-  return xdg && path.isAbsolute(xdg)
-    ? path.join(xdg, 'tao')
-    : path.join(process.env.HOME || os.homedir(), '.cache', 'tao')
+  return path.join(process.env.HOME || os.homedir(), '.tao', 'cache')
 }
 
 function root(runtimePackageRoot) {

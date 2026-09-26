@@ -23,7 +23,7 @@ source "$TAO_DEPENDENCY_DEV/dev-cli-src/cli/agent-worktree-profile.zsh"
 
 if ! tao_activate_devenv_profile "$TAO_DEPENDENCY_ROOT" "$TAO_DEPENDENCY_PROFILE"; then
   echo "Tao's pinned devenv profile is unavailable." >&2
-  echo "Create the worktree with Worktrunk, or run: direnv allow && direnv exec . ./agent setup" >&2
+  echo "Run ./enter-tao-dev-env from a regular terminal to build the pinned environment." >&2
   exit 1
 fi
 
@@ -70,7 +70,7 @@ function tao_report_install_failure() {
 
   if [[ "$install_output" == *"unable to write files to tempdir"* ]]; then
     echo "Denied operation: writing Bun's install scratch." >&2
-    echo "Recover with: just clean-scratch && direnv exec . ./agent setup" >&2
+    echo "Recover with: just clean-scratch, then ./enter-tao-dev-env" >&2
     return
   fi
 
@@ -94,7 +94,7 @@ function tao_report_install_failure() {
     return
   fi
 
-  echo "Recover with: just clean-scratch && direnv exec . ./agent setup" >&2
+  echo "Recover with: just clean-scratch, then ./enter-tao-dev-env" >&2
 }
 
 function tao_run_bun_install() {
