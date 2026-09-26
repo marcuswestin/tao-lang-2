@@ -3,6 +3,7 @@ import { detectLanIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
 import { Errors, FS, HCI } from '@shared'
 import {
   startStudioSessionServer,
+  StudioCanvasViewportStore,
   StudioClientAssets,
   StudioDeviceGateway,
   StudioDeviceTrustStore,
@@ -60,6 +61,7 @@ export async function startStudioPackagedService(
   const recentProjects = createRecentProjectStore(
     FS.resolvePath('recent-projects.json', options.userStateRoot),
   )
+  const canvasViewportStore = new StudioCanvasViewportStore(FS.resolvePath('project-viewports', options.userStateRoot))
   const devDataServer = await (dependencies.startDevDataServer ?? DevDataServer.start)({
     rootDir: FS.resolvePath('dev-data', options.userStateRoot),
   })
@@ -138,6 +140,7 @@ export async function startStudioPackagedService(
   let server: Awaited<ReturnType<typeof startStudioSessionServer>>
   try {
     server = await (dependencies.startSessionServer ?? startStudioSessionServer)(manager, {
+      canvasViewportStore,
       compileOnStart: false,
       deviceGateway,
     })
@@ -161,6 +164,7 @@ export async function startStudioPackagedService(
           () => trustStore.flush(),
           () => devDataServer.stop(),
           () => recentProjects.flush(),
+          () => canvasViewportStore.flush(),
         ])
       })()
       return stopPromise

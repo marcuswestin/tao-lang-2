@@ -1,5 +1,9 @@
 import { Assert } from '@shared/core'
-import type { StudioPreviewCanvasGestureMessage, StudioPreviewCanvasPanKeyMessage } from '../../StudioProtocol'
+import type {
+  StudioPreviewCanvasGestureMessage,
+  StudioPreviewCanvasPanKeyMessage,
+  StudioPreviewCanvasShortcutMessage,
+} from '../../StudioProtocol'
 import type { StudioHandshake } from '../StudioApiClient'
 import {
   currentSourceIdentity,
@@ -32,6 +36,7 @@ export type StudioPreviewWiringDeps = Readonly<{
   status: HTMLElement
   onCanvasGesture?: (preview: StudioPreviewConnection, gesture: StudioPreviewCanvasGestureMessage) => void
   onCanvasPanKey?: (preview: StudioPreviewConnection, message: StudioPreviewCanvasPanKeyMessage) => void
+  onCanvasShortcut?: (command: StudioPreviewCanvasShortcutMessage['command'], iframe: HTMLIFrameElement) => void
 }>
 
 /**
@@ -156,6 +161,7 @@ export function studioPreviewMessageListener(deps: StudioPreviewMessagesDeps): (
       applySourceAction: envelope => mutations.submitPreview(envelope),
       canvasGesture: gesture => deps.onCanvasGesture?.(connection, gesture),
       canvasPanKey: message => deps.onCanvasPanKey?.(connection, message),
+      canvasShortcut: message => deps.onCanvasShortcut?.(message.command, connection.iframe),
       changed() {
         drawer.renderIfLogs()
         drawer.loadDataIfVisible()

@@ -128,6 +128,12 @@ const overlayLayerStyle = {
 const hiddenNavigationLevelStyle = { display: 'none' } as const
 const visibleOverlayLevelStyle = { flex: 1 } as const
 const zeroInsets: SafeAreaInsets = { bottom: 0, left: 0, right: 0, top: 0 }
+const overlayBackdropColor = 'rgba(0, 0, 0, 0.45)'
+const overlaySurfaceStyle = {
+  backgroundColor: overlayBackdropColor,
+  flex: 1,
+  pointerEvents: 'box-none',
+} as const
 
 // An asked view is modal: it dims what it covers and sits centred over it, rather than rendering as
 // another full-bleed layer on top of the content it is supposed to interrupt. The scrim is the
@@ -135,7 +141,7 @@ const zeroInsets: SafeAreaInsets = { bottom: 0, left: 0, right: 0, top: 0 }
 // home indicator, so it grows by the live safe-area insets on top of its fixed minimum.
 const askScrimBaseStyle = {
   alignItems: 'center',
-  backgroundColor: 'rgba(0, 0, 0, 0.45)',
+  backgroundColor: overlayBackdropColor,
   bottom: 0,
   justifyContent: 'center',
   left: 0,
@@ -517,7 +523,7 @@ function renderOverlayLevel(
                 hostedModal,
               }),
           })
-          : content,
+          : createElement(requireReactNativeRuntime().View, { style: overlaySurfaceStyle }, content),
         fill: true,
         hidden,
         key: entry.instanceId,
