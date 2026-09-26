@@ -1,5 +1,6 @@
-import { ExpoApiSource, NativeBindings, ReactNativeApiSource } from '@compiler/native-bindings'
 import { Assert, FS, Json } from '@shared'
+import { NativeBindings } from './generate'
+import { ExpoApiSource, ReactNativeApiSource } from './native-binding-sources'
 
 /** generateNativeBindingFiles regenerates a complete supported import in a wholly generated directory. */
 export async function generateNativeBindingFiles(

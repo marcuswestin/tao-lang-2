@@ -4,7 +4,10 @@
 
 The experimental `tao bridge` command imports **both Expo and React Native** through separate source
 adapters. Both currently read installed public TypeScript declarations using Tao's existing TypeScript
-compiler API. They feed a common catalog and one Tao/TypeScript emitter. No dependency was added.
+compiler API. They feed a common catalog and one Tao/TypeScript emitter. The generator, catalog,
+adapters, and output writer now live in the private [`@native-bindings` package](../../../packages/native-bindings/README.md).
+The CLI owns arguments/reporting; the compiler consumes generated Tao as ordinary source. No third-party
+dependency was added.
 
 The first surfaces are `expo-haptics` 57.0.3 (all four functions and all 27 enum cases) and React Native
 0.86.3 `Vibration` (`vibrate` and `cancel`). There is no handwritten Haptics binding, per-case mapping,
@@ -80,7 +83,7 @@ through the compiled Tao program. Native package behavior is mocked only at its 
 
 The Developer exercised the generated Haptics demo on a connected physical iPhone and reported that
 the feedback works. This is a manual device observation, not exhaustive acceptance of all API cases;
-Android and the packaged CLI's resource layout remain unverified. No dependency or native host
+Android and the packaged CLI's resource layout remain unverified. No third-party dependency or native host
 configuration changed. Unsupported exported values fail the CLI
 instead of producing a silently incomplete binding. Current support excludes result-bearing actions,
 records, callback subscriptions, overloads, generic functions and complex unions.
@@ -89,12 +92,57 @@ Recommended next slices:
 
 1. Complete the generated Haptics fixture's iOS acceptance and run it on Android; verify each supported platform's real behavior
    and deliberate unsupported-platform outcomes. Preserve raw upstream semantics in this import layer.
-2. Add records and result-bearing APIs with one representative module. Decide the Tao outcome/resource
-   surface before hiding a result in mutable state. Then add callbacks with explicit disposal/lifetimes.
+2. Add Expo Clipboard text APIs for asynchronous string/boolean results and optional named records,
+   then image APIs for nullable and nested results. Decide the Tao outcome/resource surface before
+   hiding a result in mutable state. Then add callbacks with explicit disposal/lifetimes.
 3. Add generated-diff review for locked package versions and persistent naming policy. Check compiler
    condition and dependency provenance, source licensing, and shipped CLI packaging before broad rollout.
 4. Add an Android metadata reader only when its invocation backend is chosen. The source-neutral catalog
    permits a new reader; direct Kotlin/Java calls also require a backend and packaging/linking support.
+
+## Generation cost and repository policy
+
+Measured on this arm64 development machine on **2026-09-26**, with installed dependencies and warm OS
+caches. Each sample starts a fresh process and includes the repository command wrapper, CLI startup,
+TypeScript extraction, generation, and file publication. Five samples per surface/mode:
+
+| Surface                | New-directory median (range) | Rerun median (range)    |
+| ---------------------- | ---------------------------- | ----------------------- |
+| Expo Haptics           | 0.541 s (0.540–0.588 s)      | 0.543 s (0.538–0.555 s) |
+| React Native Vibration | 0.708 s (0.690–0.848 s)      | 0.641 s (0.639–0.711 s) |
+
+These are local measurements, not cold-install or CI budgets. Every generated file in all samples
+matched the pre-extraction package-move baseline byte for byte. The task-local measurement artifact is
+`.artifacts/native-api-research/package-timing/cli.json`.
+
+Recommendation: commit `Bindings.tao`, `Bindings.ts`, and `bindings.json` for maintained apps/libraries
+for now, with locked upstream dependencies and the regeneration command. This provides reviewable API
+diffs and a usable checkout while generation is still an explicit command. Keep all manual code in
+separate files; committed generated files remain entirely disposable. Do not commit experimental
+outputs, caches, or compiler intermediates. Reconsider ignoring bindings once setup/build reliably
+regenerates them; the measured runtime itself is not a reason to commit them. A future drift check should
+regenerate and compare against committed output.
+
+## Next binding surface: Clipboard
+
+[Expo Clipboard](https://docs.expo.dev/versions/latest/sdk/clipboard/) is already installed in the host
+at 57.0.2 and introduces new shapes in small increments:
+
+1. `getStringAsync(options?): Promise<string>`, `setStringAsync(text, options?): Promise<boolean>`,
+   and `hasStringAsync(): Promise<boolean>` add usable asynchronous results. `GetStringOptions` and
+   `SetStringOptions` add optional named records with enum fields. Preserve omitted fields and upstream
+   defaults. The acceptance test should use results to change visible Tao state through generated bindings.
+2. `getImageAsync(options): Promise<ClipboardImage | null>` adds required/optional record fields,
+   a `'png' | 'jpeg'` literal union, nullable results, and a nested `{ data, size: { width, height } }`
+   result. This extends the same adapter/catalog/emitter instead of introducing another source.
+3. Event listeners add callback argument conversion and subscription disposal; paste UI and
+   platform-specific methods remain separate coverage. A text-only slice must not claim full Clipboard support.
+
+Before implementing step 1, settle Tao's representation of result-bearing asynchronous operations and
+record arguments against existing language features. This package extraction changes no language syntax.
+Location can then exercise permissions and richer records; Accelerometer can exercise exported instances,
+inherited generic sensor methods, streaming measurements, and listener lifetimes. Neither is a smaller
+first step than Clipboard.
 
 ## Community project assessment
 

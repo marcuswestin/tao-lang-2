@@ -1,5 +1,5 @@
-import { ExpoApiSource, NativeBindings } from '@compiler/native-bindings'
 import { jest } from '@jest/globals'
+import { ExpoApiSource, NativeBindings } from '@native-bindings'
 import TR from '@runtime/TR'
 import { Errors, Repo } from '@shared'
 import { Deferred, Describe, Expect, MockModule, settle, Test } from '@shared/test'

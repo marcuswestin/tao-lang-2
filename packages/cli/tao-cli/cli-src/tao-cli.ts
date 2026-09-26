@@ -58,7 +58,7 @@ function createCommands(): Command {
     .description('Generate experimental Tao bindings for supported native API actions.')
     .action(async (packageName, options) => {
       try {
-        const { generateNativeBindingFiles } = await import('./native-bindings/native-binding-command')
+        const { generateNativeBindingFiles } = await import('@native-bindings')
         const files = await generateNativeBindingFiles(packageName, options)
         HCI.writeSuccess(`Generated native bindings in ${FS.displayPath(FS.dirname(files[0]!))}\n`)
       } catch (error) {

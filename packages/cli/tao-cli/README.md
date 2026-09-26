@@ -3,7 +3,9 @@
 ## Generated native bindings (proof of concept)
 
 `tao bridge` imports the public declarations of an already installed package. Expo and React Native
-have separate source adapters feeding the same catalog and Tao/TypeScript emitter. From this repository:
+have separate source adapters feeding the same catalog and Tao/TypeScript emitter in
+[`@native-bindings`](../../native-bindings/README.md). The CLI only handles arguments and reporting.
+From this repository:
 
 ```sh
 ./tao bridge expo-haptics --source expo --from packages/apps/expo-host --out .artifacts/haptics
