@@ -282,6 +282,11 @@ tests written in Tao, green in Current, for every construct introduced.
 
 Product and codebase backlog, unordered.
 
+- [ ] Evaluate Hypen as a compilation target and as a source of runtime ideas
+  - First pass: the side-by-side comparison, runtime notes, open questions, and investigation plan are in
+    [`Docs/Roadmap/Hypen evaluation.md`](Docs/Roadmap/Hypen%20evaluation.md). Early read: not a React Native
+    replacement (its mobile renderers are server-streamed only), with several ideas worth borrowing.
+
 - [x] Move Tao Studio to be an ordinary Tao app (landed 2026-09-22)
   - The browser client, its code editor, and its local-InstantDB dev stack moved to `Apps/Tao Studio/`,
     an app-local editor package, and new `tao-cloud`/`providers/instantdb` packages. No language or
