@@ -32,12 +32,16 @@ async function run(): Promise<number> {
   }
   if (
     target.argsPolicy === 'standalone-vm' && args.length !== 0 && (
-      args.length !== 2 || !['--diagnose', '--stop', '--collect'].includes(args[0]!)
-      || !/^tao-acceptance-[0-9]+-[0-9]+$/u.test(args[1]!)
+      args.length !== 2 || !(
+        (['--diagnose', '--stop', '--collect', '--recover-lease', '--audit-results'].includes(args[0]!)
+          && /^tao-acceptance-[0-9]+-[0-9]+$/u.test(args[1]!))
+        || (['--prepare-base', '--base'].includes(args[0]!) && ['vanilla', 'xcode'].includes(args[1]!))
+      )
     )
   ) {
     HCI.writeErrorLine(
-      'Usage: ./agent unsandboxed standalone-cli-clean-machine [--diagnose|--stop|--collect <owned-vm>]',
+      'Usage: ./agent unsandboxed standalone-cli-clean-machine'
+        + ' [--prepare-base|--base <vanilla|xcode> | --diagnose|--stop|--collect|--recover-lease|--audit-results <owned-vm>]',
     )
     return 2
   }

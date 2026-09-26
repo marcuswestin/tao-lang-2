@@ -194,7 +194,7 @@ Describe('named host command dispatch', () => {
     }
   })
 
-  Test('validates VM recovery arguments before Just can interpret extra recipes or options', async () => {
+  Test('validates VM recovery and base profiles before Just can interpret extra recipes or options', async () => {
     const root = await mkTestDir('tao-vm-host-')
     try {
       const source = FS.resolvePath('permissions.jsonc', root)
@@ -210,6 +210,22 @@ Describe('named host command dispatch', () => {
           ['--dry-run'],
           ['--justfile', '/tmp/untrusted'],
           ['--stop', '../other'],
+          ['--recover-lease', '../other'],
+          ['--audit-results', '../other'],
+          ['--audit-results', 'tao-acceptance-1-2', 'fix'],
+          ['--recover-lease', 'tao-acceptance-1-2', 'fix'],
+          ['--diagnose', 'vanilla'],
+          ['--prepare-base'],
+          ['--base'],
+          ['--prepare-base', 'unknown'],
+          ['--base', 'unknown'],
+          ['--prepare-base', 'tao-acceptance-1-2'],
+          ['--base', 'tao-acceptance-1-2'],
+          ['--prepare-base', 'vanilla', 'fix'],
+          ['--base', 'xcode', 'fix'],
+          ['--prepare-base', '--justfile'],
+          ['--base', 'vanilla fix'],
+          ['--base=vanilla'],
         ]
       ) {
         const denied = await CLI.run(Platform.runtimeProcess.execPath, {
@@ -218,13 +234,22 @@ Describe('named host command dispatch', () => {
           env,
         })
         Expect(denied.exitCode).toBe(2)
+        Expect(denied.stderr).toContain('--prepare-base|--base <vanilla|xcode>')
         Expect(await FS.exists(log)).toBe(false)
       }
       for (
-        const args of [[], ['--diagnose', 'tao-acceptance-1-2'], ['--stop', 'tao-acceptance-1-2'], [
-          '--collect',
-          'tao-acceptance-1-2',
-        ]]
+        const args of [
+          [],
+          ['--diagnose', 'tao-acceptance-1-2'],
+          ['--stop', 'tao-acceptance-1-2'],
+          ['--collect', 'tao-acceptance-1-2'],
+          ['--recover-lease', 'tao-acceptance-1-2'],
+          ['--audit-results', 'tao-acceptance-1-2'],
+          ['--prepare-base', 'vanilla'],
+          ['--prepare-base', 'xcode'],
+          ['--base', 'vanilla'],
+          ['--base', 'xcode'],
+        ]
       ) {
         const accepted = await CLI.run(Platform.runtimeProcess.execPath, {
           args: [DISPATCHER, source, 'standalone-cli-clean-machine', ...args],
