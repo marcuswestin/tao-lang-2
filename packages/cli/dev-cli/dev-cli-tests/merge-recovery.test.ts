@@ -1,5 +1,5 @@
 import { CLI, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import { MergeRecovery } from '../dev-cli-src/git/MergeRecovery'
 
 Describe('merge recovery', () => {
@@ -63,8 +63,8 @@ Describe('merge recovery', () => {
 })
 
 async function repository(): Promise<string> {
-  const root = await mkTestDir('tao-merge-recover-')
-  await git(root, ['init', '-b', 'main'])
+  const root = await mkGitTestDir('tao-merge-recover-')
+  await initGitTestRepository(root)
   await FS.writeText(FS.resolvePath('protected.txt', root), 'base\n')
   await commit(root, 'base')
   return root

@@ -7,7 +7,12 @@ function shard(name: string, roots: readonly string[]): TestNodeState {
   const state = WorkGraph.createState({
     name,
     needs: ['_parser-generate'],
-    run: { args: ['test', ...roots, '--name', 'opens', '--pass-with-no-tests'], command: './tao', cwd: '/repo' },
+    run: {
+      args: ['test', ...roots, '--name', 'opens', '--pass-with-no-tests'],
+      command: './tao',
+      cwd: '/repo',
+      env: { TAO_HOME: '/repo/.artifacts/testing/tao-home' },
+    },
   }) as TestNodeState
   state.suite = 'tao-apps'
   state.selectedTestFiles = roots
@@ -20,6 +25,7 @@ Describe('shared Tao app compilation', () => {
     const second = shard('tao-apps#2', ['Apps/B', 'Apps/C'])
     const states = TaoAppSharedRun.attach([first, second], '/lane', '/repo')
     const commands = new Map<string, readonly string[]>()
+    const homes = new Map<string, string | undefined>()
     const result = await WorkGraph.run(states, {
       jobs: 2,
       runNode: async (state, context) => {
@@ -27,6 +33,7 @@ Describe('shared Tao app compilation', () => {
           ? state.node.run({ slots: context.slots })
           : state.node.run
         commands.set(state.name, command.args)
+        homes.set(state.name, command.env?.['TAO_HOME'])
         return { exitCode: 0, output: '' }
       },
     })
@@ -56,6 +63,9 @@ Describe('shared Tao app compilation', () => {
       '--shared-finalize',
       '/lane/tao-apps-shared-run.json',
     ])
+    for (const name of ['tao-apps:prepare', 'tao-apps#1', 'tao-apps#2', 'tao-apps:finalize']) {
+      Expect(homes.get(name)).toBe('/repo/.artifacts/testing/tao-home')
+    }
   })
 
   Test('does not publish a handoff after a shard fails', async () => {
@@ -87,6 +97,7 @@ Describe('shared Tao app compilation', () => {
       args: ['test', 'Apps/A', '--name', 'opens', '--pass-with-no-tests'],
       command: './tao',
       cwd: '/repo',
+      env: { TAO_HOME: '/repo/.artifacts/testing/tao-home' },
     })
   })
 })

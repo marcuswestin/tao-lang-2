@@ -993,7 +993,7 @@ function taoAppsSuite(roots: readonly string[], pattern: string, repositoryRoot:
 
 /** Test lanes keep disposable Tao state inside the checkout, independent of the installed product home. */
 function testTaoHome(repositoryRoot: string): Record<string, string> {
-  return { TAO_HOME: Shared.FS.resolvePath('.artifacts/testing/tao-home', repositoryRoot) }
+  return TaoAppSharedRun.testHomeEnv(repositoryRoot)
 }
 
 function runtimeJestSuite(
