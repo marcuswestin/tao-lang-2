@@ -35,6 +35,7 @@ import {
   StudioSessionPath,
   type StudioSessionSocketEvent,
   type StudioSketchActionResult,
+  type StudioSketchConvertRequest,
   type StudioSketchFlowActionRequest,
   type StudioSketchSnapApplyResult,
   type StudioSketchSnapProposalResult,
@@ -306,6 +307,8 @@ export const StudioApiClient = {
   feedAction: async (body: StudioFeedActionRequest): Promise<StudioFeedState> => await request(routes.feedAction, body),
   sketchAction: async (body: StudioSketchCatalogRequest): Promise<StudioSketchActionResult> =>
     await request(routes.sketchAction, body),
+  sketchConvert: async (body: StudioSketchConvertRequest): Promise<StudioSketchActionResult> =>
+    await request(routes.sketchConvert, body),
   sketchFlowAction: async (body: StudioSketchFlowActionRequest): Promise<StudioSketchSnapApplyResult> =>
     await request(routes.sketchFlowAction, body),
   sketchSnapApply: async (body: StudioSketchSnapRequest): Promise<StudioSketchSnapApplyResult> =>

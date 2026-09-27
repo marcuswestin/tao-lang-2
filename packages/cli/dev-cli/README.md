@@ -254,11 +254,17 @@ it sizes itself to `cpuCount` unless `TAO_TEST_JOBS` is set. Inside `check`, `ve
 doing.
 
 The window-server row is the honest gap. `verify-full`'s native Studio and canary lanes hold a `gui` resource
-so they never overlap **inside one run**, and across worktrees the machine-wide `studio-native-host`
-lease lets exactly one native Studio session run at a time. A second worktree's native lane does not
-wait or time out: it fails at once with the `native-host-busy` failure kind, naming the worktree and
-command that hold the host, so the summary says why before any minute is spent. Only interactive
-`just studio-native` offers to take the host over. If the registry lock under
+so they never overlap **inside one run**. Across worktrees, each worktree's development Studio is its
+own macOS app (the primary checkout keeps `com.devtao.studio`; a linked worktree gets
+`com.devtao.studio.<worktree>-<hash>` and a window name that shows the worktree), and the
+`studio-native-host:<bundle id>` lease allows one native Studio per worktree, so interactive native
+Studios in different worktrees run side by side. Launches that run the native runtime probe (the
+native smoke and the canary) also take the machine-wide `studio-native-probe` lease, because the
+probe registers a global keyboard shortcut. A lane that finds either lease held does not wait or
+time out: it fails at once with the `native-host-busy` failure kind, naming the worktree and command
+that hold it, so the summary says why before any minute is spent. Only interactive
+`just studio-native` offers to take its own worktree's host over. Each new worktree's app asks macOS
+for Accessibility and Automation permission once. If the registry lock under
 `~/.cache/tao/machine-lanes` belongs to a dead process, the allocator elects one reclaimer and
 removes only that stale lock. A live or unreadable owner is preserved and the waiting lane times
 out rather than risking concurrent registry writers; use `./agent doctor` to identify the owner.

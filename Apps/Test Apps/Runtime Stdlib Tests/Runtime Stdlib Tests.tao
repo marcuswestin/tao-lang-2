@@ -1,5 +1,5 @@
 use StackNav from @tao/nav
-use Box, Button, Col, Image, Number, Progress, Row, Spinner, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
+use Box, Button, Col, Image, Layer, Number, Progress, Row, Spinner, Stack, Text, TextFrame, TextMultiline, WrappingRow from @tao/ui
 
 app RuntimeStdlibTests {
    Name "Runtime Stdlib Tests"
@@ -31,9 +31,12 @@ scene MainView() {
       Button("Tap me") {
          on press Ignore
       }
-      Box() {
+      Box() [width 200, height 48] {
          Col() {
             TextFrame("Label")
+         }
+         Layer(InsetTop: 4, InsetRight: 4) {
+            Text("Floating badge")
       }  }
       Row() {
          WrappingRow() {

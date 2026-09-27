@@ -575,8 +575,12 @@ Describe('gate failure classification', () => {
 
   Test('keeps native host, phase, runtime, probe, assertion, and interruption failures distinct', () => {
     Expect(classifyFailure(
-      "Machine resource 'studio-native-host' is busy: studio-canary in /other/worktree (PID 42)",
+      "Machine resource 'studio-native-host:com.devtao.studio' is busy: studio-native in /primary (PID 42)",
     )).toBe('native-host-busy')
+    Expect(classifyFailure(
+      "Machine resource 'studio-native-probe' is busy: studio-canary in /other/worktree (PID 42)",
+    )).toBe('native-host-busy')
+    Expect(classifyFailure("Machine resource 'studio-native-elsewhere' is busy")).not.toBe('native-host-busy')
     Expect(classifyFailure('Hutch install timed out after 30000ms')).toBe('hutch-install-timeout')
     Expect(classifyFailure('Hutch electrobun prepare timed out after 45000ms'))
       .toBe('electrobun-prepare-timeout')

@@ -82,8 +82,8 @@ export const StudioHostControl = {
 } as const
 
 /**
- * createStudioHostController does not take a machine lease itself: StudioNative already owns the
- * fixed bundle identifier and Hutch home. Its session leases fence concurrent semantic callers
+ * createStudioHostController does not take a machine lease itself: StudioNative already owns this
+ * worktree's bundle identifier and Hutch home. Its session leases fence concurrent semantic callers
  * inside that one owned process; physical input remains an external host-driver responsibility.
  */
 export function createStudioHostController(transport: StudioHostTransport): HostController {

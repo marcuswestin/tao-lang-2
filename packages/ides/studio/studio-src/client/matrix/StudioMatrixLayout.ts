@@ -1,5 +1,9 @@
 import type { StudioPreviewCell, StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
+import { projectRelativePath } from '../StudioEditor'
 import { StudioScenarioControls } from '../StudioScenarioControls'
+
+/** The project-relative tree Studio generates drawn sketches' views into. */
+const studioGeneratedDirectory = '@/studio/'
 
 type StudioMatrixCell<Item> = {
   id: string
@@ -94,6 +98,26 @@ export const StudioMatrixLayout = {
       }
     }
     return versions
+  },
+  /**
+   * renderableViews names each view with a focused scenario, which a render rectangle starts from.
+   * Views declared under the project's `@/studio/` tree are other drawn sketches' generated, read-only
+   * files, which the server refuses to render from, so they are left out.
+   */
+  renderableViews(
+    manifest: Pick<StudioPreviewManifestV2, 'scenarios' | 'subjects'>,
+    project: string,
+  ): readonly string[] {
+    const subjects = new Map(manifest.subjects.map(subject => [subject.subjectId, subject]))
+    return [
+      ...new Set(manifest.scenarios.flatMap(scenario => {
+        const subject = subjects.get(scenario.subjectId)
+        return subject?.kind === 'view'
+            && projectRelativePath(project, subject.source.path)?.startsWith(studioGeneratedDirectory) !== true
+          ? [subject.viewName]
+          : []
+      })),
+    ].toSorted()
   },
   /** focusable says whether canvas mode can focus a view: some group renders that view alone. */
   focusable(groups: readonly Pick<StudioMatrixGroup<unknown>, 'subjectViewId'>[], viewId: string): boolean {

@@ -85,7 +85,12 @@ Hugging containers:
 - `Stack`: hugs its content and lays it out top-to-bottom
 - `Box`: hugs its content and lays it out horizontally
 
-All five ship today as content-accepting `view` declarations whose injected implementations carry
+Floating container:
+
+- `Layer`: floats its content over its parent's flow, placed by optional edge insets; see
+  [Layering](#layering)
+
+All six ship today as content-accepting `view` declarations whose injected implementations carry
 the sizing defaults named above.
 
 UI containers usually do not paint pixels themselves. Instead, they focus on how visible content is arranged and sized.
@@ -567,12 +572,38 @@ view FeedPage() {
 }
 ```
 
-Use a future layout-layer concept for render children that intentionally escape normal flow:
+#### Layering
+
+`Layer` places render children above the parent's flow instead of in it:
 
 ```tao
-// Future-ish shape, not settled syntax.
-overlay Toast [aligned bottom]
+view Foo() {
+   render Box() [width 320, height 200] {
+      Row() { … }
+      Layer(InsetLeft: 10, InsetBottom: 20) {
+         Col() { … }
+         Col() { … }
+      }
+      Layer(InsetTop: 10, InsetRight: 50) { … }
+   }
+}
 ```
+
+- A layer takes no room in its parent's flow; the parent's other children lay out as if it were
+  absent, and the parent never grows to hold it, so a layer inside a hugging parent needs the
+  parent's size stated.
+- `InsetTop`, `InsetRight`, `InsetBottom`, and `InsetLeft` are each an optional `number`, the
+  distance from that edge of the parent's box. An axis with neither inset sits at its start edge,
+  top or left; an axis with both stretches the layer between them.
+- A layer's own children stack top-to-bottom and hug, like `Stack`. Its size, padding, gap, content
+  alignment, and appearance clauses apply as on any view; the clauses that place a child in its
+  parent's flow — `fill`, `claim`, `aligned`, and `centered` — have no effect, since the insets place
+  it instead.
+- Nothing clips a layer to its parent's box; a layer larger than the space its insets leave extends
+  past the parent's edge.
+- Presses on a layer's empty area reach the content beneath it; its own children take their presses
+  as usual.
+- Layers paint over earlier siblings in source order; there is no z-index.
 
 This keeps three ideas separate:
 
@@ -580,10 +611,11 @@ This keeps three ideas separate:
 - scrolling: content is larger, and the user moves through it
 - layering: content intentionally appears above or outside normal flow
 
-This future layout term is distinct from settled presentation modes. `as overlay` already produces a
-nav-owned absolute layer, and `as toast (Key:, Duration:)` already produces app-level transient
-content. Raw absolute positioning, overflow flags, z-index-like layout, popovers, and portals still
-need design and should not sneak into ordinary layout syntax merely because the runtime has a prop.
+`Layer` is distinct from settled presentation modes. `as overlay` produces a nav-owned absolute
+layer, and `as toast (Key:, Duration:)` produces app-level transient content; a `Layer` is placed
+against its parent's box and stays in its parent's navigation. Positioning clauses on arbitrary views, overflow
+flags, z-index-like layout, popovers, and portals still need design and should not sneak into
+ordinary layout syntax merely because the runtime has a prop.
 
 ### Safe Area And Keyboard Insets
 
@@ -777,8 +809,7 @@ This document is not a deterministic implementation spec. It is the intended sha
 Some things are known to belong in or near Tao layout, but still need their own design pass:
 
 - `nudge`: small post-layout movement that does not affect siblings
-- `overlay`: a possible in-layout positioning term, distinct from implemented presentation
-  `as overlay`
+- anchored layers: a `Layer` placed against a sibling or the screen rather than its parent's box
 - design-token spacing and size values
 - logical direction, such as `start` and `end`
 - aspect ratio

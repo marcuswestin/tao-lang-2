@@ -987,7 +987,7 @@ await runWithCommands(commands => {
   commands
     .command('studio-native')
     .description(
-      'Launch Tao Studio in its local Electrobun shell. When another session holds the native host, offers to stop it and proceed.',
+      "Launch this worktree's Tao Studio in its local Electrobun shell. When another session in this worktree holds its native host, offers to stop it and proceed.",
     )
     .argument('[project]', 'Tao project folder.', '.')
     .option('--entry <path>', 'Entry Tao file within the selected project.')

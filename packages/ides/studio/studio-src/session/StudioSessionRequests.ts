@@ -20,6 +20,7 @@ import {
   type StudioPreviewLayoutMeasurementsMessage,
   type StudioProjectIdentity,
   StudioProtocol,
+  type StudioSketchConvertRequest,
   type StudioSketchFlowAction,
   type StudioSketchFlowActionRequest,
   type StudioSketchSnapRequest,
@@ -37,6 +38,7 @@ export const StudioSessionRequests = {
   cellInstanceIdentity,
   cellReconfigureRequest,
   completeCellInstanceIdentity,
+  parseSketchConvertRequest,
   parseSketchFlowActionRequest,
   parseSketchSnapRequest,
   parseSketchSnapUndoRequest,
@@ -44,6 +46,33 @@ export const StudioSessionRequests = {
   requireSessionIdentity,
   requireSourceActionPreconditions,
   sourcePatchRequest,
+}
+
+function parseSketchConvertRequest(value: unknown): StudioSketchConvertRequest {
+  Assert.input(Json.isRecord(value), 'Studio badge request must be an object.')
+  requireOnlyInputKeys(
+    value,
+    ['expectedCatalogRevision', 'requestId', 'sketchId', 'to', 'view'],
+    'Studio badge request',
+  )
+  Assert.input(
+    Number.isSafeInteger(value['expectedCatalogRevision']) && Number(value['expectedCatalogRevision']) >= 0,
+    'Studio badge expectedCatalogRevision must be a nonnegative integer.',
+  )
+  const to = value['to']
+  Assert.input(to === 'definition' || to === 'render', 'Studio badge target must be definition or render.')
+  const view = value['view'] === undefined ? undefined : requireInputText(value['view'], 'Studio badge view')
+  Assert.input(
+    to === 'render' ? view !== undefined && /^[A-Z][A-Za-z0-9_]*$/u.test(view) : view === undefined,
+    to === 'render' ? 'Choose the view a render rectangle renders.' : 'Detaching a render takes no view.',
+  )
+  return {
+    expectedCatalogRevision: Number(value['expectedCatalogRevision']),
+    requestId: requireInputText(value['requestId'], 'Studio badge requestId'),
+    sketchId: requireInputText(value['sketchId'], 'Studio badge sketchId'),
+    to,
+    ...(view === undefined ? {} : { view }),
+  }
 }
 
 function parseSketchSnapRequest(value: unknown): StudioSketchSnapRequest {
@@ -276,6 +305,14 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
     }
   }
   if (
+    action.kind === 'clear-layout-entry'
+    && typeof action['renderId'] === 'string'
+    && Array.isArray(action['heads'])
+    && action['heads'].every(value => typeof value === 'string')
+  ) {
+    return { heads: action['heads'] as string[], kind: action.kind, renderId: action['renderId'] }
+  }
+  if (
     action.kind === 'set-layout-entry'
     && typeof action['renderId'] === 'string'
     && Array.isArray(action['entry'])
@@ -294,7 +331,28 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
   ) {
     return { kind: action.kind, renderId: action['renderId'], wrapper: action['wrapper'] }
   }
+  if (
+    action.kind === 'group-renders'
+    && isRenderIdList(action['renderIds'])
+    && (action['wrapper'] === 'Col' || action['wrapper'] === 'Row' || action['wrapper'] === 'Stack')
+  ) {
+    return { kind: action.kind, renderIds: action['renderIds'], wrapper: action['wrapper'] }
+  }
+  if (
+    action.kind === 'extract-view'
+    && isRenderIdList(action['renderIds'])
+    && (action['name'] === undefined || typeof action['name'] === 'string')
+  ) {
+    return {
+      kind: action.kind,
+      ...(action['name'] === undefined ? {} : { name: action['name'] }),
+      renderIds: action['renderIds'],
+    }
+  }
   if (action.kind === 'remove-render' && typeof action['renderId'] === 'string') {
+    return { kind: action.kind, renderId: action['renderId'] }
+  }
+  if (action.kind === 'toggle-flow-direction' && typeof action['renderId'] === 'string') {
     return { kind: action.kind, renderId: action['renderId'] }
   }
   if (
@@ -366,9 +424,13 @@ function requireSourceActionPreconditions(
 ): void {
   const occurrenceRequired = request.kind === 'move-render'
     || request.kind === 'set-layout-entry'
+    || request.kind === 'clear-layout-entry'
     || request.kind === 'set-style-entry'
     || request.kind === 'wrap-render'
+    || request.kind === 'group-renders'
+    || request.kind === 'extract-view'
     || request.kind === 'remove-render'
+    || request.kind === 'toggle-flow-direction'
     || request.kind === 'set-text-content'
     || request.kind === 'bind-text'
     || (request.kind === 'insert-component' || request.kind === 'insert-project-view')
@@ -381,6 +443,10 @@ function requireSourceActionPreconditions(
     occurrenceRequired || envelope.identity.occurrence === undefined,
     `Studio source action cannot carry render occurrence identity: ${request.kind}`,
   )
+}
+
+function isRenderIdList(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.length > 0 && value.every(id => typeof id === 'string')
 }
 
 function isStudioStyleLandingScope(value: unknown): value is StudioStyleLandingScope {

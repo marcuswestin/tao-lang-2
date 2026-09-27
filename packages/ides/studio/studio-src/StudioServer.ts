@@ -821,6 +821,7 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
     })
   },
   sketchAction: bodyTo((session, body) => session.applySketchAction(body)),
+  sketchConvert: bodyTo((session, body) => session.convertSketch(body)),
   sketchFlowAction: bodyTo((session, body) => session.applySketchFlowAction(body)),
   sketchSnapApply: bodyTo((session, body) => session.applySketchSnap(body)),
   sketchSnapPropose: bodyTo((session, body) => session.proposeSketchSnap(body)),
