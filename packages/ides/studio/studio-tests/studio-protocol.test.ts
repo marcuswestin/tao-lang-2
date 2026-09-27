@@ -561,6 +561,43 @@ Describe('Studio protocol v1', () => {
     })).toBe(undefined)
   })
 
+  Test('roundtrips Catalyst and native scenario Scheme publications and rejects false native pins', () => {
+    for (
+      const scheme of [
+        { capability: 'reactive-catalyst', requested: 'system', resolved: 'dark', source: 'system' },
+        { capability: 'pinned-native', requested: 'dark', resolved: 'dark', source: 'scenario' },
+      ]
+    ) {
+      const message = {
+        channel: studioProtocolChannel,
+        identity,
+        protocolVersion: studioProtocolVersion,
+        scheme,
+        type: 'preview-scheme-changed',
+      }
+      // publishStudioScheme sends its runtime snapshot unchanged through this transport envelope.
+      Expect(StudioProtocol.parseMessage(JSON.parse(JSON.stringify(message)))).toEqual({
+        ...message,
+        identity: { appName: 'Garden', previewInstanceId: 'preview-2', project: '/workspace/garden' },
+      })
+    }
+    for (
+      const scheme of [
+        { capability: 'pinned-native', requested: 'dark', resolved: 'light', source: 'scenario' },
+        { capability: 'pinned-native', requested: 'dark', resolved: 'dark', source: 'preference' },
+        { capability: 'reactive-catalyst', requested: 'system', resolved: 'dark', source: 'native-fixed' },
+      ]
+    ) {
+      Expect(StudioProtocol.parseMessage({
+        channel: studioProtocolChannel,
+        identity,
+        protocolVersion: studioProtocolVersion,
+        scheme,
+        type: 'preview-scheme-changed',
+      })).toBe(undefined)
+    }
+  })
+
   Test('validates captured fixture replies at the untrusted preview boundary', () => {
     const message = {
       channel: studioProtocolChannel,
