@@ -1525,8 +1525,11 @@ function renderSketch(
   dropTarget.style.border = '1px dashed currentColor'
   dropTarget.style.display = 'flex'
   dropTarget.style.justifyContent = 'center'
-  // In Draw the view's running cell is laid over this slot, which grows to the cell's height.
+  // In Draw the view's running cell is laid over this slot, which grows to the cell's height. The
+  // cell runs at the frame's own size, so the view lays out in the space it was drawn in.
   dropTarget.dataset['taoStudioDrawLiveSlot'] = sketch.view
+  dropTarget.dataset['taoStudioDrawLiveWidth'] = String(sketch.width)
+  dropTarget.dataset['taoStudioDrawLiveHeight'] = String(sketch.height)
   dropTarget.style.minHeight = `max(44px, var(${studioDrawLiveHeight}, 0px))`
   dropTarget.style.width = `${sketch.width}px`
   frame.append(name, board, dropTarget, toolbar)

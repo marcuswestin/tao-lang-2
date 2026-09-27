@@ -106,7 +106,11 @@ function drawPreview() {
   frame.offsetLeft = 100
   frame.offsetTop = 60
   frame.offsetParent = canvas
-  const slot = new LiveElement('', { taoStudioDrawLiveSlot: 'View1' })
+  const slot = new LiveElement('', {
+    taoStudioDrawLiveHeight: '200',
+    taoStudioDrawLiveSlot: 'View1',
+    taoStudioDrawLiveWidth: '540',
+  })
   slot.offsetLeft = 0.4
   slot.offsetTop = 240
   slot.offsetParent = frame
@@ -117,31 +121,37 @@ function drawPreview() {
 
 const place = (parent: LiveElement): void => StudioDrawLiveCells.place(parent as unknown as HTMLElement)
 
-Test('Draw moves a drawn view row onto its frame slot, grows the slot, and hides rows without a slot', () => {
-  const { app, grid, parent, slot, view1, view2 } = drawPreview()
-  place(parent)
-  Expect(view1.element.dataset['taoStudioDrawLive']).toBe('true')
-  Expect(view1.element.properties.get('left')).toBe('100px')
-  Expect(view1.element.properties.get('top')).toBe('300px')
-  Expect(slot.properties.get('--studio-draw-live-height')).toBe('700px')
-  Expect(slot.dataset['taoStudioDrawLiveFilled']).toBe('true')
-  for (const row of [view2.element, app.element]) {
-    Expect(row.dataset['taoStudioDrawLive']).toBeUndefined()
-    Expect(row.properties.has('left')).toBe(false)
-  }
-  // The grid reaches the placed row, so its cell is never suspended as out of view.
-  Expect(grid.properties.get('min-width')).toBe('max(100%, 420px)')
-  Expect(grid.properties.get('min-height')).toBe('max(100%, 1000px)')
+Test(
+  'Draw moves a drawn view row onto its frame slot at the frame size, grows the slot, hides rows without one',
+  () => {
+    const { app, grid, parent, slot, view1, view2 } = drawPreview()
+    place(parent)
+    Expect(view1.element.dataset['taoStudioDrawLive']).toBe('true')
+    Expect(view1.element.properties.get('left')).toBe('100px')
+    Expect(view1.element.properties.get('top')).toBe('300px')
+    // The running view takes its frame's drawn size, not its scenario's phone.
+    Expect(view1.element.properties.get('--studio-draw-frame-width')).toBe('540px')
+    Expect(view1.element.properties.get('--studio-draw-frame-height')).toBe('200px')
+    Expect(slot.properties.get('--studio-draw-live-height')).toBe('700px')
+    Expect(slot.dataset['taoStudioDrawLiveFilled']).toBe('true')
+    for (const row of [view2.element, app.element]) {
+      Expect(row.dataset['taoStudioDrawLive']).toBeUndefined()
+      Expect(row.properties.has('left')).toBe(false)
+    }
+    // The grid reaches the placed row, so its cell is never suspended as out of view.
+    Expect(grid.properties.get('min-width')).toBe('max(100%, 420px)')
+    Expect(grid.properties.get('min-height')).toBe('max(100%, 1000px)')
 
-  // Leaving Draw hands every row back to the grid and lets the slot shrink to its own size.
-  parent.dataset['canvasWorkspace'] = 'design'
-  place(parent)
-  Expect(view1.element.dataset['taoStudioDrawLive']).toBeUndefined()
-  Expect([...view1.element.properties.keys()]).toEqual([])
-  Expect(slot.properties.has('--studio-draw-live-height')).toBe(false)
-  Expect(slot.dataset['taoStudioDrawLiveFilled']).toBeUndefined()
-  Expect([...grid.properties.keys()]).toEqual([])
-})
+    // Leaving Draw hands every row back to the grid and lets the slot shrink to its own size.
+    parent.dataset['canvasWorkspace'] = 'design'
+    place(parent)
+    Expect(view1.element.dataset['taoStudioDrawLive']).toBeUndefined()
+    Expect([...view1.element.properties.keys()]).toEqual([])
+    Expect(slot.properties.has('--studio-draw-live-height')).toBe(false)
+    Expect(slot.dataset['taoStudioDrawLiveFilled']).toBeUndefined()
+    Expect([...grid.properties.keys()]).toEqual([])
+  },
+)
 
 Test('Draw names the running cell under a point, never the dragged view itself, and marks the hovered one', () => {
   const { frame, parent, view1 } = drawPreview()

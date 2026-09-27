@@ -489,7 +489,9 @@ Draw shows each drawn view running under its drawing, and no other preview cell.
 the preview grid's, so their iframes never reload: in Draw the grid lies beneath the transparent Draw
 canvas under the same pan and zoom, each row of a drawn view's `sketch` scenarios moves under its
 frame's drop area, and that area grows to the row's height and hides its hint, keeping the frame's
-controls below the running view. Rows follow a frame while it is dragged. Other frames' boards paint
+controls below the running view. The running view takes its frame's drawn width and height rather
+than its scenario's device, so it lays out in the space it was drawn in; Design and Run keep the
+scenario's device. Rows follow a frame while it is dragged. Other frames' boards paint
 over a running view, and the drawing keeps every pointer, so in Draw a running view is seen but not
 used. Dragging a drawn frame or definition card by its header over
 another drawn view's running cell highlights that cell and names it on the frame; releasing there

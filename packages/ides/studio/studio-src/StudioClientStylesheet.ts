@@ -649,6 +649,13 @@ kbd {
 .tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] > .studio-preview-group-label,
 .tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell-controls { display: none; }
 .tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] > .studio-preview-group-cells { padding: 6px; }
+/* A running view takes its frame's size rather than its scenario's device, so it lays out in the space
+   it was drawn in and the frame stays the size it was drawn. Placement supplies both lengths. */
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell { width: auto !important; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell-details { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell-viewport {
+  height: var(--studio-draw-frame-height) !important; width: var(--studio-draw-frame-width) !important;
+}
 /* A running view makes its frame tall; the frame's empty box and its filled slot let pointers through
    to the boards and frames around them. */
 .tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-sketch-frame] { pointer-events: none; }

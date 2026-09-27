@@ -369,7 +369,9 @@ board space; R draws a root rectangle on empty canvas and a `Placeholder` inside
 Each drawn view runs under its frame in Draw. `StudioDrawLiveCells` moves the preview grid's row for
 that view onto the frame's drop area, so the cell's iframe is the one Design shows and never reloads;
 the grid lies beneath the transparent Draw canvas under the same pan and zoom, so boards paint over
-running views and keep every pointer, and every other row stays hidden.
+running views and keep every pointer, and every other row stays hidden. A placed row carries its
+frame's size as `--studio-draw-frame-width` and `--studio-draw-frame-height`, which the Draw stylesheet
+lets win over the cell's device size, so the iframe runs at the size the frame was drawn.
 Dragging a drawn frame by its header onto another drawn view's running cell sends
 `insert-project-view` against the file and version that cell compiled, and the frame stays put.
 

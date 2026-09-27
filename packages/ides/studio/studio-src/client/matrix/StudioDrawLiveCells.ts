@@ -11,6 +11,13 @@
 /** The live-height custom property a slot reads, so leaving Draw needs no memory of what it held. */
 export const studioDrawLiveHeight = '--studio-draw-live-height'
 
+/**
+ * The frame size a placed row's cells run at. The cell's own inline size is the scenario's device,
+ * which every revision rewrites; the stylesheet lets these win in Draw, and leaving Draw drops them.
+ */
+const studioDrawFrameWidth = '--studio-draw-frame-width'
+const studioDrawFrameHeight = '--studio-draw-frame-height'
+
 /** A running view under the pointer that a dragged frame can be dropped into. */
 export type StudioDrawLiveTarget = Readonly<{
   cellId: string
@@ -43,7 +50,13 @@ export const StudioDrawLiveCells = {
     }
     const mutations = new MutationObserver(schedule)
     mutations.observe(parent, {
-      attributeFilter: ['style', 'data-canvas-workspace', 'data-tao-studio-sketch-drop-into'],
+      attributeFilter: [
+        'style',
+        'data-canvas-workspace',
+        'data-tao-studio-sketch-drop-into',
+        'data-tao-studio-draw-live-width',
+        'data-tao-studio-draw-live-height',
+      ],
       attributes: true,
       childList: true,
       subtree: true,
@@ -130,6 +143,8 @@ function placeLiveCells(parent: HTMLElement): void {
     writeFlag(row, 'taoStudioDrawLive', true)
     writeStyle(row, 'left', `${at.x}px`)
     writeStyle(row, 'top', `${at.y}px`)
+    writeStyle(row, studioDrawFrameWidth, pixels(slot.dataset['taoStudioDrawLiveWidth']))
+    writeStyle(row, studioDrawFrameHeight, pixels(slot.dataset['taoStudioDrawLiveHeight']))
     const height = row.offsetHeight
     if (height > 0) {
       writeStyle(slot, studioDrawLiveHeight, `${height}px`)
@@ -155,6 +170,14 @@ function clearRow(row: HTMLElement): void {
   writeFlag(row, 'taoStudioDrawLive', false)
   writeStyle(row, 'left', '')
   writeStyle(row, 'top', '')
+  writeStyle(row, studioDrawFrameWidth, '')
+  writeStyle(row, studioDrawFrameHeight, '')
+}
+
+/** A frame dimension as a CSS length, or nothing when the slot does not carry a usable one. */
+function pixels(value: string | undefined): string {
+  const number = Number(value)
+  return value !== undefined && Number.isFinite(number) && number > 0 ? `${number}px` : ''
 }
 
 /** A slot's layout offset inside the Draw canvas, which pan and zoom never change. */
