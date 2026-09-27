@@ -46,6 +46,7 @@ const editPhrases: Readonly<Record<string, (action: StudioCanonicalSourceAction)
   'set-layout-entry': entryPhrase,
   'set-style-entry': entryPhrase,
   'set-text-content': action => `Text “${text(action['content']) ?? ''}”`,
+  'toggle-flow-direction': () => 'Flip direction',
   'wrap-render': action => `Wrap in ${text(action['wrapper']) ?? 'container'}`,
 }
 
@@ -79,6 +80,7 @@ export function mountStudioEditLog(deps: StudioEditLogDeps): Readonly<{ dispose:
   const root = document.createElement('section')
   root.className = 'studio-edit-log'
   root.dataset['taoStudioEditLog'] = ''
+  root.dataset['taoStudioCanvasChrome'] = ''
   root.setAttribute('aria-label', 'Edits')
   root.hidden = true
   deps.host.append(root)

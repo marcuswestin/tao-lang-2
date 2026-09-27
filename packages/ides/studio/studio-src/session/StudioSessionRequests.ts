@@ -315,6 +315,9 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
   if (action.kind === 'remove-render' && typeof action['renderId'] === 'string') {
     return { kind: action.kind, renderId: action['renderId'] }
   }
+  if (action.kind === 'toggle-flow-direction' && typeof action['renderId'] === 'string') {
+    return { kind: action.kind, renderId: action['renderId'] }
+  }
   if (
     action.kind === 'set-text-content'
     && typeof action['renderId'] === 'string'
@@ -389,6 +392,7 @@ function requireSourceActionPreconditions(
     || request.kind === 'group-renders'
     || request.kind === 'extract-view'
     || request.kind === 'remove-render'
+    || request.kind === 'toggle-flow-direction'
     || request.kind === 'set-text-content'
     || request.kind === 'bind-text'
     || (request.kind === 'insert-component' || request.kind === 'insert-project-view')

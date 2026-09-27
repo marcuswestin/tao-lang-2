@@ -46,6 +46,7 @@ type StudioPreviewMessageActions = {
   feedDrop?: (message: StudioPreviewFeedDropMessage) => Promise<void>
   /** Additive selections come from a shift-click and join the selection instead of replacing it. */
   inspect: (selection: StudioInspectorSelection, additive?: boolean) => void
+  layoutMeasured?: () => void
   reveal?: () => void
 }
 
@@ -262,6 +263,7 @@ export async function handlePreviewMessage(
       const measurement = received(message, type)
       if (preview.cellIdentity === undefined || matchesExactPreviewCellIdentity(preview, measurement.identity)) {
         preview.layoutMeasurements = measurement
+        actions.layoutMeasured?.()
       }
       await StudioApiClient.previewLayoutMeasurements(measurement).catch(ignoreSupersededPreviewReport)
     },

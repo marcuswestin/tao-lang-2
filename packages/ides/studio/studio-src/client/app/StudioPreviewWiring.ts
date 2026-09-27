@@ -39,6 +39,8 @@ export type StudioPreviewWiringDeps = Readonly<{
   onCanvasPanKey?: (preview: StudioPreviewConnection, message: StudioPreviewCanvasPanKeyMessage) => void
   onCanvasShortcut?: (command: StudioPreviewCanvasShortcutMessage['command'], iframe: HTMLIFrameElement) => void
   onFeedDrop?: (message: StudioPreviewFeedDropMessage) => Promise<void>
+  /** A preview reported fresh element geometry, so anything pinned to the selection moves with it. */
+  onLayoutMeasured?: () => void
 }>
 
 /**
@@ -166,6 +168,7 @@ export function studioPreviewMessageListener(deps: StudioPreviewMessagesDeps): (
       canvasPanKey: message => deps.onCanvasPanKey?.(connection, message),
       canvasShortcut: message => deps.onCanvasShortcut?.(message.command, connection.iframe),
       feedDrop: deps.onFeedDrop,
+      layoutMeasured: () => deps.onLayoutMeasured?.(),
       changed() {
         drawer.renderIfLogs()
         drawer.loadDataIfVisible()

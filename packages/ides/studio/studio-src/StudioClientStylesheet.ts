@@ -333,7 +333,7 @@ kbd {
 .tao-studio-product-host[data-layout-preset="draw"] .studio-preview { grid-column: 3; grid-row: 1 / 3; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-divider-right { grid-column: 4; grid-row: 1 / 3; }
 .studio-draw-canvas { display: none; height: 100%; min-height: 0; overflow: auto; }
-.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu):not(.studio-edit-log) { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu):not(.studio-edit-log):not(.studio-selection-hud) { display: none; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-draw-canvas { display: block; }
 .tao-studio-product-host[data-layout-preset="run"] .studio-draw-canvas,
 .tao-studio-product-host[data-layout-preset="run"] [data-tao-studio-sketch-host] { display: none; }
@@ -638,6 +638,22 @@ kbd {
   background: transparent; border: 1px solid var(--studio-stroke); border-radius: 4px; color: var(--studio-text);
   cursor: pointer; font: 11px var(--studio-sans); padding: 1px 6px;
 }
+/* The selection HUD sits just under the selected element and moves with pan, zoom and layout. */
+.studio-selection-hud {
+  align-items: center; background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px;
+  box-shadow: 0 8px 24px #0004; display: none; flex-wrap: wrap; font-size: 11px; gap: 6px; left: 0;
+  max-width: calc(100% - 16px); padding: 4px 6px; position: absolute; top: 0; white-space: nowrap; z-index: 6;
+}
+.tao-studio-product-host:is([data-layout-preset="design"], [data-layout-preset="draw"]) .studio-selection-hud:not([hidden]) { display: flex; }
+.studio-selection-hud-name { color: var(--studio-text-muted); font: 11px var(--studio-mono); padding-right: 2px; }
+.studio-selection-hud label { align-items: center; color: var(--studio-text-muted); display: flex; gap: 4px; }
+.studio-selection-hud :is(button, input, select) {
+  background: transparent; border: 1px solid var(--studio-stroke); border-radius: 4px; color: var(--studio-text);
+  font: 11px var(--studio-sans); padding: 2px 5px;
+}
+.studio-selection-hud button { cursor: pointer; }
+.studio-selection-hud input { width: 5ch; }
+.studio-selection-hud :is(button, input, select):disabled { cursor: default; opacity: .5; }
 .studio-canvas-zoom-menu button {
   background: transparent; border: 0; border-radius: 4px; color: var(--studio-text); cursor: pointer;
   font: 12px var(--studio-sans); padding: 8px 10px; text-align: left;

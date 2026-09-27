@@ -326,7 +326,7 @@ export type StudioMoveRenderPatchRequest = StudioMoveRenderRequest & {
   kind: 'move-render'
 }
 
-/** Toggles the nearest Row/Col owning one stable leaf render. */
+/** Toggles a Row/Col render itself, or the nearest Row/Col owning one stable leaf render. */
 export type StudioToggleFlowDirectionPatchRequest = Readonly<{
   kind: 'toggle-flow-direction'
   renderId: string

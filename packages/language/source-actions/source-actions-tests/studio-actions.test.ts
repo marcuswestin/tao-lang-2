@@ -1702,6 +1702,26 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).toContain('Text("Outer")')
   })
 
+  Test('toggles a selected Row or Col itself rather than the flow around it', async () => {
+    const document = await parseDocument(`
+      use Col, Row, Text from @tao/ui
+      view MainView() {
+         render Row() {
+            Col() {
+               Text("Nested")
+            }
+            Text("Outer")
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'toggle-flow-direction',
+      renderId: renderId(requireRenderBySource(document, 'Col()')),
+    }, { occurrence: { nodeKind: 'render', renderOwner: 'MainView' } })
+
+    Expect(patch.content).toContain('render Row() {\n      Row() {\n         Text("Nested")')
+    Expect(patch.content).not.toContain('Col()')
+  })
+
   Test('inserts direction-aware separators after or between direct flow siblings', async () => {
     const row = await parseDocument(`
       use Row, Text from @tao/ui

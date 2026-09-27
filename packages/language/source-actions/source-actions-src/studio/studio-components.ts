@@ -296,15 +296,20 @@ function typesExactlyMatch(parameter: AST.ParameterDeclaration, value: StudioLex
   return expected !== undefined && expected === Type.identityKey(Type.ofValueDeclaration(value))
 }
 
-/** toggleFlowDirection changes the nearest Row/Col that directly or transitively owns a leaf render. */
+/**
+ * toggleFlowDirection flips a Row or Col render itself, or else the nearest Row/Col that directly or
+ * transitively owns a leaf render.
+ */
 export async function toggleFlowDirection(
   document: AST.Document,
   request: StudioToggleFlowDirectionPatchRequest,
 ): Promise<string> {
   assertNoSyntaxErrors(document)
   requireLocalRenderId(document, request.renderId, 'toggle flow direction for renders')
-  const leaf = requireLeafRenderById(document.parseResult.value, request.renderId)
-  const owner = nearestFlowOwner(leaf)
+  const target = requireRenderById(document.parseResult.value, request.renderId)
+  const owner = isFlowOwner(target)
+    ? target
+    : nearestFlowOwner(requireLeafRenderById(document.parseResult.value, request.renderId))
   const reference = owner.view!.$refNode
   if (reference === undefined) {
     Errors.throwUserInput('Cannot toggle a flow container without source coordinates.')
