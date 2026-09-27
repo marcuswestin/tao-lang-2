@@ -831,16 +831,14 @@ export class StudioProjectSession {
             'A Studio sketch can only be created in the active project.',
           )
         }
-        if (action?.['kind'] === 'delete-sketch') {
-          // A render or a detached definition lives in the user's own source, so removing it from the
-          // canvas forgets the catalog entry and leaves that source alone. A drawn definition still owns
-          // its `@/studio` file, and deleting that is not transactional yet.
-          const sketch = (await transaction.read()).sketches.find(candidate => candidate.id === action['id'])
-          Assert.input(
-            sketch === undefined || sketch.render !== undefined || sketch.definitionPath !== undefined,
-            'Deleting a drawn Studio sketch is not available until its generated-source lifecycle lands.',
+        // A render or a detached definition lives in the user's own source, so removing it from the
+        // canvas forgets the catalog entry and leaves that source alone. A drawn definition owns its
+        // `@/studio` file, which leaves with it in the same transaction.
+        const removedDrawing = action?.['kind'] === 'delete-sketch'
+          ? (await transaction.read()).sketches.find(candidate =>
+            candidate.id === action['id'] && candidate.render === undefined && candidate.definitionPath === undefined
           )
-        }
+          : undefined
         if (action?.['kind'] === 'refresh-snap-targets') {
           Errors.throwUserInput('Refreshing Studio Snap targets is owned by generated-source transactions.')
         }
@@ -853,6 +851,7 @@ export class StudioProjectSession {
         let createdName: string | undefined
         let createdPath: string | undefined
         let writeRegistered = false
+        let removedSource: Readonly<{ content: string; path: string }> | undefined
         try {
           const catalogResult = await transaction.apply(request)
           applied = true
@@ -880,6 +879,23 @@ export class StudioProjectSession {
             this.#emitFile(file)
             this.#emitFiles(await this.files())
           }
+          // A drawn view whose file is already gone leaves only the catalog, like a render card.
+          if (
+            removedDrawing !== undefined
+            && await FS.isFile(FS.resolvePath(`@/studio/${removedDrawing.view}.tao`, this.projectRoot))
+          ) {
+            removedSource = await new StudioGeneratedSources(this.projectRoot).readView(removedDrawing.view)
+            await this.#writeSketchSource(removedSource.path, undefined)
+            const compile = await this.#coordinator.noteStudioFileMutation([{
+              path: removedSource.path,
+              writeId: request.requestId,
+            }])
+            if (compile.status === 'error') {
+              Errors.throwUserInput(await this.#drawnRemovalRefusal(removedDrawing, removedSource.path, compile))
+            }
+            result = { ...catalogResult, compile }
+            this.#emitFiles(await this.files())
+          }
           rememberResult(this.#sketchResults, key, result)
           this.#emitSketchCatalog(result.catalog)
           return result
@@ -888,6 +904,16 @@ export class StudioProjectSession {
             if (createdName !== undefined && createdPath !== undefined && await FS.isFile(createdPath)) {
               await new StudioGeneratedSources(this.projectRoot).removeView(createdName)
               this.#files.forget(createdPath)
+            }
+            // A drawn view's file comes back only if nothing has claimed its name since it was deleted.
+            if (removedSource !== undefined && !await FS.exists(removedSource.path)) {
+              await this.#writeSketchSource(removedSource.path, removedSource.content)
+              await this.#coordinator.noteStudioFileMutation([{
+                path: removedSource.path,
+                sourceVersion: SourceActions.studioSourceVersion(removedSource.content),
+                writeId: `rollback:${request.requestId}`,
+              }])
+              this.#emitFiles(await this.files())
             }
             await transaction.restore(prior, prior.revision + 1)
             if (writeRegistered && createdPath !== undefined) {
@@ -1173,6 +1199,42 @@ export class StudioProjectSession {
       await generated.removeView(FS.basename(path, '.tao'))
     }
     this.#files.forget(path)
+  }
+
+  /**
+   * Why a drawn view could not leave: the project stopped compiling without its file, which almost
+   * always means another file uses the view. That file is named from the compile's own diagnostics,
+   * and failing those, from the project files that mention the view by name.
+   */
+  async #drawnRemovalRefusal(
+    sketch: StudioSketch,
+    removedPath: string,
+    compile: StudioCompileCompletion,
+  ): Promise<string> {
+    const removed = FS.relativePath(this.projectRoot, removedPath)
+    const reported = compile.diagnostics.flatMap(diagnostic =>
+      diagnostic.filePath === undefined
+        ? []
+        : [FS.relativePath(this.projectRoot, FS.resolvePath(diagnostic.filePath, this.projectRoot))]
+    )
+    const mentioning: string[] = []
+    if (reported.every(path => path === removed)) {
+      const named = new RegExp(`\\b${sketch.view}\\b`, 'u')
+      for (const file of this.#files.list()) {
+        const path = FS.resolvePath(file.path, this.projectRoot)
+        if (file.path !== removed && await FS.isFile(path) && named.test(await FS.readText(path))) {
+          mentioning.push(file.path)
+        }
+      }
+    }
+    const users = [...new Set([...reported.filter(path => path !== removed), ...mentioning])]
+    return users.length > 0
+      ? `Studio did not remove ${sketch.name} because ${users.join(', ')} ${
+        users.length === 1 ? 'uses' : 'use'
+      } ${sketch.view}; deleting ${removed} would break the project. Remove that use first.`
+      : `Studio did not remove ${sketch.name} because the project failed to compile without ${removed}: ${
+        compile.diagnostics[0]?.message ?? compile.message
+      }`
   }
 
   proposeSketchSnap(input: unknown): Promise<StudioSketchSnapProposalResult> {

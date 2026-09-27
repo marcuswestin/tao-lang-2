@@ -238,6 +238,41 @@ Test('Studio sketch catalog keeps a created view at the drawn canvas origin', as
   })
 })
 
+Test('Studio move-sketch places a view at a new canvas origin and refuses anything else', async () => {
+  await withTaoFiles('tao-studio-sketch-move-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    const provider = new StudioSketchCatalog(root)
+    const created = await provider.apply(createSketchRequest(0))
+    const move = (action: Record<string, unknown>, requestId: string, expectedRevision = created.catalog.revision) =>
+      provider.apply({ action, expectedRevision, requestId } as unknown as StudioSketchCatalogRequest)
+
+    await Expect(move({ id: 'sketch-row', kind: 'move-sketch', x: -1, y: 0 }, 'negative')).rejects.toThrow(
+      'Studio sketch move-sketch.x must be nonnegative.',
+    )
+    await Expect(move({ id: 'sketch-row', kind: 'move-sketch', x: 10, y: Number.NaN }, 'nan')).rejects.toThrow(
+      'Studio sketch move-sketch.y must be nonnegative.',
+    )
+    await Expect(move({ id: 'sketch-row', kind: 'move-sketch', width: 9, x: 10, y: 10 }, 'resize')).rejects.toThrow(
+      'Studio sketch move-sketch action has unsupported fields: width',
+    )
+    await Expect(move({ id: '', kind: 'move-sketch', x: 10, y: 10 }, 'unnamed')).rejects.toThrow(
+      'Studio sketch move-sketch.id must be a nonempty string.',
+    )
+    await Expect(move({ id: 'sketch-gone', kind: 'move-sketch', x: 10, y: 10 }, 'gone')).rejects.toThrow(
+      'Studio sketch does not exist: sketch-gone',
+    )
+    await Expect(move({ id: 'sketch-row', kind: 'move-sketch', x: 10, y: 10 }, 'stale', 0)).rejects.toBeInstanceOf(
+      StudioSketchCatalogConflictError,
+    )
+    Expect(await provider.read()).toEqual(created.catalog)
+
+    const moved = await move({ id: 'sketch-row', kind: 'move-sketch', x: 240.5, y: 96 }, 'move')
+    const before = created.catalog.sketches[0]!
+    Expect(moved.catalog.revision).toBe(created.catalog.revision + 1)
+    Expect(moved.catalog.sketches[0]).toEqual({ ...before, x: 240.5, y: 96 })
+    Expect((await new StudioSketchCatalog(root).read()).sketches[0]).toMatchObject({ x: 240.5, y: 96 })
+  })
+})
+
 Test('Studio sketch actions atomically move selected free rows into strict associations and back', async () => {
   await withTaoFiles('tao-studio-sketch-associations-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)

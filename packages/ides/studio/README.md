@@ -353,8 +353,14 @@ back on compile or catalog failure. Reopen reconciles only against a manifest wh
 current, then drops missing, duplicated, or retyped associations. Retained geometry is preferred for
 Unsnap; a current measured render is the fallback.
 
-The project session intentionally rejects whole-sketch deletion until generated-source removal shares
-the same transactional rollback.
+Removing a drawn sketch deletes its generated `@/studio/ViewN.tao` and its catalog row in one
+transaction. When the project no longer compiles without the file, because another file uses the
+view, Studio restores the file and the catalog and names that file in the refusal. Removing a render
+or detached card only forgets its catalog row. The Draw canvas removes a root rectangle from its badge,
+a right-click or Control-click menu, or Delete once its header row, empty board area, or card body has
+selected it, and asks before any removal that deletes a file. Delete with free rectangles selected
+deletes those rectangles instead, and Escape clears the selection. Dragging a header row moves the
+rectangle and commits one catalog-only `move-sketch` when released.
 
 Feed foundations preserve entity parameter identity in the preview manifest and accept imported
 `public fixture` declarations, including cross-file scenario row handles. The deterministic generator
@@ -399,7 +405,7 @@ rows and optional bindings without a fallback report an error rather than changi
 Run the focused Draw, Snap, and Feed-foundation contracts with the repository's installed profile:
 
 ```bash
-bun test packages/ides/studio/studio-tests/studio-feed-examples.test.ts packages/ides/studio/studio-tests/studio-feed-inventory.test.ts packages/ides/studio/studio-tests/studio-shared-fixture-source.test.ts packages/ides/studio/studio-tests/studio-sketch-catalog.test.ts packages/ides/studio/studio-tests/studio-sketch-source.test.ts packages/ides/studio/studio-tests/studio-sketch-geometry.test.ts packages/ides/studio/studio-tests/studio-sketch-projection.test.ts packages/ides/studio/studio-tests/studio-sketch-snap.test.ts packages/ides/studio/studio-tests/studio-sketch-session.test.ts packages/ides/studio/studio-tests/studio-sketch-view.test.ts
+bun test packages/ides/studio/studio-tests/studio-feed-examples.test.ts packages/ides/studio/studio-tests/studio-feed-inventory.test.ts packages/ides/studio/studio-tests/studio-shared-fixture-source.test.ts packages/ides/studio/studio-tests/studio-sketch-catalog.test.ts packages/ides/studio/studio-tests/studio-sketch-source.test.ts packages/ides/studio/studio-tests/studio-sketch-geometry.test.ts packages/ides/studio/studio-tests/studio-sketch-projection.test.ts packages/ides/studio/studio-tests/studio-sketch-snap.test.ts packages/ides/studio/studio-tests/studio-sketch-session.test.ts packages/ides/studio/studio-tests/studio-sketch-view.test.ts packages/ides/studio/studio-tests/studio-sketch-badge.test.ts
 ```
 
 The existing real browser-shell smoke entry point is:

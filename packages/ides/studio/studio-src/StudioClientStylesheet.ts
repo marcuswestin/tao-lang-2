@@ -588,6 +588,15 @@ kbd {
 [data-tao-studio-sketch-inspector] { background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); cursor: default; display: grid; gap: 6px; padding: 8px; }
 [data-tao-studio-sketch-inspector][hidden] { display: none; }
 [data-tao-studio-sketch-inspector] input, [data-tao-studio-sketch-inspector] select { background: var(--studio-bg-deep); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius); color: var(--studio-text); min-width: 0; padding: 5px 6px; }
+/* A root rectangle is selected, dragged, and removed as a whole from its header row. */
+[data-tao-studio-sketch-name] { cursor: grab; pointer-events: auto; user-select: none; }
+[data-tao-studio-sketch-frame][data-tao-studio-sketch-moving] { opacity: .85; z-index: 10; }
+[data-tao-studio-sketch-frame][data-tao-studio-sketch-moving] [data-tao-studio-sketch-name] { cursor: grabbing; }
+[data-tao-studio-sketch-frame][data-selected="true"] > [data-tao-studio-sketch],
+[data-tao-studio-sketch-frame][data-selected="true"] > .studio-sketch-card { outline: calc(2px * var(--studio-canvas-counter-scale, 1)) solid var(--studio-accent); outline-offset: calc(2px * var(--studio-canvas-counter-scale, 1)); }
+[data-tao-studio-sketch-context-menu] { background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); box-shadow: 0 8px 24px rgba(0, 0, 0, .35); cursor: default; display: grid; min-width: 120px; padding: 4px; position: absolute; z-index: 20; }
+[data-tao-studio-sketch-context-menu] button { background: none; border: 0; border-radius: var(--studio-radius); color: var(--studio-text); cursor: pointer; font: inherit; font-weight: 500; padding: 5px 8px; text-align: left; }
+[data-tao-studio-sketch-context-menu] button:hover, [data-tao-studio-sketch-context-menu] button:focus-visible { background: var(--studio-bg-deep); }
 
 /* ---------- preview canvas ---------- */
 .studio-preview { background: var(--studio-canvas); border-left: 1px solid var(--studio-stroke); min-height: 0; position: relative; }

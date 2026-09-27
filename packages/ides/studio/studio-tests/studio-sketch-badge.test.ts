@@ -16,16 +16,30 @@ Test('Studio sketch badge offers every other renderable view to an empty drawn r
   Expect(StudioSketchBadge.items(drawn, ['StoryRow', 'View1', 'CommentRow'])).toEqual([
     { intent: { sketchId: 'sketch-1', to: 'render', view: 'StoryRow' }, kind: 'action', label: 'Render StoryRow' },
     { intent: { sketchId: 'sketch-1', to: 'render', view: 'CommentRow' }, kind: 'action', label: 'Render CommentRow' },
+    { kind: 'remove', label: 'Remove', sketchId: 'sketch-1' },
   ])
   Expect(StudioSketchBadge.items(drawn, ['View1'])).toEqual([
     { kind: 'note', label: 'No other view has a scenario to start a render from yet.' },
+    { kind: 'remove', label: 'Remove', sketchId: 'sketch-1' },
   ])
+})
+
+Test('Studio asks before removing only the rectangles whose removal deletes a file', () => {
+  Expect(StudioSketchBadge.removalQuestion({ ...drawn, view: 'View3' })).toBe(
+    'Remove View3 and delete @/studio/View3.tao?',
+  )
+  Expect(StudioSketchBadge.removalQuestion({ ...drawn, definitionPath: 'Rows.tao' })).toBeUndefined()
+  Expect(StudioSketchBadge.removalQuestion({
+    ...drawn,
+    render: { group: 'rows', path: 'Rows.scenarios.tao', scenario: 'drawn1', view: 'StoryRow' },
+  })).toBeUndefined()
 })
 
 Test('Studio sketch badge says why a drawn or written definition cannot switch to a render', () => {
   const withRects = { ...drawn, rects: [{ height: 10, id: 'r', kind: 'Text' as const, width: 10, x: 0, y: 0 }] }
   Expect(StudioSketchBadge.items(withRects, ['StoryRow'])).toEqual([
     { kind: 'note', label: 'Clear the drawn rectangles to render an existing view here instead.' },
+    { kind: 'remove', label: 'Remove', sketchId: 'sketch-1' },
   ])
   const written = { ...drawn, definitionPath: 'Rows.tao' }
   Expect(StudioSketchBadge.sourceBacked(written)).toBe(true)
@@ -172,6 +186,48 @@ Test('Studio sketch badge menu closes on an outside press, on Escape anywhere, a
   menuOf(first)!.children[0]!.fire('click', {})
   Expect(converted).toEqual([{ sketchId: 'a', to: 'render', view: 'StoryRow' }])
   Expect(menuOf(first)).toBeUndefined()
+  Expect(dom.listenerCount()).toBe(0)
+})
+
+Test('Studio right-click menu removes one rectangle and shares the one-open-menu rule with badges', () => {
+  const dom = fakeBadgeDocument()
+  const sketch = { ...drawn, height: 100, name: 'View1', project: 'p', rectOrder: [], width: 100, x: 0, y: 0 }
+  const frame = dom.document.createElement('section') as unknown as FakeNode
+  dom.body.append(frame)
+  const removed: string[] = []
+  const badge = StudioSketchBadge.element(dom.document, sketch as StudioSketch, () => [], () => {}, () => {})
+  frame.append(badge as unknown as FakeNode)
+  const buttonOf = (node: FakeNode) => node.children.find(child => child.tagName === 'button')!
+  buttonOf(badge as unknown as FakeNode).fire('click', {})
+  Expect(dom.listenerCount()).toBe(2)
+
+  const close = StudioSketchBadge.contextMenu(
+    dom.document,
+    frame as unknown as HTMLElement,
+    sketch,
+    { x: 40.4, y: 12.6 },
+    id => removed.push(id),
+  )
+  // Opening it closed the badge menu, so only its own two document listeners remain.
+  Expect((badge as unknown as FakeNode).children.some(child => child.dataset['taoStudioSketchBadgeMenu'])).toBe(false)
+  Expect(dom.listenerCount()).toBe(2)
+  const menu = frame.children.find(child => child.dataset['taoStudioSketchContextMenu'] === 'sketch-1')!
+  Expect(menu.style).toMatchObject({ left: '40px', top: '13px' })
+  Expect(menu.attributes.get('role')).toBe('menu')
+  Expect(menu.children.map(child => child.textContent)).toEqual(['Remove'])
+
+  // A press inside keeps it; the item removes and closes.
+  dom.fire('pointerdown', { target: menu.children[0] })
+  Expect(frame.children).toContain(menu)
+  menu.children[0]!.fire('click', {})
+  Expect(removed).toEqual(['sketch-1'])
+  Expect(frame.children).not.toContain(menu)
+  Expect(dom.listenerCount()).toBe(0)
+  close()
+
+  StudioSketchBadge.contextMenu(dom.document, frame as unknown as HTMLElement, sketch, { x: 0, y: 0 }, () => {})
+  dom.fire('pointerdown', { target: frame })
+  Expect(frame.children.some(child => child.dataset['taoStudioSketchContextMenu'])).toBe(false)
   Expect(dom.listenerCount()).toBe(0)
 })
 

@@ -5,7 +5,7 @@ import type {
   StudioSketchSnapUndoResult,
 } from '../StudioProjectSession'
 import type { StudioSketch, StudioSketchRect } from '../StudioSketchCatalog'
-import { canvasScale } from './matrix/StudioCanvasViewport'
+import { canvasScale, isStudioTypingTarget } from './matrix/StudioCanvasViewport'
 import { type StudioFeedDrop, StudioFeedTransfer } from './StudioFeedController'
 import type { StudioFeedExampleValues, StudioFeedSample } from './StudioFeedSamples'
 import { StudioSketchBadge, type StudioSketchConvertIntent } from './StudioSketchBadge'
@@ -82,16 +82,28 @@ function settleSketchChange(sketch: StudioSketch, change: StudioSketchRectChange
 }
 
 export type StudioSketchViewOptions = Readonly<{
+  /**
+   * confirmRemove asks the person before a removal that deletes a file, answering whether to go on.
+   * Without it such a removal does not happen.
+   */
+  confirmRemove?: (question: string) => Promise<boolean>
   /** onConvert switches a root rectangle's badge and answers with the catalog's sketches afterwards. */
   onConvert?: (intent: StudioSketchConvertIntent) => Promise<readonly StudioSketch[]>
   onCreateSketch?: (input: Readonly<{ height: number; width: number; x: number; y: number }>) => Promise<void> | void
+  /** onDeleteRects deletes free rectangles from one sketch and answers with the catalog's sketches afterwards. */
+  onDeleteRects?: (sketchId: string, rectIds: readonly string[]) => Promise<readonly StudioSketch[]>
   onFeedDrop?: (payload: StudioFeedDrop, sketchId: string, rectId?: string) => Promise<void>
   onError?: (error: unknown) => void
   onFlowAction?: (request: StudioSketchViewFlowActionRequest) => Promise<StudioSketchSnapApplyResult>
+  /** onMove places a root rectangle at a new canvas origin and answers with the catalog's sketches afterwards. */
+  onMove?: (move: StudioSketchFrameMove) => Promise<readonly StudioSketch[]>
   onRectChange?: (
     change: StudioSketchRectChange,
   ) => Promise<readonly StudioSketch[] | void> | readonly StudioSketch[] | void
-  /** onRemove takes a source-backed card off the canvas and answers with the catalog's sketches afterwards. */
+  /**
+   * onRemove takes a root rectangle off the canvas and answers with the catalog's sketches afterwards.
+   * A source-backed card leaves the catalog only; a drawn definition also deletes its generated file.
+   */
   onRemove?: (sketchId: string) => Promise<readonly StudioSketch[]>
   onSnap?: (
     request: StudioSketchViewSnapRequest,
@@ -266,6 +278,8 @@ export const StudioSketchRenderGate = {
 
 export type StudioSketchBoardPointer = Readonly<{
   activePointer?: number
+  /** contextMenu is a Control-click, which opens the rectangle's menu instead of drawing. */
+  contextMenu?: boolean
   inToolbar: boolean
   onHandle: boolean
   primary: boolean
@@ -278,7 +292,85 @@ export type StudioSketchBoardPointer = Readonly<{
  */
 export const StudioSketchBoardInput = {
   beginsGesture(pointer: StudioSketchBoardPointer): boolean {
-    return pointer.activePointer === undefined && pointer.primary && !pointer.inToolbar && !pointer.onHandle
+    return pointer.activePointer === undefined && pointer.primary && pointer.contextMenu !== true
+      && !pointer.inToolbar && !pointer.onHandle
+  },
+} as const
+
+export type StudioSketchKeyCommand = 'clear' | 'delete-rects' | 'none' | 'remove-frame'
+
+export type StudioSketchKeyInput = Readonly<{
+  composing: boolean
+  frameSelected: boolean
+  key: string
+  modified: boolean
+  selectedRects: number
+  typing: boolean
+}>
+
+/**
+ * StudioSketchKeys routes a key pressed while the Draw canvas has the person's attention. Delete or
+ * Backspace deletes the selected free rectangles when there are any and otherwise removes the selected
+ * rectangle frame; Escape clears the selection. Keys typed into a field, or held with a modifier, are
+ * never the canvas's.
+ */
+export const StudioSketchKeys = {
+  command(input: StudioSketchKeyInput): StudioSketchKeyCommand {
+    if (input.typing || input.composing || input.modified) {
+      return 'none'
+    }
+    if (input.key === 'Escape') {
+      return input.selectedRects > 0 || input.frameSelected ? 'clear' : 'none'
+    }
+    if (input.key !== 'Delete' && input.key !== 'Backspace') {
+      return 'none'
+    }
+    return input.selectedRects > 0 ? 'delete-rects' : input.frameSelected ? 'remove-frame' : 'none'
+  },
+  /** routes says whether a key can mean anything to the canvas, before its target is inspected. */
+  routes(key: string): boolean {
+    return key === 'Delete' || key === 'Backspace' || key === 'Escape'
+  },
+} as const
+
+type StudioSketchFrameMove = Readonly<{ sketchId: string; x: number; y: number }>
+
+export type StudioSketchFrameDragState = Readonly<{
+  moved: boolean
+  origin: StudioSketchPoint
+  pointerId: number
+  scale: number
+  start: StudioSketchPoint
+}>
+
+/** A press on a frame's header that travels less than this many screen pixels is a click, not a drag. */
+const frameDragThreshold = 3
+
+/**
+ * StudioSketchFrameDrag follows a root rectangle dragged by its header. The pointer travels in screen
+ * pixels and the canvas may be zoomed, so the offset is divided by the zoom; the origin stays on the
+ * canvas's nonnegative quadrant and on whole pixels, as the catalog stores it.
+ */
+export const StudioSketchFrameDrag = {
+  begin(
+    pointerId: number,
+    origin: StudioSketchPoint,
+    start: StudioSketchPoint,
+    scale: number,
+  ): StudioSketchFrameDragState {
+    return { moved: false, origin, pointerId, scale: scale > 0 ? scale : 1, start }
+  },
+  update(
+    drag: StudioSketchFrameDragState,
+    client: StudioSketchPoint,
+  ): Readonly<{ drag: StudioSketchFrameDragState; x: number; y: number }> {
+    const dx = client.x - drag.start.x
+    const dy = client.y - drag.start.y
+    return {
+      drag: drag.moved || Math.hypot(dx, dy) >= frameDragThreshold ? { ...drag, moved: true } : drag,
+      x: Math.max(0, Math.round(drag.origin.x + dx / drag.scale)),
+      y: Math.max(0, Math.round(drag.origin.y + dy / drag.scale)),
+    }
   },
 } as const
 
@@ -460,6 +552,16 @@ export const StudioSketchView = {
     let viewSourceVersions: Record<string, string> = { ...options.sourceVersions }
     const snapStates = new Map<string, StudioSketchSnapUiState>()
     let selected: Readonly<{ rectId: string; rectIds: ReadonlySet<string>; sketchId: string }> | undefined
+    /** The root rectangle selected as a whole; never at the same time as rectangles inside one. */
+    let selectedFrame: string | undefined
+    /** Whether the person's last press landed on the Draw canvas, which is when its keys are the canvas's. */
+    let canvasActive = false
+    const frames = new Map<string, HTMLElement>()
+    const removing = new Set<string>()
+    let deletingRects = false
+    let frameDrag:
+      | Readonly<{ frame: HTMLElement; name: HTMLElement; sketch: StudioSketch; state: StudioSketchFrameDragState }>
+      | undefined
     let outerGesture: StudioSketchOuterGesture | undefined
     let disposed = false
     let inlineEdit: {
@@ -625,9 +727,215 @@ export const StudioSketchView = {
       const pending = options.onConvert?.(intent)
       void pending?.then(next => receive(next), error => options.onError?.(error))
     }
+    /** Removing a drawn definition deletes its generated file, so it waits for the person to agree. */
     const remove = (sketchId: string): void => {
-      const pending = options.onRemove?.(sketchId)
-      void pending?.then(next => receive(next), error => options.onError?.(error))
+      const sketch = sketches.find(candidate => candidate.id === sketchId)
+      const onRemove = options.onRemove
+      if (disposed || sketch === undefined || onRemove === undefined || removing.has(sketchId)) {
+        return
+      }
+      removing.add(sketchId)
+      const question = StudioSketchBadge.removalQuestion(sketch)
+      const confirmed = question === undefined
+        ? Promise.resolve(true)
+        : options.confirmRemove?.(question) ?? Promise.resolve(false)
+      void confirmed.then(async agreed => {
+        if (!agreed || disposed) {
+          return
+        }
+        const next = await onRemove(sketchId)
+        if (selectedFrame === sketchId) {
+          selectedFrame = undefined
+        }
+        receive(next)
+      }).catch(error => options.onError?.(error)).finally(() => removing.delete(sketchId))
+    }
+    const paintFrames = (): void => {
+      for (const [id, frame] of frames) {
+        if (id === selectedFrame) {
+          frame.dataset['selected'] = 'true'
+        } else {
+          delete frame.dataset['selected']
+        }
+      }
+    }
+    const selectFrame = (sketchId: string): void => {
+      const hadRects = selected !== undefined
+      selected = undefined
+      selectedFrame = sketchId
+      if (hadRects) {
+        render(gate.deferred?.sketches ?? sketches)
+      } else {
+        paintFrames()
+      }
+      renderInspector(inspector, sketches, selected, commit)
+    }
+    const clearSelection = (): void => {
+      selected = undefined
+      selectedFrame = undefined
+      render(gate.deferred?.sketches ?? sketches)
+    }
+    const selectedFreeRects = (): Readonly<{ rectIds: readonly string[]; sketchId: string }> | undefined => {
+      const sketch = sketches.find(candidate => candidate.id === selected?.sketchId)
+      if (sketch === undefined || selected === undefined) {
+        return undefined
+      }
+      const rectIds = [...StudioSketchSelection.settle(sketch, selected.rectIds)]
+      return rectIds.length === 0 ? undefined : { rectIds, sketchId: sketch.id }
+    }
+    const deleteRects = (target: Readonly<{ rectIds: readonly string[]; sketchId: string }>): void => {
+      const onDeleteRects = options.onDeleteRects
+      if (onDeleteRects === undefined || deletingRects) {
+        return
+      }
+      deletingRects = true
+      void onDeleteRects(target.sketchId, target.rectIds).then(next => {
+        selected = undefined
+        receive(next)
+      }, error => {
+        options.onError?.(error)
+        render(gate.deferred?.sketches ?? sketches)
+      }).finally(() => {
+        deletingRects = false
+      })
+    }
+    const endFrameDrag = (drag: NonNullable<typeof frameDrag>): void => {
+      try {
+        drag.name.releasePointerCapture?.(drag.state.pointerId)
+      } catch {
+        // The capture was already gone.
+      }
+      delete drag.frame.dataset['taoStudioSketchMoving']
+      gestureLock.end()
+    }
+    /**
+     * attachFrame makes a root rectangle selectable and movable as a whole: its header selects it and
+     * drags it, a card's body selects it, and a right-click or Control-click anywhere on it opens its menu.
+     */
+    const attachFrame = (frame: HTMLElement, sketch: StudioSketch): void => {
+      frame.addEventListener('contextmenu', event => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (disposed || inlineEdit !== undefined || frameDrag !== undefined) {
+          return
+        }
+        const at = relativePoint(frame, event)
+        selectFrame(sketch.id)
+        StudioSketchBadge.contextMenu(document, frames.get(sketch.id) ?? frame, sketch, at, remove)
+      })
+      const cardBody = frame.querySelector<HTMLElement>(':scope > [data-tao-studio-sketch-card-body]')
+      cardBody?.addEventListener('pointerdown', event => {
+        if (!disposed && primaryPointer(event) && !event.ctrlKey) {
+          selectFrame(sketch.id)
+        }
+      })
+      const name = frame.querySelector<HTMLElement>(':scope > [data-tao-studio-sketch-name]')
+      if (name === null) {
+        return
+      }
+      name.addEventListener('pointerdown', event => {
+        if (
+          disposed || inlineEdit !== undefined || frameDrag !== undefined || !primaryPointer(event) || event.ctrlKey
+        ) {
+          return
+        }
+        event.preventDefault()
+        event.stopPropagation()
+        frameDrag = {
+          frame,
+          name,
+          sketch,
+          state: StudioSketchFrameDrag.begin(
+            event.pointerId,
+            { x: sketch.x, y: sketch.y },
+            { x: event.clientX, y: event.clientY },
+            canvasScale(frame),
+          ),
+        }
+        name.setPointerCapture?.(event.pointerId)
+        frame.dataset['taoStudioSketchMoving'] = 'true'
+        gestureLock.begin()
+      })
+      name.addEventListener('pointermove', event => {
+        if (frameDrag?.name !== name || event.pointerId !== frameDrag.state.pointerId) {
+          return
+        }
+        const next = StudioSketchFrameDrag.update(frameDrag.state, { x: event.clientX, y: event.clientY })
+        frameDrag = { ...frameDrag, state: next.drag }
+        if (next.drag.moved) {
+          frame.style.left = `${next.x}px`
+          frame.style.top = `${next.y}px`
+        }
+      })
+      name.addEventListener('pointerup', event => {
+        const drag = frameDrag
+        if (drag?.name !== name || event.pointerId !== drag.state.pointerId) {
+          return
+        }
+        frameDrag = undefined
+        const next = StudioSketchFrameDrag.update(drag.state, { x: event.clientX, y: event.clientY })
+        selectFrame(sketch.id)
+        if (!next.drag.moved || (next.x === sketch.x && next.y === sketch.y)) {
+          frame.style.left = `${sketch.x}px`
+          frame.style.top = `${sketch.y}px`
+          endFrameDrag(drag)
+          return
+        }
+        frame.style.left = `${next.x}px`
+        frame.style.top = `${next.y}px`
+        // The frame stays where it was dropped until the catalog answers; a refusal puts it back.
+        const onMove = options.onMove
+        StudioSketchPointerRelease.afterCommit(
+          () =>
+            onMove === undefined
+              ? render(gate.deferred?.sketches ?? sketches)
+              : onMove({ sketchId: sketch.id, x: next.x, y: next.y }).then(moved => receive(moved), error => {
+                options.onError?.(error)
+                render(gate.deferred?.sketches ?? sketches)
+              }),
+          () => endFrameDrag(drag),
+        )
+      })
+      const cancelFrameDrag = (event: PointerEvent): void => {
+        const drag = frameDrag
+        if (drag?.name !== name || event.pointerId !== drag.state.pointerId) {
+          return
+        }
+        frameDrag = undefined
+        frame.style.left = `${sketch.x}px`
+        frame.style.top = `${sketch.y}px`
+        endFrameDrag(drag)
+      }
+      name.addEventListener('pointercancel', cancelFrameDrag)
+      name.addEventListener('lostpointercapture', cancelFrameDrag)
+    }
+    const onDocumentPointerDown = (event: Event): void => {
+      canvasActive = workspace.contains(event.target as Node | null)
+    }
+    const onDocumentKeyDown = (event: KeyboardEvent): void => {
+      if (disposed || !canvasActive || gate.activeGestures > 0 || !StudioSketchKeys.routes(event.key)) {
+        return
+      }
+      const rects = selectedFreeRects()
+      const command = StudioSketchKeys.command({
+        composing: event.isComposing === true,
+        frameSelected: selectedFrame !== undefined,
+        key: event.key,
+        modified: event.metaKey === true || event.ctrlKey === true || event.altKey === true,
+        selectedRects: rects?.rectIds.length ?? 0,
+        typing: isStudioTypingTarget(event.target),
+      })
+      if (command === 'none') {
+        return
+      }
+      event.preventDefault()
+      if (command === 'clear') {
+        clearSelection()
+      } else if (command === 'delete-rects' && rects !== undefined) {
+        deleteRects(rects)
+      } else if (command === 'remove-frame' && selectedFrame !== undefined) {
+        remove(selectedFrame)
+      }
     }
     const renderNow = (nextSketches: readonly StudioSketch[], nextSourceVersion?: string): void => {
       if (disposed) {
@@ -642,7 +950,22 @@ export const StudioSketchView = {
           selected = rectIds.size === 0 ? undefined : { ...selected, rectIds }
         }
       }
+      if (!sketches.some(sketch => sketch.id === selectedFrame)) {
+        selectedFrame = undefined
+      }
+      frames.clear()
       const boards = sketches.map(sketch => {
+        const frame = renderFrame(sketch)
+        frames.set(sketch.id, frame)
+        attachFrame(frame, sketch)
+        return frame
+      })
+      workspace.replaceChildren(...boards, inspector)
+      paintFrames()
+      renderInspector(inspector, sketches, selected, commit)
+    }
+    const renderFrame = (sketch: StudioSketch): HTMLElement => {
+      {
         const badge = StudioSketchBadge.element(
           document,
           sketch,
@@ -666,6 +989,10 @@ export const StudioSketchView = {
           () => selected,
           value => {
             selected = value
+            if (value !== undefined && selectedFrame !== undefined) {
+              selectedFrame = undefined
+              paintFrames()
+            }
             renderInspector(inspector, sketches, selected, commit)
           },
           commit,
@@ -684,19 +1011,29 @@ export const StudioSketchView = {
           options.onError,
           options.onFeedDrop,
           exampleValues[sketch.id],
+          () => selectFrame(sketch.id),
         )
         frame.querySelector(`:scope > [data-tao-studio-sketch-name]`)?.append(badge)
         return frame
-      })
-      workspace.replaceChildren(...boards, inspector)
-      renderInspector(inspector, sketches, selected, commit)
+      }
     }
+    // The document hears a press first and forgets the canvas when it landed elsewhere; the workspace,
+    // which sits inside it, claims the press again when it landed on the canvas.
+    document.addEventListener('pointerdown', onDocumentPointerDown, true)
+    document.addEventListener('keydown', onDocumentKeyDown, true)
+    workspace.addEventListener('pointerdown', () => {
+      canvasActive = true
+    }, true)
     workspace.addEventListener('pointerdown', event => {
       if (
         disposed || inlineEdit !== undefined || event.target !== workspace || outerGesture !== undefined
         || !primaryPointer(event)
       ) {
         return
+      }
+      if (selectedFrame !== undefined) {
+        selectedFrame = undefined
+        paintFrames()
       }
       outerGesture = StudioSketchOuterDrawing.begin(outerGesture, event.pointerId, relativePoint(workspace, event))
       workspace.setPointerCapture?.(event.pointerId)
@@ -785,6 +1122,8 @@ export const StudioSketchView = {
       dispose() {
         disposed = true
         inlineEdit?.cancel()
+        document.removeEventListener('pointerdown', onDocumentPointerDown, true)
+        document.removeEventListener('keydown', onDocumentKeyDown, true)
         workspace.remove()
       },
       render: receive,
@@ -814,7 +1153,8 @@ function renderSketch(
   editingText: () => boolean,
   onError: StudioSketchViewOptions['onError'],
   onFeedDrop: StudioSketchViewOptions['onFeedDrop'],
-  exampleValues?: Readonly<Record<string, StudioFeedSample>>,
+  exampleValues: Readonly<Record<string, StudioFeedSample>> | undefined,
+  selectFrame: () => void,
 ): HTMLElement {
   // The frame stacks the toolbar above the board and the proposal below it. Nothing but rectangles
   // may sit inside the board: an absolutely positioned toolbar once wrapped down over it and the
@@ -1223,6 +1563,7 @@ function renderSketch(
     const target = event.target as HTMLElement | null
     const begins = StudioSketchBoardInput.beginsGesture({
       ...(activePointer === undefined ? {} : { activePointer }),
+      contextMenu: event.ctrlKey,
       inToolbar: toolbar.contains(target),
       onHandle: target?.dataset?.['taoStudioSketchHandle'] !== undefined,
       primary: primaryPointer(event),
@@ -1325,6 +1666,8 @@ function renderSketch(
       return
     }
     state = StudioSketchGeometry.endPointer(state, point(event))
+    // A press on the empty board that drew nothing was a click on the frame itself.
+    const clickedFrame = gesture.kind === 'draw' && !state.rects.some(candidate => candidate.id === gesture.id)
     const rect = state.rects.find(candidate => candidate.id === state.selectedId)
     let change: StudioSketchRectChange | undefined
     if (rect !== undefined) {
@@ -1344,6 +1687,9 @@ function renderSketch(
     }
     duplicateSourceId = undefined
     paint()
+    if (clickedFrame) {
+      selectFrame()
+    }
     StudioSketchPointerRelease.afterCommit(
       () => change === undefined ? undefined : onChange?.(change),
       () => releasePointer(event.pointerId),

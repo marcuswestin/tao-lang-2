@@ -344,10 +344,15 @@ serializes them with other project mutations, rejects a stale revision as an HTT
 replays an identical request ID idempotently, rejects reuse of that ID for different input, and
 publishes successful snapshots through `sketch-catalog-changed`.
 
-The catalog provider defines sketch deletion, but the project session currently rejects that action.
-Deleting a sketch remains unavailable until removal of its generated source can participate in the
-same rollback contract. Rectangle creation, update, duplication, and deletion are catalog-only and do
-not compile or rewrite the generated Tao file.
+Deleting a drawn sketch deletes its generated `@/studio/ViewN.tao` in the same transaction, whether or
+not any of its rectangles were snapped, and compiles the project without it. If that compile fails —
+almost always because another file uses the view — the file comes back with its read-only mode, the
+catalog returns to its prior snapshot, and the refusal names the file that uses the view when the
+compile's diagnostics or a search of the project files for the view name find one. A drawn sketch whose
+file is already gone leaves the catalog alone. Deleting a render or detached definition is catalog-only.
+`move-sketch { id, x, y }` places a root rectangle at a new nonnegative canvas origin and changes
+nothing else. Moving a sketch, and rectangle creation, update, duplication, and deletion, are
+catalog-only and do not compile or rewrite the generated Tao file.
 
 Creating a sketch allocates `ViewN`, atomically replaces the catalog through a sibling temporary file,
 and creates `@/studio/ViewN.tao`. The generated file contains one public view whose flowed render tree
@@ -436,6 +441,19 @@ current version lists no entry of that group, name, and view — the catalog mar
 `broken`, and its card offers only Remove from canvas. Any source-backed sketch can be removed that
 way; removal changes the catalog and leaves the source alone. Renaming a file updates the `render`
 path and `definitionPath` that name it.
+
+A drawn definition's badge ends with Remove. Removing one deletes its generated file, so Studio first
+asks "Remove ViewN and delete @/studio/ViewN.tao?" with OK and Cancel; removing a render, detached, or
+broken card asks nothing. A right-click or Control-click anywhere on a root rectangle selects it and
+opens a menu holding Remove. Clicking a rectangle's header row, the empty part of its board, or a
+card's body selects the rectangle as a whole and outlines it; clicking a free rectangle inside it
+selects that instead. While the last press landed on the Draw canvas, Delete or Backspace deletes the
+selected free rectangles through `delete-rect` when there are any and otherwise removes the selected
+root rectangle as above, and Escape clears the selection; keys typed into a field or the code editor,
+composed input, and keys held with Command, Control, or Option are never the canvas's. Dragging a
+root rectangle by its header row moves it live, dividing the pointer's travel by the canvas zoom and
+keeping whole nonnegative pixels, and commits one `move-sketch` with the expected catalog revision
+when the pointer is released; a refused move returns the rectangle to its catalog position.
 
 #### Selection, grouping, and the edit log
 

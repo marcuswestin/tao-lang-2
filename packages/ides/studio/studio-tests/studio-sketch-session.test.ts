@@ -1171,16 +1171,131 @@ Describe('Studio sketch session protocol', () => {
     })
   })
 
-  Test('does not expose sketch deletion until generated-source cleanup is transactional', async () => {
-    await withSketchSession(async (session, root) => {
+  Test('removes a drawn view with its generated file in one transaction, and replays a retry', async () => {
+    await withSketchSession(async (session, root, compiles) => {
       const created = await session.applySketchAction(createRequest(root, 'create-1'))
-      await Expect(session.applySketchAction({
+      const events: StudioSessionEvent[] = []
+      session.subscribe(event => events.push(event))
+      const request = {
         action: { id: 'sketch-1', kind: 'delete-sketch' },
         expectedRevision: created.catalog.revision,
         requestId: 'delete-1',
-      })).rejects.toThrow('Deleting a drawn Studio sketch is not available until its generated-source lifecycle lands')
-      Expect(await FS.isFile(FS.resolvePath('@/studio/View1.tao', root))).toBe(true)
-      Expect((await session.sketchCatalog()).sketches).toHaveLength(1)
+      }
+
+      const removed = await session.applySketchAction(request)
+      Expect(await session.applySketchAction(request)).toEqual(removed)
+
+      Expect(removed.catalog.sketches).toEqual([])
+      Expect(removed.compile?.status).toBe('compiled')
+      Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(false)
+      Expect((await new StudioSketchCatalog(root).read()).sketches).toEqual([])
+      Expect(compiles).toHaveLength(2)
+      Expect((await session.files()).some(file => file.path.endsWith('View1.tao'))).toBe(false)
+      Expect(events.filter(event => event.type === 'sketch-catalog-changed')).toHaveLength(1)
+      Expect(events.some(event => event.type === 'files-changed')).toBe(true)
+      // Numbers are never reused: the next drawing is View2 even though View1 is gone.
+      Expect(removed.catalog.nextViewNumber).toBe(created.catalog.nextViewNumber)
+    })
+  })
+
+  Test('removes a drawn view whose rectangles were snapped into its source', async () => {
+    await withSketchSession(async (session, root) => {
+      const snapped = await snapTwoRects(session, root)
+      Expect(snapped.catalog.sketches[0]?.snapped).toHaveLength(2)
+
+      const removed = await session.applySketchAction({
+        action: { id: 'sketch-1', kind: 'delete-sketch' },
+        expectedRevision: snapped.catalog.revision,
+        requestId: 'delete-snapped',
+      })
+
+      Expect(removed.catalog.sketches).toEqual([])
+      Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(false)
+    })
+  })
+
+  Test('refuses to remove a drawn view another file uses, and puts the file and catalog back', async () => {
+    let fail = false
+    await withSketchSession(async (session, root) => {
+      const created = await session.applySketchAction(createRequest(root, 'create-1'))
+      const path = FS.resolvePath('@/studio/View1.tao', root)
+      const generated = await FS.readText(path)
+      // The app starts using the drawn view; without its file the project no longer compiles.
+      await FS.writeText(
+        FS.resolvePath('Garden.tao', root),
+        'app Garden { view Main }\nview Main() { render View1() }\n',
+      )
+      fail = true
+
+      await Expect(session.applySketchAction({
+        action: { id: 'sketch-1', kind: 'delete-sketch' },
+        expectedRevision: created.catalog.revision,
+        requestId: 'delete-used',
+      })).rejects.toThrow(
+        /Studio did not remove View1 because Garden\.tao uses View1; deleting .*View1\.tao would break/u,
+      )
+
+      Expect(await FS.readText(path)).toBe(generated)
+      Expect(await FS.fileMode(path)).toBe(0o444)
+      Expect(await session.sketchCatalog()).toEqual(created.catalog)
+      Expect((await new StudioSketchCatalog(root).read()).sketches).toHaveLength(1)
+      Expect((await session.files()).some(file => file.path.endsWith('View1.tao'))).toBe(true)
+
+      // Once the use is gone the same removal goes through.
+      fail = false
+      await FS.writeText(FS.resolvePath('Garden.tao', root), 'app Garden { view Main }\nview Main() { }\n')
+      const removed = await session.applySketchAction({
+        action: { id: 'sketch-1', kind: 'delete-sketch' },
+        expectedRevision: created.catalog.revision,
+        requestId: 'delete-unused',
+      })
+      Expect(removed.catalog.sketches).toEqual([])
+      Expect(await FS.exists(path)).toBe(false)
+    }, () => {
+      if (fail) {
+        Errors.throwUserInput('Could not resolve reference to View1.')
+      }
+    })
+  })
+
+  Test('removes a drawn view whose generated file is already gone from the catalog alone', async () => {
+    await withSketchSession(async (session, root, compiles) => {
+      const created = await session.applySketchAction(createRequest(root, 'create-1'))
+      await new StudioGeneratedSources(root).removeView('View1')
+
+      const removed = await session.applySketchAction({
+        action: { id: 'sketch-1', kind: 'delete-sketch' },
+        expectedRevision: created.catalog.revision,
+        requestId: 'delete-missing',
+      })
+
+      Expect(removed.catalog.sketches).toEqual([])
+      Expect(removed.compile).toBeUndefined()
+      Expect(compiles).toHaveLength(1)
+    })
+  })
+
+  Test('moves a sketch on the canvas without touching or recompiling its source', async () => {
+    await withSketchSession(async (session, root, compiles) => {
+      const created = await session.applySketchAction(createRequest(root, 'create-1'))
+      const path = FS.resolvePath('@/studio/View1.tao', root)
+      const source = await FS.readText(path)
+      const request = {
+        action: { id: 'sketch-1', kind: 'move-sketch', x: 320, y: 48 },
+        expectedRevision: created.catalog.revision,
+        requestId: 'move-1',
+      }
+
+      const moved = await session.applySketchAction(request)
+      Expect(await session.applySketchAction(request)).toEqual(moved)
+
+      Expect(moved.catalog.sketches[0]).toEqual({ ...created.catalog.sketches[0]!, x: 320, y: 48 })
+      Expect((await new StudioSketchCatalog(root).read()).sketches[0]).toMatchObject({ x: 320, y: 48 })
+      Expect(await FS.readText(path)).toBe(source)
+      Expect(compiles).toHaveLength(1)
+      await Expect(session.applySketchAction({ ...request, requestId: 'move-stale' })).rejects.toBeInstanceOf(
+        StudioSketchCatalogConflictError,
+      )
     })
   })
 
