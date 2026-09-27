@@ -1,5 +1,5 @@
-import { Assert } from '@shared'
-import { Deferred, Expect, Test } from '@shared/test'
+import { Assert, Errors } from '@shared'
+import { Deferred, Expect, Test, testOverrideSlot } from '@shared/test'
 import { mountCanvasViewport } from '../studio-src/client/matrix/StudioCanvasViewport'
 import {
   applySketchSnapWith,
@@ -15,6 +15,8 @@ import {
   StudioSketchDragTarget,
   StudioSketchErrors,
   StudioSketchFlowControls,
+  StudioSketchFrameDrag,
+  StudioSketchKeys,
   StudioSketchOuterDrawing,
   StudioSketchPointerRelease,
   StudioSketchProposal,
@@ -514,6 +516,8 @@ Test('Studio sketch render gate holds re-renders while a gesture is in flight an
 Test('Studio sketch board pointerdown begins a gesture only for a free primary pointer on the canvas', () => {
   const canvas = { inToolbar: false, onHandle: false, primary: true }
   Expect(StudioSketchBoardInput.beginsGesture(canvas)).toBe(true)
+  // Control-click is the Mac right-click: it opens the rectangle's menu and draws nothing.
+  Expect(StudioSketchBoardInput.beginsGesture({ ...canvas, contextMenu: true })).toBe(false)
   Expect(StudioSketchBoardInput.beginsGesture({ ...canvas, inToolbar: true })).toBe(false)
   Expect(StudioSketchBoardInput.beginsGesture({ ...canvas, onHandle: true })).toBe(false)
   Expect(StudioSketchBoardInput.beginsGesture({ ...canvas, primary: false })).toBe(false)
@@ -924,7 +928,7 @@ class SketchTestElement {
   selected = false
   selectionStart = 0
   selectionEnd = 0
-  readonly style: Record<string, string> = {}
+  readonly style: Record<string, string> = sketchTestStyle()
   textContent = ''
   title = ''
   type = ''
@@ -1013,8 +1017,10 @@ class SketchTestElement {
 
   closest(selector: string): SketchTestElement | null {
     const name = dataSelectorName(selector)
+    // Besides Studio data selectors, a plain list of tag names, as the typing-target check asks.
+    const tags = selector.split(',').map(part => part.trim())
     for (let current: SketchTestElement | undefined = this; current !== undefined; current = current.parent) {
-      if (name !== undefined && current.dataset[name] !== undefined) {
+      if (name === undefined ? tags.includes(current.tagName) : current.dataset[name] !== undefined) {
         return current
       }
     }
@@ -1081,6 +1087,18 @@ class SketchTestElement {
   setPointerCapture(): void {}
 }
 
+/** A style record that also takes custom properties, as the canvas viewport writes its counter-scale. */
+function sketchTestStyle(): Record<string, string> {
+  const style: Record<string, string> = {}
+  Object.defineProperty(style, 'setProperty', {
+    enumerable: false,
+    value: (name: string, value: string) => {
+      style[name] = value
+    },
+  })
+  return style
+}
+
 function dataSelectorName(selector: string): string | undefined {
   const match = selector.match(/data-tao-studio-([a-z-]+)/)
   return match?.[1]?.split('-').reduce(
@@ -1144,5 +1162,277 @@ Test('mounted Draw Space drag cannot draw or move rectangles and key release res
   } finally {
     controls.dispose()
     mounted.dispose()
+  }
+})
+
+Test('Studio routes Delete to selected rectangles before the frame, and ignores typing and modifiers', () => {
+  const idle = {
+    composing: false,
+    frameSelected: false,
+    key: 'Delete',
+    modified: false,
+    selectedRects: 0,
+    typing: false,
+  }
+  Expect(StudioSketchKeys.command(idle)).toBe('none')
+  Expect(StudioSketchKeys.command({ ...idle, frameSelected: true })).toBe('remove-frame')
+  Expect(StudioSketchKeys.command({ ...idle, frameSelected: true, key: 'Backspace' })).toBe('remove-frame')
+  Expect(StudioSketchKeys.command({ ...idle, frameSelected: true, selectedRects: 2 })).toBe('delete-rects')
+  Expect(StudioSketchKeys.command({ ...idle, selectedRects: 1, typing: true })).toBe('none')
+  Expect(StudioSketchKeys.command({ ...idle, composing: true, frameSelected: true })).toBe('none')
+  Expect(StudioSketchKeys.command({ ...idle, frameSelected: true, modified: true })).toBe('none')
+  Expect(StudioSketchKeys.command({ ...idle, frameSelected: true, key: 'x' })).toBe('none')
+  Expect(StudioSketchKeys.command({ ...idle, key: 'Escape' })).toBe('none')
+  Expect(StudioSketchKeys.command({ ...idle, key: 'Escape', selectedRects: 1 })).toBe('clear')
+  Expect(StudioSketchKeys.command({ ...idle, frameSelected: true, key: 'Escape' })).toBe('clear')
+  Expect(['Delete', 'Backspace', 'Escape', 'a'].map(StudioSketchKeys.routes)).toEqual([true, true, true, false])
+})
+
+Test('Studio frame drag divides the screen offset by the zoom, keeps whole nonnegative pixels, ignores jitter', () => {
+  const drag = StudioSketchFrameDrag.begin(4, { x: 100, y: 40 }, { x: 500, y: 300 }, 2)
+  const jitter = StudioSketchFrameDrag.update(drag, { x: 501, y: 301 })
+  Expect(jitter.drag.moved).toBe(false)
+  const moved = StudioSketchFrameDrag.update(drag, { x: 561, y: 280 })
+  Expect(moved).toEqual({ drag: { ...drag, moved: true }, x: 131, y: 30 })
+  // Once it travelled, coming back near the start is still a drag.
+  Expect(StudioSketchFrameDrag.update(moved.drag, { x: 500, y: 300 })).toMatchObject({ x: 100, y: 40 })
+  Expect(StudioSketchFrameDrag.update(moved.drag, { x: 0, y: 0 })).toMatchObject({ x: 0, y: 0 })
+  Expect(StudioSketchFrameDrag.begin(4, { x: 0, y: 0 }, { x: 0, y: 0 }, 0).scale).toBe(1)
+})
+
+const elementSlot = testOverrideSlot<PropertyDescriptor | undefined>({
+  equals: (left, right) => left?.value === right?.value,
+  read: () => Object.getOwnPropertyDescriptor(globalThis, 'Element'),
+  write: value => {
+    if (value === undefined) {
+      Reflect.deleteProperty(globalThis, 'Element')
+    } else {
+      Object.defineProperty(globalThis, 'Element', value)
+    }
+  },
+})
+
+function renderCard(): StudioSketch {
+  return {
+    ...testSketch(),
+    id: 'card-1',
+    name: 'View2',
+    rectOrder: [],
+    rects: [],
+    render: { group: 'rows', path: 'Rows.tao', scenario: 'drawn1', view: 'StoryRow' },
+    view: 'View2',
+    x: 500,
+  }
+}
+
+/** Mounts a drawn sketch and a render card with every whole-frame callback recorded. */
+function mountFrames() {
+  const restore = elementSlot.install({ configurable: true, value: SketchTestElement })
+  const dom = new SketchTestDocument()
+  const host = dom.createElement('main')
+  const calls: unknown[] = []
+  const answers: { confirm: boolean; move: Promise<StudioSketch[]> } = {
+    confirm: true,
+    move: Promise.resolve([testSketch(), renderCard()]),
+  }
+  const errors: unknown[] = []
+  const mounted = StudioSketchView.mount(host as unknown as HTMLElement, {
+    confirmRemove: async question => {
+      calls.push(['confirm', question])
+      return answers.confirm
+    },
+    onDeleteRects: async (sketchId, rectIds) => {
+      calls.push(['delete-rects', sketchId, rectIds])
+      return [{ ...testSketch(), rects: testSketch().rects.filter(rect => !rectIds.includes(rect.id)) }, renderCard()]
+    },
+    onError: error => errors.push(error),
+    onMove: async move => {
+      calls.push(['move', move])
+      return await answers.move
+    },
+    onRemove: async sketchId => {
+      calls.push(['remove', sketchId])
+      return [testSketch(), renderCard()].filter(sketch => sketch.id !== sketchId)
+    },
+    sketches: [testSketch(), renderCard()],
+  })
+  const frame = (id = 'sketch-1') => dom.find(host, 'taoStudioSketchFrame', id)
+  const key = (value: string, target?: SketchTestElement): void => {
+    const event = Object.assign(new Event('keydown', { cancelable: true }), { key: value })
+    if (target !== undefined) {
+      Object.defineProperty(event, 'target', { value: target })
+    }
+    dom.dispatchEvent(event)
+  }
+  const click = (element: SketchTestElement, x: number, y: number): void => {
+    element.dispatchTree(pointer('pointerdown', element, 1, x, y))
+    element.dispatchTree(pointer('pointerup', element, 1, x, y))
+  }
+  return {
+    answers,
+    calls,
+    click,
+    dispose() {
+      mounted.dispose()
+      restore()
+    },
+    dom,
+    errors,
+    frame,
+    host,
+    key,
+  }
+}
+
+const settled = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
+
+Test('mounted Delete deletes selected rectangles, else asks and removes the selected drawn frame', async () => {
+  const fixture = mountFrames()
+  const { calls, click, dom, frame, key } = fixture
+  try {
+    // Nothing is selected yet, and the canvas has not been pressed: Delete does nothing.
+    key('Delete')
+    Expect(calls).toEqual([])
+
+    // A click on the empty board selects the frame; a click on a rectangle takes the selection over.
+    click(dom.find(frame(), 'taoStudioSketch', 'sketch-1'), 200, 50)
+    Expect(frame().dataset['selected']).toBe('true')
+    const board = dom.find(frame(), 'taoStudioSketch', 'sketch-1')
+    click(dom.find(board, 'taoStudioSketchRect', 'back'), 15, 15)
+    Expect(frame().dataset['selected']).toBeUndefined()
+    key('Backspace')
+    await settled()
+    Expect(calls).toEqual([['delete-rects', 'sketch-1', ['back']]])
+    Expect(
+      dom.find(frame(), 'taoStudioSketch', 'sketch-1').descendants().some(element =>
+        element.dataset['taoStudioSketchRect'] === 'back'
+      ),
+    ).toBe(false)
+
+    // The header row selects the whole frame; Delete asks first, and Cancel keeps it.
+    calls.length = 0
+    click(dom.find(frame(), 'taoStudioSketchName', 'sketch-1'), 100, 10)
+    Expect(frame().dataset['selected']).toBe('true')
+    fixture.answers.confirm = false
+    key('Delete')
+    await settled()
+    Expect(calls).toEqual([['confirm', 'Remove View1 and delete @/studio/View1.tao?']])
+
+    fixture.answers.confirm = true
+    key('Delete')
+    await settled()
+    Expect(calls.slice(1)).toEqual([
+      ['confirm', 'Remove View1 and delete @/studio/View1.tao?'],
+      ['remove', 'sketch-1'],
+    ])
+    Expect(fixture.host.descendants().some(element => element.dataset['taoStudioSketchFrame'] === 'sketch-1'))
+      .toBe(false)
+  } finally {
+    fixture.dispose()
+  }
+})
+
+Test('mounted Delete leaves typing targets, other panes, and Escape to the person', async () => {
+  const fixture = mountFrames()
+  const { calls, click, dom, frame, key } = fixture
+  try {
+    click(dom.find(frame(), 'taoStudioSketchName', 'sketch-1'), 100, 10)
+    const field = dom.createElement('textarea')
+    frame().append(field)
+    key('Delete', field)
+    key('Backspace', field)
+    await settled()
+    Expect(calls).toEqual([])
+    Expect(frame().dataset['selected']).toBe('true')
+
+    key('Escape')
+    Expect(frame().dataset['selected']).toBeUndefined()
+    key('Delete')
+    await settled()
+    Expect(calls).toEqual([])
+
+    // A press outside the canvas hands the keys back to the rest of Studio.
+    click(dom.find(frame(), 'taoStudioSketchName', 'sketch-1'), 100, 10)
+    const press = new Event('pointerdown')
+    Object.defineProperty(press, 'target', { value: dom.createElement('button') })
+    dom.dispatchEvent(press)
+    key('Delete')
+    await settled()
+    Expect(calls).toEqual([])
+  } finally {
+    fixture.dispose()
+  }
+})
+
+Test('mounted render card is selected by its body and removed from the canvas without a question', async () => {
+  const fixture = mountFrames()
+  const { calls, dom, frame, key } = fixture
+  try {
+    const body = dom.find(frame('card-1'), 'taoStudioSketchCardBody', 'card-1')
+    body.dispatchTree(pointer('pointerdown', body, 1, 520, 40))
+    Expect(frame('card-1').dataset['selected']).toBe('true')
+    key('Delete')
+    await settled()
+    Expect(calls).toEqual([['remove', 'card-1']])
+  } finally {
+    fixture.dispose()
+  }
+})
+
+Test('mounted right-click or Control-click opens a Remove menu and never draws', async () => {
+  const fixture = mountFrames()
+  const { calls, dom, frame } = fixture
+  try {
+    const board = dom.find(frame(), 'taoStudioSketch', 'sketch-1')
+    board.dispatchTree({ ...pointer('pointerdown', board, 1, 200, 50), ctrlKey: true })
+    board.dispatchTree({ ...pointer('pointerup', board, 1, 260, 70), ctrlKey: true })
+    board.dispatchTree({ ...pointer('contextmenu', board, 1, 200, 50), ctrlKey: true })
+    Expect(frame().dataset['selected']).toBe('true')
+    const menu = dom.find(frame(), 'taoStudioSketchContextMenu', 'sketch-1')
+    Expect(menu.style).toMatchObject({ left: '200px', top: '50px' })
+    Expect(menu.children.map(child => child.textContent)).toEqual(['Remove'])
+    menu.children[0]!.dispatch('click', { stopPropagation() {}, target: menu.children[0]!, type: 'click' })
+    await settled()
+    Expect(calls).toEqual([['confirm', 'Remove View1 and delete @/studio/View1.tao?'], ['remove', 'sketch-1']])
+  } finally {
+    fixture.dispose()
+  }
+})
+
+Test('mounted header drag moves the frame live and commits one move at the end', async () => {
+  const fixture = mountFrames()
+  const { calls, dom, frame } = fixture
+  try {
+    const moving = frame()
+    const name = dom.find(moving, 'taoStudioSketchName', 'sketch-1')
+    name.dispatchTree(pointer('pointerdown', name, 3, 100, 10))
+    name.dispatchTree(pointer('pointermove', name, 3, 130, 20))
+    Expect(moving.style).toMatchObject({ left: '54px', top: '34px' })
+    Expect(moving.dataset['taoStudioSketchMoving']).toBe('true')
+    fixture.answers.move = Promise.resolve([{ ...testSketch(), x: 84, y: 54 }, renderCard()])
+    name.dispatchTree(pointer('pointermove', name, 3, 160, 40))
+    name.dispatchTree(pointer('pointerup', name, 3, 160, 40))
+    Expect(calls).toEqual([['move', { sketchId: 'sketch-1', x: 84, y: 54 }]])
+    // The frame stays where it was dropped while the catalog answers.
+    Expect(moving.style).toMatchObject({ left: '84px', top: '54px' })
+    await settled()
+    Expect(name.releasedPointers).toEqual([3])
+    Expect(frame().style).toMatchObject({ left: '84px', top: '54px' })
+    Expect(frame().dataset['taoStudioSketchMoving']).toBeUndefined()
+    Expect(frame().dataset['selected']).toBe('true')
+
+    // A refused move puts the frame back where the catalog says it is.
+    const failure = new Errors.UserInputError('stale catalog')
+    fixture.answers.move = Promise.reject(failure)
+    fixture.answers.move.catch(() => {})
+    const again = dom.find(frame(), 'taoStudioSketchName', 'sketch-1')
+    again.dispatchTree(pointer('pointerdown', again, 4, 100, 10))
+    again.dispatchTree(pointer('pointermove', again, 4, 300, 10))
+    again.dispatchTree(pointer('pointerup', again, 4, 300, 10))
+    await settled()
+    Expect(fixture.errors).toEqual([failure])
+    Expect(frame().style).toMatchObject({ left: '84px', top: '54px' })
+  } finally {
+    fixture.dispose()
   }
 })

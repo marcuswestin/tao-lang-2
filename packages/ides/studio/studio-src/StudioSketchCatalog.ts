@@ -104,6 +104,8 @@ export type StudioSketchCatalogAction =
     y?: number
   }>
   | Readonly<{ id: string; kind: 'delete-sketch' }>
+  /** move-sketch places a root rectangle at a new canvas origin; nothing else about it changes. */
+  | Readonly<{ id: string; kind: 'move-sketch'; x: number; y: number }>
   | Readonly<{
     afterRectId?: string
     kind: 'add-rect'
@@ -521,6 +523,7 @@ function applyAction(
       return { catalog: { ...catalog, sketches: catalog.sketches.filter(sketch => sketch.id !== removed.id) } }
     },
     'duplicate-rect': copied => editSketch(catalog, copied.sketchId, sketch => duplicateRect(sketch, copied)),
+    'move-sketch': moved => editSketch(catalog, moved.id, sketch => ({ ...sketch, x: moved.x, y: moved.y })),
     'refresh-snap-targets': refreshed =>
       editSketch(catalog, refreshed.sketchId, sketch => refreshSnapTargets(sketch, refreshed.targets)),
     'set-sketch-source': changed => editSketch(catalog, changed.sketchId, sketch => setSketchSource(sketch, changed)),
@@ -754,6 +757,13 @@ function validateAction(action: Record<string, unknown>): void {
   if (action['kind'] === 'delete-sketch') {
     requireOnlyKeys(action, ['id', 'kind'], 'delete-sketch action')
     requireNonEmptyString(action['id'], 'delete-sketch.id')
+    return
+  }
+  if (action['kind'] === 'move-sketch') {
+    requireOnlyKeys(action, ['id', 'kind', 'x', 'y'], 'move-sketch action')
+    requireNonEmptyString(action['id'], 'move-sketch.id')
+    requireNonNegativeFinite(action['x'], 'move-sketch.x')
+    requireNonNegativeFinite(action['y'], 'move-sketch.y')
     return
   }
   if (action['kind'] === 'add-rect') {

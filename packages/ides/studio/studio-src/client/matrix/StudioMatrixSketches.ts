@@ -9,6 +9,7 @@ import type {
 import type { StudioPreviewFeedDropMessage } from '../../StudioProtocol'
 import type { StudioSketchCatalogAction, StudioSketchCatalogSnapshot } from '../../StudioSketchCatalog'
 import { StudioApiClient } from '../StudioApiClient'
+import { StudioDialog } from '../StudioDialog'
 import type { StudioFeedDrop } from '../StudioFeedController'
 import type { StudioFeedExampleValues } from '../StudioFeedSamples'
 import {
@@ -306,8 +307,25 @@ function renderMatrixSketches(
         delete host.dataset['taoStudioSketchError']
         return result.catalog.sketches
       },
+      onMove: async move => {
+        const result = await applySketchAction(state, { id: move.sketchId, kind: 'move-sketch', x: move.x, y: move.y })
+        delete host.dataset['taoStudioSketchError']
+        return result.catalog.sketches
+      },
+      onDeleteRects: async (sketchId, rectIds) => {
+        let sketches = state.catalog.sketches
+        for (const rectId of rectIds) {
+          sketches = (await applySketchAction(state, { kind: 'delete-rect', rectId, sketchId })).catalog.sketches
+        }
+        delete host.dataset['taoStudioSketchError']
+        return sketches
+      },
+      confirmRemove: async question =>
+        await StudioDialog.confirm({ cancelLabel: 'Cancel', confirmLabel: 'OK', title: question }),
       onRemove: async sketchId => {
-        // A source-backed card leaves the catalog only; the code it showed stays as it is.
+        // A source-backed card leaves the catalog only; the code it showed stays as it is. A drawn
+        // definition takes its generated `@/studio` file with it, which the server refuses while
+        // another file still uses the view.
         const result = await applySketchAction(state, { id: sketchId, kind: 'delete-sketch' })
         delete host.dataset['taoStudioSketchError']
         return result.catalog.sketches

@@ -1,3 +1,4 @@
+import { Switch } from '@shared/core'
 import type { StudioSketch } from '../StudioSketchCatalog'
 
 /** What a badge click asks for: render a chosen view, or detach a render into a definition. */
@@ -6,18 +7,20 @@ export type StudioSketchConvertIntent = Readonly<{ sketchId: string; to: 'defini
 export type StudioSketchBadgeRole = 'definition' | 'render'
 
 /**
- * One line of a badge menu: a conversion to take, taking a source-backed card off the canvas (which
- * changes only the sketch catalog, never code), or a note saying why nothing else is offered.
+ * One line of a badge menu: a conversion to take, taking the rectangle off the canvas, or a note
+ * saying why nothing else is offered. Removing a source-backed card changes only the sketch catalog;
+ * removing a drawn definition also deletes the `@/studio` file Studio generated for it.
  */
 export type StudioSketchBadgeItem =
   | Readonly<{ intent: StudioSketchConvertIntent; kind: 'action'; label: string }>
   | Readonly<{ kind: 'note'; label: string }>
   | Readonly<{ kind: 'remove'; label: string; sketchId: string }>
 
-const removeLabel = 'Remove from canvas'
+const removeFromCanvasLabel = 'Remove from canvas'
+const removeLabel = 'Remove'
 
-/** At most one badge menu is open on the canvas; opening another closes it first. */
-let openBadgeMenuClose: (() => void) | undefined
+/** At most one sketch menu (a badge's or a right-click one) is open on the canvas; opening another closes it first. */
+let openSketchMenuClose: (() => void) | undefined
 
 /**
  * StudioSketchBadge marks every root rectangle on the Draw canvas as a definition (a view being
@@ -31,11 +34,20 @@ export const StudioSketchBadge = {
   sourceBacked(sketch: Pick<StudioSketch, 'definitionPath' | 'render'>): boolean {
     return sketch.render !== undefined || sketch.definitionPath !== undefined
   },
+  /**
+   * removalQuestion is what to ask before removing a rectangle, or nothing when removing it only
+   * forgets a catalog entry. A drawn definition takes its generated file with it, so it is asked.
+   */
+  removalQuestion(sketch: Pick<StudioSketch, 'definitionPath' | 'render' | 'view'>): string | undefined {
+    return StudioSketchBadge.sourceBacked(sketch)
+      ? undefined
+      : `Remove ${sketch.view} and delete @/studio/${sketch.view}.tao?`
+  },
   items(
     sketch: Pick<StudioSketch, 'broken' | 'definitionPath' | 'id' | 'rects' | 'render' | 'snapped' | 'view'>,
     renderableViews: readonly string[],
   ): readonly StudioSketchBadgeItem[] {
-    const remove: StudioSketchBadgeItem = { kind: 'remove', label: removeLabel, sketchId: sketch.id }
+    const remove: StudioSketchBadgeItem = { kind: 'remove', label: removeFromCanvasLabel, sketchId: sketch.id }
     if (sketch.render !== undefined && sketch.broken === true) {
       // Its scenario entry is gone, so there is nothing left to detach; the card can only leave.
       return [remove]
@@ -53,22 +65,11 @@ export const StudioSketchBadge = {
         remove,
       ]
     }
-    if (sketch.rects.length > 0 || sketch.snapped.length > 0) {
-      return [{ kind: 'note', label: 'Clear the drawn rectangles to render an existing view here instead.' }]
-    }
-    const views = renderableViews.filter(view => view !== sketch.view)
-    if (views.length === 0) {
-      return [{ kind: 'note', label: 'No other view has a scenario to start a render from yet.' }]
-    }
-    return views.map(view => ({
-      intent: { sketchId: sketch.id, to: 'render', view },
-      kind: 'action',
-      label: `Render ${view}`,
-    }))
+    return [...drawnItems(sketch, renderableViews), { kind: 'remove', label: removeLabel, sketchId: sketch.id }]
   },
   /**
    * element builds the badge button and its menu; picking a conversion hands its intent to `convert`,
-   * and "Remove from canvas" hands the sketch id to `remove`.
+   * and a remove item hands the sketch id to `remove`.
    */
   element(
     document: Document,
@@ -96,76 +97,49 @@ export const StudioSketchBadge = {
       : 'A view you are writing'
     button.setAttribute('aria-haspopup', 'menu')
     button.setAttribute('aria-expanded', 'false')
-    let menu: HTMLElement | undefined
-    /** Closes on a press anywhere outside the badge, or once the canvas re-rendered it away. */
-    const onDocumentPointerDown = (event: Event): void => {
-      if (!wrapper.isConnected || !wrapper.contains(event.target as Node | null)) {
-        close()
-      }
-    }
-    const onDocumentKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape' || !wrapper.isConnected) {
-        close()
-      }
-    }
-    const close = (): void => {
-      if (menu === undefined) {
-        return
-      }
-      menu.remove()
-      menu = undefined
-      button.setAttribute('aria-expanded', 'false')
-      document.removeEventListener('pointerdown', onDocumentPointerDown, true)
-      document.removeEventListener('keydown', onDocumentKeyDown, true)
-      if (openBadgeMenuClose === close) {
-        openBadgeMenuClose = undefined
-      }
-    }
+    let close: (() => void) | undefined
     for (const type of ['pointerdown', 'pointerup']) {
       wrapper.addEventListener(type, event => event.stopPropagation())
     }
     button.addEventListener('click', event => {
       event.stopPropagation()
-      if (menu !== undefined) {
+      if (close !== undefined) {
         close()
         return
       }
-      openBadgeMenuClose?.()
-      const opened = document.createElement('div')
-      opened.dataset['taoStudioSketchBadgeMenu'] = sketch.id
-      opened.setAttribute('role', 'menu')
-      for (const item of StudioSketchBadge.items(sketch, renderableViews())) {
-        if (item.kind === 'note') {
-          const note = document.createElement('p')
-          note.textContent = item.label
-          opened.append(note)
-          continue
-        }
-        const action = document.createElement('button')
-        action.type = 'button'
-        action.setAttribute('role', 'menuitem')
-        action.textContent = item.label
-        action.addEventListener('click', clicked => {
-          clicked.stopPropagation()
-          close()
-          if (item.kind === 'remove') {
-            remove(item.sketchId)
-          } else {
-            convert(item.intent)
-          }
-        })
-        opened.append(action)
-      }
-      wrapper.append(opened)
-      menu = opened
+      const menu = document.createElement('div')
+      menu.dataset['taoStudioSketchBadgeMenu'] = sketch.id
+      close = openSketchMenu(document, wrapper, wrapper, menu, () => {
+        close = undefined
+        button.setAttribute('aria-expanded', 'false')
+      })
+      appendItems(document, menu, StudioSketchBadge.items(sketch, renderableViews()), close, convert, remove)
       button.setAttribute('aria-expanded', 'true')
-      // Capture phase, so canvas handlers that stop propagation cannot keep the menu open.
-      document.addEventListener('pointerdown', onDocumentPointerDown, true)
-      document.addEventListener('keydown', onDocumentKeyDown, true)
-      openBadgeMenuClose = close
     })
     wrapper.append(button)
     return wrapper
+  },
+  /**
+   * contextMenu opens the right-click menu for one rectangle at `at`, in `frame`'s own coordinates.
+   * It offers what every rectangle can do from anywhere on it: leave the canvas.
+   */
+  contextMenu(
+    document: Document,
+    frame: HTMLElement,
+    sketch: Pick<StudioSketch, 'definitionPath' | 'id' | 'render'>,
+    at: Readonly<{ x: number; y: number }>,
+    remove: (sketchId: string) => void,
+  ): () => void {
+    const menu = document.createElement('div')
+    menu.dataset['taoStudioSketchContextMenu'] = sketch.id
+    menu.style.left = `${Math.round(at.x)}px`
+    menu.style.top = `${Math.round(at.y)}px`
+    for (const type of ['pointerdown', 'pointerup', 'contextmenu']) {
+      menu.addEventListener(type, event => event.stopPropagation())
+    }
+    const close = openSketchMenu(document, frame, menu, menu, () => {})
+    appendItems(document, menu, [{ kind: 'remove', label: removeLabel, sketchId: sketch.id }], close, () => {}, remove)
+    return close
   },
   /** card shows a rectangle whose source lives in code: a render's entry, or a detached definition. */
   card(document: Document, sketch: StudioSketch, badge: HTMLElement): HTMLElement {
@@ -185,6 +159,7 @@ export const StudioSketchBadge = {
     name.append(badge, label)
     const body = document.createElement('div')
     body.className = 'studio-sketch-card'
+    body.dataset['taoStudioSketchCardBody'] = sketch.id
     body.style.height = `${sketch.height}px`
     body.style.width = `${sketch.width}px`
     const summary = document.createElement('code')
@@ -208,3 +183,105 @@ export const StudioSketchBadge = {
     return frame
   },
 } as const
+
+/** The conversions a drawn definition offers before its own Remove item. */
+function drawnItems(
+  sketch: Pick<StudioSketch, 'id' | 'rects' | 'snapped' | 'view'>,
+  renderableViews: readonly string[],
+): readonly StudioSketchBadgeItem[] {
+  if (sketch.rects.length > 0 || sketch.snapped.length > 0) {
+    return [{ kind: 'note', label: 'Clear the drawn rectangles to render an existing view here instead.' }]
+  }
+  const views = renderableViews.filter(view => view !== sketch.view)
+  if (views.length === 0) {
+    return [{ kind: 'note', label: 'No other view has a scenario to start a render from yet.' }]
+  }
+  return views.map(view => ({
+    intent: { sketchId: sketch.id, to: 'render', view },
+    kind: 'action',
+    label: `Render ${view}`,
+  }))
+}
+
+/**
+ * openSketchMenu attaches `menu` to `parent` as the canvas's one open sketch menu and answers its
+ * close. It closes on a press outside `inside`, on Escape anywhere, once a re-render detached
+ * `inside`, or when another sketch menu opens.
+ */
+function openSketchMenu(
+  document: Document,
+  parent: HTMLElement,
+  inside: HTMLElement,
+  menu: HTMLElement,
+  onClosed: () => void,
+): () => void {
+  openSketchMenuClose?.()
+  let open = true
+  const onDocumentPointerDown = (event: Event): void => {
+    if (!inside.isConnected || !inside.contains(event.target as Node | null)) {
+      close()
+    }
+  }
+  const onDocumentKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape' || !inside.isConnected) {
+      close()
+    }
+  }
+  const close = (): void => {
+    if (!open) {
+      return
+    }
+    open = false
+    menu.remove()
+    document.removeEventListener('pointerdown', onDocumentPointerDown, true)
+    document.removeEventListener('keydown', onDocumentKeyDown, true)
+    if (openSketchMenuClose === close) {
+      openSketchMenuClose = undefined
+    }
+    onClosed()
+  }
+  menu.setAttribute('role', 'menu')
+  parent.append(menu)
+  // Capture phase, so canvas handlers that stop propagation cannot keep the menu open.
+  document.addEventListener('pointerdown', onDocumentPointerDown, true)
+  document.addEventListener('keydown', onDocumentKeyDown, true)
+  openSketchMenuClose = close
+  return close
+}
+
+function appendItems(
+  document: Document,
+  menu: HTMLElement,
+  items: readonly StudioSketchBadgeItem[],
+  close: () => void,
+  convert: (intent: StudioSketchConvertIntent) => void,
+  remove: (sketchId: string) => void,
+): void {
+  const menuItem = (label: string, choose: () => void): HTMLElement => {
+    const action = document.createElement('button')
+    action.type = 'button'
+    action.setAttribute('role', 'menuitem')
+    action.textContent = label
+    action.addEventListener('click', clicked => {
+      clicked.stopPropagation()
+      close()
+      choose()
+    })
+    return action
+  }
+  for (const item of items) {
+    menu.append(Switch.kind<StudioSketchBadgeItem, HTMLElement>(item, {
+      action: chosen => menuItem(chosen.label, () => convert(chosen.intent)),
+      note: chosen => {
+        const note = document.createElement('p')
+        note.textContent = chosen.label
+        return note
+      },
+      remove: chosen => {
+        const action = menuItem(chosen.label, () => remove(chosen.sketchId))
+        action.dataset['taoStudioSketchRemove'] = chosen.sketchId
+        return action
+      },
+    }))
+  }
+}
