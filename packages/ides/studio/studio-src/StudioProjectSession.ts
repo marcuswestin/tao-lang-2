@@ -32,7 +32,7 @@ import {
 } from './StudioCompileCoordinator'
 import type { StudioFeedBrowseResult, StudioFeedState } from './StudioFeedProtocol'
 import { StudioFeedSession } from './StudioFeedSession'
-import { StudioGeneratedSources } from './StudioGeneratedSources'
+import { studioGeneratedSourceHeader, StudioGeneratedSources } from './StudioGeneratedSources'
 import { type StudioCellRuntime, StudioMatrixSession } from './StudioMatrixSession'
 import type { StudioCellInstanceIdentity, StudioPreviewManifestV2 } from './StudioPreviewManifest'
 import {
@@ -1296,6 +1296,23 @@ export class StudioProjectSession {
     this.#files.note(path, sourceVersion)
   }
 
+  /**
+   * #writeSource writes one edited Tao source; a visual edit or undo in Studio's own `@/studio` tree goes
+   * through the ownership gate, which lifts read-only mode for that write alone.
+   */
+  async #writeSource(path: string, content: string): Promise<void> {
+    const generated = new StudioGeneratedSources(this.projectRoot)
+    if (!generated.owns(path)) {
+      await FS.writeText(path, content)
+      return
+    }
+    Assert.input(
+      content.startsWith(`${studioGeneratedSourceHeader}\n`),
+      `An edit to ${FS.relativePath(this.projectRoot, path)} must keep its Studio ownership header.`,
+    )
+    await generated.rewrite(path, content)
+  }
+
   async #restoreGeneratedContent(
     generated: StudioGeneratedSources,
     path: string,
@@ -1479,7 +1496,7 @@ export class StudioProjectSession {
 
       const { current, patch, path } = await this.#prepareSourceAction(envelope)
       const checkpoint = this.#ledger.prepareSourceAction(envelope, current)
-      await FS.writeText(path, patch.content)
+      await this.#writeSource(path, patch.content)
       this.#files.note(path, patch.sourceVersion)
       const compile = await this.#coordinator.noteStudioWrite({
         path,
@@ -1487,7 +1504,7 @@ export class StudioProjectSession {
         writeId: envelope.requestId,
       })
       if (envelope.action.kind === 'insert-captured-fixture' && compile.status === 'error') {
-        await FS.writeText(path, current.content)
+        await this.#writeSource(path, current.content)
         this.#files.note(path, current.sourceVersion)
         const rollback = await this.#coordinator.noteStudioWrite({
           path,
@@ -1653,7 +1670,7 @@ export class StudioProjectSession {
       requireSourceVersion(current, envelope.identity.sourceVersion)
       requireSourceVersion(current, checkpoint.afterSourceVersion)
       const path = await this.#files.resolveTaoFile(current.path)
-      await FS.writeText(path, checkpoint.beforeContent)
+      await this.#writeSource(path, checkpoint.beforeContent)
       this.#files.note(path, checkpoint.beforeSourceVersion)
       const compile = await this.#coordinator.noteStudioWrite({
         path,
