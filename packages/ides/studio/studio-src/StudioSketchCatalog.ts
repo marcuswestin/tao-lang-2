@@ -57,8 +57,13 @@ export type StudioSketchRenderEntry = Readonly<{
  * definition drawn on the canvas, `view` declared in `@/studio/<view>.tao`. With `render` it is a
  * scenario entry rendering another view; with `definitionPath` it is a definition that was detached
  * from a render into the rendered view's own hand-written file.
+ *
+ * `broken` marks a render whose scenario entry is gone from the user's source: its file was removed,
+ * or a compile of that file's current version lists no such entry. The session sets and clears it as
+ * it reconciles the catalog against the compiled preview; the card can then only be removed.
  */
 export type StudioSketch = Readonly<{
+  broken?: true
   definitionPath?: string
   height: number
   id: string
@@ -328,14 +333,40 @@ async function nextAvailableViewNumber(
   catalog: StudioSketchCatalogSnapshot,
 ): Promise<number> {
   let next = catalog.nextViewNumber
-  const allocated = new Set(catalog.sketches.map(sketch => sketch.view))
-  while (
-    allocated.has(`View${next}`)
-    || await FS.isFile(FS.resolvePath(`@/studio/View${next}.tao`, projectRoot))
-  ) {
+  const taken = await studioViewNamesInUse(projectRoot, catalog)
+  while (taken.has(`View${next}`)) {
     next += 1
   }
   return next
+}
+
+/**
+ * studioViewNamesInUse is every `ViewN` a new canvas view must not take: each one the catalog has
+ * allocated, including a render sketch whose placeholder file is gone, and each one a file in
+ * `@/studio` names or declares, such as a view made with ⌘G inside a drawn view's file.
+ */
+export async function studioViewNamesInUse(
+  projectRoot: string,
+  catalog: StudioSketchCatalogSnapshot,
+): Promise<Set<string>> {
+  const taken = new Set(catalog.sketches.map(sketch => sketch.view))
+  const directory = FS.resolvePath('@/studio', projectRoot)
+  if (!await FS.isDirectory(directory)) {
+    return taken
+  }
+  for (const entry of await FS.listDir(directory)) {
+    if (!entry.endsWith('.tao')) {
+      continue
+    }
+    taken.add(entry.slice(0, -'.tao'.length))
+    const path = FS.resolvePath(entry, directory)
+    if (await FS.isFile(path)) {
+      for (const match of (await FS.readText(path)).matchAll(/\bview\s+(View\d+)\b/g)) {
+        taken.add(match[1]!)
+      }
+    }
+  }
+  return taken
 }
 
 /**
@@ -607,7 +638,7 @@ function refreshSnapTargets(sketch: StudioSketch, targets: readonly StudioSketch
 
 /** setSketchSource switches a root rectangle between definition and render; absent fields are cleared. */
 function setSketchSource(sketch: StudioSketch, action: StudioSketchAction<'set-sketch-source'>): StudioSketch {
-  const { definitionPath: _definitionPath, render: _render, ...rest } = sketch
+  const { broken: _broken, definitionPath: _definitionPath, render: _render, ...rest } = sketch
   return {
     ...rest,
     ...(action.definitionPath === undefined ? {} : { definitionPath: action.definitionPath }),
@@ -909,6 +940,7 @@ function validateSketch(value: unknown, index: number): StudioSketch {
   requireOnlyKeys(
     value,
     [
+      'broken',
       'definitionPath',
       'height',
       'id',
@@ -945,7 +977,12 @@ function validateSketch(value: unknown, index: number): StudioSketch {
     source.render === undefined || memberIds.length === 0,
     `Studio render sketch ${fields.id} cannot hold drawn rectangles; it renders an existing view.`,
   )
+  Assert.input(
+    value['broken'] === undefined || (value['broken'] === true && source.render !== undefined),
+    `Studio sketch ${fields.id} broken must be true, and only a render can be broken.`,
+  )
   return {
+    ...(value['broken'] === true ? { broken: true as const } : {}),
     ...source,
     height: fields.height,
     id: fields.id,

@@ -107,66 +107,96 @@ function overlapRatio(left: Rect, right: Rect): number {
 }
 
 export type StudioSelectionCarryDeps = Readonly<{
+  /** The person is typing in the code editor, where a carried selection must never move their cursor. */
+  editorTyping: () => boolean
   openFile: (path: string) => Promise<StudioSourceEditor | undefined>
   previews: readonly StudioPreviewConnection[]
   project: string
   select: (selection: StudioInspectorSelection) => void
 }>
 
+export type StudioSelectionCarryControls = Readonly<{
+  forget: () => void
+  restore: () => Promise<void>
+  track: (
+    selection: StudioInspectorSelection,
+    action: StudioCanonicalSourceAction,
+    applied: Promise<boolean>,
+  ) => Promise<void>
+}>
+
 /**
  * Keeps an edited element selected across its recompile, so the HUD and inspector stay on it while
  * its gap, padding or direction is tuned one step at a time. Any other selection supersedes it.
  */
-export function createStudioSelectionCarry(deps: StudioSelectionCarryDeps): Readonly<{
-  forget: () => void
-  remember: (selection: StudioInspectorSelection, action: StudioCanonicalSourceAction) => void
-  restore: () => Promise<void>
-}> {
+export function createStudioSelectionCarry(deps: StudioSelectionCarryDeps): StudioSelectionCarryControls {
   let pending: StudioSelectionCarry | undefined
+  /** Bumped by every track and forget, so an edit that lands after being superseded carries nothing. */
+  let generation = 0
+  const forget = (): void => {
+    generation += 1
+    pending = undefined
+  }
+  const restore = async (): Promise<void> => {
+    const carry = pending
+    if (carry === undefined) {
+      return
+    }
+    if (Date.now() > carry.expires || deps.editorTyping()) {
+      pending = undefined
+      return
+    }
+    const preview = deps.previews.find(item => item.previewInstanceId === carry.previewInstanceId)
+    const layout = preview?.layoutMeasurements
+    const successor = layout === undefined ? undefined : studioCarriedMeasurement(carry, layout)
+    const range = successor === undefined ? undefined : renderRange(successor.renderId)
+    if (layout === undefined || successor === undefined || range === undefined) {
+      return
+    }
+    pending = undefined
+    const restoring = generation
+    const opened = await deps.openFile(projectRelativePath(deps.project, carry.path) ?? carry.path)
+    if (
+      opened === undefined || range.end > opened.editor.state.doc.length || restoring !== generation
+      || deps.editorTyping()
+    ) {
+      return
+    }
+    // The editor follows without taking focus, so ⌘Z and the HUD keep working on the canvas.
+    opened.editor.dispatch({
+      effects: EditorView.scrollIntoView(range.start, { y: 'center' }),
+      selection: { anchor: range.start, head: range.end },
+    })
+    deps.select({
+      identity: {
+        ...carry.selection.identity,
+        ...layout.identity,
+        path: carry.path,
+        sourceVersion: opened.file.sourceVersion,
+      },
+      range: { end: range.end, start: range.start },
+      renderId: successor.renderId,
+    })
+  }
   return {
-    forget() {
-      pending = undefined
-    },
-    remember(selection, action) {
+    forget,
+    restore,
+    /**
+     * Measures the element before its edit is sent, then carries the selection only if the edit lands:
+     * a refused or failed edit, or anything that supersedes it meanwhile, leaves nothing to restore.
+     */
+    async track(selection, action, applied) {
+      forget()
+      const tracking = generation
       const preview = deps.previews.find(item => item.previewInstanceId === selection.identity.previewInstanceId)
-      pending = studioSelectionCarry(selection, action, preview?.layoutMeasurements, Date.now())
-    },
-    async restore() {
-      const carry = pending
-      if (carry === undefined) {
+      const carry = studioSelectionCarry(selection, action, preview?.layoutMeasurements, Date.now())
+      const landed = await applied.then(ok => ok, () => false)
+      if (!landed || carry === undefined || tracking !== generation) {
         return
       }
-      if (Date.now() > carry.expires) {
-        pending = undefined
-        return
-      }
-      const preview = deps.previews.find(item => item.previewInstanceId === carry.previewInstanceId)
-      const layout = preview?.layoutMeasurements
-      const successor = layout === undefined ? undefined : studioCarriedMeasurement(carry, layout)
-      const range = successor === undefined ? undefined : renderRange(successor.renderId)
-      if (layout === undefined || successor === undefined || range === undefined) {
-        return
-      }
-      pending = undefined
-      const opened = await deps.openFile(projectRelativePath(deps.project, carry.path) ?? carry.path)
-      if (opened === undefined || range.end > opened.editor.state.doc.length) {
-        return
-      }
-      // The editor follows without taking focus, so ⌘Z and the HUD keep working on the canvas.
-      opened.editor.dispatch({
-        effects: EditorView.scrollIntoView(range.start, { y: 'center' }),
-        selection: { anchor: range.start, head: range.end },
-      })
-      deps.select({
-        identity: {
-          ...carry.selection.identity,
-          ...layout.identity,
-          path: carry.path,
-          sourceVersion: opened.file.sourceVersion,
-        },
-        range: { end: range.end, start: range.start },
-        renderId: successor.renderId,
-      })
+      pending = carry
+      // The recompiled layout may already have arrived while the edit was answered.
+      await restore()
     },
   }
 }

@@ -1,4 +1,5 @@
 import type { StudioCanonicalSourceAction } from '../../StudioProtocol'
+import { studioShortcutLetter } from '../StudioEditor'
 import { sourceActionLabel } from '../StudioVisualEditing'
 
 /** One committed visual edit, newest first in the log; only the newest in the open file can be walked back. */
@@ -52,10 +53,10 @@ const editPhrases: Readonly<Record<string, (action: StudioCanonicalSourceAction)
 
 /** ⌘Z without Shift; ⇧⌘Z stays redo wherever redo exists. */
 export function isStudioVisualUndoShortcut(
-  event: Pick<KeyboardEvent, 'altKey' | 'code' | 'ctrlKey' | 'isComposing' | 'metaKey' | 'shiftKey'>,
+  event: Pick<KeyboardEvent, 'altKey' | 'code' | 'ctrlKey' | 'isComposing' | 'key' | 'metaKey' | 'shiftKey'>,
 ): boolean {
   return !event.isComposing && !event.shiftKey && !event.altKey && (event.metaKey || event.ctrlKey)
-    && event.code === 'KeyZ'
+    && studioShortcutLetter(event) === 'z'
 }
 
 /** A short age: "now", then minutes, hours, and days. */
@@ -84,6 +85,8 @@ export function mountStudioEditLog(deps: StudioEditLogDeps): Readonly<{ dispose:
   root.setAttribute('aria-label', 'Edits')
   root.hidden = true
   deps.host.append(root)
+  /** What the log last drew: its rows and their ages as shown, so a publish that changes neither is free. */
+  let renderedKey: string | undefined
 
   const render = (): void => {
     // Mounting the preview matrix replaces the host's children, so the log re-attaches when it renders.
@@ -92,6 +95,15 @@ export function mountStudioEditLog(deps: StudioEditLogDeps): Readonly<{ dispose:
     }
     const edits = deps.edits()
     root.hidden = edits.length === 0
+    const moment = now()
+    const shown = edits.slice(0, visibleEdits)
+    const key = JSON.stringify(
+      shown.map(edit => [edit.id, edit.label, edit.path, edit.undoable, studioEditAge(edit.at, moment)]),
+    )
+    if (key === renderedKey) {
+      return
+    }
+    renderedKey = key
     const header = document.createElement('header')
     const title = document.createElement('strong')
     title.textContent = 'Edits'
@@ -99,8 +111,7 @@ export function mountStudioEditLog(deps: StudioEditLogDeps): Readonly<{ dispose:
     hint.textContent = '⌘Z walks back'
     header.append(title, hint)
     const list = document.createElement('ol')
-    const moment = now()
-    for (const edit of edits.slice(0, visibleEdits)) {
+    for (const edit of shown) {
       const item = document.createElement('li')
       item.dataset['taoStudioEdit'] = edit.id
       const label = document.createElement('span')

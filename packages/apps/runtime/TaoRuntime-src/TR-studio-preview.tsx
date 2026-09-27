@@ -1096,9 +1096,10 @@ export function mountStudioPreviewBridge(
     ) {
       return
     }
-    const command = event.code === 'KeyZ' && event.altKey !== true
+    const letter = shortcutLetter(event)
+    const command = letter === 'z' && event.altKey !== true
       ? 'undo'
-      : event.code === 'KeyG' && selectedTarget !== undefined
+      : letter === 'g' && selectedTarget !== undefined
       ? event.altKey === true ? 'group' : 'make-view'
       : undefined
     if (command !== undefined) {
@@ -1361,6 +1362,12 @@ export function mountStudioPreviewBridge(
       sourceTarget = selection.range === undefined
         ? undefined
         : sourceHighlightTarget(host, selection.path, selection.range)
+      redrawOverlay()
+    },
+    // A plain pick in another cell started a new selection there, so this cell stops outlining its own.
+    'clear-selection': () => {
+      selectedTarget = undefined
+      selectedGroup = []
       redrawOverlay()
     },
     'set-canvas-gestures': message => {
@@ -1899,6 +1906,18 @@ function postToStudio(
     ...payload,
     type,
   }, config.parentOrigin)
+}
+
+/**
+ * The letter a shortcut names, lowercased. `key` follows the person's keyboard layout; ⌥ turns it into
+ * a symbol on macOS (⌥G is "©"), so only then is the physical key read instead. Mirrors
+ * `studioShortcutLetter` in Studio's client (runtime imports nothing from Studio); keep the two in step.
+ */
+function shortcutLetter(event: Pick<StudioPreviewPointerEvent, 'altKey' | 'code' | 'key'>): string | undefined {
+  if (event.altKey === true) {
+    return event.code?.startsWith('Key') === true ? event.code.slice(3).toLowerCase() : undefined
+  }
+  return event.key?.toLowerCase()
 }
 
 /**

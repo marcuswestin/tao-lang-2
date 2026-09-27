@@ -1,6 +1,6 @@
 import { AST } from '@parser'
 import { Errors, FS } from '@shared'
-import { applySourceEdits } from './studio-source-text'
+import { applySourceEdits, type SourceEdit } from './studio-source-text'
 
 /** ensureNamedImport adds one declaration to the file's `use … from <importPath>`, creating the statement when missing. */
 export function ensureNamedImport(
@@ -11,14 +11,8 @@ export function ensureNamedImport(
 ): string {
   const use = file.statements.filter(AST.isUseStatement).find(statement => statement.importPath === importPath)
   if (use?.$cstNode !== undefined) {
-    const imported = use.importedDeclarations.map(reference => reference.$refText)
-    return imported.includes(declarationName)
-      ? source
-      : applySourceEdits(source, [{
-        end: use.$cstNode.end,
-        replacement: `use ${[...new Set([...imported, declarationName])].toSorted().join(', ')} from ${importPath}`,
-        start: use.$cstNode.offset,
-      }])
+    const edit = namedImportEdit(use, declarationName)
+    return edit === undefined ? source : applySourceEdits(source, [edit])
   }
   const offset = file.statements[0]?.$cstNode?.offset ?? 0
   return applySourceEdits(source, [{
@@ -26,6 +20,21 @@ export function ensureNamedImport(
     replacement: `use ${declarationName} from ${importPath}\n\n`,
     start: offset,
   }])
+}
+
+/** namedImportEdit adds one name to an existing `use` statement in canonical order, or nothing when it already imports it. */
+export function namedImportEdit(use: AST.UseStatement, declarationName: string): SourceEdit | undefined {
+  const imported = use.importedDeclarations.map(reference => reference.$refText)
+  if (use.$cstNode === undefined || imported.includes(declarationName)) {
+    return undefined
+  }
+  return {
+    end: use.$cstNode.end,
+    replacement: `use ${[...new Set([...imported, declarationName])].toSorted().join(', ')}${
+      use.importPath ? ` from ${use.importPath}` : ''
+    }`,
+    start: use.$cstNode.offset,
+  }
 }
 
 /** ensureUiNamesImported adds the named `@tao/ui` declarations to the file's import when missing. */

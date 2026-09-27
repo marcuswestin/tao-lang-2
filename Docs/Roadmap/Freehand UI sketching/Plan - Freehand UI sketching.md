@@ -47,7 +47,7 @@ FS-D1–FS-D20 or reordering the FS-D20 sequence.
 | 5  | Slice 3 — Feed                     | Bind a sketch to real, generated, live, or library data      | Slice 2                                     | XL   |
 | 6  | L2 — executable dialect            | WordFlower yes/no parameters and postfix conditions          | Slice 3                                     | XL   |
 | 7  | Slice 4 — Variants                 | Duplicate scenario cells and edit one argument state         | L2                                          | L    |
-| 8  | L3 — `Layer` (landed 2026-09-27)   | Studio's Draw canvas renders free rectangles as layers       | Landed ahead of Slice 4 by Developer choice | S    |
+| 8  | L3 — `Layer` (landed 2026-09-27)   | Studio's Draw canvas is to render free rectangles as layers  | Landed ahead of Slice 4 by Developer choice | S    |
 | 9  | Slice 5 — Tao-rendered canvas      | Replace the matrix overlay with `Layer` views                | L3                                          | M    |
 | 10 | Slice 6 — Focus-in                 | Open an occurrence's owning view with provenance arguments   | Interaction-outline provenance              | L    |
 | 11 | Slice 7 — Companion                | Pencil-mode sketching in one paired native cell              | Slice 5; companion app shell                | XL   |
@@ -348,10 +348,11 @@ container and `at x y` offset this slice first proposed.
 **Goal.** Let Studio's own Tao client render Studio-owned rectangle rows without making absolute
 positioning a clause every view accepts.
 
-**Dependencies.** Slice 4. **Size.** S.
+**Dependencies.** None; it landed ahead of Slice 4 by Developer choice. **Size.** S.
 
-**Forcing feature.** Studio's Draw canvas renders free rectangles as `Layer` views inside the
-canvas frame.
+**Forcing feature.** Studio's Draw canvas will render free rectangles as `Layer` views inside the
+canvas frame; that is Slice 5, so until it lands the canvas still draws them in its TypeScript
+overlay.
 
 **Introduces.** Implemented 2026-09-27: `@tao/ui` `Layer` with optional `InsetTop`, `InsetRight`,
 `InsetBottom`, and `InsetLeft`, lowered to React Native absolute positioning inside the injected

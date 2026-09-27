@@ -567,6 +567,8 @@ kbd {
 [data-tao-studio-sketch-badge-menu] p { color: var(--studio-text-dim); font-weight: 400; margin: 0; padding: 5px 8px; }
 .studio-sketch-card { border: 1px dashed var(--studio-info); border-radius: 8px; box-sizing: border-box; color: var(--studio-text); cursor: default; display: grid; gap: 6px; align-content: start; overflow: hidden; padding: 10px; }
 [data-tao-studio-sketch-card="definition"] .studio-sketch-card { border-color: var(--studio-accent); }
+[data-tao-studio-sketch-broken] .studio-sketch-card { border-color: var(--studio-stroke-strong); color: var(--studio-text-dim); opacity: .7; }
+[data-tao-studio-sketch-badge][data-broken] { background: none; border-color: var(--studio-stroke-strong); color: var(--studio-text-dim); }
 .studio-sketch-card code { font-family: var(--studio-mono); font-size: 11px; }
 .studio-sketch-card small { color: var(--studio-text-dim); font-size: 11px; line-height: 1.45; }
 [data-tao-studio-sketch-rect] { background: #dce6f5; border: 1px solid #7693bc; box-sizing: border-box; cursor: move; overflow: visible; }

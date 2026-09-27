@@ -61,7 +61,7 @@ export async function connectPreviews(
       handshake.sketchCatalog,
       StudioMatrixLayout.sketchSourceVersions(manifest),
     )
-    StudioMatrixSketches.renderable(parent, StudioMatrixLayout.renderableViews(manifest))
+    StudioMatrixSketches.renderable(parent, StudioMatrixLayout.renderableViews(manifest, handshake.identity.project))
     return connections
   }
   const wholeApp = await connectWholeAppPreview(parent, previewUrl, origin, handshake, signal)
@@ -77,7 +77,7 @@ export async function connectPreviews(
       : StudioMatrixLayout.sketchSourceVersions(handshake.previewManifest),
   )
   if (manifest !== undefined) {
-    StudioMatrixSketches.renderable(parent, StudioMatrixLayout.renderableViews(manifest))
+    StudioMatrixSketches.renderable(parent, StudioMatrixLayout.renderableViews(manifest, handshake.identity.project))
   }
   return [wholeApp]
 }
@@ -266,7 +266,7 @@ export async function refreshCellPreviews(
   }
   renderConnectionGrid(parent, manifest, nextConnections, previewUrl)
   StudioMatrixSketches.rerender(parent, StudioMatrixLayout.sketchSourceVersions(manifest))
-  StudioMatrixSketches.renderable(parent, StudioMatrixLayout.renderableViews(manifest))
+  StudioMatrixSketches.renderable(parent, StudioMatrixLayout.renderableViews(manifest, handshake.identity.project))
 
   await Promise.all(nextConnections.map(async preview => {
     const cell = manifest.cells.find(candidate => candidate.cellId === preview.cell!.cellId)!

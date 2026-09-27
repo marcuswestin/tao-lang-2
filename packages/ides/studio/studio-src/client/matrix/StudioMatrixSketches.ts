@@ -171,6 +171,21 @@ export const StudioMatrixSketches = {
       return result
     })
   },
+  /**
+   * refresh re-reads the catalog after a preview manifest update: the server marks a render card
+   * broken once its scenario entry leaves the manifest, and only a fresh read carries that mark.
+   * Runs in the mutation lane, so it never lands between a catalog edit and its answer.
+   */
+  async refresh(
+    parent: HTMLElement,
+    project: string,
+    read: () => Promise<StudioSketchCatalogSnapshot> = StudioApiClient.sketches,
+    render: typeof renderMatrixSketches = renderMatrixSketches,
+  ): Promise<void> {
+    const state = mountedSketches.get(parent)
+    const catalog = state === undefined ? await read() : await state.mutationLane.run(read)
+    render(parent, state?.project ?? project, catalog)
+  },
   /** rerender re-lays the boards already mounted under `parent` after the grid reconciled its hosts. */
   rerender(parent: HTMLElement, sourceVersions?: Readonly<Record<string, string>>): void {
     const state = mountedSketches.get(parent)
@@ -288,6 +303,12 @@ function renderMatrixSketches(
       onFlowAction: async request => await applySketchFlowAction(state, request),
       onRectChange: async change => {
         const result = await applySketchAction(state, sketchAction(change))
+        delete host.dataset['taoStudioSketchError']
+        return result.catalog.sketches
+      },
+      onRemove: async sketchId => {
+        // A source-backed card leaves the catalog only; the code it showed stays as it is.
+        const result = await applySketchAction(state, { id: sketchId, kind: 'delete-sketch' })
         delete host.dataset['taoStudioSketchError']
         return result.catalog.sketches
       },

@@ -10,6 +10,7 @@ import {
   currentSourceIdentity,
   handlePreviewMessage,
   postCanvasGestureOwnership,
+  postClearSelection,
   postEditorSelection,
   type StudioActivePreview,
   type StudioCanvasViewportControls,
@@ -148,6 +149,8 @@ export function forwardPreviewCanvasGesture(
 export type StudioPreviewMessagesDeps =
   & StudioPreviewWiringDeps
   & Readonly<{
+    /** Design and Draw keep the keyboard on the canvas, so a preview pick follows in the editor unfocused. */
+    canvasOwnsInput?: () => boolean
     /** Canvas mode follows the selection, so it is re-evaluated after every inspect. */
     onInspected: () => void
   }>
@@ -174,8 +177,16 @@ export function studioPreviewMessageListener(deps: StudioPreviewMessagesDeps): (
         drawer.loadDataIfVisible()
         connection.changed?.()
       },
+      editorTakesFocus: () => deps.canvasOwnsInput?.() !== true,
       inspect(selection, additive) {
-        inspection.select(selection, additive)
+        if (!inspection.select(selection, additive)) {
+          // A new selection lives in this cell alone; the others stop outlining their old picks.
+          for (const other of previews) {
+            if (other !== connection) {
+              postClearSelection(other, handshake)
+            }
+          }
+        }
         const selected = inspection.selected() ?? selection
         deps.publish()
         deps.onInspected()

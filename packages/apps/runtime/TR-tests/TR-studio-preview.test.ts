@@ -478,7 +478,7 @@ Describe('Studio preview runtime bridge', () => {
     const fake = previewHost([first, second])
     const cleanup = mountStudioPreviewBridge(config, fake.host)
     const posted = (type: string) => fake.messages.filter(post => (post.message as { type?: string }).type === type)
-    const selectG = (modifiers: Record<string, boolean>) =>
+    const selectG = (modifiers: Record<string, boolean | string>) =>
       fake.dispatchDocument('keydown', {
         code: 'KeyG',
         key: 'g',
@@ -499,7 +499,8 @@ Describe('Studio preview runtime bridge', () => {
       { 'data-tao-studio-overlay': 'selection-group' },
     ])
     selectG({})
-    selectG({ altKey: true })
+    // ⌥ types a symbol, so only then does the physical key name the letter.
+    selectG({ altKey: true, key: '©' })
     fake.dispatchDocument('keydown', { code: 'KeyZ', key: 'z', metaKey: true, preventDefault: () => {} })
     fake.dispatchDocument('keydown', {
       code: 'KeyZ',
@@ -508,11 +509,48 @@ Describe('Studio preview runtime bridge', () => {
       preventDefault: () => {},
       shiftKey: true,
     })
+    // Otherwise the letter follows the keyboard layout: Dvorak's physical KeyG types "i".
+    selectG({ key: 'i' })
+    fake.dispatchDocument('keydown', { code: 'KeyY', key: 'z', metaKey: true, preventDefault: () => {} })
     Expect(posted('preview-canvas-shortcut').map(post => (post.message as { command: string }).command))
-      .toEqual(['make-view', 'group', 'undo'])
+      .toEqual(['make-view', 'group', 'undo', 'undo'])
     fake.dispatchDocument('click', { shiftKey: true, target: second })
     Expect(outlines()).toEqual([{ 'data-tao-studio-overlay': 'selection' }])
     fake.dispatchDocument('click', { shiftKey: true, target: first })
+    Expect(outlines()).toEqual([{ 'data-tao-studio-overlay': 'selection' }])
+    cleanup()
+  })
+
+  Test('drops its selection outlines when Studio says a plain pick started a selection in another cell', () => {
+    const first = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
+    const second = renderElement('/project/Main.tao', 30, 40, { height: 20, left: 30, top: 0, width: 20 })
+    const fake = previewHost([first, second])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    // The single-element outline is hidden rather than removed once nothing is selected.
+    const outlines = () =>
+      fake.overlays
+        .filter(overlay => !overlay.removed && overlay.style['display'] !== 'none')
+        .map(overlay => overlay.attributes)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    fake.dispatchDocument('click', { target: first })
+    fake.dispatchDocument('click', { shiftKey: true, target: second })
+    Expect(outlines()).toHaveLength(2)
+
+    // A clear for some other preview instance is not this cell's.
+    const clear = clearSelectionMessage(fake.parent)
+    fake.dispatchWindow('message', {
+      ...clear,
+      data: { ...clear.data, identity: { ...clear.data['identity'] as object, previewInstanceId: 'other' } },
+    })
+    Expect(outlines()).toHaveLength(2)
+    fake.dispatchWindow('message', clear)
+    Expect(outlines()).toEqual([])
+
+    // With nothing selected, ⌘G has nothing to act on; the next shift-click starts afresh.
+    fake.dispatchDocument('keydown', { code: 'KeyG', key: 'g', metaKey: true, preventDefault: () => {} })
+    Expect(fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-canvas-shortcut'))
+      .toHaveLength(0)
+    fake.dispatchDocument('click', { shiftKey: true, target: second })
     Expect(outlines()).toEqual([{ 'data-tao-studio-overlay': 'selection' }])
     cleanup()
   })
@@ -1749,6 +1787,27 @@ function interactionModeMessage(mode: 'edit' | 'run', parent: StudioPreviewHost[
       mode,
       protocolVersion: 1,
       type: 'set-interaction-mode',
+    },
+    origin: config.parentOrigin,
+    source: parent,
+  }
+}
+
+function clearSelectionMessage(parent: StudioPreviewHost['parent']): {
+  data: Record<string, unknown>
+  origin: string
+  source: StudioPreviewHost['parent']
+} {
+  return {
+    data: {
+      channel: 'tao-studio',
+      identity: {
+        appName: config.appName,
+        previewInstanceId: config.previewInstanceId,
+        project: config.project,
+      },
+      protocolVersion: 1,
+      type: 'clear-selection',
     },
     origin: config.parentOrigin,
     source: parent,

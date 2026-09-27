@@ -414,32 +414,52 @@ view that is not a Tao element name. Only the badge sets them; a `set-sketch-sou
 through `POST /api/sketches/action` is refused.
 
 The badge switches through `POST /api/sketches/convert` with the expected catalog revision and a
-request ID, as one serialized source-and-catalog transaction. Definition → render is offered only for
-an empty drawn rectangle whose generated file is still exactly its placeholder, and lists every view
-that some scenario already renders. It appends a `scenario "drawnN"` entry beside the first scenario
-that renders the chosen view, in that scenario's group, carrying its render clause and the drawn size
-as its `device phone W x H`, and removes the placeholder `@/studio/ViewN.tao`. Render →
-definition detaches: it copies the rendered view beside the original under the rectangle's own
-`ViewN` name and points the entry's `render` at the copy, so the canvas rectangle keeps showing the
-same tree while becoming an independent view. If the result fails to compile, every file and the
-catalog return to their prior contents. A source-backed rectangle shows its entry or declaration as a
-card instead of a drawing board; editing what it renders happens in that view's own source.
+request ID, as one serialized source-and-catalog transaction; a repeated request ID replays its
+result only while the catalog is still at the revision that switch left. Definition → render lists
+every authored view that some scenario already renders, never an `@/studio` view, and the server
+refuses it unless the rectangle is empty and its generated file is still exactly its placeholder,
+and refuses a view name that more than one scenario subject answers to. It appends a `scenario "drawnN"` entry at the end of the group
+of the first scenario that renders the chosen view, carrying the drawn size as its
+`device phone W x H` followed by that scenario's own fixture, prepare, and render clauses, and
+removes the placeholder `@/studio/ViewN.tao`. Render → definition detaches: it copies the rendered
+view beside the original under the rectangle's own `ViewN` name and points the entry's `render` at
+the copy, writing a `render` clause when the entry inherited its view from the group and adding the
+copy to the `use` statement that brought the original in, so the canvas rectangle keeps showing the
+same tree while becoming an independent view. Each write checks that the file still holds the text
+the patch was built from. If the result fails to compile, the catalog and every file the switch
+wrote return to their prior contents; a file changed underneath the switch is kept and named in the
+refusal. A source-backed rectangle shows its entry or declaration as a card instead of a drawing
+board; editing what it renders happens in that view's own source.
+
+When a render sketch's scenario entry disappears — its file is gone, or a compile of the file's
+current version lists no entry of that group, name, and view — the catalog marks the sketch
+`broken`, and its card offers only Remove from canvas. Any source-backed sketch can be removed that
+way; removal changes the catalog and leaves the source alone. Renaming a file updates the `render`
+path and `definitionPath` that name it.
 
 #### Selection, grouping, and the edit log
 
-In Design and Draw, Shift-click adds elements from one file to the selection; the preview outlines
-each pick, and Studio's inspection keeps the group by the same toggle rule. ⌘G turns the group into a
+In Design, Shift-click adds elements from one file to the selection; the preview outlines each pick, and Studio's inspection keeps the group by the same toggle rule. ⌘G turns the group into a
 new view and ⌥⌘G wraps it in place, in a `Row` when the elements sit across and a `Col` otherwise.
 The keys work inside the preview and in Studio outside a text field, and the inspector's Make view
-acts on the whole group. A selection HUD floats beside the selected element with direction, alignment,
+acts on the whole group. A view made from several siblings is rooted in their parent's direction, a
+`Row` or `Stack` when that is what holds them and a `Col` otherwise, and takes as parameters the
+values the selection reads, including a guard's error message. Make view refuses a selection that
+places `@@content` or a render slot, reads a query, state, action, or command, or would name the view
+after an entity or one of its own parameters. A selection HUD floats beside the selected element with direction, alignment,
 gap, padding, and sizing one edit away, and with several elements selected offers Make view and Group.
 The edited element stays selected across its recompile, found again by where it starts or where it
-sits.
+sits. Draw hides the preview cells, so selection, the HUD, and the grouping keys belong to Design; a
+view drawn on the canvas is grouped there once it renders.
 
 An edit log in the canvas corner lists this session's visual edits newest first, named the way each
-was made ("Gap 16", "Make view Card") with its age. ⌘Z outside the code editor, or the newest row's
-Undo, walks it back; the preview forwards ⌘Z so it works with focus in the canvas. Visual edits,
-their rollback, and their undo reach `@/studio` files through the generated-source gate, which lifts
+was made ("Gap 16", "Wrap in Row", or "Make view", followed by the name when one was typed) with its
+age. In Design and Draw, ⌘Z outside the code editor, or the Undo on the open file's newest row, walks
+back the newest edit in the open file; the preview forwards ⌘Z so it works with focus in the canvas.
+Undo restores one file under its version check, so an edit stays undoable while it is the latest for
+its file, whatever was edited elsewhere since. Saving a file from the code editor, or an undo refused
+because the file changed underneath it, retires that file's rows. Visual edits, their rollback, and
+their undo reach `@/studio` files through the generated-source gate, which lifts
 owner-write for that write alone and keeps the ownership header.
 
 ### Feed source contracts

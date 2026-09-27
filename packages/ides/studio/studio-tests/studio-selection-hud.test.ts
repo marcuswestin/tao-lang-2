@@ -1,15 +1,20 @@
+import { Errors } from '@shared/core'
 import { Describe, Expect, Test } from '@shared/test'
 import type { StudioLayoutEntry, StudioRenderInspection } from '@source-actions'
 import {
+  createStudioSelectionCarry,
   renderRange,
   studioCarriedMeasurement,
   studioSelectionCarry,
+  type StudioSelectionCarryControls,
 } from '../studio-src/client/app/StudioSelectionCarry'
 import {
   studioSelectionHudAction,
   studioSelectionHudModel,
   studioSelectionHudPlacement,
 } from '../studio-src/client/app/StudioSelectionHud'
+import type { StudioSourceEditor } from '../studio-src/client/StudioEditor'
+import type { StudioPreviewConnection } from '../studio-src/client/StudioMatrixView'
 import { StudioInspector } from '../studio-src/StudioInspector'
 import {
   type StudioPreviewLayoutMeasurement,
@@ -167,4 +172,87 @@ Describe('Studio selection carry', () => {
       ),
     ).toBeUndefined()
   })
+
+  Test('remembers a selection only once its edit lands, and restores it without disturbing typing', async () => {
+    const harness = carryHarness()
+    const action = { entry: ['gap', 16], kind: 'set-layout-entry', renderId: `${path}:10:40` } as const
+    const after = layout(2, [measured('Text', 20, 30, 0, 0), measured('Col', 10, 49, 0, 0)])
+
+    // A landed edit arms the carry; the recompiled layout then restores the selection in the editor.
+    await harness.carry.track(selection(10, 40), action, Promise.resolve(true))
+    Expect(harness.selected).toEqual([])
+    harness.preview.layoutMeasurements = after
+    await harness.carry.restore()
+    Expect(harness.selected).toEqual([`${path}:10:49`])
+    Expect(harness.dispatched).toEqual([{ anchor: 10, head: 49 }])
+    Expect(harness.opened).toEqual(['app/Main.tao'])
+
+    // A refused or failed edit carries nothing.
+    for (const applied of [() => Promise.resolve(false), () => Promise.reject(new Errors.UserInputError('refused'))]) {
+      harness.reset()
+      await harness.carry.track(selection(10, 40), action, applied())
+      harness.preview.layoutMeasurements = after
+      await harness.carry.restore()
+      Expect(harness.selected).toEqual([])
+    }
+
+    // Anything that supersedes the edit while it is pending, such as a code-editor change, forgets it.
+    harness.reset()
+    let land: (landed: boolean) => void = () => {}
+    const tracked = harness.carry.track(selection(10, 40), action, new Promise(resolve => land = resolve))
+    harness.carry.forget()
+    land(true)
+    await tracked
+    harness.preview.layoutMeasurements = after
+    await harness.carry.restore()
+    Expect(harness.selected).toEqual([])
+
+    // Typing in the code editor drops the carry rather than moving the cursor under the person.
+    harness.reset()
+    await harness.carry.track(selection(10, 40), action, Promise.resolve(true))
+    harness.preview.layoutMeasurements = after
+    harness.typing = true
+    await harness.carry.restore()
+    harness.typing = false
+    await harness.carry.restore()
+    Expect(harness.selected).toEqual([])
+    Expect(harness.dispatched).toEqual([])
+  })
 })
+
+function carryHarness() {
+  const before = layout(1, [measured('Col', 10, 40, 0, 0), measured('Text', 20, 30, 0, 0)])
+  const preview = { layoutMeasurements: before, previewInstanceId: 'preview-1' } as StudioPreviewConnection
+  const harness = {
+    carry: undefined as unknown as StudioSelectionCarryControls,
+    dispatched: [] as unknown[],
+    opened: [] as string[],
+    preview,
+    reset() {
+      harness.carry.forget()
+      preview.layoutMeasurements = before
+      harness.dispatched.length = 0
+      harness.opened.length = 0
+      harness.selected.length = 0
+    },
+    selected: [] as string[],
+    typing: false,
+  }
+  harness.carry = createStudioSelectionCarry({
+    editorTyping: () => harness.typing,
+    openFile: async opened => {
+      harness.opened.push(opened)
+      return {
+        editor: {
+          dispatch: (spec: { selection: unknown }) => harness.dispatched.push(spec.selection),
+          state: { doc: { length: 1_000 } },
+        },
+        file: { sourceVersion: 'source-2' },
+      } as unknown as StudioSourceEditor
+    },
+    previews: [preview],
+    project: '/workspace',
+    select: next => harness.selected.push(next.renderId),
+  })
+  return harness
+}

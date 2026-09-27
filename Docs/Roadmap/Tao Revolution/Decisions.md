@@ -1518,8 +1518,9 @@ Grid [columns 7, gap sm] {                                // a generated collect
   order, with no z-index. A parent never grows to hold a layer, so a layer inside a hugging parent
   needs the parent's size stated. It replaces the positioned `Canvas` container and `at x y` child
   offset that FS-D5 proposed, and it is not the host-owned floating layer of LANG-018 and KEY-D13:
-  a `Layer` stays inside its parent's box and in its parent's navigation. Studio's Draw canvas
-  forces it, rendering free rectangles as layers.
+  a `Layer` is placed against its parent's box and stays in its parent's navigation. Studio's Draw
+  canvas is what forces it: free rectangles are to render as layers once the Freehand plan's
+  Slice 5 lands.
 - **Every element kind declares which clauses it accepts, and the validator rejects the rest** with
   a targeted diagnostic (`'cell min' applies to Grid`). Clauses are presentation, so they never
   move into the parentheses — parentheses carry data, brackets carry presentation.

@@ -43,8 +43,8 @@ const checkpointLimit = 100
 
 /**
  * StudioCheckpointLedger is the session's undo ledger: source-action checkpoints (which may stay open
- * across a visual gesture) and sketch Snap checkpoints share one commit order, and only the latest
- * committed checkpoint is undoable.
+ * across a visual gesture) and sketch Snap checkpoints share one commit order, and a committed
+ * checkpoint is undoable while it is the latest for its file.
  */
 export class StudioCheckpointLedger {
   readonly #actionCheckpoints = new Map<string, SourceActionCheckpoint>()
@@ -93,12 +93,9 @@ export class StudioCheckpointLedger {
 
   /** sketchSnapUndoTarget returns the committed sketch checkpoint an undo request may revert. */
   sketchSnapUndoTarget(checkpointId: string): SketchSnapCheckpoint {
-    Assert.input(
-      this.#order.at(-1) === checkpointId,
-      'Studio can only undo the latest committed source-action checkpoint.',
-    )
     const checkpoint = this.#sketchSnapCheckpoints.get(checkpointId)
     Assert.input(checkpoint?.status === 'committed', `Studio Snap checkpoint is not undoable: ${checkpointId}`)
+    this.#requireLatestForPath(checkpointId, FS.relativePath(this.projectRoot, checkpoint.path))
     return checkpoint
   }
 
@@ -177,15 +174,35 @@ export class StudioCheckpointLedger {
       this.#openCheckpointId === undefined,
       'Commit the active Studio source-action checkpoint before undoing.',
     )
-    Assert.input(
-      this.#order.at(-1) === checkpointId,
-      'Studio can only undo the latest committed source-action checkpoint.',
-    )
     const checkpoint = this.#actionCheckpoints.get(checkpointId)
     if (checkpoint === undefined || checkpoint.status !== 'committed') {
       Errors.throwUserInput(`Studio source-action checkpoint is not undoable: ${checkpointId}`)
     }
+    this.#requireLatestForPath(checkpointId, checkpoint.path)
     return checkpoint
+  }
+
+  /**
+   * #requireLatestForPath admits undoing a checkpoint that no later one touched the same file after.
+   * Each undo restores one file under its own version check, so a later edit elsewhere, including one
+   * the client stopped offering because its file changed underneath it, does not block it. A later
+   * checkpoint on the same file means the file moved on, which the client retires as stale source.
+   */
+  #requireLatestForPath(checkpointId: string, path: string): void {
+    const index = this.#order.lastIndexOf(checkpointId)
+    Assert.input(index >= 0, `Studio source-action checkpoint is not undoable: ${checkpointId}`)
+    if (this.#order.slice(index + 1).some(id => this.#checkpointPath(id) === path)) {
+      throw new StudioSourceActionConflictError(
+        'stale-source',
+        'Studio can only undo the latest committed source-action checkpoint for a file.',
+        { checkpointId, path },
+      )
+    }
+  }
+
+  #checkpointPath(id: string): string | undefined {
+    const snap = this.#sketchSnapCheckpoints.get(id)
+    return snap === undefined ? this.#actionCheckpoints.get(id)?.path : FS.relativePath(this.projectRoot, snap.path)
   }
 
   /** requireUndoIdentity rejects an undo whose envelope names a different file or source-action identity. */
@@ -206,10 +223,13 @@ export class StudioCheckpointLedger {
     }
   }
 
-  /** markUndone retires the latest committed checkpoint after its source was restored. */
+  /** markUndone retires a committed checkpoint after its source was restored. */
   markUndone(checkpoint: SketchSnapCheckpoint | SourceActionCheckpoint): void {
     checkpoint.status = 'undone'
-    this.#order.pop()
+    const index = this.#order.lastIndexOf(checkpoint.id)
+    if (index >= 0) {
+      this.#order.splice(index, 1)
+    }
   }
 
   #commitAbandoned(id: string): void {

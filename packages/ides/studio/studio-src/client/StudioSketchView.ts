@@ -91,6 +91,8 @@ export type StudioSketchViewOptions = Readonly<{
   onRectChange?: (
     change: StudioSketchRectChange,
   ) => Promise<readonly StudioSketch[] | void> | readonly StudioSketch[] | void
+  /** onRemove takes a source-backed card off the canvas and answers with the catalog's sketches afterwards. */
+  onRemove?: (sketchId: string) => Promise<readonly StudioSketch[]>
   onSnap?: (
     request: StudioSketchViewSnapRequest,
   ) => Promise<StudioSketchSnapApplyResult | StudioSketchSnapProposalResult>
@@ -623,6 +625,10 @@ export const StudioSketchView = {
       const pending = options.onConvert?.(intent)
       void pending?.then(next => receive(next), error => options.onError?.(error))
     }
+    const remove = (sketchId: string): void => {
+      const pending = options.onRemove?.(sketchId)
+      void pending?.then(next => receive(next), error => options.onError?.(error))
+    }
     const renderNow = (nextSketches: readonly StudioSketch[], nextSourceVersion?: string): void => {
       if (disposed) {
         return
@@ -637,7 +643,13 @@ export const StudioSketchView = {
         }
       }
       const boards = sketches.map(sketch => {
-        const badge = StudioSketchBadge.element(document, sketch, options.renderableViews ?? (() => []), convert)
+        const badge = StudioSketchBadge.element(
+          document,
+          sketch,
+          options.renderableViews ?? (() => []),
+          convert,
+          remove,
+        )
         if (StudioSketchBadge.sourceBacked(sketch)) {
           return StudioSketchBadge.card(document, sketch, badge)
         }

@@ -31,7 +31,7 @@ scene MainView() {
       Button("Tap me") {
          on press Ignore
       }
-      Box() {
+      Box() [width 200, height 48] {
          Col() {
             TextFrame("Label")
          }

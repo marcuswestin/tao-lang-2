@@ -408,14 +408,33 @@ Test(
       Expect(rendered.catalog.sketches[0]?.render).toEqual(render)
       Expect((await provider.read()).sketches[0]?.render).toEqual(render)
 
-      // Setting one source clears the other: a detach turns a render into a definition written in code.
+      // A render whose entry went missing is marked broken, and the mark survives a read.
+      const unmarked = await provider.read()
+      await provider.restore({
+        ...unmarked,
+        revision: 2,
+        sketches: [{ ...unmarked.sketches[0]!, broken: true }],
+      }, 2)
+      Expect((await provider.read()).sketches[0]?.broken).toBe(true)
+
+      // Setting one source clears the other, and any broken mark: a detach turns a render into a definition.
       const detached = await provider.apply({
         action: { definitionPath: 'StoryRow.tao', kind: 'set-sketch-source', sketchId: 'sketch-row' },
         expectedRevision: 2,
         requestId: 'detach-row',
       })
       Expect(detached.catalog.sketches[0]?.render).toBeUndefined()
+      Expect(detached.catalog.sketches[0]?.broken).toBeUndefined()
       Expect(detached.catalog.sketches[0]?.definitionPath).toBe('StoryRow.tao')
+
+      // Only a render can be broken; a definition written in code is always there to open.
+      const definitionText = await FS.readText(provider.path())
+      await FS.writeText(
+        provider.path(),
+        definitionText.replace('"definitionPath": "StoryRow.tao"', '"broken": true, "definitionPath": "StoryRow.tao"'),
+      )
+      await Expect(provider.read()).rejects.toBeInstanceOf(Errors.UserInputError)
+      await FS.writeText(provider.path(), definitionText)
 
       for (
         const action of [

@@ -579,10 +579,10 @@ view FeedPage() {
 ```tao
 view Foo() {
    render Box() [width 320, height 200] {
-      Row { … }
+      Row() { … }
       Layer(InsetLeft: 10, InsetBottom: 20) {
-         Col { … }
-         Col { … }
+         Col() { … }
+         Col() { … }
       }
       Layer(InsetTop: 10, InsetRight: 50) { … }
    }
@@ -595,8 +595,14 @@ view Foo() {
 - `InsetTop`, `InsetRight`, `InsetBottom`, and `InsetLeft` are each an optional `number`, the
   distance from that edge of the parent's box. An axis with neither inset sits at its start edge,
   top or left; an axis with both stretches the layer between them.
-- A layer's own children stack top-to-bottom and hug, like `Stack`, and its clauses apply as on any
-  view.
+- A layer's own children stack top-to-bottom and hug, like `Stack`. Its size, padding, gap, content
+  alignment, and appearance clauses apply as on any view; the clauses that place a child in its
+  parent's flow — `fill`, `claim`, `aligned`, and `centered` — have no effect, since the insets place
+  it instead.
+- Nothing clips a layer to its parent's box; a layer larger than the space its insets leave extends
+  past the parent's edge.
+- Presses on a layer's empty area reach the content beneath it; its own children take their presses
+  as usual.
 - Layers paint over earlier siblings in source order; there is no z-index.
 
 This keeps three ideas separate:
@@ -606,8 +612,8 @@ This keeps three ideas separate:
 - layering: content intentionally appears above or outside normal flow
 
 `Layer` is distinct from settled presentation modes. `as overlay` produces a nav-owned absolute
-layer, and `as toast (Key:, Duration:)` produces app-level transient content; a `Layer` stays inside
-its parent's box and its parent's navigation. Positioning clauses on arbitrary views, overflow
+layer, and `as toast (Key:, Duration:)` produces app-level transient content; a `Layer` is placed
+against its parent's box and stays in its parent's navigation. Positioning clauses on arbitrary views, overflow
 flags, z-index-like layout, popovers, and portals still need design and should not sneak into
 ordinary layout syntax merely because the runtime has a prop.
 

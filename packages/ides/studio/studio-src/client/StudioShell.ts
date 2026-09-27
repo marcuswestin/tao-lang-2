@@ -42,12 +42,46 @@ const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 360, preview
 const dividerWidth = 4
 const editorMinimum = 240
 
-/** The pane operations the rest of the shell drives: the rail reopens the left pane, presets reshape for Design. */
+/** The pane operations the rest of the shell drives: the rail reopens the left pane, presets reshape the panes. */
 type StudioPaneControls = Readonly<{
-  designLayout: (active: boolean) => void
   dispose: () => void
+  presetLayout: (preset: string | undefined) => void
   showLeft: () => void
 }>
+
+/** Which shell elements a collapsed pane hides; `true` hides that element. */
+export type StudioPaneVisibility = Readonly<{
+  bottom: boolean
+  editor: boolean
+  environment: boolean
+  left: boolean
+  preview: boolean
+  right: boolean
+  visual: boolean
+}>
+
+/**
+ * What collapsing each pane hides in a preset. Draw's workbench frame dissolves the inspector aside
+ * into its grid, so hiding the aside would take both inspector panes with it: there the right divider
+ * collapses only the selection pane on the right, and the preview divider collapses the code column
+ * (the editor and the environment pinned under it) rather than the canvas. Run shows only the
+ * preview, so its size never hides it there.
+ */
+export function studioPaneVisibility(
+  preset: string | undefined,
+  sizes: Readonly<Record<PaneName, number>>,
+): StudioPaneVisibility {
+  const draw = preset === 'draw'
+  return {
+    bottom: sizes.bottom === 0,
+    editor: draw && sizes.preview === 0,
+    environment: draw && sizes.preview === 0,
+    left: sizes.left === 0,
+    preview: !draw && preset !== 'run' && sizes.preview === 0,
+    right: !draw && sizes.right === 0,
+    visual: draw && sizes.right === 0,
+  }
+}
 const paneStorageKey = 'tao-studio:pane-sizes:v4'
 
 /** Emitted after the shell has synchronously committed a new layout preset to its root dataset. */
@@ -418,6 +452,9 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
   const right = requiredElement(root, '.studio-pane-right')
   const preview = requiredElement(root, '.studio-preview')
   const bottom = requiredElement(root, '.studio-drawer')
+  const editorPane = requiredElement(root, '.studio-editor-pane')
+  const environmentPane = requiredElement(root, '.studio-environment-pane')
+  const visualPane = requiredElement(root, '.studio-visual-pane')
   /**
    * What the layout looked like before Design mode borrowed the width, so leaving can give it back.
    * `previewSized` records that the person moved the canvas divider themselves while in Design mode;
@@ -428,15 +465,19 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
     previewSized: false,
   }
   const apply = (): void => {
-    left.hidden = sizes.left === 0
-    right.hidden = sizes.right === 0
-    preview.hidden = sizes.preview === 0
-    bottom.hidden = sizes.bottom === 0
-    shell.style.setProperty('--studio-left-size', `${sizes.left}px`)
-    shell.style.setProperty('--studio-right-size', `${sizes.right}px`)
     if (designLayout.active && !designLayout.previewSized) {
       sizes.preview = studioDesignPreviewSize(center.getBoundingClientRect().width, sizes.right)
     }
+    const hidden = studioPaneVisibility(root.dataset['layoutPreset'], sizes)
+    left.hidden = hidden.left
+    right.hidden = hidden.right
+    preview.hidden = hidden.preview
+    bottom.hidden = hidden.bottom
+    editorPane.hidden = hidden.editor
+    environmentPane.hidden = hidden.environment
+    visualPane.hidden = hidden.visual
+    shell.style.setProperty('--studio-left-size', `${sizes.left}px`)
+    shell.style.setProperty('--studio-right-size', `${sizes.right}px`)
     center.style.setProperty('--studio-preview-size', `${sizes.preview}px`)
     center.style.setProperty('--studio-bottom-size', `${sizes.bottom}px`)
     for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
@@ -545,21 +586,22 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
     /**
      * Design mode makes the canvas the hero: the file tree folds into the rail, which can bring it
      * straight back, and the preview takes half the window. Leaving Design restores what was there.
+     * Every preset change re-applies the collapse mapping, since Draw hides different elements.
      */
-    designLayout(active: boolean): void {
-      if (active === designLayout.active) {
-        return
-      }
-      designLayout.active = active
-      if (active) {
-        designLayout.left = sizes.left
-        designLayout.preview = sizes.preview
-        designLayout.previewSized = false
-        sizes.left = 0
-        // `apply` measures every time the host width or rail visibility changes.
-      } else {
-        sizes.left = designLayout.left ?? sizes.left
-        sizes.preview = designLayout.preview ?? sizes.preview
+    presetLayout(preset: string | undefined): void {
+      const active = preset === 'design'
+      if (active !== designLayout.active) {
+        designLayout.active = active
+        if (active) {
+          designLayout.left = sizes.left
+          designLayout.preview = sizes.preview
+          designLayout.previewSized = false
+          sizes.left = 0
+          // `apply` measures every time the host width or rail visibility changes.
+        } else {
+          sizes.left = designLayout.left ?? sizes.left
+          sizes.preview = designLayout.preview ?? sizes.preview
+        }
       }
       apply()
     },
@@ -583,7 +625,7 @@ function configurePresets(root: HTMLElement, panes: StudioPaneControls, storage?
       button.setAttribute('aria-current', 'true')
       root.dataset['layoutPreset'] = button.dataset['preset']
       const preset = button.dataset['preset'] as StudioLayoutPreset
-      panes.designLayout(preset === 'design')
+      panes.presetLayout(preset)
       root.dispatchEvent(new CustomEvent(studioLayoutPresetChangedEvent))
       if (preset === 'code' || preset === 'design' || preset === 'draw' || preset === 'run') {
         StudioWorkbenchState.saveLayoutPreset(store, preset)

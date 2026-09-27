@@ -86,6 +86,7 @@ import {
   type StudioSketchRenderEntry,
   type StudioSketchRenderTarget,
   type StudioSnappedRect,
+  studioViewNamesInUse,
 } from './StudioSketchCatalog'
 import { StudioSketchProjection } from './StudioSketchProjection'
 import { StudioSketchSnap, type StudioSketchSnapTree } from './StudioSketchSnap'
@@ -664,8 +665,83 @@ export class StudioProjectSession {
   async #reconcileSketchCatalog(): Promise<StudioSketchCatalogSnapshot> {
     const catalog = await this.#sketchCatalog.read()
     const manifest = this.#matrix?.publishedManifest()
-    if (manifest?.renders === undefined || catalog.sketches.every(sketch => sketch.snapped.length === 0)) {
+    if (manifest === undefined) {
       return catalog
+    }
+    const checked = await this.#markBrokenRenders(catalog.sketches, manifest)
+    const sketches = await this.#reconcileSnapTargets(checked, manifest)
+    if (sketches === catalog.sketches) {
+      return catalog
+    }
+    // Bind refreshes (host-absolute renderId, compile offsets, sourceVersion) are session-local.
+    // The catalog already lives inside the project; persisting a checkout-specific locator
+    // would rewrite committed sketches.jsonc on every open from another worktree. A broken render
+    // is a fact about committed source, so it persists like a dropped rectangle.
+    if (
+      !sketchMembershipChanged(catalog.sketches, sketches)
+      && catalog.sketches.every((sketch, index) => sketch.broken === sketches[index]!.broken)
+    ) {
+      return { ...catalog, sketches }
+    }
+    const reconciled = { ...catalog, revision: catalog.revision + 1, sketches }
+    await this.#sketchCatalog.restore(reconciled, catalog.revision)
+    this.#emitSketchCatalog(reconciled)
+    return reconciled
+  }
+
+  /**
+   * #markBrokenRenders sets or clears `broken` on each render sketch. Its entry is gone when its file
+   * is, or when the manifest was compiled from the file's current version and lists no scenario of that
+   * group and name rendering that view. A manifest from an older version proves nothing either way.
+   */
+  async #markBrokenRenders(
+    sketches: readonly StudioSketch[],
+    manifest: StudioPreviewManifestV2,
+  ): Promise<readonly StudioSketch[]> {
+    const views = manifestViewNames(manifest)
+    let changed = false
+    const checked: StudioSketch[] = []
+    for (const sketch of sketches) {
+      const render = sketch.render
+      const broken = render === undefined ? undefined : await this.#renderEntryMissing(render, manifest, views)
+      if (broken === undefined || broken === (sketch.broken === true)) {
+        checked.push(sketch)
+        continue
+      }
+      changed = true
+      const { broken: _broken, ...rest } = sketch
+      checked.push(broken ? { ...rest, broken: true } : rest)
+    }
+    return changed ? checked : sketches
+  }
+
+  async #renderEntryMissing(
+    render: StudioSketchRenderEntry,
+    manifest: StudioPreviewManifestV2,
+    views: ReadonlyMap<string, string>,
+  ): Promise<boolean | undefined> {
+    const path = FS.resolvePath(render.path, this.projectRoot)
+    if (!await FS.isFile(path)) {
+      return true
+    }
+    const compiled = manifest.sourceVersions[path] ?? manifest.sourceVersions[render.path]
+    const current = await this.readFile(render.path).then(file => file.sourceVersion, () => undefined)
+    if (compiled === undefined || compiled !== current) {
+      return undefined
+    }
+    return !manifest.scenarios.some(scenario =>
+      scenario.group === render.group && scenario.label === render.scenario
+      && views.get(scenario.subjectId) === render.view
+    )
+  }
+
+  /** #reconcileSnapTargets rebinds snapped rectangles to the compiled renders their markers name. */
+  async #reconcileSnapTargets(
+    sketches: readonly StudioSketch[],
+    manifest: StudioPreviewManifestV2,
+  ): Promise<readonly StudioSketch[]> {
+    if (manifest.renders === undefined || sketches.every(sketch => sketch.snapped.length === 0)) {
+      return sketches
     }
     const rendersByMarker = new Map<string, NonNullable<StudioPreviewManifestV2['renders']>>()
     for (const render of manifest.renders) {
@@ -674,7 +750,7 @@ export class StudioProjectSession {
       }
     }
     const currentSourceVersions = new Map<string, string | undefined>()
-    for (const path of new Set(catalog.sketches.flatMap(sketch => sketch.snapped.map(item => item.target.path)))) {
+    for (const path of new Set(sketches.flatMap(sketch => sketch.snapped.map(item => item.target.path)))) {
       try {
         currentSourceVersions.set(path, (await this.readFile(path)).sourceVersion)
       } catch {
@@ -682,7 +758,7 @@ export class StudioProjectSession {
       }
     }
     let changed = false
-    const sketches = catalog.sketches.map(sketch => {
+    const reconciled = sketches.map(sketch => {
       const retained = [] as typeof sketch.snapped[number][]
       const droppedIds = new Set<string>()
       for (const snapped of sketch.snapped) {
@@ -728,19 +804,7 @@ export class StudioProjectSession {
         snapped: retained,
       }
     })
-    if (!changed) {
-      return catalog
-    }
-    // Bind refreshes (host-absolute renderId, compile offsets, sourceVersion) are session-local.
-    // The catalog already lives inside the project; persisting a checkout-specific locator
-    // would rewrite committed sketches.jsonc on every open from another worktree.
-    if (!sketchMembershipChanged(catalog.sketches, sketches)) {
-      return { ...catalog, sketches }
-    }
-    const reconciled = { ...catalog, revision: catalog.revision + 1, sketches }
-    await this.#sketchCatalog.restore(reconciled, catalog.revision)
-    this.#emitSketchCatalog(reconciled)
-    return reconciled
+    return changed ? reconciled : sketches
   }
 
   applySketchAction(input: unknown): Promise<StudioSketchActionResult> {
@@ -768,7 +832,14 @@ export class StudioProjectSession {
           )
         }
         if (action?.['kind'] === 'delete-sketch') {
-          Errors.throwUserInput('Deleting a Studio sketch is not available until its generated-source lifecycle lands.')
+          // A render or a detached definition lives in the user's own source, so removing it from the
+          // canvas forgets the catalog entry and leaves that source alone. A drawn definition still owns
+          // its `@/studio` file, and deleting that is not transactional yet.
+          const sketch = (await transaction.read()).sketches.find(candidate => candidate.id === action['id'])
+          Assert.input(
+            sketch === undefined || sketch.render !== undefined || sketch.definitionPath !== undefined,
+            'Deleting a drawn Studio sketch is not available until its generated-source lifecycle lands.',
+          )
         }
         if (action?.['kind'] === 'refresh-snap-targets') {
           Errors.throwUserInput('Refreshing Studio Snap targets is owned by generated-source transactions.')
@@ -845,20 +916,32 @@ export class StudioProjectSession {
       this.#sketchCatalog.transaction(async transaction => {
         const request = StudioSessionRequests.parseSketchConvertRequest(input)
         const key = requestKey(request)
-        const cached = cachedResult(this.#sketchResults, key, 'badge')
+        const prior = await transaction.read()
+        const cached = cachedResult(
+          this.#sketchResults,
+          key,
+          'badge',
+          result => result.catalog.revision === prior.revision,
+        )
         if (cached !== undefined) {
           return cached
         }
-        const prior = await transaction.read()
         const sketch = requireSketch(prior, request)
         const plan = request.to === 'render'
           ? await this.#planSketchRender(sketch, request.view!)
           : await this.#planSketchDetach(sketch)
-        const written: { before: string | undefined; path: string }[] = []
+        const written: StudioSketchConversionPlan['writes'][number][] = []
         let applied = false
         try {
           for (const write of plan.writes) {
-            written.push({ before: write.before, path: write.path })
+            // The plan was built on what this read; a save landing since then must not be overwritten.
+            Assert.input(
+              await sourceOnDisk(write.path) === write.before,
+              `${
+                FS.relativePath(this.projectRoot, write.path)
+              } changed while Studio was switching ${sketch.name}; nothing was overwritten.`,
+            )
+            written.push(write)
             await this.#writeSketchSource(write.path, write.after)
           }
           const compile = await this.#coordinator.noteStudioFileMutation(plan.writes.map(write => ({
@@ -880,7 +963,6 @@ export class StudioProjectSession {
           })
           applied = true
           const result: StudioSketchActionResult = { ...catalogResult, compile, requestId: request.requestId }
-          rememberResult(this.#sketchResults, key, result)
           this.#emitSketchCatalog(result.catalog)
           for (const write of plan.writes) {
             if (write.after !== undefined) {
@@ -893,15 +975,28 @@ export class StudioProjectSession {
             }
           }
           this.#emitFiles(await this.files())
-          return result
+          // Remembered only once nothing left can fail, so a retry never replays a rolled-back switch.
+          return rememberResult(this.#sketchResults, key, result)
         } catch (error) {
+          // Put back only what still holds exactly what this switch wrote; a file saved since keeps its save.
+          const restored: StudioSketchConversionPlan['writes'][number][] = []
+          const kept: string[] = []
           for (const write of written.toReversed()) {
+            const actual = await sourceOnDisk(write.path)
+            if (actual === write.before) {
+              continue
+            }
+            if (actual !== write.after) {
+              kept.push(FS.relativePath(this.projectRoot, write.path))
+              continue
+            }
             await this.#writeSketchSource(write.path, write.before)
+            restored.push(write)
           }
-          if (written.length > 0) {
-            await this.#coordinator.noteStudioFileMutation(written.map(write => ({
+          if (restored.length > 0) {
+            await this.#coordinator.noteStudioFileMutation(restored.map(write => ({
               path: write.path,
-              ...(write.before === undefined ? {} : { sourceVersion: SourceActions.studioSourceVersion(write.before) }),
+              sourceVersion: SourceActions.studioSourceVersion(write.before),
               writeId: `rollback:${request.requestId}`,
             })))
             this.#emitFiles(await this.files())
@@ -909,7 +1004,16 @@ export class StudioProjectSession {
           if (applied) {
             await transaction.restore(prior, prior.revision + 1)
           }
-          throw Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-convert' })
+          const failure = Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-convert' })
+          if (kept.length > 0) {
+            Errors.throwUserInput(
+              `${Errors.messageOf(failure)} Studio did not put back ${
+                kept.join(', ')
+              } because it changed during the switch; its current contents were preserved.`,
+              { preserved: kept, requestId: request.requestId, studioOperation: 'sketch-convert' },
+            )
+          }
+          throw failure
         }
       })
     )
@@ -945,11 +1049,15 @@ export class StudioProjectSession {
         subject.kind === 'view' && subject.viewName === view ? [[subject.subjectId, subject] as const] : []
       ),
     )
+    Assert.input(
+      subjects.size <= 1,
+      `More than one view is named ${view}, so Studio cannot tell which one to render.`,
+    )
     const first = manifest.scenarios.find(scenario => subjects.has(scenario.subjectId))
     Assert.input(first, `${view} has no scenario to start from; add a \`scenarios ${view}\` entry first.`)
     const path = await this.#files.resolveTaoFile(first.source.path)
     const viewPath = await this.#files.resolveTaoFile(subjects.get(first.subjectId)!.source.path)
-    const current = await this.readFile(FS.relativePath(this.projectRoot, path))
+    this.#requireAuthoredView(view, viewPath)
     // A scenarios file names its view across files in the same directory, which only a linked parse resolves.
     const [parsed] = await this.#workspace.parseFiles([path, viewPath])
     const scenario = `drawn${sketch.view.slice('View'.length)}`
@@ -966,7 +1074,8 @@ export class StudioProjectSession {
         render: { group: first.group, path: FS.relativePath(this.projectRoot, path), scenario, view },
       },
       writes: [
-        { after: patch.content, before: current.content, path },
+        // `before` is the text the patch was built on, not a second read that could differ from it.
+        { after: patch.content, before: parsed!.entry.document.textDocument.getText(), path },
         { after: undefined, before: generated.content, path: generated.path },
       ],
     }
@@ -977,16 +1086,33 @@ export class StudioProjectSession {
     Assert.input(render, `${sketch.name} is already a definition.`)
     const manifest = this.previewManifest()
     Assert.input(manifest, `Studio needs a compiled preview to find where ${render.view} is declared.`)
-    const subject = manifest.subjects.find(candidate => candidate.kind === 'view' && candidate.viewName === render.view)
-    Assert.input(subject, `${render.view} is no longer a view Studio can find.`)
+    // The entry's own subject is the declaration it renders; another view sharing its name elsewhere is not.
+    const named = manifest.scenarios.filter(candidate =>
+      candidate.group === render.group && candidate.label === render.scenario
+    )
+    const entries = named.length > 1
+      ? named.filter(candidate => FS.relativePath(this.projectRoot, candidate.source.path) === render.path)
+      : named
+    if (entries.length !== 1) {
+      Errors.throwUserInput(
+        await this.#renderEntryMissing(render, manifest, manifestViewNames(manifest))
+          ? `${sketch.name}'s scenario "${render.scenario}" is no longer in ${render.path}; remove it from the canvas instead.`
+          : `Studio has not compiled the current ${render.path} yet; detach ${sketch.name} once the preview updates.`,
+      )
+    }
+    const subject = manifest.subjects.find(candidate =>
+      candidate.subjectId === entries[0]!.subjectId && candidate.kind === 'view'
+    )
+    Assert.input(subject?.kind === 'view', `${render.view} is no longer a view Studio can find.`)
     const viewPath = await this.#files.resolveTaoFile(subject.source.path)
+    this.#requireAuthoredView(subject.viewName, viewPath)
     const scenarioPath = await this.#files.resolveTaoFile(render.path)
-    const viewFile = await this.readFile(FS.relativePath(this.projectRoot, viewPath))
     const parsedView = await this.#workspace.parse(viewPath)
+    const viewBefore = parsedView.entry.document.textDocument.getText()
     const copied = await SourceActions.applyStudioPatch(parsedView.entry.document, {
       kind: 'copy-view',
       name: sketch.view,
-      view: render.view,
+      view: subject.viewName,
     }, { files: parsedView.files.map(file => file.ast) })
     const retarget = {
       kind: 'retarget-scenario-render',
@@ -999,19 +1125,33 @@ export class StudioProjectSession {
       const retargeted = await SourceActions.applyStudioPatch(reparsed.entry.document, retarget)
       return {
         source: { definitionPath: FS.relativePath(this.projectRoot, viewPath) },
-        writes: [{ after: retargeted.content, before: viewFile.content, path: viewPath }],
+        writes: [{ after: retargeted.content, before: viewBefore, path: viewPath }],
       }
     }
-    const scenarioFile = await this.readFile(FS.relativePath(this.projectRoot, scenarioPath))
     const parsedScenario = await this.#workspace.parse(scenarioPath)
     const retargeted = await SourceActions.applyStudioPatch(parsedScenario.entry.document, retarget)
     return {
       source: { definitionPath: FS.relativePath(this.projectRoot, viewPath) },
       writes: [
-        { after: copied.content, before: viewFile.content, path: viewPath },
-        { after: retargeted.content, before: scenarioFile.content, path: scenarioPath },
+        { after: copied.content, before: viewBefore, path: viewPath },
+        {
+          after: retargeted.content,
+          before: parsedScenario.entry.document.textDocument.getText(),
+          path: scenarioPath,
+        },
       ],
     }
+  }
+
+  /**
+   * A drawn view's `@/studio` file is Studio's to regenerate, so neither a render's scenario entry nor
+   * a detached copy of the user's view may land in it.
+   */
+  #requireAuthoredView(view: string, viewPath: string): void {
+    Assert.input(
+      !new StudioGeneratedSources(this.projectRoot).owns(viewPath),
+      `${view} is drawn on the canvas, and Studio owns its file; render a view declared in your own source instead.`,
+    )
   }
 
   /** #writeSketchSource writes, or with no content removes, one file a badge switch touches. */
@@ -1131,16 +1271,23 @@ export class StudioProjectSession {
         const expectedPath = FS.relativePath(this.projectRoot, generated.path)
         const current = await this.readFile(expectedPath)
         requireSourceVersion(current, request.sourceVersion)
-        const associations = new Map(sketch.snapped.map(item => [item.rect.id, item.target]))
+        // A Design edit through the ownership gate rewrites this file without touching the catalog, so the
+        // persisted targets may name an older version. The tagged renders in the current source are the
+        // authority, as they are for Unsnap; only a rectangle whose render left the view is refused.
+        const currentTargets = await this.#sketchRenderTargets(
+          generated.path,
+          current.content,
+          current.sourceVersion,
+          sketch.snapped.map(item => item.rect.id),
+        )
         for (const item of sketch.snapped) {
+          const refreshed = currentTargets.find(candidate => candidate.studioRectId === item.rect.id)
           Assert.input(
-            item.target.path === expectedPath
-              && item.target.view === sketch.view
-              && item.target.studioRectId === item.rect.id
-              && item.target.sourceVersion === current.sourceVersion,
+            item.target.path === expectedPath && item.target.view === sketch.view && refreshed?.view === sketch.view,
             `Studio snapped rectangle target is stale or not owned by ${sketch.view}: ${item.rect.id}`,
           )
         }
+        const associations = new Map(currentTargets.map(target => [target.studioRectId, target]))
         const target = (rectId: string): StudioSketchRenderTarget => {
           const resolved = associations.get(rectId)
           Assert.input(resolved, `Studio snapped rectangle does not exist: ${rectId}`)
@@ -1206,11 +1353,7 @@ export class StudioProjectSession {
               await transaction.restore(catalog, catalog.revision + 1)
             }
           },
-          undoAction: {
-            kind: 'refresh-snap-targets',
-            sketchId: sketch.id,
-            targets: sketch.snapped.map(item => item.target),
-          },
+          undoAction: { kind: 'refresh-snap-targets', sketchId: sketch.id, targets: currentTargets },
         })
       })
     )
@@ -1769,6 +1912,26 @@ export class StudioProjectSession {
     })
   }
 
+  /**
+   * A view made with ⌘G inside a drawn view's file lands in `@/studio`, where the canvas numbers its
+   * own views; naming it from the catalog's counter keeps the next drawn `ViewN` from colliding with it.
+   */
+  async #nameCanvasView(request: StudioSourcePatchRequest, path: string): Promise<StudioSourcePatchRequest> {
+    if (
+      request.kind !== 'extract-view' || request.name !== undefined
+      || FS.dirname(path) !== FS.resolvePath('@/studio', this.projectRoot)
+    ) {
+      return request
+    }
+    const catalog = await this.#sketchCatalog.read()
+    const taken = await studioViewNamesInUse(this.projectRoot, catalog)
+    let next = catalog.nextViewNumber
+    while (taken.has(`View${next}`)) {
+      next += 1
+    }
+    return { ...request, name: `View${next}` }
+  }
+
   async #prepareSourceAction(envelope: StudioSourceActionEnvelope): Promise<PreparedSourceAction> {
     this.#acceptPreviewIdentity(envelope)
     const loaded = await this.#parseVersionedFile(
@@ -1799,10 +1962,14 @@ export class StudioProjectSession {
           workspaceFiles.push(sibling.entry.ast)
         }
       }
-      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, request, {
-        files: workspaceFiles,
-        ...(envelope.identity.occurrence === undefined ? {} : { occurrence: envelope.identity.occurrence }),
-      })
+      const patch = await SourceActions.applyStudioPatch(
+        parsed.entry.document,
+        await this.#nameCanvasView(request, path),
+        {
+          files: workspaceFiles,
+          ...(envelope.identity.occurrence === undefined ? {} : { occurrence: envelope.identity.occurrence }),
+        },
+      )
       return { current, envelope, patch, path }
     } catch (error) {
       if (error instanceof StudioSourceOccurrenceConflictError) {
@@ -2078,6 +2245,18 @@ function cellInstanceIdentity(identity: StudioPreviewIdentity): StudioCellInstan
     previewInstanceId: identity.previewInstanceId,
     project: identity.project,
   }
+}
+
+/** manifestViewNames maps each view subject id in a manifest to the view's name. */
+function manifestViewNames(manifest: StudioPreviewManifestV2): ReadonlyMap<string, string> {
+  return new Map(
+    manifest.subjects.flatMap(subject => subject.kind === 'view' ? [[subject.subjectId, subject.viewName]] : []),
+  )
+}
+
+/** sourceOnDisk is a file's current text, or undefined once it is gone. */
+async function sourceOnDisk(path: string): Promise<string | undefined> {
+  return await FS.isFile(path) ? await FS.readText(path) : undefined
 }
 
 /** requestKey identifies one parsed request: its id, and the exact input that id stood for. */

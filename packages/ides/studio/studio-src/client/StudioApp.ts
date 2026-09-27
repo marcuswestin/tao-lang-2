@@ -30,7 +30,7 @@ import { studioCanvasSelectionBounds } from './app/StudioCanvasTargets'
 import { isStudioCommandPaletteShortcut, mountStudioCommandPalette } from './app/StudioCommandPaletteWiring'
 import { connectStudioEvents, StudioCompileStatus, StudioStatusLine } from './app/StudioCompileEvents'
 import { StudioDrawerPanels } from './app/StudioDrawerPanels'
-import { isStudioVisualUndoShortcut, mountStudioEditLog } from './app/StudioEditLog'
+import { mountStudioEditLog } from './app/StudioEditLog'
 import { StudioEditorSession } from './app/StudioEditorSession'
 import { StudioInspection } from './app/StudioInspection'
 import { StudioMountSignal } from './app/StudioMountSignal'
@@ -46,9 +46,10 @@ import { StudioScenarioActions } from './app/StudioScenarioActions'
 import { createStudioSelectionCarry } from './app/StudioSelectionCarry'
 import {
   isStudioSelectionCommand,
+  studioCanvasCommandAllowed,
+  studioCanvasKeyCommand,
   studioSelectionAction,
   type StudioSelectionCommand,
-  studioSelectionShortcut,
 } from './app/StudioSelectionGrouping'
 import { mountStudioSelectionHud } from './app/StudioSelectionHud'
 import { configureStudioSessionPickers } from './app/StudioSessionPickers'
@@ -230,7 +231,17 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     const session = new StudioEditorSession({
       compileState: () => compileState,
       identity: handshake.identity,
-      onDocumentChanged: () => search.scheduleIfActive(),
+      onDocumentChanged: () => {
+        search.scheduleIfActive()
+        // Typing in the code editor supersedes the element a visual edit meant to keep selected.
+        selectionCarry.forget()
+      },
+      onSaved: path => {
+        // The file now holds source no visual edit produced, so its edits can no longer walk back.
+        mutations.retirePath(path)
+        selectionCarry.forget()
+        publish()
+      },
       openCompileDiagnostic,
       postSelection: (file, editor) => postEditorSelection(activePreview.current(), handshake, file, editor),
       publish,
@@ -341,6 +352,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
 
     let canvasViewport: ReturnType<typeof mountCanvasViewport> | undefined
     const canvasGesturesOwned = (): boolean => studioLayoutOwnsCanvasGestures(root.dataset['layoutPreset'])
+    /** Design and Draw put the canvas first: the keyboard stays there and ⌘Z walks back the edit log. */
+    const canvasOwnsInput = (): boolean =>
+      root.dataset['layoutPreset'] === 'design' || root.dataset['layoutPreset'] === 'draw'
     /** ⌘G and ⌥⌘G turn the preview selection into a view or a group; a lone element is a group of one. */
     const applySelectionCommand = (command: StudioSelectionCommand): void => {
       const inspected = inspection.selected()
@@ -357,6 +371,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       void mutations.submitLocal(action, inspected.identity)
     }
     const selectionCarry = createStudioSelectionCarry({
+      editorTyping: () => document.activeElement?.closest('.studio-editor .cm-content') != null,
       openFile: path => session.openFile(path),
       previews,
       project,
@@ -370,14 +385,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       apply: action => {
         const inspected = inspection.selected()
         if (inspected !== undefined) {
-          selectionCarry.remember(inspected, action)
-          void mutations.submitLocal(action, inspected.identity)
+          void selectionCarry.track(inspected, action, mutations.submitLocal(action, inspected.identity))
         }
       },
       bounds: () => studioCanvasSelectionBounds(view.preview, inspection.selected(), previews),
       busy: () => mutations.busy(),
       command: applySelectionCommand,
-      enabled: () => root.dataset['layoutPreset'] === 'design' || root.dataset['layoutPreset'] === 'draw',
+      enabled: canvasOwnsInput,
       groupSize: () => inspection.selectedGroup().length,
       host: view.preview,
       inspection: () => inspection.inspection(),
@@ -399,12 +413,21 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       onCanvasShortcut: (
         command: import('../StudioProtocol').StudioPreviewCanvasShortcutMessage['command'],
         iframe: HTMLIFrameElement,
-      ) =>
-        command === 'undo'
-          ? void mutations.undoLatest()
-          : isStudioSelectionCommand(command)
-          ? applySelectionCommand(command)
-          : canvasViewport?.iframeShortcut(command, iframe),
+      ) => {
+        // A preview in Run or Code still forwards its keys; only the canvas presets act on them.
+        if (command === 'undo' || isStudioSelectionCommand(command)) {
+          if (!studioCanvasCommandAllowed(command, root.dataset['layoutPreset'])) {
+            return
+          }
+          if (command === 'undo') {
+            void mutations.undoLatest()
+          } else {
+            applySelectionCommand(command)
+          }
+          return
+        }
+        canvasViewport?.iframeShortcut(command, iframe)
+      },
       onLayoutMeasured: () => {
         selectionHud?.place()
         void selectionCarry.restore()
@@ -556,6 +579,11 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         }
         publish()
         devicePanel.setManifest(manifest)
+        // A render card whose scenario entry left the manifest is marked broken on the next catalog read.
+        void StudioMatrixView.refreshSketches(view.preview, project).catch(error => {
+          view.status.dataset['state'] = 'error'
+          view.status.textContent = Errors.messageOf(error)
+        })
         if (config.previewUrl !== undefined) {
           void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
             activePreview.reconcile(wirePreview)
@@ -592,7 +620,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     window.addEventListener('pagehide', flushCanvas)
     document.addEventListener('visibilitychange', onCanvasVisibility)
     canvasViewport = mountCanvasViewport({
-      enabled: () => root.dataset['layoutPreset'] === 'design' || root.dataset['layoutPreset'] === 'draw',
+      enabled: canvasOwnsInput,
       canPanWithoutSpace: event =>
         root.dataset['layoutPreset'] === 'design'
         && previewActivation.canPanWithoutSpace(event),
@@ -643,6 +671,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     )
     const disconnectPreviewMessages = connectStudioPreviewMessages({
       ...previewWiring,
+      canvasOwnsInput,
       onInspected: () => {
         selectionCarry.forget()
         canvasFocus.update()
@@ -657,15 +686,20 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         commands.toggle()
       } else if (event.key === 'Escape' && !view.commandOverlay.hidden) {
         commands.close()
-      } else if (isStudioVisualUndoShortcut(event) && mutations.canUndo() && !isStudioTypingTarget(event.target)) {
-        // The code editor keeps its own ⌘Z; anywhere else it walks back the edit log.
-        event.preventDefault()
-        void mutations.undoLatest()
       } else {
-        const command = studioSelectionShortcut(event)
-        if (command !== undefined && inspection.selected() !== undefined && !isStudioTypingTarget(event.target)) {
+        const command = studioCanvasKeyCommand(event, {
+          canUndo: mutations.canUndo(),
+          hasSelection: inspection.selected() !== undefined,
+          preset: root.dataset['layoutPreset'],
+          typing: isStudioTypingTarget(event.target),
+        })
+        if (command !== undefined) {
           event.preventDefault()
-          applySelectionCommand(command)
+          if (command === 'undo') {
+            void mutations.undoLatest()
+          } else {
+            applySelectionCommand(command)
+          }
         }
       }
     }
@@ -688,8 +722,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (proposed) {
           await mutations.submitProposedLocal(action, inspected.identity)
         } else {
-          selectionCarry.remember(inspected, action)
-          await mutations.submitLocal(action, inspected.identity)
+          const applied = mutations.submitLocal(action, inspected.identity)
+          void selectionCarry.track(inspected, action, applied)
+          await applied
         }
       },
       async applyActiveCellEnvironment(identity, environment) {

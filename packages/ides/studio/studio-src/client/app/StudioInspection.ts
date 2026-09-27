@@ -70,11 +70,15 @@ export class StudioInspection {
 
   /**
    * An additive selection toggles membership: a new element joins, a member leaves unless it is the
-   * last one. The preview applies the same rule to its outlines. A plain selection starts over.
+   * last one. The preview applies the same rule to its outlines. A plain selection starts over, and so
+   * does a shift-click in another file or another cell, since each cell outlines only its own picks.
+   * Answers whether the pick joined the existing selection rather than starting a new one.
    */
-  select(selection: StudioInspectorSelection, additive = false): void {
+  select(selection: StudioInspectorSelection, additive = false): boolean {
     const current = this.#selected
-    if (!additive || current === undefined || current.identity.path !== selection.identity.path) {
+    const joins = additive && current !== undefined && current.identity.path === selection.identity.path
+      && current.identity.previewInstanceId === selection.identity.previewInstanceId
+    if (!joins) {
       this.#group = [selection]
     } else if (this.#group.some(member => member.renderId === selection.renderId)) {
       if (this.#group.length > 1) {
@@ -84,6 +88,7 @@ export class StudioInspection {
       this.#group = [...this.#group, selection]
     }
     this.#selected = this.#group.at(-1)
+    return joins
   }
 
   /** A source mutation invalidates the selection: render ids do not survive a recompile. */

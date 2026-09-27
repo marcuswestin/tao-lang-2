@@ -16,9 +16,11 @@ import {
   formatAndReparse,
   requireExactKeys,
   requireIdentifier,
+  requireViewName,
   type SourceEdit,
   taoStringLiteral,
 } from './studio-source-text'
+import { namedImportEdit } from './studio-use-imports'
 
 export async function appendScenarioSteps(
   document: AST.Document,
@@ -86,8 +88,9 @@ function requireScenarioIdentity(group: string, scenario: string): void {
 }
 
 /**
- * addRenderScenario adds a new entry to a scenario group, copying the device size the caller chose and
- * the arguments of an existing render entry: how a drawn rectangle becomes a render of an existing view.
+ * addRenderScenario adds a new entry to a scenario group, with the device size the caller chose and
+ * the own fixture, prepare and render clauses of an existing render entry: how a drawn rectangle
+ * becomes a render of an existing view.
  */
 export async function addRenderScenario(
   document: AST.Document,
@@ -119,10 +122,14 @@ export async function addRenderScenario(
   if (AST.scenarioDeclarations(group).some(scenario => scenario.name === request.scenarioName)) {
     Errors.throwUserInput(`Studio scenario already exists: ${request.scenarioGroupName} / ${request.scenarioName}`)
   }
-  const ownRender = fromScenario.block.entries.find(AST.isScenarioRenderClause)
+  // The entry's own fixture and prepare clauses travel with its render clause: the render arguments
+  // name fixture handles that only the entry's effective fixture brings into scope.
+  const copiedClauses = fromScenario.block.entries.filter(entry =>
+    AST.isScenarioFixtureClause(entry) || AST.isScenarioPrepareClause(entry) || AST.isScenarioRenderClause(entry)
+  )
   const bodyLines = [
     `device phone ${request.width} x ${request.height}`,
-    ...(ownRender?.$cstNode ? [ownRender.$cstNode.text] : []),
+    ...copiedClauses.flatMap(clause => clause.$cstNode ? [clause.$cstNode.text] : []),
   ]
   const entrySource = `scenario ${taoStringLiteral(request.scenarioName)} {\n${bodyLines.join('\n')}\n}`
   const source = document.textDocument.getText()
@@ -317,15 +324,18 @@ export function scenarioRenderSource(
 
 /**
  * retargetScenarioRender repoints one entry's render clause at a different view, keeping the entry's
- * effective render arguments verbatim: how a detached Draw rectangle's entry
- * comes to render its own copy.
+ * effective render arguments verbatim: how a detached Draw rectangle's entry comes to render its own
+ * copy. An entry of a view group with no render clause at all renders the new view with no arguments.
+ * When a `use` brought the original view into this file, the new view joins that same statement.
  */
 export async function retargetScenarioRender(
   document: AST.Document,
   request: StudioRetargetScenarioRenderPatchRequest,
 ): Promise<string> {
   assertNoSyntaxErrors(document)
-  const groups = document.parseResult.value.statements
+  requireViewName(request.view)
+  const file = document.parseResult.value
+  const groups = file.statements
     .filter(AST.isScenarioGroupDeclaration)
     .filter(group => group.name === request.scenarioGroupName)
   const scenarios = groups.flatMap(group => AST.scenarioDeclarations(group))
@@ -338,23 +348,41 @@ export async function retargetScenarioRender(
   }
   const scenario = scenarios[0]!
   const effectiveClause = AST.effectiveScenarioSubjectClause(scenario)
-  if (!AST.isScenarioRenderClause(effectiveClause)) {
+  const original = AST.scenarioSubjectDeclaration(scenario)
+  if (
+    !AST.isViewDeclaration(original)
+    || !(AST.isScenarioRenderClause(effectiveClause) || effectiveClause === undefined)
+  ) {
     Errors.throwUserInput(
       `Studio can only retarget a focused render scenario: ${request.scenarioGroupName} / ${request.scenarioName}`,
     )
   }
-  const argumentsSource = effectiveClause.argumentList?.$cstNode?.text ?? ''
+  const argumentsSource = effectiveClause?.argumentList?.$cstNode?.text ?? ''
   const renderSource = `render ${request.view}(${argumentsSource})`
   const ownRender = scenario.block.entries.find(AST.isScenarioRenderClause)
   const source = document.textDocument.getText()
-  const edit: SourceEdit = ownRender?.$cstNode
-    ? { end: ownRender.$cstNode.end, replacement: renderSource, start: ownRender.$cstNode.offset }
-    : {
-      end: scenarioBlockNode.offset + 1,
-      replacement: `\n${renderSource}`,
-      start: scenarioBlockNode.offset + 1,
-    }
-  return await Formatter.formatCode(applySourceEdits(source, [edit]))
+  const edits: SourceEdit[] = [
+    ownRender?.$cstNode
+      ? { end: ownRender.$cstNode.end, replacement: renderSource, start: ownRender.$cstNode.offset }
+      : {
+        end: scenarioBlockNode.offset + 1,
+        replacement: `\n${renderSource}`,
+        start: scenarioBlockNode.offset + 1,
+      },
+  ]
+  const nameInFile = file.statements.some(statement =>
+    (AST.isDeclaration(statement) && statement.name === request.view)
+    || (AST.isUseStatement(statement) && statement.importedDeclarations.some(item => item.$refText === request.view))
+  )
+  const originalUse = file.statements.filter(AST.isUseStatement)
+    .find(use => AST.resolvedImportedDeclarations(use).includes(original))
+  const importEdit = originalUse === undefined || nameInFile
+    ? undefined
+    : namedImportEdit(originalUse, request.view)
+  if (importEdit !== undefined) {
+    edits.push(importEdit)
+  }
+  return await Formatter.formatCode(applySourceEdits(source, edits))
 }
 
 function scenarioArgumentSource(value: StudioScenarioArgumentValue): string {

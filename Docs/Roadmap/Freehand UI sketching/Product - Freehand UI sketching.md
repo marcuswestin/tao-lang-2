@@ -795,8 +795,8 @@ decided conditional-styling grammar, of which the executable tranche implements 
 
 **Missing — language.** L1's ordered scenario steps, omitted-action stand-ins, optional fixture,
 `Placeholder`, and settled spacer; postfix `when` over parameters and interaction states; `yes / no`
-parameter types and literals; L3's `Layer` has landed. Text scale, loading,
-and empty remain out-of-scope world controls.
+parameter types and literals. (L3's `Layer` has landed, so it is no longer missing.) Text scale,
+loading, and empty remain out-of-scope world controls.
 
 **Missing — compiler and manifest.** Measured layout rectangles reported per render node for
 unsnap; argument bindings per rendered instance for focus-in; project-view insertion with argument
