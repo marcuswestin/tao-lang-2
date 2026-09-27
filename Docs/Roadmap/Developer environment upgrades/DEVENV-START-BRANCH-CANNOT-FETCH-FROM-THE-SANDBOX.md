@@ -14,10 +14,10 @@
   `git fetch`; `git switch -c feat/layer-view origin/main` then reported that
   `/Users/ro/code/tao-lang-2/.git/config` could not be locked. The same credential boundary is
   archived as DEVENV-088 for `merge-with-main`, whose fix did not reach `start-branch`.
-- **Workaround:** Branch from the already-fetched `origin/main` without tracking:
-  `git switch --no-track -c feat/<name> origin/main`. To recover a half-applied switch, point HEAD
-  at the branch it created, `git symbolic-ref HEAD refs/heads/feat/<name>`, which leaves a clean
-  status because index and tree already match it.
-- **Proposed change:** Give `start-branch` an `unsandboxed` host operation, as `merge-main` has, or
-  let it branch from the current `origin/main` with `--no-track` when the fetch is refused, saying
-  how old that ref is.
+- **Workaround:** Run `./agent unsandboxed start-branch feat/<name>`, which is a listed host
+  operation. To recover a half-applied switch, point HEAD at the branch it created,
+  `git symbolic-ref HEAD refs/heads/feat/<name>`; status is then clean because index and tree
+  already match it.
+- **Proposed change:** When the sandboxed `start-branch` fetch is refused, end its report by naming
+  `./agent unsandboxed start-branch` instead of the bare git failure, so an agent never reaches for
+  `git switch -c` by hand.
