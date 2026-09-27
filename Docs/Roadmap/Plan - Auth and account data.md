@@ -429,10 +429,17 @@ and sign-out isolation after relaunch on 2026-09-26. Its explicit pre-MVP lane i
 A separate simulator regression runs the real `clerk-review` command with stored configuration,
 its LAN account gateway, and the unchanged authored Fill values. Password sign-in and sign-out
 passed on 2026-09-26 without provisioning a substitute account or changing profile/note data.
-The physical phone still reports the generic sign-in failure; its network path and retained native
-state are not established by a simulator on the Mac.
-Physical registration, profile, note persistence, email-code login, and logout isolation remain
-separate acceptance work.
+Physical review on 2026-09-27 used the installed Companion on an iPhone 16 Pro Max, controlled
+through iPhone Mirroring, and a fresh `clerk-review --device roPhone` session from `b7056b6e`
+(the feature tree landed as `76fda72b`). The unchanged **Fill email / Fill password / Sign in**
+sequence reached **Signed in**. Terminating and relaunching Companion restored that session;
+signing out, terminating, and relaunching again retained the signed-out state. The fresh gateway
+used the Mac's `192.168.50.107` LAN address. The earlier `169.254.168.204` gateway remains a
+possible explanation for the prior failure, not a demonstrated cause: that session had already
+stopped, and no controlled comparison was made. No authentication code, account passwords, profiles,
+or notes were changed. The temporary review services stopped and their source/database directory was removed.
+Physical registration, profile and note persistence, email-code login, cross-account data isolation,
+and the distributed TestFlight build remain separate acceptance work.
 
 ## Original implementation seams
 
