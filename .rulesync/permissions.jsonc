@@ -120,6 +120,7 @@
     "android devices", "android state", "android emulators", "android boot", "android ensure",
     "remote fetch", "remote refs", "remote heads", "remote exists",
     "processes list", "processes started", "start-branch",
+    "storage sync", "storage qa", "storage push",
   ],
   "claudecode": {
     "autoCompactWindow": 272000,

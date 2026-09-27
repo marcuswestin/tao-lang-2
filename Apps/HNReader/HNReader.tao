@@ -107,23 +107,52 @@ nav HNNavigator = SelectionNav {
 }  }
 
 // Hacker News's warm paper and orange, tuned for reading: white story cards on the beige ground,
-// rank and bylines in the brand orange, ink sized for scanning titles and reading comments.
+// rank and bylines in the brand orange, ink sized for scanning titles and reading comments. At night
+// the ground turns to warm charcoal and the orange lifts so it still reads against it.
 folder
 design HNDesign {
    colors {
-      paper #f6f6ef
-      card #ffffff
-      ink #21211c
-      inkMuted #82827a
-      accent #ff6600
-      accentDeep #c9560c
-      line #e7e7db
-      railInk #d9d2ba
+      paperLight #f6f6ef
+      cardLight #ffffff
+      inkLight #21211c
+      inkMutedLight #6e6e66
+      accentLight #ff6600
+      accentDeepLight #c9560c
+      lineLight #e7e7db
+      railInkLight #d9d2ba
+      paperDark #171714
+      cardDark #22221e
+      inkDark #eeeee6
+      inkMutedDark #a8a89f
+      accentDark #ff7a26
+      accentDeepDark #ffa066
+      lineDark #37372f
+      railInkDark #4d4839
+
+      paper when Scheme is Dark paperDark / not paperLight
+      card when Scheme is Dark cardDark / not cardLight
+      ink when Scheme is Dark inkDark / not inkLight
+      inkMuted when Scheme is Dark inkMutedDark / not inkMutedLight
+      accent when Scheme is Dark accentDark / not accentLight
+      accentDeep when Scheme is Dark accentDeepDark / not accentDeepLight
+      line when Scheme is Dark lineDark / not lineLight
+      railInk when Scheme is Dark railInkDark / not railInkLight
    }
    sizes {
       sm 4.px
    }
    styles {
+      // Chrome defaults, so the navigation host follows the palette instead of the runtime's white.
+      Text [ink ink]
+      AppSurface [background paper]
+      NavigationHost [background paper]
+      NavigationContent [background paper]
+      NavigationHeader [background card, border line]
+      NavigationTitle [size 18, weight 700, ink ink]
+      NavigationTabs [gap 6, pad 6, background card, border line]
+      NavigationTab [pad 10, radius 10, ink inkMuted, weight 600, ink accentDeep when selected]
+      NavigationChromeButton [pad 8, radius 8, ink accentDeep, weight 600]
+
       screen [fill, content top stretch, background paper]
       feed [fill, content top stretch, pad 10, gap 8]
       threadWrap [fill, content center top]

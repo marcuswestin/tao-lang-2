@@ -159,7 +159,10 @@ function connectionGroups(
         return sourceVersion === undefined ? [] : [sourceVersion]
       }))
       const sketchSourceVersion = sourceVersions.size === 1 ? [...sourceVersions][0] : undefined
+      const sourcePaths = new Set(scenarios.map(scenario => scenario.source.path))
+      const sketchSourcePath = sourcePaths.size === 1 ? [...sourcePaths][0] : undefined
       return {
+        ...(sketchSourcePath === undefined ? {} : { sketchSourcePath }),
         ...(sketchSourceVersion === undefined ? {} : { sketchSourceVersion }),
         ...(sketchView === undefined ? {} : { sketchView }),
       }

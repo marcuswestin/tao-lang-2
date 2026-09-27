@@ -265,7 +265,7 @@ Describe('tao create command', () => {
         runTests: false,
       })
       Expect(result.plan.palette).toEqual(palette)
-      Expect(lowerCreationPlan(result.plan)['Design.tao']).toContain('canvas #fdf6e3')
+      Expect(lowerCreationPlan(result.plan)['Design.tao']).toContain('canvasLight #fdf6e3')
       Expect(captured()).toContain(`Read colors from ${FS.displayPath(image)}.`)
     })
   })

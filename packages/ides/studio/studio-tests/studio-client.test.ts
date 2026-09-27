@@ -2467,6 +2467,58 @@ Test('Studio review waits for authenticated journey replay settlement', async ()
   Expect(frame.dataset['taoReviewError']).toBe('Save was not found.')
 })
 
+Test('Studio review keeps a replay outcome across a render for the revision the frame already replayed', async () => {
+  // The frame replays each revision once. Rendering the cell again for that revision (a manifest
+  // refresh that registers the same identity) used to reset it to pending, and no second settlement
+  // ever arrived, so review waited on the cell until it timed out.
+  const contentWindow = { postMessage() {} }
+  const preview = previewConnection('preview-journey', 'novel', contentWindow)
+  const manifest = { compileRevision: 1, manifestRevision: 'manifest-1' }
+  Expect(StudioReviewDom.retainedJourneyReplay(preview, manifest)).toBeUndefined()
+  await handlePreviewMessage(
+    {
+      data: {
+        channel: studioProtocolChannel,
+        identity: { ...preview.cellIdentity, previewInstanceId: preview.previewInstanceId },
+        protocolVersion: studioProtocolVersion,
+        type: 'preview-journey-replay-settled',
+      },
+      origin: preview.origin,
+      source: contentWindow,
+    } as unknown as MessageEvent,
+    preview,
+    { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake,
+    async () => undefined,
+    { async applySourceAction() {}, inspect() {} },
+  )
+  Expect(StudioReviewDom.retainedJourneyReplay(preview, manifest)?.status).toBe('settled')
+  Expect(StudioReviewDom.retainedJourneyReplay(preview, { ...manifest, manifestRevision: 'manifest-2' }))
+    .toBeUndefined()
+  Expect(StudioReviewDom.retainedJourneyReplay({ ...preview, previewInstanceId: 'remounted' }, manifest))
+    .toBeUndefined()
+  Expect(StudioReviewDom.retainedJourneyReplay({
+    ...preview,
+    cellIdentity: { ...preview.cellIdentity!, cellRevision: 1 },
+  }, manifest)).toBeUndefined()
+})
+
+Test('Studio review keeps a cell ready across a render for the revision its frame already applied', () => {
+  // A cell without a journey is ready once its frame acknowledges applying it, which the frame does
+  // once per revision; a render that reset it to pending left review waiting on it for good.
+  const preview = previewConnection('preview-applied', 'novel', { postMessage() {} })
+  const identity = preview.cellIdentity!
+  const manifest = { compileRevision: identity.compileRevision, manifestRevision: identity.manifestRevision }
+  Expect(StudioReviewDom.retainedApplied(preview, manifest)).toBe(false)
+  preview.appliedIdentity = { identity, previewInstanceId: preview.previewInstanceId }
+  Expect(StudioReviewDom.retainedApplied(preview, manifest)).toBe(true)
+  Expect(StudioReviewDom.retainedApplied(preview, { ...manifest, manifestRevision: 'newer' })).toBe(false)
+  Expect(StudioReviewDom.retainedApplied({ ...preview, previewInstanceId: 'remounted' }, manifest)).toBe(false)
+  Expect(StudioReviewDom.retainedApplied({
+    ...preview,
+    cellIdentity: { ...identity, cellRevision: identity.cellRevision + 1 },
+  }, manifest)).toBe(false)
+})
+
 Test('Studio command palette indexes files, views, grouped scenarios, commands, and insertions', () => {
   const manifest = {
     project: { appName: 'Garden', entryPath: 'Garden.tao', root: '/workspace' },
