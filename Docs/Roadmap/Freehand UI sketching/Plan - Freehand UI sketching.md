@@ -562,8 +562,9 @@ of it stays catalog-only, so no language change and no compile per keystroke.
   Shift+arrows by ten, coalesced into one `update-rect` per burst. Escape cancels a gesture in
   progress, otherwise clears selection. ⌘D duplicates in place with a small offset
   (`duplicate-rect`). ⌘A selects every free rectangle in the sketch. ⇧A snaps the selection, or every
-  free rectangle when nothing is selected. Enter edits the selected rectangle's content. T, B, and I
-  retype the selection to `Text`, `Button`, and `Image`. Tab and Shift+Tab walk `rectOrder`.
+  free rectangle when nothing is selected. Enter edits the selected rectangle's content. ⇧T, ⇧B, and
+  ⇧I retype the selection to `Text`, `Button`, and `Image` (decision I). Tab and Shift+Tab walk
+  `rectOrder`.
 - **b. Tool model.** V is select: dragging empty sketch space draws a marquee, Shift adds to it. R
   is draw: dragging creates a rectangle as today. T draws a `Text` rectangle. Dragging empty canvas
   outside any sketch still creates a sketch. A three-button strip above the sketch shows the active
@@ -571,8 +572,8 @@ of it stays catalog-only, so no language change and no compile per keystroke.
   frame on empty canvas and a rectangle inside a sketch. **Implemented 2026-09-27:** the strip sits
   on the canvas's top edge outside the zoom; V is the resting tool, a drawing tool hands back to V
   after one shape as in Figma, T opens its new rectangle for typing, and Escape hands back to V
-  before clearing selection. Stride 1a's T retype key now collides with the T tool; which key
-  retypes to `Text` is open for the next decision round.
+  before clearing selection. Decision I moves stride 1a's retype keys to Shift so they no longer
+  collide with the tools.
 - **c. Constraints.** Shift keeps a square while drawing or corner-resizing and locks the axis while
   moving; Option resizes from the centre.
 - **d. Undo.** ⌘Z and ⇧⌘Z walk one client-held, time-ordered stack over catalog gestures and source
@@ -727,6 +728,9 @@ Settled by the Developer on 2026-09-27, taking the recommendations.
   inside a sketch, rather than separate frame and rectangle tools.
 - **H. Canvas before L2.** The canvas strides go before the L2 language tranche, headed by the
   live-preview composition slice.
+- **I. Retype keys.** Delegated by the Developer: bare V, R, and T pick tools, and Shift plus a
+  letter acts on the selection, so ⇧T, ⇧B, and ⇧I retype to `Text`, `Button`, and `Image`, alongside
+  ⇧A for Snap.
 
 A decision discovered during implementation joins the next round with the Developer; it is not decided silently.
 
