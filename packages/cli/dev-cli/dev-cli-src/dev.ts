@@ -88,6 +88,15 @@ await runWithCommands(commands => {
   commands.name('dev')
 
   commands
+    .command('shell-setup')
+    .description('Offer automatic development environments for this repository and its worktrees.')
+    .option('--configure', 'Ask again even when this repository already has a saved choice.')
+    .action(async (options: { configure?: boolean }) => {
+      const { runDirenvSetup } = await import('./shell/DirenvSetup')
+      await runDirenvSetup(options)
+    })
+
+  commands
     .command('completion')
     .description('Print completion generated from the registered dev commands.')
     .argument('<shell>', 'zsh')

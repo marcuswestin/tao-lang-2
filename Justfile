@@ -20,7 +20,13 @@ help:
 # The private setup recipe is what every harness reaches through `./agent setup`: Worktrunk's pre-start hook
 # (.config/wt.toml), the harness SessionStart hooks (.rulesync/hooks.jsonc), and
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
-_setup: _deps _agent-config _git-hooks _initial-dev-branch
+_setup: _deps _agent-config _git-hooks _initial-dev-branch _shell-completion
+    ./dev shell-setup
+
+# Configure optional automatic development environments for this repository and its worktrees
+[group('Setup')]
+shell-setup: _shell-completion
+    ./dev shell-setup --configure
 
 # Configure this checkout and GitHub CLI for HTTPS Git authentication
 [group('Setup')]
@@ -640,6 +646,17 @@ _agent-config:
 
 _deps:
     zsh packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh "{{ justfile_directory() }}" --health
+
+# Generate completion during explicit setup so entering a directory never bootstraps dependencies.
+_shell-completion: _deps
+    #!/bin/zsh
+    set -e
+    cache=.artifacts/cache/dev-shell
+    mkdir -p "$cache"
+    completion_file=$(mktemp "$cache/completion.XXXXXX")
+    trap 'rm -f "$completion_file"' EXIT
+    "{{ BUN }}" run packages/cli/dev-cli/dev-cli-src/dev.ts completion zsh > "$completion_file"
+    mv -f "$completion_file" "$cache/completion.zsh"
 
 _git-hooks:
     ./packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh install

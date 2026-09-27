@@ -137,9 +137,21 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     browser = await StudioCdp.launchChrome({ artifactRoot: artifactParent })
     await browser.setViewport(1_440, 900)
     await browser.goto(`${studio.url}/sessions/${encodeURIComponent(current.sessionId)}`)
-    await browser.waitFor(`document.querySelector('.chat-cloud:not(:disabled)') instanceof HTMLInputElement`, {
-      timeoutMs: 30_000,
-    })
+    try {
+      await browser.waitFor(`document.querySelector('.chat-cloud:not(:disabled)') instanceof HTMLInputElement`, {
+        timeoutMs: 30_000,
+      })
+    } catch (cause) {
+      const page = await browser.evaluate<string>('document.body.innerText')
+      Errors.throwHostEnvironment(
+        `Studio chat did not become ready: ${JSON.stringify({ page, browser: browser.browserFailures() })}`,
+        { cause },
+      )
+    }
+    Expect(await browser.evaluate<number>(`document.querySelectorAll('.studio-preview iframe').length`)).toBe(0)
+    Expect(await browser.evaluate<boolean>(`document.querySelector('[data-tao-studio-draw-canvas]') !== null`)).toBe(
+      true,
+    )
     await browser.click('.chat-cloud')
     await browser.waitFor(`document.querySelector('.chat-status')?.getAttribute('data-state') === 'on'`)
 

@@ -80,6 +80,8 @@ const sessionRoutes = {
   deviceSelectCell: { method: 'POST', path: '/api/device/select-cell' },
   deviceStatus: { method: 'GET', path: '/api/device/status' },
   events: { method: 'WS', path: '/events' },
+  feedBrowse: { method: 'POST', path: '/api/feed/browse' },
+  feedAction: { method: 'POST', path: '/api/feed/action' },
   file: { method: 'GET', path: '/api/file' },
   fileCreate: { method: 'POST', path: '/api/file/create' },
   fileDelete: { method: 'POST', path: '/api/file/delete' },

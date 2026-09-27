@@ -1,0 +1,15 @@
+// Studio-written generated source. Read-only until moved to a package.
+use Col, Placeholder from @tao/ui
+
+public
+view View4() {
+   render Col() [pad top 14.914 right 29.438 bottom 57.176 left 7.926] {
+      #studio_rect_00380038003000640063003800660066002d0031006100390063002d0034003500360066002d0038003300330031002d003000630030003700320034003400620062003000330066
+      Placeholder("Placeholder") [width 123.637, height 79.91]
+}  }
+
+scenarios View4 "sketch" {
+   device phone
+   scenario "draft" {
+      render ()
+}  }

@@ -1,12 +1,16 @@
 import { Assert, Switch } from '@shared/core'
+import type { StudioFeedState } from '../../StudioFeedProtocol'
 import type {
   StudioSketchFlowActionRequest,
   StudioSketchSnapRequest,
   StudioSketchSnapUndoRequest,
   StudioSketchUnsnapRequest,
 } from '../../StudioProjectSession'
+import type { StudioPreviewFeedDropMessage } from '../../StudioProtocol'
 import type { StudioSketchCatalogAction, StudioSketchCatalogSnapshot } from '../../StudioSketchCatalog'
 import { StudioApiClient } from '../StudioApiClient'
+import type { StudioFeedDrop } from '../StudioFeedController'
+import type { StudioFeedExampleValues } from '../StudioFeedSamples'
 import {
   type MountedStudioSketchView,
   type StudioSketchRectChange,
@@ -18,6 +22,8 @@ const mountedSketches = new WeakMap<HTMLElement, MountedMatrixSketches>()
 
 type MountedMatrixSketches = {
   catalog: StudioSketchCatalogSnapshot
+  exampleValues?: StudioFeedExampleValues
+  feedDrop?: (payload: StudioFeedDrop, sketchId: string, rectId?: string) => Promise<void>
   mount?: MountedStudioSketchView
   mutationLane: StudioSketchMutationLane
   project: string
@@ -118,6 +124,45 @@ export const StudioDrawCanvas = {
 
 export const StudioMatrixSketches = {
   render: renderMatrixSketches,
+  feedTarget(parent: HTMLElement, message: StudioPreviewFeedDropMessage): { rectId: string; sketchId: string } {
+    const state = mountedSketches.get(parent)
+    Assert.input(state !== undefined, 'The sketch catalog is not available for this Feed drop.')
+    return StudioSketchFeedTarget.resolve(state.catalog, state.project, message)
+  },
+  examples(parent: HTMLElement, values: StudioFeedExampleValues): void {
+    const state = mountedSketches.get(parent)
+    if (state === undefined || JSON.stringify(state.exampleValues ?? {}) === JSON.stringify(values)) {
+      return
+    }
+    state.exampleValues = values
+    state.mount?.render(state.catalog.sketches, state.sourceVersions, values)
+  },
+  sketchForView(parent: HTMLElement, viewName: string): string | undefined {
+    return mountedSketches.get(parent)?.catalog.sketches.find(sketch => sketch.view === viewName)?.id
+  },
+  connectFeed(
+    parent: HTMLElement,
+    drop: (payload: StudioFeedDrop, sketchId: string, rectId?: string) => Promise<void>,
+  ): () => void {
+    const state = mountedSketches.get(parent)
+    Assert.defined(state, 'mounted Studio sketches before connecting Feed')
+    state.feedDrop = drop
+    return () => {
+      state.feedDrop = undefined
+    }
+  },
+  async runFeed<Result extends StudioFeedState>(
+    parent: HTMLElement,
+    run: (revision: number) => Promise<Result>,
+  ): Promise<Result> {
+    const state = mountedSketches.get(parent)
+    Assert.defined(state, 'mounted Studio sketches before editing Feed')
+    return await state.mutationLane.run(async () => {
+      const result = await run(state.catalog.revision)
+      renderMatrixSketches(parent, state.project, result.catalog)
+      return result
+    })
+  },
   /** rerender re-lays the boards already mounted under `parent` after the grid reconciled its hosts. */
   rerender(parent: HTMLElement, sourceVersions?: Readonly<Record<string, string>>): void {
     const state = mountedSketches.get(parent)
@@ -126,6 +171,43 @@ export const StudioMatrixSketches = {
     }
   },
 } as const
+
+/** Maps a rendered iframe leaf back to the exact current snapped catalog target. */
+export const StudioSketchFeedTarget = {
+  resolve(
+    catalog: StudioSketchCatalogSnapshot,
+    project: string,
+    message: Pick<StudioPreviewFeedDropMessage, 'identity' | 'renderId' | 'studioRectId'>,
+  ): { rectId: string; sketchId: string } {
+    Assert.input(message.studioRectId !== undefined, 'Drop a Feed field on a snapped sketch rectangle.')
+    const path = normalizedSourcePath(project, message.identity.path)
+    const matches = catalog.sketches.flatMap(sketch =>
+      sketch.snapped.flatMap(item =>
+        item.target.studioRectId === message.studioRectId
+          && normalizedRenderId(project, item.target.renderId) === normalizedRenderId(project, message.renderId)
+          && normalizedSourcePath(project, item.target.path) === path
+          && item.target.sourceVersion === message.identity.sourceVersion
+          ? [{ rectId: item.rect.id, sketchId: sketch.id }]
+          : []
+      )
+    )
+    Assert.input(
+      matches.length === 1,
+      'The Feed drop target changed or is not a snapped sketch rectangle. Refresh the preview and try again.',
+    )
+    return matches[0]!
+  },
+} as const
+
+function normalizedSourcePath(project: string, path: string): string {
+  return new URL(path.startsWith('/') ? path : `${project.replace(/\/$/, '')}/${path}`, 'file:///').pathname
+}
+
+function normalizedRenderId(project: string, renderId: string): string {
+  const match = /^(.*):(\d+):(\d+)$/.exec(renderId)
+  Assert.input(match !== null, 'The Feed drop has an invalid render identity.')
+  return `${normalizedSourcePath(project, match[1]!)}:${match[2]}:${match[3]}`
+}
 
 function renderMatrixSketches(
   parent: HTMLElement,
@@ -178,6 +260,9 @@ function renderMatrixSketches(
       onError: error => {
         host.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
       },
+      onFeedDrop: async (payload, sketchId, rectId) => {
+        await state.feedDrop?.(payload, sketchId, rectId)
+      },
       onFlowAction: async request => await applySketchFlowAction(state, request),
       onRectChange: async change => {
         const result = await applySketchAction(state, sketchAction(change))
@@ -188,10 +273,11 @@ function renderMatrixSketches(
       onUnsnap: async request => await applySketchUnsnap(state, request),
       onUndoSnap: async request => await undoSketchSnap(state, request),
       sketches: state.catalog.sketches,
+      exampleValues: state.exampleValues,
       sourceVersions: state.sourceVersions,
     })
   } else {
-    state.mount.render(state.catalog.sketches, state.sourceVersions)
+    state.mount.render(state.catalog.sketches, state.sourceVersions, state.exampleValues)
   }
 }
 

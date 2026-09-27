@@ -177,7 +177,8 @@ trailing edge. The isolated screens patch now synchronizes the direct child stac
 compiled and the clean app launched with native hosts; its repaired edges and resizing still await
 manual review. The earlier defective variants are not accepted for sidebar layout.
 
-The generated host currently forces light appearance. Dark adaptation is not accepted. The
+The original generated host forced light appearance. The follow-up below enables automatic
+appearance; full appearance acceptance remains open. The
 transparent overlay places its labels close to the covered sheet's labels and needs appearance
 review. Compact window chrome may move direct commands into the system toolbar overflow.
 
@@ -197,6 +198,33 @@ Pending review includes the repaired compact/expanded sidebar layout, keyboard-o
 editing, final-app screenshots, and light/dark appearance. The developer's visual judgment is
 required before appearance is accepted.
 
+### Catalyst automatic appearance follow-up, 2026-09-26
+
+The isolated Catalyst trial now requests automatic system appearance. The Catalyst runtime reads
+and subscribes to React Native Appearance, exposing `reactive-catalyst` evidence through Studio's
+validated scheme protocol. Other native targets retain their existing behavior. Default app
+frames, text, inputs, portable chrome and presented surfaces use the selected palette; authored
+styles keep precedence. Focused tests cover light/dark changes, listener cleanup, real nested app
+frames, authored overrides and protocol round trips. They do not prove native visual acceptance.
+
+Run `68bddbfd-a77a-47e6-a400-a98fc1e81942` built and signed the current trial. Launch on macOS
+27.0 (26A428) showed `Catalyst: true · Interface: mac · Native appearance: dark` and native tabs
+and stack. The system was already dark; no system setting was changed. The initial native
+screenshot showed dark content/input/sidebar backgrounds and readable light content labels.
+Setting the draft to “Dark review” enabled Save; invoking Save updated the saved text, cleared
+the draft and disabled Save again. These are automated native observations, not developer visual
+acceptance. A subsequent sheet capture failed in the computer-control service with ScreenCaptureKit
+error -3812; sheet/overlay/confirmation appearance and live native system-appearance switching
+remain unverified on this build.
+
+The build's initial source diff predates a nested-frame palette correction. Metro resolves runtime
+sources from the live repository and bundled after that correction; the dark nested frame was
+observed at launch. The initial diff capture is not an immutable final-bundle manifest.
+The retained app is `.artifacts/catalyst/68bddbfd-a77a-47e6-a400-a98fc1e81942/NativeNavigation.app`.
+Subsequent verification moved appearance subscriptions into Catalyst-only mounted wrappers,
+preserving lazy native loading and other platforms. Real-renderer and runtime tests cover that
+final correction; this retained Mac app predates it, so final-wrapper native retesting remains open.
+
 ## Retention
 
 Trial directories are task-owned and retained for launch and diagnosis. Remove an individual run
@@ -209,7 +237,7 @@ distribution is part of this workflow.
 Working with named limitations: local Catalyst compilation, launch, native navigation and a useful
 menu command are established. Appearance is not accepted. The repaired sidebar layout, ordinary
 manual typing, keyboard-only operation and final compact/expanded/detail/overflow/sheet screenshots
-remain under review; dark adaptation is not implemented by this trial. Earlier inline captures
+remain under review; dark adaptation is implemented with partial native evidence. Earlier inline captures
 show the diagnostic variants, not acceptance of the final layout patch.
 
 Production support appears moderate in effort: two isolated native compatibility patches, source

@@ -6,7 +6,7 @@ import { DataLoadRecoveryBoundary } from './TR-data-load-recovery'
 import { mountedDesignStyle } from './TR-mounted-design'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { requireReactNativeRuntime } from './TR-react-native'
-import { SchemeControls, type TaoScheme } from './TR-scheme'
+import { catalystPalette, SchemeControls, type TaoScheme } from './TR-scheme'
 import type { TaoProps } from './TR-TaoProps'
 
 type AppShellProps = {
@@ -101,7 +101,7 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
     RN.KeyboardAvoidingView,
     {
       behavior: platformOS === 'ios' ? 'padding' : undefined,
-      style: rootStyle,
+      style: [rootStyle, catalystPalette(scheme.resolved)],
     },
     createElement(
       DataLoadRecoveryBoundary,
@@ -177,7 +177,13 @@ export function AppSurfaceFrame(props: {
   const insets = requireSafeAreaContext().useSafeAreaInsets()
   const alreadyInset = AppSurfaceInsetContext.use()
   const defaults = AppSurfaceFrameDefaults.use()
+  const scheme = SchemeControls.use()
   const nativeInsets = props.nativeInsets ?? defaults.nativeInsets ?? false
+  // A floating iPad sidebar contributes a horizontal safe area even to vertical-only content.
+  // UIKit's automatic adjustment only includes horizontal insets on horizontally scrollable views.
+  const ipad = platformOS === 'ios'
+    && (RN.Platform as { isPad?: boolean })?.isPad === true
+    && RN.Platform?.isMacCatalyst !== true
   const edges = defaults.edges ?? allEdges
   const liveInset = (edge: SafeAreaEdge): number => alreadyInset || !edges.includes(edge) ? 0 : insets[edge]
   const bottomInset = props.bottomInset ?? 0
@@ -197,11 +203,15 @@ export function AppSurfaceFrame(props: {
   return createElement(
     RN.ScrollView,
     {
-      ...(nativeInsets ? { contentInsetAdjustmentBehavior: 'automatic' } : {}),
+      ...(nativeInsets ? { contentInsetAdjustmentBehavior: ipad ? 'always' : 'automatic' } : {}),
       contentContainerStyle: [contentStyle, contentPadding],
       keyboardDismissMode: platformOS === 'ios' ? 'interactive' : 'on-drag',
       keyboardShouldPersistTaps: 'handled',
-      style: [rootStyle, mountedDesignStyle(props.taoProps, 'AppSurface')],
+      style: [
+        rootStyle,
+        catalystPalette(props.taoProps?.scheme ?? scheme.resolved),
+        mountedDesignStyle(props.taoProps, 'AppSurface'),
+      ],
     },
     createElement(
       AppSurfaceInsetContext.Provider,
