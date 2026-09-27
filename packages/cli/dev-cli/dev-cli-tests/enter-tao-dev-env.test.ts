@@ -1,10 +1,12 @@
-import { CLI, FS, Platform, Repo } from '@shared'
+import { Assert, CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 
 const ENTRY = Repo.resolvePath('enter-tao-dev-env')
 const SHELL_SOURCE = 'packages/cli/dev-cli/dev-cli-src/shell'
 
 async function prepareFixture(fixture: string): Promise<Record<string, string | undefined>> {
+  const zsh = await CLI.commandPath('zsh')
+  Assert.defined(zsh, 'the managed toolchain supplies zsh')
   const bin = FS.resolvePath('bin', fixture)
   const stub = FS.resolvePath('devenv', bin)
   const shellHook = (await FS.readText(Repo.resolvePath('devenv.nix'))).match(/enterShell = ''([\s\S]*?)'';/)?.[1]
@@ -58,7 +60,7 @@ if [ "$TAO_TEST_COLD_SETUP" = yes ]; then
   command -v fixture-tool > "$DEVENV_ROOT/installed-tool.log"
 fi
 if [ -n "$TAO_TEST_STARTUP_SCRIPT" ]; then
-  exec /bin/zsh -f "$TAO_TEST_STARTUP_SCRIPT"
+  exec "$TAO_TEST_ZSH" -f "$TAO_TEST_STARTUP_SCRIPT"
 fi
 exit "\${TAO_TEST_SHELL_EXIT:-0}"
 `,
@@ -69,6 +71,7 @@ exit "\${TAO_TEST_SHELL_EXIT:-0}"
     ...Platform.runtimeProcess.env,
     PATH: `${bin}:/usr/bin:/bin`,
     SHELL: FS.resolvePath('zsh', bin),
+    TAO_TEST_ZSH: zsh,
     ZDOTDIR: undefined,
     TAO_DEVENV: undefined,
     DEVENV_ROOT: undefined,

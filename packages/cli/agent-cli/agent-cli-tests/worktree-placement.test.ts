@@ -103,22 +103,60 @@ Describe('worktree placement', () => {
     })
   })
 
-  Test('still makes a worktree where the harness would when no bun is available', async () => {
+  Test('Bash fallback creates, reuses and removes worktrees without Bun', async () => {
     await withCheckout(async primary => {
       // The wrapper finds the script from the checkout it runs in, so the fixture carries a copy.
       const script = 'packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh'
       await FS.mkdir(FS.dirname(FS.resolvePath(script, primary)))
       await FS.copyFile(FS.resolvePath(script, Repo.getRoot()), FS.resolvePath(script, primary))
-      const result = await CLI.run('/bin/zsh', {
-        args: [FS.resolvePath(script, primary), 'create'],
-        cwd: primary,
-        env: { HOME: Platform.runtimeProcess.env['HOME'] ?? '', PATH: '/usr/bin:/bin' },
-        stdin: JSON.stringify({ cwd: primary, name: 'no-bun' }),
-      })
+      const copied = FS.resolvePath(script, primary)
+      Expect((await FS.readText(copied)).split('\n')[0]).toBe('#!/bin/bash')
+      const run = (args: string[], payload: object, cwd = primary) =>
+        CLI.run('/bin/bash', {
+          args: [copied, ...args],
+          cwd,
+          env: { HOME: Platform.runtimeProcess.env['HOME'] ?? '', PATH: '/usr/bin:/bin' },
+          stdin: JSON.stringify(payload),
+        })
+      const result = await run(['create'], { name: 'no-bun' })
 
       Expect(result.exitCode).toBe(0)
-      Expect(result.stdout.trim()).toBe(FS.resolvePath('.claude/worktrees/no-bun', primary))
-      Expect(await branchOf(result.stdout.trim())).toBe('worktree-no-bun')
+      const created = FS.resolvePath('.claude/worktrees/no-bun', primary)
+      Expect(result.stdout).toBe(`${created}\n`)
+      Expect(result.stderr).toContain('Preparing worktree')
+      Expect(await branchOf(created)).toBe('worktree-no-bun')
+      Expect((await run(['create'], { name: 'no-bun' }, created)).stdout).toBe(`${created}\n`)
+
+      const nested = await run(['create'], { name: 'from-linked' }, created)
+      Expect(nested.exitCode).toBe(0)
+      Expect(nested.stdout).toBe(`${FS.resolvePath('.claude/worktrees/from-linked', primary)}\n`)
+      const removed = await run(['remove'], { worktree_path: created })
+      Expect(removed.exitCode).toBe(0)
+      Expect(removed.stdout).toBe('')
+      Expect(await FS.exists(created)).toBe(false)
+      Expect((await run(['remove'], { worktree_path: created })).exitCode).toBe(0)
+      // Removal retains the branch, so a second creation must take the existing-branch path.
+      Expect((await run(['create'], { name: 'no-bun' })).exitCode).toBe(0)
+      Expect(await branchOf(created)).toBe('worktree-no-bun')
+      await FS.writeText(FS.resolvePath('untracked.txt', created), 'keep this work\n')
+      const dirty = await run(['remove'], { worktree_path: created })
+      Expect(dirty.exitCode).not.toBe(0)
+      Expect(dirty.stdout).toBe('')
+      Expect(await FS.exists(FS.resolvePath('untracked.txt', created))).toBe(true)
+
+      for (
+        const [args, payload] of [
+          [[], {}],
+          [['unknown'], {}],
+          [['create'], { name: '../escape' }],
+          [['create'], {}],
+          [['remove'], {}],
+        ] as const
+      ) {
+        const invalid = await run([...args], payload)
+        Expect(invalid.exitCode).toBe(1)
+        Expect(invalid.stdout).toBe('')
+      }
     })
   })
 })

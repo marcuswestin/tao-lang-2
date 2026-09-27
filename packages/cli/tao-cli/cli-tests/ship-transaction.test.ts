@@ -1,5 +1,5 @@
 import { CLI, FS, Time } from '@shared'
-import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test, until } from '@shared/test'
 import { readProjectLock } from '../cli-src/ship-lock'
 import { shipContentHash } from '../cli-src/ship-model'
 
@@ -7,6 +7,7 @@ const transactionModule = FS.resolvePath('packages/cli/tao-cli/cli-src/ship-tran
 const lockModule = FS.resolvePath('packages/cli/tao-cli/cli-src/ship-lock.ts')
 const commandModule = FS.resolvePath('packages/cli/tao-cli/cli-src/ship-command.ts')
 const sharedModule = FS.resolvePath('packages/shared/shared-src/shared.ts')
+const testModule = FS.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts')
 const tsconfig = FS.resolvePath('packages/cli/tao-cli/tsconfig.json')
 
 Describe('tao ship cross-process transactions', () => {
@@ -14,44 +15,77 @@ Describe('tao ship cross-process transactions', () => {
     const root = await mkTestDir('tao-ship-stale-transaction-', { location: 'host' })
     const repositoryKey = shipContentHash([await FS.realPath(root)])
     const coordinationRoot = FS.resolvePath(`tao-ship-coordination/${repositoryKey}`, FS.tmpdir())
+    const workers: Array<{ command: CLI.StartedCommand; result?: CLI.CommandCloseResult }> = []
+    const startContender = (index: number) => {
+      const command = CLI.start('bun', {
+        args: [`--tsconfig=${tsconfig}`, '-e', staleContenderSource(root, coordinationRoot, index)],
+        onOutput: () => {},
+        processPolicy: 'test',
+        stdio: 'pipe',
+        timeoutMs: 30_000,
+      })
+      const worker: (typeof workers)[number] = { command }
+      workers.push(worker)
+      void command.waitForClose().then(result => worker.result = result)
+    }
     try {
       const ownerPath = FS.resolvePath('ship-transaction-stale.json', coordinationRoot)
       await FS.writeJson(ownerPath, { pid: Number.MAX_SAFE_INTEGER, token: 'stale' })
       await FS.symlink(FS.basename(ownerPath), FS.resolvePath('ship-transaction.lock', coordinationRoot))
 
-      const longLived = runWorker(staleContenderSource(root, coordinationRoot, 0, 300))
+      startContender(0)
       const claimPath = FS.resolvePath(
         'ship-transaction-reclaim-ship-transaction-stale.json.lock',
         coordinationRoot,
       )
-      const claimInstalled = await Time.pollUntil(async () => await FS.exists(claimPath), {
-        intervalMs: 5,
-        timeoutMs: 30_000,
+      await until(async () => await FS.exists(FS.resolvePath('hook-0', root)), {
+        description: 'the first contender to hold the stale reclaim claim before unlinking',
       })
-      Expect(claimInstalled).toBe(true)
+      Expect(await FS.exists(claimPath)).toBe(true)
+      startContender(1)
+      startContender(2)
+      await until(
+        async () =>
+          await FS.exists(FS.resolvePath('contested-1', root)) && await FS.exists(FS.resolvePath('contested-2', root)),
+        {
+          description: 'both fresh contenders to receive EEXIST from the held fixed reclaim claim',
+        },
+      )
+      Expect((await FS.listDir(root)).filter(entry => entry.startsWith('hook-'))).toEqual(['hook-0'])
+      await FS.writeText(FS.resolvePath('release-reclaim', root), '')
+      await until(
+        async () => await FS.exists(FS.resolvePath('ready-replacement', root)) && !await FS.exists(claimPath),
+        {
+          description:
+            'the reclaimer to leave its destructive edge and release its claim after observing the replacement',
+        },
+      )
+      await FS.writeText(FS.resolvePath('verify-replacement', root), '')
+      await until(() => workers.every(worker => worker.result !== undefined), {
+        description: 'the ship contenders to finish',
+      })
 
-      const freshOne = runWorker(staleContenderSource(root, coordinationRoot, 1, 0))
-      await Time.sleep(40)
-      const freshTwo = runWorker(staleContenderSource(root, coordinationRoot, 2, 0))
-      const results = await Promise.all([longLived, freshOne, freshTwo])
-
-      Expect(results.map(result => result.exitCode)).toEqual([0, 0, 0])
+      Expect(workers.map(worker => worker.result?.exitCode)).toEqual([0, 0, 0])
       Expect((await FS.listDir(root)).filter(entry => entry.startsWith('entered-')).toSorted()).toEqual([
         'entered-0',
         'entered-1',
         'entered-2',
       ])
-      const clocks = await Promise.all(
-        [0, 1, 2].map(async index => await FS.readJson<{ now: number }>(FS.resolvePath(`clock-${index}.json`, root))),
-      )
-      Expect(clocks[0]!.now).toBeGreaterThan(clocks[1]!.now + 200)
-      Expect(clocks[0]!.now).toBeGreaterThan(clocks[2]!.now + 200)
       Expect((await FS.listDir(root)).filter(entry => entry.startsWith('hook-'))).toEqual(['hook-0'])
       const replacementResults = (await FS.listDir(root)).filter(entry => entry.startsWith('replacement-'))
       Expect(replacementResults).toHaveLength(1)
       Expect(await FS.readJson(FS.resolvePath(replacementResults[0]!, root))).toEqual({ survived: true })
       Expect(await FS.exists(FS.resolvePath('ship-transaction.lock', coordinationRoot))).toBe(false)
     } finally {
+      for (const worker of workers) {
+        worker.command.kill('SIGKILL')
+      }
+      await until(() => workers.every(worker => worker.result !== undefined), {
+        description: 'the owned ship workers to close after cleanup',
+      })
+      for (const worker of workers) {
+        worker.command.dispose()
+      }
       await FS.remove(coordinationRoot)
       await FS.remove(root)
     }
@@ -245,17 +279,37 @@ async function runWorker(source: string) {
   })
 }
 
-function staleContenderSource(root: string, coordinationRoot: string, index: number, initialDelayMs: number): string {
+function staleContenderSource(root: string, coordinationRoot: string, index: number): string {
   return `
-    import { CLI, FS, Platform, Time } from ${JSON.stringify(sharedModule)}
-    import { ShipTransactionTesting, withShipTransaction } from ${JSON.stringify(transactionModule)}
+    const shared = { ...await import(${JSON.stringify(sharedModule)}) }
+    const { CLI, Errors, FS, Platform, Time } = shared
+    const { MockModule } = await import(${JSON.stringify(testModule)})
     const root = ${JSON.stringify(root)}
     const coordinationRoot = ${JSON.stringify(coordinationRoot)}
+    const claimPath = FS.resolvePath('ship-transaction-reclaim-ship-transaction-stale.json.lock', coordinationRoot)
+    const symlink = FS.symlink
+    MockModule('@shared', () => ({ ...shared, FS: { ...FS, symlink: async (target, path) => {
+      try {
+        return await symlink(target, path)
+      } catch (error) {
+        if (path === claimPath && error.code === 'EEXIST') {
+          await FS.writeText(FS.resolvePath(${JSON.stringify(`contested-${index}`)}, root), '')
+        }
+        throw error
+      }
+    } } }))
+    const { ShipTransactionTesting, withShipTransaction } = await import(${JSON.stringify(transactionModule)})
     let replacementCheck
-    await Time.sleep(${initialDelayMs})
-    await FS.writeJson(FS.resolvePath(${JSON.stringify(`clock-${index}.json`)}, root), { now: Time.nowMs() })
-    ShipTransactionTesting.setStaleUnlinkDelay(250)
+    async function waitFor(name) {
+      const ready = await Time.pollUntil(() => FS.exists(FS.resolvePath(name, root)), {
+        intervalMs: 5,
+        timeoutMs: 30_000,
+      })
+      if (!ready) Errors.throwUnexpected('Timed out waiting for fixture handshake: ' + name)
+    }
     ShipTransactionTesting.setBeforeStaleUnlink(async linkPath => {
+      await FS.writeText(FS.resolvePath(${JSON.stringify(`hook-${index}`)}, root), '')
+      await waitFor('release-reclaim')
       const replacement = FS.resolvePath(${
     JSON.stringify(`ship-transaction-replacement-${index}.json`)
   }, coordinationRoot)
@@ -265,9 +319,9 @@ function staleContenderSource(root: string, coordinationRoot: string, index: num
       await FS.writeJson(replacement, { pid: Platform.runtimeProcess.pid, token: 'replacement' })
       await FS.symlink(FS.basename(replacement), replacementLink)
       await FS.move(replacementLink, linkPath)
-      await FS.writeText(FS.resolvePath(${JSON.stringify(`hook-${index}`)}, root), '')
+      await FS.writeText(FS.resolvePath('ready-replacement', root), '')
       replacementCheck = (async () => {
-        await Time.sleep(150)
+        await waitFor('verify-replacement')
         const target = await CLI.run('/usr/bin/readlink', { args: [linkPath] })
         const survived = target.stdout.trim() === FS.basename(replacement)
         await FS.writeJson(FS.resolvePath(${JSON.stringify(`replacement-${index}.json`)}, root), { survived })
@@ -281,11 +335,9 @@ function staleContenderSource(root: string, coordinationRoot: string, index: num
     try {
       await withShipTransaction(root, async () => {
         await FS.writeText(FS.resolvePath(${JSON.stringify(`entered-${index}`)}, root), '')
-        await Time.sleep(10)
       })
       await replacementCheck
     } finally {
-      ShipTransactionTesting.setStaleUnlinkDelay(0)
       ShipTransactionTesting.setBeforeStaleUnlink(undefined)
     }
   `
