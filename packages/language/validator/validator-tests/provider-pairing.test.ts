@@ -16,7 +16,7 @@ const imports = `
   ${stubView('Main')}
 `
 
-const clerk = 'Clerk { PublishableKey "pk_test" Endpoint "http://127.0.0.1:4738" Resource "notes" }'
+const clerk = 'Clerk { PublishableKey "pk_test" }'
 const localAuth = 'LocalAuth { Endpoint "http://127.0.0.1:4738" Resource "notes" }'
 const reference = 'Reference { ServerURL "http://127.0.0.1:4738" Resource "notes" }'
 const instantDB = 'InstantDB { AppId "app" }'

@@ -920,6 +920,18 @@ export class RuntimeAuthScope {
       this.publish({ state: pendingState })
       return Promise.resolve()
     }
+    if (this.bindings.length > 0 && this.bindings.every(binding => binding.localOnly !== undefined)) {
+      // Device-local data has no remote Account to resolve: the verified principal is the account,
+      // and each local store's custody key names its issuer and subject.
+      if (this.authentication) {
+        this.retireAuthentication()
+        this.resetIdentity()
+      }
+      this.attempt = undefined
+      this.attemptToken += 1
+      this.authenticated({ accountId: principal.subject })
+      return Promise.resolve()
+    }
     let target: AccountTarget | string
     try {
       target = this.accountTarget()
@@ -1021,7 +1033,8 @@ export class RuntimeAuthScope {
   private accountTarget(): AccountTarget {
     const auth = this.authDeclaration()
     const targets: (AccountTarget & { holdsAccount: boolean })[] = []
-    for (const binding of this.bindings) {
+    // A local-only catalog keeps device custody under the resolved account and never resolves it.
+    for (const binding of this.bindings.filter(binding => binding.localOnly === undefined)) {
       const declaration = binding.source.declaration
       const configuration = evaluatedDatasourceConfiguration(binding.source)
       const holdsAccount = binding.store.definition.entities['Account'] !== undefined
@@ -1186,7 +1199,8 @@ export class RuntimeAuthScope {
           }
           : undefined
         const auth = this.dataAuth ?? fixtureAuth
-        const identity = this.current.identity
+        // Stores bind before the session publishes, so custody follows the verified principal.
+        const identity = this.dataAuth ? this.principal : undefined
         const local = binding.localOnly && auth
           ? {
             storageKey: JSON.stringify([
