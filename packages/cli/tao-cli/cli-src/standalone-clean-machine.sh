@@ -318,6 +318,8 @@ acceptance_status=0
 step "run standalone acceptance in the $profile guest" \
   "$bun_bin" run "$vm_helper" exec "$name" 1800000 /bin/sh /Users/admin/tao-harness/input/run.sh "$profile" \
   2>&1 | tee "$logs/acceptance.log" || acceptance_status=$?
+step 'flush guest evidence before stopping the VM' \
+  "$bun_bin" run "$vm_helper" exec "$name" 30000 /bin/sync
 step 'stop the VM before its final audit' tart stop "$name"
 wait "$vm_pid" || true
 started=0

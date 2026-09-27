@@ -158,6 +158,9 @@ export class StudioFeedController {
   }
 
   async refresh(): Promise<void> {
+    if (this.#disposed) {
+      return
+    }
     const revision = ++this.#revision
     this.#loading = true
     this.#error = ''
@@ -187,6 +190,9 @@ export class StudioFeedController {
   }
 
   async execute(payload: string): Promise<void> {
+    if (this.#disposed) {
+      return
+    }
     try {
       const action: unknown = JSON.parse(payload)
       Assert.input(Json.isRecord(action) && typeof action['type'] === 'string', 'Studio Feed requires an action.')
@@ -240,6 +246,9 @@ export class StudioFeedController {
   }
 
   async drop(payload: StudioFeedDrop, sketchId: string, rectId?: string, cellId?: string): Promise<void> {
+    if (this.#disposed) {
+      return
+    }
     try {
       const entity = this.#inventory.entities.find(item => item.name === payload.entity)
       Assert.input(

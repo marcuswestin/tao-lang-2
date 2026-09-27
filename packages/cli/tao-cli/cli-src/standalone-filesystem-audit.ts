@@ -58,7 +58,7 @@ async function main(args: string[]): Promise<void> {
     const diff = compare(before, after)
     if (args[5] !== undefined) {
       const scope = await FS.readJson<AuditScope>(FS.resolvePath(args[5]))
-      diff.violations = violations(diff, scope)
+      diff.violations = violations(diff, scope, after.entries)
     }
     await FS.writeText(FS.resolvePath(args[3]!), `${JSON.stringify(diff)}\n`)
     await FS.writeText(FS.resolvePath(args[4]!), report(diff))
@@ -160,7 +160,7 @@ function compare(before: Snapshot, after: Snapshot): Diff {
 }
 
 /** Require every observed change to belong to the acceptance or an explicit macOS-owned area. */
-function violations(diff: Diff, scope: AuditScope): string[] {
+function violations(diff: Diff, scope: AuditScope, afterEntries: Snapshot['entries']): string[] {
   if (scope.vmProfile !== undefined && scope.vmProfile !== 'vanilla' && scope.vmProfile !== 'xcode') {
     Errors.throwUserInput(`Invalid filesystem audit VM profile: ${scope.vmProfile}`)
   }
@@ -445,6 +445,41 @@ function violations(diff: Diff, scope: AuditScope): string[] {
     'Library/News/com.apple.news.public-com.apple.news.private-production',
     guestHome,
   )
+  // Observed Tahoe background metadata only: exact paths and shapes, never their descendants.
+  const observedMetadata = new Map<string, { kind: string; beforeSize: number; afterSize: number }>(([
+    ['Library/Caches/com.apple.Safari.SafeBrowsing', { kind: 'directory', beforeSize: 160, afterSize: 192 }],
+    ['Library/Caches/com.apple.Safari.SafeBrowsing/Cache.db-shm', {
+      kind: 'file',
+      beforeSize: 32768,
+      afterSize: 32768,
+    }],
+    ['Library/Caches/com.apple.Safari.SafeBrowsing/Cache.db-wal', {
+      kind: 'file',
+      beforeSize: 41232,
+      afterSize: 49472,
+    }],
+    ['Library/Safari/PasswordBreachStore.plist', { kind: 'file', beforeSize: 335, afterSize: 335 }],
+  ] as const).map(([path, shape]) => [FS.resolvePath(path, guestHome), shape]))
+  const observedMetadataChanges = new Set(
+    diff.changed.filter(({ path, before, after }) => {
+      const shape = observedMetadata.get(path)
+      return shape !== undefined && before.kind === shape.kind && after.kind === shape.kind
+        && before.size === shape.beforeSize && after.size === shape.afterSize
+        && after.uid === 501 && after.gid === 20 && after.mode === (shape.kind === 'file' ? 0o100644 : 0o40755)
+        && JSON.stringify({ ...before, device: 0, modifiedMs: 0, size: 0 })
+          === JSON.stringify({ ...after, device: 0, modifiedMs: 0, size: 0 })
+    }).map(change => change.path),
+  )
+  for (const relative of ['Library/Caches/com.apple.Safari.SafeBrowsing/fsCachedData', 'Library/PrivateCloudCompute']) {
+    const path = FS.resolvePath(relative, guestHome)
+    const entry = afterEntries[path]
+    if (
+      diff.added.includes(path) && entry?.kind === 'directory' && entry.size === 64
+      && entry.mode === 0o40755 && entry.uid === 501 && entry.gid === 20
+    ) {
+      observedMetadataChanges.add(path)
+    }
+  }
   // Recognize the observed extension-install shape, without attributing who wrote it.
   const retainedChanges = new Set([...diff.added, ...diff.changed.map(change => change.path)])
   const chromeInstallRoots = new Set(
@@ -494,6 +529,7 @@ function violations(diff: Diff, scope: AuditScope): string[] {
       xcodeExact.includes(path) || xcodeCryptex(path) || xcodeRemoved(path)
       || (scope.vmProfile === 'xcode' && xcodeTimestampDirectories.includes(path) && timestampChanged.has(path))
       || (path === newsDirectory && timestampChanged.has(path))
+      || observedMetadataChanges.has(path)
     ) {
       return false
     }
