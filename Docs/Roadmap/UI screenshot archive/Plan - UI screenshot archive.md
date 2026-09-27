@@ -115,7 +115,12 @@ it. So:
    byte for byte. Studio's review capture once flagged one shot in fifteen as changing between two
    consecutive settled captures; it now captures in a window that holds every cell and repeats until
    two consecutive captures agree, keeping `unstable-<name>` beside a shot that never does.
-2. The other Tao apps, then Studio on web.
+2. The other Tao apps (done), then Studio on web. HNReader, Pantry, and Notebook capture without a
+   failure. Getting there fixed two Studio defects that also stalled `tao review`: a capture now
+   scrolls its cell into view while it settles, since Chrome pauses animation frames in an offscreen
+   preview frame, and a cell without steps stays ready across a re-render of the revision its frame
+   already applied, where it used to fall back to pending and wait for an acknowledgement the frame
+   sends only once.
 3. Milestone native captures: iOS for the reference apps and the companion app, and the native
    Studio shell.
 4. Android, and the websites once their source or URL is named.
