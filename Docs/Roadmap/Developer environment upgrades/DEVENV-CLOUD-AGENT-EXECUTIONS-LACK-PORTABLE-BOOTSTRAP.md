@@ -4,10 +4,10 @@
 - **Section:** Deferred
 - **Area:** Agent workflow; cloud development environment
 - **Impact:** A cloud agent container without zsh or the pinned Nix/devenv profile cannot start the repository's `./agent` workflow, so it cannot set up, test, or verify a checkout.
-- **Evidence:** On 2026-09-25, a cloud execution could not start without zsh or the pinned profile. On 2026-09-26, committed `7996e033657e3a7ddccd8a392f5a977057c17431` passed the complete cold and cached native ARM Ubuntu contributor workflow, including bootstrap, setup, parser tests, checks, all tests, and verification. Default amd64 emulation and actual hosted acceptance are distinct; see the evidence below.
+- **Evidence:** On 2026-09-25, a cloud execution could not start without zsh or the pinned profile. On 2026-09-26, committed `d37963fc282d7a6d8a926a6822b23f3b7bfbfb7c` passed the complete cold and cached native ARM Ubuntu contributor workflow, including bootstrap, setup, parser tests, checks, all tests, and verification. Default amd64 emulation and actual hosted acceptance are distinct; see the evidence below.
 - **Workaround:** On Apple Silicon, run `./agent unsandboxed contributor-linux-test --native-arm64` for local Linux contributor acceptance. It does not establish amd64 or actual hosted compatibility.
 - **Proposed change:** Retain committed-source native Linux acceptance of the implemented portable bootstrap and shared pinned tools, resolve or qualify the default amd64 emulation boundary, then verify actual hosted setup and caching for every supported harness. Preserve noninteractive setup without preinstalled zsh, shared local/cloud versions, explicit host-only capability boundaries, and owned resource cleanup.
-- **Dependencies:** The standalone developer-shell work has landed. Complete this task before closing the broader standalone development effort. Nix 2.35.2 remains checksum-pinned; the existing task inventory's Python runtime is approved from locked nixpkgs without a pin change. Host access, initial downloads, and process-local QEMU bootstrap compatibility have successful evidence. Native ARM is a separate control for translation cost, not amd64 acceptance. Rosetta, global configuration, and further dependency/version changes remain outside this authorization.
+- **Dependencies:** The standalone developer-shell work has landed. Complete this task before closing the broader standalone development effort. Nix 2.35.2 remains checksum-pinned; the existing task inventory's Python runtime is approved from locked nixpkgs without a pin change. Host access, initial downloads, and process-local QEMU bootstrap compatibility have successful evidence. Native ARM acceptance proves local ARM Linux behavior, not amd64 acceptance. Rosetta, global configuration, and further dependency/version changes remain outside this authorization.
 - **Acceptance:** Reproduce contributor setup locally in an isolated Ubuntu environment, then prove the workflow in an actual fresh cloud session for each supported harness. Bootstrap a checkout without preinstalled zsh or a Nix/devenv profile; run `./agent help`, `./agent setup`, a focused test, and the portable check/test/verify lanes. Record per-harness evidence and explicitly identify unavailable macOS-only lanes. Local success alone does not close the task.
 - **Source:** Developer request, 2026-09-25.
 
@@ -386,10 +386,10 @@ No production shortcut semantics changed.
       16 GiB RAM, and a 30 GiB disk budget. Choose a container inside a Linux VM on macOS or a
       dedicated VM according to the required isolation. Measure architecture-emulation cost on
       Apple Silicon separately from repository performance, and verify disk-limit enforcement.
-- [ ] Cache pinned Linux tool installation in a reusable image layer, but create a fresh checkout
+- [x] Cache pinned Linux tool installation in a reusable image layer, but create a fresh checkout
       and writable environment per run. Apply the selected local revision/patch explicitly;
       never borrow the host checkout's dependencies, generated files, or developer profile.
-- [ ] Exercise both cold bootstrap and cached-image setup, including worktree/session initialization,
+- [x] Exercise both cold bootstrap and cached-image setup on native ARM Linux, including worktree/session initialization,
       dependency installation, and portable repository verification. Retain logs, tool versions,
       image identity, resource limits, and cleanup ownership for failures.
 - [ ] Run actual cloud smoke tests for every supported harness to cover hosted proxy, permissions,
@@ -497,3 +497,34 @@ Review found that the incoming cache lifecycle fixture published readiness JSON 
 and then treated file existence as complete publication. Its receipt now writes to an owned
 temporary sibling and renames after completion. This changes only the test handshake; cache
 retention and process cleanup behavior are unchanged.
+
+## Integrated-source Linux acceptance
+
+Run `20260926T234504Z-90279` passed both native ARM phases at `d37963fc282d7a6d8a926a6822b23f3b7bfbfb7c`,
+including the incoming subprocess-output, verification-priority, and account-review changes.
+Total wall time was 1132 seconds. All steps passed:
+
+| Phase                          | Cold | Cached |
+| ------------------------------ | ---- | ------ |
+| Bootstrap                      | 63s  | 27s    |
+| Repeat setup                   | 2s   | 2s     |
+| Parser tests                   | 2s   | 2s     |
+| Source checks                  | 28s  | 30s    |
+| Complete tests                 | 187s | 167s   |
+| Verification                   | 244s | 351s   |
+| Phase with evidence collection | 536s | 595s   |
+
+Both guests confirmed the managed Nix 2.35.2 and Python 3.13.12 toolchain. The run base was
+`sha256:12f2f66ce9ce08bb6916d48e9d78f1335b4d7c8b7726ff9e8f2b951370d95ad3`; the cached phase reused
+`sha256:fe941be7d173ed62368420c1617b6e85c98a45e6797567a0eea5e90159bfab50`.
+Full evidence is in `.artifacts/contributor-linux/20260926T234504Z-90279/`. Independent inspection
+`20260927T000405Z-35530` confirmed no run-specific containers or base images remain.
+Reusable tools images and shared caches were preserved. No Tart cleanup was performed.
+
+Complete macOS verification of this same commit passed in 94.2 seconds at
+`.artifacts/logs/verify/2026-09-26T23-42-56-113Z-68683-87013f24/`; finalization passed before
+this Linux rerun. Later tracked edits only record the results. The default amd64 QEMU/Nix
+blocker was last reproduced at `7996e033`; the intervening integrations did not change the
+Nix bootstrap, pinned version, image, or compatibility settings. Native amd64 and actual hosted
+smoke tests remain outstanding. No landing, Rosetta experiment, or global configuration change
+was performed.
