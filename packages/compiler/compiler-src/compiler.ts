@@ -235,6 +235,7 @@ const Compiler = {
   createContext,
   createSession,
   compileCode,
+  compileStudioPreviewManifest,
   compileTestPlan,
   compileValidated,
 } as const

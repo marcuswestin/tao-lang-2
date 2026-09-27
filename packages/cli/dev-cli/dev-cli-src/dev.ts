@@ -526,14 +526,15 @@ await runWithCommands(commands => {
     .description('Sync the storage submodule, record a QA screenshot run into it, or push it.')
     .argument('<action>', 'sync, qa, or push')
     .argument('[path]', 'Tao project directory to capture.')
-    .option('--app <name>', 'Select a named app within the project.')
-    .option('--devices <list>', 'Comma-separated devices: phone, tablet, laptop (default: all).')
-    .option('--appearances <list>', 'Comma-separated appearances: light, dark (default: both).')
+    .option('--app <names>', 'Capture only these apps (default: every app in the project).', repeatedOption)
+    .option('--scenario <selector>', 'Capture only matching scenarios; see `tao _preview qa --help`.', repeatedOption)
+    .option('--device <names>', 'Devices: phone, tablet, laptop (default: all).', repeatedOption)
+    .option('--appearance <names>', 'Appearances: light, dark (default: both).', repeatedOption)
     .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
     .action(async (
       action: string,
       path: string | undefined,
-      options: { app?: string; appearances?: string; devices?: string; note?: string },
+      options: { app?: string[]; appearance?: string[]; device?: string[]; note?: string; scenario?: string[] },
     ) => {
       const { Storage } = await import('./git/Storage')
       await runExitCommand(() => Storage.run(action, path, options))
@@ -1154,6 +1155,11 @@ async function runExitCommand(run: () => Promise<number>): Promise<void> {
     }
     Platform.runtimeProcess.exit(1)
   }
+}
+
+/** repeatedOption collects every occurrence of a repeatable option, in order. */
+function repeatedOption(value: string, previous: string[] = []): string[] {
+  return [...previous, value]
 }
 
 function parsePositiveInteger(value: string, label: string): number {

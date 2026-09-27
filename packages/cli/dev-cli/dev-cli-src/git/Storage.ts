@@ -15,15 +15,16 @@ const listedNames = 10
 const storageActions = ['sync', 'qa', 'push'] as const
 
 type StorageAction = (typeof storageActions)[number]
-type QaOptions = { app?: string; appearances?: string; devices?: string; note?: string }
+type QaOptions = { app?: string[]; appearance?: string[]; device?: string[]; note?: string; scenario?: string[] }
 
 /** QaRun is the part of a `qa-run.json` the commit message reads. */
 type QaRun = {
   appearances: readonly string[]
+  apps: readonly string[]
   devices: readonly string[]
   note?: string
-  project: { appName: string }
   runId: string
+  selection?: readonly string[]
   shots: readonly { change?: 'changed' | 'new' | 'unchanged'; error?: string; name: string; status: string }[]
   source: { branch: string; commit: string; dirty: boolean; subject: string }
 }
@@ -91,10 +92,13 @@ async function timeline(root: string): Promise<number> {
 
 async function qa(root: string, path: string, options: QaOptions): Promise<number> {
   await sync(root)
+  const repeated = (flag: string, values: readonly string[] | undefined): string[] =>
+    (values ?? []).flatMap(value => [flag, value])
   const flags = [
-    ...(options.app === undefined ? [] : ['--app', options.app]),
-    ...(options.devices === undefined ? [] : ['--devices', options.devices]),
-    ...(options.appearances === undefined ? [] : ['--appearances', options.appearances]),
+    ...repeated('--app', options.app),
+    ...repeated('--scenario', options.scenario),
+    ...repeated('--device', options.device),
+    ...repeated('--appearance', options.appearance),
     ...(options.note === undefined ? [] : ['--note', options.note]),
   ]
   const exitCode = await tao(root, [
@@ -141,9 +145,11 @@ function qaCommitMessage(run: QaRun): string {
     ...(added.length > 0 ? [`${added.length} new`] : []),
     ...(failed.length > 0 ? [`${failed.length} failed`] : []),
   ]
+  const apps = run.apps.join(', ')
+  const screenshots = `${run.shots.length} ${run.shots.length === 1 ? 'screenshot' : 'screenshots'}`
   const summary = counts.length === 0
-    ? `QA ${run.project.appName}: no changes across ${run.shots.length} screenshots`
-    : `QA ${run.project.appName}: ${counts.join(', ')} of ${run.shots.length} screenshots`
+    ? `QA ${apps}: no changes across ${screenshots}`
+    : `QA ${apps}: ${counts.join(', ')} of ${screenshots}`
   const list = (names: readonly string[]): string =>
     [
       ...names.slice(0, listedNames).map(name => name.replace(/\.png$/u, '')),
@@ -154,6 +160,7 @@ function qaCommitMessage(run: QaRun): string {
     summary,
     '',
     `- Run: ${run.runId} on ${run.devices.join(', ')} in ${run.appearances.join(', ')}`,
+    ...(run.selection === undefined ? [] : [`- Selection: ${run.selection.join(', ')}`]),
     `- Source: ${source.branch} ${source.commit.slice(0, 8)} ${source.subject}${
       source.dirty ? ' (with uncommitted changes)' : ''
     }`,
@@ -205,3 +212,5 @@ async function gitOrThrow(cwd: string, args: readonly string[]): Promise<CLI.Com
   }
   return result
 }
+
+export const StorageTesting = { qaCommitMessage } as const

@@ -21,6 +21,10 @@ is a history, not a gate: nothing fails because a screenshot changed.
 - **Websites**: deferred; no website source is in this checkout.
 - **Comparison**: by content hash, as `tao review --against` already does. A pixel-threshold
   comparison would need a new dependency and is not planned.
+- **Unchanged runs**: committed like any other, since a run whose screens all held is still history.
+- **Tests**: Tao behavior tests take no screenshots; scenarios are the shot list.
+- **Checkout size**: the blobless clone is enough for now; a sparse checkout and a before/after
+  comparison page wait until the archive is large enough to need them.
 
 ## Matrix
 
@@ -56,8 +60,21 @@ the window chrome.
   commands under development until one graduates to a released name. Agents run it as
   `./agent unsandboxed storage qa <project> [--note …]`, since Studio needs the host's Watchman;
   `storage sync` and `storage push` handle the archive's remote. Each capture hides everything on
-  the Studio page but the cell, so Studio's own chrome stays out of the shot. Studio's CDP capture
-  and Appium are the planned adapters for Studio itself and native targets. No new dependency.
+  the Studio page but the cell, and the runtime's floating dev menu inside it, so tooling stays out
+  of the shot. Studio's CDP capture and Appium are the planned adapters for Studio itself and native
+  targets. No new dependency.
+- **Apps**: Studio previews one app per session, so a run launches Studio once per app. The first
+  launch opens Studio's default app and captures its own scenarios and every view scenario. Every
+  app whose source reaches a view lists its scenarios, so capturing them once avoids a duplicate per
+  app, and the harness apps that mount no design would fail them. The
+  other apps are parsed without a launch, and only those that some selected scenario runs as its
+  subject, such as `WordFlowerDark`, are launched after it. `--app` names the apps instead, the
+  first one taking the view scenarios.
+- **Selection**: `--scenario` picks scenarios and repeats, spelled
+  `[<file>.tao:]<name>[/<name>[/<name>]]`: one name is a subject or a group, two a group and entry
+  or a subject and group, three subject, group, and entry, and the file prefix narrows any of them.
+  Names match exactly, and a selector that matches nothing fails the run. `--device` and
+  `--appearance` narrow the matrix; each flag repeats, or takes a comma-separated list.
 - **Store**: `storage/qa/`. Each run writes only its own directory, `runs/<UTC time>/`, holding
   `qa-run.json` (scenario identities, hashes, change since the previous capture of each name,
   renderer fingerprint, source commit and subject, optional note) and `screenshots/`, so two
@@ -66,8 +83,8 @@ the window chrome.
   app itself and the source file appended only when two files declare the same group and entry.
   Git stores identical PNGs once, so an unchanged screen adds no bytes to the repository.
 - **Commits**: one per run, summarised by what changed —
-  `QA <App>: 2 changed, 1 failed of 14 screenshots`, then bullets for the run, its source commit,
-  the changed, new, and failed names, and the note.
+  `QA WordFlower, WordFlowerDark: 2 changed, 1 failed of 14 screenshots`, then bullets for the run,
+  its selection, its source commit, the changed, new, and failed names, and the note.
 - **Timeline**: a generated, ignored `index.html` with one filmstrip per screenshot name, showing
   only the runs where the pixels changed or the capture failed, each labelled with its commit
   subject and note. A renderer-fingerprint change is labelled as such rather than as a design
@@ -87,8 +104,8 @@ it. So:
   tree arrives, and a screenshot downloads only when checked out. A shallow clone would save less,
   since the screenshots are the weight, and makes rebasing onto the archive's `main` fragile.
 - Sync puts the submodule on the archive's `main` at `origin/main` before any capture writes.
-- A capture commits inside the archive and pushes to the archive's own `main`, rebasing and
-  retrying on a non-fast-forward. Per-run manifests make that rebase conflict-free.
+- A capture commits inside the archive; `storage push` publishes to the archive's own `main`,
+  rebasing and retrying on a non-fast-forward. Per-run manifests make that rebase conflict-free.
 - Repository scans, formatting, and lint exclude the submodule path.
 
 ## Slices

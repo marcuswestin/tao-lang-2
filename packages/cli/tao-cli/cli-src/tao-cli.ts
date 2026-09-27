@@ -307,25 +307,37 @@ function createCommands(): Command {
     const preview = commands
       .command('_preview', { hidden: true })
       .description('Unreleased commands under development; their interface may change.')
+    // Repeatable; `list` also splits commas, which no app, device, or appearance name contains.
+    const repeated = (value: string, previous: string[] = []): string[] => [...previous, value]
+    const list = (value: string, previous: string[] = []): string[] => [
+      ...previous,
+      ...value.split(',').map(item => item.trim()).filter(Boolean),
+    ]
     preview
       .command('qa')
       .argument('[path]', 'Tao project directory to capture in Studio.', '.')
-      .option('--app <name>', 'Select a named app within the project.')
-      .option('--screenshot', 'Capture every scenario across the device and appearance matrix.')
+      .option('--screenshot', "Capture the project's scenarios across the device and appearance matrix.")
       .option('--dest <directory>', 'Screenshot store to append this run to, as runs/<UTC time>/.')
-      .option('--devices <list>', 'Comma-separated devices: phone, tablet, laptop (default: all).')
-      .option('--appearances <list>', 'Comma-separated appearances: light, dark (default: both).')
+      .option('--app <names>', 'Capture only these apps (default: every app in the project).', list)
+      .option(
+        '--scenario <selector>',
+        'Capture only matching scenarios, as [<file>.tao:]<subject or group>[/<group or entry>[/<entry>]]; repeatable.',
+        repeated,
+      )
+      .option('--device <names>', 'Devices: phone, tablet, laptop (default: all).', list)
+      .option('--appearance <names>', 'Appearances: light, dark (default: both).', list)
       .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
       .option('--timeline', "Only regenerate the store's index.html from the runs it already holds.")
       .description('Capture QA evidence for a Tao project.')
       .action(async (
         path: string,
         options: {
-          app?: string
-          appearances?: string
+          app?: string[]
+          appearance?: string[]
           dest?: string
-          devices?: string
+          device?: string[]
           note?: string
+          scenario?: string[]
           screenshot?: boolean
           timeline?: boolean
         },
@@ -341,14 +353,13 @@ function createCommands(): Command {
             HCI.writeSuccess(`Timeline: ${FS.displayPath(await writeQaTimeline(options.dest))}\n`)
             return
           }
-          const list = (value: string | undefined): string[] | undefined =>
-            value?.split(',').map(item => item.trim()).filter(Boolean)
           const result = await runQaScreenshots(path, {
-            ...(options.app === undefined ? {} : { appName: options.app }),
-            ...(options.appearances === undefined ? {} : { appearances: list(options.appearances) }),
+            ...(options.app === undefined ? {} : { apps: options.app }),
+            ...(options.appearance === undefined ? {} : { appearances: options.appearance }),
             dest: options.dest,
-            ...(options.devices === undefined ? {} : { devices: list(options.devices) }),
+            ...(options.device === undefined ? {} : { devices: options.device }),
             ...(options.note === undefined ? {} : { note: options.note }),
+            ...(options.scenario === undefined ? {} : { scenarios: options.scenario }),
           })
           HCI.writeSuccess(
             `Captured ${result.captured} screenshots (${result.changed} changed, ${result.new} new, ${result.failed} failed): ${
