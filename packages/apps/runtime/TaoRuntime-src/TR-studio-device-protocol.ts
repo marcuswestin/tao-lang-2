@@ -160,6 +160,7 @@ export type TaoStudioDeviceStudioMessage =
 
 export type TaoStudioDeviceDeviceMessage =
   | { cellId: string; type: 'device.selectCell' }
+  | { compileRevision: number; manifestRevision: string; type: 'device.appApplied' }
   | {
     appliedRevision: number
     compileRevision: number
@@ -339,6 +340,14 @@ const clearMessageParsers: MessageParsers<TaoStudioDeviceClearMessage> = {
 }
 
 const deviceMessageParsers: MessageParsers<TaoStudioDeviceDeviceMessage> = {
+  'device.appApplied': value =>
+    nonNegativeInteger(value['compileRevision']) && nonEmptyString(value['manifestRevision'])
+      ? {
+        compileRevision: value['compileRevision'],
+        manifestRevision: value['manifestRevision'],
+        type: 'device.appApplied',
+      }
+      : undefined,
   'device.applied': value => {
     const identity = parseCellIdentity(value['identity'])
     return identity !== undefined

@@ -217,3 +217,22 @@ test('native navigation has explicit simulator targets and cannot silently run a
     )
   }
 })
+
+test('native Clipboard uses an explicit iOS simulator and rejects unrelated platforms and fault fixtures', () => {
+  const native = { app: 'native-bridge', seed: '12345' }
+  expect(parseHostTestingRequest('ios', { ...native, device: 'owned-target' })).toMatchObject({
+    kind: 'native',
+    mode: 'ios',
+    subject: 'native-bridge',
+    device: 'owned-target',
+  })
+  expect(() => parseHostTestingRequest('ios', native)).toThrow('Native proofs require --device')
+  expect(() => parseHostTestingRequest('ios', { ...native, device: 'owned-target', fault: true })).toThrow(
+    '--fault is not supported for native-bridge.',
+  )
+  for (const mode of ['browser', 'export', 'driver', 'android', 'device', 'catalyst']) {
+    expect(() => parseHostTestingRequest(mode, { ...native, device: 'owned-target' })).toThrow(
+      'native-bridge Clipboard acceptance requires ios',
+    )
+  }
+})

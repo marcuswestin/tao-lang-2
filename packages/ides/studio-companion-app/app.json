@@ -28,6 +28,12 @@
     "plugins": [
       "expo-dev-client",
       [
+        "@clerk/expo",
+        {
+          "appleSignIn": false
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "ios": {

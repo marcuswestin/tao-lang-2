@@ -51,8 +51,8 @@ test('selects the one HNReader lifecycle journey with authored source locations'
   expect(journey.version).toBe(1)
   expect(journey.check.name).toBe('keeps reading history across a relaunch in most-recent order')
   expect(journey.check.source.filePath).toMatch(/Apps\/HNReader\/HNReader\.test\.tao$/u)
-  expect(journey.check.source.range?.start.line).toBe(95)
-  expect(journey.check.run.source.range?.start.line).toBe(96)
+  expect(journey.check.source.range?.start.line).toBe(96)
+  expect(journey.check.run.source.range?.start.line).toBe(97)
   expect(journey.check.steps.map(step => step.kind)).toEqual([
     'press',
     'press',
@@ -89,7 +89,7 @@ test('preflights missing row selection before it sends any host input and report
   const unsupported = failure as HostJourneyUnsupportedCapabilityError
   expect(unsupported.capability).toBe('select')
   expect(unsupported.source.filePath).toMatch(/Apps\/HNReader\/HNReader\.test\.tao$/u)
-  expect(unsupported.source.range?.start.line).toBe(104)
+  expect(unsupported.source.range?.start.line).toBe(105)
   expect(operations).toEqual([])
 })
 
@@ -179,4 +179,35 @@ test('compiles and emits the authored Clockwork countdown journey', async () => 
     { kind: 'expect', text: 'Control received: advance 1000ms' },
     { kind: 'expect', text: 'Countdown: 0:09' },
   ])
+})
+
+test('compiles real Clipboard operations against the maintained Native Bridge app without mocked native modules', async () => {
+  const clipboard = await compileHostJourney(
+    Repo.resolvePath('Apps/Test Apps/Native Bridge/.host-tests/Clipboard.test.tao'),
+    {
+      suite: 'Native Clipboard acceptance',
+      check: 'round trips native clipboard formats and manages change subscriptions',
+    },
+  )
+  expect(clipboard.check.run.appName).toBe('NativeBridge')
+  expect(clipboard.check.run.appSourcePath).toBe(Repo.resolvePath('Apps/Test Apps/Native Bridge/App.tao'))
+  const operations: HostJourneyOperation[] = []
+  await runHostJourney(clipboard, {
+    capabilities,
+    execute: async operation => {
+      operations.push(operation)
+    },
+  })
+  expect(operations.filter(operation => operation.kind === 'press').map(operation => operation.text)).toEqual(
+    expect.arrayContaining([
+      'Copy text',
+      'Read HTML',
+      'Read PNG',
+      'Read JPEG',
+      'Copy sample URL',
+      'Start listening',
+      'Stop listening',
+      'Stop via deprecated API',
+    ]),
+  )
 })

@@ -1,11 +1,10 @@
 { pkgs, inputs, ... }:
 
 let
-  # Keep one Node pin for both devenv's JavaScript support and Expo's direct `node` usage.
-  nodePkg = pkgs.nodejs_24;
-  # Bun 1.4.2 fixes the compiled-binary signature failure on macOS 27. Keep the
-  # rest of the toolchain on its existing nixpkgs pin.
-  bunPkg = (import inputs.bun-nixpkgs { system = pkgs.stdenv.system; }).bun;
+  toolchain = import ./packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix {
+    inherit pkgs;
+    bunPkgs = import inputs.bun-nixpkgs { system = pkgs.stdenv.system; };
+  };
   hutchPkg = pkgs.callPackage ./nix/hutch.nix { };
 in
 {
@@ -19,17 +18,15 @@ in
   enterShell = ''
     export PATH="$DEVENV_ROOT:$PATH"
     for bin_dir in "$DEVENV_ROOT/node_modules/.bin" "$DEVENV_ROOT/packages/shared/node_modules/.bin"; do
-      if [ -d "$bin_dir" ]; then
-        export PATH="$bin_dir:$PATH"
-      fi
+      export PATH="$bin_dir:$PATH"
     done
   '';
 
   languages.javascript = {
     enable = true;
-    package = nodePkg;
+    package = toolchain.node;
     bun.enable = true;
-    bun.package = bunPkg;
+    bun.package = toolchain.bun;
   };
 
   android = {
@@ -44,22 +41,9 @@ in
     android-studio.enable = false;
   };
 
-  packages = [
-    nodePkg
-    # `just secrets` encrypts with age; the Secure Enclave plugin keeps the identity in hardware, so
-    # decrypting asks for a fingerprint and no passphrase exists to be stored or typed.
-    pkgs.age
+  packages = toolchain.packages ++ [
     pkgs.cocoapods
-    # GNU coreutils for `timeout`, which repository scripts and agents use to bound a run.
-    pkgs.coreutils
-    pkgs.dprint
-    # `./agent open-pr` and `companion-host-publish` drive GitHub through gh; pinning it here gives
-    # every checkout the same version rather than whatever each machine installed, if any.
-    pkgs.gh
-    pkgs.git
-    pkgs.just
-    pkgs.ripgrep
-    pkgs.watchman
+    pkgs.direnv
     hutchPkg
   ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ pkgs.age-plugin-se ];
 

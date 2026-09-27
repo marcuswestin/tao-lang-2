@@ -110,12 +110,14 @@ function isStudioSchemeEnvironment(value: unknown): value is StudioCellEnvironme
   return (requested === 'dark' || requested === 'light' || requested === 'system')
     && (resolved === 'dark' || resolved === 'light')
     && (source === 'native-fixed' || source === 'preference' || source === 'scenario' || source === 'system')
-    && (capability === 'fixed-light-native' || capability === 'reactive-browser')
+    && (capability === 'fixed-light-native' || capability === 'pinned-native'
+      || capability === 'reactive-browser' || capability === 'reactive-catalyst')
     && !(source === 'system' && requested !== 'system')
     && !(source === 'preference' && requested === 'system')
     && !(source === 'scenario' && requested === 'system')
     && !(source === 'native-fixed' && capability !== 'fixed-light-native')
     && !(capability === 'fixed-light-native' && (resolved !== 'light' || source !== 'native-fixed'))
+    && !(capability === 'pinned-native' && (source !== 'scenario' || resolved !== requested))
 }
 
 function runtimeDataEntryTables(value: StudioJsonValue): readonly StudioRuntimeDataTable[] {

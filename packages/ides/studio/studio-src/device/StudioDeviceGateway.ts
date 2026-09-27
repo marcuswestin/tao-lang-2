@@ -721,6 +721,17 @@ export class StudioDeviceGateway {
   }
 
   #manifestChanged(connection: Connection, manifest: StudioPreviewManifestV2): void {
+    if (manifest.cells.length === 0) {
+      this.#releaseInstance(connection)
+      connection.assignment = undefined
+      connection.cellId = undefined
+      connection.scenarioLabel = undefined
+      const sessionId = connection.ref?.sessionId
+      if (sessionId !== undefined) {
+        this.#state(sessionId).lensSamples = undefined
+        this.#emit(sessionId)
+      }
+    }
     this.#sendSealed(connection, { manifest: deviceManifest(manifest), type: 'studio.manifest' })
     if (connection.cellId === undefined) {
       return
@@ -946,6 +957,7 @@ export class StudioDeviceGateway {
     }
     Switch.on(message, 'type', {
       'device.applied': applied => this.#deviceApplied(connection, ref, applied),
+      'device.appApplied': applied => this.#deviceAppApplied(connection, ref, applied),
       'device.lens': lens => this.#deviceLens(connection, ref, lens.samples),
       'device.log': logged => this.#deviceLog(connection, logged.entries),
       'device.ping': () => this.#sendSealed(connection, { type: 'studio.pong' }),
@@ -1107,6 +1119,29 @@ export class StudioDeviceGateway {
     this.#captures.delete(requestId)
     clearTimeout(pending.timer)
     pending.resolve(result)
+  }
+
+  /** Ordinary app mounts prove only this device's revision; the browser owns its own applied state. */
+  #deviceAppApplied(
+    connection: Connection,
+    ref: StudioDeviceGatewaySessionRef,
+    message: Extract<TaoStudioDeviceDeviceMessage, { type: 'device.appApplied' }>,
+  ): void {
+    // compileRevision advances even for failed builds. Only a published manifest proves a bundle.
+    const manifest = ref.session.previewManifest()
+    const accepted = manifest !== undefined
+      && manifest.cells.length === 0
+      && connection.assignment === undefined
+      && connection.previewInstanceId === undefined
+      && connection.cellId === undefined
+      && manifest.compileRevision === message.compileRevision
+      && manifest.manifestRevision === message.manifestRevision
+    if (accepted) {
+      connection.appliedRevision = message.compileRevision
+      connection.lastError = undefined
+    }
+    this.#sendSealed(connection, { accepted, compileRevision: message.compileRevision, type: 'studio.appliedAck' })
+    this.#emit(ref.sessionId)
   }
 
   #deviceApplied(

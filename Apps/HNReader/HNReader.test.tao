@@ -1,8 +1,9 @@
+use Bookmarks, Comments, ReadingEntries, Stories from @model
 use Http from @tao/data/providers/http
 use Local from @tao/data/providers/local
 use StackNav from @tao/nav
 use Col, FormButton, ScrollView, Text from @tao/ui
-use Bookmarks, Comments, HNDesign, HNReaderStub, ReadingEntries, ReadingHistoryRow, Stories, TrackedStoryRow from ./
+use HNDesign, HNReaderStub, ReadingHistoryRow, TrackedStoryRow from ./
 
 app HNReaderAvailabilityHarness {
    Name "HNReader availability harness"

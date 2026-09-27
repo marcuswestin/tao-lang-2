@@ -1,4 +1,9 @@
-import { AppiumNoSuchAlertError, type AppiumSession, type AppiumSessionFactory } from '@appium-driver'
+import {
+  type AppiumElement,
+  AppiumNoSuchAlertError,
+  type AppiumSession,
+  type AppiumSessionFactory,
+} from '@appium-driver'
 import { expect, test } from '@playwright/test'
 import { Errors } from '@shared'
 import { appiumAndroidClient, appiumXcuiTestClient } from './AppiumMobileClients'
@@ -103,4 +108,23 @@ test('Android Back invokes the native keycode instead of typing the word into an
   await session.pressKey('Back')
   expect(scripts).toEqual([{ script: 'mobile: pressKey', args: [{ keycode: 4 }] }])
   expect(keyboardActions).toBe(0)
+})
+
+test('iOS target reveal delegates container and direction to XCTest using the exact observed element', async () => {
+  const scripts: Array<{ args: readonly unknown[]; script: string }> = []
+  const element = { id: 'clipboard-result' } as AppiumElement
+  const remote = stubRemote({
+    find: async () => element,
+    executeScript: async <T>(script: string, args: readonly unknown[] = []): Promise<T> => {
+      scripts.push({ args, script })
+      return undefined as T
+    },
+  })
+  const session = await appiumXcuiTestClient({ createSession: async () => remote }).createSession({})
+  const observed = await session.findElement({ using: 'accessibility id', value: 'Clipboard result' })
+  await session.revealElement!(observed)
+  expect(scripts).toEqual([{
+    script: 'mobile: scrollToElement',
+    args: [{ elementId: 'clipboard-result' }],
+  }])
 })

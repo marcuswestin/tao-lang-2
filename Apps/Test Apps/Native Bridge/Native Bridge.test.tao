@@ -1,0 +1,24 @@
+use NativeBridge from ./App.tao
+
+test "Native Bridge" {
+   test "opens every native surface without requesting native effects" {
+      run NativeBridge
+      expect navigation title "Native Bridge"
+      press "Haptics · Expo"
+      expect navigation title "Haptics · Expo"
+      expect text "Status: Ready"
+      expect text "ImpactAsync Light"
+      back
+      press "Vibration · React Native"
+      expect navigation title "Vibration · React Native"
+      expect text "Status: Ready"
+      back
+      press "Clipboard · Expo"
+      expect navigation title "Clipboard · Expo"
+      expect text "Not listening"
+      expect text "No image read"
+      expect text "Read result: Nothing read yet"
+      back
+      expect navigation title "Native Bridge"
+   }
+}

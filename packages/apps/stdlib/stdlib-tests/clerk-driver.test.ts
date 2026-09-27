@@ -1,6 +1,8 @@
 import { Deferred, Describe, Expect, Test } from '@shared/test'
 import {
   bindClerkDriverHost,
+  classifyClerkSignInError,
+  ClerkConfigurationError,
   type ClerkDriverSDK,
   ClerkRevocationError,
   ClerkSignInRejectedError,
@@ -98,7 +100,10 @@ function fixture() {
   }
   const configuration = {}
   const driver = createClerkDriver(configuration)
-  const unbind = bindClerkDriverHost(configuration, sdk, error => error === 'invalid-credentials')
+  const unbind = bindClerkDriverHost(configuration, sdk, error =>
+    error === 'invalid-credentials'
+      ? classifyClerkSignInError({ status: 422, errors: [{ code: 'form_password_incorrect' }] })
+      : undefined)
   return {
     driver,
     sdk,
@@ -216,6 +221,42 @@ Describe('Clerk SDK driver', () => {
     } finally {
       f.cleanup()
     }
+  })
+
+  Test('classifies only known Clerk codes without exposing provider messages or metadata', () => {
+    const native = classifyClerkSignInError({ status: 400, errors: [{ code: 'native_api_disabled' }] })
+    Expect(native).toBeInstanceOf(ClerkConfigurationError)
+    Expect(native?.message).toBe(
+      'Native sign-in is disabled for this app. Ask the app developer to enable the Clerk Native API.',
+    )
+    for (
+      const code of ['form_identifier_not_found', 'form_password_incorrect', 'form_password_or_identifier_incorrect']
+    ) {
+      const rejected = classifyClerkSignInError({ status: 422, errors: [{ code }] })
+      Expect(rejected).toBeInstanceOf(ClerkSignInRejectedError)
+      Expect(rejected?.message).toBe('The sign-in details were not accepted. Check them and try again.')
+    }
+    const messages = [
+      ['form_code_incorrect', 'The verification code was not accepted. Check it and try again.'],
+      ['form_password_matches_identifier', 'Choose a password that is different from your email address.'],
+      ['form_password_pwned', 'This password has appeared in a data breach. Choose a different password.'],
+      ['user_settings_invalid', 'Sign-in is not configured correctly for this app. Contact the app developer.'],
+    ]
+    for (const [code, message] of messages) {
+      Expect(classifyClerkSignInError({ status: 400, errors: [{ code: code! }] })?.message).toBe(message)
+    }
+    for (const code of ['unknown', '__proto__', 'constructor', 'secret@example.test']) {
+      const providerError = { status: 400, errors: [{ code, message: 'private', meta: { secret: 'private' } }] }
+      Expect(classifyClerkSignInError(providerError)).toBeUndefined()
+    }
+    for (const status of [200, 429, 500]) {
+      Expect(classifyClerkSignInError({ status, errors: [{ code: 'form_password_incorrect' }] })).toBeUndefined()
+    }
+    Expect(classifyClerkSignInError({ status: 400, errors: [] })).toBeUndefined()
+    Expect(classifyClerkSignInError({
+      status: 400,
+      errors: [{ code: 'form_password_incorrect' }, { code: 'unknown' }],
+    })).toBeUndefined()
   })
 
   Test('normalizes rejected credentials without leaking the SDK error', async () => {

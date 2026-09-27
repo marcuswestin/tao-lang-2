@@ -20,6 +20,14 @@
   floor gives each of 13 lanes a ceiling of one or two slots, and every admission decision takes
   the single advisory registry lock, so 13 contenders may spend admission in lock contention rather
   than in work.
+  A 2026-09-26 `verify-changed` in `feat/clerk-device-acceptance` took 315.6s with six overlapping
+  lanes and peak load 172.8 on 18 CPUs. The shipping stale-reclaimer timing assertion and Studio
+  malformed-handshake assertion failed, then their exact files passed unchanged in separate
+  invocations (3.2s and 11.0s of suite time). The failed run is
+  `.artifacts/logs/verify-changed/2026-09-26T22-15-40-789Z-81198-1fab9590/summary.json`;
+  retries are `.artifacts/logs/dev-test/2026-09-26T22-23-47-694Z-43035-99bd2067/summary.json`
+  and `.artifacts/logs/dev-test/2026-09-26T22-23-48-592Z-43200-845f1769/summary.json`.
+  These are observations under contention, not a measured causal explanation or an admission benchmark.
 - **Workaround:** Verify when the machine is quiet, or read the `contention` block in
   `summary.json` before treating a slow lane as a regression.
 - **2026-09-26 recurrence:** An iOS development checkout's `verify-changed` recorded three

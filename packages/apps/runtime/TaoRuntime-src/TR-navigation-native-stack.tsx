@@ -27,6 +27,7 @@ import type { PresentableEntry } from './TR-navigation-state'
 import { presentedOccurrenceRegion } from './TR-navigation-surfaces'
 import { isNavigation, renderPresentable } from './TR-navigation-values'
 import { requireReactNativeRuntime } from './TR-react-native'
+import { catalystPalette, SchemeControls } from './TR-scheme'
 import type { TaoProps } from './TR-TaoProps'
 
 type HostEntry = PresentableEntry & { host: RuntimeHostReadChannel }
@@ -110,9 +111,22 @@ function NativeStackItemContent(props: {
   const header = slots.header && !props.chrome
   const ScreenStackItem = module.ScreenStackItem!
   const Right = module.ScreenStackHeaderRightView
+  const Center = module.ScreenStackHeaderCenterView
   const runtime = requireReactNativeRuntime()
   const ios = runtime.Platform?.OS === 'ios'
   const catalyst = ios && (runtime.Platform as { isMacCatalyst?: boolean })?.isMacCatalyst === true
+  const ipad = ios && !catalyst && (runtime.Platform as { isPad?: boolean })?.isPad === true
+  const titleView = ipad && Center && header && slots.title
+    ? createElement(
+      Center,
+      null,
+      createElement(runtime.Text, {
+        accessibilityRole: 'header',
+        numberOfLines: 1,
+        style: { color: runtime.PlatformColor?.('label'), fontSize: 17, fontWeight: '600' },
+      }, slots.title),
+    )
+    : null
   const androidHeader = runtime.Platform?.OS === 'android' && runtime.PlatformColor
     ? {
       backgroundColor: runtime.PlatformColor('?android:attr/colorBackground'),
@@ -176,7 +190,7 @@ function NativeStackItemContent(props: {
         ...androidHeader,
         children: !ios && Right && header && props.observable && slots.toolbar.length > 0
           ? createElement(Right, null, createElement(NativeToolbar, { commands: slots.toolbar, nativeHeader: true }))
-          : null,
+          : titleView,
         headerRightBarButtonItems: ios ? toolbar.items : undefined,
         hidden: !header,
         hideBackButton: !header || !props.observable,
@@ -263,6 +277,7 @@ function NativeOverflowMenu(props: {
   onClose(): void
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
+  const scheme = SchemeControls.use()
   const firstHost = React.useRef<TaoAccessibilityHost | null>(null)
   React.useEffect(() => focusAccessibilityHost(runtime, firstHost.current), [runtime])
   const content = createElement(
@@ -271,7 +286,7 @@ function NativeOverflowMenu(props: {
       accessibilityRole: 'menu',
       accessibilityViewIsModal: true,
       onAccessibilityEscape: props.onClose,
-      style: nativeMenuStyle,
+      style: [nativeMenuStyle, catalystPalette(scheme.resolved)],
     },
     ...props.commands.map(command =>
       createElement(NavigationCommandButton, {

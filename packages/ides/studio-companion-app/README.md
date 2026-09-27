@@ -49,12 +49,13 @@ will fail to provision.
 ## Install once
 
 ```sh
-just studio-companion-install device="<name>"
+just studio-companion-install "<name>"
 ```
 
 `<name>` is the device name Finder and Xcode show. The command lists the connected physical
-iPhones and iPads, then runs `expo run:ios --device "<name>" --no-bundler` here: Expo prebuilds the
-`ios/` project when needed, CocoaPods resolves pods (the `pod` binary comes from the repository's
+iPhones and iPads, refreshes the native project with Expo prebuild and CocoaPods, then runs
+`expo run:ios --device "<name>" --no-bundler` here. Native configuration plugins are reapplied on
+every installation. CocoaPods resolves pods (the `pod` binary comes from the repository's
 devenv profile), Xcode builds and installs. No Metro starts; Studio stays the only Metro owner.
 The first build takes minutes; the device must be unlocked and must trust this Mac, and the Xcode
 project needs a development team selected once.

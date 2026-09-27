@@ -19,6 +19,7 @@ export namespace Packages {
 
   /** Context declares shared lookup state for Tao imports. */
   export type Context = {
+    sourcePaths?: ReadonlySet<string>
     index: Index
     stdlibRoot: string
     /**
@@ -31,6 +32,7 @@ export namespace Packages {
 
   /** ContextOptions configures package roots shared by one parser or workspace lifetime. */
   export type ContextOptions = {
+    sourcePaths?: readonly string[]
     stdlibRoot?: string
   }
 
@@ -113,7 +115,13 @@ export namespace Packages {
         )
       },
       async candidateFilePaths(useStatement, request) {
-        return await candidateFilePaths(resolveUse(context, useStatement, request.fromFilePath))
+        const resolution = resolveUse(context, useStatement, request.fromFilePath)
+        const diskPaths = await candidateFilePaths(resolution)
+        const sourcePaths = [...context.sourcePaths ?? []]
+        const workspaceFilePaths = new Set([...diskPaths, ...sourcePaths])
+        return [...workspaceFilePaths].filter(filePath =>
+          targetMatches(context, resolution, { filePath, workspaceFilePaths })
+        )
       },
       projectSourceFiles(request) {
         const projectRoot = projectRootForPath(context.index, request.fromFilePath)
@@ -147,14 +155,15 @@ export namespace Packages {
   export async function createContext(projectRoot: string, options: ContextOptions = {}): Promise<Context> {
     const resolvedProjectRoot = FS.resolvePath(projectRoot)
     return {
-      index: await createIndex(resolvedProjectRoot),
+      index: await createIndex(resolvedProjectRoot, options.sourcePaths),
+      sourcePaths: options.sourcePaths === undefined ? undefined : new Set(options.sourcePaths),
       stdlibRoot: FS.resolvePath(options.stdlibRoot ?? Stdlib.rootPath),
       physicalPaths: new Map(),
     }
   }
 
   /** createIndex scans one project root for project-local Tao package directories. */
-  export async function createIndex(projectRoot: string): Promise<Index> {
+  export async function createIndex(projectRoot: string, sourcePaths: readonly string[] = []): Promise<Index> {
     const requestedRoot = FS.resolvePath(projectRoot)
     const resolvedRoot = await containingProjectRoot(requestedRoot) ?? requestedRoot
     const scanRoot = await FS.realPath(resolvedRoot).catch(() => resolvedRoot)
@@ -194,6 +203,15 @@ export namespace Packages {
         if (containsTaoSource(listing, scannedPath)) {
           record(path)
         }
+      }
+    }
+    for (const sourcePath of sourcePaths) {
+      let directory = FS.dirname(sourcePath)
+      while (directory !== resolvedRoot && FS.pathIsWithin(directory, resolvedRoot)) {
+        if (FS.basename(directory).startsWith('@')) {
+          record(directory)
+        }
+        directory = FS.dirname(directory)
       }
     }
     for (const paths of packages.values()) {
@@ -688,7 +706,15 @@ export namespace Packages {
   function physicalPath(context: Context, path: string): string {
     let resolved = context.physicalPaths.get(path)
     if (resolved === undefined) {
-      resolved = FS.realPathSync(path)
+      const virtual = context.sourcePaths !== undefined
+        && [...context.sourcePaths].some(source => source === path || FS.pathIsWithin(source, path))
+      let ancestor = path
+      if (virtual) {
+        while (!FS.existsSync(ancestor)) {
+          ancestor = FS.dirname(ancestor)
+        }
+      }
+      resolved = FS.resolvePath(FS.relativePath(ancestor, path), FS.realPathSync(ancestor))
       context.physicalPaths.set(path, resolved)
     }
     return resolved

@@ -792,8 +792,115 @@ Describe('Studio device client sealed control plane', () => {
     const connection = run.studio.latest()
     connection.open()
     const second = await run.studio.handshake(connection)
-    second.welcome({ manifest })
+    second.welcome({
+      manifest: {
+        ...manifest,
+        scenarios: [...manifest.scenarios, { ...manifest.scenarios[0]!, cellId: 'editing#cell' }],
+      },
+    })
     Expect(second.received()).toEqual([{ cellId: 'editing#cell', type: 'device.selectCell' }])
+  })
+
+  Test(
+    'welcomes an ordinary app without selecting a scenario and preserves explicit invalid-selection errors',
+    async () => {
+      const run = harness()
+      await run.client.start()
+      const connection = run.studio.latest()
+      connection.open()
+      const session = await run.studio.handshake(connection)
+      session.welcome({ manifest: { ...manifest, scenarios: [] } })
+      Expect(run.client.state().phase).toBe('connected')
+      Expect(run.client.state().assignment).toBeUndefined()
+      Expect(session.received()).toEqual([])
+      run.client.selectCell('missing')
+      Expect(session.received()).toEqual([{ cellId: 'missing', type: 'device.selectCell' }])
+      session.send({ cellId: 'missing', code: 'unknown-cell', message: 'Missing', type: 'studio.cellUnavailable' })
+      Expect(run.client.state().cellUnavailable).toEqual({
+        cellId: 'missing',
+        code: 'unknown-cell',
+        message: 'Missing',
+      })
+    },
+  )
+
+  Test('clears the last scenario assignment and unavailable selection when the manifest becomes empty', async () => {
+    const run = harness()
+    const session = await connect(run)
+    session.received()
+    session.send({ identity, runtime: {}, type: 'studio.cellAssigned' })
+    run.client.selectCell('missing')
+    session.send({ cellId: 'missing', code: 'unknown-cell', message: 'Missing', type: 'studio.cellUnavailable' })
+    Expect(run.client.state().assignment?.identity.cellId).toBe('states#cell')
+    Expect(run.client.state().cellUnavailable?.cellId).toBe('missing')
+    session.received()
+
+    session.send({ manifest: { ...manifest, scenarios: [] }, type: 'studio.manifest' })
+    Expect(run.client.state().assignment).toBeUndefined()
+    Expect(run.client.state().selectedCellId).toBeUndefined()
+    Expect(run.client.state().cellUnavailable).toBeUndefined()
+    Expect(session.received()).toEqual([])
+    session.send({ manifest, type: 'studio.manifest' })
+    Expect(session.received()).toEqual([{ cellId: 'states#cell', type: 'device.selectCell' }])
+  })
+
+  Test('forgets a removed selection on reconnect and chooses the first remaining scenario', async () => {
+    const run = harness()
+    const first = await connect(run)
+    first.send({ identity, runtime: {}, type: 'studio.cellAssigned' })
+    first.send({ type: 'studio.reconnect' })
+    const connection = run.studio.latest()
+    connection.open()
+    const second = await run.studio.handshake(connection)
+    second.welcome({
+      manifest: { ...manifest, scenarios: [{ ...manifest.scenarios[0]!, cellId: 'remaining#cell' }] },
+    })
+    Expect(second.received()).toEqual([{ cellId: 'remaining#cell', type: 'device.selectCell' }])
+    Expect(run.client.state().selectedCellId).toBeUndefined()
+
+    second.send({ identity: { ...identity, cellId: 'remaining#cell' }, runtime: {}, type: 'studio.cellAssigned' })
+    second.send({ type: 'studio.reconnect' })
+    const next = run.studio.latest()
+    next.open()
+    const third = await run.studio.handshake(next)
+    third.welcome({ manifest: { ...manifest, scenarios: [] } })
+    Expect(third.received()).toEqual([])
+    Expect(run.client.state().selectedCellId).toBeUndefined()
+    Expect(run.client.state().assignment).toBeUndefined()
+  })
+
+  Test('sends an ordinary app acknowledgement with its published manifest identity', async () => {
+    const run = harness()
+    const session = await connect(run)
+    session.received()
+    session.send({ manifest: { ...manifest, scenarios: [] }, type: 'studio.manifest' })
+    run.client.appliedApp(7, 'compile:7')
+    Expect(session.received()).toEqual([{
+      compileRevision: 7,
+      manifestRevision: 'compile:7',
+      type: 'device.appApplied',
+    }])
+    Expect(run.client.state().appliedRevision).toBe(7)
+    session.send({ accepted: true, compileRevision: 7, type: 'studio.appliedAck' })
+    Expect(run.client.state().appliedAck).toEqual({ accepted: true, compileRevision: 7 })
+    Expect(
+      StudioDeviceProtocol.parseDeviceMessage({
+        compileRevision: 7,
+        manifestRevision: 'compile:7',
+        type: 'device.appApplied',
+      }),
+    )
+      .toEqual({ compileRevision: 7, manifestRevision: 'compile:7', type: 'device.appApplied' })
+    for (
+      const malformed of [
+        { compileRevision: -1, manifestRevision: 'compile:7' },
+        { compileRevision: 7.5, manifestRevision: 'compile:7' },
+        { compileRevision: 7, manifestRevision: '' },
+        { compileRevision: 7 },
+      ]
+    ) {
+      Expect(StudioDeviceProtocol.parseDeviceMessage({ ...malformed, type: 'device.appApplied' })).toBeUndefined()
+    }
   })
 
   Test('asks for the first scenario when a manifest arrives after a manifest-less welcome', async () => {

@@ -88,6 +88,15 @@ await runWithCommands(commands => {
   commands.name('dev')
 
   commands
+    .command('shell-setup')
+    .description('Offer automatic development environments for this repository and its worktrees.')
+    .option('--configure', 'Ask again even when this repository already has a saved choice.')
+    .action(async (options: { configure?: boolean }) => {
+      const { runDirenvSetup } = await import('./shell/DirenvSetup')
+      await runDirenvSetup(options)
+    })
+
+  commands
     .command('completion')
     .description('Print completion generated from the registered dev commands.')
     .argument('<shell>', 'zsh')
@@ -109,7 +118,7 @@ await runWithCommands(commands => {
     )
     .option(
       '--app <subject>',
-      'Explicit subject: hnreader, clockwork, or native-navigation (device installs; catalyst builds a local Mac trial).',
+      'Explicit subject: hnreader, clockwork, native-navigation, or native-bridge (iOS Clipboard acceptance).',
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
@@ -645,6 +654,40 @@ await runWithCommands(commands => {
     .command('worktree-status')
     .description('Report every Git worktree and its latest matching Codex, Claude, or Cursor task; removes nothing.')
     .action(async () => Platform.runtimeProcess.exit(await ReclaimCommand.status()))
+
+  commands
+    .command('setup-clerk')
+    .description('Guide Clerk development setup and save credentials in the encrypted repository store.')
+    .option('--instructions', 'Print setup steps without opening a browser or changing credentials.')
+    .action(async (options: { instructions?: boolean }) => {
+      const { runSetupClerk } = await import('./clerk/SetupClerkCommand')
+      try {
+        Platform.runtimeProcess.exit(await runSetupClerk(options))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('clerk-review')
+    .description('Run Clerk and local InstantDB in Studio for a connected iPhone review.')
+    .option(
+      '--device <name-or-udid>',
+      'Launch on this connected iPhone or iPad and pair in Terminal without opening a browser.',
+    )
+    .option('--host <ipv4>', 'The Mac LAN IPv4 address reachable from the phone; detected when omitted.')
+    .option('--instant-url <origin>', 'Local InstantDB API origin.', 'http://127.0.0.1:9020')
+    .option('--no-browser', 'Start Studio without opening the Mac browser.')
+    .action(async (options: { host?: string; instantUrl?: string; browser?: boolean; device?: string }) => {
+      const { runClerkReview } = await import('./clerk/ClerkReviewCommand')
+      try {
+        Platform.runtimeProcess.exit(await runClerkReview(options))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
 
   commands
     .command('secrets')

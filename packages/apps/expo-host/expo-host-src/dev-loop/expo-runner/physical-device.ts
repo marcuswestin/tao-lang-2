@@ -1,18 +1,13 @@
 import { CLI, Errors, FS, HCI, Json } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
-import { CompanionIdentity } from '../prebuilt-host/CompanionIdentity'
+import { companionDevClientUrl, CompanionIdentity } from '../prebuilt-host/CompanionIdentity'
 import { Android, type AndroidSession } from './android'
 import { ExpoConfig, expoSdkMajor, type ExpoSessionConfig } from './expo-config'
+import { companionAppProbeArgs, companionLaunchArgs, installedFromDevicectlApps } from './ios-companion'
 import { detectLanIPv4 } from './lan-host'
 import { ExpoMetro, type ExpoMetroSession } from './metro'
 
 const taoSdkMajor = expoSdkMajor() ?? ''
-/**
- * The command that puts a Tao runtime on a physical iPhone or iPad today. `StudioCompanionDevice.ts`
- * owns this spelling for Studio's own surfaces, so the sentences below repeat the words rather than
- * importing them back through a cycle.
- */
-const COMPANION_INSTALL_COMMAND = 'just studio-companion-install'
 
 /** DevicectlList is the `devicectl list devices` JSON shape this module reads. */
 export type DevicectlList = {
@@ -60,10 +55,12 @@ export type IosPhysicalDevice = {
   name: string
 }
 
-export type PhysicalDeviceDependencies = {
+type PhysicalDeviceOptions = DevicectlJsonOptions & {
+  device?: string
   detectLanHost?: typeof detectLanIPv4
   listIosDevices?: () => Promise<IosPhysicalDevice[]>
   selectDevice?: (choices: readonly { label: string; value: string }[]) => Promise<string>
+  shouldStop?: () => boolean
 }
 
 /** expoGoUrl builds the Expo Go deep link for a reachable Metro host. */
@@ -92,53 +89,57 @@ export function iosPhysicalDevicesFromDevicectl(payload: DevicectlList): IosPhys
 }
 
 /**
- * physicalIosUnsupportedMessage explains why `tao dev` refuses a physical iPhone or iPad and names
- * the loop that does reach one. Expo Go is not a lane Tao can restore here: since 2026-09-03 its
- * iPhone build requires an Expo account signed in on the device *and* in the terminal serving the
- * bundle, and `expo-config.ts` deliberately gives Metro a repository-local Expo home, so a
- * developer's own `expo login` is invisible to it.
- */
-export function physicalIosUnsupportedMessage(device: IosPhysicalDevice): string {
-  return `Cannot open this Tao app on ${device.name}: Expo Go on iPhone now requires an Expo account signed in both on the phone and in the terminal running Metro, and Tao runs Metro under its own Expo home, so that sign-in never reaches it. Run this app on ${device.name} through the Tao Companion development build instead: \`${COMPANION_INSTALL_COMMAND} device="${device.name}"\` once from a Tao checkout with Xcode, then open the app from Tao Studio's Device popover.`
-}
-
-/**
- * openPhysicalDevice opens the app on a connected Android phone, in a compatible prebuilt Companion
- * or else Expo Go, and truthfully rejects a physical iPhone, which Expo Go no longer serves.
+ * Opens an ordinary app in the installed iOS Companion or the prepared Android runtime.
+ * An explicit name/ID never prompts or silently launches a different device.
  */
 export async function openPhysicalDevice(
   config: ExpoSessionConfig = ExpoConfig,
   metro: ExpoMetroSession = ExpoMetro,
   android: AndroidSession = Android,
-  dependencies: PhysicalDeviceDependencies = {},
+  dependencies: PhysicalDeviceOptions = {},
 ): Promise<boolean> {
-  await metro.waitForMetro()
-  const iosDevices = await (dependencies.listIosDevices ?? listIosPhysicalDevices)()
+  const shouldStop = dependencies.shouldStop ?? (() => false)
+  if (shouldStop() || await metro.waitForMetro(shouldStop) === false || shouldStop()) {
+    return false
+  }
+  const iosDevices = await (dependencies.listIosDevices ?? (() => listIosPhysicalDevices(dependencies)))()
   const androidSerials = await listAndroidPhysicalDevices(android)
-  if (iosDevices.length === 0 && androidSerials.length === 0) {
+  if (shouldStop()) {
+    return false
+  }
+  if (dependencies.device === undefined && iosDevices.length === 0 && androidSerials.length === 0) {
     DevLoopOutput.logDevLoop(
       'dev',
-      `No connected physical device. Connect an Android phone — this loop installs a compatible prebuilt Tao Companion onto it, or else the SDK ${taoSdkMajor} Expo Go — or use an iOS Simulator. A physical iPhone or iPad runs a Tao app through the Tao Companion development build (\`${COMPANION_INSTALL_COMMAND}\`), not through Expo Go.`,
+      `No connected physical device. Connect and unlock an iPhone with Tao Companion installed, or an Android phone with a compatible Companion or SDK ${taoSdkMajor} Expo Go.`,
       'warn',
     )
     return false
   }
 
   const choices = [
-    ...iosDevices.map(device => ({ label: `${device.name} (iOS)`, value: `ios:${device.id}` })),
-    ...androidSerials.map(serial => ({ label: `${serial} (Android)`, value: `android:${serial}` })),
+    ...iosDevices.map(device => ({ ...device, label: `${device.name} (iOS)`, value: `ios:${device.id}` })),
+    ...androidSerials.map(serial => ({
+      id: serial,
+      name: serial,
+      label: `${serial} (Android)`,
+      value: `android:${serial}`,
+    })),
   ]
-  const selected = choices.length === 1
+  const selected = dependencies.device !== undefined
+    ? namedDevice(choices, dependencies.device)
+    : choices.length === 1
     ? choices[0]!.value
     : await (dependencies.selectDevice ?? (choices =>
       HCI.askChoice({
         message: 'Choose a connected physical device',
         choices: [...choices],
       })))(choices)
+  if (shouldStop()) {
+    return false
+  }
   const iosDevice = iosDevices.find(device => selected === `ios:${device.id}`)
   if (iosDevice !== undefined) {
-    DevLoopOutput.logDevLoop('dev', physicalIosUnsupportedMessage(iosDevice), 'warn')
-    return false
+    return await openIosPhone(config, iosDevice, dependencies)
   }
   const serial = androidSerials.find(candidate => selected === `android:${candidate}`)
   if (serial === undefined) {
@@ -146,7 +147,95 @@ export async function openPhysicalDevice(
   }
 
   const host = await (dependencies.detectLanHost ?? detectLanIPv4)()
-  return await openAndroidPhone(config, android, serial, host)
+  if (shouldStop()) {
+    return false
+  }
+  return await openAndroidPhone(config, android, serial, host, shouldStop)
+}
+
+function namedDevice(choices: readonly { id: string; name: string; value: string }[], query: string): string {
+  const wanted = query.trim()
+  if (wanted.length === 0) {
+    Errors.throwUserInput('--device needs a physical device name or ID.')
+  }
+  const ids = choices.filter(choice => choice.id === wanted || choice.value === wanted)
+  const exact = choices.filter(choice => choice.name === wanted)
+  const matches = ids.length > 0
+    ? ids
+    : exact.length > 0
+    ? exact
+    : choices.filter(choice => choice.name.toLowerCase() === wanted.toLowerCase())
+  if (matches.length === 0) {
+    Errors.throwUserInput(
+      `No connected device matches "${wanted}". Connect and unlock it, trust this Mac, and retry. `
+        + `Connected: ${choices.map(choice => `${choice.name} (${choice.id})`).join(', ') || 'none'}.`,
+    )
+  }
+  if (matches.length > 1) {
+    Errors.throwUserInput(
+      `More than one connected device is named "${wanted}". Use its ID: ${
+        matches.map(device => device.id).join(', ')
+      }.`,
+    )
+  }
+  return matches[0]!.value
+}
+
+async function openIosPhone(
+  config: ExpoSessionConfig,
+  device: IosPhysicalDevice,
+  options: PhysicalDeviceOptions,
+): Promise<boolean> {
+  try {
+    const probe = await runDevicectlJson(companionAppProbeArgs(device.id, CompanionIdentity.bundleIdentifier), options)
+    if (options.shouldStop?.()) {
+      return false
+    }
+    if (probe.failure !== undefined) {
+      Errors.throwHostEnvironment(probe.failure.message)
+    }
+    const installed = installedFromDevicectlApps(probe.payload, CompanionIdentity.bundleIdentifier)
+    if (installed === undefined) {
+      Errors.throwHostEnvironment('devicectl answered without an app list for this device.')
+    }
+    if (!installed) {
+      Errors.throwHostEnvironment(
+        `${CompanionIdentity.name} is not installed. From a Tao checkout, run \`./dev studio-companion-install --device '${
+          device.name.replaceAll("'", "'\\''")
+        }'\` once, then retry.`,
+      )
+    }
+    const host = await (options.detectLanHost ?? detectLanIPv4)()
+    if (options.shouldStop?.()) {
+      return false
+    }
+    const result = await runDevicectlJson(
+      companionLaunchArgs({
+        bundleIdentifier: CompanionIdentity.bundleIdentifier,
+        hostId: device.id,
+        terminateExisting: true,
+        url: companionDevClientUrl({ host, port: config.EXPO_PORT }),
+      }),
+      options,
+    )
+    if (result.failure !== undefined) {
+      Errors.throwHostEnvironment(result.failure.message)
+    }
+    DevLoopOutput.logDevLoop('dev', `opened ${device.name} (${CompanionIdentity.name})`)
+    return true
+  } catch (error) {
+    if (options.shouldStop?.()) {
+      return false
+    }
+    DevLoopOutput.logDevLoop(
+      'dev',
+      `Could not open ${device.name}: ${
+        Errors.formatForUser(error)
+      } Unlock the phone, trust this Mac, and keep it on the same network.`,
+      'warn',
+    )
+    return false
+  }
 }
 
 /**
@@ -212,8 +301,8 @@ function commandFailure(result: CLI.CommandResult): DevicectlFailure | undefined
   }
 }
 
-async function listIosPhysicalDevices(): Promise<IosPhysicalDevice[]> {
-  const outcome = await runDevicectlJson<DevicectlList>(['list', 'devices'])
+async function listIosPhysicalDevices(options: DevicectlJsonOptions): Promise<IosPhysicalDevice[]> {
+  const outcome = await runDevicectlJson<DevicectlList>(['list', 'devices'], options)
   if (outcome.failure !== undefined || outcome.payload === undefined) {
     return []
   }
@@ -242,11 +331,18 @@ async function openAndroidPhone(
   android: AndroidSession,
   serial: string,
   lanHost: string,
+  shouldStop: () => boolean,
 ): Promise<boolean> {
   const lanUrl = expoGoUrl(lanHost, config.EXPO_PORT)
   try {
     await android.prepareRuntimeOnSerial(serial)
+    if (shouldStop()) {
+      return false
+    }
     const reversed = await android.reverseMetroPort(serial)
+    if (shouldStop()) {
+      return false
+    }
     const runtime = await android.openRuntimeOnSerial(
       serial,
       reversed ? config.EXPO_GO_URL : lanUrl,
@@ -255,6 +351,9 @@ async function openAndroidPhone(
     DevLoopOutput.logDevLoop('dev', `opened ${serial}${runtime === 'companion' ? ` (${CompanionIdentity.name})` : ''}`)
     return true
   } catch (error) {
+    if (shouldStop()) {
+      return false
+    }
     DevLoopOutput.logDevLoop(
       'dev',
       `Could not open this app on ${serial}: ${Errors.formatForUser(error)}. Try ${lanUrl} in Expo Go.`,

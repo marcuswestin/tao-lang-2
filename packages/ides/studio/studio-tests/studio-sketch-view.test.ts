@@ -1,5 +1,6 @@
 import { Assert } from '@shared'
 import { Deferred, Expect, Test } from '@shared/test'
+import { mountCanvasViewport } from '../studio-src/client/matrix/StudioCanvasViewport'
 import {
   applySketchSnapWith,
   StudioSketchMutationLane,
@@ -883,7 +884,8 @@ function pointer(
   }
 }
 
-class SketchTestDocument {
+class SketchTestDocument extends EventTarget {
+  readonly defaultView = new EventTarget()
   activeElement: SketchTestElement | undefined
   hitTest: SketchTestElement[] = []
 
@@ -908,6 +910,9 @@ class SketchTestDocument {
 
 class SketchTestElement {
   ariaLabel = ''
+  className = ''
+  readonly attributes = new Map<string, string>()
+  readonly captureListeners = new Map<string, Array<(event: never) => void>>()
   readonly children: SketchTestElement[] = []
   readonly dataset: Record<string, string | undefined> = {}
   disabled = false
@@ -944,10 +949,59 @@ class SketchTestElement {
     this.append(child)
   }
 
-  addEventListener(type: string, listener: (event: never) => void): void {
-    const listeners = this.listeners.get(type) ?? []
+  addEventListener(type: string, listener: (event: never) => void, capture = false): void {
+    const map = capture === true ? this.captureListeners : this.listeners
+    const listeners = map.get(type) ?? []
     listeners.push(listener)
-    this.listeners.set(type, listeners)
+    map.set(type, listeners)
+  }
+
+  removeEventListener(type: string, listener: (event: never) => void, capture = false): void {
+    const map = capture === true ? this.captureListeners : this.listeners
+    map.set(type, (map.get(type) ?? []).filter(candidate => candidate !== listener))
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attributes.get(name) ?? null
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value)
+  }
+
+  removeAttribute(name: string): void {
+    this.attributes.delete(name)
+  }
+
+  dispatchTree(event: SketchTestEvent): void {
+    const path: SketchTestElement[] = []
+    for (let current: SketchTestElement | undefined = this; current !== undefined; current = current.parent) {
+      path.push(current)
+    }
+    let stopped = false
+    const dispatched = {
+      ...event,
+      stopPropagation: () => {
+        stopped = true
+      },
+      stopImmediatePropagation: () => {
+        stopped = true
+      },
+    }
+    for (const node of [...path].reverse()) {
+      for (const listener of node.captureListeners.get(event.type) ?? []) {
+        listener(dispatched as never)
+        if (stopped) {
+          return
+        }
+      }
+    }
+    for (const node of path) {
+      node.dispatch(event.type, dispatched)
+      if (stopped) {
+        return
+      }
+    }
   }
 
   append(...children: SketchTestElement[]): void {
@@ -997,7 +1051,7 @@ class SketchTestElement {
   querySelector(selector: string): SketchTestElement | null {
     const name = dataSelectorName(selector)
     return name === undefined
-      ? null
+      ? this.children.find(child => selector.includes(`.${child.className}`) && child.className !== '') ?? null
       : this.children.find(child => child.dataset[name] !== undefined) ?? null
   }
 
@@ -1034,3 +1088,61 @@ function dataSelectorName(selector: string): string | undefined {
     'taoStudio',
   )
 }
+
+Test('free sketch rectangles render transient text and images without writing catalog content', () => {
+  const { dom, host, mounted, changes } = mountTextEditor()
+  const sketch = testSketch()
+  mounted.render([sketch], undefined, { 'sketch-1': { front: { text: 'Feed title', label: 'Title' } } })
+  Expect(dom.find(host, 'taoStudioSketchRect', 'front').textContent).toBe('Feed title')
+  Expect(sketch.rects.find(rect => rect.id === 'front')?.content).toBe('Front')
+  mounted.render([sketch], undefined, {
+    'sketch-1': {
+      front: { text: 'https://example.test/a.png', imageUrl: 'https://example.test/a.png', label: 'Cover' },
+    },
+  })
+  const image = dom.find(host, 'taoStudioSketchRect', 'front').children.find(child => child.tagName === 'img')
+  Expect(image).toBeDefined()
+  Expect((image as unknown as { src: string; alt: string }).src).toBe('https://example.test/a.png')
+  Expect((image as unknown as { src: string; alt: string }).alt).toBe('Cover')
+  mounted.render([sketch], undefined, {})
+  Expect(dom.find(host, 'taoStudioSketchRect', 'front').textContent).toBe('Front')
+  Expect(changes).toEqual([])
+  mounted.dispose()
+})
+
+Test('mounted Draw Space drag cannot draw or move rectangles and key release restores both gestures', () => {
+  const { dom, host, mounted, changes } = mountTextEditor()
+  const preview = dom.createElement('main')
+  preview.dataset['canvasWorkspace'] = 'draw'
+  host.dataset['taoStudioDrawCanvas'] = 'true'
+  preview.append(host)
+  const controls = mountCanvasViewport({ host: preview as unknown as HTMLElement })
+  const drag = (element: SketchTestElement, x: number, y: number): void => {
+    element.dispatchTree(pointer('pointerdown', element, 7, x, y))
+    element.dispatchTree(pointer('pointermove', element, 7, x + 60, y + 25))
+    element.dispatchTree(pointer('pointerup', element, 7, x + 60, y + 25))
+  }
+  try {
+    const board = dom.find(host, 'taoStudioSketch', 'sketch-1')
+    const workspace = dom.find(host, 'taoStudioSketchWorkspace', 'true')
+    // The controller's forwarded Space transition uses the same held-key state as document Space.
+    controls.iframePanKey(true, host as unknown as Element)
+    drag(workspace, 200, 200)
+    drag(board, 200, 40)
+    drag(dom.find(board, 'taoStudioSketchRect', 'front'), 45, 15)
+    Expect(changes).toEqual([])
+    Expect(host.descendants().filter(element => element.dataset['taoStudioSketch'] !== undefined)).toHaveLength(1)
+    Expect(controls.state()).toEqual({ x: 135, y: 56.25, z: 1 })
+    dom.dispatchEvent(Object.assign(new Event('keyup'), { key: ' ' }))
+    drag(board, 200, 40)
+    Expect(changes).toHaveLength(1)
+    Expect(changes[0]).toMatchObject({ kind: 'add', rect: { x: 200, y: 40, width: 60, height: 25 } })
+    const updated = dom.find(host, 'taoStudioSketch', 'sketch-1')
+    drag(dom.find(updated, 'taoStudioSketchRect', 'front'), 45, 15)
+    Expect(changes).toHaveLength(2)
+    Expect(changes[1]).toMatchObject({ kind: 'update', rect: { id: 'front', x: 100, y: 35 } })
+  } finally {
+    controls.dispose()
+    mounted.dispose()
+  }
+})

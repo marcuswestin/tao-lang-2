@@ -13,9 +13,9 @@ Describe('repository tao wrapper', () => {
       await Promise.all([
         FS.copyFile(Repo.resolvePath('tao'), wrapper),
         FS.copyFile(Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh'), helper),
-        FS.writeText(profileBun, '#!/bin/zsh\nprint -r -- checkout\nprintf "%s\\n" "$@"\n'),
-        FS.writeText(profileNode, '#!/bin/zsh\nprint -r -- node\n'),
-        FS.writeText(hostBun, '#!/bin/zsh\nprint -r -- host\n'),
+        FS.writeText(profileBun, '#!/usr/bin/env zsh\nprint -r -- checkout\nprintf "%s\\n" "$@"\n'),
+        FS.writeText(profileNode, '#!/usr/bin/env zsh\nprint -r -- node\n'),
+        FS.writeText(hostBun, '#!/usr/bin/env zsh\nprint -r -- host\n'),
       ])
       await Promise.all([FS.chmod(profileBun, 0o755), FS.chmod(profileNode, 0o755), FS.chmod(hostBun, 0o755)])
 

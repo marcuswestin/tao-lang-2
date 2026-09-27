@@ -1,7 +1,7 @@
 import Runtime from '@expo-host'
 import { CLI, Errors, FS, Platform, Repo, Switch } from '@shared'
 
-export type HostSubject = 'clockwork' | 'hnreader' | 'native-navigation'
+export type HostSubject = 'clockwork' | 'hnreader' | 'native-navigation' | 'native-bridge'
 export type HostApplicationFault = 'clockwork-countdown-frozen' | 'hnreader-reading-history-no-write'
 export type HostFaultProvenance = Readonly<{
   expectedVisibleAssertion: string
@@ -105,6 +105,10 @@ function subjectSource(subject: HostSubject): { appName: string; sourcePath: str
       appName: 'Clockwork',
       sourcePath: 'packages/testing/e2e-testing/fixtures/Clockwork/Clockwork.tao',
     }),
+    'native-bridge': () => ({
+      appName: 'NativeBridge',
+      sourcePath: 'Apps/Test Apps/Native Bridge/App.tao',
+    }),
     'native-navigation': () => ({
       appName: 'NativeNavigation',
       sourcePath: 'Apps/Test Apps/Navigation/Native Navigation.tao',
@@ -166,6 +170,24 @@ async function copyProductionHostFiles(runtimeToolchainRoot: string, root: strin
   for (const file of ['app-config.cjs', 'metro.config.cjs', 'package.json'] as const) {
     await FS.copyFile(FS.resolvePath(file, runtimeToolchainRoot), FS.resolvePath(file, root))
   }
+  const manifestPath = FS.resolvePath('package.json', root)
+  const manifest = await FS.readJson<{
+    expo?: { autolinking?: { exclude?: string[]; ios?: { exclude?: string[] } } }
+  }>(manifestPath)
+  const autolinking = manifest.expo?.autolinking
+  // These fixtures do not use auth. Keep Clerk's Swift packages out of their iOS builds,
+  // using Expo's project-local autolinking configuration rather than changing dependencies.
+  manifest.expo = {
+    ...manifest.expo,
+    autolinking: {
+      ...autolinking,
+      ios: {
+        ...autolinking?.ios,
+        exclude: [...new Set([...(autolinking?.exclude ?? []), ...(autolinking?.ios?.exclude ?? []), '@clerk/expo'])],
+      },
+    },
+  }
+  await FS.writeJson(manifestPath, manifest)
 }
 export function hostEntrypoint(repositoryRoot: string): string {
   const nativeControl = FS.resolvePath(
@@ -247,7 +269,7 @@ const HostApp: ComponentType = () => {
       if (publishNavigationReceipt === publishNavigation) publishNavigationReceipt = undefined
     }
   }, [])
-  if (config.subject !== 'hnreader' && config.subject !== 'native-navigation') {
+  if (config.subject === 'clockwork') {
     return createElement(generatedApp.default)
   }
   return createElement(
@@ -282,7 +304,7 @@ function hostAppConfig(appId: string, runId: string, subject: HostSubject): stri
           name: appId,
           platforms: ['ios', 'android', 'web'],
           plugins: [
-            // Clerk's native pod requires iOS 17; an older target skips it after registering its Swift packages.
+            // Keep the fixture deployment floor aligned with the Companion host.
             ['expo-build-properties', { ios: { deploymentTarget: '17.0', enableSceneSupport: true } }],
           ],
           scheme: `taohostpoc-${runId}`,

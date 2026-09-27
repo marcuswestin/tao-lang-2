@@ -19,6 +19,7 @@ type CommandKeyContext = {
   runtimeRoot?: string
   restart: () => Promise<void>
   selectApp: () => Promise<void>
+  shouldStop?: () => boolean
   stopServices: () => Promise<void>
 }
 
@@ -50,7 +51,11 @@ const COMMAND_HANDLERS = {
   q: context => context.finish(0),
   r: context => CommandRunner.runNonInteractiveCommand('reload app', context.expo.reloadExpoApps),
   d: context => CommandRunner.runNonInteractiveCommand('open Tao desktop', context.openDesktop ?? (async () => false)),
-  p: context => CommandRunner.runNonInteractiveCommand('open physical device', context.expo.openPhysicalDevice),
+  p: context =>
+    CommandRunner.runNonInteractiveCommand(
+      'open physical device',
+      () => context.expo.openPhysicalDevice(undefined, context.shouldStop),
+    ),
   x: context => context.restart(),
   w: context => CommandRunner.runNonInteractiveCommand('open Expo web', context.expo.openWeb),
   i: context => CommandRunner.runNonInteractiveCommand('open Expo iOS', context.expo.openIosSimulator),

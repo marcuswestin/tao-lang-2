@@ -49,11 +49,16 @@ export async function addSketchEntityParameter(
     )
   }
   const group = groups[0]!
-  const fixture = file.statements.filter(AST.isFixtureDeclaration)
-    .filter(candidate => candidate.name === request.fixtureName)
+  const fixture = [
+    ...new Set([
+      ...file.statements.filter(AST.isFixtureDeclaration),
+      ...file.statements.filter(AST.isUseStatement)
+        .flatMap(AST.resolvedImportedDeclarations).filter(AST.isFixtureDeclaration),
+    ]),
+  ].filter(candidate => candidate.name === request.fixtureName)
   if (fixture.length !== 1) {
     Errors.throwUserInput(
-      `Studio sketch fixture is not uniquely declared in this source file: ${request.fixtureName}`,
+      `Studio sketch fixture is not uniquely declared or imported in this source file: ${request.fixtureName}`,
     )
   }
   const entities = [
@@ -83,13 +88,19 @@ export async function addSketchEntityParameter(
       'Studio entity binding must supply one fixture handle for every sketch scenario entry.',
     )
   }
-  const fixtureValues = new Map(AST.fixtureValueDeclarations(fixture[0]!).map(value => [value.name, value]))
+  const fixtureValues = AST.fixtureValueDeclarations(fixture[0]!)
+  const importedFixture = fixture[0]!.$container !== file
   for (const binding of request.scenarioArguments) {
-    const value = fixtureValues.get(binding.fixtureHandle)
+    const values = fixtureValues.filter(value => value.name === binding.fixtureHandle)
+    const value = values[0]
     if (
-      !AST.isFixtureCreateBinding(value)
+      values.length !== 1
+      || !AST.isFixtureCreateBinding(value)
       || value.entity.$refText !== request.entity.parameterName
       || (entity !== undefined && value.entity.ref !== undefined && value.entity.ref !== entity)
+      || (importedFixture
+        && (value.entity.ref?.name !== request.entity.declarationName
+          || value.entity.ref?.singularName !== request.entity.parameterName))
     ) {
       Errors.throwUserInput(
         `Studio fixture handle ${binding.fixtureHandle} does not create ${request.entity.parameterName}.`,
@@ -240,9 +251,10 @@ function validateAddSketchEntityParameterRequest(request: StudioAddSketchEntityP
     Errors.throwUserInput('Studio sketch scenario group name is invalid.')
   }
   if (
-    !/^(?:\.\.?\/)+(?:[A-Za-z_][A-Za-z0-9_-]*)(?:\/[A-Za-z_][A-Za-z0-9_-]*)*(?:\.tao)?$/.test(
-      request.entity.importPath,
-    )
+    !/^(?:(?:\.\.?\/)+[A-Za-z_][A-Za-z0-9_-]*(?:\/[A-Za-z_][A-Za-z0-9_-]*)*(?:\.tao)?|@(?:[A-Za-z_][A-Za-z0-9_-]*)?(?:\/[A-Za-z_][A-Za-z0-9_-]*)*)$/
+      .test(
+        request.entity.importPath,
+      )
   ) {
     Errors.throwUserInput(`Studio entity import path is invalid: ${request.entity.importPath}`)
   }

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "catalog": {
+    "source": "react-native",
+    "packageName": "react-native",
+    "packageVersion": "0.86.3",
+    "declaration": "types/index.d.ts",
+    "declarationHash": "d0bc29885d95ddb7fe590e3de329207745db91632495b7f58322efdf7977b550",
+    "enums": [],
+    "operations": [
+      {
+        "name": "cancel",
+        "parameters": [],
+        "asynchronous": false,
+        "platforms": []
+      },
+      {
+        "name": "vibrate",
+        "parameters": [
+          {
+            "name": "pattern",
+            "type": {
+              "kind": "union",
+              "members": [
+                {
+                  "kind": "primitive",
+                  "name": "number"
+                },
+                {
+                  "kind": "list",
+                  "element": {
+                    "kind": "primitive",
+                    "name": "number"
+                  }
+                }
+              ]
+            },
+            "optional": true
+          },
+          {
+            "name": "repeat",
+            "type": {
+              "kind": "primitive",
+              "name": "boolean"
+            },
+            "optional": true
+          }
+        ],
+        "asynchronous": false,
+        "platforms": []
+      }
+    ]
+  },
+  "target": {
+    "module": "react-native",
+    "receiver": [
+      "Vibration"
+    ]
+  },
+  "diagnostics": []
+}

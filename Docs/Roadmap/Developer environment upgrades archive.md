@@ -44,6 +44,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-044 — Typecheck gate runs 19 projects serially on the legacy compiler](<Developer environment upgrades/Archive/DEVENV-044-typecheck-gate-runs-19-projects-serially-on-the-legacy-compi.md>) — Resolved
 - [DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated](<Developer environment upgrades/Archive/DEVENV-049-a-fresh-worktree-cannot-run-tao-until-the-parser-is-generate.md>) — Resolved
 - [DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial](<Developer environment upgrades/Archive/DEVENV-054-a-forced-bun-serve-stop-strands-another-test-s-in-process-we.md>) — Resolved
+- [DEVENV-055 — No repository command compiles a native module](<Developer environment upgrades/Archive/DEVENV-055-no-repository-command-compiles-a-native-module.md>) — Resolved
 - [DEVENV-056 — Visual review can lose its renderer context during preview reload](<Developer environment upgrades/Archive/DEVENV-056-visual-review-can-lose-its-renderer-context-during-preview-r.md>) — Resolved
 - [DEVENV-058 — The CLI's bundled `@tao/*` module directory is never filled](<Developer environment upgrades/Archive/DEVENV-058-the-cli-s-bundled-tao-module-directory-is-never-filled.md>) — Resolved
 - [DEVENV-060 — One denied host probe crashes the capabilities report](<Developer environment upgrades/Archive/DEVENV-060-one-denied-host-probe-crashes-the-capabilities-report.md>) — Resolved
@@ -70,8 +71,11 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-108 — `finalize` overwrites a hand-written merge message with its own draft](<Developer environment upgrades/Archive/DEVENV-108-finalize-overwrites-a-hand-written-merge-message.md>) — Closed
 - [DEVENV-111 — `finalize`'s integration merge half-applies `main` in the sandbox and names no conflicting path](<Developer environment upgrades/Archive/DEVENV-111-finalize-s-integration-merge-half-applies-main-in-the-sandbox.md>) — Resolved
 - [DEVENV-112 — The human landing recipe rejected the landing dry-run flag](<Developer environment upgrades/Archive/DEVENV-112-human-landing-recipe-rejected-dry-run.md>) — Resolved
+- [DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE — Account service readiness JSON race](<Developer environment upgrades/Archive/DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE.md>) — Resolved
+- [DEVENV-ACCOUNT-TEST-READS-PARTIAL-READINESS-JSON — Account test reads partial readiness JSON](<Developer environment upgrades/Archive/DEVENV-ACCOUNT-TEST-READS-PARTIAL-READINESS-JSON.md>) — Resolved
 - [DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD — Agent-config recovery can download dprint plugins](<Developer environment upgrades/Archive/DEVENV-AGENT-CONFIG-RECOVERY-COLD-DPRINT-PLUGIN-DOWNLOAD.md>) — Resolved
 - [DEVENV-COLD-VM-CHROME-STARTUP — Cold VM Chrome startup](<Developer environment upgrades/Archive/DEVENV-COLD-VM-CHROME-STARTUP.md>) — Resolved
+- [DEVENV-COMPANION-INSTALL-SKIPS-NATIVE-CONFIGURATION — Companion install skips native configuration](<Developer environment upgrades/Archive/DEVENV-COMPANION-INSTALL-SKIPS-NATIVE-CONFIGURATION.md>) — Resolved
 - [DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS — Compiled test store rename is denied in managed shells](<Developer environment upgrades/Archive/DEVENV-COMPILED-TEST-STORE-RENAME-DENIED-IN-MANAGED-SHELLS.md>) — Resolved
 - [DEVENV-CPU-SAMPLE-TEST-ASSUMES-UNCONTENDED-SCHEDULING — CPU sample test assumes uncontended scheduling](<Developer environment upgrades/Archive/DEVENV-CPU-SAMPLE-TEST-ASSUMES-UNCONTENDED-SCHEDULING.md>) — Resolved
 - [DEVENV-DEV-SHELL-WRITES-COMPLETION-DUMP-IN-SOURCE — Dev shell writes completion dump in source](<Developer environment upgrades/Archive/DEVENV-DEV-SHELL-WRITES-COMPLETION-DUMP-IN-SOURCE.md>) — Resolved
@@ -87,6 +91,7 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS — Setup can retain an old transitive package link](<Developer environment upgrades/Archive/DEVENV-LOCK-UPDATE-KEEPS-STALE-TRANSITIVE-LINKS.md>) — Resolved
 - [DEVENV-MERGE-RECOVERY-TEST-TIMES-OUT-UNDER-COMPLETE-VERIFY — Merge recovery test times out under complete verification](<Developer environment upgrades/Archive/DEVENV-MERGE-RECOVERY-TEST-TIMES-OUT-UNDER-COMPLETE-VERIFY.md>) — Resolved
 - [DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI — Node worker teardown loads Bun-only process inspection](<Developer environment upgrades/Archive/DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI.md>) — Resolved
+- [DEVENV-NONAUTH-FIXTURES-AUTOLINK-CLERK-SWIFT-PACKAGES — Non-auth fixtures autolink Clerk Swift packages](<Developer environment upgrades/Archive/DEVENV-NONAUTH-FIXTURES-AUTOLINK-CLERK-SWIFT-PACKAGES.md>) — Resolved
 - [DEVENV-PARSER-STAGING-USES-WORKTREE-DIRECTORIES — Parser staging uses worktree directories](<Developer environment upgrades/Archive/DEVENV-PARSER-STAGING-USES-WORKTREE-DIRECTORIES.md>) — Resolved
 - [DEVENV-RESERVED-PORT-CLIENT-CLOSE-TIMES-OUT — Reserved port client close can time out during broad tests](<Developer environment upgrades/Archive/DEVENV-RESERVED-PORT-CLIENT-CLOSE-TIMES-OUT.md>) — Resolved
 - [DEVENV-SANDBOXED-TAO-CHECK-CRASHES-ON-A-DENIED-TMPDIR-SIBLING — Sandboxed `tao check` crashes on a denied `$TMPDIR` sibling](<Developer environment upgrades/Archive/DEVENV-SANDBOXED-TAO-CHECK-CRASHES-ON-A-DENIED-TMPDIR-SIBLING.md>) — Resolved

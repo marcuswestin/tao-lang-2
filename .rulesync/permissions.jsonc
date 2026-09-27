@@ -107,8 +107,8 @@
     "docker-desktop start",
     "watchman start", "watchman status", "watchman stop",
     "local-instantdb start", "local-instantdb stop",
-    "companion-host-build", "setup-ios",
-    "standalone-cli-vm-setup", "standalone-cli-clean-machine",
+    "companion-host-build", "setup-ios", "studio-companion-install", "clerk-review",
+    "standalone-cli-vm-setup", "standalone-cli-clean-machine", "contributor-linux-test",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators open-url", "simulators uninstall", "simulators open",
     "devices list", "devices apps", "devices launch",
@@ -178,6 +178,16 @@
           "repo.reactnative.dev",
           // CocoaPods resolves native iOS podspecs through its official metadata CDN.
           "cdn.cocoapods.org",
+          // Contributor Ubuntu image: token exchange, registry, and documented blob delivery.
+          // https://docs.docker.com/desktop/setup/allow-list/
+          "auth.docker.io",
+          "registry-1.docker.io",
+          "production.cloudfront.docker.com",
+          // The fixed amd64 Ubuntu base installs prerequisites from these package archives.
+          "archive.ubuntu.com",
+          "security.ubuntu.com",
+          // nix-bootstrap.sh downloads its checksum-pinned release directly, without channels.
+          "releases.nixos.org",
           "cache.nixos.org",
           "*.cachix.org",
           "*.anthropic.com",

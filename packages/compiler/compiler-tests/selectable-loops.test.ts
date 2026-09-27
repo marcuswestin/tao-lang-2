@@ -27,6 +27,7 @@ Describe('compiler: selectable loops', () => {
     Expect(firstBinding).toBeGreaterThan(loop)
     Expect(secondBinding).toBeGreaterThan(firstBinding)
     Expect(selection).toBeGreaterThan(secondBinding)
+    Expect(code.slice(selection)).toContain('owner: _TaoActionOwner,')
   })
 
   Test('leaves non-selectable loop lowering on the two-argument runtime path', async () => {
@@ -42,5 +43,6 @@ Describe('compiler: selectable loops', () => {
     `)
 
     Expect(compiled.code.match(/_Scope.Row = _TaoFunctionArg0/g)).toHaveLength(1)
+    Expect(compiled.code).not.toContain('owner: _TaoActionOwner,')
   })
 })

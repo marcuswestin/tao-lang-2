@@ -1,5 +1,9 @@
 import { Expect, Test, testOverrideSlot } from '@shared/test'
-import { mountCanvasViewport, type StudioCanvasViewportDeps } from '../studio-src/client/matrix/StudioCanvasViewport'
+import {
+  applyCanvasViewport,
+  mountCanvasViewport,
+  type StudioCanvasViewportDeps,
+} from '../studio-src/client/matrix/StudioCanvasViewport'
 
 class CanvasElement extends EventTarget {
   dataset: Record<string, string> = {}
@@ -38,7 +42,11 @@ class CanvasElement extends EventTarget {
     this.attributes.delete(name)
   }
   querySelector(selector: string): CanvasElement | null {
-    return selector.includes('preview-grid') ? this.children[0]! : this.children[1] ?? null
+    return selector.includes('draw-canvas')
+      ? this.children.find(child => child.dataset['taoStudioDrawCanvas'] === 'true') ?? null
+      : selector.includes('preview-grid')
+      ? this.children[0]!
+      : this.children[1] ?? null
   }
   setPointerCapture(id: number): void {
     this.captures.add(id)
@@ -213,24 +221,24 @@ Test('Studio releases canvas input when a layout change cancels a pan', () => {
   })
 })
 
-Test('Studio pans only with Space while pinch zoom remains available', () => {
+Test('Studio wheel pans without Space while iframe scrolling stays local and pinch zoom remains available', () => {
   canvasTest(({ controls, document, host }) => {
     const wheel = { clientX: 100, clientY: 100, deltaX: 20, deltaY: 10 }
     Expect(emit(host, 'wheel', wheel).defaultPrevented).toBe(true)
     emit(host, 'pointerdown', { ...down, button: 1 })
     emit(host, 'pointermove', move)
-    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
+    Expect(controls.state()).toEqual({ x: -15, y: -7.5, z: 1 })
     const frame = new CanvasElement()
     host.append(frame)
     controls.iframeWheel({ ...wheel, zoom: false }, frame as unknown as Element)
-    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
+    Expect(controls.state()).toEqual({ x: -15, y: -7.5, z: 1 })
     emit(document, 'keydown', { key: ' ' })
     Expect(emit(host, 'wheel', wheel).defaultPrevented).toBe(true)
-    Expect(controls.state()).toEqual({ x: -15, y: -7.5, z: 1 })
+    Expect(controls.state()).toEqual({ x: -30, y: -15, z: 1 })
     emit(host, 'pointerdown', down)
     emit(document, 'keyup', { key: ' ' })
     emit(host, 'pointermove', move)
-    Expect(controls.state()).toEqual({ x: -15, y: -7.5, z: 1 })
+    Expect(controls.state()).toEqual({ x: -30, y: -15, z: 1 })
     Expect(host.captures.size).toBe(0)
     Expect(emit(host, 'wheel', { ...wheel, ctrlKey: true }).defaultPrevented).toBe(true)
     Expect(controls.state().z).toBeLessThan(1)
@@ -286,5 +294,56 @@ Test('Studio iframe shortcuts require a contained frame and enabled canvas', () 
     enabled(true)
     controls.iframeShortcut('reset', frame as unknown as Element)
     Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
+  })
+})
+
+Test('Studio neutral canvas drag waits for movement and suppresses only the drag click', () => {
+  canvasTest(({ controls, host }) => {
+    emit(host, 'pointerdown', down)
+    emit(host, 'pointermove', { ...move, clientX: 103, clientY: 100 })
+    Expect(host.captures.size).toBe(0)
+    emit(host, 'pointerup', down)
+    Expect(emit(host, 'click').defaultPrevented).toBe(false)
+    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
+    emit(host, 'pointerdown', down)
+    emit(host, 'pointermove', move)
+    Expect(host.captures.has(7)).toBe(true)
+    Expect(controls.state()).toEqual({ x: 45, y: 18.75, z: 1 })
+    emit(host, 'pointerup', move)
+    Expect(emit(host, 'click').defaultPrevented).toBe(true)
+    Expect(host.captures.size).toBe(0)
+    emit(host, 'pointerdown', down)
+    emit(host, 'pointerup', down)
+    Expect(emit(host, 'click').defaultPrevented).toBe(false)
+  }, { canPanWithoutSpace: () => true })
+})
+
+Test('Studio Draw Space panning transforms Draw and returns geometry ownership on key release or blur', () => {
+  canvasTest(({ controls, document, host }) => {
+    const draw = new CanvasElement()
+    draw.dataset['taoStudioDrawCanvas'] = 'true'
+    host.append(draw)
+    host.dataset['canvasWorkspace'] = 'draw'
+    applyCanvasViewport(host as unknown as HTMLElement)
+    Expect(draw.style['transform']).toBe('translate(0px, 0px) scale(1)')
+    for (const release of ['keyup', 'blur']) {
+      emit(document, 'keydown', { key: ' ' })
+      const drag = emit(host, 'pointerdown', down)
+      Expect(drag.defaultPrevented).toBe(true)
+      Expect(host.captures.has(7)).toBe(true)
+      emit(host, 'pointermove', move)
+      if (release === 'keyup') {
+        emit(document, 'keyup', { key: ' ' })
+      } else {
+        emit(document.defaultView, 'blur')
+      }
+      Expect(host.captures.size).toBe(0)
+      Expect(host.dataset['canvasPanReady']).toBeUndefined()
+      Expect(emit(host, 'pointerdown', down).defaultPrevented).toBe(false)
+      emit(host, 'pointermove', move)
+    }
+    Expect(controls.state()).toEqual({ x: 90, y: 37.5, z: 1 })
+    Expect(draw.style['transform']).toBe('translate(90px, 37.5px) scale(1)')
+    Expect(host.children[0]!.style['transform']).toBe('translate(0px, 0px) scale(1)')
   })
 })

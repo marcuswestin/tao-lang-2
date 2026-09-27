@@ -1,5 +1,3 @@
-/// <reference path="../../../apps/expo-host/expo-host-src/dev-loop/expo-runner/better-opn.d.ts" />
-
 import { DEV_DATA_ROOT_PATH, devDataAppKey, devDataManifest } from '@expo-host/dev-loop/dev-data/DevDataBootstrap'
 import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { ExpoRunner } from '@expo-host/dev-loop/expo-runner/ExpoRunner'
@@ -25,8 +23,9 @@ import {
   type StudioSessionResource,
 } from '@studio'
 import { enclosingWatchRoot } from '@verification/WatchmanHealth'
-import betterOpen from 'better-opn'
+import { StudioBrowser } from './StudioBrowser'
 import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
+import { startStudioDeviceCli } from './StudioDeviceCli'
 import { createStudioDeviceLauncher } from './StudioDeviceLaunch'
 import { describeOwnProcess, openLaunchRecord, type StudioLaunchRecord } from './StudioLaunchManifest'
 import { createStudioLifecycleLog, type StudioLifecycleLog } from './StudioLifecycleLog'
@@ -45,6 +44,8 @@ const METRO_WATCHMAN_CAPABILITIES = ['field-content.sha1hex', 'relative_root', '
 export type StudioDevOptions = {
   appName?: string
   browser?: boolean
+  /** Launch the installed Companion on this exact physical device name or UDID. */
+  device?: string
   entryPath?: string
   hostname?: string
   /** Emit a machine-readable readiness payload once the advertised page answers. */
@@ -104,6 +105,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   let manager: StudioSessionManager | undefined
   let studioClientReload: StartedStudioClientDevReload | undefined
   let deviceGateway: StudioDeviceGateway | undefined
+  let deviceCli: Awaited<ReturnType<typeof startStudioDeviceCli>> | undefined
   let devDataServer: DevDataServer | undefined
   let trustStore: StudioDeviceTrustStore | undefined
   const userStateRoot = options.userStateRoot ?? Repo.resolvePath('.artifacts/user/studio')
@@ -214,6 +216,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
         }; run \`just secrets\` to decrypt one, or \`just secrets add <NAME>\`.`,
       )
     }
+    const deviceLauncher = createStudioDeviceLauncher()
     server = await startStudioSessionServer(manager, {
       canvasViewportStore,
       agentSecrets,
@@ -221,9 +224,10 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       clientReloadRevision: studioClientReload?.revision,
       compileOnStart: false,
       deviceGateway,
-      deviceLauncher: createStudioDeviceLauncher(),
+      deviceLauncher,
       generationProvider: foundationModels.provider,
       hostname: options.hostname,
+      openBrowser: StudioBrowser.open,
       port: options.port,
     })
     const sessionUrl = `${server.url}${StudioSessionPath.window(initial.sessionId)}`
@@ -279,6 +283,21 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       // that reads as usable to `studio-ps` and to anything scripting it.
       if (await waitForReadyUrl(sessionUrl)) {
         await launch.update({ state: 'ready' })
+        if (options.device !== undefined && !requestedStop) {
+          if (initialResource.previewUrl === undefined) {
+            Errors.throwHostEnvironment('Studio has no Metro preview to launch on the requested device.')
+          }
+          deviceCli = await startStudioDeviceCli({
+            device: options.device,
+            gateway: deviceGateway,
+            launcher: deviceLauncher,
+            metroOrigin: initialResource.previewUrl,
+            sessionId: initial.sessionId,
+            sessionUrl,
+            signal: nativeAbort.signal,
+            stop: () => stop(130),
+          })
+        }
         if (options.json === true) {
           writeReadiness({
             appName: options.appName,
@@ -307,7 +326,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       ? undefined
       : openTarget({ browser: options.browser, opened: requestedStop, sessionUrl })
     if (target !== undefined) {
-      await betterOpen(target)
+      await StudioBrowser.open(target)
     }
     if (!requestedStop) {
       HCI.logProcessInfo(
@@ -337,6 +356,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     try {
       try {
         await cleanupStudioDev([
+          () => deviceCli?.stop(),
           () => native?.stop(),
           () => studioClientReload?.close(),
           () => server?.stop(),

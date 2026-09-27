@@ -42,11 +42,17 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   // operations and a hand-written placement step.
   'companion-host-build': { command: './dev', fixedArgs: ['companion-host-build'] },
   'setup-ios': { command: './dev', fixedArgs: ['setup-ios'] },
+  'studio-companion-install': { command: './dev', fixedArgs: ['studio-companion-install'] },
+  'clerk-review': { command: 'just', fixedArgs: ['clerk-review'], server: true },
   'standalone-cli-vm-setup': { command: 'just', fixedArgs: ['standalone-cli-vm-setup'], argsPolicy: 'none' },
   'standalone-cli-clean-machine': {
     command: 'just',
     fixedArgs: ['standalone-cli-clean-machine'],
     argsPolicy: 'standalone-vm',
+  },
+  'contributor-linux-test': {
+    command: '/bin/sh',
+    fixedArgs: ['packages/cli/dev-cli/dev-cli-src/environment/contributor-linux-test.sh'],
   },
   'simulators list': { command: 'xcrun', fixedArgs: ['simctl', 'list', 'devices'] },
   'simulators boot': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },

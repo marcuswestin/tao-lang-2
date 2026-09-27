@@ -13,7 +13,9 @@ policy, caller identity, or a trusted provisioning instruction through the HTTP 
 
 `--policy` is required. The other displayed arguments show their defaults. The default issuer is
 `tao-local:auth-review`; `--issuer` overrides it. Repeat `--origin URL` for allowed browser origins.
-No origins are accepted implicitly. The listener binds `127.0.0.1`. `--port 0` selects an ephemeral
+No origins are accepted implicitly. The listener defaults to `127.0.0.1`; `--host HOST` selects an
+explicit interface or `0.0.0.0` for LAN device review. Clients must use the host's reachable LAN
+address when binding all interfaces. `--port 0` selects an ephemeral
 test port, and `--ready-file PATH` writes its URL and resource for test/process orchestration.
 
 Local email/password registration uses Bun's maintained Argon2id implementation. Email is a login
@@ -26,7 +28,7 @@ linking, or production deployment guarantees.
 ## Clerk account gateway
 
 This is the application backend that translates a verified Clerk identity into a Tao Account and
-resource-scoped data authority. It is not a disposable auth stub. The current launcher still binds
+resource-scoped data authority. It is not a disposable auth stub. The current launcher defaults
 to loopback and supports one gateway process per deployment; production ingress, operations and
 migration are not supplied by this reference service.
 
@@ -45,6 +47,13 @@ An optional `audience` string or list restricts JWT audiences. The configured is
 must match the session's `iss` and `azp`; missing required claims, pending sessions, expired proofs
 and malformed factor claims fail closed. `--origin` independently allows the browser origin
 through CORS. Only public verification material belongs in this gateway configuration.
+
+Native deployments may explicitly set `allowMissingAuthorizedPartyWithoutOrigin: true` in this
+trusted JSON configuration (the default is `false`). This permits an absent `azp` only when the
+actual HTTP request has no `Origin` header. Any present `azp` must still match `authorizedParties`.
+Browser requests, including `Origin: null` or an empty Origin, remain strict; request bodies cannot
+assert native status. Signature, issuer, subject, session ID, expiry, audience and completed-factor
+checks still apply. `authorizedParties` remains required even when this option is enabled.
 
 `POST /v1/auth/clerk/exchange` accepts a Clerk bearer proof and `{ "resource": "auth-review" }`.
 It verifies the signature locally with `@clerk/backend`, provisions the issuer/subject mapping,
@@ -73,20 +82,65 @@ required phone number, MFA or session tasks, and local browser origins allowed. 
 with `just secrets add <NAME>` and run `just secrets` once to decrypt the repository store. Explicit
 environment values take precedence. Stored values are loaded only after live opt-in; the journey
 selects the three Clerk entries without exporting them into the process environment. No secret is
-needed in Tao source. From the repository root run:
+needed in Tao source.
+
+For guided setup, run `just setup-clerk` in a terminal (`just setup-clerk --instructions` only
+prints the steps). The wizard opens each Dashboard page after a keypress, asks you to confirm
+that settings are saved, validates development keys, retrieves the matching public signing key,
+and encrypts the three entries in the existing repository secret store. Authentication settings
+remain Dashboard steps because ordinary Backend API keys do not configure them. Run `just secrets`
+afterward to refresh the local decrypted store. This is repository development tooling, not a
+published Tao CLI command. Run the browser acceptance from the repository root:
 
 ```sh
 TAO_CLERK_LIVE=1 ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-auth.test.ts
 ```
 
+To run the same real Clerk UI journey with local InstantDB storage, start the stack and explicitly
+select its endpoint:
+
+```sh
+./agent unsandboxed local-instantdb start
+TAO_CLERK_LIVE=1 TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-auth.test.ts
+```
+
+The Instant variant creates an isolated expiring app, independently reads persisted account and
+note rows, and checks that direct guest access is denied. It still requires internet access for
+Clerk. An unavailable or invalid configured Instant endpoint fails instead of selecting SQLite.
+
 Without opt-in the journey explicitly skips; opted-in missing configuration fails. The test creates
 and deletes its own Clerk user, temporary project, gateway database and browser profile. If remote
 cleanup fails, it reports the synthetic user ID for manual deletion. Live browser acceptance passed
 on 2026-09-26 against the SQLite reference gateway, including both sign-in methods, profile/notes,
-reload and logout. Clerk over real Instant storage still needs its own live conformance run.
-The gateway requires an `azp` origin claim, which native Clerk proofs may omit. Native
-authentication is not a verified pairing; its token/origin contract and physical-device storage
-need separate acceptance.
+reload and logout. The same journey passed against local InstantDB on 2026-09-26, with independent
+profile/note reads and direct guest-access denial.
+Focused signed-token HTTP tests cover the optional native `azp` exception and its Origin boundary.
+Native authentication and physical-device storage still need separate device acceptance.
+
+### Manual iPhone review
+
+After `just setup-clerk` and `just secrets`, run these from the repository root:
+
+```sh
+just studio-companion-install roPhone
+just clerk-review
+```
+
+The review command starts local InstantDB, creates an isolated expiring app, and runs a LAN gateway
+with the native originless-token option enabled. It reads the configured development credentials
+locally; only the public publishable key enters the temporary Tao app. Keep the Mac and phone on
+the same network, unlock the phone, and choose **Open this app on device** in Studio's Device panel.
+Allow the phone's local-network prompt and complete pairing if shown. Use a development Clerk
+account to sign in, edit the profile, add a note, reopen Companion, and sign out/in to review
+persistence. Clerk sign-in requires Internet access. Authentication is enabled on the phone only
+in this review configuration; the Mac preview has no allowed browser origin.
+
+`--host <LAN IPv4>` overrides address detection. Leave the command running while reviewing;
+Ctrl+C stops Studio and the gateway and removes the temporary project and local account database.
+Each new run starts an empty review dataset. The shared InstantDB stack remains running and its
+disposable app expires automatically. The named host equivalents are
+`./agent unsandboxed studio-companion-install --device roPhone` and
+`./agent unsandboxed clerk-review`.
 
 See [Clerk's testing guide](https://clerk.com/docs/guides/development/testing/playwright/overview)
 and [test emails and phones](https://clerk.com/docs/guides/development/testing/test-emails-and-phones).

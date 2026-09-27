@@ -1,6 +1,11 @@
 import type { TaoSchemeCapability } from '@runtime/TR-scheme'
 import type { TaoStudioLensCause, TaoStudioLensRenderSample } from '@runtime/TR-studio-lens'
-import { TaoStudioProtocolVersions } from '@runtime/TR-studio-protocol'
+import {
+  parseTaoStudioFeedDrop,
+  parseTaoStudioFeedDropAtPoint,
+  type TaoStudioFeedDrop,
+  TaoStudioProtocolVersions,
+} from '@runtime/TR-studio-protocol'
 import type { StudioDeviceStateEvent } from './device/StudioDeviceStatus'
 import type {
   StudioCompileCompletion,
@@ -98,6 +103,7 @@ export type StudioDeleteFileRequest = {
 
 export type StudioMoveGeneratedSourceRequest = {
   path: string
+  relocateScenarios?: boolean
   sourceVersion: string
   targetPackage: string
   writeId: string
@@ -495,6 +501,26 @@ export type StudioPreviewSourceMessage = {
   type: 'preview-hover-source' | 'preview-select-source'
 }
 
+export type StudioFeedDropAtPointMessage = {
+  channel: typeof studioProtocolChannel
+  clientX: number
+  clientY: number
+  drop: TaoStudioFeedDrop
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'feed-drop-at-point'
+}
+
+export type StudioPreviewFeedDropMessage = {
+  channel: typeof studioProtocolChannel
+  drop: TaoStudioFeedDrop
+  identity: StudioPreviewSourceIdentity
+  protocolVersion: typeof studioProtocolVersion
+  renderId: string
+  studioRectId?: string
+  type: 'preview-feed-drop'
+}
+
 export type StudioHighlightSourceMessage = {
   channel: typeof studioProtocolChannel
   identity: StudioPreviewSourceIdentity
@@ -655,7 +681,7 @@ type StudioPreviewSchemeMessage = {
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   scheme: Readonly<{
-    capability: 'fixed-light-native' | typeof reactiveBrowserSchemeCapability
+    capability: 'fixed-light-native' | 'pinned-native' | 'reactive-catalyst' | typeof reactiveBrowserSchemeCapability
     requested: 'dark' | 'light' | 'system'
     resolved: 'dark' | 'light'
     source: 'native-fixed' | 'preference' | 'scenario' | 'system'
@@ -800,6 +826,8 @@ export type StudioWindowMessage =
   | StudioPreviewCanvasGestureMessage
   | StudioPreviewCanvasPanKeyMessage
   | StudioPreviewCanvasShortcutMessage
+  | StudioFeedDropAtPointMessage
+  | StudioPreviewFeedDropMessage
   | StudioDebugCommandMessage
   | StudioPreviewLayoutMeasurementsMessage
   | StudioPreviewLensRenderMessage
@@ -893,6 +921,7 @@ const windowMessageParsers: {
   [TypeT in StudioWindowMessage['type']]: (value: StudioJsonObject) => StudioWindowMessage | undefined
 } = {
   'debug-command': parseDebugCommand,
+  'feed-drop-at-point': parseFeedDropAtPoint,
   'highlight-source': parseHighlightSource,
   'preview-applied': parsePreviewApplied,
   'preview-canvas-gesture': parsePreviewCanvasGesture,
@@ -900,6 +929,7 @@ const windowMessageParsers: {
   'preview-canvas-shortcut': parsePreviewCanvasShortcut,
   'preview-console': parsePreviewLog,
   'preview-debug': parsePreviewDebug,
+  'preview-feed-drop': parsePreviewFeedDrop,
   'preview-fixture-capture-failed': parsePreviewFixtureCaptureFailed,
   'preview-fixture-captured': parsePreviewFixtureCaptured,
   'preview-hover-source': parsePreviewSource,
@@ -1193,7 +1223,9 @@ function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage
   if (
     identity === undefined
     || !isObject(scheme)
-    || !['fixed-light-native', reactiveBrowserSchemeCapability].includes(String(scheme['capability']))
+    || !['fixed-light-native', 'pinned-native', 'reactive-catalyst', reactiveBrowserSchemeCapability].includes(
+      String(scheme['capability']),
+    )
     || !['dark', 'light', 'system'].includes(String(scheme['requested']))
     || !['dark', 'light'].includes(String(scheme['resolved']))
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(String(scheme['source']))
@@ -1203,6 +1235,8 @@ function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage
     || (scheme['source'] === 'native-fixed' && scheme['capability'] !== 'fixed-light-native')
     || (scheme['capability'] === 'fixed-light-native'
       && (scheme['resolved'] !== 'light' || scheme['source'] !== 'native-fixed'))
+    || (scheme['capability'] === 'pinned-native'
+      && (scheme['source'] !== 'scenario' || scheme['resolved'] !== scheme['requested']))
   ) {
     return undefined
   }
@@ -1697,6 +1731,43 @@ function parsePreviewSource(value: StudioJsonObject): StudioPreviewSourceMessage
     identity,
     range,
     type,
+  })
+}
+
+function parseFeedDropAtPoint(value: StudioJsonObject): StudioFeedDropAtPointMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const point = parseTaoStudioFeedDropAtPoint(value)
+  return identity === undefined || point === undefined
+    ? undefined
+    : envelope({ ...point, identity, type: 'feed-drop-at-point' })
+}
+
+function parsePreviewFeedDrop(value: StudioJsonObject): StudioPreviewFeedDropMessage | undefined {
+  const identity = parsePreviewSourceIdentity(value['identity'])
+  const drop = parseTaoStudioFeedDrop(value['drop'])
+  const renderId = value['renderId']
+  const studioRectId = value['studioRectId']
+  if (
+    identity === undefined || drop === undefined || !nonEmptyString(renderId)
+    || (studioRectId !== undefined && !nonEmptyString(studioRectId))
+  ) {
+    return undefined
+  }
+  const range = renderId.slice(identity.path.length + 1).split(':')
+  if (
+    !renderId.startsWith(`${identity.path}:`) || range.length !== 2
+    || !range.every(part => /^\d+$/.test(part))
+    || !Number.isSafeInteger(Number(range[0])) || !Number.isSafeInteger(Number(range[1]))
+    || Number(range[0]) > Number(range[1])
+  ) {
+    return undefined
+  }
+  return envelope({
+    drop,
+    identity,
+    renderId,
+    ...(studioRectId === undefined ? {} : { studioRectId }),
+    type: 'preview-feed-drop',
   })
 }
 
