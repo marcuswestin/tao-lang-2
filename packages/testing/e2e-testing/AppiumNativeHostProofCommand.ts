@@ -1,13 +1,11 @@
 import {
-  type AppiumPortReservation,
-  type AppiumPortReservations,
   type AppiumServer,
   createAppiumHttpTransport,
   createAppiumWebDriverClient,
-  startAppiumServer,
+  startMobileAppiumServer,
 } from '@appium-driver'
 import { type HostRevision, type MachineResourceLease, MachineResources } from '@host-control'
-import { CLI, Errors, FS, HCI, Json, Platform, Repo, Switch } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo, Switch } from '@shared'
 import type { HostBuild, PrepareHostAppOptions } from './app-build/HostBuild'
 import type { HostTestingContext, SimulatorNativeHostTestingRequest } from './HostTestingRequest'
 import { compileHostJourney, type HostJourney } from './journey/HostJourney'
@@ -44,7 +42,6 @@ export async function runAppiumNativeHostProofCommand(
   })
   const journey = await journeyFor(request.subject)
   const driver = platform === 'ios' ? 'xcuitest' : 'uiautomator2'
-  await ensureAppiumDriver(driver, context.artifactRoot)
   const targetLease = await acquireTargetLease(platform, request.device, preparation.appId, context.runId)
   let server: AppiumServer | undefined
   let proof: AppiumProof | undefined
@@ -52,7 +49,7 @@ export async function runAppiumNativeHostProofCommand(
   let cleanupFailures: readonly AppiumCleanupFailure[] = []
   try {
     await buildAndInstall(platform, request.device, preparation)
-    server = await startOwnedAppiumServer(context.runId, context.artifactRoot)
+    server = await startMobileAppiumServer({ artifactRoot: context.artifactRoot, driver, runId: context.runId })
     await FS.writeText(FS.resolvePath('appium/server.url.txt', context.artifactRoot), `${server.url}\n`)
     const factory = createAppiumWebDriverClient(createAppiumHttpTransport({ serverUrl: server.url }))
     const fault = preparation.fault === undefined ? undefined : appiumFault(preparation.fault.kind, journey)
@@ -486,77 +483,4 @@ async function uninstall(platform: AppiumMobilePlatform, device: string, appId: 
       details: { exitCode: result.exitCode, stderr: result.stderr, stdout: result.stdout },
     })
   }
-}
-
-async function ensureAppiumDriver(driver: 'uiautomator2' | 'xcuitest', artifactRoot: string): Promise<void> {
-  const command = appiumCommand()
-  const environment = appiumEnvironment(artifactRoot)
-  const home = environment['APPIUM_HOME']!
-  const packageNames = [
-    'appium-mac2-driver',
-    'appium-uiautomator2-driver',
-    'appium-xcuitest-driver',
-  ] as const
-  const dependencies: Record<string, string> = {}
-  for (const packageName of packageNames) {
-    const source = await FS.realPath(Repo.resolvePath(`packages/testing/appium-driver/node_modules/${packageName}`))
-    const destination = FS.resolvePath(`node_modules/${packageName}`, home)
-    dependencies[packageName] = `file:${source}`
-    await FS.mkdir(FS.dirname(destination))
-    if (!await FS.exists(destination)) {
-      await FS.symlink(source, destination)
-    }
-  }
-  await FS.writeJson(FS.resolvePath('package.json', home), { devDependencies: dependencies })
-  const listed = await CLI.mustRun(command, { args: ['driver', 'list', '--installed', '--json'], env: environment })
-  const installed = Json.tryParse(listed.stdout)
-  if (typeof installed === 'object' && installed !== null && driver in installed) {
-    return
-  }
-  Errors.throwHostEnvironment(`The isolated Appium home did not discover its pinned ${driver} driver.`, {
-    details: { appiumHome: home, installed },
-  })
-}
-
-async function startOwnedAppiumServer(runId: string, artifactRoot: string): Promise<AppiumServer> {
-  return await startAppiumServer({
-    command: appiumCommand(),
-    environment: appiumEnvironment(artifactRoot),
-    reservations: appiumPortReservations(runId),
-  })
-}
-
-function appiumCommand(): string {
-  return Repo.resolvePath('packages/testing/appium-driver/node_modules/.bin/appium')
-}
-
-function appiumEnvironment(artifactRoot: string): Record<string, string | undefined> {
-  return {
-    ...Platform.runtimeProcess.env,
-    APPIUM_HOME: FS.resolvePath('appium-home', artifactRoot),
-  }
-}
-
-function appiumPortReservations(runId: string): AppiumPortReservations {
-  return {
-    async reserve(): Promise<AppiumPortReservation> {
-      const first = 4723 + Number.parseInt(Platform.sha256Hex(runId).slice(0, 4), 16) % 1_000
-      for (let offset = 0; offset < 1_000; offset += 1) {
-        const port = 4723 + (first - 4723 + offset) % 1_000
-        const lease = await MachineResources.tryAcquire({
-          command: `Appium server for host test ${runId}`,
-          name: `appium-server-port-${port}`,
-          repositoryRoot: Repo.getRoot(),
-        })
-        if (lease !== undefined) {
-          return portReservation(port, lease)
-        }
-      }
-      return Errors.throwHostEnvironment('No Appium server port could be reserved.')
-    },
-  }
-}
-
-function portReservation(port: number, lease: MachineResourceLease): AppiumPortReservation {
-  return { port, release: async () => await lease.release() }
 }

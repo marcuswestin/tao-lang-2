@@ -65,6 +65,7 @@ type TaoTextInputProps = TaoViewProps & {
   onChange?: (value: string) => unknown
   onSubmit?: () => unknown
   placeholder?: string
+  secure?: boolean
   value: string
 }
 
@@ -539,6 +540,8 @@ function renderTaoTextInput(
     onFocus: () => InteractionControls.Engage(occurrence),
     onSubmitEditing: submit,
     placeholder: props.placeholder,
+    secureTextEntry: props.secure === true,
+    ...(props.secure ? { autoCapitalize: 'none', autoCorrect: false } : {}),
     placeholderTextColor: translucentColor(themedStyle?.['color'], 0.55),
     ref: inputRef,
     style: [textInputStyle, themedStyle],

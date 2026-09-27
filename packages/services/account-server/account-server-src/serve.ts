@@ -13,6 +13,7 @@ export async function startAccountServerFromArguments(args: readonly string[]): 
     '--policy',
     '--database',
     '--port',
+    '--host',
     '--resource',
     '--issuer',
     '--origin',
@@ -25,7 +26,7 @@ export async function startAccountServerFromArguments(args: readonly string[]): 
     const value = args[index + 1]
     if (!names.includes(name) || value === undefined || value.startsWith('--') || value.trim() === '') {
       Errors.throwUserInput(
-        'Use --policy PATH [--database PATH] [--port PORT] [--resource NAME] [--issuer NAME] [--origin URL] [--instant-config PATH] [--clerk-config PATH].',
+        'Use --policy PATH [--database PATH] [--host HOST] [--port PORT] [--resource NAME] [--issuer NAME] [--origin URL] [--instant-config PATH] [--clerk-config PATH].',
       )
     }
     if (name === '--origin') {
@@ -53,6 +54,7 @@ export async function startAccountServerFromArguments(args: readonly string[]): 
   const server = await AccountServer.start({
     allowedOrigins,
     databasePath: FS.resolvePath(values.get('--database') ?? '.artifacts/auth-review/accounts.sqlite'),
+    host: values.get('--host') ?? '127.0.0.1',
     issuer: values.get('--issuer') ?? `tao-local:${resource}`,
     ...(instant === undefined ? {} : { instant }),
     ...(clerk === undefined ? {} : { clerk }),
@@ -83,17 +85,19 @@ async function readClerkConfiguration(path: string): Promise<ClerkAccountOptions
   }
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     Errors.throwUserInput(
-      'Clerk configuration must contain issuer, jwtKey, and authorizedParties, with optional audience.',
+      'Clerk configuration must contain issuer, jwtKey, and authorizedParties, with optional audience and allowMissingAuthorizedPartyWithoutOrigin.',
     )
   }
   const configuration = value as Record<string, unknown>
   const required = ['issuer', 'jwtKey', 'authorizedParties']
   if (
     required.some(key => !Object.hasOwn(configuration, key))
-    || Object.keys(configuration).some(key => ![...required, 'audience'].includes(key))
+    || Object.keys(configuration).some(key =>
+      ![...required, 'audience', 'allowMissingAuthorizedPartyWithoutOrigin'].includes(key)
+    )
   ) {
     Errors.throwUserInput(
-      'Clerk configuration must contain only issuer, jwtKey, authorizedParties, and optional audience.',
+      'Clerk configuration must contain only issuer, jwtKey, authorizedParties, and optional audience and allowMissingAuthorizedPartyWithoutOrigin.',
     )
   }
   const options = configuration as ClerkAccountOptions

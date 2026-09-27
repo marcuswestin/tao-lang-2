@@ -149,6 +149,9 @@ For `TextInput(mutable Value text, Change action(text), ...)`, a writable argume
 storage with the caller. This includes state, ordinary item fields, and parameters whose writable
 requirement is inferred. Literal arguments instead create storage owned by the mounted control.
 
+`TextInput(..., Secure: true)` masks the entered value and disables automatic capitalization and
+correction. It defaults to false. Masking changes presentation; the bound value remains text.
+
 ```tao
 state Draft = ""
 TextInput(Value: Draft, Label: "Title") {

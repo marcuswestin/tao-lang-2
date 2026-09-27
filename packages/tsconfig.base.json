@@ -20,6 +20,9 @@
     "noPropertyAccessFromIndexSignature": true,
     "rootDir": ".",
     "paths": {
+      "@account-server": [
+        "./services/account-server/account-server-src/account-server.ts"
+      ],
       "@cli-kit": [
         "./cli/cli-kit/cli-kit-src/cli-kit.ts"
       ],

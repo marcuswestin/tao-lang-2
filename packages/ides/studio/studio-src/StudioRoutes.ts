@@ -65,6 +65,7 @@ const sessionRoutes = {
   agentChatStream: { method: 'POST', path: '/api/agent-chat/stream/:command' },
   aiAvailability: { method: 'GET', path: '/api/ai/availability' },
   aiFixture: { method: 'POST', path: '/api/ai/fixture' },
+  browserOpen: { method: 'POST', path: '/api/browser/open' },
   canvasViewport: { method: 'POST', path: '/api/canvas/viewport' },
   dataFill: { method: 'POST', path: '/api/data/fill' },
   deviceCapture: { method: 'POST', path: '/api/device/capture' },

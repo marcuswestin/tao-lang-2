@@ -437,5 +437,18 @@ isolation are verified separately by the reference server/provider tests; only c
 journeys establish the user-facing behavior. AuthReviewClerk selects the managed adapter with a
 placeholder publishable key; configure its development instance and gateway before use. Its opt-in
 browser journey passed on 2026-09-26 against the SQLite reference gateway, including real password
-and email-code UI, profile and note persistence, reload and logout. Clerk over InstantDB and
-physical-device acceptance remain outstanding.
+and email-code UI, profile and note persistence, reload and logout. The same journey passed with
+local InstantDB storage and independent row/guest-access checks on 2026-09-26. Physical-device
+acceptance remains outstanding. `just clerk-review` configures this app from the encrypted development
+credentials, starts its local InstantDB gateway, and opens Studio for manual iPhone review. Install
+Tao Companion with `just studio-companion-install roPhone`, keep the phone and Mac on the same
+network, then choose the phone in Studio and open the app. Select the "Clerk and InstantDB / iPhone"
+scenario to send the app to Companion. Clerk sign-in requires Internet access.
+The custom password input is masked and authentication problems wrap on a phone. Known Clerk
+configuration failures, including disabled native API access, are distinguished from rejected
+credentials without exposing provider response text.
+Fill buttons beside the custom email and password fields insert separate review values without
+submitting; the email-code form offers the same email shortcut. The phone form scrolls and keeps its
+input rows compact. Password and registration challenges open the code form, and Sign in explicitly
+leaves registration mode. Tao journeys cover filling, code verification and cancellation/retry;
+real registration still requires manual acceptance.
