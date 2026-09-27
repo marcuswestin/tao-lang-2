@@ -189,10 +189,10 @@ Describe('optional developer shell setup', () => {
             : failure === 'zshrc'
             ? `[[ ! -r '${f.shell}/activation.zsh' ]] || source '${f.shell}/activation.zsh'`
             : failure === 'devenv'
-            ? 'existing host devenv'
+            ? 'devenv version failed (exit 1):\nunavailable'
             : 'Nix GC root',
         )
-        Expect(await FS.readText(f.choice)).toBe('disabled\n')
+        Expect(await FS.readText(f.choice)).toBe('pending\n')
         Expect(await FS.readText(f.zshrc)).toBe('# personal settings\nexport EDITOR=vim')
         if (failure === 'profile') {
           Expect(f.calls.some(call => call.command === 'nix-store')).toBe(false)
@@ -200,6 +200,38 @@ Describe('optional developer shell setup', () => {
       } finally {
         await FS.remove(f.root)
       }
+    }
+  })
+
+  Test('probes the devenv version subcommand and retries an interrupted opt-in on ordinary setup', async () => {
+    const f = await fixture()
+    try {
+      const executable = FS.resolvePath('devenv.sh', f.root)
+      await FS.writeText(
+        executable,
+        '#!/bin/sh\nif [ "$1" = version ]; then\n  echo "devenv 2.1.0"\nelse\n  echo "requires a subcommand" >&2\n  exit 2\nfi\n',
+      )
+      const run = f.environment.run
+      let unavailable = true
+      f.environment.run = async (command, spec) => {
+        if (command === 'devenv') {
+          return await CLI.run('/bin/sh', { ...spec, args: [executable, ...spec?.args ?? []] })
+        }
+        if (command === 'nix-store' && unavailable) {
+          return { command, args: [], exitCode: 1, signal: null, stdout: '', stderr: 'temporary root failure' }
+        }
+        return await run(command, spec)
+      }
+      await Expect(runDirenvSetup({}, f.environment)).rejects.toThrow('temporary root failure')
+      Expect(await FS.readText(f.choice)).toBe('pending\n')
+      Expect(await FS.readText(f.zshrc)).toBe('# personal settings\nexport EDITOR=vim')
+      unavailable = false
+      Expect(await runDirenvSetup({}, f.environment)).toBe(0)
+      Expect(f.prompts).toHaveLength(2)
+      Expect(await FS.readText(f.choice)).toBe('enabled\n')
+      Expect(await FS.readText(f.zshrc)).toContain('source ')
+    } finally {
+      await FS.remove(f.root)
     }
   })
 
@@ -266,7 +298,7 @@ Describe('optional developer shell setup', () => {
         ),
       ])
       Expect(roots).toBe(1)
-      Expect(await FS.readText(f.choice)).toBe('disabled\n')
+      Expect(await FS.readText(f.choice)).toBe('pending\n')
       release.resolve()
       Expect(await Promise.all([first, second])).toEqual([0, 0])
       Expect(roots).toBe(2)

@@ -91,7 +91,8 @@ export async function runDirenvSetup(
         return 0
       }
       await atomicWrite(fs, FS.resolvePath('common-dir', repository), `${commonDirectory}\n`)
-      await atomicWrite(fs, choicePath, 'disabled\n')
+      // Incomplete installations stay untrusted but can be offered again on the next setup.
+      await atomicWrite(fs, choicePath, accepted ? 'pending\n' : 'disabled\n')
       if (!accepted) {
         write(
           'Automatic trust is disabled for this repository; existing direnv authorizations are unchanged. Run `./agent shell-setup` to change it.',
@@ -108,9 +109,11 @@ export async function runDirenvSetup(
           }\n./agent setup --environment\n./agent shell-setup`,
         )
       }
-      const devenv = await run('devenv', { args: ['--version'], cwd: root, stdio: 'pipe' })
+      const devenv = await run('devenv', { args: ['version'], cwd: root, stdio: 'pipe' })
       if (devenv.exitCode !== 0) {
-        Errors.throwHostEnvironment('Automatic shell activation requires an existing host devenv installation.')
+        Errors.throwHostEnvironment(
+          `devenv version failed (exit ${devenv.exitCode}):\n${devenv.stderr.trim() || devenv.stdout.trim()}`,
+        )
       }
       const runtime = await fs.readText(
         FS.resolvePath('packages/cli/dev-cli/dev-cli-src/shell/direnv-activation.zsh', root),
