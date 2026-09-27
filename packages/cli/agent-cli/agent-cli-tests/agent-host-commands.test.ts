@@ -78,6 +78,9 @@ const expected = [
   'processes list',
   'processes started',
   'start-branch',
+  'storage sync',
+  'storage qa',
+  'storage push',
 ]
 
 Describe('agent host command permissions', () => {

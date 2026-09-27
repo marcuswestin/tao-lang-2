@@ -120,6 +120,7 @@
     "android devices", "android state", "android emulators", "android boot", "android ensure",
     "remote fetch", "remote refs", "remote heads", "remote exists",
     "processes list", "processes started", "start-branch",
+    "storage sync", "storage qa", "storage push",
   ],
   "claudecode": {
     "autoCompactWindow": 272000,
@@ -180,6 +181,8 @@
           // artifact CDN during native builds. These network rules do not grant a host escape.
           "repo1.maven.org",
           "repo.reactnative.dev",
+          // CocoaPods resolves native iOS podspecs through its official metadata CDN.
+          "cdn.cocoapods.org",
           // Contributor Ubuntu image: token exchange, registry, and documented blob delivery.
           // https://docs.docker.com/desktop/setup/allow-list/
           "auth.docker.io",

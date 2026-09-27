@@ -254,6 +254,14 @@ shared-companion decision.
 
 ### A8 — A managed toolchain and a requirements graph
 
+Repository iOS setup is the first bounded slice: `just setup-ios` / the named `setup-ios` host
+operation inspects explicit Xcode and simulator-runtime versions, supports a side-by-side local
+Xcode archive installation with automatic detection in Downloads and a download-and-resume prompt,
+Apple's runtime download/import, and hands off account, license,
+and administrator steps. The [developer workflow documentation](../../packages/cli/dev-cli/README.md#ios-simulator-setup)
+owns its commands and limits. Public CLI integration, a shared target requirements graph, Android
+installation, and complete clean-machine acceptance remain open.
+
 A build should never fail with a Gradle stack trace on a machine that was missing a JDK. Each target
 (web, iOS simulator, iOS device, Android emulator, Android device, ship) declares its requirements,
 each requirement knows how to detect, install, and verify itself, and the CLI shows one plan with
@@ -261,9 +269,9 @@ sizes and licenses before it downloads anything.
 
 - Shape: installs under a Tao-owned directory without administrator rights wherever possible — the
   Android command-line tools, SDK packages, emulator, system images, and a JDK are fully
-  automatable on every OS; Xcode is a guided walkthrough (App Store or Apple download, license
-  acceptance, `xcodebuild -runFirstLaunch`, simulator runtime download) because it cannot be
-  automated; every download is pinned per Tao version and checksum-verified; `tao doctor` reports
+  automatable on every OS; Xcode combines archive installation and simulator runtime downloads
+  with guided Apple account, license, and administrator steps; every download is pinned per Tao
+  version and checksum-verified; `tao doctor` reports
   the same graph without installing.
 - Context: `packages/cli/dev-cli` doctor, `packages/cli/tao-cli/cli-src/ship-*`, the environment discussion this
   roadmap came out of.
@@ -505,6 +513,41 @@ and distribution remain separate release checks.
   secret store to the CLI and keeps the token out of app source, generated output, and logs.
 - Developer decision: requested 2026-09-27. The first InstantDB-with-auth demo runs on the
   Developer's existing Instant Cloud account and may be configured by hand before this lands.
+
+### A20 — Finish the InstantDB auth pairing
+
+Auth Review runs on Instant Cloud with InstantAuth and with Clerk and no server of ours (landed in
+`fd4c1012` and `f7ecb086`); the Developer ran both variants on a physical iPhone on 2026-09-27.
+Deferred that day, to finish before MVP:
+
+- [ ] **Before MVP:** implement the answers to `R15`'s five questions once the Developer settles
+      them.
+- [ ] **Before MVP:** a Clerk sign-in's InstantDB session must not outlive the Clerk session. The
+      datasource signs that session out on release, failure, and cancel, and only the session it
+      opened, but an app killed while signed in leaves it persisted in the InstantDB client, and
+      InstantDB refresh tokens do not expire. A launch whose Clerk session has ended can still find
+      the client signed in as that user until something signs it out. `R15`'s offline-launch
+      question decides whether a launch reuses that session or discards it.
+- [ ] **Before MVP:** hosted acceptance that checks stored data. The phone runs are the Developer's
+      report only. Repeat the local live test's admin-query checks (the account row keyed by the
+      InstantDB user, an owned note, another account denied) against the Instant Cloud app for both
+      variants.
+- [ ] **Before MVP:** an automated journey for `AuthReviewInstantClerk`. A local InstantDB cannot
+      verify a Clerk token without a real Clerk instance, so the Clerk pairing has only provider
+      unit tests.
+- [ ] **Before MVP:** WordFlower's hosted push. Store its Instant app's admin token as
+      `WORDFLOWER_INSTANT_ADMIN_TOKEN`, add a recipe like `instant-review` that pushes with it, and
+      push once the app is confirmed to be WordFlower's own. `Apps/WordFlower/README.md` holds the
+      token and shared-app hazards.
+- Instant Cloud shuts down on 2027-08-31 (`R11`, `A16`); `Docs/Roadmap/Hosted data provider
+  candidates.md` weighs the replacement and is the next slice. The dev client aborting when it
+  reloads with the InstantDB websocket open is
+  `DEVENV-DEV-CLIENT-CRASHES-RELOADING-WITH-AN-OPEN-WEBSOCKET`.
+- Context: `Docs/Roadmap/Plan - Auth and data pairing.md` (progress, Developer actions, InstantDB
+  facts), `Apps/Test Apps/README.md` (Auth Review), `packages/providers/instantdb/README.md` (live
+  tests), and `DEVENV-TAO-TEST-WAITS-FOREVER-ON-A-JEST-WORKER-LEFT-OPEN` for why `tao test` cancels a
+  journey file's leftover timers.
+- Done: every box above is checked on `main`.
 
 ## Project tracking
 

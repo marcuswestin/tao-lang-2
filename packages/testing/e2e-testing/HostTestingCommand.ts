@@ -1,4 +1,4 @@
-import { Errors, HCI, Platform, Repo, Switch } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo, Switch } from '@shared'
 import { runBrowserHostProof } from './BrowserHostProof'
 import { runPlaywrightHostDriverProof } from './DriverHostProof'
 import { HostTestingArtifacts } from './HostTestingArtifacts'
@@ -9,6 +9,7 @@ import {
   type HostTestingRequest,
   parseHostTestingRequest,
 } from './HostTestingRequest'
+import { validateNativeIosAppOutput } from './native/NativeIosAppExport'
 import { runNativeHostProofCommand } from './NativeHostProofCommand'
 
 /** Public command entry for explicitly selected host tests; ordinary suites never discover these tests. */
@@ -38,13 +39,69 @@ async function pruneWithWarning(): Promise<void> {
   })
 }
 
-async function createHostTestingContext(request: HostTestingRequest): Promise<HostTestingContext> {
+/** Validates an explicit Xcode selection before artifact creation, pruning, builds, or device operations. */
+export async function createHostTestingContext(
+  request: HostTestingRequest,
+  dependencies: {
+    environment?: Record<string, string | undefined>
+    files?: Pick<typeof FS, 'isDirectory' | 'isFile' | 'realPath'>
+    hostPlatform?: string
+    run?: typeof CLI.run
+  } = {},
+): Promise<HostTestingContext> {
+  if (request.kind === 'native' && request.mode === 'ios' && request.output !== undefined) {
+    await validateNativeIosAppOutput(request.output)
+  }
+  const environment = { ...(dependencies.environment ?? Platform.runtimeProcess.env) }
+  if (request.kind === 'catalyst' || request.kind === 'native' && request.mode !== 'android') {
+    // CocoaPods' Ruby normalization fails under the C locale before installing any pods.
+    environment['LANG'] = 'en_US.UTF-8'
+    environment['LC_ALL'] = 'en_US.UTF-8'
+  }
+  if ('developerDir' in request && request.developerDir !== undefined) {
+    const files = dependencies.files ?? FS
+    const execute = dependencies.run ?? CLI.run
+    if ((dependencies.hostPlatform ?? Platform.hostPlatform) !== 'darwin') {
+      Errors.throwHostEnvironment('--developer-dir requires a macOS host.')
+    }
+    if (
+      !await files.isDirectory(request.developerDir)
+      || !await files.isFile(`${request.developerDir}/usr/bin/xcodebuild`)
+    ) {
+      Errors.throwHostEnvironment(
+        `The selected Xcode Developer directory is missing or incomplete: ${request.developerDir}`,
+      )
+    }
+    environment['DEVELOPER_DIR'] = await files.realPath(request.developerDir)
+    for (const args of [['-version'], ['-checkFirstLaunchStatus']]) {
+      const result = await execute('/usr/bin/xcodebuild', { args, env: environment })
+      if (
+        result.exitCode !== 0 || result.error || result.signal !== null
+        || args[0] === '-version' && !/^Xcode \d/mu.test(result.stdout)
+      ) {
+        Errors.throwHostEnvironment(
+          `Selected Xcode is not ready: ${
+            result.stderr || result.stdout || result.error?.message || request.developerDir
+          }. Complete its first-launch and license prompts in Xcode before rerunning.`,
+        )
+      }
+    }
+    const resolved = await execute('/usr/bin/xcrun', { args: ['--find', 'xcodebuild'], env: environment })
+    if (
+      resolved.exitCode !== 0 || resolved.error || resolved.signal !== null
+      || resolved.stdout.trim() !== `${environment['DEVELOPER_DIR']}/usr/bin/xcodebuild`
+    ) {
+      Errors.throwHostEnvironment(
+        `xcrun did not resolve xcodebuild inside the selected Developer directory: ${request.developerDir}`,
+      )
+    }
+  }
   const runId = Platform.randomUUID()
   const artifactRoot = Repo.resolvePath(`.artifacts/host-testing/${runId}`)
   return {
     artifactRoot,
     environment: {
-      ...Platform.runtimeProcess.env,
+      ...environment,
       TAO_HOST_TEST_APP: request.subject,
       TAO_HOST_TEST_ARTIFACTS: artifactRoot,
       TAO_HOST_TEST_BROWSER_CHANNEL: request.browserChannel,

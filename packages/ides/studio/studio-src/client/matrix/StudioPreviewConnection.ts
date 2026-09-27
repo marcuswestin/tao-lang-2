@@ -26,6 +26,8 @@ export type StudioInteractionMode = 'edit' | 'run'
 export type StudioPreviewConnection = {
   activate?: () => void
   applySourceAction?: (envelope: StudioSourceActionEnvelope) => Promise<void>
+  /** The cell identity the frame last acknowledged applying, and the frame instance that applied it. */
+  appliedIdentity?: Readonly<{ identity: StudioCellIdentity; previewInstanceId: string }>
   appliedRevision?: number
   capture?: {
     fixtureName: string
@@ -54,6 +56,8 @@ export type StudioPreviewConnection = {
   journeyRecording?: StudioJourneyRecordingDraft
   journeyRecordingTimeout?: ReturnType<typeof setTimeout>
   journeyReplayStatus?: 'failed' | 'pending' | 'settled'
+  /** The last replay outcome the frame reported, and the journey revision it reported it for. */
+  journeyReplayResult?: Readonly<{ error?: string; revision: string; status: 'failed' | 'settled' }>
   lensNotifyQueued?: boolean
   lensSamples?: readonly StudioLensRenderSample[]
   layoutMeasurements?: StudioPreviewLayoutMeasurementsMessage
@@ -275,6 +279,7 @@ export function observePreviewVisibility(frame: HTMLElement, connection: StudioP
     const transition = StudioPreviewSuspension.transition(connection.suspended === true, visible)
     if (transition === 'suspend') {
       invalidatePreviewJourneyRecording(connection)
+      connection.appliedIdentity = undefined
       connection.suspendedSource = connection.iframe.src
       connection.suspended = true
       connection.iframe.src = 'about:blank'
@@ -293,6 +298,7 @@ export function observePreviewVisibility(frame: HTMLElement, connection: StudioP
 
 export function setPreviewSource(connection: StudioPreviewConnection, source: string): void {
   invalidatePreviewJourneyRecording(connection)
+  connection.appliedIdentity = undefined
   if (connection.suspended === true) {
     connection.suspendedSource = source
   } else {

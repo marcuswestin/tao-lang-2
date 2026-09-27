@@ -133,12 +133,16 @@ async function checkedProjectFiles(
   return files.sort()
 }
 
-/** projectFilesUnder lists the project files a starter comparison covers, in a stable order. */
+/**
+ * projectFilesUnder lists the project files a starter comparison covers, in a stable order. It skips
+ * `.tao/`, the local state a Studio or dev session records in any project it opens, which the
+ * starter's own `.gitignore` leaves out of the checkout.
+ */
 async function projectFilesUnder(directory: string): Promise<string[]> {
   const paths: string[] = []
   for await (
     const path of FS.walk(directory, {
-      excludeDirectory: name => name === 'node_modules',
+      excludeDirectory: name => name === 'node_modules' || name === '.tao',
       includeHidden: true,
     })
   ) {
