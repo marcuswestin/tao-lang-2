@@ -46,6 +46,29 @@ function createCommands(): Command {
     .version(TaoVersion.current(), '-v, --version', 'Print the Tao release this is, or `development` from source.')
 
   commands
+    .command('bridge')
+    .argument('<package>', 'Installed package whose public API should be imported.')
+    .requiredOption('--source <source>', 'Source adapter: expo or react-native.')
+    .option('--export <name>', 'Import one public object, such as React Native Vibration.')
+    .option('--exclude <names...>', 'Explicitly omit named public exports and record them in the generated catalog.')
+    .option('--from <directory>', 'Resolve installed declarations from this directory.', '.')
+    .requiredOption(
+      '--out <directory>',
+      'Regenerate bindings in a dedicated generated directory; its contents are disposable.',
+    )
+    .description('Generate experimental Tao bindings for supported native API actions.')
+    .action(async (packageName, options) => {
+      try {
+        const { generateNativeBindingFiles } = await import('@native-bindings')
+        const files = await generateNativeBindingFiles(packageName, options)
+        HCI.writeSuccess(`Generated native bindings in ${FS.displayPath(FS.dirname(files[0]!))}\n`)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
     .command('create')
     .argument('<description>', 'What the app is, in a sentence. URLs and image paths in it are read.')
     .option('--id <id>', 'Checked-in project id and directory name. Suggested from the name when omitted.')
@@ -95,6 +118,10 @@ function createCommands(): Command {
     .command('dev')
     .argument('[path]', 'Tao file or directory whose runnable apps should be discovered.', '.')
     .option('--app <name>', 'Select a uniquely named app without prompting.')
+    .option(
+      '--device <name-or-id>',
+      'Open a physical device by name, identifier, or Android serial after Metro starts.',
+    )
     .option('--ios', 'Open an iOS simulator after Metro starts.')
     .option('--android', 'Open Android after Metro starts.')
     .option('--web', 'Open the web app after Metro starts.')
@@ -103,7 +130,7 @@ function createCommands(): Command {
     .action(
       async (
         path: string,
-        options: { android?: boolean; app?: string; desktop?: boolean; ios?: boolean; web?: boolean },
+        options: { android?: boolean; app?: string; desktop?: boolean; device?: string; ios?: boolean; web?: boolean },
       ) => {
         try {
           // Command implementations load lazily so completion and help paths stay fast.
@@ -111,7 +138,9 @@ function createCommands(): Command {
           const startupTargets = (['ios', 'android', 'web', 'desktop'] as const).filter(target =>
             options[target] === true
           )
-          Platform.runtimeProcess.setExitCode(await runTaoDev(path, { appName: options.app, startupTargets }))
+          Platform.runtimeProcess.setExitCode(
+            await runTaoDev(path, { appName: options.app, device: options.device, startupTargets }),
+          )
         } catch (error) {
           HCI.writeErrorLine(Errors.formatForUser(error))
           Platform.runtimeProcess.setExitCode(1)

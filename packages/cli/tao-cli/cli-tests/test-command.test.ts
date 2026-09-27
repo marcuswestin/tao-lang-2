@@ -40,6 +40,7 @@ Describe('tao test', () => {
   Test('skips hidden future-source directories without reserving test directory names', async () => {
     await withTaoFixture({
       'Current.test.tao': 'test "Current" { }\n',
+      '.host-tests/Clipboard.test.tao': 'test "Native clipboard" { }\n',
       'Apps/WordFlower/.tao-archive/Future.test.tao': 'test "Future" {',
       'Apps/WordFlower/1 - Current/Valid.test.tao': 'test "Valid current MVP" { }\n',
       'Roadmap/Feature/Syntax Sketches/Valid.test.tao': 'test "Valid syntax sketch" { }\n',

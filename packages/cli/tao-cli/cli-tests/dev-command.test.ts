@@ -192,19 +192,23 @@ Describe('Tao dev app discovery and selection', () => {
       })
       input.end('2')
       const runs: string[] = []
+      const devices: (string | undefined)[] = []
 
       const exitCode = await runTaoDev(root, {
         appName: 'First',
+        device: 'roPhone',
         input,
         output,
-        runLoop: async selection => {
+        runLoop: async (selection, device) => {
           runs.push(selection.appName)
+          devices.push(device)
           return runs.length === 1 ? { kind: 'select-app' } : { kind: 'exit', exitCode: 0 }
         },
       })
 
       Expect(exitCode).toBe(0)
       Expect(runs).toEqual(['First', 'Second'])
+      Expect(devices).toEqual(['roPhone', 'roPhone'])
       // Quitting closes the dashboard's alternate screen, which restores the stale selector;
       // the exit line is what tells the user the CLI actually finished.
       Expect(stripAnsi(written)).toContain('Exited Tao dev.')

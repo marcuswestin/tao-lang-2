@@ -875,6 +875,17 @@ Describe('HCI', () => {
     Expect(stripAnsi(streams.outputText())).toContain(`Kill it?${HCI.confirmChoiceSuffix(false)}`)
   })
 
+  Test('cancelling a confirmation closes its terminal reader without accepting later input', async () => {
+    const streams = fakeTerminal()
+    const abort = new AbortController()
+    const answer = HCI.askConfirm({ message: 'Trust?', ...streams, defaultValue: false, signal: abort.signal })
+    Expect(streams.outputText()).toContain('Trust?')
+    abort.abort()
+    await Expect(answer).rejects.toThrow()
+    Expect(streams.input.listenerCount('keypress')).toBe(0)
+    Expect(streams.rawMode()).toBe(false)
+  })
+
   Test('reads raw keys one at a time from any terminal stream, without waiting for Enter', async () => {
     const terminal = fakeTerminal()
     terminal.input.write('1a')

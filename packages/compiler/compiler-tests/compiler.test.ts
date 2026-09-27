@@ -139,6 +139,7 @@ Describe('compiler: language lowering', () => {
       Expect(compiled.code).not.toContain('await TR.Do(_Scope.Increment.evaluate())')
       Expect(compiled.code).toContain('_Scope.AskFirst = TR.Action(async () =>')
       Expect(compiled.code.match(/interrupt: true/g)).toHaveLength(4)
+      Expect(compiled.code).toMatch(/owner: _TaoActionOwner,\s*interrupt: true/)
     },
   )
 

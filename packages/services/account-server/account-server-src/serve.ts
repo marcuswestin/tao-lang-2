@@ -2,6 +2,7 @@
 import { Errors, FS, HCI, Platform } from '@shared'
 import { accountPolicyFromJSON } from './AccountPolicy'
 import { AccountServer, type AccountServerOptions } from './AccountServer'
+import { publishAccountServerReadiness } from './AccountServerReadiness'
 import { type ClerkAccountOptions, validateClerkAccountOptions } from './ClerkAccountIdentity'
 
 /** startAccountServerFromArguments starts only from an explicit trusted policy file. */
@@ -64,14 +65,7 @@ export async function startAccountServerFromArguments(args: readonly string[]): 
   const readyPath = values.get('--ready-file')
   try {
     if (readyPath !== undefined) {
-      const path = FS.resolvePath(readyPath)
-      const temporary = `${path}.${Platform.randomUUID()}.tmp`
-      try {
-        await FS.writeJson(temporary, { resource, url: server.url })
-        await FS.move(temporary, path)
-      } finally {
-        await FS.remove(temporary)
-      }
+      await publishAccountServerReadiness(FS.resolvePath(readyPath), { resource, url: server.url })
     }
     return server
   } catch (error) {

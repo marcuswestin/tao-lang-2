@@ -1,18 +1,17 @@
+import { companionLaunchArgs, installedFromDevicectlApps } from '@expo-host/dev-loop/expo-runner/ios-companion'
 import type { ExpoFetch } from '@expo-host/dev-loop/expo-runner/metro'
 import { companionDevClientUrl, CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { CLI, Errors, FS, type Platform, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import type { StudioDeviceLaunchDiagnostic } from '@studio'
 import {
   companionDeviceNameFromArgument,
   companionInstallArgs,
   companionInstallCommand,
   companionInstallEnv,
-  companionLaunchArgs,
   createStudioCompanionDevice,
   describeDevicectlFailure,
   devicectlFailureLayer,
-  installedFromDevicectlApps,
   matchCompanionHost,
   runStudioCompanionInstall,
   type StudioCompanionDevice,
@@ -537,6 +536,29 @@ const LAN = {
 }
 
 Describe('Studio device launcher', () => {
+  Test('cancellation during the final Metro lookup prevents a later physical launch', async () => {
+    const resolving = Deferred()
+    const release = Deferred()
+    const abort = new AbortController()
+    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }], installed: { [PHONE_UDID]: true } })
+    const launcher = createStudioDeviceLauncher({
+      simulator: fakeSimulator({}),
+      device,
+      fetch: scriptedFetch(linkRedirect(EXPO_LINK)).fetchImpl,
+      lanAddresses: async () => {
+        resolving.resolve()
+        await release.promise
+        return LAN
+      },
+    })
+    const opening = launcher.open({ hostId: PHONE_UDID, metroOrigin: 'http://127.0.0.1:8081', signal: abort.signal })
+    await resolving.promise
+    abort.abort()
+    release.resolve()
+    await Expect(opening).rejects.toThrow()
+    Expect(device.opened).toEqual([])
+  })
+
   Test('describes Expo’s own dev-client link first, with LAN and link-local hosts as further candidates', async () => {
     const fetched = scriptedFetch(linkRedirect(EXPO_LINK))
     const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'example-phone' }], installed: { [PHONE_UDID]: true } })

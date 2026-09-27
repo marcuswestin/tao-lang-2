@@ -433,6 +433,11 @@ export function owningCommand(node: AST.Node): AST.CommandDeclaration | undefine
   return findAncestor(node, AST.isCommandDeclaration, true)
 }
 
+/** actionResultDeclarationsOwnedByActionBlock returns the immutable results of direct do calls. */
+export function actionResultDeclarationsOwnedByActionBlock(block: AST.ActionBlock): AST.ActionResultStatement[] {
+  return block.statements.filter(AST.isActionResultStatement)
+}
+
 /** askDeclarationsOwnedByActionBlock returns dialogue results introduced directly by one action block. */
 export function askDeclarationsOwnedByActionBlock(block: AST.ActionBlock): AST.AskStatement[] {
   return block.statements.filter(AST.isAskStatement)

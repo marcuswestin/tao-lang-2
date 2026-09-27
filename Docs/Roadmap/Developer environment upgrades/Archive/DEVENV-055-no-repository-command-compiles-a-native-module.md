@@ -1,6 +1,6 @@
 # DEVENV-055 — No repository command compiles a native module
 
-- **Status:** In progress
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Native builds
 - **Impact:** The repository now carries native code (`packages/providers/icloud`, an Expo module in
@@ -45,5 +45,20 @@
   The complete isolated host is retained at
   `.artifacts/native-module-check/run-ouRMif`. Adding `cmake` would mask the denied prebuilt-artifact
   path rather than prove the intended host lane, so no repository change is justified from this run.
-  Keep this entry open until a fresh host run compiles `TaoICloudNative` successfully.
+  On 2026-09-26, `./agent unsandboxed test-host ios --app native-bridge --device
+  4E0DEA16-953F-4269-B8BB-91D1D38993D1` likewise completed Expo prebuild and native codegen, then the
+  active task's immutable network profile blocked `cdn.cocoapods.org`. The tool terminated the
+  process before the ordinary report/cleanup completed; no native Clipboard assertion ran.
+  Evidence: `.artifacts/logs/agent/test-host/2026-09-26T23-49-08-853Z-91922.log` and isolated run
+  `.artifacts/host-testing/b8b5ffa3-8afe-4b9c-9c6b-9fe7c28d3d93` on `feat/native-binding-poc`.
+  On 2026-09-27, after integrating main's isolated-host build changes, the same repository command
+  completed a fresh native build, compiled and packaged `TaoICloudNative`, installed the isolated
+  Native Bridge app, passed its real Clipboard journey, and completed cleanup. This satisfies the
+  outstanding native-compilation criterion without changing network policy or dependency versions.
+  Evidence on `feat/native-binding-poc`: `.artifacts/logs/agent/test-host/2026-09-27T00-26-26-936Z-28016.log`
+  (TaoICloudNative compilation/packaging at lines 857–862) and
+  `.artifacts/host-testing/bbc9132e-1cf6-4252-96bf-247a219d058a/appium-ios/proof.receipt.json`.
+  The dedicated `native-module-check` route was not rerun; this acceptance uses the maintained
+  `test-host` native build. CloudKit/iCloud service behavior was not exercised.
 - **Source:** 2026-09-05 iCloud datasource provider implementation.
+- **Archived:** 2026-09-27

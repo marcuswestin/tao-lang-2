@@ -5,7 +5,7 @@ let
     inherit pkgs;
     bunPkgs = import inputs.bun-nixpkgs { system = pkgs.stdenv.system; };
   };
-  hutchPkg = pkgs.callPackage ./nix/hutch.nix { };
+  hutchPkg = pkgs.callPackage ./nix/hutch.nix { nodejs = toolchain.node; };
 in
 {
   name = "tao-lang";
@@ -18,9 +18,7 @@ in
   enterShell = ''
     export PATH="$DEVENV_ROOT:$PATH"
     for bin_dir in "$DEVENV_ROOT/node_modules/.bin" "$DEVENV_ROOT/packages/shared/node_modules/.bin"; do
-      if [ -d "$bin_dir" ]; then
-        export PATH="$bin_dir:$PATH"
-      fi
+      export PATH="$bin_dir:$PATH"
     done
   '';
 

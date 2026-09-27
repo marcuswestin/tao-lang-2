@@ -60,8 +60,13 @@ git clone <repository> tao && cd tao
 ./tao create "A reading list"
 ```
 
-The entry script builds the pinned toolchain, runs `./agent setup`, and opens an interactive
-development shell; type `exit` to leave. At the end of successful setup, a developer terminal offers
+The entry script enters the pinned environment once, runs `./agent setup`, and opens your interactive
+shell in that same environment. A failed setup stops entry. Running it again inside this checkout's
+active environment returns immediately without repeating setup or nesting another shell. A different
+checkout still enters its own environment. `./enter-tao-dev-env --setup-only` explicitly refreshes
+the pinned environment and runs setup without an interactive shell. Type `exit` to leave.
+
+At the end of successful setup, a developer terminal offers
 to install the pinned direnv and enable automatic environments for this repository and all its
 registered Git worktrees. After opting in, open a new terminal and enter a checkout to load its
 tools automatically. Without activation, run the entry script when you return to the checkout.
@@ -74,6 +79,11 @@ repositories and nested `.envrc` files are not automatically trusted. Dependency
 explicit: entering a directory loads its environment without running `./agent setup`.
 Setup prepares checkout-local completions; worktrees that have not run setup use the copy installed
 under `~/.tao-dev`. Directory entry never invokes the dependency installer to obtain completions.
+For an already enabled repository, setup also warms this checkout's own devenv cache, so its first
+directory entry can use the cached evaluation. This moves cold Nix work into setup rather than
+eliminating it; a checkout entered before setup still evaluates normally. Branch-specific toolchain
+changes remain subject to devenv's normal invalidation. Preparation is bounded and optional: a
+missing or inaccessible Nix installation leaves setup usable and directory entry retries normally.
 
 For an older worktree with no root `.envrc`, the hook creates the standard loader as an untracked
 file. It never replaces an existing file or symlink, or restores a tracked file you deleted.
