@@ -9,6 +9,38 @@ Several agents and people work in linked worktrees beside the primary checkout (
 under `~/.codex/worktrees/`, in older ones still under `.claude/worktrees/`, and elsewhere. Every one of them is a full checkout with its own `node_modules`, its own `_gen_*`
 trees, and its own `.artifacts/`. What they cannot have their own copy of is the machine.
 
+## Apple development setup
+
+`setup-ios` and `setup-visionos` share the signed Xcode installer, first-launch rechecks, exact
+simulator-runtime matching, and receipts in `dev-cli-src/apple-setup/AppleToolchainSetup.ts`.
+Use the named host operations from the repository root:
+
+```sh
+./agent unsandboxed setup-ios --xcode-version 27.1 --runtime-version 27.1
+./agent unsandboxed setup-visionos Apps/VisionHello --xcode-version 27.0
+```
+
+These inspect by default. Add `--apply` to install missing components and follow interactive
+instructions. Xcode downloads come from Apple; the command reuses completed archives in Downloads
+or accepts `--archive <path>`. Installation uses a versioned side-by-side app, validates Apple's
+signature, and never switches the global Xcode selection. Human sign-in, licenses, administrator
+authorization, and first-launch prompts stay with the person. Every continuation probes readiness
+again. A receipt records owned installation and extraction paths before writes so interrupted
+attempts remain inspectable.
+
+The iOS command requires the requested simulator runtime and retains its existing receipt format
+under `.artifacts/ios-setup/`. Vision Pro setup defaults to a physical headset: it checks the
+visionOS device SDK, guides pairing and Developer Mode, selects the person's team and bundle ID,
+and builds, installs, and launches the exported Tao app. It does not require CoreSimulator for
+headset setup. `--simulator --runtime-version <version>` selects the separate simulator flow.
+`--device`, `--team`, and `--bundle-id` make choices explicit; `--json` suppresses interactive
+prompts. A simulator never counts as a paired headset. An unknown readiness field, failed native
+command, or missing launch process ID remains incomplete.
+
+See [VisionHello's guided workflow](../../../Apps/VisionHello/README.md) for examples, manual
+Device Hub steps, signing prerequisites, retained diagnostics, and the physical acceptance boundary.
+Neither setup command proves how an app looks or responds to input on a physical headset.
+
 ## What a lane takes
 
 Every scheduling number in this repository is a reservation against `Platform.cpuCount()`. One

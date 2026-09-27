@@ -3,8 +3,9 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { AgentClientBuild } from './agent-client-build'
 import { buildDesktopApp } from './desktop-build'
 import { chooseTaoApp } from './dev-app-selection'
+import { exportVisionOSProject } from './visionos-project'
 
-export type BuildTarget = 'web' | 'desktop' | 'ios' | 'android'
+export type BuildTarget = 'web' | 'desktop' | 'ios' | 'android' | 'visionos'
 export type BuildRecord = {
   appName: string
   createdAt: string
@@ -26,7 +27,7 @@ type BuildOptions = {
   agents?: boolean
   output?: string
 }
-const targets = ['web', 'desktop', 'ios', 'android'] as const
+const targets = ['web', 'desktop', 'ios', 'android', 'visionos'] as const
 const runtimeFiles = [
   'index.ts',
   'app.json',
@@ -94,10 +95,22 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
       if (target === 'ios' || target === 'android') {
         Errors.throwUserInput(`Local ${target} builds are not yet implemented.`)
       }
-      const site = FS.resolvePath('site', target === 'web' ? FS.resolvePath('web', artifactRoot) : workRoot)
+      const site = FS.resolvePath(
+        'site',
+        target === 'web' ? FS.resolvePath('web', artifactRoot) : FS.resolvePath(target, workRoot),
+      )
       await exportWeb(snapshotApp, app.appName, workRoot, site, target)
       if (target === 'web') {
         return await finishWebArtifact(site)
+      }
+      if (target === 'visionos') {
+        const tests = FS.resolvePath('visionos/Tests.swift', snapshotRoot)
+        return await exportVisionOSProject({
+          appName: app.appName,
+          outputRoot: FS.resolvePath('visionos', artifactRoot),
+          siteRoot: site,
+          testSource: await FS.isFile(tests) ? await FS.readText(tests) : undefined,
+        })
       }
       const desktop = await buildDesktopApp({
         appName: app.appName,
@@ -228,21 +241,23 @@ async function chooseTargets(requested: readonly BuildTarget[]): Promise<BuildTa
   }
   if (!HCI.isInteractive()) {
     Errors.throwUserInput(
-      'Choose build targets with --web, --desktop, --ios, and/or --android in a non-interactive terminal.',
+      'Choose build targets with --web, --desktop, --ios, --android, and/or --visionos in a non-interactive terminal.',
     )
   }
-  HCI.writeLine('Build targets: 1. web  2. desktop  3. iOS (not yet implemented)  4. Android (not yet implemented)')
+  HCI.writeLine(
+    'Build targets: 1. web  2. desktop  3. iOS (not yet implemented)  4. Android (not yet implemented)  5. visionOS (Xcode project)',
+  )
   const answer = await HCI.askText({
     message: 'Select target numbers (comma-separated)',
     validate: value =>
-      parseTargetSelection(value) === undefined ? 'Choose one or more numbers from 1 to 4.' : undefined,
+      parseTargetSelection(value) === undefined ? 'Choose one or more numbers from 1 to 5.' : undefined,
   })
   return parseTargetSelection(answer)!
 }
 
 function parseTargetSelection(value: string): BuildTarget[] | undefined {
   const parts = value.split(',').map(part => part.trim())
-  if (parts.some(part => !/^[1-4]$/.test(part))) {
+  if (parts.some(part => !/^[1-5]$/.test(part))) {
     return undefined
   }
   return targets.filter((_, index) => parts.includes(String(index + 1)))

@@ -1,0 +1,16 @@
+use VisionHello from ./
+
+test "VisionHello" {
+   test "increments twice and resets the count" {
+      run VisionHello
+      expect navigation title "Hello Tao"
+      expect text "Hello from Tao"
+      expect text "Count: 0"
+      press "Increment"
+      expect text "Count: 1"
+      press "Increment"
+      expect text "Count: 2"
+      press "Reset"
+      expect text "Count: 0"
+   }
+}

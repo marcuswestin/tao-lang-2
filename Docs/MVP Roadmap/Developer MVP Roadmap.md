@@ -7,6 +7,15 @@ here they wait on.
 Each entry states the question, what it blocks, the options as they stand, and a marked
 recommendation. A recommendation is a starting position for the decision, never the decision.
 
+## Pre-MVP device acceptance
+
+- [ ] **Run the first Tao app on a physical Vision Pro.** Decided 2026-09-27: defer headset
+      acceptance from landing the experimental visionOS app and guided setup to this pre-MVP task.
+      Follow the [VisionHello setup guide](../../Apps/VisionHello/README.md), verify pairing,
+      Developer Mode, signing, build, installation, and launch, then visually confirm the counter's
+      increments and reset on the headset. Record the device and OS versions and the setup receipt.
+      Simulator interaction and unsigned device SDK builds do not complete this acceptance.
+
 ## Release checklist — before the repository goes public
 
 Run down this list before the first public push. Each item points at the entry that owns it.
