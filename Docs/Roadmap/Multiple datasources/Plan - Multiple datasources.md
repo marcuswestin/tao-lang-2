@@ -629,8 +629,9 @@ derivation; toolchain coverage proves the manifest's `icloud` section becomes th
 
 The Swift module compiles: `expo prebuild` of the runtime host, `pod install`, and an `xcodebuild`
 of the `TaoICloudNative` pod target for the iOS Simulator succeeded against ExpoModulesCore 3.0. The
-three commands, and which of them the Bash sandbox refuses, are recorded as DEVENV-055 in
-`Docs/Roadmap/Developer environment upgrades.md`. No simulator or device has run the provider yet.
+three commands, and which of them the Bash sandbox refuses, are recorded in
+[DEVENV-055](<../Developer environment upgrades/Archive/DEVENV-055-no-repository-command-compiles-a-native-module.md>).
+The Native Bridge simulator journey later compiled and linked the module on 2026-09-27. No simulator or device has run the provider yet.
 
 **Live acceptance still required:**
 

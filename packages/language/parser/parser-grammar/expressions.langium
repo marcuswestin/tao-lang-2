@@ -384,5 +384,5 @@ RefinementExpression:
 type RefinementBaseDeclaration = ValueDeclaration | TypeDeclaration;
 // A design color is a value only where a `color` argument or default names it; the scope offers
 // the mounted designs' colors there and nowhere else.
-type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | CommandDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | DesignDeclaration | DesignColor | PhraseDeclaration;
+type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | CommandDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | ActionResultStatement | DesignDeclaration | DesignColor | PhraseDeclaration;
 type DesignColor = DesignColorEntry | DesignToken;

@@ -1,5 +1,6 @@
 import { AST } from '@parser'
 import { Switch } from '@shared'
+import { resolveActionInvocation } from './invocations'
 import { parameterRequiresWritable } from './reactive-parameters'
 import { type UnitFamily, Units } from './Units'
 
@@ -171,6 +172,12 @@ export class Type {
   static ofValueDeclaration(declaration: AST.ValueDeclaration | undefined, context?: AST.Node): TaoType {
     const resolution = new TypeResolutionContext()
     return context ? resolution.ofContextualValue(declaration, context) : resolution.ofValueDeclaration(declaration)
+  }
+
+  /** ofActionResult resolves a foreign action's declared value, including nullable results. */
+  static ofActionResult(action: AST.ActionDeclaration): TaoType {
+    const declared = action.returnType ? Type.ofTypeExpression(action.returnType) : unresolvedType()
+    return action.optionalResult ? { kind: 'union', members: [declared, primitiveType('none')] } : declared
   }
 
   /** ofFunctionReturn resolves an explicit function result or infers it from every return statement. */
@@ -1014,7 +1021,10 @@ class TypeResolutionContext {
     if (parameter.inlineType) {
       return this.ofDefinition(parameter.inlineType)
     }
-    return parameter.type ? this.ofReference(parameter.type) : unresolvedType()
+    const declared = parameter.type ? this.ofReference(parameter.type) : unresolvedType()
+    return parameter.optional
+      ? { kind: 'union', members: [declared, primitiveType('none')] }
+      : declared
   }
 
   ofExpression(expression: AST.Expression): TaoType {
@@ -1140,6 +1150,12 @@ class TypeResolutionContext {
       CommandDeclaration: command => this.ofAction(command),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
       AppDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('app'),
+      ActionResultStatement: statement => {
+        const action = resolveActionInvocation(statement.invocation).action
+        return AST.isActionDeclaration(action) && action.returnType
+          ? Type.ofActionResult(action)
+          : unresolvedType()
+      },
       AskStatement: ask =>
         ask.view.ref?.response?.ref
           ? { kind: 'enum', declaration: ask.view.ref.response.ref }
@@ -1251,7 +1267,12 @@ class TypeResolutionContext {
   ofDefinition(definition: AST.TypeDefinition): TaoType {
     return this.withoutCycles(definition, () =>
       Switch.type(definition, {
-        ParameterTypeDeclaration: declaration => withNominal(this.ofTypeExpression(declaration.type), declaration),
+        ParameterTypeDeclaration: declaration => {
+          const declared = withNominal(this.ofTypeExpression(declaration.type), declaration)
+          return declaration.optional
+            ? { kind: 'union', members: [declared, primitiveType('none')] }
+            : declared
+        },
         TypeDeclaration: declaration => {
           const target = declaration.aliasTarget?.member.ref
           if (AST.isTypeDeclaration(target)) {

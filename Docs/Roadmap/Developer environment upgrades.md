@@ -35,7 +35,6 @@ change that addressed it.
 - [DEVENV-051 — `sips` exits 13 inside a sandboxed agent shell](<Developer environment upgrades/DEVENV-051-sips-exits-13-inside-a-sandboxed-agent-shell.md>) — Candidate
 - [DEVENV-052 — `bun --tsconfig-override` fails for scripts outside the repository](<Developer environment upgrades/DEVENV-052-bun-tsconfig-override-fails-for-scripts-outside-the-reposito.md>) — Candidate
 - [DEVENV-053 — Verifying a sibling worktree from an agent shell needs unsandboxed commands](<Developer environment upgrades/DEVENV-053-verifying-a-sibling-worktree-from-an-agent-shell-needs-unsan.md>) — Candidate
-- [DEVENV-055 — No repository command compiles a native module](<Developer environment upgrades/DEVENV-055-no-repository-command-compiles-a-native-module.md>) — In progress
 - [DEVENV-057 — `git hash-object --stdin-paths` cannot hash a directory symlink](<Developer environment upgrades/DEVENV-057-git-hash-object-stdin-paths-cannot-hash-a-directory-symlink.md>) — Candidate
 - [DEVENV-059 — Xcode 27 runtime installation can strand Apple device services](<Developer environment upgrades/DEVENV-059-xcode-27-runtime-installation-can-strand-apple-device-servic.md>) — In progress
 - [DEVENV-061 — `bun test` from the repository root loses subprocess output](<Developer environment upgrades/DEVENV-061-bun-test-from-the-repository-root-loses-subprocess-output.md>) — Candidate
@@ -70,7 +69,6 @@ change that addressed it.
 - [DEVENV-A-GATE-RECOMPILES-THE-GENERATED-APP-UNDER-A-RUNNING-DEV-LOOP — A check or test lane replaces the app a running `tao dev` is serving](<Developer environment upgrades/DEVENV-A-GATE-RECOMPILES-THE-GENERATED-APP-UNDER-A-RUNNING-DEV-LOOP.md>) — Candidate
 - [DEVENV-A-KILL-DEADLINE-NO-LONGER-CATCHES-A-SLOW-REGRESSION — A kill deadline no longer catches a slow regression](<Developer environment upgrades/DEVENV-A-KILL-DEADLINE-NO-LONGER-CATCHES-A-SLOW-REGRESSION.md>) — Candidate
 - [DEVENV-A-MERGE-OF-MAIN-LEAVES-THE-CODEX-CONFIG-MISSING-UNTIL-SETUP-RUNS — A merge of main leaves the Codex config missing until setup runs](<Developer environment upgrades/DEVENV-A-MERGE-OF-MAIN-LEAVES-THE-CODEX-CONFIG-MISSING-UNTIL-SETUP-RUNS.md>) — In progress
-- [DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE — Account service readiness JSON race](<Developer environment upgrades/DEVENV-ACCOUNT-SERVICE-READINESS-JSON-RACE.md>) — Candidate
 - [DEVENV-ACTIVE-NETWORK-POLICY-KEEPS-OLD-DOMAINS — Active network policy keeps old domains](<Developer environment upgrades/DEVENV-ACTIVE-NETWORK-POLICY-KEEPS-OLD-DOMAINS.md>) — Blocked
 - [DEVENV-ADMITTED-SEAT-HELD-BY-REGISTRATION-NOT-DEMAND — An admitted seat is held by registration, not by demand](<Developer environment upgrades/DEVENV-ADMITTED-SEAT-HELD-BY-REGISTRATION-NOT-DEMAND.md>) — Candidate
 - [DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM — Claude Code is below the configured Opus minimum](<Developer environment upgrades/DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM.md>) — Candidate
@@ -91,6 +89,7 @@ change that addressed it.
 - [DEVENV-MUTATION-FAILURES-CAN-BE-TOLERATED-AS-FLAKES — Mutation failures can be tolerated as flakes](<Developer environment upgrades/DEVENV-MUTATION-FAILURES-CAN-BE-TOLERATED-AS-FLAKES.md>) — Candidate
 - [DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME — Native session timestamps use monotonic time](<Developer environment upgrades/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md>) — Candidate
 - [DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS — One test file spawns five typechecks, so its shard cannot be split](<Developer environment upgrades/DEVENV-ONE-TEST-FILE-SPAWNS-FIVE-TYPECHECKS.md>) — Candidate
+- [DEVENV-PORT-REACQUISITION-ASSERTION-FAILS-INTERMITTENTLY — Port reacquisition assertion fails intermittently](<Developer environment upgrades/DEVENV-PORT-REACQUISITION-ASSERTION-FAILS-INTERMITTENTLY.md>) — Candidate
 - [DEVENV-PORT-REUSE-ASSERTION-FAILS-DURING-CONCURRENT-VERIFICATION — Port reuse assertion fails during concurrent verification](<Developer environment upgrades/DEVENV-PORT-REUSE-ASSERTION-FAILS-DURING-CONCURRENT-VERIFICATION.md>) — Candidate
 - [DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE — A queued node's first wait is charged to the lane, not the machine](<Developer environment upgrades/DEVENV-QUEUED-NODE-FIRST-WAIT-CHARGED-TO-LANE-NOT-MACHINE.md>) — Candidate
 - [DEVENV-RELEASE-ACCEPTANCE-DIRECTORY-OPERATIONS-FAIL-IN-MANAGED-SHELL — Release acceptance directory operations fail in the managed shell](<Developer environment upgrades/DEVENV-RELEASE-ACCEPTANCE-DIRECTORY-OPERATIONS-FAIL-IN-MANAGED-SHELL.md>) — Candidate

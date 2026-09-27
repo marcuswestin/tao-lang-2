@@ -1,0 +1,93 @@
+import TR from '@runtime/TR'
+import { Describe, Expect, Test } from '@shared/test'
+import { beginActionLaunch } from '../TaoRuntime-src/TR-action-transactions'
+
+Describe('foreign action results', () => {
+  Test('preserves false, empty, zero, nullable and structured native results', async () => {
+    const results: unknown[] = []
+    for (const value of [false, '', 0, null, { Message: 'ready' }]) {
+      const foreign = TR.ForeignAction(async () => value, 'Read', [])
+      await TR.Action(async () => {
+        results.push((await TR.DoResult<unknown>(foreign)).jsValue)
+      }).jsValue.invoke()
+    }
+    Expect(results).toEqual([false, '', 0, null, { Message: 'ready' }])
+  })
+
+  Test('awaits the native result and commits caller writes together in order', async () => {
+    let release!: (value: string) => void
+    const pending = new Promise<string>(resolve => {
+      release = resolve
+    })
+    const order: string[] = []
+    const state = TR.Cell(TR.Value('initial'))
+    const read = TR.ForeignAction(
+      () => {
+        order.push('native')
+        return pending
+      },
+      'Read',
+      [],
+    )
+    const root = TR.Action(async () => {
+      const continuation = TR.ActionContinuation()
+      await TR.Set(state, () => TR.Value('before'))
+      TR.ResumeActionContinuation(continuation)
+      const result = await TR.DoResult<string>(read)
+      TR.ResumeActionContinuation(continuation)
+      order.push(result.jsValue)
+      await TR.Set(state, () => result)
+    })
+    const running = root.jsValue.invoke()
+    await Promise.resolve()
+    Expect(order).toEqual(['native'])
+    release('after')
+    await running
+    Expect(order).toEqual(['native', 'after'])
+    Expect(state.evaluate().jsValue).toBe('after')
+  })
+
+  Test('never resumes the caller with a fabricated value after native rejection', async () => {
+    const reached: unknown[] = []
+    const state = TR.Cell(TR.Value('initial'))
+    const reports: unknown[] = []
+    const stop = TR.Errors.onFailure(report => reports.push(report))
+    const failed = TR.ForeignAction(
+      async () => {
+        TR.Errors.failHost('Read failed.')
+      },
+      'Read',
+      [],
+    )
+    try {
+      await TR.Action(async () => {
+        await TR.Set(state, () => TR.Value('temporary'))
+        reached.push(await TR.DoResult<string>(failed))
+      }, { name: 'Caller' }).jsValue.invoke()
+    } finally {
+      stop()
+    }
+    Expect(reached).toEqual([])
+    Expect(state.evaluate().jsValue).toBe('initial')
+    Expect(reports).toHaveLength(1)
+    Expect(reports[0]).toEqual(
+      Expect['objectContaining']({ action: 'Caller', frames: ['Caller', 'Read'], message: 'Read failed.' }),
+    )
+  })
+
+  Test('rejects a result that arrives after its launch was abandoned', async () => {
+    let release!: (value: string) => void
+    const pending = new Promise<string>(resolve => {
+      release = resolve
+    })
+    const reached: unknown[] = []
+    const root = TR.Action(async () => {
+      reached.push(await TR.DoResult<string>(TR.ForeignAction(() => pending, 'Read', [])))
+    })
+    const running = root.jsValue.invoke()
+    beginActionLaunch()
+    release('stale')
+    await running
+    Expect(reached).toEqual([])
+  })
+})

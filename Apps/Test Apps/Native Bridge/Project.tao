@@ -1,0 +1,6 @@
+project {
+   id "native-bridge-device-demo"
+   name "Native Bridge"
+   version "0.1.0"
+   DefaultApp NativeBridge
+}

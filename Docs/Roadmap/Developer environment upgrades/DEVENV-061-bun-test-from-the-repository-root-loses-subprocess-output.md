@@ -17,6 +17,21 @@
   `bun test packages/dev/dev-tests/merge-with-main.test.ts` from the root gave complete output including
   subprocess stack traces, and was the only way to see a failure while `./dev` itself was mid-edit and
   broken; `bun test --cwd packages/<name> <relative-path>` was reliable throughout.
+  On 2026-09-26 the supported repository runner also reproduced empty output on Bun 1.4.2:
+  `shared-tests/expect-async.test.ts:34` received exit 0 and empty stdout from one of 34 concurrent
+  `git --version` children in `verify-changed`, then again through `./agent test-file`. The same
+  unchanged test passed earlier that day. Logs:
+  `.artifacts/logs/verify-changed/2026-09-26T22-26-03-832Z-71916-24952f8b/shared.log` and
+  `.artifacts/logs/agent/test-file/2026-09-26T22-26-54-829Z-89095.log`.
+  Four concurrent lanes were reported during the focused retry; no causal claim follows from that
+  load. This observation broadens the earlier root-cwd-only boundary; the capture failure remains
+  independent of the account-server readiness publication repair on `feat/native-binding-poc`.
+  The same broad lane also returned empty stdout with exit 0 in
+  `agent-worktree-profile.test.ts:270`, which expected its fixture's `setup` and `--json` lines;
+  `.artifacts/logs/verify-changed/2026-09-26T22-26-03-832Z-71916-24952f8b/cli_dev-cli.log`.
+  The unchanged worktree-profile file passed its focused retry at
+  `.artifacts/logs/agent/test-file/2026-09-26T22-30-53-136Z-52039.log`; the shared concurrent-Git
+  regression still failed at `.artifacts/logs/agent/test-file/2026-09-26T22-30-53-090Z-52038.log`.
 - **Recurrence, 2026-09-26:** The supported landing and focused-test entry points
   also returned empty captured output on `feat/summary-cache-cleanup` after
   integrating main at `f6cb6a19`. The unchanged shared regression
@@ -51,6 +66,8 @@
   <relative-test-path>` resolves `@shared/test` correctly and reports the real stack, and a root-cwd
   `bun test <file>` is usable for a file that does not assert on captured subprocess output. Do not
   trust a root-cwd `bun test` for the suites that do.
+  Before the September 26 supported-lane repair, these routes also reproduced concurrent
+  subprocess-output loss; the repair above fixes that capture path rather than retrying commands.
 - **Proposed change:** Find what the root working directory changes about Bun's test runtime, then
   either fix the capture path in `Platform.spawn` or make a root-cwd `bun test` refuse and name the
   supported entry points.
