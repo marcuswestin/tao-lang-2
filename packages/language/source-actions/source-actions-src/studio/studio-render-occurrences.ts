@@ -125,6 +125,8 @@ function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | u
     'append-scenario-steps': () => undefined,
     'bind-sketch-field': action => action.renderId,
     'bind-text': action => action.renderId,
+    'extract-view': action => action.renderIds[0],
+    'group-renders': action => action.renderIds[0],
     'insert-captured-fixture': () => undefined,
     'insert-component': action => action.beforeId ?? action.afterId,
     'insert-project-view': action => action.beforeId ?? action.afterId,

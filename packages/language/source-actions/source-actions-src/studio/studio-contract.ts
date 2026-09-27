@@ -226,6 +226,23 @@ export type StudioWrapRenderPatchRequest = {
 
 export type StudioWrapRenderContainer = 'Col' | 'Row' | 'Stack'
 
+/** StudioGroupRendersPatchRequest wraps adjacent sibling renders in one new container, in place. */
+export type StudioGroupRendersPatchRequest = Readonly<{
+  kind: 'group-renders'
+  renderIds: readonly string[]
+  wrapper: StudioWrapRenderContainer
+}>
+
+/**
+ * StudioExtractViewPatchRequest makes a new view from adjacent sibling renders and renders it in their
+ * place. Without a name the view is numbered like a drawn one, View1, View2, and renamed later.
+ */
+export type StudioExtractViewPatchRequest = Readonly<{
+  kind: 'extract-view'
+  name?: string
+  renderIds: readonly string[]
+}>
+
 /** StudioRemoveRenderPatchRequest removes one direct child render together with its attached tag. */
 export type StudioRemoveRenderPatchRequest = Readonly<{
   kind: 'remove-render'
@@ -385,6 +402,8 @@ export type StudioSourcePatchRequest =
   | StudioAddSketchEntityParameterPatchRequest
   | StudioAppendScenarioStepsPatchRequest
   | StudioBindSketchFieldPatchRequest
+  | StudioExtractViewPatchRequest
+  | StudioGroupRendersPatchRequest
   | StudioInsertCapturedFixturePatchRequest
   | StudioSetDesignEntryPatchRequest
   | StudioInsertComponentPatchRequest

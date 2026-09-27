@@ -268,6 +268,8 @@ function sourceActionUsesRenderOccurrence(action: StudioCanonicalSourceAction): 
     || action.kind === 'set-layout-entry'
     || action.kind === 'set-style-entry'
     || action.kind === 'wrap-render'
+    || action.kind === 'group-renders'
+    || action.kind === 'extract-view'
     || (action.kind === 'insert-component' || action.kind === 'insert-project-view')
       && (typeof action['beforeId'] === 'string' || typeof action['afterId'] === 'string')
 }

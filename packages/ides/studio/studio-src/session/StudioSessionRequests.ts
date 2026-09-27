@@ -294,6 +294,24 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
   ) {
     return { kind: action.kind, renderId: action['renderId'], wrapper: action['wrapper'] }
   }
+  if (
+    action.kind === 'group-renders'
+    && isRenderIdList(action['renderIds'])
+    && (action['wrapper'] === 'Col' || action['wrapper'] === 'Row' || action['wrapper'] === 'Stack')
+  ) {
+    return { kind: action.kind, renderIds: action['renderIds'], wrapper: action['wrapper'] }
+  }
+  if (
+    action.kind === 'extract-view'
+    && isRenderIdList(action['renderIds'])
+    && (action['name'] === undefined || typeof action['name'] === 'string')
+  ) {
+    return {
+      kind: action.kind,
+      ...(action['name'] === undefined ? {} : { name: action['name'] }),
+      renderIds: action['renderIds'],
+    }
+  }
   if (action.kind === 'remove-render' && typeof action['renderId'] === 'string') {
     return { kind: action.kind, renderId: action['renderId'] }
   }
@@ -368,6 +386,8 @@ function requireSourceActionPreconditions(
     || request.kind === 'set-layout-entry'
     || request.kind === 'set-style-entry'
     || request.kind === 'wrap-render'
+    || request.kind === 'group-renders'
+    || request.kind === 'extract-view'
     || request.kind === 'remove-render'
     || request.kind === 'set-text-content'
     || request.kind === 'bind-text'
@@ -381,6 +401,10 @@ function requireSourceActionPreconditions(
     occurrenceRequired || envelope.identity.occurrence === undefined,
     `Studio source action cannot carry render occurrence identity: ${request.kind}`,
   )
+}
+
+function isRenderIdList(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.length > 0 && value.every(id => typeof id === 'string')
 }
 
 function isStudioStyleLandingScope(value: unknown): value is StudioStyleLandingScope {

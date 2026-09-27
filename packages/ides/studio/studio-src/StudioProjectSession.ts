@@ -1558,7 +1558,7 @@ export class StudioProjectSession {
         parsed = entries[0]!
         workspaceFiles = [...new Set(entries.flatMap(entry => entry.files.map(file => file.ast)))]
       }
-      if (request.kind === 'wrap-render') {
+      if (request.kind === 'wrap-render' || request.kind === 'group-renders' || request.kind === 'extract-view') {
         const directory = FS.dirname(path)
         for (const siblingPath of this.#files.absolutePaths()) {
           if (siblingPath === path || FS.dirname(siblingPath) !== directory) {

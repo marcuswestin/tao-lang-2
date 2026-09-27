@@ -2692,6 +2692,170 @@ Describe('Studio canvas-mode source actions', () => {
   })
 })
 
+Describe('Studio make view and group', () => {
+  const header = `
+      use Col, Text from @tao/ui
+
+      view MainView(Title text, Count number) {
+         let Note = "Kept"
+         render Col() {
+            Text("Before")
+            Text(Title)
+            Text("{ Count } of { Note }")
+            Text("After")
+         }
+      }
+    `
+
+  Test('extract-view makes a view from one render and passes the values it reads', async () => {
+    const document = await parseDocument(header)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'extract-view',
+      name: 'Heading',
+      renderIds: [renderId(requireRenderBySource(document, 'Text(Title)'))],
+    })
+    Expect(patch.content).toBe(source(`
+      use Col, Text from @tao/ui
+
+      view MainView(Title text, Count number) {
+         let Note = "Kept"
+         render Col() {
+            Text("Before")
+            Heading(Title: Title)
+            Text("{ Count } of { Note }")
+            Text("After")
+      }  }
+
+      view Heading(Title text) {
+         render Text(Title)
+      }
+    `))
+    await expectCanonical(patch.content)
+  })
+
+  Test('extract-view groups adjacent renders under a Col and types a local from its value', async () => {
+    const document = await parseDocument(header)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'extract-view',
+      name: 'Summary',
+      renderIds: [
+        renderId(requireRenderBySource(document, 'Text("{ Count }')),
+        renderId(requireRenderBySource(document, 'Text(Title)')),
+      ],
+    })
+    Expect(patch.content).toContain('Summary(Title: Title, Count: Count, Note: Note)')
+    Expect(patch.content).toContain(source(`
+      view Summary(Title text, Count number, Note text) {
+         render Col() {
+            Text(Title)
+            Text("{ Count } of { Note }")
+      }  }
+    `))
+    Expect(patch.content).toContain('   render Col() {\n      Text("Before")\n      Summary(')
+    await expectCanonical(patch.content)
+  })
+
+  Test('extract-view copies a shorthand parameter and names a loop item by its entity', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+      data Playlists / Playlist { Title text }
+
+      view Shelf(Playlist, Others list of Playlist) {
+         render Col() {
+            Text(Playlist.Title)
+            loop Others / Other {
+               Text(Other.Title)
+            }
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'extract-view',
+      name: 'Pair',
+      renderIds: [renderId(requireRenderBySource(document, 'Text(Other.Title)'))],
+    })
+    Expect(patch.content).toContain('Pair(Other: Other)')
+    Expect(patch.content).toContain('view Pair(Other Playlist) {\n   render Text(Other.Title)\n}')
+    await expectCanonical(patch.content)
+
+    const lead = await SourceActions.applyStudioPatch(document, {
+      kind: 'extract-view',
+      name: 'Lead',
+      renderIds: [renderId(requireRenderBySource(document, 'Text(Playlist.Title)'))],
+    })
+    Expect(lead.content).toContain('view Lead(Playlist) {\n   render Text(Playlist.Title)\n}')
+    Expect(lead.content).toContain('Lead(Playlist: Playlist)')
+    await expectCanonical(lead.content)
+  })
+
+  Test('extract-view numbers an unnamed view after the views already visible', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view View1() { render Text("Taken") }
+      view MainView() {
+         render Col() {
+            Text("Loose")
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'extract-view',
+      renderIds: [renderId(requireRenderBySource(document, 'Text("Loose")'))],
+    })
+    Expect(patch.content).toContain('      View2()\n')
+    Expect(patch.content).toContain('view View2() {\n   render Text("Loose")\n}')
+  })
+
+  Test('extract-view refuses a selection it cannot move without changing meaning', async () => {
+    const document = await parseDocument(header)
+    const extract = (name: string, texts: readonly string[]) =>
+      SourceActions.applyStudioPatch(document, {
+        kind: 'extract-view',
+        name,
+        renderIds: texts.map(text => renderId(requireRenderBySource(document, text))),
+      })
+    await Expect(extract('Split', ['Text("Before")', 'Text("After")'])).rejects.toThrow('adjacent elements')
+    await Expect(extract('MainView', ['Text("Before")'])).rejects.toThrow('already visible here')
+    await Expect(extract('lower', ['Text("Before")'])).rejects.toThrow('capital letter')
+    await Expect(extract('Whole', ['Col()'])).rejects.toThrow("not a view's root render")
+
+    const stateful = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         state Taps = 0
+         render Col() {
+            Text("{ Taps } taps")
+         }
+      }
+    `)
+    await Expect(SourceActions.applyStudioPatch(stateful, {
+      kind: 'extract-view',
+      name: 'Tapper',
+      renderIds: [renderId(requireRenderBySource(stateful, 'taps")'))],
+    })).rejects.toThrow('cannot make a view that reads Taps')
+  })
+
+  Test('group-renders wraps adjacent renders in place and imports the wrapper', async () => {
+    const document = await parseDocument(header)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'group-renders',
+      renderIds: [
+        renderId(requireRenderBySource(document, 'Text(Title)')),
+        renderId(requireRenderBySource(document, 'Text("{ Count }')),
+      ],
+      wrapper: 'Row',
+    })
+    Expect(patch.content).toContain('use Col, Row, Text from @tao/ui')
+    Expect(patch.content).toContain(`      Text("Before")
+      Row() {
+         Text(Title)
+         Text("{ Count } of { Note }")
+      }
+      Text("After")`)
+    await expectCanonical(patch.content)
+  })
+})
+
 /** expectCanonical asserts that `tao check` finds edited source canonical: every source fix leaves it unchanged. */
 async function expectCanonical(content: string): Promise<void> {
   const document = await parseRawDocument(content)

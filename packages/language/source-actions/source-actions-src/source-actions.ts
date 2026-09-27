@@ -92,6 +92,8 @@ export {
   type StudioAppendScenarioStepsPatchRequest,
   type StudioBindSketchFieldPatchRequest,
   type StudioComponentKind,
+  type StudioExtractViewPatchRequest,
+  type StudioGroupRendersPatchRequest,
   type StudioInsertCapturedFixturePatchRequest,
   type StudioInsertComponentPatchRequest,
   type StudioInsertProjectViewPatchRequest,

@@ -13,6 +13,7 @@ import type {
   StudioWorkspaceDesignContext,
 } from './studio/studio-contract'
 import { setDesignEntry, setStyleEntry } from './studio/studio-design-styles'
+import { extractView, groupRenders } from './studio/studio-extract-view'
 import { setLayoutEntry } from './studio/studio-layout-entries'
 import { bindText, inspectRender, setTextContent } from './studio/studio-render-inspection'
 import { validateOccurrencePrecondition } from './studio/studio-render-occurrences'
@@ -33,6 +34,8 @@ export const StudioActions = {
   applyPatch,
   bindSketchField,
   bindText,
+  extractView,
+  groupRenders,
   insertCapturedFixture,
   insertComponent,
   insertProjectView,
@@ -78,6 +81,8 @@ async function applyPatchContent(
     'append-scenario-steps': async action => await appendScenarioSteps(document, action),
     'bind-sketch-field': async action => await bindSketchField(document, action),
     'bind-text': async action => await bindText(document, action),
+    'extract-view': async action => await extractView(document, action, context),
+    'group-renders': async action => await groupRenders(document, action, context),
     'insert-captured-fixture': async action => await insertCapturedFixture(document, action),
     'insert-component': async action => await insertComponent(document, action.component, action),
     'insert-project-view': async action => await insertProjectView(document, action, context),
