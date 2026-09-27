@@ -4,7 +4,8 @@ import { CLI, Errors, FS, HCI, Repo, Switch } from '@shared'
  * Storage keeps the `storage` submodule, where development evidence such as QA screenshots is
  * archived, on its own `main`. Runs commit and push there and never bump the commit this repository
  * records for the submodule, so concurrent worktrees never conflict over it; `.gitmodules` sets
- * `ignore = all` to keep the moving checkout out of `git status`.
+ * `ignore = all` to keep the moving checkout out of `git status`. Only `pin` moves that record, and
+ * only when someone deliberately asks it to.
  */
 
 const submodulePath = 'storage'
@@ -12,7 +13,7 @@ const qaStore = 'qa'
 const pushAttempts = 3
 const listedNames = 10
 
-const storageActions = ['sync', 'qa', 'push'] as const
+const storageActions = ['sync', 'qa', 'push', 'pin'] as const
 
 type StorageAction = (typeof storageActions)[number]
 type QaOptions = {
@@ -54,6 +55,10 @@ export const Storage = {
     }
     const root = Repo.getRoot()
     return await Switch(action, {
+      pin: async () => {
+        await pin(root)
+        return 0
+      },
       push: async () => {
         await push(root)
         return 0
@@ -244,6 +249,67 @@ async function push(root: string): Promise<void> {
   Errors.throwHostEnvironment(`${submodulePath} could not push after ${pushAttempts} attempts.`)
 }
 
+/**
+ * pin records the archive's published head as the commit this repository points `storage` at, in a
+ * commit of its own on the current feature branch, and drafts the branch's merge message when it has
+ * none, so landing is the one step left. It refuses a head that is not on the archive's `main`,
+ * since a pointer to an unpublished commit breaks every fresh checkout's `submodule update`.
+ */
+async function pin(root: string): Promise<void> {
+  const branch = (await git(root, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout.trim()
+  if (!branch.startsWith('feat/')) {
+    Errors.throwUserInput(
+      `Pin from a feat/ branch, not ${branch || 'a detached HEAD'}; run \`./agent start-branch feat/<name>\`.`,
+    )
+  }
+  const staged = (await gitOrThrow(root, ['diff', '--cached', '--name-only'])).stdout.trim()
+  if (staged !== '') {
+    Errors.throwUserInput(`Commit or unstage what is already staged before pinning ${submodulePath}:\n${staged}`)
+  }
+  const storage = FS.resolvePath(submodulePath, root)
+  if (!await FS.exists(FS.resolvePath('.git', storage))) {
+    Errors.throwUserInput(`${submodulePath} is not initialised; run \`./agent unsandboxed storage sync\`.`)
+  }
+  if ((await gitOrThrow(storage, ['status', '--porcelain'])).stdout.trim() !== '') {
+    Errors.throwUserInput(`${submodulePath} has uncommitted changes; commit or remove them first.`)
+  }
+  const head = (await gitOrThrow(storage, ['rev-parse', 'HEAD'])).stdout.trim()
+  const published = await git(storage, ['merge-base', '--is-ancestor', head, 'refs/remotes/origin/main'])
+  if (published.exitCode !== 0) {
+    Errors.throwUserInput(
+      `${submodulePath} ${
+        head.slice(0, 8)
+      } is not on the archive's main; run \`./agent unsandboxed storage push\` first.`,
+    )
+  }
+  const recorded = (await gitOrThrow(root, ['ls-tree', 'HEAD', submodulePath])).stdout.split(/\s+/u)[2] ?? ''
+  if (recorded === head) {
+    HCI.writeLine(`${submodulePath} already points at ${head.slice(0, 8)}.`)
+    return
+  }
+  const subject = (await gitOrThrow(storage, ['log', '-1', '--format=%s', head])).stdout.trim()
+  const message = pinMessage(head, subject)
+  // `ignore = all` makes `git add` skip the submodule, so the pointer is written to the index directly.
+  await gitOrThrow(root, ['update-index', '--cacheinfo', `160000,${head},${submodulePath}`])
+  await gitOrThrow(root, ['commit', '--quiet', '-m', message])
+  const messageFile = FS.resolvePath(`.artifacts/merge/${branch}.msg`, root)
+  if (await FS.exists(messageFile)) {
+    HCI.writeLine(`Kept ${FS.displayPath(messageFile)}; check it still describes the branch before landing.`)
+  } else {
+    await FS.writeText(messageFile, `${message}\n`)
+  }
+  HCI.writeLine(`Pointed ${submodulePath} at ${head.slice(0, 8)}; land with \`./agent unsandboxed land\`.`)
+}
+
+/** pinMessage names the archive commit being pointed at by what it recorded. */
+function pinMessage(head: string, subject: string): string {
+  return [
+    `Point the ${submodulePath} submodule at archive commit ${head.slice(0, 8)}`,
+    '',
+    `- ${subject}`,
+  ].join('\n')
+}
+
 async function tao(root: string, args: readonly string[]): Promise<number> {
   const result = await CLI.run('./tao', { args, cwd: root, stdio: 'inherit' })
   if (result.error !== undefined) {
@@ -264,4 +330,4 @@ async function gitOrThrow(cwd: string, args: readonly string[]): Promise<CLI.Com
   return result
 }
 
-export const StorageTesting = { qaCommitMessage } as const
+export const StorageTesting = { pinMessage, qaCommitMessage } as const

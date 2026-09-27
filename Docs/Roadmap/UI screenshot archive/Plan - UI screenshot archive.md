@@ -111,8 +111,10 @@ The archive is a submodule for discoverability, but this repository runs many wo
 branches at once, and a submodule's gitlink would conflict on nearly every merge if captures bumped
 it. So:
 
-- The gitlink is set once and bumped only deliberately. `.gitmodules` sets `ignore = all`, so
-  captured commits inside the archive never make a worktree look dirty to `finalize` or `land`.
+- The gitlink is set once and bumped only deliberately: `./dev storage pin`, on a feature branch,
+  points it at the archive's published head in a commit of its own and drafts the merge message, so
+  `./agent unsandboxed land` is the one step left. `.gitmodules` sets `ignore = all`, so captured
+  commits inside the archive never make a worktree look dirty to `finalize` or `land`.
 - The submodule, at `storage`, is not initialised by default. `storage sync` initialises it in
   the worktree that captures as a blobless partial clone (`--filter=blob:none`): every commit and
   tree arrives, and a screenshot downloads only when checked out. A shallow clone would save less,
