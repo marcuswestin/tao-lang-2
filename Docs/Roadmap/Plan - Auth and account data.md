@@ -398,7 +398,12 @@ The gateway defaults to requiring an `azp` origin claim. The approved native opt
 request has no Origin header; any present claim must still match the configured authorized parties.
 Browser requests, including null or empty Origin headers, retain the strict policy. This trusts a
 verified bearer session and does not attest a physical device. `just clerk-review` prepares a
-development gateway and local InstantDB behind Studio for manual Companion review.
+development gateway and local InstantDB behind Studio for manual Companion review. Pass
+`--device <name-or-udid>` to launch the installed Companion directly on a connected iPhone or iPad
+without opening a Mac browser. The terminal asks the person to compare and confirm the pairing
+code; noninteractive runs leave confirmation to Studio's Device panel. Ctrl+C stops the review,
+including while pairing. Device selection, launch cancellation, and terminal pairing have focused
+automated coverage; a real phone sign-in remains manual acceptance.
 The authored iPhone scenario has mounted on a connected phone. Manual review exposed an unmasked
 custom password input and truncated failure text; secure input and wrapped messages address those.
 Known Clerk configuration errors now have fixed messages distinct from rejected credentials.
@@ -421,6 +426,11 @@ proved physical-device account persistence. The automated iOS simulator journey 
 email-code sign-in, profile and note writes against real InstantDB, process relaunch restoration,
 and sign-out isolation after relaunch on 2026-09-26. Its explicit pre-MVP lane is tracked in
 [initial release QA](<../MVP Roadmap/Plan - Initial release QA.md#live-native-authentication-acceptance>).
+A separate simulator regression runs the real `clerk-review` command with stored configuration,
+its LAN account gateway, and the unchanged authored Fill values. Password sign-in and sign-out
+passed on 2026-09-26 without provisioning a substitute account or changing profile/note data.
+The physical phone still reports the generic sign-in failure; its network path and retained native
+state are not established by a simulator on the Mac.
 Physical registration, profile, note persistence, email-code login, and logout isolation remain
 separate acceptance work.
 

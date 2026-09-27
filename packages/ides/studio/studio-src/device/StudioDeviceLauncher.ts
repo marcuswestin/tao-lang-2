@@ -49,6 +49,6 @@ export type StudioDeviceLauncher = {
   describe(input: { metroOrigin: string }): Promise<StudioDeviceLaunchInfo>
   /** Launches the installed shell on one host; throws a `HostEnvironmentError` naming the failing layer. */
   open(
-    input: { hostId: string; metroOrigin: string; route?: StudioDeviceLaunchRoute },
+    input: { hostId: string; metroOrigin: string; route?: StudioDeviceLaunchRoute; signal?: AbortSignal },
   ): Promise<StudioDeviceLaunchOpenResult>
 }
