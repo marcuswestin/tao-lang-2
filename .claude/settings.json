@@ -211,6 +211,7 @@
         "exp.host",
         "repo1.maven.org",
         "repo.reactnative.dev",
+        "cdn.cocoapods.org",
         "auth.docker.io",
         "registry-1.docker.io",
         "production.cloudfront.docker.com",

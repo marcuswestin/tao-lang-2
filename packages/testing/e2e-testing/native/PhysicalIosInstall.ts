@@ -8,6 +8,7 @@ export type PhysicalIosInstallOptions = Readonly<{
   build: (input: PrepareHostAppOptions) => Promise<HostBuild>
   dependencies?: PhysicalIosInstallDependencies
   device: string
+  environment?: Platform.ProcessEnv
   runId: string
   seed: number
   subject: HostSubject
@@ -22,6 +23,7 @@ type PhysicalIosInstallCommand = (
     args: readonly string[]
     command: string
     cwd: string | undefined
+    environment: Platform.ProcessEnv
     timeoutMs: number
   }>,
 ) => Promise<CommandReceipt>
@@ -124,6 +126,7 @@ async function runLeasedPhysicalIosInstall(
     undefined,
     preflightTimeoutMs,
     command,
+    options.environment ?? Platform.runtimeProcess.env,
   )
   receiptBase.commands.push(discovery)
   if (!succeeded(discovery)) {
@@ -194,6 +197,7 @@ async function runLeasedPhysicalIosInstall(
     preparation.root,
     nativeBuildTimeoutMs,
     command,
+    options.environment ?? Platform.runtimeProcess.env,
   )
   receiptBase.commands.push(install)
   return await writeReceipt(
@@ -318,16 +322,17 @@ async function commandReceipt(
   cwd: string | undefined,
   timeoutMs: number,
   injected: PhysicalIosInstallCommand | undefined,
+  environment: Platform.ProcessEnv,
 ): Promise<CommandReceipt> {
   if (injected !== undefined) {
-    return await injected({ args, command, cwd, timeoutMs })
+    return await injected({ args, command, cwd, environment, timeoutMs })
   }
   try {
     const result = await CLI.run(command, {
       args: [...args],
       ...(cwd === undefined ? {} : { cwd }),
       env: {
-        ...Platform.runtimeProcess.env,
+        ...environment,
         CI: '1',
         EXPO_NO_DOTENV: '1',
         TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: Repo.resolvePath('packages/apps/expo-host'),

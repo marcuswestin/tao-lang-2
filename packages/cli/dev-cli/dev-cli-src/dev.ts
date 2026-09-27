@@ -123,6 +123,9 @@ await runWithCommands(commands => {
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
+    .option('--developer-dir <path>', 'Task-scoped Xcode Contents/Developer directory for ios, device, or catalyst.')
+    .option('--output <path>', 'For ios: retain the built app and provenance in a new directory for manual review.')
+    .option('--build-only', 'For ios: build and install for manual review without running or claiming an Appium proof.')
     .option('--seed <seed>', 'Unsigned 32-bit deterministic application seed.', '12345')
     .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')
     .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
@@ -952,7 +955,8 @@ await runWithCommands(commands => {
     )
     .option('--platform <platform>', 'android, or ios-simulator for an iOS Simulator host.', 'android')
     .option('--abi <abis>', 'Comma-separated Android ABIs to build; arm64-v8a,x86_64 by default.')
-    .action(async (options: { abi?: string; platform: string }) => {
+    .option('--developer-dir <path>', 'Task-scoped Xcode Contents/Developer directory for ios-simulator.')
+    .action(async (options: { abi?: string; developerDir?: string; platform: string }) => {
       try {
         if (options.platform !== 'android' && options.platform !== 'ios-simulator') {
           Errors.throwUserInput(`--platform takes android or ios-simulator, not ${options.platform}.`)
@@ -962,6 +966,7 @@ await runWithCommands(commands => {
         Platform.runtimeProcess.exit(
           await runCompanionHostBuild({
             platform: options.platform,
+            ...(options.developerDir === undefined ? {} : { developerDir: options.developerDir }),
             ...(architectures === undefined ? {} : { architectures }),
           }),
         )
