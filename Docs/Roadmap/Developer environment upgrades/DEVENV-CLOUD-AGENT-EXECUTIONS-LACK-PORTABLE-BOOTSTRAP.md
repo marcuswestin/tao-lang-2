@@ -548,3 +548,10 @@ ordering, then passed with the repair. It exercises the real installer through a
 lock-completion fixture, preserves rejection of interrupted installations, and checks profile
 reuse. It does not claim a concurrent real Linux installation or refresh the native ARM
 acceptance tied to `d37963fc` above. Native amd64 and actual hosted acceptance remain open.
+
+Landing integrated optional shell activation and subsequent Studio Feed changes from main.
+The native launcher smoke and canary completed, but full verification stopped in the existing
+bootstrap-lock fixture: its fixed 0.2-second holder could exit before the contender ran,
+producing exit 9. A deliberate 0.3-second contender delay reproduced that failure. The fixture
+now retains the lock until an explicit release handshake, with bounded failure cleanup; the
+contender timeout is unchanged. This repairs the test schedule rather than altering lock behavior.
