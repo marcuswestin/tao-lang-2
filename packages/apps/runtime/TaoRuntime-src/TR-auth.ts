@@ -5,39 +5,76 @@ import { createElement } from './TR-create-element'
 import type {
   TaoAppDatasourceBinding,
   TaoConfiguredDatasource,
+  TaoDataAuthentication,
   TaoDataSchema,
+  TaoDataSchemaDefinition,
   TaoDatasourceDeclaration,
 } from './TR-data'
 import { entityHandle, metadataOf } from './TR-data-entity'
 import { registerDataSchema, unregisterDataSchema } from './TR-data-registry'
-import { RuntimeDataSchema } from './TR-data-schema'
-import { UserInputError, warnContainedFailure } from './TR-errors'
+import { configurationValuesEqual, evaluatedDatasourceConfiguration, RuntimeDataSchema } from './TR-data-schema'
+import { errorMessage, UserInputError, warnContainedFailure } from './TR-errors'
 import { runtimeRevisionStore } from './TR-listeners'
 import { NativeModules } from './TR-native-modules'
 import type { RuntimeAppDefinition } from './TR-navigation-app'
 import type { Evaluable } from './TR-navigation-presentables'
-import type { TaoAuthPairing } from './TR-pairing'
+import type { TaoAuthPairing, TaoAuthProofKind, TaoDataAcceptance } from './TR-pairing'
 import { withReadAvailability } from './TR-read-availability'
 
+type TaoAuthState =
+  | 'Restoring'
+  | 'SignedOut'
+  | 'Authenticating'
+  | 'ChallengeRequired'
+  | 'ReauthenticationRequired'
+  | 'SignedIn'
+  | 'Error'
+type TaoAuthChallenge = Readonly<{ id: string; kind: string; expiresAt?: number }>
+/** TaoAuthPrincipal is who the auth provider signed in; it carries no application account. */
+export type TaoAuthPrincipal = Readonly<{ issuer: string; subject: string; email?: string; emailVerified?: boolean }>
+/** TaoAuthIdentity is the signed-in principal once the account datasource resolved its Account. */
 export type TaoAuthIdentity = Readonly<{ issuer: string; subject: string; accountId: string }>
+/** TaoAuthSession is the app-visible session: `SignedIn` means account data can be read. */
 export type TaoAuthSession = Readonly<{
-  state:
-    | 'Restoring'
-    | 'SignedOut'
-    | 'Authenticating'
-    | 'ChallengeRequired'
-    | 'ReauthenticationRequired'
-    | 'SignedIn'
-    | 'Error'
+  state: TaoAuthState
   identity?: TaoAuthIdentity
-  challenge?: Readonly<{ id: string; kind: string; expiresAt?: number }>
+  challenge?: TaoAuthChallenge
+  message?: string
+}>
+/** TaoAuthConnectionSession is what an auth provider reports: `SignedIn` carries a principal. */
+export type TaoAuthConnectionSession = Readonly<{
+  state: TaoAuthState
+  principal?: TaoAuthPrincipal
+  challenge?: TaoAuthChallenge
   message?: string
 }>
 export type TaoAuthOutcome = Readonly<{
   status: 'completed' | 'cancelled' | 'rejected' | 'error'
   message?: string
 }>
-export type TaoAuthResult = Readonly<{ outcome: TaoAuthOutcome; session?: TaoAuthSession }>
+export type TaoAuthResult = Readonly<{ outcome: TaoAuthOutcome; session?: TaoAuthConnectionSession }>
+/** TaoAuthIssuedProof is a sign-in proof as the auth connection returns it, before the runtime stamps it. */
+export type TaoAuthIssuedProof =
+  | Readonly<{
+    kind: 'IdentityToken'
+    issuer: string
+    subject: string
+    token: string
+    expiresAt?: number
+    email?: string
+    emailVerified?: boolean
+  }>
+  | Readonly<{
+    kind: 'Session'
+    issuer: string
+    subject: string
+    value: Readonly<Record<string, unknown>>
+    expiresAt?: number
+  }>
+  | Readonly<{ kind: 'TestIdentity'; issuer: string; subject: string; accountId: string }>
+/** TaoAuthProof is a checked sign-in proof; `provider` is the issuing auth declaration's name. */
+export type TaoAuthProof = TaoAuthIssuedProof & Readonly<{ provider: string }>
+export type TaoAuthProofRequest = Readonly<{ kind: TaoAuthProofKind; signal: AbortSignal }>
 export type TaoAuthInput = Readonly<{
   method: string
   fields?: Readonly<Record<string, string>>
@@ -51,8 +88,6 @@ export type TaoAuthCapabilities = Readonly<{
   linking?: boolean
   sessions?: boolean
 }>
-export type TaoAuthCredentialRequest = Readonly<{ audience: string; signal: AbortSignal }>
-export type TaoAuthCredential = Readonly<{ audience: string; value: string; expiresAt?: number }>
 export type TaoAuthSecretStorage = Readonly<{
   getItem(key: string): Promise<string | null>
   setItem(key: string, value: string): Promise<void>
@@ -60,12 +95,13 @@ export type TaoAuthSecretStorage = Readonly<{
 }>
 export type TaoAuthConnection = {
   capabilities: TaoAuthCapabilities
-  restore(signal: AbortSignal): Promise<TaoAuthSession>
+  restore(signal: AbortSignal): Promise<TaoAuthConnectionSession>
   signIn(input: TaoAuthInput, signal: AbortSignal): Promise<TaoAuthResult>
   cancel?(): void
   signOut(signal: AbortSignal): Promise<TaoAuthOutcome>
-  credential(request: TaoAuthCredentialRequest): Promise<TaoAuthCredential>
-  subscribe?(listener: (session: TaoAuthSession) => void): () => void
+  /** Issues a fresh proof of the signed-in principal; the runtime checks and stamps it. */
+  proof(request: TaoAuthProofRequest): Promise<TaoAuthIssuedProof>
+  subscribe?(listener: (session: TaoAuthConnectionSession) => void): () => void
   close?(): void
 }
 export type TaoAuthProvider = {
@@ -89,16 +125,37 @@ export type TaoConfiguredAuth = Readonly<{
   config: Readonly<Record<string, unknown>>
   evaluate(): TaoConfiguredAuth
 }>
-/** Only transports receive this broker; Tao expressions cannot obtain resource credentials. */
+/**
+ * Only transports receive this broker; Tao expressions cannot obtain resource credentials.
+ * `credential` is the credential source the datasource's own `authenticate` returned.
+ */
 export type TaoDataAuthBinding = Readonly<{
   accountId: string
   generation: number
   signal: AbortSignal
   testing?: true
   onInvalidate?(cleanup: () => void | Promise<void>): () => void
-  credential(audience: string): Promise<TaoAuthCredential>
+  credential(signal?: AbortSignal): Promise<string>
 }>
 
+/** AccountTarget is the one datasource that resolves the signed-in principal to an Account. */
+type AccountTarget = Readonly<{
+  configuration: Readonly<Record<string, unknown>>
+  declaration: TaoDatasourceDeclaration
+  schema: TaoDataSchemaDefinition
+}>
+/** An attempt's target is an AccountTarget, or the sentence explaining why none could be chosen. */
+type AccountAttempt = {
+  promise: Promise<void>
+  status: 'failed' | 'pending' | 'resolved'
+  target: AccountTarget | string
+  token: number
+}
+type PendingState = 'Authenticating' | 'Restoring'
+
+const restoreFailed = 'Unable to restore your session.'
+const signInFailed = 'Unable to sign in. Please try again.'
+const remoteSignOutUnconfirmed = 'Signed out on this device. Remote sign-out could not be confirmed.'
 const completed: TaoAuthOutcome = Object.freeze({ status: 'completed' })
 const cancelled: TaoAuthOutcome = Object.freeze({ status: 'cancelled' })
 const signedOut: TaoAuthSession = Object.freeze({ state: 'SignedOut' })
@@ -130,6 +187,8 @@ export class RuntimeAuthScope {
   private readonly stores = new Map<TaoDataSchema, RuntimeDataSchema>()
   private readonly storeSubscriptions = new Map<TaoDataSchema, () => void>()
   private bindings: readonly TaoAppDatasourceBinding[] = []
+  /** bindingsSettled is false until the app binds its datasources, so an early principal waits for them. */
+  private bindingsSettled = false
   private connection: TaoAuthConnection | undefined
   private evaluatedConfiguration: Readonly<Record<string, unknown>> | undefined
   private stop: (() => void) | undefined
@@ -141,6 +200,18 @@ export class RuntimeAuthScope {
   private disposed = false
   private restored: Promise<void> | undefined
   private current: TaoAuthSession
+  /** principal is the provider's signed-in principal; the public identity appears once it resolves. */
+  private principal: TaoAuthPrincipal | undefined
+  /** authentication is the resolved account; a fixture account has no target and is never re-resolved. */
+  private authentication: { result: TaoDataAuthentication; target?: AccountTarget } | undefined
+  private attempt: AccountAttempt | undefined
+  private attemptToken = 0
+  /** pendingState is how the in-progress account resolution presents: restoring or signing in. */
+  private pendingState: PendingState = 'Authenticating'
+  /** unreleased holds data-side sessions to end; a failed release is retried on the next sign-out. */
+  private readonly unreleased = new Map<TaoDataAuthentication, Promise<void> | undefined>()
+  private readonly releaseSignal = new AbortController().signal
+  private signingIn = false
   private dataAuth: TaoDataAuthBinding | undefined
   private cleanup: Promise<boolean> = Promise.resolve(true)
   private invalidations = new Set<() => void | Promise<void>>()
@@ -238,18 +309,23 @@ export class RuntimeAuthScope {
       return
     }
     const operation = this.beginOperation()
+    let resolving: Promise<void>
     try {
       const connection = this.connect()
       const session = await connection.restore(operation.signal)
-      if (this.isCurrent(operation.generation)) {
-        this.accept(session)
-        this.watch()
+      if (!this.isCurrent(operation.generation)) {
+        return
       }
+      resolving = this.accept(session, 'Restoring')
+      // The provider may report a new principal while the datasource is still resolving this one.
+      this.watch()
     } catch {
       if (this.isCurrent(operation.generation)) {
-        this.accept({ state: 'Error', message: 'Unable to restore your session.' })
+        void this.accept({ state: 'Error', message: restoreFailed })
       }
+      return
     }
+    await resolving
   }
 
   signIn(input: TaoAuthInput): Promise<TaoAuthOutcome> {
@@ -264,50 +340,91 @@ export class RuntimeAuthScope {
     try {
       connection = this.connect()
     } catch {
-      return { status: 'error', message: 'Unable to sign in. Please try again.' }
+      return { status: 'error', message: signInFailed }
     }
     if (!connection.capabilities.methods.includes(input.method)) {
       return { status: 'rejected', message: 'This sign-in method is not available.' }
     }
     const operation = this.beginOperation()
+    let result: TaoAuthResult
     try {
-      this.accept({ state: 'Authenticating' })
-      const result = await connection.signIn(input, operation.signal)
+      void this.accept({ state: 'Authenticating' })
+      result = await connection.signIn(input, operation.signal)
       if (!this.isCurrent(operation.generation)) {
         return cancelled
       }
-      if (result.outcome.status === 'completed' && result.session) {
-        this.accept(result.session)
-      } else {
-        this.accept(signedOut)
-      }
-      this.watch()
-      if (result.outcome.status === 'completed' && this.current.state === 'SignedIn') {
-        this.finishPresentation(completed)
-      }
-      if (result.outcome.status === 'cancelled') {
-        this.finishPresentation(cancelled)
-      }
-      return result.outcome
     } catch {
       if (!this.isCurrent(operation.generation)) {
         return cancelled
       }
-      this.accept(signedOut)
-      return { status: 'error', message: 'Unable to sign in. Please try again.' }
+      void this.accept(signedOut)
+      return { status: 'error', message: signInFailed }
     }
+    let resolving: Promise<void> | undefined
+    try {
+      resolving = result.outcome.status === 'completed' && result.session
+        ? this.accept(result.session, 'Authenticating')
+        : void this.accept(signedOut)
+    } catch {
+      void this.accept(signedOut)
+      this.abandonProviderSession()
+      return { status: 'error', message: signInFailed }
+    }
+    this.watch()
+    if (resolving) {
+      this.signingIn = true
+      try {
+        await resolving
+      } finally {
+        this.signingIn = false
+      }
+      if (!this.isCurrent(operation.generation)) {
+        return cancelled
+      }
+      if (this.current.state === 'Error') {
+        // The provider signed in, but the datasource could not resolve the account. Leaving the
+        // provider session would let the next launch restore a sign-in the app never accepted.
+        this.abandonProviderSession()
+        return { status: 'error', message: this.current.message ?? signInFailed }
+      }
+    }
+    if (result.outcome.status === 'completed' && this.current.state === 'SignedIn') {
+      this.finishPresentation(completed)
+    }
+    if (result.outcome.status === 'cancelled') {
+      this.finishPresentation(cancelled)
+    }
+    return result.outcome
   }
 
   cancel(): TaoAuthOutcome {
+    const abandoning = this.signingIn
     this.beginOperation()
-    this.accept(signedOut)
+    void this.accept(signedOut)
     this.finishPresentation(cancelled)
     try {
       this.connection?.cancel?.()
     } catch (error) {
       warnContainedFailure('Authentication cancellation cleanup failed.', error)
     }
+    if (abandoning) {
+      this.abandonProviderSession()
+    }
     return cancelled
+  }
+
+  /** abandonProviderSession signs the provider out of a sign-in the app did not accept. */
+  private abandonProviderSession(): void {
+    const connection = this.connection
+    if (!connection) {
+      return
+    }
+    void trackAuthOperation(
+      Promise.resolve().then(() => connection.signOut(new AbortController().signal)).catch(error => {
+        warnContainedFailure('Abandoning an unaccepted sign-in failed.', error)
+        return cancelled
+      }),
+    )
   }
 
   signOut(): Promise<TaoAuthOutcome> {
@@ -319,14 +436,20 @@ export class RuntimeAuthScope {
       return cancelled
     }
     const operation = this.beginOperation()
-    this.accept(signedOut)
+    // The datasource's session ends before the provider's, so no backend session outlives sign-out.
+    this.retireAuthentication()
+    void this.accept(signedOut)
     this.finishPresentation(cancelled)
     const cleanup = this.cleanup
     try {
+      const released = await this.releasePending()
       const outcome = await this.connection?.signOut(operation.signal) ?? completed
       const cleaned = await cleanup
       if (!this.isCurrent(operation.generation)) {
         return cancelled
+      }
+      if (!released) {
+        return { status: 'error', message: remoteSignOutUnconfirmed }
       }
       return cleaned
         ? outcome
@@ -334,36 +457,83 @@ export class RuntimeAuthScope {
     } catch {
       await cleanup
       return this.isCurrent(operation.generation)
-        ? { status: 'error', message: 'Signed out on this device. Remote sign-out could not be confirmed.' }
+        ? { status: 'error', message: remoteSignOutUnconfirmed }
         : cancelled
     }
   }
 
-  async credential(request: TaoAuthCredentialRequest): Promise<TaoAuthCredential> {
-    const identity = this.current.identity
-    const generation = this.identityGeneration
-    const lifetime = this.identityLifetime.signal
-    if (this.disposed || this.current.state !== 'SignedIn' || !identity || request.signal.aborted) {
+  /**
+   * issueProof asks the provider for a fresh proof of the principal `generation` signed in, and
+   * refuses a kind the declaration does not issue, a proof for another principal, and an expired one.
+   */
+  private async issueProof<KindT extends TaoAuthProofKind>(
+    kind: KindT,
+    signal: AbortSignal,
+    generation: number,
+  ): Promise<Extract<TaoAuthProof, { kind: KindT }>> {
+    const principal = this.principal
+    if (this.disposed || generation !== this.identityGeneration || !principal || signal.aborted) {
       throw new UserInputError('Sign in to access this resource.')
     }
-    const controller = new AbortController()
-    const abort = (): void => controller.abort()
-    lifetime.addEventListener('abort', abort, { once: true })
-    request.signal.addEventListener('abort', abort, { once: true })
+    const declaration = this.authDeclaration()
+    RuntimeAssert.input(
+      declaration.pairing === undefined || declaration.pairing.issues.includes(kind),
+      `Auth ${declaration.name} does not issue ${kind} sign-in proofs.`,
+    )
+    RuntimeAssert.input(
+      kind !== 'TestIdentity' || declaration.provider.testing === true,
+      `Auth ${declaration.name} cannot issue TestIdentity sign-in proofs; only TestAuth can.`,
+    )
+    const request = linkedAbort(this.identityLifetime.signal, signal)
     try {
-      const credential = await this.connect().credential({ audience: request.audience, signal: controller.signal })
-      if (controller.signal.aborted || generation !== this.identityGeneration || this.disposed) {
+      const issued = await this.connect().proof({ kind, signal: request.signal })
+      if (request.signal.aborted || generation !== this.identityGeneration || this.disposed) {
         throw new UserInputError('This session is no longer active.')
       }
       RuntimeAssert.input(
-        credential.audience === request.audience && credential.value.length > 0
-          && (credential.expiresAt === undefined || credential.expiresAt > Date.now()),
+        validIssuedProof(issued) && issued.kind === kind && issued.issuer === principal.issuer
+          && issued.subject === principal.subject,
+        `Auth ${declaration.name} returned a sign-in proof that does not match the signed-in account.`,
+      )
+      RuntimeAssert.input(
+        !('expiresAt' in issued) || issued.expiresAt === undefined || issued.expiresAt > Date.now(),
+        'The sign-in proof has expired. Sign in again.',
+      )
+      return Object.freeze({ ...issued, provider: declaration.name }) as Extract<TaoAuthProof, { kind: KindT }>
+    } finally {
+      request.dispose()
+    }
+  }
+
+  /** resourceCredential brokers the resolved datasource's own credential source for its transport. */
+  private async resourceCredential(
+    authentication: TaoDataAuthentication,
+    generation: number,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    if (
+      this.disposed || generation !== this.identityGeneration || this.current.state !== 'SignedIn'
+      || signal?.aborted
+    ) {
+      throw new UserInputError('Sign in to access this resource.')
+    }
+    RuntimeAssert.input(
+      authentication.credential !== undefined,
+      'This datasource does not issue resource credentials.',
+    )
+    const request = linkedAbort(this.identityLifetime.signal, signal)
+    try {
+      const credential = await authentication.credential(request.signal)
+      if (request.signal.aborted || generation !== this.identityGeneration || this.disposed) {
+        throw new UserInputError('This session is no longer active.')
+      }
+      RuntimeAssert.input(
+        typeof credential === 'string' && credential.length > 0,
         'The resource credential is not valid for this request.',
       )
       return credential
     } finally {
-      lifetime.removeEventListener('abort', abort)
-      request.signal.removeEventListener('abort', abort)
+      request.dispose()
     }
   }
 
@@ -373,6 +543,10 @@ export class RuntimeAuthScope {
       RuntimeAssert.input(!this.disposed, 'This app is no longer mounted.')
       app = declaration.mountForAuth(this)
       this.apps.set(declaration, app)
+      if (!this.bindingsSettled && declaration.definition.datasources === undefined) {
+        // This app binds no datasource, so no later binding can hold the signed-in Account.
+        this.bindDatasources([])
+      }
     }
     return app
   }
@@ -405,8 +579,13 @@ export class RuntimeAuthScope {
 
   bindDatasources(bindings: readonly TaoAppDatasourceBinding[]): void {
     this.bindings = bindings
+    this.bindingsSettled = true
     for (const binding of bindings) {
       this.store(binding.store)
+    }
+    // Generated apps rebind on every render; only a changed account datasource resolves again.
+    if (this.principal && !this.disposed) {
+      void trackAuthOperation(this.resolveAccount(this.pendingState, false))
     }
     this.bindStores()
   }
@@ -450,12 +629,13 @@ export class RuntimeAuthScope {
       fixture.signedIn === undefined || accountId !== undefined,
       'The signed-in fixture account is not declared.',
     )
-    this.accept(
-      accountId === undefined ? signedOut : {
-        state: 'SignedIn',
-        identity: { accountId, issuer: 'tao-test', subject: fixture.signedIn! },
-      },
-    )
+    if (accountId === undefined) {
+      void this.accept(signedOut)
+    } else {
+      // A fixture names its signed-in account directly; no datasource resolves it.
+      this.changePrincipal({ issuer: 'tao-test', subject: fixture.signedIn! })
+      this.authenticated({ accountId })
+    }
     this.bindStores()
     for (const schema of schemas) {
       await schema.settle()
@@ -494,6 +674,11 @@ export class RuntimeAuthScope {
     this.unwatch()
     this.finishPresentation(cancelled)
     this.current = signedOut
+    // Unmounting keeps the data-side session for the next launch to restore; it is not a sign-out.
+    this.principal = undefined
+    this.authentication = undefined
+    this.attempt = undefined
+    this.attemptToken += 1
     this.dataAuth = undefined
     try {
       this.connection?.close?.()
@@ -532,6 +717,11 @@ export class RuntimeAuthScope {
     return this.connection
   }
 
+  private authDeclaration(): TaoAuthDeclaration {
+    RuntimeAssert.input(this.source !== undefined, 'This app has no authentication provider.')
+    return this.source.declaration
+  }
+
   private beginOperation(): { generation: number; signal: AbortSignal } {
     this.unwatch()
     this.operation.abort()
@@ -560,9 +750,13 @@ export class RuntimeAuthScope {
       if (this.disposed || generation !== this.subscriptionGeneration) {
         return
       }
-      this.operation.abort()
-      this.operationGeneration += 1
-      this.accept(session)
+      // A provider re-reporting the same principal (a refreshed session) does not supersede the
+      // operation that signed it in; any other transition does.
+      if (session.state !== 'SignedIn' || !samePrincipal(session.principal, this.principal)) {
+        this.operation.abort()
+        this.operationGeneration += 1
+      }
+      void this.accept(session, 'Authenticating')
       // Provider transitions can temporarily clear identity while exchanging a new account.
       // Explicit user operations and disposal invalidate this subscription separately.
     })
@@ -587,59 +781,276 @@ export class RuntimeAuthScope {
     return !this.disposed && generation === this.operationGeneration
   }
 
-  private accept(session: TaoAuthSession): void {
+  /**
+   * accept applies a provider-reported session. A new principal ends the previous one's data access;
+   * a signed-in principal stays `pendingState` until the account datasource resolves its Account.
+   */
+  private accept(session: TaoAuthConnectionSession, pendingState: PendingState = 'Authenticating'): Promise<void> {
     RuntimeAssert.input(
-      session.state !== 'SignedIn' || !!(
-        session.identity?.accountId && session.identity.issuer && session.identity.subject
-      ),
+      session.state !== 'SignedIn' || !!(session.principal?.issuer && session.principal.subject),
       'An authenticated session requires a verified account identity.',
     )
-    const identity = session.state === 'SignedIn' ? session.identity : undefined
-    const before = this.current.identity
-    const identityChanged = before?.accountId !== identity?.accountId || before?.issuer !== identity?.issuer
-      || before?.subject !== identity?.subject
-    this.current = Object.freeze({
-      state: session.state,
-      ...(identity ? { identity: Object.freeze({ ...identity }) } : {}),
-      ...(session.challenge ? { challenge: Object.freeze({ ...session.challenge }) } : {}),
-      ...(session.message ? { message: session.message } : {}),
-    })
-    if (identityChanged) {
-      this.invalidateIdentity()
-      const cleanups = [...this.stores.values()].map(store =>
-        store.invalidateAuth().then(
-          () => true,
-          error => {
-            warnContainedFailure('Account data cleanup failed.', error)
-            return false
-          },
-        )
+    const principal = session.state === 'SignedIn' ? session.principal : undefined
+    if (!samePrincipal(principal, this.principal)) {
+      this.changePrincipal(principal)
+    } else if (principal) {
+      // Claims such as email may change for the same principal; its data access does not.
+      this.principal = Object.freeze({ ...principal })
+    }
+    if (!principal) {
+      this.publish({
+        state: session.state,
+        ...(session.challenge ? { challenge: Object.freeze({ ...session.challenge }) } : {}),
+        ...(session.message ? { message: session.message } : {}),
+      })
+      return Promise.resolve()
+    }
+    return this.resolveAccount(pendingState, true)
+  }
+
+  /** changePrincipal ends every account binding of the previous principal and starts a new lifetime. */
+  private changePrincipal(principal: TaoAuthPrincipal | undefined): void {
+    this.principal = principal ? Object.freeze({ ...principal }) : undefined
+    this.retireAuthentication()
+    this.resetIdentity()
+  }
+
+  /** resetIdentity seals account data behind a new identity lifetime and abandons resolution in flight. */
+  private resetIdentity(): void {
+    this.attempt = undefined
+    this.attemptToken += 1
+    this.invalidateIdentity()
+    const cleanups = [...this.stores.values()].map(store =>
+      store.invalidateAuth().then(
+        () => true,
+        error => {
+          warnContainedFailure('Account data cleanup failed.', error)
+          return false
+        },
       )
-      this.cleanup = Promise.all([this.cleanup, ...cleanups]).then(results => results.every(Boolean))
-      this.identityLifetime = new AbortController()
-      this.identityGeneration += 1
-      const signal = this.identityLifetime.signal
-      const invalidations = this.invalidations
-      this.dataAuth = identity
-        ? Object.freeze({
-          accountId: identity.accountId,
-          generation: this.identityGeneration,
+    )
+    this.cleanup = Promise.all([this.cleanup, ...cleanups]).then(results => results.every(Boolean))
+    this.identityLifetime = new AbortController()
+    this.identityGeneration += 1
+    this.dataAuth = undefined
+    this.bindStores()
+  }
+
+  /**
+   * resolveAccount asks the datasource holding Account to resolve the principal. `retry` repeats a
+   * failed attempt against the same datasource; a rebind without retry resolves only when the
+   * account datasource changed, so per-render rebinds and failures never loop.
+   */
+  private resolveAccount(pendingState: PendingState, retry: boolean): Promise<void> {
+    const principal = this.principal
+    if (!principal || this.disposed) {
+      return Promise.resolve()
+    }
+    if (this.authentication && this.authentication.target === undefined) {
+      return Promise.resolve()
+    }
+    if (!this.bindingsSettled) {
+      // Restoration can finish before the app's first layout binds its datasources; the principal
+      // stays pending until they arrive, and bindDatasources resolves it then.
+      this.pendingState = pendingState
+      this.publish({ state: pendingState })
+      return Promise.resolve()
+    }
+    let target: AccountTarget | string
+    try {
+      target = this.accountTarget()
+    } catch (error) {
+      target = errorMessage(error)
+    }
+    const attempt = this.attempt
+    if (attempt && sameTarget(attempt.target, target) && (!retry || attempt.status !== 'failed')) {
+      return attempt.promise
+    }
+    if (this.authentication) {
+      // A different account datasource may resolve a different Account.
+      this.retireAuthentication()
+      this.resetIdentity()
+    }
+    const token = ++this.attemptToken
+    this.pendingState = pendingState
+    if (typeof target === 'string') {
+      this.attempt = { promise: Promise.resolve(), status: 'failed', target, token }
+      this.publish({ state: 'Error', message: target })
+      return this.attempt.promise
+    }
+    const resolved = target
+    const generation = this.identityGeneration
+    const signal = this.identityLifetime.signal
+    const auth = this.authDeclaration()
+    const provider = resolved.declaration.provider
+    this.publish({ state: pendingState })
+    const current: AccountAttempt = { promise: Promise.resolve(), status: 'pending', target: resolved, token }
+    this.attempt = current
+    current.promise = (async () => {
+      let result: TaoDataAuthentication | undefined
+      try {
+        result = await provider.authenticate!(Object.freeze({
+          configuration: resolved.configuration,
+          schema: resolved.schema,
+          principal,
+          provider: auth.name,
+          proof: <KindT extends TaoAuthProofKind>(kind: KindT, request: AbortSignal) =>
+            this.issueProof(kind, request, generation),
           signal,
-          onInvalidate: (cleanup: () => void | Promise<void>) => {
-            RuntimeAssert.input(!signal.aborted, 'This account data connection is no longer active.')
-            invalidations.add(cleanup)
-            return () => invalidations.delete(cleanup)
-          },
-          ...(this.source?.declaration.provider.testing ? { testing: true as const } : {}),
-          credential: (audience: string) => this.credential({ audience, signal }),
-        })
-        : undefined
-      this.bindStores()
+          ...(auth.provider.testing ? { testing: true as const } : {}),
+        }))
+        RuntimeAssert.input(
+          typeof result === 'object' && result !== null && typeof result.accountId === 'string'
+            && result.accountId.length > 0,
+          `Datasource ${resolved.declaration.name} did not resolve an account.`,
+        )
+      } catch (error) {
+        if (token !== this.attemptToken) {
+          return
+        }
+        warnContainedFailure('Account resolution failed.', error)
+        current.status = 'failed'
+        this.publish({ state: 'Error', message: pendingState === 'Restoring' ? restoreFailed : signInFailed })
+        return
+      }
+      if (token !== this.attemptToken) {
+        // Superseded before it was handed out: end the backend session it created.
+        this.queueRelease(result)
+        void this.releasePending()
+        return
+      }
+      current.status = 'resolved'
+      this.authenticated(result, resolved)
+    })()
+    return current.promise
+  }
+
+  /** authenticated publishes the resolved account and binds its data under the current lifetime. */
+  private authenticated(result: TaoDataAuthentication, target?: AccountTarget): void {
+    const principal = this.principal
+    RuntimeAssert.defined(principal, 'a resolved account belongs to a signed-in principal')
+    this.authentication = { result, ...(target ? { target } : {}) }
+    const generation = this.identityGeneration
+    const signal = this.identityLifetime.signal
+    const invalidations = this.invalidations
+    this.dataAuth = Object.freeze({
+      accountId: result.accountId,
+      generation,
+      signal,
+      onInvalidate: (cleanup: () => void | Promise<void>) => {
+        RuntimeAssert.input(!signal.aborted, 'This account data connection is no longer active.')
+        invalidations.add(cleanup)
+        return () => invalidations.delete(cleanup)
+      },
+      ...(this.source?.declaration.provider.testing ? { testing: true as const } : {}),
+      credential: (request?: AbortSignal) => this.resourceCredential(result, generation, request),
+    })
+    this.bindStores()
+    this.publish({
+      state: 'SignedIn',
+      identity: Object.freeze({ issuer: principal.issuer, subject: principal.subject, accountId: result.accountId }),
+    })
+  }
+
+  /** accountTarget chooses the one datasource that resolves the Account and checks it can pair. */
+  private accountTarget(): AccountTarget {
+    const auth = this.authDeclaration()
+    const targets: (AccountTarget & { holdsAccount: boolean })[] = []
+    for (const binding of this.bindings) {
+      const declaration = binding.source.declaration
+      const configuration = evaluatedDatasourceConfiguration(binding.source)
+      const holdsAccount = binding.store.definition.entities['Account'] !== undefined
+      const index = targets.findIndex(target =>
+        target.declaration === declaration && configurationValuesEqual(target.configuration, configuration)
+      )
+      if (index < 0) {
+        targets.push({ configuration, declaration, holdsAccount, schema: binding.store.definition })
+      } else if (holdsAccount && !targets[index]!.holdsAccount) {
+        targets[index] = { ...targets[index]!, holdsAccount, schema: binding.store.definition }
+      }
+    }
+    RuntimeAssert.input(targets.length > 0, `Auth ${auth.name} needs a datasource to hold the signed-in Account.`)
+    RuntimeAssert.input(
+      targets.length === 1,
+      `Auth ${auth.name} can sign in to one datasource, but this app binds ${
+        targets.map(target => target.declaration.name).join(', ')
+      }. Keep the Account and account data in one datasource.`,
+    )
+    const { holdsAccount: _holdsAccount, ...target } = targets[0]!
+    const data = target.declaration
+    RuntimeAssert.input(
+      auth.pairing !== undefined && data.pairing !== undefined,
+      `Auth ${auth.name} and Datasource ${data.name} must both declare sign-in pairing: the proofs ${auth.name} issues and the proofs ${data.name} accepts.`,
+    )
+    const issues = auth.pairing.issues
+    const accepted = data.pairing.accepts.filter(acceptance =>
+      issues.includes(acceptance.kind) && (acceptance.from === undefined || acceptance.from === auth.name)
+      && (acceptance.kind !== 'TestIdentity' || auth.provider.testing === true)
+    )
+    RuntimeAssert.input(
+      accepted.length > 0,
+      `Datasource ${data.name} cannot sign in with Auth ${auth.name}: ${auth.name} issues ${
+        issues.length > 0 ? issues.join(', ') : 'no sign-in proofs'
+      }, and ${data.name} accepts ${describeAcceptances(data.pairing.accepts)}.`,
+    )
+    RuntimeAssert.input(
+      data.provider.authenticate !== undefined,
+      `Datasource ${data.name} accepts sign-in proofs from Auth ${auth.name} but its provider does not authenticate them.`,
+    )
+    return target
+  }
+
+  /** publish replaces the app-visible session, resetting apps when the account identity changes. */
+  private publish(session: TaoAuthSession): void {
+    const next: TaoAuthSession = Object.freeze({ ...session })
+    if (sameSession(this.current, next)) {
+      return
+    }
+    const identityChanged = !sameIdentity(this.current.identity, next.identity)
+    this.current = next
+    if (identityChanged) {
       for (const app of this.apps.values()) {
         app.reset()
       }
     }
     this.changes.changed()
+  }
+
+  /** retireAuthentication queues the current account's data-side session for release. */
+  private retireAuthentication(): void {
+    const authentication = this.authentication
+    this.authentication = undefined
+    if (authentication) {
+      this.queueRelease(authentication.result)
+      void this.releasePending()
+    }
+  }
+
+  private queueRelease(result: TaoDataAuthentication): void {
+    if (result.release && !this.unreleased.has(result)) {
+      this.unreleased.set(result, undefined)
+    }
+  }
+
+  /** releasePending ends every queued data-side session; a failure stays queued for the next sign-out. */
+  private releasePending(): Promise<boolean> {
+    return Promise.all([...this.unreleased.keys()].map(result => {
+      let running = this.unreleased.get(result)
+      if (!running) {
+        running = Promise.resolve().then(() => result.release!(this.releaseSignal)).then(
+          () => {
+            this.unreleased.delete(result)
+          },
+          error => {
+            this.unreleased.set(result, undefined)
+            warnContainedFailure('Remote account sign-out could not be confirmed.', error)
+            throw error
+          },
+        )
+        this.unreleased.set(result, running)
+      }
+      return running.then(() => true, () => false)
+    })).then(results => results.every(Boolean))
   }
 
   private invalidateIdentity(): void {
@@ -696,7 +1107,6 @@ export class RuntimeAuthScope {
       declaration = Object.freeze({
         ...source.declaration,
         provider: {
-          authenticatedAuthority: 'test' as const,
           connect: () => ({
             load: () => this.fixtureSnapshots.get(store),
             save: (value: string) => {
@@ -876,6 +1286,79 @@ function AuthPresentation(
 ): React.ReactNode {
   React.useSyncExternalStore(props.scope.subscribe, props.scope.snapshot, props.scope.snapshot)
   return props.scope.presenting ? (props.scope.presentationRenderer ?? props.render)?.(props.scope) ?? null : null
+}
+
+function samePrincipal(left: TaoAuthPrincipal | undefined, right: TaoAuthPrincipal | undefined): boolean {
+  return left?.issuer === right?.issuer && left?.subject === right?.subject
+}
+
+function sameIdentity(left: TaoAuthIdentity | undefined, right: TaoAuthIdentity | undefined): boolean {
+  return left?.issuer === right?.issuer && left?.subject === right?.subject && left?.accountId === right?.accountId
+}
+
+function sameSession(left: TaoAuthSession, right: TaoAuthSession): boolean {
+  return left.state === right.state && left.message === right.message && sameIdentity(left.identity, right.identity)
+    && left.challenge?.id === right.challenge?.id && left.challenge?.kind === right.challenge?.kind
+    && left.challenge?.expiresAt === right.challenge?.expiresAt
+}
+
+function sameTarget(left: AccountTarget | string, right: AccountTarget | string): boolean {
+  if (typeof left === 'string' || typeof right === 'string') {
+    return left === right
+  }
+  return left.declaration === right.declaration && left.schema === right.schema
+    && configurationValuesEqual(left.configuration, right.configuration)
+}
+
+function describeAcceptances(accepts: readonly TaoDataAcceptance[]): string {
+  return accepts.length === 0
+    ? 'no sign-in proofs'
+    : accepts.map(acceptance => acceptance.from ? `${acceptance.kind} from ${acceptance.from}` : acceptance.kind)
+      .join(', ')
+}
+
+/** validIssuedProof checks the payload each proof kind must carry before the runtime stamps it. */
+function validIssuedProof(value: unknown): value is TaoAuthIssuedProof {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const proof = value as Partial<Record<string, unknown>>
+  const text = (name: string): boolean => typeof proof[name] === 'string' && (proof[name] as string).length > 0
+  if (!text('issuer') || !text('subject')) {
+    return false
+  }
+  if (
+    proof['expiresAt'] !== undefined && !(typeof proof['expiresAt'] === 'number' && Number.isFinite(proof['expiresAt']))
+  ) {
+    return false
+  }
+  const payloads: Readonly<Record<TaoAuthProofKind, () => boolean>> = {
+    IdentityToken: () => text('token'),
+    Session: () => typeof proof['value'] === 'object' && proof['value'] !== null && !Array.isArray(proof['value']),
+    TestIdentity: () => text('accountId'),
+  }
+  const kind = proof['kind']
+  return typeof kind === 'string' && Object.hasOwn(payloads, kind) && payloads[kind as TaoAuthProofKind]()
+}
+
+/** linkedAbort aborts when any given signal does, and detaches from them once disposed. */
+function linkedAbort(...signals: readonly (AbortSignal | undefined)[]): { signal: AbortSignal; dispose(): void } {
+  const controller = new AbortController()
+  const abort = (): void => controller.abort()
+  for (const signal of signals) {
+    if (signal?.aborted) {
+      controller.abort()
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+  }
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      for (const signal of signals) {
+        signal?.removeEventListener('abort', abort)
+      }
+    },
+  }
 }
 
 function emptySubscribe(): () => void {

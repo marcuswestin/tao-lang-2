@@ -3,8 +3,6 @@ use AuthProvider from @tao/auth
 public
 type Clerk is AuthProvider with {
    PublishableKey text
-   Endpoint text
-   Resource text
    issues { IdentityToken }
 
    provider ClerkAuthProvider from ./Clerk.ts

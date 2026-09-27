@@ -185,7 +185,7 @@ export async function referenceTest(instant?: AccountServerOptions['instant']) {
           accountId: session.accountId,
           generation: 1,
           signal: controller.signal,
-          credential: () => Promise.resolve({ audience: 'notes', value: session.token }),
+          credential: () => Promise.resolve(session.token),
         },
         configuration: {
           ServerURL: server.url,

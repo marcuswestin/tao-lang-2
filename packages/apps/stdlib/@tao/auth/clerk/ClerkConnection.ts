@@ -1,6 +1,5 @@
 import type TR from '@runtime/TR'
 import { Assert, Errors } from '@shared/core'
-import type { AccountProtocol } from 'tao-shared/auth'
 import {
   ClerkConfigurationError,
   type ClerkDriver,
@@ -12,31 +11,27 @@ import {
 type ClerkConnectionHost = {
   driver: ClerkDriver
   logoutStorage: Pick<TR.AuthSecretStorage, 'getItem' | 'setItem'>
-  fetch?: typeof fetch
-  now?: () => number
   schedule?: (job: () => void, delay: number) => () => void
 }
 
-/** No Clerk token or resource credential is exposed to authored Tao values. */
+/**
+ * No Clerk token is exposed to authored Tao values. The connection reports the Clerk user as the
+ * principal and issues its session token as an IdentityToken proof; the datasource exchanges it.
+ */
 export function createClerkConnection(
   configuration: Readonly<Record<string, unknown>>,
   host: ClerkConnectionHost,
 ): TR.AuthConnection {
-  const { Endpoint: endpoint, Resource: resource, PublishableKey: publishableKey } = configuration
-  Assert.input(typeof endpoint === 'string' && endpoint.length > 0, 'Clerk requires an Endpoint.')
-  Assert.input(typeof resource === 'string' && resource.length > 0, 'Clerk requires a Resource.')
+  const { PublishableKey: publishableKey } = configuration
   Assert.input(typeof publishableKey === 'string' && publishableKey.length > 0, 'Clerk requires a PublishableKey.')
-  const base = endpoint.replace(/\/$/, '')
   const driver = host.driver
-  const transport = host.fetch ?? fetch
-  const now = host.now ?? Date.now
   const schedule = host.schedule ?? ((job, delay) => {
     const timer = setTimeout(job, delay)
     return () => clearTimeout(timer)
   })
-  const storageKey = `tao.clerk.logout.${encodeURIComponent(JSON.stringify([publishableKey, endpoint, resource]))}`
+  const storageKey = `tao.clerk.logout.${encodeURIComponent(JSON.stringify([publishableKey]))}`
   const markerKey = (sessionId: string) => `${storageKey}.session.${encodeURIComponent(sessionId)}`
-  const listeners = new Set<(session: TR.AuthSession) => void>()
+  const listeners = new Set<(session: TR.AuthConnectionSession) => void>()
   const lifetime = new AbortController()
   let generation = 0
   let closed = false
@@ -45,34 +40,23 @@ export function createClerkConnection(
   let sdkGeneration = 0
   let deferredSDKChange: { session: ClerkDriverSession | null } | undefined
   let sdkSession: ClerkDriverSession | undefined
-  let current: AccountProtocol.Session | undefined
-  const gatewaySessions = new Map<string, AccountProtocol.Session>()
-  const gatewayRevocations = new Map<string, Promise<void>>()
-  let cancelRefresh: (() => void) | undefined
-  let cancelExpiry: (() => void) | undefined
+  let principal: TR.AuthPrincipal | undefined
   let cancelRevocation: (() => void) | undefined
-  let refreshing: Promise<void> | undefined
   let pending = new Set<string>()
   let loaded: Promise<void> | undefined
   let persistence = Promise.resolve()
   let flushing: Promise<boolean> | undefined
 
   const active = (epoch: number, signal: AbortSignal) => !closed && generation === epoch && !signal.aborted
-  function notify(value: TR.AuthSession) {
+  function notify(value: TR.AuthConnectionSession) {
     if (!closed) {
       for (const listener of listeners) {
         listener(value)
       }
     }
   }
-  function identity(value: AccountProtocol.Session): TR.AuthSession {
-    return { state: 'SignedIn', identity: { accountId: value.accountId, issuer: value.issuer, subject: value.subject } }
-  }
   function clear() {
-    current = undefined
-    cancelRefresh?.()
-    cancelExpiry?.()
-    cancelRefresh = cancelExpiry = undefined
+    principal = undefined
   }
   function loadPending() {
     loaded ??= (async () => {
@@ -114,7 +98,7 @@ export function createClerkConnection(
     return true
   }
   async function abandonSession(sessionId: string) {
-    // The SDK can complete before the gateway request is cancelled. Persist a tombstone before
+    // The SDK can complete before the sign-in is cancelled. Persist a tombstone before
     // targeted revocation so that a restart cannot restore this abandoned provider session.
     await markPending(sessionId)
     await flushPending()
@@ -146,60 +130,8 @@ export function createClerkConnection(
     })
     return flushing
   }
-  function revokeGateway(value: AccountProtocol.Session): Promise<void> {
-    const running = gatewayRevocations.get(value.token)
-    if (running) {
-      return running
-    }
-    const revocation = (async () => {
-      const response = await transport(`${base}/v1/auth/sign-out`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${value.token}`, 'Content-Type': 'application/json' },
-        body: '{}',
-      })
-      Assert.input(response.ok || response.status === 401, 'The account gateway could not confirm sign-out.')
-      gatewaySessions.delete(value.token)
-    })().finally(() => {
-      gatewayRevocations.delete(value.token)
-    })
-    gatewayRevocations.set(value.token, revocation)
-    return revocation
-  }
-  function valid(value: unknown, session: ClerkDriverSession): value is AccountProtocol.Session {
-    if (typeof value !== 'object' || value === null) {
-      return false
-    }
-    const candidate = value as Partial<AccountProtocol.Session>
-    return candidate.resource === resource && candidate.subject === session.userId
-      && typeof candidate.token === 'string' && /^[a-f0-9]{96}$/.test(candidate.token)
-      && typeof candidate.accountId === 'string' && candidate.accountId.length > 0
-      && typeof candidate.issuer === 'string' && candidate.issuer.length > 0
-      && typeof candidate.expiresAt === 'number' && Number.isFinite(candidate.expiresAt) && candidate.expiresAt > now()
-  }
-  function arm(value: AccountProtocol.Session) {
-    cancelRefresh?.()
-    cancelExpiry?.()
-    cancelExpiry = schedule(() => {
-      if (current !== value || closed) {
-        return
-      }
-      generation += 1
-      clear()
-      notify({ state: 'ReauthenticationRequired' })
-    }, Math.max(0, value.expiresAt - now()))
-    cancelRefresh = schedule(() => {
-      cancelRefresh = undefined
-      void renew().catch(() => {
-        if (current === value && !closed) {
-          cancelRefresh = schedule(() => {
-            cancelRefresh = undefined
-            void renew().catch(() => undefined)
-          }, Math.min(5_000, Math.max(0, value.expiresAt - now())))
-        }
-      })
-    }, Math.max(1_000, value.expiresAt - now() - 10_000))
-  }
-  async function exchange(session: ClerkDriverSession, epoch: number, signal: AbortSignal) {
+  /** sessionToken reads the SDK session's current token after confirming no tab signed it out. */
+  async function sessionToken(session: ClerkDriverSession, epoch: number, signal: AbortSignal) {
     const sdkEpoch = sdkGeneration
     Assert.input(!await isLoggedOut(session.id), 'Finish signing out before using this Clerk session again.')
     const token = await session.getToken()
@@ -207,50 +139,20 @@ export function createClerkConnection(
       throw Errors.abortError('Sign-in was cancelled.')
     }
     Assert.input(token !== null, 'Sign in again to access account data.')
-    const response = await transport(`${base}/v1/auth/clerk/exchange`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resource }),
-      signal: signal as NonNullable<Parameters<typeof fetch>[1]>['signal'],
-    })
-    Assert.input(response.ok, 'Clerk could not authorize this account gateway. Try signing in again.')
-    const value: unknown = await response.json()
-    Assert.input(valid(value, session), 'The account gateway returned an invalid Clerk session.')
-    gatewaySessions.set(value.token, value)
-    try {
-      Assert.input(!await isLoggedOut(session.id), 'Finish signing out before using this Clerk session again.')
-      if (!active(epoch, signal) || sdkEpoch !== sdkGeneration) {
-        throw Errors.abortError('Sign-in was cancelled.')
-      }
-    } catch (error) {
-      void revokeGateway(value).catch(() => undefined)
-      throw error
-    }
-    current = value
-    sdkSession = session
-    arm(value)
-    // Even an expired bearer can have an admitted remote write that still needs fencing.
-    // Retire replaced credentials promptly and retain failures for explicit logout.
-    for (const previous of gatewaySessions.values()) {
-      if (previous.token !== value.token) {
-        void revokeGateway(previous).catch(() => undefined)
-      }
-    }
-    return identity(value)
+    return { token, claims: clerkTokenClaims(token, session) }
   }
-  function renew() {
-    refreshing ??= (async () => {
-      const session = sdkSession
-      Assert.input(session !== undefined && !closed && !explicitLogout, 'Sign in again to access account data.')
-      const result = await exchange(session, generation, lifetime.signal)
-      notify(result)
-    })().finally(() => {
-      refreshing = undefined
-    })
-    return refreshing
+  async function signedIn(
+    session: ClerkDriverSession,
+    epoch: number,
+    signal: AbortSignal,
+  ): Promise<TR.AuthConnectionSession> {
+    const { claims } = await sessionToken(session, epoch, signal)
+    sdkSession = session
+    principal = claims.principal
+    return { state: 'SignedIn', principal: claims.principal }
   }
   function acceptSDKChange(session: ClerkDriverSession | null) {
-    if (closed || explicitLogout || (session?.id === sdkSession?.id && (session === null || current))) {
+    if (closed || explicitLogout || (session?.id === sdkSession?.id && (session === null || principal))) {
       return
     }
     const epoch = ++generation
@@ -262,7 +164,7 @@ export function createClerkConnection(
         if (!active(epoch, lifetime.signal)) {
           return
         }
-        const result = await exchange(session, epoch, lifetime.signal)
+        const result = await signedIn(session, epoch, lifetime.signal)
         notify(result)
       }).catch(() => {
         if (active(epoch, lifetime.signal)) {
@@ -307,7 +209,7 @@ export function createClerkConnection(
         }
         sdkSession = session
         sdkEpoch = sdkGeneration
-        return await exchange(session, epoch, signal)
+        return await signedIn(session, epoch, signal)
       } catch (error) {
         if (!active(epoch, signal) || sdkEpoch !== sdkGeneration) {
           return { state: 'SignedOut' }
@@ -345,7 +247,7 @@ export function createClerkConnection(
           }
         }
         sdkSession = result.session
-        return { outcome: { status: 'completed' }, session: await exchange(result.session, epoch, signal) }
+        return { outcome: { status: 'completed' }, session: await signedIn(result.session, epoch, signal) }
       } catch (error) {
         const abandonedId = error instanceof ClerkRevocationError ? error.sessionId : completedSession?.id
         if (abandonedId) {
@@ -379,11 +281,7 @@ export function createClerkConnection(
         } else {
           await persistPending()
         }
-        const results = await Promise.allSettled([
-          flushPending(),
-          ...[...gatewaySessions.values()].map(revokeGateway),
-        ])
-        return results.every(result => result.status === 'fulfilled' && result.value !== false)
+        return await flushPending()
           ? { status: 'completed' }
           : { status: 'error', message: 'Signed out here. Some remote revocations could not be confirmed.' }
       } catch {
@@ -393,21 +291,29 @@ export function createClerkConnection(
     cancel() {
       generation += 1
     },
-    async credential({ audience, signal }) {
-      Assert.input(audience === resource, 'This Clerk session does not authorize that datasource.')
+    /** The IdentityToken proof is the Clerk session token; the datasource verifies and exchanges it. */
+    async proof({ kind, signal }) {
+      Assert.input(kind === 'IdentityToken', `Clerk issues IdentityToken sign-in proofs, not ${kind}.`)
       if (signal.aborted || closed) {
         throw Errors.abortError('The authentication request was cancelled.')
       }
-      Assert.input(current !== undefined && current.expiresAt > now(), 'Sign in again to access account data.')
-      const epoch = generation
-      if (current.expiresAt - now() < 5_000) {
-        await renew()
+      const session = sdkSession
+      const signedInAs = principal
+      Assert.input(
+        session !== undefined && signedInAs !== undefined && !explicitLogout,
+        'Sign in again to access account data.',
+      )
+      const { token, claims } = await sessionToken(session, generation, signal)
+      Assert.input(
+        claims.principal.issuer === signedInAs.issuer && claims.principal.subject === signedInAs.subject,
+        'Sign in again to access account data.',
+      )
+      return {
+        kind,
+        ...claims.principal,
+        token,
+        ...(claims.expiresAt === undefined ? {} : { expiresAt: claims.expiresAt }),
       }
-      if (!active(epoch, signal)) {
-        throw Errors.abortError('The authentication request was cancelled.')
-      }
-      Assert.input(current !== undefined && current.expiresAt > now(), 'Sign in again to access account data.')
-      return { audience, value: current.token, expiresAt: current.expiresAt }
     },
     subscribe(listener) {
       listeners.add(listener)
@@ -425,5 +331,64 @@ export function createClerkConnection(
       driver.close()
       listeners.clear()
     },
+  }
+}
+
+/**
+ * clerkTokenClaims reads the principal from a Clerk session token's claims. The datasource that
+ * receives the token verifies its signature; these claims only name who the provider signed in.
+ */
+function clerkTokenClaims(
+  token: string,
+  session: ClerkDriverSession,
+): { principal: TR.AuthPrincipal; expiresAt?: number } {
+  const claims = jwtPayload(token)
+  const issuer = claims?.['iss']
+  Assert.input(
+    typeof issuer === 'string' && issuer.length > 0 && claims?.['sub'] === session.userId,
+    'Clerk returned an unreadable session token.',
+  )
+  const expiry = claims['exp']
+  const email = claims['email']
+  const emailVerified = claims['email_verified']
+  return {
+    principal: {
+      issuer,
+      subject: session.userId,
+      ...(typeof email === 'string' && email.length > 0 ? { email } : {}),
+      ...(typeof emailVerified === 'boolean' ? { emailVerified } : {}),
+    },
+    ...(typeof expiry === 'number' && Number.isFinite(expiry) ? { expiresAt: expiry * 1_000 } : {}),
+  }
+}
+
+const base64URL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+
+/** jwtPayload decodes a JWT's payload segment without trusting it; it is undefined when unreadable. */
+function jwtPayload(token: string): Record<string, unknown> | undefined {
+  const segment = token.split('.')[1]
+  if (segment === undefined || !/^[A-Za-z0-9_-]+$/.test(segment)) {
+    return undefined
+  }
+  const bytes: number[] = []
+  let buffer = 0
+  let bits = 0
+  for (const character of segment) {
+    buffer = (buffer << 6) | base64URL.indexOf(character)
+    bits += 6
+    if (bits >= 8) {
+      bits -= 8
+      bytes.push((buffer >> bits) & 0xff)
+    }
+  }
+  try {
+    const value: unknown = JSON.parse(
+      decodeURIComponent(bytes.map(byte => `%${byte.toString(16).padStart(2, '0')}`).join('')),
+    )
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : undefined
+  } catch {
+    return undefined
   }
 }

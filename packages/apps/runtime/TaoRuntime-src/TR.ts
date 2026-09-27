@@ -25,12 +25,15 @@ import {
   type RuntimeAuthScope,
   type TaoAuthCapabilities,
   type TaoAuthConnection,
-  type TaoAuthCredential,
-  type TaoAuthCredentialRequest,
+  type TaoAuthConnectionSession,
   type TaoAuthDeclaration,
   type TaoAuthIdentity,
   type TaoAuthInput,
+  type TaoAuthIssuedProof,
   type TaoAuthOutcome,
+  type TaoAuthPrincipal,
+  type TaoAuthProof,
+  type TaoAuthProofRequest,
   type TaoAuthProvider,
   type TaoAuthResult,
   type TaoAuthSecretStorage,
@@ -1399,8 +1402,11 @@ namespace TR {
   export type AuthInput = TaoAuthInput
   export type AuthOutcome = TaoAuthOutcome
   export type AuthResult = TaoAuthResult
-  export type AuthCredential = TaoAuthCredential
-  export type AuthCredentialRequest = TaoAuthCredentialRequest
+  export type AuthConnectionSession = TaoAuthConnectionSession
+  export type AuthPrincipal = TaoAuthPrincipal
+  export type AuthProof = TaoAuthProof
+  export type AuthIssuedProof = TaoAuthIssuedProof
+  export type AuthProofRequest = TaoAuthProofRequest
   export type AuthSecretStorage = TaoAuthSecretStorage
   export type AuthDeclaration = TaoAuthDeclaration
   export type AuthPairing = TaoAuthPairing
@@ -1463,6 +1469,10 @@ namespace TR {
   export type DataProvider = TaoDataProvider
   /** DataProviderContext carries one schema mount and plain evaluated configuration. */
   export type DataProviderContext = TaoDataProviderContext
+  /** DataAuthenticationContext is what the account datasource receives to resolve a signed-in principal. */
+  export type DataAuthenticationContext = import('./TR-data').TaoDataAuthenticationContext
+  /** DataAuthentication is the account a datasource resolved, with its own credential and release. */
+  export type DataAuthentication = import('./TR-data').TaoDataAuthentication
   /** DataFillRequest carries the query descriptor a connection's fill is offered. */
   export type DataFillRequest = TaoFillRequest
   /** DataFillOps is what a connection's fill receives to land fetched rows in the store. */

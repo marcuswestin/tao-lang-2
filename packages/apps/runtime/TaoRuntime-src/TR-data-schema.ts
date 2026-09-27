@@ -154,7 +154,7 @@ type TaoEntityWriteStatus = Readonly<{
 }>
 
 /** evaluatedDatasourceConfiguration collapses runtime Tao values before crossing the provider boundary. */
-function evaluatedDatasourceConfiguration(
+export function evaluatedDatasourceConfiguration(
   source: TaoConfiguredDatasource,
 ): Readonly<Record<string, unknown>> {
   return Object.freeze(Object.fromEntries(
@@ -168,7 +168,7 @@ function evaluatedDatasourceConfiguration(
  * else — an adapter object's fill functions, for instance — compares by identity, so swapping a
  * variant's adapter rebinds even when the shapes serialize alike.
  */
-function configurationValuesEqual(left: unknown, right: unknown): boolean {
+export function configurationValuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) {
     return true
   }
@@ -419,17 +419,8 @@ export class RuntimeDataSchema {
     // A configuration or connect failure becomes data error state behind the recovery overlay; a
     // throw would escape into the mounting layout effect, where no error boundary catches it.
     try {
-      if (auth) {
-        const supported = RuntimeSwitch(source.declaration.provider.authenticatedAuthority ?? 'unsupported', {
-          server: () => true,
-          test: () => auth.testing === true,
-          unsupported: () => false,
-        })
-        RuntimeAssert.input(
-          supported,
-          `Datasource ${source.declaration.name} cannot enforce authenticated account access. Use an authenticated server provider, or Memory with TestAuth.`,
-        )
-      }
+      // The auth scope binds an account only after this datasource's `authenticate` resolved it, or
+      // for TestAuth fixtures; the pairing check lives there, where both declarations are known.
       const baseStorageKey = this.validatedStorageKey(source.declaration.name, configuration, storageName)
       const storageKey = auth ? JSON.stringify([baseStorageKey, auth.accountId]) : baseStorageKey
       const connection = source.declaration.provider.connect(Object.freeze({

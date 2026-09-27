@@ -1,5 +1,5 @@
 import TR from '@runtime/TR'
-import { Deferred, Describe, Expect, Test } from '@shared/test'
+import { Deferred, Describe, Expect, Test, until } from '@shared/test'
 import type { TaoDataConnectionObserver } from '../TaoRuntime-src/TR-data'
 import { HostEnvironmentError, onUnownedFailure } from '../TaoRuntime-src/TR-errors'
 
@@ -26,16 +26,13 @@ const definition: TR.DataSchemaDefinition = {
     },
   },
 }
-const alice: TR.AuthSession = {
-  state: 'SignedIn',
-  identity: { accountId: 'account-a', issuer: 'local', subject: 'alice' },
-}
-const bob: TR.AuthSession = { state: 'SignedIn', identity: { accountId: 'account-b', issuer: 'local', subject: 'bob' } }
+const alice: TR.AuthConnectionSession = { state: 'SignedIn', principal: { issuer: 'local', subject: 'alice' } }
+const bob: TR.AuthConnectionSession = { state: 'SignedIn', principal: { issuer: 'local', subject: 'bob' } }
 const input: TR.AuthInput = { method: 'Password', fields: { Email: 'alice@example.test', Password: 'transient' } }
 
 Describe('mounted app authentication', () => {
   Test('discards a restore that completes after sign-out', async () => {
-    const pending = Deferred<TR.AuthSession>()
+    const pending = Deferred<TR.AuthConnectionSession>()
     const harness = authHarness({ restore: () => pending.promise })
     const restoring = harness.scope.restore()
     await harness.scope.signOut()
@@ -46,70 +43,315 @@ Describe('mounted app authentication', () => {
     harness.scope.dispose()
   })
 
-  Test('rejects unsupported and test-only providers before connecting a real authenticated session', async () => {
-    for (const authority of [undefined, 'test'] as const) {
-      let connections = 0
-      const pending = Deferred<TR.AuthSession>()
-      const harness = authHarness({ restore: () => pending.promise })
-      const restoring = harness.scope.restore()
-      const declaration = TR.Data.Schema(definition)
-      const source = TR.Data.Configure(
-        TR.Data.Declaration('LegacySnapshot', {
-          ...(authority ? { authenticatedAuthority: authority } : {}),
-          connect: () => {
-            connections += 1
-            return { load: () => accountSnapshot('account-a'), save: () => undefined }
-          },
-        }),
-        {},
-      )
-      harness.scope.bindDatasources([{ store: declaration, source }])
-      Expect(connections).toBe(0)
-      Expect(harness.scope.session.state).toBe('Restoring')
-      pending.resolve(alice)
-      await restoring
-      const store = harness.scope.store(declaration)
-      Expect(connections).toBe(0)
-      const availability = store.availability(store.entity('Account', 'account-a'))
-      Expect(availability.status).toBe('error')
-      if (availability.status === 'error') {
-        Expect(availability.message).toContain('cannot enforce authenticated account access')
+  Test('refuses a datasource that cannot resolve the account before connecting it, naming both', async () => {
+    let connections = 0
+    const connect = (): TR.DataConnection => {
+      connections += 1
+      return { load: () => accountSnapshot('account-a'), save: () => undefined }
+    }
+    const pending = Deferred<TR.AuthConnectionSession>()
+    const harness = authHarness({ restore: () => pending.promise }, { provider: { authenticate: undefined, connect } })
+    const restoring = harness.scope.restore()
+    Expect(harness.scope.session.state).toBe('Restoring')
+    pending.resolve(alice)
+    await restoring
+    Expect(connections).toBe(0)
+    Expect(harness.scope.session).toEqual({
+      state: 'Error',
+      message:
+        'Datasource Remote accepts sign-in proofs from Auth Deterministic but its provider does not authenticate them.',
+    })
+    Expect(
+      TR.Data.EntityAvailability(TR.Auth.Account(harness.scope, harness.declaration, 'Account').evaluate().jsValue),
+    )
+      .toBeUndefined()
+    await harness.scope.signOut()
+    Expect(harness.scope.session.state).toBe('SignedOut')
+    Expect(connections).toBe(0)
+    harness.scope.dispose()
+  })
+
+  Test('repeats the pairing check with both declarations, respecting from and test authority', async () => {
+    const cases: readonly [TR.AuthPairing, TR.DataPairing, TR.AuthProvider['testing'], string | undefined][] = [
+      [{ issues: ['Session'] }, { accepts: [{ kind: 'IdentityToken' }], supports: [] }, undefined, 'issues Session'],
+      [
+        { issues: ['Session'] },
+        { accepts: [{ kind: 'Session', from: 'LocalAuth' }], supports: [] },
+        undefined,
+        'Session from LocalAuth',
+      ],
+      [
+        { issues: ['TestIdentity'] },
+        { accepts: [{ kind: 'TestIdentity' }], supports: [] },
+        undefined,
+        'accepts TestIdentity',
+      ],
+      [{ issues: ['TestIdentity'] }, { accepts: [{ kind: 'TestIdentity' }], supports: [] }, true, undefined],
+      [
+        { issues: ['Session'] },
+        { accepts: [{ kind: 'Session', from: 'Deterministic' }], supports: [] },
+        undefined,
+        undefined,
+      ],
+    ]
+    for (const [issued, accepted, testing, problem] of cases) {
+      const harness = authHarness({ restore: async () => alice }, {
+        authPairing: issued,
+        dataPairing: accepted,
+        testing,
+      })
+      await harness.scope.restore()
+      if (problem === undefined) {
+        Expect(harness.scope.session.identity?.accountId).toBe('account-a')
+      } else {
+        Expect(harness.scope.session.state).toBe('Error')
+        Expect(harness.scope.session.message).toContain('Datasource Remote cannot sign in with Auth Deterministic')
+        Expect(harness.scope.session.message).toContain(problem)
+        Expect(harness.contexts).toEqual([])
       }
-      Expect(harness.scope.session.state).toBe('SignedIn')
-      await harness.scope.signOut()
-      Expect(harness.scope.session.state).toBe('SignedOut')
-      Expect(connections).toBe(0)
       harness.scope.dispose()
     }
   })
 
+  Test('requires pairing metadata on both declarations, naming both', async () => {
+    for (const unpaired of [{ authPairing: null }, { dataPairing: null }] as const) {
+      const harness = authHarness({ restore: async () => alice }, unpaired)
+      await harness.scope.restore()
+      Expect(harness.scope.session).toEqual({
+        state: 'Error',
+        message:
+          'Auth Deterministic and Datasource Remote must both declare sign-in pairing: the proofs Deterministic issues and the proofs Remote accepts.',
+      })
+      Expect(harness.contexts).toEqual([])
+      harness.scope.dispose()
+    }
+  })
+
+  Test('a principal restored before the app binds its datasources waits for them instead of failing', async () => {
+    const early = authHarness({ restore: async () => alice }, { bind: false })
+    await early.scope.restore()
+    await TR.Auth.SettleAll()
+    Expect(early.scope.session).toEqual({ state: 'Restoring' })
+    Expect(early.contexts).toEqual([])
+    early.scope.bindDatasources([{ store: early.declaration, source: dataSource(early.contexts) }])
+    Expect(early.scope.session).toEqual({ state: 'Restoring' })
+    await TR.Auth.SettleAll()
+    Expect(early.scope.session.identity?.accountId).toBe('account-a')
+    early.scope.dispose()
+
+    const signingIn = authHarness({}, { bind: false })
+    Expect(await signingIn.scope.signIn(input)).toEqual({ status: 'completed' })
+    Expect(signingIn.scope.session).toEqual({ state: 'Authenticating' })
+    signingIn.scope.bindDatasources([{ store: signingIn.declaration, source: dataSource(signingIn.contexts) }])
+    await TR.Auth.SettleAll()
+    Expect(signingIn.scope.session.identity?.accountId).toBe('account-a')
+    signingIn.scope.dispose()
+  })
+
+  Test('holds the account in exactly one datasource once binding settles', async () => {
+    const empty = authHarness({ restore: async () => alice }, { bind: false })
+    await empty.scope.restore()
+    empty.scope.bindDatasources([])
+    Expect(empty.scope.session).toEqual({
+      state: 'Error',
+      message: 'Auth Deterministic needs a datasource to hold the signed-in Account.',
+    })
+    // Binding the datasource afterwards resolves the principal that is already signed in.
+    empty.scope.bindDatasources([{ store: empty.declaration, source: dataSource(empty.contexts) }])
+    await until(() => empty.scope.session.state === 'SignedIn')
+    Expect(empty.scope.session.identity?.accountId).toBe('account-a')
+    empty.scope.dispose()
+
+    const several = authHarness({ restore: async () => alice })
+    const other = TR.Data.Schema({ ...definition, name: 'Other' })
+    several.scope.bindDatasources([
+      { store: several.declaration, source: dataSource(several.contexts) },
+      {
+        store: other,
+        source: TR.Data.Configure(TR.Data.Declaration('Elsewhere', dataProvider(), undefined, sessionPairing), {}),
+      },
+    ])
+    await several.scope.restore()
+    Expect(several.scope.session.state).toBe('Error')
+    Expect(several.scope.session.message).toBe(
+      'Auth Deterministic can sign in to one datasource, but this app binds Remote, Elsewhere. Keep the Account and account data in one datasource.',
+    )
+    Expect(several.contexts).toEqual([])
+    several.scope.dispose()
+  })
+
+  Test('stays restoring or authenticating until the datasource resolves the account', async () => {
+    const resolved = Deferred<TR.DataAuthentication>()
+    const principals: TR.AuthPrincipal[] = []
+    const harness = authHarness({ restore: async () => alice }, {
+      provider: {
+        authenticate: async context => {
+          principals.push(context.principal)
+          return resolved.promise
+        },
+      },
+    })
+    const account = TR.Auth.Account(harness.scope, harness.declaration, 'Account')
+    const restoring = harness.scope.restore()
+    await until(() => principals.length === 1)
+    Expect(harness.scope.session).toEqual({ state: 'Restoring' })
+    Expect(TR.Data.EntityAvailability(account.evaluate().jsValue)).toBeUndefined()
+    Expect(harness.contexts).toEqual([])
+    resolved.resolve({ accountId: 'account-a' })
+    await restoring
+    Expect(principals).toEqual([{ issuer: 'local', subject: 'alice' }])
+    Expect(harness.scope.session).toEqual({
+      state: 'SignedIn',
+      identity: { issuer: 'local', subject: 'alice', accountId: 'account-a' },
+    })
+    Expect(harness.contexts.map(context => context.auth?.accountId)).toEqual(['account-a'])
+    await harness.scope.signOut()
+
+    const signingIn = Deferred<TR.DataAuthentication>()
+    const later = authHarness({}, { provider: { authenticate: () => signingIn.promise } })
+    await later.scope.restore()
+    const signIn = later.scope.signIn(input)
+    await until(() => later.scope.session.state === 'Authenticating' && later.contexts.length === 0)
+    await Promise.resolve()
+    Expect(later.scope.session).toEqual({ state: 'Authenticating' })
+    signingIn.resolve({ accountId: 'account-a' })
+    Expect(await signIn).toEqual({ status: 'completed' })
+    Expect(later.scope.session.identity?.accountId).toBe('account-a')
+    later.scope.dispose()
+    harness.scope.dispose()
+  })
+
+  Test('turns a failed account resolution into an error and abandons the unaccepted sign-in', async () => {
+    let signOuts = 0
+    const failing = { authenticate: async () => Promise.reject(new HostEnvironmentError('gateway=secret offline')) }
+    const restored = authHarness({ restore: async () => alice }, { provider: failing })
+    await restored.scope.restore()
+    Expect(restored.scope.session).toEqual({ state: 'Error', message: 'Unable to restore your session.' })
+    restored.scope.dispose()
+
+    const signedIn = authHarness({
+      signOut: async () => {
+        signOuts += 1
+        return { status: 'completed' }
+      },
+    }, { provider: failing })
+    Expect(await signedIn.scope.signIn(input)).toEqual({
+      status: 'error',
+      message: 'Unable to sign in. Please try again.',
+    })
+    Expect(signedIn.scope.session).toEqual({ state: 'Error', message: 'Unable to sign in. Please try again.' })
+    await TR.Auth.SettleAll()
+    Expect(signOuts).toBe(1)
+    signedIn.scope.dispose()
+  })
+
+  Test('cancelling while the account resolves abandons the provider sign-in and releases a late result', async () => {
+    const resolved = Deferred<TR.DataAuthentication>()
+    const released: string[] = []
+    let signOuts = 0
+    const harness = authHarness({
+      signOut: async () => {
+        signOuts += 1
+        return { status: 'completed' }
+      },
+    }, { provider: { authenticate: () => resolved.promise } })
+    const signingIn = harness.scope.signIn(input)
+    await until(() => harness.scope.session.state === 'Authenticating')
+    await Promise.resolve()
+    harness.scope.cancel()
+    resolved.resolve({
+      accountId: 'account-a',
+      release: async () => {
+        released.push('account-a')
+      },
+    })
+    Expect(await signingIn).toEqual({ status: 'cancelled' })
+    await TR.Auth.SettleAll()
+    await until(() => released.length === 1)
+    Expect(signOuts).toBe(1)
+    Expect(harness.scope.session).toEqual({ state: 'SignedOut' })
+    Expect(harness.contexts).toEqual([])
+    harness.scope.dispose()
+  })
+
+  Test('a rebind with an equal account datasource does not resolve the account again', async () => {
+    let resolutions = 0
+    const harness = authHarness({ restore: async () => alice }, {
+      provider: {
+        authenticate: async () => {
+          resolutions += 1
+          return { accountId: 'account-a' }
+        },
+      },
+    })
+    await harness.scope.restore()
+    const source = harness.source
+    for (let render = 0; render < 3; render += 1) {
+      harness.scope.bindDatasources([{
+        store: harness.declaration,
+        source: TR.Data.Configure(source.declaration, { ...source.config }),
+      }])
+    }
+    await TR.Auth.SettleAll()
+    Expect(resolutions).toBe(1)
+    Expect(harness.scope.session.identity?.accountId).toBe('account-a')
+    harness.scope.dispose()
+  })
+
   Test(
-    'allows declared local test authority only under TestAuth and keeps legacy unauthenticated apps working',
+    'allows TestIdentity proofs only from a testing provider and keeps legacy unauthenticated apps working',
     async () => {
       let connections = 0
+      const testings: (true | undefined)[] = []
+      const failures: string[] = []
       const provider: TR.DataProvider = {
-        authenticatedAuthority: 'test',
+        authenticate: async context => {
+          testings.push(context.testing)
+          try {
+            return { accountId: (await context.proof('TestIdentity', context.signal)).accountId }
+          } catch (error) {
+            failures.push(String(error))
+            throw error
+          }
+        },
         connect: () => {
           connections += 1
           return { load: () => accountSnapshot('account-a'), save: () => undefined }
         },
       }
-      const source = TR.Data.Configure(TR.Data.Declaration('Memory', provider), {})
+      const source = TR.Data.Configure(TR.Data.Declaration('Memory', provider, undefined, testIdentityPairing), {})
+      const testIdentity: TR.AuthConnection['proof'] = async () => ({
+        kind: 'TestIdentity',
+        issuer: 'local',
+        subject: 'alice',
+        accountId: 'account-a',
+      })
       const scope = TR.Auth.CreateScope(TR.Auth.Configure(
         TR.Auth.Declaration('TestAuth', {
           testing: true,
-          connect: () => ({ ...authConnection(), restore: async () => alice }),
-        }),
+          connect: () => ({ ...authConnection(), restore: async () => alice, proof: testIdentity }),
+        }, { issues: ['TestIdentity'] }),
         {},
       ))
-      await scope.restore()
       const declaration = TR.Data.Schema(definition)
       scope.bindDatasources([{ store: declaration, source }])
+      await scope.restore()
       Expect(connections).toBe(1)
       Expect(TR.Data.EntityAvailability(scope.store(declaration).entity('Account', 'account-a'))).toEqual({
         status: 'available',
       })
       scope.dispose()
+      // Declaring TestIdentity does not let a production provider issue one.
+      const production = authHarness({ restore: async () => alice, proof: testIdentity }, {
+        authPairing: { issues: ['Session', 'TestIdentity'] },
+        provider: { authenticate: provider.authenticate },
+      })
+      await production.scope.restore()
+      Expect(production.scope.session).toEqual({ state: 'Error', message: 'Unable to restore your session.' })
+      Expect(testings).toEqual([true, undefined])
+      Expect(failures).toHaveLength(1)
+      Expect(failures[0]).toContain('Auth Deterministic cannot issue TestIdentity sign-in proofs; only TestAuth can.')
+      production.scope.dispose()
       const legacy = TR.Data.Schema(definition)
       legacy.bindConfigured(TR.Data.Configure(
         TR.Data.Declaration('Legacy', {
@@ -124,6 +366,86 @@ Describe('mounted app authentication', () => {
       Expect(TR.Data.EntityAvailability(legacy.entity('Account', 'account-a'))).toEqual({ status: 'available' })
     },
   )
+
+  Test('releases the data-side session before the provider signs out and retries an unconfirmed release', async () => {
+    const order: string[] = []
+    let failRelease = true
+    const harness = authHarness({
+      restore: async () => alice,
+      signOut: async () => {
+        order.push('provider')
+        return { status: 'completed' }
+      },
+    }, {
+      provider: {
+        authenticate: async () => ({
+          accountId: 'account-a',
+          release: async () => {
+            order.push('release')
+            if (failRelease) {
+              throw new HostEnvironmentError('offline')
+            }
+          },
+        }),
+      },
+    })
+    await harness.scope.restore()
+    Expect(await harness.scope.signOut()).toEqual({
+      status: 'error',
+      message: 'Signed out on this device. Remote sign-out could not be confirmed.',
+    })
+    Expect(order).toEqual(['release', 'provider'])
+    failRelease = false
+    Expect(await harness.scope.signOut()).toEqual({ status: 'completed' })
+    Expect(order).toEqual(['release', 'provider', 'release', 'provider'])
+    Expect(await harness.scope.signOut()).toEqual({ status: 'completed' })
+    Expect(order).toEqual(['release', 'provider', 'release', 'provider', 'provider'])
+    harness.scope.dispose()
+  })
+
+  Test('stamps checked proofs and refuses expired, mismatched, and unissued ones', async () => {
+    const cases: readonly [TR.AuthIssuedProof, TR.AuthPairing | undefined, string | undefined][] = [
+      [{ kind: 'Session', issuer: 'local', subject: 'alice', value: { token: 't' } }, undefined, undefined],
+      [{ kind: 'Session', issuer: 'local', subject: 'alice', value: {}, expiresAt: 0 }, undefined, 'expired'],
+      [{ kind: 'Session', issuer: 'local', subject: 'bob', value: {} }, undefined, 'does not match'],
+      [{ kind: 'IdentityToken', issuer: 'local', subject: 'alice', token: 't' }, undefined, 'does not match'],
+      [
+        { kind: 'Session', issuer: 'local', subject: 'alice', value: {} },
+        { issues: ['IdentityToken'] },
+        'does not issue',
+      ],
+    ]
+    for (const [issued, pairing, problem] of cases) {
+      let proof: TR.AuthProof | undefined
+      let failure = ''
+      const harness = authHarness({ restore: async () => alice, proof: async () => issued }, {
+        authPairing: pairing,
+        // The datasource also accepts IdentityToken, so an auth issuing only that kind still pairs.
+        dataPairing: { accepts: [{ kind: 'Session' }, { kind: 'IdentityToken' }], supports: [] },
+        provider: {
+          authenticate: async context => {
+            try {
+              proof = await context.proof('Session', context.signal)
+            } catch (error) {
+              failure = String(error)
+              throw error
+            }
+            return { accountId: 'account-a' }
+          },
+        },
+      })
+      await harness.scope.restore()
+      if (problem === undefined) {
+        Expect(proof).toEqual({ ...issued, provider: 'Deterministic' })
+        Expect(Object.isFrozen(proof)).toBe(true)
+        Expect(harness.scope.session.state).toBe('SignedIn')
+      } else {
+        Expect(failure).toContain(problem)
+        Expect(JSON.stringify(TR.Auth.Session(harness.scope).evaluate().jsValue)).toBe('{"State":"Error"}')
+      }
+      harness.scope.dispose()
+    }
+  })
 
   Test('settles finite auth work without waiting for presented input or cancelled restoration', async () => {
     const signedIn = Deferred<TR.AuthResult>()
@@ -145,7 +467,7 @@ Describe('mounted app authentication', () => {
     Expect(await presentation).toEqual({ status: 'completed' })
     harness.scope.dispose()
 
-    const pending = Deferred<TR.AuthSession>()
+    const pending = Deferred<TR.AuthConnectionSession>()
     const restoring = authHarness({ restore: () => pending.promise })
     const restore = restoring.scope.restore()
     const cancellationBarrier = TR.Auth.SettleAll()
@@ -166,7 +488,7 @@ Describe('mounted app authentication', () => {
     Expect(signedIn.scope.session.state).toBe('ReauthenticationRequired')
     signedIn.scope.dispose()
 
-    const pending = Deferred<TR.AuthSession>()
+    const pending = Deferred<TR.AuthConnectionSession>()
     let signal: AbortSignal | undefined
     const restoring = authHarness({
       restore: current => {
@@ -208,55 +530,57 @@ Describe('mounted app authentication', () => {
     await harness.scope.signIn(input)
     Expect(harness.scope.session.identity).toBeUndefined()
     Expect(harness.scope.session.state).toBe('ChallengeRequired')
-    await Expect(harness.scope.credential({ audience: 'notes', signal: new AbortController().signal })).rejects.toThrow(
-      'Sign in',
-    )
+    Expect(harness.contexts).toEqual([])
     harness.scope.dispose()
   })
 
   Test('invalidates an in-flight resource credential and the old broker on account switch', async () => {
-    const pending = Deferred<TR.AuthCredential>()
-    const contexts: TR.DataProviderContext[] = []
-    const harness = authHarness({ restore: async () => alice, credential: () => pending.promise })
+    const pending = Deferred<string>()
+    const harness = authHarness({ restore: async () => alice }, {
+      provider: {
+        authenticate: async context => ({
+          accountId: accountOf(context.principal),
+          credential: context.principal.subject === 'alice' ? () => pending.promise : async () => 'new-secret',
+        }),
+      },
+    })
     await harness.scope.restore()
-    bind(harness.scope, contexts)
-    const oldBroker = contexts[0]!.auth!
-    const credential = oldBroker.credential('notes')
+    const oldBroker = harness.contexts[0]!.auth!
+    const credential = oldBroker.credential()
     harness.emit(bob)
-    pending.resolve({ audience: 'notes', value: 'old-secret' })
+    pending.resolve('old-secret')
     await Expect(credential).rejects.toThrow('no longer active')
     Expect(oldBroker.signal.aborted).toBe(true)
-    await Expect(oldBroker.credential('notes')).rejects.toThrow('Sign in')
-    Expect(contexts[1]!.auth!.accountId).toBe('account-b')
+    await Expect(oldBroker.credential()).rejects.toThrow('Sign in')
+    await until(() => harness.contexts.length === 2)
+    Expect(harness.contexts[1]!.auth!.accountId).toBe('account-b')
+    Expect(await harness.contexts[1]!.auth!.credential()).toBe('new-secret')
     harness.scope.dispose()
   })
 
-  Test('rejects wrong-audience and expired resource credentials without exposing them to Tao', async () => {
-    let audience = 'wrong-resource'
-    const harness = authHarness({
-      restore: async () => alice,
-      credential: async () => ({ audience, value: 'secret', expiresAt: 0 }),
+  Test('rejects an empty resource credential and a datasource without one', async () => {
+    const harness = authHarness({ restore: async () => alice }, {
+      provider: { authenticate: async () => ({ accountId: 'account-a', credential: async () => '' }) },
     })
     await harness.scope.restore()
-    await Expect(harness.scope.credential({ audience: 'notes', signal: new AbortController().signal })).rejects.toThrow(
-      'not valid',
-    )
-    audience = 'notes'
-    await Expect(harness.scope.credential({ audience: 'notes', signal: new AbortController().signal })).rejects.toThrow(
-      'not valid',
-    )
-    Expect(JSON.stringify(TR.Auth.Session(harness.scope).evaluate().jsValue)).toBe('{"State":"SignedIn"}')
+    await Expect(harness.contexts[0]!.auth!.credential()).rejects.toThrow('not valid')
     harness.scope.dispose()
+    const without = authHarness({ restore: async () => alice }, {
+      provider: { authenticate: async () => ({ accountId: 'account-a' }) },
+    })
+    await without.scope.restore()
+    await Expect(without.contexts[0]!.auth!.credential()).rejects.toThrow('does not issue resource credentials')
+    without.scope.dispose()
   })
 
   Test('isolates two mounts of the same schema and clears only the departing account', async () => {
     const declaration = TR.Data.Schema(definition)
-    const first = authHarness({ restore: async () => alice })
-    const second = authHarness({ restore: async () => bob })
-    await Promise.all([first.scope.restore(), second.scope.restore()])
     const contexts: TR.DataProviderContext[] = []
-    const firstStore = bind(first.scope, contexts, declaration)
-    const secondStore = bind(second.scope, contexts, declaration)
+    const first = authHarness({ restore: async () => alice }, { contexts, declaration })
+    const second = authHarness({ restore: async () => bob }, { contexts, declaration })
+    await Promise.all([first.scope.restore(), second.scope.restore()])
+    const firstStore = first.store
+    const secondStore = second.store
     Expect(firstStore).not.toBe(secondStore)
     createNote(firstStore, 'Alice private')
     createNote(secondStore, 'Bob private', 'account-b')
@@ -266,7 +590,7 @@ Describe('mounted app authentication', () => {
     Expect(secondStore.query({ entity: 'Note', filters: [] }).map(row => (row as { Body: string }).Body)).toEqual([
       'Bob private',
     ])
-    Expect(contexts.map(context => context.storageKey)).toEqual([
+    Expect(contexts.map(context => context.storageKey).sort()).toEqual([
       '["PrivateNotes","account-a"]',
       '["PrivateNotes","account-b"]',
     ])
@@ -281,12 +605,8 @@ Describe('mounted app authentication', () => {
     const started = Deferred<void>()
     const pending = Deferred<void>()
     const saves: string[] = []
-    const harness = authHarness({ restore: async () => alice })
-    await harness.scope.restore()
-    const schema = TR.Data.Schema(definition)
-    const source = TR.Data.Configure(
-      TR.Data.Declaration('Memory', {
-        authenticatedAuthority: 'server',
+    const harness = authHarness({ restore: async () => alice }, {
+      provider: {
         connect: () => ({
           load: () => accountSnapshot('account-a'),
           save: async value => {
@@ -295,11 +615,10 @@ Describe('mounted app authentication', () => {
             await pending.promise
           },
         }),
-      }),
-      {},
-    )
-    harness.scope.bindDatasources([{ store: schema, source }])
-    const store = harness.scope.store(schema)
+      },
+    })
+    await harness.scope.restore()
+    const store = harness.store
     createNote(store, 'First')
     await started.promise
     createNote(store, 'Must stay sealed')
@@ -315,17 +634,11 @@ Describe('mounted app authentication', () => {
 
   Test('separates signed-in state from the availability of its application account row', async () => {
     const pending = Deferred<string | undefined>()
-    const harness = authHarness({ restore: async () => alice })
+    const harness = authHarness({ restore: async () => alice }, {
+      provider: { connect: () => ({ load: () => pending.promise, save: () => undefined }) },
+    })
     await harness.scope.restore()
-    const declaration = TR.Data.Schema(definition)
-    const source = TR.Data.Configure(
-      TR.Data.Declaration('Remote', {
-        authenticatedAuthority: 'server',
-        connect: () => ({ load: () => pending.promise, save: () => undefined }),
-      }),
-      {},
-    )
-    harness.scope.bindDatasources([{ store: declaration, source }])
+    const declaration = harness.declaration
     const account = TR.Auth.Account(harness.scope, declaration, 'Account')
     Expect(TR.Data.EntityAvailability(account.evaluate().jsValue)).toEqual({ status: 'loading' })
     pending.resolve(
@@ -345,7 +658,7 @@ Describe('mounted app authentication', () => {
   })
 
   Test('discards a pending restore after disposal without installing a subscription', async () => {
-    const pending = Deferred<TR.AuthSession>()
+    const pending = Deferred<TR.AuthConnectionSession>()
     const harness = authHarness({ restore: () => pending.promise })
     const restoring = harness.scope.restore()
     harness.scope.dispose()
@@ -374,7 +687,7 @@ Describe('mounted app authentication', () => {
   Test('uses secure opaque identifiers for mounted data without changing deterministic legacy IDs', async () => {
     const harness = authHarness({ restore: async () => alice })
     await harness.scope.restore()
-    const store = bind(harness.scope, [])
+    const store = harness.store
     createNote(store, 'one')
     createNote(store, 'two')
     const ids = store.query({ entity: 'Note', filters: [] }).map(row => (row as { Id: string }).Id)
@@ -389,14 +702,14 @@ Describe('mounted app authentication', () => {
   Test('observes provider account transitions through a signed-out interval', async () => {
     const harness = authHarness({ restore: async () => alice })
     await harness.scope.restore()
-    const contexts: TR.DataProviderContext[] = []
-    const store = bind(harness.scope, contexts)
+    const store = harness.store
     const previous = store.entity('Account', 'account-a')
     harness.emit({ state: 'SignedOut' })
     Expect(harness.scope.session.identity).toBeUndefined()
     Expect(TR.Data.EntityAvailability(previous)?.status).not.toBe('available')
     harness.emit(bob)
-    Expect(harness.scope.session.identity?.accountId).toBe('account-b')
+    Expect(harness.scope.session).toEqual({ state: 'Authenticating' })
+    await until(() => harness.scope.session.identity?.accountId === 'account-b')
     Expect(harness.stopped()).toBe(0)
     harness.scope.dispose()
     Expect(harness.stopped()).toBe(1)
@@ -406,7 +719,7 @@ Describe('mounted app authentication', () => {
     const harness = authHarness()
     await harness.scope.restore()
     harness.emit(alice)
-    Expect(harness.scope.session.identity?.accountId).toBe('account-a')
+    await until(() => harness.scope.session.identity?.accountId === 'account-a')
     harness.scope.dispose()
   })
 
@@ -445,21 +758,17 @@ Describe('mounted app authentication', () => {
 
   Test('waits for durable account cleanup while clearing the account synchronously', async () => {
     const cleanup = Deferred<void>()
-    const harness = authHarness({ restore: async () => alice })
-    await harness.scope.restore()
-    const declaration = TR.Data.Schema(definition)
-    const source = TR.Data.Configure(
-      TR.Data.Declaration('Durable', {
-        authenticatedAuthority: 'server',
+    const harness = authHarness({ restore: async () => alice }, {
+      provider: {
         connect: () => ({
           load: () => accountSnapshot('account-a'),
           save: () => undefined,
           invalidateAuth: () => cleanup.promise,
         }),
-      }),
-      {},
-    )
-    harness.scope.bindDatasources([{ store: declaration, source }])
+      },
+    })
+    await harness.scope.restore()
+    const declaration = harness.declaration
     let settled = false
     const signingOut = harness.scope.signOut().then(outcome => {
       settled = true
@@ -478,25 +787,33 @@ Describe('mounted app authentication', () => {
     const newCleanup = Deferred<void>()
     const harness = authHarness({ restore: async () => alice })
     await harness.scope.restore()
-    const declaration = TR.Data.Schema(definition)
+    const declaration = harness.declaration
     let invalidated = 0
     const source = (cleanup: Promise<void>) =>
       TR.Data.Configure(
-        TR.Data.Declaration('Durable', {
-          authenticatedAuthority: 'server',
-          connect: () => ({
-            load: () => accountSnapshot('account-a'),
-            save: () => undefined,
-            invalidateAuth: () => {
-              invalidated += 1
-              return cleanup
-            },
-          }),
-        }),
+        TR.Data.Declaration(
+          'Durable',
+          {
+            ...dataProvider(),
+            connect: () => ({
+              load: () => accountSnapshot('account-a'),
+              save: () => undefined,
+              invalidateAuth: () => {
+                invalidated += 1
+                return cleanup
+              },
+            }),
+          },
+          undefined,
+          sessionPairing,
+        ),
         {},
       )
     harness.scope.bindDatasources([{ store: declaration, source: source(oldCleanup.promise) }])
+    await until(() => harness.scope.session.state === 'SignedIn')
+    // A different account datasource resolves the account again under a new lifetime.
     harness.scope.bindDatasources([{ store: declaration, source: source(newCleanup.promise) }])
+    await until(() => harness.scope.session.state === 'SignedIn')
     let settled = false
     const signOut = harness.scope.signOut().then(result => {
       settled = true
@@ -578,7 +895,7 @@ Describe('mounted app authentication', () => {
   })
 
   Test('maps Session.State to the declared enum and guards absent accounts without exposing identity', async () => {
-    const pending = Deferred<TR.AuthSession>()
+    const pending = Deferred<TR.AuthConnectionSession>()
     const harness = authHarness({ restore: () => pending.promise })
     const schema = TR.Data.Schema(definition)
     const account = TR.Alias(TR.Auth.Account(harness.scope, schema, 'Account'))
@@ -605,8 +922,7 @@ Describe('mounted app authentication', () => {
   Test('keeps evaluated auth aliases evaluable for compiled member access', async () => {
     const harness = authHarness({ restore: async () => alice })
     await harness.scope.restore()
-    const declaration = TR.Data.Schema(definition)
-    bind(harness.scope, [], declaration)
+    const declaration = harness.declaration
     const session = TR.Auth.Session(harness.scope).evaluate() as TR.Evaluable
     const account = TR.Auth.Account(harness.scope, declaration, 'Account').evaluate() as TR.Evaluable
     Expect(TR.Member(session, ['State']).evaluate().jsValue).toBe('SignedIn')
@@ -649,21 +965,17 @@ Describe('mounted app authentication', () => {
 
   Test('keeps profile input out of the account row until its submitted change is confirmed', async () => {
     const receipt = Deferred<{ status: 'saved' | 'queued' }>()
-    const harness = authHarness({ restore: async () => alice })
-    await harness.scope.restore()
-    const declaration = TR.Data.Schema(definition)
-    const source = TR.Data.Configure(
-      TR.Data.Declaration('Remote', {
-        authenticatedAuthority: 'server',
+    const harness = authHarness({ restore: async () => alice }, {
+      provider: {
         connect: () => ({
           load: () => accountSnapshot('account-a'),
           save: () => undefined,
           submit: () => receipt.promise,
         }),
-      }),
-      {},
-    )
-    harness.scope.bindDatasources([{ store: declaration, source }])
+      },
+    })
+    await harness.scope.restore()
+    const declaration = harness.declaration
     const account = TR.Auth.Account(harness.scope, declaration, 'Account')
     const save = TR.Auth.SaveProfile(harness.scope, account, { DisplayName: TR.Value('Confirmed') })
     Expect(TR.Member(account, ['DisplayName']).evaluate().jsValue).toBe('Alice')
@@ -674,9 +986,6 @@ Describe('mounted app authentication', () => {
   })
 
   Test('denies reads and every write path against another account including owner reassignment', async () => {
-    const harness = authHarness({ restore: async () => alice })
-    await harness.scope.restore()
-    const declaration = TR.Data.Schema(definition)
     const snapshot = JSON.stringify({
       formatVersion: 1,
       schemaVersion: 1,
@@ -686,15 +995,11 @@ Describe('mounted app authentication', () => {
         Note: [{ Id: 'bob-note', Body: 'private', Owner: 'account-b' }],
       },
     })
-    const source = TR.Data.Configure(
-      TR.Data.Declaration('Remote', {
-        authenticatedAuthority: 'server',
-        connect: () => ({ load: () => snapshot, save: () => undefined }),
-      }),
-      {},
-    )
-    harness.scope.bindDatasources([{ store: declaration, source }])
-    const store = harness.scope.store(declaration)
+    const harness = authHarness({ restore: async () => alice }, {
+      provider: { connect: () => ({ load: () => snapshot, save: () => undefined }) },
+    })
+    await harness.scope.restore()
+    const store = harness.store
     const other = store.entity('Note', 'bob-note')
     Expect(TR.Data.Read(other, 'Body')).toBeUndefined()
     Expect(TR.Data.EntityAvailability(other)).toEqual({ status: 'unauthorized' })
@@ -712,7 +1017,7 @@ Describe('mounted app authentication', () => {
     const gate = Deferred<void>()
     const harness = authHarness({ restore: async () => alice })
     await harness.scope.restore()
-    const store = bind(harness.scope, [])
+    const store = harness.store
     const action = TR.Action(async () => {
       createNote(store, 'old draft')
       await gate.promise
@@ -732,14 +1037,10 @@ Describe('mounted app authentication', () => {
 
   Test('sends the consumed write baseline while newer subscription rows are buffered', async () => {
     const firstSave = Deferred<void>()
-    const harness = authHarness({ restore: async () => alice })
-    await harness.scope.restore()
-    const declaration = TR.Data.Schema(definition)
     let observer: TaoDataConnectionObserver | undefined
     const baselines: string[] = []
-    const source = TR.Data.Configure(
-      TR.Data.Declaration('Remote', {
-        authenticatedAuthority: 'server',
+    const harness = authHarness({ restore: async () => alice }, {
+      provider: {
         connect: () => ({
           load: () => accountSnapshot('account-a'),
           subscribe: next => {
@@ -751,11 +1052,10 @@ Describe('mounted app authentication', () => {
             return baselines.length === 1 ? firstSave.promise : undefined
           },
         }),
-      }),
-      {},
-    )
-    harness.scope.bindDatasources([{ store: declaration, source }])
-    const store = harness.scope.store(declaration)
+      },
+    })
+    await harness.scope.restore()
+    const store = harness.store
     createNote(store, 'First')
     await Promise.resolve()
     const remote = JSON.parse(accountSnapshot('account-a'))
@@ -771,12 +1071,8 @@ Describe('mounted app authentication', () => {
 
   Test('keeps queued and rejected profile inputs out of the loaded Account', async () => {
     for (const rejection of [false, true]) {
-      const harness = authHarness({ restore: async () => alice })
-      await harness.scope.restore()
-      const declaration = TR.Data.Schema(definition)
-      const source = TR.Data.Configure(
-        TR.Data.Declaration('Remote', {
-          authenticatedAuthority: 'server',
+      const harness = authHarness({ restore: async () => alice }, {
+        provider: {
           connect: () => ({
             load: () => accountSnapshot('account-a'),
             save: () => undefined,
@@ -787,10 +1083,10 @@ Describe('mounted app authentication', () => {
               return { status: 'queued' as const }
             },
           }),
-        }),
-        {},
-      )
-      harness.scope.bindDatasources([{ store: declaration, source }])
+        },
+      })
+      await harness.scope.restore()
+      const declaration = harness.declaration
       TR.Auth.BindAccount(harness.scope, declaration, 'Account')
       const account = TR.Auth.Account(harness.scope)
       const result = await TR.Auth.SaveProfile(harness.scope, account, { DisplayName: TR.Value('Unsaved') })
@@ -801,12 +1097,12 @@ Describe('mounted app authentication', () => {
   })
 
   Test('keeps entity picker candidates within the explicitly mounted account scope', async () => {
-    const first = authHarness({ restore: async () => alice })
-    const second = authHarness({ restore: async () => bob })
-    await Promise.all([first.scope.restore(), second.scope.restore()])
     const declaration = TR.Data.Schema(definition)
-    const firstStore = bind(first.scope, [], declaration)
-    const secondStore = bind(second.scope, [], declaration)
+    const first = authHarness({ restore: async () => alice }, { declaration })
+    const second = authHarness({ restore: async () => bob }, { declaration })
+    await Promise.all([first.scope.restore(), second.scope.restore()])
+    const firstStore = first.store
+    const secondStore = second.store
     createNote(firstStore, 'Alice')
     createNote(secondStore, 'Bob', 'account-b')
     Expect(TR.Data.interactionCandidates('Note', first.scope).map(row => TR.Data.Read(row, 'Body'))).toEqual(['Alice'])
@@ -856,12 +1152,13 @@ Describe('mounted app authentication', () => {
 
   Test('uses only TestAuth to provision fixture accounts and keeps actor overrides operation-local', async () => {
     const source = TR.Auth.Configure(
-      TR.Auth.Declaration('TestAuth', { testing: true, connect: () => authConnection() }),
+      TR.Auth.Declaration('TestAuth', { testing: true, connect: () => authConnection() }, { issues: ['TestIdentity'] }),
       {},
     )
     const scope = TR.Auth.CreateScope(source)
     const declaration = TR.Data.Schema(definition)
-    const store = bind(scope, [], declaration)
+    scope.bindDatasources([{ store: declaration, source: dataSource([]) }])
+    const store = scope.store(declaration)
     const accounts = await scope.prepareFixture({
       accounts: [{ name: 'Alice', fields: { DisplayName: 'Alice' } }, { name: 'Bob', fields: { DisplayName: 'Bob' } }],
       signedIn: 'Alice',
@@ -883,17 +1180,27 @@ Describe('mounted app authentication', () => {
   })
 })
 
-function authHarness(overrides: Partial<TR.AuthConnection> = {}) {
-  let listener: ((session: TR.AuthSession) => void) | undefined
+const sessionPairing: TR.DataPairing = { accepts: [{ kind: 'Session' }], supports: [] }
+const testIdentityPairing: TR.DataPairing = { accepts: [{ kind: 'TestIdentity' }], supports: [] }
+
+/** HarnessOptions default to a Session-issuing auth and a Session-accepting datasource; `null` omits pairing. */
+type HarnessOptions = {
+  authPairing?: TR.AuthPairing | null
+  bind?: false
+  contexts?: TR.DataProviderContext[]
+  dataPairing?: TR.DataPairing | null
+  declaration?: TR.DataSchema
+  provider?: Partial<TR.DataProvider>
+  testing?: true
+}
+
+/** authHarness mounts a deterministic auth provider over one bound account datasource. */
+function authHarness(overrides: Partial<TR.AuthConnection> = {}, options: HarnessOptions = {}) {
+  let listener: ((session: TR.AuthConnectionSession) => void) | undefined
   let closed = 0
   let stopped = 0
   const connection: TR.AuthConnection = {
     ...authConnection(),
-    capabilities: { methods: ['Password'] },
-    restore: async () => ({ state: 'SignedOut' }),
-    signIn: async () => ({ outcome: { status: 'completed' }, session: alice }),
-    signOut: async () => ({ status: 'completed' }),
-    credential: async request => ({ audience: request.audience, value: 'private-resource-credential' }),
     subscribe: next => {
       listener = next
       return () => {
@@ -905,10 +1212,28 @@ function authHarness(overrides: Partial<TR.AuthConnection> = {}) {
     },
     ...overrides,
   }
-  const source = TR.Auth.Configure(TR.Auth.Declaration('Deterministic', { connect: () => connection }), {})
+  const source = TR.Auth.Configure(
+    TR.Auth.Declaration(
+      'Deterministic',
+      { ...(options.testing ? { testing: true as const } : {}), connect: () => connection },
+      options.authPairing === null ? undefined : options.authPairing ?? { issues: ['Session'] },
+    ),
+    {},
+  )
+  const scope = TR.Auth.CreateScope(source)
+  const declaration = options.declaration ?? TR.Data.Schema(definition)
+  const contexts = options.contexts ?? []
+  const data = dataSource(contexts, options.provider, options.dataPairing)
+  if (options.bind !== false) {
+    scope.bindDatasources([{ store: declaration, source: data }])
+  }
   return {
-    scope: TR.Auth.CreateScope(source),
-    emit: (session: TR.AuthSession) => listener?.(session),
+    scope,
+    contexts,
+    declaration,
+    source: data,
+    store: scope.store(declaration),
+    emit: (session: TR.AuthConnectionSession) => listener?.(session),
     closed: () => closed,
     stopped: () => stopped,
   }
@@ -920,27 +1245,47 @@ function authConnection(): TR.AuthConnection {
     restore: async () => ({ state: 'SignedOut' }),
     signIn: async () => ({ outcome: { status: 'completed' }, session: alice }),
     signOut: async () => ({ status: 'completed' }),
-    credential: async request => ({ audience: request.audience, value: 'private-resource-credential' }),
+    proof: async () => ({ kind: 'Session', issuer: 'local', subject: 'alice', value: {} }),
   }
 }
 
-function bind(
-  scope: TR.AuthScope,
-  contexts: TR.DataProviderContext[],
-  declaration = TR.Data.Schema(definition),
-): TR.DataSchema {
-  const source = TR.Data.Configure(
-    TR.Data.Declaration('Memory', {
-      authenticatedAuthority: 'server',
-      connect: context => {
-        contexts.push(context)
-        return { load: () => accountSnapshot(context.auth!.accountId), save: () => undefined }
-      },
+/** dataProvider resolves `alice` to `account-a` and `bob` to `account-b`, the way a server would. */
+function dataProvider(provider: Partial<TR.DataProvider> = {}): TR.DataProvider {
+  return {
+    authenticate: async context => ({
+      accountId: accountOf(context.principal),
+      credential: async () => 'private-resource-credential',
     }),
+    connect: context => ({ load: () => accountSnapshot(context.auth!.accountId), save: () => undefined }),
+    ...provider,
+  }
+}
+
+function dataSource(
+  contexts: TR.DataProviderContext[],
+  provider: Partial<TR.DataProvider> = {},
+  pairing: TR.DataPairing | null = sessionPairing,
+): TR.ConfiguredDatasource {
+  const base = dataProvider(provider)
+  return TR.Data.Configure(
+    TR.Data.Declaration(
+      'Remote',
+      {
+        ...base,
+        connect: context => {
+          contexts.push(context)
+          return base.connect(context)
+        },
+      },
+      undefined,
+      pairing ?? undefined,
+    ),
     {},
   )
-  scope.bindDatasources([{ store: declaration, source }])
-  return scope.store(declaration)
+}
+
+function accountOf(principal: TR.AuthPrincipal): string {
+  return `account-${principal.subject.slice(0, 1)}`
 }
 
 function accountSnapshot(id: string): string {
