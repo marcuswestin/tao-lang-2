@@ -1,7 +1,7 @@
 # Plan — Auth and data pairing
 
-Status: decided 2026-09-27; steps 1–4 implemented, step 5 except a Clerk journey, and step 6 is
-the Developer's. The first target is the InstantDB datasource
+Status: decided 2026-09-27; steps 1–4 implemented, step 5 except a Clerk journey, and step 6 run
+by the Developer on a phone. The first target is the InstantDB datasource
 signed in through Clerk and through InstantDB's own email-code auth, with no Tao-hosted server.
 [Plan — Auth and account data](<Plan - Auth and account data.md>) remains the owner of the account
 semantics this plan builds on; this plan owns how an auth provider and a datasource pair.
@@ -139,7 +139,10 @@ trimmed by the language slice:
   syncs, and sign-out. Owner isolation, restoration, and concurrent first sign-in are the provider
   live tests' (`instantdb-live`, `InstantAuth-live`, `InstantDB-sign-in-live`).
 - `AuthReviewInstantClerk` has no local journey: a local InstantDB cannot verify a Clerk token
-  without a real Clerk instance, so its pairing is covered by unit tests and awaits the hosted run.
+  without a real Clerk instance, so its pairing is covered by unit tests and the hosted run.
+- Hosted: on 2026-09-27 the Developer ran both variants against the Instant Cloud app on a physical
+  iPhone and reported both working. No hosted run is recorded beyond that report, and the admin-query
+  checks of the local acceptance have not been repeated there.
 - WordFlower binds the per-row adapter. Its hosted Instant app still holds the old snapshot schema;
   pushing WordFlower's schema there, and abandoning the snapshot data, is a Developer action below.
 

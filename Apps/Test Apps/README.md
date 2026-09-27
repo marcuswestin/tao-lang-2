@@ -461,11 +461,13 @@ with no name, so the app opens on "Complete your profile" rather than the missin
 paired flow (code sign-in, account row, owner-only notes, sign-out) is covered against a local
 InstantDB by `packages/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts`, and
 `auth-review-live.test.ts` beside it pushes this source and runs a journey it writes for the variant under
-`tao test`; the phone journey against Instant Cloud remains outstanding.
+`tao test`. On 2026-09-27 the Developer ran it against Instant Cloud on a physical iPhone and
+reported it working.
 AuthReviewInstantClerk keeps the same InstantDB data but signs in with Clerk: InstantDB verifies the
 Clerk session token through the Clerk client registered with the Instant app under `ClerkClientName`
 ("clerk" here), and the account is the InstantDB user that token resolves to. Register that client
 and add the `email` and `email_verified` claims to Clerk's session token first. `just instant-review`
 runs the InstantAuth variant against the stored Instant app; `--clerk` runs this one with the stored
-Clerk publishable key. The Clerk pairing is covered by provider unit tests only; acceptance against
-Clerk and Instant Cloud remains outstanding.
+Clerk publishable key. The Clerk pairing has no local journey, only provider unit tests; on
+2026-09-27 the Developer ran it against Clerk and Instant Cloud on a physical iPhone and reported it
+working.
