@@ -388,7 +388,7 @@ Describe('InstantDB sign-in', () => {
       // Release drops the lease authenticate took and never signs InstantDB out.
       await authentication.release!(new AbortController().signal)
       Expect(sdk.core().shutdowns).toBe(1)
-      Expect(await sdk.core().getAuth()).toEqual({ id: subject })
+      Expect(await sdk.core().getAuth()).toMatchObject({ id: subject })
     },
   )
 
@@ -477,7 +477,12 @@ Describe('InstantDB sign-in with Clerk', () => {
   function signIn(
     sdk: ReturnType<typeof fakeInstantSDK>,
     appId: string,
-    options: { configuration?: Record<string, unknown>; provider?: string; signal?: AbortSignal } = {},
+    options: {
+      configuration?: Record<string, unknown>
+      provider?: string
+      signal?: AbortSignal
+      token?: string
+    } = {},
   ) {
     const proofs: string[] = []
     const context: TR.DataAuthenticationContext = {
@@ -492,7 +497,7 @@ Describe('InstantDB sign-in with Clerk', () => {
           kind: 'IdentityToken',
           provider: 'Clerk',
           subject: clerkSubject,
-          token: 'clerk-session-token',
+          token: options.token ?? 'clerk-session-token',
         }
       }) as TR.DataAuthenticationContext['proof'],
       signal: options.signal ?? new AbortController().signal,
@@ -597,6 +602,46 @@ Describe('InstantDB sign-in with Clerk', () => {
     Expect(cancelled.core().signOuts).toBe(1)
     Expect(cancelled.core().shutdowns).toBe(1)
   })
+
+  Test('signs in one at a time on a shared client and ends only the session each one opened', async () => {
+    let answerSignIns!: () => void
+    const sdk = fakeInstantSDK({ idTokenGate: new Promise<void>(resolve => (answerSignIns = resolve)) })
+    const appId = nextAppId()
+    const account = (userId: string) => ({ data: { accounts: [{ id: userId }] } })
+    const released = new AbortController().signal
+
+    // A newer sign-in waits for a stale one still in flight, whose answer would otherwise land on
+    // top of its own; the stale one, cancelled, ends only the session it opened.
+    const lifetime = new AbortController()
+    const stale = signIn(sdk, appId, { signal: lifetime.signal, token: 'stale-token' })
+    await until(() => sdk.cores.length > 0 && sdk.core().idTokenSignIns.length > 0, {
+      description: 'the stale sign-in',
+    })
+    const current = signIn(sdk, appId, { token: 'current-token' })
+    await until(() => sdk.inits.length === 2, { description: 'the current lease' })
+    Expect(sdk.core().idTokenSignIns).toHaveLength(1)
+    lifetime.abort()
+    answerSignIns()
+    await Expect(stale.resolving).rejects.toThrow('The authentication request was cancelled.')
+    await until(() => sdk.core().queries.length > 0, { description: 'the current account lookup' })
+    sdk.latestSubscription()(account('user-of-current-token'))
+    const authentication = await current.resolving
+    Expect(sdk.core().idTokenSignIns.map(params => params.idToken)).toEqual(['stale-token', 'current-token'])
+    Expect(authentication.accountId).toBe('user-of-current-token')
+    Expect(sdk.core().signOuts).toBe(1)
+
+    // A later sign-in replaces the session; releasing the replaced one leaves the later one alone.
+    const later = signIn(sdk, appId, { token: 'later-token' })
+    await until(() => sdk.core().queries.length > 1, { description: 'the later account lookup' })
+    sdk.latestSubscription()(account('user-of-later-token'))
+    const replacing = await later.resolving
+    await authentication.release!(released)
+    Expect(sdk.core().signOuts).toBe(1)
+    Expect(await sdk.core().getAuth()).toMatchObject({ id: 'user-of-later-token' })
+    await replacing.release!(released)
+    Expect(sdk.core().signOuts).toBe(2)
+    Expect(sdk.core().shutdowns).toBe(1)
+  })
 })
 
 Describe('InstantDB client registry', () => {
@@ -632,6 +677,8 @@ type FakeCore = ReturnType<typeof fakeCore>
  * an external id token does.
  */
 type FakeClientOptions = Readonly<{
+  /** idTokenGate holds every id-token sign-in's answer until it settles. */
+  idTokenGate?: Promise<void>
   idTokenRefusal?: unknown
   idTokenUser?: string
   signedIn?: string
@@ -657,8 +704,11 @@ function fakeCore(options: FakeClientOptions = {}) {
     transactions: [] as Chunk[][],
     unsubscribeFailure: undefined as { error: unknown } | undefined,
     unsubscribes: 0,
-    user: (options.signedIn === undefined ? null : { id: options.signedIn }) as { id: string } | null,
+    user: (options.signedIn === undefined ? null : { id: options.signedIn, refresh_token: 'restored' }) as
+      | Readonly<{ id: string; refresh_token: string }>
+      | null,
   }
+  let issued = 0
   return {
     auth: {
       signInWithToken: async (token: string) => {
@@ -666,15 +716,16 @@ function fakeCore(options: FakeClientOptions = {}) {
         if (state.signInFailure !== undefined) {
           throw state.signInFailure.error
         }
-        state.user = { id: options.tokenUser ?? `user-of-${token}` }
+        state.user = { id: options.tokenUser ?? `user-of-${token}`, refresh_token: token }
         return { user: state.user }
       },
       signInWithIdToken: async (params: Readonly<{ clientName: string; idToken: string }>) => {
         state.idTokenSignIns.push(params)
+        await options.idTokenGate
         if (options.idTokenRefusal !== undefined) {
           throw options.idTokenRefusal
         }
-        state.user = { id: options.idTokenUser ?? `user-of-${params.idToken}` }
+        state.user = { id: options.idTokenUser ?? `user-of-${params.idToken}`, refresh_token: `issued-${++issued}` }
         return { user: state.user }
       },
       signOut: async () => {

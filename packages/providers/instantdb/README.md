@@ -37,8 +37,11 @@ Generated schema and rules are build output; never commit them.
 
 ## Live tests
 
-`instantdb-tests/instantdb-live.test.ts` runs against the machine's local InstantDB, in an ephemeral
-app per test, and skips unless `TAO_INSTANT_LIVE_API_URL` is set:
+The `instantdb-tests/*-live.test.ts` files run against the machine's local InstantDB, in an
+ephemeral app per test, and skip unless `TAO_INSTANT_LIVE_API_URL` is set.
+`auth-review-live.test.ts` pushes Auth Review's own source and runs a journey it writes for the
+InstantAuth variant under
+`tao test`, minting the email code through the admin API.
 
 ```sh
 ./agent unsandboxed local-instantdb start

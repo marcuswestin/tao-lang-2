@@ -80,32 +80,36 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
         throw instantFailure('initialization', error)
       }
       const core = lease.db.core
-      let userId: string | undefined
+      let signedIn: InstantSignedIn
       try {
-        userId = await signIn.signIn(core)
-        throwIfCancelled(context.signal)
-        await ensureAccount(sdk, core, userId, context.signal)
-        throwIfCancelled(context.signal)
+        // A stale attempt still signing in would otherwise land on top of a newer one's user.
+        signedIn = await lease.exclusively(async () => {
+          const reached = await signIn.signIn(core)
+          try {
+            throwIfCancelled(context.signal)
+            await ensureAccount(sdk, core, reached.userId, context.signal)
+            throwIfCancelled(context.signal)
+          } catch (error) {
+            // Nothing will release this sign-in, so it ends here rather than outliving the attempt.
+            await endOwnedSession(core, reached).catch(() => undefined)
+            throw error
+          }
+          return reached
+        })
       } catch (error) {
-        if (signIn.ownsSession && userId !== undefined) {
-          // Nothing will release this sign-in, so it ends here rather than outliving the attempt.
-          await core.auth.signOut().catch(() => undefined)
-        }
         lease.release()
         throw error
       }
       let released = false
       return {
-        accountId: userId,
+        accountId: signedIn.userId,
         // InstantAuth's session is its own to end; a session this datasource made from a Clerk
         // token ends here. A failed sign-out keeps the lease, so the runtime's retry can finish it.
         release: async () => {
           if (released) {
             return
           }
-          if (signIn.ownsSession) {
-            await core.auth.signOut()
-          }
+          await lease.exclusively(() => endOwnedSession(core, signedIn))
           released = true
           lease.release()
         },
@@ -320,15 +324,25 @@ function instantAddress(context: TR.DataProviderContext): InstantClientAddress {
   }
 }
 
+/** InstantSignIn signs the shared client in for one auth provider's proof. */
+type InstantSignIn = Readonly<{ signIn(core: InstantCore): Promise<InstantSignedIn> }>
+
 /**
- * InstantSignIn signs the shared client in for one auth provider's proof and returns the InstantDB
- * user it signed in. `ownsSession` says the session is this datasource's to end, because the auth
- * provider that signed the person in knows nothing of InstantDB.
+ * InstantSignedIn is the InstantDB user a sign-in reached. `ownedSession` is the refresh token of a
+ * session the datasource opened and so must end, because the auth provider that signed the person
+ * in knows nothing of InstantDB.
  */
-type InstantSignIn = Readonly<{
-  ownsSession: boolean
-  signIn(core: InstantCore): Promise<string>
-}>
+type InstantSignedIn = Readonly<{ ownedSession?: string | undefined; userId: string }>
+
+/**
+ * endOwnedSession signs out a session the datasource opened, unless a later sign-in on the shared
+ * client has replaced it; that session is the later sign-in's to end.
+ */
+async function endOwnedSession(core: InstantCore, signedIn: InstantSignedIn): Promise<void> {
+  if (signedIn.ownedSession !== undefined && (await core.getAuth())?.refresh_token === signedIn.ownedSession) {
+    await core.auth.signOut()
+  }
+}
 
 /**
  * sessionSignIn uses InstantAuth's session. With one address the auth provider signed this very
@@ -349,14 +363,13 @@ async function sessionSignIn(
     )
   }
   return {
-    ownsSession: false,
     signIn: async core => {
       const user = await core.getAuth()
       throwIfCancelled(context.signal)
       if (user?.id !== proof.subject) {
         await signInWithToken(core, session.refreshToken, proof.subject)
       }
-      return proof.subject
+      return { userId: proof.subject }
     },
   }
 }
@@ -379,10 +392,10 @@ async function identityTokenSignIn(context: TR.DataAuthenticationContext): Promi
   )
   const proof = await context.proof('IdentityToken', context.signal)
   return {
-    ownsSession: true,
     signIn: async core => {
       try {
-        return (await core.auth.signInWithIdToken({ clientName, idToken: proof.token })).user.id
+        const { user } = await core.auth.signInWithIdToken({ clientName, idToken: proof.token })
+        return { ownedSession: user.refresh_token, userId: user.id }
       } catch (error) {
         const status = typeof error === 'object' && error !== null ? (error as { status?: unknown }).status : undefined
         if (typeof status === 'number' && status >= 400 && status < 500) {

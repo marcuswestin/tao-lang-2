@@ -459,8 +459,9 @@ InstantDB, with no server of ours. Replace both placeholder App IDs with an Inst
 push that app's generated schema and rules first. The first sign-in creates the person's Account row
 with no name, so the app opens on "Complete your profile" rather than the missing-account guard. The
 paired flow (code sign-in, account row, owner-only notes, sign-out) is covered against a local
-InstantDB by `packages/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts`; the
-phone journey against Instant Cloud remains outstanding.
+InstantDB by `packages/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts`, and
+`auth-review-live.test.ts` beside it pushes this source and runs a journey it writes for the variant under
+`tao test`; the phone journey against Instant Cloud remains outstanding.
 AuthReviewInstantClerk keeps the same InstantDB data but signs in with Clerk: InstantDB verifies the
 Clerk session token through the Clerk client registered with the Instant app under `ClerkClientName`
 ("clerk" here), and the account is the InstantDB user that token resolves to. Register that client
