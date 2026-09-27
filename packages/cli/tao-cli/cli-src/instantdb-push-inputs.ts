@@ -172,7 +172,7 @@ function settingEntries(binding: ASTUtils.AppDatasourceBinding, setting: string)
  * `EntityDataDefinition` emits for those keys, because the compiler emits the schema only as
  * generated code; runtime-only keys (defaults, titles, command policy, grants) are left out.
  */
-export function storeDefinition(
+function storeDefinition(
   name: string,
   collections: readonly AST.EntityDataDeclaration[],
 ): TR.DataSchemaDefinition {

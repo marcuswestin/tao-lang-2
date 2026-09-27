@@ -13,7 +13,7 @@ import { readInstantPushInputs } from './instantdb-push-inputs'
  */
 
 /** instantTokenVariable names the environment variable the push token is read from. */
-export const instantTokenVariable = 'INSTANT_APP_ADMIN_TOKEN'
+const instantTokenVariable = 'INSTANT_APP_ADMIN_TOKEN'
 
 type InstantPushModule = typeof import('tao-instantdb/push')
 

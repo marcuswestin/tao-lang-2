@@ -25,7 +25,7 @@ export type InstantPushTarget = Readonly<{
 }>
 
 /** InstantPushStep is one request the push made, as the report shows it. */
-export type InstantPushStep = Readonly<{
+type InstantPushStep = Readonly<{
   authorization: string
   endpoint: string
   method: 'POST'

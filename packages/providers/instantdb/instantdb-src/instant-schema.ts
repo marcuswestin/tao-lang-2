@@ -29,7 +29,7 @@ export type InstantAttribute = Readonly<{
 type InstantValueType = 'boolean' | 'json' | 'number' | 'string'
 
 /** InstantLinkSide is one side of a link: the namespace it sits on, its label, and cardinality. */
-export type InstantLinkSide = Readonly<{
+type InstantLinkSide = Readonly<{
   has: 'many' | 'one'
   label: string
   on: string
@@ -43,7 +43,7 @@ export type InstantSchemaJSON = Readonly<{
 }>
 
 /** InstantRelationMapping is one Tao relation field's link. */
-export type InstantRelationMapping = Readonly<{
+type InstantRelationMapping = Readonly<{
   cascade: boolean
   label: string
   optional: boolean

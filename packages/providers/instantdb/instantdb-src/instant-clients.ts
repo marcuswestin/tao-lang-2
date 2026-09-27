@@ -14,7 +14,7 @@ import type { InstantAttribute, InstantSchemaJSON } from './instant-schema'
 export type InstantSDK = Pick<typeof import('@instantdb/react-native'), 'i' | 'id' | 'init' | 'tx'>
 
 /** InstantDatabase is one shared client as `init` returns it. */
-export type InstantDatabase = ReturnType<InstantSDK['init']>
+type InstantDatabase = ReturnType<InstantSDK['init']>
 
 /** InstantClientAddress is the registry key: the app and the endpoints that reach it. */
 export type InstantClientAddress = Readonly<{
