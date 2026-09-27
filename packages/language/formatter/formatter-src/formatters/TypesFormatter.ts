@@ -34,7 +34,14 @@ export const TypesFormatter = {
 
   /** ItemTypeExpression formats item type property blocks. */
   ItemTypeExpression(f) {
-    const entries = [...f.node.properties, ...f.node.keys, ...f.node.implementations]
+    const entries = [
+      ...f.node.properties,
+      ...f.node.keys,
+      ...f.node.issues,
+      ...f.node.accepts,
+      ...f.node.supports,
+      ...f.node.implementations,
+    ]
       .toSorted((left, right) => (left.$cstNode?.offset ?? 0) - (right.$cstNode?.offset ?? 0))
     f.indentedBraceBlock(entries)
     f.commaLineList()

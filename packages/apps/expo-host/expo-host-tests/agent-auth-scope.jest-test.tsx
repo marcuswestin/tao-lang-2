@@ -3,11 +3,26 @@ import { Deferred, Describe, Expect, settle, Test, until } from '@shared/test'
 import { act, render } from '@testing-library/react-native'
 
 const commandId = 'tests/@workspace/Commands/command/Append'
+const sessionAcceptor: TR.DataPairing = { accepts: [{ kind: 'Session' }], supports: [] }
 
 Describe('mounted app command auth scope', () => {
   Test('rejects a queued request admitted before its mounted account signs out', async () => {
     const gate = Deferred<void>()
-    const scope = accountScope('alice')
+    const scope = accountScope('alice', [{
+      store: TR.Data.Schema({ name: 'AgentAccounts', entities: { Account: { collection: 'Accounts', fields: {} } } }),
+      source: TR.Data.Configure(
+        TR.Data.Declaration(
+          'Accounts',
+          {
+            authenticate: async context => ({ accountId: context.principal.subject }),
+            connect: () => ({ load: () => undefined, save: () => undefined }),
+          },
+          undefined,
+          sessionAcceptor,
+        ),
+        {},
+      ),
+    }])
     await scope.restore()
     let invocations = 0
     const command = TR.Interaction.Command({
@@ -68,26 +83,31 @@ Describe('mounted app command auth scope', () => {
       },
     })
     const source = TR.Data.Configure(
-      TR.Data.Declaration('ScopedNotes', {
-        authenticatedAuthority: 'server',
-        connect: context => ({
-          load: () =>
-            JSON.stringify({
-              formatVersion: 1,
-              schemaVersion: 1,
-              nextId: 1,
-              rows: { Account: [{ Id: context.auth!.accountId, DisplayName: context.auth!.accountId }], Note: [] },
-            }),
-          save: snapshot => {
-            saves.push({ account: context.auth!.accountId, snapshot })
-            return save.promise
-          },
-        }),
-      }),
+      TR.Data.Declaration(
+        'ScopedNotes',
+        {
+          authenticate: async context => ({ accountId: context.principal.subject }),
+          connect: context => ({
+            load: () =>
+              JSON.stringify({
+                formatVersion: 1,
+                schemaVersion: 1,
+                nextId: 1,
+                rows: { Account: [{ Id: context.auth!.accountId, DisplayName: context.auth!.accountId }], Note: [] },
+              }),
+            save: snapshot => {
+              saves.push({ account: context.auth!.accountId, snapshot })
+              return save.promise
+            },
+          }),
+        },
+        undefined,
+        sessionAcceptor,
+      ),
       {},
     )
-    const alice = accountScope('alice')
-    const bob = accountScope('bob')
+    const alice = accountScope('alice', [{ store: schema, source }])
+    const bob = accountScope('bob', [{ store: schema, source }])
     const append = TR.Interaction.Command({
       name: 'Append',
       slots: ['Body'],
@@ -172,17 +192,20 @@ Describe('mounted app command auth scope', () => {
   })
 })
 
-function accountScope(accountId: string): TR.AuthScope {
-  return TR.Auth.CreateScope(TR.Auth.Configure(
+/** accountScope signs `subject` in; the bound datasource resolves the subject as its account id. */
+function accountScope(subject: string, datasources: readonly TR.AppDatasourceBinding[]): TR.AuthScope {
+  const scope = TR.Auth.CreateScope(TR.Auth.Configure(
     TR.Auth.Declaration('Deterministic', {
       connect: () => ({
         capabilities: { methods: [] },
-        restore: async () => ({ state: 'SignedIn', identity: { accountId, issuer: 'test', subject: accountId } }),
+        restore: async () => ({ state: 'SignedIn', principal: { issuer: 'test', subject } }),
         signIn: async () => ({ outcome: { status: 'cancelled' } }),
         signOut: async () => ({ status: 'completed' }),
-        credential: async request => ({ audience: request.audience, value: 'test-credential' }),
+        proof: async () => ({ kind: 'Session', issuer: 'test', subject, value: {} }),
       }),
-    }),
+    }, { issues: ['Session'] }),
     {},
   ))
+  scope.bindDatasources(datasources)
+  return scope
 }

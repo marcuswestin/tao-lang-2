@@ -148,6 +148,41 @@ Describe('Tao formatter configurable declarations', () => {
   )
 
   Test(
+    'formats provider pairing blocks on one line each, before the implementation',
+    formats(
+      `use AuthProvider from @tao/auth\npublic type Door is AuthProvider with{Key text issues{IdentityToken ,Session} provider Door from ./Door.ts}\npublic type Store is datasource with{AppId text accepts{IdentityToken   from Door,TestIdentity} supports{Relations,Migrations   Additive} provider Store from ./Store.ts}\npublic type Empty is datasource with{accepts{} supports{} provider Empty from ./Empty.ts}`,
+      `
+        use AuthProvider from @tao/auth
+
+        public
+        type Door is AuthProvider with {
+           Key text
+           issues { IdentityToken, Session }
+
+           provider Door from ./Door.ts
+        }
+
+        public
+        type Store is datasource with {
+           AppId text
+           accepts { IdentityToken from Door, TestIdentity }
+           supports { Relations, Migrations Additive }
+
+           provider Store from ./Store.ts
+        }
+
+        public
+        type Empty is datasource with {
+           accepts { }
+           supports { }
+
+           provider Empty from ./Empty.ts
+        }
+      `,
+    ),
+  )
+
+  Test(
     'formats keyed, labeled, named, nested, and bare constructor entries',
     formats(
       `let Demo=SelectionNav{Initial @home Display "tabs" @home{Label:"Home" Content HomeStack} Extra{Nested "value"} "bare"}`,

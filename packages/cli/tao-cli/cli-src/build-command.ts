@@ -2,8 +2,7 @@ import Runtime, { HostDependencies, RuntimeToolchainPaths } from '@expo-host'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { AgentClientBuild } from './agent-client-build'
 import { buildDesktopApp } from './desktop-build'
-import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
-import { selectTaoDevApp } from './dev-app-selection'
+import { chooseTaoApp } from './dev-app-selection'
 
 export type BuildTarget = 'web' | 'desktop' | 'ios' | 'android'
 export type BuildRecord = {
@@ -46,7 +45,7 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
   if (options.agents && (options.compileOnly || selectedTargets.some(target => target !== 'desktop'))) {
     Errors.throwUserInput('--agents requires a packaged desktop build.')
   }
-  const app = await chooseApp(path, options.appName)
+  const app = await chooseTaoApp(path, options.appName, 'Build')
   const buildsRoot = options.output ? FS.resolvePath(options.output) : FS.resolvePath('.tao/builds', app.projectRoot)
   if (
     FS.pathIsWithin(buildsRoot, app.projectRoot)
@@ -247,32 +246,6 @@ function parseTargetSelection(value: string): BuildTarget[] | undefined {
     return undefined
   }
   return targets.filter((_, index) => parts.includes(String(index + 1)))
-}
-
-async function chooseApp(path: string, appName?: string): Promise<TaoDevApp> {
-  const projects = await discoverTaoDevProjects(path)
-  const apps = projects.flatMap(project => project.apps)
-  if (apps.length === 0) {
-    Errors.throwUserInput(`No runnable Tao apps found under ${FS.displayPath(FS.resolvePath(path))}.`)
-  }
-  if (appName !== undefined) {
-    const matches = apps.filter(app => app.appName === appName)
-    if (matches.length !== 1) {
-      Errors.throwUserInput(`--app '${appName}' must identify exactly one runnable app (${matches.length} found).`)
-    }
-    return matches[0]!
-  }
-  if (apps.length === 1) {
-    return apps[0]!
-  }
-  if (!HCI.isInteractive()) {
-    Errors.throwUserInput('Multiple Tao apps found; choose one with --app in a non-interactive terminal.')
-  }
-  const selected = await selectTaoDevApp(projects)
-  if (selected.kind !== 'selected') {
-    Errors.throwUserInput('Build app selection was cancelled.')
-  }
-  return selected.app
 }
 
 async function ensureBuildsIgnored(projectRoot: string): Promise<void> {

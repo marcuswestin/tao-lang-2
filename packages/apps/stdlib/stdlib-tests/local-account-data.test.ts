@@ -65,17 +65,16 @@ Describe('authenticated local-only persistence', () => {
             next.scope.dispose()
           }
         }
-        Expect(LocalProvider(() => disk.storage).authenticatedAuthority).toBeUndefined()
+        // Local keeps device custody only: it resolves no account, so it cannot pair with a sign-in.
+        Expect(LocalProvider(() => disk.storage).authenticate).toBeUndefined()
         const ordinary = mount(disk.storage, undefined, false)
         try {
           await ordinary.scope.restore()
           ordinary.accept(alice)
           await ordinary.store.settle()
-          const state = ordinary.store.availability(ordinary.store.entity('Draft', 'missing'))
-          Expect(state).toMatchObject({ status: 'error' })
-          if (state.status === 'error') {
-            Expect(state.message).toContain('cannot enforce authenticated account access')
-          }
+          Expect(ordinary.scope.session.state).toBe('Error')
+          Expect(ordinary.scope.session.message).toContain('must both declare sign-in pairing')
+          Expect(() => create(ordinary.store, 'unpaired')).toThrow('unauthorized')
         } finally {
           ordinary.scope.dispose()
         }
@@ -384,6 +383,43 @@ Describe('authenticated local-only persistence', () => {
     }
   })
 
+  Test('keys a local-only catalog under the account its paired datasource resolves', async () => {
+    const disk = await diskStorage()
+    const scope = TR.Auth.CreateScope(TR.Auth.Configure(
+      TR.Auth.Declaration('TestAuth', TestAuthProvider(), { issues: ['TestIdentity'] }),
+      {},
+    ))
+    const accounts = TR.Data.Schema({ name: 'Accounts', entities: { Account: { collection: 'Accounts', fields: {} } } })
+    const local = TR.Data.Schema(definition)
+    const memory = TR.Data.Declaration('Memory', MemoryProvider(), undefined, {
+      accepts: [{ kind: 'TestIdentity' }],
+      supports: [],
+    })
+    // The Local catalog sits beside the paired datasource and is not a second account target.
+    scope.bindDatasources([
+      { store: accounts, source: TR.Data.Configure(memory, {}) },
+      {
+        store: local,
+        source: TR.Data.Configure(TR.Data.Declaration('Local', LocalProvider(() => disk.storage)), {}),
+        localOnly: 'paired-app',
+      },
+    ])
+    const store = scope.store(local)
+    try {
+      await scope.restore()
+      await scope.signIn({ method: 'Password' })
+      Expect(scope.session.state).toBe('SignedIn')
+      await store.settle()
+      create(store, 'Paired draft')
+      await store.settle()
+      Expect(await disk.savedBodies()).toEqual([['Paired draft']])
+      Expect(disk.savedKeys()[0]).toContain(JSON.stringify(scope.session.identity!.accountId))
+      Expect(disk.savedKeys()[0]).toContain('paired-app')
+    } finally {
+      scope.dispose()
+    }
+  })
+
   Test('seeds local fixtures only for the selected TestAuth account without writing device storage', async () => {
     const disk = await diskStorage()
     const scope = TR.Auth.CreateScope(TR.Auth.Configure(TR.Auth.Declaration('TestAuth', TestAuthProvider()), {}))
@@ -422,6 +458,11 @@ Describe('authenticated local-only persistence', () => {
   })
 })
 
+/** principalOf is what a provider verifies; a local-only app uses its subject as the account. */
+function principalOf(identity: TR.AuthIdentity) {
+  return { issuer: identity.issuer, subject: identity.subject }
+}
+
 function create(store: TR.DataSchema, body: string) {
   TR.Data.Create(store, 'Draft', { Body: TR.Value(body) })
   return store.query({ entity: 'Draft', filters: [] }).at(-1)!
@@ -436,16 +477,19 @@ function mount(
   app = 'app-a',
   localOnly = true,
 ) {
-  let listener: ((session: TR.AuthSession) => void) | undefined
+  let listener: ((session: NonNullable<TR.AuthResult['session']>) => void) | undefined
   let signingIn = alice
   const scope = TR.Auth.CreateScope(TR.Auth.Configure(
     TR.Auth.Declaration('Verified', {
       connect: () => ({
         capabilities: { methods: ['Password'] },
         restore: async () => ({ state: 'SignedOut' }),
-        signIn: async () => ({ outcome: { status: 'completed' }, session: { state: 'SignedIn', identity: signingIn } }),
+        signIn: async () => ({
+          outcome: { status: 'completed' },
+          session: { state: 'SignedIn', principal: principalOf(signingIn) },
+        }),
         signOut: async () => ({ status: 'completed' }),
-        credential: async () => TR.Errors.failInput('Local data must not request credentials.'),
+        proof: async () => TR.Errors.failInput('Local data must not request sign-in proofs.'),
         subscribe: next => {
           listener = next
           return () => {
@@ -462,7 +506,7 @@ function mount(
   return {
     scope,
     store: TR.Auth.Store(scope, declaration),
-    accept: (identity: TR.AuthIdentity) => listener?.({ state: 'SignedIn', identity }),
+    accept: (identity: TR.AuthIdentity) => listener?.({ state: 'SignedIn', principal: principalOf(identity) }),
     signIn: (identity: TR.AuthIdentity) => {
       signingIn = identity
       return scope.signIn({ method: 'Password' })
@@ -492,6 +536,7 @@ async function diskStorage(hooks: {
         await FS.remove(path(key))
       },
     },
+    savedKeys: () => [...keys],
     savedBodies: async () =>
       await Promise.all([...keys].map(async key => {
         const snapshot = JSON.parse(await FS.readText(path(key))) as { rows: { Draft: { Body: string }[] } }

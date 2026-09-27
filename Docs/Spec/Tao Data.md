@@ -249,10 +249,39 @@ This deployment requires deny-all direct-client rules and one gateway using its 
 database. Policy migration, copied databases running extra gateways, and distributed failover are
 unsupported. Live tests exercise the actual Tao app, transaction races, and process/offline recovery.
 
-An authenticated datasource must declare that it enforces authenticated authority. `Reference`
-declares server authority; `Memory` declares test authority and is usable with `TestAuth`.
-The runtime rejects unsupported pairings before calling the provider. The existing InstantDB
-snapshot and Local adapters do not opt in: client-side filtering is not remote authorization.
+Auth providers and datasources pair through declared sign-in proofs. An auth provider type declares
+the proofs it `issues` (`IdentityToken`, `Session`, or `TestIdentity`); a datasource type declares
+the proofs it `accepts`, optionally only `from` a named auth provider type, and the data capabilities
+it `supports`:
+
+```tao
+type Reference is datasource with {
+   ServerURL text
+   accepts { IdentityToken from Clerk, Session from LocalAuth }
+   supports { Relations, UniqueFields, UniqueTogether, AccessRules, FieldUpdates, MembershipRules }
+   provider ReferenceProvider from ./Reference.ts
+}
+```
+
+Every datasource type must declare `supports`, even as `supports { }`, and every auth provider type
+must declare `issues`. The compiler checks each app and variant: an app with `Auth` must bind only
+datasources that accept a proof its Auth issues, the app's data may use only capabilities its
+datasource supports, and `access` rules require `Auth`. Each error names the use and the `Auth` or
+`Datasource` line. The capabilities are `Relations`, `UniqueFields`, `UniqueTogether`,
+`AccessRules`, `FieldUpdates`, `MembershipRules`, and `Migrations` with a level of `Additive`,
+`Renames`, or `Destructive`; `Migrations` is a deployment fact the compiler cannot detect.
+
+`Reference` accepts Clerk tokens and LocalAuth sessions; `Memory` accepts only `TestIdentity`. Local,
+Dev, Http, iCloud, CloudKit, and the current InstantDB adapter accept nothing, so an app with `Auth`
+cannot bind them: client-side filtering is not remote authorization. The runtime repeats the pairing
+check whenever it chooses the datasource that resolves the signed-in Account. After the auth provider
+signs in, the datasource holding `Account` turns its proof into the application Account; the public
+session reports signed in only once that resolves, and a failed resolution is an error. Sign-out
+shows signed out at once, then releases the datasource's session before the auth provider signs out,
+waiting at most five seconds; a release still running then is abandoned, reported as an unconfirmed
+remote sign-out, and retried on the next sign-out. A sign-in or restoration waits for the provider
+sign-out in flight before contacting the provider. An account resolution still in flight when
+sign-out begins is released when it finishes, which can be after the provider has signed out.
 
 `Offline` declares the working set persisted by `Reference`; it is not permission to fetch a row.
 The current compiler supports the current account and its direct inverse collections, such as
@@ -286,16 +315,15 @@ use Clerk from @tao/auth/clerk
 app ManagedNotes = NotesApp with {
    Auth Clerk {
       PublishableKey "pk_test_YOUR_INSTANCE_KEY"
-      Endpoint "http://localhost:4738"
-      Resource "notes"
    }
 }
 ```
 
-The endpoint is an application account gateway, not Clerk's API URL or a testing-only server.
-It verifies Clerk session proofs against a configured issuer, public key and allowed origins,
-then maps `(issuer, subject)` to the application's opaque Account. Resource credentials stay
-inside providers. The included gateway is a localhost, single-process reference implementation;
+Clerk issues its session token as an `IdentityToken`; it knows nothing about the datasource. The
+`Reference` datasource exchanges the token with its own server at `ServerURL`, an application
+account gateway rather than Clerk's API URL or a testing-only server. The gateway verifies Clerk
+session proofs against a configured issuer, public key and allowed origins, then maps
+`(issuer, subject)` to the application's opaque Account. Resource credentials stay inside providers. The included gateway is a localhost, single-process reference implementation;
 production hosting, distributed failover and identity migration remain deployment work.
 
 Password and email-code sign-in/registration use the supplied or custom Tao UI. Email verification
@@ -308,7 +336,8 @@ The runtime mounts the SDK through an optional provider `Host`, with the same ap
 configuration passed to `connect`. The Expo SDK currently permits one mounted native Clerk app;
 its lease lasts through outstanding authentication cleanup. Credentials are managed by the SDK
 and never authored as Tao fields. Cancellation revokes a newly created SDK session; logout clears
-local access immediately, then attempts both SDK and gateway revocation. Both paths suppress
+local access immediately; `Reference` revokes its gateway sessions, and then Clerk revokes the SDK
+session. A gateway revocation that cannot be confirmed is reported and retried on the next sign-out. Both paths suppress
 Clerk's default redirect: Tao retains ownership of navigation on logout and cancellation.
 Failed SDK revocations retain non-secret session-ID tombstones and retry on reconnection/restoration. Each session has
 its own durable marker, checked again before accepting a proof exchange; another browser tab

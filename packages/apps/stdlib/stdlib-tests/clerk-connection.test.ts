@@ -12,30 +12,48 @@ import {
 } from '../@tao/auth/clerk/ClerkDriver'
 
 const signal = () => new AbortController().signal
-const configuration = { Endpoint: 'https://gateway.test/', Resource: 'notes', PublishableKey: 'pk_test_fixture' }
-const token = 'a'.repeat(96)
-const otherToken = 'b'.repeat(96)
-const sdkSession = (id = 'session-alice', userId = 'alice'): ClerkDriverSession => ({
-  id,
-  userId,
-  getToken: async () => `clerk-${userId}`,
-})
-const gatewaySession = (subject = 'alice', value = token, expiresAt = 61_000) => ({
-  accountId: `account-${subject}`,
-  issuer: 'https://clerk.test',
+const configuration = { PublishableKey: 'pk_test_fixture' }
+const issuer = 'https://clerk.test'
+
+/** clerkToken is an unsigned stand-in for a Clerk session JWT; only the datasource verifies signatures. */
+function clerkToken(userId: string, claims: Record<string, unknown> = {}): string {
+  const encode = (value: unknown) =>
+    btoa(JSON.stringify(value)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  return `${encode({ alg: 'RS256' })}.${
+    encode({
+      iss: issuer,
+      sub: userId,
+      exp: Math.floor(Date.now() / 1_000) + 60,
+      email: `${userId}@example.test`,
+      email_verified: true,
+      ...claims,
+    })
+  }.signature`
+}
+
+const principal = (subject = 'alice'): TR.AuthPrincipal => ({
+  issuer,
   subject,
-  resource: 'notes',
-  token: value,
-  expiresAt,
+  email: `${subject}@example.test`,
+  emailVerified: true,
 })
 
 function fixture(storage = new Map<string, string>()) {
-  let now = 1_000
   let listener: (session: ClerkDriverSession | null) => void = () => undefined
   let closed = false
-  const calls: Array<{ url: string; options?: RequestInit }> = []
-  const timers: Array<{ job: () => void; delay: number; cancelled: boolean }> = []
-  const sessions: TR.AuthSession[] = []
+  const sessions: TR.AuthConnectionSession[] = []
+  const tokens = {
+    reads: 0,
+    issue: async (userId: string): Promise<string | null> => clerkToken(userId),
+  }
+  const sdkSession = (id = 'session-alice', userId = 'alice'): ClerkDriverSession => ({
+    id,
+    userId,
+    getToken: async () => {
+      tokens.reads += 1
+      return await tokens.issue(userId)
+    },
+  })
   const driver: ClerkDriver = {
     restore: async () => sdkSession(),
     signIn: async (): Promise<ClerkDriverResult> => ({ status: 'complete', session: sdkSession() }),
@@ -48,232 +66,118 @@ function fixture(storage = new Map<string, string>()) {
       closed = true
     },
   }
-  const transport = {
-    respond: async (url: string, _options?: RequestInit): Promise<Response> =>
-      Response.json(url.endsWith('/exchange') ? gatewaySession() : {}),
-  }
   const connection = createClerkConnection(configuration, {
     driver,
-    now: () => now,
     logoutStorage: {
       getItem: async key => storage.get(key) ?? null,
       setItem: async (key, value) => {
         storage.set(key, value)
       },
     },
-    fetch: (async (input, options) => {
-      const url = String(input)
-      calls.push({ url, options })
-      return await transport.respond(url, options)
-    }) as typeof fetch,
-    schedule: (job, delay) => {
-      const timer = { job, delay, cancelled: false }
-      timers.push(timer)
-      return () => {
-        timer.cancelled = true
-      }
-    },
+    schedule: () => () => undefined,
   })
   connection.subscribe?.(value => sessions.push(value))
   return {
     connection,
-    calls,
     driver,
+    sdkSession,
     sessions,
     storage,
-    timers,
-    transport,
+    tokens,
     emit: (session: ClerkDriverSession | null) => listener(session),
-    setNow: (value: number) => {
-      now = value
-    },
     isClosed: () => closed,
-    credential: () => connection.credential({ audience: 'notes', signal: signal() }),
+    proof: () => connection.proof({ kind: 'IdentityToken', signal: signal() }),
     signIn: () => connection.signIn({ method: 'Password', fields: { Email: 'alice', Password: 'secret' } }, signal()),
   }
 }
 
-Describe('Clerk account gateway connection', () => {
-  Test('exchanges only the Clerk bearer and resource, and exposes an audience-scoped gateway credential', async () => {
+Describe('Clerk auth connection', () => {
+  Test('reports the Clerk user as the principal and issues its session token as an IdentityToken proof', async () => {
     const f = fixture()
     try {
       Expect(await f.signIn()).toEqual({
         outcome: { status: 'completed' },
-        session: {
-          state: 'SignedIn',
-          identity: { accountId: 'account-alice', issuer: 'https://clerk.test', subject: 'alice' },
-        },
+        session: { state: 'SignedIn', principal: principal() },
       })
-      Expect(f.calls[0]!.url).toBe('https://gateway.test/v1/auth/clerk/exchange')
-      Expect(new Headers(f.calls[0]!.options?.headers).get('Authorization')).toBe('Bearer clerk-alice')
-      Expect(JSON.parse(String(f.calls[0]!.options?.body))).toEqual({ resource: 'notes' })
-      Expect(await f.credential()).toEqual({ audience: 'notes', value: token, expiresAt: 61_000 })
-      await Expect(f.connection.credential({ audience: 'other', signal: signal() })).rejects.toThrow(
-        'does not authorize',
+      const proof = await f.proof()
+      Expect(proof).toMatchObject({ kind: 'IdentityToken', ...principal() })
+      Expect(proof.kind === 'IdentityToken' && proof.token.split('.')).toHaveLength(3)
+      Expect(proof.kind === 'IdentityToken' && proof.expiresAt! > Date.now()).toBe(true)
+      await Expect(f.connection.proof({ kind: 'Session', signal: signal() })).rejects.toThrow(
+        'Clerk issues IdentityToken sign-in proofs, not Session.',
       )
     } finally {
       f.connection.close?.()
     }
   })
 
-  Test('email verification exposes a challenge without acquiring any credential', async () => {
+  Test('email verification exposes a challenge without reading any token', async () => {
     const f = fixture()
     f.driver.signIn = async () => ({ status: 'challenge', id: 'challenge-1', kind: 'EmailCode' })
     try {
       Expect(await f.signIn()).toEqual({
         outcome: { status: 'completed' },
-        session: {
-          state: 'ChallengeRequired',
-          challenge: { id: 'challenge-1', kind: 'EmailCode' },
-        },
+        session: { state: 'ChallengeRequired', challenge: { id: 'challenge-1', kind: 'EmailCode' } },
       })
-      Expect(f.calls).toEqual([])
-      await Expect(f.credential()).rejects.toThrow('Sign in again')
+      Expect(f.tokens.reads).toBe(0)
+      await Expect(f.proof()).rejects.toThrow('Sign in again')
     } finally {
       f.connection.close?.()
     }
   })
 
-  Test('rejects gateway credentials for another subject, resource, expired session, or malformed token', async () => {
-    for (
-      const invalid of [
-        { ...gatewaySession(), subject: 'bob' },
-        { ...gatewaySession(), resource: 'other' },
-        { ...gatewaySession(), expiresAt: 1_000 },
-        { ...gatewaySession(), token: 'not-a-gateway-token' },
-      ]
-    ) {
+  Test('refuses a session token without an issuer or for another user, and abandons that SDK session', async () => {
+    for (const claims of [{ iss: '' }, { sub: 'bob' }, {}]) {
       const f = fixture()
-      f.transport.respond = async () => Response.json(invalid)
-      try {
-        Expect((await f.signIn()).outcome.status).toBe('error')
-        await Expect(f.credential()).rejects.toThrow('Sign in again')
-      } finally {
-        f.connection.close?.()
-      }
-    }
-  })
-
-  Test('refresh replaces the expiring credential and cancels its old expiry callback', async () => {
-    const f = fixture()
-    try {
-      await f.signIn()
-      const expiry = f.timers.find(timer => timer.delay === 60_000)!
-      f.setNow(57_000)
-      f.transport.respond = async () => Response.json(gatewaySession('alice', otherToken, 120_000))
-      Expect(await f.credential()).toEqual({ audience: 'notes', value: otherToken, expiresAt: 120_000 })
-      Expect(expiry.cancelled).toBe(true)
-      f.setNow(61_000)
-      expiry.job()
-      Expect((await f.credential()).value).toBe(otherToken)
-      Expect(f.sessions).toEqual([
-        { state: 'SignedIn', identity: { accountId: 'account-alice', issuer: 'https://clerk.test', subject: 'alice' } },
-      ])
-    } finally {
-      f.connection.close?.()
-    }
-  })
-
-  Test('a cancelled delayed exchange revokes its returned token without publishing credentials', async () => {
-    const f = fixture()
-    const pending = Deferred<Response>()
-    f.transport.respond = async url => url.endsWith('/exchange') ? pending.promise : Response.json({})
-    try {
-      const signingIn = f.signIn()
-      await until(() => f.calls.length === 1)
-      f.connection.cancel?.()
-      pending.resolve(Response.json(gatewaySession()))
-      Expect((await signingIn).outcome.status).toBe('cancelled')
-      Expect(f.calls).toHaveLength(2)
-      Expect(f.calls[1]!.url).toBe('https://gateway.test/v1/auth/sign-out')
-      Expect(new Headers(f.calls[1]!.options?.headers).get('Authorization')).toBe(`Bearer ${token}`)
-      Expect(f.sessions).toEqual([])
-      await Expect(f.credential()).rejects.toThrow('Sign in again')
-    } finally {
-      f.connection.close?.()
-    }
-  })
-
-  Test(
-    'cancellation after SDK completion revokes the completed SDK session while its gateway exchange is delayed',
-    async () => {
-      const f = fixture()
-      const pending = Deferred<Response>()
       const revoked: Array<string | undefined> = []
       f.driver.signOut = async id => {
         revoked.push(id)
       }
-      f.transport.respond = async url => url.endsWith('/exchange') ? pending.promise : Response.json({})
+      f.tokens.issue = async userId => Object.keys(claims).length === 0 ? 'not-a-jwt' : clerkToken(userId, claims)
       try {
-        const signingIn = f.signIn()
-        await until(() => f.calls.length === 1)
-        f.connection.cancel?.()
-        pending.resolve(Response.json(gatewaySession()))
-        Expect((await signingIn).outcome.status).toBe('cancelled')
+        Expect((await f.signIn()).outcome).toEqual({
+          status: 'error',
+          message: 'Unable to sign in. Check your details and connection, then try again.',
+        })
         Expect(revoked).toEqual(['session-alice'])
-        await Expect(f.credential()).rejects.toThrow('Sign in again')
+        await Expect(f.proof()).rejects.toThrow('Sign in again')
       } finally {
         f.connection.close?.()
       }
-    },
-  )
-
-  Test('failed renewal remains bounded by the original expiry and requires reauthentication', async () => {
-    const f = fixture()
-    try {
-      await f.signIn()
-      f.transport.respond = async () => Errors.throwHostEnvironment('offline fixture')
-      f.setNow(57_000)
-      await Expect(f.credential()).rejects.toThrow('offline fixture')
-      f.setNow(61_000)
-      f.timers.find(timer => timer.delay === 60_000)!.job()
-      Expect(f.sessions).toEqual([{ state: 'ReauthenticationRequired' }])
-      await Expect(f.credential()).rejects.toThrow('Sign in again')
-    } finally {
-      f.connection.close?.()
     }
   })
 
-  Test('logout after expiry retains SDK ownership and fences the expired gateway credential', async () => {
+  Test('cancellation after SDK completion revokes the completed SDK session while its token is delayed', async () => {
     const f = fixture()
+    const pending = Deferred<string | null>()
     const revoked: Array<string | undefined> = []
     f.driver.signOut = async id => {
       revoked.push(id)
-      Errors.throwHostEnvironment('offline fixture')
     }
+    f.tokens.issue = () => pending.promise
     try {
-      await f.signIn()
-      f.setNow(61_000)
-      f.timers.find(timer => timer.delay === 60_000)!.job()
-      Expect((await f.connection.signOut(signal())).status).toBe('error')
+      const signingIn = f.signIn()
+      await until(() => f.tokens.reads === 1)
+      f.connection.cancel?.()
+      pending.resolve(clerkToken('alice'))
+      Expect((await signingIn).outcome.status).toBe('cancelled')
       Expect(revoked).toEqual(['session-alice'])
-      Expect(
-        f.calls.filter(call => call.url.endsWith('/sign-out')).map(call =>
-          new Headers(call.options?.headers).get('Authorization')
-        ),
-      ).toEqual([`Bearer ${token}`])
-      const restored = fixture(f.storage)
-      restored.driver.signOut = f.driver.signOut
-      try {
-        Expect(await restored.connection.restore(signal())).toEqual({ state: 'SignedOut' })
-        Expect(restored.calls).toEqual([])
-      } finally {
-        restored.connection.close?.()
-      }
+      Expect(f.sessions).toEqual([])
+      await Expect(f.proof()).rejects.toThrow('Sign in again')
     } finally {
       f.connection.close?.()
     }
   })
 
-  Test('logout revokes the restored SDK session even when its gateway exchange failed', async () => {
+  Test('logout revokes the restored SDK session even when its token could not be read', async () => {
     const f = fixture()
     const revoked: Array<string | undefined> = []
     f.driver.signOut = async id => {
       revoked.push(id)
     }
-    f.transport.respond = async () => Response.json({}, { status: 503 })
+    f.tokens.issue = async () => Errors.throwHostEnvironment('offline fixture')
     try {
-      await Expect(f.connection.restore(signal())).rejects.toThrow('could not authorize')
+      await Expect(f.connection.restore(signal())).rejects.toThrow('offline fixture')
       Expect((await f.connection.signOut(signal())).status).toBe('completed')
       Expect(revoked).toEqual(['session-alice'])
     } finally {
@@ -281,67 +185,27 @@ Describe('Clerk account gateway connection', () => {
     }
   })
 
-  Test('logout retries every unconfirmed gateway retirement, including expired credentials', async () => {
-    const f = fixture()
-    let failOldRevocation = true
-    const revoked: string[] = []
-    try {
-      f.transport.respond = async () => Response.json(gatewaySession())
-      await f.signIn()
-      f.transport.respond = async (url, options) => {
-        if (url.endsWith('/exchange')) {
-          return Response.json(gatewaySession('alice', otherToken, 120_000))
-        }
-        const authorization = new Headers(options?.headers).get('Authorization')!
-        revoked.push(authorization)
-        return Response.json({}, { status: authorization === `Bearer ${token}` && failOldRevocation ? 503 : 200 })
-      }
-      f.setNow(57_000)
-      await f.credential()
-      await until(() => revoked.length === 1)
-      f.setNow(62_000)
-      Expect((await f.connection.signOut(signal())).status).toBe('error')
-      Expect(revoked).toContain(`Bearer ${otherToken}`)
-      failOldRevocation = false
-      Expect((await f.connection.signOut(signal())).status).toBe('completed')
-      Expect(revoked.at(-1)).toBe(`Bearer ${token}`)
-      Expect(revoked.filter(value => value === `Bearer ${otherToken}`)).toHaveLength(1)
-    } finally {
-      f.connection.close?.()
-    }
-  })
-
-  Test('SDK changes during sign-in or restoration cannot publish a stale gateway identity', async () => {
+  Test('SDK changes during sign-in or restoration cannot publish a stale principal', async () => {
     for (const restoring of [false, true]) {
-      for (const replacement of [null, sdkSession('session-bob', 'bob')]) {
+      for (const replacement of ['none', 'bob'] as const) {
         const f = fixture()
-        const pending = Deferred<Response>()
-        f.transport.respond = async url => url.endsWith('/exchange') ? pending.promise : Response.json({})
+        const pending = Deferred<string | null>()
+        f.tokens.issue = userId => userId === 'alice' ? pending.promise : Promise.resolve(clerkToken(userId))
         try {
-          const signingIn = restoring ? f.connection.restore(signal()) : f.signIn()
-          await until(() => f.calls.length === 1)
-          f.emit(replacement)
-          f.transport.respond = async url =>
-            Response.json(
-              url.endsWith('/exchange')
-                ? gatewaySession('bob', otherToken, 120_000)
-                : {},
-            )
-          pending.resolve(Response.json(gatewaySession()))
-          const result = await signingIn
-          Expect(result).not.toHaveProperty('session.identity.subject', 'alice')
-          Expect(result).not.toHaveProperty('identity.subject', 'alice')
-          if (replacement) {
-            await until(() => f.sessions.some(value => value.identity?.subject === 'bob'))
-            Expect((await f.credential()).value).toBe(otherToken)
+          const running = restoring ? f.connection.restore(signal()) : f.signIn()
+          await until(() => f.tokens.reads === 1)
+          f.emit(replacement === 'bob' ? f.sdkSession('session-bob', 'bob') : null)
+          pending.resolve(clerkToken('alice'))
+          const result = await running
+          Expect(result).not.toHaveProperty('session.principal.subject', 'alice')
+          Expect(result).not.toHaveProperty('principal.subject', 'alice')
+          if (replacement === 'bob') {
+            await until(() => f.sessions.some(value => value.principal?.subject === 'bob'))
+            Expect((await f.proof()).subject).toBe('bob')
           } else {
-            await Expect(f.credential()).rejects.toThrow('Sign in again')
+            await Expect(f.proof()).rejects.toThrow('Sign in again')
           }
-          Expect(f.sessions.some(value => value.identity?.subject === 'alice')).toBe(false)
-          Expect(f.calls.some(call =>
-            call.url.endsWith('/sign-out')
-            && new Headers(call.options?.headers).get('Authorization') === `Bearer ${token}`
-          )).toBe(true)
+          Expect(f.sessions.some(value => value.principal?.subject === 'alice')).toBe(false)
         } finally {
           f.connection.close?.()
         }
@@ -352,69 +216,85 @@ Describe('Clerk account gateway connection', () => {
   Test('the SDK activation notification does not invalidate its own sign-in', async () => {
     const f = fixture()
     f.driver.signIn = async () => {
-      f.emit(sdkSession())
-      return { status: 'complete', session: sdkSession() }
+      f.emit(f.sdkSession())
+      return { status: 'complete', session: f.sdkSession() }
     }
     try {
-      Expect((await f.signIn()).session?.identity?.subject).toBe('alice')
-      Expect((await f.credential()).value).toBe(token)
+      Expect((await f.signIn()).session?.principal?.subject).toBe('alice')
+      Expect((await f.proof()).subject).toBe('alice')
+      Expect(f.sessions).toEqual([])
     } finally {
       f.connection.close?.()
     }
   })
 
-  Test('the runtime follows a Clerk account switch through the gateway exchange', async () => {
+  Test('the runtime follows a Clerk account switch and stamps its proofs with the Clerk declaration', async () => {
     const f = fixture()
-    const expiresAt = Date.now() + 120_000
-    f.transport.respond = async () => Response.json(gatewaySession('alice', token, expiresAt))
-    const scope = TR.Auth.CreateScope(TR.Auth.Configure(
-      TR.Auth.Declaration('Clerk', {
-        connect: () => f.connection,
-      }),
-      {},
-    ))
-    const pending = Deferred<Response>()
+    const proofs: TR.AuthProof[] = []
+    const scope = TR.Auth.CreateScope(
+      TR.Auth.Configure(
+        TR.Auth.Declaration('Clerk', { connect: () => f.connection }, { issues: ['IdentityToken'] }),
+        {},
+      ),
+    )
+    scope.bindDatasources([{
+      store: TR.Data.Schema({ name: 'Accounts', entities: { Account: { collection: 'Accounts', fields: {} } } }),
+      source: TR.Data.Configure(
+        TR.Data.Declaration(
+          'Gateway',
+          {
+            authenticate: async context => {
+              const proof = await context.proof('IdentityToken', context.signal)
+              proofs.push(proof)
+              return { accountId: `account-${proof.subject}` }
+            },
+            connect: () => ({ load: () => undefined, save: () => undefined }),
+          },
+          undefined,
+          { accepts: [{ kind: 'IdentityToken', from: 'Clerk' }], supports: [] },
+        ),
+        {},
+      ),
+    }])
     try {
       await scope.restore()
-      Expect(scope.session.identity?.subject).toBe('alice')
-      f.transport.respond = async url => url.endsWith('/exchange') ? pending.promise : Response.json({})
-      f.emit(sdkSession('session-bob', 'bob'))
-      Expect(scope.session.state).toBe('SignedOut')
-      pending.resolve(Response.json(gatewaySession('bob', otherToken, expiresAt)))
+      Expect(scope.session.identity).toEqual({ issuer, subject: 'alice', accountId: 'account-alice' })
+      f.emit(f.sdkSession('session-bob', 'bob'))
       await until(() => scope.session.identity?.subject === 'bob')
-      Expect((await scope.credential({ audience: 'notes', signal: signal() })).value).toBe(otherToken)
+      Expect(scope.session.identity?.accountId).toBe('account-bob')
+      Expect(proofs.map(proof => [proof.provider, proof.subject])).toEqual([['Clerk', 'alice'], ['Clerk', 'bob']])
     } finally {
       scope.dispose()
     }
   })
 
-  Test(
-    'sign-out clears credentials before delayed revocation and persists a tombstone across restoration',
-    async () => {
-      const f = fixture()
-      const revocation = Deferred<void>()
-      f.driver.signOut = async () => revocation.promise
+  Test('sign-out refuses proofs before delayed revocation and persists a tombstone across restoration', async () => {
+    const f = fixture()
+    const revocation = Deferred<void>()
+    f.driver.signOut = async () => revocation.promise
+    try {
+      await f.signIn()
+      const leaving = f.connection.signOut(signal())
+      await Expect(f.proof()).rejects.toThrow('Sign in again')
+      await until(() => [...f.storage.values()].includes('["session-alice"]'))
+      revocation.reject(Errors.abortError('offline fixture'))
+      Expect(await leaving).toEqual({
+        status: 'error',
+        message: 'Signed out here. Some remote revocations could not be confirmed.',
+      })
+      const restored = fixture(f.storage)
+      restored.driver.signOut = async () => Errors.throwHostEnvironment('offline fixture')
       try {
-        await f.signIn()
-        const leaving = f.connection.signOut(signal())
-        await Expect(f.credential()).rejects.toThrow('Sign in again')
-        await until(() => [...f.storage.values()].includes('["session-alice"]'))
-        revocation.reject(Errors.abortError('offline fixture'))
-        Expect((await leaving).status).toBe('error')
-        const restored = fixture(f.storage)
-        restored.driver.signOut = async () => Errors.throwHostEnvironment('offline fixture')
-        try {
-          Expect(await restored.connection.restore(signal())).toEqual({ state: 'SignedOut' })
-          Expect(restored.calls).toEqual([])
-          await Expect(restored.credential()).rejects.toThrow('Sign in again')
-        } finally {
-          restored.connection.close?.()
-        }
+        Expect(await restored.connection.restore(signal())).toEqual({ state: 'SignedOut' })
+        Expect(restored.tokens.reads).toBe(0)
+        await Expect(restored.proof()).rejects.toThrow('Sign in again')
       } finally {
-        f.connection.close?.()
+        restored.connection.close?.()
       }
-    },
-  )
+    } finally {
+      f.connection.close?.()
+    }
+  })
 
   Test('another tab cannot erase an authoritative logout marker by overwriting the retry index', async () => {
     const storage = new Map<string, string>()
@@ -434,88 +314,50 @@ Describe('Clerk account gateway connection', () => {
       restored.driver.signOut = offline
       try {
         Expect(await restored.connection.restore(signal())).toEqual({ state: 'SignedOut' })
-        Expect(restored.calls).toEqual([])
+        Expect(restored.tokens.reads).toBe(0)
       } finally {
         restored.connection.close?.()
       }
       // This connection loaded the empty index before the other tab wrote its marker.
       stale.driver.signOut = offline
       Expect((await stale.signIn()).outcome.status).toBe('error')
-      Expect(stale.calls).toEqual([])
+      Expect(stale.tokens.reads).toBe(0)
     } finally {
       leaving.connection.close?.()
       stale.connection.close?.()
     }
   })
 
-  Test('stale tabs check logout markers before proofs and after delayed renewal or SDK-switch exchanges', async () => {
-    for (const mode of ['renew', 'switch']) {
-      for (const delayed of [false, true]) {
-        const storage = new Map<string, string>()
-        const leaving = fixture(storage)
-        const stale = fixture(storage)
-        const pending = Deferred<Response>()
-        const offline = async () => Errors.throwHostEnvironment('offline fixture')
-        leaving.driver.signOut = offline
-        stale.driver.signOut = offline
-        let proofs = 0
-        const session = {
-          ...sdkSession(),
-          getToken: async () => {
-            proofs += 1
-            return 'clerk-alice'
-          },
+  Test('a stale tab checks the logout marker before issuing a proof or following an SDK switch', async () => {
+    for (const mode of ['proof', 'switch'] as const) {
+      const storage = new Map<string, string>()
+      const leaving = fixture(storage)
+      const stale = fixture(storage)
+      const offline = async () => Errors.throwHostEnvironment('offline fixture')
+      leaving.driver.signOut = offline
+      stale.driver.signOut = offline
+      try {
+        await leaving.signIn()
+        await stale.signIn()
+        await leaving.connection.signOut(signal())
+        const reads = stale.tokens.reads
+        if (mode === 'proof') {
+          await Expect(stale.proof()).rejects.toThrow('Finish signing out')
+        } else {
+          stale.emit(null)
+          stale.emit(stale.sdkSession())
+          await until(() => stale.sessions.some(value => value.state === 'ReauthenticationRequired'))
         }
-        stale.driver.signIn = async () => ({ status: 'complete', session })
-        try {
-          await leaving.signIn()
-          await stale.signIn()
-          if (!delayed) {
-            await leaving.connection.signOut(signal())
-          }
-          stale.transport.respond = async url =>
-            url.endsWith('/exchange')
-              ? delayed ? pending.promise : Response.json(gatewaySession('alice', otherToken, 120_000))
-              : Response.json({})
-          let renewal: Promise<string> | undefined
-          if (mode === 'renew') {
-            stale.setNow(57_000)
-            renewal = stale.credential().then(() => 'authorized', () => 'rejected')
-          } else {
-            stale.emit(null)
-            stale.emit(session)
-          }
-          if (delayed) {
-            await until(() => stale.calls.filter(call => call.url.endsWith('/exchange')).length === 2)
-            await leaving.connection.signOut(signal())
-            pending.resolve(Response.json(gatewaySession('alice', otherToken, 120_000)))
-          }
-          if (renewal) {
-            Expect(await renewal).toBe('rejected')
-          } else {
-            await until(() =>
-              stale.sessions.some(value => value.state === 'ReauthenticationRequired' || value.state === 'SignedIn')
-            )
-            Expect(stale.sessions.at(-1)?.state).toBe('ReauthenticationRequired')
-          }
-          Expect(proofs).toBe(delayed ? 2 : 1)
-          Expect(stale.sessions.some(value => value.state === 'SignedIn')).toBe(false)
-          if (delayed) {
-            Expect(stale.calls.some(call =>
-              call.url.endsWith('/sign-out')
-              && new Headers(call.options?.headers).get('Authorization') === `Bearer ${otherToken}`
-            )).toBe(true)
-          }
-        } finally {
-          pending.resolve(Response.json(gatewaySession('alice', otherToken, 120_000)))
-          leaving.connection.close?.()
-          stale.connection.close?.()
-        }
+        Expect(stale.tokens.reads).toBe(reads)
+        Expect(stale.sessions.some(value => value.state === 'SignedIn')).toBe(false)
+      } finally {
+        leaving.connection.close?.()
+        stale.connection.close?.()
       }
     }
   })
 
-  Test('an unreadable session logout marker fails closed before requesting a proof', async () => {
+  Test('an unreadable session logout marker fails closed before reading a token', async () => {
     const f = fixture()
     f.driver.signOut = async () => Errors.throwHostEnvironment('offline fixture')
     try {
@@ -528,7 +370,7 @@ Describe('Clerk account gateway connection', () => {
       restored.driver.signOut = f.driver.signOut
       try {
         await Expect(restored.connection.restore(signal())).rejects.toThrow('logout state is unreadable')
-        Expect(restored.calls).toEqual([])
+        Expect(restored.tokens.reads).toBe(0)
       } finally {
         restored.connection.close?.()
       }
@@ -549,7 +391,7 @@ Describe('Clerk account gateway connection', () => {
       restored.driver.signOut = f.driver.signOut
       try {
         Expect(await restored.connection.restore(signal())).toEqual({ state: 'SignedOut' })
-        Expect(restored.calls).toEqual([])
+        Expect(restored.tokens.reads).toBe(0)
       } finally {
         restored.connection.close?.()
       }
@@ -568,7 +410,7 @@ Describe('Clerk account gateway connection', () => {
         status: 'rejected',
         message: 'The sign-in details were not accepted. Check them and try again.',
       })
-      Expect(f.calls).toEqual([])
+      Expect(f.tokens.reads).toBe(0)
     } finally {
       f.connection.close?.()
     }
@@ -595,57 +437,25 @@ Describe('Clerk account gateway connection', () => {
         status: 'error',
         message: 'Unable to sign in. Check your details and connection, then try again.',
       })
-      Expect(f.calls).toEqual([])
+      Expect(f.tokens.reads).toBe(0)
     } finally {
       f.connection.close?.()
     }
   })
 
-  Test('late refresh of a replaced account cannot overwrite the newer account', async () => {
+  Test('close rejects a delayed sign-in and ignores later SDK callbacks', async () => {
     const f = fixture()
-    const pending = Deferred<Response>()
-    try {
-      await f.signIn()
-      f.setNow(57_000)
-      f.transport.respond = async () => pending.promise
-      const renewing = f.credential().catch(() => undefined)
-      await until(() => f.calls.length === 2)
-      f.transport.respond = async url =>
-        Response.json(
-          url.endsWith('/exchange')
-            ? gatewaySession('bob', otherToken, 120_000)
-            : {},
-        )
-      f.emit(sdkSession('session-bob', 'bob'))
-      await until(() => f.sessions.some(value => value.state === 'SignedIn' && value.identity?.subject === 'bob'))
-      pending.resolve(Response.json(gatewaySession('alice', token, 120_000)))
-      await renewing
-      Expect((await f.credential()).value).toBe(otherToken)
-      Expect(f.sessions.filter(value => value.state === 'SignedIn')).toEqual([
-        { state: 'SignedIn', identity: { accountId: 'account-bob', issuer: 'https://clerk.test', subject: 'bob' } },
-      ])
-      Expect(f.calls.some(call =>
-        call.url.endsWith('/sign-out')
-        && new Headers(call.options?.headers).get('Authorization') === `Bearer ${token}`
-      )).toBe(true)
-    } finally {
-      f.connection.close?.()
-    }
-  })
-
-  Test('close rejects delayed exchange completion and ignores later SDK callbacks', async () => {
-    const f = fixture()
-    const pending = Deferred<Response>()
-    f.transport.respond = async url => url.endsWith('/exchange') ? pending.promise : Response.json({})
+    const pending = Deferred<string | null>()
+    f.tokens.issue = () => pending.promise
     const signingIn = f.signIn()
-    await until(() => f.calls.length === 1)
+    await until(() => f.tokens.reads === 1)
     f.connection.close?.()
-    f.emit(sdkSession('session-bob', 'bob'))
-    pending.resolve(Response.json(gatewaySession()))
+    f.emit(f.sdkSession('session-bob', 'bob'))
+    pending.resolve(clerkToken('alice'))
     Expect((await signingIn).outcome.status).toBe('cancelled')
     Expect(f.isClosed()).toBe(true)
     Expect(f.sessions).toEqual([])
-    Expect(f.calls.filter(call => call.url.endsWith('/exchange'))).toHaveLength(1)
-    await Expect(f.credential()).rejects.toThrow('cancelled')
+    Expect(f.tokens.reads).toBe(1)
+    await Expect(f.proof()).rejects.toThrow('cancelled')
   })
 })

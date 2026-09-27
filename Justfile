@@ -103,6 +103,11 @@ auth-review-server *ARGS:
 clerk-review *ARGS: _parser-gen
     ./dev clerk-review {{ ARGS }}
 
+# Push Auth Review to your Instant Cloud app and run it in tao dev; requires its stored App ID and admin token
+[group('Run')]
+instant-review *ARGS: _parser-gen
+    ./dev instant-review {{ ARGS }}
+
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
 studio project="Apps/HNReader": _parser-gen

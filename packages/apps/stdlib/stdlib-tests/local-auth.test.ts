@@ -1,3 +1,4 @@
+import type TR from '@runtime/TR'
 import { Errors } from '@shared/core'
 import { Deferred, Describe, Expect, Test, until } from '@shared/test'
 import type { AccountProtocol } from 'tao-shared/auth'
@@ -15,6 +16,7 @@ const session = (token: string): AccountProtocol.Session => ({
   expiresAt: Date.now() + 60_000,
 })
 const configuration = { Endpoint: 'http://localhost:4738', Resource: 'notes' }
+const token = (proof: TR.AuthIssuedProof): unknown => proof.kind === 'Session' ? proof.value['token'] : undefined
 
 Describe('LocalAuth session lifetime', () => {
   Test('offline sign-out clears access immediately and restores only the queued revocation', async () => {
@@ -57,7 +59,7 @@ Describe('LocalAuth session lifetime', () => {
     const first = provider.connect({ configuration })
     await first.signIn({ method: 'Password', fields: { Email: 'alice', Password: 'secret' } }, signal())
     Expect((await first.signOut(signal())).status).toBe('error')
-    await Expect(first.credential({ audience: 'notes', signal: signal() })).rejects.toThrow('Sign in again')
+    await Expect(first.proof({ kind: 'Session', signal: signal() })).rejects.toThrow('Sign in again')
     const record = JSON.parse([...values.values()][0]!)
     Expect(record.session).toBeUndefined()
     Expect(record.revocations).toHaveLength(1)
@@ -90,7 +92,7 @@ Describe('LocalAuth session lifetime', () => {
     await connection.signIn({ method: 'Password' }, signal())
     pending.resolve(Response.json({}))
     await leaving
-    Expect((await connection.credential({ audience: 'notes', signal: signal() })).value).toBe('new')
+    Expect(token(await connection.proof({ kind: 'Session', signal: signal() }))).toBe('new')
     Expect(revoked).toEqual(['Bearer old'])
     connection.close?.()
   })
@@ -127,7 +129,7 @@ Describe('LocalAuth session lifetime', () => {
     Expect((await signingIn).outcome.status).toBe('cancelled')
     Expect(JSON.parse(record!).session).toBeUndefined()
     Expect(JSON.parse(record!).revocations[0].token).toBe('cancelled')
-    await Expect(connection.credential({ audience: 'notes', signal: signal() })).rejects.toThrow('Sign in again')
+    await Expect(connection.proof({ kind: 'Session', signal: signal() })).rejects.toThrow('Sign in again')
     connection.close?.()
   })
 
@@ -163,11 +165,11 @@ Describe('LocalAuth session lifetime', () => {
     }).connect({ configuration })
     connection.subscribe!(value => changes.push(value.state))
     Expect((await connection.restore(signal())).state).toBe('SignedIn')
-    Expect((await connection.credential({ audience: 'notes', signal: signal() })).value).toBe('cached')
+    Expect(token(await connection.proof({ kind: 'Session', signal: signal() }))).toBe('cached')
     connected = true
     jobs.get(1_000)!()
     await until(() => changes.includes('ReauthenticationRequired') && record === undefined)
-    await Expect(connection.credential({ audience: 'notes', signal: signal() })).rejects.toThrow('Sign in again')
+    await Expect(connection.proof({ kind: 'Session', signal: signal() })).rejects.toThrow('Sign in again')
     connection.close?.()
   })
 
@@ -228,7 +230,19 @@ Describe('LocalAuth session lifetime', () => {
     expiry!()
     await until(() => record === undefined)
     Expect(changes).toEqual(['ReauthenticationRequired'])
-    await Expect(connection.credential({ audience: 'notes', signal: signal() })).rejects.toThrow('Sign in again')
+    await Expect(connection.proof({ kind: 'Session', signal: signal() })).rejects.toThrow('Sign in again')
+    connection.close?.()
+  })
+
+  Test('reports the server principal and issues only Session proofs carrying the server session', async () => {
+    const transport = (async () => Response.json(session('alice'))) as AuthTransport
+    const connection = LocalAuthProvider({ fetch: transport, secureStorage: null, schedule: () => () => undefined })
+      .connect({ configuration })
+    const result = await connection.signIn({ method: 'Password' }, signal())
+    Expect(result.session).toEqual({ state: 'SignedIn', principal: { issuer: 'local', subject: 'alice' } })
+    const proof = await connection.proof({ kind: 'Session', signal: signal() })
+    Expect(proof).toMatchObject({ kind: 'Session', issuer: 'local', subject: 'alice', value: { accountId: 'alice' } })
+    await Expect(connection.proof({ kind: 'IdentityToken', signal: signal() })).rejects.toThrow('issues Session')
     connection.close?.()
   })
 })

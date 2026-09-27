@@ -1,6 +1,7 @@
 import TR from '@runtime/TR'
 import type { AccountProtocol } from '@shared/auth/AuthProtocol'
 import { Assert, Errors, Time } from '@shared/core'
+import { referenceAuthentication } from './ReferenceAuth'
 import { acquireBrowserCheckpoint, joinReferenceCheckpoint } from './ReferenceCoordinator'
 import {
   parseReferenceEnvelope,
@@ -16,6 +17,8 @@ import {
 /** ReferenceHost injects platform storage, transport, and scheduling; server authority stays real. */
 export type ReferenceHost = {
   acquireCheckpoint?(identity: string): Promise<() => void>
+  /** now is the clock gateway session expiry is measured against; it defaults to `Date.now`. */
+  now?(): number
   request(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): ReturnType<typeof fetch>
   operationId(): string
   schedule(callback: () => void, milliseconds: number): () => void
@@ -32,7 +35,11 @@ type WriteContext = { previousSnapshot: string }
 /** ReferenceProvider durably records explicit authenticated operations before offering them online. */
 export function ReferenceProvider(host: ReferenceHost = nativeHost()): TR.DataProvider {
   return {
-    authenticatedAuthority: 'server',
+    authenticate: context =>
+      referenceAuthentication(host, context, {
+        resource: textConfiguration(context.configuration, 'Resource'),
+        serverURL: textConfiguration(context.configuration, 'ServerURL').replace(/\/$/, ''),
+      }),
     testNetwork: 'remote',
     testWriteRecovery: true,
     connect: context => {
@@ -146,14 +153,13 @@ export function ReferenceProvider(host: ReferenceHost = nativeHost()): TR.DataPr
 
       const request = async <T>(path: string, transaction?: AccountProtocol.Transaction): Promise<T> => {
         assertOpen()
-        const credential = await auth.credential(resource)
+        const credential = await auth.credential(abort.signal)
         assertOpen()
-        Assert.input(credential.audience === resource, 'The auth provider returned a credential for another resource.')
         let response: Response
         try {
           response = await host.request(`${serverURL}/v1${path}`, {
             body: transaction === undefined ? undefined : JSON.stringify(transaction),
-            headers: { Authorization: `Bearer ${credential.value}`, 'Content-Type': 'application/json' },
+            headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
             method: transaction === undefined ? 'GET' : 'POST',
             // React Native declares a narrower ambient AbortSignal; fetch accepts the same host signal.
             signal: abort.signal as NonNullable<Parameters<typeof fetch>[1]>['signal'],
