@@ -1,4 +1,5 @@
-import { ASTUtils, Type } from '@ast-utils'
+import { ASTUtils } from '@ast-utils'
+import { storedDataSchemaFile, type StoredDataSchemas } from '@compiler/stored-data-schema'
 import { Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import type TR from '@runtime/TR'
@@ -8,8 +9,8 @@ import type { TaoDataPolicy } from 'tao-instantdb/push'
 /**
  * What `tao instantdb push` reads from a Tao app before it talks to InstantDB: which InstantDB app
  * the selected app's datasource names, the compiled schema of the store that datasource fills, and
- * the compiled access policy. Everything is read statically, so a setting written as anything but a
- * literal is refused rather than guessed.
+ * the compiled access policy. The address is read statically, so a setting written as anything but a
+ * literal is refused rather than guessed; the schema and policy are the compiler's own sidecars.
  */
 
 /** InstantPushInputs is one app's InstantDB address, stored schema, and compiled access policy. */
@@ -52,7 +53,12 @@ export async function readInstantPushInputs(appPath: string, appName: string): P
     statements.filter(AST.isEntityDataDeclaration),
     statements.filter(AST.isDatasourceDeclaration),
   )
-  const address = instantAddress(app, stores)
+  const schemas = compiled.files.find(file => file.relativePath === storedDataSchemaFile)
+  const address = instantAddress(
+    app,
+    stores,
+    schemas === undefined ? { stores: {} } : JSON.parse(schemas.code) as StoredDataSchemas,
+  )
   const policy = compiled.files.find(file => file.relativePath === policyFile)
   return {
     ...address,
@@ -63,7 +69,7 @@ export async function readInstantPushInputs(appPath: string, appName: string): P
 type InstantBinding = Readonly<{
   apiURI: string
   appId: string
-  store: ASTUtils.DataStore | undefined
+  storeName: string | undefined
 }>
 
 /**
@@ -74,6 +80,7 @@ type InstantBinding = Readonly<{
 function instantAddress(
   app: AST.AppValueDeclaration,
   stores: ASTUtils.DataStorePlan,
+  schemas: StoredDataSchemas,
 ): Omit<InstantPushInputs, 'policy'> {
   const bindings = ASTUtils.appBoundDatasources(app).flatMap(binding => {
     const value = binding.value ?? binding.declaration?.value
@@ -94,15 +101,20 @@ function instantAddress(
       }); push supports one InstantDB app per Tao app.`,
     )
   }
-  const collections = [...new Set(bindings.flatMap(binding => binding.store?.collections ?? []))]
-  if (collections.length === 0) {
+  // The compiler writes a schema only for a synced store that holds data.
+  const filled = [...new Set(bindings.flatMap(binding => binding.storeName ?? []))]
+    .flatMap(name => schemas.stores[name] ?? [])
+  if (filled.length === 0) {
     Errors.throwUserInput(`App '${app.name}' stores no data in its ${providerTypeName} datasource.`)
   }
-  const storeNames = [...new Set(bindings.flatMap(binding => binding.store === undefined ? [] : [binding.store.name]))]
   return {
     apiURI: bindings[0]!.apiURI,
     appId: bindings[0]!.appId,
-    definition: storeDefinition(storeNames.join('+'), collections),
+    definition: {
+      entities: Object.assign({}, ...filled.map(schema => schema.entities)),
+      name: filled.map(schema => schema.name).join('+'),
+      schemaVersion: 1,
+    },
   }
 }
 
@@ -132,7 +144,7 @@ function instantBinding(
   return {
     apiURI: resolved.configuration.get('ApiURI') ?? instantCloudApiURI,
     appId,
-    store: claims ? ASTUtils.storeOfDatasource(stores, declaration) : stores.defaultStore,
+    storeName: (claims ? ASTUtils.storeOfDatasource(stores, declaration) : stores.defaultStore)?.name,
   }
 }
 
@@ -164,94 +176,4 @@ function settingEntries(binding: ASTUtils.AppDatasourceBinding, setting: string)
     }
   }
   return entries
-}
-
-/**
- * storeDefinition lowers a store's collections to the stored-shape part of the compiled schema: the
- * fields, links, and unique constraints InstantDB stores. It restates what `DataCompiler`'s
- * `EntityDataDefinition` emits for those keys, because the compiler emits the schema only as
- * generated code; runtime-only keys (defaults, titles, command policy, grants) are left out.
- */
-function storeDefinition(
-  name: string,
-  collections: readonly AST.EntityDataDeclaration[],
-): TR.DataSchemaDefinition {
-  return {
-    entities: Object.fromEntries(collections.map(entity => [entity.singularName, entityDefinition(entity)])),
-    name,
-    schemaVersion: 1,
-  }
-}
-
-type EntityDefinition = TR.DataSchemaDefinition['entities'][string]
-type FieldDefinition = EntityDefinition['fields'][string]
-
-function entityDefinition(entity: AST.EntityDataDeclaration): EntityDefinition {
-  const fields = entity.block.entries.filter(AST.isEntityDataField)
-  const unique = entity.block.entries.filter(AST.isDataUnique).map(entry => entry.fieldNames)
-  const inverseFields: NonNullable<EntityDefinition['inverseFields']> = {}
-  const stored: Record<string, FieldDefinition> = {}
-  for (const field of fields) {
-    if (Type.dataFieldIsInverseRelation(field)) {
-      const relation = Type.dataFieldRelationEntity(field)
-      const inverseField = relation === undefined
-        ? undefined
-        : Type.dataFields(relation).find(candidate => {
-          const type = Type.dataFieldType(candidate)
-          return type.kind === 'entity' && type.entity === entity
-        })
-      if (relation === undefined || inverseField === undefined) {
-        return Errors.throwUnexpected(`validated inverse field '${entity.singularName}.${field.name}' resolves`)
-      }
-      inverseFields[field.name] = { inverseField: inverseField.name, relation: relation.singularName }
-      continue
-    }
-    stored[field.name] = fieldDefinition(entity, field)
-  }
-  return {
-    collection: entity.name,
-    fields: stored,
-    inverseFields,
-    ...(unique.length > 0 ? { uniqueConstraints: unique } : {}),
-  }
-}
-
-function fieldDefinition(owner: AST.EntityDataDeclaration, field: AST.EntityDataField): FieldDefinition {
-  const traits = field.traits?.traits ?? []
-  const optional = field.optional ? { optional: true } : {}
-  const type = Type.dataFieldType(field)
-  if (type.kind === 'enum') {
-    return { kind: 'enum', ...optional }
-  }
-  if (type.kind === 'primitive') {
-    const indexed = owner.block.entries.some(entry => AST.isDataIndex(entry) && entry.fieldName === field.name)
-    return {
-      kind: type.primitive as FieldDefinition['kind'],
-      ...optional,
-      ...(indexed ? { indexed: true } : {}),
-      ...(traits.some(trait => trait.unique) ? { unique: true } : {}),
-    }
-  }
-  const target = Type.dataFieldRelationEntity(field)
-  if (target === undefined) {
-    return Errors.throwUnexpected(`validated field '${owner.singularName}.${field.name}' has a stored type`)
-  }
-  if (Type.dataFieldIsReference(field)) {
-    return { kind: 'reference', ...optional, relation: target.singularName }
-  }
-  return {
-    kind: 'relation',
-    ...optional,
-    relation: target.singularName,
-    ...(relationCascades(owner, target) ? { onDelete: 'cascade' as const } : {}),
-  }
-}
-
-/** relationCascades mirrors the compiler: a relation cascades when its target owns the inverse. */
-function relationCascades(owner: AST.EntityDataDeclaration, target: AST.EntityDataDeclaration): boolean {
-  return Type.dataFields(target).some(candidate =>
-    Type.dataFieldIsInverseRelation(candidate)
-    && Type.dataFieldRelationEntity(candidate) === owner
-    && (candidate.traits?.traits ?? []).some(trait => trait.owned)
-  )
 }

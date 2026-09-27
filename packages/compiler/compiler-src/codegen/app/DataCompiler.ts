@@ -2,6 +2,7 @@ import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { authGrants } from '../../auth-policy'
+import { storedDataEntity, type StoredDataField } from '../../stored-data-schema'
 import { type Compiled, gen, LocalDataBindings, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { activeDataStorePlan } from './data-store-context'
@@ -82,16 +83,16 @@ export const DataCompiler = {
 
   EntityDataDefinition(entity: AST.EntityDataDeclaration, access: readonly AST.AccessDeclaration[] = []): Compiled {
     const order = entity.block.entries.find(AST.isDataDefaultOrder)
+    const stored = storedDataEntity(entity, activeDataStorePlan())
     const fields = entity.block.entries.filter(AST.isEntityDataField)
-    const unique = entity.block.entries.filter(AST.isDataUnique).map(entry => entry.fieldNames)
     const policies = AST.entityCommandPoliciesOf(entity)
     const surfaced = policies.filter(policy => !policy.hide).flatMap(policy => policy.commands.map(resolveRef))
     const hidden = policies.filter(policy => policy.hide).flatMap(policy => policy.commands.map(resolveRef))
     return gen`
       [${gen.jsLiteral(entity.singularName)}]: {
-        collection: ${gen.jsLiteral(entity.name)},
+        collection: ${gen.jsLiteral(stored.collection)},
         ${access.length ? gen`grants: ${gen.jsLiteral(authGrants(entity, access))},` : gen.noop()}
-        ${unique.length ? gen`uniqueConstraints: ${gen.jsLiteral(unique)},` : gen.noop()}
+        ${stored.uniqueConstraints ? gen`uniqueConstraints: ${gen.jsLiteral(stored.uniqueConstraints)},` : gen.noop()}
         ${
       policies.length === 0
         ? gen.noop()
@@ -108,10 +109,24 @@ export const DataCompiler = {
         : ''
     }
         fields: {
-          ${gen.list(fields.filter(field => !isInverseField(field)), field => compileEntityDataField(entity, field))}
+          ${
+      gen.list(
+        fields.filter(field => stored.fields[field.name] !== undefined),
+        field => compileEntityDataField(field, stored.fields[field.name]!),
+      )
+    }
         },
         inverseFields: {
-          ${gen.list(fields.filter(isInverseField), field => compileInverseDataField(entity, field))}
+          ${
+      gen.list(
+        Object.entries(stored.inverseFields),
+        ([name, inverse]) =>
+          gen`[${gen.jsLiteral(name)}]: {
+            relation: ${gen.jsLiteral(inverse.relation)},
+            inverseField: ${gen.jsLiteral(inverse.inverseField)},
+          },`,
+      )
+    }
         },
       },
     `
@@ -285,98 +300,30 @@ function compileRelationSourceFilter(
   },`
 }
 
-function compileEntityDataField(
-  owner: AST.EntityDataDeclaration,
-  field: AST.EntityDataField,
-): Compiled {
+/**
+ * compileEntityDataField emits a field's stored shape, which `stored-data-schema` owns, with the
+ * keys only the runtime reads beside it.
+ */
+function compileEntityDataField(field: AST.EntityDataField, stored: StoredDataField): Compiled {
   const traits = field.traits?.traits ?? []
-  const indexed = owner.block.entries.some(entry => AST.isDataIndex(entry) && entry.fieldName === field.name)
   const defaultModifier = traits.find(trait => trait.defaultValue || trait.defaultCase)
   const type = Type.dataFieldType(field)
   const required = traits.find(AST.traitIsRequired)?.sentence
-  const metadata = gen`${field.optional ? gen`optional: true,` : gen.noop()}
-    ${required ? gen`required: ${gen.jsLiteral(required)},` : gen.noop()}`
-  if (type.kind === 'enum') {
-    return gen`[${gen.jsLiteral(field.name)}]: {
-      kind: 'enum',
-      cases: ${gen.jsLiteral(AST.caseSetCasesOf(type.declaration).map(AST.caseSetCaseName))},
-      enumValues: () => ${gen.scopeName(type.declaration)},
-      ${metadata}
-      ${compileEntityFieldDefault(field, defaultModifier)}
-    },`
-  }
-  if (type.kind === 'primitive') {
-    const kind = type.primitive
-    return gen`[${gen.jsLiteral(field.name)}]: {
-      kind: ${gen.jsLiteral(kind)},
-      ${metadata}
-      ${indexed ? 'indexed: true,' : ''}
-      ${traits.some(trait => trait.unique) ? 'unique: true,' : ''}
-      ${traits.some(AST.traitIsTitle) ? 'title: true,' : ''}
-      ${traits.some(trait => trait.search) ? 'search: true,' : ''}
-      ${compileEntityFieldDefault(field, defaultModifier)}
-    },`
-  }
-  const direct = Type.dataFieldRelationEntity(field)
-  if (direct && Type.dataFieldIsReference(field)) {
-    // A reference is stored as the target's unique value, so it survives the target living in
-    // another store; the runtime resolves it to a handle in whichever store holds that entity.
-    const unique = Type.dataFields(direct).find(candidate =>
-      (candidate.traits?.traits ?? []).some(trait => trait.unique)
-    )
-    Assert.defined(unique, 'validated reference target declares a unique field')
-    const plan = activeDataStorePlan()
-    const store = plan ? ASTUtils.storeOfCollection(plan, direct) : undefined
-    return gen`[${gen.jsLiteral(field.name)}]: {
-      kind: 'reference',
-      ${metadata}
-      relation: ${gen.jsLiteral(direct.singularName)},
-      referenceField: ${gen.jsLiteral(unique.name)},
-      ${store ? gen`store: ${gen.jsLiteral(store.name)},` : ''}
-    },`
-  }
-  if (direct && !Type.dataFieldIsInverseRelation(field)) {
-    return gen`[${gen.jsLiteral(field.name)}]: {
-      kind: 'relation',
-      ${metadata}
-      relation: ${gen.jsLiteral(direct.singularName)},
-      ${storedRelationCascades(owner, direct) ? "onDelete: 'cascade'," : ''}
-    },`
-  }
-  return Assert.never(field as never, 'inverse fields compile through inverseFields')
-}
-
-function compileInverseDataField(owner: AST.EntityDataDeclaration, field: AST.EntityDataField): Compiled {
-  const inverse = Type.dataFieldRelationEntity(field)
-  Assert.defined(inverse, 'validated inferred inverse relation resolves its entity')
-  const inverseField = inverse.block.entries
-    .filter(AST.isEntityDataField)
-    .find(candidate => {
-      const candidateType = Type.dataFieldType(candidate)
-      return candidateType.kind === 'entity' && candidateType.entity === owner
-    })
-  Assert.defined(inverseField, 'validated inverse relation resolves its stored field')
   return gen`[${gen.jsLiteral(field.name)}]: {
-    relation: ${gen.jsLiteral(inverse.singularName)},
-    inverseField: ${gen.jsLiteral(inverseField.name)},
+    ${
+    gen.list(
+      Object.entries(stored).filter(([, value]) => value !== undefined),
+      ([key, value]) => gen`${key}: ${gen.jsLiteral(value!)},`,
+    )
+  }
+    ${required ? gen`required: ${gen.jsLiteral(required)},` : gen.noop()}
+    ${type.kind === 'enum' ? gen`enumValues: () => ${gen.scopeName(type.declaration)},` : gen.noop()}
+    ${type.kind === 'primitive' && traits.some(AST.traitIsTitle) ? 'title: true,' : ''}
+    ${type.kind === 'primitive' && traits.some(trait => trait.search) ? 'search: true,' : ''}
+    ${
+    type.kind === 'enum' || type.kind === 'primitive' ? compileEntityFieldDefault(field, defaultModifier) : gen.noop()
+  }
   },`
-}
-
-function isInverseField(field: AST.EntityDataField): boolean {
-  return Type.dataFieldIsInverseRelation(field)
-}
-
-function storedRelationCascades(
-  owner: AST.EntityDataDeclaration,
-  target: AST.EntityDataDeclaration,
-): boolean {
-  return Type.dataFields(target).some(candidate => {
-    if (!Type.dataFieldIsInverseRelation(candidate)) {
-      return false
-    }
-    const related = Type.dataFieldRelationEntity(candidate)
-    return related === owner && (candidate.traits?.traits ?? []).some(trait => trait.owned)
-  })
 }
 
 function compileEntityFieldDefault(
