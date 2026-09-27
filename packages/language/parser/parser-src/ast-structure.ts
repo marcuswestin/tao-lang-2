@@ -830,29 +830,46 @@ function effectiveConfigurationProperties(
   return properties
 }
 
-function configurationMetadataOf<KeyT extends 'keys' | 'implementations'>(
+/**
+ * configurationPairingOf returns the declaration's effective `issues`, `accepts`, or `supports`
+ * block. Like its implementation, a derived provider type inherits its base's block unless it
+ * writes its own, and a transparent alias reads its target's.
+ */
+export function configurationPairingOf<KeyT extends 'issues' | 'accepts' | 'supports'>(
+  declaration: ConfigurableDeclaration,
+  key: KeyT,
+): ConfigurationMetadata[KeyT] | undefined {
+  return configurationMetadataOf(declaration, key, new Set())
+}
+
+/** ConfigurationMetadata maps each item-type metadata list to the node it holds. */
+type ConfigurationMetadata = {
+  readonly accepts: AST.ConfigurationAccepts
+  readonly implementations: AST.ConfigurationImplementation
+  readonly issues: AST.ConfigurationIssues
+  readonly keys: AST.ConfigurationKeyDeclaration
+  readonly supports: AST.ConfigurationSupports
+}
+
+function configurationMetadataOf<KeyT extends keyof ConfigurationMetadata>(
   declaration: AST.TypeDeclaration,
   key: KeyT,
   seen: Set<AST.TypeDeclaration>,
-): KeyT extends 'keys' ? AST.ConfigurationKeyDeclaration | undefined
-  : AST.ConfigurationImplementation | undefined
-{
+): ConfigurationMetadata[KeyT] | undefined {
   if (seen.has(declaration)) {
-    return undefined as never
+    return undefined
   }
   seen.add(declaration)
   if (declaration.aliasTarget) {
     const target = declaration.aliasTarget.member.ref
-    return (AST.isTypeDeclaration(target)
-      ? configurationMetadataOf(target, key, seen)
-      : undefined) as never
+    return AST.isTypeDeclaration(target) ? configurationMetadataOf(target, key, seen) : undefined
   }
-  const own = itemTypeExpressionOf(declaration)?.[key][0]
+  const own = (itemTypeExpressionOf(declaration)?.[key] as readonly ConfigurationMetadata[KeyT][] | undefined)?.[0]
   if (own) {
-    return own as never
+    return own
   }
   const base = baseTypeDeclarationOf(declaration)
-  return (base ? configurationMetadataOf(base, key, seen) : undefined) as never
+  return base ? configurationMetadataOf(base, key, seen) : undefined
 }
 
 function itemTypeExpressionOf(declaration: AST.TypeDeclaration): AST.ItemTypeExpression | undefined {

@@ -216,6 +216,7 @@ Describe('compiler: language lowering', () => {
       }
       public type Datasource is datasource with {
         StorageKey text
+        supports { }
         provider TestProviderImpl from ./TestProviderImpl.ts
       }
       app Demo {

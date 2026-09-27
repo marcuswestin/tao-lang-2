@@ -6,6 +6,7 @@ type InstantDB is datasource with {
    AppId text
    ApiURI text?
    WebsocketURI text?
+   supports { Relations, UniqueFields, AccessRules, FieldUpdates, Migrations Additive }
 
    provider InstantDBProvider from ./InstantDB.ts
 }

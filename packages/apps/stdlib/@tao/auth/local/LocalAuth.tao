@@ -4,6 +4,7 @@ public
 type LocalAuth is AuthProvider with {
    Endpoint text
    Resource text
+   issues { Session }
 
    provider LocalAuthProvider from ./LocalAuth.ts
 }

@@ -102,7 +102,7 @@ Describe('compiler: app-scoped auth and account data', () => {
   Test('publishes server policy and symbolic offline scopes without reading a live account', async () => {
     const result = await Compiler.compileCode(`
       use Account from @tao/auth
-      use TestAuth from @tao/auth/testing
+      use LocalAuth from @tao/auth/local
       use Reference from @tao/data/providers/reference
       let Me = Account
       type Role is one of Owner, Member
@@ -112,7 +112,8 @@ Describe('compiler: app-scoped auth and account data', () => {
       access Account { Account can read; Account can update DisplayName }
       access Note { Owner can read, create, delete; Owner can update Body }
       app NotesApp {
-        Auth TestAuth { }
+        // Reference pairs with an Auth whose sign-in proof its server accepts.
+        Auth LocalAuth { Endpoint "http://localhost:4738" Resource "test" }
         Datasource Reference { ServerURL "http://localhost:4738" Resource "test" Offline { Me, Me.Notes } }
         view Main
       }

@@ -16,7 +16,7 @@ export const ConfigurationCompiler = {
     const factory = configurationFactory(declaration, implementation)
     if (AST.configurationPrimitiveOf(declaration) === 'auth') {
       return gen`${gen.scopeName({ name: configurationRuntimeBindingName(declaration) })} = TR.Auth.Declaration(
-        ${gen.jsLiteral(declaration.name)}, ${factory},
+        ${gen.jsLiteral(declaration.name)}, ${factory}${authPairing(declaration)},
       )`
     }
     return AST.configurationPrimitiveOf(declaration) === 'nav'
@@ -29,6 +29,7 @@ export const ConfigurationCompiler = {
           ${gen.jsLiteral(declaration.name)},
           ${factory},
           ${compileDeclarationIdentity(declaration)},
+          ${dataPairing(declaration)}
         )`
   },
 
@@ -100,6 +101,39 @@ export function configurationAliasTargetTypeBindingName(declaration: AST.TypeDec
   const target = declaration.aliasTarget
   Assert.defined(target, 'transparent configurable alias has a target')
   return `__tao_package_${target.namespace.$refText}_${target.member.$refText}Config`
+}
+
+/**
+ * authPairing emits what an auth provider type issues as the optional last Declaration argument, so
+ * the runtime can repeat the compiler's pairing check when it binds a store.
+ */
+function authPairing(declaration: AST.ConfigurableDeclaration): Compiled {
+  const issues = AST.configurationPairingOf(declaration, 'issues')
+  return issues
+    ? gen`, { issues: [${gen.join(issues.proofs, proof => gen.jsLiteral(proof.kind))}] }`
+    : gen.noop()
+}
+
+/**
+ * dataPairing emits what a datasource type accepts and supports. `from` names the auth type by the
+ * declaration name its own `TR.Auth.Declaration` receives, which is what the runtime compares.
+ */
+function dataPairing(declaration: AST.ConfigurableDeclaration): Compiled {
+  const accepts = AST.configurationPairingOf(declaration, 'accepts')?.proofs ?? []
+  const supports = AST.configurationPairingOf(declaration, 'supports')?.capabilities ?? []
+  const acceptance = gen.join(accepts, proof => {
+    if (!proof.issuer) {
+      return gen`{ kind: ${gen.jsLiteral(proof.kind)} }`
+    }
+    const issuer = ASTUtils.pairingIssuerOf(proof)
+    Assert.defined(issuer, 'validated accepted proof names an auth provider type')
+    return gen`{ kind: ${gen.jsLiteral(proof.kind)}, from: ${gen.jsLiteral(issuer.name)} }`
+  })
+  const capabilities = gen.join(supports, entry =>
+    entry.level === undefined
+      ? gen`{ capability: ${gen.jsLiteral(entry.capability)} }`
+      : gen`{ capability: ${gen.jsLiteral(entry.capability)}, level: ${gen.jsLiteral(entry.level)} }`)
+  return gen`{ accepts: [${acceptance}], supports: [${capabilities}] },`
 }
 
 function configurationFactory(

@@ -41,7 +41,8 @@ YesNoTypeExpression:
 
 // The structural record type. No `item` keyword: `item { ... }` constructs a value.
 ItemTypeExpression:
-    '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation) ','?)* '}';
+    '{' ((properties+=TypeProperty | keys+=ConfigurationKeyDeclaration | implementations+=ConfigurationImplementation
+      | issues+=ConfigurationIssues | accepts+=ConfigurationAccepts | supports+=ConfigurationSupports) ','?)* '}';
 
 // A postfix `?` carries optionality. Item fields take no trait list.
 TypeProperty:

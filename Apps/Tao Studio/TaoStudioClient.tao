@@ -34,6 +34,7 @@ design StudioDesign {
 
 type StudioServer is datasource with {
    ServerOrigin text is ""
+   supports { Relations, UniqueFields, UniqueTogether }
 
    provider StudioServerProvider from ./StudioServerDataProvider.ts
 }
