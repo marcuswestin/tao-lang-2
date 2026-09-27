@@ -460,12 +460,15 @@ when the pointer is released; a refused move returns the rectangle to its catalo
 In Design, Shift-click adds elements from one file to the selection; the preview outlines each pick, and Studio's inspection keeps the group by the same toggle rule. ⌘G turns the group into a
 new view and ⌥⌘G wraps it in place, in a `Row` when the elements sit across and a `Col` otherwise.
 The keys work inside the preview and in Studio outside a text field, and the inspector's Make view
-acts on the whole group. A view made from several siblings is rooted in their parent's direction, a
+acts on the whole group. Make view first asks for the new view's name with OK and Cancel; an empty
+name numbers it View1, View2, and so on, and Cancel makes nothing. A view made from several siblings is rooted in their parent's direction, a
 `Row` or `Stack` when that is what holds them and a `Col` otherwise, and takes as parameters the
 values the selection reads, including a guard's error message. Make view refuses a selection that
 places `@@content` or a render slot, reads a query, state, action, or command, or would name the view
 after an entity or one of its own parameters. A selection HUD floats beside the selected element with direction, alignment,
 gap, padding, and sizing one edit away, and with several elements selected offers Make view and Group.
+Choosing "—" in its alignment or sizing picker, or emptying its gap or padding field, removes that
+entry from the element's layout clause, and the clause itself once nothing is left in it.
 The edited element stays selected across its recompile, found again by where it starts or where it
 sits. Draw hides the preview cells, so selection, the HUD, and the grouping keys belong to Design; a
 view drawn on the canvas is grouped there once it renders.
@@ -670,7 +673,7 @@ ephemeral. The Navigation test app's Resizable Split journey exercises the combi
 runtime tests cover persistence edge cases, the depth cap, and resize gestures.
 
 The browser client implements the target frame: project toolbar, Design/Code/Run/Draw presets, command palette,
-icon rail with an agent toggle, a floating, draggable, and collapsible agent panel in the bottom left, persisted resizable and collapsible left/right/bottom panes,
+icon rail with an agent toggle, a floating, draggable, and collapsible agent panel in the bottom left, persisted resizable and collapsible left/right/bottom panes (a divider drags until the canvas reaches its preset's floor, and dragging a pane below half its minimum collapses it),
 CodeMirror editor with breadcrumbs, pannable and zoomable scenario canvas, a one-column inspector whose Scenario pane
 holds the scenario's arguments, environment, and captured state above the four-context Selection pane, and
 bottom drawer. One token sheet in the client stylesheet styles the shell, the Tao-rendered panels (through
@@ -698,6 +701,8 @@ A focused preview suppresses mouse input immediately and forwards Space to the h
 normal Space typing, and Run keeps selected-app interaction when the canvas does not own the gesture.
 Releasing Space or the pointer, or losing window focus, ends a pan; losing focus also clears held Space.
 Canvas shortcuts (⌘/Ctrl+0 fit, 1 reset, +/− zoom) also work from focused previews outside text entry.
+⌘0 fits the selection when there is one and the whole canvas otherwise; ⌘+ and ⌘− step the zoom and
+bring the selection's centre to the middle of the canvas.
 The zoom menu offers Fit all, 100%, Zoom to selection, and Zoom to focused frame; unavailable targets
 are disabled. Selection framing uses current iframe viewport measurements. Free sketches have their separate Draw surface.
 Studio restores canvas position and zoom per canonical project path from its user-state directory,
