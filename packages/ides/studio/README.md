@@ -362,6 +362,10 @@ selected it, and asks before any removal that deletes a file. Delete with free r
 deletes those rectangles instead, and Escape clears the selection. Dragging a header row moves the
 rectangle and commits one catalog-only `move-sketch` when released.
 
+One V/R/T tool strip sits beside the zoomed Draw surface. V selects and sweeps a marquee over empty
+board space; R draws a root rectangle on empty canvas and a `Placeholder` inside a board; T draws a
+`Text` rectangle and opens it for typing. A drawing tool hands back to V after one shape.
+
 Draw edits share the Design edit log and ⌘Z: each drawing, moving, resizing, retyping, text, duplicate,
 delete, or frame-move gesture is one row, and undo sends a catalog-only `restore-sketch` with the
 sketch's geometry from before the gesture, only while the sketch still holds what the gesture left.

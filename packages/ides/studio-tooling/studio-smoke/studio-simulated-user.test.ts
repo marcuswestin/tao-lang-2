@@ -471,6 +471,8 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.waitFor(
         `document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`,
       )
+      // V is the Draw canvas's resting tool; R draws the frame, then a rectangle inside it.
+      await browser.click(rectangleTool)
       await browser.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 76 }, { steps: 12 })
       await waitForSketchFile(browser, generatedSketchPath)
       await waitForFile(sketchCatalogPath)
@@ -498,6 +500,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         firstDraw,
         firstDrawOrigin,
       )
+      await drawingBrowser.click(rectangleTool)
       await drawingBrowser.dragBy(`[data-tao-studio-sketch="${createdSketchId}"]`, firstDraw, {
         offset: firstDrawOrigin,
         steps: 8,
@@ -1427,6 +1430,9 @@ async function waitForSketchCatalog(
   )
 }
 
+/** The Draw strip's R tool; drawing hands back to V, so every draw picks it again. */
+const rectangleTool = '[data-tao-studio-draw-tool="rect"]'
+
 async function drawSketchRectangle(
   browser: StudioCdp,
   sketchId: string,
@@ -1435,6 +1441,8 @@ async function drawSketchRectangle(
   return await browser.evaluate<string>(`(() => {
     const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
     if (!(board instanceof HTMLElement)) throw new Error('Missing Studio sketch board')
+    const tool = document.querySelector(${JSON.stringify(rectangleTool)})
+    if (tool instanceof HTMLElement) tool.click()
     const generation = crypto.randomUUID()
     board.dataset.taoStudioSmokeGeneration = generation
     const bounds = board.getBoundingClientRect()

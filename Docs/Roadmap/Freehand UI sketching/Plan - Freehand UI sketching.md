@@ -568,7 +568,11 @@ of it stays catalog-only, so no language change and no compile per keystroke.
   is draw: dragging creates a rectangle as today. T draws a `Text` rectangle. Dragging empty canvas
   outside any sketch still creates a sketch. A three-button strip above the sketch shows the active
   tool. Ruled by decision B, refined by decision G: the strip is one canvas-wide strip, and R draws a
-  frame on empty canvas and a rectangle inside a sketch.
+  frame on empty canvas and a rectangle inside a sketch. **Implemented 2026-09-27:** the strip sits
+  on the canvas's top edge outside the zoom; V is the resting tool, a drawing tool hands back to V
+  after one shape as in Figma, T opens its new rectangle for typing, and Escape hands back to V
+  before clearing selection. Stride 1a's T retype key now collides with the T tool; which key
+  retypes to `Text` is open for the next decision round.
 - **c. Constraints.** Shift keeps a square while drawing or corner-resizing and locks the axis while
   moving; Option resizes from the centre.
 - **d. Undo.** ⌘Z and ⇧⌘Z walk one client-held, time-ordered stack over catalog gestures and source

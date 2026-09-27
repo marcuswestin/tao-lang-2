@@ -130,12 +130,17 @@ export const StudioDrawCanvas = {
     }
     return host
   },
-  /** retain keeps the Draw host across a preview parent replacement. */
+  /** retain keeps the Draw host, and the tool strip beside it, across a preview parent replacement. */
   retain(parent: HTMLElement, replace: () => void): void {
-    const host = parent.querySelector<HTMLElement>(':scope > [data-tao-studio-draw-canvas]')
+    const kept = [
+      parent.querySelector<HTMLElement>(':scope > [data-tao-studio-draw-canvas]'),
+      parent.querySelector<HTMLElement>(':scope > [data-tao-studio-draw-tools]'),
+    ]
     replace()
-    if (host !== null && !parent.contains(host)) {
-      parent.append(host)
+    for (const node of kept) {
+      if (node !== null && !parent.contains(node)) {
+        parent.append(node)
+      }
     }
   },
 } as const

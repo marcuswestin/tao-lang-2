@@ -38,6 +38,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await driver.click('[data-preset="draw"]')
     await driver.waitFor(`document.querySelector('.tao-studio-product-host')?.dataset.layoutPreset === 'draw'`)
     await driver.waitFor(`document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`)
+    await driver.click(rectangleTool)
     await driver.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 110 }, { steps: 12 })
     const catalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)
     const viewPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
@@ -208,6 +209,9 @@ export async function exerciseHnreaderFeed(): Promise<void> {
 const feedPanel = '.studio-sidebar [data-studio-panel="data"]'
 const feedButtons = `${feedPanel} button`
 
+/** The Draw strip's R tool; drawing hands back to V, so every draw picks it again. */
+const rectangleTool = '[data-tao-studio-draw-tool="rect"]'
+
 async function drawRect(
   browser: StudioCdp,
   board: string,
@@ -216,6 +220,7 @@ async function drawRect(
 ): Promise<void> {
   await browser.waitFor(`document.querySelector(${JSON.stringify(board)}) !== null`)
   await browser.evaluate(`document.querySelector(${JSON.stringify(board)}).dataset.feedDrawProbe = 'before'`)
+  await browser.click(rectangleTool)
   await browser.dragBy(board, delta, { offset, steps: 8 })
   await browser.waitFor(`document.querySelector(${JSON.stringify(board)})?.dataset.feedDrawProbe !== 'before'`)
 }

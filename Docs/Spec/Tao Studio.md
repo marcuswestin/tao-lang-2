@@ -457,6 +457,16 @@ root rectangle by its header row moves it live, dividing the pointer's travel by
 keeping whole nonnegative pixels, and commits one `move-sketch` with the expected catalog revision
 when the pointer is released; a refused move returns the rectangle to its catalog position.
 
+The Draw canvas has one tool strip on its top edge, outside the zoomed surface, holding V, R, and T;
+the same letters pick a tool while the last press landed on the canvas or the strip. V, the resting
+tool, selects: a press on a free rectangle picks it up as above, a drag across empty board space draws
+a marquee that selects every free rectangle it overlaps (Shift adds them to the selection), a press
+there that sweeps less than three pixels selects the root rectangle, and a press on empty canvas clears
+the selection. R draws: dragged on empty canvas it creates a root rectangle, and dragged inside a board
+it adds a `Placeholder` rectangle, even over an existing one. T draws a `Text` rectangle inside a board
+and opens it for typing. Each drawing tool is used once and hands back to V; Escape also hands back to
+V before it clears anything.
+
 #### Selection, grouping, and the edit log
 
 In Design, Shift-click adds elements from one file to the selection; the preview outlines each pick, and Studio's inspection keeps the group by the same toggle rule. ⌘G turns the group into a

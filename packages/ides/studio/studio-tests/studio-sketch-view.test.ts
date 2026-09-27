@@ -7,7 +7,7 @@ import {
   type StudioSketchSnapApi,
   StudioSketchSnapRequests,
 } from '../studio-src/client/StudioMatrixView'
-import { StudioSketchGeometry } from '../studio-src/client/StudioSketchGeometry'
+import { StudioSketchGeometry, type StudioSketchPoint } from '../studio-src/client/StudioSketchGeometry'
 import {
   StudioSketchBoardInput,
   StudioSketchChanges,
@@ -17,12 +17,15 @@ import {
   StudioSketchFlowControls,
   StudioSketchFrameDrag,
   StudioSketchKeys,
+  StudioSketchMarquee,
   StudioSketchOuterDrawing,
   StudioSketchPointerRelease,
   StudioSketchProposal,
   type StudioSketchRectChange,
   StudioSketchRenderGate,
   StudioSketchSelection,
+  type StudioSketchTool,
+  StudioSketchTools,
   StudioSketchView,
   StudioSketchViewNames,
 } from '../studio-src/client/StudioSketchView'
@@ -846,6 +849,11 @@ function mountTextEditor(
   return { board: dom.find(host, 'taoStudioSketch', 'sketch-1'), changes, dom, host, mounted }
 }
 
+function pickTool(dom: SketchTestDocument, host: SketchTestElement, tool: StudioSketchTool): void {
+  const button = dom.find(host, 'taoStudioDrawTool', tool)
+  button.dispatch('click', { target: button, type: 'click' })
+}
+
 function press(input: SketchTestElement, key: string): void {
   input.dispatch('keydown', { key, preventDefault() {}, stopPropagation() {}, target: input, type: 'keydown' })
 }
@@ -1054,6 +1062,11 @@ class SketchTestElement {
     return { bottom: 0, height: 0, left: 0, right: 0, toJSON: () => ({}), top: 0, width: 0, x: 0, y: 0 }
   }
 
+  querySelectorAll(selector: string): SketchTestElement[] {
+    const name = dataSelectorName(selector)
+    return this.descendants().slice(1).filter(element => name !== undefined && element.dataset[name] !== undefined)
+  }
+
   querySelector(selector: string): SketchTestElement | null {
     const name = dataSelectorName(selector)
     return name === undefined
@@ -1152,9 +1165,11 @@ Test('mounted Draw Space drag cannot draw or move rectangles and key release res
     Expect(host.descendants().filter(element => element.dataset['taoStudioSketch'] !== undefined)).toHaveLength(1)
     Expect(controls.state()).toEqual({ x: 135, y: 56.25, z: 1 })
     dom.dispatchEvent(Object.assign(new Event('keyup'), { key: ' ' }))
+    pickTool(dom, host, 'rect')
     drag(board, 200, 40)
     Expect(changes).toHaveLength(1)
     Expect(changes[0]).toMatchObject({ kind: 'add', rect: { x: 200, y: 40, width: 60, height: 25 } })
+    // The rectangle tool is used once; the next press on a rectangle picks it up.
     const updated = dom.find(host, 'taoStudioSketch', 'sketch-1')
     drag(dom.find(updated, 'taoStudioSketchRect', 'front'), 45, 15)
     Expect(changes).toHaveLength(2)
@@ -1435,4 +1450,162 @@ Test('mounted header drag moves the frame live and commits one move at the end',
   } finally {
     fixture.dispose()
   }
+})
+
+Test(
+  'Draw tools: V picks or sweeps, R draws a frame or a rectangle, T draws text, and V, R, T, Escape pick them',
+  () => {
+    Expect(StudioSketchTools.initial).toBe('select')
+    Expect(['v', 'r', 't', 'x', 'R'].map(StudioSketchTools.fromKey)).toEqual([
+      'select',
+      'rect',
+      'text',
+      undefined,
+      undefined,
+    ])
+    Expect((['select', 'rect', 'text'] as const).map(StudioSketchTools.canvasPress)).toEqual([
+      'clear',
+      'draw-frame',
+      'none',
+    ])
+    Expect(StudioSketchTools.boardPress('select', true)).toBe('pick')
+    Expect(StudioSketchTools.boardPress('select', false)).toBe('marquee')
+    // A drawing tool draws even when the press lands on a rectangle, as in Figma.
+    Expect(StudioSketchTools.boardPress('rect', true)).toBe('draw')
+    Expect(StudioSketchTools.boardPress('text', false)).toBe('draw')
+    Expect([StudioSketchTools.drawKind('rect'), StudioSketchTools.drawKind('text')]).toEqual(['Placeholder', 'Text'])
+
+    const idle = { composing: false, frameSelected: false, key: 'r', modified: false, selectedRects: 0, typing: false }
+    Expect(StudioSketchKeys.command(idle)).toBe('tool-rect')
+    Expect(StudioSketchKeys.command({ ...idle, key: 't', selectedRects: 2 })).toBe('tool-text')
+    Expect(StudioSketchKeys.command({ ...idle, key: 'v', tool: 'rect' })).toBe('tool-select')
+    Expect(StudioSketchKeys.command({ ...idle, typing: true })).toBe('none')
+    Expect(StudioSketchKeys.command({ ...idle, modified: true })).toBe('none')
+    // Escape puts a drawing tool back first, and only then clears the selection.
+    Expect(StudioSketchKeys.command({ ...idle, key: 'Escape', selectedRects: 1, tool: 'text' })).toBe('tool-select')
+    Expect(StudioSketchKeys.command({ ...idle, key: 'Escape', selectedRects: 1, tool: 'select' })).toBe('clear')
+    Expect(['v', 'r', 't', 'b'].map(StudioSketchKeys.routes)).toEqual([true, true, true, false])
+
+    const [back, front] = testRects()
+    Expect(StudioSketchMarquee.box({ x: 50, y: 40 }, { x: 5, y: 5 })).toEqual({ height: 35, width: 45, x: 5, y: 5 })
+    const sweep = { height: 35, width: 35, x: 0, y: 0 }
+    Expect([...StudioSketchMarquee.pick([back!, front!], sweep, new Set(), false)]).toEqual(['back'])
+    Expect([...StudioSketchMarquee.pick([back!, front!], sweep, new Set(['front']), true)]).toEqual(['front', 'back'])
+    Expect([...StudioSketchMarquee.pick([back!, front!], sweep, new Set(['front']), false)]).toEqual(['back'])
+    // Touching an edge is not overlapping it.
+    Expect([...StudioSketchMarquee.pick([front!], { height: 5, width: 5, x: 35, y: 10 }, new Set(), false)]).toEqual([])
+    Expect(StudioSketchMarquee.click({ height: 2, width: 2, x: 0, y: 0 })).toBe(true)
+    Expect(StudioSketchMarquee.click({ height: 5, width: 2, x: 0, y: 0 })).toBe(false)
+  },
+)
+
+Test('mounted V sweeps a marquee across empty sketch space, Shift adds to it, and a click selects the frame', () => {
+  const { board, changes, dom, host, mounted } = mountTextEditor()
+  const sweep = (from: StudioSketchPoint, to: StudioSketchPoint, shiftKey = false): void => {
+    board.dispatchTree({ ...pointer('pointerdown', board, 5, from.x, from.y), shiftKey })
+    board.dispatchTree({ ...pointer('pointermove', board, 5, to.x, to.y), shiftKey })
+    board.dispatchTree({ ...pointer('pointerup', board, 5, to.x, to.y), shiftKey })
+  }
+  const selectedRects = (): string[] =>
+    ['back', 'front'].filter(id => dom.find(board, 'taoStudioSketchRect', id).dataset['selected'] === 'true')
+  try {
+    Expect(dom.find(host, 'taoStudioSketchWorkspace', 'true').dataset['taoStudioSketchTool']).toBe('select')
+    board.dispatchTree(pointer('pointerdown', board, 5, 100, 5))
+    board.dispatchTree(pointer('pointermove', board, 5, 35, 25))
+    Expect(dom.find(board, 'taoStudioSketchMarquee', 'sketch-1').style).toMatchObject({
+      height: '20px',
+      left: '35px',
+      top: '5px',
+      width: '65px',
+    })
+    Expect(selectedRects()).toEqual(['front'])
+    board.dispatchTree(pointer('pointerup', board, 5, 35, 25))
+    Expect(board.descendants().some(element => element.dataset['taoStudioSketchMarquee'] !== undefined)).toBe(false)
+    Expect(board.releasedPointers).toEqual([5])
+
+    sweep({ x: 5, y: 5 }, { x: 32, y: 32 }, true)
+    Expect(selectedRects()).toEqual(['back', 'front'])
+    sweep({ x: 5, y: 5 }, { x: 32, y: 32 })
+    Expect(selectedRects()).toEqual(['back'])
+
+    // A press on empty sketch space that sweeps nothing is a click on the frame.
+    sweep({ x: 200, y: 50 }, { x: 201, y: 51 })
+    Expect(dom.find(host, 'taoStudioSketchFrame', 'sketch-1').dataset['selected']).toBe('true')
+    Expect(changes).toEqual([])
+  } finally {
+    mounted.dispose()
+  }
+})
+
+Test('mounted tool strip: R draws a frame on empty canvas, T draws Text and opens it, each hands back to V', () => {
+  const restore = elementSlot.install({ configurable: true, value: SketchTestElement })
+  const dom = new SketchTestDocument()
+  const host = dom.createElement('main')
+  const changes: StudioSketchRectChange[] = []
+  const created: unknown[] = []
+  const mounted = StudioSketchView.mount(host as unknown as HTMLElement, {
+    onCreateSketch: size => {
+      created.push(size)
+    },
+    onRectChange: change => {
+      changes.push(change)
+    },
+    sketches: [testSketch()],
+  })
+  const workspace = dom.find(host, 'taoStudioSketchWorkspace', 'true')
+  const tool = (): string | undefined => workspace.dataset['taoStudioSketchTool']
+  const pressed = (): string[] =>
+    host.querySelectorAll('[data-tao-studio-draw-tool]')
+      .filter(button => button.getAttribute('aria-pressed') === 'true')
+      .map(button => button.dataset['taoStudioDrawTool']!)
+  const key = (value: string, target?: SketchTestElement): void => {
+    const event = Object.assign(new Event('keydown', { cancelable: true }), { key: value })
+    if (target !== undefined) {
+      Object.defineProperty(event, 'target', { value: target })
+    }
+    dom.dispatchEvent(event)
+  }
+  const drag = (element: SketchTestElement, x: number, y: number): void => {
+    element.dispatchTree(pointer('pointerdown', element, 9, x, y))
+    element.dispatchTree(pointer('pointermove', element, 9, x + 60, y + 25))
+    element.dispatchTree(pointer('pointerup', element, 9, x + 60, y + 25))
+  }
+  try {
+    Expect(host.querySelectorAll('[data-tao-studio-draw-tool]').map(button => button.textContent)).toEqual([
+      'V',
+      'R',
+      'T',
+    ])
+    Expect(pressed()).toEqual(['select'])
+    // V on empty canvas draws nothing; the press also makes the canvas's keys its own.
+    drag(workspace, 500, 200)
+    Expect(created).toEqual([])
+
+    key('r')
+    Expect([tool(), ...pressed()]).toEqual(['rect', 'rect'])
+    key('Escape')
+    Expect(tool()).toBe('select')
+    key('r', dom.createElement('textarea'))
+    Expect(tool()).toBe('select')
+
+    pickTool(dom, host, 'rect')
+    drag(workspace, 500, 200)
+    Expect(created).toEqual([{ height: 25, width: 60, x: 500, y: 200 }])
+    Expect([tool(), ...pressed()]).toEqual(['select', 'select'])
+
+    key('t')
+    const board = dom.find(host, 'taoStudioSketch', 'sketch-1')
+    // T draws even when the press starts on a rectangle.
+    drag(board, 15, 15)
+    Expect(changes).toHaveLength(1)
+    const drawn = changes[0]!
+    Expect(drawn).toMatchObject({ kind: 'add', rect: { height: 25, kind: 'Text', width: 60, x: 15, y: 15 } })
+    Expect(tool()).toBe('select')
+    const editor = dom.find(host, 'taoStudioSketchTextEditor', drawn.rect.id)
+    Expect(dom.activeElement).toBe(editor)
+  } finally {
+    mounted.dispose()
+    restore()
+  }
+  Expect(host.querySelectorAll('[data-tao-studio-draw-tools]')).toEqual([])
 })

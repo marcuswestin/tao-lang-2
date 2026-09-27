@@ -334,7 +334,7 @@ kbd {
 .tao-studio-product-host[data-layout-preset="draw"] .studio-preview { grid-column: 3; grid-row: 1 / 3; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-divider-right { grid-column: 4; grid-row: 1 / 3; }
 .studio-draw-canvas { display: none; height: 100%; min-height: 0; overflow: auto; }
-.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu):not(.studio-edit-log):not(.studio-selection-hud) { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-draw-tools):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu):not(.studio-edit-log):not(.studio-selection-hud) { display: none; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-draw-canvas { display: block; }
 .tao-studio-product-host[data-layout-preset="run"] .studio-draw-canvas,
 .tao-studio-product-host[data-layout-preset="run"] [data-tao-studio-sketch-host] { display: none; }
@@ -553,10 +553,26 @@ kbd {
 }
 .studio-canvas-bar span { color: var(--studio-text-muted); font-size: 12px; }
 .studio-canvas-focus[data-state="focused"] { background: #343a35; color: #f0f2ef; }
-[data-tao-studio-sketch-workspace] { align-items: flex-start; border: 1px dashed var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); box-sizing: border-box; cursor: crosshair; min-height: 140px; min-width: 400px; position: relative; }
+[data-tao-studio-sketch-workspace] { align-items: flex-start; border: 1px dashed var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); box-sizing: border-box; cursor: default; min-height: 140px; min-width: 400px; position: relative; }
+[data-tao-studio-sketch-workspace]:is([data-tao-studio-sketch-tool="rect"], [data-tao-studio-sketch-tool="text"]),
+[data-tao-studio-sketch-workspace]:is([data-tao-studio-sketch-tool="rect"], [data-tao-studio-sketch-tool="text"]) [data-tao-studio-sketch-rect] { cursor: crosshair; }
 .studio-draw-canvas [data-tao-studio-sketch-workspace] { min-height: 100%; min-width: 100%; }
-[data-tao-studio-sketch-create-surface] [data-tao-studio-sketch-workspace]::before { color: var(--studio-text-dim); content: "Drag empty space to draw a view"; font-size: 11px; left: 10px; pointer-events: none; position: absolute; top: 6px; }
+[data-tao-studio-sketch-create-surface] [data-tao-studio-sketch-workspace]::before { color: var(--studio-text-dim); content: "Press R and drag empty space to draw a view"; font-size: 11px; left: 10px; pointer-events: none; position: absolute; top: 6px; }
 [data-tao-studio-sketch-outer-preview] { background: rgba(255, 106, 31, .08); border: 1px dashed var(--studio-accent); box-sizing: border-box; pointer-events: none; position: absolute; }
+[data-tao-studio-sketch-marquee] { background: rgba(255, 106, 31, .08); border: calc(1px * var(--studio-canvas-counter-scale, 1)) solid var(--studio-accent); box-sizing: border-box; }
+/* The one Draw tool strip: V selects, R draws a view or a rectangle, T draws text. It sits on the
+   canvas's top edge beside the zoomed surface, so it keeps one size and place at any zoom. */
+.studio-draw-tools {
+  background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px; box-shadow: 0 8px 24px #0004;
+  display: none; gap: 2px; left: 50%; padding: 3px; position: absolute; top: 12px; transform: translateX(-50%); z-index: 5;
+}
+.tao-studio-product-host[data-layout-preset="draw"] .studio-draw-tools { display: flex; }
+.studio-draw-tools button {
+  background: transparent; border: 0; border-radius: 5px; color: var(--studio-text-muted); cursor: pointer;
+  font: 600 12px var(--studio-mono); height: 26px; width: 28px;
+}
+.studio-draw-tools button:hover { color: var(--studio-text); }
+.studio-draw-tools button[aria-pressed="true"] { background: var(--studio-accent-surface); color: var(--studio-accent); }
 [data-tao-studio-sketch] { background: #f4f1ea; border: 1px solid #c4b8a5; border-radius: 8px; box-shadow: 0 8px 20px rgba(0, 0, 0, .28); color: #242a33; }
 [data-tao-studio-sketch-name] { align-items: center; color: var(--studio-text); display: flex; font-size: 12px; font-weight: 600; gap: 6px; line-height: 16px; pointer-events: none; white-space: nowrap; }
 .studio-sketch-badge { cursor: default; order: -1; pointer-events: auto; position: relative; }
