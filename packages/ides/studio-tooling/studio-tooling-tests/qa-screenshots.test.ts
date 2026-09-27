@@ -9,6 +9,8 @@ const {
   parseSelector,
   selectorMatches,
   shotName,
+  studioShotName,
+  studioStates,
   timelineEntries,
   uniqueName,
 } = QaScreenshotsTesting
@@ -92,6 +94,14 @@ Describe('QA screenshot names', () => {
       .toBe('WordFlower_SavedToast_interaction-held_phone-light.png')
     Expect(uniqueName('WordFlower_SavedToast_interaction-held_phone-light.png', other, taken))
       .toBe('WordFlower_SavedToast_interaction-held_phone-light_Other-Views.png')
+  })
+
+  Test("name Studio's own shots by the app it opened and the state, one shot per state and appearance", () => {
+    Expect(studioShotName('WordFlower', 'design', 'dark')).toBe('Studio_WordFlower_design_laptop-dark.png')
+    const names = studioStates.flatMap(state =>
+      (['light', 'dark'] as const).map(appearance => studioShotName('Pantry', state.key, appearance))
+    )
+    Expect(new Set(names).size).toBe(studioStates.length * 2)
   })
 })
 

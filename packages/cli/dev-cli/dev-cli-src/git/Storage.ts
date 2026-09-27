@@ -15,7 +15,14 @@ const listedNames = 10
 const storageActions = ['sync', 'qa', 'push'] as const
 
 type StorageAction = (typeof storageActions)[number]
-type QaOptions = { app?: string[]; appearance?: string[]; device?: string[]; note?: string; scenario?: string[] }
+type QaOptions = {
+  app?: string[]
+  appearance?: string[]
+  device?: string[]
+  note?: string
+  scenario?: string[]
+  studio?: boolean
+}
 
 /** QaRun is the part of a `qa-run.json` the commit message reads. */
 type QaRun = {
@@ -23,9 +30,16 @@ type QaRun = {
   apps: readonly string[]
   devices: readonly string[]
   note?: string
+  project?: string
   runId: string
   selection?: readonly string[]
-  shots: readonly { change?: 'changed' | 'new' | 'unchanged'; error?: string; name: string; status: string }[]
+  shots: readonly {
+    app?: string
+    change?: 'changed' | 'new' | 'unchanged'
+    error?: string
+    name: string
+    status: string
+  }[]
   source: { branch: string; commit: string; dirty: boolean; subject: string }
 }
 
@@ -34,7 +48,7 @@ function isStorageAction(action: string): action is StorageAction {
 }
 
 export const Storage = {
-  async run(action: string, path: string | undefined, options: QaOptions): Promise<number> {
+  async run(action: string, paths: readonly string[], options: QaOptions): Promise<number> {
     if (!isStorageAction(action)) {
       Errors.throwUserInput(`Unknown storage action ${action}; choose ${storageActions.join(', ')}.`)
     }
@@ -45,10 +59,10 @@ export const Storage = {
         return 0
       },
       qa: async () => {
-        if (path === undefined) {
-          Errors.throwUserInput('storage qa requires the Tao project directory to capture.')
+        if (paths.length === 0) {
+          Errors.throwUserInput('storage qa requires the Tao project directories to capture.')
         }
-        return await qa(root, path, options)
+        return await qa(root, paths, options)
       },
       sync: async () => {
         await sync(root)
@@ -90,8 +104,18 @@ async function timeline(root: string): Promise<number> {
   return await tao(root, ['_preview', 'qa', '--timeline', '--dest', `${submodulePath}/${qaStore}`])
 }
 
-async function qa(root: string, path: string, options: QaOptions): Promise<number> {
+/**
+ * qa captures each project as its own run, then archives them together as one commit, so one
+ * capture of several projects is one entry in the archive's history.
+ */
+async function qa(root: string, paths: readonly string[], options: QaOptions): Promise<number> {
   await sync(root)
+  const storage = FS.resolvePath(submodulePath, root)
+  const pending = await stagedRunIds(storage)
+  if (pending.length > 0) {
+    HCI.writeErrorLine(`Found ${pending.length} uncommitted runs in ${submodulePath}; commit or remove them first.`)
+    return 1
+  }
   const repeated = (flag: string, values: readonly string[] | undefined): string[] =>
     (values ?? []).flatMap(value => [flag, value])
   const flags = [
@@ -101,52 +125,67 @@ async function qa(root: string, path: string, options: QaOptions): Promise<numbe
     ...repeated('--appearance', options.appearance),
     ...(options.note === undefined ? [] : ['--note', options.note]),
   ]
-  const exitCode = await tao(root, [
-    '_preview',
-    'qa',
-    path,
-    '--screenshot',
-    '--dest',
-    `${submodulePath}/${qaStore}`,
-    ...flags,
-  ])
-  const storage = FS.resolvePath(submodulePath, root)
+  let exitCode = 0
+  for (const [index, path] of paths.entries()) {
+    // Studio is one product whatever project it opens, so one project's run carries its shots.
+    const studio = options.studio === true && index === 0 ? ['--studio'] : []
+    const captured = await tao(root, [
+      '_preview',
+      'qa',
+      path,
+      '--screenshot',
+      '--dest',
+      `${submodulePath}/${qaStore}`,
+      ...flags,
+      ...studio,
+    ])
+    exitCode = exitCode === 0 ? captured : exitCode
+  }
+  const runIds = await stagedRunIds(storage)
+  if (runIds.length === 0) {
+    HCI.writeErrorLine('The capture recorded nothing to archive.')
+    return exitCode === 0 ? 1 : exitCode
+  }
+  const runs = await Promise.all(
+    runIds.map(runId => FS.readJson<QaRun>(FS.resolvePath(`${qaStore}/runs/${runId}/qa-run.json`, storage))),
+  )
+  await gitOrThrow(storage, ['commit', '--quiet', '-m', qaCommitMessage(runs)])
+  HCI.writeLine(
+    `Committed ${
+      runs.map(run => run.runId).join(', ')
+    } in ${submodulePath}; publish with \`./agent unsandboxed storage push\`.`,
+  )
+  return exitCode
+}
+
+/** stagedRunIds stages the store and names the runs it holds that no commit records yet, oldest first. */
+async function stagedRunIds(storage: string): Promise<string[]> {
   if (await FS.exists(FS.resolvePath(qaStore, storage))) {
     await gitOrThrow(storage, ['add', '--', qaStore])
   }
   const added = (await gitOrThrow(storage, ['diff', '--cached', '--name-only', '--', `${qaStore}/runs`])).stdout
-  const runIds = [...new Set(added.split('\n').map(line => line.split('/')[2]).filter(Boolean))]
-  if (runIds.length !== 1) {
-    HCI.writeErrorLine(
-      runIds.length === 0
-        ? 'The run recorded nothing to archive.'
-        : `Found ${runIds.length} uncommitted runs in ${submodulePath}; commit or remove all but one.`,
-    )
-    return exitCode === 0 ? 1 : exitCode
-  }
-  const run = await FS.readJson<QaRun>(FS.resolvePath(`${qaStore}/runs/${runIds[0]}/qa-run.json`, storage))
-  await gitOrThrow(storage, ['commit', '--quiet', '-m', qaCommitMessage(run)])
-  HCI.writeLine(`Committed run ${run.runId} in ${submodulePath}; publish it with \`./agent unsandboxed storage push\`.`)
-  return exitCode
+  return unique(added.split('\n').map(line => line.split('/')[2] ?? '').filter(Boolean)).sort()
 }
 
 /**
- * qaCommitMessage summarises a run by what changed since each screenshot's previous capture, so the
- * archive's log reads as a history of UI changes rather than of capture sessions.
+ * qaCommitMessage summarises the runs of one capture by what changed since each screenshot's previous
+ * capture, so the archive's log reads as a history of UI changes rather than of capture sessions.
  */
-function qaCommitMessage(run: QaRun): string {
+function qaCommitMessage(runs: readonly QaRun[]): string {
+  const shots = runs.flatMap(run => run.shots)
   const named = (change: string): string[] =>
-    run.shots.filter(shot => shot.status === 'captured' && shot.change === change).map(shot => shot.name)
+    shots.filter(shot => shot.status === 'captured' && shot.change === change).map(shot => shot.name)
   const changed = named('changed')
   const added = named('new')
-  const failed = run.shots.filter(shot => shot.status !== 'captured')
+  const failed = shots.filter(shot => shot.status !== 'captured')
   const counts = [
     ...(changed.length > 0 ? [`${changed.length} changed`] : []),
     ...(added.length > 0 ? [`${added.length} new`] : []),
     ...(failed.length > 0 ? [`${failed.length} failed`] : []),
   ]
-  const apps = run.apps.join(', ')
-  const screenshots = `${run.shots.length} ${run.shots.length === 1 ? 'screenshot' : 'screenshots'}`
+  // A run lists the apps it launched; Studio's own shots name Studio, which no run launches as an app.
+  const apps = unique(runs.flatMap(run => [...run.apps, ...run.shots.flatMap(shot => shot.app ?? [])])).join(', ')
+  const screenshots = `${shots.length} ${shots.length === 1 ? 'screenshot' : 'screenshots'}`
   const summary = counts.length === 0
     ? `QA ${apps}: no changes across ${screenshots}`
     : `QA ${apps}: ${counts.join(', ')} of ${screenshots}`
@@ -155,22 +194,34 @@ function qaCommitMessage(run: QaRun): string {
       ...names.slice(0, listedNames).map(name => name.replace(/\.png$/u, '')),
       ...(names.length > listedNames ? [`and ${names.length - listedNames} more`] : []),
     ].join(', ')
-  const source = run.source
+  const sources = unique(
+    runs.map(({ source }) =>
+      `- Source: ${source.branch} ${source.commit.slice(0, 8)} ${source.subject}${
+        source.dirty ? ' (with uncommitted changes)' : ''
+      }`
+    ),
+  )
   return [
     summary,
     '',
-    `- Run: ${run.runId} on ${run.devices.join(', ')} in ${run.appearances.join(', ')}`,
-    ...(run.selection === undefined ? [] : [`- Selection: ${run.selection.join(', ')}`]),
-    `- Source: ${source.branch} ${source.commit.slice(0, 8)} ${source.subject}${
-      source.dirty ? ' (with uncommitted changes)' : ''
-    }`,
+    ...runs.flatMap(run => [
+      `- Run: ${run.runId}${run.project === undefined ? '' : ` of ${run.project}`} on ${run.devices.join(', ')} in ${
+        run.appearances.join(', ')
+      }`,
+      ...(run.selection === undefined ? [] : [`- Selection: ${run.selection.join(', ')}`]),
+    ]),
+    ...sources,
     ...(changed.length > 0 ? [`- Changed: ${list(changed)}`] : []),
     ...(added.length > 0 ? [`- New: ${list(added)}`] : []),
     ...failed.map(shot =>
       `- Failed: ${shot.name.replace(/\.png$/u, '')}${shot.error === undefined ? '' : ` — ${shot.error}`}`
     ),
-    ...(run.note === undefined ? [] : [`- Note: ${run.note}`]),
+    ...unique(runs.flatMap(run => run.note ?? [])).map(note => `- Note: ${note}`),
   ].join('\n')
+}
+
+function unique(values: readonly string[]): string[] {
+  return [...new Set(values)]
 }
 
 /** push publishes the submodule's local commits, rebasing over runs other worktrees pushed first. */

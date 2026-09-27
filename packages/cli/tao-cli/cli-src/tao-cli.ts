@@ -356,6 +356,7 @@ function createCommands(): Command {
       .option('--device <names>', 'Devices: phone, tablet, laptop (default: all).', list)
       .option('--appearance <names>', 'Appearances: light, dark (default: both).', list)
       .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
+      .option('--studio', "Also capture Studio's own layouts, at laptop size, with this project open.")
       .option('--timeline', "Only regenerate the store's index.html from the runs it already holds.")
       .description('Capture QA evidence for a Tao project.')
       .action(async (
@@ -368,6 +369,7 @@ function createCommands(): Command {
           note?: string
           scenario?: string[]
           screenshot?: boolean
+          studio?: boolean
           timeline?: boolean
         },
       ) => {
@@ -389,6 +391,7 @@ function createCommands(): Command {
             ...(options.device === undefined ? {} : { devices: options.device }),
             ...(options.note === undefined ? {} : { note: options.note }),
             ...(options.scenario === undefined ? {} : { scenarios: options.scenario }),
+            ...(options.studio === true ? { studio: true } : {}),
           })
           HCI.writeSuccess(
             `Captured ${result.captured} screenshots (${result.changed} changed, ${result.new} new, ${result.failed} failed): ${

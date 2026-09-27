@@ -535,19 +535,27 @@ await runWithCommands(commands => {
     .command('storage')
     .description('Sync the storage submodule, record a QA screenshot run into it, or push it.')
     .argument('<action>', 'sync, qa, or push')
-    .argument('[path]', 'Tao project directory to capture.')
+    .argument('[paths...]', 'Tao project directories to capture, archived together as one commit.')
     .option('--app <names>', 'Capture only these apps (default: every app in the project).', repeatedOption)
     .option('--scenario <selector>', 'Capture only matching scenarios; see `tao _preview qa --help`.', repeatedOption)
     .option('--device <names>', 'Devices: phone, tablet, laptop (default: all).', repeatedOption)
     .option('--appearance <names>', 'Appearances: light, dark (default: both).', repeatedOption)
+    .option('--studio', "Also capture Studio's own layouts, once, on the first project.")
     .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
     .action(async (
       action: string,
-      path: string | undefined,
-      options: { app?: string[]; appearance?: string[]; device?: string[]; note?: string; scenario?: string[] },
+      paths: string[],
+      options: {
+        app?: string[]
+        appearance?: string[]
+        device?: string[]
+        note?: string
+        scenario?: string[]
+        studio?: boolean
+      },
     ) => {
       const { Storage } = await import('./git/Storage')
-      await runExitCommand(() => Storage.run(action, path, options))
+      await runExitCommand(() => Storage.run(action, paths, options))
     })
 
   commands

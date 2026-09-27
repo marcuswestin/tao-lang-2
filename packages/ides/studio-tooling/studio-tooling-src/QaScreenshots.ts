@@ -1,6 +1,6 @@
 import Compiler from '@compiler'
 import { Workspace } from '@compiler/workspace'
-import { CLI, Errors, FS, HCI, Repo } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
 import { StudioCdp, type StudioCdpRendererFingerprint } from './StudioCdp'
 import { type ReviewBrowser, StudioReview } from './StudioReview'
 import { type StartedStudioSmokeLaunch, startStudioSmokeLaunch } from './StudioSmokeLaunch'
@@ -54,7 +54,10 @@ type QaScenario = {
  */
 type QaSelector = { file?: string; names: readonly string[]; text: string }
 
-/** QaShot is one screenshot, compared with the latest earlier capture of the same name. */
+/**
+ * QaShot is one screenshot, compared with the latest earlier capture of the same name. A Tao app's
+ * shot names its scenario; one of Studio's own names the Studio state it shows.
+ */
 type QaShot = {
   app: string
   appearance: QaAppearance
@@ -62,10 +65,27 @@ type QaShot = {
   device: QaDevice
   error?: string
   name: string
-  scenario: QaScenario
+  scenario?: QaScenario
   sha256?: string
   status: 'captured' | 'failed'
+  studioState?: string
 }
+
+/**
+ * Studio's own shot list: stable keys naming how to reach each state from a freshly opened session
+ * page. Studio is captured at `laptop` only, its chrome is dark-only, and the appearance pass sets its
+ * preview cells' scheme, so its light and dark shots differ in the previews alone.
+ */
+const studioStates: readonly { key: string; preset: 'code' | 'design' | 'draw' | 'run' }[] = [
+  { key: 'run', preset: 'run' },
+  { key: 'design', preset: 'design' },
+  { key: 'code', preset: 'code' },
+  { key: 'draw', preset: 'draw' },
+]
+const studioApp = 'Studio'
+const studioDevice: QaDevice = 'laptop'
+// Captures after the first before a Studio state that never repeats itself is reported unstable.
+const studioStableAttempts = 4
 
 type QaRunManifest = {
   appearances: readonly QaAppearance[]
@@ -89,6 +109,7 @@ type QaScreenshotOptions = {
   devices?: readonly string[]
   note?: string
   scenarios?: readonly string[]
+  studio?: boolean
 }
 
 type QaScreenshotResult = {
@@ -130,6 +151,9 @@ export async function runQaScreenshots(projectPath: string, options: QaScreensho
   const devices = chosen(options.devices, qaDeviceOrder, 'device')
   const appearances = chosen(options.appearances, qaAppearanceOrder, 'appearance')
   const selectors = (options.scenarios ?? []).map(parseSelector)
+  if (options.studio === true && !devices.includes(studioDevice)) {
+    Errors.throwUserInput(`Studio is captured at ${studioDevice} only; include it in --device to capture Studio.`)
+  }
   const repositoryRoot = Repo.getRoot(projectRoot)
   const store = FS.resolvePath(options.dest)
   const createdAt = new Date().toISOString()
@@ -170,6 +194,10 @@ export async function runQaScreenshots(projectPath: string, options: QaScreensho
           const others = handshake.apps.filter(app => app.appName !== handshake.appName)
           apps = requested ?? [handshake.appName, ...await appsWithOwnScenarios(projectRoot, others, selectors)]
         }
+        // Studio goes first, while every cell still has the size its scenario authored.
+        if (options.studio === true && index === 0) {
+          await captureStudio(session, handshake.appName, capture)
+        }
         await captureApp(session, handshake.appName, index === 0, capture)
         // Taken last: the fingerprint records each font's load status, which settles only once the
         // captured cells have rendered.
@@ -203,6 +231,9 @@ export async function runQaScreenshots(projectPath: string, options: QaScreensho
     }
     const runPath = FS.resolvePath(qaRunManifestName, runRoot)
     await FS.writeJson(runPath, manifest)
+    // The work directory holds each launch's Studio log and raw captures; a finished run no longer
+    // needs them, and a failed one keeps them for diagnosis.
+    await FS.remove(workRoot)
     const shots = capture.shots
     return {
       captured: shots.filter(shot => shot.status === 'captured').length,
@@ -225,6 +256,7 @@ async function withStudio(
 ): Promise<void> {
   let browser: StudioCdp | undefined
   let launch: StartedStudioSmokeLaunch | undefined
+  const recordsBefore = await sessionRecords(options.projectRoot)
   try {
     launch = await startStudioSmokeLaunch({
       ...(options.appName === undefined ? {} : { appName: options.appName }),
@@ -241,6 +273,38 @@ async function withStudio(
     }
     await browser?.close().catch(() => undefined)
     await launch?.stop().catch(() => undefined)
+    await removeNewSessionRecords(options.projectRoot, recordsBefore)
+  }
+}
+
+const sessionsPath = '.tao/sessions'
+
+/** sessionRecords lists the dev-session history records a project holds, leaving out its live owner. */
+async function sessionRecords(projectRoot: string): Promise<ReadonlySet<string>> {
+  const root = FS.resolvePath(sessionsPath, projectRoot)
+  return new Set(
+    await FS.isDirectory(root)
+      ? (await FS.listDir(root)).filter(name => name.endsWith('.json') && name !== 'owner.json')
+      : [],
+  )
+}
+
+/**
+ * removeNewSessionRecords deletes the history records a capture's own Studio launch left in the
+ * project, and the directories they emptied, so repeated captures do not pile records into an
+ * ignored folder nobody reads. A record that was there before the launch stays.
+ */
+async function removeNewSessionRecords(projectRoot: string, before: ReadonlySet<string>): Promise<void> {
+  for (const name of await sessionRecords(projectRoot)) {
+    if (!before.has(name)) {
+      await FS.remove(FS.resolvePath(`${sessionsPath}/${name}`, projectRoot))
+    }
+  }
+  for (const directory of [sessionsPath, '.tao']) {
+    const path = FS.resolvePath(directory, projectRoot)
+    if (await FS.isDirectory(path) && await FS.isEmptyDirectory(path)) {
+      await FS.remove(path)
+    }
   }
 }
 
@@ -266,11 +330,6 @@ async function captureApp(session: QaSession, appName: string, first: boolean, c
       const surface = await StudioReview.capture.surface(browser)
       const captureRoot = FS.resolvePath(`${device}-${appearance}`, session.artifactRoot)
       for (const cell of surface.cells) {
-        // A scenario that authors its appearance is captured only in that appearance's pass.
-        const scheme = appliedEnvironment(cell.environment)?.scheme
-        if (scheme !== undefined && scheme !== appearance) {
-          continue
-        }
         const scenario = scenarioOf(cell, scenarios)
         if (!wanted.includes(scenario)) {
           continue
@@ -294,6 +353,152 @@ async function captureApp(session: QaSession, appName: string, first: boolean, c
       }
     }
   }
+}
+
+/**
+ * captureStudio captures Studio's own page in each state of `studioStates`, at the laptop size with
+ * the window exactly that size, in every appearance pass. Each state starts from a freshly loaded
+ * session page, so no state inherits scroll or focus from the one before it.
+ */
+async function captureStudio(session: QaSession, appName: string, capture: QaCapture): Promise<void> {
+  const { browser, sessionUrl } = session
+  const size = qaDevices[studioDevice]
+  const captureRoot = FS.resolvePath('studio', session.artifactRoot)
+  await FS.mkdir(captureRoot)
+  await StudioReview.capture.open(browser, sessionUrl)
+  // Studio remembers the layout preset, and the cell captures after these shots need the one the
+  // session opened in: in Draw no preview cell renders, so every one of them would time out.
+  const openedPreset = await browser.evaluate<string | undefined>(
+    `document.querySelector('[data-layout-preset]')?.dataset.layoutPreset`,
+  )
+  await browser.setViewport(size.width, size.height)
+  try {
+    for (const appearance of capture.appearances) {
+      HCI.writeLine(`Capturing Studio on ${appName} ${studioDevice} ${appearance}…`)
+      // The previews keep their authored sizes: Studio's shot shows them as a person opening it would.
+      await applyEnvironment(browser, undefined, appearance)
+      for (const state of studioStates) {
+        const name = studioShotName(appName, state.key, appearance)
+        const shot = { app: studioApp, appearance, device: studioDevice, name, studioState: state.key }
+        try {
+          await StudioReview.capture.open(browser, sessionUrl)
+          await minimizeAgentPanel(browser)
+          await resetCanvasViewport(browser, 'design')
+          await browser.click(`[data-preset="${state.preset}"]`)
+          if (state.preset === 'draw') {
+            await resetCanvasViewport(browser, 'draw')
+          }
+          await browser.waitFor(studioStateSettled(state.preset), { timeoutMs: 60_000 })
+          const settled = await settledPageCapture(browser, FS.resolvePath(name, captureRoot))
+          if (settled.error !== undefined) {
+            capture.shots.push({ ...shot, error: settled.error, status: 'failed' })
+            continue
+          }
+          await FS.copyFile(settled.path, FS.resolvePath(`screenshots/${name}`, capture.runRoot))
+          capture.shots.push({
+            ...shot,
+            change: changeSince(capture.previous, name, settled.sha256),
+            sha256: settled.sha256,
+            status: 'captured',
+          })
+        } catch (error) {
+          capture.shots.push({ ...shot, error: Errors.formatForUser(error), status: 'failed' })
+        }
+      }
+    }
+  } finally {
+    await browser.setViewport(qaCaptureViewport.width, qaCaptureViewport.height)
+    if (openedPreset !== undefined) {
+      await StudioReview.capture.open(browser, sessionUrl)
+      await browser.click(`[data-preset="${openedPreset}"]`)
+      await browser.waitFor(`document.querySelector('[data-layout-preset=${JSON.stringify(openedPreset)}]') !== null`)
+    }
+  }
+}
+
+/**
+ * minimizeAgentPanel folds Studio's floating agent panel, which opens over the workbench and reports
+ * whether this host has a model key, so a shot shows the workbench rather than one machine's setup.
+ */
+async function minimizeAgentPanel(browser: StudioCdp): Promise<void> {
+  const minimized = `(() => {
+    const collapse = document.querySelector('.studio-agent-collapse')
+    const panel = collapse?.closest('[data-studio-panel="agent"] > *')
+    if (!(collapse instanceof HTMLElement) || !(panel instanceof HTMLElement)) return false
+    if (panel.dataset.minimized === 'true') return true
+    collapse.click()
+    return false
+  })()`
+  await browser.waitFor(minimized, { timeoutMs: 30_000 })
+}
+
+/**
+ * resetCanvasViewport returns the preview canvas to 100 % at its top left through Studio's own zoom
+ * menu, and scrolls its host back to the origin. Studio restores the last pan for the project, and a review capture pans to reveal each cell,
+ * so without this a shot shows wherever the previous capture or person left it. The menu answers only
+ * in the Design and Draw presets, and Draw keeps a canvas of its own.
+ */
+async function resetCanvasViewport(browser: StudioCdp, preset: 'design' | 'draw'): Promise<void> {
+  await browser.click(`[data-preset="${preset}"]`)
+  const reset = `(() => {
+    if (document.querySelector('[data-layout-preset=${JSON.stringify(preset)}]') === null) return false
+    const host = [...document.querySelectorAll('[data-canvas-surface="on"]')].find(candidate =>
+      (candidate.dataset.canvasWorkspace === 'draw') === ${JSON.stringify(preset === 'draw')})
+    const grid = host?.querySelector(${
+    JSON.stringify(preset === 'draw' ? ':scope > [data-tao-studio-draw-canvas]' : ':scope > .studio-preview-grid')
+  })
+    if (!(grid instanceof HTMLElement)) return false
+    // A revealed element can scroll the clipped host itself as well as panning the grid.
+    host.scrollTo(0, 0)
+    if (grid.style.transform === 'translate(0px, 0px) scale(1)') return true
+    const choice = host.querySelector('[data-tao-studio-canvas-zoom-action="1"]')
+    if (choice instanceof HTMLElement && !choice.parentElement?.hidden) {
+      choice.click()
+    } else {
+      host.querySelector('.studio-canvas-zoom')?.click()
+    }
+    return false
+  })()`
+  await browser.waitFor(reset, { timeoutMs: 30_000 })
+}
+
+/** studioShotName spells `Studio_<App>_<state>_laptop-<appearance>.png`, naming the app Studio opened. */
+function studioShotName(appName: string, state: string, appearance: QaAppearance): string {
+  return `${[studioApp, appName, state, `${studioDevice}-${appearance}`].map(namePart).join('_')}.png`
+}
+
+/**
+ * studioStateSettled holds until the layout preset applied, the fonts loaded, and every preview cell
+ * on screen stopped waiting for its frame. A cell scrolled out of view is left out: Chrome pauses its
+ * frame's animation frames, so it may never settle, and the shot does not show it.
+ */
+function studioStateSettled(preset: string): string {
+  return `(() => {
+    if (document.querySelector('[data-layout-preset=${JSON.stringify(preset)}]') === null) return false
+    if (document.fonts.status !== 'loaded') return false
+    return [...document.querySelectorAll('.studio-preview-cell[data-tao-review-key]')].every(cell => {
+      const box = cell.getBoundingClientRect()
+      const onScreen = box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < innerHeight
+      return !onScreen || cell.dataset.taoReviewStatus !== 'pending'
+    })
+  })()`
+}
+
+/** settledPageCapture captures the window until two consecutive captures agree. */
+async function settledPageCapture(
+  browser: StudioCdp,
+  path: string,
+): Promise<{ error?: string; path: string; sha256: string }> {
+  let sha256 = Platform.sha256Hex(await FS.readFile(await browser.captureScreenshotAt(path)))
+  for (let attempt = 0; attempt < studioStableAttempts; attempt += 1) {
+    await Time.sleep(250)
+    const next = Platform.sha256Hex(await FS.readFile(await browser.captureScreenshotAt(path)))
+    if (next === sha256) {
+      return { path, sha256 }
+    }
+    sha256 = next
+  }
+  return { error: `Studio kept changing across ${studioStableAttempts + 1} captures.`, path, sha256 }
 }
 
 function chosen<Value extends string>(
@@ -484,13 +689,17 @@ function namePart(value: string): string {
 }
 
 /**
- * applyEnvironment overrides every cell's viewport, and the scheme of every cell whose scenario does
- * not author an appearance, for this Studio session only, through the same reconfigure route Studio's
- * own environment controls use; the Tao source is untouched. A reload then renders the published
- * manifest, which carries the overrides.
+ * applyEnvironment overrides every cell's scheme, and its viewport when a device is given, including a
+ * scenario's authored device and appearance, for this Studio session only, through the same
+ * reconfigure route Studio's own environment controls use; the Tao source is untouched. A reload then
+ * renders the published manifest, which carries the overrides.
  */
-async function applyEnvironment(browser: ReviewBrowser, device: QaDevice, appearance: QaAppearance): Promise<void> {
-  const viewport = { ...qaDevices[device], presetId: device }
+async function applyEnvironment(
+  browser: ReviewBrowser,
+  device: QaDevice | undefined,
+  appearance: QaAppearance,
+): Promise<void> {
+  const viewport = device === undefined ? null : { ...qaDevices[device], presetId: device }
   // Raw `Error`: this string runs in Chrome, which has no reach into Tao's error taxonomy.
   const failure = await browser.evaluate<string | null>(`(async () => {
     const base = location.pathname.match(/^\\/sessions\\/[^/]+/u)?.[0]
@@ -501,15 +710,9 @@ async function applyEnvironment(browser: ReviewBrowser, device: QaDevice, appear
     const viewport = ${JSON.stringify(viewport)}
     const appearance = ${JSON.stringify(appearance)}
     for (const cell of manifest.cells) {
-      const scheme = cell.environment.scheme
-      // A scenario's authored appearance outranks the cell's scheme in the runtime, so it stays.
-      const environment = {
-        ...cell.environment,
-        scheme: scheme.source === 'scenario'
-          ? scheme
-          : { ...scheme, requested: appearance, resolved: appearance, source: 'preference' },
-        viewport,
-      }
+      // An explicit preference outranks even a scenario's authored appearance in the preview runtime.
+      const scheme = { ...cell.environment.scheme, requested: appearance, resolved: appearance, source: 'preference' }
+      const environment = { ...cell.environment, scheme, viewport: viewport ?? cell.environment.viewport }
       const response = await fetch(base + '/api/preview/cell/reconfigure', {
         body: JSON.stringify({
           appName: manifest.project.appName,
@@ -523,7 +726,9 @@ async function applyEnvironment(browser: ReviewBrowser, device: QaDevice, appear
         headers: { 'content-type': 'application/json' },
         method: 'POST',
       })
-      if (!response.ok) return 'Tao Studio refused ' + cell.cellId + ' at ${device} ${appearance}: ' + await response.text()
+      if (!response.ok) return 'Tao Studio refused ' + cell.cellId + ' at ${
+    device ?? 'its own size'
+  } ${appearance}: ' + await response.text()
     }
     return null
   })()`)
@@ -765,6 +970,8 @@ export const QaScreenshotsTesting = {
   parseSelector,
   selectorMatches,
   shotName,
+  studioShotName,
+  studioStates,
   timelineEntries,
   uniqueName,
 } as const

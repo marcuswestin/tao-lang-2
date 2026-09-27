@@ -580,7 +580,12 @@ export class StudioCdp {
             + '[aria-label="Tao dev menu"]{visibility:hidden!important}'
           document.head.append(freeze)
           if (document.fonts?.ready !== undefined) await document.fonts.ready
-          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+          // Bounded: a frame the page scrolled back out of view gets no animation frames, and this
+          // evaluation has no timeout of its own. The element is pinned on screen below regardless.
+          await Promise.race([
+            new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+            new Promise(resolve => setTimeout(resolve, 2000)),
+          ])
           return true
         })()`,
         )
