@@ -372,6 +372,51 @@ Describe('Studio source-action patch bus', () => {
     `))
   })
 
+  Test('clears one kind of layout entry, and the clause once it is empty', async () => {
+    const document = await parseDocument(`
+      view MainView() {
+         render Stack() [pad 4, aligned left, gap 8, centered] {
+            Text("First")
+      }  }
+    `)
+    const alignment = await SourceActions.applyStudioPatch(document, {
+      heads: ['aligned', 'centered', 'fill'],
+      kind: 'clear-layout-entry',
+      renderId: renderId(requireRenderByText(document, 'Stack()')),
+    })
+    Expect(alignment.content).toBe(source(`
+      view MainView() {
+         render Stack() [pad 4, gap 8] {
+            Text("First")
+      }  }
+    `))
+
+    const padded = await parseRawDocument(alignment.content)
+    const gapless = await parseRawDocument(
+      (await SourceActions.applyStudioPatch(padded, {
+        heads: ['gap'],
+        kind: 'clear-layout-entry',
+        renderId: renderId(requireRenderByText(padded, 'Stack()')),
+      })).content,
+    )
+    const bare = await SourceActions.applyStudioPatch(gapless, {
+      heads: ['pad'],
+      kind: 'clear-layout-entry',
+      renderId: renderId(requireRenderByText(gapless, 'Stack()')),
+    })
+    Expect(bare.content).toBe(source(`
+      view MainView() {
+         render Stack() {
+            Text("First")
+      }  }
+    `))
+    await Expect(SourceActions.applyStudioPatch(gapless, {
+      heads: ['hug'],
+      kind: 'clear-layout-entry',
+      renderId: renderId(requireRenderByText(gapless, 'Stack()')),
+    })).rejects.toThrow('sets no hug')
+  })
+
   Test('inspects parsed layout and style values and edits current-dialect inline style', async () => {
     const document = await parseDocument(`
       workspace design Theme { ink #111 body [fg ink, size 14] }

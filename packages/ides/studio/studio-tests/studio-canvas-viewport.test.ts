@@ -329,6 +329,30 @@ Test('Studio Shift+1 frames the selection and Shift+2 the focused frame, from th
   })
 })
 
+Test('Studio ⌘0 fits the selection and ⌘+/⌘− keep it centred, and fit the whole canvas without one', () => {
+  let selection: { left: number; top: number; right: number; bottom: number } | undefined = {
+    left: 120,
+    top: 130,
+    right: 320,
+    bottom: 230,
+  }
+  canvasTest(({ controls, document }) => {
+    // The 500x400 host sits at 20,30, so the selection's centre is host point 200,150.
+    emit(document, 'keydown', { key: '=', metaKey: true })
+    Expect(controls.state()).toEqual({ x: -50, y: -25, z: 1.5 })
+    controls.reset()
+    emit(document, 'keydown', { key: '-', metaKey: true })
+    Expect(controls.state()).toEqual({ x: 100, y: 87.5, z: 0.75 })
+    controls.reset()
+    emit(document, 'keydown', { key: '0', metaKey: true })
+    Expect(controls.state().z).toBe(2.18)
+    Expect(controls.state().x).toBeCloseTo(-186)
+    selection = undefined
+    emit(document, 'keydown', { key: '0', metaKey: true })
+    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 0.5 })
+  }, { selectionBounds: () => selection })
+})
+
 Test('Studio iframe shortcuts require a contained frame and enabled canvas', () => {
   canvasTest(({ controls, host, enabled }) => {
     const frame = new CanvasElement()

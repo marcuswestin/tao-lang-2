@@ -126,6 +126,7 @@ function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | u
     'append-scenario-steps': () => undefined,
     'bind-sketch-field': action => action.renderId,
     'bind-text': action => action.renderId,
+    'clear-layout-entry': action => action.renderId,
     'copy-view': () => undefined,
     'extract-view': action => action.renderIds[0],
     'group-renders': action => action.renderIds[0],

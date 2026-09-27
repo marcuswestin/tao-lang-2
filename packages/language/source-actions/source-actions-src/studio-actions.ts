@@ -14,7 +14,7 @@ import type {
 } from './studio/studio-contract'
 import { setDesignEntry, setStyleEntry } from './studio/studio-design-styles'
 import { copyView, extractView, groupRenders } from './studio/studio-extract-view'
-import { setLayoutEntry } from './studio/studio-layout-entries'
+import { clearLayoutEntry, setLayoutEntry } from './studio/studio-layout-entries'
 import { bindText, inspectRender, setTextContent } from './studio/studio-render-inspection'
 import { validateOccurrencePrecondition } from './studio/studio-render-occurrences'
 import { moveRender, removeRender, wrapRender } from './studio/studio-render-tree'
@@ -41,6 +41,7 @@ export const StudioActions = {
   applyPatch,
   bindSketchField,
   bindText,
+  clearLayoutEntry,
   copyView,
   extractView,
   groupRenders,
@@ -91,6 +92,7 @@ async function applyPatchContent(
     'append-scenario-steps': async action => await appendScenarioSteps(document, action),
     'bind-sketch-field': async action => await bindSketchField(document, action),
     'bind-text': async action => await bindText(document, action),
+    'clear-layout-entry': async action => await clearLayoutEntry(document, action),
     'copy-view': async action => await copyView(document, action, context),
     'extract-view': async action => await extractView(document, action, context),
     'group-renders': async action => await groupRenders(document, action, context),

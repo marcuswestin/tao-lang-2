@@ -28,6 +28,7 @@ export type StudioSelectionCarry = Readonly<{
 /** The edits that change an element without moving, removing, or multiplying it. */
 const carriedKinds: ReadonlySet<string> = new Set([
   'bind-text',
+  'clear-layout-entry',
   'set-layout-entry',
   'set-style-entry',
   'set-text-content',

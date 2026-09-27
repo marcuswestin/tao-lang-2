@@ -36,7 +36,17 @@ const text = (value: unknown): string | undefined => typeof value === 'string' ?
 const entryPhrase = (action: StudioCanonicalSourceAction): string =>
   Array.isArray(action['entry']) ? capitalized(action['entry'].join(' ')) : capitalized(sourceActionLabel(action))
 
+const clearPhrase = (action: StudioCanonicalSourceAction): string => {
+  const heads: unknown[] = Array.isArray(action['heads']) ? action['heads'] : []
+  return heads.includes('aligned')
+    ? 'Clear alignment'
+    : heads.includes('hug')
+    ? 'Clear size'
+    : `Clear ${text(heads[0]) ?? 'layout'}`
+}
+
 const editPhrases: Readonly<Record<string, (action: StudioCanonicalSourceAction) => string>> = {
+  'clear-layout-entry': clearPhrase,
   'extract-view': action => ['Make view', text(action['name'])].filter(part => part !== undefined).join(' '),
   'group-renders': action => `Group in ${text(action['wrapper']) ?? 'container'}`,
   'insert-component': action => `Insert ${text(action['component']) ?? 'component'}`,

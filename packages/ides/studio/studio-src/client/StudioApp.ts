@@ -48,6 +48,7 @@ import {
   isStudioSelectionCommand,
   studioCanvasCommandAllowed,
   studioCanvasKeyCommand,
+  studioNameNewView,
   studioSelectionAction,
   type StudioSelectionCommand,
 } from './app/StudioSelectionGrouping'
@@ -356,19 +357,24 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     const canvasOwnsInput = (): boolean =>
       root.dataset['layoutPreset'] === 'design' || root.dataset['layoutPreset'] === 'draw'
     /** ⌘G and ⌥⌘G turn the preview selection into a view or a group; a lone element is a group of one. */
-    const applySelectionCommand = (command: StudioSelectionCommand): void => {
+    const applySelectionCommand = async (command: StudioSelectionCommand): Promise<void> => {
       const inspected = inspection.selected()
       if (inspected === undefined) {
         view.status.dataset['state'] = 'error'
         view.status.textContent = 'Select elements in the preview before grouping them.'
         return
       }
+      const group = inspection.selectedGroup()
       const action = studioSelectionAction(
         command,
-        inspection.selectedGroup(),
+        group,
         selection => studioCanvasSelectionBounds(view.preview, selection, previews),
       )
-      void mutations.submitLocal(action, inspected.identity)
+      const named = action.kind === 'extract-view' ? await studioNameNewView(group.length) : action
+      if (named === undefined) {
+        return
+      }
+      await mutations.submitLocal(action.kind === 'extract-view' ? { ...action, ...named } : action, inspected.identity)
     }
     const selectionCarry = createStudioSelectionCarry({
       editorTyping: () => document.activeElement?.closest('.studio-editor .cm-content') != null,
@@ -390,7 +396,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       },
       bounds: () => studioCanvasSelectionBounds(view.preview, inspection.selected(), previews),
       busy: () => mutations.busy(),
-      command: applySelectionCommand,
+      command: command => void applySelectionCommand(command),
       enabled: canvasOwnsInput,
       groupSize: () => inspection.selectedGroup().length,
       host: view.preview,
@@ -422,7 +428,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           if (command === 'undo') {
             void mutations.undoLatest()
           } else {
-            applySelectionCommand(command)
+            void applySelectionCommand(command)
           }
           return
         }
@@ -698,7 +704,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           if (command === 'undo') {
             void mutations.undoLatest()
           } else {
-            applySelectionCommand(command)
+            void applySelectionCommand(command)
           }
         }
       }
@@ -716,8 +722,15 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         const inspected = inspection.selected()
         Assert.input(inspected, 'Select a rendered element before editing its source.')
         // Make view acts on everything shift-selected, not just the element the inspector shows.
+        const group = inspection.selectedGroup()
+        const named = requested.kind === 'extract-view' && requested['name'] === undefined
+          ? await studioNameNewView(group.length)
+          : {}
+        if (named === undefined) {
+          return
+        }
         const action = requested.kind === 'extract-view'
-          ? { ...requested, renderIds: inspection.selectedGroup().map(selection => selection.renderId) }
+          ? { ...requested, ...named, renderIds: group.map(selection => selection.renderId) }
           : requested
         if (proposed) {
           await mutations.submitProposedLocal(action, inspected.identity)

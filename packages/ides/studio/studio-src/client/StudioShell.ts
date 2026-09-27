@@ -94,6 +94,22 @@ export function studioLayoutOwnsCanvasGestures(preset: string | undefined): bool
 
 export const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
 
+/** The narrowest the flexible middle column of each preset may get while a side pane is dragged wider. */
+const studioMiddleFloor: Readonly<Record<string, number>> = { design: 240, draw: 320 }
+const studioDefaultMiddleFloor = 360
+
+/**
+ * studioDraggedPaneSize turns a dragged width into a pane size: dragging past half the pane's minimum
+ * collapses it, as double-click does, so a divider never just stops; short of that the pane holds its
+ * minimum, and it never grows past what leaves the rest of the layout usable.
+ */
+export function studioDraggedPaneSize(requested: number, minimum: number, maximum: number): number {
+  if (requested < minimum / 2) {
+    return 0
+  }
+  return Math.max(minimum, Math.min(Math.max(minimum, maximum), requested))
+}
+
 /** Responsive Design split leaves the inspector and a usable editor ahead of the canvas. */
 export function studioDesignPreviewSize(available: number, right: number): number {
   const room = available - right - dividerWidth * 2 - editorMinimum
@@ -538,6 +554,18 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
     const mirrored = root.dataset['layoutPreset'] === 'draw'
     return (pane === 'preview') === mirrored ? 1 : -1
   }
+  /** The widest a pane may be dragged: whatever leaves the middle column of its preset at its floor. */
+  const paneMaximum = (pane: PaneName): number => {
+    if (pane === 'left') {
+      return shell.getBoundingClientRect().width - 48 - studioDefaultMiddleFloor
+    }
+    if (pane === 'bottom') {
+      return center.getBoundingClientRect().height - 240
+    }
+    const floor = studioMiddleFloor[root.dataset['layoutPreset'] ?? ''] ?? studioDefaultMiddleFloor
+    const other = pane === 'preview' ? sizes.right : sizes.preview
+    return center.getBoundingClientRect().width - other - dividerWidth * 2 - floor
+  }
   for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
     const pane = divider.dataset['divider'] as PaneName
     divider.addEventListener('dblclick', () => toggle(pane))
@@ -567,8 +595,7 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
         const delta = pane === 'bottom'
           ? start - moveEvent.clientY
           : (moveEvent.clientX - start) * horizontalSign(pane)
-        const minimum = StudioPaneMinimums[pane]
-        resize(pane, Math.max(minimum, initial + delta))
+        resize(pane, studioDraggedPaneSize(initial + delta, StudioPaneMinimums[pane], paneMaximum(pane)))
       }
       const finish = (): void => {
         divider.removeEventListener('pointermove', move)

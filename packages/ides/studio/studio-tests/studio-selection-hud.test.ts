@@ -113,7 +113,19 @@ Describe('Studio selection HUD', () => {
     Expect(studioSelectionHudAction(renderId, 'alignment', 'centered')?.['entry']).toEqual(['centered'])
     Expect(studioSelectionHudAction(renderId, 'sizing', 'fill')?.['entry']).toEqual(['fill'])
     Expect(studioSelectionHudAction(renderId, 'gap', '-3')).toBeUndefined()
-    Expect(studioSelectionHudAction(renderId, 'sizing', 'unset')).toBeUndefined()
+    Expect(studioSelectionHudAction(renderId, 'sizing', 'claim 2')).toBeUndefined()
+  })
+
+  Test("clears a control's entry when its picker is set to — or its field is emptied", () => {
+    const renderId = `${path}:10:40`
+    Expect(studioSelectionHudAction(renderId, 'alignment', 'unset')).toEqual({
+      heads: ['aligned', 'centered', 'fill'],
+      kind: 'clear-layout-entry',
+      renderId,
+    })
+    Expect(studioSelectionHudAction(renderId, 'sizing', 'unset')?.['heads']).toEqual(['claim', 'fill', 'hug'])
+    Expect(studioSelectionHudAction(renderId, 'gap', '')?.['heads']).toEqual(['gap'])
+    Expect(studioSelectionHudAction(renderId, 'pad', '')?.['heads']).toEqual(['pad'])
   })
 
   Test('sits under the selection, above it when there is no room below, and inside the host', () => {

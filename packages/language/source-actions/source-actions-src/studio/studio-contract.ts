@@ -127,6 +127,16 @@ export type StudioLayoutEntry =
   | readonly ['width', 'fill' | StudioLayoutSizeValue]
   | readonly ['width', 'max', StudioLayoutSizeValue]
 
+/**
+ * StudioClearLayoutEntryPatchRequest removes every layout entry on a rendered Tao node whose head is
+ * one of `heads`, so the node falls back to its default for that choice.
+ */
+export type StudioClearLayoutEntryPatchRequest = {
+  heads: readonly string[]
+  kind: 'clear-layout-entry'
+  renderId: string
+}
+
 /** StudioSetLayoutEntryPatchRequest sets one layout entry on a rendered Tao node. */
 export type StudioSetLayoutEntryPatchRequest = {
   entry: StudioLayoutEntry
@@ -441,6 +451,7 @@ export type StudioSourcePatchRequest =
   | StudioInsertSeparatorPatchRequest
   | StudioInsertSpacerPatchRequest
   | StudioSetLayoutEntryPatchRequest
+  | StudioClearLayoutEntryPatchRequest
   | StudioSetStyleEntryPatchRequest
   | StudioSetScenarioArgumentsPatchRequest
   | StudioRetargetScenarioRenderPatchRequest

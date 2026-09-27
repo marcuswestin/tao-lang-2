@@ -1,5 +1,6 @@
 import type { StudioInspectorSelection } from '../../StudioInspector'
 import type { StudioCanonicalSourceAction, StudioCanvasShortcutCommand } from '../../StudioProtocol'
+import { StudioDialog } from '../StudioDialog'
 import { studioShortcutLetter } from '../StudioEditor'
 import { isStudioVisualUndoShortcut } from './StudioEditLog'
 
@@ -78,4 +79,31 @@ export function studioSelectionAction(
   return command === 'make-view'
     ? { kind: 'extract-view', renderIds }
     : { kind: 'group-renders', renderIds, wrapper: inferGroupWrapper(group.map(bounds)) }
+}
+
+/**
+ * The name a Make view answer asks for: a typed name is the new view's, an empty answer lets the
+ * server number it View1, View2, …, and a cancelled prompt makes no view at all.
+ */
+export function studioViewNameAnswer(answer: string | undefined): Readonly<{ name?: string }> | undefined {
+  if (answer === undefined) {
+    return undefined
+  }
+  const name = answer.trim()
+  return name === '' ? {} : { name }
+}
+
+/** studioNameNewView asks what to call the view Make view is about to write, with OK and Cancel. */
+export async function studioNameNewView(elementCount: number): Promise<Readonly<{ name?: string }> | undefined> {
+  return studioViewNameAnswer(
+    await StudioDialog.prompt({
+      cancelLabel: 'Cancel',
+      confirmLabel: 'OK',
+      detail: elementCount > 1
+        ? `The ${elementCount} selected elements become one new view. Leave the name empty to number it.`
+        : 'The selected element becomes a new view. Leave the name empty to number it.',
+      placeholder: 'ViewName',
+      title: 'Make view',
+    }),
+  )
 }

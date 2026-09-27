@@ -92,6 +92,7 @@ export {
   type StudioAddSketchEntityParameterPatchRequest,
   type StudioAppendScenarioStepsPatchRequest,
   type StudioBindSketchFieldPatchRequest,
+  type StudioClearLayoutEntryPatchRequest,
   type StudioComponentKind,
   type StudioCopyViewPatchRequest,
   type StudioExtractViewPatchRequest,

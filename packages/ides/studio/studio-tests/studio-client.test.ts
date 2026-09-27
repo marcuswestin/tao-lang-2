@@ -89,6 +89,7 @@ import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
 import { StudioScenarioControls } from '../studio-src/client/StudioScenarioControls'
 import {
   studioDesignPreviewSize,
+  studioDraggedPaneSize,
   StudioGlobalLoading,
   studioLayoutOwnsCanvasGestures,
   StudioPaneMinimums,
@@ -1393,6 +1394,15 @@ Test(
     }
   },
 )
+
+Test('a dragged divider collapses its pane past half the minimum and otherwise stays within its bounds', () => {
+  Expect(studioDraggedPaneSize(130, 280, 900)).toBe(0)
+  Expect(studioDraggedPaneSize(141, 280, 900)).toBe(280)
+  Expect(studioDraggedPaneSize(500, 280, 900)).toBe(500)
+  Expect(studioDraggedPaneSize(1400, 280, 900)).toBe(900)
+  // A window too narrow for the floor still lets the pane keep its minimum rather than vanish.
+  Expect(studioDraggedPaneSize(400, 280, 120)).toBe(280)
+})
 
 Test('Studio pane sizes load safe defaults and persist all divider dimensions', () => {
   Expect(StudioPaneMinimums).toEqual({ bottom: 96, left: 180, preview: 280, right: 320 })

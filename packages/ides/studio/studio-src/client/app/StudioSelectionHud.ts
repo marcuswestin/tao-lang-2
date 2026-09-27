@@ -19,6 +19,7 @@ export type StudioSelectionHudModel = Readonly<{
 export type StudioSelectionHudControl = 'alignment' | 'direction' | 'gap' | 'pad' | 'sizing'
 
 const studioSelectionHudAlignments = [
+  'unset',
   'fill',
   'centered',
   'left',
@@ -29,7 +30,15 @@ const studioSelectionHudAlignments = [
   'baseline',
 ] as const
 
-const studioSelectionHudSizings = ['fill', 'hug'] as const
+const studioSelectionHudSizings = ['unset', 'fill', 'hug'] as const
+
+/** The layout heads each HUD control writes, which choosing "—" or emptying the field removes. */
+const studioSelectionHudHeads: Readonly<Record<Exclude<StudioSelectionHudControl, 'direction'>, readonly string[]>> = {
+  alignment: ['aligned', 'centered', 'fill'],
+  gap: ['gap'],
+  pad: ['pad'],
+  sizing: ['claim', 'fill', 'hug'],
+}
 
 export function studioSelectionHudModel(inspection: StudioRenderInspection): StudioSelectionHudModel {
   const layout = StudioInspector.layout(inspection)
@@ -44,7 +53,10 @@ export function studioSelectionHudModel(inspection: StudioRenderInspection): Stu
   }
 }
 
-/** The one source action a HUD control commits, or nothing while its draft is not a valid value. */
+/**
+ * The one source action a HUD control commits, or nothing while its draft is not a valid value. "—"
+ * in a picker and an emptied field both clear the control's entry.
+ */
 export function studioSelectionHudAction(
   renderId: string,
   control: StudioSelectionHudControl,
@@ -52,6 +64,9 @@ export function studioSelectionHudAction(
 ): StudioCanonicalSourceAction | undefined {
   if (control === 'direction') {
     return { kind: 'toggle-flow-direction', renderId }
+  }
+  if (value === '' || value === 'unset') {
+    return { heads: studioSelectionHudHeads[control], kind: 'clear-layout-entry', renderId }
   }
   const entry = control === 'gap'
     ? gapEntry(value)
@@ -285,8 +300,8 @@ function hudPicker(
   const caption = document.createElement('span')
   caption.textContent = label
   const select = document.createElement('select')
-  // The current value leads even when the HUD cannot set it ("unset", a claim weight), so the picker
-  // never shows a choice that is not in the source.
+  // The current value leads even when the HUD cannot set it (a claim weight), so the picker never shows
+  // a choice that is not in the source. "—" is the unset choice, and picking it clears the entry.
   const choices = options.includes(value) ? options : [value, ...options]
   for (const choice of choices) {
     const option = document.createElement('option')

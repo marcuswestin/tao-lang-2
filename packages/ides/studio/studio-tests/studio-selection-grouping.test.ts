@@ -12,6 +12,7 @@ import {
   studioCanvasKeyCommand,
   studioSelectionAction,
   studioSelectionShortcut,
+  studioViewNameAnswer,
 } from '../studio-src/client/app/StudioSelectionGrouping'
 import type { StudioClientView } from '../studio-src/client/StudioShell'
 import { StudioInspector } from '../studio-src/StudioInspector'
@@ -47,6 +48,12 @@ function inspection(): StudioInspection {
 const garden = '/workspace/Garden.tao'
 
 Describe('Studio selection grouping', () => {
+  Test('Make view takes a typed name, numbers the view for an empty answer, and makes nothing on Cancel', () => {
+    Expect(studioViewNameAnswer('  StoryCard ')).toEqual({ name: 'StoryCard' })
+    Expect(studioViewNameAnswer('   ')).toEqual({})
+    Expect(studioViewNameAnswer(undefined)).toBeUndefined()
+  })
+
   Test('additive selection toggles members of one file and keeps the last added as the selection', () => {
     const selected = inspection()
     const title = selection(garden, 10, 20)

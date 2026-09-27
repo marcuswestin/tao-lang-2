@@ -329,6 +329,7 @@ function isStaleSourceRefusal(error: unknown): boolean {
 function sourceActionUsesRenderOccurrence(action: StudioCanonicalSourceAction): boolean {
   return action.kind === 'move-render'
     || action.kind === 'set-layout-entry'
+    || action.kind === 'clear-layout-entry'
     || action.kind === 'set-style-entry'
     || action.kind === 'wrap-render'
     || action.kind === 'group-renders'

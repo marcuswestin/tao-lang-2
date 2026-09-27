@@ -305,6 +305,14 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
     }
   }
   if (
+    action.kind === 'clear-layout-entry'
+    && typeof action['renderId'] === 'string'
+    && Array.isArray(action['heads'])
+    && action['heads'].every(value => typeof value === 'string')
+  ) {
+    return { heads: action['heads'] as string[], kind: action.kind, renderId: action['renderId'] }
+  }
+  if (
     action.kind === 'set-layout-entry'
     && typeof action['renderId'] === 'string'
     && Array.isArray(action['entry'])
@@ -416,6 +424,7 @@ function requireSourceActionPreconditions(
 ): void {
   const occurrenceRequired = request.kind === 'move-render'
     || request.kind === 'set-layout-entry'
+    || request.kind === 'clear-layout-entry'
     || request.kind === 'set-style-entry'
     || request.kind === 'wrap-render'
     || request.kind === 'group-renders'

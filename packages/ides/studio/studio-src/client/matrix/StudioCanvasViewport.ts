@@ -254,13 +254,31 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     })
     publish()
   }
+  /** A zoom step keeps the selection in view: its centre lands in the host's centre at the new scale. */
+  const zoomStep = (direction: 1 | -1): void => {
+    const target = deps.selectionBounds?.()
+    if (target === undefined) {
+      zoomTo(nextStop(current.z, direction))
+      return
+    }
+    const bounds = host.getBoundingClientRect()
+    const next = nextStop(current.z, direction)
+    const x = ((target.left + target.right) / 2 - bounds.left - current.x) / current.z
+    const y = ((target.top + target.bottom) / 2 - bounds.top - current.y) / current.z
+    Object.assign(current, { x: bounds.width / 2 - x * next, y: bounds.height / 2 - y * next, z: next })
+    publish()
+  }
   const shortcut = (command: StudioCanvasZoomCommand): void => {
     Switch(command, {
-      fit,
+      // ⌘0 fits what is selected, and the whole canvas only when nothing is.
+      fit: () => {
+        const selected = deps.selectionBounds?.()
+        return selected === undefined ? fit() : frameBounds(selected)
+      },
       reset,
       'zoom-focused': () => frameBounds(deps.focusedBounds?.()),
-      'zoom-in': () => zoomTo(nextStop(current.z, 1)),
-      'zoom-out': () => zoomTo(nextStop(current.z, -1)),
+      'zoom-in': () => zoomStep(1),
+      'zoom-out': () => zoomStep(-1),
       'zoom-selection': () => frameBounds(deps.selectionBounds?.()),
     })
     deps.onGestureEnd?.()
@@ -628,7 +646,8 @@ const shiftedShortcuts: Readonly<Record<string, StudioCanvasZoomCommand>> = {
 
 /**
  * canvasShortcutCommand names the canvas command a key press asks for: ⌘0, ⌘1, ⌘+ and ⌘− with the
- * platform modifier, ⇧1 and ⇧2 with Shift alone.
+ * platform modifier, ⇧1 and ⇧2 with Shift alone. ⌘0 fits the selection when there is one and the
+ * whole canvas otherwise; ⌘+ and ⌘− keep the selection centred.
  */
 function canvasShortcutCommand(
   event: Readonly<{

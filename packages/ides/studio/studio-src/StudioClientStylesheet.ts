@@ -316,10 +316,11 @@ kbd {
 /* Draw is the workbench frame: code on the left with the view's inputs pinned under it, the canvas in
    the middle, and the whole inspector on the right. The inspector's two panes are placed apart by
    letting the aside dissolve into the grid, so no mounted pane moves in the DOM. The preview size
-   is the code column here and both side dividers are mirrored (StudioShell). */
+   is the code column here and both side dividers are mirrored (StudioShell). The percentage caps only
+   guard a shrinking window; a drag is clamped in StudioShell so the canvas keeps its floor. */
 .tao-studio-product-host[data-layout-preset="draw"] .studio-center {
   grid-template-columns:
-    min(var(--studio-preview-size), 32%) 4px minmax(320px, 1fr) 4px min(var(--studio-right-size), 28%);
+    min(var(--studio-preview-size), 55%) 4px minmax(320px, 1fr) 4px min(var(--studio-right-size), 45%);
   grid-template-rows: minmax(160px, 1fr) minmax(0, auto);
 }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-inspector { display: contents; }
