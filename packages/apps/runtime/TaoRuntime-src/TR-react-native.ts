@@ -6,6 +6,10 @@ export type ReactNativeRuntime = {
     sendAccessibilityEvent(host: object, eventType: 'focus'): void
   }
   ActivityIndicator: React.ComponentType<any>
+  Appearance?: {
+    getColorScheme(): 'dark' | 'light' | null | undefined
+    addChangeListener(handler: () => void): { remove(): void }
+  }
   AppState?: {
     addEventListener(event: 'change', handler: (state: string) => void): { remove(): void }
     currentState: string
@@ -27,7 +31,7 @@ export type ReactNativeRuntime = {
   StatusBar?: any
   RefreshControl?: any
   FlatList?: any
-  Platform?: { OS: string }
+  Platform?: { OS: string; isMacCatalyst?: boolean }
   PlatformColor?: (...names: string[]) => unknown
   Pressable: React.ComponentType<any>
   ScrollView: React.ComponentType<any>
