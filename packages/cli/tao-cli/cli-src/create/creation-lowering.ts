@@ -1,4 +1,4 @@
-import { Assert, FS, Switch } from '@shared'
+import { Assert, FS, type ReleaseProfile, Switch } from '@shared'
 import { PROJECT_TSCONFIG } from '../app-modules'
 import { deriveDesignColors } from './creation-colors'
 import {
@@ -11,11 +11,14 @@ import {
   derivedDeclarationNames,
   titleFieldOf,
 } from './creation-plan'
+import { projectStarterRelease } from './release-starter-projection'
 
 /** CreationFiles maps project-relative paths to Tao source, before canonical formatting. */
 export type CreationFiles = Record<string, string>
 
 export type LowerCreationPlanOptions = {
+  /** Internal builds and tests select a profile; public commands use their build stamp. */
+  releaseProfile?: ReleaseProfile
   /** The description the plan came from, recorded in the app file for provenance. */
   description?: string
 }
@@ -47,7 +50,7 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
   for (const entity of plan.entities) {
     files[`${entity.plural}/${entity.plural}.tao`] = featureFile(entity, names)
   }
-  return files
+  return projectStarterRelease(files, options.releaseProfile)
 }
 
 /** writeCreationFiles writes lowered sources under `directory`, creating feature folders as needed. */

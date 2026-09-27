@@ -32,7 +32,14 @@ export function createWorkspaceLspServices(
 ): WorkspaceLspServices {
   return assembleWorkspaceServices(
     packagesContext,
-    options => Parser.createLspContext({ ...options, langiumContext: context, ...contributions }),
+    options =>
+      Parser.createLspContext({
+        ...options,
+        langiumContext: context,
+        ...contributions,
+        releaseStdlibRoot: packagesContext.stdlibRoot,
+      }),
+    true,
   )
 }
 
@@ -44,9 +51,10 @@ export function createWorkspaceLspServices(
 function assembleWorkspaceServices<ServicesT extends ParserServices>(
   packagesContext: Packages.Context,
   createParserContext: (options: { packages: PackageResolver }) => ParserContext<ServicesT>,
+  editorRelease = false,
 ): ServicesT & { packages: PackageResolver } {
   const packages = Packages.createResolver(packagesContext)
   const { services } = createParserContext({ packages })
-  Validator.installLangiumChecks(services, packagesContext)
+  Validator.installLangiumChecks(services, packagesContext, editorRelease)
   return { ...services, packages }
 }

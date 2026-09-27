@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { Errors, FS, Platform, ReleaseCapabilities, type ReleasePhase } from '@shared'
 import { context } from 'esbuild'
 import { writeMergedTaoTextMateGrammar } from './ide-extension-src/syntax/textmate-grammar'
 
@@ -13,6 +13,8 @@ type IdeExtensionPublicationOptions =
 
 type BuildIdeExtensionOptions = {
   minify?: boolean
+  releasePhase?: ReleasePhase
+  releaseVersion?: string
   packageRoot?: string
   watch?: boolean
 }
@@ -42,6 +44,19 @@ export async function publishIdeExtensionOutputs(
 }
 
 export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}): Promise<void> {
+  const releaseArg = Platform.runtimeProcess.argv.indexOf('--release')
+  const phaseArg = Platform.runtimeProcess.argv.indexOf('--phase')
+  const releaseVersion = options.releaseVersion
+    ?? (releaseArg < 0 ? undefined : Platform.runtimeProcess.argv[releaseArg + 1])
+  const phase = options.releasePhase
+    ?? (phaseArg < 0 ? 'development' : Number(Platform.runtimeProcess.argv[phaseArg + 1]) as ReleasePhase)
+  const profile = ReleaseCapabilities.profile(phase)
+  if (releaseVersion !== undefined && phase === 'development') {
+    Errors.throwUserInput('A public editor release requires a release phase.')
+  }
+  if (phase !== 'development' && releaseVersion === undefined) {
+    Errors.throwUserInput('A public editor profile requires --release <version>.')
+  }
   const packageRoot = options.packageRoot ?? import.meta.dir
   const repositoryRoot = FS.resolvePath('../../..', packageRoot)
   const watch = options.watch ?? Platform.runtimeProcess.argv.includes('--watch')
@@ -77,6 +92,8 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
     format: 'cjs',
     define: {
       'import.meta.dirname': '__dirname',
+      TAO_RELEASE_PHASE: JSON.stringify(profile.phase),
+      TAO_RELEASE_VERSION: JSON.stringify(releaseVersion ?? 'development'),
     },
     outExtension: {
       '.js': '.cjs',
@@ -95,6 +112,11 @@ export async function buildIdeExtension(options: BuildIdeExtensionOptions = {}):
           if (result.errors.length > 0) {
             return
           }
+          await FS.writeJson(FS.resolvePath('release-profile.json', stagingGeneratedRoot), {
+            version: releaseVersion ?? 'development',
+            ...profile,
+            fingerprint: ReleaseCapabilities.fingerprint(profile),
+          })
           await FS.copyFile(generatedTaoTextMateGrammar, stagingTaoTextMateGrammar)
           await writeMergedTaoTextMateGrammar(stagingTaoTextMateGrammar, taoTextMateGrammarOverlay)
           await FS.copyFile(

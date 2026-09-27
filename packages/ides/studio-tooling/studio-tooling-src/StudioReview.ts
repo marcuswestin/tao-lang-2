@@ -1,4 +1,4 @@
-import { Errors, FS, Platform, Repo } from '@shared'
+import { Errors, FS, Json, Platform, ReleaseCapabilities, Repo } from '@shared'
 import {
   StudioCdp,
   type StudioCdpRendererFingerprint,
@@ -131,6 +131,7 @@ export async function runStudioReview(
   options: StudioReviewOptions = {},
   dependencies: StudioReviewDependencies = defaultDependencies,
 ): Promise<StudioReviewResult> {
+  ReleaseCapabilities.require('studio')
   const projectRoot = FS.resolvePath(projectPath)
   if (!await FS.isDirectory(projectRoot)) {
     Errors.throwUserInput(`No Tao project directory found at ${projectRoot}.`)
@@ -185,18 +186,70 @@ export async function runStudioReview(
       surface: initialSurface.manifest,
     })
   } catch (error) {
+    const evidence: Promise<unknown>[] = []
+    if (browser !== undefined) {
+      evidence.push(
+        browser.captureElementScreenshotAt(FS.resolvePath('failure.png', artifactRoot), 'body'),
+        FS.writeJson(
+          FS.resolvePath('logs/browser-events.json', artifactRoot),
+          browser.browserEvents().map(event => ({
+            kind: event.kind,
+            level: event.level,
+            ...(event.timestamp === undefined ? {} : { timestamp: event.timestamp }),
+          })),
+        ),
+        browser.evaluate<unknown>(`({
+          gridCount: document.querySelectorAll('.studio-preview-grid').length,
+          manifestCount: document.querySelectorAll('.studio-preview-grid[data-tao-review-manifest]').length,
+          frameCount: document.querySelectorAll('iframe').length,
+          cells: [...document.querySelectorAll('.studio-preview-cell[data-tao-review-key]')].map(element => ({
+            key: element.dataset.taoReviewKey, status: element.dataset.taoReviewStatus,
+          })),
+        })`).then(value =>
+          FS.writeJson(FS.resolvePath('logs/failure-page.json', artifactRoot), failurePageEvidence(value))
+        ),
+      )
+    }
+    if (launch !== undefined) {
+      evidence.push(FS.writeText(FS.resolvePath('logs/studio.log', artifactRoot), launch.output()))
+    }
+    // Preserve the original failure even when a crashed renderer cannot supply every artifact.
+    const retained = await Promise.allSettled(evidence)
     await FS.writeJson(FS.resolvePath('failure.json', artifactRoot), {
       error: error instanceof Error ? error.message : String(error),
+      evidenceErrors: retained.flatMap(result => result.status === 'rejected' ? [Errors.messageOf(result.reason)] : []),
       reviewId,
       version: 1,
     })
-    if (launch !== undefined) {
-      await FS.writeText(FS.resolvePath('logs/studio.log', artifactRoot), launch.output())
-    }
     throw error
   } finally {
     await browser?.close().catch(() => undefined)
     await launch?.stop().catch(() => undefined)
+  }
+}
+
+/** Keep failure structure useful without retaining arbitrary preview text, attributes, or input values. */
+function failurePageEvidence(value: unknown) {
+  const page = Json.isRecord(value) ? value : {}
+  const count = (name: string): number => {
+    const value = page[name]
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0
+  }
+  return {
+    gridCount: count('gridCount'),
+    manifestCount: count('manifestCount'),
+    frameCount: count('frameCount'),
+    cells: Array.isArray(page['cells'])
+      ? page['cells'].flatMap(cell => {
+        if (!Json.isRecord(cell) || typeof cell['key'] !== 'string') {
+          return []
+        }
+        return [{
+          key: cell['key'],
+          status: ['ready', 'failed', 'pending'].includes(String(cell['status'])) ? cell['status'] : 'unknown',
+        }]
+      })
+      : [],
   }
 }
 
@@ -356,6 +409,7 @@ async function writeReviewArtifacts(input: {
   reviewId: string
   surface: ReviewSurfaceManifest
 }): Promise<StudioReviewResult> {
+  ReleaseCapabilities.require('studio')
   if (!input.cells.every(isReviewCell)) {
     Errors.throwUnexpected('Studio review capture produced invalid cell evidence.')
   }

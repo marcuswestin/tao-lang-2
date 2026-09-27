@@ -1,8 +1,9 @@
-import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics, FS } from '@shared'
+import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics, FS, type ReleaseProfile } from '@shared'
 import { Langium } from './langium-exports'
 import { bridgesToATypeScriptExport, unresolvedReferenceMessage } from './linker-diagnostics'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
+import { ReleaseCompletionProvider } from './release-completion-provider'
 import { TaoLexerErrorMessageProvider, TaoParserErrorMessageProvider } from './syntax-diagnostics'
 import { TaoDocumentValidator } from './tao-document-validator'
 import { TaoReferences } from './tao-references'
@@ -20,6 +21,7 @@ export const codeProjectRoot = '/__tao__'
 const codeSourceUri = Langium.URI.file(`${codeProjectRoot}/source.tao`)
 
 export { AST, Langium, URI }
+export { releaseCapabilityOf } from './release-capability'
 export { TaoReferences } from './tao-references'
 export type URI = Langium.URI
 export type { PackageResolver } from './package-resolver'
@@ -56,6 +58,8 @@ export type CreateParserLspContextOptions = ParserLspContributions & {
 
 /** ParserLspContributions declares optional LSP services supplied by parser hosts. */
 export type ParserLspContributions = {
+  releaseProfile?: ReleaseProfile
+  releaseStdlibRoot?: string
   lspFormatter?: () => Langium.Formatter
   lspCodeActionProvider?: () => Langium.CodeActionProvider
 }
@@ -293,6 +297,8 @@ type ParserLspModule = {
 
 function lspModule(options: ParserLspContributions): ParserLspModule {
   const lsp = {
+    CompletionProvider: (services: Langium.LangiumServices) =>
+      new ReleaseCompletionProvider(services, options.releaseProfile, options.releaseStdlibRoot),
     ...(options.lspFormatter ? { Formatter: options.lspFormatter } : {}),
     ...(options.lspCodeActionProvider ? { CodeActionProvider: options.lspCodeActionProvider } : {}),
   }

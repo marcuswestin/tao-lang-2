@@ -10,6 +10,8 @@ recommendation. A recommendation is a starting position for the decision, never 
 ## Release checklist — before the repository goes public
 
 Run down this list before the first public push. Each item points at the entry that owns it.
+The [staged release plan](<Plan - Staged public releases.md>) owns the five cumulative public
+releases; it waives none of these publication or licensing prerequisites.
 
 - [ ] **Revoke the App Store Connect API key.** Untracking the WordFlower ship lock (`P15`,
       2026-09-22) removed it from the tree, not from history. Revoke the key its `keyId` names and
@@ -122,11 +124,14 @@ do we say it?
 - **Decided 2026-09-22:** invite outside developers before MVP is complete, with an explicit 0.x
   promise: expect breaking changes, and `tao fix` migrates what it can. Feedback should shape the
   remaining tranches.
+- **Revised 2026-09-26:** use five cumulative releases, aiming for three to four days between them
+  after release 1 is ready, conditional on each candidate's QA. The staged plan owns the scope;
+  these are planning intervals, with on-demand QA and no schedule or new merge gate.
 
 ### R4 — What we claim about platforms
 
 Parts of the toolchain are macOS-only (`sips` in the create brief, the Apple helper, Xcode). Android
-and web work everywhere.
+and web implementation paths exist; implementation alone does not establish public support.
 
 - Blocks: `A3`'s install instructions and `A8`'s target matrix.
 - Options: say macOS-only for now; say macOS for iOS and full support elsewhere for web and Android;
@@ -134,6 +139,11 @@ and web work everywhere.
 - **Decided 2026-09-22:** the first public standalone CLI supports **macOS on Apple Silicon only**.
   Do not claim Linux, Windows, or Intel Mac support in that release. The other buildable targets in
   `Plan - Standalone Tao CLI.md` remain later expansion work, not first-release targets.
+- **Revised 2026-09-26:** release 1 runs the first app in the browser; release 2 adds iOS Simulator,
+  release 3 native macOS Studio, release 4 invitation Companion and private same-person CloudKit
+  sync on Apple devices, and release 5 TestFlight shipping. Android and other host/distribution
+  platforms are deferred beyond these five releases. The CLI must be signed and notarized at
+  release 1; a successful unsigned install is insufficient.
 
 ## Decide next — these unblock program and device work
 
@@ -170,7 +180,8 @@ that host the companion app itself, and does one host serve several Tao versions
   Studio-pairing features on top of the same shell.
 - **Decided 2026-09-22:** the companion app is the shared host, with infrequent native-shell
   releases and an explicit compatibility check against the Tao bundle. One host is not built for
-  every Tao version. The first public-release companion is an invitation beta (`R12`).
+  every Tao version. **Revised 2026-09-26:** the invitation-beta Companion arrives in release 4
+  (`R12`), after the release-2 iOS Simulator host.
 - **Decided 2026-09-23:** prebuilt hosts are published as release assets on the public repository's
   GitHub Releases, beside the CLI's (`R11`), and `tao dev` downloads them without authentication.
   Until the repository is public, hosts reach a machine by being built in its checkout.
@@ -227,6 +238,10 @@ app's membership model assumes.
 - **Decided 2026-09-22:** put standalone CLI release binaries, checksums, and the version index on
   GitHub Releases in the planned public repository. This does not host the separate app-update
   service.
+- **Revised 2026-09-26:** public OTA claims stay beyond release 5. The existing InstantDB demo
+  work is separate from release 4's CloudKit private same-person sync and is not a prerequisite
+  or substitute for that acceptance. Auth/access/account-backed offline data is deferred beyond
+  release 5; CloudKit still requires offline/relaunch/account-switch and two-device proof.
 
 ### R12 — What the public story includes
 
@@ -234,20 +249,21 @@ Which surfaces the release presents: the CLI alone, the CLI plus Studio, the com
 extension. Studio is the most impressive and the least finished.
 
 - Blocks: `A3`'s scope and `A5`'s example set.
-- **Decided in the Studio dialogue, recorded 2026-09-21:** ship a supported, publicly downloadable
-  native macOS Studio in the first public release. Its packaging and release proof remain work.
-- **Decided 2026-09-22:** publish the IDE extension to the VS Code Marketplace and Open VSX at
-  launch. Offer the companion host as an invitation beta, with physical-device acceptance still to
-  prove. Defer `tao review` from the first standalone CLI binary; excluding its imported Studio
-  graph requires a packaging slice.
-- **Decided 2026-09-24:** defer build and distribution acceptance that needs release accounts,
-  signing certificates, notarization credentials, or an authorized physical device until the
-  near-release pass. Do not run certificate-dependent Studio or CLI signing and notarization,
-  physical-iPhone Companion builds, hosted-binary or installed-update proofs, or marketplace
-  publication checks as current branch or landing gates. Keep their guarded commands available;
-  revisit and complete the release-required proofs before declaring the first public release
-  ready. Ordinary tests, local packaging, simulator checks, and credential-free editor acceptance
-  continue.
+- **Decided 2026-09-26 — supersedes the first-release Studio/Companion promises from 2026-09-21
+  and 2026-09-22:** follow [the five-release plan](<Plan - Staged public releases.md>). Release 1
+  includes the signed/notarized macOS Apple Silicon CLI, both editor marketplaces, a polished
+  reading-list tutorial and the core local app/test surface. Release 2 adds iOS Simulator and
+  remote/multiple datasource use; release 3 adds native Studio and advanced design/interactive
+  scenarios; release 4 adds invitation Companion and CloudKit private same-person sync; release 5
+  adds TestFlight shipping. Scenario syntax is in release 1. App Store submission and public OTA
+  claims are beyond release 5. Keep `tao review` out of the first standalone binary; interactive
+  Studio review does not itself decide its later packaging.
+- **The 2026-09-24 evidence boundary remains:** build and distribution acceptance that needs release
+  accounts, signing certificates, notarization credentials, or an authorized physical device belongs
+  to the near-release pass for the phase that introduces it. Do not make these current branch or
+  landing gates. Keep guarded commands available; complete each applicable proof before declaring
+  that release ready. Ordinary tests, local packaging, simulator checks, and credential-free editor
+  acceptance continue. QA is on demand and report-only; fixes are separately scoped.
 
 ### R13 — The standalone CLI's remaining questions
 

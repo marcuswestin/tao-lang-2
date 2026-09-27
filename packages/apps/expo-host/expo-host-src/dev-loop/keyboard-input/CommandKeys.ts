@@ -1,4 +1,4 @@
-import { Errors } from '@shared'
+import { Errors, ReleaseCapabilities } from '@shared'
 import CommandRunner from '../CommandRunner'
 import { DEV_LOOP_CONTROLS, DevLoopOutput } from '../DevLoopOutput'
 import type { ExpoRunnerSession } from '../expo-runner/ExpoRunner'
@@ -30,6 +30,12 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
 
   if (key === '\u0003') {
     await context.finish(130)
+    return
+  }
+
+  const capability = DEV_LOOP_CONTROLS.find(control => control.key === key)?.capability
+  if (capability !== undefined && !ReleaseCapabilities.allows(capability)) {
+    DevLoopOutput.logDevLoop('dev', ReleaseCapabilities.diagnostic(capability), 'warn')
     return
   }
 

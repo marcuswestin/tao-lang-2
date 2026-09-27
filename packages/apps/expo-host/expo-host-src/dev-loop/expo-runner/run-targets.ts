@@ -1,6 +1,6 @@
 /// <reference path="./better-opn.d.ts" />
 
-import { CLI, Errors, Platform, Repo, Time } from '@shared'
+import { CLI, Errors, Platform, ReleaseCapabilities, Repo, Time } from '@shared'
 import betterOpen from 'better-opn'
 import { DevLoopOutput } from '../DevLoopOutput'
 import { presentIosSimulator } from '../IosSimulatorPresentation'
@@ -51,6 +51,7 @@ export function createExpoTargets(
 
 /** openAndroid opens the current app on Android, launching an emulator and installing its runtime. */
 async function openAndroid(context: ExpoTargetContext): Promise<boolean> {
+  ReleaseCapabilities.require('android')
   try {
     await context.android.ensureEmulator()
     await context.android.ensureRuntime()
@@ -79,6 +80,7 @@ async function openIosSimulator(
   context: ExpoTargetContext,
   shouldStop: () => boolean = () => false,
 ): Promise<boolean> {
+  ReleaseCapabilities.require('ios-simulator')
   const simulator = await ensureIosSimulator(context.config, shouldStop)
   if (!simulator) {
     return false
@@ -86,7 +88,8 @@ async function openIosSimulator(
   if (shouldStop()) {
     return false
   }
-  const inCompanion = await prepareCompanionOnSimulator(context, simulator)
+  const inCompanion = ReleaseCapabilities.allows('companion')
+    && await prepareCompanionOnSimulator(context, simulator)
   const link = inCompanion
     ? companionDevClientUrl({ host: '127.0.0.1', port: context.config.EXPO_PORT })
     : context.metro.endpointUrl(await context.metro.expoOpenEndpoint('ios'))
@@ -177,6 +180,7 @@ async function openStartupTargets(
 
 /** openPreparedAndroid opens the current app in the runtime prepared on the Android emulator. */
 async function openPreparedAndroid(context: ExpoTargetContext, url?: string): Promise<void> {
+  ReleaseCapabilities.require('android')
   await context.android.openRuntime(url)
 }
 

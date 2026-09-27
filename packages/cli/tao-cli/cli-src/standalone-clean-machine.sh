@@ -172,7 +172,7 @@ if (( major < 1 || (major == 1 && minor < 4) || (major == 1 && minor == 4 && pat
 fi
 
 if ! step 'build the 0.0.0 release' "$bun_bin" run \
-  packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0 \
+  packages/cli/tao-cli/cli-src/standalone-build.ts --release 0.0.0 --phase 1 \
   > "$logs/release.log" 2>&1; then
   cat "$logs/release.log" >&2
   exit 1

@@ -1,4 +1,6 @@
 import { Arrays, Effects } from '@tao/runtime/core'
+export { ReleaseCapabilities } from '../ReleaseCapabilities'
+export type { ReleaseCapability, ReleasePhase, ReleaseProfile } from '../ReleaseCapabilities'
 import { Assert } from './Assert'
 import { Diagnostic, Diagnostics } from './Diagnostics'
 import * as Errors from './Errors'

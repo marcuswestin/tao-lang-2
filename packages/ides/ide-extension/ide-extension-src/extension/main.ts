@@ -10,6 +10,7 @@ import {
   type ServerOptions,
   TransportKind,
 } from 'vscode-languageclient/node'
+import { requireMatchingEditorRelease } from '../language/release-profile'
 import { workspaceServerPlan } from './workspace-server-roots'
 
 let clients = new Map<string, LanguageClient>()
@@ -35,7 +36,8 @@ async function reconcileLanguageClients(context: vscode.ExtensionContext): Promi
       folders.map(folder => folder.uri.fsPath),
       Platform.runtimeProcess.cwd(),
     )
-    const additions = plan.add.map(root => {
+    const additions = plan.add.map(async root => {
+      await requireMatchingEditorRelease(root)
       const client = new LanguageClient(
         `tao-${++clientSequence}`,
         folders.length > 1 ? `Tao Language Server (${FS.basename(root)})` : 'Tao Language Server',
@@ -126,6 +128,9 @@ async function runTaoSourceAction(command: TaoSourceActionCommand): Promise<void
   }
 
   try {
+    await requireMatchingEditorRelease(
+      editor.document.uri.scheme === 'file' ? editor.document.uri.fsPath : workspaceRootForDocument(editor.document),
+    )
     const currentText = editor.document.getText()
     const documentUri = Langium.URI.parse(editor.document.uri.toString())
     const workspace = await Workspace.open(workspaceRootForDocument(editor.document))

@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Json } from '@shared'
+import { CLI, Errors, FS, HCI, Json, ReleaseCapabilities } from '@shared'
 import { DevLoopOutput } from '../DevLoopOutput'
 import { CompanionIdentity } from '../prebuilt-host/CompanionIdentity'
 import { Android, type AndroidSession } from './android'
@@ -112,9 +112,10 @@ export async function openPhysicalDevice(
   android: AndroidSession = Android,
   dependencies: PhysicalDeviceDependencies = {},
 ): Promise<boolean> {
+  ReleaseCapabilities.require('companion')
   await metro.waitForMetro()
   const iosDevices = await (dependencies.listIosDevices ?? listIosPhysicalDevices)()
-  const androidSerials = await listAndroidPhysicalDevices(android)
+  const androidSerials = ReleaseCapabilities.allows('android') ? await listAndroidPhysicalDevices(android) : []
   if (iosDevices.length === 0 && androidSerials.length === 0) {
     DevLoopOutput.logDevLoop(
       'dev',

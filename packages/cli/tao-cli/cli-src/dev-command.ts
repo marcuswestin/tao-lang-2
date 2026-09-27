@@ -1,6 +1,6 @@
 import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@expo-host/dev-loop/expo-dev-loop'
 import type { DevStartupTarget } from '@expo-host/dev-loop/expo-runner/run-targets'
-import { Errors, FS, HCI, ProjectDevSession, Switch } from '@shared'
+import { Errors, FS, HCI, ProjectDevSession, ReleaseCapabilities, Switch } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { TaoAppModules } from './app-modules'
 import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
@@ -22,6 +22,9 @@ export async function runTaoDev(
   targetPath = '.',
   options: TaoDevCommandOptions = {},
 ): Promise<number> {
+  for (const target of options.startupTargets ?? []) {
+    ReleaseCapabilities.require(ReleaseCapabilities.targetCapability(target))
+  }
   const target = FS.resolvePath(targetPath)
   // `runDevLoop` renders through whichever reporter it is given; the dashboard is `tao dev`'s to
   // own, so this is the one place that wires the Ink implementation in.

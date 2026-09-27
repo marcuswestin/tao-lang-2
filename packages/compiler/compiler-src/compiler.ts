@@ -1,6 +1,6 @@
 import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST, codeProjectRoot, type ParsedFile } from '@parser'
-import { Assert, Diagnostics, Errors, FS } from '@shared'
+import { Assert, Diagnostics, Errors, FS, ReleaseCapabilities, type ReleaseProfile } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
 import { authPolicy } from './auth-policy'
@@ -140,11 +140,16 @@ export type CompilerSession = {
 export type CompilerContext = {
   packagesContext: Packages.Context
   sourceRoot: string
+  releaseProfile: ReleaseProfile
 }
 
 /** createContext creates compiler invocation state. */
-function createContext(packagesContext: Packages.Context, sourceRoot: string): CompilerContext {
-  return { packagesContext, sourceRoot }
+function createContext(
+  packagesContext: Packages.Context,
+  sourceRoot: string,
+  releaseProfile: ReleaseProfile = ReleaseCapabilities.current(),
+): CompilerContext {
+  return { packagesContext, sourceRoot, releaseProfile }
 }
 
 /**
@@ -183,6 +188,20 @@ function compileValidated(
   context: CompilerContext,
   options: CompileOptions = {},
 ): CompileResult {
+  const releaseDiagnostics = Validator.releaseDiagnostics(Validator.createContext(
+    context.packagesContext,
+    validationResult.files.map(file => file.ast),
+    validationResult.entry.path,
+    undefined,
+    context.releaseProfile,
+  ))
+  validationResult = {
+    ...validationResult,
+    diagnostics: Diagnostics.unique([...validationResult.diagnostics, ...releaseDiagnostics]),
+  }
+  if (options.studio) {
+    ReleaseCapabilities.require('studio', context.releaseProfile)
+  }
   validationResult = validationForCompileMode(validationResult, options.validationMode ?? 'development')
   const errors = Diagnostics.errorMessages(validationResult.diagnostics)
   Assert(errors.length === 0, `Cannot compile Tao source with validation errors: ${errors.join('; ')}`, {

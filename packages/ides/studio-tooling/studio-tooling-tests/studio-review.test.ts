@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { Errors, FS, Repo } from '@shared'
 import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 import { createHash } from 'node:crypto'
 import {
@@ -22,6 +22,81 @@ const renderer = {
 }
 
 Describe('Studio visual review', () => {
+  Test('retains failed-page evidence before closing a renderer that never publishes a manifest', async () => {
+    const root = await mkTestDir('studio-review-failure-')
+    const artifactRoot = FS.resolvePath('review', root)
+    const order: string[] = []
+    try {
+      await Expect(runStudioReview(Repo.getRoot(), { artifactRoot }, {
+        launchBrowser: async () => ({
+          browserEvents: () => [{ kind: 'console', level: 'error', text: 'secret-token=never-write-this' }],
+          captureElementScreenshotAt: async (path, selector) => {
+            Expect(selector).toBe('body')
+            order.push('capture')
+            await FS.writeText(path, 'failed page pixels')
+            return path
+          },
+          close: async () => {
+            order.push('close')
+          },
+          evaluate: async <Result>(expression: string) => {
+            Expect(expression).not.toContain('outerHTML')
+            Expect(expression).not.toContain('textContent')
+            return {
+              gridCount: 1,
+              manifestCount: 0,
+              frameCount: 2,
+              cells: [{ key: 'main', status: 'failed', input: 'secret-token=never-write-this' }],
+              html: 'secret-token=never-write-this',
+            } as Result
+          },
+          goto: async () => {},
+          rendererFingerprint: async () => renderer,
+          waitFor: async () => Errors.throwHostEnvironment('Review manifest unavailable'),
+        }),
+        now: () => new Date('2026-09-26T00:00:00.000Z'),
+        randomId: () => 'failure-test',
+        startStudio: async () => ({
+          output: () => 'compile error details',
+          readiness: {
+            artifactRoot,
+            launchId: 'failure-launch',
+            lifecycleLogPath: 'lifecycle.jsonl',
+            manifestPath: 'launch.json',
+            mode: 'browser',
+            previewUrl: 'http://localhost:42001',
+            projectRoot: Repo.getRoot(),
+            sessionId: 'failure-session',
+            sessionUrl: 'http://localhost:42000/sessions/failure-session',
+            studioUrl: 'http://localhost:42000',
+            version: 1,
+          },
+          stop: async () => {
+            order.push('stop')
+          },
+        }),
+      })).rejects.toThrow('Review manifest unavailable')
+      Expect(order).toEqual(['capture', 'close', 'stop'])
+      Expect(await FS.readText(FS.resolvePath('failure.png', artifactRoot))).toBe('failed page pixels')
+      Expect(await FS.readJson(FS.resolvePath('logs/failure-page.json', artifactRoot))).toEqual({
+        gridCount: 1,
+        manifestCount: 0,
+        frameCount: 2,
+        cells: [{ key: 'main', status: 'failed' }],
+      })
+      Expect(await FS.isFile(FS.resolvePath('logs/failure-page.html', artifactRoot))).toBe(false)
+      Expect(await FS.readText(FS.resolvePath('logs/studio.log', artifactRoot))).toBe('compile error details')
+      Expect(await FS.readJson(FS.resolvePath('logs/browser-events.json', artifactRoot))).toEqual([
+        { kind: 'console', level: 'error' },
+      ])
+      for (const path of ['logs/browser-events.json', 'logs/failure-page.json', 'failure.json']) {
+        Expect(await FS.readText(FS.resolvePath(path, artifactRoot))).not.toContain('secret-token')
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('captures each ready viewport and releases both browser and Studio launch', async () => {
     const root = await mkGitTestDir('tao-studio-review-test-')
     const projectRoot = FS.resolvePath('project', root)

@@ -8,6 +8,11 @@ The release these items serve: a small number of outside developers — a Hacker
 install Tao, build something, and tell us what they wanted. Tao does not need to be complete. It
 needs to be installable, explorable, and honest about what it does not do yet.
 
+**Scope revised 2026-09-26:** [five cumulative public releases](<Plan - Staged public releases.md>)
+own the public sequence. This work inventory spans those releases and later work; it is not a list
+of prerequisites for release 1. Existing implementation records do not establish current QA or
+distribution readiness. The [QA register](../QA/README.md) holds on-demand evidence and findings.
+
 Each entry states what it is, why it blocks or serves the release, where the context lives, and what
 done looks like. None of them is a plan; each is enough to gather context and write one.
 
@@ -79,7 +84,8 @@ is `private`. Nobody outside the repository can install Tao.
   evidence, a nine-slice sequence, and the first-release decisions.
 - Progress: slices 1–5, 7, and 8 have landed, and the binary leaves out `tao review` (slice 9).
   `just standalone-cli-release <version>` builds an unsigned macOS arm64 release with its checksum,
-  index, and install script, ready to publish once the repository is public. Installed through
+  index, and install script. That unsigned artifact is not publication-ready: signing/notarization
+  and all applicable publication prerequisites remain required. Installed through
   `curl | sh`, the binary creates a project with its tests, then checks, compiles, tests, builds for
   web, and serves web from `tao dev` outside any checkout, and each project it creates runs under
   the release that made it; `just standalone-cli-acceptance` proves all of that. The plan's
@@ -258,7 +264,7 @@ from the development loop, which no virtualization approach can do.
 - Shape: use the companion app as the shared host, release its native shell infrequently, and check
   bundle compatibility explicitly. Build the applicable simulator/emulator artifacts in Tao's CI;
   `tao dev` obtains and launches a compatible host. The physical-iPhone companion is an invitation
-  beta for the first public release.
+  beta in release 4. iOS Simulator is release 2; Android is deferred beyond release 5.
 - Context: `packages/ides/studio-companion-app` (Slice 1 and 2 records under
   `Docs/Roadmap/Tao Studio companion app/`), `packages/apps/expo-host`.
 - Uses the host-scope decision in `R7`; physical-device acceptance and beta distribution remain
@@ -432,7 +438,8 @@ shell-completion tail. Each is a plan-and-execute task on its own.
   mounted design, including refinements. `rules { }` and rule checks are deferred past MVP. The
   plan's "Design values tranche" and "Design rules — deferred past MVP" sections carry the detail.
 
-Additional pre-MVP follow-ups requested in the 2026-09-26 auth design review:
+Follow-ups requested in the 2026-09-26 auth design review; the later staged-release decision places
+auth/access/account-backed offline app data beyond release 5:
 
 - **Drafts and completeness, separate from auth:** keep the new/edit draft and queued-submission
   lifecycle discussion separate from auth. Main already provides required-field completeness;
@@ -441,7 +448,8 @@ Additional pre-MVP follow-ups requested in the 2026-09-26 auth design review:
 - **Auth and account data:** follow the sequenced
   [implementation plan](<../Roadmap/Plan - Auth and account data.md>) for syntax, provider-neutral
   sessions, backend-enforced owner/member rules, supplied/custom UI, and offline data.
-  This plan does not settle the remainder of R5's authority cluster.
+  This plan does not settle the remainder of R5's authority cluster and is not a prerequisite for
+  releases 1–5. CloudKit's narrower release-4 offline/account-switch acceptance remains required.
 
 **Post-MVP deferrals:** text truthiness and named audiences. Neither is an auth prerequisite.
 Scope and review history: [Auth syntax review](<../Roadmap/Auth syntax review.md>).
@@ -457,6 +465,10 @@ a selection an authoritative render had discarded unsnaps the whole flow. That i
 consecutive green runs were re-established on 2026-09-20, which closed DEVENV-042.
 
 ### A16 — A reachable datasource for the public demo
+
+**Scope revised 2026-09-26:** this InstantDB evidence is retained as implementation history. The
+five-release public plan uses local data first and CloudKit private same-person sync at release 4;
+a public hosted InstantDB demo is deferred beyond release 5. It cannot satisfy CloudKit acceptance.
 
 `WordFlowerInstantDB` now selects an Instant Cloud datasource with a hard-coded app ID;
 `WordFlowerLocalInstantDB` preserves the `localhost:9020` fixture for development. Hosted app

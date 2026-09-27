@@ -1073,7 +1073,8 @@ function preferredConstructorDeclarations(
   node: AST.ConfiguredValue,
   candidates: readonly AST.ConstructorDeclaration[],
 ): AST.ConstructorDeclaration[] {
-  const rootName = node.type.$refText
+  // Completion creates a partial constructor before it has a reference token.
+  const rootName = node.type?.$refText
   const sameName = candidates.filter(candidate => candidate.name === rootName)
   if (sameName.length <= 1) {
     return [...candidates]

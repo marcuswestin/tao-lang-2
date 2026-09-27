@@ -17,6 +17,7 @@ const REPORT_COMMANDS = new Set([
   'land-lock',
   'landed',
   'model-audit',
+  'qa',
   'report-test-stats',
   'simplify-audit',
 ])

@@ -20,6 +20,7 @@ const expected = [
   'open-pr',
   'fix-agent-config',
   'test-host',
+  'qa-capture',
   'studio-smoke',
   'studio-proof-real-app',
   'admission-experiment',
@@ -87,7 +88,7 @@ Describe('agent host command permissions', () => {
     Expect(hostCommandKind(['prepare-release'], prefixes)).toBeUndefined()
     Expect(hostCommandKind(['reclaim', '--execute'], prefixes)).toBe('named')
     Expect(hostCommandKind(['reclaim', '--report-json'], prefixes)).toBeUndefined()
-    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(['merge-recover', ...expected.slice(13)])
+    Expect(Object.keys(HOST_COMMAND_TARGETS)).toEqual(['merge-recover', ...expected.slice(14)])
     const rules = CodexConfigGenerator.renderRules(source)
     const settings = JSON.parse(await FS.readText(Repo.resolvePath('.claude/settings.json'))) as {
       permissions: { allow: string[] }

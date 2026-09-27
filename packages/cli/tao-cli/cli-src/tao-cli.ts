@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import tab from '@bomb.sh/tab/commander'
 import { Command } from '@commander-js/extra-typings'
-import { Diagnostic, Errors, FS, HCI, Platform } from '@shared'
+import { Diagnostic, Errors, FS, HCI, Platform, ReleaseCapabilities } from '@shared'
 import type { Command as BaseCommand } from 'commander'
 import * as DiagnosticReport from './diagnostic-report'
 import type { InPlace } from './in-place-files'
@@ -39,7 +39,7 @@ export async function runTaoCli(argv = Platform.runtimeProcess.argv): Promise<vo
   await createCommands().parseAsync(argv, { from: 'node' })
 }
 
-function createCommands(): Command {
+export function createCommands(): Command {
   const commands = new Command()
     .name('tao')
     .description('Tao language CLI.')
@@ -529,6 +529,40 @@ function createCommands(): Command {
         Platform.runtimeProcess.exit(1)
       }
     })
+
+  commands.command('release-profile')
+    .description('Print the immutable release profile used by this toolchain.')
+    .action(() =>
+      HCI.writeLine(
+        JSON.stringify({
+          version: TaoVersion.current(),
+          ...ReleaseCapabilities.current(),
+          fingerprint: ReleaseCapabilities.fingerprint(),
+        }),
+      )
+    )
+
+  // Remove unavailable surfaces before completion registration so discovery and parsing agree.
+  const registeredCommands = commands.commands as Array<(typeof commands.commands)[number]>
+  for (const command of [...registeredCommands]) {
+    if (!ReleaseCapabilities.allows(ReleaseCapabilities.commandCapability(command.name()))) {
+      registeredCommands.splice(registeredCommands.indexOf(command), 1)
+      continue
+    }
+    const registeredOptions = command.options as Array<(typeof command.options)[number]>
+    for (const option of [...registeredOptions]) {
+      const capability = option.long === '--agents'
+        ? 'app-commands'
+        : option.long === '--update' || option.long === '--rollback'
+        ? 'ota'
+        : ['--ios', '--android', '--desktop', '--web'].includes(option.long ?? '')
+        ? ReleaseCapabilities.targetCapability(option.long!.slice(2))
+        : 'core'
+      if (!ReleaseCapabilities.allows(capability)) {
+        registeredOptions.splice(registeredOptions.indexOf(option), 1)
+      }
+    }
+  }
 
   // Registers `tao complete <shell>` to print a completion script, and the hidden request protocol it calls.
   // The adapter types against plain Commander, which extra-typings' generic Command does not widen to.
