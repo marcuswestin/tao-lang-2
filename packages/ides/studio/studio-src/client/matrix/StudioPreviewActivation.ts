@@ -4,7 +4,7 @@ import type { StudioPreviewConnection } from './StudioPreviewConnection'
  * Panels floating over the canvas (the edit log, the selection HUD) are Studio chrome: pressing one
  * neither pans the canvas nor lets go of the preview being edited.
  */
-export const studioCanvasChromeSelector = '[data-tao-studio-canvas-chrome]'
+const studioCanvasChromeSelector = '[data-tao-studio-canvas-chrome]'
 
 /** Input selection is separate from the preview used for inspection and source actions. */
 export function mountPreviewActivation(host: HTMLElement, previews: readonly StudioPreviewConnection[]): {

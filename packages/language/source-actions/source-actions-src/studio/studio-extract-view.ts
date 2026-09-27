@@ -1,7 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import Formatter from '@formatter'
 import { AST, Langium } from '@parser'
-import { Errors } from '@shared'
+import { Errors, Switch } from '@shared'
 import { assertNoSyntaxErrors } from '../source-actions-utils'
 import type {
   StudioCopyViewPatchRequest,
@@ -256,15 +256,17 @@ function parameterDeclaration(name: string, value: StudioLexicalValue): string {
 
 /** sourceTypeName spells a resolved type as a parameter type, or nothing where no plain spelling exists. */
 function sourceTypeName(type: ASTUtils.TaoType): string | undefined {
-  if (type.kind === 'unresolved' || type.kind === 'item' || type.kind === 'union') {
-    return undefined
+  const plain = () => {
+    const name = Type.displayName(type)
+    return name.includes('.') ? undefined : name
   }
-  if (type.kind === 'primitive' && type.primitive === 'action') {
-    return undefined
-  }
-  if (type.kind === 'list' && (type.element === undefined || sourceTypeName(type.element) === undefined)) {
-    return undefined
-  }
-  const name = Type.displayName(type)
-  return name.includes('.') ? undefined : name
+  return Switch.kind(type, {
+    entity: plain,
+    enum: plain,
+    item: () => undefined,
+    list: list => list.element === undefined || sourceTypeName(list.element) === undefined ? undefined : plain(),
+    primitive: primitive => primitive.primitive === 'action' ? undefined : plain(),
+    union: () => undefined,
+    unresolved: () => undefined,
+  })
 }

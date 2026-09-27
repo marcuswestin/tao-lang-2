@@ -18,7 +18,7 @@ export type StudioSelectionHudModel = Readonly<{
 
 export type StudioSelectionHudControl = 'alignment' | 'direction' | 'gap' | 'pad' | 'sizing'
 
-export const studioSelectionHudAlignments = [
+const studioSelectionHudAlignments = [
   'fill',
   'centered',
   'left',
@@ -29,7 +29,7 @@ export const studioSelectionHudAlignments = [
   'baseline',
 ] as const
 
-export const studioSelectionHudSizings = ['fill', 'hug'] as const
+const studioSelectionHudSizings = ['fill', 'hug'] as const
 
 export function studioSelectionHudModel(inspection: StudioRenderInspection): StudioSelectionHudModel {
   const layout = StudioInspector.layout(inspection)
