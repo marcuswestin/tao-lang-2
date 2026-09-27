@@ -116,11 +116,17 @@ clipboard synchronization, and uninstalls its uniquely identified test app durin
 scrolling brings off-screen controls and results into view. Android and physical-device journeys
 are not admitted under this subject because it includes iOS-specific URL operations.
 
-The first simulator attempt on 2026-09-26 stopped during CocoaPods preparation: the task's network
-policy blocked `cdn.cocoapods.org`. No native UI assertion ran. The journey still needs a successful
-host run; current host-free tests prove orchestration only. Image assertions check returned dimensions
-and presence, not encoded bytes or native image decoding. Late-event disposal is established by the
-mocked suite, not by an immediate unchanged native counter.
+The journey passed on an iPhone 17e simulator running iOS 27 on 2026-09-27, using the real native
+module. The first attempt had stopped at a CocoaPods network boundary; after integrating the isolated
+build fixes from main, the build, installation, assertions, and cleanup completed successfully.
+Evidence: `.artifacts/host-testing/bbc9132e-1cf6-4252-96bf-247a219d058a/appium-ios/proof.receipt.json`.
+
+HTML checks establish successful write/read calls and recovery of the distinct sample's plain text.
+iOS re-serializes HTML, so the native journey does not assert markup byte equality or bold styling.
+The listener check requires a change after a cleared count; native notifications are not assumed to
+arrive exactly once per write. The demo's reset control changes the count without removing the listener.
+Image assertions check returned dimensions and presence, not encoded bytes or native image decoding.
+Late-event disposal is established by the mocked suite, not by an immediate unchanged native counter.
 
 Cross-app paste permission scenarios remain pending. Physical haptic feel is deliberately excluded.
 Neither mocked UI tests nor this same-app Clipboard journey establishes those behaviors; listener

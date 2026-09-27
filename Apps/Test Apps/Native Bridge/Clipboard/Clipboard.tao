@@ -30,7 +30,7 @@ scene ClipboardDemo() {
       set Status = "Text read complete"
    }
    action CopyHtml() {
-      let Saved = do SetStringAsync(Text: "<b>Hello from Native Bridge</b>", Options: SetStringOptions {
+      let Saved = do SetStringAsync(Text: "<b>HTML from Native Bridge</b>", Options: SetStringOptions {
          InputFormat: StringFormat_HTML
       })
       set Status = "HTML write returned: { Saved }"
@@ -84,6 +84,9 @@ scene ClipboardDemo() {
    }
    action Changed(Event ClipboardEvent) {
       set EventCount += 1
+   }
+   action ResetCount() {
+      set EventCount = 0
    }
    action Listen() {
       check not Listening
@@ -151,6 +154,10 @@ scene ClipboardDemo() {
          TextMultiline("Start listening, then copy text above or in another app. Back automatically removes the listener.")
          Text(when Listening "Listening" / not "Not listening")
          Text("Clipboard changes: { EventCount }")
+         Text(when EventCount > 0 "Clipboard change received" / not "No clipboard changes received")
+         Button("Reset change count") {
+            on press ResetCount
+         }
          Button("Start listening", Disabled: Listening) {
             on press Listen
          }

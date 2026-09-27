@@ -21,8 +21,9 @@ notes after each completed pass; Git history is the longer record.
   before treating a `reclaimable` checkout as disposable; preserve live and owner-unknown roots,
   including the broken-pointer directories, until ownership is established. The
   [open developer-environment index](<Developer environment upgrades.md>) still needs a small,
-  owner-aware shortlist; `DEVENV-094` needs a quiet-machine admission experiment and `DEVENV-055`
-  its native-host proof.
+  owner-aware shortlist; `DEVENV-094` needs a quiet-machine admission experiment. `DEVENV-055`
+  received its native-compilation proof through the Native Bridge simulator journey on 2026-09-27
+  and is archived; this did not exercise iCloud service behavior.
 - Test Claude Code cloud readiness locally in an isolated Ubuntu 24.04 x86_64 environment with a
   fresh checkout, four CPUs, 16 GiB RAM, and a 30 GiB disk. First prove the repository's worktree
   session setup and `./agent setup`; then run portable check, test, and verify workflows. Keep a

@@ -153,7 +153,7 @@ Describe('maintained Native Bridge demo', () => {
     Expect(clipboard.setStringAsync.mock.calls).toEqual([
       ['An edited draft'],
       ['Submitted draft'],
-      ['<b>Hello from Native Bridge</b>', { inputFormat: 'html' }],
+      ['<b>HTML from Native Bridge</b>', { inputFormat: 'html' }],
     ])
     Expect(clipboard.getStringAsync.mock.calls).toEqual([[], [{ preferredFormat: 'html' }], []])
     Expect(clipboard.hasStringAsync.mock.calls).toEqual([[], []])
@@ -218,6 +218,7 @@ Describe('maintained Native Bridge demo', () => {
   for (const stopButton of ['Stop listening', 'Stop via deprecated API']) {
     Test(`updates listener controls and events, supports ${stopButton}, and cleans up on Back`, async () => {
       const screen = await openDemo('Clipboard · Expo')
+      Expect(screen.getByText('No clipboard changes received')).toBeDefined()
       Expect(screen.getByRole('button', { name: 'Start listening' }).props.accessibilityState.disabled).toBe(false)
       for (const name of ['Stop listening', 'Stop via deprecated API']) {
         Expect(screen.getByRole('button', { name }).props.accessibilityState.disabled).toBe(true)
@@ -239,6 +240,19 @@ Describe('maintained Native Bridge demo', () => {
         await settle()
       })
       Expect(screen.getByText('Clipboard changes: 2')).toBeDefined()
+      Expect(screen.getByText('Clipboard change received')).toBeDefined()
+      await press(screen, 'Reset change count')
+      Expect(screen.getByText('Clipboard changes: 0')).toBeDefined()
+      Expect(screen.getByText('No clipboard changes received')).toBeDefined()
+      Expect(screen.getByText('Listening')).toBeDefined()
+      Expect(first.remove).not.toHaveBeenCalled()
+      Expect(clipboard.addClipboardListener).toHaveBeenCalledTimes(1)
+      await act(async () => {
+        first.emit({ contentTypes: ['plain-text'] })
+        await settle()
+      })
+      Expect(screen.getByText('Clipboard changes: 1')).toBeDefined()
+      Expect(screen.getByText('Clipboard change received')).toBeDefined()
       await press(screen, stopButton)
       Expect(first.remove).toHaveBeenCalledTimes(1)
       Expect(clipboard.removeClipboardListener).toHaveBeenCalledTimes(stopButton === 'Stop via deprecated API' ? 1 : 0)
@@ -251,7 +265,7 @@ Describe('maintained Native Bridge demo', () => {
         first.emit({ contentTypes: ['url'] })
         await settle()
       })
-      Expect(screen.getByText('Clipboard changes: 2')).toBeDefined()
+      Expect(screen.getByText('Clipboard changes: 1')).toBeDefined()
       await press(screen, 'Start listening')
       const second = subscriptions[1]!
       Expect(clipboard.addClipboardListener).toHaveBeenCalledTimes(2)
