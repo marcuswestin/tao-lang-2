@@ -25,12 +25,13 @@ if [ "$(uname -s)" != Linux ]; then
 fi
 
 environment="$repository/packages/cli/dev-cli/dev-cli-src/environment"
+if "$install_nix"; then
+  # The installer waits for an active installation before judging its pending marker.
+  /bin/sh "$environment/nix-bootstrap.sh"
+fi
 if [ -f "$HOME/.local/state/tao-contributor/nix-bootstrap.pending" ]; then
   printf 'A previous Nix bootstrap did not complete. Recreate the disposable environment or recover its recorded installation before retrying.\n' >&2
   exit 1
-fi
-if "$install_nix"; then
-  /bin/sh "$environment/nix-bootstrap.sh"
 fi
 
 # Discover an installed Nix without assuming setup-shell exports survive the next cloud process.

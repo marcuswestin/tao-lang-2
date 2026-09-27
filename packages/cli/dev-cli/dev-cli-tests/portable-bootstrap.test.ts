@@ -18,7 +18,10 @@ Describe('portable contributor bootstrap', () => {
         await FS.writeText(path, `#!/bin/sh\nset -eu\n${body}\n`)
         await FS.chmod(path, 0o755)
       }
-      await executable(FS.resolvePath('uname', bin), 'case "$1" in -s) echo Linux ;; *) echo "Linux x86_64" ;; esac')
+      await executable(
+        FS.resolvePath('uname', bin),
+        'case "$1" in -s) echo Linux ;; -m) echo x86_64 ;; *) echo "Linux x86_64" ;; esac',
+      )
       // The real kernel lock is exercised in the Linux guest; this fixture tests publication on macOS too.
       await executable(FS.resolvePath('flock', bin), ':')
       await executable(
@@ -78,10 +81,43 @@ done`,
       Expect(await FS.readText(configLog)).toBe('keep-outputs = true')
 
       const callsBeforePartial = await FS.readText(calls)
+      const targetBeforePartial = await FS.realPath(profile)
       await FS.writeText(`${marker}.pending`, 'interrupted installation\n')
       const partial = await CLI.run('/bin/sh', { args: [script, '--tools-only'], cwd: root, env })
       Expect(partial.exitCode).toBe(1)
       Expect(await FS.readText(calls)).toBe(callsBeforePartial)
+
+      await FS.writeText(
+        FS.resolvePath('nix-bootstrap.sh', environment),
+        await FS.readText(Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/environment/nix-bootstrap.sh')),
+      )
+      const interrupted = await CLI.run('/bin/sh', {
+        args: [script, '--install-nix', '--tools-only'],
+        cwd: root,
+        env,
+      })
+      Expect(interrupted.exitCode).toBe(1)
+      Expect(await FS.exists(`${marker}.pending`)).toBe(true)
+
+      // Model the first installer completing while the second waits on its lock.
+      // The real installer must arbitrate the marker before the profile can be reused.
+      await executable(
+        FS.resolvePath('flock', bin),
+        `
+if [ "$1" = -w ]; then
+  printf 'lock acquired\\n' >> "$TAO_BOOTSTRAP_TEST_CALLS"
+  rm -f "$HOME/.local/state/tao-contributor/nix-bootstrap.pending"
+fi`,
+      )
+      const overlapping = await CLI.run('/bin/sh', {
+        args: [script, '--install-nix', '--tools-only'],
+        cwd: root,
+        env,
+      })
+      Expect({ exitCode: overlapping.exitCode, stderr: overlapping.stderr }).toEqual({ exitCode: 0, stderr: '' })
+      Expect(await FS.exists(`${marker}.pending`)).toBe(false)
+      Expect(await FS.readText(calls)).toBe(`${callsBeforePartial}lock acquired\nlock acquired\n`)
+      Expect(await FS.realPath(profile)).toBe(targetBeforePartial)
     } finally {
       await FS.remove(root)
     }

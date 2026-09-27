@@ -533,3 +533,18 @@ blocker was last reproduced at `7996e033`; the intervening integrations did not 
 Nix bootstrap, pinned version, image, or compatibility settings. Native amd64 and actual hosted
 smoke tests remain outstanding. No landing, Rosetta experiment, or global configuration change
 was performed.
+
+## Landing continuation, 2026-09-27
+
+The continuation at `06791ceb` restored the missing pinned Hutch launcher with
+`./agent setup --environment`; the separate host capability report then found it available.
+Setup reported a nonfatal timestamped GC-root symlink warning and retained the protected
+generated adapter directory. No dependency version or lockfile change was needed.
+
+Whole-diff review found the outer bootstrap rejected an active installer's pending marker
+before entering the installer's lock. The `--install-nix` path now lets the installer wait
+before judging that marker. The focused portable-bootstrap regression failed on the old
+ordering, then passed with the repair. It exercises the real installer through a deterministic
+lock-completion fixture, preserves rejection of interrupted installations, and checks profile
+reuse. It does not claim a concurrent real Linux installation or refresh the native ARM
+acceptance tied to `d37963fc` above. Native amd64 and actual hosted acceptance remain open.
