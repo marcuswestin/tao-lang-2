@@ -22,6 +22,12 @@
   Nix store. On 2026-09-25, after the branch's doctor repair, `./agent doctor` measured the same
   1.3.13 profile and correctly failed with a `direnv reload` instruction. The profile prerequisite
   remains external to this review branch.
+  On 2026-09-27 UTC, finalization of `feat/visionos-development-setup` integrated the new
+  `pkgs.direnv` prerequisite, but the borrowed profile lacked `bin/direnv`. Doctor still reported
+  the checkout usable; the real-direnv activation test failed with `ENOENT` on that path. The
+  documented `./agent setup --environment` rebuilt this checkout's profile successfully and
+  installed the missing tool. Nix reported a nonfatal timestamped GC-root symlink permission
+  warning. This is the same input-drift gap for a newly added tool rather than a Bun version.
 - **Workaround:** Bring the primary checkout past the pin and reload its profile (`direnv reload`,
   unsandboxed), or give one worktree its own profile by running `direnv allow && direnv exec .
   ./agent setup` in it from an ordinary terminal. `standalone-build.ts` refuses a Bun older than
