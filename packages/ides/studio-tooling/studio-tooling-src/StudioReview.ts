@@ -247,12 +247,17 @@ async function captureReviewCell(
     if (!marked) {
       Errors.throwUnexpected(`Tao Studio did not expose the review cell selected for capture: ${initialCell.key}`)
     }
+    // Cells above this one can grow while it settles, pushing it out of view, where Chrome pauses its
+    // preview frame's rendering; each poll scrolls it back.
     await browser.waitFor(
       `(() => {
       const key = ${key}
       const frame = [...document.querySelectorAll('.studio-preview-cell[data-tao-review-key]')]
         .find(candidate => candidate instanceof HTMLElement && candidate.dataset.taoReviewKey === key)
-      return frame instanceof HTMLElement && ['ready', 'failed'].includes(frame.dataset.taoReviewStatus ?? '')
+      if (!(frame instanceof HTMLElement)) return false
+      if (['ready', 'failed'].includes(frame.dataset.taoReviewStatus ?? '')) return true
+      frame.scrollIntoView({ block: 'center', inline: 'center' })
+      return false
     })()`,
       { timeoutMs: 60_000 },
     )
