@@ -1,0 +1,13 @@
+{
+  "name": "tao-native-bindings",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "module": "native-bindings-src/native-bindings.ts",
+  "exports": {
+    ".": "./native-bindings-src/native-bindings.ts"
+  },
+  "dependencies": {
+    "tao-shared": "workspace:*"
+  }
+}

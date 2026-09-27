@@ -320,7 +320,7 @@ kbd {
 .tao-studio-product-host[data-layout-preset="run"] .studio-preview,
 .tao-studio-product-host[data-layout-preset="draw"] .studio-preview { grid-column: 1 / 6; grid-row: 1; }
 .studio-draw-canvas { display: none; height: 100%; min-height: 0; overflow: auto; }
-.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas) { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu) { display: none; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-draw-canvas { display: block; }
 .tao-studio-product-host[data-layout-preset="run"] .studio-draw-canvas,
 .tao-studio-product-host[data-layout-preset="run"] [data-tao-studio-sketch-host] { display: none; }
@@ -577,10 +577,12 @@ kbd {
 /* The canvas surface: the grid becomes one transformed plane the person pans and zooms, so every
    scenario group is laid out at its natural size and the host clips rather than scrolls. */
 .studio-preview[data-canvas-surface="on"] { overflow: hidden; touch-action: none; }
-.studio-preview[data-canvas-surface="on"] > .studio-preview-grid {
+.studio-preview[data-canvas-surface="on"] > .studio-preview-grid,
+.studio-preview[data-canvas-surface="on"] > .studio-draw-canvas {
   background: none; height: auto; left: 0; min-height: 100%; min-width: 100%; overflow: visible; position: absolute;
   top: 0; transform-origin: 0 0; width: max-content; will-change: transform;
 }
+.studio-preview[data-canvas-surface="on"] > .studio-draw-canvas { height: 100%; width: 100%; }
 .studio-preview[data-canvas-surface="on"] > .studio-preview-grid > .studio-preview-group > .studio-preview-group-cells {
   overflow: visible;
 }
@@ -589,6 +591,7 @@ kbd {
 /* Keep one transparent surface above every preview for the entire held-Space gesture, including
    between drags. Pointer hit testing targets the canvas host, never an embedded app or edit handle. */
 .studio-preview[data-canvas-pan-ready="true"]::after,
+.studio-preview[data-feed-dragging="true"]::after,
 .studio-preview[data-canvas-panning="true"]::after {
   content: ""; cursor: inherit; inset: 0; pointer-events: auto; position: absolute; z-index: 6;
 }
@@ -623,12 +626,18 @@ kbd {
   align-items: center; color: var(--studio-text); display: flex; font-size: 12px; font-weight: 600; gap: 8px; justify-content: space-between; width: 100%;
 }
 .studio-preview-cell-details { color: var(--studio-text-dim); font: 11px var(--studio-mono); font-weight: 400; }
-.studio-preview-cell[aria-current="true"] > .studio-preview-cell-label { color: var(--studio-accent-strong); }
+.studio-preview-cell[data-preview-interactive="true"] > .studio-preview-cell-label { color: var(--studio-accent-strong); }
 .studio-preview-cell-viewport {
   background: #fff; border-radius: 26px; box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 6px var(--studio-stroke-strong), 0 24px 48px -12px rgba(0, 0, 0, .8);
-  flex: none; overflow: hidden;
+  flex: none; overflow: hidden; position: relative;
 }
-.studio-preview-cell[aria-current="true"] .studio-preview-cell-viewport {
+.studio-preview-activation-shield {
+  appearance: none; background: transparent; border: 0; border-radius: inherit; cursor: grab; inset: 0; padding: 0; position: absolute; z-index: 2;
+}
+.studio-preview-activation-shield[hidden] { display: none; }
+.studio-preview-activation-shield:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: -3px; }
+.studio-preview > iframe[data-preview-interactive="true"] { outline: 2px solid var(--studio-accent); outline-offset: -2px; }
+.studio-preview-cell[data-preview-interactive="true"] .studio-preview-cell-viewport {
   box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 7px var(--studio-accent), 0 24px 48px -12px rgba(0, 0, 0, .8);
 }
 .studio-preview-cell-controls { display: grid; gap: 8px; width: 100%; }

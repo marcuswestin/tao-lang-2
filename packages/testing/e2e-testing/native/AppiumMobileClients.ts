@@ -81,6 +81,8 @@ function iosSession(remote: WireSession): AppiumWebDriverSession {
     openDeepLink: async (url, appId) => await remote.executeScript('mobile: deepLink', [{ bundleId: appId, url }]),
     pressKey: async key => await remote.actions(keyActions(key)),
     screenshot: async () => await remote.screenshot(),
+    revealElement: async element =>
+      await remote.executeScript('mobile: scrollToElement', [{ elementId: wire(element).id }]),
     scroll: async input =>
       await remote.executeScript('mobile: scroll', [{
         ...(input.element === undefined ? {} : { elementId: wire(input.element).id }),

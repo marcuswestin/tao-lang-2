@@ -1,4 +1,5 @@
-import { loadSemanticSnapshot } from '@compiler/workspace'
+import { loadSemanticSnapshot, Workspace } from '@compiler/workspace'
+import { AST } from '@parser'
 import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { Deferred, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
@@ -212,6 +213,109 @@ Test('Move to package retires the catalog sketch after source and compile succee
   })
 })
 
+for (const relocateScenarios of [undefined, false]) {
+  Test(
+    `Move to package preserves shared fixture journeys with relocation ${relocateScenarios ?? 'default'}`,
+    async () => {
+      await withTaoFiles('tao-studio-move-scenarios-', {
+        '@/studio/View1.tao': `// Studio-written generated source. Read-only until moved to a package.
+        use Playlist from ../../Data.tao
+        use Sketches from ${relocateScenarios === false ? './Sketches' : './Sketches.tao'}
+        use Text from @tao/ui
+        public view View1(Playlist) {
+          #studio_rect_007400690074006c0065
+          render Text(Playlist.Title)
+        }
+        scenarios View1 "sketch" {
+          fixture Sketches
+          device phone
+          scenario "draft" { render (Playlist: Chill) press #studio_rect_007400690074006c0065 }
+        }
+      `,
+        '@/studio/Sketches.tao':
+          'use Playlist from ../../Data.tao\npublic fixture Sketches { Chill = create Playlist { Title: "Chill" } }',
+        '@views/Existing.tao': 'public view Existing() { }',
+        'Data.tao': 'public data Playlists / Playlist { Title text }',
+        'Garden.tao': 'app Garden { view Main }\nview Main() { }',
+        'Scenarios.tao': '// Existing authored content\nlet ExistingValue = "keep"',
+      }, async (paths, root) => {
+        const session = await StudioProjectSession.open({
+          async compile() {},
+          entryPath: paths['Garden.tao'],
+          projectRoot: root,
+        })
+        const generated = await session.readFile('@/studio/View1.tao')
+        const result = await session.moveGeneratedSource({
+          path: generated.path,
+          ...(relocateScenarios === undefined ? {} : { relocateScenarios }),
+          sourceVersion: generated.sourceVersion,
+          targetPackage: '@views',
+          writeId: 'move-scenarios',
+        })
+        Expect(result.status).toBe('moved')
+        const movedPath = FS.resolvePath('@views/View1.tao', root)
+        const moved = await FS.readText(movedPath)
+        Expect(moved).toContain('use Playlist from ../Data.tao')
+        Expect(moved).toContain('#studio_rect_007400690074006c0065')
+        Expect(moved.includes('scenarios View1')).toBe(relocateScenarios === false)
+        const scenarios = await FS.readText(paths['Scenarios.tao'])
+        Expect(scenarios).toContain('// Existing authored content')
+        Expect(scenarios).toContain('let ExistingValue = "keep"')
+        Expect(scenarios.includes('scenarios View1')).toBe(relocateScenarios !== false)
+        const parsed = await (await Workspace.open(root)).parse(
+          relocateScenarios === false ? movedPath : paths['Scenarios.tao'],
+        )
+        const group = parsed.entry.ast.statements.find(AST.isScenarioGroupDeclaration)!
+        Expect.Is(group.subject?.ref, AST.isViewDeclaration)
+        Expect(AST.getDocument(group.subject!.ref!).uri.fsPath).toBe(movedPath)
+        const fixture = group.block.entries.find(AST.isScenarioFixtureClause)?.fixture.ref
+        Expect.Is(fixture, AST.isFixtureDeclaration)
+        Expect(AST.getDocument(fixture).uri.fsPath).toBe(paths['@/studio/Sketches.tao'])
+        Expect(group.block.entries.find(AST.isScenarioDeclaration)?.block.steps[0]?.$cstNode?.text)
+          .toBe('press #studio_rect_007400690074006c0065')
+      })
+    },
+  )
+}
+
+for (const failure of ['compile', 'import collision'] as const) {
+  Test(`Move to package preserves existing Scenarios.tao after ${failure}`, async () => {
+    await withTaoFiles('tao-studio-move-existing-scenarios-', {
+      '@/studio/View1.tao':
+        '// Studio-written generated source. Read-only until moved to a package.\npublic view View1() { }\nscenarios View1 "sketch" { scenario "draft" { render () } }',
+      '@views/Existing.tao': 'public view Existing() { }',
+      '@other/View1.tao': 'public view View1() { }',
+      'Garden.tao': 'app Garden { view Main }\nview Main() { }',
+      'Scenarios.tao': failure === 'import collision'
+        ? 'use View1 from @other\nlet Kept = "authored"'
+        : 'let Kept = "authored"',
+    }, async (paths, root) => {
+      let failCompile = failure === 'compile'
+      const session = await StudioProjectSession.open({
+        async compile() {
+          if (failCompile) {
+            failCompile = false
+            Errors.throwUserInput('Rejected relocated scenarios.')
+          }
+        },
+        entryPath: paths['Garden.tao'],
+        projectRoot: root,
+      })
+      const before = await session.readFile('@/studio/View1.tao')
+      const scenariosBefore = await FS.readText(paths['Scenarios.tao'])
+      await Expect(session.moveGeneratedSource({
+        path: before.path,
+        sourceVersion: before.sourceVersion,
+        targetPackage: '@views',
+        writeId: 'move-failing-relocation',
+      })).rejects.toThrow(failure === 'compile' ? 'authored Tao source failed to compile' : 'already imports View1')
+      Expect(await session.readFile('@/studio/View1.tao')).toEqual(before)
+      Expect(await FS.readText(paths['Scenarios.tao'])).toBe(scenariosBefore)
+      Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
+    })
+  })
+}
+
 Test('Move to package restores source, imports, catalog, and compile state after compile failure', async () => {
   let failMoveCompile = false
   const compiles: Array<readonly { path: string; sourceVersion?: string }[]> = []
@@ -260,12 +364,77 @@ Test('Move to package restores source, imports, catalog, and compile state after
     Expect(await FS.readText(paths['Garden.tao'])).toBe(beforeGarden)
     Expect(await FS.readText(paths['Nested.tao'])).toBe(beforeNested)
     Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
+    Expect(await FS.exists(FS.resolvePath('Scenarios.tao', root))).toBe(false)
     Expect(await FS.fileMode(FS.resolvePath('@/studio/View1.tao', root))).toBe(0o444)
     Expect(await session.sketchCatalog()).toEqual(beforeCatalog)
     Expect(session.compileSnapshot().status).toBe('compiled')
     Expect(compiles).toHaveLength(3)
   })
 })
+
+for (const changed of ['target', 'original', 'import'] as const) {
+  Test(`Move rollback preserves an external ${changed} edit while compilation is pending`, async () => {
+    const entered = Deferred<void>()
+    const release = Deferred<void>()
+    let failMove = false
+    await withTaoFiles('tao-studio-move-external-edit-', {
+      '@views/Existing.tao': 'public view Existing() { }\n',
+      'Garden.tao': 'use View1 from @/studio\napp Garden { view Main }\nview Main() { render View1() }\n',
+    }, async (paths, root) => {
+      const session = await StudioProjectSession.open({
+        async compile() {
+          if (failMove) {
+            failMove = false
+            entered.resolve()
+            await release.promise
+            Errors.throwUserInput('Moved source does not compile.')
+          }
+        },
+        entryPath: paths['Garden.tao'],
+        projectRoot: root,
+      })
+      await session.applySketchAction({
+        action: {
+          height: 80,
+          id: 'concurrent-move',
+          kind: 'create-sketch',
+          project: await FS.realPath(root),
+          rects: [],
+          width: 200,
+        },
+        expectedRevision: 0,
+        requestId: 'create-concurrent-move',
+      })
+      const before = await session.readFile('@/studio/View1.tao')
+      const original = FS.resolvePath(before.path, root)
+      const target = FS.resolvePath('@views/View1.tao', root)
+      const editedPath = changed === 'target' ? target : changed === 'original' ? original : paths['Garden.tao']
+      const external = '// External edit must survive failed Move.\npublic view External() { }\n'
+      failMove = true
+      const moving = session.moveGeneratedSource({
+        path: before.path,
+        sourceVersion: before.sourceVersion,
+        targetPackage: '@views',
+        writeId: `concurrent-${changed}`,
+      })
+      await entered.promise
+      try {
+        await FS.writeText(editedPath, external)
+      } finally {
+        release.resolve()
+      }
+      await Expect(moving).rejects.toThrow('Move rollback incomplete')
+      Expect(await FS.readText(editedPath)).toBe(external)
+      if (changed !== 'original') {
+        Expect(await FS.readText(original)).toBe(before.content)
+      }
+      if (changed !== 'target') {
+        Expect(await FS.exists(target)).toBe(false)
+      }
+      Expect((await session.readFile(FS.relativePath(root, editedPath))).content).toBe(external)
+    })
+  })
+}
 
 Test('Move to package serializes source and catalog rollback against an independent Studio create', async () => {
   const moveCompileEntered = Deferred<void>()

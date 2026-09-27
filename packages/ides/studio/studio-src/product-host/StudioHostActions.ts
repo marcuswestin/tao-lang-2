@@ -35,8 +35,13 @@ export async function RenameFile(path: string, sourceVersion: string, targetPath
   await requestStudioProductHostRenameFile(path, sourceVersion, targetPath)
 }
 
-export async function MoveGeneratedSource(path: string, sourceVersion: string, targetPackage: string): Promise<void> {
-  await requestStudioProductHostMoveGeneratedSource(path, sourceVersion, targetPackage)
+export async function MoveGeneratedSource(
+  path: string,
+  sourceVersion: string,
+  targetPackage: string,
+  relocateScenarios = true,
+): Promise<void> {
+  await requestStudioProductHostMoveGeneratedSource(path, sourceVersion, targetPackage, relocateScenarios)
 }
 
 export async function DeleteFile(path: string, sourceVersion: string): Promise<void> {

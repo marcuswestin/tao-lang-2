@@ -12,6 +12,7 @@ type NamedValueDeclaration =
   | AST.CommandDeclaration
   | AST.ForStatement
   | AST.AskStatement
+  | AST.ActionResultStatement
   | AST.CasePayload
   | AST.CaseSetCase
 type NamedFileValueDeclaration =
@@ -48,6 +49,7 @@ export const AliasesValidator = {
     [AST.NavDeclaration.$type]: reportReservedRuntimeName,
     [AST.DatasourceDeclaration.$type]: reportReservedRuntimeName,
     [AST.ForStatement.$type]: reportReservedRuntimeName,
+    [AST.ActionResultStatement.$type]: reportReservedRuntimeName,
     [AST.AskStatement.$type]: reportReservedRuntimeName,
     [AST.FunctionDeclaration.$type]: reportReservedRuntimeName,
     [AST.PhraseDeclaration.$type]: reportReservedRuntimeName,

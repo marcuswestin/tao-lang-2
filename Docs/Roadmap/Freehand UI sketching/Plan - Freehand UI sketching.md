@@ -3,8 +3,8 @@
 The implementation plan for freehand UI sketching decided in
 `Product - Freehand UI sketching.md`'s "Design record" section (FS-D1–FS-D20). Read that design
 record first; this plan cites the decisions rather than reopening their alternatives. L1, the `@`
-tooling, Slice 1 (Draw), and Slice 2 (Snap) have landed; the Slice 3 (Feed) server foundations are
-green. "Figma-at-home strides" and "Canvas-first design mode" below are two additional, currently
+tooling, Slice 1 (Draw), and Slice 2 (Snap) have landed; Slice 3 (Feed) is implemented on
+`feat/studio-feed-client` and awaits visual acceptance and landing. "Figma-at-home strides" and "Canvas-first design mode" below are two additional, currently
 active bodies of work that polish the landed slices and the Studio canvas UI without reopening
 FS-D1–FS-D20 or reordering the FS-D20 sequence.
 
@@ -228,12 +228,35 @@ step; do not change the settled heuristic to fit individual screens invisibly.
 
 ## Slice 3 — Feed
 
-**Implementation status (2026-09-04).** Foundations are green and committed: shared fixture imports,
-entity-aware preview manifests, deterministic four-source inventory, canonical shared-fixture source,
-typed entity/field source actions, durable free/snapped field bindings, and scope-derived arguments for
-parameterized project-view insertion. The slice remains open until Studio exposes the row/chip browser
-and lands entity/field drop, atomic Keep, Move-to-package scenario relocation, and their browser
-journey; "Figma-at-home strides" Stride 3 below is the work that finishes it.
+**Implementation status (2026-09-26).** The Feed branch adds the Tao-owned four-source row/chip browser,
+entity and typed field drops, collection loop proposals, transient source-overlay compilation, a
+multi-file Keep with rollback and Undo Keep, and default-on Move-to-package scenario relocation.
+Server lifecycle tests exercise partial writes, failed compilation/catalog persistence, stale source
+and catalog state, and concurrent external edits. The browser journey exercises the panel and drag
+adapters, free and snapped binding, Keep/Discard/Undo, collection loops, and default scenario relocation.
+Imported-view insertion uses canonical source actions with loop-scope arguments and project containment.
+Native gesture feel still requires visual acceptance; landing this slice requires separate authorization.
+HNReader review exposed a misleading fixture-handle error for folder-only entities. Feed now checks
+entity visibility before fixture promotion and explains the import restriction; coverage includes
+folder-only and file-only models as well as importable public models.
+HNReader's entities now live in a workspace-visible `@model` package so its generated Story examples
+can bind into sketches without changing language visibility rules. A real HNReader regression covers
+the generated row, shared fixture, required parameter, field binding, and overlay compilation.
+The real-app browser lane now drives the HNReader review through actual drag input, including a
+rendered Metro iframe target, transient disk invariants, Discard/Keep/Undo Keep, and a fresh-session
+reopen. It exposed the browser's cross-origin drag restriction: Design Feed drops now cross a
+temporary parent capture surface and authenticated coordinate bridge before runtime hit-testing.
+Preview acknowledgements also restore canvas gesture ownership after a late bridge mount.
+The review also exposed stale fixture handles during live recompilation. Compatible source-only
+publications now retain the scenario provider; changed scenario contracts remount provider and fixture
+state together, with a regression for retained local state and reseeded data.
+
+**Representability limits.** Existing fixture syntax represents primitive literals, `now`, and fixture
+references. Exact captured/generated timestamps, unresolved live relation IDs, cyclic fixture creation
+dependencies, and unsupported scenario argument expressions are rejected explicitly. Optional field
+binding needs a source fallback. Moving into an authored package keeps its existing import boundaries;
+app-private dependencies must be made package-compatible before moving the view. No language semantics
+are weakened for the visual workflow.
 
 **Decisions.** FS-D6, FS-D16.
 
@@ -849,10 +872,15 @@ Focusing a view wraps it in a frame whose size is the occurrence's measured size
   Fit all, 100%, Zoom to selection, and Zoom to focused frame; absent targets are disabled. Viewport
   state persists per canonical project path beneath the existing Studio user-state root, surviving
   server-port changes without project mutations. Saved writes are ordered, coalesced during motion,
-  and flushed on gesture end or page hide. Ordinary scroll stays with the app; canvas pan now requires
-  held Space for both scroll and left/middle drag. Pinch and modifier-wheel zoom remain unconditional
-  in Design. Selection geometry refreshes after app scrolling and before selection. Remaining from
+  and flushed on gesture end or page hide. Selection geometry refreshes after app scrolling and before selection. Remaining from
   this stride: ⇧1/⇧2 framing shortcuts and counter-scaled sketch-handle strokes.
+
+- **Revised 2026-09-26.** Ordinary scrolling and neutral-surface dragging pan in Design. Every preview
+  starts inert; a first click selects and outlines it without activating its app controls. Only the
+  selected preview accepts mouse input; an outside pointer press deselects it. Inactive-preview drags
+  pan without selecting. Space still overrides preview input, and now pans the Draw plane as well;
+  normal Draw gestures continue creating and editing rectangles. Browser coverage checks first-click
+  consumption, exclusive selection, outside deselection, and Draw pan without catalog mutation.
 
 ### Stride D — Focus-selection mode with a red outline on view frames
 

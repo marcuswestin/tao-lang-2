@@ -62,7 +62,7 @@ Describe('Tao local build and clean CLI', () => {
       }
 
       const first = await runTao(['build', '--web', FS.resolvePath('Clockwork.tao', root)])
-      Expect(first.exitCode).toBe(0)
+      Expect(first).toMatchObject({ exitCode: 0 })
       const buildsRoot = FS.resolvePath('.tao/builds', root)
       const firstId = (await FS.listDir(buildsRoot)).find(name => !name.startsWith('.'))
       Expect(firstId).toBeDefined()
@@ -82,7 +82,7 @@ Describe('Tao local build and clean CLI', () => {
       await servesOnlyContainedFiles(firstRoot)
 
       const second = await runTao(['build', '--web', FS.resolvePath('Clockwork.tao', root)])
-      Expect(second.exitCode).toBe(0)
+      Expect(second).toMatchObject({ exitCode: 0 })
       const ids = (await FS.listDir(buildsRoot)).filter(name => !name.startsWith('.'))
       Expect(ids).toHaveLength(2)
       Expect(ids).toContain(firstId)

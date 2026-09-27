@@ -32,14 +32,22 @@ class FakeCdpTransport implements StudioCdpTransport {
   screenshot = Buffer.from('screenshot bytes').toString('base64')
   private readonly listeners = new Map<string, Set<(params: unknown) => void>>()
   private intercepting = false
+  failMouseType: string | undefined
+
+  listenerCount(method: string): number {
+    return this.listeners.get(method)?.size ?? 0
+  }
 
   async send<Result = Record<string, never>>(
     method: string,
     params: Record<string, unknown> = {},
   ): Promise<Result> {
     this.calls.push({ method, params })
-    if (method === 'Input.setInterceptDrags' && params['enabled'] === true) {
-      this.intercepting = true
+    if (method === 'Input.setInterceptDrags') {
+      this.intercepting = params['enabled'] === true
+    }
+    if (method === 'Input.dispatchMouseEvent' && params['type'] === this.failMouseType) {
+      Errors.throwHostEnvironment('Mouse transport failed')
     }
     // Chrome answers an intercepted drag gesture with the payload the page's own dragstart built.
     if (this.intercepting && method === 'Input.dispatchMouseEvent' && params['buttons'] === 1) {
@@ -159,6 +167,45 @@ Describe('Studio browser CDP harness', () => {
   // Chrome never synthesizes HTML5 drag-and-drop from mouse events, so a palette drag has to go
   // through drag interception: press and move to make the page start the drag, then replay the
   // intercepted payload into dragEnter/dragOver/drop over the target.
+  Test('drops the intercepted page payload at an explicit iframe target point', async () => {
+    const transport = new FakeCdpTransport()
+    transport.evaluateResults.push({ x: 40, y: 80 })
+    const browser = StudioCdp.testing.create(transport)
+
+    await browser.dragToPoint('[data-field="Title"]', { x: 640, y: 360 }, { steps: 2 })
+
+    Expect(transport.calls.filter(call => call.method === 'Input.dispatchDragEvent')).toEqual([
+      { method: 'Input.dispatchDragEvent', params: { data: FAKE_DRAG_DATA, type: 'dragEnter', x: 640, y: 360 } },
+      { method: 'Input.dispatchDragEvent', params: { data: FAKE_DRAG_DATA, type: 'dragOver', x: 640, y: 360 } },
+      { method: 'Input.dispatchDragEvent', params: { data: FAKE_DRAG_DATA, type: 'drop', x: 640, y: 360 } },
+    ])
+    Expect(transport.calls.at(-1)).toEqual({ method: 'Input.setInterceptDrags', params: { enabled: false } })
+    await Expect(browser.dragToPoint('#source', { x: Number.NaN, y: 0 })).rejects.toThrow(
+      'horizontal drop coordinate must be finite',
+    )
+  })
+
+  Test('cleans up interception when the source mouse gesture fails before a payload arrives', async () => {
+    const transport = new FakeCdpTransport()
+    transport.evaluateResults.push({ x: 40, y: 80 })
+    transport.failMouseType = 'mousePressed'
+    const browser = StudioCdp.testing.create(transport)
+    try {
+      await Expect(browser.dragToPoint('#source', { x: 640, y: 360 })).rejects.toThrow('Mouse transport failed')
+      Expect(transport.calls.slice(-2)).toEqual([
+        {
+          method: 'Input.dispatchMouseEvent',
+          params: { button: 'left', buttons: 0, clickCount: 1, type: 'mouseReleased', x: 640, y: 360 },
+        },
+        { method: 'Input.setInterceptDrags', params: { enabled: false } },
+      ])
+      Expect(transport.listenerCount('Input.dragIntercepted')).toBe(0)
+    } finally {
+      // Also clears the old implementation's timer when this regression is run red.
+      transport.emit('Input.dragIntercepted', { data: FAKE_DRAG_DATA })
+    }
+  })
+
   Test('dispatches an intercepted HTML5 drag over deterministic interpolated coordinates', async () => {
     const transport = new FakeCdpTransport()
     transport.evaluateResults.push({
@@ -185,6 +232,10 @@ Describe('Studio browser CDP harness', () => {
       {
         method: 'Input.dispatchMouseEvent',
         params: { button: 'left', buttons: 1, type: 'mouseMoved', x: 30, y: 60 },
+      },
+      {
+        method: 'Input.dispatchMouseEvent',
+        params: { button: 'left', buttons: 0, clickCount: 1, type: 'mouseReleased', x: 30, y: 60 },
       },
     ])
     Expect(transport.calls.filter(call => call.method === 'Input.dispatchDragEvent')).toEqual(

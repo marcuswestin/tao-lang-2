@@ -28,6 +28,7 @@ design StudioDesign {
    styles {
       Text [ink ink]
       TextInput [background panel, border line, ink ink]
+      feedChip [border line, radius 4, pad 4]
    }
 }
 
@@ -118,7 +119,7 @@ action CreateFile(Path text) fails Conflict "This file changed under this edit."
 
 action RenameFile(Path text, SourceVersion text, TargetPath text) fails Conflict "This file changed under this edit." from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
-action MoveGeneratedSource(Path text, SourceVersion text, TargetPackage text) fails Conflict "This file changed under this edit." from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+action MoveGeneratedSource(Path text, SourceVersion text, TargetPackage text, RelocateScenarios boolean) fails Conflict "This file changed under this edit." from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 action DeleteFile(Path text, SourceVersion text) fails Conflict "This file changed under this edit." from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
@@ -204,6 +205,7 @@ view FileRow(File) {
    state ConfirmDelete = false
    state Moving = false
    state TargetPackage = ""
+   state RelocateScenarios = true
    action Open() {
       do OpenFile(File.Path)
    }
@@ -242,14 +244,17 @@ view FileRow(File) {
    action ChangeTargetPackage(Value text) {
       set TargetPackage = Value
    }
+   action ChangeRelocateScenarios(Value boolean) {
+      set RelocateScenarios = Value
+   }
    action Move() {
-      do MoveGeneratedSource(Path: File.Path, SourceVersion: File.Version, TargetPackage: TargetPackage)
+      do MoveGeneratedSource(Path: File.Path, SourceVersion: File.Version, TargetPackage: TargetPackage, RelocateScenarios: RelocateScenarios)
       set Moving = false
    }
-   render TreeFileRow(Name: File.Name, Path: File.Path, Dirty: File.Dirty, DiagnosticCount: File.DiagnosticCount, RenamePath: RenamePath, Renaming: Renaming, ConfirmDelete: ConfirmDelete, Moving: Moving, TargetPackage: TargetPackage, Open: Open, ChangeRenamePath: ChangeRenamePath, BeginRename: BeginRename, CancelRename: CancelRename, Rename: Rename, BeginDelete: BeginDelete, CancelDelete: CancelDelete, Delete: Delete, BeginMove: BeginMove, ChangeTargetPackage: ChangeTargetPackage, Move: Move)
+   render TreeFileRow(Name: File.Name, Path: File.Path, Dirty: File.Dirty, DiagnosticCount: File.DiagnosticCount, RenamePath: RenamePath, Renaming: Renaming, ConfirmDelete: ConfirmDelete, Moving: Moving, TargetPackage: TargetPackage, Open: Open, ChangeRenamePath: ChangeRenamePath, BeginRename: BeginRename, CancelRename: CancelRename, Rename: Rename, BeginDelete: BeginDelete, CancelDelete: CancelDelete, Delete: Delete, BeginMove: BeginMove, ChangeTargetPackage: ChangeTargetPackage, RelocateScenarios: RelocateScenarios, ChangeRelocateScenarios: ChangeRelocateScenarios, Move: Move)
 }
 
-view TreeFileRow(Name text, Path text, Dirty boolean, DiagnosticCount number, RenamePath text, Renaming boolean, ConfirmDelete boolean, Moving boolean, TargetPackage text, Open action(), ChangeRenamePath action(text), BeginRename action(), CancelRename action(), Rename action(), BeginDelete action(), CancelDelete action(), Delete action(), BeginMove action(), ChangeTargetPackage action(text), Move action()) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+view TreeFileRow(Name text, Path text, Dirty boolean, DiagnosticCount number, RenamePath text, Renaming boolean, ConfirmDelete boolean, Moving boolean, TargetPackage text, Open action(), ChangeRenamePath action(text), BeginRename action(), CancelRename action(), Rename action(), BeginDelete action(), CancelDelete action(), Delete action(), BeginMove action(), ChangeTargetPackage action(text), RelocateScenarios boolean, ChangeRelocateScenarios action(boolean), Move action()) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
 view StudioPanelSurface(Title text) accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 
@@ -891,8 +896,43 @@ type StudioDataPanelTable is {
    TotalRowCount number,
 }
 
+type StudioFeedField is {
+   Label text,
+   Value text,
+   DragPayload text,
+}
+
+type StudioFeedRow is {
+   RowId text,
+   Label text,
+   Selected boolean,
+   SelectAction StudioPanelAction,
+   DragPayload text,
+   Fields list of StudioFeedField,
+}
+
+type StudioFeedPanel is {
+   Notice text,
+   Entities list of text,
+   Entity text,
+   Source text,
+   Sources list of text,
+   Seed text,
+   Rows list of StudioFeedRow,
+   Loading boolean,
+   Pending boolean,
+   Error text,
+   CanUndo boolean,
+   UndoAction StudioPanelAction,
+   CanKeep boolean,
+   CanDiscard boolean,
+   KeepAction StudioPanelAction,
+   DiscardAction StudioPanelAction,
+}
+
 type StudioDataPanel is {
    CaptureAction StudioPanelAction,
+   Feed StudioFeedPanel,
    Error text,
    Loading boolean,
    RefreshAction StudioPanelAction,
@@ -999,7 +1039,26 @@ let InitialCompilePanel = StudioCompilePanel {
 let InitialProblemsPanel = StudioProblemsPanel {
    Rows: []
 }
+let InitialFeedPanel = StudioFeedPanel {
+   Notice: "",
+   Entities: [],
+   Entity: "",
+   Source: "Fixture",
+   Sources: ["Fixture", "Generated", "Live", "Library"],
+   Seed: "",
+   Rows: [],
+   Loading: false,
+   Pending: false,
+   Error: "",
+   CanUndo: false,
+   UndoAction: InitialPanelAction,
+   CanKeep: false,
+   CanDiscard: false,
+   KeepAction: InitialPanelAction,
+   DiscardAction: InitialPanelAction
+}
 let InitialDataPanel = StudioDataPanel {
+   Feed: InitialFeedPanel,
    CaptureAction: StudioPanelAction {
       Name: "capture-fixture",
       Payload: "null"
@@ -1150,6 +1209,7 @@ view StudioProblemsPanelView(Problems StudioProblemsPanel, Dispatch action(text,
 
 view StudioDataPanelView(Data StudioDataPanel, Dispatch action(text, text)) {
    render Col() {
+      StudioFeedPanelView(Feed: Data.Feed, Dispatch: Dispatch)
       StudioPanelCommand(Label: "Refresh data", Command: Data.RefreshAction, Dispatch: Dispatch, Disabled: Data.Loading)
       StudioPanelCommand(Label: "Capture fixture", Command: Data.CaptureAction, Dispatch: Dispatch, Disabled: false)
       when Data.Source {
@@ -1170,6 +1230,77 @@ view StudioDataPanelView(Data StudioDataPanel, Dispatch action(text, text)) {
             StudioDataTableView(Table)
          } }
 }  }  }
+
+view StudioFeedPanelView(Feed StudioFeedPanel, Dispatch action(text, text)) {
+   action ChangeEntity(Value text) {
+      do Dispatch("feed-action", StudioFeedEntityPayload(Value))
+   }
+   action ChangeSource(Value text) {
+      do Dispatch("feed-action", StudioFeedSourcePayload(Value))
+   }
+   action ChangeSeed(Value text) {
+      do Dispatch("feed-action", StudioFeedSeedPayload(Value))
+   }
+   action SubmitSeed() { }
+   render Col() {
+      Text("Feed")
+      Text("Transient examples and proposals · Keep applies; Discard cancels.")
+      when Feed.Notice {
+         empty -> { }
+         otherwise -> { Text(Feed.Notice) }
+      }
+      StudioChoice(Value: Feed.Entity, Change: ChangeEntity, Options: Feed.Entities, Label: "Feed entity")
+      StudioSegmented(Value: Feed.Source, Change: ChangeSource, Options: Feed.Sources, Label: "Feed source")
+      TextInput(Value: Feed.Seed, Change: ChangeSeed, Submit: SubmitSeed, Label: "Feed seed")
+      when Feed.Loading {
+         true -> { Text("Loading feed…") }
+         otherwise -> { }
+      }
+      when Feed.Pending {
+         true -> { Text("Saving feed change…") }
+         otherwise -> { }
+      }
+      when Feed.Error {
+         empty -> { }
+         otherwise -> { Text(Feed.Error) }
+      }
+      when Feed.Rows {
+         empty -> { Text("Choose an entity and source to browse examples.") }
+         otherwise -> { loop Feed.Rows / Row {
+            StudioFeedRowView(Row: Row, Dispatch: Dispatch, Disabled: Feed.Pending or Feed.Loading)
+         } }
+      }
+      StudioPanelCommand(Label: "Keep", Command: Feed.KeepAction, Dispatch: Dispatch, Disabled: not Feed.CanKeep)
+      StudioPanelCommand(Label: "Discard", Command: Feed.DiscardAction, Dispatch: Dispatch, Disabled: not Feed.CanDiscard)
+      StudioPanelCommand(Label: "Undo Keep", Command: Feed.UndoAction, Dispatch: Dispatch, Disabled: not Feed.CanUndo)
+}  }
+
+view StudioFeedRowView(Row StudioFeedRow, Dispatch action(text, text), Disabled boolean) {
+   action Select() {
+      do Dispatch(Row.SelectAction.Name, Row.SelectAction.Payload)
+   }
+   render Col() {
+      StudioFeedRowControl(Label: Row.Label, Selected: Row.Selected, Select: Select, Disabled: Disabled, Payload: Row.DragPayload)
+      loop Row.Fields / Field {
+         StudioFeedDrag(Payload: Field.DragPayload, Label: Field.Label, Disabled: Disabled) [feedChip] {
+            Text("{ Field.Label }: { Field.Value }")
+}  }  }  }
+
+view StudioFeedRowControl(Label text, Selected boolean, Select action(), Disabled boolean, Payload text) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view StudioFeedDrag(Payload text, Label text, Disabled boolean) accepts content from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+function StudioFeedEntityPayload(Entity text) returns text {
+   return StudioFeedEntityPayload(Entity) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioFeedSourcePayload(Source text) returns text {
+   return StudioFeedSourcePayload(Source) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioFeedSeedPayload(Seed text) returns text {
+   return StudioFeedSeedPayload(Seed) from ../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
 
 view StudioDataTableView(Table StudioDataPanelTable) {
    render Col() {

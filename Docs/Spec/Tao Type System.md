@@ -147,6 +147,11 @@ Defaults may be omitted. A defaulted slot does not compete for an unlabeled valu
 with its owner label. A required parameter cannot follow a defaulted one; a default must match its
 parameter type and may refer only to earlier parameters in the same declaration.
 
+A parameter type marked `?` accepts its declared values and `none`. This applies both to a named
+slot (`Style FeedbackStyle?`) and a shorthand slot (`FeedbackStyle?`). It does not make an argument
+omittable by itself: use `Style FeedbackStyle? default none` when omission should supply `none`.
+An explicit value for that defaulted slot uses its label, such as `Play(Style: Soft)`.
+
 Empty calls use `()`. A render layout clause and child block follow the closing parenthesis and are
 never part of the argument list. The `render` keyword may be omitted only for child invocations
 inside a render block; parentheses remain mandatory.
@@ -517,7 +522,18 @@ statements would infer. `runs latest` is valid only on a foreign action and reta
 not-yet-started argument set while one call is in flight; the detailed transaction and skipped-call
 contract is specified in [Tao Actions](Tao%20Actions.md).
 The generated bridge contract checks its plain JavaScript parameter types and `void` or promised
-`void` completion. Entity parameters are structural records of their declared fields.
+`void` completion when no result is declared. A named foreign action with `returns T` instead checks
+`T` or `Promise<T>` completion. `let Name = do Action(...)` awaits that result and binds an immutable
+local value of the declared type for the following statements. Nullable results use `returns T?`.
+Only foreign actions declare results; result-bearing actions cannot use `runs latest`.
+The ordinary `from` expression remains synchronous and does not unwrap promises.
+Entity parameters are structural records of their declared fields.
+
+Generated native bindings also convert structural option and result records, including nested records,
+optional fields, enum fields, string-literal cases, and nullable values. Missing optional fields stay
+omitted rather than overriding upstream defaults. Listener callback payloads use the same conversion;
+their subscription's `Remove` member is an action. Subscription ownership and disposal follow
+[Tao Actions](Tao%20Actions.md#native-listener-ownership).
 Configuration implementation factories are checked against the declared nav or datasource protocol.
 
 A view may publish the same typed boundary directly:

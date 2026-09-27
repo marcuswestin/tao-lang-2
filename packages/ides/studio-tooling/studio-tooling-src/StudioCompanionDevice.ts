@@ -1,4 +1,9 @@
 import {
+  companionAppProbeArgs,
+  companionLaunchArgs,
+  installedFromDevicectlApps,
+} from '@expo-host/dev-loop/expo-runner/ios-companion'
+import {
   type DevicectlFailure,
   type DevicectlList,
   type IosPhysicalDevice,
@@ -39,12 +44,6 @@ export type StudioCompanionDeviceOptions = {
 
 export type StudioCompanionDevice = ReturnType<typeof createStudioCompanionDevice>
 
-type DevicectlApps = {
-  result?: {
-    apps?: readonly { bundleIdentifier?: unknown }[]
-  }
-}
-
 const PROFILE_BIN_PATH = '.devenv/profile/bin'
 
 /** createStudioCompanionDevice binds the companion identity and a process runner to the devicectl and Expo commands. */
@@ -68,15 +67,7 @@ export function createStudioCompanionDevice(options: StudioCompanionDeviceOption
   }
 
   async function installedAppProbe(hostId: string): Promise<CompanionInstallProbe> {
-    const outcome = await devicectl<DevicectlApps>([
-      'device',
-      'info',
-      'apps',
-      '--device',
-      hostId,
-      '--bundle-id',
-      bundleIdentifier,
-    ])
+    const outcome = await devicectl(companionAppProbeArgs(hostId, bundleIdentifier))
     if (outcome.failure !== undefined) {
       return {
         installed: undefined,
@@ -195,35 +186,9 @@ export function companionInstallEnv(baseEnv: Platform.ProcessEnv, repoRoot: stri
   }
 }
 
-/** companionLaunchArgs opens the installed bundle with the dev-client URL as its launch payload. */
-export function companionLaunchArgs(
-  input: { bundleIdentifier: string; hostId: string; terminateExisting: boolean; url: string },
-): string[] {
-  return [
-    'device',
-    'process',
-    'launch',
-    '--device',
-    input.hostId,
-    ...(input.terminateExisting ? ['--terminate-existing'] : []),
-    '--payload-url',
-    input.url,
-    input.bundleIdentifier,
-  ]
-}
-
 /** companionInstallCommand is the command a person runs to put the shell on a device. */
 export function companionInstallCommand(deviceName = '<name>'): string {
   return `just studio-companion-install device="${deviceName}"`
-}
-
-/** installedFromDevicectlApps reads a `devicectl device info apps` report; undefined when it carries no app list. */
-export function installedFromDevicectlApps(payload: unknown, bundleIdentifier: string): boolean | undefined {
-  const apps = (payload as DevicectlApps | undefined)?.result?.apps
-  if (!Array.isArray(apps)) {
-    return undefined
-  }
-  return apps.some(app => typeof app === 'object' && app !== null && app.bundleIdentifier === bundleIdentifier)
 }
 
 /** matchCompanionHost finds the device a person named: exact name, then case-insensitive name, then id. */

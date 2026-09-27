@@ -120,6 +120,8 @@ export type TreeFileRowProps =
     CancelRename: TaoStudioHostAction
     ChangeRenamePath: TaoStudioHostTextAction
     ChangeTargetPackage: TaoStudioHostTextAction
+    ChangeRelocateScenarios?: TR.ActionValue<[TR.Value<boolean>]>
+    RelocateScenarios?: boolean
     ConfirmDelete: boolean
     Delete: TaoStudioHostAction
     DiagnosticCount: number
@@ -245,6 +247,14 @@ export function TreeFileRow(props: TreeFileRowProps): React.ReactElement {
               spellCheck={false}
               value={props.TargetPackage}
             />
+            <label>
+              <input
+                checked={props.RelocateScenarios ?? true}
+                onChange={event => void props.ChangeRelocateScenarios?.invoke(TR.Value(event.currentTarget.checked))}
+                type="checkbox"
+              />
+              Move scenarios to app Scenarios.tao
+            </label>
             <button
               aria-label="Move to package"
               className="studio-button"

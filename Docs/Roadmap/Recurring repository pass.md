@@ -21,20 +21,45 @@ notes after each completed pass; Git history is the longer record.
   before treating a `reclaimable` checkout as disposable; preserve live and owner-unknown roots,
   including the broken-pointer directories, until ownership is established. The
   [open developer-environment index](<Developer environment upgrades.md>) still needs a small,
-  owner-aware shortlist; `DEVENV-094` needs a quiet-machine admission experiment and `DEVENV-055`
-  its native-host proof.
-- Test Claude Code cloud readiness locally in an isolated Ubuntu 24.04 x86_64 environment with a
-  fresh checkout, four CPUs, 16 GiB RAM, and a 30 GiB disk. First prove the repository's worktree
-  session setup and `./agent setup`; then run portable check, test, and verify workflows. Keep a
-  cached toolchain layer and a fresh checkout per run to expose missing per-session setup. Account
-  separately for the hosted network proxy, Bun registry behavior, and macOS native lanes that a
-  local Linux environment cannot reproduce. The local Docker daemon was unavailable at this pass;
-  no container proof was claimed.
+  owner-aware shortlist; `DEVENV-094` needs a quiet-machine admission experiment. `DEVENV-055`
+  received its native-compilation proof through the Native Bridge simulator journey on 2026-09-27
+  and is archived; this did not exercise iCloud service behavior.
+- Include the periodic isolation checks below. Local Linux success does not establish actual
+  hosted-cloud compatibility; record hosted network, permissions, and setup-hook proof separately.
 - Recheck `uuid`, Appium pins, and Nixpkgs using the
   [advisory register](<Dependency advisory follow-up.md>) and current primary sources. Use host,
   Linux, device, installed-binary, and public-distribution evidence only for the acceptance each
   actually exercises. Include [`bun audit`](https://bun.sh/docs/pm/cli/audit) and inspect any
   `devenv.lock` change against the [Nixpkgs tracker](https://tracker.security.nixos.org/).
+
+## Periodic isolation checks
+
+Keep these explicit periodic host checks, outside ordinary verification runs. Follow the existing
+[installed CLI and prepared-base commands](<../MVP Roadmap/Plan - Standalone Tao CLI.md#follow-up-order-decided-2026-09-26>)
+and [contributor verification workflow](<Developer environment upgrades/DEVENV-CLOUD-AGENT-EXECUTIONS-LACK-PORTABLE-BOOTSTRAP.md#local-reproduction-and-cloud-proof>):
+
+- Run installed CLI acceptance in a fresh vanilla Tart clone, including its mandatory filesystem
+  audit. Exercise a fresh clone of the prepared Xcode base separately; this qualifies that
+  environment and installed CLI behavior, not native app builds or simulator launches.
+- Run both cold and cached Ubuntu contributor verification against the intended committed HEAD.
+  Record bootstrap and repository verification separately from actual hosted-cloud compatibility.
+- Inspect failures and fix repository-owned defects within the approved pass scope, then rerun
+  the affected checks. Record external blockers and every unrun check explicitly.
+- Inspect retained clones, containers, image caches, and cleanup behavior. Distinguish reusable
+  vanilla/Xcode bases and toolchain caches from disposable run results. Preserve active resources,
+  unrelated resources, and evidence still needed for debugging; confirm activity and mounted-disk
+  state before cleanup. Record tested commits, image identities, timings, evidence paths, cleanup
+  outcomes, and each retained resource's owner, purpose, and cleanup condition.
+
+For now, designate exactly one isolation-test agent in the approved pass plan, with ownership
+across all worktrees on the account. That agent runs vanilla, prepared Xcode, and Linux checks
+sequentially, completing evidence collection and resource accounting before starting the next.
+Other worktrees must defer isolation runs until the owner explicitly hands off or finishes.
+This is manual coordination, not a scheduler or a parallel-execution facility: Tart's existing
+account-wide lease rejects a competing run rather than queuing it; the Linux runner has no
+equivalent cross-worktree guard. If ownership is unclear or a competing run is found, stop and
+resolve ownership with the Developer; never infer an idle account from an absent Tart lease or
+force-release a lease. The procedure depends on all participants observing the single-owner rule.
 
 ## Run a pass
 
@@ -47,7 +72,8 @@ notes after each completed pass; Git history is the longer record.
 3. After approval, orchestrate the pass with focused subagents. Review assignments may overlap
    commits or paths when different specialties need the same evidence. Keep assessment subagents
    read-only until their findings have been checked and reconciled; use a later implementation phase
-   for any accepted fixes included in the approved pass.
+   for any accepted fixes included in the approved pass. Assign the periodic isolation checks above
+   to one owner; do not fan them out across those subagents or worktrees.
 4. Check temporary-state growth: identify creation sites and retention rules, measure significant
    worktree and machine-wide accumulation, and distinguish active state from abandoned output. For
    each material source, design and verify a bounded cleanup path in normal agent operations; do not

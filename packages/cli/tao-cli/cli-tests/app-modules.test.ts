@@ -1,5 +1,6 @@
 import { Assert, CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import ts from 'typescript'
 import { PROJECT_TSCONFIG, TaoAppModules } from '../cli-src/app-modules'
 
 const PINNED_PROJECT_TSCONFIG = `{
@@ -83,6 +84,32 @@ Describe('Tao app TypeScript modules', () => {
       stderr: result.stderr,
       stdout: result.stdout,
     })
+  })
+
+  Test('resolves native app imports from the owning host without root-hoisted dependencies', async () => {
+    const root = await mkTestDir('tao-app-native-resolution-')
+    try {
+      const configPath = FS.resolvePath('Apps/tsconfig.json', root)
+      await FS.writeText(configPath, await FS.readText(Repo.resolvePath('Apps/tsconfig.json')))
+      const sidecar = FS.resolvePath('Apps/Test Apps/Native Bridge/Generated/Bindings.ts', root)
+      await FS.writeText(sidecar, '')
+      const config = ts.readConfigFile(configPath, ts.sys.readFile)
+      Expect(config.error).toBeUndefined()
+      const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, FS.dirname(configPath))
+      Expect(parsed.errors).toEqual([])
+      for (const name of ['expo-clipboard', 'expo-haptics', 'react-native']) {
+        const declaration = FS.resolvePath(`packages/apps/expo-host/node_modules/${name}/index.d.ts`, root)
+        await FS.writeText(declaration, 'export declare const hostOnly: unique symbol;')
+        await FS.writeJson(FS.resolvePath(`packages/apps/expo-host/node_modules/${name}/package.json`, root), {
+          name,
+          types: 'index.d.ts',
+        })
+        const resolved = ts.resolveModuleName(name, sidecar, parsed.options, ts.sys).resolvedModule
+        Expect(resolved?.resolvedFileName).toBe(declaration)
+      }
+    } finally {
+      await FS.remove(root)
+    }
   })
 
   Test('links a created project to the bundled runtime and skips a project without tsconfig', async () => {

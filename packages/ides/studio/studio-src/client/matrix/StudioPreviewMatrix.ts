@@ -26,6 +26,14 @@ export async function connectPreviews(
   signal?: AbortSignal,
 ): Promise<StudioPreviewConnection[]> {
   if (previewUrl === undefined) {
+    StudioMatrixSketches.render(
+      parent,
+      handshake.identity.project,
+      handshake.sketchCatalog,
+      handshake.previewManifest === undefined
+        ? undefined
+        : StudioMatrixLayout.sketchSourceVersions(handshake.previewManifest),
+    )
     return []
   }
   const origin = StudioProtocol.messageOrigin(previewUrl)

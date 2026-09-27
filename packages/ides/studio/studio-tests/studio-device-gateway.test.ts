@@ -736,6 +736,89 @@ Describe('Studio device gateway sealed control plane', () => {
     })
   })
 
+  Test('acknowledges an ordinary app on its first connection and after reconnect without a preview cell', async () => {
+    await withGateway({}, async env => {
+      env.cells.splice(0)
+      await env.session.compileInitial()
+      const device = await pairedDevice(env)
+      device.sendSealed({ compileRevision: 2, manifestRevision: 'manifest-2', type: 'device.appApplied' })
+      Expect(await device.nextSealed()).toEqual({ accepted: true, compileRevision: 2, type: 'studio.appliedAck' })
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(2)
+      Expect(env.gateway.status(env.sessionId).connection?.cellId).toBeUndefined()
+      Expect(env.session.compileSnapshot().appliedRevision).toBe(0)
+      const reconnecting = new TestDevice(env.gateway.port, device.identity)
+      await reconnecting.connect({ sessionId: env.sessionId })
+      Expect(await reconnecting.nextSealed()).toMatchObject({ manifest: { scenarios: [] }, type: 'studio.welcome' })
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBeUndefined()
+      reconnecting.sendSealed({ compileRevision: 2, manifestRevision: 'manifest-2', type: 'device.appApplied' })
+      Expect(await reconnecting.nextSealed()).toEqual({ accepted: true, compileRevision: 2, type: 'studio.appliedAck' })
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(2)
+    })
+  })
+
+  Test('releases a removed last scenario and acknowledges only the current ordinary app manifest', async () => {
+    await withGateway({}, async env => {
+      const device = await pairedDevice(env)
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      const assigned = await device.nextSealed()
+      Expect(assigned.type).toBe('studio.cellAssigned')
+      Expect(env.gateway.status(env.sessionId).connection?.cellId).toBe('cell:phone')
+      device.sendSealed({ compileRevision: 1, manifestRevision: 'manifest-1', type: 'device.appApplied' })
+      Expect(await device.nextSealed()).toEqual({ accepted: false, compileRevision: 1, type: 'studio.appliedAck' })
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBeUndefined()
+
+      env.cells.splice(0)
+      await env.session.compileInitial()
+      Expect(await device.nextSealed()).toMatchObject({ status: 'compiling', type: 'studio.compileState' })
+      Expect(await device.nextSealed()).toMatchObject({ manifest: { scenarios: [] }, type: 'studio.manifest' })
+      Expect(await device.nextSealed()).toMatchObject({ status: 'compiled', type: 'studio.compileState' })
+      Expect(env.gateway.status(env.sessionId).connection?.cellId).toBeUndefined()
+      Expect(env.gateway.status(env.sessionId).connection?.scenarioLabel).toBeUndefined()
+      if (assigned.type === 'studio.cellAssigned') {
+        Expect(() => env.session.previewCellInstance(assigned.identity.previewInstanceId)).toThrow('no longer current')
+      }
+      for (
+        const stale of [
+          { compileRevision: 1, manifestRevision: 'manifest-1' },
+          { compileRevision: 2, manifestRevision: 'manifest-1' },
+          { compileRevision: 3, manifestRevision: 'manifest-2' },
+        ]
+      ) {
+        device.sendSealed({ ...stale, type: 'device.appApplied' })
+        Expect(await device.nextSealed()).toEqual({
+          accepted: false,
+          compileRevision: stale.compileRevision,
+          type: 'studio.appliedAck',
+        })
+        Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBeUndefined()
+      }
+      device.sendSealed({ compileRevision: 2, manifestRevision: 'manifest-2', type: 'device.appApplied' })
+      Expect(await device.nextSealed()).toEqual({ accepted: true, compileRevision: 2, type: 'studio.appliedAck' })
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(2)
+      Expect(env.session.compileSnapshot().appliedRevision).toBe(0)
+
+      env.compile.failNext = true
+      await env.session.compileInitial()
+      Expect(await device.nextSealed()).toMatchObject({ status: 'compiling', type: 'studio.compileState' })
+      Expect(await device.nextSealed()).toMatchObject({ status: 'error', type: 'studio.compileState' })
+      device.sendSealed({ compileRevision: 3, manifestRevision: 'manifest-3', type: 'device.appApplied' })
+      Expect(await device.nextSealed()).toEqual({ accepted: false, compileRevision: 3, type: 'studio.appliedAck' })
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(2)
+
+      // A new scenario is offered without restoring the obsolete device assignment.
+      env.cells.push('cell:tablet')
+      await env.session.compileInitial()
+      Expect(await device.nextSealed()).toMatchObject({ status: 'compiling', type: 'studio.compileState' })
+      Expect(await device.nextSealed()).toMatchObject({ manifest: { compileRevision: 4 }, type: 'studio.manifest' })
+      Expect(await device.nextSealed()).toMatchObject({ status: 'compiled', type: 'studio.compileState' })
+      device.sendSealed({ cellId: 'cell:tablet', type: 'device.selectCell' })
+      Expect(await device.nextSealed()).toMatchObject({
+        identity: { cellId: 'cell:tablet' },
+        type: 'studio.cellAssigned',
+      })
+    })
+  })
+
   Test('closes on a replayed or reordered sealed frame', async () => {
     await withGateway({}, async env => {
       const replayer = await pairedDevice(env)

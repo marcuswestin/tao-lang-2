@@ -1,3 +1,4 @@
+import { companionLaunchArgs, installedFromDevicectlApps } from '@expo-host/dev-loop/expo-runner/ios-companion'
 import type { ExpoFetch } from '@expo-host/dev-loop/expo-runner/metro'
 import { companionDevClientUrl, CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { CLI, Errors, FS, type Platform, Repo } from '@shared'
@@ -8,11 +9,9 @@ import {
   companionInstallArgs,
   companionInstallCommand,
   companionInstallEnv,
-  companionLaunchArgs,
   createStudioCompanionDevice,
   describeDevicectlFailure,
   devicectlFailureLayer,
-  installedFromDevicectlApps,
   matchCompanionHost,
   runStudioCompanionInstall,
   type StudioCompanionDevice,

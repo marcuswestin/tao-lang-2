@@ -1239,6 +1239,7 @@ Describe('Studio smoke resource isolation', () => {
     try {
       const captured = await withCapturedOutput(async () =>
         await runStudioDev({
+          devDataRoot: FS.resolvePath('dev-data', root),
           native: true,
           nativeHutchPath: FS.resolvePath('missing-hutch', root),
           onFailure: error => failures.push(error),

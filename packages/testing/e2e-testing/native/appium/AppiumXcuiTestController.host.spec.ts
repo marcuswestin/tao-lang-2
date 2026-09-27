@@ -17,6 +17,7 @@ import {
   type AppiumXcuiTestCapabilities,
   appiumXcuiTestCapabilities,
   type AppiumXcuiTestDeepLinkSession,
+  type AppiumXcuiTestRevealSession,
   createAppiumXcuiTestController,
   iosTargetLeaseName,
 } from './AppiumXcuiTestController'
@@ -45,6 +46,7 @@ test('allocates collision-free Appium resources for two simulator UDIDs', async 
     secondClient.capabilities[0]?.['appium:derivedDataPath'],
   )
   expect(firstClient.capabilities[0]).not.toHaveProperty('appium:autoAcceptAlerts')
+  expect(firstClient.capabilities[0]?.['appium:simulatorPasteboardAutomaticSync']).toBe('off')
   expect(firstClient.sessions[0]?.alertDismissals).toBe(1)
   expect(secondClient.sessions[0]?.alertDismissals).toBe(1)
   expect(
@@ -376,6 +378,50 @@ test('reports a busy target, keeps inputs isolated, and releases only the sessio
   await secondSession.close(secondSession.descriptor().lease)
 })
 
+test('native reveal invalidates its observation and requires a fresh lookup before input', async () => {
+  const client = new FakeClient('reveal')
+  client.sessions[0]!.visible = false
+  const controller = appiumController(client, new FakeLeases(), simulator('SIM-REVEAL'))
+  const session = await open(controller) as AppiumXcuiTestRevealSession
+  try {
+    const request = { expectedRevision: revision, target: { kind: 'accessibility' as const, name: 'entry' } }
+    const hidden = await session.observe(request)
+    expect(hidden.visible).toBe(false)
+    await session.revealObservation(hidden)
+    await expect(session.revealObservation(hidden)).rejects.toThrow('Observation is no longer current')
+    await expect(session.perform(typeAction(session, hidden, 'stale write'))).rejects.toThrow(
+      'Observation is no longer current',
+    )
+    expect(client.sessions[0]!.revealed).toHaveLength(1)
+    expect(client.sessions[0]!.input).toEqual([])
+    const visible = await session.observe(request)
+    expect(visible.visible).toBe(true)
+    await session.perform(typeAction(session, visible, 'fresh write'))
+    expect(client.sessions[0]!.input).toEqual(['fresh write'])
+  } finally {
+    await controller.close()
+  }
+})
+
+test('native reveal rejects foreign observation leases and fenced target leases before dispatch', async () => {
+  const leases = new FakeLeases()
+  const client = new FakeClient('reveal-fenced')
+  const controller = appiumController(client, leases, simulator('SIM-REVEAL-FENCED'))
+  const session = await open(controller) as AppiumXcuiTestRevealSession
+  const observation = await session.observe({
+    expectedRevision: revision,
+    target: { kind: 'accessibility', name: 'entry' },
+  })
+  await expect(session.revealObservation({
+    ...observation,
+    lease: { ...observation.lease, generation: 'foreign-lease' },
+  })).rejects.toThrow('no longer current')
+  leases.fence('ios-simulator:SIM-REVEAL-FENCED')
+  await expect(session.revealObservation(observation)).rejects.toThrow('is no longer current')
+  expect(client.sessions[0]!.revealed).toEqual([])
+  await expect(controller.close()).rejects.toThrow('is no longer current')
+})
+
 test('fences stale leases before they can mutate a session', async () => {
   const leases = new FakeLeases()
   const client = new FakeClient('fenced')
@@ -671,6 +717,7 @@ class FakeClient {
 }
 
 class FakeSession implements AppiumWebDriverSession {
+  readonly revealed: string[] = []
   alertDismissals = 0
   deleted = false
   deleteAttempts = 0
@@ -692,6 +739,11 @@ class FakeSession implements AppiumWebDriverSession {
 
   constructor(name: string) {
     this.id = `${name}-session`
+  }
+
+  async revealElement(element: AppiumElement): Promise<void> {
+    this.revealed.push(element.id)
+    this.visible = true
   }
 
   async deleteSession(): Promise<void> {

@@ -236,11 +236,30 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
     }
   }
   if (action.kind === 'insert-project-view' && typeof action['viewName'] === 'string') {
+    Assert.input(
+      action['viewSourcePath'] === undefined || typeof action['viewSourcePath'] === 'string',
+      'Project view source path must be a string.',
+    )
+    const rawBindings = action['bindings']
+    Assert.input(
+      rawBindings === undefined || Json.isRecord(rawBindings),
+      'Project view bindings must name lexical values.',
+    )
+    const bindings = rawBindings === undefined
+      ? undefined
+      : Object.fromEntries(
+        Object.entries(rawBindings).map(([name, value]) => {
+          Assert.input(typeof value === 'string', 'Project view bindings must name lexical values.')
+          return [name, value]
+        }),
+      )
     return {
       ...(typeof action['afterId'] === 'string' ? { afterId: action['afterId'] } : {}),
       ...(typeof action['beforeId'] === 'string' ? { beforeId: action['beforeId'] } : {}),
       kind: action.kind,
       viewName: action['viewName'],
+      ...(action['viewSourcePath'] === undefined ? {} : { viewSourcePath: action['viewSourcePath'] }),
+      ...(bindings === undefined ? {} : { bindings }),
     }
   }
   if (

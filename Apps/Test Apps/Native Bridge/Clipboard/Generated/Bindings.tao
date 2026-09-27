@@ -1,0 +1,83 @@
+// Generated from public native API declarations. Regenerate instead of editing.
+public
+type ClipboardEvent is {
+   ContentTypes list of ContentType
+}
+
+public
+type ClipboardImage is {
+   Data text,
+   Size ClipboardImageSize
+}
+
+public
+type ClipboardImageSize is {
+   Width number,
+   Height number
+}
+
+public
+type EventSubscription is {
+   Remove action()
+}
+
+public
+type GetImageOptions is {
+   Format GetImageOptionsFormat,
+   JpegQuality number?
+}
+
+public
+type GetStringOptions is {
+   PreferredFormat StringFormat?
+}
+
+public
+type SetStringOptions is {
+   InputFormat StringFormat?
+}
+
+public
+type ContentType is one of ContentType_PLAIN_TEXT, ContentType_HTML, IMAGE, URL
+
+public
+type GetImageOptionsFormat is one of Png, Jpeg
+
+public
+type StringFormat is one of StringFormat_PLAIN_TEXT, StringFormat_HTML
+
+public
+action AddClipboardListener(Listener action(ClipboardEvent)) returns EventSubscription from ./Bindings.ts
+
+public
+action GetImageAsync(Options GetImageOptions) returns ClipboardImage? from ./Bindings.ts
+
+public
+action GetStringAsync(Options GetStringOptions? default none) returns text from ./Bindings.ts
+
+// Upstream platform annotation: ios, macos.
+public
+action GetUrlAsync() returns text? from ./Bindings.ts
+
+public
+action HasImageAsync() returns boolean from ./Bindings.ts
+
+public
+action HasStringAsync() returns boolean from ./Bindings.ts
+
+// Upstream platform annotation: ios, macos.
+public
+action HasUrlAsync() returns boolean from ./Bindings.ts
+
+public
+action RemoveClipboardListener(Subscription EventSubscription) from ./Bindings.ts
+
+public
+action SetImageAsync(Base64Image text) from ./Bindings.ts
+
+public
+action SetStringAsync(Text text, Options SetStringOptions? default none) returns boolean from ./Bindings.ts
+
+// Upstream platform annotation: ios, macos.
+public
+action SetUrlAsync(Url text) from ./Bindings.ts
