@@ -307,9 +307,12 @@ login. The experimental Clerk offline resource cache is not enabled.
 Offline driver, connection and signed-proof tests exercise adapter behavior without Clerk servers.
 The separate opt-in browser journey uses a Clerk development instance and real password/email-code
 UI. Testing tokens bypass bot protection; they do not replace hosted authentication. Live browser
-and physical-device acceptance are distinct from the offline contract tests. The gateway currently
-requires an `azp` origin claim; native Clerk proofs may omit it. Native authentication is therefore
-not supported as a verified pairing until its token/origin contract has been established.
+and physical-device acceptance are distinct from the offline contract tests. The gateway requires
+an `azp` origin claim by default. Trusted deployment configuration may enable
+`allowMissingAuthorizedPartyWithoutOrigin` for native Clerk proofs: an absent `azp` is accepted
+only when the actual HTTP request has no `Origin` header. A present `azp` must still match the
+configured authorized parties. Request payloads cannot opt into this exception, and signature,
+issuer, subject, session ID, expiry, audience, and completed-factor checks remain required.
 
 ## App datasource configuration
 

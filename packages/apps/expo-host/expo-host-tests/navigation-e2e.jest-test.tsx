@@ -1116,10 +1116,14 @@ Describe('Expo runtime', () => {
         }
 
         view Confirm() responds ConfirmResult {
-          action ConfirmIt() { respond Confirmed }
+          action Reply() { respond Confirmed }
+          action Cancel() { dismiss }
+          action ConfirmIt() { when do Reply() { saved -> { } } }
+          action CancelIt() { when do Cancel() { saved -> { } } }
           render Col() {
             Text("Nested ask")
             Button("Confirm nested ask") { on press ConfirmIt }
+            Button("Cancel nested ask") { on press CancelIt }
           }
         }
       `,
@@ -1129,6 +1133,14 @@ Describe('Expo runtime', () => {
           return style?.gap === 9
         })
         Expect(gapNineViews).toHaveLength(1)
+
+        fireEvent.press(screen.getByText('Open nested ask'))
+        await act(async () => {})
+        ExpectScreen(screen).toHaveText('Nested ask')
+        await fireEventAsync.press(screen.getByText('Cancel nested ask'))
+        await act(async () => {})
+        Expect(screen.queryByText('Nested ask')).toBeNull()
+        ExpectScreen(screen).toHaveText('Ready')
 
         fireEvent.press(screen.getByText('Open nested ask'))
         await act(async () => {})

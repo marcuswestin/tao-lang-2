@@ -1,3 +1,4 @@
+import { RuntimeToolchainPaths } from '@expo-host'
 import { CLI, type Diagnostic, FS, Platform, TaoResources } from '@shared'
 import { TaoAppModules } from './app-modules'
 
@@ -86,7 +87,13 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
     : FS.resolvePath(`../${TaoResources.HOST_DEPENDENCIES_DIRECTORY}/node_modules/typescript/bin/tsc`, resourceRoot)
   const runTsc = () =>
     CLI.run(Platform.runtimeProcess.execPath, {
-      args: [...(resourceRoot === undefined ? [] : ['--bun']), tsc, '--project', configPath, '--pretty', 'false'],
+      args: [tsc, '--project', configPath, '--pretty', 'false'],
+      ...(resourceRoot === undefined ? {} : {
+        env: {
+          ...RuntimeToolchainPaths.nodeLauncherEnvironment(RuntimeToolchainPaths.hostInstallRoot),
+          BUN_BE_BUN: '1',
+        },
+      }),
       cwd: workspaceRoot,
     })
   let result = await runTsc()

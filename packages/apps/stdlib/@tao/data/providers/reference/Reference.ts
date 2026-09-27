@@ -307,14 +307,17 @@ export function ReferenceProvider(host: ReferenceHost = nativeHost()): TR.DataPr
           await persist(next)
         })
       }
-      const upload = (): Promise<void> => {
+      const upload = (operationId?: string): Promise<void> => {
         if (uploading !== undefined) {
-          return uploading
+          return operationId === undefined ? uploading : uploading.then(() => upload(operationId))
         }
         uploading = (async () => {
           while (!closed) {
             const pending = await enqueue(async () =>
-              state.checkpoint?.pending.find(item => item.failure?.permanent !== true)
+              state.checkpoint?.pending.find(item =>
+                item.failure?.permanent !== true
+                && (operationId === undefined || item.transaction.operationId === operationId)
+              )
             )
             if (pending === undefined) {
               return
@@ -343,6 +346,9 @@ export function ReferenceProvider(host: ReferenceHost = nativeHost()): TR.DataPr
                 }
                 await persist(next)
               })
+              if (operationId !== undefined) {
+                return
+              }
             } catch (error) {
               if (closed) {
                 return
@@ -476,13 +482,17 @@ export function ReferenceProvider(host: ReferenceHost = nativeHost()): TR.DataPr
             void enqueue(async () => {
               Assert.defined(state.checkpoint, 'reference checkpoint has loaded')
               const next = structuredClone(state.checkpoint)
-              for (const item of next.pending) {
-                if (item.transaction.operations.some(operation => operation.entity === entity && operation.id === id)) {
-                  delete item.failure
-                }
+              const item = next.pending.find(item =>
+                item.failure !== undefined
+                && item.transaction.operations.some(operation => operation.entity === entity && operation.id === id)
+              )
+              if (item === undefined) {
+                return undefined
               }
+              delete item.failure
               await persist(next)
-            }).then(upload).catch(report)
+              return item.transaction.operationId
+            }).then(operationId => operationId === undefined ? undefined : upload(operationId)).catch(report)
           },
           status: (entity, id) => {
             if (closed) {

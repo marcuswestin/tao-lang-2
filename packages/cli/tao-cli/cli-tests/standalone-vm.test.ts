@@ -140,6 +140,9 @@ fi
         await FS.writeText(FS.resolvePath('guest/steps/xcode-version.log', logs), 'Xcode 26.0\nBuild version 17A324\n')
         await FS.writeText(FS.resolvePath('guest/steps/brew-version.log', logs), 'Homebrew 4.6.0\n')
         await FS.writeText(FS.resolvePath('guest/steps/vendor-node-version.log', logs), 'v22.19.0\n')
+        const summaryPath = FS.resolvePath('guest/steps/acceptance-summary.json', logs)
+        const summary = { format: 'tao-standalone-acceptance-v1', scenarios: [{ status: 'passed' }] }
+        await FS.writeJson(summaryPath, summary)
         const runtimesPath = FS.resolvePath('guest/steps/simulator-runtimes.json', logs)
         await FS.writeJson(runtimesPath, {
           runtimes: [
@@ -168,6 +171,15 @@ fi
         Expect(await FS.exists(calls)).toBe(false)
 
         await FS.writeText(FS.resolvePath('source-image.txt', logs), `${source}\n`)
+        for (const scenarios of [[], [{ status: 'running' }], [{ status: 'failed' }], [{ status: 'unrun' }]]) {
+          await FS.writeJson(summaryPath, { ...summary, scenarios })
+          const incomplete = await qualify()
+          Expect(incomplete.exitCode).not.toBe(0)
+          Expect(incomplete.stderr).toContain('summary is not complete and passing')
+          Expect(await FS.exists(manifest)).toBe(false)
+          Expect(await FS.exists(calls)).toBe(false)
+        }
+        await FS.writeJson(summaryPath, summary)
         const qualified = await qualify()
         Expect(qualified.exitCode).toBe(0)
         Expect(await FS.readJson(manifest)).toMatchObject({
