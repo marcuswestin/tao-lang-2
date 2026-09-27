@@ -20,6 +20,7 @@
     "tao-cli-kit": "workspace:*",
     "tao-formatter": "workspace:*",
     "tao-generation": "workspace:*",
+    "tao-instantdb": "workspace:*",
     "tao-native-bindings": "workspace:*",
     "tao-parser": "workspace:*",
     "tao-expo-host": "workspace:*",

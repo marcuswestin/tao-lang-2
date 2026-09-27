@@ -104,6 +104,51 @@ Describe('InstantDB schema push', () => {
     ])
   })
 
+  Test('plans without applying the schema or the rules when asked only to plan', async () => {
+    const instant = fakeInstant({
+      'current-attrs': [userAttribute('notes', 'body')],
+      steps: [['add-attr', { 'forward-identity': ['attr-id', 'notes', 'pinned'] }]],
+    })
+    const report = await pushInstantSchema(
+      { apiURI: 'http://localhost:9020', appId: 'app-1', fetch: instant.fetcher, token: 't' },
+      generated,
+      { planOnly: true },
+    )
+    Expect(report.changes).toEqual(['add-attr notes.pinned'])
+    Expect(instant.requests.map(request => request.url)).toEqual([
+      'http://localhost:9020/superadmin/apps/app-1/schema/push/plan',
+    ])
+  })
+
+  Test('names the refused token and never the token itself when the server answers 401 or 403', async () => {
+    for (const status of [401, 403]) {
+      const instant = fakeInstant({}, {
+        path: '/plan',
+        response: Response.json({ message: 'Unauthorized' }, { status }),
+      })
+      const push = pushInstantSchema(
+        {
+          apiURI: 'http://localhost:9020',
+          appId: 'app-1',
+          fetch: instant.fetcher,
+          token: 'secret-token',
+          tokenLabel: 'token from INSTANT_APP_ADMIN_TOKEN',
+        },
+        generated,
+      )
+      await Expect(push).rejects.toBeInstanceOf(Errors.UserInputError)
+      await Expect(push).rejects.toThrow(
+        'InstantDB refused the token from INSTANT_APP_ADMIN_TOKEN for plan schema at '
+          + `http://localhost:9020/superadmin/apps/app-1/schema/push/plan with HTTP ${status}: Unauthorized. `
+          + "Check that the token belongs to app 'app-1'; if an app admin token is refused here, supply a "
+          + 'platform token for an account that can manage the app instead.',
+      )
+      await push.catch((error: unknown) => {
+        Expect(String(error).includes('secret-token')).toBe(false)
+      })
+    }
+  })
+
   Test('refuses removals, renames, and non-additive steps before changing anything', async () => {
     const instant = fakeInstant({
       'current-attrs': [

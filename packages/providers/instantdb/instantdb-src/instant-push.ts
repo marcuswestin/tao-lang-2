@@ -36,6 +36,12 @@ export type InstantPushReport = Readonly<{
   steps: readonly InstantPushStep[]
 }>
 
+/** InstantPushOptions chooses between pushing and only planning. */
+export type InstantPushOptions = Readonly<{
+  /** planOnly reads the plan and checks it, then stops: nothing on the server changes. */
+  planOnly?: boolean
+}>
+
 type PlanAttribute = Readonly<{
   catalog?: string
   'forward-identity'?: readonly [string, string, string]
@@ -51,19 +57,24 @@ type Plan = Readonly<{
 // `add-attr` creates an attribute or link, and `index` indexes one; both leave stored data alone.
 const additiveSteps = new Set(['add-attr', 'index'])
 
-/** pushInstantSchema plans, checks, and applies a schema, then applies its rules. */
+/**
+ * pushInstantSchema plans, checks, and applies a schema, then applies its rules. With `planOnly` it
+ * stops after the check and reports the additive changes a push would apply.
+ */
 export async function pushInstantSchema(
   target: InstantPushTarget,
   generated: Readonly<{ rules: InstantRules; schema: InstantSchemaJSON }>,
+  options: InstantPushOptions = {},
 ): Promise<InstantPushReport> {
   const base = target.apiURI.replace(/\/+$/, '')
   const app = encodeURIComponent(target.appId)
   const steps: InstantPushStep[] = []
+  const tokenLabel = target.tokenLabel ?? 'app admin token'
   const body = { check_types: true, schema: generated.schema, supports_background_updates: true }
   const request = async (purpose: InstantPushStep['purpose'], path: string, payload: unknown): Promise<unknown> => {
     const endpoint = `${base}${path}`
     steps.push({
-      authorization: `Bearer ${target.tokenLabel ?? 'app admin token'}`,
+      authorization: `Bearer ${tokenLabel}`,
       endpoint,
       method: 'POST',
       purpose,
@@ -84,6 +95,15 @@ export async function pushInstantSchema(
     }
     const text = await response.text()
     const parsed = parseJSON(text)
+    if (response.status === 401 || response.status === 403) {
+      // The same endpoints may accept an app admin token or only a platform token, depending on the
+      // server, so the refusal names the token it was given rather than guessing which one it wants.
+      return Errors.throwUserInput(
+        `InstantDB refused the ${tokenLabel} for ${purpose} at ${endpoint} with HTTP ${response.status}`
+          + `${serverMessage(parsed)}. Check that the token belongs to app '${target.appId}'; if an app admin `
+          + 'token is refused here, supply a platform token for an account that can manage the app instead.',
+      )
+    }
     if (!response.ok) {
       return Errors.throwHostEnvironment(
         `InstantDB ${purpose} at ${endpoint} failed with HTTP ${response.status}${serverMessage(parsed)}.`,
@@ -94,6 +114,9 @@ export async function pushInstantSchema(
 
   const plan = await request('plan schema', `/superadmin/apps/${app}/schema/push/plan`, body) as Plan
   const changes = checkAdditive(plan, generated.schema)
+  if (options.planOnly === true) {
+    return { changes, steps }
+  }
   if (changes.length > 0) {
     await request('apply schema', `/superadmin/apps/${app}/schema/push/apply`, body)
   }
