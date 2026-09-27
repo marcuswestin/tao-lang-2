@@ -424,11 +424,40 @@ Describe('Studio browser CDP harness', () => {
     const browser = StudioCdp.testing.create(transport)
 
     Expect(await browser.rendererFingerprint()).toMatchObject({
-      fontFingerprint: '9096b87d28a06448c10deb4680d3b0082746afea84ca3cbc26e72dc84da9363e',
+      fontFingerprint: '09947a6b4157d40020e97c9861a1c64833e62a0fd315930d5b822a4c538ec41e',
       product: 'Chrome/142.0.1',
     })
     Expect(transport.calls.filter(call => call.method === 'Browser.getVersion')).toHaveLength(2)
     Expect(transport.calls.filter(call => call.method === 'Page.getFrameTree')).toHaveLength(2)
+  })
+
+  Test('fingerprints preview frames by what they render, not the URL each launch serves them from', async () => {
+    const fingerprintFor = async (urls: readonly string[]) => {
+      const transport = new FakeCdpTransport()
+      transport.frameTree = {
+        childFrames: urls.map((url, index) => ({ frame: { id: `preview-${index}`, url } })),
+        frame: { id: 'root', url: 'http://127.0.0.1/studio' },
+      }
+      transport.evaluateResults.push(
+        {
+          colorGamut: 'srgb',
+          deviceScaleFactor: 1,
+          fontFingerprint: 'page-fonts',
+          locale: 'en-US',
+          platform: 'MacIntel',
+          timezone: 'America/New_York',
+        },
+        ...urls.map(() => 'frame-fonts'),
+      )
+      return (await StudioCdp.testing.create(transport).rendererFingerprint()).fontFingerprint
+    }
+
+    Expect(await fingerprintFor(['http://127.0.0.1:55102/?previewInstanceId=one'])).toBe(
+      await fingerprintFor([
+        'http://127.0.0.1:61877/?previewInstanceId=two',
+        'http://127.0.0.1:61877/?previewInstanceId=three',
+      ]),
+    )
   })
 
   Test('retries waits only for recognized execution-context replacement', async () => {

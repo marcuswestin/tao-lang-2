@@ -330,6 +330,82 @@ function createCommands(): Command {
           Platform.runtimeProcess.setExitCode(1)
         }
       })
+
+    // `_preview` holds commands under development: unlisted in help and free to change until one
+    // graduates to a released name.
+    const preview = commands
+      .command('_preview', { hidden: true })
+      .description('Unreleased commands under development; their interface may change.')
+    // Repeatable; `list` also splits commas, which no app, device, or appearance name contains.
+    const repeated = (value: string, previous: string[] = []): string[] => [...previous, value]
+    const list = (value: string, previous: string[] = []): string[] => [
+      ...previous,
+      ...value.split(',').map(item => item.trim()).filter(Boolean),
+    ]
+    preview
+      .command('qa')
+      .argument('[path]', 'Tao project directory to capture in Studio.', '.')
+      .option('--screenshot', "Capture the project's scenarios across the device and appearance matrix.")
+      .option('--dest <directory>', 'Screenshot store to append this run to, as runs/<UTC time>/.')
+      .option('--app <names>', 'Capture only these apps (default: every app in the project).', list)
+      .option(
+        '--scenario <selector>',
+        'Capture only matching scenarios, as [<file>.tao:]<subject or group>[/<group or entry>[/<entry>]]; repeatable.',
+        repeated,
+      )
+      .option('--device <names>', 'Devices: phone, tablet, laptop (default: all).', list)
+      .option('--appearance <names>', 'Appearances: light, dark (default: both).', list)
+      .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
+      .option('--studio', "Also capture Studio's own layouts, at laptop size, with this project open.")
+      .option('--timeline', "Only regenerate the store's index.html from the runs it already holds.")
+      .description('Capture QA evidence for a Tao project.')
+      .action(async (
+        path: string,
+        options: {
+          app?: string[]
+          appearance?: string[]
+          dest?: string
+          device?: string[]
+          note?: string
+          scenario?: string[]
+          screenshot?: boolean
+          studio?: boolean
+          timeline?: boolean
+        },
+      ) => {
+        try {
+          if (options.dest === undefined || (options.screenshot === true) === (options.timeline === true)) {
+            Errors.throwUserInput(
+              'Choose what to do and where: tao _preview qa --screenshot --dest <directory>, or --timeline --dest <directory>.',
+            )
+          }
+          const { runQaScreenshots, writeQaTimeline } = await import('tao-studio-tooling/qa-screenshots')
+          if (options.timeline === true) {
+            HCI.writeSuccess(`Timeline: ${FS.displayPath(await writeQaTimeline(options.dest))}\n`)
+            return
+          }
+          const result = await runQaScreenshots(path, {
+            ...(options.app === undefined ? {} : { apps: options.app }),
+            ...(options.appearance === undefined ? {} : { appearances: options.appearance }),
+            dest: options.dest,
+            ...(options.device === undefined ? {} : { devices: options.device }),
+            ...(options.note === undefined ? {} : { note: options.note }),
+            ...(options.scenario === undefined ? {} : { scenarios: options.scenario }),
+            ...(options.studio === true ? { studio: true } : {}),
+          })
+          HCI.writeSuccess(
+            `Captured ${result.captured} screenshots (${result.changed} changed, ${result.new} new, ${result.failed} failed): ${
+              FS.displayPath(result.runPath)
+            }\nTimeline: ${FS.displayPath(result.timelinePath)}\n`,
+          )
+          if (result.failed > 0) {
+            Platform.runtimeProcess.setExitCode(1)
+          }
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      })
   }
 
   commands

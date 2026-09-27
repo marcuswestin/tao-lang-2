@@ -453,6 +453,9 @@ Product and codebase backlog, unordered.
   program, mainstream assistive-technology compatibility baseline, research watchlist, and first
   selectable-row focus-intake slice.
 - `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..036 deferred-decision inventory.
+- `Docs/Roadmap/UI screenshot archive/Plan - UI screenshot archive.md` — the decided product ×
+  platform × size matrix, the private submodule store, and the slices for an append-only history of
+  UI screenshots.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
 - `Docs/Archive/Plans/Repository foundations/` — the package, automation, and language-service foundation record.
 - `Docs/Archive/Plans/Verification orchestration/` — the completed verification-orchestration program: one

@@ -90,7 +90,7 @@ Describe('the package groups left out of the toolchain identity', () => {
 
   // Stated separately from the edge walk above, because this is the half that walking manifests
   // cannot settle: the edge is allowed only for as long as nothing on the verdict path follows it.
-  Test('are reached from the CLI only by one lazy import, outside any check or compile', async () => {
+  Test('are reached from the CLI only by lazy imports, outside any check or compile', async () => {
     const sourceRoot = FS.resolvePath('packages/cli/tao-cli/cli-src', Repo.getRoot())
     const references: string[] = []
     for (const path of await Repo.filesUnder(sourceRoot)) {
@@ -105,10 +105,12 @@ Describe('the package groups left out of the toolchain identity', () => {
       }
     }
 
-    Expect(references).toHaveLength(1)
-    // Lazy: inside an action, so nothing outside `studio-review` loads it. A bare `import ... from`
-    // at the top of a module would be the regression this catches.
-    Expect(references[0]).toContain("await import('tao-studio-tooling/studio-review')")
+    // Lazy: inside an action, so nothing outside `studio-review` and `_preview qa` loads it. A bare
+    // `import ... from` at the top of a module would be the regression this catches.
+    Expect(references.map(reference => reference.replace(/^.*?(await import\('[^']+'\)).*$/, '$1'))).toEqual([
+      "await import('tao-studio-tooling/studio-review')",
+      "await import('tao-studio-tooling/qa-screenshots')",
+    ])
   })
 
   Test('leaves out exactly the named groups and keeps everything else', async () => {

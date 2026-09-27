@@ -10,6 +10,8 @@
     "**/_gen_*/**",
     ".*",
     "Docs/Archive/**",
+    // The storage submodule holds generated capture records owned by another repository.
+    "storage/**",
     "packages/old-*",
     "packages/old-*/**",
   ],

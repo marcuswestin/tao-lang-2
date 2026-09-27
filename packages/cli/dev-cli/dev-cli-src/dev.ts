@@ -535,6 +535,33 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('storage')
+    .description('Sync the storage submodule, record a QA screenshot run into it, or push it.')
+    .argument('<action>', 'sync, qa, or push')
+    .argument('[paths...]', 'Tao project directories to capture, archived together as one commit.')
+    .option('--app <names>', 'Capture only these apps (default: every app in the project).', repeatedOption)
+    .option('--scenario <selector>', 'Capture only matching scenarios; see `tao _preview qa --help`.', repeatedOption)
+    .option('--device <names>', 'Devices: phone, tablet, laptop (default: all).', repeatedOption)
+    .option('--appearance <names>', 'Appearances: light, dark (default: both).', repeatedOption)
+    .option('--studio', "Also capture Studio's own layouts, once, on the first project.")
+    .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
+    .action(async (
+      action: string,
+      paths: string[],
+      options: {
+        app?: string[]
+        appearance?: string[]
+        device?: string[]
+        note?: string
+        scenario?: string[]
+        studio?: boolean
+      },
+    ) => {
+      const { Storage } = await import('./git/Storage')
+      await runExitCommand(() => Storage.run(action, paths, options))
+    })
+
+  commands
     .command('delegation-report')
     .description('Summarise which subagents this repository spawned, at which model, and for how long.')
     .option('--json', 'Print the structured summary instead of a table.')
@@ -1215,6 +1242,11 @@ async function runExitCommand(run: () => Promise<number>): Promise<void> {
     }
     Platform.runtimeProcess.exit(1)
   }
+}
+
+/** repeatedOption collects every occurrence of a repeatable option, in order. */
+function repeatedOption(value: string, previous: string[] = []): string[] {
+  return [...previous, value]
 }
 
 function parsePositiveInteger(value: string, label: string): number {
