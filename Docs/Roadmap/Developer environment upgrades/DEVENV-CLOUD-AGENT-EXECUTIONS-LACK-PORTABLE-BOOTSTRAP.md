@@ -523,7 +523,12 @@ Reusable tools images and shared caches were preserved. No Tart cleanup was perf
 
 Complete macOS verification of this same commit passed in 94.2 seconds at
 `.artifacts/logs/verify/2026-09-26T23-42-56-113Z-68683-87013f24/`; finalization passed before
-this Linux rerun. Later tracked edits only record the results. The default amd64 QEMU/Nix
+this Linux rerun. Evidence commit `2a3733f0` only records the results. Finalization then integrated
+the unrelated iPad/Catalyst changes from main `898f5f97` into `4c533b32`; complete macOS verification
+of that merged tree passed in 182.4 seconds at
+`.artifacts/logs/verify/2026-09-27T00-07-39-407Z-77016-b2e76ea2/`. Those incoming changes do not alter
+bootstrap, process supervision, Nix, dependency pins, or network policy. Linux acceptance remains
+explicitly tied to `d37963fc`; native UI/device acceptance is separate. The default amd64 QEMU/Nix
 blocker was last reproduced at `7996e033`; the intervening integrations did not change the
 Nix bootstrap, pinned version, image, or compatibility settings. Native amd64 and actual hosted
 smoke tests remain outstanding. No landing, Rosetta experiment, or global configuration change
