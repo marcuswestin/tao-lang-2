@@ -2,8 +2,8 @@ use CloudKit from @tao/data/providers/cloudkit
 use ExportDocument from @ui
 use StarterWorkspace, WordFlower from ./
 
-// WordFlower's hosted InstantDB variant saves snapshots. CloudKit supplies the per-row write
-// recovery that this sync journey exercises, while the test world replaces its host transport.
+// WordFlower's InstantDB variants need a running InstantDB server. CloudKit supplies the per-row
+// write recovery that this sync journey exercises, while the test world replaces its host transport.
 app WordFlowerSyncTest = WordFlower with {
    Name "WordFlower Sync Test"
    Datasource CloudKit { }

@@ -23,9 +23,14 @@ export type InstantClientAddress = Readonly<{
   websocketURI?: string | undefined
 }>
 
-/** InstantClientLease holds the shared client until `release`, which runs at most once. */
+/**
+ * InstantClientLease holds the shared client until `release`, which runs at most once.
+ * `exclusively` runs `work` once every earlier exclusive work on the client has settled; the client
+ * holds one signed-in user, so each change of it runs alone rather than landing on top of another.
+ */
 export type InstantClientLease = Readonly<{
   db: InstantDatabase
+  exclusively<Result>(work: () => Promise<Result>): Promise<Result>
   release(): void
 }>
 
@@ -33,6 +38,8 @@ type ClientEntry = {
   db: InstantDatabase
   leases: number
   schemas: Map<symbol, InstantSchemaJSON>
+  /** turn settles once the exclusive work last queued on the client has. */
+  turn: Promise<void>
 }
 
 const clients = new Map<string, ClientEntry>()
@@ -60,7 +67,7 @@ export function acquireInstantClient(
       ...(address.websocketURI === undefined ? {} : { websocketURI: address.websocketURI }),
       ...(schemas.size === 0 ? {} : { schema: sdkSchema(sdk, mergeSchemas([...schemas.values()])) }),
     })
-  const entry: ClientEntry = existing ?? { db, leases: 0, schemas }
+  const entry: ClientEntry = existing ?? { db, leases: 0, schemas, turn: Promise.resolve() }
   entry.db = db
   entry.leases += 1
   entry.schemas = schemas
@@ -68,6 +75,11 @@ export function acquireInstantClient(
   let released = false
   return {
     db,
+    exclusively: work => {
+      const running = entry.turn.then(work)
+      entry.turn = running.then(() => undefined, () => undefined)
+      return running
+    },
     release: () => {
       if (released) {
         return
