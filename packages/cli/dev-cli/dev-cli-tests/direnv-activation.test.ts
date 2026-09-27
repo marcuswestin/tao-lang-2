@@ -228,6 +228,9 @@ _tao_dev_preserve_status 9
 _tao_dev_direnv_hook
 print -r -- "real|$?|$TAO_TEST_ACTIVE|$TAO_TEST_COMPLETED"
 print 'export TAO_TEST_ACTIVE=changed_with_real_direnv' > .envrc
+# direnv notices an edit by whole-second mtime, so a rewrite in the second it loaded would go unseen.
+zmodload zsh/datetime
+touch -t "$(strftime %Y%m%d%H%M.%S $((EPOCHSECONDS + 2)))" .envrc
 _tao_dev_direnv_hook
 print -r -- "changed|$TAO_TEST_ACTIVE"
 cd "$TAO_TEST_BASE"
