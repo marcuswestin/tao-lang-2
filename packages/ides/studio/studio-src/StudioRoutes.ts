@@ -103,6 +103,7 @@ const sessionRoutes = {
   protocol: { method: 'GET', path: '/api/protocol' },
   shipBeta: { method: 'POST', path: '/api/ship/beta' },
   sketchAction: { method: 'POST', path: '/api/sketches/action' },
+  sketchConvert: { method: 'POST', path: '/api/sketches/convert' },
   sketchFlowAction: { method: 'POST', path: '/api/sketches/flow/action' },
   sketchSnapApply: { method: 'POST', path: '/api/sketches/snap/apply' },
   sketchSnapPropose: { method: 'POST', path: '/api/sketches/snap/propose' },

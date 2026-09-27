@@ -223,11 +223,14 @@ print -r -- "created|$TAO_TEST_ACTIVE"
           await runShell(
             test,
             `
+# Give direnv's timestamp-based watch distinct past mtimes without waiting for the clock.
+command touch -t 202001010000.00 .envrc
 source "$TAO_TEST_HOOK"
 _tao_dev_preserve_status 9
 _tao_dev_direnv_hook
 print -r -- "real|$?|$TAO_TEST_ACTIVE|$TAO_TEST_COMPLETED"
 print 'export TAO_TEST_ACTIVE=changed_with_real_direnv' > .envrc
+command touch -t 202001010000.02 .envrc
 _tao_dev_direnv_hook
 print -r -- "changed|$TAO_TEST_ACTIVE"
 cd "$TAO_TEST_BASE"

@@ -37,3 +37,12 @@
   host lanes pass without manual state deletion or unrelated-process termination.
 - **Source:** 2026-09-04 native full-verification failure and reliability handoff.
 - **Archived:** 2026-09-19
+- **Superseded in part (2026-09-27):** the machine-wide `studio-native-host` lease existed because
+  worktrees shared one Hutch project registry; the per-worktree Hutch home above removed that cause.
+  The lease is now `studio-native-host:<bundle id>`, one per worktree, and a linked worktree's
+  development Studio is its own macOS app (`com.devtao.studio.<worktree>-<hash>`, named
+  "Tao Studio — <worktree>"), so native Studios in different worktrees run side by side. The
+  primary checkout keeps `com.devtao.studio`. Launches that run the runtime probe (the native smoke
+  and canary) still take turns machine-wide on `studio-native-probe`, because the probe registers a
+  global keyboard shortcut. Known cost: each new worktree's app asks again for macOS Accessibility
+  and Automation permission.

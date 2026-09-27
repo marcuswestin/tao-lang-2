@@ -28,6 +28,7 @@ import { StudioHostControl } from './StudioHostControl'
 import { StudioHutchHome } from './StudioHutchHome'
 import { readLaunches } from './StudioLaunchManifest'
 import { formatStopReport, stopLaunches } from './StudioLifecycle'
+import { StudioNativeIdentity } from './StudioNativeIdentity'
 
 const probeTimeoutMs = 30_000
 // Both bounds leave room inside the 120-second native smoke gate for Studio startup, the runtime
@@ -40,7 +41,9 @@ const electrobunReleaseBuildTimeoutMs = 30 * 60_000
 const hutchShutdownTimeoutMs = 5_000
 const hutchDiagnosticOutputLimit = 8_000
 const defaultHutchCommand = 'hutch'
-const nativeHostResourceName = 'studio-native-host'
+// The runtime probe registers and asserts a machine-global keyboard shortcut, so probing native
+// Studios take turns across the machine while ordinary ones run side by side.
+const nativeProbeResourceName = 'studio-native-probe'
 // After the holder is told to stop, its lease is released by its own shutdown or pruned once the
 // process is gone; either way the retry only has to outlast an orderly Studio shutdown.
 const nativeHostTakeoverWaitMs = 10_000
@@ -48,7 +51,9 @@ const nativeHostTakeoverWaitMs = 10_000
 type StudioNativeOptions = {
   artifactRoot?: string
   hutchPath?: string
-  /** Operation recorded in the machine-wide native-host lease. */
+  /** Development app identity; defaults to the one derived from this worktree. */
+  identity?: StudioNativeIdentity
+  /** Operation recorded in this worktree's native-host lease. */
   nativeHostCommand?: string
   previewUrl: string
   /** Undefined opens the Welcome window only: `--no-browser` must not add a project window. */
@@ -65,6 +70,8 @@ export type StudioNativeProbeResult = {
 }
 
 export type StartedStudioNative = {
+  /** The identifier macOS knows this worktree's development app by; host drivers attach through it. */
+  bundleIdentifier: string
   /** Opens semantic development sessions inside this already-owned Electrobun process. */
   hostControl(): Promise<HostController>
   /**
@@ -109,6 +116,8 @@ type CommandRunner = (command: string, spec: CLI.CommandSpec) => Promise<CLI.Com
 type Sleep = (milliseconds: number) => Promise<void>
 type NativePhaseLog = (message: string) => void
 type StartProcessTree = typeof startStudioProcessTree
+/** NativeHostLease is every machine lease one native Studio holds from preparation to shutdown. */
+type NativeHostLease = Pick<MachineResourceLease, 'release'>
 type NativeStartLifecycleOptions = {
   nativeHost?: NativeHostLeaseDependencies
   onProcessSignal?: typeof Platform.onProcessSignal
@@ -156,6 +165,7 @@ export const StudioNative = {
   start,
   testing: {
     acquireNativeHostLease,
+    acquireNativeHostLeases,
     installedHutchExecutablePath,
     installStudioServicePayload,
     createNativeInterruption,
@@ -186,17 +196,22 @@ async function start(
   lifecycleOptions: NativeStartLifecycleOptions = {},
 ): Promise<StartedStudioNative> {
   const interruption = createNativeInterruption(options.signal, lifecycleOptions.onProcessSignal)
-  let nativeHostLease: MachineResourceLease | undefined
+  let nativeHostLease: NativeHostLease | undefined
   try {
     const hutchPath = await (lifecycleOptions.resolveHutch ?? resolveHutchExecutablePath)(options.hutchPath)
+    const identity = options.identity ?? await StudioNativeIdentity.forWorktree()
+    const command = options.nativeHostCommand ?? 'studio-native'
     nativeHostLease = await runNativePhase(
       'native host lease',
       async () =>
-        await acquireNativeHostLease(options.nativeHostCommand ?? 'studio-native', lifecycleOptions.nativeHost),
+        await acquireNativeHostLeases(
+          { command, name: identity.hostResourceName, probe: options.probe === true },
+          lifecycleOptions.nativeHost,
+        ),
       { signal: interruption.signal },
     )
     return await (lifecycleOptions.startWithLease ?? startWithInterruption)(
-      { ...options, hutchPath, signal: interruption.signal },
+      { ...options, hutchPath, identity, signal: interruption.signal },
       interruption.close,
       nativeHostLease,
     )
@@ -210,9 +225,10 @@ async function start(
 async function startWithInterruption(
   options: StudioNativeOptions,
   closeInterruption: () => void,
-  nativeHostLease: MachineResourceLease,
+  nativeHostLease: NativeHostLease,
 ): Promise<StartedStudioNative> {
   const hutchPath = options.hutchPath ?? defaultHutchCommand
+  const identity = options.identity ?? await StudioNativeIdentity.forWorktree()
   const artifactRoot = FS.resolvePath(options.artifactRoot ?? '.artifacts/user/studio-native', Repo.getRoot())
   const phaseOptions = { signal: options.signal }
   const stoppedNativeProcesses = await runNativePhase(
@@ -245,8 +261,8 @@ async function startWithInterruption(
     'materialize Electrobun project',
     async () =>
       await StudioElectrobun.create({
-        appName: defaultStudioAppName,
-        bundleIdentifier: defaultStudioBundleIdentifier,
+        appName: identity.appName,
+        bundleIdentifier: identity.bundleIdentifier,
         outputRoot: artifactRoot,
         previewUrl: options.previewUrl,
         projectUrl: options.projectUrl,
@@ -371,6 +387,7 @@ async function startWithInterruption(
     return closing
   }
   return {
+    bundleIdentifier: identity.bundleIdentifier,
     async hostControl() {
       hostControllerOpening ??= StudioHostControl.waitForTransport(project.hostControlPath).then(transport => {
         hostController = StudioHostControl.create(transport)
@@ -379,7 +396,7 @@ async function startWithInterruption(
       return await hostControllerOpening
     },
     async mac2Acceptance(factory) {
-      mac2ControllerOpening ??= Promise.resolve(factory({ appId: defaultStudioBundleIdentifier })).then(controller => {
+      mac2ControllerOpening ??= Promise.resolve(factory({ appId: identity.bundleIdentifier })).then(controller => {
         mac2Controller = controller
         return controller
       })
@@ -402,23 +419,62 @@ async function startWithInterruption(
 }
 
 /**
- * acquireNativeHostLease claims the one native host on this machine. When another session holds it
- * and a person is at the terminal, the person is asked whether to stop that session and proceed;
- * a pipe or a script gets the busy error unchanged, because nothing is killed on a default answer.
+ * acquireNativeHostLeases claims this worktree's native host and, for a probing launch, the
+ * machine's one probe slot. The probe slot never offers a takeover: it belongs to a short
+ * verification run, which fails at once as busy rather than stop another worktree's run.
+ */
+async function acquireNativeHostLeases(
+  request: { command: string; name: string; probe: boolean },
+  dependencies: NativeHostLeaseDependencies = {},
+): Promise<NativeHostLease> {
+  const hostLease = await acquireNativeHostLease(request, dependencies)
+  if (!request.probe) {
+    return hostLease
+  }
+  let probeLease: MachineResourceLease
+  try {
+    probeLease = await (dependencies.acquire ?? MachineLanes.acquireResource)({
+      command: request.command,
+      maxAgeMs: Number.POSITIVE_INFINITY,
+      name: nativeProbeResourceName,
+      repositoryRoot: Repo.getRoot(),
+      waitTimeoutMs: 0,
+    })
+  } catch (error) {
+    await hostLease.release()
+    throw error
+  }
+  return {
+    async release() {
+      try {
+        await probeLease.release()
+      } finally {
+        await hostLease.release()
+      }
+    },
+  }
+}
+
+/**
+ * acquireNativeHostLease claims this worktree's one native host, named by the worktree's app
+ * identity so native Studios in different worktrees never contend. When another session in this
+ * worktree holds it and a person is at the terminal, the person is asked whether to stop that
+ * session and proceed; a pipe or a script gets the busy error unchanged, because nothing is killed
+ * on a default answer.
  */
 async function acquireNativeHostLease(
-  command: string,
+  host: { command: string; name: string },
   dependencies: NativeHostLeaseDependencies = {},
 ): Promise<MachineResourceLease> {
   const acquire = dependencies.acquire ?? MachineLanes.acquireResource
   const log = dependencies.log ?? (message => HCI.logProcessInfo('studio-native', message))
   const request = async (waitTimeoutMs: number): Promise<MachineResourceLease> =>
     await acquire({
-      command,
+      command: host.command,
       // An interactive native Studio may validly hold the host all day; only process identity
       // retires its lease.
       maxAgeMs: Number.POSITIVE_INFINITY,
-      name: nativeHostResourceName,
+      name: host.name,
       repositoryRoot: Repo.getRoot(),
       waitTimeoutMs,
     })
@@ -480,7 +536,7 @@ async function stopNativeHostOwner(
   return `stopped ${owner.command} (PID ${owner.pid}) in ${owner.repositoryRoot}`
 }
 
-async function releaseNativeHostLease(lease: MachineResourceLease | undefined): Promise<void> {
+async function releaseNativeHostLease(lease: NativeHostLease | undefined): Promise<void> {
   if (lease === undefined) {
     return
   }

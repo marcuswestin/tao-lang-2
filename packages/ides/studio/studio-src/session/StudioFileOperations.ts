@@ -88,7 +88,36 @@ export class StudioFileOperations {
     }
     const listed = files.list()
     this.#context.onFilesChanged(listed)
+    // The file has already moved, so a catalog refusal must not report the rename as failed; a render
+    // left pointing at the old path is then marked broken, and its card offers Remove from canvas.
+    await this.#followRenamedSketchSource(current.path, file.path, request.writeId).catch(() => undefined)
     return { compile, file, files: listed, previousPath: current.path }
+  }
+
+  /** A render or detached definition on the canvas names the file it lives in; a rename carries that along. */
+  async #followRenamedSketchSource(previousPath: string, path: string, writeId: string): Promise<void> {
+    const moved = await this.#context.sketchCatalog.transaction(async transaction => {
+      const before = await transaction.read()
+      let catalog = before
+      for (const sketch of before.sketches) {
+        const source = sketch.render?.path === previousPath
+          ? { render: { ...sketch.render, path } }
+          : sketch.definitionPath === previousPath
+          ? { definitionPath: path }
+          : undefined
+        if (source !== undefined) {
+          catalog = (await transaction.apply({
+            action: { kind: 'set-sketch-source', sketchId: sketch.id, ...source },
+            expectedRevision: catalog.revision,
+            requestId: `catalog:${writeId}:${sketch.id}`,
+          })).catalog
+        }
+      }
+      return catalog === before ? undefined : catalog
+    })
+    if (moved !== undefined) {
+      this.#context.onSketchCatalogChanged(moved)
+    }
   }
 
   async deleteFile(request: StudioDeleteFileRequest): Promise<StudioDeleteFileResult> {
