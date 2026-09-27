@@ -137,6 +137,7 @@ export {
   type StudioSessionEvent,
   type StudioSessionHandshake,
   type StudioSketchActionResult,
+  type StudioSketchConvertRequest,
   type StudioSketchFlowAction,
   type StudioSketchFlowActionRequest,
   type StudioSketchSnapApplyResult,

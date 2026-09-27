@@ -238,6 +238,94 @@ Test('Studio sketch catalog keeps a created view at the drawn canvas origin', as
   })
 })
 
+Test('Studio move-sketch places a view at a new canvas origin and refuses anything else', async () => {
+  await withTaoFiles('tao-studio-sketch-move-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    const provider = new StudioSketchCatalog(root)
+    const created = await provider.apply(createSketchRequest(0))
+    const move = (action: Record<string, unknown>, requestId: string, expectedRevision = created.catalog.revision) =>
+      provider.apply({ action, expectedRevision, requestId } as unknown as StudioSketchCatalogRequest)
+
+    await Expect(move({ id: 'sketch-row', kind: 'move-sketch', x: -1, y: 0 }, 'negative')).rejects.toThrow(
+      'Studio sketch move-sketch.x must be nonnegative.',
+    )
+    await Expect(move({ id: 'sketch-row', kind: 'move-sketch', x: 10, y: Number.NaN }, 'nan')).rejects.toThrow(
+      'Studio sketch move-sketch.y must be nonnegative.',
+    )
+    await Expect(move({ id: 'sketch-row', kind: 'move-sketch', width: 9, x: 10, y: 10 }, 'resize')).rejects.toThrow(
+      'Studio sketch move-sketch action has unsupported fields: width',
+    )
+    await Expect(move({ id: '', kind: 'move-sketch', x: 10, y: 10 }, 'unnamed')).rejects.toThrow(
+      'Studio sketch move-sketch.id must be a nonempty string.',
+    )
+    await Expect(move({ id: 'sketch-gone', kind: 'move-sketch', x: 10, y: 10 }, 'gone')).rejects.toThrow(
+      'Studio sketch does not exist: sketch-gone',
+    )
+    await Expect(move({ id: 'sketch-row', kind: 'move-sketch', x: 10, y: 10 }, 'stale', 0)).rejects.toBeInstanceOf(
+      StudioSketchCatalogConflictError,
+    )
+    Expect(await provider.read()).toEqual(created.catalog)
+
+    const moved = await move({ id: 'sketch-row', kind: 'move-sketch', x: 240.5, y: 96 }, 'move')
+    const before = created.catalog.sketches[0]!
+    Expect(moved.catalog.revision).toBe(created.catalog.revision + 1)
+    Expect(moved.catalog.sketches[0]).toEqual({ ...before, x: 240.5, y: 96 })
+    Expect((await new StudioSketchCatalog(root).read()).sketches[0]).toMatchObject({ x: 240.5, y: 96 })
+  })
+})
+
+Test('Studio restore-sketch puts back drawn geometry and leaves the view and its snapped rows alone', async () => {
+  await withTaoFiles('tao-studio-sketch-restore-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    const provider = new StudioSketchCatalog(root)
+    const created = await provider.apply(createSketchRequest(0))
+    const before = created.catalog.sketches[0]!
+    const title: StudioSketchRect = { ...cover, id: 'rect-title', kind: 'Text', x: 80 }
+    const added = await provider.apply({
+      action: { kind: 'add-rect', rect: title, sketchId: 'sketch-row' },
+      expectedRevision: created.catalog.revision,
+      requestId: 'add-title',
+    })
+    const moved = await provider.apply({
+      action: { id: 'sketch-row', kind: 'move-sketch', x: 300, y: 120 },
+      expectedRevision: added.catalog.revision,
+      requestId: 'move-row',
+    })
+    const restore = (action: Record<string, unknown>, requestId: string) =>
+      provider.apply(
+        { action, expectedRevision: moved.catalog.revision, requestId } as unknown as StudioSketchCatalogRequest,
+      )
+
+    await Expect(restore({
+      kind: 'restore-sketch',
+      rectOrder: ['rect-cover'],
+      rects: [cover],
+      sketchId: 'sketch-row',
+      view: 'View9',
+      x: 0,
+      y: 0,
+    }, 'rename')).rejects.toThrow('Studio sketch restore-sketch action has unsupported fields: view')
+    await Expect(restore({
+      kind: 'restore-sketch',
+      rectOrder: ['rect-cover', 'rect-title'],
+      rects: [cover],
+      sketchId: 'sketch-row',
+      x: 0,
+      y: 0,
+    }, 'orphan')).rejects.toThrow('rectOrder must contain every free and snapped rectangle exactly once')
+    Expect(await provider.read()).toEqual(moved.catalog)
+
+    const restored = await restore({
+      kind: 'restore-sketch',
+      rectOrder: before.rectOrder,
+      rects: before.rects,
+      sketchId: 'sketch-row',
+      x: before.x,
+      y: before.y,
+    }, 'restore')
+    Expect(restored.catalog.revision).toBe(moved.catalog.revision + 1)
+    Expect(restored.catalog.sketches[0]).toEqual(before)
+  })
+})
+
 Test('Studio sketch actions atomically move selected free rows into strict associations and back', async () => {
   await withTaoFiles('tao-studio-sketch-associations-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
@@ -389,6 +477,83 @@ Test('Studio bind-rect validates exact typed payloads and preserves stale/idempo
     },
   )
 })
+
+Test(
+  'Studio sketch source records a render entry or a written definition, never both, and never beside rectangles',
+  async () => {
+    await withTaoFiles('tao-studio-sketch-source-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+      const provider = new StudioSketchCatalog(root)
+      await provider.apply({
+        ...createSketchRequest(0),
+        action: { ...createSketchRequest(0).action, rects: [] } as never,
+      })
+      const render = { group: 'rows', path: 'Rows.scenarios.tao', scenario: 'drawn1', view: 'StoryRow' }
+      const rendered = await provider.apply({
+        action: { kind: 'set-sketch-source', render, sketchId: 'sketch-row' },
+        expectedRevision: 1,
+        requestId: 'render-row',
+      })
+      Expect(rendered.catalog.sketches[0]?.render).toEqual(render)
+      Expect((await provider.read()).sketches[0]?.render).toEqual(render)
+
+      // A render whose entry went missing is marked broken, and the mark survives a read.
+      const unmarked = await provider.read()
+      await provider.restore({
+        ...unmarked,
+        revision: 2,
+        sketches: [{ ...unmarked.sketches[0]!, broken: true }],
+      }, 2)
+      Expect((await provider.read()).sketches[0]?.broken).toBe(true)
+
+      // Setting one source clears the other, and any broken mark: a detach turns a render into a definition.
+      const detached = await provider.apply({
+        action: { definitionPath: 'StoryRow.tao', kind: 'set-sketch-source', sketchId: 'sketch-row' },
+        expectedRevision: 2,
+        requestId: 'detach-row',
+      })
+      Expect(detached.catalog.sketches[0]?.render).toBeUndefined()
+      Expect(detached.catalog.sketches[0]?.broken).toBeUndefined()
+      Expect(detached.catalog.sketches[0]?.definitionPath).toBe('StoryRow.tao')
+
+      // Only a render can be broken; a definition written in code is always there to open.
+      const definitionText = await FS.readText(provider.path())
+      await FS.writeText(
+        provider.path(),
+        definitionText.replace('"definitionPath": "StoryRow.tao"', '"broken": true, "definitionPath": "StoryRow.tao"'),
+      )
+      await Expect(provider.read()).rejects.toBeInstanceOf(Errors.UserInputError)
+      await FS.writeText(provider.path(), definitionText)
+
+      for (
+        const action of [
+          { definitionPath: 'StoryRow.tao', render, sketchId: 'sketch-row' },
+          { definitionPath: '../Elsewhere.tao', sketchId: 'sketch-row' },
+          { definitionPath: '/abs/StoryRow.tao', sketchId: 'sketch-row' },
+          { definitionPath: 'StoryRow.ts', sketchId: 'sketch-row' },
+          { render: { ...render, view: 'storyRow' }, sketchId: 'sketch-row' },
+          { render: { ...render, extra: true }, sketchId: 'sketch-row' },
+        ]
+      ) {
+        await Expect(provider.apply({
+          action: { ...action, kind: 'set-sketch-source' },
+          expectedRevision: 3,
+          requestId: `malformed-${JSON.stringify(action)}`,
+        } as never)).rejects.toBeInstanceOf(Errors.UserInputError)
+      }
+
+      // A render rectangle draws nothing of its own; a catalog that says otherwise is refused on read.
+      const text = (await FS.readText(provider.path())).replace(
+        '"definitionPath": "StoryRow.tao"',
+        `"render": ${JSON.stringify(render)}`,
+      ).replace('"rects": []', `"rects": [${JSON.stringify(cover)}]`).replace(
+        '"rectOrder": []',
+        '"rectOrder": ["rect-cover"]',
+      )
+      await FS.writeText(provider.path(), text)
+      await Expect(provider.read()).rejects.toBeInstanceOf(Errors.UserInputError)
+    })
+  },
+)
 
 Test(
   'Studio sketch associations record the emitted fallback element independently of the free rectangle kind',

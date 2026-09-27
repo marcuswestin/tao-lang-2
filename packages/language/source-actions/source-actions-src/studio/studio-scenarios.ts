@@ -3,9 +3,11 @@ import { AST } from '@parser'
 import { Errors } from '@shared'
 import { assertNoSyntaxErrors } from '../source-actions-utils'
 import type {
+  StudioAddRenderScenarioPatchRequest,
   StudioAppendScenarioStepsPatchRequest,
   StudioInsertCapturedFixturePatchRequest,
   StudioRecordedScenarioStep,
+  StudioRetargetScenarioRenderPatchRequest,
   StudioScenarioArgumentValue,
   StudioSetScenarioArgumentsPatchRequest,
 } from './studio-contract'
@@ -14,9 +16,11 @@ import {
   formatAndReparse,
   requireExactKeys,
   requireIdentifier,
+  requireViewName,
   type SourceEdit,
   taoStringLiteral,
 } from './studio-source-text'
+import { namedImportEdit } from './studio-use-imports'
 
 export async function appendScenarioSteps(
   document: AST.Document,
@@ -80,6 +84,71 @@ function recordedScenarioTag(value: string): string {
 function requireScenarioIdentity(group: string, scenario: string): void {
   if (group.trim() === '' || scenario.trim() === '' || /[\x00-\x1f\x7f]/u.test(group + scenario)) {
     Errors.throwUserInput('Studio journey recording scenario identity is invalid.')
+  }
+}
+
+/**
+ * addRenderScenario adds a new entry to a scenario group, with the device size the caller chose and
+ * the own fixture, prepare and render clauses of an existing render entry: how a drawn rectangle
+ * becomes a render of an existing view.
+ */
+export async function addRenderScenario(
+  document: AST.Document,
+  request: StudioAddRenderScenarioPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireRenderScenarioIdentity(request.scenarioGroupName, request.fromScenarioName)
+  requireRenderScenarioIdentity(request.scenarioGroupName, request.scenarioName)
+  requirePositiveWholeNumber(request.width, 'Studio render scenario width')
+  requirePositiveWholeNumber(request.height, 'Studio render scenario height')
+  const groups = document.parseResult.value.statements
+    .filter(AST.isScenarioGroupDeclaration)
+    .filter(group => group.name === request.scenarioGroupName)
+  const fromScenarios = groups.flatMap(group => AST.scenarioDeclarations(group))
+    .filter(scenario => scenario.name === request.fromScenarioName)
+  const groupBlockNode = groups[0]?.block.$cstNode
+  if (groups.length !== 1 || fromScenarios.length !== 1 || groupBlockNode === undefined) {
+    Errors.throwUserInput(
+      `Studio scenario is not uniquely declared in this source file: ${request.scenarioGroupName} / ${request.fromScenarioName}`,
+    )
+  }
+  const group = groups[0]!
+  const fromScenario = fromScenarios[0]!
+  if (!AST.isViewDeclaration(AST.scenarioSubjectDeclaration(fromScenario))) {
+    Errors.throwUserInput(
+      `Studio can only add a render scenario from a focused render scenario: ${request.scenarioGroupName} / ${request.fromScenarioName}`,
+    )
+  }
+  if (AST.scenarioDeclarations(group).some(scenario => scenario.name === request.scenarioName)) {
+    Errors.throwUserInput(`Studio scenario already exists: ${request.scenarioGroupName} / ${request.scenarioName}`)
+  }
+  // The entry's own fixture and prepare clauses travel with its render clause: the render arguments
+  // name fixture handles that only the entry's effective fixture brings into scope.
+  const copiedClauses = fromScenario.block.entries.filter(entry =>
+    AST.isScenarioFixtureClause(entry) || AST.isScenarioPrepareClause(entry) || AST.isScenarioRenderClause(entry)
+  )
+  const bodyLines = [
+    `device phone ${request.width} x ${request.height}`,
+    ...copiedClauses.flatMap(clause => clause.$cstNode ? [clause.$cstNode.text] : []),
+  ]
+  const entrySource = `scenario ${taoStringLiteral(request.scenarioName)} {\n${bodyLines.join('\n')}\n}`
+  const source = document.textDocument.getText()
+  const offset = groupBlockNode.end - 1
+  return await formatAndReparse(
+    document,
+    applySourceEdits(source, [{ end: offset, replacement: `\n${entrySource}\n`, start: offset }]),
+  )
+}
+
+function requireRenderScenarioIdentity(group: string, scenario: string): void {
+  if (group.trim() === '' || scenario.trim() === '' || /[\x00-\x1f\x7f]/u.test(group + scenario)) {
+    Errors.throwUserInput('Studio render scenario identity is invalid.')
+  }
+}
+
+function requirePositiveWholeNumber(value: number, label: string): void {
+  if (!Number.isInteger(value) || value <= 0) {
+    Errors.throwUserInput(`${label} must be a positive whole number.`)
   }
 }
 
@@ -251,6 +320,69 @@ export function scenarioRenderSource(
   return groupSubject === view
     ? `render (${argumentsSource})`
     : `render ${view.name}(${argumentsSource})`
+}
+
+/**
+ * retargetScenarioRender repoints one entry's render clause at a different view, keeping the entry's
+ * effective render arguments verbatim: how a detached Draw rectangle's entry comes to render its own
+ * copy. An entry of a view group with no render clause at all renders the new view with no arguments.
+ * When a `use` brought the original view into this file, the new view joins that same statement.
+ */
+export async function retargetScenarioRender(
+  document: AST.Document,
+  request: StudioRetargetScenarioRenderPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireViewName(request.view)
+  const file = document.parseResult.value
+  const groups = file.statements
+    .filter(AST.isScenarioGroupDeclaration)
+    .filter(group => group.name === request.scenarioGroupName)
+  const scenarios = groups.flatMap(group => AST.scenarioDeclarations(group))
+    .filter(scenario => scenario.name === request.scenarioName)
+  const scenarioBlockNode = scenarios[0]?.block.$cstNode
+  if (groups.length !== 1 || scenarios.length !== 1 || scenarioBlockNode === undefined) {
+    Errors.throwUserInput(
+      `Studio scenario is not uniquely declared in this source file: ${request.scenarioGroupName} / ${request.scenarioName}`,
+    )
+  }
+  const scenario = scenarios[0]!
+  const effectiveClause = AST.effectiveScenarioSubjectClause(scenario)
+  const original = AST.scenarioSubjectDeclaration(scenario)
+  if (
+    !AST.isViewDeclaration(original)
+    || !(AST.isScenarioRenderClause(effectiveClause) || effectiveClause === undefined)
+  ) {
+    Errors.throwUserInput(
+      `Studio can only retarget a focused render scenario: ${request.scenarioGroupName} / ${request.scenarioName}`,
+    )
+  }
+  const argumentsSource = effectiveClause?.argumentList?.$cstNode?.text ?? ''
+  const renderSource = `render ${request.view}(${argumentsSource})`
+  const ownRender = scenario.block.entries.find(AST.isScenarioRenderClause)
+  const source = document.textDocument.getText()
+  const edits: SourceEdit[] = [
+    ownRender?.$cstNode
+      ? { end: ownRender.$cstNode.end, replacement: renderSource, start: ownRender.$cstNode.offset }
+      : {
+        end: scenarioBlockNode.offset + 1,
+        replacement: `\n${renderSource}`,
+        start: scenarioBlockNode.offset + 1,
+      },
+  ]
+  const nameInFile = file.statements.some(statement =>
+    (AST.isDeclaration(statement) && statement.name === request.view)
+    || (AST.isUseStatement(statement) && statement.importedDeclarations.some(item => item.$refText === request.view))
+  )
+  const originalUse = file.statements.filter(AST.isUseStatement)
+    .find(use => AST.resolvedImportedDeclarations(use).includes(original))
+  const importEdit = originalUse === undefined || nameInFile
+    ? undefined
+    : namedImportEdit(originalUse, request.view)
+  if (importEdit !== undefined) {
+    edits.push(importEdit)
+  }
+  return await Formatter.formatCode(applySourceEdits(source, edits))
 }
 
 function scenarioArgumentSource(value: StudioScenarioArgumentValue): string {

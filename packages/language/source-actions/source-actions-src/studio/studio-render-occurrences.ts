@@ -121,10 +121,15 @@ export function validateOccurrencePrecondition(
 
 function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | undefined {
   return Switch.kind(request, {
+    'add-render-scenario': () => undefined,
     'add-sketch-entity-parameter': () => undefined,
     'append-scenario-steps': () => undefined,
     'bind-sketch-field': action => action.renderId,
     'bind-text': action => action.renderId,
+    'clear-layout-entry': action => action.renderId,
+    'copy-view': () => undefined,
+    'extract-view': action => action.renderIds[0],
+    'group-renders': action => action.renderIds[0],
     'insert-captured-fixture': () => undefined,
     'insert-component': action => action.beforeId ?? action.afterId,
     'insert-project-view': action => action.beforeId ?? action.afterId,
@@ -132,6 +137,7 @@ function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | u
     'insert-spacer': action => action.afterId,
     'move-render': action => action.draggedId,
     'remove-render': action => action.renderId,
+    'retarget-scenario-render': () => undefined,
     'set-design-entry': () => undefined,
     'set-layout-entry': action => action.renderId,
     'set-scenario-arguments': () => undefined,

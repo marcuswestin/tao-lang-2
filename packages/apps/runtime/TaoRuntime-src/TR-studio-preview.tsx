@@ -98,8 +98,10 @@ type StudioPreviewMessageEvent = {
 }
 
 type StudioPreviewPointerEvent = {
+  altKey?: boolean
   clientX?: number
   clientY?: number
+  code?: string
   ctrlKey?: boolean
   deltaX?: number
   deltaY?: number
@@ -109,6 +111,7 @@ type StudioPreviewPointerEvent = {
   metaKey?: boolean
   preventDefault?(): void
   repeat?: boolean
+  shiftKey?: boolean
   stopImmediatePropagation?(): void
   stopPropagation?(): void
   target?: unknown
@@ -841,6 +844,9 @@ export function mountStudioPreviewBridge(
 
   let hoverTarget: StudioRenderTarget | undefined
   let selectedTarget: StudioRenderTarget | undefined
+  /** Shift-click adds elements from the same file; the selected target is always its last member. */
+  let selectedGroup: StudioRenderTarget[] = []
+  let groupOverlays: StudioPreviewOverlay[] = []
   let sourceTarget: StudioRenderTarget | undefined
   let overlay: StudioPreviewOverlay | undefined
   let dragOverlay: StudioPreviewOverlay | undefined
@@ -899,10 +905,12 @@ export function mountStudioPreviewBridge(
   const clearEditSelection = () => {
     hoverTarget = undefined
     selectedTarget = undefined
+    selectedGroup = []
     sourceTarget = undefined
     disarmDrag()
     overlay?.remove()
     overlay = undefined
+    redrawGroupOverlays()
   }
 
   const postRecordingState = (
@@ -1018,7 +1026,21 @@ export function mountStudioPreviewBridge(
     postRecordedStep(recording, target === undefined ? unresolvedRecordedStep('press') : { kind: 'press', ...target })
   }
 
+  /** Outlines every selected element other than the one the main overlay already follows. */
+  const redrawGroupOverlays = () => {
+    const others = selectedGroup.length > 1 ? selectedGroup.filter(member => member !== selectedTarget) : []
+    for (const extra of groupOverlays.splice(others.length)) {
+      extra.remove()
+    }
+    others.forEach((member, index) => {
+      const outline = groupOverlays[index] ?? createOverlay(host)
+      groupOverlays[index] = outline
+      outline.setAttribute('data-tao-studio-overlay', 'selection-group')
+      positionOverlay(outline, member.element.getBoundingClientRect())
+    })
+  }
   const redrawOverlay = () => {
+    redrawGroupOverlays()
     const target = sourceTarget ?? hoverTarget ?? selectedTarget
     if (target === undefined) {
       if (overlay !== undefined) {
@@ -1045,23 +1067,39 @@ export function mountStudioPreviewBridge(
   }
   const onCanvasShortcutKeyDown = (event: StudioPreviewPointerEvent) => {
     if (
-      !canvasGesturesOwned || !(event.metaKey === true || event.ctrlKey === true) || event.isComposing === true
+      !canvasGesturesOwned || event.isComposing === true
       || event.taoStudioJourney === true || isCanvasTypingTarget(previewElementFromEvent(event))
     ) {
       return
     }
-    const commands: Readonly<Record<string, 'fit' | 'reset' | 'zoom-in' | 'zoom-out'>> = {
-      '0': 'fit',
-      '1': 'reset',
-      '=': 'zoom-in',
-      '+': 'zoom-in',
-      '-': 'zoom-out',
-    }
-    if (event.key === undefined || !Object.hasOwn(commands, event.key)) {
+    const command = canvasShortcutCommand(event)
+    if (command === undefined) {
       return
     }
     blockAppPointerEvent(event)
-    postToStudio(host, config, 'preview-canvas-shortcut', { command: commands[event.key] })
+    postToStudio(host, config, 'preview-canvas-shortcut', { command })
+  }
+  /**
+   * In edit mode ⌘G makes a view of the selection, ⌥⌘G groups it in place, and ⌘Z walks back Studio's
+   * latest visual edit; the app under edit never sees these keys.
+   */
+  const onSelectionShortcutKeyDown = (event: StudioPreviewPointerEvent) => {
+    if (
+      !editingGesture(event) || !(event.metaKey === true || event.ctrlKey === true) || event.isComposing === true
+      || event.shiftKey === true || isCanvasTypingTarget(previewElementFromEvent(event))
+    ) {
+      return
+    }
+    const letter = shortcutLetter(event)
+    const command = letter === 'z' && event.altKey !== true
+      ? 'undo'
+      : letter === 'g' && selectedTarget !== undefined
+      ? event.altKey === true ? 'group' : 'make-view'
+      : undefined
+    if (command !== undefined) {
+      blockAppPointerEvent(event)
+      postToStudio(host, config, 'preview-canvas-shortcut', { command })
+    }
   }
   const onCanvasPanKeyDown = (event: StudioPreviewPointerEvent) => {
     if (
@@ -1187,10 +1225,13 @@ export function mountStudioPreviewBridge(
     }
     hoverTarget = undefined
     sourceTarget = undefined
-    selectedTarget = target
+    const additive = event.shiftKey === true && selectedTarget !== undefined
+      && selectedTarget.identity.sourcePath === target.identity.sourcePath
+    selectedGroup = additive ? toggledGroupMember(selectedGroup, target) : [target]
+    selectedTarget = selectedGroup.at(-1)
     redrawOverlay()
     postLayoutMeasurements()
-    postSourceMessage(host, config, 'preview-select-source', target.identity)
+    postSourceMessage(host, config, 'preview-select-source', target.identity, additive)
   }
   const onMouseDown = (event: StudioPreviewPointerEvent) => {
     if (!editingGesture(event)) {
@@ -1317,6 +1358,12 @@ export function mountStudioPreviewBridge(
         : sourceHighlightTarget(host, selection.path, selection.range)
       redrawOverlay()
     },
+    // A plain pick in another cell started a new selection there, so this cell stops outlining its own.
+    'clear-selection': () => {
+      selectedTarget = undefined
+      selectedGroup = []
+      redrawOverlay()
+    },
     'set-canvas-gestures': message => {
       if (typeof message['owned'] === 'boolean') {
         canvasGesturesOwned = message['owned']
@@ -1384,6 +1431,7 @@ export function mountStudioPreviewBridge(
     ['input', onRecordedInput, true],
     ['blur', onRecordedBlur, true],
     ['keydown', onCanvasShortcutKeyDown, true],
+    ['keydown', onSelectionShortcutKeyDown, true],
     ['keydown', onCanvasPanKeyDown, true],
     ['keyup', onCanvasPanKeyUp, true],
     ['keydown', onRecordedKeyDown, true],
@@ -1444,6 +1492,9 @@ export function mountStudioPreviewBridge(
       host.window.removeEventListener(type, listener)
     }
     overlay?.remove()
+    for (const outline of groupOverlays.splice(0)) {
+      outline.remove()
+    }
     disarmDrag()
   }
 }
@@ -1587,6 +1638,35 @@ function recordingControl(
 
 function previewElementFromEvent(event: StudioPreviewPointerEvent): StudioPreviewElement | undefined {
   return isStudioElement(event.target) ? event.target : undefined
+}
+
+type StudioPreviewCanvasCommand = 'fit' | 'reset' | 'zoom-focused' | 'zoom-in' | 'zoom-out' | 'zoom-selection'
+
+const modifiedCanvasCommands: Readonly<Record<string, StudioPreviewCanvasCommand>> = {
+  '0': 'fit',
+  '1': 'reset',
+  '=': 'zoom-in',
+  '+': 'zoom-in',
+  '-': 'zoom-out',
+}
+
+/** Shift turns a digit into layout-dependent punctuation, so ⇧1 and ⇧2 are read from the physical key. */
+const shiftedCanvasCommands: Readonly<Record<string, StudioPreviewCanvasCommand>> = {
+  Digit1: 'zoom-selection',
+  Digit2: 'zoom-focused',
+}
+
+/** The runtime imports nothing from Studio, so it names the canvas commands the Studio client also names. */
+function canvasShortcutCommand(event: StudioPreviewPointerEvent): StudioPreviewCanvasCommand | undefined {
+  if (event.metaKey === true || event.ctrlKey === true) {
+    return event.key !== undefined && Object.hasOwn(modifiedCanvasCommands, event.key)
+      ? modifiedCanvasCommands[event.key]
+      : undefined
+  }
+  return event.shiftKey === true && event.altKey !== true && event.code !== undefined
+      && Object.hasOwn(shiftedCanvasCommands, event.code)
+    ? shiftedCanvasCommands[event.code]
+    : undefined
 }
 
 /** Text entry retains Space even when a containing preview belongs to the Design canvas. */
@@ -1777,12 +1857,14 @@ function postSourceMessage(
   config: StudioPreviewConfig,
   type: 'preview-hover-source' | 'preview-select-source',
   occurrence: TaoStudioIdentity,
+  additive = false,
 ): void {
   const sourceVersion = sourceVersionFor(config, occurrence.sourcePath)
   if (sourceVersion === undefined) {
     return
   }
   postToStudio(host, config, type, {
+    ...(additive ? { additive: true } : {}),
     identity: occurrenceIdentity(config, occurrence, sourceVersion),
     range: { end: occurrence.end, start: occurrence.start },
   })
@@ -1847,6 +1929,18 @@ function postToStudio(
     ...payload,
     type,
   }, config.parentOrigin)
+}
+
+/**
+ * The letter a shortcut names, lowercased. `key` follows the person's keyboard layout; ⌥ turns it into
+ * a symbol on macOS (⌥G is "©"), so only then is the physical key read instead. Mirrors
+ * `studioShortcutLetter` in Studio's client (runtime imports nothing from Studio); keep the two in step.
+ */
+function shortcutLetter(event: Pick<StudioPreviewPointerEvent, 'altKey' | 'code' | 'key'>): string | undefined {
+  if (event.altKey === true) {
+    return event.code?.startsWith('Key') === true ? event.code.slice(3).toLowerCase() : undefined
+  }
+  return event.key?.toLowerCase()
 }
 
 /**
@@ -2006,6 +2100,19 @@ const overlayBaseStyle = {
 /** The drop indicator's thickness, and the smallest extent it is drawn along its other axis. */
 const dropIndicatorThickness = 3
 const dropIndicatorMinimumLength = { across: 16, along: 24 } as const
+
+/**
+ * Shift-clicking a member removes it unless it is the last one; anything else joins the group.
+ * Studio's inspection applies the same rule, so both sides agree on what is selected.
+ */
+function toggledGroupMember(group: readonly StudioRenderTarget[], target: StudioRenderTarget): StudioRenderTarget[] {
+  const same = (member: StudioRenderTarget) =>
+    member.identity.start === target.identity.start && member.identity.end === target.identity.end
+  if (group.some(same)) {
+    return group.length > 1 ? group.filter(member => !same(member)) : [...group]
+  }
+  return [...group, target]
+}
 
 function createOverlay(host: StudioPreviewHost): StudioPreviewOverlay {
   const overlay = host.document.createElement('div')

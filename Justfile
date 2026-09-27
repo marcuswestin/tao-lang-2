@@ -113,7 +113,7 @@ instant-review *ARGS: _parser-gen
 studio project="Apps/HNReader": _parser-gen
     ./dev studio "{{ project }}"
 
-# Launch Tao Studio in its local Electrobun shell; offers to stop another session holding the native host
+# Launch this worktree's Tao Studio in its local Electrobun shell; offers to stop another session of it in this worktree
 [group('Run')]
 studio-native project="Apps/HNReader": _parser-gen
     ./dev studio-native "{{ project }}"

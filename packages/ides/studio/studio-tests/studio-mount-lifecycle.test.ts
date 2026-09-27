@@ -210,6 +210,12 @@ await mockClient('app/StudioSourceMutations', () => ({
     }
   },
 }))
+await mockClient('app/StudioEditLog', () => ({
+  mountStudioEditLog: () => ({ dispose: () => current.disposed.push('edit-log'), render() {} }),
+}))
+await mockClient('app/StudioSelectionHud', () => ({
+  mountStudioSelectionHud: () => ({ dispose: () => current.disposed.push('selection-hud'), render() {} }),
+}))
 await mockClient('app/StudioScenarioActions', () => ({ StudioScenarioActions: class {} }))
 await mockClient('app/StudioAppNavigation', () => ({ StudioAppNavigation: class {} }))
 await mockClient('app/StudioBetaShip', () => ({
@@ -283,8 +289,10 @@ for (const ending of ['abort', 'failure'] as const) {
         'device',
         'dialogs',
         'drawer',
+        'edit-log',
         'previews',
         'search',
+        'selection-hud',
         'session',
         'view',
       ])
@@ -329,10 +337,12 @@ Test('a completed Studio mount releases the same owners once on repeated teardow
       'device',
       'dialogs',
       'drawer',
+      'edit-log',
       'events',
       'focus',
       'previews',
       'search',
+      'selection-hud',
       'session',
       'view',
       'viewport',
