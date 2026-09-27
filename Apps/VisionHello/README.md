@@ -27,6 +27,28 @@ to zero. State lasts for the current mounted scene.
 
 ## Run on a headset
 
+From the repository root, inspect the toolchain and headset prerequisites:
+
+```sh
+./agent unsandboxed setup-visionos Apps/VisionHello --xcode-version 27.0
+```
+
+Add `--apply` to follow the guided setup, select your signing identity, build, install, and launch:
+
+```sh
+./agent unsandboxed setup-visionos Apps/VisionHello --xcode-version 27.0 --apply
+```
+
+Use the Xcode version you intend to develop with. The command reuses an installed matching Xcode
+or guides installation of Apple's signed `.xip` side by side. It preserves the global Xcode
+selection and checks first-launch and visionOS SDK readiness. Headset setup does not download or
+require a simulator runtime. Downloads, first-launch license acceptance, administrator prompts,
+pairing, trust, Developer Mode, and Apple account sign-in require your action where indicated.
+Enter requests a fresh check; it never establishes readiness by itself. Type `q` at a guided prompt
+to stop, then rerun the same command to resume from the actual host state.
+
+To perform the same workflow manually:
+
 1. In Xcode, open **Xcode > Open Developer Tool > Device Hub** and pair the Vision Pro. Keep the
    Mac and headset on the same network; the headset's **Settings > General > Remote Devices**
    exposes wireless pairing.
@@ -40,6 +62,33 @@ to zero. State lasts for the current mounted scene.
 See Apple's [Device Hub guide](https://developer.apple.com/documentation/xcode/managing-your-simulated-and-physical-devices-in-device-hub)
 and [Developer Mode guide](https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device).
 This prototype has simulator evidence only; physical-device signing and interaction remain unverified.
+
+For repeatable runs, supply `--device <identifier>`, `--team <team-id>`, and
+`--bundle-id <your.bundle.identifier>`. The team ID is the ten-character Apple development team ID,
+not its display name. Sign in through **Xcode > Settings > Apple Accounts** first. Device builds use
+automatic signing and allow Xcode to obtain the required provisioning assets. A rejected team,
+unregistered identifier, unavailable device, or signing failure leaves setup incomplete and reports
+the next action. Each run exports current Tao source to a retained project; no signing changes are
+written into Tao source. A successful launch proves process startup, not visual acceptance: check
+the window, Increment, and Reset while wearing the headset.
+
+Optional simulator setup is a separate run and needs no development team:
+
+```sh
+./agent unsandboxed setup-visionos Apps/VisionHello --xcode-version 27.0 --simulator --runtime-version 27.0 --apply
+```
+
+An installed matching runtime and simulator are reused. `--device` can select a simulator UUID;
+otherwise the command guides selection. It does not open the simulator viewer automatically.
+Use Device Hub when you want to inspect the window. Reports and build diagnostics are retained
+under `.artifacts/visionos-setup/`; inspect the reported paths after a failure. `--json` emits a
+structured report without prompts, so supply required choices explicitly when using it with
+`--apply`. Inspection does not install, build, or launch anything.
+
+Computer-use automation of Device Hub requires separate app approval. If the harness reports
+“Computer Use was not approved to use Device Hub,” enable Device Hub under **Settings > Computer
+Use** in the harness app. Shell command approval does not grant that access. You can still complete
+the pairing and visual checks yourself in Device Hub.
 
 ## Verification
 

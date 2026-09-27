@@ -102,6 +102,8 @@ Examples:
   ./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
   ./agent unsandboxed prepare-release ide-extension
   ./agent unsandboxed capabilities
+  ./agent unsandboxed setup-ios --xcode-version 27.1 --runtime-version 27.1
+  ./agent unsandboxed setup-visionos Apps/VisionHello --xcode-version 27.0
   ./agent unsandboxed watchman status
   ./agent unsandboxed watchman start
   ./agent unsandboxed land --dry-run

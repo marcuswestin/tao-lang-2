@@ -108,6 +108,7 @@
     "watchman start", "watchman status", "watchman stop",
     "local-instantdb start", "local-instantdb stop",
     "companion-host-build",
+    "setup-ios", "setup-visionos",
     "standalone-cli-vm-setup", "standalone-cli-clean-machine",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators launch", "simulators open-url", "simulators uninstall", "simulators open",

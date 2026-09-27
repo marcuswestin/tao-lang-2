@@ -41,6 +41,8 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   // sequence; naming the whole build keeps an agent from stitching it together from lower-level
   // operations and a hand-written placement step.
   'companion-host-build': { command: './dev', fixedArgs: ['companion-host-build'] },
+  'setup-ios': { command: './dev', fixedArgs: ['setup-ios'] },
+  'setup-visionos': { command: './dev', fixedArgs: ['setup-visionos'] },
   'standalone-cli-vm-setup': { command: 'just', fixedArgs: ['standalone-cli-vm-setup'], argsPolicy: 'none' },
   'standalone-cli-clean-machine': {
     command: 'just',
