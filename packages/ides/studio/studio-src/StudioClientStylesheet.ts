@@ -303,22 +303,35 @@ kbd {
 .tao-studio-product-host[data-layout-preset="code"] .studio-divider-preview,
 .tao-studio-product-host[data-layout-preset="code"] .studio-inspector,
 .tao-studio-product-host[data-layout-preset="code"] .studio-divider-right { display: none; }
-.tao-studio-product-host[data-layout-preset="run"] .studio-center,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-center { grid-template-columns: 0 0 0 0 minmax(420px, 1fr); grid-template-rows: minmax(0, 1fr); }
+.tao-studio-product-host[data-layout-preset="run"] .studio-center { grid-template-columns: 0 0 0 0 minmax(420px, 1fr); grid-template-rows: minmax(0, 1fr); }
 .tao-studio-product-host[data-layout-preset="run"] .studio-editor-pane,
 .tao-studio-product-host[data-layout-preset="run"] .studio-inspector,
 .tao-studio-product-host[data-layout-preset="run"] .studio-divider-right,
 .tao-studio-product-host[data-layout-preset="run"] .studio-divider-preview,
 .tao-studio-product-host[data-layout-preset="run"] .studio-divider-bottom,
 .tao-studio-product-host[data-layout-preset="run"] .studio-drawer,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-editor-pane,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-inspector,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-divider-right,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-divider-preview,
 .tao-studio-product-host[data-layout-preset="draw"] .studio-divider-bottom,
 .tao-studio-product-host[data-layout-preset="draw"] .studio-drawer { display: none; }
-.tao-studio-product-host[data-layout-preset="run"] .studio-preview,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-preview { grid-column: 1 / 6; grid-row: 1; }
+.tao-studio-product-host[data-layout-preset="run"] .studio-preview { grid-column: 1 / 6; grid-row: 1; }
+/* Draw is the workbench frame: code on the left with the view's inputs pinned under it, the canvas in
+   the middle, and the whole inspector on the right. The inspector's two panes are placed apart by
+   letting the aside dissolve into the grid, so no mounted pane moves in the DOM. The preview size
+   is the code column here and both side dividers are mirrored (StudioShell). */
+.tao-studio-product-host[data-layout-preset="draw"] .studio-center {
+  grid-template-columns:
+    min(var(--studio-preview-size), 32%) 4px minmax(320px, 1fr) 4px min(var(--studio-right-size), 28%);
+  grid-template-rows: minmax(160px, 1fr) minmax(0, auto);
+}
+.tao-studio-product-host[data-layout-preset="draw"] .studio-inspector { display: contents; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-editor-pane { grid-column: 1; grid-row: 1; min-width: 0; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-environment-pane {
+  border-top: 1px solid var(--studio-divider); grid-column: 1; grid-row: 2; max-height: 45vh; min-width: 0; overflow: auto;
+}
+.tao-studio-product-host[data-layout-preset="draw"] .studio-environment-pane .studio-collapse-right { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-visual-pane { grid-column: 5; grid-row: 1 / 3; min-width: 0; overflow: auto; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-divider-preview { grid-column: 2; grid-row: 1 / 3; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview { grid-column: 3; grid-row: 1 / 3; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-divider-right { grid-column: 4; grid-row: 1 / 3; }
 .studio-draw-canvas { display: none; height: 100%; min-height: 0; overflow: auto; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu) { display: none; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-draw-canvas { display: block; }
@@ -892,6 +905,12 @@ kbd {
   .tao-studio-product-host[data-layout-preset="run"] .studio-center,
   .tao-studio-product-host[data-layout-preset="draw"] .studio-center {
     grid-template-columns: 0 0 0 0 minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
+  .tao-studio-product-host[data-layout-preset="draw"] .studio-editor-pane,
+  .tao-studio-product-host[data-layout-preset="draw"] .studio-inspector-pane,
+  .tao-studio-product-host[data-layout-preset="draw"] .studio-divider-preview,
+  .tao-studio-product-host[data-layout-preset="draw"] .studio-divider-right { display: none; }
+  .tao-studio-product-host[data-layout-preset="draw"] .studio-preview { grid-column: 1 / 6; grid-row: 1; }
 }
 `

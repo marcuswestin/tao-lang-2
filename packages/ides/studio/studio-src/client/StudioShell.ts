@@ -485,6 +485,18 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
   })
   requiredButton(root, '.studio-collapse-right').addEventListener('click', () => toggle('right'))
   requiredButton(root, '.studio-collapse-bottom').addEventListener('click', () => toggle('bottom'))
+  /**
+   * Which way a horizontal divider grows its pane: +1 when dragging right grows it. The inspector sits
+   * left of its divider and the preview right of its own, except in Draw's workbench frame, where the
+   * inspector is on the right and the preview size is the code column on the left.
+   */
+  const horizontalSign = (pane: PaneName): number => {
+    if (pane === 'left') {
+      return 1
+    }
+    const mirrored = root.dataset['layoutPreset'] === 'draw'
+    return (pane === 'preview') === mirrored ? 1 : -1
+  }
   for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
     const pane = divider.dataset['divider'] as PaneName
     divider.addEventListener('dblclick', () => toggle(pane))
@@ -496,13 +508,7 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
       }
       const direction = pane === 'bottom'
         ? event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0
-        : pane === 'preview'
-        ? event.key === 'ArrowLeft' ? 1 : event.key === 'ArrowRight' ? -1 : 0
-        : event.key === 'ArrowRight'
-        ? 1
-        : event.key === 'ArrowLeft'
-        ? -1
-        : 0
+        : (event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0) * horizontalSign(pane)
       if (direction === 0) {
         return
       }
@@ -519,9 +525,7 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
       const move = (moveEvent: PointerEvent): void => {
         const delta = pane === 'bottom'
           ? start - moveEvent.clientY
-          : pane === 'preview'
-          ? start - moveEvent.clientX
-          : moveEvent.clientX - start
+          : (moveEvent.clientX - start) * horizontalSign(pane)
         const minimum = StudioPaneMinimums[pane]
         resize(pane, Math.max(minimum, initial + delta))
       }
