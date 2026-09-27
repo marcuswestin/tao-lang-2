@@ -20,6 +20,20 @@
   floor gives each of 13 lanes a ceiling of one or two slots, and every admission decision takes
   the single advisory registry lock, so 13 contenders may spend admission in lock contention rather
   than in work.
+  A 2026-09-26 `verify-changed` in `feat/clerk-device-acceptance` took 315.6s with six overlapping
+  lanes and peak load 172.8 on 18 CPUs. The shipping stale-reclaimer timing assertion and Studio
+  malformed-handshake assertion failed, then their exact files passed unchanged in separate
+  invocations (3.2s and 11.0s of suite time). The failed run is
+  `.artifacts/logs/verify-changed/2026-09-26T22-15-40-789Z-81198-1fab9590/summary.json`;
+  retries are `.artifacts/logs/dev-test/2026-09-26T22-23-47-694Z-43035-99bd2067/summary.json`
+  and `.artifacts/logs/dev-test/2026-09-26T22-23-48-592Z-43200-845f1769/summary.json`.
+  These are observations under contention, not a measured causal explanation or an admission benchmark.
+  A 2026-09-27 UTC `verify-changed` in `feat/visionos-development-setup` stopped after 506.5s
+  with `Timed out waiting for the machine-lane registry lock.` The board sampled two concurrent
+  lanes, each reporting 16/16 slots, and load 220.7 on 16 CPUs. Type checking took 230.6s;
+  several suites timed out or were interrupted. The command log is
+  `.artifacts/logs/agent/verify-changed/2026-09-27T00-07-22-109Z-38825.log`.
+  This is another contention observation; no scheduler settings or foreign processes were changed.
 - **Workaround:** Verify when the machine is quiet, or read the `contention` block in
   `summary.json` before treating a slow lane as a regression.
 - **Proposed change:** Admit whole heavy lanes machine-wide in arrival order rather than splitting

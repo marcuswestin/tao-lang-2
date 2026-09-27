@@ -60,7 +60,7 @@ async function createFixture(apiURI: string) {
   )
   const created = await fetch(`${apiURI}/dash/apps/ephemeral`, {
     method: 'POST',
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(30_000) as NonNullable<Parameters<typeof fetch>[1]>['signal'],
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       title: `Tao authority conformance ${Platform.randomUUID()}`,
@@ -105,7 +105,7 @@ async function createFixture(apiURI: string) {
       }
       const response = await fetch(`${apiURI}${incoming.pathname}${incoming.search}`, {
         method: request.method,
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(30_000) as NonNullable<Parameters<typeof fetch>[1]>['signal'],
         headers: request.headers,
         ...(body === undefined ? {} : { body }),
       })
@@ -146,7 +146,7 @@ async function createFixture(apiURI: string) {
     async admin(path: string, body: unknown, anonymous = false) {
       return await fetch(`${apiURI}${path}`, {
         method: 'POST',
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(30_000) as NonNullable<Parameters<typeof fetch>[1]>['signal'],
         headers: {
           'content-type': 'application/json',
           'app-id': credentials.appId,

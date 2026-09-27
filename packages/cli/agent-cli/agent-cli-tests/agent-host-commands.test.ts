@@ -41,6 +41,8 @@ const expected = [
   'companion-host-build',
   'setup-ios',
   'setup-visionos',
+  'studio-companion-install',
+  'clerk-review',
   'standalone-cli-vm-setup',
   'standalone-cli-clean-machine',
   'simulators list',

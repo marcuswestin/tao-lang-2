@@ -3,6 +3,7 @@ import { Errors } from '@shared/core'
 import { Deferred, Describe, Expect, Test, until } from '@shared/test'
 import { createClerkConnection } from '../@tao/auth/clerk/ClerkConnection'
 import {
+  classifyClerkSignInError,
   type ClerkDriver,
   type ClerkDriverResult,
   type ClerkDriverSession,
@@ -566,6 +567,33 @@ Describe('Clerk account gateway connection', () => {
       Expect((await f.signIn()).outcome).toEqual({
         status: 'rejected',
         message: 'The sign-in details were not accepted. Check them and try again.',
+      })
+      Expect(f.calls).toEqual([])
+    } finally {
+      f.connection.close?.()
+    }
+  })
+
+  Test('native configuration errors stay distinct and unknown provider failures remain generic', async () => {
+    const f = fixture()
+    try {
+      f.driver.signIn = async () => {
+        const error = classifyClerkSignInError({ status: 400, errors: [{ code: 'native_api_disabled' }] })
+        throw error
+      }
+      Expect((await f.signIn()).outcome).toEqual({
+        status: 'error',
+        message: 'Native sign-in is disabled for this app. Ask the app developer to enable the Clerk Native API.',
+      })
+      f.driver.signIn = async () => {
+        throw {
+          status: 400,
+          errors: [{ code: 'private@example.test', message: 'private', meta: { secret: 'private' } }],
+        }
+      }
+      Expect((await f.signIn()).outcome).toEqual({
+        status: 'error',
+        message: 'Unable to sign in. Check your details and connection, then try again.',
       })
       Expect(f.calls).toEqual([])
     } finally {

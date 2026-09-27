@@ -13,6 +13,7 @@ export type AccountServerOptions = {
   clock?: () => number
   clerk?: ClerkAccountOptions
   databasePath: string
+  host?: string
   issuer: string
   instant?: { apiURI: string; appId: string; adminToken: string }
   policy: AccountPolicy
@@ -21,7 +22,7 @@ export type AccountServerOptions = {
   sessionLifetimeMs?: number
 }
 
-/** AccountServer runs the durable localhost reference identity and entity authority. */
+/** AccountServer runs the durable reference identity and entity authority. */
 export class AccountServer {
   readonly #options: AccountServerOptions
   readonly #store: AccountStore
@@ -49,11 +50,11 @@ export class AccountServer {
     this.#instant = instant
     this.#server = Bun.serve({
       fetch: request => this.#accept(request),
-      hostname: '127.0.0.1',
+      hostname: options.host ?? '127.0.0.1',
       maxRequestBodySize: 1024 * 1024,
       port: options.port ?? 0,
     })
-    this.url = `http://127.0.0.1:${this.#server.port}`
+    this.url = this.#server.url.origin
   }
 
   static async start(options: AccountServerOptions): Promise<AccountServer> {
@@ -200,7 +201,9 @@ export class AccountServer {
       if (!/^Bearer [A-Za-z0-9_.-]+$/.test(authorization)) {
         rejectAccountRequest('unauthorized', 'Sign in to continue.')
       }
-      const proof = await clerkAccountIdentity(authorization.slice(7), clerk, () => this.#now())
+      const proof = await clerkAccountIdentity(authorization.slice(7), clerk, () => this.#now(), {
+        hasOrigin: request.headers.has('origin'),
+      })
       return this.#serialize(async () => {
         if (proof.expiresAt <= this.#now()) {
           rejectAccountRequest('unauthorized', 'The Clerk session expired. Sign in again.')

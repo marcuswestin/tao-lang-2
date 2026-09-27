@@ -111,11 +111,13 @@ export function createStudioCompanionDevice(options: StudioCompanionDeviceOption
           + 'Run `./agent setup` at the repository root, then retry.',
       )
     }
+    const env = companionInstallEnv(Platform.runtimeProcess.env, repoRoot())
+    await prepareCompanionIosInstall({ root, env, run })
     const args = companionInstallArgs(input.deviceName)
     const result = await run('bunx', {
       args,
       cwd: root,
-      env: companionInstallEnv(Platform.runtimeProcess.env, repoRoot()),
+      env,
       prefixedOutput: { processName: 'expo' },
     })
     if (result.error !== undefined) {
@@ -141,6 +143,36 @@ export function createStudioCompanionDevice(options: StudioCompanionDeviceOption
     installedOn: async (hostId: string): Promise<boolean | undefined> => (await installedAppProbe(hostId)).installed,
     listHosts,
     open,
+  }
+}
+
+/** prepareCompanionIosInstall refreshes config plugins and pods before either kind of iOS install. */
+export async function prepareCompanionIosInstall(input: {
+  env: Platform.ProcessEnv
+  root: string
+  run: typeof CLI.run
+}): Promise<void> {
+  // run:ios reuses an existing native project. Refresh config plugins and pods first so a
+  // newly installed native module cannot leave this development shell on stale native settings.
+  const preparation = [
+    { command: 'bunx', args: ['expo', 'prebuild', '--platform', 'ios', '--no-install'], cwd: input.root },
+    { command: 'pod', args: ['install'], cwd: FS.resolvePath('ios', input.root) },
+  ]
+  for (const step of preparation) {
+    const result = await input.run(step.command, {
+      args: step.args,
+      cwd: step.cwd,
+      env: input.env,
+      prefixedOutput: { processName: step.command === 'pod' ? 'pods' : 'expo' },
+    })
+    if (result.error !== undefined || result.exitCode !== 0) {
+      throwStudioDeviceFailure(
+        'expo',
+        `Could not prepare ${CompanionIdentity.name}: \`${step.command} ${step.args.join(' ')}\` failed. `
+          + 'Its output above says why; fix that failure and retry the install.',
+        { cause: result.error, details: { exitCode: result.exitCode, signal: result.signal } },
+      )
+    }
   }
 }
 

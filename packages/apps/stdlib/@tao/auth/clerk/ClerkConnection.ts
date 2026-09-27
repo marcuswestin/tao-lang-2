@@ -2,6 +2,7 @@ import type TR from '@runtime/TR'
 import { Assert, Errors } from '@shared/core'
 import type { AccountProtocol } from 'tao-shared/auth'
 import {
+  ClerkConfigurationError,
   type ClerkDriver,
   type ClerkDriverSession,
   ClerkRevocationError,
@@ -352,6 +353,9 @@ export function createClerkConnection(
         }
         if (active(epoch, signal) && error instanceof ClerkSignInRejectedError) {
           return { outcome: { status: 'rejected', message: error.message } }
+        }
+        if (active(epoch, signal) && error instanceof ClerkConfigurationError) {
+          return { outcome: { status: 'error', message: error.message } }
         }
         return {
           outcome: active(epoch, signal)
