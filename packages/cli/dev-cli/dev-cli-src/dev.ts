@@ -91,7 +91,8 @@ await runWithCommands(commands => {
     .command('shell-setup')
     .description('Offer automatic development environments for this repository and its worktrees.')
     .option('--configure', 'Ask again even when this repository already has a saved choice.')
-    .action(async (options: { configure?: boolean }) => {
+    .option('--prepare', 'Warm this checkout’s environment when automatic activation is already enabled.')
+    .action(async (options: { configure?: boolean; prepare?: boolean }) => {
       const { runDirenvSetup } = await import('./shell/DirenvSetup')
       await runDirenvSetup(options)
     })
