@@ -8,6 +8,7 @@ import type {
 } from '../../StudioProjectSession'
 import type { StudioPreviewFeedDropMessage } from '../../StudioProtocol'
 import type { StudioSketchCatalogAction, StudioSketchCatalogSnapshot } from '../../StudioSketchCatalog'
+import { StudioMountSignal } from '../app/StudioMountSignal'
 import { StudioApiClient } from '../StudioApiClient'
 import { StudioDialog } from '../StudioDialog'
 import type { StudioFeedDrop } from '../StudioFeedController'
@@ -163,11 +164,14 @@ export const StudioMatrixSketches = {
   async runFeed<Result extends StudioFeedState>(
     parent: HTMLElement,
     run: (revision: number) => Promise<Result>,
+    signal?: AbortSignal,
   ): Promise<Result> {
     const state = mountedSketches.get(parent)
     Assert.defined(state, 'mounted Studio sketches before editing Feed')
     return await state.mutationLane.run(async () => {
+      StudioMountSignal.throwIfAborted(signal)
       const result = await run(state.catalog.revision)
+      StudioMountSignal.throwIfAborted(signal)
       renderMatrixSketches(parent, state.project, result.catalog)
       return result
     })

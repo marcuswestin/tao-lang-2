@@ -1,4 +1,4 @@
-import { FS, Platform, TaoResources } from '@shared'
+import { Errors, FS, Platform, TaoResources } from '@shared'
 
 const moduleDirectory = typeof __dirname === 'string' ? __dirname : import.meta.dirname
 const resourceRoot = TaoResources.declaredRoot()
@@ -42,6 +42,8 @@ export const RuntimeToolchainPaths = {
   expoEnvironment,
   installedExpoLauncher,
   nodeScriptCommand,
+  prepareNodeLauncher,
+  nodeLauncherEnvironment,
 } as const
 
 /** dependencyRoot is the `node_modules` a run of the host resolves packages from. */
@@ -86,8 +88,8 @@ type ExpoCommand = { args: string[]; command: string; env: Record<string, string
 
 /**
  * expoCommand runs Expo's CLI from `runtimeRoot`'s dependencies. An installed Tao runs the script
- * under its own binary acting as Bun, because the script starts `#!/usr/bin/env node` and a machine
- * with only Tao on it has no Node; `x --bun` does not reach that far in a compiled binary.
+ * explicitly under its own binary acting as Bun. Forcing `--bun` also creates global fallback
+ * executables; an absolute script needs no such flag, and children use the owned node launcher.
  */
 function expoCommand(runtimeRoot: string, args: readonly string[]): ExpoCommand {
   return nodeScriptCommand(runtimeRoot, 'expo', args)
@@ -100,8 +102,47 @@ function nodeScriptCommand(runtimeRoot: string, name: string, args: readonly str
     return { args: [...args], command: script, env: {} }
   }
   return {
-    args: ['--bun', script, ...args],
+    args: [script, ...args],
     command: Platform.runtimeProcess.execPath,
-    env: { ...expoEnvironment(), BUN_BE_BUN: '1' },
+    env: { ...expoEnvironment(), ...nodeLauncherEnvironment(RuntimeToolchainPaths.hostInstallRoot), BUN_BE_BUN: '1' },
   }
+}
+
+/** Child-only PATH keeps Bun's fallback node executable inside the version-owned host install. */
+function nodeLauncherEnvironment(installRoot: string | undefined): Record<string, string> {
+  if (installRoot === undefined) {
+    return {}
+  }
+  const directory = FS.resolvePath('.tao-runtime-bin', installRoot)
+  return { PATH: `${directory}:${Platform.runtimeProcess.env['PATH'] ?? '/usr/bin:/bin'}` }
+}
+
+/** Prepare our exact launcher, refusing existing entries that do not match this installation. */
+async function prepareNodeLauncher(installRoot: string, executable = Platform.runtimeProcess.execPath): Promise<void> {
+  const directory = FS.resolvePath('.tao-runtime-bin', installRoot)
+  const directoryEntry = await FS.entryMetadata(directory).catch(error => {
+    if ((error as { code?: string }).code !== 'ENOENT') {
+      throw error
+    }
+    return undefined
+  })
+  if (directoryEntry !== undefined && directoryEntry.kind !== 'directory') {
+    Errors.throwHostEnvironment(`Cannot prepare Tao's runtime launcher: ${directory} is not a directory.`)
+  }
+  const path = FS.resolvePath('node', directory)
+  const quoted = `'${executable.replaceAll("'", "'\\''")}'`
+  const script = `#!/bin/sh\nBUN_BE_BUN=1 exec ${quoted} "$@"\n`
+  const entry = await FS.entryMetadata(path).catch(error => {
+    if ((error as { code?: string }).code !== 'ENOENT') {
+      throw error
+    }
+    return undefined
+  })
+  if (entry !== undefined) {
+    if (entry.kind !== 'file' || await FS.readText(path) !== script || (entry.mode & 0o111) === 0) {
+      Errors.throwHostEnvironment(`Cannot replace an unrecognized runtime launcher at ${path}.`)
+    }
+    return
+  }
+  await FS.writeText(path, script, { mode: 0o755 })
 }

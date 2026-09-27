@@ -1,6 +1,6 @@
 # DEVENV-MUTATION-FAILURES-CAN-BE-TOLERATED-AS-FLAKES — Mutation failures can be tolerated as flakes
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Verification evidence
 - **Impact:** Deliberate production-code mutations can teach the test ledger that a
@@ -27,3 +27,6 @@
   controls cannot make an otherwise deterministic test eligible for tolerance.
   The restored control still records and reports actual assertion results.
 - **Source:** Cache lifecycle acceptance, 2026-09-26.
+
+- **Resolution:** Implemented `./agent test-mutation <path>` with a separate evidence mode and artifact lane. Mutation runs preserve raw failure verdicts, bypass automatic retries and flake tolerance, and leave ordinary ledger, history and learned timings untouched. Fixture controls prove pre-existing tolerated history cannot mask a deliberate failure and alternating red/green controls do not change evidence bytes; ordinary behavior remains covered.
+- **Archived:** 2026-09-27.

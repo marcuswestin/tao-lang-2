@@ -172,6 +172,8 @@ Exercise `required` completeness and the writes that consume it through an ordin
 
 Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.
 
+The Enum Fields app also proves declared enum defaults, explicit overrides, and omitted or absent optional values through creates, copies, updates, and clearing.
+
 **Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, stored rows surviving a `relaunch`, and Memory saving while the test network is offline. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
 
 **Does not belong here:** remote providers, credentials, auth, permissions, sync, pagination, or aggregation; navigation or WordFlower product behavior; schema, query, and write diagnostics.

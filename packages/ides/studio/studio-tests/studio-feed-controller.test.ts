@@ -31,6 +31,41 @@ function inventory(): StudioFeedBrowseResult {
 }
 
 Describe('Studio Feed controller', () => {
+  Test('disposal ignores a late browse and refuses further Feed requests', async () => {
+    const pending = Deferred<StudioFeedBrowseResult>()
+    let browses = 0
+    let mutations = 0
+    let publications = 0
+    const received: StudioFeedState[] = []
+    const controller = new StudioFeedController({
+      browse: async () => {
+        browses++
+        return await pending.promise
+      },
+      mutate: async () => {
+        mutations++
+        return inventory()
+      },
+      context: () => ({}),
+      canMutate: () => true,
+      publish: () => publications++,
+      receive: state => received.push(state),
+      requestId: () => 'disposed',
+    })
+    const refresh = controller.refresh()
+    Expect(publications).toBe(1)
+    controller.dispose()
+    pending.resolve(inventory())
+    await refresh
+    await controller.refresh()
+    await controller.execute('{"type":"discard"}')
+    await controller.drop({ kind: 'entity', entity: 'Post', rowId: 'row:1' }, 'sketch:1')
+    Expect(browses).toBe(1)
+    Expect(mutations).toBe(0)
+    Expect(received).toEqual([])
+    Expect(publications).toBe(1)
+  })
+
   Test('browses server rows and sends target-bound draft revisions through the mutation adapter', async () => {
     const requests: StudioFeedActionRequest[] = []
     const received: StudioFeedState[] = []

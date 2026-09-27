@@ -58,7 +58,10 @@ import { Clock } from './TR-units'
 type DeleteTarget = { entity: string; id: string }
 
 /** An invalidated account connection can never start another queued save or fill. */
-function accountConnection(connection: TaoDataConnection, auth: TaoDataAuthBinding): TaoDataConnection {
+function accountConnection(
+  connection: TaoDataConnection,
+  auth: Pick<TaoDataAuthBinding, 'signal' | 'onInvalidate'>,
+): TaoDataConnection {
   const active = (): void => {
     RuntimeAssert.input(!auth.signal.aborted, 'This account data connection is no longer active.')
   }
@@ -127,8 +130,11 @@ type FillState = {
   status: 'failed' | 'filling' | 'ready'
 }
 
+type LocalCustody = Readonly<{ storageKey: string; signal: AbortSignal; fixtureAccountId?: string }>
+
 type ConfiguredProviderBinding = Readonly<{
   auth?: TaoDataAuthBinding
+  local?: LocalCustody
   configuration: Readonly<Record<string, unknown>>
   declaration: TaoDatasourceDeclaration
   /** storageName is the bound datasource's own name, the storage key it defaults to. */
@@ -283,7 +289,8 @@ export class RuntimeDataSchema {
       return `${String(binding ?? 'unbound')}:${this.name}`
     }
     const declaration = binding.declaration.canonicalIdentity?.canonical ?? binding.declaration.name
-    const storageKey = this.validatedStorageKey(binding.declaration.name, binding.configuration, binding.storageName)
+    const storageKey = binding.local?.storageKey
+      ?? this.validatedStorageKey(binding.declaration.name, binding.configuration, binding.storageName)
     return JSON.stringify([declaration, storageKey, this.name, ...(binding.auth ? [binding.auth.accountId] : [])])
   }
 
@@ -396,7 +403,12 @@ export class RuntimeDataSchema {
    * a store keeps its saved rows when collections or alternatives are added, and a stub standing in for
    * the real datasource keeps rows of its own.
    */
-  bindConfigured(source: TaoConfiguredDatasource, storageName?: string, auth?: TaoDataAuthBinding): void {
+  bindConfigured(
+    source: TaoConfiguredDatasource,
+    storageName?: string,
+    auth?: TaoDataAuthBinding,
+    local?: LocalCustody,
+  ): void {
     // A rebind is compared by evaluated configuration value, not object identity: the app root
     // constructs a fresh configured value per render, while a Patch that changes `Adapter` or
     // `StorageKey` under the same declaration must still rebind.
@@ -406,6 +418,8 @@ export class RuntimeDataSchema {
       && this.providerBinding.declaration === source.declaration
       && this.providerBinding.storageName === storageName
       && this.providerBinding.auth === auth
+      && this.providerBinding.local?.storageKey === local?.storageKey
+      && this.providerBinding.local?.signal === local?.signal
       && configurationValuesEqual(this.providerBinding.configuration, configuration)
     ) {
       return
@@ -414,6 +428,7 @@ export class RuntimeDataSchema {
       configuration,
       declaration: source.declaration,
       ...(auth === undefined ? {} : { auth }),
+      ...(local === undefined ? {} : { local }),
       ...(storageName === undefined ? {} : { storageName }),
     })
     // A configuration or connect failure becomes data error state behind the recovery overlay; a
@@ -431,14 +446,16 @@ export class RuntimeDataSchema {
         )
       }
       const baseStorageKey = this.validatedStorageKey(source.declaration.name, configuration, storageName)
-      const storageKey = auth ? JSON.stringify([baseStorageKey, auth.accountId]) : baseStorageKey
+      const storageKey = local?.storageKey ?? (auth ? JSON.stringify([baseStorageKey, auth.accountId]) : baseStorageKey)
       const connection = source.declaration.provider.connect(Object.freeze({
         ...(auth === undefined ? {} : { auth }),
+        ...(local === undefined ? {} : { signal: local.signal }),
         configuration,
         schema: this.definition,
         storageKey,
       }))
-      this.configure(auth ? accountConnection(connection, auth) : connection, binding)
+      const lifetime = auth ?? local
+      this.configure(lifetime ? accountConnection(connection, lifetime) : connection, binding)
     } catch (error) {
       this.configure(brokenConnection(error), binding)
     }
@@ -535,9 +552,15 @@ export class RuntimeDataSchema {
 
   /** TestAuth alone can select a one-operation actor without changing the mounted session. */
   withFixtureActor<ResultT>(accountId: string, body: () => ResultT): ResultT {
+    const binding = typeof this.providerBinding === 'object' ? this.providerBinding : undefined
+    const localFixtureAccount = binding?.local?.fixtureAccountId
     RuntimeAssert.input(
-      typeof this.providerBinding === 'object' && this.providerBinding.auth?.testing === true,
+      binding?.auth?.testing === true || localFixtureAccount !== undefined,
       'Fixture actor overrides require TestAuth.',
+    )
+    RuntimeAssert.input(
+      localFixtureAccount === undefined || localFixtureAccount === accountId,
+      'Local-only fixture creates require the signed-in fixture account.',
     )
     const previous = this.fixtureActor
     this.fixtureActor = accountId
@@ -1332,8 +1355,11 @@ export class RuntimeDataSchema {
     if (intents === undefined) {
       this.pendingWriteIntents.clear()
     }
-    this.emit()
-    this.saveQueue = this.saveQueue.then(async () => {
+    const local = typeof this.providerBinding === 'object' && this.providerBinding.local !== undefined
+    if (!local) {
+      this.emit()
+    }
+    const save = async (): Promise<void> => {
       try {
         await connection.save(serialized, submitted, context)
         if (
@@ -1362,7 +1388,15 @@ export class RuntimeDataSchema {
           this.replayBufferedSnapshot(generation)
         }
       }
-    })
+    }
+    // A local commit is already visible to the app. Reserve its durable snapshot immediately,
+    // before sign-out can seal this generation or a same-account remount can queue its load.
+    this.saveQueue = local
+      ? Promise.all([this.saveQueue, save()]).then(() => undefined)
+      : this.saveQueue.then(save)
+    if (local) {
+      this.emit()
+    }
   }
 
   private ensureActionOverlay(): void {
@@ -1773,6 +1807,9 @@ export class RuntimeDataSchema {
     if (typeof binding === 'object') {
       const canonical = binding.declaration.canonicalIdentity?.canonical
       if (canonical) {
+        if (binding.local) {
+          return JSON.stringify([canonical, binding.local.storageKey])
+        }
         return binding.auth ? JSON.stringify([canonical, binding.auth.accountId]) : canonical
       }
       throw new UnexpectedBehaviorError(

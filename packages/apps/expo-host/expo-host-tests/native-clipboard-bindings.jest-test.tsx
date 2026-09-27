@@ -67,7 +67,7 @@ Describe('generated native Clipboard bindings', () => {
     native.getStringAsync.mockReset().mockImplementationOnce(() => read.promise).mockResolvedValue('')
     native.setStringAsync.mockClear().mockResolvedValue(false)
     native.hasStringAsync.mockClear().mockResolvedValue(false)
-    await testCompileFiles('App.tao', {
+    await testCompileFiles('App.tao', async () => ({
       ...await generatedFiles(),
       'App.tao': `
         use GetStringAsync, SetStringAsync, HasStringAsync, GetStringOptions, SetStringOptions, StringFormat from ./Bindings.tao
@@ -94,7 +94,7 @@ Describe('generated native Clipboard bindings', () => {
         }
         ${controls}
       `,
-    }, async screen => {
+    }), async screen => {
       let pending: Promise<unknown> | undefined
       try {
         pending = Promise.resolve(fireEvent.press(screen.getByText('Read')))
@@ -128,7 +128,7 @@ Describe('generated native Clipboard bindings', () => {
       .mockResolvedValueOnce(null)
     native.setImageAsync.mockClear().mockResolvedValue(undefined)
     native.hasImageAsync.mockClear().mockResolvedValue(false)
-    await testCompileFiles('App.tao', {
+    await testCompileFiles('App.tao', async () => ({
       ...await generatedFiles(),
       'App.tao': `
         use GetImageAsync, SetImageAsync, HasImageAsync, GetImageOptions, GetImageOptionsFormat, ClipboardImage from ./Bindings.tao
@@ -152,7 +152,7 @@ Describe('generated native Clipboard bindings', () => {
         }
         ${controls}
       `,
-    }, async screen => {
+    }), async screen => {
       await act(async () => {
         await fireEvent.press(screen.getByText('PNG'))
       })
@@ -172,7 +172,7 @@ Describe('generated native Clipboard bindings', () => {
     native.getUrlAsync.mockReset().mockResolvedValueOnce(null).mockResolvedValueOnce('https://example.com/copied')
     native.setUrlAsync.mockClear().mockResolvedValue(undefined)
     native.hasUrlAsync.mockReset().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
-    await testCompileFiles('App.tao', {
+    await testCompileFiles('App.tao', async () => ({
       ...await generatedFiles(),
       'App.tao': `
         use GetUrlAsync, SetUrlAsync, HasUrlAsync from ./Bindings.tao
@@ -195,7 +195,7 @@ Describe('generated native Clipboard bindings', () => {
         }
         ${controls}
       `,
-    }, async screen => {
+    }), async screen => {
       await act(async () => {
         await fireEvent.press(screen.getByText('Read URL'))
       })
@@ -220,7 +220,7 @@ Describe('generated native Clipboard bindings', () => {
     native.addClipboardListener.mockClear()
     native.setStringAsync.mockClear()
     listener = undefined
-    await testCompileFiles('App.tao', {
+    await testCompileFiles('App.tao', async () => ({
       ...await generatedFiles(),
       'App.tao': `
         use AddClipboardListener, SetStringAsync, ClipboardEvent from ./Bindings.tao
@@ -239,7 +239,7 @@ Describe('generated native Clipboard bindings', () => {
         }
         ${controls}
       `,
-    }, async screen => {
+    }), async screen => {
       await act(async () => {
         await fireEvent.press(screen.getByText('Listen'))
       })
@@ -271,7 +271,7 @@ Describe('generated native Clipboard bindings', () => {
       remove.mockClear()
       native.removeClipboardListener.mockClear()
       listener = undefined
-      await testCompileFiles('App.tao', {
+      await testCompileFiles('App.tao', async () => ({
         ...await generatedFiles(),
         'App.tao': `
         use AddClipboardListener, RemoveClipboardListener, ClipboardEvent from ./Bindings.tao
@@ -291,7 +291,7 @@ Describe('generated native Clipboard bindings', () => {
         }
         ${controls}
       `,
-      }, async screen => {
+      }), async screen => {
         await act(async () => {
           await fireEvent.press(screen.getByText('Remove'))
         })
