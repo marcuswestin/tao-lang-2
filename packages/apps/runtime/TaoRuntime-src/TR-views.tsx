@@ -14,6 +14,7 @@ import {
 import { LayoutControls, type TaoLayoutEntry, type TaoResolvedLayoutStyle } from './TR-layout'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
+import { catalystPalette, SchemeControls } from './TR-scheme'
 import RuntimeSwitch from './TR-switch'
 import { TaoPropsControls, type TaoViewProps, type TaoViewRuntimeProps } from './TR-TaoProps'
 
@@ -215,6 +216,30 @@ function TaoCheckbox({ props, runtimeProps }: {
   const parentDirection = ParentDirectionContext.use()
   const merged = TaoPropsControls.mergeViewProps(props, runtimeProps, parentDirection)
   const occurrence = interactionOccurrence(props, runtimeProps)
+  return catalystPalette(undefined)
+    ? createElement(TaoCatalystCheckbox, { merged, occurrence, props, runtime })
+    : renderCheckboxWithInteraction(props, runtime, merged, occurrence)
+}
+
+function TaoCatalystCheckbox({ merged, occurrence, props, runtime }: {
+  merged: MergedTaoViewProps
+  occurrence: TaoInteractionOccurrence | undefined
+  props: TaoCheckboxProps
+  runtime: ReactNativeRuntime
+}): React.ReactElement {
+  const palette = catalystPalette(SchemeControls.use().resolved)
+  const themed = palette
+    ? { ...merged, props: { ...merged.props, style: { color: palette.color, ...merged.props?.style } } }
+    : merged
+  return renderCheckboxWithInteraction(props, runtime, themed, occurrence)
+}
+
+function renderCheckboxWithInteraction(
+  props: TaoCheckboxProps,
+  runtime: ReactNativeRuntime,
+  merged: MergedTaoViewProps,
+  occurrence: TaoInteractionOccurrence | undefined,
+): React.ReactElement {
   return occurrence === undefined
     ? renderTaoCheckbox(props, runtime, merged)
     : createElement(TaoInteractiveCheckbox, { merged, occurrence, props, runtime })
@@ -493,6 +518,30 @@ function TaoTextInput({ props, runtimeProps }: {
   const parentDirection = ParentDirectionContext.use()
   const merged = TaoPropsControls.mergeViewProps(props, runtimeProps, parentDirection)
   const occurrence = interactionOccurrence(props, runtimeProps)
+  return catalystPalette(undefined)
+    ? createElement(TaoCatalystTextInput, { merged, occurrence, props, runtime })
+    : renderTextInputWithInteraction(props, runtime, merged, occurrence)
+}
+
+function TaoCatalystTextInput({ merged, occurrence, props, runtime }: {
+  merged: MergedTaoViewProps
+  occurrence: TaoInteractionOccurrence | undefined
+  props: TaoTextInputProps
+  runtime: ReactNativeRuntime
+}): React.ReactElement {
+  const palette = catalystPalette(SchemeControls.use().resolved)
+  const themed = palette
+    ? { ...merged, props: { ...merged.props, style: { ...palette, ...merged.props?.style } } }
+    : merged
+  return renderTextInputWithInteraction(props, runtime, themed, occurrence)
+}
+
+function renderTextInputWithInteraction(
+  props: TaoTextInputProps,
+  runtime: ReactNativeRuntime,
+  merged: MergedTaoViewProps,
+  occurrence: TaoInteractionOccurrence | undefined,
+): React.ReactElement {
   return occurrence === undefined
     ? renderTaoTextInput(props, runtime, merged)
     : createElement(TaoInteractiveTextInput, { merged, occurrence, props, runtime })
@@ -572,6 +621,33 @@ function TaoPrimitiveElement(props: TaoPrimitiveElementProps): React.ReactElemen
   const runtime = requireReactNativeRuntime()
   const parentDirection = ParentDirectionContext.use()
   const merged = TaoPropsControls.mergeViewProps(props.viewProps, props.runtimeProps, parentDirection)
+  return catalystPalette(undefined) && (props.kind === 'Text' || props.kind === 'Pressable')
+    ? createElement(TaoCatalystPrimitiveElement, { merged, props, runtime })
+    : renderPrimitiveWithInteraction(props, runtime, merged)
+}
+
+/** Only mounted Catalyst text mounts a subscriber; element factories remain host-independent. */
+function TaoCatalystPrimitiveElement({ merged, props, runtime }: {
+  merged: MergedTaoViewProps
+  props: TaoPrimitiveElementProps
+  runtime: ReactNativeRuntime
+}): React.ReactElement {
+  const palette = catalystPalette(SchemeControls.use().resolved)
+  return renderPrimitiveWithInteraction(
+    {
+      ...props,
+      defaultStyle: palette ? { color: palette.color, ...props.defaultStyle } : props.defaultStyle,
+    },
+    runtime,
+    merged,
+  )
+}
+
+function renderPrimitiveWithInteraction(
+  props: TaoPrimitiveElementProps,
+  runtime: ReactNativeRuntime,
+  merged: MergedTaoViewProps,
+): React.ReactElement {
   if (props.semanticIdentity !== undefined) {
     return createElement(TaoSemanticPrimitiveElement, { merged, props, runtime })
   }
