@@ -8,7 +8,7 @@ const schemeCaptureVersion = 1 as const
 
 export type TaoAppearance = 'dark' | 'light' | 'system'
 export type TaoScheme = 'dark' | 'light'
-export type TaoSchemeCapability = 'fixed-light-native' | 'pinned-native' | 'reactive-browser'
+export type TaoSchemeCapability = 'fixed-light-native' | 'pinned-native' | 'reactive-browser' | 'reactive-catalyst'
 
 /** The capability a browser cell reports: it follows the page's color scheme as it changes. */
 const reactiveBrowserSchemeCapability = 'reactive-browser' satisfies TaoSchemeCapability
@@ -28,7 +28,7 @@ export type TaoSchemeRequest = Readonly<{
 }>
 
 export type TaoSchemeResolutionEnvironment = Readonly<{
-  platform: 'native' | 'web'
+  platform: 'catalyst' | 'native' | 'web'
   system: TaoScheme
 }>
 
@@ -87,7 +87,7 @@ function resolveScheme(
     })
   }
   return Object.freeze({
-    capability: reactiveBrowserSchemeCapability,
+    capability: environment.platform === 'catalyst' ? 'reactive-catalyst' : reactiveBrowserSchemeCapability,
     requested,
     resolved: requested === 'system' ? environment.system : requested,
     source: requestSource,
@@ -124,11 +124,16 @@ function useScheme(): TaoSchemeSnapshot {
 
 function useSchemeEnvironment(): TaoSchemeResolutionEnvironment {
   const system = React.useSyncExternalStore<TaoScheme>(subscribeSystemScheme, readSystemScheme, () => 'light')
-  const platform = requireReactNativeRuntime().Platform?.OS === 'web' ? 'web' : 'native'
+  const nativePlatform = requireReactNativeRuntime().Platform
+  const platform = nativePlatform?.OS === 'web' ? 'web' : isCatalyst() ? 'catalyst' : 'native'
   return React.useMemo(() => ({ platform, system }), [platform, system])
 }
 
 function subscribeSystemScheme(changed: () => void): () => void {
+  if (isCatalyst()) {
+    const subscription = requireReactNativeRuntime().Appearance?.addChangeListener(changed)
+    return () => subscription?.remove()
+  }
   const media = browserSchemeMedia()
   if (media === undefined) {
     return () => {}
@@ -144,6 +149,9 @@ function subscribeSystemScheme(changed: () => void): () => void {
 }
 
 function readSystemScheme(): TaoScheme {
+  if (isCatalyst()) {
+    return requireReactNativeRuntime().Appearance?.getColorScheme() === 'dark' ? 'dark' : 'light'
+  }
   return browserSchemeMedia()?.matches === true ? 'dark' : 'light'
 }
 
@@ -166,7 +174,9 @@ function decodeSnapshot(value: TaoRuntimeJson): TaoSchemeSnapshot {
     typeof value !== 'object'
     || value === null
     || Array.isArray(value)
-    || !['fixed-light-native', 'pinned-native', 'reactive-browser'].includes(String(record['capability']))
+    || !['fixed-light-native', 'pinned-native', 'reactive-browser', 'reactive-catalyst'].includes(
+      String(record['capability']),
+    )
     || (record['requested'] !== 'dark' && record['requested'] !== 'light' && record['requested'] !== 'system')
     || (record['resolved'] !== 'dark' && record['resolved'] !== 'light')
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(String(record['source']))
@@ -180,7 +190,7 @@ function decodeSnapshot(value: TaoRuntimeJson): TaoSchemeSnapshot {
 
 function validateSnapshot(snapshot: TaoSchemeSnapshot): void {
   if (
-    !['fixed-light-native', 'pinned-native', 'reactive-browser'].includes(snapshot.capability)
+    !['fixed-light-native', 'pinned-native', 'reactive-browser', 'reactive-catalyst'].includes(snapshot.capability)
     || (snapshot.requested !== 'dark' && snapshot.requested !== 'light' && snapshot.requested !== 'system')
     || (snapshot.resolved !== 'dark' && snapshot.resolved !== 'light')
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(snapshot.source)
@@ -197,4 +207,23 @@ function validateSnapshot(snapshot: TaoSchemeSnapshot): void {
   ) {
     throw new UserInputError('Tao Scheme snapshot is invalid.', { snapshot })
   }
+}
+
+function isCatalyst(): boolean {
+  const platform = requireReactNativeRuntime().Platform
+  return platform?.OS === 'ios' && platform.isMacCatalyst === true
+}
+
+/** Catalyst defaults follow the resolved Tao frame; authored design colors still take precedence. */
+export function catalystPalette(scheme: TaoScheme | undefined): {
+  backgroundColor: string
+  color: string
+  borderColor: string
+} | undefined {
+  if (!isCatalyst()) {
+    return undefined
+  }
+  return scheme === 'dark'
+    ? { backgroundColor: '#1c1c1e', color: '#f2f2f7', borderColor: '#48484a' }
+    : { backgroundColor: '#ffffff', color: '#1c1c1e', borderColor: '#d0d0d0' }
 }
