@@ -109,8 +109,11 @@ function validateFields(
   for (const [name, value] of Object.entries(fields)) {
     const field = schema.get(name)
     Assert.input(field !== undefined, `Studio feed row contains unknown ${declaration.name} field ${name}.`)
+    if (field.secret) {
+      continue
+    }
     Assert.input(fieldValueMatches(field, value), `Studio feed field ${declaration.name}.${name} has the wrong type.`)
-    validated[name] = value
+    validated[name] = isObject(value) ? { ...value } : value
   }
   for (const field of declaration.fields) {
     Assert.input(
@@ -128,7 +131,8 @@ function fieldValueMatches(
 ): boolean {
   if (field.type.kind === 'relation') {
     return typeof value === 'string'
-      || isObject(value) && value['kind'] === 'fixture-reference' && typeof value['handle'] === 'string'
+      || isObject(value) && Object.keys(value).length === 2 && value['kind'] === 'fixture-reference'
+        && typeof value['handle'] === 'string'
   }
   if (field.type.kind === 'case') {
     return typeof value === 'string' && field.type.cases.includes(value)
@@ -142,7 +146,8 @@ function fieldValueMatches(
   if (field.type.scalar === 'boolean') {
     return typeof value === 'boolean'
   }
-  return typeof value === 'string' || isObject(value) && value['kind'] === 'now'
+  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+    || isObject(value) && Object.keys(value).length === 1 && value['kind'] === 'now'
 }
 
 function opaqueId(

@@ -378,6 +378,15 @@ export class StudioCdp {
     await this.dispatchHtml5Drag(points.start, points.end, steps)
   }
 
+  /** Drops the page's actual HTML5 payload at a viewport point, including a target inside an iframe. */
+  async dragToPoint(fromSelector: string, end: Point, options: { steps?: number } = {}): Promise<void> {
+    const steps = options.steps ?? 8
+    requirePositiveInteger(steps, 'Studio browser drag steps')
+    requireFiniteNumber(end.x, 'Studio browser horizontal drop coordinate')
+    requireFiniteNumber(end.y, 'Studio browser vertical drop coordinate')
+    await this.dispatchHtml5Drag(await this.elementCenter(fromSelector, 'drag source'), end, steps)
+  }
+
   /**
    * `offset` starts the gesture at one point inside the element's box instead of its center, for a
    * target whose center is not its live grab area — a long, thin divider that a floating panel
@@ -417,6 +426,7 @@ export class StudioCdp {
    */
   private async dispatchHtml5Drag(start: Point, end: Point, steps: number): Promise<void> {
     await this.client.send('Input.setInterceptDrags', { enabled: true })
+    let cancelInterception = () => {}
     try {
       // Subscribe before the gesture: Chrome reports the interception while the moves are still
       // being dispatched, and the whole gesture must land before the drop replays it.
@@ -430,14 +440,33 @@ export class StudioCdp {
           unsubscribe()
           resolve((params as { data: Record<string, unknown> }).data)
         })
+        cancelInterception = () => {
+          clearTimeout(timer)
+          unsubscribe()
+          reject(Errors.abortError('HTML5 drag interception finished.'))
+        }
       })
+      // A mouse command can fail before we await this promise; consume cancellation and an
+      // interception timeout immediately while preserving rejection for the await below.
+      void intercepted.catch(() => undefined)
       await this.beginDrag(start, end, steps)
       const data = await intercepted
       for (const type of ['dragEnter', 'dragOver', 'drop'] as const) {
         await this.client.send('Input.dispatchDragEvent', { data, type, ...end })
       }
     } finally {
-      await this.client.send('Input.setInterceptDrags', { enabled: false })
+      cancelInterception()
+      try {
+        await this.client.send('Input.dispatchMouseEvent', {
+          button: 'left',
+          buttons: 0,
+          clickCount: 1,
+          type: 'mouseReleased',
+          ...end,
+        })
+      } finally {
+        await this.client.send('Input.setInterceptDrags', { enabled: false })
+      }
     }
   }
 

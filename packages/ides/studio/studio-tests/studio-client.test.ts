@@ -2731,6 +2731,69 @@ Test('Studio canvas shortcuts reach only the authenticated preview bridge', asyn
   Expect(commands).toEqual(['fit', 'reset', 'zoom-in', 'zoom-out'])
 })
 
+const previewAppliedSlot = testOverrideSlot({
+  read: () => StudioApiClient.previewApplied,
+  write: value => {
+    ;(StudioApiClient as { previewApplied: typeof value }).previewApplied = value
+  },
+})
+
+Test('Studio restores current canvas ownership when a preview bridge mounts after iframe load', async () => {
+  const messages: unknown[] = []
+  const contentWindow = { postMessage: (message: unknown) => messages.push(message) }
+  const preview = previewConnection('preview-late', 'late', contentWindow)
+  let owned = true
+  let applied = 0
+  const restore = previewAppliedSlot.install(async () => {
+    applied += 1
+  })
+  const listener = studioPreviewMessageListener({
+    canvasGesturesOwned: () => owned,
+    handshake: { identity: { appName: 'Garden', project: '/workspace' } },
+    previews: [preview],
+  } as never)
+  const event = {
+    data: {
+      appliedRevision: 1,
+      channel: studioProtocolChannel,
+      compileRevision: 1,
+      identity: { ...preview.cellIdentity, previewInstanceId: preview.previewInstanceId },
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-applied',
+    },
+    origin: preview.origin,
+    source: contentWindow,
+  } as unknown as MessageEvent
+  try {
+    // The receiver missed load-time publication. Its mounted acknowledgement must recover it.
+    listener({ ...event, origin: 'https://untrusted.example' } as MessageEvent)
+    Expect(messages).toEqual([])
+    listener(event)
+    await until(() => applied === 1)
+    Expect(messages).toContainEqual({
+      channel: studioProtocolChannel,
+      identity: event.data.identity,
+      owned: true,
+      protocolVersion: studioProtocolVersion,
+      type: 'set-canvas-gestures',
+    })
+    messages.length = 0
+    owned = false
+    // A later bridge remount must receive the current layout, not the initial Design state.
+    listener(event)
+    await until(() => applied === 2)
+    Expect(messages).toContainEqual({
+      channel: studioProtocolChannel,
+      identity: event.data.identity,
+      owned: false,
+      protocolVersion: studioProtocolVersion,
+      type: 'set-canvas-gestures',
+    })
+  } finally {
+    restore()
+  }
+})
+
 Test('Studio wires a canvas shortcut to the iframe that sent it', () => {
   const first = previewConnection('preview-first', 'first', {})
   const second = previewConnection('preview-second', 'second', {})
@@ -3537,7 +3600,9 @@ Test('Studio source mutations share one envelope and bind undo to the file the e
   })
   const replies: Array<() => Response> = []
   const requests: string[] = []
-  globalThis.fetch = (async (input: string | URL | Request) => {
+  const requestBodies: unknown[] = []
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    requestBodies.push(init?.body === undefined ? undefined : JSON.parse(String(init.body)))
     requests.push(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url)
     const reply = replies.shift()
     if (reply === undefined) {
@@ -3659,6 +3724,25 @@ Test('Studio source mutations share one envelope and bind undo to the file the e
       'inspector',
     ])
     Expect(mutations.canUndo()).toBe(false)
+    Expect(replies).toHaveLength(0)
+
+    // Imported parameterized views use the selected source gap even when no editor is mounted.
+    replies.push(() => result('checkpoint-imported-view'))
+    mutations.insertProjectView({
+      label: 'View1',
+      snippet: { placeholders: [{ start: 16, end: 24 }], text: 'View1(Playlist: Playlist)' },
+      sourcePath: '/workspace/@/studio/View1.tao',
+      viewName: 'View1',
+    })
+    await until(() => !mutations.busy(), { description: 'the imported view insertion', intervalMs: 0 })
+    Expect(requestBodies.at(-1)).toMatchObject({
+      action: {
+        beforeId: selected.renderId,
+        kind: 'insert-project-view',
+        viewName: 'View1',
+        viewSourcePath: '/workspace/@/studio/View1.tao',
+      },
+    })
     Expect(replies).toHaveLength(0)
   } finally {
     globalThis.fetch = previousFetch
