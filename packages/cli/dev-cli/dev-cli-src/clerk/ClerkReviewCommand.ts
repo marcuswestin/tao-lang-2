@@ -2,7 +2,7 @@ import type { AccountServerOptions } from '@account-server'
 import { CLI, Errors, FS, HCI, Json, Platform, Repo, SecretsFile } from '@shared'
 import type { StudioDevOptions } from '@studio-tooling/StudioDev'
 
-type ReviewOptions = { host?: string; instantUrl?: string; browser?: boolean }
+type ReviewOptions = { host?: string; instantUrl?: string; browser?: boolean; device?: string }
 type ReviewEnvironment = {
   secrets: typeof SecretsFile.readDecryptedSecrets
   host: () => Promise<string>
@@ -77,6 +77,9 @@ export async function runClerkReview(
   options: ReviewOptions = {},
   environment: ReviewEnvironment = liveEnvironment(),
 ): Promise<number> {
+  if (options.device !== undefined && options.device.trim() === '') {
+    Errors.throwUserInput('--device requires a physical device name or UDID.')
+  }
   const endpoint = URL.parse(options.instantUrl ?? 'http://127.0.0.1:9020')
   if (
     endpoint === null || endpoint.protocol !== 'http:'
@@ -184,7 +187,9 @@ export async function runClerkReview(
     )
     environment.write(`Clerk phone review gateway: ${gateway.url}`)
     environment.write(
-      'Keep the Mac and iPhone on the same LAN. In Studio, open Devices and launch AuthReviewClerk on the connected iPhone; use a development Clerk account. Studio prints its session and preview URLs below.',
+      options.device === undefined
+        ? 'Keep the Mac and iPhone on the same LAN. In Studio, open Devices and launch AuthReviewClerk on the connected iPhone; use a development Clerk account. Studio prints its session and preview URLs below.'
+        : `Keep the Mac and iPhone on the same LAN. Studio will launch AuthReviewClerk on ${options.device}; keep the phone unlocked and compare any pairing code shown in this terminal.`,
     )
     environment.write('Sign in on the iPhone; Mac preview authentication is not enabled for this review.')
     environment.write(
@@ -198,7 +203,8 @@ export async function runClerkReview(
     checkpoint()
     exitCode = await runStudio({
       appName: 'AuthReviewClerk',
-      browser: options.browser,
+      browser: options.device === undefined ? options.browser : false,
+      device: options.device,
       entryPath: FS.resolvePath('Auth Review.tao', projectRoot),
       projectRoot,
       json: true,

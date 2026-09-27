@@ -248,7 +248,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
    * Metro and the device gateway on loopback and never needs the LAN address a phone does.
    */
   async function openSimulator(
-    input: { hostId: string; metroOrigin: string },
+    input: { hostId: string; metroOrigin: string; signal?: AbortSignal },
   ): Promise<StudioDeviceLaunchOpenResult | undefined> {
     let available: readonly { booted: boolean; id: string; name: string; runtime: string }[]
     try {
@@ -256,6 +256,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
     } catch {
       return undefined
     }
+    input.signal?.throwIfAborted()
     const target = available.find(entry => entry.id === input.hostId)
     if (target === undefined) {
       return undefined
@@ -274,6 +275,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
       port: metroPortOf(input.metroOrigin),
       scheme: CompanionIdentity.scheme,
     })
+    input.signal?.throwIfAborted()
     await simulator.open({ id: target.id, url })
     return { hostName: name, launched: true, url }
   }
@@ -300,13 +302,16 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
     },
 
     async open(
-      input: { hostId: string; metroOrigin: string; route?: StudioDeviceLaunchRoute },
+      input: { hostId: string; metroOrigin: string; route?: StudioDeviceLaunchRoute; signal?: AbortSignal },
     ): Promise<StudioDeviceLaunchOpenResult> {
+      input.signal?.throwIfAborted()
       const simulated = await openSimulator(input)
+      input.signal?.throwIfAborted()
       if (simulated !== undefined) {
         return simulated
       }
       const connected = await device.listHosts()
+      input.signal?.throwIfAborted()
       const host = connected.find(entry => entry.id === input.hostId)
       if (host === undefined) {
         throwStudioDeviceFailure(
@@ -319,6 +324,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
         )
       }
       const probe = await device.installedAppProbe(host.id)
+      input.signal?.throwIfAborted()
       if (probe.installed === false) {
         throwStudioDeviceFailure(
           'devicectl',
@@ -328,6 +334,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
         )
       }
       const resolved = await resolveLaunchUrl(input.metroOrigin, input.route)
+      input.signal?.throwIfAborted()
       if (resolved.url === undefined) {
         throwStudioDeviceFailure(
           'network',
