@@ -26,6 +26,7 @@ export type { PackageResolver } from './package-resolver'
 
 /** ParserServices declares the Langium services used by the parser stage. */
 export type ParserServices = {
+  sourceOverrides?: Readonly<Record<string, string>>
   shared: Langium.LangiumSharedCoreServices
   language: Langium.LangiumDefaultCoreServices
 }
@@ -131,9 +132,11 @@ export const Parser = {
 
   /** parse parses one Tao file URI and all reachable Tao documents. */
   async parse(context: ParserContext, uri: URI, options: ParseOptions = {}): Promise<ParseResult> {
-    const entryDocument = await context.services.shared.workspace.LangiumDocumentFactory.fromUri<AST.TaoFile>(
-      uri,
-    )
+    const factory = context.services.shared.workspace.LangiumDocumentFactory
+    const source = context.services.sourceOverrides?.[uri.path]
+    const entryDocument = source === undefined
+      ? await factory.fromUri<AST.TaoFile>(uri)
+      : factory.fromString<AST.TaoFile>(source, uri)
     const documents = await loadReachableDocuments(context, entryDocument)
     return await buildDocuments(context.services, entryDocument, documents, options)
   },
@@ -526,7 +529,7 @@ async function loadReferencedDocuments(
   const referencedDocuments: AST.Document[] = []
   // A sibling may carry `folder` declarations this file reaches without naming them in a `use`,
   // so the whole folder is loaded rather than only what the imports point at.
-  for (const siblingPath of await siblingTaoFilePaths(document.uri.path, siblingScans)) {
+  for (const siblingPath of await siblingTaoFilePaths(context, document.uri.path, siblingScans)) {
     if (!loadedDocuments.has(siblingPath)) {
       referencedDocuments.push(await documentFromFilePath(context, siblingPath, loaded))
     }
@@ -557,26 +560,32 @@ const readNetDeclarationPattern = /^[ \t]*guard[ \t]+default\b/m
 /** SiblingScanCache memoizes one load's per-directory folder-sibling scans. */
 type SiblingScanCache = Map<string, Promise<string[]>>
 
-async function siblingTaoFilePaths(filePath: string, siblingScans: SiblingScanCache): Promise<string[]> {
+async function siblingTaoFilePaths(
+  context: ParserContext,
+  filePath: string,
+  siblingScans: SiblingScanCache,
+): Promise<string[]> {
   const directory = FS.dirname(filePath)
   let scan = siblingScans.get(directory)
   if (!scan) {
-    scan = folderSiblingPathsIn(directory)
+    scan = folderSiblingPathsIn(context, directory)
     siblingScans.set(directory, scan)
   }
   return (await scan).filter(path => path !== filePath)
 }
 
-async function folderSiblingPathsIn(directory: string): Promise<string[]> {
-  if (!await FS.isDirectory(directory)) {
-    return []
-  }
-  const candidates = (await FS.listDir(directory))
-    .filter(name => FS.extname(name) === '.tao' && !AST.isTestSidecarPath(name))
-    .map(name => FS.resolvePath(name, directory))
+async function folderSiblingPathsIn(context: ParserContext, directory: string): Promise<string[]> {
+  const overrides = context.services.sourceOverrides ?? {}
+  const diskPaths = await FS.isDirectory(directory)
+    ? (await FS.listDir(directory)).map(name => FS.resolvePath(name, directory))
+    : []
+  const candidates = [
+    ...new Set([...diskPaths, ...Object.keys(overrides).filter(path => FS.dirname(path) === directory)]),
+  ]
+    .filter(path => FS.extname(path) === '.tao' && !AST.isTestSidecarPath(path))
   const paths: string[] = []
   for (const path of candidates) {
-    const source = await FS.readText(path)
+    const source = overrides[path] ?? await FS.readText(path)
     if (folderDeclarationPattern.test(source) || readNetDeclarationPattern.test(source)) {
       paths.push(path)
     }
@@ -593,9 +602,11 @@ async function documentFromFilePath(
   if (held !== undefined) {
     return held
   }
-  const document = await context.services.shared.workspace.LangiumDocumentFactory.fromUri<AST.TaoFile>(
-    Langium.URI.file(filePath),
-  )
+  const factory = context.services.shared.workspace.LangiumDocumentFactory
+  const source = context.services.sourceOverrides?.[filePath]
+  const document = source === undefined
+    ? await factory.fromUri<AST.TaoFile>(Langium.URI.file(filePath))
+    : factory.fromString<AST.TaoFile>(source, Langium.URI.file(filePath))
   loaded?.set(filePath, document)
   return document
 }

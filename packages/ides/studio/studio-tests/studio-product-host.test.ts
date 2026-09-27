@@ -14,6 +14,11 @@ import {
   StudioDataRows,
   StudioDesignTokenRow,
   StudioDesignTokenSection,
+  StudioFeedDrag,
+  StudioFeedEntityPayload,
+  StudioFeedRowControl,
+  StudioFeedSeedPayload,
+  StudioFeedSourcePayload,
   StudioInspectorAction,
   StudioInspectorActionIds,
   StudioInspectorActionLabel,
@@ -904,3 +909,78 @@ function textContent(node: React.ReactNode): string {
     ? textContent(node.props['children'] as React.ReactNode)
     : ''
 }
+
+Test('Feed rows dispatch Tao selection and native drag preserves entity and field identity', () => {
+  let selected = 0
+  let transferred = ''
+  let mime = ''
+  let stopped = false
+  let prevented = false
+  const event = {
+    dataTransfer: {
+      effectAllowed: '',
+      setData(type: string, value: string) {
+        mime = type
+        transferred = value
+      },
+    },
+    stopPropagation() {
+      stopped = true
+    },
+    preventDefault() {
+      prevented = true
+    },
+  }
+  const payload = '{"kind":"entity","entity":"Posts","rowId":"post:1"}'
+  const row = StudioFeedRowControl({
+    Payload: payload,
+    Label: 'First post',
+    Selected: true,
+    Disabled: false,
+    Select: {
+      invoke() {
+        selected++
+      },
+    } as unknown as TR.ActionValue<[]>,
+  })
+  ;(property(row, 'onClick') as () => void)()
+  ;(property(row, 'onDragStart') as (event: unknown) => void)(event)
+  Expect(selected).toBe(1)
+  Expect(property(row, 'aria-pressed')).toBe(true)
+  Expect(mime).toBe('application/x-tao-studio-feed')
+  Expect(transferred).toBe(payload)
+  Expect(event.dataTransfer.effectAllowed).toBe('copy')
+  const fieldPayload = '{"kind":"field","entity":"Posts","rowId":"post:1","path":["title"],"presentation":"text"}'
+  const chip = StudioFeedDrag({ Payload: fieldPayload, Label: 'Title', Disabled: false })
+  ;(property(chip, 'onDragStart') as (event: unknown) => void)(event)
+  Expect(transferred).toBe(fieldPayload)
+  Expect(stopped).toBe(false) // The parent Feed surface must observe this native drag.
+  const disabled = StudioFeedDrag({ Payload: 'invalid', Label: 'Title', Disabled: true })
+  ;(property(disabled, 'onDragStart') as (event: unknown) => void)(event)
+  Expect(property(disabled, 'draggable')).toBe(false)
+  Expect(prevented).toBe(true)
+  Expect(transferred).toBe(fieldPayload)
+})
+
+Test('Feed selector adapters escape values into controller action payloads', () => {
+  Expect(JSON.parse(StudioFeedEntityPayload('Posts'))).toEqual({ type: 'select-entity', entity: 'Posts' })
+  Expect(JSON.parse(StudioFeedSourcePayload('Library'))).toEqual({ type: 'select-source', source: 'Library' })
+  Expect(JSON.parse(StudioFeedSeedPayload('seed"\n'))).toEqual({ type: 'set-seed', seed: 'seed"\n' })
+})
+
+Test('Move to package defaults scenario relocation on and forwards checkbox choices to Tao state', () => {
+  let chosen: boolean | undefined
+  const row = TreeFileRow(fileRowProps({
+    Moving: true,
+    ChangeRelocateScenarios: {
+      invoke(value: TR.Value<boolean>) {
+        chosen = value.jsValue
+      },
+    } as unknown as TR.ActionValue<[TR.Value<boolean>]>,
+  }))
+  const checkbox = elementWith(row, 'type', 'checkbox')
+  Expect(property(checkbox, 'checked')).toBe(true)
+  Expect(textContent(row)).toContain('Move scenarios to app Scenarios.tao')
+  ;(property(checkbox, 'onChange') as (event: unknown) => void)({ currentTarget: { checked: false } })
+  Expect(chosen).toBe(false)
+})

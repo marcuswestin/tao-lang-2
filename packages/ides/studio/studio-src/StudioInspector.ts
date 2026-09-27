@@ -101,6 +101,7 @@ export type StudioEditorSnippet = {
 export type StudioProjectViewPaletteItem = {
   label: string
   snippet: StudioEditorSnippet
+  /** Exact declaration file passed to the canonical insertion action, including generated views. */
   sourcePath: string
   viewName: string
 }

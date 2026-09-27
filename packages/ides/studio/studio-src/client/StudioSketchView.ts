@@ -6,6 +6,8 @@ import type {
 } from '../StudioProjectSession'
 import type { StudioSketch, StudioSketchRect } from '../StudioSketchCatalog'
 import { canvasScale } from './matrix/StudioCanvasViewport'
+import { type StudioFeedDrop, StudioFeedTransfer } from './StudioFeedController'
+import type { StudioFeedExampleValues, StudioFeedSample } from './StudioFeedSamples'
 import {
   StudioSketchGeometry,
   type StudioSketchGeometryState,
@@ -80,6 +82,7 @@ function settleSketchChange(sketch: StudioSketch, change: StudioSketchRectChange
 
 export type StudioSketchViewOptions = Readonly<{
   onCreateSketch?: (input: Readonly<{ height: number; width: number; x: number; y: number }>) => Promise<void> | void
+  onFeedDrop?: (payload: StudioFeedDrop, sketchId: string, rectId?: string) => Promise<void>
   onError?: (error: unknown) => void
   onFlowAction?: (request: StudioSketchViewFlowActionRequest) => Promise<StudioSketchSnapApplyResult>
   onRectChange?: (
@@ -91,6 +94,7 @@ export type StudioSketchViewOptions = Readonly<{
   onUnsnap?: (request: StudioSketchViewUnsnapRequest) => Promise<StudioSketchSnapApplyResult>
   onUndoSnap?: (request: StudioSketchViewUndoRequest) => Promise<StudioSketchSnapUndoResult>
   sketches: readonly StudioSketch[]
+  exampleValues?: StudioFeedExampleValues
   sourceVersion?: string
   sourceVersions?: Readonly<Record<string, string>>
 }>
@@ -344,7 +348,11 @@ export const StudioSketchPointerRelease = {
 
 export type MountedStudioSketchView = Readonly<{
   dispose(): void
-  render(sketches: readonly StudioSketch[], sourceVersions?: Readonly<Record<string, string>>): void
+  render(
+    sketches: readonly StudioSketch[],
+    sourceVersions?: Readonly<Record<string, string>>,
+    exampleValues?: StudioFeedExampleValues,
+  ): void
 }>
 
 export type StudioSketchOuterGesture = Readonly<{
@@ -440,6 +448,7 @@ export const StudioSketchView = {
     inspector.hidden = true
     inspector.style.width = '180px'
     let sketches = options.sketches
+    let exampleValues = options.exampleValues ?? {}
     let currentSourceVersion = options.sourceVersion
     let viewSourceVersions: Record<string, string> = { ...options.sourceVersions }
     const snapStates = new Map<string, StudioSketchSnapUiState>()
@@ -505,7 +514,9 @@ export const StudioSketchView = {
     const render = (
       nextSketches: readonly StudioSketch[],
       nextSourceVersions?: Readonly<Record<string, string>>,
+      nextExamples?: StudioFeedExampleValues,
     ): void => {
+      exampleValues = nextExamples ?? exampleValues
       if (disposed) {
         return
       }
@@ -521,12 +532,13 @@ export const StudioSketchView = {
     const receive = (
       nextSketches: readonly StudioSketch[],
       nextSourceVersions?: Readonly<Record<string, string>>,
+      nextExamples?: StudioFeedExampleValues,
     ): void => {
       const edit = inlineEdit
       const rect = nextSketches.find(sketch => sketch.id === edit?.sketchId)?.rects.find(candidate =>
         candidate.id === edit?.rect.id
       )
-      render(nextSketches, nextSourceVersions)
+      render(nextSketches, nextSourceVersions, nextExamples)
       if (edit !== undefined && (rect === undefined || !StudioSketchChanges.equal(rect, edit.rect))) {
         edit.invalidated = true
         if (!edit.pending) {
@@ -645,6 +657,8 @@ export const StudioSketchView = {
           editText,
           () => inlineEdit !== undefined || disposed,
           options.onError,
+          options.onFeedDrop,
+          exampleValues[sketch.id],
         )
       )
       workspace.replaceChildren(...boards, inspector)
@@ -772,6 +786,8 @@ function renderSketch(
   editText: (sketchId: string, rect: StudioSketchRect, element: HTMLElement) => void,
   editingText: () => boolean,
   onError: StudioSketchViewOptions['onError'],
+  onFeedDrop: StudioSketchViewOptions['onFeedDrop'],
+  exampleValues?: Readonly<Record<string, StudioFeedSample>>,
 ): HTMLElement {
   // The frame stacks the toolbar above the board and the proposal below it. Nothing but rectangles
   // may sit inside the board: an absolutely positioned toolbar once wrapped down over it and the
@@ -805,6 +821,27 @@ function renderSketch(
     board.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
     onError?.(error)
   }
+  board.addEventListener('dragover', event => {
+    if (onFeedDrop !== undefined && event.dataTransfer?.types.includes(StudioFeedTransfer.mime)) {
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'copy'
+    }
+  })
+  board.addEventListener('drop', event => {
+    if (onFeedDrop === undefined || !event.dataTransfer?.types.includes(StudioFeedTransfer.mime)) {
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    try {
+      const payload = StudioFeedTransfer.parse(event.dataTransfer.getData(StudioFeedTransfer.mime))
+      const target = event.target as HTMLElement | null
+      const rectId = target?.closest<HTMLElement>('[data-tao-studio-sketch-rect]')?.dataset['taoStudioSketchRect']
+      void onFeedDrop(payload, sketch.id, rectId).catch(reportError)
+    } catch (error) {
+      reportError(error)
+    }
+  })
   const clearError = (): void => StudioSketchErrors.clear(board)
   let state: StudioSketchGeometryState = StudioSketchGeometry.initial(sketch.rects)
   // The in-flight gesture is published on the board so a person, a stylesheet, or a browser lane
@@ -852,7 +889,14 @@ function renderSketch(
     }
     for (const rect of state.rects) {
       const existing = rectElements.get(rect.id)
-      const element = rectElement(document, rect, selectedIds.has(rect.id), beginResize, existing)
+      const element = rectElement(
+        document,
+        rect,
+        selectedIds.has(rect.id),
+        beginResize,
+        existing,
+        exampleValues?.[rect.id],
+      )
       if (existing === undefined) {
         rectElements.set(rect.id, element)
         board.append(element)
@@ -1324,6 +1368,7 @@ function rectElement(
   selected: boolean,
   beginResize: (event: PointerEvent, handle: StudioSketchResizeHandle) => void,
   existing?: HTMLElement,
+  example?: StudioFeedSample,
 ): HTMLElement {
   const element = existing ?? document.createElement('div')
   element.dataset['taoStudioSketchRect'] = rect.id
@@ -1334,10 +1379,26 @@ function rectElement(
   element.style.top = `${rect.y}px`
   element.style.width = `${rect.width}px`
   // Keep the hit element attached between the two clicks of a native double-click.
-  if (existing !== undefined && (element.dataset['selected'] === 'true') === selected) {
+  const sampleSignature = JSON.stringify(example ?? null)
+  if (
+    existing !== undefined && (element.dataset['selected'] === 'true') === selected
+    && element.dataset['taoStudioSample'] === sampleSignature
+  ) {
     return element
   }
-  element.textContent = rect.content ?? rect.kind
+  element.dataset['taoStudioSample'] = sampleSignature
+  element.textContent = example?.text ?? rect.content ?? rect.kind
+  if (example?.imageUrl !== undefined) {
+    const image = document.createElement('img')
+    image.src = example.imageUrl
+    image.alt = example.label
+    image.draggable = false
+    image.style.width = '100%'
+    image.style.height = '100%'
+    image.style.objectFit = 'contain'
+    image.style.pointerEvents = 'none'
+    element.replaceChildren(image)
+  }
   delete element.dataset['selected']
   if (selected) {
     element.dataset['selected'] = 'true'
