@@ -54,17 +54,25 @@ the window chrome.
 - **Capture**: `tao _preview qa <project> --screenshot --dest <store>` drives `tao review`'s cell
   capture (`packages/ides/studio-tooling/studio-tooling-src/QaScreenshots.ts`); `_preview` holds
   commands under development until one graduates to a released name. Agents run it as
-  `./agent unsandboxed ui-archive capture <project> [--note …]`, since Studio needs the host's
-  Watchman; `ui-archive sync` and `ui-archive push` handle the archive's remote. Studio's CDP capture
+  `./agent unsandboxed storage qa <project> [--note …]`, since Studio needs the host's Watchman;
+  `storage sync` and `storage push` handle the archive's remote. Each capture hides everything on
+  the Studio page but the cell, so Studio's own chrome stays out of the shot. Studio's CDP capture
   and Appium are the planned adapters for Studio itself and native targets. No new dependency.
-- **Store**: `storage/ui-screenshots/`. PNGs live once each under `blobs/<sha256>.png`, so an
-  unchanged screen adds no bytes. Each capture run writes its own `runs/<runId>.json` — keys,
-  hashes, renderer fingerprint, source commit and subject, optional note — so two concurrent
-  captures never edit the same file.
-- **Timeline**: a generated, ignored `index.html` with one filmstrip per key, showing only the runs
-  where the hash changed or the capture failed, each labelled with its commit subject and note. A
-  renderer-fingerprint change is labelled as such rather than as a design change. Every capture and
-  `ui-archive sync` regenerate it; `tao _preview qa --timeline --dest <store>` does so alone.
+- **Store**: `storage/qa/`. Each run writes only its own directory, `runs/<UTC time>/`, holding
+  `qa-run.json` (scenario identities, hashes, change since the previous capture of each name,
+  renderer fingerprint, source commit and subject, optional note) and `screenshots/`, so two
+  concurrent runs never edit the same file. A screenshot is named
+  `<App>_<Subject>_<group>-<entry>_<device>-<appearance>.png`, the subject left out when it is the
+  app itself and the source file appended only when two files declare the same group and entry.
+  Git stores identical PNGs once, so an unchanged screen adds no bytes to the repository.
+- **Commits**: one per run, summarised by what changed —
+  `QA <App>: 2 changed, 1 failed of 14 screenshots`, then bullets for the run, its source commit,
+  the changed, new, and failed names, and the note.
+- **Timeline**: a generated, ignored `index.html` with one filmstrip per screenshot name, showing
+  only the runs where the pixels changed or the capture failed, each labelled with its commit
+  subject and note. A renderer-fingerprint change is labelled as such rather than as a design
+  change. Every capture and `storage sync` regenerate it; `tao _preview qa --timeline --dest <store>`
+  does so alone.
 
 ## Submodule rules
 
@@ -74,7 +82,7 @@ it. So:
 
 - The gitlink is set once and bumped only deliberately. `.gitmodules` sets `ignore = all`, so
   captured commits inside the archive never make a worktree look dirty to `finalize` or `land`.
-- The submodule, at `storage`, is not initialised by default. `ui-archive sync` initialises it in
+- The submodule, at `storage`, is not initialised by default. `storage sync` initialises it in
   the worktree that captures as a blobless partial clone (`--filter=blob:none`): every commit and
   tree arrives, and a screenshot downloads only when checked out. A shallow clone would save less,
   since the screenshots are the weight, and makes rebasing onto the archive's `main` fragile.

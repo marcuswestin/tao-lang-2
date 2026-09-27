@@ -38,4 +38,4 @@ prefix_rule(pattern=["./agent","unsandboxed","android"], decision="allow", justi
 prefix_rule(pattern=["./agent","unsandboxed","remote"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","processes"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","start-branch"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
-prefix_rule(pattern=["./agent","unsandboxed","ui-archive"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
+prefix_rule(pattern=["./agent","unsandboxed","storage"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")

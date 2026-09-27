@@ -522,9 +522,9 @@ await runWithCommands(commands => {
     })
 
   commands
-    .command('ui-archive')
-    .description('Sync, capture into, or push the UI screenshot archive in the storage submodule.')
-    .argument('<action>', 'sync, capture, or push')
+    .command('storage')
+    .description('Sync the storage submodule, record a QA screenshot run into it, or push it.')
+    .argument('<action>', 'sync, qa, or push')
     .argument('[path]', 'Tao project directory to capture.')
     .option('--app <name>', 'Select a named app within the project.')
     .option('--devices <list>', 'Comma-separated devices: phone, tablet, laptop (default: all).')
@@ -535,8 +535,8 @@ await runWithCommands(commands => {
       path: string | undefined,
       options: { app?: string; appearances?: string; devices?: string; note?: string },
     ) => {
-      const { UiArchive } = await import('./git/UiArchive')
-      await runExitCommand(() => UiArchive.run(action, path, options))
+      const { Storage } = await import('./git/Storage')
+      await runExitCommand(() => Storage.run(action, path, options))
     })
 
   commands

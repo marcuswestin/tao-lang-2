@@ -606,6 +606,10 @@ export class StudioCdp {
         if (current !== element) current.style.setProperty('transform', 'none', 'important')
       }
       element.dataset.taoCdpCapture = captureToken
+      // The page's own floating chrome (panels, zoom controls, launchers) can sit in a stacking
+      // context above the element, so everything else is hidden rather than out-stacked.
+      const captured = '[data-tao-cdp-capture="' + captureToken + '"]'
+      freeze.textContent += 'body *{visibility:hidden!important}' + captured + ',' + captured + ' *{visibility:visible!important}'
       element.style.setProperty('position', 'fixed', 'important')
       element.style.setProperty('inset', '0 auto auto 0', 'important')
       element.style.setProperty('margin', '0', 'important')

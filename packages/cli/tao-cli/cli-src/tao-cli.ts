@@ -312,7 +312,7 @@ function createCommands(): Command {
       .argument('[path]', 'Tao project directory to capture in Studio.', '.')
       .option('--app <name>', 'Select a named app within the project.')
       .option('--screenshot', 'Capture every scenario across the device and appearance matrix.')
-      .option('--dest <directory>', 'Screenshot store to append this run to.')
+      .option('--dest <directory>', 'Screenshot store to append this run to, as runs/<UTC time>/.')
       .option('--devices <list>', 'Comma-separated devices: phone, tablet, laptop (default: all).')
       .option('--appearances <list>', 'Comma-separated appearances: light, dark (default: both).')
       .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
@@ -351,9 +351,9 @@ function createCommands(): Command {
             ...(options.note === undefined ? {} : { note: options.note }),
           })
           HCI.writeSuccess(
-            `Captured ${result.captured} screenshots (${result.newBlobs} new, ${result.failed} failed): ${
-              FS.displayPath(result.timelinePath)
-            }\n`,
+            `Captured ${result.captured} screenshots (${result.changed} changed, ${result.new} new, ${result.failed} failed): ${
+              FS.displayPath(result.runPath)
+            }\nTimeline: ${FS.displayPath(result.timelinePath)}\n`,
           )
           if (result.failed > 0) {
             Platform.runtimeProcess.setExitCode(1)

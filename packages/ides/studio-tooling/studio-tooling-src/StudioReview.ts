@@ -199,8 +199,8 @@ export async function runStudioReview(
 }
 
 /**
- * openReviewGrid loads a Studio session's preview grid ready for capture. Screenshots are clips of
- * the Studio page, so its floating agent chat window is hidden to keep it out of them.
+ * openReviewGrid loads a Studio session's preview grid ready for capture. Each capture hides the rest
+ * of the Studio page itself (`StudioCdp.captureElementScreenshotAt`), so its chrome stays out of shots.
  */
 async function openReviewGrid(browser: ReviewBrowser, sessionUrl: string): Promise<void> {
   await browser.goto(sessionUrl)
@@ -208,12 +208,6 @@ async function openReviewGrid(browser: ReviewBrowser, sessionUrl: string): Promi
     `document.querySelector('.studio-preview-grid[data-tao-review-manifest]') instanceof HTMLElement`,
     { timeoutMs: 60_000 },
   )
-  await browser.evaluate(`(() => {
-    const style = document.createElement('style')
-    style.textContent = '.studio-agent-panel { display: none !important; }'
-    document.head.append(style)
-    return true
-  })()`)
 }
 
 async function captureReviewCell(

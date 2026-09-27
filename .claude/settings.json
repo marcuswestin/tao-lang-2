@@ -115,8 +115,8 @@
       "Bash(./agent unsandboxed processes *)",
       "Bash(./agent unsandboxed start-branch)",
       "Bash(./agent unsandboxed start-branch *)",
-      "Bash(./agent unsandboxed ui-archive)",
-      "Bash(./agent unsandboxed ui-archive *)"
+      "Bash(./agent unsandboxed storage)",
+      "Bash(./agent unsandboxed storage *)"
     ],
     "ask": [
       "Bash(./agent land-unlock --force*)",
@@ -208,8 +208,8 @@
       "./agent unsandboxed processes *",
       "./agent unsandboxed start-branch",
       "./agent unsandboxed start-branch *",
-      "./agent unsandboxed ui-archive",
-      "./agent unsandboxed ui-archive *"
+      "./agent unsandboxed storage",
+      "./agent unsandboxed storage *"
     ],
     "filesystem": {
       "allowWrite": [

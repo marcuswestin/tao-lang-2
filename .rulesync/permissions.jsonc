@@ -118,7 +118,7 @@
     "android devices", "android state", "android emulators", "android boot", "android ensure",
     "remote fetch", "remote refs", "remote heads", "remote exists",
     "processes list", "processes started", "start-branch",
-    "ui-archive sync", "ui-archive capture", "ui-archive push",
+    "storage sync", "storage qa", "storage push",
   ],
   "claudecode": {
     "autoCompactWindow": 272000,

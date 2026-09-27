@@ -84,11 +84,11 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'processes list': { command: 'ps', fixedArgs: ['-axo', 'pid=,ppid=,lstart=,command='], argsPolicy: 'none' },
   'processes started': { command: 'ps', fixedArgs: ['-o', 'lstart=', '-p'], argsPolicy: 'pid' },
   'start-branch': { command: './dev', fixedArgs: ['start-branch'] },
-  // The UI screenshot archive is the `storage` submodule: syncing and pushing reach its GitHub
-  // remote, and capturing runs Studio, which needs the host's Watchman.
-  'ui-archive sync': { command: './dev', fixedArgs: ['ui-archive', 'sync'], argsPolicy: 'none' },
-  'ui-archive capture': { command: './dev', fixedArgs: ['ui-archive', 'capture'] },
-  'ui-archive push': { command: './dev', fixedArgs: ['ui-archive', 'push'], argsPolicy: 'none' },
+  // The `storage` submodule archives development evidence: syncing and pushing reach its GitHub
+  // remote, and a QA run drives Studio, which needs the host's Watchman.
+  'storage sync': { command: './dev', fixedArgs: ['storage', 'sync'], argsPolicy: 'none' },
+  'storage qa': { command: './dev', fixedArgs: ['storage', 'qa'] },
+  'storage push': { command: './dev', fixedArgs: ['storage', 'push'], argsPolicy: 'none' },
 }
 
 /** A named operation has a fixed implementation; suffix argv passes through without a shell. */

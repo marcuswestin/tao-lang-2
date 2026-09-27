@@ -6,7 +6,7 @@
 - **Impact:** Any tool that drives the Studio page over the Chrome DevTools Protocol right after
   launch can fail with "Inspected target navigated or closed", because the page reloads itself a
   few seconds in. The failure reads as a flaky browser rather than a Studio behaviour.
-- **Evidence:** Observed 2026-09-27 on the first `./agent unsandboxed ui-archive capture` of
+- **Evidence:** Observed 2026-09-27 on the first UI screenshot archive capture (now `./agent unsandboxed storage qa`) of
   WordFlower. Launching Studio compiles its own Tao client, rewriting `Apps/Tao Studio/*.tao.ts`
   (for example `TaoStudioClient.tao.ts` and `@code-editor/CodeEditor.tao.ts`, whose mtimes matched
   the launch). The dev reload watcher
