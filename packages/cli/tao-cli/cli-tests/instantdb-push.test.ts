@@ -220,6 +220,44 @@ Describe('tao instantdb push', () => {
     })
   })
 
+  Test('--force pushes past undeclared attributes and non-additive steps, listing both', async () => {
+    await withNotesApp(notesSource(), async appPath => {
+      const stale = { catalog: 'user', 'forward-identity': ['attr-id', 'Todo', 'text'] }
+      const unique = ['unique', { 'forward-identity': ['attr-id', 'notes', 'body'] }]
+      const plan = { 'current-attrs': [stale], steps: [addBody, unique] }
+      const push = (options: { dryRun?: boolean; force?: boolean }) => {
+        const instant = fakeInstant(plan)
+        const terminal = captured()
+        const pushed = runInstantDBPush(appPath, {
+          ...options,
+          env: { INSTANT_APP_ADMIN_TOKEN: 'secret-token' },
+          fetch: instant.fetcher,
+          output: terminal.output,
+        })
+        return { instant, pushed, terminal }
+      }
+
+      const refused = push({})
+      await Expect(refused.pushed).rejects.toThrow("The app stores 'Todo.text'")
+      Expect(refused.instant.requests.map(request => request.url.split('/').at(-1))).toEqual(['plan'])
+
+      const planned = push({ dryRun: true, force: true })
+      await planned.pushed
+      Expect(planned.instant.requests.map(request => request.url.split('/').at(-1))).toEqual(['plan'])
+      Expect(planned.terminal.text()).toContain(
+        'Schema changes a push would apply (dry run):\n  add-attr notes.body\n'
+          + 'Non-additive changes a forced push would apply (dry run):\n  unique notes.body\n'
+          + 'Left on the server, not declared by the Tao schema (delete them in the InstantDB dashboard):\n'
+          + '  Todo.text\n',
+      )
+
+      const forced = push({ force: true })
+      await forced.pushed
+      Expect(forced.instant.requests.map(request => request.url.split('/').at(-1))).toEqual(['plan', 'apply', 'perms'])
+      Expect(forced.terminal.text()).toContain('Non-additive changes applied (forced):\n  unique notes.body\n')
+    })
+  })
+
   Test('asks for the token without echo at a terminal when the environment has none', async () => {
     await withNotesApp(notesSource(), async appPath => {
       const instant = fakeInstant({ 'current-attrs': [], steps: [] })

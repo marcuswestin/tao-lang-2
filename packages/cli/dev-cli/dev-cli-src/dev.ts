@@ -681,8 +681,18 @@ await runWithCommands(commands => {
     .option('--web', 'Open the web app after Metro starts.')
     .option('--dry-run', 'Print what the push would change, apply nothing, and start no dev loop.')
     .option('--skip-push', 'Start the dev loop without pushing the schema and rules.')
+    .option('--force', 'Push a plan that is not purely additive, leaving undeclared attributes on the app.')
     .action(
-      async (options: { device?: string; ios?: boolean; web?: boolean; dryRun?: boolean; skipPush?: boolean }) => {
+      async (
+        options: {
+          device?: string
+          ios?: boolean
+          web?: boolean
+          dryRun?: boolean
+          force?: boolean
+          skipPush?: boolean
+        },
+      ) => {
         const { runInstantReview } = await import('./instantdb/InstantReviewCommand')
         try {
           Platform.runtimeProcess.exit(await runInstantReview(options))

@@ -8,7 +8,8 @@ import { readInstantPushInputs } from './instantdb-push-inputs'
  * `tao instantdb push` prepares an InstantDB app for a Tao app: it compiles the app, generates the
  * InstantDB schema and permission rules from the store its InstantDB datasource fills, and pushes
  * both. Only additive schema changes are applied; anything else is refused before the server
- * changes. The token authorizes the push and is never printed, logged, or stored.
+ * changes, unless the push is forced. The token authorizes the push and is never printed, logged,
+ * or stored.
  */
 
 /** instantTokenVariable names the environment variable the push token is read from. */
@@ -24,6 +25,8 @@ type InstantDBPushOptions = {
   env?: Readonly<Record<string, string | undefined>>
   /** fetch replaces the network for tests. */
   fetch?: typeof fetch
+  /** force applies a plan that is not purely additive; attributes the app no longer declares stay put. */
+  force?: boolean
   input?: Readable
   interactive?: boolean
   output?: Writable
@@ -51,7 +54,7 @@ export async function runInstantDBPush(path: string, options: InstantDBPushOptio
       tokenLabel: token.label,
     },
     { rules, schema: mapping.schema },
-    { planOnly: options.dryRun === true },
+    { force: options.force === true, planOnly: options.dryRun === true },
   )
   writeSchemaChanges(report, options.dryRun === true, out)
   const namespaces = Object.keys(rules).filter(namespace => namespace !== '$default' && namespace !== 'attrs')
@@ -66,14 +69,26 @@ export async function runInstantDBPush(path: string, options: InstantDBPushOptio
 }
 
 function writeSchemaChanges(report: InstantPushReport, dryRun: boolean, out: { output?: Writable }): void {
-  if (report.changes.length === 0) {
+  const list = (heading: string, items: readonly string[]) => {
+    if (items.length > 0) {
+      HCI.writeLine(heading, out)
+      for (const item of items) {
+        HCI.writeLine(`  ${item}`, out)
+      }
+    }
+  }
+  if (report.changes.length + report.forced.length === 0) {
     HCI.writeLine('Schema already current.', out)
-    return
   }
-  HCI.writeLine(dryRun ? 'Schema changes a push would apply (dry run):' : 'Schema changes applied:', out)
-  for (const change of report.changes) {
-    HCI.writeLine(`  ${change}`, out)
-  }
+  list(dryRun ? 'Schema changes a push would apply (dry run):' : 'Schema changes applied:', report.changes)
+  list(
+    dryRun ? 'Non-additive changes a forced push would apply (dry run):' : 'Non-additive changes applied (forced):',
+    report.forced,
+  )
+  list(
+    'Left on the server, not declared by the Tao schema (delete them in the InstantDB dashboard):',
+    report.undeclared,
+  )
 }
 
 /**

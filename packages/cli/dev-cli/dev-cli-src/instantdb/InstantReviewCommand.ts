@@ -8,7 +8,14 @@ const PUSH_TOKEN_VARIABLE = 'INSTANT_APP_ADMIN_TOKEN'
 const PLACEHOLDER = 'REPLACE_WITH_INSTANT_APP_ID'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-type ReviewOptions = { device?: string; ios?: boolean; web?: boolean; dryRun?: boolean; skipPush?: boolean }
+type ReviewOptions = {
+  device?: string
+  ios?: boolean
+  web?: boolean
+  dryRun?: boolean
+  force?: boolean
+  skipPush?: boolean
+}
 type TaoRunOptions = { env?: Readonly<Record<string, string>>; captureOutput: boolean }
 type TaoChild = {
   result: Promise<{ exitCode: number; output: string }>
@@ -80,6 +87,9 @@ export async function runInstantReview(
   if (options.dryRun === true && options.skipPush === true) {
     Errors.throwUserInput('--dry-run plans the push and --skip-push skips it; pass only one.')
   }
+  if (options.force === true && options.skipPush === true) {
+    Errors.throwUserInput('--force forces the push and --skip-push skips it; pass only one.')
+  }
   if (options.dryRun === true && targets.length > 0) {
     Errors.throwUserInput('--dry-run only plans the push and starts no dev loop; drop --device, --ios, and --web.')
   }
@@ -145,7 +155,15 @@ export async function runInstantReview(
     if (options.skipPush !== true) {
       stage = options.dryRun === true ? 'plan InstantDB push' : 'push InstantDB schema and rules'
       const pushed = await run(
-        ['instantdb', 'push', entryPath, '--app', APP_NAME, ...(options.dryRun === true ? ['--dry-run'] : [])],
+        [
+          'instantdb',
+          'push',
+          entryPath,
+          '--app',
+          APP_NAME,
+          ...(options.dryRun === true ? ['--dry-run'] : []),
+          ...(options.force === true ? ['--force'] : []),
+        ],
         { env: { [PUSH_TOKEN_VARIABLE]: token }, captureOutput: true },
       )
       const output = redact(pushed.output).trimEnd()

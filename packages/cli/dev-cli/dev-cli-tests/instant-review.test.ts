@@ -83,6 +83,12 @@ Test('dry run plans the push and starts no dev loop', async () => {
   Expect(await FS.exists(f.root)).toBe(false)
 })
 
+Test('force reaches the push and not the dev loop', async () => {
+  const f = await fixture()
+  Expect(await runInstantReview({ force: true, device: 'roPhone' }, f.environment)).toBe(0)
+  Expect(f.runs.map(run => [run.args[0], run.args.includes('--force')])).toEqual([['instantdb', true], ['dev', false]])
+})
+
 Test('skip push starts tao dev directly and forwards the simulator and web targets', async () => {
   const f = await fixture()
   Expect(await runInstantReview({ skipPush: true, ios: true, web: true }, f.environment)).toBe(0)
@@ -196,6 +202,7 @@ Test('conflicting or empty flags are refused before reading credentials', async 
   try {
     await Expect(runInstantReview({ device: ' ' }, f.environment)).rejects.toThrow('device name or identifier')
     await Expect(runInstantReview({ dryRun: true, skipPush: true }, f.environment)).rejects.toThrow('pass only one')
+    await Expect(runInstantReview({ force: true, skipPush: true }, f.environment)).rejects.toThrow('pass only one')
     await Expect(runInstantReview({ dryRun: true, web: true }, f.environment)).rejects.toThrow('starts no dev loop')
   } finally {
     await FS.remove(f.root)

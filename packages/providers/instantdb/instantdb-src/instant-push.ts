@@ -5,11 +5,13 @@ import type { InstantSchemaJSON } from './instant-schema'
 /**
  * Pushes a generated schema and its rules to one InstantDB app over HTTP.
  *
- * Only additive changes are applied. The app's current schema is read first, through the same plan
- * endpoint that would apply the change, and the push stops before changing anything when the plan
- * would do more than add attributes, links, or indexes — or when the app holds attributes the Tao
- * schema no longer declares, which is how a rename or removal looks from here. Those need a
- * person's decision about the stored data, so the refusal names each one and says why.
+ * Only additive changes are applied unless the push is forced. The app's current schema is read
+ * first, through the same plan endpoint that would apply the change, and the push stops before
+ * changing anything when the plan would do more than add attributes, links, or indexes — or when the
+ * app holds attributes the Tao schema no longer declares, which is how a rename or removal looks
+ * from here. Those need a person's decision about the stored data, so the refusal names each one and
+ * says why. A forced push is that decision: it applies the whole plan and leaves the undeclared
+ * attributes, and their data, where they are.
  */
 
 /** InstantPushTarget names the app, the API that serves it, and the token that may change it. */
@@ -30,14 +32,21 @@ export type InstantPushStep = Readonly<{
   purpose: 'apply rules' | 'apply schema' | 'plan schema'
 }>
 
-/** InstantPushReport lists the requests made and the additive changes the schema step applied. */
+/** InstantPushReport lists the requests made and the schema changes the plan held. */
 export type InstantPushReport = Readonly<{
+  /** changes are the additive steps: attributes, links, and indexes the schema adds. */
   changes: readonly string[]
+  /** forced are the plan's other steps, which only a forced push applies. */
+  forced: readonly string[]
   steps: readonly InstantPushStep[]
+  /** undeclared are attributes the app stores and the Tao schema does not declare; a forced push leaves them. */
+  undeclared: readonly string[]
 }>
 
-/** InstantPushOptions chooses between pushing and only planning. */
+/** InstantPushOptions chooses between pushing and only planning, and whether more than additions may apply. */
 export type InstantPushOptions = Readonly<{
+  /** force applies a plan that is not purely additive, leaving undeclared attributes on the server. */
+  force?: boolean
   /** planOnly reads the plan and checks it, then stops: nothing on the server changes. */
   planOnly?: boolean
 }>
@@ -59,7 +68,8 @@ const additiveSteps = new Set(['add-attr', 'index'])
 
 /**
  * pushInstantSchema plans, checks, and applies a schema, then applies its rules. With `planOnly` it
- * stops after the check and reports the additive changes a push would apply.
+ * stops after the check and reports what a push would apply; with `force` the check reports rather
+ * than refuses.
  */
 export async function pushInstantSchema(
   target: InstantPushTarget,
@@ -113,18 +123,23 @@ export async function pushInstantSchema(
   }
 
   const plan = await request('plan schema', `/superadmin/apps/${app}/schema/push/plan`, body) as Plan
-  const changes = checkAdditive(plan, generated.schema)
+  const { changes, forced, undeclared } = checkAdditive(plan, generated.schema, options.force === true)
+  const report = () => ({ changes, forced, steps, undeclared })
   if (options.planOnly === true) {
-    return { changes, steps }
+    return report()
   }
-  if (changes.length > 0) {
+  if (changes.length + forced.length > 0) {
     await request('apply schema', `/superadmin/apps/${app}/schema/push/apply`, body)
   }
   await request('apply rules', `/superadmin/apps/${app}/perms`, { code: generated.rules })
-  return { changes, steps }
+  return report()
 }
 
-function checkAdditive(plan: Plan, schema: InstantSchemaJSON): string[] {
+function checkAdditive(
+  plan: Plan,
+  schema: InstantSchemaJSON,
+  force: boolean,
+): Readonly<{ changes: string[]; forced: string[]; undeclared: string[] }> {
   const declared = new Set<string>()
   for (const [namespace, entity] of Object.entries(schema.entities)) {
     declared.add(`${namespace}.id`)
@@ -150,10 +165,11 @@ function checkAdditive(plan: Plan, schema: InstantSchemaJSON): string[] {
     const name = identity === undefined ? kind : `${kind} ${identity[1]}.${identity[2]}`
     ;(additiveSteps.has(kind) ? changes : refused).push(name)
   }
-  if (undeclared.length > 0 || refused.length > 0) {
+  if (!force && (undeclared.length > 0 || refused.length > 0)) {
     Errors.throwUserInput(
       [
-        'InstantDB schema push refused: only additive changes are pushed, and applying this schema needs more.',
+        'InstantDB schema push refused: only additive changes are pushed, and applying this schema needs more.'
+        + ' Pushing with --force applies the whole plan and leaves undeclared attributes and their data in place.',
         ...undeclared.map(name =>
           `- The app stores '${name}', which the Tao schema no longer declares. A renamed or removed field `
           + 'keeps its data on the server; move or delete it in the InstantDB dashboard first.'
@@ -164,7 +180,7 @@ function checkAdditive(plan: Plan, schema: InstantSchemaJSON): string[] {
       ].join('\n'),
     )
   }
-  return changes
+  return { changes, forced: refused, undeclared }
 }
 
 function parseJSON(text: string): unknown {

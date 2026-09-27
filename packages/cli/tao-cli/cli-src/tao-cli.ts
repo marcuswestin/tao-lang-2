@@ -252,14 +252,18 @@ function createCommands(): Command {
     .argument('[path]', 'Tao file or directory whose app should be pushed.', '.')
     .option('--app <name>', 'Select a named app.')
     .option('--dry-run', 'Generate and plan, print what would change, and apply nothing.')
-    .description(
-      "Push the app's generated InstantDB schema (additive changes only) and permission rules. Reads the"
-        + ' token from INSTANT_APP_ADMIN_TOKEN, or asks for it at a terminal.',
+    .option(
+      '--force',
+      'Apply a plan that is not purely additive; attributes the Tao schema does not declare stay on the server.',
     )
-    .action(async (path: string, options: { app?: string; dryRun?: boolean }) => {
+    .description(
+      "Push the app's generated InstantDB schema (additive changes only, unless forced) and permission rules."
+        + ' Reads the token from INSTANT_APP_ADMIN_TOKEN, or asks for it at a terminal.',
+    )
+    .action(async (path: string, options: { app?: string; dryRun?: boolean; force?: boolean }) => {
       try {
         const { runInstantDBPush } = await import('./instantdb-push-command')
-        await runInstantDBPush(path, { appName: options.app, dryRun: options.dryRun })
+        await runInstantDBPush(path, { appName: options.app, dryRun: options.dryRun, force: options.force })
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.setExitCode(1)

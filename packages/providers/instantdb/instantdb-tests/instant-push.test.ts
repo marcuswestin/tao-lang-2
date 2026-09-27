@@ -50,6 +50,8 @@ Describe('InstantDB schema push', () => {
 
     Expect(report).toEqual({
       changes: ['add-attr notes.pinned', 'index notes.body'],
+      forced: [],
+      undeclared: [],
       steps: [
         {
           authorization: 'Bearer app admin token',
@@ -166,7 +168,8 @@ Describe('InstantDB schema push', () => {
     await Expect(push).rejects.toBeInstanceOf(Errors.UserInputError)
     await Expect(push).rejects.toThrow(
       [
-        'InstantDB schema push refused: only additive changes are pushed, and applying this schema needs more.',
+        'InstantDB schema push refused: only additive changes are pushed, and applying this schema needs more.'
+        + ' Pushing with --force applies the whole plan and leaves undeclared attributes and their data in place.',
         "- The app stores 'notes.title', which the Tao schema no longer declares. A renamed or removed field keeps "
         + 'its data on the server; move or delete it in the InstantDB dashboard first.',
         "- The app stores 'taoSnapshots.Snapshot', which the Tao schema no longer declares. A renamed or removed "
@@ -177,6 +180,52 @@ Describe('InstantDB schema push', () => {
     Expect(instant.requests.map(request => request.url)).toEqual([
       'http://localhost:9020/superadmin/apps/app-1/schema/push/plan',
     ])
+  })
+
+  Test('a forced push applies the whole plan and rules, reporting what it forced and what it left', async () => {
+    const plan = {
+      'current-attrs': [
+        userAttribute('notes', 'body'),
+        userAttribute('Todo', 'text'),
+        userAttribute('Todo', 'done'),
+      ],
+      steps: [
+        ['add-attr', { 'forward-identity': ['attr-id', 'notes', 'pinned'] }],
+        ['unique', { 'forward-identity': ['attr-id', 'notes', 'body'] }],
+      ],
+    }
+    const expected = {
+      changes: ['add-attr notes.pinned'],
+      forced: ['unique notes.body'],
+      undeclared: ['Todo.text', 'Todo.done'],
+    }
+    const planned = fakeInstant(plan)
+    const target = { apiURI: 'http://localhost:9020', appId: 'app-1', token: 't' }
+    Expect(await pushInstantSchema({ ...target, fetch: planned.fetcher }, generated, { force: true, planOnly: true }))
+      .toMatchObject(expected)
+    Expect(planned.requests.map(request => request.url)).toEqual([
+      'http://localhost:9020/superadmin/apps/app-1/schema/push/plan',
+    ])
+
+    const pushed = fakeInstant(plan)
+    Expect(await pushInstantSchema({ ...target, fetch: pushed.fetcher }, generated, { force: true }))
+      .toMatchObject(expected)
+    Expect(pushed.requests.map(request => request.url)).toEqual([
+      'http://localhost:9020/superadmin/apps/app-1/schema/push/plan',
+      'http://localhost:9020/superadmin/apps/app-1/schema/push/apply',
+      'http://localhost:9020/superadmin/apps/app-1/perms',
+    ])
+  })
+
+  Test('a forced push with only undeclared attributes applies no schema, only the rules', async () => {
+    const instant = fakeInstant({ 'current-attrs': [userAttribute('Task', 'text')], steps: [] })
+    const report = await pushInstantSchema(
+      { apiURI: 'http://localhost:9020', appId: 'app-1', fetch: instant.fetcher, token: 't' },
+      generated,
+      { force: true },
+    )
+    Expect(report).toMatchObject({ changes: [], forced: [], undeclared: ['Task.text'] })
+    Expect(report.steps.map(step => step.purpose)).toEqual(['plan schema', 'apply rules'])
   })
 
   Test('reports an HTTP failure with the endpoint and the server message, never the token', async () => {
