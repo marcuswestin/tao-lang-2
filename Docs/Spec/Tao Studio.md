@@ -361,8 +361,11 @@ The browser Draw canvas renders ordered catalog rectangles through a TypeScript 
 lives beside the keyed preview grid, not inside a scenario row. Each created view keeps the canvas
 origin it was drawn at, shows its view name above an off-white board, and stays mounted across the
 compile that writes `@/studio/ViewN.tao`. Handshake and catalog-change snapshots re-render the overlay
-in authoritative catalog order and ignore an older revision. The Draw layout preset shows only that
-canvas; Run hides it so a running preview has no drawing surface.
+in authoritative catalog order and ignore an older revision. The Draw layout preset frames that canvas
+as a workbench: the code editor with the scenario inputs pinned under it on the left, the canvas in the
+centre, and the full inspector on the right. The panes move by grid placement alone, so the product
+host's portal targets are never re-parented, and side columns are capped by a share of the grid. Run
+hides the canvas so a running preview has no drawing surface.
 
 The geometry model normalizes drawing in either direction, enforces a four-pixel minimum extent,
 selects the frontmost rectangle, moves and resizes through eight handles, cancels a pointer gesture back
@@ -397,6 +400,47 @@ missing, duplicated, or retyped associations are dropped; an active matching pre
 the fallback, otherwise Studio returns the retryable `measurement-unavailable` conflict without
 changing either store. Free rows remain in the TypeScript overlay beside the flowed preview until they
 are snapped.
+
+#### Definition and render rectangles
+
+Every root rectangle on the Draw canvas carries a badge: `◆ Definition ▾` for a view being written,
+or `▢ Render ▾` for one call of a view that already exists. A catalog sketch records which through two
+optional, mutually exclusive fields. `render` holds `{ group, path, scenario, view }` and names the
+scenario entry that is the rectangle's source; a render sketch has no rectangles of its own.
+`definitionPath` holds the project-relative `.tao` file a detached definition was written into. A sketch
+with neither is a drawn definition backed by `@/studio/ViewN.tao`. The catalog rejects both fields
+together, a path that is absolute, climbs out of the project, or does not end in `.tao`, and a render
+view that is not a Tao element name. Only the badge sets them; a `set-sketch-source` action sent
+through `POST /api/sketches/action` is refused.
+
+The badge switches through `POST /api/sketches/convert` with the expected catalog revision and a
+request ID, as one serialized source-and-catalog transaction. Definition → render is offered only for
+an empty drawn rectangle whose generated file is still exactly its placeholder, and lists every view
+that some scenario already renders. It appends a `scenario "drawnN"` entry beside the first scenario
+that renders the chosen view, in that scenario's group, carrying its render clause and the drawn size
+as its `device phone W x H`, and removes the placeholder `@/studio/ViewN.tao`. Render →
+definition detaches: it copies the rendered view beside the original under the rectangle's own
+`ViewN` name and points the entry's `render` at the copy, so the canvas rectangle keeps showing the
+same tree while becoming an independent view. If the result fails to compile, every file and the
+catalog return to their prior contents. A source-backed rectangle shows its entry or declaration as a
+card instead of a drawing board; editing what it renders happens in that view's own source.
+
+#### Selection, grouping, and the edit log
+
+In Design and Draw, Shift-click adds elements from one file to the selection; the preview outlines
+each pick, and Studio's inspection keeps the group by the same toggle rule. ⌘G turns the group into a
+new view and ⌥⌘G wraps it in place, in a `Row` when the elements sit across and a `Col` otherwise.
+The keys work inside the preview and in Studio outside a text field, and the inspector's Make view
+acts on the whole group. A selection HUD floats beside the selected element with direction, alignment,
+gap, padding, and sizing one edit away, and with several elements selected offers Make view and Group.
+The edited element stays selected across its recompile, found again by where it starts or where it
+sits.
+
+An edit log in the canvas corner lists this session's visual edits newest first, named the way each
+was made ("Gap 16", "Make view Card") with its age. ⌘Z outside the code editor, or the newest row's
+Undo, walks it back; the preview forwards ⌘Z so it works with focus in the canvas. Visual edits,
+their rollback, and their undo reach `@/studio` files through the generated-source gate, which lifts
+owner-write for that write alone and keeps the ownership header.
 
 ### Feed source contracts
 
@@ -471,7 +515,8 @@ Canvas mode edits one view definition on its own. With an element selected in a 
 toolbar's **Focus view** button is enabled when the element's owning view already has a focused
 `scenarios` group, and pressing it hides every group that does not render that view alone, leaving
 that view's cells and a bar that names the view and offers **Back to app**. Cells stay mounted, so the
-app's previews keep their state. Selection inside a focused cell edits the owning view's source, and
+app's previews keep their state. The code pane opens the view's file at its declaration without taking keyboard focus from the
+canvas. Selection inside a focused cell edits the owning view's source, and
 because each cell is a scenario entry over one definition, every occurrence in the app updates at
 once. A view without a focused scenario group cannot be focused yet; adding a `scenarios View` entry
 is the way in.

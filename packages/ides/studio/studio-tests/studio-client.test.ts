@@ -2094,6 +2094,8 @@ Test('Studio canvas mode focuses only a group whose every scenario renders one v
   }))
   Expect(StudioMatrixLayout.focusable(groups, 'view:StoryRow')).toBe(true)
   Expect(StudioMatrixLayout.focusable(groups, 'view:CommentRow')).toBe(false)
+  // A render rectangle can start from any view some scenario renders, whichever group holds it.
+  Expect(StudioMatrixLayout.renderableViews(manifest)).toEqual(['CommentRow', 'StoryRow'])
 })
 
 Test('Studio canvas Focus keeps same-named declarations distinct by canonical subject identity', () => {
@@ -3918,12 +3920,14 @@ Test('Studio Focus frames a view it entered before the owning cell reported a re
   }
   // No measurement yet: entering focus can frame nothing.
   let measured: { height: number; width: number; x: number; y: number } | undefined
+  const shown: string[] = []
   const focus = mountStudioCanvasFocus({
     button,
     matrix,
     onError: error => {
       throw error
     },
+    onFocused: viewId => shown.push(viewId),
     ownerFrame: viewId => viewId === owner.id ? measured : undefined,
     preview,
     previews: () => [connection],
@@ -3934,6 +3938,8 @@ Test('Studio Focus frames a view it entered before the owning cell reported a re
   click?.()
   await until(() => focused === owner.id)
   Expect(viewports).toEqual([])
+  // Focusing a view also brings its declaration into the code pane.
+  Expect(shown).toEqual([owner.id])
 
   // The cell reports its rectangle afterwards, and the next inspection applies it.
   measured = { height: 120.2, width: 240.1, x: 0, y: 0 }

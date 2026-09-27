@@ -56,6 +56,19 @@ export type StudioSketchScenarioFixtureBinding = Readonly<{
   scenarioName: string
 }>
 
+/**
+ * Adds a new scenario entry to an existing group, starting from another entry's arguments and a
+ * chosen device size: how a drawn rectangle becomes a render of an existing view.
+ */
+export type StudioAddRenderScenarioPatchRequest = Readonly<{
+  fromScenarioName: string
+  height: number
+  kind: 'add-render-scenario'
+  scenarioGroupName: string
+  scenarioName: string
+  width: number
+}>
+
 /** Adds one entity parameter and fixture-backed argument to every entry of a generated sketch group. */
 export type StudioAddSketchEntityParameterPatchRequest = Readonly<{
   entity: Readonly<{
@@ -243,6 +256,9 @@ export type StudioExtractViewPatchRequest = Readonly<{
   renderIds: readonly string[]
 }>
 
+/** StudioCopyViewPatchRequest copies a declared view under a new name, right after the original. */
+export type StudioCopyViewPatchRequest = Readonly<{ kind: 'copy-view'; name: string; view: string }>
+
 /** StudioRemoveRenderPatchRequest removes one direct child render together with its attached tag. */
 export type StudioRemoveRenderPatchRequest = Readonly<{
   kind: 'remove-render'
@@ -278,6 +294,18 @@ export type StudioSetScenarioArgumentsPatchRequest = {
   scenarioGroupName: string
   scenarioName: string
 }
+
+/**
+ * StudioRetargetScenarioRenderPatchRequest repoints one scenario entry's render clause at a different
+ * view, keeping the entry's effective render arguments verbatim: how a detached Draw rectangle's
+ * entry comes to render its own copy.
+ */
+export type StudioRetargetScenarioRenderPatchRequest = Readonly<{
+  kind: 'retarget-scenario-render'
+  scenarioGroupName: string
+  scenarioName: string
+  view: string
+}>
 
 export type StudioRecordedScenarioStep =
   | Readonly<{
@@ -399,9 +427,11 @@ export type StudioSetDesignEntryPatchRequest = {
 
 /** StudioSourcePatchRequest declares one semantic visual source mutation from Studio. */
 export type StudioSourcePatchRequest =
+  | StudioAddRenderScenarioPatchRequest
   | StudioAddSketchEntityParameterPatchRequest
   | StudioAppendScenarioStepsPatchRequest
   | StudioBindSketchFieldPatchRequest
+  | StudioCopyViewPatchRequest
   | StudioExtractViewPatchRequest
   | StudioGroupRendersPatchRequest
   | StudioInsertCapturedFixturePatchRequest
@@ -413,6 +443,7 @@ export type StudioSourcePatchRequest =
   | StudioSetLayoutEntryPatchRequest
   | StudioSetStyleEntryPatchRequest
   | StudioSetScenarioArgumentsPatchRequest
+  | StudioRetargetScenarioRenderPatchRequest
   | StudioSnapSketchToFlowPatchRequest
   | StudioToggleFlowDirectionPatchRequest
   | StudioUnsnapSketchFromFlowPatchRequest

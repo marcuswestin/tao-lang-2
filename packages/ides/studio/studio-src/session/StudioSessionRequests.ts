@@ -20,6 +20,7 @@ import {
   type StudioPreviewLayoutMeasurementsMessage,
   type StudioProjectIdentity,
   StudioProtocol,
+  type StudioSketchConvertRequest,
   type StudioSketchFlowAction,
   type StudioSketchFlowActionRequest,
   type StudioSketchSnapRequest,
@@ -37,6 +38,7 @@ export const StudioSessionRequests = {
   cellInstanceIdentity,
   cellReconfigureRequest,
   completeCellInstanceIdentity,
+  parseSketchConvertRequest,
   parseSketchFlowActionRequest,
   parseSketchSnapRequest,
   parseSketchSnapUndoRequest,
@@ -44,6 +46,33 @@ export const StudioSessionRequests = {
   requireSessionIdentity,
   requireSourceActionPreconditions,
   sourcePatchRequest,
+}
+
+function parseSketchConvertRequest(value: unknown): StudioSketchConvertRequest {
+  Assert.input(Json.isRecord(value), 'Studio badge request must be an object.')
+  requireOnlyInputKeys(
+    value,
+    ['expectedCatalogRevision', 'requestId', 'sketchId', 'to', 'view'],
+    'Studio badge request',
+  )
+  Assert.input(
+    Number.isSafeInteger(value['expectedCatalogRevision']) && Number(value['expectedCatalogRevision']) >= 0,
+    'Studio badge expectedCatalogRevision must be a nonnegative integer.',
+  )
+  const to = value['to']
+  Assert.input(to === 'definition' || to === 'render', 'Studio badge target must be definition or render.')
+  const view = value['view'] === undefined ? undefined : requireInputText(value['view'], 'Studio badge view')
+  Assert.input(
+    to === 'render' ? view !== undefined && /^[A-Z][A-Za-z0-9_]*$/u.test(view) : view === undefined,
+    to === 'render' ? 'Choose the view a render rectangle renders.' : 'Detaching a render takes no view.',
+  )
+  return {
+    expectedCatalogRevision: Number(value['expectedCatalogRevision']),
+    requestId: requireInputText(value['requestId'], 'Studio badge requestId'),
+    sketchId: requireInputText(value['sketchId'], 'Studio badge sketchId'),
+    to,
+    ...(view === undefined ? {} : { view }),
+  }
 }
 
 function parseSketchSnapRequest(value: unknown): StudioSketchSnapRequest {

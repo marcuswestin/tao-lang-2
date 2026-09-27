@@ -83,6 +83,7 @@ import {
   type StudioSketchCatalogResult,
   type StudioSketchCatalogSnapshot,
   type StudioSketchRect,
+  type StudioSketchRenderEntry,
   type StudioSketchRenderTarget,
   type StudioSnappedRect,
 } from './StudioSketchCatalog'
@@ -110,6 +111,7 @@ export type {
   StudioSessionEvent,
   StudioSessionHandshake,
   StudioSketchActionResult,
+  StudioSketchConvertRequest,
   StudioSketchFlowAction,
   StudioSketchFlowActionRequest,
   StudioSketchSnapApplyResult,
@@ -150,6 +152,12 @@ type StudioRequestCache<ResultT> = Map<string, Readonly<{ fingerprint: string; r
 
 /** The identifying half of one request, as the result caches key and validate it. */
 type StudioRequestKey = Readonly<{ fingerprint: string; requestId: string }>
+
+/** One badge switch: the files it rewrites (no `after` removes one) and the rectangle's new source. */
+type StudioSketchConversionPlan = Readonly<{
+  source: Readonly<{ definitionPath?: string; render?: StudioSketchRenderEntry }>
+  writes: readonly Readonly<{ after: string | undefined; before: string; path: string }>[]
+}>
 
 type PreparedSourceAction = {
   current: StudioProjectFileContent
@@ -765,6 +773,9 @@ export class StudioProjectSession {
         if (action?.['kind'] === 'refresh-snap-targets') {
           Errors.throwUserInput('Refreshing Studio Snap targets is owned by generated-source transactions.')
         }
+        if (action?.['kind'] === 'set-sketch-source') {
+          Errors.throwUserInput('Switching a Studio sketch between definition and render goes through its badge.')
+        }
 
         const prior = await transaction.read()
         let applied = false
@@ -819,6 +830,209 @@ export class StudioProjectSession {
         }
       })
     )
+  }
+
+  /**
+   * convertSketch switches a root rectangle's badge as one transaction over source and catalog.
+   *
+   * Definition → render appends a scenario entry for the chosen view, starting from its first
+   * scenario's arguments at the drawn size, and removes the untouched placeholder view. Render →
+   * definition detaches: it copies the rendered view beside the original under the rectangle's own
+   * name and points the entry at the copy. A compile failure puts every file and the catalog back.
+   */
+  convertSketch(input: unknown): Promise<StudioSketchActionResult> {
+    return this.#edit(() =>
+      this.#sketchCatalog.transaction(async transaction => {
+        const request = StudioSessionRequests.parseSketchConvertRequest(input)
+        const key = requestKey(request)
+        const cached = cachedResult(this.#sketchResults, key, 'badge')
+        if (cached !== undefined) {
+          return cached
+        }
+        const prior = await transaction.read()
+        const sketch = requireSketch(prior, request)
+        const plan = request.to === 'render'
+          ? await this.#planSketchRender(sketch, request.view!)
+          : await this.#planSketchDetach(sketch)
+        const written: { before: string | undefined; path: string }[] = []
+        let applied = false
+        try {
+          for (const write of plan.writes) {
+            written.push({ before: write.before, path: write.path })
+            await this.#writeSketchSource(write.path, write.after)
+          }
+          const compile = await this.#coordinator.noteStudioFileMutation(plan.writes.map(write => ({
+            path: write.path,
+            ...(write.after === undefined ? {} : { sourceVersion: SourceActions.studioSourceVersion(write.after) }),
+            writeId: request.requestId,
+          })))
+          if (compile.status === 'error') {
+            Errors.throwUserInput(
+              `Studio did not switch ${sketch.name} because the result failed to compile: ${
+                compile.diagnostics[0]?.message ?? compile.message
+              }`,
+            )
+          }
+          const catalogResult = await transaction.apply({
+            action: { kind: 'set-sketch-source', sketchId: sketch.id, ...plan.source },
+            expectedRevision: prior.revision,
+            requestId: `catalog:${request.requestId}`,
+          })
+          applied = true
+          const result: StudioSketchActionResult = { ...catalogResult, compile, requestId: request.requestId }
+          rememberResult(this.#sketchResults, key, result)
+          this.#emitSketchCatalog(result.catalog)
+          for (const write of plan.writes) {
+            if (write.after !== undefined) {
+              this.#emitFile(
+                this.#files.projectFile(
+                  FS.relativePath(this.projectRoot, write.path),
+                  SourceActions.studioSourceVersion(write.after),
+                ),
+              )
+            }
+          }
+          this.#emitFiles(await this.files())
+          return result
+        } catch (error) {
+          for (const write of written.toReversed()) {
+            await this.#writeSketchSource(write.path, write.before)
+          }
+          if (written.length > 0) {
+            await this.#coordinator.noteStudioFileMutation(written.map(write => ({
+              path: write.path,
+              ...(write.before === undefined ? {} : { sourceVersion: SourceActions.studioSourceVersion(write.before) }),
+              writeId: `rollback:${request.requestId}`,
+            })))
+            this.#emitFiles(await this.files())
+          }
+          if (applied) {
+            await transaction.restore(prior, prior.revision + 1)
+          }
+          throw Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-convert' })
+        }
+      })
+    )
+  }
+
+  async #planSketchRender(sketch: StudioSketch, view: string): Promise<StudioSketchConversionPlan> {
+    Assert.input(
+      sketch.render === undefined && sketch.definitionPath === undefined,
+      `${sketch.name} is not a drawn definition, so it cannot switch to a render.`,
+    )
+    Assert.input(view !== sketch.view, `${sketch.name} cannot render itself.`)
+    Assert.input(
+      sketch.rects.length === 0 && sketch.snapped.length === 0,
+      `${sketch.name} has drawn rectangles; a render holds none, so clear them before switching.`,
+    )
+    const generated = await new StudioGeneratedSources(this.projectRoot).readView(sketch.view)
+    const placeholder = `${studioGeneratedSourceHeader}\n${
+      (await StudioSketchSource.generate({
+        height: sketch.height,
+        name: sketch.view,
+        project: sketch.project,
+        width: sketch.width,
+      })).trim()
+    }\n`
+    Assert.input(
+      generated.content === placeholder,
+      `${sketch.name} has source beyond its placeholder, and switching it to a render would discard it.`,
+    )
+    const manifest = this.previewManifest()
+    Assert.input(manifest, `Studio needs a compiled preview to find ${view}'s scenarios.`)
+    const subjects = new Map(
+      manifest.subjects.flatMap(subject =>
+        subject.kind === 'view' && subject.viewName === view ? [[subject.subjectId, subject] as const] : []
+      ),
+    )
+    const first = manifest.scenarios.find(scenario => subjects.has(scenario.subjectId))
+    Assert.input(first, `${view} has no scenario to start from; add a \`scenarios ${view}\` entry first.`)
+    const path = await this.#files.resolveTaoFile(first.source.path)
+    const viewPath = await this.#files.resolveTaoFile(subjects.get(first.subjectId)!.source.path)
+    const current = await this.readFile(FS.relativePath(this.projectRoot, path))
+    // A scenarios file names its view across files in the same directory, which only a linked parse resolves.
+    const [parsed] = await this.#workspace.parseFiles([path, viewPath])
+    const scenario = `drawn${sketch.view.slice('View'.length)}`
+    const patch = await SourceActions.applyStudioPatch(parsed!.entry.document, {
+      fromScenarioName: first.label,
+      height: Math.round(sketch.height),
+      kind: 'add-render-scenario',
+      scenarioGroupName: first.group,
+      scenarioName: scenario,
+      width: Math.round(sketch.width),
+    }, { files: parsed!.files.map(file => file.ast) })
+    return {
+      source: {
+        render: { group: first.group, path: FS.relativePath(this.projectRoot, path), scenario, view },
+      },
+      writes: [
+        { after: patch.content, before: current.content, path },
+        { after: undefined, before: generated.content, path: generated.path },
+      ],
+    }
+  }
+
+  async #planSketchDetach(sketch: StudioSketch): Promise<StudioSketchConversionPlan> {
+    const render = sketch.render
+    Assert.input(render, `${sketch.name} is already a definition.`)
+    const manifest = this.previewManifest()
+    Assert.input(manifest, `Studio needs a compiled preview to find where ${render.view} is declared.`)
+    const subject = manifest.subjects.find(candidate => candidate.kind === 'view' && candidate.viewName === render.view)
+    Assert.input(subject, `${render.view} is no longer a view Studio can find.`)
+    const viewPath = await this.#files.resolveTaoFile(subject.source.path)
+    const scenarioPath = await this.#files.resolveTaoFile(render.path)
+    const viewFile = await this.readFile(FS.relativePath(this.projectRoot, viewPath))
+    const parsedView = await this.#workspace.parse(viewPath)
+    const copied = await SourceActions.applyStudioPatch(parsedView.entry.document, {
+      kind: 'copy-view',
+      name: sketch.view,
+      view: render.view,
+    }, { files: parsedView.files.map(file => file.ast) })
+    const retarget = {
+      kind: 'retarget-scenario-render',
+      scenarioGroupName: render.group,
+      scenarioName: render.scenario,
+      view: sketch.view,
+    } as const
+    if (scenarioPath === viewPath) {
+      const reparsed = await this.#workspace.parseSource(copied.content, Langium.URI.file(viewPath))
+      const retargeted = await SourceActions.applyStudioPatch(reparsed.entry.document, retarget)
+      return {
+        source: { definitionPath: FS.relativePath(this.projectRoot, viewPath) },
+        writes: [{ after: retargeted.content, before: viewFile.content, path: viewPath }],
+      }
+    }
+    const scenarioFile = await this.readFile(FS.relativePath(this.projectRoot, scenarioPath))
+    const parsedScenario = await this.#workspace.parse(scenarioPath)
+    const retargeted = await SourceActions.applyStudioPatch(parsedScenario.entry.document, retarget)
+    return {
+      source: { definitionPath: FS.relativePath(this.projectRoot, viewPath) },
+      writes: [
+        { after: copied.content, before: viewFile.content, path: viewPath },
+        { after: retargeted.content, before: scenarioFile.content, path: scenarioPath },
+      ],
+    }
+  }
+
+  /** #writeSketchSource writes, or with no content removes, one file a badge switch touches. */
+  async #writeSketchSource(path: string, content: string | undefined): Promise<void> {
+    const generated = new StudioGeneratedSources(this.projectRoot)
+    if (content !== undefined) {
+      if (generated.owns(path) && !await FS.exists(path)) {
+        await generated.createView(
+          FS.basename(path, '.tao'),
+          content.slice(`${studioGeneratedSourceHeader}\n`.length),
+        )
+      } else {
+        await this.#writeSource(path, content)
+      }
+      this.#files.note(path, SourceActions.studioSourceVersion(content))
+      return
+    }
+    if (await FS.exists(path)) {
+      await generated.removeView(FS.basename(path, '.tao'))
+    }
+    this.#files.forget(path)
   }
 
   proposeSketchSnap(input: unknown): Promise<StudioSketchSnapProposalResult> {

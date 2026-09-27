@@ -2876,6 +2876,401 @@ Describe('Studio make view and group', () => {
   })
 })
 
+Describe('Studio copy-view', () => {
+  Test('copy-view duplicates a declared view right after the original, keeping its public modifier', async () => {
+    const document = await parseDocument(`
+      public view Card(Title text) {
+         render Text(Title)
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'CardCopy',
+      view: 'Card',
+    })
+
+    Expect(patch.content).toBe(source(`
+      public
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      public
+      view CardCopy(Title text) {
+         render Text(Title)
+      }
+    `))
+    await expectCanonical(patch.content)
+  })
+
+  Test('copy-view excludes the original doc comment from the copy', async () => {
+    const document = await parseDocument(`
+      // Renders one card.
+      view Card(Title text) {
+         render Text(Title)
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'CardCopy',
+      view: 'Card',
+    })
+
+    Expect(patch.content).toBe(source(`
+      // Renders one card.
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      view CardCopy(Title text) {
+         render Text(Title)
+      }
+    `))
+  })
+
+  Test('copy-view does not rewrite a recursive self-reference in the body', async () => {
+    const document = await parseDocument(`
+      view Item() {
+         render Stack() {
+            Item()
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'ItemCopy',
+      view: 'Item',
+    })
+
+    Expect(patch.content).toContain('view ItemCopy() {')
+    Expect(patch.content.match(/ItemCopy\(\)/g)).toHaveLength(1)
+    Expect(patch.content.match(/Item\(\)/g)).toHaveLength(3)
+  })
+
+  Test('copy-view refuses a view that is not declared here', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'CardCopy',
+      view: 'Missing',
+    })).rejects.toThrow('not uniquely declared')
+  })
+
+  Test('copy-view refuses an ambiguous view name', async () => {
+    const document = await parseRawDocument(`
+      view Card() { render Text("A") }
+      view Card() { render Text("B") }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'CardCopy',
+      view: 'Card',
+    })).rejects.toThrow('not uniquely declared')
+  })
+
+  Test('copy-view refuses a name already visible in the file', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      view Other() { render Text("Other") }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'Other',
+      view: 'Card',
+    })).rejects.toThrow('already visible here')
+  })
+})
+
+Describe('Studio add-render-scenario', () => {
+  Test("adds a new entry from another entry's own render clause and a chosen device size", async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         scenario "lead" {
+            device phone 390 x 844
+            render (Title: "Lead")
+         }
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: 'copy',
+      width: 400,
+    })
+    const updated = await parseRawDocument(patch.content)
+
+    Expect(patch.content).toBe(source(`
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      scenarios Card "states" {
+         scenario "lead" {
+            device phone 390 x 844
+            render (Title: "Lead")
+         }
+         scenario "copy" {
+            device phone 400 x 900
+            render (Title: "Lead")
+      }  }
+    `))
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
+  })
+
+  Test("writes only the device line when the from-entry inherits the group's render clause", async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         render (Title: "Default")
+         device phone
+         scenario "lead" { }
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: 'copy',
+      width: 400,
+    })
+    const updated = await parseRawDocument(patch.content)
+
+    Expect(patch.content).toBe(source(`
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      scenarios Card "states" {
+         render (Title: "Default")
+         device phone
+         scenario "lead" { }
+         scenario "copy" {
+            device phone 400 x 900
+      }  }
+    `))
+    const newScenario = updated.parseResult.value.statements
+      .filter(AST.isScenarioGroupDeclaration)
+      .flatMap(group => AST.scenarioDeclarations(group))
+      .find(scenario => scenario.name === 'copy')!
+    Expect(newScenario.block.entries.filter(AST.isScenarioRenderClause)).toEqual([])
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
+  })
+
+  Test('refuses ambiguous scenario identity', async () => {
+    const document = await parseDocument(`
+      view Card() { render Text("Card") }
+      scenarios Card "states" { scenario "lead" { } }
+      scenarios Card "states" { scenario "lead" { } }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: 'copy',
+      width: 400,
+    })).rejects.toThrow('not uniquely declared')
+  })
+
+  Test('refuses a from-entry whose effective subject is not a view', async () => {
+    const document = await parseDocument(`
+      app Preview { view Main }
+      view Main() { render Text("Main") }
+      scenarios Preview "flows" {
+         scenario "boot" { }
+      }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'boot',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'flows',
+      scenarioName: 'copy',
+      width: 400,
+    })).rejects.toThrow('can only add a render scenario from a focused render scenario')
+  })
+
+  Test('refuses a new scenario name that already exists in the group', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         scenario "lead" { device phone render (Title: "Lead") }
+         scenario "taken" { device phone render (Title: "Taken") }
+      }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: 'taken',
+      width: 400,
+    })).rejects.toThrow('already exists')
+  })
+
+  Test('refuses invalid scenario names', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         scenario "lead" { device phone render (Title: "Lead") }
+      }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: '',
+      width: 400,
+    })).rejects.toThrow('identity is invalid')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: 'bad\x01name',
+      width: 400,
+    })).rejects.toThrow('identity is invalid')
+  })
+
+  Test('refuses a non-positive or non-whole device size', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         scenario "lead" { device phone render (Title: "Lead") }
+      }
+    `)
+    const attempt = (width: number, height: number) =>
+      SourceActions.applyStudioPatch(document, {
+        fromScenarioName: 'lead',
+        height,
+        kind: 'add-render-scenario',
+        scenarioGroupName: 'states',
+        scenarioName: 'copy',
+        width,
+      })
+    await Expect(attempt(0, 900)).rejects.toThrow('positive whole number')
+    await Expect(attempt(400, -1)).rejects.toThrow('positive whole number')
+    await Expect(attempt(400.5, 900)).rejects.toThrow('positive whole number')
+  })
+})
+
+Describe('Studio retarget-scenario-render', () => {
+  Test("retargets an entry's own render clause at a different view, keeping its arguments", async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      view OtherCard(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         scenario "lead" {
+            render (Title: "Lead")
+         }
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'retarget-scenario-render',
+      scenarioGroupName: 'states',
+      scenarioName: 'lead',
+      view: 'OtherCard',
+    })
+    const updated = await parseRawDocument(patch.content)
+
+    Expect(patch.content).toBe(source(`
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      view OtherCard(Title text) {
+         render Text(Title)
+      }
+
+      scenarios Card "states" {
+         scenario "lead" {
+            render OtherCard(Title: "Lead")
+      }  }
+    `))
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
+  })
+
+  Test("adds an inherited render clause as the entry's first line, retargeted at another view", async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      view OtherCard(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         render (Title: "Default")
+         device phone
+         scenario "lead" {
+            press #edit
+         }
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'retarget-scenario-render',
+      scenarioGroupName: 'states',
+      scenarioName: 'lead',
+      view: 'OtherCard',
+    })
+    const updated = await parseRawDocument(patch.content)
+
+    Expect(patch.content).toBe(source(`
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      view OtherCard(Title text) {
+         render Text(Title)
+      }
+
+      scenarios Card "states" {
+         render (Title: "Default")
+         device phone
+         scenario "lead" {
+            render OtherCard(Title: "Default")
+            press #edit
+      }  }
+    `))
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
+  })
+
+  Test('refuses ambiguous scenario identity', async () => {
+    const document = await parseDocument(`
+      view Card() { render Text("Card") }
+      scenarios Card "states" { scenario "lead" { } }
+      scenarios Card "states" { scenario "lead" { } }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'retarget-scenario-render',
+      scenarioGroupName: 'states',
+      scenarioName: 'lead',
+      view: 'Card',
+    })).rejects.toThrow('not uniquely declared')
+  })
+
+  Test('refuses an entry with no effective render clause', async () => {
+    const document = await parseDocument(`
+      app Preview { view Main }
+      view Main() { render Text("Main") }
+      scenarios Preview "flows" {
+         scenario "boot" { }
+      }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'retarget-scenario-render',
+      scenarioGroupName: 'flows',
+      scenarioName: 'boot',
+      view: 'Main',
+    })).rejects.toThrow('can only retarget a focused render scenario')
+  })
+})
+
 /** expectCanonical asserts that `tao check` finds edited source canonical: every source fix leaves it unchanged. */
 async function expectCanonical(content: string): Promise<void> {
   const document = await parseRawDocument(content)

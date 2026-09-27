@@ -95,6 +95,16 @@ export const StudioMatrixLayout = {
     }
     return versions
   },
+  /** renderableViews names each view with a focused scenario, which a render rectangle starts from. */
+  renderableViews(manifest: Pick<StudioPreviewManifestV2, 'scenarios' | 'subjects'>): readonly string[] {
+    const subjects = new Map(manifest.subjects.map(subject => [subject.subjectId, subject]))
+    return [
+      ...new Set(manifest.scenarios.flatMap(scenario => {
+        const subject = subjects.get(scenario.subjectId)
+        return subject?.kind === 'view' ? [subject.viewName] : []
+      })),
+    ].toSorted()
+  },
   /** focusable says whether canvas mode can focus a view: some group renders that view alone. */
   focusable(groups: readonly Pick<StudioMatrixGroup<unknown>, 'subjectViewId'>[], viewId: string): boolean {
     return groups.some(group => group.subjectViewId === viewId)

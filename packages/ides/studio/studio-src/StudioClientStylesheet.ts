@@ -557,7 +557,18 @@ kbd {
 [data-tao-studio-sketch-create-surface] [data-tao-studio-sketch-workspace]::before { color: var(--studio-text-dim); content: "Drag empty space to draw a view"; font-size: 11px; left: 10px; pointer-events: none; position: absolute; top: 6px; }
 [data-tao-studio-sketch-outer-preview] { background: rgba(255, 106, 31, .08); border: 1px dashed var(--studio-accent); box-sizing: border-box; pointer-events: none; position: absolute; }
 [data-tao-studio-sketch] { background: #f4f1ea; border: 1px solid #c4b8a5; border-radius: 8px; box-shadow: 0 8px 20px rgba(0, 0, 0, .28); color: #242a33; }
-[data-tao-studio-sketch-name] { color: var(--studio-text); font-size: 12px; font-weight: 600; line-height: 16px; pointer-events: none; white-space: nowrap; }
+[data-tao-studio-sketch-name] { align-items: center; color: var(--studio-text); display: flex; font-size: 12px; font-weight: 600; gap: 6px; line-height: 16px; pointer-events: none; white-space: nowrap; }
+.studio-sketch-badge { cursor: default; order: -1; pointer-events: auto; position: relative; }
+[data-tao-studio-sketch-badge] { background: var(--studio-accent-surface); border: 1px solid var(--studio-accent); border-radius: 999px; color: var(--studio-accent); cursor: pointer; font: inherit; font-size: 10px; font-weight: 600; line-height: 14px; padding: 0 7px; }
+[data-tao-studio-sketch-badge][data-role="render"] { background: rgba(90, 169, 255, .12); border-color: var(--studio-info); color: var(--studio-info); }
+[data-tao-studio-sketch-badge-menu] { background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); box-shadow: 0 8px 24px rgba(0, 0, 0, .35); display: grid; gap: 2px; left: 0; max-width: 280px; min-width: 180px; padding: 4px; position: absolute; top: calc(100% + 4px); white-space: normal; z-index: 20; }
+[data-tao-studio-sketch-badge-menu] button { background: none; border: 0; border-radius: var(--studio-radius); color: var(--studio-text); cursor: pointer; font: inherit; font-weight: 500; padding: 5px 8px; text-align: left; }
+[data-tao-studio-sketch-badge-menu] button:hover, [data-tao-studio-sketch-badge-menu] button:focus-visible { background: var(--studio-bg-deep); }
+[data-tao-studio-sketch-badge-menu] p { color: var(--studio-text-dim); font-weight: 400; margin: 0; padding: 5px 8px; }
+.studio-sketch-card { border: 1px dashed var(--studio-info); border-radius: 8px; box-sizing: border-box; color: var(--studio-text); cursor: default; display: grid; gap: 6px; align-content: start; overflow: hidden; padding: 10px; }
+[data-tao-studio-sketch-card="definition"] .studio-sketch-card { border-color: var(--studio-accent); }
+.studio-sketch-card code { font-family: var(--studio-mono); font-size: 11px; }
+.studio-sketch-card small { color: var(--studio-text-dim); font-size: 11px; line-height: 1.45; }
 [data-tao-studio-sketch-rect] { background: #dce6f5; border: 1px solid #7693bc; box-sizing: border-box; cursor: move; overflow: visible; }
 [data-tao-studio-sketch-rect-kind="Text"] { background: transparent; border-color: #9ca8b8; }
 [data-tao-studio-sketch-rect][data-selected="true"] { outline: 2px solid var(--studio-accent); outline-offset: 1px; }

@@ -391,6 +391,64 @@ Test('Studio bind-rect validates exact typed payloads and preserves stale/idempo
 })
 
 Test(
+  'Studio sketch source records a render entry or a written definition, never both, and never beside rectangles',
+  async () => {
+    await withTaoFiles('tao-studio-sketch-source-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+      const provider = new StudioSketchCatalog(root)
+      await provider.apply({
+        ...createSketchRequest(0),
+        action: { ...createSketchRequest(0).action, rects: [] } as never,
+      })
+      const render = { group: 'rows', path: 'Rows.scenarios.tao', scenario: 'drawn1', view: 'StoryRow' }
+      const rendered = await provider.apply({
+        action: { kind: 'set-sketch-source', render, sketchId: 'sketch-row' },
+        expectedRevision: 1,
+        requestId: 'render-row',
+      })
+      Expect(rendered.catalog.sketches[0]?.render).toEqual(render)
+      Expect((await provider.read()).sketches[0]?.render).toEqual(render)
+
+      // Setting one source clears the other: a detach turns a render into a definition written in code.
+      const detached = await provider.apply({
+        action: { definitionPath: 'StoryRow.tao', kind: 'set-sketch-source', sketchId: 'sketch-row' },
+        expectedRevision: 2,
+        requestId: 'detach-row',
+      })
+      Expect(detached.catalog.sketches[0]?.render).toBeUndefined()
+      Expect(detached.catalog.sketches[0]?.definitionPath).toBe('StoryRow.tao')
+
+      for (
+        const action of [
+          { definitionPath: 'StoryRow.tao', render, sketchId: 'sketch-row' },
+          { definitionPath: '../Elsewhere.tao', sketchId: 'sketch-row' },
+          { definitionPath: '/abs/StoryRow.tao', sketchId: 'sketch-row' },
+          { definitionPath: 'StoryRow.ts', sketchId: 'sketch-row' },
+          { render: { ...render, view: 'storyRow' }, sketchId: 'sketch-row' },
+          { render: { ...render, extra: true }, sketchId: 'sketch-row' },
+        ]
+      ) {
+        await Expect(provider.apply({
+          action: { ...action, kind: 'set-sketch-source' },
+          expectedRevision: 3,
+          requestId: `malformed-${JSON.stringify(action)}`,
+        } as never)).rejects.toBeInstanceOf(Errors.UserInputError)
+      }
+
+      // A render rectangle draws nothing of its own; a catalog that says otherwise is refused on read.
+      const text = (await FS.readText(provider.path())).replace(
+        '"definitionPath": "StoryRow.tao"',
+        `"render": ${JSON.stringify(render)}`,
+      ).replace('"rects": []', `"rects": [${JSON.stringify(cover)}]`).replace(
+        '"rectOrder": []',
+        '"rectOrder": ["rect-cover"]',
+      )
+      await FS.writeText(provider.path(), text)
+      await Expect(provider.read()).rejects.toBeInstanceOf(Errors.UserInputError)
+    })
+  },
+)
+
+Test(
   'Studio sketch associations record the emitted fallback element independently of the free rectangle kind',
   async () => {
     await withTaoFiles(

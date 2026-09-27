@@ -1,9 +1,10 @@
 import { ASTUtils, Type } from '@ast-utils'
 import Formatter from '@formatter'
-import { AST } from '@parser'
+import { AST, Langium } from '@parser'
 import { Errors } from '@shared'
 import { assertNoSyntaxErrors } from '../source-actions-utils'
 import type {
+  StudioCopyViewPatchRequest,
   StudioExtractViewPatchRequest,
   StudioGroupRendersPatchRequest,
   StudioWorkspaceDesignContext,
@@ -101,6 +102,41 @@ export async function extractView(
   ])
   return await Formatter.formatCode(
     selection.renders.length === 1 ? extracted : ensureUiNamesImported(extracted, file, ['Col'], context.files),
+  )
+}
+
+/**
+ * copyView duplicates a declared view under a new name, right after the original: how the Draw canvas
+ * detaches a render rectangle into a view of its own.
+ */
+export async function copyView(
+  document: AST.Document,
+  request: StudioCopyViewPatchRequest,
+  context: StudioWorkspaceDesignContext = {},
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  const file = document.parseResult.value
+  const matches = file.statements.filter(AST.isViewDeclaration).filter(statement => statement.name === request.view)
+  if (matches.length !== 1 || matches[0]?.$cstNode === undefined) {
+    Errors.throwUserInput(`Studio view is not uniquely declared in this source file: ${request.view}`)
+  }
+  requireNewViewName(file, request.name, context.files)
+  const cstNode = matches[0]!.$cstNode!
+  const nameNode = Langium.GrammarUtils.findNodeForProperty(cstNode, 'name')
+  if (nameNode === undefined) {
+    Errors.throwUserInput(`Studio cannot find the declared name of view: ${request.view}`)
+  }
+  const originalText = cstNode.text
+  const nameStart = nameNode.offset - cstNode.offset
+  const nameEnd = nameNode.end - cstNode.offset
+  const copyText = `${originalText.slice(0, nameStart)}${request.name}${originalText.slice(nameEnd)}`
+  const source = document.textDocument.getText()
+  return await Formatter.formatCode(
+    applySourceEdits(source, [{
+      end: cstNode.end,
+      replacement: `${originalText}\n\n${copyText}`,
+      start: cstNode.offset,
+    }]),
   )
 }
 

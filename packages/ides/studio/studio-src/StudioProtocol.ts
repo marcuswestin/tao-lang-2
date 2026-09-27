@@ -221,6 +221,18 @@ export type StudioSketchUnsnapRequest = Readonly<
   Omit<StudioSketchSnapRequest, 'confirmedProposalVersion'>
 >
 
+/**
+ * Switches one root rectangle's badge. `render` turns a drawn definition into a scenario entry that
+ * renders `view`; `definition` detaches a render into a copy of the view it rendered.
+ */
+export type StudioSketchConvertRequest = Readonly<{
+  expectedCatalogRevision: number
+  requestId: string
+  sketchId: string
+  to: 'definition' | 'render'
+  view?: string
+}>
+
 export type StudioSketchFlowAction =
   | Readonly<{ kind: 'toggle-direction'; rectId: string }>
   | Readonly<{ afterRectId: string; beforeRectId?: string; kind: 'insert-separator' }>

@@ -987,6 +987,33 @@ dwell-to-enter lands as a child, empty states present) and a screenshot pair in
 `.artifacts/studio-smoke/` reviewed by eye before landing. The simulated lane runs in `verify-full`
 and met "Figma-at-home strides"'s ten-green-runs condition on 2026-09-20.
 
+## Draw workbench
+
+Two Draw-mode frames were compared on 2026-09-26. The Developer chose frame A (code with the scenario
+inputs pinned under it on the left, the canvas centre, the full inspector right) with frame B's
+selection HUD and edit log from the start, and B's multi-cell stage once scenario variants land.
+
+Decided alongside it:
+
+1. Free placement stays sketch data (FS-D1) and shows as a ghost line in the code pane.
+2. ⌘G extracts a view; ⌥⌘G wraps the selection inline in `Row` or `Col`.
+3. An extracted view lives in its parent's file when the parent is hand-written, and in `@/studio/`
+   when the parent was born on the canvas.
+4. A root rectangle that renders an existing view is a scenario entry.
+5. Isolate captures arguments once FS-D15 lands; until then it starts from the view's first scenario
+   entry.
+
+### Where it stands
+
+- **Done:** the frame, Shift-click multi-select with ⌘G and ⌥⌘G, the edit log that ⌘Z walks back,
+  visual edits and their undo writing `@/studio` views through the generated-source gate, the
+  selection HUD, and the Definition/Render badge on root rectangles with render entries and detach.
+  Focusing a view opens its declaration in the code pane.
+  `Docs/Spec/Tao Studio.md` records the contract.
+- **Next:** show free placement as a ghost line in the code pane, and fold the rest of a focused
+  view's file away.
+- **After scenario variants:** B's multi-cell stage, one row of cells per variant of the isolated view.
+
 ## Post-MVP target — paper sketch to editable Studio views
 
 **Goal.** A person draws one or more UI views on paper, takes a photo, and gives it to an agent

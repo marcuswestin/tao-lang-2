@@ -27,6 +27,7 @@ type MountedMatrixSketches = {
   mount?: MountedStudioSketchView
   mutationLane: StudioSketchMutationLane
   project: string
+  renderableViews: readonly string[]
   sourceVersions: Record<string, string>
 }
 
@@ -137,6 +138,13 @@ export const StudioMatrixSketches = {
     state.exampleValues = values
     state.mount?.render(state.catalog.sketches, state.sourceVersions, values)
   },
+  /** renderable records which views a badge can switch a drawn rectangle to render. */
+  renderable(parent: HTMLElement, views: readonly string[]): void {
+    const state = mountedSketches.get(parent)
+    if (state !== undefined) {
+      state.renderableViews = views
+    }
+  },
   sketchForView(parent: HTMLElement, viewName: string): string | undefined {
     return mountedSketches.get(parent)?.catalog.sketches.find(sketch => sketch.view === viewName)?.id
   },
@@ -219,6 +227,7 @@ function renderMatrixSketches(
     catalog,
     mutationLane: new StudioSketchMutationLane(),
     project,
+    renderableViews: [],
     sourceVersions: {},
   }
   if (catalog.revision >= state.catalog.revision) {
@@ -263,6 +272,19 @@ function renderMatrixSketches(
       onFeedDrop: async (payload, sketchId, rectId) => {
         await state.feedDrop?.(payload, sketchId, rectId)
       },
+      onConvert: async intent => {
+        const result = await state.mutationLane.run(async () => {
+          const converted = await StudioApiClient.sketchConvert({
+            ...intent,
+            expectedCatalogRevision: state.catalog.revision,
+            requestId: crypto.randomUUID(),
+          })
+          state.catalog = converted.catalog
+          return converted
+        })
+        delete host.dataset['taoStudioSketchError']
+        return result.catalog.sketches
+      },
       onFlowAction: async request => await applySketchFlowAction(state, request),
       onRectChange: async change => {
         const result = await applySketchAction(state, sketchAction(change))
@@ -272,6 +294,7 @@ function renderMatrixSketches(
       onSnap: async request => await applySketchSnap(state, request),
       onUnsnap: async request => await applySketchUnsnap(state, request),
       onUndoSnap: async request => await undoSketchSnap(state, request),
+      renderableViews: () => state.renderableViews,
       sketches: state.catalog.sketches,
       exampleValues: state.exampleValues,
       sourceVersions: state.sourceVersions,
