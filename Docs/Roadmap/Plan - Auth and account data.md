@@ -426,6 +426,11 @@ proved physical-device account persistence. The automated iOS simulator journey 
 email-code sign-in, profile and note writes against real InstantDB, process relaunch restoration,
 and sign-out isolation after relaunch on 2026-09-26. Its explicit pre-MVP lane is tracked in
 [initial release QA](<../MVP Roadmap/Plan - Initial release QA.md#live-native-authentication-acceptance>).
+A separate simulator regression runs the real `clerk-review` command with stored configuration,
+its LAN account gateway, and the unchanged authored Fill values. Password sign-in and sign-out
+passed on 2026-09-26 without provisioning a substitute account or changing profile/note data.
+The physical phone still reports the generic sign-in failure; its network path and retained native
+state are not established by a simulator on the Mac.
 Physical registration, profile, note persistence, email-code login, and logout isolation remain
 separate acceptance work.
 
