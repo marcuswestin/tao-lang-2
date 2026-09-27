@@ -47,8 +47,8 @@ FS-D1–FS-D20 or reordering the FS-D20 sequence.
 | 5  | Slice 3 — Feed                     | Bind a sketch to real, generated, live, or library data      | Slice 2                                     | XL   |
 | 6  | L2 — executable dialect            | WordFlower yes/no parameters and postfix conditions          | Slice 3                                     | XL   |
 | 7  | Slice 4 — Variants                 | Duplicate scenario cells and edit one argument state         | L2                                          | L    |
-| 8  | L3 — positioned container          | Studio's Tao client renders free rectangle rows              | Slice 4; settled container/offset spellings | XL   |
-| 9  | Slice 5 — Tao-rendered canvas      | Replace the matrix overlay with the L3 container             | L3                                          | M    |
+| 8  | L3 — `Layer` (landed 2026-09-27)   | Studio's Draw canvas is to render free rectangles as layers  | Landed ahead of Slice 4 by Developer choice | S    |
+| 9  | Slice 5 — Tao-rendered canvas      | Replace the matrix overlay with `Layer` views                | L3                                          | M    |
 | 10 | Slice 6 — Focus-in                 | Open an occurrence's owning view with provenance arguments   | Interaction-outline provenance              | L    |
 | 11 | Slice 7 — Companion                | Pencil-mode sketching in one paired native cell              | Slice 5; companion app shell                | XL   |
 
@@ -340,33 +340,32 @@ scenario naming and `when` output.
 
 ---
 
-## L3 — the positioned container
+## L3 — `Layer`
 
-**Decision.** FS-D5, constrained by KEY-D7.
+**Decision.** FS-D5, amended 2026-09-27: `Decisions.md` §9 decides `Layer`, replacing the `Canvas`
+container and `at x y` offset this slice first proposed.
 
 **Goal.** Let Studio's own Tao client render Studio-owned rectangle rows without making absolute
-positioning a product-layout escape hatch.
+positioning a clause every view accepts.
 
-**Dependencies.** Slice 4 and the spellings below. **Size.** XL.
+**Dependencies.** None; it landed ahead of Slice 4 by Developer choice. **Size.** S.
 
-**Forcing feature.** The Studio canvas renders its catalog through a positioned container and direct
-child offsets.
+**Forcing feature.** Studio's Draw canvas will render free rectangles as `Layer` views inside the
+canvas frame; that is Slice 5, so until it lands the canvas still draws them in its TypeScript
+overlay.
 
-**Introduces.** One positioned stdlib container and one direct-child offset clause, with validation
-restricting offsets to that parent. The runtime accepts reactive Studio data and preserves ordinary
-selection, accessibility, and event semantics. WordFlower contains the smallest honest forcing
-example needed to absorb the spelling.
+**Introduces.** Implemented 2026-09-27: `@tao/ui` `Layer` with optional `InsetTop`, `InsetRight`,
+`InsetBottom`, and `InsetLeft`, lowered to React Native absolute positioning inside the injected
+render. An axis with no inset sits at its start edge; children stack and hug like `Stack`; source
+order is paint order. Because `Layer` is a view and not a clause, no validation restricts where it
+appears.
 
-**Tests.** Tao behavior tests prove offsets, sizing, ordering, invalid parents/nesting, events, and
-web/native behavior. Studio journey compares Tao rendering against the Slice 1 overlay geometry.
+**Tests.** `Apps/Test Apps/Runtime Stdlib Tests` renders a `Layer` in its Tao behavior test, and
+`layout-e2e.jest-test.tsx` asserts the lowered styles, since Tao tests cannot yet assert layout.
+The Studio journey against Slice 1 overlay geometry lands with Slice 5.
 
-**Reconcile.** `Decisions.md` §9 and KEY-D7's floating anchored-layer relationship, Layout/UI,
-stdlib catalog, WordFlower tiers, and Coverage.
-
-**Open before starting.** Settle in `2 - Next` the container name (`Canvas` recommended), the offset
-spelling (`at x y` recommended), accepted value types, whether nesting is legal, and the explicit
-relationship to KEY-D7's floating anchored layers. This container renders Studio data; it does not
-reinstate product-source sketches withdrawn by FS-D1.
+**Reconcile.** Done for `Decisions.md` §9, Layout/UI, and the product document. WordFlower gains a
+forcing example only if one of its screens needs an overlay.
 
 ---
 
@@ -374,7 +373,7 @@ reinstate product-source sketches withdrawn by FS-D1.
 
 **Decision.** FS-D5.
 
-**Goal.** Replace the TypeScript rectangle overlay with the L3 container in Studio's own Tao client.
+**Goal.** Replace the TypeScript rectangle overlay with `Layer` views in Studio's own Tao client.
 
 **Dependencies.** L3. **Size.** M.
 
@@ -988,6 +987,33 @@ size equals the occurrence size within 1 px, Focus tool outlines the owner not t
 dwell-to-enter lands as a child, empty states present) and a screenshot pair in
 `.artifacts/studio-smoke/` reviewed by eye before landing. The simulated lane runs in `verify-full`
 and met "Figma-at-home strides"'s ten-green-runs condition on 2026-09-20.
+
+## Draw workbench
+
+Two Draw-mode frames were compared on 2026-09-26. The Developer chose frame A (code with the scenario
+inputs pinned under it on the left, the canvas centre, the full inspector right) with frame B's
+selection HUD and edit log from the start, and B's multi-cell stage once scenario variants land.
+
+Decided alongside it:
+
+1. Free placement stays sketch data (FS-D1) and shows as a ghost line in the code pane.
+2. ⌘G extracts a view; ⌥⌘G wraps the selection inline in `Row` or `Col`.
+3. An extracted view lives in its parent's file when the parent is hand-written, and in `@/studio/`
+   when the parent was born on the canvas.
+4. A root rectangle that renders an existing view is a scenario entry.
+5. Isolate captures arguments once FS-D15 lands; until then it starts from the view's first scenario
+   entry.
+
+### Where it stands
+
+- **Done:** the frame, Shift-click multi-select with ⌘G and ⌥⌘G, the edit log that ⌘Z walks back,
+  visual edits and their undo writing `@/studio` views through the generated-source gate, the
+  selection HUD, and the Definition/Render badge on root rectangles with render entries and detach.
+  Focusing a view opens its declaration in the code pane.
+  `Docs/Spec/Tao Studio.md` records the contract.
+- **Next:** show free placement as a ghost line in the code pane, and fold the rest of a focused
+  view's file away.
+- **After scenario variants:** B's multi-cell stage, one row of cells per variant of the isolated view.
 
 ## Post-MVP target — paper sketch to editable Studio views
 

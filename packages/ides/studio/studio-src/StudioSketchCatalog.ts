@@ -41,13 +41,37 @@ export type StudioSnappedRect = Readonly<{
   target: StudioSketchRenderTarget
 }>
 
+/**
+ * A render rectangle is one scenario entry that renders a view that already exists, which is how a
+ * root render persists and gets inputs. `path` is project-relative, like every committed locator.
+ */
+export type StudioSketchRenderEntry = Readonly<{
+  group: string
+  path: string
+  scenario: string
+  view: string
+}>
+
+/**
+ * A sketch is one root rectangle on the Draw canvas. Without `render` or `definitionPath` it is a
+ * definition drawn on the canvas, `view` declared in `@/studio/<view>.tao`. With `render` it is a
+ * scenario entry rendering another view; with `definitionPath` it is a definition that was detached
+ * from a render into the rendered view's own hand-written file.
+ *
+ * `broken` marks a render whose scenario entry is gone from the user's source: its file was removed,
+ * or a compile of that file's current version lists no such entry. The session sets and clears it as
+ * it reconciles the catalog against the compiled preview; the card can then only be removed.
+ */
 export type StudioSketch = Readonly<{
+  broken?: true
+  definitionPath?: string
   height: number
   id: string
   name: string
   project: string
   rectOrder: readonly string[]
   rects: readonly StudioSketchRect[]
+  render?: StudioSketchRenderEntry
   snapped: readonly StudioSnappedRect[]
   view: string
   width: number
@@ -116,6 +140,12 @@ export type StudioSketchCatalogAction =
     kind: 'refresh-snap-targets'
     sketchId: string
     targets: readonly StudioSketchRenderTarget[]
+  }>
+  | Readonly<{
+    definitionPath?: string
+    kind: 'set-sketch-source'
+    render?: StudioSketchRenderEntry
+    sketchId: string
   }>
 
 export type StudioSketchCatalogRequest = Readonly<{
@@ -303,14 +333,40 @@ async function nextAvailableViewNumber(
   catalog: StudioSketchCatalogSnapshot,
 ): Promise<number> {
   let next = catalog.nextViewNumber
-  const allocated = new Set(catalog.sketches.map(sketch => sketch.view))
-  while (
-    allocated.has(`View${next}`)
-    || await FS.isFile(FS.resolvePath(`@/studio/View${next}.tao`, projectRoot))
-  ) {
+  const taken = await studioViewNamesInUse(projectRoot, catalog)
+  while (taken.has(`View${next}`)) {
     next += 1
   }
   return next
+}
+
+/**
+ * studioViewNamesInUse is every `ViewN` a new canvas view must not take: each one the catalog has
+ * allocated, including a render sketch whose placeholder file is gone, and each one a file in
+ * `@/studio` names or declares, such as a view made with ⌘G inside a drawn view's file.
+ */
+export async function studioViewNamesInUse(
+  projectRoot: string,
+  catalog: StudioSketchCatalogSnapshot,
+): Promise<Set<string>> {
+  const taken = new Set(catalog.sketches.map(sketch => sketch.view))
+  const directory = FS.resolvePath('@/studio', projectRoot)
+  if (!await FS.isDirectory(directory)) {
+    return taken
+  }
+  for (const entry of await FS.listDir(directory)) {
+    if (!entry.endsWith('.tao')) {
+      continue
+    }
+    taken.add(entry.slice(0, -'.tao'.length))
+    const path = FS.resolvePath(entry, directory)
+    if (await FS.isFile(path)) {
+      for (const match of (await FS.readText(path)).matchAll(/\bview\s+(View\d+)\b/g)) {
+        taken.add(match[1]!)
+      }
+    }
+  }
+  return taken
 }
 
 /**
@@ -467,6 +523,7 @@ function applyAction(
     'duplicate-rect': copied => editSketch(catalog, copied.sketchId, sketch => duplicateRect(sketch, copied)),
     'refresh-snap-targets': refreshed =>
       editSketch(catalog, refreshed.sketchId, sketch => refreshSnapTargets(sketch, refreshed.targets)),
+    'set-sketch-source': changed => editSketch(catalog, changed.sketchId, sketch => setSketchSource(sketch, changed)),
     'snap-rects': snapped => editSketch(catalog, snapped.sketchId, sketch => snapRects(sketch, snapped.targets)),
     'unsnap-rects': unsnapped => editSketch(catalog, unsnapped.sketchId, sketch => unsnapRects(sketch, unsnapped)),
     'update-rect': updated => editSketch(catalog, updated.sketchId, sketch => updateRect(sketch, updated)),
@@ -576,6 +633,16 @@ function refreshSnapTargets(sketch: StudioSketch, targets: readonly StudioSketch
       )
       return { ...item, target }
     }),
+  }
+}
+
+/** setSketchSource switches a root rectangle between definition and render; absent fields are cleared. */
+function setSketchSource(sketch: StudioSketch, action: StudioSketchAction<'set-sketch-source'>): StudioSketch {
+  const { broken: _broken, definitionPath: _definitionPath, render: _render, ...rest } = sketch
+  return {
+    ...rest,
+    ...(action.definitionPath === undefined ? {} : { definitionPath: action.definitionPath }),
+    ...(action.render === undefined ? {} : { render: action.render }),
   }
 }
 
@@ -752,6 +819,12 @@ function validateAction(action: Record<string, unknown>): void {
     action['targets'].forEach((target, index) => validateRenderTarget(target, `refresh-snap-targets.targets[${index}]`))
     return
   }
+  if (action['kind'] === 'set-sketch-source') {
+    requireOnlyKeys(action, ['definitionPath', 'kind', 'render', 'sketchId'], 'set-sketch-source action')
+    requireNonEmptyString(action['sketchId'], 'set-sketch-source.sketchId')
+    validateSketchSource(action, 'set-sketch-source')
+    return
+  }
   Errors.throwUserInput(`Unsupported Studio sketch action: ${String(action['kind'])}`)
 }
 
@@ -866,9 +939,25 @@ function validateSketch(value: unknown, index: number): StudioSketch {
   Assert.input(Json.isRecord(value), `Studio sketch at index ${index} must be an object.`)
   requireOnlyKeys(
     value,
-    ['height', 'id', 'name', 'project', 'rectOrder', 'rects', 'snapped', 'view', 'width', 'x', 'y'],
+    [
+      'broken',
+      'definitionPath',
+      'height',
+      'id',
+      'name',
+      'project',
+      'rectOrder',
+      'rects',
+      'render',
+      'snapped',
+      'view',
+      'width',
+      'x',
+      'y',
+    ],
     `sketch at index ${index}`,
   )
+  const source = validateSketchSource(value, `sketches[${index}]`)
   const fields = validateSketchFields(value, index)
   Assert.input(Array.isArray(value['rectOrder']), `Studio sketch ${fields.id} rectOrder must be an array.`)
   const rectOrder = value['rectOrder'].map((id, orderIndex) =>
@@ -884,7 +973,17 @@ function validateSketch(value: unknown, index: number): StudioSketch {
     rectOrder.length === memberIds.length && memberIds.every(id => rectOrder.includes(id)),
     `Studio sketch ${fields.id} rectOrder must contain every free and snapped rectangle exactly once.`,
   )
+  Assert.input(
+    source.render === undefined || memberIds.length === 0,
+    `Studio render sketch ${fields.id} cannot hold drawn rectangles; it renders an existing view.`,
+  )
+  Assert.input(
+    value['broken'] === undefined || (value['broken'] === true && source.render !== undefined),
+    `Studio sketch ${fields.id} broken must be true, and only a render can be broken.`,
+  )
   return {
+    ...(value['broken'] === true ? { broken: true as const } : {}),
+    ...source,
     height: fields.height,
     id: fields.id,
     name: fields.name,
@@ -897,6 +996,42 @@ function validateSketch(value: unknown, index: number): StudioSketch {
     x: fields.x,
     y: fields.y,
   }
+}
+
+function validateSketchSource(
+  value: Record<string, unknown>,
+  field: string,
+): Pick<StudioSketch, 'definitionPath' | 'render'> {
+  Assert.input(
+    value['definitionPath'] === undefined || value['render'] === undefined,
+    `Studio sketch ${field} is either a definition or a render, not both.`,
+  )
+  if (value['definitionPath'] !== undefined) {
+    return { definitionPath: requireProjectRelativePath(value['definitionPath'], `${field}.definitionPath`) }
+  }
+  if (value['render'] === undefined) {
+    return {}
+  }
+  const render = value['render']
+  Assert.input(Json.isRecord(render), `Studio sketch ${field}.render must be an object.`)
+  requireOnlyKeys(render, ['group', 'path', 'scenario', 'view'], `${field}.render`)
+  return {
+    render: {
+      group: requireNonEmptyString(render['group'], `${field}.render.group`),
+      path: requireProjectRelativePath(render['path'], `${field}.render.path`),
+      scenario: requireNonEmptyString(render['scenario'], `${field}.render.scenario`),
+      view: requireTaoElementName(render['view'], `${field}.render.view`),
+    },
+  }
+}
+
+function requireProjectRelativePath(value: unknown, field: string): string {
+  const path = requireNonEmptyString(value, field)
+  Assert.input(
+    !path.startsWith('/') && !path.split(/[/\\]/u).includes('..') && path.endsWith('.tao'),
+    `Studio sketch ${field} must be a project-relative Tao source path.`,
+  )
+  return path
 }
 
 function validateSketchFields(

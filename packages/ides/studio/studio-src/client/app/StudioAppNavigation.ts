@@ -73,6 +73,25 @@ export class StudioAppNavigation {
     this.#reveal(opened.editor, StudioDefinitionNavigation.selection(opened.editor.state.doc, item.start))
   }
 
+  /**
+   * showView brings a focused view's declaration into the code pane beside the canvas, leaving
+   * keyboard focus where it was so canvas keys keep working.
+   */
+  async showView(subjectId: string): Promise<void> {
+    const subject = this.#deps.previewManifest()?.subjects.find(candidate =>
+      candidate.kind === 'view' && candidate.subjectId === subjectId
+    )
+    if (subject === undefined) {
+      return
+    }
+    const opened = await this.#deps.openFile(this.#relativePath(subject.source.path))
+    if (opened === undefined) {
+      return
+    }
+    const selection = StudioDefinitionNavigation.selection(opened.editor.state.doc, subject.source.range.start)
+    opened.editor.dispatch({ effects: EditorView.scrollIntoView(selection.anchor, { y: 'start' }), selection })
+  }
+
   async openSource(path: string, sourceVersion: string, start: number): Promise<void> {
     const relativePath = this.#relativePath(path)
     const current = this.#deps.projectFiles().find(file => file.path === relativePath)

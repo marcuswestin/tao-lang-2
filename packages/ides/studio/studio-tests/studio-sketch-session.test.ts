@@ -1,11 +1,20 @@
-import { CLI, Errors, FS, Repo, Time } from '@shared'
+import { Workspace } from '@compiler/workspace'
+import { AST } from '@parser'
+import { Assert, CLI, Errors, FS, Repo, Time } from '@shared'
 import { Deferred, Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { StudioApiEventStream } from '../studio-src/client/StudioApiClient'
 import type { StudioFixtureGeneration } from '../studio-src/StudioFixtureGeneration'
 import { StudioGeneratedSources } from '../studio-src/StudioGeneratedSources'
-import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
-import { StudioProjectSession, type StudioSessionEvent } from '../studio-src/StudioProjectSession'
-import { studioProtocolChannel, studioProtocolVersion } from '../studio-src/StudioProtocol'
+import { StudioPreviewManifest, type StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
+import {
+  type StudioProjectFileContent,
+  StudioProjectSession,
+  type StudioSessionEvent,
+  type StudioSketchActionResult,
+  type StudioSketchSnapApplyResult,
+  type StudioSourceActionResult,
+} from '../studio-src/StudioProjectSession'
+import { studioProtocolChannel, studioProtocolVersion, studioSourceActionVersion } from '../studio-src/StudioProtocol'
 import { StudioServerTesting } from '../studio-src/StudioServer'
 import {
   StudioSketchCatalog,
@@ -492,6 +501,88 @@ Describe('Studio sketch session protocol', () => {
 
       await Expect(session.applySketchFlowAction(request)).rejects.toBeInstanceOf(StudioSketchCatalogConflictError)
       Expect((await session.sketchCatalog()).revision).toBe(flowed.catalog.revision + 1)
+    })
+  })
+
+  Test('keeps flow edits available after a Design edit rewrites the snapped view', async () => {
+    await withSketchSession(async (session, root) => {
+      const snapped = await snapTwoRects(session, root)
+      session.registerPreview({ previewInstanceId: 'preview-1' })
+      const padded = await drawnViewSourceAction(session, snapped.file, 'pad-cafe', {
+        entry: ['pad', 12],
+        kind: 'set-layout-entry',
+        renderId: snapped.catalog.sketches[0]!.snapped[0]!.target.renderId,
+      })
+      const catalog = await session.sketchCatalog()
+
+      const flowed = await session.applySketchFlowAction({
+        action: { kind: 'toggle-direction', rectId: 'café' },
+        checkpointId: 'flow-after-design',
+        expectedCatalogRevision: catalog.revision,
+        requestId: 'flow-after-design-request',
+        sketchId: 'sketch-1',
+        sourceVersion: padded.sourceVersion,
+      })
+
+      Expect(flowed.file.content).toContain('pad 12')
+      Expect(flowed.catalog.sketches[0]!.snapped.map(item => item.target.sourceVersion)).toEqual([
+        flowed.file.sourceVersion,
+        flowed.file.sourceVersion,
+      ])
+      const undone = await session.undoSketchSnap({
+        checkpointId: 'flow-after-design',
+        expectedCatalogRevision: flowed.catalog.revision,
+        requestId: 'undo-flow-after-design',
+        sourceVersion: flowed.file.sourceVersion,
+      })
+      Expect(undone.file.content).toBe(padded.content)
+      Expect(undone.catalog.sketches[0]!.snapped.map(item => item.target.sourceVersion)).toEqual([
+        padded.sourceVersion,
+        padded.sourceVersion,
+      ])
+    })
+  })
+
+  Test('names a view made with ⌘G in a drawn view from the canvas count, and the next drawing skips it', async () => {
+    await withSketchSession(async (session, root) => {
+      const { flowed, separatorId } = await separatedFlow(session, root)
+      session.registerPreview({ previewInstanceId: 'preview-1' })
+
+      const extracted = await drawnViewSourceAction(session, flowed.file, 'make-view', {
+        kind: 'extract-view',
+        renderIds: [separatorId],
+      })
+      Expect(extracted.content).toContain('view View2(')
+      const drawn = await session.applySketchAction({
+        action: { height: 40, id: 'sketch-2', kind: 'create-sketch', project: root, rects: [], width: 100 },
+        expectedRevision: flowed.catalog.revision,
+        requestId: 'create-after-make-view',
+      })
+
+      Expect(drawn.createdSketch?.view).toBe('View3')
+      Expect(await FS.readText(FS.resolvePath('@/studio/View1.tao', root))).toBe(extracted.content)
+    })
+  })
+
+  Test('names a view made with ⌘G past every canvas number a drawing or earlier ⌘G holds', async () => {
+    await withSketchSession(async (session, root) => {
+      const { flowed, separatorId } = await separatedFlow(session, root)
+      session.registerPreview({ previewInstanceId: 'preview-1' })
+      await session.applySketchAction({
+        action: { height: 40, id: 'sketch-2', kind: 'create-sketch', project: root, rects: [], width: 100 },
+        expectedRevision: flowed.catalog.revision,
+        requestId: 'create-before-make-view',
+      })
+      // A stray drawn-view file with no catalog entry holds its number too.
+      await new StudioGeneratedSources(root).createView('View3', 'public\nview View3() { }\n')
+
+      const extracted = await drawnViewSourceAction(session, flowed.file, 'make-view', {
+        kind: 'extract-view',
+        renderIds: [separatorId],
+      })
+
+      Expect(extracted.content).toContain('view View4(')
+      Expect(extracted.content).not.toContain('view View2(')
     })
   })
 
@@ -993,9 +1084,13 @@ Describe('Studio sketch session protocol', () => {
     })
   })
 
-  Test('routes typed Snap, flow, undo, and arbitrary Unsnap requests', async () => {
+  Test('routes typed Snap, flow, undo, arbitrary Unsnap, and badge switch requests', async () => {
     const calls: Array<{ body: unknown; operation: string }> = []
     const session = {
+      async convertSketch(body: unknown) {
+        calls.push({ body, operation: 'convert' })
+        return { operation: 'converted' }
+      },
       async applySketchSnap(body: unknown) {
         calls.push({ body, operation: 'apply' })
         return { operation: 'applied' }
@@ -1029,6 +1124,7 @@ Describe('Studio sketch session protocol', () => {
       ['/api/sketches/flow/action', 'flowed'],
       ['/api/sketches/snap/undo', 'undone'],
       ['/api/sketches/unsnap/apply', 'unsnapped'],
+      ['/api/sketches/convert', 'converted'],
       ['/api/preview/layout-measurements', undefined],
     ] as const
 
@@ -1047,7 +1143,15 @@ Describe('Studio sketch session protocol', () => {
       )
       Expect(await response.json()).toEqual(operation === undefined ? { accepted: true } : { operation })
     }
-    Expect(calls.map(call => call.operation)).toEqual(['propose', 'apply', 'flow', 'undo', 'unsnap', 'measurements'])
+    Expect(calls.map(call => call.operation)).toEqual([
+      'propose',
+      'apply',
+      'flow',
+      'undo',
+      'unsnap',
+      'convert',
+      'measurements',
+    ])
     Expect(calls.every(call => JSON.stringify(call.body) === JSON.stringify(body))).toBe(true)
   })
 
@@ -1074,12 +1178,550 @@ Describe('Studio sketch session protocol', () => {
         action: { id: 'sketch-1', kind: 'delete-sketch' },
         expectedRevision: created.catalog.revision,
         requestId: 'delete-1',
-      })).rejects.toThrow('not available until its generated-source lifecycle lands')
+      })).rejects.toThrow('Deleting a drawn Studio sketch is not available until its generated-source lifecycle lands')
       Expect(await FS.isFile(FS.resolvePath('@/studio/View1.tao', root))).toBe(true)
       Expect((await session.sketchCatalog()).sketches).toHaveLength(1)
     })
   })
+
+  Test('refuses a source switch sent as a plain catalog action, which only the badge may make', async () => {
+    await withSketchSession(async (session, root) => {
+      const created = await session.applySketchAction(createRequest(root, 'create-1'))
+      await Expect(session.applySketchAction({
+        action: {
+          kind: 'set-sketch-source',
+          render: { group: 'rows', path: 'Rows.tao', scenario: 'long', view: 'StoryRow' },
+          sketchId: 'sketch-1',
+        },
+        expectedRevision: created.catalog.revision,
+        requestId: 'set-source',
+      })).rejects.toThrow('Switching a Studio sketch between definition and render goes through its badge.')
+      Expect(await session.sketchCatalog()).toEqual(created.catalog)
+    })
+  })
 })
+
+Describe('Studio sketch badge', () => {
+  const rowFiles = {
+    'Garden.tao':
+      'app Garden { view Main }\nview Main() { }\nfolder\nview StoryRow(Title text) { render Text(Title) }\n',
+    'Rows.tao': 'scenarios StoryRow "rows" {\n  device phone\n  scenario "long" {\n    render (Title: "Hi")\n  }\n}\n',
+  }
+
+  Test(
+    'switches an empty drawn rectangle to a render entry, then detaches it into a copy beside the view',
+    async () => {
+      await withSketchSession(
+        async (session, root) => {
+          const created = await session.applySketchAction(emptySketchRequest(root))
+          session.setMatrixManifest(storyRowManifest(session, root))
+
+          const rendered = await session.convertSketch({
+            expectedCatalogRevision: created.catalog.revision,
+            requestId: 'render-1',
+            sketchId: 'sketch-1',
+            to: 'render',
+            view: 'StoryRow',
+          })
+
+          Expect(rendered.catalog.sketches[0]?.render).toEqual({
+            group: 'rows',
+            path: 'Rows.tao',
+            scenario: 'drawn1',
+            view: 'StoryRow',
+          })
+          const rows = await FS.readText(FS.resolvePath('Rows.tao', root))
+          Expect(rows).toContain('scenario "drawn1"')
+          Expect(rows).toContain('device phone 360 x 76')
+          Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(false)
+
+          // Another view named StoryRow, listed first: the detach copies what the entry renders, not it.
+          session.setMatrixManifest(
+            await renderedRowsManifest(session, root, {
+              subjects: [{
+                path: 'Elsewhere/StoryRow.tao',
+                subjectId: 'view:Elsewhere.StoryRow',
+                viewName: 'StoryRow',
+              }],
+            }),
+          )
+          const detached = await session.convertSketch({
+            expectedCatalogRevision: rendered.catalog.revision,
+            requestId: 'detach-1',
+            sketchId: 'sketch-1',
+            to: 'definition',
+          })
+
+          Expect(detached.catalog.sketches[0]?.render).toBeUndefined()
+          Expect(detached.catalog.sketches[0]?.definitionPath).toBe('Garden.tao')
+          const garden = await FS.readText(FS.resolvePath('Garden.tao', root))
+          Expect(garden).toContain('folder\nview View1(Title text)')
+          Expect(await FS.readText(FS.resolvePath('Rows.tao', root))).toContain('render View1(Title: "Hi")')
+
+          // The detached view is the user's source now: removing the card forgets it and nothing else.
+          const removed = await session.applySketchAction({
+            action: { id: 'sketch-1', kind: 'delete-sketch' },
+            expectedRevision: detached.catalog.revision,
+            requestId: 'remove-detached',
+          })
+          Expect(removed.catalog.sketches).toEqual([])
+          Expect(await FS.readText(FS.resolvePath('Garden.tao', root))).toBe(garden)
+        },
+        undefined,
+        { files: rowFiles },
+      )
+    },
+  )
+
+  Test('puts every file and the catalog back when the switched source fails to compile', async () => {
+    let fail = false
+    await withSketchSession(async (session, root) => {
+      const created = await session.applySketchAction(emptySketchRequest(root))
+      session.setMatrixManifest(storyRowManifest(session, root))
+      const generated = await FS.readText(FS.resolvePath('@/studio/View1.tao', root))
+      const rows = await FS.readText(FS.resolvePath('Rows.tao', root))
+      fail = true
+
+      await Expect(session.convertSketch({
+        expectedCatalogRevision: created.catalog.revision,
+        requestId: 'render-broken',
+        sketchId: 'sketch-1',
+        to: 'render',
+        view: 'StoryRow',
+      })).rejects.toThrow('failed to compile')
+
+      Expect(await FS.readText(FS.resolvePath('Rows.tao', root))).toBe(rows)
+      Expect(await FS.readText(FS.resolvePath('@/studio/View1.tao', root))).toBe(generated)
+      Expect((await session.sketchCatalog()).sketches[0]?.render).toBeUndefined()
+    }, () => {
+      if (fail) {
+        Errors.throwUserInput('Rows.tao does not compile.')
+      }
+    }, { files: rowFiles })
+  })
+
+  Test('puts the view and scenario files back when a detach fails to compile', async () => {
+    let fail = false
+    await withSketchSession(async (session, root) => {
+      const rendered = await renderStoryRow(session, root)
+      session.setMatrixManifest(await renderedRowsManifest(session, root))
+      const garden = await FS.readText(FS.resolvePath('Garden.tao', root))
+      const rows = await FS.readText(FS.resolvePath('Rows.tao', root))
+      fail = true
+
+      await Expect(session.convertSketch({
+        expectedCatalogRevision: rendered.catalog.revision,
+        requestId: 'detach-broken',
+        sketchId: 'sketch-1',
+        to: 'definition',
+      })).rejects.toThrow('failed to compile')
+
+      Expect(await FS.readText(FS.resolvePath('Garden.tao', root))).toBe(garden)
+      Expect(await FS.readText(FS.resolvePath('Rows.tao', root))).toBe(rows)
+      Expect(await session.sketchCatalog()).toEqual(rendered.catalog)
+    }, () => {
+      if (fail) {
+        Errors.throwUserInput('Garden.tao does not compile.')
+      }
+    }, { files: rowFiles })
+  })
+
+  Test('keeps a file saved during a failed switch and names it instead of rolling it back', async () => {
+    let saveDuringCompile = false
+    let root = ''
+    const saved = `${rowFiles['Rows.tao']}// saved in another editor\n`
+    await withSketchSession(async (session, sessionRoot) => {
+      root = sessionRoot
+      const created = await session.applySketchAction(emptySketchRequest(root))
+      session.setMatrixManifest(storyRowManifest(session, root))
+      const placeholder = await FS.readText(FS.resolvePath('@/studio/View1.tao', root))
+      saveDuringCompile = true
+
+      await Expect(session.convertSketch({
+        expectedCatalogRevision: created.catalog.revision,
+        requestId: 'render-raced',
+        sketchId: 'sketch-1',
+        to: 'render',
+        view: 'StoryRow',
+      })).rejects.toThrow('Studio did not put back Rows.tao because it changed during the switch')
+
+      Expect(await FS.readText(FS.resolvePath('Rows.tao', root))).toBe(saved)
+      Expect(await FS.readText(FS.resolvePath('@/studio/View1.tao', root))).toBe(placeholder)
+      Expect((await session.sketchCatalog()).sketches[0]?.render).toBeUndefined()
+    }, async () => {
+      if (saveDuringCompile) {
+        saveDuringCompile = false
+        await FS.writeText(FS.resolvePath('Rows.tao', root), saved)
+        Errors.throwUserInput('Rows.tao does not compile.')
+      }
+    }, { files: rowFiles })
+  })
+
+  Test('replays a switch only while the catalog is where the switch left it', async () => {
+    await withSketchSession(
+      async (session, root) => {
+        const created = await session.applySketchAction(emptySketchRequest(root))
+        session.setMatrixManifest(storyRowManifest(session, root))
+        const request = {
+          expectedCatalogRevision: created.catalog.revision,
+          requestId: 'render-1',
+          sketchId: 'sketch-1',
+          to: 'render' as const,
+          view: 'StoryRow',
+        }
+        const rendered = await session.convertSketch(request)
+
+        Expect(await session.convertSketch(request)).toEqual(rendered)
+        await Expect(session.convertSketch({ ...request, view: 'Main' })).rejects.toThrow(
+          'Studio badge request id was reused: render-1',
+        )
+        await session.applySketchAction({
+          action: { height: 40, id: 'sketch-2', kind: 'create-sketch', project: root, rects: [], width: 100 },
+          expectedRevision: rendered.catalog.revision,
+          requestId: 'create-2',
+        })
+        await Expect(session.convertSketch(request)).rejects.toBeInstanceOf(StudioSketchCatalogConflictError)
+      },
+      undefined,
+      { files: rowFiles },
+    )
+  })
+
+  Test('refuses a switch it cannot carry out, before writing anything', async () => {
+    await withSketchSession(
+      async (session, root) => {
+        const created = await session.applySketchAction(emptySketchRequest(root))
+        const request = {
+          expectedCatalogRevision: created.catalog.revision,
+          requestId: 'render-refused',
+          sketchId: 'sketch-1',
+          to: 'render' as const,
+          view: 'StoryRow',
+        }
+        const rows = await FS.readText(FS.resolvePath('Rows.tao', root))
+        const view1 = FS.resolvePath('@/studio/View1.tao', root)
+
+        await Expect(session.convertSketch({ requestId: 'malformed', to: 'render' })).rejects.toBeInstanceOf(
+          Errors.UserInputError,
+        )
+        await Expect(session.convertSketch(request)).rejects.toThrow('Studio needs a compiled preview')
+        session.setMatrixManifest(storyRowManifest(session, root))
+        await Expect(session.convertSketch({ ...request, expectedCatalogRevision: 0, requestId: 'stale' })).rejects
+          .toBeInstanceOf(StudioSketchCatalogConflictError)
+        await Expect(session.convertSketch({ ...request, requestId: 'itself', view: 'View1' })).rejects.toThrow(
+          'View1 cannot render itself.',
+        )
+        await Expect(session.convertSketch({ ...request, requestId: 'detach-with-view', to: 'definition' })).rejects
+          .toThrow('Detaching a render takes no view.')
+        await Expect(
+          session.convertSketch({ ...request, requestId: 'detach-drawn', view: undefined, to: 'definition' }),
+        )
+          .rejects.toThrow('View1 is already a definition.')
+        session.setMatrixManifest(storyRowManifest(session, root, {
+          subjects: [{ path: 'Elsewhere/StoryRow.tao', subjectId: 'view:Elsewhere.StoryRow', viewName: 'StoryRow' }],
+        }))
+        await Expect(session.convertSketch({ ...request, requestId: 'ambiguous' })).rejects.toThrow(
+          'More than one view is named StoryRow, so Studio cannot tell which one to render.',
+        )
+        await FS.chmod(view1, 0o644)
+        await FS.writeText(view1, `${await FS.readText(view1)}// kept by hand\n`)
+        session.setMatrixManifest(storyRowManifest(session, root))
+        await Expect(session.convertSketch({ ...request, requestId: 'edited' })).rejects.toThrow(
+          'View1 has source beyond its placeholder',
+        )
+
+        Expect(await FS.readText(FS.resolvePath('Rows.tao', root))).toBe(rows)
+        Expect(await FS.readText(view1)).toContain('// kept by hand')
+        Expect(await session.sketchCatalog()).toEqual(created.catalog)
+      },
+      undefined,
+      { files: rowFiles },
+    )
+  })
+
+  Test('refuses to render a view drawn on the canvas, whose file Studio owns', async () => {
+    await withSketchSession(async (session, root) => {
+      await session.applySketchAction(emptySketchRequest(root))
+      const second = await session.applySketchAction({
+        action: { height: 40, id: 'sketch-2', kind: 'create-sketch', project: root, rects: [], width: 100 },
+        expectedRevision: 1,
+        requestId: 'create-2',
+      })
+      const view2 = FS.resolvePath('@/studio/View2.tao', root)
+      const before = await FS.readText(view2)
+      session.setMatrixManifest(storyRowManifest(session, root, {
+        scenarios: [{ group: 'sketch', label: 'draft', path: '@/studio/View2.tao', subjectId: 'view:View2' }],
+        subjects: [{ path: '@/studio/View2.tao', subjectId: 'view:View2', viewName: 'View2' }],
+      }))
+
+      await Expect(session.convertSketch({
+        expectedCatalogRevision: second.catalog.revision,
+        requestId: 'render-drawn-view',
+        sketchId: 'sketch-1',
+        to: 'render',
+        view: 'View2',
+      })).rejects.toThrow('View2 is drawn on the canvas, and Studio owns its file')
+      Expect(await FS.readText(view2)).toBe(before)
+      Expect(await FS.isFile(FS.resolvePath('@/studio/View1.tao', root))).toBe(true)
+    })
+  })
+
+  Test('marks a render whose entry was deleted by hand, and removes it without touching source', async () => {
+    await withSketchSession(
+      async (session, root) => {
+        const rendered = await renderStoryRow(session, root)
+        const garden = await FS.readText(FS.resolvePath('Garden.tao', root))
+        const rowsPath = FS.resolvePath('Rows.tao', root)
+        const renderedRows = await FS.readText(rowsPath)
+        await FS.writeText(rowsPath, rowFiles['Rows.tao'])
+        const current = (await session.readFile('Rows.tao')).sourceVersion
+
+        // A manifest compiled from an older Rows.tao proves nothing about the entry.
+        session.setMatrixManifest(storyRowManifest(session, root, { sourceVersions: { 'Rows.tao': 'older' } }))
+        Expect(await session.sketchCatalog()).toEqual(rendered.catalog)
+
+        session.setMatrixManifest(storyRowManifest(session, root, { sourceVersions: { 'Rows.tao': current } }))
+        const marked = await session.sketchCatalog()
+        Expect(marked.revision).toBe(rendered.catalog.revision + 1)
+        Expect(marked.sketches[0]).toMatchObject({ broken: true, render: rendered.catalog.sketches[0]!.render! })
+        Expect((await new StudioSketchCatalog(root).read()).sketches[0]?.broken).toBe(true)
+        await Expect(session.convertSketch({
+          expectedCatalogRevision: marked.revision,
+          requestId: 'detach-missing',
+          sketchId: 'sketch-1',
+          to: 'definition',
+        })).rejects.toThrow('View1\'s scenario "drawn1" is no longer in Rows.tao; remove it from the canvas instead.')
+
+        // Putting the entry back clears the mark.
+        await FS.writeText(rowsPath, renderedRows)
+        session.setMatrixManifest(await renderedRowsManifest(session, root))
+        const healed = await session.sketchCatalog()
+        Expect(healed.sketches[0]?.broken).toBeUndefined()
+
+        await FS.remove(rowsPath)
+        const gone = await session.sketchCatalog()
+        Expect(gone.sketches[0]?.broken).toBe(true)
+        const removed = await session.applySketchAction({
+          action: { id: 'sketch-1', kind: 'delete-sketch' },
+          expectedRevision: gone.revision,
+          requestId: 'remove-broken',
+        })
+        Expect(removed.catalog.sketches).toEqual([])
+        Expect(await FS.exists(rowsPath)).toBe(false)
+        Expect(await FS.readText(FS.resolvePath('Garden.tao', root))).toBe(garden)
+      },
+      undefined,
+      { files: rowFiles },
+    )
+  })
+
+  Test('carries a render across a rename of its scenarios file', async () => {
+    await withSketchSession(
+      async (session, root) => {
+        const rendered = await renderStoryRow(session, root)
+        const events: StudioSessionEvent[] = []
+        session.subscribe(event => events.push(event))
+        const rows = await session.readFile('Rows.tao')
+
+        await session.renameFile({
+          path: rows.path,
+          sourceVersion: rows.sourceVersion,
+          targetPath: 'Stories.tao',
+          writeId: 'rename-rows',
+        })
+
+        const catalog = await session.sketchCatalog()
+        Expect(catalog.sketches[0]?.render).toEqual({ ...rendered.catalog.sketches[0]!.render!, path: 'Stories.tao' })
+        Expect(events.filter(event => event.type === 'sketch-catalog-changed').at(-1)).toMatchObject({ catalog })
+      },
+      undefined,
+      { files: rowFiles },
+    )
+  })
+
+  Test('refuses a render for a rectangle that has drawn rectangles in it', async () => {
+    await withSketchSession(async (session, root) => {
+      const created = await session.applySketchAction(createRequest(root, 'create-drawn'))
+      await Expect(session.convertSketch({
+        expectedCatalogRevision: created.catalog.revision,
+        requestId: 'render-drawn',
+        sketchId: 'sketch-1',
+        to: 'render',
+        view: 'StoryRow',
+      })).rejects.toThrow('clear them before switching')
+    })
+  })
+})
+
+function emptySketchRequest(project: string): StudioSketchCatalogRequest {
+  const request = createRequest(project, 'create-empty')
+  return { ...request, action: { ...request.action, rects: [] } as StudioSketchCatalogRequest['action'] }
+}
+
+/**
+ * What a compile adds to the StoryRow manifest: more scenarios and views (listed before StoryRow, so a
+ * lookup by bare name meets them first), and the project-relative source versions it was compiled from.
+ */
+type StoryRowManifestExtras = Readonly<{
+  scenarios?: readonly Readonly<{ group: string; label: string; path: string; subjectId: string }>[]
+  sourceVersions?: Readonly<Record<string, string>>
+  subjects?: readonly Readonly<{ path: string; subjectId: string; viewName: string }>[]
+}>
+
+function storyRowManifest(
+  session: StudioProjectSession,
+  root: string,
+  extras: StoryRowManifestExtras = {},
+): StudioPreviewManifestV2 {
+  const source = (path: string) => ({
+    kind: 'tao' as const,
+    path: FS.resolvePath(path, root),
+    range: { end: 1, start: 0 },
+  })
+  const manifest = {
+    capabilities: { captureDomains: [], scheme: 'reactive-browser' },
+    cells: [],
+    compileRevision: session.compileSnapshot().compileRevision,
+    fixtures: [],
+    generationDeclarations: [],
+    manifestRevision: 'manifest-story-row',
+    parametersBySubject: {},
+    project: { appName: session.appName, entryPath: 'Garden.tao', root },
+    renders: [],
+    scenarios: [{
+      args: {},
+      group: 'rows',
+      label: 'long',
+      prepare: [],
+      scenarioId: 'rows.long',
+      source: source('Rows.tao'),
+      stateLayers: [],
+      subjectId: 'view:StoryRow',
+    }],
+    sourceVersions: {},
+    states: [],
+    subjects: [{ kind: 'view', source: source('Garden.tao'), subjectId: 'view:StoryRow', viewName: 'StoryRow' }],
+    version: 2,
+  } as StudioPreviewManifestV2
+  return {
+    ...manifest,
+    scenarios: [
+      ...manifest.scenarios,
+      ...(extras.scenarios ?? []).map(scenario => ({
+        args: {},
+        group: scenario.group,
+        label: scenario.label,
+        prepare: [],
+        scenarioId: `${scenario.group}.${scenario.label}`,
+        source: source(scenario.path),
+        stateLayers: [],
+        subjectId: scenario.subjectId,
+      })),
+    ],
+    sourceVersions: Object.fromEntries(
+      Object.entries(extras.sourceVersions ?? {}).map(([path, version]) => [FS.resolvePath(path, root), version]),
+    ),
+    subjects: [
+      ...(extras.subjects ?? []).map(subject => ({
+        kind: 'view' as const,
+        source: source(subject.path),
+        subjectId: subject.subjectId,
+        viewName: subject.viewName,
+      })),
+      ...manifest.subjects,
+    ],
+  }
+}
+
+/** The manifest a compile publishes once Rows.tao holds the `drawn1` entry a render switch added. */
+async function renderedRowsManifest(
+  session: StudioProjectSession,
+  root: string,
+  extras: StoryRowManifestExtras = {},
+): Promise<StudioPreviewManifestV2> {
+  return storyRowManifest(session, root, {
+    ...extras,
+    scenarios: [{ group: 'rows', label: 'drawn1', path: 'Rows.tao', subjectId: 'view:StoryRow' }],
+    sourceVersions: { 'Rows.tao': (await session.readFile('Rows.tao')).sourceVersion },
+  })
+}
+
+/** Creates the empty drawn rectangle `View1` and switches it to render StoryRow. */
+async function renderStoryRow(session: StudioProjectSession, root: string): Promise<StudioSketchActionResult> {
+  const created = await session.applySketchAction(emptySketchRequest(root))
+  session.setMatrixManifest(storyRowManifest(session, root))
+  return await session.convertSketch({
+    expectedCatalogRevision: created.catalog.revision,
+    requestId: 'render-1',
+    sketchId: 'sketch-1',
+    to: 'render',
+    view: 'StoryRow',
+  })
+}
+
+/** A Design edit or ⌘G on one render in the drawn view `View1`, sent as the inspector sends it. */
+function drawnViewSourceAction(
+  session: StudioProjectSession,
+  file: StudioProjectFileContent,
+  requestId: string,
+  action: Readonly<Record<string, unknown>>,
+): Promise<StudioSourceActionResult> {
+  return session.applySourceAction({
+    action,
+    channel: studioProtocolChannel,
+    checkpoint: { id: requestId, phase: 'single' },
+    identity: {
+      ...session.identity(),
+      occurrence: { nodeKind: 'render', renderOwner: 'View1' },
+      path: file.path,
+      previewInstanceId: 'preview-1',
+      sourceVersion: file.sourceVersion,
+    },
+    protocolVersion: studioProtocolVersion,
+    requestId,
+    sourceActionVersion: studioSourceActionVersion,
+    type: 'source-action',
+  })
+}
+
+/**
+ * Snaps two rectangles into `View1` and puts a separator between them: a snapped element cannot be
+ * made into a view, but the untagged separator can.
+ */
+async function separatedFlow(
+  session: StudioProjectSession,
+  root: string,
+): Promise<Readonly<{ flowed: StudioSketchSnapApplyResult; separatorId: string }>> {
+  const snapped = await snapTwoRects(session, root)
+  const flowed = await session.applySketchFlowAction({
+    action: { afterRectId: 'café', beforeRectId: 'subtitle', kind: 'insert-separator' },
+    checkpointId: 'flow-separator',
+    expectedCatalogRevision: snapped.catalog.revision,
+    requestId: 'flow-separator-request',
+    sketchId: 'sketch-1',
+    sourceVersion: snapped.file.sourceVersion,
+  })
+  const path = FS.resolvePath('@/studio/View1.tao', root)
+  const parsed = await (await Workspace.open(root)).parse(path)
+  const separator = AST.streamAllContents(parsed.entry.ast).filter(AST.isViewRender)
+    .find(render => render.view?.$refText === 'Box' && AST.attachedTag(render) === undefined)
+  Assert.defined(separator?.$cstNode, 'the flow separator parses with source coordinates')
+  return { flowed, separatorId: `${path}:${separator.$cstNode.offset}:${separator.$cstNode.end}` }
+}
+
+/** Creates `View1` from two rectangles and snaps both into its flow. */
+async function snapTwoRects(session: StudioProjectSession, root: string): Promise<StudioSketchSnapApplyResult> {
+  const created = await session.applySketchAction(createTwoRectRequest(root, 'create-flow'))
+  const initial = await session.readFile('@/studio/View1.tao')
+  return await session.applySketchSnap({
+    checkpointId: 'snap-flow',
+    expectedCatalogRevision: created.catalog.revision,
+    rectIds: ['café', 'subtitle'],
+    requestId: 'snap-flow-request',
+    sketchId: 'sketch-1',
+    sourceVersion: initial.sourceVersion,
+  })
+}
 
 function createRequest(project: string, requestId: string): StudioSketchCatalogRequest {
   return {
@@ -1155,10 +1797,12 @@ function createAxisChangeRequest(project: string, requestId: string): StudioSket
 async function withSketchSession(
   use: (session: StudioProjectSession, root: string, compiles: unknown[]) => Promise<void>,
   compile: () => Promise<void> | void = () => {},
-  options: Readonly<{ sketchCatalogIO?: StudioSketchCatalogIO }> = {},
+  options: Readonly<{ files?: Readonly<Record<string, string>>; sketchCatalogIO?: StudioSketchCatalogIO }> = {},
 ): Promise<void> {
+  const { files, ...sessionOptions } = options
   await withTaoFiles('tao-studio-sketch-session-', {
     'Garden.tao': 'app Garden { view Main }\nview Main() { }\n',
+    ...files,
   }, async (paths, root) => {
     const compiles: unknown[] = []
     const session = await StudioProjectSession.open({
@@ -1168,7 +1812,7 @@ async function withSketchSession(
       },
       entryPath: paths['Garden.tao'],
       projectRoot: root,
-      ...options,
+      ...sessionOptions,
     })
     await use(session, await FS.realPath(root), compiles)
   })

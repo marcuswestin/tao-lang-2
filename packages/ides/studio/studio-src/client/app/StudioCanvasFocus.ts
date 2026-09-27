@@ -6,6 +6,8 @@ export type StudioCanvasFocusDeps = Readonly<{
   button: HTMLButtonElement
   /** The measured rectangle of that view's root render, when the selecting cell reported one. */
   ownerFrame: (viewId: string) => StudioCanvasFocusRect | undefined
+  /** Called once a view is focused, so the code pane can show that view alone. */
+  onFocused?: (viewId: string) => void
   onError: (error: unknown) => void
   preview: HTMLElement
   previews: () => readonly StudioPreviewConnection[]
@@ -147,6 +149,7 @@ export function mountStudioCanvasFocus(
     }
     matrix.focusView(preview, candidate.id, leave)
     update()
+    deps.onFocused?.(candidate.id)
     lane.enqueue(async () => await frameCells(candidate))
   }
   button.addEventListener('click', onClick)

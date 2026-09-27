@@ -8,6 +8,7 @@ import type { StudioSketch, StudioSketchRect } from '../StudioSketchCatalog'
 import { canvasScale } from './matrix/StudioCanvasViewport'
 import { type StudioFeedDrop, StudioFeedTransfer } from './StudioFeedController'
 import type { StudioFeedExampleValues, StudioFeedSample } from './StudioFeedSamples'
+import { StudioSketchBadge, type StudioSketchConvertIntent } from './StudioSketchBadge'
 import {
   StudioSketchGeometry,
   type StudioSketchGeometryState,
@@ -81,6 +82,8 @@ function settleSketchChange(sketch: StudioSketch, change: StudioSketchRectChange
 }
 
 export type StudioSketchViewOptions = Readonly<{
+  /** onConvert switches a root rectangle's badge and answers with the catalog's sketches afterwards. */
+  onConvert?: (intent: StudioSketchConvertIntent) => Promise<readonly StudioSketch[]>
   onCreateSketch?: (input: Readonly<{ height: number; width: number; x: number; y: number }>) => Promise<void> | void
   onFeedDrop?: (payload: StudioFeedDrop, sketchId: string, rectId?: string) => Promise<void>
   onError?: (error: unknown) => void
@@ -88,11 +91,15 @@ export type StudioSketchViewOptions = Readonly<{
   onRectChange?: (
     change: StudioSketchRectChange,
   ) => Promise<readonly StudioSketch[] | void> | readonly StudioSketch[] | void
+  /** onRemove takes a source-backed card off the canvas and answers with the catalog's sketches afterwards. */
+  onRemove?: (sketchId: string) => Promise<readonly StudioSketch[]>
   onSnap?: (
     request: StudioSketchViewSnapRequest,
   ) => Promise<StudioSketchSnapApplyResult | StudioSketchSnapProposalResult>
   onUnsnap?: (request: StudioSketchViewUnsnapRequest) => Promise<StudioSketchSnapApplyResult>
   onUndoSnap?: (request: StudioSketchViewUndoRequest) => Promise<StudioSketchSnapUndoResult>
+  /** renderableViews lists the views a render rectangle can start from, read when a badge menu opens. */
+  renderableViews?: () => readonly string[]
   sketches: readonly StudioSketch[]
   exampleValues?: StudioFeedExampleValues
   sourceVersion?: string
@@ -614,6 +621,14 @@ export const StudioSketchView = {
       input.focus()
       input.select()
     }
+    const convert = (intent: StudioSketchConvertIntent): void => {
+      const pending = options.onConvert?.(intent)
+      void pending?.then(next => receive(next), error => options.onError?.(error))
+    }
+    const remove = (sketchId: string): void => {
+      const pending = options.onRemove?.(sketchId)
+      void pending?.then(next => receive(next), error => options.onError?.(error))
+    }
     const renderNow = (nextSketches: readonly StudioSketch[], nextSourceVersion?: string): void => {
       if (disposed) {
         return
@@ -627,8 +642,18 @@ export const StudioSketchView = {
           selected = rectIds.size === 0 ? undefined : { ...selected, rectIds }
         }
       }
-      const boards = sketches.map(sketch =>
-        renderSketch(
+      const boards = sketches.map(sketch => {
+        const badge = StudioSketchBadge.element(
+          document,
+          sketch,
+          options.renderableViews ?? (() => []),
+          convert,
+          remove,
+        )
+        if (StudioSketchBadge.sourceBacked(sketch)) {
+          return StudioSketchBadge.card(document, sketch, badge)
+        }
+        const frame = renderSketch(
           document,
           sketch,
           (() => {
@@ -660,7 +685,9 @@ export const StudioSketchView = {
           options.onFeedDrop,
           exampleValues[sketch.id],
         )
-      )
+        frame.querySelector(`:scope > [data-tao-studio-sketch-name]`)?.append(badge)
+        return frame
+      })
       workspace.replaceChildren(...boards, inspector)
       renderInspector(inspector, sketches, selected, commit)
     }

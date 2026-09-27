@@ -1509,6 +1509,18 @@ Grid [columns 7, gap sm] {                                // a generated collect
   per-item `span N`. The runtime bridge is Shopify's FlashList — virtualization, recycling, masonry,
   and spans are its; the min-width arithmetic and the collection-owned selection are Tao's, since
   the platform has neither.
+- **`Layer` is the one way to float content over a parent's flow** (decided 2026-09-27). It is an
+  ordinary `@tao/ui` view, not a clause, so no other view gains a position:
+  `Layer(InsetBottom: 20, InsetLeft: 10) { Col { … } }`. It takes no room in the parent's flow; each
+  of `InsetTop`, `InsetRight`, `InsetBottom`, and `InsetLeft` is an optional distance from that
+  edge of the parent's box, and an axis with neither inset sits at its start edge, top or left.
+  Its own children stack and hug like `Stack`, and it paints over earlier siblings in source
+  order, with no z-index. A parent never grows to hold a layer, so a layer inside a hugging parent
+  needs the parent's size stated. It replaces the positioned `Canvas` container and `at x y` child
+  offset that FS-D5 proposed, and it is not the host-owned floating layer of LANG-018 and KEY-D13:
+  a `Layer` is placed against its parent's box and stays in its parent's navigation. Studio's Draw
+  canvas is what forces it: free rectangles are to render as layers once the Freehand plan's
+  Slice 5 lands.
 - **Every element kind declares which clauses it accepts, and the validator rejects the rest** with
   a targeted diagnostic (`'cell min' applies to Grid`). Clauses are presentation, so they never
   move into the parentheses — parentheses carry data, brackets carry presentation.

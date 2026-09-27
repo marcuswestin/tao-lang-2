@@ -27,6 +27,7 @@ type MountedMatrixSketches = {
   mount?: MountedStudioSketchView
   mutationLane: StudioSketchMutationLane
   project: string
+  renderableViews: readonly string[]
   sourceVersions: Record<string, string>
 }
 
@@ -137,6 +138,13 @@ export const StudioMatrixSketches = {
     state.exampleValues = values
     state.mount?.render(state.catalog.sketches, state.sourceVersions, values)
   },
+  /** renderable records which views a badge can switch a drawn rectangle to render. */
+  renderable(parent: HTMLElement, views: readonly string[]): void {
+    const state = mountedSketches.get(parent)
+    if (state !== undefined) {
+      state.renderableViews = views
+    }
+  },
   sketchForView(parent: HTMLElement, viewName: string): string | undefined {
     return mountedSketches.get(parent)?.catalog.sketches.find(sketch => sketch.view === viewName)?.id
   },
@@ -162,6 +170,21 @@ export const StudioMatrixSketches = {
       renderMatrixSketches(parent, state.project, result.catalog)
       return result
     })
+  },
+  /**
+   * refresh re-reads the catalog after a preview manifest update: the server marks a render card
+   * broken once its scenario entry leaves the manifest, and only a fresh read carries that mark.
+   * Runs in the mutation lane, so it never lands between a catalog edit and its answer.
+   */
+  async refresh(
+    parent: HTMLElement,
+    project: string,
+    read: () => Promise<StudioSketchCatalogSnapshot> = StudioApiClient.sketches,
+    render: typeof renderMatrixSketches = renderMatrixSketches,
+  ): Promise<void> {
+    const state = mountedSketches.get(parent)
+    const catalog = state === undefined ? await read() : await state.mutationLane.run(read)
+    render(parent, state?.project ?? project, catalog)
   },
   /** rerender re-lays the boards already mounted under `parent` after the grid reconciled its hosts. */
   rerender(parent: HTMLElement, sourceVersions?: Readonly<Record<string, string>>): void {
@@ -219,6 +242,7 @@ function renderMatrixSketches(
     catalog,
     mutationLane: new StudioSketchMutationLane(),
     project,
+    renderableViews: [],
     sourceVersions: {},
   }
   if (catalog.revision >= state.catalog.revision) {
@@ -263,15 +287,35 @@ function renderMatrixSketches(
       onFeedDrop: async (payload, sketchId, rectId) => {
         await state.feedDrop?.(payload, sketchId, rectId)
       },
+      onConvert: async intent => {
+        const result = await state.mutationLane.run(async () => {
+          const converted = await StudioApiClient.sketchConvert({
+            ...intent,
+            expectedCatalogRevision: state.catalog.revision,
+            requestId: crypto.randomUUID(),
+          })
+          state.catalog = converted.catalog
+          return converted
+        })
+        delete host.dataset['taoStudioSketchError']
+        return result.catalog.sketches
+      },
       onFlowAction: async request => await applySketchFlowAction(state, request),
       onRectChange: async change => {
         const result = await applySketchAction(state, sketchAction(change))
         delete host.dataset['taoStudioSketchError']
         return result.catalog.sketches
       },
+      onRemove: async sketchId => {
+        // A source-backed card leaves the catalog only; the code it showed stays as it is.
+        const result = await applySketchAction(state, { id: sketchId, kind: 'delete-sketch' })
+        delete host.dataset['taoStudioSketchError']
+        return result.catalog.sketches
+      },
       onSnap: async request => await applySketchSnap(state, request),
       onUnsnap: async request => await applySketchUnsnap(state, request),
       onUndoSnap: async request => await undoSketchSnap(state, request),
+      renderableViews: () => state.renderableViews,
       sketches: state.catalog.sketches,
       exampleValues: state.exampleValues,
       sourceVersions: state.sourceVersions,

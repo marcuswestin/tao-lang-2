@@ -10,6 +10,7 @@ import {
   currentSourceIdentity,
   handlePreviewMessage,
   postCanvasGestureOwnership,
+  postClearSelection,
   postEditorSelection,
   type StudioActivePreview,
   type StudioCanvasViewportControls,
@@ -39,6 +40,8 @@ export type StudioPreviewWiringDeps = Readonly<{
   onCanvasPanKey?: (preview: StudioPreviewConnection, message: StudioPreviewCanvasPanKeyMessage) => void
   onCanvasShortcut?: (command: StudioPreviewCanvasShortcutMessage['command'], iframe: HTMLIFrameElement) => void
   onFeedDrop?: (message: StudioPreviewFeedDropMessage) => Promise<void>
+  /** A preview reported fresh element geometry, so anything pinned to the selection moves with it. */
+  onLayoutMeasured?: () => void
 }>
 
 /**
@@ -146,6 +149,8 @@ export function forwardPreviewCanvasGesture(
 export type StudioPreviewMessagesDeps =
   & StudioPreviewWiringDeps
   & Readonly<{
+    /** Design and Draw keep the keyboard on the canvas, so a preview pick follows in the editor unfocused. */
+    canvasOwnsInput?: () => boolean
     /** Canvas mode follows the selection, so it is re-evaluated after every inspect. */
     onInspected: () => void
   }>
@@ -166,17 +171,27 @@ export function studioPreviewMessageListener(deps: StudioPreviewMessagesDeps): (
       canvasPanKey: message => deps.onCanvasPanKey?.(connection, message),
       canvasShortcut: message => deps.onCanvasShortcut?.(message.command, connection.iframe),
       feedDrop: deps.onFeedDrop,
+      layoutMeasured: () => deps.onLayoutMeasured?.(),
       changed() {
         drawer.renderIfLogs()
         drawer.loadDataIfVisible()
         connection.changed?.()
       },
-      inspect(selection) {
-        inspection.select(selection)
+      editorTakesFocus: () => deps.canvasOwnsInput?.() !== true,
+      inspect(selection, additive) {
+        if (!inspection.select(selection, additive)) {
+          // A new selection lives in this cell alone; the others stop outlining their old picks.
+          for (const other of previews) {
+            if (other !== connection) {
+              postClearSelection(other, handshake)
+            }
+          }
+        }
+        const selected = inspection.selected() ?? selection
         deps.publish()
         deps.onInspected()
-        void inspection.inspect(selection)
-        void inspection.highlightOnDevice(selection)
+        void inspection.inspect(selected)
+        void inspection.highlightOnDevice(selected)
       },
       reveal: deps.onReveal,
     }).catch(error => {

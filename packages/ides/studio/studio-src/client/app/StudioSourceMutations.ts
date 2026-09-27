@@ -1,3 +1,4 @@
+import { Errors } from '@shared/core'
 import type { EditorView } from 'codemirror'
 import type { StudioCompileCompletion } from '../../StudioCompileCoordinator'
 import type { StudioDraftFile } from '../../StudioDraftSync'
@@ -7,14 +8,23 @@ import type {
   StudioSourceActionEnvelope,
   StudioSourceActionIdentity,
 } from '../../StudioProtocol'
-import { StudioApiClient } from '../StudioApiClient'
+import { StudioApiClient, StudioApiError } from '../StudioApiClient'
 import { StudioDialog } from '../StudioDialog'
 import { projectRelativePath, StudioEditorInsertion } from '../StudioEditor'
 import { showSourceActionError, sourceActionLabel } from '../StudioVisualEditing'
+import { studioEditLabel, type StudioEditLogEntry } from './StudioEditLog'
 
 type StudioSourceMutationResult = Readonly<{ compile: StudioCompileCompletion; path: string }>
 
-type StudioUndoCheckpoint = Readonly<{ id: string; identity: StudioSourceActionIdentity; path: string }>
+type StudioUndoCheckpoint = Readonly<{
+  at: number
+  id: string
+  identity: StudioSourceActionIdentity
+  label: string
+  path: string
+  /** False once its file changed outside a visual edit: the log keeps the edit but ⌘Z passes over it. */
+  undoable: boolean
+}>
 
 export type StudioSourceMutationsDeps = Readonly<{
   activeFile: () => StudioDraftFile | undefined
@@ -41,7 +51,7 @@ export type StudioSourceMutationsDeps = Readonly<{
  * checkpoints it commits form the undo stack for the file they landed in.
  */
 export class StudioSourceMutations {
-  readonly #checkpoints: StudioUndoCheckpoint[] = []
+  #checkpoints: StudioUndoCheckpoint[] = []
   readonly #deps: StudioSourceMutationsDeps
   #busy = false
 
@@ -54,7 +64,29 @@ export class StudioSourceMutations {
   }
 
   canUndo(): boolean {
-    return this.#checkpoints.at(-1)?.path === this.#deps.activePath()
+    return this.#undoTarget() !== undefined
+  }
+
+  /** The undo stack as the edit log shows it: newest first, and only the next undoable edit in the open file walks back. */
+  edits(): readonly StudioEditLogEntry[] {
+    const target = this.canUndo() ? this.#undoTarget() : undefined
+    return this.#checkpoints.toReversed().map(checkpoint => ({
+      at: checkpoint.at,
+      id: checkpoint.id,
+      label: checkpoint.label,
+      path: checkpoint.path,
+      undoable: checkpoint === target,
+    }))
+  }
+
+  /**
+   * The file changed outside a visual edit (saved from the code editor), so none of its earlier visual
+   * edits can be walked back any more; they stay in the log as history.
+   */
+  retirePath(path: string): void {
+    this.#checkpoints = this.#checkpoints.map(checkpoint =>
+      checkpoint.path === path && checkpoint.undoable ? { ...checkpoint, undoable: false } : checkpoint
+    )
   }
 
   /** Whether a mutation may start now; when it may not, the status line already says why. */
@@ -68,18 +100,26 @@ export class StudioSourceMutations {
       async () => {
         const result = await StudioApiClient.sourceAction(envelope)
         if (result.checkpoint.status === 'committed' && this.#checkpoints.at(-1)?.id !== result.checkpoint.id) {
-          this.#checkpoints.push({ id: result.checkpoint.id, identity: envelope.identity, path: result.path })
+          this.#checkpoints.push({
+            at: Date.now(),
+            id: result.checkpoint.id,
+            identity: envelope.identity,
+            label: studioEditLabel(envelope.action),
+            path: result.path,
+            undoable: true,
+          })
         }
         return result
       },
     )
   }
 
-  async submitLocal(action: StudioCanonicalSourceAction, identity: StudioSourceActionIdentity): Promise<void> {
+  /** Answers whether the edit landed; a refusal has already said why in the status line. */
+  async submitLocal(action: StudioCanonicalSourceAction, identity: StudioSourceActionIdentity): Promise<boolean> {
     if (!this.#canEditRender(identity)) {
-      return
+      return false
     }
-    await this.apply(this.#localEnvelope(action, identity))
+    return await this.apply(this.#localEnvelope(action, identity))
   }
 
   /** A shared-style edit lands everywhere the style is used, so the person confirms its diff first. */
@@ -132,7 +172,7 @@ export class StudioSourceMutations {
   }
 
   async undoLatest(): Promise<void> {
-    const checkpoint = this.#checkpoints.at(-1)
+    const checkpoint = this.#undoTarget()
     if (checkpoint === undefined || checkpoint.path !== this.#deps.activePath() || !this.canMutate()) {
       return
     }
@@ -145,14 +185,32 @@ export class StudioSourceMutations {
       ...(checkpoint.identity.occurrence === undefined ? {} : { occurrence: checkpoint.identity.occurrence }),
     }
     await this.#run('Undoing visual source edit…', async () => {
-      const result = await StudioApiClient.undoSourceAction(StudioInspector.undo({
-        checkpointId: checkpoint.id,
-        identity,
-        requestId: `undo:${crypto.randomUUID()}`,
-      }))
-      this.#checkpoints.pop()
+      let result: Awaited<ReturnType<typeof StudioApiClient.undoSourceAction>>
+      try {
+        result = await StudioApiClient.undoSourceAction(StudioInspector.undo({
+          checkpointId: checkpoint.id,
+          identity,
+          requestId: `undo:${crypto.randomUUID()}`,
+        }))
+      } catch (error) {
+        if (!isStaleSourceRefusal(error)) {
+          throw error
+        }
+        // The file changed after this edit, and so after every earlier one in it: none can walk back.
+        this.retirePath(checkpoint.path)
+        Errors.throwUserInput(
+          `${checkpoint.path} changed after “${checkpoint.label}”, so its visual edits can no longer be undone.`,
+        )
+      }
+      this.#checkpoints = this.#checkpoints.filter(candidate => candidate.id !== checkpoint.id)
       return result
     })
+  }
+
+  /** The open file's newest edit ⌘Z can still walk back; edits in other files wait for their file to open. */
+  #undoTarget(): StudioUndoCheckpoint | undefined {
+    const activePath = this.#deps.activePath()
+    return this.#checkpoints.findLast(checkpoint => checkpoint.undoable && checkpoint.path === activePath)
   }
 
   insertComponent(component: (typeof studioPaletteComponents)[number]): void {
@@ -263,11 +321,18 @@ export class StudioSourceMutations {
   }
 }
 
+/** The server refuses an undo whose file no longer holds the source the edit left behind. */
+function isStaleSourceRefusal(error: unknown): boolean {
+  return error instanceof StudioApiError && error.status === 409 && error.details?.['code'] === 'stale-source'
+}
+
 function sourceActionUsesRenderOccurrence(action: StudioCanonicalSourceAction): boolean {
   return action.kind === 'move-render'
     || action.kind === 'set-layout-entry'
     || action.kind === 'set-style-entry'
     || action.kind === 'wrap-render'
+    || action.kind === 'group-renders'
+    || action.kind === 'extract-view'
     || (action.kind === 'insert-component' || action.kind === 'insert-project-view')
       && (typeof action['beforeId'] === 'string' || typeof action['afterId'] === 'string')
 }

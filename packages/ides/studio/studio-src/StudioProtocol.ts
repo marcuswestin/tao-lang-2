@@ -221,6 +221,18 @@ export type StudioSketchUnsnapRequest = Readonly<
   Omit<StudioSketchSnapRequest, 'confirmedProposalVersion'>
 >
 
+/**
+ * Switches one root rectangle's badge. `render` turns a drawn definition into a scenario entry that
+ * renders `view`; `definition` detaches a render into a copy of the view it rendered.
+ */
+export type StudioSketchConvertRequest = Readonly<{
+  expectedCatalogRevision: number
+  requestId: string
+  sketchId: string
+  to: 'definition' | 'render'
+  view?: string
+}>
+
 export type StudioSketchFlowAction =
   | Readonly<{ kind: 'toggle-direction'; rectId: string }>
   | Readonly<{ afterRectId: string; beforeRectId?: string; kind: 'insert-separator' }>
@@ -494,6 +506,8 @@ export type StudioPreviewRuntimeUpdateMessage<Runtime = StudioJsonObject> = {
 }
 
 export type StudioPreviewSourceMessage = {
+  /** A shift-click adds the element to the selection instead of replacing it. */
+  additive?: true
   channel: typeof studioProtocolChannel
   identity: StudioPreviewSourceIdentity
   protocolVersion: typeof studioProtocolVersion
@@ -728,10 +742,29 @@ export type StudioPreviewCanvasPanKeyMessage = {
   type: 'preview-canvas-pan-key'
 }
 
+/**
+ * Canvas commands: zoom, ⌘G making a view of the selection, ⌥⌘G grouping it in place, and ⌘Z walking
+ * back the latest visual edit.
+ */
+export type StudioCanvasShortcutCommand = 'fit' | 'group' | 'make-view' | 'reset' | 'undo' | 'zoom-in' | 'zoom-out'
+
+/** The canvas commands the viewport itself answers. */
+export type StudioCanvasZoomCommand = Exclude<StudioCanvasShortcutCommand, 'group' | 'make-view' | 'undo'>
+
+const canvasShortcutCommands: ReadonlySet<string> = new Set<StudioCanvasShortcutCommand>([
+  'fit',
+  'group',
+  'make-view',
+  'reset',
+  'undo',
+  'zoom-in',
+  'zoom-out',
+])
+
 /** Canvas commands from an authenticated focused preview. */
 export type StudioPreviewCanvasShortcutMessage = {
   channel: typeof studioProtocolChannel
-  command: 'fit' | 'reset' | 'zoom-in' | 'zoom-out'
+  command: StudioCanvasShortcutCommand
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   type: 'preview-canvas-shortcut'
@@ -1196,8 +1229,7 @@ function parsePreviewCanvasPanKey(value: StudioJsonObject): StudioPreviewCanvasP
 function parsePreviewCanvasShortcut(value: StudioJsonObject): StudioPreviewCanvasShortcutMessage | undefined {
   const identity = parsePreviewIdentity(value['identity'])
   const command = value['command']
-  return identity === undefined
-      || (command !== 'fit' && command !== 'reset' && command !== 'zoom-in' && command !== 'zoom-out')
+  return identity === undefined || typeof command !== 'string' || !canvasShortcutCommands.has(command)
     ? undefined
     : envelope({
       command: command as StudioPreviewCanvasShortcutMessage['command'],
@@ -1728,6 +1760,7 @@ function parsePreviewSource(value: StudioJsonObject): StudioPreviewSourceMessage
     return undefined
   }
   return envelope({
+    ...(value['additive'] === true && type === 'preview-select-source' ? { additive: true as const } : {}),
     identity,
     range,
     type,
