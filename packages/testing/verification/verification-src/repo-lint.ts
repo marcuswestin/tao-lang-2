@@ -485,7 +485,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:239',
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:351',
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:359',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:372',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:376',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:20',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:195',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:513',
