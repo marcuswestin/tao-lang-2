@@ -45,5 +45,13 @@
   The complete isolated host is retained at
   `.artifacts/native-module-check/run-ouRMif`. Adding `cmake` would mask the denied prebuilt-artifact
   path rather than prove the intended host lane, so no repository change is justified from this run.
+  On 2026-09-26, `./agent unsandboxed test-host ios --app native-bridge --device
+  4E0DEA16-953F-4269-B8BB-91D1D38993D1` likewise completed Expo prebuild and native codegen, then the
+  active task's immutable network profile blocked `cdn.cocoapods.org`. The tool terminated the
+  process before the ordinary report/cleanup completed; no native Clipboard assertion ran.
+  Evidence: `.artifacts/logs/agent/test-host/2026-09-26T23-49-08-853Z-91922.log` and isolated run
+  `.artifacts/host-testing/b8b5ffa3-8afe-4b9c-9c6b-9fe7c28d3d93` on `feat/native-binding-poc`.
+  No policy or dependency version was changed. Re-run this native proof from an ordinary developer
+  shell; existing host-free checks cannot substitute for its result.
   Keep this entry open until a fresh host run compiles `TaoICloudNative` successfully.
 - **Source:** 2026-09-05 iCloud datasource provider implementation.

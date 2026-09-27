@@ -1,6 +1,6 @@
 # Native Bridge device demo
 
-One app for exercising generated native bindings on physical devices. This replaces the temporary
+One app for exercising generated native bindings on devices and simulators. This replaces the temporary
 Haptics runner. The home screen opens separate Expo Haptics, React Native Vibration, and Expo
 Clipboard scenes. More native surfaces should join this app as they become supported.
 
@@ -58,7 +58,8 @@ component and constant generation are supported. All 11 generated Clipboard oper
 ```text
 Native Bridge/
   App.tao, Project.tao, Design.tao
-  Native Bridge.test.tao
+  Native Bridge.test.tao    # no native effects
+  .host-tests/Clipboard.test.tao       # explicit iOS host journey
   Haptics/
     Haptics.tao
     Generated/             # generated Tao, TypeScript and catalog
@@ -101,6 +102,26 @@ image previews and absent results, URLs, listener controls/events and cleanup on
 Haptics control, and vibration/cancellation. A pending clipboard write must finish before its
 completion status appears. The substitutes leave the real clipboard and device hardware untouched.
 
-Separate generated-binding tests exercise the native contracts. Physical-device behavior still
-needs the interactions above: these tests do not prove OS paste prompts, clipboard formats,
-platform support or physical feedback.
+Separate generated-binding tests exercise the native contracts. The opt-in iOS host journey compiles
+this app without native substitutes, installs an isolated Release build, and drives text/HTML,
+PNG/JPEG image metadata, URLs, availability, and listener controls through Appium. Its hidden `.host-tests/` directory
+keeps real clipboard writes out of ordinary in-process test discovery.
+
+```sh
+./dev test-host ios --app native-bridge --device <simulator-UDID>
+```
+
+Use an idle iOS simulator. The run changes that simulator's pasteboard, disables automatic Mac
+clipboard synchronization, and uninstalls its uniquely identified test app during cleanup. Native
+scrolling brings off-screen controls and results into view. Android and physical-device journeys
+are not admitted under this subject because it includes iOS-specific URL operations.
+
+The first simulator attempt on 2026-09-26 stopped during CocoaPods preparation: the task's network
+policy blocked `cdn.cocoapods.org`. No native UI assertion ran. The journey still needs a successful
+host run; current host-free tests prove orchestration only. Image assertions check returned dimensions
+and presence, not encoded bytes or native image decoding. Late-event disposal is established by the
+mocked suite, not by an immediate unchanged native counter.
+
+Cross-app paste permission scenarios remain pending. Physical haptic feel is deliberately excluded.
+Neither mocked UI tests nor this same-app Clipboard journey establishes those behaviors; listener
+cleanup against late events is additionally covered by the mocked maintained-app suite.

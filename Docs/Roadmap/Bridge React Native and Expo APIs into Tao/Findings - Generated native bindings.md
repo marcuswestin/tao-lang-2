@@ -181,11 +181,22 @@ operations, which satisfies strict unused-local checks in the repository.
 The demo exposes a remaining language gap: nullable record results can be stored and passed through
 Tao, but their fields cannot yet be inspected directly. A separate injected UI renderer previews a
 returned clipboard image without any handwritten native calls. A future language slice should settle
-nullable-value narrowing before expanding this pattern. Clipboard device acceptance remains open.
+nullable-value narrowing before expanding this pattern. Clipboard native acceptance remains open.
 The demo journey covers navigation and initial state. A maintained-app runtime suite now exercises
 the actual Clipboard controls, rendered results, listener lifecycle and Back cleanup, all Haptics
 controls and vibration/cancellation against native substitutes. Separate generated-binding tests
 cover native contracts; neither suite proves physical device effects or OS clipboard behavior.
+
+An explicit iOS Simulator journey now targets the same maintained app with the real Expo module:
+`./dev test-host ios --app native-bridge --device <simulator-UDID>`. The authored journey lives in
+`.host-tests/Clipboard.test.tao`, outside ordinary recursive test discovery. It exercises text/HTML,
+image availability and PNG/JPEG result metadata, URLs, event delivery, both stop controls and re-entry.
+Image metadata assertions do not independently verify encoded bytes or successful image decoding;
+late-event disposal remains established by the mocked runtime suite.
+The 2026-09-26 host attempt stopped during CocoaPods preparation because the active task's immutable
+network policy denied `cdn.cocoapods.org`. No native UI assertion ran, so this is implemented coverage
+awaiting its first real-host result. Cross-app paste permission scenarios remain pending, and physical
+haptic feel is explicitly excluded from the current pre-landing scope.
 
 The app has no scenario and opens as an ordinary app. Physical iPhone launch can use
 `./tao dev "Apps/Test Apps/Native Bridge" --app NativeBridge --device roPhone`, or Studio's Device

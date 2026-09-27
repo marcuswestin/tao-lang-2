@@ -11,7 +11,7 @@ contexts. `tao-appium-driver` owns the reusable W3C transport, Appium server lif
 controller. This package owns the iOS and Android target policies and compiled-journey adapters.
 
 `playwright.config.ts` discovers tests only through scoped control and subject-specific browser globs
-inside this package. HNReader is the only existing app admitted as a subject; Clockwork is a harness
+inside this package. HNReader, Native Navigation, and Native Bridge are maintained-app subjects; Clockwork is a harness
 fixture. Production compiler, runtime, Expo configuration, and shared utilities are reused.
 
 ## Subjects and evidence
@@ -116,6 +116,26 @@ Browser, export, driver, and `--fault` are explicitly unsupported for this subje
 Release installation milestone; it does not run a UI journey or claim physical-device UI acceptance. `prepare` builds the isolated fixture without claiming host acceptance. The journey
 covers switching tabs, pushed stack positions, typed drafts, local counters, and native Back. It does
 not establish gesture cancellation, toolbar menus, presentation dismissal, or keyboard/safe-area layout.
+
+### Native Clipboard acceptance
+
+```sh
+./agent unsandboxed test-host ios --app native-bridge --device <simulator-UDID>
+```
+
+This subject drives `Apps/Test Apps/Native Bridge/.host-tests/Clipboard.test.tao` against the maintained app
+and real Expo Clipboard module. It covers text/HTML, image PNG/JPEG metadata and absence, URL
+operations, availability, event delivery and both listener stop controls, plus scene re-entry.
+It intentionally does not run in ordinary test discovery, on Android, in a browser, or on a physical
+phone. Cross-app paste permissions and physical haptic feel are outside this proof. Simulator
+pasteboard synchronization is explicitly off; use an idle target because its pasteboard is changed.
+The existing target lease, isolated Release bundle, receipts, and uninstall cleanup apply.
+
+The first simulator attempt on 2026-09-26 stopped during CocoaPods preparation: the task's network
+policy blocked `cdn.cocoapods.org`. No native UI assertion ran. The journey still needs a successful
+host run; current host-free tests prove orchestration only. Image assertions check returned dimensions
+and presence, not encoded bytes or native image decoding. Late-event disposal is established by the
+mocked suite, not by an immediate unchanged native counter.
 
 ## Time, randomness, and parallelism
 

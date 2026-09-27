@@ -180,3 +180,34 @@ test('compiles and emits the authored Clockwork countdown journey', async () => 
     { kind: 'expect', text: 'Countdown: 0:09' },
   ])
 })
+
+test('compiles real Clipboard operations against the maintained Native Bridge app without mocked native modules', async () => {
+  const clipboard = await compileHostJourney(
+    Repo.resolvePath('Apps/Test Apps/Native Bridge/.host-tests/Clipboard.test.tao'),
+    {
+      suite: 'Native Clipboard acceptance',
+      check: 'round trips native clipboard formats and manages change subscriptions',
+    },
+  )
+  expect(clipboard.check.run.appName).toBe('NativeBridge')
+  expect(clipboard.check.run.appSourcePath).toBe(Repo.resolvePath('Apps/Test Apps/Native Bridge/App.tao'))
+  const operations: HostJourneyOperation[] = []
+  await runHostJourney(clipboard, {
+    capabilities,
+    execute: async operation => {
+      operations.push(operation)
+    },
+  })
+  expect(operations.filter(operation => operation.kind === 'press').map(operation => operation.text)).toEqual(
+    expect.arrayContaining([
+      'Copy text',
+      'Read HTML',
+      'Read PNG',
+      'Read JPEG',
+      'Copy sample URL',
+      'Start listening',
+      'Stop listening',
+      'Stop via deprecated API',
+    ]),
+  )
+})

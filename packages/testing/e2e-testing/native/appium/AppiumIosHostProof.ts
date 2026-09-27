@@ -16,7 +16,7 @@ import {
   runHostJourney,
 } from '../../journey/HostJourney'
 import { assertNativeInputValue, enterNativeInput } from '../AppiumNativeInputs'
-import type { AppiumXcuiTestDeepLinkSession } from './AppiumXcuiTestController'
+import type { AppiumXcuiTestDeepLinkSession, AppiumXcuiTestRevealSession } from './AppiumXcuiTestController'
 
 export type AppiumIosHostFault = Readonly<{
   expectedAssertion: Readonly<{
@@ -323,6 +323,9 @@ async function assertText(
   if (!missing) {
     const found = await Time.pollUntil(async () => {
       const observation = await observeIfPresent(session, target)
+      if (observation?.visible === false) {
+        await scrollToward(session, observation)
+      }
       return observation?.visible === true
           && (observation.text === text || observation.accessibilityLabel === text)
         ? observation
@@ -393,7 +396,23 @@ async function press(
     : selector === 'label'
     ? { kind: 'accessibility', name: value }
     : { kind: 'text', value }
-  const observation = await observe(session, targetWithinSelections(selections, leaf))
+  const target = targetWithinSelections(selections, leaf)
+  const observation = await Time.pollUntil(async () => {
+    const found = await observeIfPresent(session, target)
+    if (found?.visible === true) {
+      return found
+    }
+    if (found !== undefined) {
+      await scrollToward(session, found)
+    }
+    return undefined
+  }, { intervalMs: 100, timeoutMs: 10_000 })
+  if (observation === undefined) {
+    throw new HostControlError(
+      'assertion',
+      `Tao journey could not press ${selector} '${value}': target was not visible.`,
+    )
+  }
   await session.perform({
     expectedRevision: session.descriptor().revision,
     kind: 'click',
@@ -420,4 +439,10 @@ function unsupportedJourneyOperation(operation: HostJourneyOperation): never {
     'unsupported',
     `Appium XCUITest cannot preserve Tao journey operation '${operation.kind}'.`,
   )
+}
+
+/** Reveal only an existing off-screen target; the native driver owns container-relative geometry. */
+async function scrollToward(session: HostSession, observation: HostObservation): Promise<void> {
+  const native = session as HostSession & Partial<AppiumXcuiTestRevealSession>
+  await native.revealObservation?.(observation)
 }

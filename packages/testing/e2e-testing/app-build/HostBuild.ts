@@ -1,7 +1,7 @@
 import Runtime from '@expo-host'
 import { CLI, Errors, FS, Platform, Repo, Switch } from '@shared'
 
-export type HostSubject = 'clockwork' | 'hnreader' | 'native-navigation'
+export type HostSubject = 'clockwork' | 'hnreader' | 'native-navigation' | 'native-bridge'
 export type HostApplicationFault = 'clockwork-countdown-frozen' | 'hnreader-reading-history-no-write'
 export type HostFaultProvenance = Readonly<{
   expectedVisibleAssertion: string
@@ -104,6 +104,10 @@ function subjectSource(subject: HostSubject): { appName: string; sourcePath: str
     clockwork: () => ({
       appName: 'Clockwork',
       sourcePath: 'packages/testing/e2e-testing/fixtures/Clockwork/Clockwork.tao',
+    }),
+    'native-bridge': () => ({
+      appName: 'NativeBridge',
+      sourcePath: 'Apps/Test Apps/Native Bridge/App.tao',
     }),
     'native-navigation': () => ({
       appName: 'NativeNavigation',
@@ -247,7 +251,7 @@ const HostApp: ComponentType = () => {
       if (publishNavigationReceipt === publishNavigation) publishNavigationReceipt = undefined
     }
   }, [])
-  if (config.subject !== 'hnreader' && config.subject !== 'native-navigation') {
+  if (config.subject === 'clockwork') {
     return createElement(generatedApp.default)
   }
   return createElement(

@@ -246,13 +246,20 @@ async function journeyFor(subject: SimulatorNativeHostTestingRequest['subject'])
         check: 'keeps reading history across a relaunch in most-recent order',
         suite: 'hn reader',
       }),
+    'native-bridge': () =>
+      compileHostJourney(Repo.resolvePath('Apps/Test Apps/Native Bridge/.host-tests/Clipboard.test.tao'), {
+        check: 'round trips native clipboard formats and manages change subscriptions',
+        suite: 'Native Clipboard acceptance',
+      }),
     'native-navigation': () =>
       compileHostJourney(Repo.resolvePath('Apps/Test Apps/Navigation/Native Navigation.test.tao'), {
         check: 'keeps three independent stack positions and local state when switching tabs',
         suite: 'Native navigation acceptance',
       }),
   })
-  return subject === 'clockwork' ? journey : requireNativeNavigationHosts(journey, subject)
+  return subject === 'clockwork' || subject === 'native-bridge'
+    ? journey
+    : requireNativeNavigationHosts(journey, subject)
 }
 
 /** Host receipts guard each process lifetime, including both sides of an authored relaunch. */

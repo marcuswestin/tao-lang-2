@@ -108,7 +108,7 @@ await runWithCommands(commands => {
     )
     .option(
       '--app <subject>',
-      'Explicit subject: hnreader, clockwork, or native-navigation (device installs; catalyst builds a local Mac trial).',
+      'Explicit subject: hnreader, clockwork, native-navigation, or native-bridge (iOS Clipboard acceptance).',
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
