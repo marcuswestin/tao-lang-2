@@ -140,6 +140,63 @@ Describe('Clerk account gateway', () => {
     })
   })
 
+  Test('requires explicit deployment opt-in for a signed proof without an authorized party', async () => {
+    for (const allowMissingAuthorizedPartyWithoutOrigin of [undefined, false]) {
+      await fixture(
+        async context => {
+          const token = await context.token({ azp: undefined })
+          Expect((await context.exchange(token)).status).toBe(401)
+          Expect((await context.exchange(token, { resource: 'notes', native: true })).status).toBe(400)
+          Expect(context.count('identities')).toBe(0)
+        },
+        {},
+        { allowMissingAuthorizedPartyWithoutOrigin },
+      )
+    }
+  })
+
+  Test('accepts opted-in native proofs only without an Origin header and retains all other proof checks', async () => {
+    await fixture(
+      async context => {
+        const native = await context.token({ azp: undefined })
+        const session = await context.session(native)
+        Expect(session.subject).toBe('user_alice')
+        Expect(session.issuer).toBe(issuer)
+        Expect(session.expiresAt).toBe(context.now() + 30_000)
+        for (const origin of [party, 'null', '']) {
+          Expect((await context.exchange(native, { resource: 'notes' }, { origin })).status).toBe(401)
+          // These origins reach token verification: CORS is not masking this assertion.
+          Expect((await context.exchange(await context.token(), { resource: 'notes' }, { origin })).status).toBe(200)
+        }
+        for (
+          const claims of [
+            { azp: 'https://attacker.example.test' },
+            { azp: '' },
+            { azp: null },
+            { iss: 'https://attacker.clerk.accounts.dev' },
+            { aud: 'another-resource' },
+            { aud: undefined },
+            { sid: undefined },
+            { sub: '' },
+            { exp: Math.floor(Date.now() / 1000) - 1 },
+            { nbf: Math.floor(Date.now() / 1000) + 300 },
+            { sts: 'pending' },
+            { fva: [-1, -1] },
+            { fva: undefined },
+          ]
+        ) {
+          Expect((await context.exchange(await context.token({ azp: undefined, ...claims }))).status).toBe(401)
+        }
+        const parts = native.split('.')
+        parts[1] = Buffer.from(JSON.stringify({ ...context.claims, azp: undefined, sub: 'forged_user' }))
+          .toString('base64url')
+        Expect((await context.exchange(parts.join('.'))).status).toBe(401)
+      },
+      { allowedOrigins: [party, 'null', ''] },
+      { allowMissingAuthorizedPartyWithoutOrigin: true },
+    )
+  })
+
   Test('does not issue a gateway credential when signed proof expires during asynchronous provisioning', async () => {
     const entered = Deferred<string>()
     const release = Deferred()
@@ -227,10 +284,11 @@ async function fixture(
     count(table: 'sessions' | 'identities'): number
     restart(): Promise<void>
     token(claims?: Record<string, unknown>): Promise<string>
-    exchange(token: string, body?: unknown): Promise<Response>
+    exchange(token: string, body?: unknown, headers?: Record<string, string>): Promise<Response>
     session(token: string): Promise<AccountProtocol.Session>
   }) => Promise<void>,
   overrides: Partial<AccountServerOptions> = {},
+  clerkOverrides: Partial<NonNullable<AccountServerOptions['clerk']>> = {},
 ): Promise<void> {
   const root = await mkTestDir('clerk-account-')
   const key = await crypto.subtle.generateKey(
@@ -257,6 +315,7 @@ async function fixture(
       authorizedParties: [party],
       audience: 'notes',
       jwtKey: `-----BEGIN PUBLIC KEY-----\n${publicKey}\n-----END PUBLIC KEY-----`,
+      ...clerkOverrides,
     },
     ...overrides,
   }
@@ -298,10 +357,14 @@ async function fixture(
       const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key.privateKey, new TextEncoder().encode(message))
       return `${message}.${Buffer.from(signature).toString('base64url')}`
     },
-    async exchange(token: string, body: unknown = { resource: 'notes' }): Promise<Response> {
+    async exchange(
+      token: string,
+      body: unknown = { resource: 'notes' },
+      headers: Record<string, string> = {},
+    ): Promise<Response> {
       return await fetch(`${context.server.url}/v1/auth/clerk/exchange`, {
         method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', ...headers },
         body: JSON.stringify(body),
       })
     },

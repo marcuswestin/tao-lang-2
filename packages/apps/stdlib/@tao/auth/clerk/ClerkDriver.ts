@@ -21,9 +21,48 @@ export class ClerkRevocationError extends Errors.HostEnvironmentError {
 }
 
 export class ClerkSignInRejectedError extends Errors.UserInputError {
-  constructor() {
-    super('The sign-in details were not accepted. Check them and try again.')
+  constructor(message = 'The sign-in details were not accepted. Check them and try again.') {
+    super(message)
   }
+}
+
+export class ClerkConfigurationError extends Errors.HostEnvironmentError {}
+
+/** Only fixed messages cross the SDK boundary; provider text and metadata remain private. */
+export function classifyClerkSignInError(error: {
+  status: number
+  errors: readonly { code: string }[]
+}): ClerkSignInRejectedError | ClerkConfigurationError | undefined {
+  if (error.status < 400 || error.status >= 500 || error.status === 429 || !error.errors.length) {
+    return undefined
+  }
+  const credentialMessage = 'The sign-in details were not accepted. Check them and try again.'
+  const inputMessages = new Map([
+    ['form_identifier_not_found', credentialMessage],
+    ['form_password_incorrect', credentialMessage],
+    ['form_password_or_identifier_incorrect', credentialMessage],
+    ['form_code_incorrect', 'The verification code was not accepted. Check it and try again.'],
+    ['form_password_matches_identifier', 'Choose a password that is different from your email address.'],
+    ['form_password_pwned', 'This password has appeared in a data breach. Choose a different password.'],
+  ])
+  const configurationMessages = new Map([
+    [
+      'native_api_disabled',
+      'Native sign-in is disabled for this app. Ask the app developer to enable the Clerk Native API.',
+    ],
+    ['user_settings_invalid', 'Sign-in is not configured correctly for this app. Contact the app developer.'],
+  ])
+  const classified = error.errors.map(({ code }) => {
+    const configurationMessage = configurationMessages.get(code)
+    if (configurationMessage) {
+      return new ClerkConfigurationError(configurationMessage)
+    }
+    const inputMessage = inputMessages.get(code)
+    return inputMessage ? new ClerkSignInRejectedError(inputMessage) : undefined
+  })
+  return classified.every(value => value !== undefined)
+    ? classified.find(value => value instanceof ClerkConfigurationError) ?? classified[0]
+    : undefined
 }
 
 type Session = {
@@ -71,7 +110,7 @@ type Rendezvous = {
   changed: Set<() => void>
   operations: number
   idle: Set<() => void>
-  rejectsInput?: (error: unknown) => boolean
+  classifyError?: (error: unknown) => ClerkSignInRejectedError | ClerkConfigurationError | undefined
 }
 const hosts = new WeakMap<object, Rendezvous>()
 const clients = new WeakMap<object, object>()
@@ -97,7 +136,7 @@ export function releaseClerkHostWhenIdle(configuration: object, release: () => v
 export function bindClerkDriverHost(
   configuration: object,
   sdk: ClerkDriverSDK,
-  rejectsInput?: (error: unknown) => boolean,
+  classifyError?: (error: unknown) => ClerkSignInRejectedError | ClerkConfigurationError | undefined,
 ): () => void {
   const entry = rendezvous(configuration)
   Assert.input(!entry.host, 'This Clerk configuration is already mounted in another app.')
@@ -109,7 +148,7 @@ export function bindClerkDriverHost(
   clients.set(sdk, owner)
   entry.host = owner
   entry.sdk = sdk
-  entry.rejectsInput = rejectsInput
+  entry.classifyError = classifyError
   for (const changed of entry.changed) {
     changed()
   }
@@ -351,9 +390,11 @@ export function createClerkDriver(configuration: Readonly<Record<string, unknown
         challenge = { id: prepared.id, signIn: prepared }
         return { status: 'challenge', id: prepared.id, kind: 'EmailCode' }
       } catch (error) {
-        if (!(error instanceof ClerkRevocationError) && entry.rejectsInput?.(error)) {
-          const rejected = new ClerkSignInRejectedError()
-          throw rejected
+        if (!(error instanceof ClerkRevocationError)) {
+          const classified = entry.classifyError?.(error)
+          if (classified) {
+            throw classified
+          }
         }
         throw error
       } finally {

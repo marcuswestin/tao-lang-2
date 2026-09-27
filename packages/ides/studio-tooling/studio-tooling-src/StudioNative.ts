@@ -40,7 +40,6 @@ const electrobunReleaseBuildTimeoutMs = 30 * 60_000
 const hutchShutdownTimeoutMs = 5_000
 const hutchDiagnosticOutputLimit = 8_000
 const defaultHutchCommand = 'hutch'
-const hutchInstallUrl = 'https://hutch.blackboard.sh/hutch/install.sh'
 const nativeHostResourceName = 'studio-native-host'
 // After the holder is told to stop, its lease is released by its own shutdown or pruned once the
 // process is gone; either way the retry only has to outlast an orderly Studio shutdown.
@@ -1170,8 +1169,8 @@ function missingHutchError(reason: string): Errors.UserInputError {
   const installedPath = FS.resolvePath('.hutch/bin/hutch', FS.homeDir())
   return new Errors.UserInputError([
     `${reason} Native Tao Studio requires the Hutch launcher; its generated project pins Hutch CLI 0.24.3.`,
-    `Install Hutch with the official verified installer: curl -fsSL ${hutchInstallUrl} | sh`,
-    `Then open a new terminal, or retry now with --hutch ${installedPath}`,
+    'Provision the pinned native tools with ./agent setup --environment, then retry.',
+    `An existing external installation can be selected with --hutch ${installedPath}`,
     'To use Studio without the native shell, run ./dev studio instead.',
   ].join('\n'))
 }

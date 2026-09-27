@@ -3,6 +3,26 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { StudioHutchHome } from '../studio-tooling-src/StudioHutchHome'
 
 Describe('Studio isolated Hutch home', () => {
+  Test('initializes writable native state without a prior global installation', async () => {
+    await withTemporaryRoot('first-use', async root => {
+      const sourceHome = FS.resolvePath('absent-global-home', root)
+      const targetHome = FS.resolvePath('worktree-home', root)
+      const options = { sourceHome, targetHome }
+      Expect(await StudioHutchHome.prepare(options)).toBe(targetHome)
+      Expect(await FS.exists(sourceHome)).toBe(false)
+      Expect(await FS.readJson(FS.resolvePath('state/store.json', targetHome))).toEqual({
+        canonicalRoot: targetHome,
+        kind: 'hutch-store',
+        schemaVersion: 1,
+      })
+      await FS.writeText(FS.resolvePath('releases/retained.txt', targetHome), 'cached')
+      await FS.writeText(FS.resolvePath('state/projects/interrupted.json', targetHome), 'stale')
+      await StudioHutchHome.prepare(options)
+      Expect(await FS.readText(FS.resolvePath('releases/retained.txt', targetHome))).toBe('cached')
+      Expect(await FS.listDir(FS.resolvePath('state/projects', targetHome))).toEqual([])
+    })
+  })
+
   Test('clones immutable assets while clearing copied project registrations', async () => {
     await withTemporaryRoot('clone', async root => {
       const sourceHome = FS.resolvePath('source-home', root)

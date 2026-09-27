@@ -8,6 +8,7 @@ import { LandingLock } from '@verification/LandingLock'
 import { landedReport, MergeWithMainCommand } from '@verification/MergeWithMain'
 import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/RunSummary'
 import { TestRunner } from '@verification/TestRunner'
+import { VerificationLanes } from '@verification/VerificationLanes'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
 import { devZshCompletion } from './completion/DevCompletion'
@@ -328,6 +329,15 @@ await runWithCommands(commands => {
     // uncaught stack with a code frame from inside the error helper.
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       await runExitCommand(async () => {
+        // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
+        // Gate children inherit it; the invoking shell and landing process keep their priority.
+        if (VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)) {
+          try {
+            Platform.lowerProcessPriority()
+          } catch (error) {
+            HCI.logProcessWarn('verify', `${Errors.formatForUser(error)} Continuing at inherited priority.`)
+          }
+        }
         const outputMode = WorkReporter.resolveMode({ requested: options.output })
         const verdict = { color: WorkReporter.colorizes(outputMode) }
         return await holdingLandingLock(options.lane ?? 'verify', async () => {
@@ -493,6 +503,15 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('watchman')
+    .description('Manage the shared per-user Watchman daemon; stop affects every worktree.')
+    .argument('<action>', 'start, status, or stop')
+    .action(async (action: string) => {
+      const { WatchmanCommand } = await import('./doctor/WatchmanCommand')
+      await runExitCommand(() => WatchmanCommand.run(action))
+    })
+
+  commands
     .command('delegation-report')
     .description('Summarise which subagents this repository spawned, at which model, and for how long.')
     .option('--json', 'Print the structured summary instead of a table.')
@@ -607,6 +626,36 @@ await runWithCommands(commands => {
     .command('worktree-status')
     .description('Report every Git worktree and its latest matching Codex, Claude, or Cursor task; removes nothing.')
     .action(async () => Platform.runtimeProcess.exit(await ReclaimCommand.status()))
+
+  commands
+    .command('setup-clerk')
+    .description('Guide Clerk development setup and save credentials in the encrypted repository store.')
+    .option('--instructions', 'Print setup steps without opening a browser or changing credentials.')
+    .action(async (options: { instructions?: boolean }) => {
+      const { runSetupClerk } = await import('./clerk/SetupClerkCommand')
+      try {
+        Platform.runtimeProcess.exit(await runSetupClerk(options))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
+    .command('clerk-review')
+    .description('Run Clerk and local InstantDB in Studio for a connected iPhone review.')
+    .option('--host <ipv4>', 'The Mac LAN IPv4 address reachable from the phone; detected when omitted.')
+    .option('--instant-url <origin>', 'Local InstantDB API origin.', 'http://127.0.0.1:9020')
+    .option('--no-browser', 'Start Studio without opening the Mac browser.')
+    .action(async (options: { host?: string; instantUrl?: string; browser?: boolean }) => {
+      const { runClerkReview } = await import('./clerk/ClerkReviewCommand')
+      try {
+        Platform.runtimeProcess.exit(await runClerkReview(options))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
 
   commands
     .command('secrets')

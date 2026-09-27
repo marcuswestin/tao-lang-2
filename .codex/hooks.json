@@ -5,7 +5,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh\""
+            "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh\"",
+            "name": "Set up this checkout",
+            "description": "Install pinned dependencies, generate harness configuration, and load the development tools when a session starts."
           }
         ]
       }
@@ -16,11 +18,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-output-discipline.zsh\" || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-output-discipline.zsh\" || true",
+            "name": "Check shell commands before running",
+            "description": "Block overly broad output, misleading commands, and unsafe staging; explain how to correct the command."
           },
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-shell-habits.zsh\" 2>/dev/null || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-shell-habits.zsh\" 2>/dev/null || true",
+            "name": "Remind agents about shell conventions",
+            "description": "Add non-blocking reminders about working-directory changes, environment prefixes, and preserving command exit status."
           }
         ]
       },
@@ -29,7 +35,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" spawn > /dev/null 2>&1 || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" spawn > /dev/null 2>&1 || true",
+            "name": "Record subagent requests locally",
+            "description": "Save delegation requests in this checkout's local logs to review model routing and cost."
           }
         ]
       }
@@ -39,11 +47,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" start > /dev/null 2>&1 || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" start > /dev/null 2>&1 || true",
+            "name": "Record subagent starts locally",
+            "description": "Save subagent start events in this checkout's local delegation logs."
           },
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-subagent-brief.zsh\" 2>/dev/null || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-subagent-brief.zsh\" 2>/dev/null || true",
+            "name": "Give subagents repository instructions",
+            "description": "Provide each subagent with the repository's working-directory, search, file ownership, and reporting rules."
           }
         ]
       }
@@ -53,7 +65,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" stop > /dev/null 2>&1 || true"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" stop > /dev/null 2>&1 || true",
+            "name": "Record subagent completions locally",
+            "description": "Save subagent completion events in this checkout's local delegation logs."
           }
         ]
       }

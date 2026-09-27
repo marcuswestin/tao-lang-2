@@ -25,6 +25,8 @@
     // behind the models this machine runs.
     "sessionStart": [
       {
+        "name": "Set up this checkout",
+        "description": "Install pinned dependencies, generate harness configuration, and load the development tools when a session starts.",
         "type": "command",
         "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh\"",
       },
@@ -70,16 +72,22 @@
       {
         "type": "command",
         "matcher": "Bash",
+        "name": "Check shell commands before running",
+        "description": "Block overly broad output, misleading commands, and unsafe staging; explain how to correct the command.",
         "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-output-discipline.zsh\" || true",
       },
       {
         "type": "command",
         "matcher": "Agent",
+        "name": "Record subagent requests locally",
+        "description": "Save delegation requests in this checkout's local logs to review model routing and cost.",
         "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" spawn > /dev/null 2>&1 || true",
       },
       {
         "type": "command",
         "matcher": "Bash",
+        "name": "Remind agents about shell conventions",
+        "description": "Add non-blocking reminders about working-directory changes, environment prefixes, and preserving command exit status.",
         "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-shell-habits.zsh\" 2>/dev/null || true",
       },
     ],
@@ -87,16 +95,22 @@
     // caller pasting it into every brief; neither harness lets a SubagentStart hook block.
     "subagentStart": [
       {
+        "name": "Record subagent starts locally",
+        "description": "Save subagent start events in this checkout's local delegation logs.",
         "type": "command",
         "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" start > /dev/null 2>&1 || true",
       },
       {
         "type": "command",
         "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-subagent-brief.zsh\" 2>/dev/null || true",
+        "name": "Give subagents repository instructions",
+        "description": "Provide each subagent with the repository's working-directory, search, file ownership, and reporting rules.",
       },
     ],
     "subagentStop": [
       {
+        "name": "Record subagent completions locally",
+        "description": "Save subagent completion events in this checkout's local delegation logs.",
         "type": "command",
         "command": "repo_root=\"$(git rev-parse --show-toplevel 2>/dev/null)\" && \"$repo_root/packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh\" stop > /dev/null 2>&1 || true",
       },
@@ -111,12 +125,16 @@
     // script borrows the primary checkout's copy rather than failing every worktree it would make.
     "worktreeCreate": [
       {
+        "name": "Create isolated worktrees beside the checkout",
+        "description": "Create a sibling Git worktree so its files stay outside the primary checkout's file watchers.",
         "type": "command",
         "command": "script=packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh && repo_root=\"$(git rev-parse --show-toplevel)\" && { [ -x \"$repo_root/$script\" ] || repo_root=\"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\"; } && \"$repo_root/$script\" create",
       },
     ],
     "worktreeRemove": [
       {
+        "name": "Remove a finished isolated worktree",
+        "description": "Remove the worktree selected by the harness through the repository's worktree cleanup script.",
         "type": "command",
         "command": "script=packages/cli/agent-cli/agent-cli-src/cli/agent-worktree.zsh && repo_root=\"$(git rev-parse --show-toplevel)\" && { [ -x \"$repo_root/$script\" ] || repo_root=\"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")\"; } && \"$repo_root/$script\" remove",
       },
