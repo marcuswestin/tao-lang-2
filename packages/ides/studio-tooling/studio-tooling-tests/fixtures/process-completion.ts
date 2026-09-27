@@ -34,17 +34,17 @@ MockModule(new URL('../../../../shared/shared-src/Platform.ts', import.meta.url)
     return child
   },
 }))
-const { CLI } = await import('@shared')
+const { CLI, ProcessTree } = await import('@shared')
 const { StudioTestProcessRunner } = await import('../../studio-tooling-src/StudioTestProcessRunner')
 const { startStudioProcessTree } = await import('@expo-host/dev-loop/StudioProcessTree')
 
 function groupExists(pid: number): boolean {
-  return original.spawnSync('/bin/kill', { args: ['-0', '--', `-${pid}`], stdio: 'ignore' }).status === 0
+  return Number.isSafeInteger(pid) && pid > 1 && ProcessTree.isGroupAlive(pid)
 }
 function cleanup(): void {
   for (const { child } of children) {
     if (child.pid !== undefined && groupExists(child.pid)) {
-      original.spawnSync('/bin/kill', { args: ['-KILL', '--', `-${child.pid}`], stdio: 'ignore' })
+      original.signalProcess(-child.pid, 'SIGKILL')
     }
     child.stdin?.destroy()
     child.stdout?.destroy()
@@ -143,7 +143,13 @@ try {
         )
       }
       const failure = await CLI.run(FS.resolvePath('nonexistent-command', root), { detached: true })
-      Assert(failure.error !== undefined && failure.exitCode !== 0, 'A failed spawn completes with its native error.')
+      Assert(failure.error !== undefined && failure.exitCode !== 0, 'A failed spawn completes with its native error.', {
+        error: failure.error,
+        exitCode: failure.exitCode,
+        signal: failure.signal,
+        stderr: failure.stderr,
+        stdout: failure.stdout,
+      })
     },
   })
   await settle()

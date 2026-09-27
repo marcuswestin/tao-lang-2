@@ -69,6 +69,6 @@ Describe('compiler: action failures', () => {
     const code = compiled.code.replace(/\s+/g, ' ')
 
     Expect(code).toContain('TR.Async(() =>')
-    Expect(code).toContain('name: "ReplyLater", interrupt: true')
+    Expect(code).toContain('name: "ReplyLater", owner: _TaoActionOwner, interrupt: true')
   })
 })

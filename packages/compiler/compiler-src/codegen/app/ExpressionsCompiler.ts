@@ -359,6 +359,7 @@ export const ExpressionsCompiler = {
       ActionDeclaration: action => gen`${contextualReference(action)}.evaluate()`,
       AliasDeclaration: alias => gen`${contextualReference(alias)}.evaluate()`,
       AppDeclaration: app => gen`${gen.Name({ name: `_TaoAppDefinition_${app.name}` })}`,
+      ActionResultStatement: result => gen`${gen.scopeName(result)}.evaluate()`,
       AskStatement: ask => gen`${gen.scopeName(ask)}.evaluate()`,
       CasePayload: payload => gen`${gen.scopeName(payload)}.evaluate()`,
       CommandDeclaration: command => gen`${contextualCommand(command)}.evaluate()`,

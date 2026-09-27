@@ -115,7 +115,9 @@ Test('Studio moves a generated view into an authored package with writable sourc
     Expect(await FS.exists(paths['@/studio/View1.tao'])).toBe(false)
     Expect(target).toBe(FS.resolvePath('@views/View1.tao', root))
     Expect(await FS.fileMode(target)).toBe(0o644)
-    Expect(await FS.readText(target)).toBe('public view View1() {\n   render Placeholder("Moved")\n}\n')
+    Expect(await FS.readText(target)).toBe(
+      'public view View1() {\n   #studio_rect_006100720074\n   render Placeholder("Moved")\n}\n',
+    )
   })
 })
 

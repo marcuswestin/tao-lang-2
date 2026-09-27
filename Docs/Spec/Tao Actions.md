@@ -184,6 +184,46 @@ A foreign implementation may fail with an object carrying a string `case` or `ca
 marks the transaction as having crossed an external-effect boundary, whether the implementation succeeds
 or fails.
 
+## Foreign action results
+
+A foreign action may declare `returns T`. Its TypeScript implementation returns `T` or `Promise<T>`;
+the caller binds the resolved value with `let Name = do Action(...)`. The binding is immutable and
+available to following statements in its action block. Completion is awaited before those statements
+run, with the same joined transaction and failure behavior as ordinary `do`. A failed call does not
+produce a value or continue the block. Ordinary `do` may discard a declared result.
+
+Clipboard actions inside a view, using generated imports:
+
+```tao
+use GetStringAsync, SetStringAsync from ./Generated/Bindings.tao
+
+action Copy() {
+   let Result = do SetStringAsync("Hi")
+   set Copied = Result
+}
+
+action Paste() {
+   let Value = do GetStringAsync()
+   set Draft = Value
+}
+```
+
+Here `Copied` is writable boolean state and `Draft` is writable text state in the owning view. Native Tao action bodies cannot declare
+or return a result. A result-bearing foreign action cannot use `runs latest`, whose skipped-call
+contract does not produce a value. Synchronous `from` value expressions do not await promises.
+
+### Native listener ownership
+
+Generated native listener registration belongs to the lexical mounted view that owns the invoking
+action. Registration outside an owned mounted view fails before registering with the native module.
+Reading or writing Clipboard needs no listener; a subscription only observes later changes.
+
+The subscription is disposed automatically when that view unmounts. Its generated `Remove` action
+allows early disposal; the deprecated `RemoveClipboardListener` entry uses the same idempotent
+disposal. Events arriving after disposal, and queued callbacks that have not started when disposal
+occurs, are ignored. An already executing callback is not cancelled. A failed action transaction or
+savepoint disposes subscriptions created within the rolled-back work.
+
 ## Latest-only foreign actions
 
 A high-frequency foreign boundary may retain only its latest not-yet-started call:

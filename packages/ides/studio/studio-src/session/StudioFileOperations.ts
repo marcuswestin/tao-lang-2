@@ -18,6 +18,7 @@ import type {
   StudioRenameFileRequest,
   StudioRenameFileResult,
 } from '../StudioProtocol'
+import { StudioScenarioRelocation } from '../StudioScenarioRelocation'
 import type { StudioSketchCatalog, StudioSketchCatalogSnapshot } from '../StudioSketchCatalog'
 import type { StudioProjectFiles } from './StudioProjectFiles'
 import { requireSourceVersion } from './StudioSourceConflicts'
@@ -169,25 +170,89 @@ export class StudioFileOperations {
           })
         }
       }
-      const otherRewrites = rewrites.filter(candidate => candidate.current.path !== current.path)
-      const movedContent = rewrites.find(rewrite => rewrite.current.path === current.path)?.content ?? current.content
+      let otherRewrites = rewrites.filter(candidate => candidate.current.path !== current.path)
+      let movedContent = rewrites.find(rewrite => rewrite.current.path === current.path)?.content ?? current.content
+      const scenariosRelativePath = FS.relativePath(
+        projectRoot,
+        FS.resolvePath('Scenarios.tao', FS.dirname(this.#context.entryPath)),
+      )
+      const scenariosPath = FS.resolvePath(scenariosRelativePath, projectRoot)
+      const movedParsed = await this.#context.workspace.parseSource(movedContent, Langium.URI.file(sourcePath))
+      const relocate = request.relocateScenarios !== false && movedParsed.entry.ast.statements
+        .some(statement => AST.isScenarioGroupDeclaration(statement) && statement.subject?.$refText === name)
+      const existingScenarios = relocate && await FS.exists(scenariosPath)
+        ? await files.readFile(scenariosRelativePath)
+        : undefined
+      if (relocate && existingScenarios === undefined) {
+        await files.resolveNewTaoFile(scenariosRelativePath)
+      }
+      const scenariosBefore = relocate
+        ? otherRewrites.find(rewrite => rewrite.path === scenariosPath)?.content ?? existingScenarios?.content ?? ''
+        : ''
+      const scenariosParsed = await this.#context.workspace.parseSource(
+        scenariosBefore,
+        Langium.URI.file(scenariosPath),
+      )
+      Assert.input(
+        !Diagnostics.hasError(scenariosParsed.diagnostics, 'lexer', 'parser'),
+        `Cannot relocate scenarios until ${scenariosRelativePath} parses.`,
+      )
+      const relocation = StudioScenarioRelocation.prepare({
+        document: movedParsed.entry.document,
+        name,
+        projectRoot,
+        relocateScenarios: relocate,
+        scenariosDocument: scenariosParsed.entry.document,
+        targetPackage,
+        targetPath: FS.resolvePath(`${targetPackage}/${name}.tao`, projectRoot),
+      })
+      movedContent = relocation.movedSource
+      if (relocation.scenariosSource !== undefined) {
+        otherRewrites = otherRewrites.filter(rewrite => rewrite.path !== scenariosPath)
+      }
       const generated = new StudioGeneratedSources(projectRoot)
       let targetPath: string | undefined
       let retiredCatalog: StudioSketchCatalogSnapshot | undefined
+      let scenariosWritten = false
+      let movedPostimage: string | undefined
+      const completedRewrites = new Set<string>()
       try {
-        targetPath = await generated.moveView(name, targetPackage, movedContent)
+        targetPath = await generated.moveView(name, targetPackage, movedContent, async (path, content) => {
+          await FS.writeText(path, content)
+          movedPostimage = content
+        })
         const rewritten: StudioProjectFileContent[] = []
         for (const rewrite of otherRewrites) {
+          Assert.input(
+            await FS.readText(rewrite.path) === rewrite.current.content,
+            `${rewrite.current.path} changed during the move; its current contents were preserved.`,
+          )
           if (rewrite.current.path.startsWith('@/studio/')) {
             await generated.rewrite(rewrite.path, rewrite.content)
           } else {
             await FS.writeText(rewrite.path, rewrite.content)
           }
+          completedRewrites.add(rewrite.path)
           const sourceVersion = SourceActions.studioSourceVersion(rewrite.content)
           files.note(rewrite.path, sourceVersion)
           rewritten.push({
             content: rewrite.content,
             ...files.projectFile(rewrite.current.path, sourceVersion),
+          })
+        }
+        if (relocation.scenariosSource !== undefined) {
+          const content = await FS.exists(scenariosPath) ? await FS.readText(scenariosPath) : undefined
+          Assert.input(
+            content === existingScenarios?.content,
+            `${scenariosRelativePath} changed during the move; its current contents were preserved.`,
+          )
+          await FS.writeText(scenariosPath, relocation.scenariosSource)
+          scenariosWritten = true
+          const sourceVersion = SourceActions.studioSourceVersion(relocation.scenariosSource)
+          files.note(scenariosPath, sourceVersion)
+          rewritten.push({
+            content: relocation.scenariosSource,
+            ...files.projectFile(scenariosRelativePath, sourceVersion),
           })
         }
         const targetContent = await FS.readText(targetPath)
@@ -231,16 +296,23 @@ export class StudioFileOperations {
       } catch (error) {
         if (targetPath !== undefined) {
           const rollbackFailures: unknown[] = []
+          const rollbackConflicts: string[] = []
+          let scenariosVersion = existingScenarios?.sourceVersion
           try {
-            if (await FS.isFile(targetPath)) {
-              if (await FS.exists(sourcePath)) {
-                await FS.remove(targetPath)
-              } else {
-                await FS.move(targetPath, sourcePath)
-              }
+            const targetContent = await FS.isFile(targetPath) ? await FS.readText(targetPath) : undefined
+            if (targetContent !== movedPostimage) {
+              rollbackConflicts.push(
+                `${
+                  FS.relativePath(projectRoot, targetPath)
+                } changed during the move; its current contents were preserved.`,
+              )
+            } else if (await FS.isFile(targetPath)) {
+              await FS.remove(targetPath)
             }
-            if (await FS.isFile(sourcePath)) {
-              await generated.rewrite(sourcePath, current.content)
+            if (await FS.exists(sourcePath)) {
+              rollbackConflicts.push(
+                `${current.path} was recreated during the move; its current contents were preserved.`,
+              )
             } else {
               await FS.writeText(sourcePath, current.content)
               await FS.chmod(sourcePath, 0o444)
@@ -250,10 +322,47 @@ export class StudioFileOperations {
           }
           for (const rewrite of otherRewrites) {
             try {
+              const actual = await FS.isFile(rewrite.path) ? await FS.readText(rewrite.path) : undefined
+              if (!completedRewrites.has(rewrite.path) || actual !== rewrite.content) {
+                if (actual !== rewrite.current.content) {
+                  rollbackConflicts.push(
+                    `${rewrite.current.path} changed during the move; its current contents were preserved.`,
+                  )
+                }
+                continue
+              }
               if (rewrite.current.path.startsWith('@/studio/')) {
                 await generated.rewrite(rewrite.path, rewrite.current.content)
               } else {
                 await FS.writeText(rewrite.path, rewrite.current.content)
+              }
+            } catch (rollbackError) {
+              rollbackFailures.push(rollbackError)
+            }
+          }
+          if (relocation.scenariosSource !== undefined) {
+            try {
+              const content = await FS.exists(scenariosPath) ? await FS.readText(scenariosPath) : undefined
+              if (!scenariosWritten || content !== relocation.scenariosSource) {
+                if (scenariosWritten) {
+                  rollbackConflicts.push(
+                    `${scenariosRelativePath} changed during the move; its current contents were preserved.`,
+                  )
+                }
+                scenariosVersion = content === undefined ? undefined : SourceActions.studioSourceVersion(content)
+                if (scenariosVersion === undefined) {
+                  files.forget(scenariosPath)
+                } else {
+                  files.note(scenariosPath, scenariosVersion)
+                }
+              } else if (existingScenarios === undefined) {
+                if (await FS.exists(scenariosPath)) {
+                  await FS.remove(scenariosPath)
+                }
+                files.forget(scenariosPath)
+              } else {
+                await FS.writeText(scenariosPath, existingScenarios.content)
+                files.note(scenariosPath, existingScenarios.sourceVersion)
               }
             } catch (rollbackError) {
               rollbackFailures.push(rollbackError)
@@ -266,26 +375,39 @@ export class StudioFileOperations {
               rollbackFailures.push(rollbackError)
             }
           }
-          files.forget(targetPath)
-          files.note(sourcePath, current.sourceVersion)
-          for (const rewrite of otherRewrites) {
-            files.note(rewrite.path, rewrite.current.sourceVersion)
+          const recoveredVersions = new Map<string, string | undefined>()
+          for (const path of [sourcePath, targetPath, ...otherRewrites.map(rewrite => rewrite.path)]) {
+            const version = await FS.isFile(path)
+              ? SourceActions.studioSourceVersion(await FS.readText(path))
+              : undefined
+            recoveredVersions.set(path, version)
+            if (version === undefined) {
+              files.forget(path)
+            } else {
+              files.note(path, version)
+            }
           }
           try {
             const rollback = await coordinator.noteStudioFileMutation([
-              { path: sourcePath, sourceVersion: current.sourceVersion, writeId: `rollback:${request.writeId}` },
-              { path: targetPath, writeId: `rollback:${request.writeId}` },
-              ...otherRewrites.map(rewrite => ({
-                path: rewrite.path,
-                sourceVersion: rewrite.current.sourceVersion,
+              ...[...recoveredVersions].map(([path, sourceVersion]) => ({
+                path,
+                ...(sourceVersion === undefined ? {} : { sourceVersion }),
                 writeId: `rollback:${request.writeId}`,
               })),
+              ...(relocation.scenariosSource === undefined ? [] : [{
+                path: scenariosPath,
+                ...(scenariosVersion === undefined ? {} : { sourceVersion: scenariosVersion }),
+                writeId: `rollback:${request.writeId}`,
+              }]),
             ])
             if (rollback.status === 'error') {
               rollbackFailures.push(new Errors.HostEnvironmentError(rollback.message))
             }
           } catch (rollbackError) {
             rollbackFailures.push(rollbackError)
+          }
+          if (rollbackConflicts.length > 0) {
+            Errors.throwUserInput(`Move rollback incomplete. ${rollbackConflicts.join('\n')}`)
           }
           if (rollbackFailures.length > 0) {
             Errors.throwHostEnvironment(

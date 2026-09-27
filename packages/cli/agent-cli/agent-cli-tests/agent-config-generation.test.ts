@@ -9,7 +9,7 @@ Describe('agent config generation', () => {
     await initGitTestRepository(root)
     const marker = FS.resolvePath('hook-ran', root)
     const script = FS.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-session-start.zsh', root)
-    await FS.writeText(script, '#!/bin/zsh\n: > "$TAO_TEST_HOOK_MARKER"\n')
+    await FS.writeText(script, '#!/bin/sh\n: > "$TAO_TEST_HOOK_MARKER"\n')
     await FS.chmod(script, 0o755)
     const nested = FS.resolvePath('packages/cli/agent-cli', root)
     await FS.mkdir(nested)
@@ -130,7 +130,7 @@ Describe('agent config generation', () => {
       await FS.writeText(script, await FS.readText(Repo.resolvePath(scriptPath)))
       await FS.chmod(script, 0o755)
       const agent = FS.resolvePath('agent', root)
-      await FS.writeText(agent, '#!/bin/zsh\necho "detached HEAD warning" >&2\nexit 0\n')
+      await FS.writeText(agent, '#!/bin/sh\necho "detached HEAD warning" >&2\nexit 0\n')
       await FS.chmod(agent, 0o755)
 
       const success = await CLI.run(script, { cwd: root })
@@ -138,7 +138,7 @@ Describe('agent config generation', () => {
       Expect(success.stdout).toBe('')
       Expect(success.stderr).toBe('')
 
-      await FS.writeText(agent, '#!/bin/zsh\necho "setup failed"\necho "recovery detail" >&2\nexit 7\n')
+      await FS.writeText(agent, '#!/bin/sh\necho "setup failed"\necho "recovery detail" >&2\nexit 7\n')
       const failure = await CLI.run(script, { cwd: root })
       Expect(failure.exitCode).toBe(7)
       Expect(failure.stderr).toContain('setup failed')
@@ -156,11 +156,11 @@ Describe('agent config generation', () => {
       await FS.writeText(script, await FS.readText(Repo.resolvePath(scriptPath)))
       await FS.chmod(script, 0o755)
       const agent = FS.resolvePath('agent', root)
-      await FS.writeText(agent, '#!/bin/zsh\necho "setup chatter"\nexit 0\n')
+      await FS.writeText(agent, '#!/bin/sh\necho "setup chatter"\nexit 0\n')
       await FS.chmod(agent, 0o755)
       // Stands in for the profile's bun: it names the script it was asked to run, then fails.
       const bun = FS.resolvePath('.devenv/profile/bin/bun', root)
-      await FS.writeText(bun, '#!/bin/zsh\necho "notice from ${2:t}"\nexit 3\n')
+      await FS.writeText(bun, '#!/usr/bin/env zsh\necho "notice from ${2:t}"\nexit 3\n')
       await FS.chmod(bun, 0o755)
 
       const result = await CLI.run(script, { cwd: root, env: { CLAUDE_ENV_FILE: '' } })

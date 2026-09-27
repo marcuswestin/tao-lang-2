@@ -56,11 +56,20 @@ type PhysicalIosInstallRequest = Readonly<{
 
 export type NativeHostTestingRequest = SimulatorNativeHostTestingRequest | PhysicalIosInstallRequest
 
+export type CatalystHostTestingRequest = Readonly<{
+  kind: 'catalyst'
+  mode: 'catalyst'
+  subject: 'native-navigation' | 'hnreader'
+  seed: number
+  browserChannel: string
+}>
+
 export type HostTestingRequest =
   | MaintenanceHostTestingRequest
   | BrowserHostTestingRequest
   | DriverHostTestingRequest
   | NativeHostTestingRequest
+  | CatalystHostTestingRequest
 
 export type HostTestingContext = Readonly<{
   artifactRoot: string
@@ -75,8 +84,24 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
   if (!Number.isInteger(seed) || seed < 0 || seed > 0xffff_ffff) {
     Errors.throwUserInput('--seed must be an unsigned 32-bit integer.')
   }
-  if (options.app !== 'hnreader' && options.app !== 'clockwork' && options.app !== 'native-navigation') {
-    Errors.throwUserInput('--app must be hnreader, clockwork, or native-navigation.')
+  if (
+    options.app !== 'hnreader' && options.app !== 'clockwork' && options.app !== 'native-navigation'
+    && options.app !== 'native-bridge'
+  ) {
+    Errors.throwUserInput('--app must be hnreader, clockwork, native-navigation, or native-bridge.')
+  }
+  if (options.app === 'native-bridge') {
+    if (options.fault === true) {
+      Errors.throwUserInput('--fault is not supported for native-bridge.')
+    }
+    if (
+      mode !== 'ios' && mode !== 'prepare' && mode !== 'check' && mode !== 'lint' && mode !== 'format'
+      && mode !== 'typecheck'
+    ) {
+      Errors.throwUserInput(
+        'native-bridge Clipboard acceptance requires ios with an explicit simulator; prepare is also available.',
+      )
+    }
   }
   if (options.app === 'native-navigation') {
     if (options.fault === true) {
@@ -93,6 +118,15 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
     seed,
     subject: options.app,
   } as const
+  if (mode === 'catalyst') {
+    if (
+      (options.app === 'clockwork' || options.app === 'native-bridge') || options.fault === true
+      || options.device !== undefined
+    ) {
+      Errors.throwUserInput('Catalyst builds require --app native-navigation or hnreader, without --device or --fault.')
+    }
+    return { ...common, subject: options.app, kind: 'catalyst', mode }
+  }
   if (mode === 'driver') {
     if (options.fault === true) {
       Errors.throwUserInput(
@@ -131,8 +165,8 @@ export function parseHostTestingRequest(mode: string, options: HostTestingOption
 }
 
 function applicationFaultFor(subject: HostSubject): HostApplicationFault {
-  if (subject === 'native-navigation') {
-    return Errors.throwUserInput('--fault is not supported for native-navigation.')
+  if (subject === 'native-navigation' || subject === 'native-bridge') {
+    return Errors.throwUserInput(`--fault is not supported for ${subject}.`)
   }
   return subject === 'clockwork' ? 'clockwork-countdown-frozen' : 'hnreader-reading-history-no-write'
 }

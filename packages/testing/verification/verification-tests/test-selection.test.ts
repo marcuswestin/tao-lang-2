@@ -293,7 +293,18 @@ Describe('changed suite plan', () => {
   })
 
   Test('root dependency and toolchain files widen to every suite', () => {
-    for (const path of ['package.json', 'bun.lock', 'devenv.nix', 'devenv.yaml', 'devenv.lock', 'devenv.local.nix']) {
+    for (
+      const path of [
+        'package.json',
+        'bun.lock',
+        'devenv.nix',
+        'devenv.yaml',
+        'devenv.lock',
+        'devenv.local.nix',
+        'packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix',
+        'packages/cli/dev-cli/dev-cli-src/environment/portable-profile.nix',
+      ]
+    ) {
       const result = plan([path])
       Expect(result.everything).toBe(path)
       Expect(result.selected.size).toBe(inventory.packageSuites.length + 3)

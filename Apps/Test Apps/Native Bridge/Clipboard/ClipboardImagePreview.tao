@@ -1,0 +1,23 @@
+use ClipboardImage from ./Generated/Bindings.tao
+
+// UI only: nullable records are transported by generated bindings; direct nullable field
+// inspection is not yet available in Tao. Keep this renderer outside Generated/.
+public
+view ClipboardImagePreview(Value ClipboardImage?) {
+   render inject Value ```ts
+      if (!Value) {
+        return <RN.Text>No image read</RN.Text>
+      }
+      return (
+        <RN.View>
+          <RN.Text>Image: {Value.Size.Width} × {Value.Size.Height}</RN.Text>
+          <RN.Image
+            source={{ uri: Value.Data }}
+            accessibilityLabel="Clipboard image"
+            style={{ width: 160, height: 160 }}
+            resizeMode="contain"
+          />
+        </RN.View>
+      )
+   ```
+}

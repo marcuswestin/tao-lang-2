@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "kind": "release",
+  "product": "hutch",
+  "channel": "production",
+  "version": "0.24.3",
+  "revision": "8bb98ace92aa90ce0fb66f0ea0cee2c10bcf7f87",
+  "publishedAt": "2026-08-20T20:25:45.298Z",
+  "build": {
+    "url": "https://hutch.blackboard.sh/hutch/builds/8bb98ace92aa90ce0fb66f0ea0cee2c10bcf7f87/manifest.json"
+  },
+  "platforms": {
+    "macos-arm64": {
+      "archive": {
+        "url": "https://hutch.blackboard.sh/hutch/builds/8bb98ace92aa90ce0fb66f0ea0cee2c10bcf7f87/macos-arm64/hutch.tar.gz",
+        "sha256": "6e23aada3ec7630421efb1a3e523007c9611ac0f390eb3bf1a0004796a8a65f5",
+        "size": 1238046
+      }
+    },
+    "linux-x64": {
+      "archive": {
+        "url": "https://hutch.blackboard.sh/hutch/builds/8bb98ace92aa90ce0fb66f0ea0cee2c10bcf7f87/linux-x64/hutch.tar.gz",
+        "sha256": "c951579a466521c2c17c4ab6ee08c9c8893b3be8cfb2e37bbf187b70f1ae3c4b",
+        "size": 1230638
+      }
+    },
+    "linux-arm64": {
+      "archive": {
+        "url": "https://hutch.blackboard.sh/hutch/builds/8bb98ace92aa90ce0fb66f0ea0cee2c10bcf7f87/linux-arm64/hutch.tar.gz",
+        "sha256": "98353b49d625d0246d5437bd0211ea692899806eb62e04bee9a3c7bd52dc694e",
+        "size": 1291212
+      }
+    },
+    "windows-x64": {
+      "archive": {
+        "url": "https://hutch.blackboard.sh/hutch/builds/8bb98ace92aa90ce0fb66f0ea0cee2c10bcf7f87/windows-x64/hutch.tar.gz",
+        "sha256": "50e36698f32b10c223cc0b130f2fa27e4c40a214c685fb8298c2468ad5c49050",
+        "size": 1359898
+      }
+    }
+  }
+}

@@ -165,28 +165,27 @@ export class StudioSourceMutations {
     }
   }
 
-  /** A view with placeholders, or one declared elsewhere, is typed into the editor; otherwise it is a source action. */
+  /** A preview insertion resolves imported views and required arguments at the exact selected source gap. */
   insertProjectView(projectView: ReturnType<typeof StudioInspector.projectViews>[number]): void {
+    const identity = this.#deps.currentIdentity()
+    if (identity !== undefined) {
+      void this.submitLocal(
+        {
+          ...this.#insertionGap(),
+          kind: 'insert-project-view',
+          viewName: projectView.viewName,
+          viewSourcePath: projectView.sourcePath,
+        },
+        identity,
+      )
+      return
+    }
     const editor = this.#deps.editor()
-    const activeFile = this.#deps.activeFile()
-    const activeSourcePath = activeFile === undefined
-      ? undefined
-      : `${this.#deps.project.replace(/\/$/, '')}/${activeFile.path.replace(/^\//, '')}`
-    if (
-      editor !== undefined
-      && (projectView.snippet.placeholders.length > 0 || projectView.sourcePath !== activeSourcePath)
-    ) {
+    if (editor !== undefined) {
       const position = editor.state.selection.main.head
       editor.dispatch(StudioEditorInsertion.transaction(editor.state.doc, projectView.snippet, position))
       this.#deps.focusEditor()
       return
-    }
-    const identity = this.#deps.currentIdentity()
-    if (identity !== undefined) {
-      void this.submitLocal(
-        { ...this.#insertionGap(), kind: 'insert-project-view', viewName: projectView.viewName },
-        identity,
-      )
     }
   }
 

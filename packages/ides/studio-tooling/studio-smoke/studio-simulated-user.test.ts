@@ -10,6 +10,7 @@ import {
 } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { type StartedStudioNative, StudioNative } from '../studio-tooling-src/StudioNative'
+import { exerciseStudioFeed } from './studio-feed-journey'
 
 const scrollingTail = Array.from({ length: 80 }, (_, index) => `// scroll proof ${index + 1}`).join('\n')
 
@@ -207,6 +208,11 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         const rect = frame.getBoundingClientRect()
         return { height: rect.height, width: rect.width }
       })()`)
+      await browser.clickAtOffset('.studio-preview-cell .studio-preview-activation-shield', {
+        x: transformedFrame.width * 0.72,
+        y: transformedFrame.height * 0.62,
+      })
+      await browser.waitFor(`document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`)
       await browser.clickAtOffset('.studio-preview-cell iframe', {
         x: transformedFrame.width * 0.72,
         y: transformedFrame.height * 0.62,
@@ -794,6 +800,14 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(undoneCatalog.sketches[0]?.snapped).toEqual(beforeOverlapCatalog.sketches[0]?.snapped)
       await browser.captureScreenshot('studio-completed-interactions')
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
+      await exerciseStudioFeed(
+        browser,
+        session,
+        projectRoot,
+        persistedSketch.id,
+        persistedRect.id,
+        playlistRectIds.at(-1)!,
+      )
       Expect(browser.browserFailures()).toEqual([])
       // A blank or broken Studio usually reports itself only in the browser console, so the run
       // fails on any page error and keeps the evidence beside the run's other artifacts.
@@ -899,6 +913,19 @@ function previewHtml(): string {
         sourceIdentity = message.identity
         ownsCanvasGestures = message.owned
         document.documentElement.dataset.studioCanvasGestures = message.owned ? 'owned' : 'released'
+      } else if (message.type === 'capture-runtime') {
+        parent.postMessage({
+          channel: ${JSON.stringify(studioProtocolChannel)},
+          protocolVersion: ${studioProtocolVersion},
+          type: 'preview-runtime-captured',
+          identity: message.identity,
+          requestId: message.requestId,
+          capture: { version: 1, capturedAt: 1, domains: [{ domain: 'data', version: 1,
+            value: { entries: [{ key: 'fixture:Smoke', snapshot: JSON.stringify({ rows: {
+              Playlist: [{ Title: 'Live playlist', Cover: 'https://example.com/live.png', Score: 42 }],
+            } }) }] },
+          }] },
+        }, parentOrigin)
       }
     })
     window.addEventListener('wheel', event => {

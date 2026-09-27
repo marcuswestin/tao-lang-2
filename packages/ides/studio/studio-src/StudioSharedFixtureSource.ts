@@ -72,8 +72,13 @@ function canonicalImports(
   for (const entry of imports) {
     requireIdentifier(entry.collection, 'entity collection')
     requireIdentifier(entry.entity, 'entity')
-    if (!/^(?:\.\.?(?:\/|$))/.test(entry.source) || /[\r\n]/.test(entry.source)) {
-      Errors.throwUserInput(`Studio shared fixture import must be project-relative: ${entry.source}`)
+    if (
+      !/^(?:(?:\.\.?\/)+[A-Za-z_][A-Za-z0-9_-]*(?:\/[A-Za-z_][A-Za-z0-9_-]*)*(?:\.tao)?|@(?:[A-Za-z_][A-Za-z0-9_-]*)?(?:\/[A-Za-z_][A-Za-z0-9_-]*)*)$/
+        .test(entry.source)
+    ) {
+      Errors.throwUserInput(
+        `Studio shared fixture import must be a relative or project-package source path: ${entry.source}`,
+      )
     }
     const previous = byCollection.get(entry.collection)
     if (previous !== undefined && !sameEntityImport(previous, entry)) {

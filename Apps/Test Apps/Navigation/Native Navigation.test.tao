@@ -3,19 +3,24 @@ use NativeNavigation from ./
 test "Native navigation acceptance" {
    test "keeps three independent stack positions and local state when switching tabs" {
       run NativeNavigation
-
+      expect navigation title "Notes workspace"
       expect text "Saved note: Nothing saved"
       enter "Keep this draft" into #nativeDraft
       press "Open note detail"
+      expect navigation title "Note detail"
       press "Count detail tap"
       press label "Library"
+      expect navigation title "Library workspace"
       expect text "Library visits: 0"
       press "Count library visit"
       press "Open library detail"
+      expect navigation title "Library detail"
       press label "Settings"
+      expect navigation title "Settings workspace"
       expect text "Profile: Not set"
       enter "River" into #nativeNickname
       press "Open settings detail"
+      expect navigation title "Settings detail"
       expect text "Settings detail taps: 0"
       press label "Notes"
       expect text "Note detail taps: 1"

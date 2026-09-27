@@ -16,6 +16,37 @@ The first public CLI target is **macOS on Apple Silicon**. The public story also
 4. **Triage by journey impact.** P1 is a release gate: a published claim, first success, safety, or distribution path fails. P2 is a common next action or recovery path and should pass before broad invitation; a narrow, clearly disclosed limitation may be consciously accepted. P3 is important but lower frequency. P4 is polish or an edge flow. P5 is optional polish if bandwidth remains. These ranks set **QA order**, not a development backlog. If a P1 fails, fix it and repeat the journey from its original public entry point on the replacement artifact. Also retest the few adjacent stories that share the changed seam.
 5. **Make a release decision from evidence.** Require no unresolved P1 failures or blocked public claims, a working feedback route, and an honest limitations story. Summarize P2–P5 friction with owners and accepted scope; do not turn “not run” into “pass.” Record what was proved from a clean install, from a browser or simulator, from a physical device, and from a real distribution channel separately. The Developer makes the final quality and release judgment after seeing the story record and a short uncoached session.
 
+### Live native authentication acceptance
+
+Run the Clerk/InstantDB iOS journey after changing native auth, gateway exchange, or session restoration,
+and again against the pre-MVP candidate. This is explicit host acceptance, outside `verify`,
+`verify-changed`, and the credential-free `verify-full` membership: it needs an installed iOS runtime,
+Xcode, materialized development Clerk keys, network access, and the local InstantDB stack. Missing
+prerequisites fail the requested run rather than silently reporting a pass. Deterministic auth and
+sensitive-log regression tests stay in ordinary verification.
+
+From the repository root:
+
+```sh
+./agent unsandboxed local-instantdb start
+TAO_CLERK_LIVE=1 TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-ios-auth.test.ts
+```
+
+For an iteration using a Companion simulator binary already built from the intended native sources,
+set `TAO_CLERK_IOS_APP_PATH` to its `.app` directory. The receipt labels this as supplied-binary evidence
+and records its path and executable hash; omit it for fresh-build acceptance.
+
+The journey owns a fresh simulator, synthetic Clerk user, and ephemeral Instant app. Builds and
+relaunches use background commands. The native driver preserves an already-running Simulator or
+Device Hub, or runs headless if neither is running; avoid opening or quitting that host during
+driver startup because Appium chooses its presentation mode from that state. It compares
+Studio pairing codes, selects the authored iPhone scenario, signs in through native controls, saves
+profile and notes, checks their ownership directly in Instant, relaunches the process, and checks
+sign-out isolation and email-code authentication. Stage receipts and cleanup ownership records live
+under `.artifacts/tests/studio-smoke/`; request logs, credentials, and screenshots are excluded.
+A green simulator journey is automated evidence only. Physical-device LAN behavior, real registration,
+and the distributed TestFlight build retain their separate acceptance boundaries.
+
 ### Tags
 
 - **A** — an agent can run the whole story and judge the observable result from the released surface.

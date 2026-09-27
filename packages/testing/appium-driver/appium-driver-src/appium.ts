@@ -1,4 +1,5 @@
 export * from './AppiumMac2HostController'
+export * from './AppiumMobileServer'
 export * from './AppiumServer'
 export * from './AppiumWebDriver'
 export * from './StudioMac2Acceptance'

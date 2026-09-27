@@ -38,7 +38,11 @@ function clampScale(scale: number): number {
 }
 
 function grid(host: HTMLElement): HTMLElement | null {
-  return host.querySelector<HTMLElement>(':scope > .studio-preview-grid')
+  return host.querySelector<HTMLElement>(
+    host.dataset['canvasWorkspace'] === 'draw'
+      ? ':scope > [data-tao-studio-draw-canvas]'
+      : ':scope > .studio-preview-grid',
+  )
 }
 
 /** canvasScale reports the zoom a node is rendered under, so a pointer gesture can undo it. */
@@ -119,7 +123,9 @@ export type StudioCanvasViewportControls = Readonly<{
 }>
 
 export type StudioCanvasViewportDeps = Readonly<{
-  /** Canvas shortcuts and forwarded iframe gestures are active only in the Design preset. */
+  /** Neutral Design canvas and inactive previews may offer drag navigation without Space. */
+  canPanWithoutSpace?: (event: PointerEvent) => boolean
+  /** Canvas shortcuts are active in the Design and Draw presets. */
   enabled?: () => boolean
   host: HTMLElement
   initialState?: StudioCanvasViewportState
@@ -152,7 +158,7 @@ export function canvasIframeGestureAnchor(
 }
 
 /**
- * mountCanvasViewport owns canvas navigation: held-Space wheel or drag pans, pinch or modifier
+ * mountCanvasViewport owns canvas navigation: wheel or held-Space drag pans, pinch or modifier
  * wheel zooms around the pointer, and the zoom menu frames the canvas or its current selection.
  */
 export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanvasViewportControls {
@@ -360,12 +366,9 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     if (deps.enabled?.() === false) {
       return
     }
-    // A clipped canvas must not scroll its host or outer workbench when panning is disarmed.
-    // Ordinary iframe scrolling stays inside its own document and never reaches this listener.
+    // Wheel input over the canvas pans its plane. Ordinary scrolling in an active iframe
+    // stays inside that document and never reaches this listener.
     event.preventDefault()
-    if (!spaceHeld && !event.ctrlKey && !event.metaKey) {
-      return
-    }
     const bounds = host.getBoundingClientRect()
     const anchor = { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
     if (event.ctrlKey || event.metaKey) {
@@ -396,6 +399,8 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
 
   let panning: number | undefined
   let spaceHeld = false
+  let pendingPan: Readonly<{ pointerId: number; x: number; y: number }> | undefined
+  let suppressClick = false
   let lastPoint = { x: 0, y: 0 }
   const previousTabIndex = host.getAttribute('tabindex')
   host.tabIndex = -1
@@ -407,21 +412,41 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
       delete host.dataset['canvasPanReady']
     }
   }
-  /** Space explicitly gives the canvas ownership of left- or middle-button dragging. */
-  const startsPan = (event: PointerEvent): boolean => spaceHeld && (event.button === 0 || event.button === 1)
-  const onPointerDown = (event: PointerEvent): void => {
-    if (deps.enabled?.() === false || panning !== undefined || !startsPan(event)) {
-      return
-    }
-    panning = event.pointerId
-    lastPoint = { x: event.clientX, y: event.clientY }
-    host.setPointerCapture?.(event.pointerId)
+  const beginPan = (pointerId: number): void => {
+    panning = pointerId
+    host.setPointerCapture?.(pointerId)
     host.dataset['canvasPanning'] = 'true'
     host.focus({ preventScroll: true })
+  }
+  const onPointerDown = (event: PointerEvent): void => {
+    if (deps.enabled?.() === false || panning !== undefined || pendingPan !== undefined) {
+      return
+    }
+    suppressClick = false
+    if ((event.button !== 0 && event.button !== 1) || (!spaceHeld && !deps.canPanWithoutSpace?.(event))) {
+      return
+    }
+    lastPoint = { x: event.clientX, y: event.clientY }
+    if (!spaceHeld) {
+      pendingPan = { pointerId: event.pointerId, ...lastPoint }
+      return
+    }
+    beginPan(event.pointerId)
+    suppressClick = true
     event.preventDefault()
     event.stopPropagation()
   }
   const onPointerMove = (event: PointerEvent): void => {
+    if (event.pointerId === pendingPan?.pointerId) {
+      if (Math.hypot(event.clientX - pendingPan.x, event.clientY - pendingPan.y) <= 4) {
+        return
+      }
+      beginPan(event.pointerId)
+      pendingPan = undefined
+      suppressClick = true
+      event.preventDefault()
+      event.stopPropagation()
+    }
     if (event.pointerId !== panning) {
       return
     }
@@ -430,7 +455,15 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     lastPoint = { x: event.clientX, y: event.clientY }
     publish()
   }
+  const onClick = (event: MouseEvent): void => {
+    if (suppressClick) {
+      suppressClick = false
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }
+  }
   const releasePan = (): void => {
+    pendingPan = undefined
     if (panning === undefined) {
       return
     }
@@ -445,20 +478,25 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     deps.onGestureEnd?.()
   }
   const endPan = (event: PointerEvent): void => {
-    if (event.pointerId === panning) {
+    if (event.pointerId === panning || event.pointerId === pendingPan?.pointerId) {
       releasePan()
     }
   }
   const onBlur = (): void => {
     closeMenu()
+    suppressClick = false
     setSpaceHeld(false)
     releasePan()
   }
   host.addEventListener('pointerdown', onPointerDown, true)
   host.addEventListener('pointermove', onPointerMove)
+  host.addEventListener('click', onClick, true)
   host.addEventListener('pointerup', endPan)
   host.addEventListener('pointercancel', endPan)
   host.addEventListener('lostpointercapture', endPan)
+  // A pending drag has no capture yet, so release outside the host must also clear it.
+  document.addEventListener('pointerup', endPan)
+  document.addEventListener('pointercancel', endPan)
 
   const onKeyDown = (event: KeyboardEvent): void => {
     if (deps.enabled?.() === false) {
@@ -543,9 +581,12 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
       host.removeEventListener('wheel', onWheel)
       host.removeEventListener('pointerdown', onPointerDown, true)
       host.removeEventListener('pointermove', onPointerMove)
+      host.removeEventListener('click', onClick, true)
       host.removeEventListener('pointerup', endPan)
       host.removeEventListener('pointercancel', endPan)
       host.removeEventListener('lostpointercapture', endPan)
+      document.removeEventListener('pointerup', endPan)
+      document.removeEventListener('pointercancel', endPan)
       document.removeEventListener('keydown', onKeyDown, true)
       document.removeEventListener('keyup', onKeyUp, true)
       document.defaultView?.removeEventListener('blur', onBlur)

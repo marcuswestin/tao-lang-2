@@ -293,6 +293,19 @@ Describe('agent runner', () => {
 })
 
 Describe('resolveRunStdio', () => {
+  Test('offers shell setup only with a visible, answerable terminal', () => {
+    for (const command of ['setup', 'shell-setup']) {
+      Expect(resolveRunStdio(command, { verbose: false }, () => true).stdio).toBe('inherit')
+      Expect(resolveRunStdio(command, { verbose: false }, () => false).stdio).toBe('pipe')
+      Expect(resolveRunStdio(command, { verbose: true }, () => false).stdio).toBe('stream')
+      Expect(resolveRunStdio(command, { verbose: false, json: true }, () => true).stdio).toBe('pipe')
+    }
+  })
+  Test('Clerk setup keeps secret prompts on the terminal and out of captured logs', () => {
+    Expect(resolveRunStdio('setup-clerk', { verbose: false }, () => true).stdio).toBe('inherit')
+    Expect(resolveRunStdio('setup-clerk', { verbose: true }, () => true).stdio).toBe('inherit')
+    Expect(resolveRunStdio('setup-clerk', { verbose: false }, () => false).stdio).toBe('pipe')
+  })
   Test('runs an ordinary command over a captured pipe, verbose or not', () => {
     Expect(resolveRunStdio('verify', { verbose: false }, () => false)).toEqual({ stdio: 'pipe' })
     Expect(resolveRunStdio('verify', { verbose: true }, () => false)).toEqual({ stdio: 'stream' })

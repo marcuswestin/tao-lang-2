@@ -1,23 +1,32 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -ne 0 ]; then
-  printf 'Usage: ./enter-tao-dev-env\n' >&2
+if [ "$#" -gt 1 ] || { [ "$#" -eq 1 ] && [ "$1" != --setup-only ]; }; then
+  printf 'Usage: ./enter-tao-dev-env [--setup-only]\n' >&2
   exit 2
 fi
 
 repository=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 cd "$repository"
 
+# Existing shells already carry these markers, including shells entered without this wrapper.
+if [ "$#" -eq 0 ] && [ "${TAO_DEVENV:-}" = 1 ] && [ -n "${DEVENV_ROOT:-}" ] &&
+  [ "$(CDPATH= cd -- "$DEVENV_ROOT" 2>/dev/null && pwd -P)" = "$repository" ]; then
+  printf 'Tao development environment is already active for this checkout; keeping the current shell.\n'
+  exit 0
+fi
+
 if ! command -v devenv >/dev/null 2>&1; then
   printf 'Tao development needs devenv and Nix installed before this shell can start.\n' >&2
   exit 1
 fi
 
-# One setup runs in the pinned environment before the interactive shell begins. The second
-# devenv invocation reuses its evaluated profile and keeps the shell active until the user exits.
+# Setup and the interactive shell share one pinned environment. Configure zsh's startup path
+# before entering it so the interactive shell keeps completion output in the disposable cache.
 export DEVENV_TUI=false
-devenv shell --no-tui ./agent setup
+if [ "${1:-}" = --setup-only ]; then
+  exec devenv shell --no-tui ./agent setup
+fi
 if [ "${SHELL##*/}" = zsh ]; then
   # System zshrc runs compinit before our zshrc can restore the user's ZDOTDIR.
   # Keep its dump beside a startup link in the checkout's disposable cache, not in source.
@@ -34,6 +43,5 @@ if [ "${SHELL##*/}" = zsh ]; then
   fi
   export TAO_ORIGINAL_ZDOTDIR="${ZDOTDIR:-$HOME}"
   export ZDOTDIR="$shell_cache"
-  exec devenv shell --no-tui -- zsh -i
 fi
-exec devenv shell --no-tui
+exec devenv shell --no-tui -- sh -ec './agent setup; exec "$1" -i' tao-dev-shell "$SHELL"

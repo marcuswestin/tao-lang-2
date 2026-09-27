@@ -1,6 +1,7 @@
 import {
   type Dirent,
   existsSync as nodeExistsSync,
+  readdirSync as nodeReaddirSync,
   readFileSync as nodeReadFileSync,
   realpathSync as nodeRealpathSync,
   rmSync as nodeRmSync,
@@ -372,6 +373,8 @@ type SynchronizeDirectoryFilesOptions = {
   /** boundaryPath is the trusted ancestor for a single synchronization's source and destination. */
   boundaryPath?: string
   inspectProcessIdentity?: (pid: number) => Promise<FileMutationProcessIdentity>
+  /** validateDestination runs under the destination lock before staging and again before publication. */
+  validateDestination?: () => Promise<void>
 }
 
 type DirectoryFileSynchronization = {
@@ -465,6 +468,7 @@ async function synchronizeDirectoryFileSetsLocked(
   boundaryPath: string,
   options: Partial<SynchronizeDirectoryFileSetsOptions>,
 ): Promise<void> {
+  await options.validateDestination?.()
   for (const fileSet of fileSets) {
     await assertTreeHasNoSymbolicLinks(sourceBoundaryPath, fileSet.fromPath, 'source')
     await assertTreeHasNoSymbolicLinks(boundaryPath, fileSet.toPath, 'destination')
@@ -508,6 +512,7 @@ async function synchronizeDirectoryFileSetsLocked(
     }
     const sourceSnapshot = await filesIdentity(stagedFiles.map(staged => [staged.label, staged.path]))
     await options.beforeCommit?.()
+    await options.validateDestination?.()
 
     // Recheck both trees immediately before the first worktree mutation. The content identities
     // make a concurrent non-cooperating writer fail closed instead of being overwritten or restored.
@@ -1275,6 +1280,11 @@ export async function replaceSymlink(targetPath: string, linkPath: string): Prom
 /** listDir lists direct child names for a directory, sorted for platform-independent order. */
 export async function listDir(inputPath: string): Promise<string[]> {
   return (await nodeFs.readdir(inputPath)).sort()
+}
+
+/** listDirSync lists direct child names for synchronous host inspection. */
+export function listDirSync(inputPath: string): string[] {
+  return nodeReaddirSync(inputPath).sort()
 }
 
 /** walk yields files under a path according to the provided filters. */

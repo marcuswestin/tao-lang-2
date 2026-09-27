@@ -62,5 +62,9 @@ async function dispatchHostTestingRequest(request: HostTestingRequest, context: 
     driver: driverRequest => runPlaywrightHostDriverProof(driverRequest, context),
     maintenance: maintenanceRequest => runHostTestingMaintenance(maintenanceRequest, context),
     native: nativeRequest => runNativeHostProofCommand(nativeRequest, context),
+    catalyst: async catalystRequest => {
+      const { runCatalystBuild } = await import('./native/CatalystBuild')
+      await runCatalystBuild(catalystRequest, context)
+    },
   })
 }

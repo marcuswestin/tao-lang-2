@@ -1585,6 +1585,68 @@ Describe('Expo runtime', () => {
     }
   })
 
+  Test('updates the iPad native title view and removes it for hidden or enclosing chrome', () => {
+    const originalRuntime = {
+      ActivityIndicator: RN.ActivityIndicator,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      Pressable: RN.Pressable,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      Text: RN.Text,
+      TextInput: RN.TextInput,
+      View: RN.View,
+    }
+    const platform = { OS: 'ios', isPad: true, isMacCatalyst: false }
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ...originalRuntime,
+      Platform: platform,
+    })
+    let header: Record<string, any> = {}
+    const restoreNative = overrideNativeNavigationModuleForTest({
+      ScreenStack: props => createElement(RN.View, null, props.children),
+      ScreenStackHeaderCenterView: props => createElement(RN.View, { testID: 'native-title-view' }, props.children),
+      ScreenStackItem: props => {
+        header = props.headerConfig
+        return createElement(RN.View, null, props.children, props.headerConfig.children)
+      },
+    })
+    try {
+      const host = new RuntimeHostReadChannel()
+      host.publish({ header: true, title: 'Root title', toolbar: [] })
+      const home = TR.Navigation.View({ name: 'Title home', render: () => null })
+      const props = {
+        entries: [{ arguments: {}, host, instanceId: 97, presentable: home }],
+        navigation: configuredStack('Title stack', home) as RuntimeStackNav,
+      }
+      const screen = render(createElement(NativeStackSurface, props))
+      Expect(screen.getByRole('header').props.children).toBe('Root title')
+      Expect(header['title']).toBe('Root title')
+      act(() => host.publish({ header: true, title: 'Updated title', toolbar: [] }))
+      Expect(screen.getByRole('header').props.children).toBe('Updated title')
+      Expect(screen.queryByText('Root title')).toBeNull()
+      act(() => host.publish({ header: false, title: 'Hidden title', toolbar: [] }))
+      Expect(screen.queryByRole('header')).toBeNull()
+      act(() => host.publish({ header: true, title: 'Owned elsewhere', toolbar: [] }))
+      screen.rerender(createElement(NativeStackSurface, { ...props, chrome: new RuntimeHostReadChannel() }))
+      Expect(screen.queryByRole('header')).toBeNull()
+      for (
+        const next of [
+          { ...platform, isPad: false },
+          { ...platform, isMacCatalyst: true },
+        ]
+      ) {
+        restoreRuntime.mockReturnValue({ ...originalRuntime, Platform: next })
+        screen.rerender(createElement(NativeStackSurface, props))
+        Expect(screen.queryByTestId('native-title-view')).toBeNull()
+        Expect(header['title']).toBe('Owned elsewhere')
+      }
+    } finally {
+      restoreNative()
+      restoreRuntime.mockRestore()
+    }
+  })
+
   Test('adapts native stack entries to pinned screenId and headerConfig props', async () => {
     const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
       ActivityIndicator: RN.ActivityIndicator,

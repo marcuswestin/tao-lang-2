@@ -13,10 +13,11 @@ export type ProjectContext<ServicesT extends WorkspaceServices = WorkspaceServic
 export async function createProjectContext<ServicesT extends WorkspaceServices>(
   directoryPath: string,
   createServices: (packagesContext: Packages.Context) => ServicesT,
+  sourcePaths?: readonly string[],
 ): Promise<ProjectContext<ServicesT>> {
   const root = FS.resolvePath(directoryPath)
   Assert(await FS.isDirectory(root), 'workspace root is an existing directory', { root })
-  const packagesContext = await Packages.createContext(root)
+  const packagesContext = await Packages.createContext(root, { sourcePaths })
   return {
     root,
     packagesContext,

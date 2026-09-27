@@ -13,7 +13,12 @@ import { expect, test } from '@playwright/test'
 import { Errors, FS, Repo } from '@shared'
 import type { HostJourney } from '../../journey/HostJourney'
 import { appiumAndroidJourneyAdapter } from '../appium-android/AppiumAndroidHostProof'
-import { appiumIosJourneyAdapter, classifyAppiumIosFault, runAppiumIosHostProof } from './AppiumIosHostProof'
+import {
+  type AppiumIosHostProofStep,
+  appiumIosJourneyAdapter,
+  classifyAppiumIosFault,
+  runAppiumIosHostProof,
+} from './AppiumIosHostProof'
 
 const revision: HostRevision = { build: 'build-a', source: 'source-a' }
 
@@ -131,6 +136,36 @@ test('writes a target-retention receipt when opening a session leaves a live dri
   }
 })
 
+test('records navigation diagnostics separately from authored assertions and retains capture failures', async () => {
+  const captures: string[] = []
+  const session = Object.assign(new RecordingSession(), {
+    captureNavigationDiagnostics: async (name: string) => {
+      captures.push(name)
+      if (captures.length > 1) {
+        Errors.throwHostEnvironment('native diagnostic transport failed')
+      }
+      return { artifactPath: 'navigation/root.json' }
+    },
+  })
+  const timeline: AppiumIosHostProofStep[] = []
+  const adapter = appiumIosJourneyAdapter(session, { advance: async () => {} }, 'run-a', timeline)
+  await adapter.execute({
+    kind: 'run',
+    appName: 'NativeNavigation',
+    appSourcePath: 'Native Navigation.tao',
+    source: source(),
+  })
+  await adapter.execute({
+    kind: 'run',
+    appName: 'NativeNavigation',
+    appSourcePath: 'Native Navigation.tao',
+    source: source(),
+  })
+  expect(captures).toEqual(['navigation-1-run', 'navigation-2-run'])
+  expect(timeline[0]).toMatchObject({ outcome: 'passed', nativeDiagnostics: { artifactPath: 'navigation/root.json' } })
+  expect(timeline[1]).toMatchObject({ outcome: 'passed', diagnosticFailure: 'native diagnostic transport failed' })
+})
+
 test('treats only a typed Appium absent-element response as a passing missing-text assertion', async () => {
   const adapter = appiumIosJourneyAdapter(new MissingElementSession(), { advance: async () => {} }, 'run-a')
 
@@ -167,6 +202,124 @@ test('waits for a positive assertion to appear after a native transition', async
     text: '2 opened',
   })).resolves.toBeUndefined()
   expect(session.attemptsRemaining).toBe(0)
+})
+
+for (const [position, y] of [['above', -120], ['header-clipped within', 40], ['below', 1200]] as const) {
+  for (const kind of ['expect', 'press'] as const) {
+    test(`${kind} reveals a target ${position} the viewport and uses its fresh observation`, async () => {
+      const session = new ScrollRevealSession(y)
+      const adapter = appiumIosJourneyAdapter(session, { advance: async () => {} }, 'run-scroll')
+      await adapter.execute({
+        ...(kind === 'expect' ? { kind, missing: false } : { kind }),
+        selector: 'text',
+        selections: [],
+        source: source(),
+        text: 'Clipboard result',
+      })
+      expect(session.targets).toEqual([
+        { kind: 'text', value: 'Clipboard result' },
+        { kind: 'text', value: 'Clipboard result' },
+      ])
+      expect(session.reveals).toEqual([expect.objectContaining({
+        bounds: expect.objectContaining({ y }),
+        observationRevision: 1,
+        visible: false,
+      })])
+      expect(session.actions).toEqual([
+        ...(kind === 'press'
+          ? [expect.objectContaining({
+            kind: 'click',
+            observation: expect.objectContaining({ observationRevision: 2, visible: true }),
+          })]
+          : []),
+      ])
+    })
+  }
+}
+
+test('missing text does not scroll an existing off-screen target into view', async () => {
+  const session = new ScrollRevealSession(1200)
+  const adapter = appiumIosJourneyAdapter(session, { advance: async () => {} }, 'run-scroll')
+  await adapter.execute({
+    kind: 'expect',
+    missing: true,
+    selector: 'text',
+    selections: [],
+    source: source(),
+    text: 'Clipboard result',
+  })
+  expect(session.targets).toHaveLength(1)
+  expect(session.reveals).toEqual([])
+  expect(session.actions).toEqual([])
+})
+
+for (const kind of ['expect', 'press'] as const) {
+  test(`${kind} waits for an absent target without speculative scrolling`, async () => {
+    const session = new ScrollRevealSession(1200, true)
+    const observe = session.observe.bind(session)
+    let lookups = 0
+    session.observe = async request => {
+      lookups += 1
+      if (lookups === 1) {
+        throw new AppiumNoSuchElementError('Target has not mounted')
+      }
+      return await observe(request)
+    }
+    const adapter = appiumIosJourneyAdapter(session, { advance: async () => {} }, 'run-scroll')
+    await adapter.execute({
+      ...(kind === 'expect' ? { kind, missing: false } : { kind }),
+      selector: 'text',
+      selections: [],
+      source: source(),
+      text: 'Clipboard result',
+    })
+    expect(lookups).toBe(2)
+    expect(session.reveals).toEqual([])
+    expect(session.actions.map(action => action.kind)).toEqual(kind === 'press' ? ['click'] : [])
+  })
+
+  test(`${kind} propagates a scrolling transport failure without retrying`, async () => {
+    const session = new ScrollRevealSession(1200)
+    const reveal = session.revealObservation.bind(session)
+    session.revealObservation = async observation => {
+      await reveal(observation)
+      return Errors.throwHostEnvironment('Scroll transport disconnected')
+    }
+    const adapter = appiumIosJourneyAdapter(session, { advance: async () => {} }, 'run-scroll')
+    await expect(adapter.execute({
+      ...(kind === 'expect' ? { kind, missing: false } : { kind }),
+      selector: 'text',
+      selections: [],
+      source: source(),
+      text: 'Clipboard result',
+    })).rejects.toThrow('Scroll transport disconnected')
+    expect(session.targets).toHaveLength(1)
+    expect(session.reveals).toHaveLength(1)
+    expect(session.actions).toEqual([])
+  })
+}
+
+test('a click failure after scrolling is propagated without dispatching a duplicate click', async () => {
+  const session = new ScrollRevealSession(1200)
+  const perform = session.perform.bind(session)
+  session.perform = async action => {
+    const receipt = await perform(action)
+    if (action.kind === 'click') {
+      return Errors.throwHostEnvironment('Click transport disconnected after dispatch')
+    }
+    return receipt
+  }
+  const adapter = appiumIosJourneyAdapter(session, { advance: async () => {} }, 'run-scroll')
+  await expect(adapter.execute({
+    kind: 'press',
+    selector: 'text',
+    selections: [],
+    source: source(),
+    text: 'Clipboard result',
+  })).rejects.toThrow('Click transport disconnected after dispatch')
+  expect(session.reveals).toHaveLength(1)
+  expect(session.actions.map(action => action.kind)).toEqual(['click'])
+  expect(session.targets).toHaveLength(2)
 })
 
 test('uses an XCUITest deep link before waiting for the exact native clock receipt', async () => {
@@ -333,6 +486,31 @@ class RecordingSession implements HostSession {
   }
 
   async publishRevision(): Promise<void> {}
+}
+
+class ScrollRevealSession extends RecordingSession {
+  readonly reveals: HostObservation[] = []
+  readonly #y: number
+  #visible: boolean
+
+  constructor(y: number, visible = false) {
+    super()
+    this.#y = y
+    this.#visible = visible
+  }
+
+  override async observe(request: Parameters<HostSession['observe']>[0]): Promise<HostObservation> {
+    return {
+      ...await super.observe(request),
+      bounds: { height: 40, width: 200, x: 0, y: this.#visible ? 200 : this.#y },
+      visible: this.#visible,
+    }
+  }
+
+  async revealObservation(observation: HostObservation): Promise<void> {
+    this.reveals.push(observation)
+    this.#visible = true
+  }
 }
 
 class MissingElementSession extends RecordingSession {

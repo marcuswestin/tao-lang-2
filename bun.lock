@@ -77,6 +77,7 @@
         "@types/jest": "29.5.14",
         "@types/react": "~19.2.0",
         "@types/react-dom": "~19.2.0",
+        "tao-native-bindings": "workspace:*",
       },
     },
     "packages/apps/runtime": {
@@ -197,6 +198,7 @@
         "tao-expo-host": "workspace:*",
         "tao-formatter": "workspace:*",
         "tao-generation": "workspace:*",
+        "tao-native-bindings": "workspace:*",
         "tao-parser": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-skills": "workspace:*",
@@ -365,6 +367,12 @@
       "dependencies": {
         "tao-ast-utils": "workspace:*",
         "tao-parser": "workspace:*",
+        "tao-shared": "workspace:*",
+      },
+    },
+    "packages/native-bindings": {
+      "name": "tao-native-bindings",
+      "dependencies": {
         "tao-shared": "workspace:*",
       },
     },
@@ -3097,6 +3105,8 @@
     "tao-icloud": ["tao-icloud@workspace:packages/providers/icloud"],
 
     "tao-instantdb": ["tao-instantdb@workspace:packages/providers/instantdb"],
+
+    "tao-native-bindings": ["tao-native-bindings@workspace:packages/native-bindings"],
 
     "tao-parser": ["tao-parser@workspace:packages/language/parser"],
 

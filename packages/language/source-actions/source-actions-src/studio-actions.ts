@@ -80,7 +80,7 @@ async function applyPatchContent(
     'bind-text': async action => await bindText(document, action),
     'insert-captured-fixture': async action => await insertCapturedFixture(document, action),
     'insert-component': async action => await insertComponent(document, action.component, action),
-    'insert-project-view': async action => await insertProjectView(document, action),
+    'insert-project-view': async action => await insertProjectView(document, action, context),
     'insert-separator': async action => await insertSeparator(document, action),
     'insert-spacer': async action => await insertSpacer(document, action),
     'move-render': async action => await moveRender(document, action),

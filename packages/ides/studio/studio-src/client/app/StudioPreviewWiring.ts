@@ -1,8 +1,9 @@
-import { Assert } from '@shared/core'
+import { Assert, Errors } from '@shared/core'
 import type {
   StudioPreviewCanvasGestureMessage,
   StudioPreviewCanvasPanKeyMessage,
   StudioPreviewCanvasShortcutMessage,
+  StudioPreviewFeedDropMessage,
 } from '../../StudioProtocol'
 import type { StudioHandshake } from '../StudioApiClient'
 import {
@@ -37,6 +38,7 @@ export type StudioPreviewWiringDeps = Readonly<{
   onCanvasGesture?: (preview: StudioPreviewConnection, gesture: StudioPreviewCanvasGestureMessage) => void
   onCanvasPanKey?: (preview: StudioPreviewConnection, message: StudioPreviewCanvasPanKeyMessage) => void
   onCanvasShortcut?: (command: StudioPreviewCanvasShortcutMessage['command'], iframe: HTMLIFrameElement) => void
+  onFeedDrop?: (message: StudioPreviewFeedDropMessage) => Promise<void>
 }>
 
 /**
@@ -160,8 +162,10 @@ export function studioPreviewMessageListener(deps: StudioPreviewMessagesDeps): (
       activate: () => activePreview.activate(connection),
       applySourceAction: envelope => mutations.submitPreview(envelope),
       canvasGesture: gesture => deps.onCanvasGesture?.(connection, gesture),
+      canvasGesturesOwned: deps.canvasGesturesOwned,
       canvasPanKey: message => deps.onCanvasPanKey?.(connection, message),
       canvasShortcut: message => deps.onCanvasShortcut?.(message.command, connection.iframe),
+      feedDrop: deps.onFeedDrop,
       changed() {
         drawer.renderIfLogs()
         drawer.loadDataIfVisible()
@@ -175,6 +179,9 @@ export function studioPreviewMessageListener(deps: StudioPreviewMessagesDeps): (
         void inspection.highlightOnDevice(selection)
       },
       reveal: deps.onReveal,
+    }).catch(error => {
+      deps.status.dataset['state'] = 'error'
+      deps.status.textContent = Errors.messageOf(error)
     })
   }
 }

@@ -1,5 +1,5 @@
-import { FS, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { CLI, FS, Repo } from '@shared'
+import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test } from '@shared/test'
 import { OVERRIDE_LOG } from '../agent-cli-src/agent-hooks/HookOverrides'
 import { hookOverrideReason, outputDisciplineRefusal, splitStages } from '../agent-cli-src/agent-hooks/OutputDiscipline'
 import { outputDisciplineDecision } from '../agent-cli-src/agent-hooks/OutputDisciplineEntry'
@@ -277,15 +277,12 @@ Describe('output discipline', () => {
   })
 
   Test('runs as the hook does, from the script the generated settings name', async () => {
-    const run = async (payload: string): Promise<{ exitCode: number; stdout: string }> => {
-      const hook = Bun.spawn(['zsh', `${Repo.getRoot()}/${HOOK_SCRIPT}`], {
-        stderr: 'pipe',
-        stdin: new TextEncoder().encode(payload),
-        stdout: 'pipe',
+    Expect((await FS.readText(Repo.resolvePath(HOOK_SCRIPT))).split('\n')[0]).toBe('#!/bin/sh')
+    const run = (payload: string) =>
+      CLI.run('/bin/sh', {
+        args: [Repo.resolvePath(HOOK_SCRIPT)],
+        stdin: payload,
       })
-      const stdout = await new Response(hook.stdout).text()
-      return { exitCode: await hook.exited, stdout }
-    }
 
     const denied = await run(JSON.stringify({ tool_input: { command: 'git show HEAD' }, tool_name: 'Bash' }))
     Expect(denied.exitCode).toEqual(0)
@@ -298,5 +295,19 @@ Describe('output discipline', () => {
     const unreadable = await run('')
     Expect(unreadable.exitCode).toEqual(0)
     Expect(unreadable.stdout.trim()).toEqual('')
+  })
+
+  Test('the POSIX hook remains silent when the checkout has no Bun', async () => {
+    const root = await mkGitTestDir('tao-output-hook-no-bun-')
+    await initGitTestRepository(root)
+    const result = await CLI.run('/bin/sh', {
+      args: [Repo.resolvePath(HOOK_SCRIPT)],
+      cwd: root,
+      env: { PATH: '/usr/bin:/bin' },
+      stdin: JSON.stringify({ tool_input: { command: 'git show HEAD' }, tool_name: 'Bash' }),
+    })
+    Expect(result.exitCode).toBe(0)
+    Expect(result.stdout).toBe('')
+    Expect(result.stderr).toBe('')
   })
 })
