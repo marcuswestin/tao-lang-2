@@ -188,6 +188,17 @@ A later macOS evidence-update gate reported an unhandled `ENOENT` while
 (`2026-09-26T17-52-59-069Z-66921`). This is a separate observed fixture/lease-lifecycle race,
 not a cause assigned to the Linux bootstrap or new procfs adapter. Preserve the failed gate log
 for the verification owner's follow-up; no scheduler or lease behavior was changed here.
+
+The September 27 repository review reproduced this same race in verification run
+`2026-09-27T19-27-48-010Z-26072-75369b75`. Early and final release calls entered the same
+lease cleanup concurrently because its released flag was set only after registry I/O. One
+finished and allowed scratch deletion while the other still scanned the registry. The repair
+shares one pending release across callers, preserves retry after rejection, and makes the
+gate runner own and await both early prepare/GUI cleanup results before returning. Controlled
+regressions fail with the old double-release and unowned-error paths; the restored focused
+checks pass. This closes the observed cleanup race, not the separate native amd64/hosted
+acceptance requirements of this entry.
+
 The next gate passed that suite but hit a separate account-server fixture readiness race:
 `JSON Parse error: Unexpected EOF` at `account-server.test.ts:432`, after observing the ready
 file before its direct JSON write finished (`2026-09-26T17-53-14-010Z-67962`). Its focused

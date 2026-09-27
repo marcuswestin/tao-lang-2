@@ -86,6 +86,21 @@ a stored `relation` may not cross between them: both ends must declare `local on
 same holds for two collections held by different datasources, and `reference` is the link that
 crosses either boundary (see _References across datasources_).
 
+In an authenticated app, that companion catalog is scoped to the signed-in account. Its rows
+remain on this device and persist across remounts for the same app/account, but are inaccessible
+while signed out or signed into another account. Switching accounts fences the old connection
+and its in-flight work before exposing the new account's store. Signing back into the same account
+restores its local rows. An app without authentication keeps the existing device-local store.
+This account-scoped companion does not give an ordinary Local datasource authenticated server
+authority, and does not make its rows eligible for synchronization.
+
+Account switching preserves snapshots already admitted by a local commit, including queued writes,
+under their original account key. It rejects new work from the invalidated account lifetime, and a
+later mount of the same account waits for admitted writes before loading. It cannot cancel a
+device-storage write that has already started.
+This is app-level account isolation using the Local provider's existing device persistence; it
+does not add encrypted storage or multi-process writer coordination.
+
 The field trait `(unique)` selects the entity's external reconciliation key, used by `Http` fills
 and cross-store references. It is legal on a scalar primitive field, including a named scalar type
 or case-named boolean, at most once per field and on at most one field per entity.

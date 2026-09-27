@@ -3,6 +3,29 @@ import { BridgeMetadata } from '../compiler-src/bridge-metadata'
 import { TestCompiler as Compiler } from './test-compile'
 
 Describe('compiler: app-scoped auth and account data', () => {
+  Test('mounts an authenticated local-only app through the same scoped catalog its reads and writes use', async () => {
+    const result = await Compiler.compileCode(`
+      use TestAuth from @tao/auth/testing
+      data Drafts / Draft { Body text, local only }
+      app Notes { Auth TestAuth { State "SignedOut" } view Main }
+      view Main() {
+        query Drafts = Drafts with { }
+        action Add() { create Draft { Body: "Local" } }
+        render Label("Drafts: { Drafts.Count }")
+      }
+      view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+    `)
+    const code = result.code.replace(/\s+/g, ' ')
+    Expect(code).toContain('TR.Auth.UseDatasources(_TaoAuthScope, [')
+    Expect(code).toContain(
+      'store: _Scope._TaoLocalDataCatalog, source: _Scope._TaoLocalDatasource, localOnly: _TaoAppDefinition_Notes.declaration.canonicalIdentity!.canonical,',
+    )
+    Expect(code).toContain('TR.Data.Query( TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog)')
+    Expect(code).toContain('TR.Data.Create( TR.Auth.Store(_TaoAuthScope, _Scope._TaoLocalDataCatalog)')
+    Expect(code).not.toContain('TR.Data.UseConfigured(')
+    Expect(code).not.toContain('datasources: () =>')
+  })
+
   Test('binds independent auth configuration and mounts the scoped host', async () => {
     const result = await Compiler.compileCode(`
       use TestAuth from @tao/auth/testing
