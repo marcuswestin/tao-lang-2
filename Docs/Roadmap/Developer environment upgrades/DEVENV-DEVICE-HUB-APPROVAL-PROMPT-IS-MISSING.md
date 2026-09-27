@@ -6,7 +6,7 @@
 - **Impact:** Device Hub approval can be obtained and saved after selecting interactive approval in the existing task. App selection still times out after approval, leaving visual navigation acceptance blocked on successful inspection or manual review.
 - **Evidence:** On 2026-09-26, requesting `com.apple.dt.Devices` through the computer-use app selector immediately returned `Computer Use was not approved to use Device Hub`. The Developer's screenshot showed Any App enabled and an empty Always-allowed apps list. The active task reported approval policy `never`, while the generated repository configuration and the system configuration both specified `on-request` with automatic review. The repository generator emits those same values. No computer-use policy override appeared in the inspected repository, user or system configuration; the two inspected local requirements-file locations were absent. These observations identify a session/configuration mismatch, not its source or a proven cause of the missing prompt. Managed remote policy and desktop session overrides remain unexamined.
 - **Workaround:** Use the existing named device install/launch workflows and manual visual review. Installation and successful launch are not UI acceptance.
-- **Proposed change:** First establish whether Device Hub has a responsive visible window, then make one supported inspection attempt after that state change. If the timeout persists, inspect the desktop computer-use diagnostics and the remaining macOS Device Control and Data Access grant read-only (the former Accessibility permission) before proposing a targeted intervention. Separately investigate which layer selects `never`: it was absent in the September 26 follow-up but recurred in the September 27 continuation. No repository configuration change is supported by these results. Do not change the sandbox, forge saved approvals, or hand-edit generated configuration. The [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) distinguishes app access policy from normal approval and persistence; an `allow` rule alone grants neither. [Computer-use guidance](https://learn.chatgpt.com/docs/computer-use#permissions-and-approvals) distinguishes application approval from macOS permissions.
+- **Proposed change:** Diagnose why exact-path inspection of the responsive Device Hub window still times out after app approval and confirmed macOS Device Control and Data Access access. Separately investigate which layer selected `never`: it was absent in the September 26 follow-up but recurred in the September 27 continuation. No repository configuration change is supported by these results. Do not change the sandbox, forge saved approvals, or hand-edit generated configuration. The [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) distinguishes app access policy from normal approval and persistence; an `allow` rule alone grants neither. [Computer-use guidance](https://learn.chatgpt.com/docs/computer-use#permissions-and-approvals) distinguishes application approval from macOS permissions.
 - **Dependencies:** Desktop session permission controls and user approval; inspect applicable managed policy if the mismatch persists. No configuration changes authorized by this research-only follow-up.
 - **Acceptance:** Establish which layer selected `never`; reproduce an actual app approval prompt with interactive approval enabled; confirm approved Device Hub inspection succeeds; verify a future task can reuse saved approval when selected. Document the smallest required change and its owner, preserving repository sandbox protections.
 - **Source:** Native navigation physical-review follow-up on `feat/native-navigation-implementation`, 2026-09-26.
@@ -211,3 +211,17 @@ No screenshot or accessibility state of either rendered app was obtained. Outer/
 portrait/landscape, book/tabletop, Split View, keyboard, active sheet/dialog, and navigation/state
 continuity acceptance all remain outstanding. No compatibility fix is justified by this run.
 Landing remains held until the required visual acceptance can be completed.
+
+## macOS grant confirmed — 2026-09-27 UTC
+
+The Developer supplied a System Settings screenshot of Privacy & Security → Device Control and
+Data Access with the `Codex Computer Use` switch enabled. This confirms the visible macOS grant
+and rules out a disabled switch as the direct explanation for this retry; it does not prove the
+helper can inspect Device Hub. One further exact-path `getApp` request still returned
+`Computer Use server error -10005: timeoutReached` after 5.1702 seconds, without an accessibility
+state or screenshot. The app approval and window-launch observations remain valid separately.
+No settings were changed by this task. The cause of the inspection timeout remains unknown.
+
+The Developer then authorized landing the reviewed scoped setup/build and evidence slice despite
+the visual acceptance gap. Landing this slice must not be described as Duo display/fold or
+navigation acceptance. A separate visual follow-up remains necessary.
