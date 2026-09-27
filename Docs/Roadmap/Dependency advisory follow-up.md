@@ -90,8 +90,9 @@ CVE-2026-6368, and CVE-2026-6791. A tracker match on the bare glibc version alon
 that a backported CVE is still present; compare the pinned patch with upstream fixes and the
 [Nixpkgs tracker](https://tracker.security.nixos.org/).
 
-`devenv update nixpkgs --no-tui` could not resolve `github.com` on this host, including outside
-the managed shell, so no lock update or Linux acceptance is claimed. On a network-enabled Linux
+The earlier `devenv update nixpkgs --no-tui` attempt could not resolve `github.com` on this host,
+including outside the managed shell, so no lock update or updated-input Linux closure acceptance
+is claimed. Contributor verification of the unchanged input does not establish its glibc patch exposure. On a network-enabled Linux
 host, update the input, inspect its glibc patches against current upstream notices, build and
 activate a fresh `x86_64-linux` profile, inspect the realized closure and glibc version, and run
 the complete repository gate and relevant Android/Node smoke checks. Record the new lock revision
