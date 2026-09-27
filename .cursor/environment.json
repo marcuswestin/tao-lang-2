@@ -1,0 +1,4 @@
+{
+  "install": "./bootstrap-tao-dev-env --install-nix",
+  "start": "./bootstrap-tao-dev-env --install-nix"
+}

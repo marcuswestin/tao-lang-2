@@ -357,6 +357,14 @@ Describe('Codex config generation', () => {
     const config = Platform.parseToml(configText) as any
     Expect(config.default_permissions).toBe('tao-workspace')
     Expect(config.permissions['tao-workspace'].extends).toBe(':workspace')
-    Expect(config.permissions['tao-workspace'].filesystem['~/code/tao-lang-2/.git']).toBe('write')
+    const commonGit = await CLI.run('git', {
+      args: ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+      cwd: root,
+    })
+    Expect(commonGit.exitCode).toBe(0)
+    const writable = Object.entries(config.permissions['tao-workspace'].filesystem)
+      .filter(([, mode]) => mode === 'write')
+      .map(([path]) => path.startsWith('~/') ? FS.resolvePath(path.slice(2), FS.homeDir()) : path)
+    Expect(writable).toContain(commonGit.stdout.trim())
   })
 })

@@ -1,6 +1,6 @@
 # DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION — Doctor test observes concurrent artifact creation
 
-- **Status:** Candidate
+- **Status:** Incoming
 - **Section:** External
 - **Area:** Repository doctor and full verification
 - **Impact:** A full `./agent verify` can fail the read-only doctor test because another lane creates a top-level `.artifacts` directory during the test, even though doctor did not write it. This makes a clean checkout's verification result dependent on test scheduling.
@@ -12,3 +12,5 @@
 - **Dependencies:** None.
 - **Acceptance:** Repeated full verification from a fresh artifact root passes while other lane nodes create their normal artifact directories, and a deliberate doctor write still fails the focused test.
 - **Source:** Initial release QA plan verification on `feat/mvp-release-qa-plan`.
+
+- **Implemented follow-up:** `2411e883` on `feat/cloud-contributor-continuation` moves the preservation assertion into an owned Git checkout and gives the competing Studio fixture an owned `devDataRoot`. The fixture snapshots staged, unstaged, untracked, ignored, directory, and symlink state; dependency/parser smoke checks remain against the actual checkout. A scratch mutation that creates `.artifacts/user` in the actual doctor fails the preservation assertion. Focused evidence: `.artifacts/logs/agent/test-file/2026-09-26T22-15-22-500Z-79895.log`; mutation: `2026-09-26T22-14-48-882Z-75706.log`. Complete macOS verification passed at merge `03b54882` in `.artifacts/logs/verify/2026-09-26T22-40-09-499Z-38053-7bbf89e4/`. Linux acceptance is in progress; keep this entry incoming until landing and re-verification.

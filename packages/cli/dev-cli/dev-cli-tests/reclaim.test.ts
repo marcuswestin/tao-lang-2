@@ -56,6 +56,51 @@ const noThreads = async (paths: readonly string[]): Promise<WorktreeThreadInvent
   providers: { claude: 'ok', codex: 'ok', cursor: 'ok' },
 })
 
+async function cursorDatabase(appRoot: string, worktree: string): Promise<void> {
+  const storage = FS.resolvePath('User/globalStorage', appRoot)
+  await FS.mkdir(storage)
+  const db = new Database(FS.resolvePath('state.vscdb', storage))
+  try {
+    db.run(
+      'CREATE TABLE composerHeaders (composerId TEXT, createdAt INTEGER, lastUpdatedAt INTEGER, isArchived INTEGER, value TEXT)',
+    )
+    db.run('INSERT INTO composerHeaders VALUES (?, ?, ?, ?, ?)', [
+      'cursor-linux',
+      1000,
+      2000,
+      0,
+      JSON.stringify({ name: 'Attached Linux task', workspaceIdentifier: { uri: { fsPath: worktree } } }),
+    ])
+  } finally {
+    db.close()
+  }
+}
+
+async function cursorInventory(
+  home: string,
+  paths: readonly string[],
+  platform = 'linux',
+  xdgConfigHome = '',
+  deniedPath?: string,
+): Promise<WorktreeThreadInventory> {
+  const script = Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/doctor/worktree_thread_inventory.py')
+  // Inject a deterministic permission failure even when the guest test runs as root.
+  const args = deniedPath === undefined ? [script] : [
+    '-c',
+    'import pathlib,runpy,sys\noriginal=pathlib.Path.lstat\ndef lstat(path,*args,**kwargs):\n if str(path)==sys.argv[2]: raise PermissionError("fixture denied")\n return original(path,*args,**kwargs)\npathlib.Path.lstat=lstat\nrunpy.run_path(sys.argv[1],run_name="__main__")',
+    script,
+    deniedPath,
+  ]
+  const result = await CLI.run('python3', {
+    args,
+    processPolicy: 'test',
+    stdin: JSON.stringify({ home, paths, platform, xdgConfigHome }),
+    timeoutMs: 20_000,
+  })
+  Expect(result.exitCode).toBe(0)
+  return JSON.parse(result.stdout) as WorktreeThreadInventory
+}
+
 /** scenario builds one machine: a primary checkout, the worktree asking, and one candidate. */
 async function scenario(options: {
   calls?: string[]
@@ -177,7 +222,7 @@ Describe('reclaim', () => {
 
     const result = await CLI.run('python3', {
       args: [Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/doctor/worktree_thread_inventory.py')],
-      stdin: JSON.stringify({ home, paths: [worktree, `${worktree}-other`] }),
+      stdin: JSON.stringify({ home, paths: [worktree, `${worktree}-other`], platform: 'darwin' }),
     })
     Expect(result.exitCode).toBe(0)
     const inventory = JSON.parse(result.stdout) as WorktreeThreadInventory
@@ -188,6 +233,129 @@ Describe('reclaim', () => {
     Expect(inventory.byPath[worktree]?.find(thread => thread.app === 'codex')?.label).toBe('NEXT')
     Expect(inventory.byPath[worktree]?.find(thread => thread.app === 'codex')?.lastActivity)
       .toBe('User: Review the worktree cleanup')
+  })
+  Test('Cursor default profiles resolve for both operating systems and Linux XDG precedence', async () => {
+    for (
+      const fixture of [
+        { platform: 'darwin', xdg: '', directory: 'Library/Application Support/Cursor' },
+        { platform: 'linux', xdg: '', directory: '.config/Cursor' },
+        { platform: 'linux', xdg: 'relative-invalid', directory: '.config/Cursor' },
+        { platform: 'linux', xdg: 'absolute', directory: 'custom-config/Cursor' },
+      ]
+    ) {
+      const home = await mkTestDir('cursor-path-')
+      const worktree = FS.resolvePath('checkout', await FS.realPath(home))
+      const xdg = fixture.xdg === 'absolute' ? FS.resolvePath('custom-config', home) : fixture.xdg
+      await cursorDatabase(FS.resolvePath(fixture.directory, home), worktree)
+      if (fixture.xdg === 'absolute') {
+        await cursorDatabase(FS.resolvePath('.config/Cursor', home), `${worktree}-wrong`)
+      }
+      const inventory = await cursorInventory(home, [worktree, `${worktree}-wrong`], fixture.platform, xdg)
+      Expect(inventory.providers.cursor).toBe('ok')
+      Expect(inventory.byPath[worktree]?.map(thread => thread.title)).toEqual(['Attached Linux task'])
+      Expect(inventory.byPath[`${worktree}-wrong`]).toEqual([])
+    }
+  })
+
+  Test('Cursor reports only absent default app directories as not installed', async () => {
+    const home = await mkTestDir('cursor-absent-')
+    Expect((await cursorInventory(home, [])).providers.cursor).toBe('not-installed')
+    Expect((await cursorInventory(home, [], 'unsupported')).providers.cursor).toContain('unavailable:')
+    const appRoot = FS.resolvePath('.config/Cursor', home)
+    await FS.mkdir(appRoot)
+    Expect((await cursorInventory(home, [])).providers.cursor).toContain('unavailable:')
+    await FS.mkdir(FS.resolvePath('User/globalStorage', appRoot))
+    Expect((await cursorInventory(home, [])).providers.cursor).toContain('unavailable:')
+    Expect((await cursorInventory(home, [], 'linux', '', appRoot)).providers.cursor)
+      .toBe('unavailable: PermissionError')
+  })
+
+  Test('Cursor malformed paths and databases fail closed', async () => {
+    for (
+      const malformed of ['file', 'broken-link', 'broken-parent', 'database-directory', 'corrupt', 'schema', 'json']
+    ) {
+      const home = await mkTestDir('cursor-malformed-')
+      const appRoot = FS.resolvePath('.config/Cursor', home)
+      if (malformed === 'file') {
+        await FS.writeText(appRoot, 'not a directory')
+      } else if (malformed === 'broken-link') {
+        await FS.symlink(FS.resolvePath('missing', home), appRoot)
+      } else if (malformed === 'broken-parent') {
+        await FS.symlink(FS.resolvePath('missing', home), FS.resolvePath('.config', home))
+      } else {
+        const database = FS.resolvePath('User/globalStorage/state.vscdb', appRoot)
+        await FS.mkdir(FS.resolvePath('User/globalStorage', appRoot))
+        if (malformed === 'database-directory') {
+          await FS.mkdir(database)
+        } else if (malformed === 'corrupt') {
+          await FS.writeText(database, 'not sqlite')
+        } else if (malformed === 'schema') {
+          new Database(database).close()
+        } else {
+          await cursorDatabase(appRoot, '/fixture/checkout')
+          const db = new Database(database)
+          db.run("UPDATE composerHeaders SET value = 'invalid JSON'")
+          db.close()
+        }
+      }
+      Expect((await cursorInventory(home, ['/fixture/checkout'])).providers.cursor).toContain('unavailable:')
+    }
+  })
+
+  Test('malformed Cursor path values block reclaim while workspace-less tasks remain valid', async () => {
+    const calls: string[] = []
+    const { candidate, registryRoot, run } = await scenario({ calls })
+    const home = await mkTestDir('cursor-path-values-')
+    const appRoot = FS.resolvePath('.config/Cursor', home)
+    const readThreads = async (paths: readonly string[]) => await cursorInventory(home, paths)
+    const stale = await reclaim({ readThreads, registryRoot, run })
+    Expect(stale.worktrees.find(row => row.path === candidate)?.verdict).toBe('reclaimable')
+    await cursorDatabase(appRoot, candidate)
+    const db = new Database(FS.resolvePath('User/globalStorage/state.vscdb', appRoot))
+    try {
+      for (const value of [0, false, [], {}]) {
+        db.run('UPDATE composerHeaders SET value = ?', [
+          JSON.stringify({ workspaceIdentifier: { uri: { fsPath: value } } }),
+        ])
+        Expect((await readThreads([candidate])).providers.cursor).toBe('unavailable: ValueError')
+        const current = await reclaim({ readThreads, registryRoot, run })
+        Expect(current.worktrees.find(row => row.path === candidate)?.verdict).toBe('unclassified')
+        Expect(await execute(stale, { inSandbox: () => false, readThreads, registryRoot, run })).toEqual([
+          { outcome: 'skipped-now-live', path: candidate, reason: 'an agent task index became unreadable' },
+        ])
+        Expect(calls).not.toContain(routeKey('git', ['worktree', 'remove', candidate], Repo.getRoot()))
+      }
+      for (
+        const value of [
+          {},
+          { workspaceIdentifier: { uri: {} } },
+          { workspaceIdentifier: { uri: { fsPath: null } } },
+          { workspaceIdentifier: { uri: { fsPath: '' } } },
+        ]
+      ) {
+        db.run('UPDATE composerHeaders SET value = ?', [JSON.stringify(value)])
+        const inventory = await readThreads([candidate])
+        Expect(inventory.providers.cursor).toBe('ok')
+        Expect(inventory.byPath[candidate]).toEqual([])
+      }
+    } finally {
+      db.close()
+    }
+  })
+
+  Test('a real Linux default-profile task keeps reclaim live and prevents a stale removal', async () => {
+    const calls: string[] = []
+    const { candidate, registryRoot, run } = await scenario({ calls })
+    const home = await mkTestDir('cursor-reclaim-')
+    const readThreads = async (paths: readonly string[]) => await cursorInventory(home, paths)
+    const stale = await reclaim({ readThreads, registryRoot, run })
+    Expect(stale.worktrees.find(row => row.path === candidate)?.verdict).toBe('reclaimable')
+    await cursorDatabase(FS.resolvePath('.config/Cursor', home), candidate)
+    const current = await reclaim({ readThreads, registryRoot, run })
+    Expect(current.worktrees.find(row => row.path === candidate)?.verdict).toBe('live')
+    const removed = await execute(stale, { inSandbox: () => false, readThreads, registryRoot, run })
+    Expect(removed).toEqual([{ outcome: 'skipped-now-live', path: candidate, reason: 'attached to an agent task' }])
+    Expect(calls).not.toContain(routeKey('git', ['worktree', 'remove', candidate], Repo.getRoot()))
   })
   Test('reports a clean, idle, preserved worktree as reclaimable with its evidence', async () => {
     const { candidate, registryRoot, run } = await scenario({})
