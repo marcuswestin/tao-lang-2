@@ -11,10 +11,17 @@ import { StudioApiClient } from '../StudioApiClient'
 import { StudioDialog } from '../StudioDialog'
 import { projectRelativePath, StudioEditorInsertion } from '../StudioEditor'
 import { showSourceActionError, sourceActionLabel } from '../StudioVisualEditing'
+import { studioEditLabel, type StudioEditLogEntry } from './StudioEditLog'
 
 type StudioSourceMutationResult = Readonly<{ compile: StudioCompileCompletion; path: string }>
 
-type StudioUndoCheckpoint = Readonly<{ id: string; identity: StudioSourceActionIdentity; path: string }>
+type StudioUndoCheckpoint = Readonly<{
+  at: number
+  id: string
+  identity: StudioSourceActionIdentity
+  label: string
+  path: string
+}>
 
 export type StudioSourceMutationsDeps = Readonly<{
   activeFile: () => StudioDraftFile | undefined
@@ -57,6 +64,18 @@ export class StudioSourceMutations {
     return this.#checkpoints.at(-1)?.path === this.#deps.activePath()
   }
 
+  /** The undo stack as the edit log shows it: newest first, and only the newest walks back in the open file. */
+  edits(): readonly StudioEditLogEntry[] {
+    const undoable = this.canUndo()
+    return this.#checkpoints.toReversed().map(({ at, id, label, path }, index) => ({
+      at,
+      id,
+      label,
+      path,
+      undoable: undoable && index === 0,
+    }))
+  }
+
   /** Whether a mutation may start now; when it may not, the status line already says why. */
   canMutate(): boolean {
     return !this.#busy && this.#deps.requireActiveDraftSaved()
@@ -68,7 +87,13 @@ export class StudioSourceMutations {
       async () => {
         const result = await StudioApiClient.sourceAction(envelope)
         if (result.checkpoint.status === 'committed' && this.#checkpoints.at(-1)?.id !== result.checkpoint.id) {
-          this.#checkpoints.push({ id: result.checkpoint.id, identity: envelope.identity, path: result.path })
+          this.#checkpoints.push({
+            at: Date.now(),
+            id: result.checkpoint.id,
+            identity: envelope.identity,
+            label: studioEditLabel(envelope.action),
+            path: result.path,
+          })
         }
         return result
       },

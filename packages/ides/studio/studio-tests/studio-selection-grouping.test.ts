@@ -1,4 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
+import { isStudioVisualUndoShortcut, studioEditAge, studioEditLabel } from '../studio-src/client/app/StudioEditLog'
 import { StudioInspection } from '../studio-src/client/app/StudioInspection'
 import {
   inferGroupWrapper,
@@ -88,5 +89,21 @@ Describe('Studio selection grouping', () => {
       kind: 'extract-view',
       renderIds: [`${garden}:10:20`, `${garden}:30:40`],
     })
+  })
+
+  Test('the edit log names edits the way they were made and ages them coarsely', () => {
+    Expect(studioEditLabel({ entry: ['gap', 16], kind: 'set-layout-entry', renderId: 'x' })).toBe('Gap 16')
+    Expect(studioEditLabel({ kind: 'group-renders', renderIds: [], wrapper: 'Row' })).toBe('Group in Row')
+    Expect(studioEditLabel({ kind: 'extract-view', renderIds: [] })).toBe('Make view')
+    Expect(studioEditLabel({ kind: 'extract-view', name: 'Card', renderIds: [] })).toBe('Make view Card')
+    Expect(studioEditLabel({ kind: 'insert-spacer' })).toBe('Insert spacer')
+    Expect(studioEditLabel({ kind: 'toString' })).toBe('ToString')
+    const minute = 60_000
+    Expect([0, 59_000, minute, 59 * minute, 60 * minute, 49 * 60 * minute].map(age => studioEditAge(0, age)))
+      .toEqual(['now', 'now', '1m', '59m', '1h', '2d'])
+    const key = { altKey: false, code: 'KeyZ', ctrlKey: false, isComposing: false, metaKey: true, shiftKey: false }
+    Expect(isStudioVisualUndoShortcut(key)).toBe(true)
+    Expect(isStudioVisualUndoShortcut({ ...key, shiftKey: true })).toBe(false)
+    Expect(isStudioVisualUndoShortcut({ ...key, metaKey: false })).toBe(false)
   })
 })

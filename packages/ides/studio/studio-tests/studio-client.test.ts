@@ -3686,8 +3686,15 @@ Test('Studio source mutations share one envelope and bind undo to the file the e
       'inspector',
     ])
     Expect(mutations.canUndo()).toBe(true)
+    Expect(mutations.edits()).toMatchObject([{
+      id: 'checkpoint-1',
+      label: 'Gap 16',
+      path: 'Garden.tao',
+      undoable: true,
+    }])
     activePath = 'Other.tao'
     Expect(mutations.canUndo()).toBe(false)
+    Expect(mutations.edits()).toMatchObject([{ undoable: false }])
     activePath = 'Garden.tao'
 
     // A refused mutation reports in the status line and leaves the undo stack and busy flag alone.

@@ -730,17 +730,21 @@ export type StudioPreviewCanvasPanKeyMessage = {
   type: 'preview-canvas-pan-key'
 }
 
-/** Canvas commands: zoom, plus ⌘G making a view of the selection and ⌥⌘G grouping it in place. */
-export type StudioCanvasShortcutCommand = 'fit' | 'group' | 'make-view' | 'reset' | 'zoom-in' | 'zoom-out'
+/**
+ * Canvas commands: zoom, ⌘G making a view of the selection, ⌥⌘G grouping it in place, and ⌘Z walking
+ * back the latest visual edit.
+ */
+export type StudioCanvasShortcutCommand = 'fit' | 'group' | 'make-view' | 'reset' | 'undo' | 'zoom-in' | 'zoom-out'
 
 /** The canvas commands the viewport itself answers. */
-export type StudioCanvasZoomCommand = Exclude<StudioCanvasShortcutCommand, 'group' | 'make-view'>
+export type StudioCanvasZoomCommand = Exclude<StudioCanvasShortcutCommand, 'group' | 'make-view' | 'undo'>
 
 const canvasShortcutCommands: ReadonlySet<string> = new Set<StudioCanvasShortcutCommand>([
   'fit',
   'group',
   'make-view',
   'reset',
+  'undo',
   'zoom-in',
   'zoom-out',
 ])

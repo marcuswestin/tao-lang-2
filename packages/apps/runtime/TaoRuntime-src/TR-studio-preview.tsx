@@ -1085,16 +1085,26 @@ export function mountStudioPreviewBridge(
     blockAppPointerEvent(event)
     postToStudio(host, config, 'preview-canvas-shortcut', { command: commands[event.key] })
   }
-  /** ⌘G makes a view of the selection and ⌥⌘G groups it in place; both need an edit-mode selection. */
+  /**
+   * In edit mode ⌘G makes a view of the selection, ⌥⌘G groups it in place, and ⌘Z walks back Studio's
+   * latest visual edit; the app under edit never sees these keys.
+   */
   const onSelectionShortcutKeyDown = (event: StudioPreviewPointerEvent) => {
     if (
-      !editingGesture(event) || selectedTarget === undefined || !(event.metaKey === true || event.ctrlKey === true)
-      || event.isComposing === true || event.code !== 'KeyG' || isCanvasTypingTarget(previewElementFromEvent(event))
+      !editingGesture(event) || !(event.metaKey === true || event.ctrlKey === true) || event.isComposing === true
+      || event.shiftKey === true || isCanvasTypingTarget(previewElementFromEvent(event))
     ) {
       return
     }
-    blockAppPointerEvent(event)
-    postToStudio(host, config, 'preview-canvas-shortcut', { command: event.altKey === true ? 'group' : 'make-view' })
+    const command = event.code === 'KeyZ' && event.altKey !== true
+      ? 'undo'
+      : event.code === 'KeyG' && selectedTarget !== undefined
+      ? event.altKey === true ? 'group' : 'make-view'
+      : undefined
+    if (command !== undefined) {
+      blockAppPointerEvent(event)
+      postToStudio(host, config, 'preview-canvas-shortcut', { command })
+    }
   }
   const onCanvasPanKeyDown = (event: StudioPreviewPointerEvent) => {
     if (
@@ -1481,6 +1491,9 @@ export function mountStudioPreviewBridge(
       host.window.removeEventListener(type, listener)
     }
     overlay?.remove()
+    for (const outline of groupOverlays.splice(0)) {
+      outline.remove()
+    }
     disarmDrag()
   }
 }

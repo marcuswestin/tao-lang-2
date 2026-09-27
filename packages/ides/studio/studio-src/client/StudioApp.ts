@@ -30,6 +30,7 @@ import { studioCanvasSelectionBounds } from './app/StudioCanvasTargets'
 import { isStudioCommandPaletteShortcut, mountStudioCommandPalette } from './app/StudioCommandPaletteWiring'
 import { connectStudioEvents, StudioCompileStatus, StudioStatusLine } from './app/StudioCompileEvents'
 import { StudioDrawerPanels } from './app/StudioDrawerPanels'
+import { isStudioVisualUndoShortcut, mountStudioEditLog } from './app/StudioEditLog'
 import { StudioEditorSession } from './app/StudioEditorSession'
 import { StudioInspection } from './app/StudioInspection'
 import { StudioMountSignal } from './app/StudioMountSignal'
@@ -178,8 +179,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let previewManifest = handshake.previewManifest
     let fileTree: ReturnType<typeof mountStudioFileTree> | undefined
     let editorRevealRevision = 0
+    let editLog: ReturnType<typeof mountStudioEditLog> | undefined
 
     const publish = (): void => {
+      editLog?.render()
       feed.liveChanged()
       StudioMatrixSketches.examples(
         view.preview,
@@ -264,6 +267,11 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       renderInspector,
       requireActiveDraftSaved: () => session.requireActiveDraftSaved(),
       status: view.status,
+    })
+    editLog = mountStudioEditLog({
+      edits: () => mutations.edits(),
+      host: view.preview,
+      undo: () => void mutations.undoLatest(),
     })
     const feed = new StudioFeedController({
       browse: request => StudioMatrixSketches.runFeed(view.preview, () => StudioApiClient.feedBrowse(request)),
@@ -361,7 +369,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         command: import('../StudioProtocol').StudioPreviewCanvasShortcutMessage['command'],
         iframe: HTMLIFrameElement,
       ) =>
-        isStudioSelectionCommand(command)
+        command === 'undo'
+          ? void mutations.undoLatest()
+          : isStudioSelectionCommand(command)
           ? applySelectionCommand(command)
           : canvasViewport?.iframeShortcut(command, iframe),
       onFeedDrop: async (message: import('../StudioProtocol').StudioPreviewFeedDropMessage) => {
@@ -604,6 +614,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         commands.toggle()
       } else if (event.key === 'Escape' && !view.commandOverlay.hidden) {
         commands.close()
+      } else if (isStudioVisualUndoShortcut(event) && mutations.canUndo() && !isStudioTypingTarget(event.target)) {
+        // The code editor keeps its own ⌘Z; anywhere else it walks back the edit log.
+        event.preventDefault()
+        void mutations.undoLatest()
       } else {
         const command = studioSelectionShortcut(event)
         if (command !== undefined && inspection.selected() !== undefined && !isStudioTypingTarget(event.target)) {
@@ -835,6 +849,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       disposeBrowserLaunch?.()
       disconnectPreviewMessages()
       canvasFocus.dispose()
+      editLog?.dispose()
       canvasViewport?.dispose()
       disposeFeedDropOverlay()
       previewActivation.dispose()

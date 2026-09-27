@@ -472,7 +472,7 @@ Describe('Studio preview runtime bridge', () => {
     Expect(layoutMessages()).toHaveLength(4)
   })
 
-  Test('shift-click groups elements from one file and ⌘G or ⌥⌘G asks Studio to make a view or group', () => {
+  Test('shift-click groups elements from one file; ⌘G, ⌥⌘G and ⌘Z ask Studio to make a view, group, or undo', () => {
     const first = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
     const second = renderElement('/project/Main.tao', 30, 40, { height: 20, left: 30, top: 0, width: 20 })
     const fake = previewHost([first, second])
@@ -500,8 +500,16 @@ Describe('Studio preview runtime bridge', () => {
     ])
     selectG({})
     selectG({ altKey: true })
+    fake.dispatchDocument('keydown', { code: 'KeyZ', key: 'z', metaKey: true, preventDefault: () => {} })
+    fake.dispatchDocument('keydown', {
+      code: 'KeyZ',
+      key: 'z',
+      metaKey: true,
+      preventDefault: () => {},
+      shiftKey: true,
+    })
     Expect(posted('preview-canvas-shortcut').map(post => (post.message as { command: string }).command))
-      .toEqual(['make-view', 'group'])
+      .toEqual(['make-view', 'group', 'undo'])
     fake.dispatchDocument('click', { shiftKey: true, target: second })
     Expect(outlines()).toEqual([{ 'data-tao-studio-overlay': 'selection' }])
     fake.dispatchDocument('click', { shiftKey: true, target: first })

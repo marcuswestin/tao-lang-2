@@ -333,7 +333,7 @@ kbd {
 .tao-studio-product-host[data-layout-preset="draw"] .studio-preview { grid-column: 3; grid-row: 1 / 3; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-divider-right { grid-column: 4; grid-row: 1 / 3; }
 .studio-draw-canvas { display: none; height: 100%; min-height: 0; overflow: auto; }
-.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu) { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu):not(.studio-edit-log) { display: none; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-draw-canvas { display: block; }
 .tao-studio-product-host[data-layout-preset="run"] .studio-draw-canvas,
 .tao-studio-product-host[data-layout-preset="run"] [data-tao-studio-sketch-host] { display: none; }
@@ -620,6 +620,24 @@ kbd {
   position: absolute; right: 12px; z-index: 5;
 }
 .studio-canvas-zoom-menu[hidden] { display: none; }
+/* The edit log shares the canvas's bottom edge with the zoom pill: left corner, Design and Draw only. */
+.studio-edit-log {
+  background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px; bottom: 12px;
+  box-shadow: 0 8px 24px #0004; display: none; font-size: 12px; left: 12px; max-width: min(280px, 45%);
+  padding: 6px 4px 4px; position: absolute; z-index: 5;
+}
+.tao-studio-product-host:is([data-layout-preset="design"], [data-layout-preset="draw"]) .studio-edit-log:not([hidden]) { display: block; }
+.studio-edit-log header { align-items: baseline; display: flex; gap: 8px; justify-content: space-between; padding: 0 6px 4px; }
+.studio-edit-log header span { color: var(--studio-text-muted); font-size: 11px; white-space: nowrap; }
+.studio-edit-log ol { display: grid; list-style: none; margin: 0; padding: 0; }
+.studio-edit-log li { align-items: center; border-radius: 4px; display: flex; gap: 8px; min-height: 24px; padding: 0 6px; }
+.studio-edit-log li:first-child { background: var(--studio-stroke); }
+.studio-edit-log-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-edit-log time { color: var(--studio-text-muted); font: 11px var(--studio-mono); }
+.studio-edit-log button {
+  background: transparent; border: 1px solid var(--studio-stroke); border-radius: 4px; color: var(--studio-text);
+  cursor: pointer; font: 11px var(--studio-sans); padding: 1px 6px;
+}
 .studio-canvas-zoom-menu button {
   background: transparent; border: 0; border-radius: 4px; color: var(--studio-text); cursor: pointer;
   font: 12px var(--studio-sans); padding: 8px 10px; text-align: left;
