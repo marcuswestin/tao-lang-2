@@ -10,10 +10,12 @@ async function prepare(fixture: {
   interactive?: boolean
   missingDeviceSdk?: boolean
   installDeviceSdk?: boolean
+  verificationFailure?: 'codesign' | 'spctl'
 } = {}) {
   const calls: { name: string; spec: CLI.CommandSpec }[] = []
   const writes: string[] = []
   const prompts: string[] = []
+  const diagnostics: { path: string; value: unknown }[] = []
   let deviceSdkAvailable = !fixture.missingDeviceSdk
   let imported = false
   const output = await withCapturedOutput(() =>
@@ -43,8 +45,9 @@ async function prepare(fixture: {
         mkdir: async path => {
           writes.push(path)
         },
-        writeJson: async path => {
+        writeJson: async (path, value) => {
           writes.push(path)
+          diagnostics.push({ path, value })
         },
       },
       runCommand: async (name, spec = {}) => {
@@ -52,6 +55,11 @@ async function prepare(fixture: {
         const args = spec.args ?? []
         let stdout = ''
         let exitCode = 0
+        let stderr = ''
+        if (fixture.verificationFailure && name.endsWith(`/${fixture.verificationFailure}`)) {
+          exitCode = 1
+          stderr = `${'nested bundle: valid on disk\n'.repeat(2000)}Xcode: rejected signature`
+        }
         if (name.endsWith('sw_vers')) {
           stdout = '27.0'
         }
@@ -88,14 +96,48 @@ async function prepare(fixture: {
         if (name.endsWith('/df')) {
           stdout = 'Filesystem 1024-blocks Used Available Capacity Mounted\n/dev/disk 200000000 1000000 199000000 1% /'
         }
-        return { command: name, args: [...args], exitCode, signal: null, stdout, stderr: '' }
+        return { command: name, args: [...args], exitCode, signal: null, stdout, stderr }
       },
     }, AppleSetupPlatforms.visionos)
   )
-  return { receipt: output.result, output: output.stdout, calls, writes, prompts }
+  return { receipt: output.result, output: output.stdout, calls, writes, prompts, diagnostics }
 }
 
 Describe('shared Apple toolchain setup', () => {
+  Test('reports failed signature and Gatekeeper checks concisely with complete diagnostic files', async () => {
+    for (const verificationFailure of ['codesign', 'spctl'] as const) {
+      const result = await prepare({ verificationFailure, apply: true })
+      Expect(result.receipt.status).toBe('needs-action')
+      Expect(result.receipt.remaining.length).toBe(1)
+      const message = result.receipt.remaining[0]!
+      Expect(message).toContain(
+        verificationFailure === 'codesign' ? 'signature verification failed' : 'Gatekeeper verification failed',
+      )
+      Expect(message).toContain('Xcode: rejected signature')
+      Expect(message).not.toContain('license acceptance')
+      Expect(message).not.toContain('nested bundle')
+      Expect(message.length < 700).toBe(true)
+      const log = result.diagnostics.find(entry => entry.path.includes('/diagnostics/'))!
+      Expect(message).toContain(log.path)
+      Expect(log.value).toMatchObject({
+        exitCode: 1,
+        stderr: `${'nested bundle: valid on disk\n'.repeat(2000)}Xcode: rejected signature`,
+      })
+      Expect(result.calls.some(call => call.spec.args?.includes('-checkFirstLaunchStatus'))).toBe(false)
+      if (verificationFailure === 'codesign') {
+        Expect(result.calls.some(call => call.name.endsWith('/spctl'))).toBe(false)
+      }
+    }
+  })
+
+  Test('keeps signature inspection failures read-only and bounded', async () => {
+    const result = await prepare({ verificationFailure: 'codesign' })
+    Expect(result.receipt.status).toBe('needs-action')
+    Expect(result.writes).toEqual([])
+    Expect(result.receipt.remaining[0]).toContain('Rerun with --apply to save full verification diagnostics')
+    Expect(result.receipt.remaining.join('\n')).not.toContain('nested bundle')
+  })
+
   Test('checks visionOS device support without touching simulator state for headset-only setup', async () => {
     const result = await prepare()
     Expect(result.receipt.status).toBe('ready')

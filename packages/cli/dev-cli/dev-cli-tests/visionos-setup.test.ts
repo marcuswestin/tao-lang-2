@@ -174,11 +174,61 @@ function harness(
     },
     promptCount: () => prompts,
     receipt: () =>
-      JSON.parse(reports.at(-1)!) as { status: string; processIdentifier?: number; remaining: string[]; log?: string },
+      JSON.parse(reports.at(-1)!) as {
+        status: string
+        processIdentifier?: number
+        remaining: string[]
+        log?: string
+        xcodeProject?: string
+      },
   }
 }
 
 Describe('guided visionOS setup', () => {
+  Test(
+    'exports before pairing, retains the project on quit, and explains manual device and simulator runs',
+    async () => {
+      const h = harness({ devices: 0 })
+      Expect(await VisionOSSetup.run({ ...h.options, apply: true, terminal: h.terminal }, h.dependencies)).toBe(1)
+      const exportIndex = h.calls.findIndex(call => call.command === './tao')
+      const discoveryIndex = h.calls.findIndex(call => call.args[0] === 'devicectl')
+      Expect(exportIndex).toBeGreaterThanOrEqual(0)
+      Expect(discoveryIndex).toBeGreaterThan(exportIndex)
+      Expect(h.calls.some(call => call.command === '/usr/bin/xcodebuild')).toBe(false)
+      Expect(h.calls.some(call => call.args.includes('install') || call.args.includes('launch'))).toBe(false)
+      const saved = [...h.files.entries()].find(([path]) => path.endsWith('/receipt.json'))![1] as {
+        xcodeProject: string
+        status: string
+      }
+      Expect(saved.xcodeProject).toContain('/exports/build-1/visionos/TaoApp.xcodeproj')
+      Expect(saved.status).toBe('needs-action')
+      const output = h.reports.join('\n')
+      for (
+        const instruction of [
+          'File > Open',
+          'For Simulator:',
+          'TaoApp scheme',
+          'Signing & Capabilities',
+          'Automatically manage signing',
+          'Apple Accounts',
+          'Settings > General > Remote Devices',
+          'Device Hub > + > Pair Nearby Device',
+          'Opening Xcode alone does not start pairing',
+        ]
+      ) {
+        Expect(output).toContain(instruction)
+      }
+      Expect(output.indexOf('Xcode project generated:')).toBeLessThan(output.indexOf('Next: pair your Vision Pro'))
+    },
+  )
+
+  Test('failed export stops before pairing and cannot claim a usable project', async () => {
+    const h = harness({ failure: './tao' })
+    Expect(await VisionOSSetup.run({ ...h.options, apply: true, json: true }, h.dependencies)).toBe(1)
+    Expect(h.receipt().xcodeProject).toBeUndefined()
+    Expect(h.calls.some(call => call.args[0] === 'devicectl' || call.command === '/usr/bin/xcodebuild')).toBe(false)
+  })
+
   Test('plan inspects a physical headset without exporting, installing, launching, or prompting', async () => {
     const h = harness()
     Expect(await VisionOSSetup.run({ ...h.options, json: true, terminal: h.terminal }, h.dependencies)).toBe(0)
@@ -198,7 +248,8 @@ Describe('guided visionOS setup', () => {
         const h = harness(settings)
         Expect(await VisionOSSetup.run({ ...h.options, apply: true, json: true }, h.dependencies)).toBe(1)
         Expect(h.receipt().status).toBe('needs-action')
-        Expect(h.calls.some(call => call.command === './tao')).toBe(false)
+        Expect(h.calls.some(call => call.command === './tao')).toBe(true)
+        Expect(h.calls.some(call => call.command === '/usr/bin/xcodebuild')).toBe(false)
         Expect(h.receipt().remaining.length).toBeGreaterThan(0)
       }
     },
@@ -219,7 +270,8 @@ Describe('guided visionOS setup', () => {
     ).toBe(1)
     Expect(answers).toBe(2)
     Expect(h.calls.filter(call => call.args.includes('details'))).toHaveLength(2)
-    Expect(h.calls.some(call => call.command === './tao')).toBe(false)
+    Expect(h.calls.some(call => call.command === './tao')).toBe(true)
+    Expect(h.calls.some(call => call.command === '/usr/bin/xcodebuild')).toBe(false)
     Expect([...h.files.keys()].some(path => path.endsWith('/receipt.json'))).toBe(true)
     h.setMode('enabled')
     Expect(await VisionOSSetup.run({ ...h.options, apply: true, json: true }, h.dependencies)).toBe(0)
@@ -308,7 +360,7 @@ Describe('guided visionOS setup', () => {
       Expect(await VisionOSSetup.run({ ...simulated.options, json: true }, simulated.dependencies)).toBe(1)
       const badJson = harness({ jsonOutcome: 'failed' })
       Expect(await VisionOSSetup.run({ ...badJson.options, apply: true, json: true }, badJson.dependencies)).toBe(1)
-      Expect(badJson.calls.some(call => call.command === './tao')).toBe(false)
+      Expect(badJson.calls.some(call => call.command === '/usr/bin/xcodebuild')).toBe(false)
       const changed = harness({ selection: '/Applications/Other.app/Contents/Developer' })
       Expect(await VisionOSSetup.run({ ...changed.options, json: true }, changed.dependencies)).toBe(1)
       Expect(changed.receipt().remaining.join('\n')).toContain('global Xcode selection changed')

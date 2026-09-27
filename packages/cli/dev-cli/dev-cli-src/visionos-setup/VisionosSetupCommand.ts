@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Assert, CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import {
   type AppleSetupOptions,
   AppleSetupPlatforms,
@@ -37,10 +37,20 @@ type Receipt = {
   receiptPath: string
 }
 
-const PAIR =
-  'Pair your headset in Xcode > Open Developer Tool > Device Hub > + > Pair Nearby Device. Use the same Wi-Fi network with IPv6 enabled. On the headset open Settings > General > Remote Devices, then complete pairing and trust prompts.'
-const DEVELOPER =
-  'Enable Developer Mode on the headset in Settings > Privacy & Security, restart, then confirm the enablement prompt. Unlock and reconnect the headset. Unknown Developer Mode status blocks installation; inspect Device Hub if it remains unknown.'
+const PAIR = [
+  'Next: pair your Vision Pro with this Mac. Opening Xcode alone does not start pairing.',
+  '1. Connect the Mac and headset to the same Wi-Fi network with IPv6 enabled; keep the headset awake and unlocked.',
+  '2. On the headset, open Settings > General > Remote Devices and leave it open.',
+  '3. On the Mac, choose Xcode > Open Developer Tool > Device Hub > + > Pair Nearby Device.',
+  '4. Select your Vision Pro and complete the pairing code and trust prompts on both devices.',
+].join('\n')
+const DEVELOPER = [
+  'Next: enable Developer Mode on your paired Vision Pro.',
+  '1. On the headset, open Settings > Privacy & Security > Developer Mode and turn it on.',
+  '2. Restart when prompted, then confirm enabling Developer Mode after the restart.',
+  '3. Unlock the headset and reconnect it in Device Hub. If Developer Mode is missing, complete pairing first.',
+  'Setup will recheck Developer Mode; an unknown status does not permit installation.',
+].join('\n')
 const TEAM = /^[A-Z0-9]{10}$/
 const BUNDLE = /^[A-Za-z][A-Za-z0-9-]*(?:\.[A-Za-z][A-Za-z0-9-]*)+$/
 
@@ -89,7 +99,7 @@ class SetupSession {
       Errors.throwUserInput('--bundle-id must be your own reverse-DNS identifier, not the preview app identifier.')
     }
     try {
-      const inspecting = '1/5 Inspecting Xcode and verifying its signature... This can take several minutes.'
+      const inspecting = '1/6 Inspecting Xcode and verifying its signature... This can take several minutes.'
       if (this.options.json) {
         HCI.writeErrorLine(inspecting)
       } else {
@@ -105,13 +115,23 @@ class SetupSession {
         return await this.finish()
       }
       this.step('toolchain', 'ready', `Using ${this.app}; the global Xcode selection is preserved.`)
-      this.notice(`2/5 Inspecting ${this.receipt.target} availability...`)
+      if (this.options.apply) {
+        this.notice("2/6 Generating the Tao app's Xcode project before device setup...")
+        await this.exportProject()
+      } else {
+        this.step(
+          'export',
+          'planned',
+          'With --apply, setup first generates an Xcode project usable on a simulator or paired headset, then checks the selected destination.',
+        )
+      }
+      this.notice(`3/6 Inspecting ${this.receipt.target} availability...`)
       const device = this.options.simulator ? await this.simulator() : await this.headset()
       if (!device) {
         return await this.finish()
       }
       this.receipt.device = device.id
-      this.notice('3/5 Checking app identity and signing inputs...')
+      this.notice('4/6 Checking app identity and signing inputs...')
       const identity = await this.identity()
       if (!identity) {
         return await this.finish()
@@ -126,9 +146,9 @@ class SetupSession {
         )
         return await this.finish()
       }
-      this.notice('4/5 Exporting and building the Tao app; full command output is retained in this run directory...')
+      this.notice('5/6 Building the Tao app; full command output is retained in this run directory...')
       const artifact = await this.build(device.destinationId, identity)
-      this.notice('5/5 Installing and launching the app...')
+      this.notice('6/6 Installing and launching the app...')
       await this.installAndLaunch(device.id, identity.bundleId, artifact)
       this.receipt.status = 'running'
       this.step(
@@ -315,7 +335,7 @@ class SetupSession {
         }
         if (
           await this.retry(
-            `Create or select an available Apple Vision Pro simulator for exactly visionOS ${this.options.runtimeVersion} in Xcode Device Hub. ${
+            `Next: set up the optional simulator; headset pairing and a signing team are not needed.\n1. In Xcode > Settings > Components, install visionOS ${this.options.runtimeVersion} Simulator if it is missing.\n2. Open Xcode > Open Developer Tool > Device Hub and create or select an Apple Vision Pro simulator using that runtime.\n3. In the generated project, choose the TaoApp scheme and that simulator as the run destination, then Run. ${
               candidates.length > 1
                 ? `Pass --device with one identifier: ${candidates.map(item => item['udid']).join(', ')}.`
                 : ''
@@ -393,7 +413,7 @@ class SetupSession {
     return { bundleId, team }
   }
 
-  private async build(device: string, identity: { bundleId: string; team?: string }): Promise<string> {
+  private async exportProject(): Promise<void> {
     const output = `${this.work}/exports`
     await this.command('./tao', ['build', this.receipt.project, '--visionos', '--output', output], 'export')
     const records = await this.files.listDir(output)
@@ -410,10 +430,27 @@ class SetupSession {
       Errors.throwHostEnvironment(`The export did not retain a successful visionOS Xcode project; inspect ${output}.`)
     }
     this.receipt.xcodeProject = vision['artifact']
+    this.step(
+      'export',
+      'ready',
+      [
+        `Xcode project generated: ${this.receipt.xcodeProject}`,
+        'You can use this project on a simulator or a physical Vision Pro. It remains available if you quit setup.',
+        `1. In ${this.app}, choose File > Open and select the project path above.`,
+        '2. For Simulator: choose the TaoApp scheme and an Apple Vision Pro simulator as the run destination, then click Run. Install the visionOS Simulator runtime in Xcode > Settings > Components if needed; no team is required.',
+        '3. For a headset: pair it in Device Hub and enable Developer Mode using the next instructions. In the TaoApp target > Signing & Capabilities, enable Automatically manage signing, select your Team, and choose your own unique bundle identifier. If your team is missing, sign in under Xcode > Settings > Apple Accounts.',
+        '4. Select the paired Vision Pro as the run destination, keep it awake and unlocked, then click Run. Check the app window and controls in the headset.',
+        `Setup will now continue with the ${this.receipt.target} workflow.`,
+      ].join('\n'),
+    )
+  }
+
+  private async build(device: string, identity: { bundleId: string; team?: string }): Promise<string> {
+    Assert.defined(this.receipt.xcodeProject, 'Expected an exported Xcode project before native build.')
     const derived = `${this.work}/DerivedData`
     await this.command('/usr/bin/xcodebuild', [
       '-project',
-      vision['artifact'],
+      this.receipt.xcodeProject,
       '-scheme',
       'TaoApp',
       '-configuration',

@@ -60,6 +60,11 @@ export const AppleSetupPlatforms = {
 
 const APPLE_DOWNLOADS = 'https://developer.apple.com/download/applications/'
 const VERSION = /^\d{1,2}\.\d{1,2}(?:\.\d{1,2})?$/
+// Apple's Xcode distribution identities: Mac App Store or Apple's Developer ID team.
+const XCODE_REQUIREMENT = '=(anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.9]'
+  + ' or anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6]'
+  + ' and certificate leaf[field.1.2.840.113635.100.6.1.13]'
+  + ' and certificate leaf[subject.OU] = "59GAB85EFG") and identifier "com.apple.dt.Xcode"'
 
 function matchesVersion(actual: string, requested: string): boolean {
   const normalize = (value: string) => value.replace(/(?:\.0)+$/, '')
@@ -102,6 +107,7 @@ async function prepare(options: AppleSetupOptions, platform: AppleSetupPlatform)
     root,
   )
   const runId = Platform.randomUUID()
+  let verificationFailed = false
   const receipt: AppleSetupReceipt = {
     requested: { xcodeVersion: options.xcodeVersion, runtimeVersion: options.runtimeVersion },
     mode: options.apply ? 'apply' : 'plan',
@@ -144,24 +150,49 @@ async function prepare(options: AppleSetupOptions, platform: AppleSetupPlatform)
     )
   }
   const signed = async (app: string) => {
+    const verify = async (name: string, args: string[], stage: string) => {
+      const result = await command(name, args)
+      if (result.exitCode === 0 && !result.error) {
+        return
+      }
+      verificationFailed = true
+      const diagnostic = (result.stderr || result.stdout || result.error?.message || 'no diagnostic').trim()
+      const summary = diagnostic.split('\n').filter(Boolean).at(-1)?.slice(0, 280) ?? 'no diagnostic'
+      const log = `${work}/diagnostics/${runId}-${stage}.json`
+      if (options.apply) {
+        await files.writeJson(log, {
+          command: name,
+          args,
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          error: result.error?.message,
+        })
+      }
+      Errors.throwHostEnvironment(
+        `Xcode ${stage} verification failed for ${quote(app)}: ${summary}. ${
+          options.apply ? `Details: ${log}.` : 'Rerun with --apply to save full verification diagnostics.'
+        }`,
+      )
+    }
     if (options.apply) {
       notice(
         `Verifying the full Xcode code signature at ${app}... This reads the app bundle and can take several minutes.`,
       )
     }
-    await requireSuccess('/usr/bin/codesign', [
+    await verify('/usr/bin/codesign', [
       '--verify',
       '--deep',
       '--strict',
       '--verbose=2',
       '-R',
-      '=anchor apple and identifier "com.apple.dt.Xcode"',
+      XCODE_REQUIREMENT,
       app,
-    ])
+    ], 'signature')
     if (options.apply) {
       notice('Code signature verified. Checking macOS Gatekeeper approval...')
     }
-    await requireSuccess('/usr/sbin/spctl', ['--assess', '--verbose', app])
+    await verify('/usr/sbin/spctl', ['--assess', '--verbose', app], 'Gatekeeper')
     if (options.apply) {
       notice('Gatekeeper approval confirmed.')
     }
@@ -626,7 +657,7 @@ async function prepare(options: AppleSetupOptions, platform: AppleSetupPlatform)
   } catch (error) {
     receipt.status = 'needs-action'
     receipt.remaining.push(Errors.messageOf(error))
-    if (options.apply) {
+    if (options.apply && !verificationFailed) {
       receipt.remaining.push(
         'If Apple requests sign-in, license acceptance, first launch or administrator access, complete that step in Xcode or Finder, then rerun the same setup command.',
       )

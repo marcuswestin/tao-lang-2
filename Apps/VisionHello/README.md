@@ -47,6 +47,14 @@ pairing, trust, Developer Mode, and Apple account sign-in require your action wh
 Enter requests a fresh check; it never establishes readiness by itself. Type `q` at a guided prompt
 to stop, then rerun the same command to resume from the actual host state.
 
+Once Xcode is ready, `--apply` generates the Xcode project **before** headset pairing or signing.
+The script prints the retained project path and numbered instructions for opening it, choosing a
+simulator or headset, configuring signing, and running. If no headset is ready, it explicitly tells
+you to open Remote Devices on the headset and Pair Nearby Device in Device Hub; simply opening
+Xcode does not start pairing. Quitting at that prompt keeps the generated project available for a
+manual simulator run. Signature and Gatekeeper failures report the specific failed check and a
+diagnostic file, rather than asking you to complete an unrelated first-launch step.
+
 To perform the same workflow manually:
 
 1. In Xcode, open **Xcode > Open Developer Tool > Device Hub** and pair the Vision Pro. Keep the
