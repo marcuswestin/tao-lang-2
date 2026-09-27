@@ -63,6 +63,8 @@ export function applyCanvasViewport(host: HTMLElement): void {
   const current = state(host)
   host.dataset['canvasSurface'] = 'on'
   surface.style.transform = `translate(${current.x}px, ${current.y}px) scale(${current.z})`
+  // Handles and selection strokes scale by the inverse, so they keep one on-screen width at any zoom.
+  surface.style.setProperty('--studio-canvas-counter-scale', String(1 / current.z))
   const pill = host.querySelector<HTMLElement>(':scope > .studio-canvas-zoom')
   if (pill !== null) {
     pill.textContent = `${Math.round(current.z * 100)}%`
@@ -256,8 +258,10 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     Switch(command, {
       fit,
       reset,
+      'zoom-focused': () => frameBounds(deps.focusedBounds?.()),
       'zoom-in': () => zoomTo(nextStop(current.z, 1)),
       'zoom-out': () => zoomTo(nextStop(current.z, -1)),
+      'zoom-selection': () => frameBounds(deps.selectionBounds?.()),
     })
     deps.onGestureEnd?.()
   }
@@ -508,16 +512,10 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
       setSpaceHeld(true)
       return
     }
-    if (event.isComposing || !(event.metaKey || event.ctrlKey) || isStudioTypingTarget(event.target)) {
+    if (event.isComposing || isStudioTypingTarget(event.target)) {
       return
     }
-    const command = event.key === '0' ? 'fit' : event.key === '1'
-      ? 'reset'
-      : event.key === '=' || event.key === '+'
-      ? 'zoom-in'
-      : event.key === '-'
-      ? 'zoom-out'
-      : undefined
+    const command = canvasShortcutCommand(event)
     if (command !== undefined) {
       event.preventDefault()
       event.stopPropagation()
@@ -612,6 +610,46 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     state: () => ({ ...current }),
     zoomTo,
   }
+}
+
+const modifiedShortcuts: Readonly<Record<string, StudioCanvasZoomCommand>> = {
+  '0': 'fit',
+  '1': 'reset',
+  '=': 'zoom-in',
+  '+': 'zoom-in',
+  '-': 'zoom-out',
+}
+
+/** Shift turns a digit into punctuation that differs by keyboard layout, so ⇧1 and ⇧2 are read from the physical key. */
+const shiftedShortcuts: Readonly<Record<string, StudioCanvasZoomCommand>> = {
+  Digit1: 'zoom-selection',
+  Digit2: 'zoom-focused',
+}
+
+/**
+ * canvasShortcutCommand names the canvas command a key press asks for: ⌘0, ⌘1, ⌘+ and ⌘− with the
+ * platform modifier, ⇧1 and ⇧2 with Shift alone.
+ */
+function canvasShortcutCommand(
+  event: Readonly<{
+    altKey?: boolean | undefined
+    code?: string | undefined
+    ctrlKey?: boolean | undefined
+    key?: string | undefined
+    metaKey?: boolean | undefined
+    shiftKey?: boolean | undefined
+  }>,
+): StudioCanvasZoomCommand | undefined {
+  const modified = event.metaKey === true || event.ctrlKey === true
+  if (modified) {
+    return event.key !== undefined && Object.hasOwn(modifiedShortcuts, event.key)
+      ? modifiedShortcuts[event.key]
+      : undefined
+  }
+  return event.shiftKey === true && event.altKey !== true && event.code !== undefined
+      && Object.hasOwn(shiftedShortcuts, event.code)
+    ? shiftedShortcuts[event.code]
+    : undefined
 }
 
 /** nextStop moves one notch along the zoom ladder, so ⌘+ and ⌘− land on round percentages. */

@@ -7,7 +7,17 @@ import {
 
 class CanvasElement extends EventTarget {
   dataset: Record<string, string> = {}
-  style: Record<string, string> = {}
+  properties: Record<string, string> = {}
+  style: Record<string, string> & { setProperty: (name: string, value: string) => void } = Object.defineProperty(
+    {} as Record<string, string> & { setProperty: (name: string, value: string) => void },
+    'setProperty',
+    {
+      enumerable: false,
+      value: (name: string, value: string) => {
+        this.properties[name] = value
+      },
+    },
+  )
   attributes = new Map<string, string>()
   children: CanvasElement[] = []
   captures = new Set<number>()
@@ -273,6 +283,49 @@ Test('Studio restores viewport and menu frames selection in the current transfor
     initialState: { x: -100, y: -50, z: 2 },
     selectionBounds: () => ({ left: 120, top: 130, right: 320, bottom: 230 }),
     onChange: state => published.push(state),
+  })
+})
+
+Test('Studio Shift+1 frames the selection and Shift+2 the focused frame, from the page or a focused preview', () => {
+  let focused: { left: number; top: number; right: number; bottom: number } | undefined
+  canvasTest(({ controls, document, host }) => {
+    // Shift turns the digit into punctuation, so the physical key names the command.
+    const selection = emit(document, 'keydown', { code: 'Digit1', key: '!', shiftKey: true })
+    Expect(selection.defaultPrevented).toBe(true)
+    // Screen rect 120,130..320,230 fills the 500x400 host at 2.18x with 32px of padding.
+    const framed = controls.state()
+    Expect(framed.z).toBe(2.18)
+    Expect(framed.x).toBeCloseTo(-186)
+    Expect(framed.y).toBeCloseTo(-127)
+    Expect(host.children[0]!.properties['--studio-canvas-counter-scale']).toBe(String(1 / 2.18))
+    const before = controls.state()
+    Expect(emit(document, 'keydown', { code: 'Digit2', key: '@', shiftKey: true }).defaultPrevented).toBe(true)
+    Expect(controls.state()).toEqual(before)
+    focused = { left: 20, top: 30, right: 238, bottom: 139 }
+    emit(document, 'keydown', { code: 'Digit2', key: '@', shiftKey: true })
+    Expect(controls.state().z).toBe(4)
+    controls.reset()
+    const frame = new CanvasElement()
+    host.append(frame)
+    controls.iframeShortcut('zoom-selection', frame as unknown as Element)
+    Expect(controls.state()).toEqual(framed)
+    controls.reset()
+    const input = new CanvasElement()
+    input.typing = true
+    const typing = new Event('keydown', { cancelable: true })
+    Object.defineProperties(typing, {
+      code: { value: 'Digit1' },
+      shiftKey: { value: true },
+      target: { value: input },
+    })
+    document.dispatchEvent(typing)
+    Expect(typing.defaultPrevented).toBe(false)
+    Expect(emit(document, 'keydown', { altKey: true, code: 'Digit1', shiftKey: true }).defaultPrevented).toBe(false)
+    Expect(emit(document, 'keydown', { code: 'Digit3', shiftKey: true }).defaultPrevented).toBe(false)
+    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
+  }, {
+    focusedBounds: () => focused,
+    selectionBounds: () => ({ left: 120, top: 130, right: 320, bottom: 230 }),
   })
 })
 

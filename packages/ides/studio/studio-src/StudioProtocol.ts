@@ -743,23 +743,25 @@ export type StudioPreviewCanvasPanKeyMessage = {
 }
 
 /**
- * Canvas commands: zoom, ⌘G making a view of the selection, ⌥⌘G grouping it in place, and ⌘Z walking
- * back the latest visual edit.
+ * Canvas commands: zoom (the two `zoom-*` targets frame the selection or the focused frame), ⌘G making a
+ * view of the selection, ⌥⌘G grouping it in place, and ⌘Z walking back the latest visual edit.
  */
-export type StudioCanvasShortcutCommand = 'fit' | 'group' | 'make-view' | 'reset' | 'undo' | 'zoom-in' | 'zoom-out'
-
-/** The canvas commands the viewport itself answers. */
-export type StudioCanvasZoomCommand = Exclude<StudioCanvasShortcutCommand, 'group' | 'make-view' | 'undo'>
-
-const canvasShortcutCommands: ReadonlySet<string> = new Set<StudioCanvasShortcutCommand>([
+const studioCanvasShortcutCommands = [
   'fit',
   'group',
   'make-view',
   'reset',
   'undo',
+  'zoom-focused',
   'zoom-in',
   'zoom-out',
-])
+  'zoom-selection',
+] as const
+
+export type StudioCanvasShortcutCommand = typeof studioCanvasShortcutCommands[number]
+
+/** The canvas commands the viewport itself answers. */
+export type StudioCanvasZoomCommand = Exclude<StudioCanvasShortcutCommand, 'group' | 'make-view' | 'undo'>
 
 /** Canvas commands from an authenticated focused preview. */
 export type StudioPreviewCanvasShortcutMessage = {
@@ -1228,14 +1230,10 @@ function parsePreviewCanvasPanKey(value: StudioJsonObject): StudioPreviewCanvasP
 
 function parsePreviewCanvasShortcut(value: StudioJsonObject): StudioPreviewCanvasShortcutMessage | undefined {
   const identity = parsePreviewIdentity(value['identity'])
-  const command = value['command']
-  return identity === undefined || typeof command !== 'string' || !canvasShortcutCommands.has(command)
+  const command = studioCanvasShortcutCommands.find(candidate => candidate === value['command'])
+  return identity === undefined || command === undefined
     ? undefined
-    : envelope({
-      command: command as StudioPreviewCanvasShortcutMessage['command'],
-      identity,
-      type: 'preview-canvas-shortcut',
-    })
+    : envelope({ command, identity, type: 'preview-canvas-shortcut' })
 }
 
 function parseCanvasGestureOwnership(value: StudioJsonObject): StudioCanvasGestureOwnershipMessage | undefined {

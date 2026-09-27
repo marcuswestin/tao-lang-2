@@ -504,7 +504,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1505',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:306',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:328',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:1078',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:1083',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
   'packages/ides/studio/studio-tests/studio-client.test.ts:709',
   'packages/ides/studio/studio-tests/studio-client.test.ts:3692',
