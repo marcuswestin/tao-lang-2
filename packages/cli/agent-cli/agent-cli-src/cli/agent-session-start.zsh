@@ -17,7 +17,7 @@ SCRIPT_DIR="${0:A:h}"
 REPO_ROOT="${SCRIPT_DIR:h:h:h:h:h}"
 PROFILE_BIN="$REPO_ROOT/.devenv/profile/bin"
 
-if setup_output="$("$REPO_ROOT/agent" setup 2>&1)"; then
+if setup_output="$(TAO_DEV_SHELL_SETUP=0 "$REPO_ROOT/agent" setup 2>&1)"; then
   :
 else
   setup_status=$?
