@@ -114,12 +114,12 @@ await runWithCommands(commands => {
     .description('Run the opt-in real-host testing prototype, independently of existing suites.')
     .argument(
       '[mode]',
-      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, catalyst, agents, or setup.',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, watchos, catalyst, agents, or setup.',
       'check',
     )
     .option(
       '--app <subject>',
-      'Explicit subject: hnreader, clockwork, native-navigation, or native-bridge (iOS Clipboard acceptance).',
+      'Explicit subject: hnreader, clockwork, native-navigation, native-bridge, or watchhello (watchos only).',
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
@@ -128,6 +128,11 @@ await runWithCommands(commands => {
     .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
     .option('--demo', 'For agents: build the example, print discovery, invoke one command, then stop.')
     .action(async (mode, options) => {
+      if (mode === 'watchos') {
+        const { runWatchProof } = await import('./watchos/WatchProof')
+        await runWatchProof(options)
+        return
+      }
       if (mode === 'agents') {
         if (options.demo) {
           await CLI.mustRun('just', { args: ['agents-demo'], cwd: Repo.getRoot(), stdio: 'inherit' })

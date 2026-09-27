@@ -7,7 +7,8 @@
   "module": "TaoRuntime-src/TR.ts",
   "types": "TaoRuntime-src/TR.ts",
   "files": [
-    "TaoRuntime-src"
+    "TaoRuntime-src",
+    "swiftui"
   ],
   "exports": {
     ".": "./TaoRuntime-src/TR.ts",

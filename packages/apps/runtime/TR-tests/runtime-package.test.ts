@@ -35,7 +35,8 @@ Describe('tao-runtime package boundary', () => {
 
     Expect(manifest.private).toBe(true)
     Expect(manifest.version).toBeUndefined()
-    Expect(manifest.files).toEqual(['TaoRuntime-src'])
+    Expect(manifest.files).toEqual(['TaoRuntime-src', 'swiftui'])
+    Expect(await FS.isFile(FS.resolvePath('swiftui/TaoValues.swift', runtimePackageRoot))).toBe(true)
     Expect(manifest.exports).toEqual({
       '.': './TaoRuntime-src/TR.ts',
       './TR': './TaoRuntime-src/TR.ts',

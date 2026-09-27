@@ -1,7 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { authGrants } from '../../auth-policy'
+import { authGrants } from '../../../auth-policy'
 import { type Compiled, gen, LocalDataBindings, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { activeDataStorePlan } from './data-store-context'

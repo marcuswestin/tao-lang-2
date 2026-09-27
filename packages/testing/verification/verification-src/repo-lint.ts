@@ -804,7 +804,7 @@ export function testScratchConventionIssues(files: readonly SourceFile[]): strin
  * helper, and an entry goes stale when its file no longer holds a chain.
  */
 const KIND_CHAIN_ALLOWLIST = [
-  'packages/compiler/compiler-src/codegen/app/ExpressionsCompiler.ts',
+  'packages/compiler/compiler-src/codegen/react-native/app/ExpressionsCompiler.ts',
   'packages/providers/icloud/icloud-src/cloudkit-native.ts',
   'packages/language/validator/validator-src/validators/types-validator.ts',
 ]
