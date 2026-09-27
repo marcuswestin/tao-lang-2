@@ -571,7 +571,9 @@ export class StudioCdp {
           const captureToken = ${JSON.stringify(captureToken)}
           const freeze = document.createElement('style')
           freeze.dataset.taoCdpFrameFreeze = captureToken
+          // The runtime's floating dev menu (TR-dev-menu.tsx) is tooling, not the app, so no capture shows it.
           freeze.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}'
+            + '[aria-label="Tao dev menu"]{visibility:hidden!important}'
           document.head.append(freeze)
           if (document.fonts?.ready !== undefined) await document.fonts.ready
           await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
