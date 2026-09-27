@@ -1,17 +1,19 @@
 // `just secrets` — one step from a committed store to a usable environment file.
 //
 // The identity lives outside the repository, in the Secure Enclave of one Mac, so this is set up once per
-// machine and never per worktree. Decrypting asks for a fingerprint because the kernel asks, not because
-// this code does; nothing here ever sees or stores a passphrase.
+// machine and never per worktree. Decrypting asks for one fingerprint, to unwrap the store key, because the
+// kernel asks, not because this code does; nothing here ever sees or stores a passphrase.
 
 import { CLI, Errors, FS, HCI, Platform, Repo, SecretsFile } from '@shared'
 import {
   type Cipher,
   formatStore,
+  isStoreKeyArmor,
   parseStore,
   renderEnvFile,
   requireSecretName,
   type SecretStore,
+  type StoreKey,
   withSecret,
 } from './SecretStore'
 
@@ -104,11 +106,19 @@ async function recipientOf(identity: string): Promise<string> {
   return derived.stdout.trim()
 }
 
-/** ageCipher shells out to `age`; the Secure Enclave plugin is what turns decryption into a Touch ID prompt. */
-function ageCipher(): Cipher {
+function failureOf(result: CLI.CommandResult): string {
+  return result.stderr.trim() || `exit code ${result.exitCode ?? 'unknown'}`
+}
+
+/**
+ * ageCipher shells out to `age`. Only `decrypt` uses the machine identity, and the Secure Enclave plugin is
+ * what turns that into a Touch ID prompt; everything else is software and silent. A test passes a stand-in
+ * identity file; the command always reads the machine's.
+ */
+function ageCipher(identityPath?: string): Cipher {
   return {
     decrypt: async armor => {
-      const identity = identityFile()
+      const identity = identityPath ?? identityFile()
       if (!await FS.exists(identity)) {
         Errors.throwHostEnvironment(
           `No secrets identity at ${FS.displayPath(identity)}. Run \`just secrets setup\` once on this machine.`,
@@ -116,11 +126,38 @@ function ageCipher(): Cipher {
       }
       const result = await CLI.run('age', { args: ['--decrypt', '--identity', identity], stdin: armor })
       if (result.exitCode !== 0) {
-        Errors.throwHostEnvironment(
-          `age could not decrypt a secret: ${result.stderr.trim() || `exit code ${result.exitCode ?? 'unknown'}`}`,
-        )
+        Errors.throwHostEnvironment(`age could not decrypt a secret: ${failureOf(result)}`)
       }
       return result.stdout
+    },
+    // The key reaches age on stdin (`--identity -`), never in argv, where any process listing would show it,
+    // and never in a file. That leaves the ciphertext, which is committed anyway, to go through a file.
+    decryptWithKey: async (armor, secretKey) => {
+      const directory = await FS.mkTmpDir('tao-secrets-')
+      try {
+        const input = FS.resolvePath('value.age', directory)
+        await FS.writeText(input, armor, { mode: 0o600 })
+        const result = await CLI.run('age', { args: ['--decrypt', '--identity', '-', input], stdin: secretKey })
+        if (result.exitCode !== 0) {
+          Errors.throwHostEnvironment(
+            `age could not decrypt a secret with the store key: ${
+              failureOf(result).replaceAll(secretKey, '<store key>')
+            }`,
+          )
+        }
+        return result.stdout
+      } finally {
+        await FS.remove(directory)
+      }
+    },
+    generateKey: async () => {
+      const result = await CLI.run('age-keygen', {})
+      const recipient = /^#\s*public key:\s*(age1\S+)\s*$/m.exec(result.stdout)?.[1]
+      const secretKey = /^AGE-SECRET-KEY-1\S+$/m.exec(result.stdout)?.[0]
+      if (result.exitCode !== 0 || recipient === undefined || secretKey === undefined) {
+        Errors.throwHostEnvironment(`age-keygen could not create the store key: ${failureOf(result)}`)
+      }
+      return { recipient, secretKey }
     },
     encrypt: async (plaintext, recipients) => {
       if (recipients.length === 0) {
@@ -131,9 +168,7 @@ function ageCipher(): Cipher {
         stdin: plaintext,
       })
       if (result.exitCode !== 0) {
-        Errors.throwHostEnvironment(
-          `age could not encrypt a secret: ${result.stderr.trim() || `exit code ${result.exitCode ?? 'unknown'}`}`,
-        )
+        Errors.throwHostEnvironment(`age could not encrypt a secret: ${failureOf(result)}`)
       }
       return result.stdout
     },
@@ -146,6 +181,18 @@ async function readStore(): Promise<SecretStore> {
     return { recipients: [], secrets: {} }
   }
   return parseStore(await FS.readText(path))
+}
+
+/** StoreAccess is what reading or writing the store needs; a test supplies an in-memory store and stand-in keys. */
+type StoreAccess = {
+  cipher: Cipher
+  now: () => Date
+  read: () => Promise<SecretStore>
+  write: (store: SecretStore) => Promise<void>
+}
+
+function liveStoreAccess(cipher: Cipher = ageCipher(), now = () => new Date()): StoreAccess {
+  return { cipher, now, read: readStore, write: writeStore }
 }
 
 /** Every encrypted-store writer uses this lock; prompts and encryption happen before entering it. */
@@ -165,13 +212,25 @@ async function writeStore(store: SecretStore): Promise<void> {
   }
 }
 
+/**
+ * createStoreKey makes the key every value is encrypted to and wraps its secret half to the machines. Wrapping
+ * needs only their public keys, so a store gains its key during an `add` without anyone being prompted.
+ */
+async function createStoreKey(cipher: Cipher, recipients: readonly string[]): Promise<StoreKey> {
+  const { recipient, secretKey } = await cipher.generateKey()
+  const wrapped = await cipher.encrypt(secretKey, recipients)
+  return { recipient, wrappedFor: [...recipients], wrappedKey: armorLines(wrapped) }
+}
+
+function armorLines(armor: string): string[] {
+  return armor.trimEnd().split('\n')
+}
+
+/** A store key created during a save is written only if no other writer created one first. */
+const STORE_KEY_ATTEMPTS = 3
+
 /** Prepare an encrypted batch without decrypting existing values or writing partial credentials. */
-export async function prepareSecretBatch(environment = {
-  cipher: ageCipher(),
-  now: () => new Date(),
-  read: readStore,
-  write: writeStore,
-}) {
+export async function prepareSecretBatch(environment: StoreAccess = liveStoreAccess()) {
   const original = await environment.read()
   if (original.recipients.length === 0) {
     Errors.throwUserInput('The secret store lists no recipients. Run `just secrets setup` first.')
@@ -179,49 +238,65 @@ export async function prepareSecretBatch(environment = {
   return {
     existingNames: Object.keys(original.secrets),
     save: async (values: Readonly<Record<string, string>>, notes: Readonly<Record<string, string>> = {}) => {
-      const encrypted: Record<string, string> = {}
       for (const [name, value] of Object.entries(values)) {
         requireSecretName(name)
         if (value.trim() === '') {
           Errors.throwUserInput('No value was entered, so nothing was stored.')
         }
-        encrypted[name] = await environment.cipher.encrypt(value, original.recipients)
       }
-      await withStoreMutation(async () => {
-        const current = await environment.read()
-        if (
-          JSON.stringify(current.recipients) !== JSON.stringify(original.recipients)
-          || Object.keys(values).some(name =>
-            JSON.stringify(current.secrets[name]) !== JSON.stringify(original.secrets[name])
-          )
-        ) {
-          Errors.throwUserInput(
-            'The recipients or selected secrets changed during setup. Run setup again to preserve those changes.',
-          )
+      let storeKey = original.storeKey
+      for (let attempt = 1; attempt <= STORE_KEY_ATTEMPTS; attempt++) {
+        const target = storeKey ?? await createStoreKey(environment.cipher, original.recipients)
+        const encrypted: Record<string, string> = {}
+        for (const [name, value] of Object.entries(values)) {
+          encrypted[name] = await environment.cipher.encrypt(value, [target.recipient])
         }
-        let updated = current
-        for (const [name, armor] of Object.entries(encrypted)) {
-          const note = notes[name]
-          updated = withSecret(updated, name, armor, {
-            now: environment.now(),
-            ...(note === undefined ? {} : { note }),
-          })
+        // Another writer that created the store key first wins; this batch is encrypted again to theirs,
+        // outside the lock, rather than leaving values under a key the store does not record.
+        const theirs = await withStoreMutation(async () => {
+          const current = await environment.read()
+          if (
+            JSON.stringify(current.recipients) !== JSON.stringify(original.recipients)
+            || Object.keys(values).some(name =>
+              JSON.stringify(current.secrets[name]) !== JSON.stringify(original.secrets[name])
+            )
+          ) {
+            Errors.throwUserInput(
+              'The recipients or selected secrets changed during setup. Run setup again to preserve those changes.',
+            )
+          }
+          if (current.storeKey !== undefined && current.storeKey.recipient !== target.recipient) {
+            return current.storeKey
+          }
+          let updated: SecretStore = { ...current, storeKey: current.storeKey ?? target }
+          for (const [name, armor] of Object.entries(encrypted)) {
+            const note = notes[name]
+            updated = withSecret(updated, name, armor, {
+              now: environment.now(),
+              ...(note === undefined ? {} : { note }),
+            })
+          }
+          await environment.write(updated)
+          return undefined
+        })
+        if (theirs === undefined) {
+          return
         }
-        await environment.write(updated)
-      })
+        storeKey = theirs
+      }
+      Errors.throwUserInput('The store key kept changing while saving. Run the command again.')
     },
   }
 }
 
 /** decrypt writes every secret into the generated environment file, replacing it wholesale. */
 async function decryptSecrets(environment: SecretsEnvironment): Promise<number> {
-  const store = await readStore()
-  const names = Object.keys(store.secrets)
-  if (names.length === 0) {
+  const opened = await openSecrets(liveStoreAccess(environment.cipher, environment.now))
+  const values = opened.values
+  if (values.size === 0) {
     HCI.writeLine(`No secrets are stored yet. Add one with \`just secrets add <KEY>\`.`)
     return 0
   }
-  const values = await decryptedValues(store, environment.cipher)
   const path = Repo.resolvePath(SecretsFile.ENV_PATH)
   // The plaintext store is owner-only. `mode` applies to a fresh file and this command rewrites an
   // existing one every run, so the mode is asserted afterwards as well.
@@ -229,29 +304,130 @@ async function decryptSecrets(environment: SecretsEnvironment): Promise<number> 
   await FS.chmod(path, 0o600)
   HCI.writeSuccess(`Wrote ${values.size} ${values.size === 1 ? 'secret' : 'secrets'} to ${SecretsFile.ENV_PATH}.\n`)
   HCI.writeLine(`Anything you maintain by hand belongs in ${SecretsFile.LOCAL_PATH}, which this never writes.`)
+  if (opened.moved > 0) {
+    HCI.writeLine(
+      `Moved ${opened.moved} ${
+        opened.moved === 1 ? 'secret' : 'secrets'
+      } onto the store key in ${STORE_PATH}; commit it, and later runs ask for one fingerprint.`,
+    )
+  }
+  if (opened.granted > 0) {
+    HCI.writeLine(
+      `Granted the store key to ${opened.granted} newly recorded ${
+        opened.granted === 1 ? 'machine' : 'machines'
+      } in ${STORE_PATH}; commit it so they can read the secrets.`,
+    )
+  }
+  if (opened.unsaved) {
+    HCI.writeLine(`${STORE_PATH} changed while decrypting, so it was left alone; the next run updates it.`)
+  }
   return 0
 }
 
-/** Decrypt without normalizing any byte represented by the UTF-8 plaintext string. */
-async function decryptedValues(store: SecretStore, cipher: Cipher): Promise<Map<string, string>> {
-  const values = new Map<string, string>()
-  // One `age` call per secret means one Touch ID prompt per secret. The plugin coalesces prompts that arrive
-  // together, and a store this size is a handful of keys, so this stays one interaction in practice.
-  for (const name of Object.keys(store.secrets).sort()) {
-    values.set(name, await cipher.decrypt(store.secrets[name]!.value.join('\n')))
+type OpenedSecrets = {
+  values: Map<string, string>
+  /** Values that were encrypted straight to machines and now use the store key. */
+  moved: number
+  /** Machine recipients the store key was newly wrapped to. */
+  granted: number
+  /** Whether a migration or grant was abandoned because the store changed underneath it. */
+  unsaved: boolean
+}
+
+/**
+ * openSecrets decrypts every value with one use of the machine identity: that one unwraps the store key, and
+ * the store key decrypts the rest in software.
+ *
+ * A value from before the store key existed was encrypted straight to the machines and costs its own prompt,
+ * once: this read moves it onto the store key. The same read wraps the store key to any machine `setup`
+ * recorded since, which needs only that machine's public key. Both are written back only if the store did not
+ * change meanwhile, and otherwise are left for the next read.
+ */
+async function openSecrets(access: StoreAccess): Promise<OpenedSecrets> {
+  const original = await access.read()
+  const names = Object.keys(original.secrets).sort()
+  const armorOf = (name: string) => original.secrets[name]!.value.join('\n')
+  const legacy = new Set(names.filter(name => !isStoreKeyArmor(armorOf(name))))
+  const ungranted = original.storeKey === undefined
+    ? []
+    : original.recipients.filter(recipient => !original.storeKey!.wrappedFor.includes(recipient))
+  const keyed = legacy.size < names.length
+  if (original.storeKey === undefined && keyed) {
+    Errors.throwUserInput(`${STORE_PATH} has values encrypted to a store key but records no store key.`)
   }
-  return values
+  const secretKey = original.storeKey !== undefined && (keyed || ungranted.length > 0)
+    ? await unwrapStoreKey(access.cipher, original.storeKey)
+    : undefined
+  const values = new Map<string, string>()
+  for (const name of names) {
+    // Decrypt without normalizing any byte represented by the UTF-8 plaintext string.
+    values.set(
+      name,
+      legacy.has(name) ? await access.cipher.decrypt(armorOf(name)) : await access.cipher.decryptWithKey(
+        armorOf(name),
+        secretKey!,
+      ),
+    )
+  }
+  const opened: OpenedSecrets = { values, moved: 0, granted: 0, unsaved: false }
+  if ((legacy.size === 0 && ungranted.length === 0) || original.recipients.length === 0) {
+    return opened
+  }
+  const storeKey = original.storeKey === undefined
+    ? await createStoreKey(access.cipher, original.recipients)
+    : ungranted.length === 0
+    ? original.storeKey
+    : {
+      ...original.storeKey,
+      wrappedFor: [...original.recipients],
+      wrappedKey: armorLines(await access.cipher.encrypt(secretKey!, original.recipients)),
+    }
+  const moved = new Map<string, string>()
+  for (const name of legacy) {
+    moved.set(name, await access.cipher.encrypt(values.get(name)!, [storeKey.recipient]))
+  }
+  await withStoreMutation(async () => {
+    const current = await access.read()
+    if (
+      JSON.stringify(current.recipients) !== JSON.stringify(original.recipients)
+      || JSON.stringify(current.storeKey) !== JSON.stringify(original.storeKey)
+    ) {
+      opened.unsaved = true
+      return
+    }
+    const secrets = { ...current.secrets }
+    for (const [name, armor] of moved) {
+      // A value replaced meanwhile keeps its replacement; this one was read from the older armor.
+      if (JSON.stringify(current.secrets[name]) === JSON.stringify(original.secrets[name])) {
+        secrets[name] = { ...current.secrets[name]!, value: armorLines(armor) }
+        opened.moved++
+      }
+    }
+    opened.granted = ungranted.length
+    await access.write({ ...current, storeKey, secrets })
+  })
+  return opened
+}
+
+/** unwrapStoreKey is the read's one use of the machine identity, and so its one fingerprint. */
+async function unwrapStoreKey(cipher: Cipher, storeKey: StoreKey): Promise<string> {
+  try {
+    return (await cipher.decrypt(storeKey.wrappedKey.join('\n'))).trim()
+  } catch (error) {
+    Errors.throwHostEnvironment(
+      `Could not unwrap the store key (${
+        Errors.asError(error).message
+      }). It is wrapped for ${storeKey.wrappedFor.length} ${
+        storeKey.wrappedFor.length === 1 ? 'machine' : 'machines'
+      }; if this one ran \`just secrets setup\` since, run \`just secrets\` on one of those and commit ${STORE_PATH}.`,
+    )
+  }
 }
 
 /** add encrypts one pasted secret into the store, without echoing it or writing it anywhere in the clear. */
 async function addSecret(name: string, environment: SecretsEnvironment, note?: string): Promise<number> {
   const key = requireSecretName(name)
-  const batch = await prepareSecretBatch({
-    cipher: environment.cipher,
-    now: environment.now,
-    read: readStore,
-    write: writeStore,
-  })
+  const batch = await prepareSecretBatch(liveStoreAccess(environment.cipher, environment.now))
   const secret = await environment.promptSecret(`Paste the value for ${key} (hidden; a paste submits itself):`)
   await batch.save({ [key]: secret }, note === undefined ? {} : { [key]: note })
   const replaced = batch.existingNames.includes(key)
@@ -325,11 +501,11 @@ async function setupSecrets(): Promise<number> {
   HCI.writeLine(`Recipient added to ${STORE_PATH}; commit that so this machine keeps access.`)
   if (result.count > 0) {
     HCI.writeLine(
-      `The ${result.count} secret(s) already stored were encrypted without this machine. Someone who can read them must run \`just secrets add\` again for each.`,
+      `The ${result.count} secret(s) already stored were encrypted without this machine. The next \`just secrets\` on a machine that already reads them grants this one access; commit the store there and pull it here.`,
     )
   }
   return 0
 }
 
-/** Narrow test seam for proving the ciphertext-to-plaintext boundary is byte preserving. */
-export const SecretsCommand = { testing: { decryptedValues } } as const
+/** Narrow test seam: a stand-in identity for the Secure Enclave, and the read path over an in-memory store. */
+export const SecretsCommand = { testing: { ageCipher, openSecrets } } as const
