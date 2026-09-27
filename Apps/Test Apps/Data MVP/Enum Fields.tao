@@ -1,0 +1,88 @@
+use Memory from @tao/data/providers/memory
+use StackNav from @tao/nav
+use Col, FormButton, Text from @tao/ui
+
+app EnumFields {
+   Name "Enum fields"
+   Navigator StackNav {
+      Initial EnumNotesView
+   }
+   Datasource Memory { }
+}
+
+type Role is one of Reader, Editor
+
+data EnumNotes / EnumNote {
+   Title text,
+   Role (default Reader),
+   State Role?,
+   Remembered Role?,
+   Flag yes / no?,
+}
+
+function RoleLabel(Value Role?) returns text {
+   return when (Value == none) {
+      true -> "none"
+      otherwise -> when (Value == Reader) {
+         true -> "Reader"
+         otherwise -> "Editor"
+}  }  }
+
+scene EnumNotesView() {
+   Title "Enum fields"
+   query EnumNotes = EnumNotes with { }
+   action Add() {
+      create EnumNote {
+         Title: "Default"
+      }
+      create EnumNote {
+         Title: "Override",
+         Role: Editor
+      }
+      create EnumNote {
+         Title: "Omitted"
+      }
+      create EnumNote {
+         Title: "Absent",
+         State: none,
+         Remembered: none,
+         Flag: none
+      }
+      create EnumNote {
+         Title: "Concrete",
+         State: Editor,
+         Flag
+   }  }
+   render Col() {
+      FormButton("Add notes") {
+         on press Add
+      }
+      loop EnumNotes / EnumNote {
+         Col() {
+            Text("{ EnumNote.Title } role: { RoleLabel(EnumNote.Role) }")
+            Text("{ EnumNote.Title }: { RoleLabel(EnumNote.State) }")
+            Text("{ EnumNote.Title } remembered: { RoleLabel(EnumNote.Remembered) }")
+            Text("{ EnumNote.Title } flag: { when (EnumNote.Flag == none) {
+               true -> "none"
+               otherwise -> when (EnumNote.Flag == true) {
+                  true -> "yes"
+                  otherwise -> "no"
+               }
+            } }")
+            FormButton("Copy { EnumNote.Title }") {
+               on press -> { create EnumNote {
+                  Title: "Copy { EnumNote.Title }",
+                  State: EnumNote.State
+               } }
+            }
+            FormButton("Remember { EnumNote.Title }") {
+               on press -> { update EnumNote {
+                  Remembered: EnumNote.State
+               } }
+            }
+            FormButton("Clear { EnumNote.Title }") {
+               on press -> { update EnumNote {
+                  State: none,
+                  Flag: none
+               } }
+}  }  }  }  }

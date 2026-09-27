@@ -423,11 +423,11 @@ export class Type {
 
   /** isCastCompatible returns whether a value can be type-fixed through typed value creation. */
   static isCastCompatible(actual: TaoType, target: TaoType): boolean {
-    if (target.kind === 'union') {
-      return target.members.some(member => Type.isCastCompatible(actual, member))
-    }
     if (actual.kind === 'union') {
       return actual.members.every(member => Type.isCastCompatible(member, target))
+    }
+    if (target.kind === 'union') {
+      return target.members.some(member => Type.isCastCompatible(actual, member))
     }
     if (!typesHaveCompatibleBase(actual, target)) {
       return false
@@ -659,6 +659,15 @@ export class Type {
     return Type.dataFieldIsInverseRelation(field)
       ? { kind: 'list', element: { kind: 'entity', entity: relation } }
       : { kind: 'entity', entity: relation }
+  }
+
+  /** dataFieldValueType includes the absence an optional stored field may read or receive. */
+  static dataFieldValueType(field: DataFieldDefinition): TaoType {
+    const declared = Type.dataFieldType(field)
+    // Inverse relations are computed collections even when their declaration carries `?`.
+    return field.optional && declared.kind !== 'list'
+      ? { kind: 'union', members: [declared, primitiveType('none')] }
+      : declared
   }
 
   /** definitionOfReference resolves a named type reference, including qualified item fields. */
@@ -970,10 +979,11 @@ function memberType(current: TaoType, member: string): TaoType | undefined {
       return builtin
     }
     const field = dataFieldNamed(current.entity, member)
-    return field && Type.dataFieldType(field)
+    return field && Type.dataFieldValueType(field)
   }
   const property = isItemKind(current) && current.item ? propertyNamed(current.item, member) : undefined
-  return property && (AST.isEntityDataField(property) ? Type.dataFieldType(property) : Type.ofPropertyRead(property))
+  return property
+    && (AST.isEntityDataField(property) ? Type.dataFieldValueType(property) : Type.ofPropertyRead(property))
 }
 
 class TypeResolutionContext {

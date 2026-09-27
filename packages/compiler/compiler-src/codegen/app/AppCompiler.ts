@@ -143,14 +143,25 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       : gen.noop()
   }
       ${
-    datasources
-      ? auth
-        ? gen`TR.Auth.UseDatasources(_TaoAuthScope, ${gen.Name(definition)}.definition.datasources?.() ?? [])`
-        : gen`TR.Data.UseAppDatasources(${gen.Name(definition)}.definition)`
+    auth && (datasources || options.localDataCatalog)
+      ? gen`TR.Auth.UseDatasources(_TaoAuthScope, [
+          ...(${gen.Name(definition)}.definition.datasources?.() ?? []),
+          ${
+        options.localDataCatalog
+          ? gen`{
+            store: ${gen.scopeName({ name: '_TaoLocalDataCatalog' })},
+            source: ${gen.scopeName({ name: '_TaoLocalDatasource' })},
+            localOnly: ${gen.Name(definition)}.declaration.canonicalIdentity!.canonical,
+          },`
+          : gen.noop()
+      }
+        ])`
+      : datasources
+      ? gen`TR.Data.UseAppDatasources(${gen.Name(definition)}.definition)`
       : gen.noop()
   }
       ${
-    options.localDataCatalog
+    options.localDataCatalog && !auth
       ? gen`TR.Data.UseConfigured(
           ${gen.scopeName({ name: '_TaoLocalDataCatalog' })},
           ${gen.scopeName({ name: '_TaoLocalDatasource' })},

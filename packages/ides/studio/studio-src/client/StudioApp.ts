@@ -32,6 +32,7 @@ import { connectStudioEvents, StudioCompileStatus, StudioStatusLine } from './ap
 import { StudioDrawerPanels } from './app/StudioDrawerPanels'
 import { StudioEditorSession } from './app/StudioEditorSession'
 import { StudioInspection } from './app/StudioInspection'
+import { StudioMountLifetime } from './app/StudioMountLifetime'
 import { StudioMountSignal } from './app/StudioMountSignal'
 import { mountStudioBrowserLaunch, mountStudioPreviewReload, StudioPreviewNotice } from './app/StudioPreviewStatus'
 import {
@@ -100,15 +101,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
 
   const config = window.TaoStudioConfig ?? {}
   const view = createStudioShell(root, config)
-  const { signal } = options
-  const disposeDialogs = StudioDialog.mount({ container: root, signal })
+  const lifetime = new StudioMountLifetime(options.signal)
+  const { signal } = lifetime
+  lifetime.add(() => view.dispose())
+  lifetime.add(StudioDialog.mount({ container: root, signal }))
   // The tabs' EditorViews are document models; the editor a person sees is the one Tao mounts.
   const focusVisibleEditor = (): void => root.querySelector<HTMLElement>('.studio-editor .cm-content')?.focus()
-  let partialActivation: ReturnType<typeof mountPreviewActivation> | undefined
-  let disposeBrowserLaunch: (() => void) | undefined
-  let partialSession: StudioEditorSession | undefined
-  let partialPreviews: Awaited<ReturnType<typeof connectPreviews>> = []
-  let partialDevicePanel: ReturnType<typeof createStudioDevicePanel> | undefined
   try {
     StudioMountSignal.throwIfAborted(signal)
     const handshake = await StudioApiClient.handshake(signal)
@@ -117,7 +115,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       void navigation.openCompileDiagnostic(diagnostic)
     StudioStatusLine.update(view.status, handshake.compile, openCompileDiagnostic)
     const previews = await connectPreviews(view.preview, config.previewUrl, handshake, signal)
-    partialPreviews = previews
+    lifetime.add(() => disconnectPreviews(previews))
     StudioMountSignal.throwIfAborted(signal)
     const cellStorageKey = `tao-studio:active-cell:${handshake.identity.project}:${handshake.identity.appName}`
     let initialCellId: string | undefined
@@ -138,12 +136,15 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       },
     })
     const previewActivation = mountPreviewActivation(view.preview, previews)
-    partialActivation = previewActivation
+    lifetime.add(() => previewActivation.dispose())
     configureInteractionMode(view.interactionMode, previews, handshake)
     let deviceLogs: readonly StudioDeviceLog[] = []
     let deviceLensSamples: NonNullable<StudioDeviceStatus['lensSamples']> = []
     let clearedDeviceSequence = 0
     const receiveDeviceStatus = (status: StudioDeviceStatus): void => {
+      if (signal.aborted) {
+        return
+      }
       const incoming = (status.logs ?? []).filter(log => log.sequence > clearedDeviceSequence)
       if ((incoming.at(-1)?.sequence ?? 0) >= (deviceLogs.at(-1)?.sequence ?? 0)) {
         deviceLogs = incoming
@@ -159,7 +160,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       handshake,
       popover: view.devicePopover,
     })
-    partialDevicePanel = devicePanel
+    lifetime.add(() => devicePanel.dispose())
     void StudioApiClient.deviceStatus(signal).then(receiveDeviceStatus).catch(error => {
       if (!StudioMountSignal.isAbortError(error)) {
         devicePanel.setGatewayUnavailable(StudioDevicePanelModel.gatewayUnavailableMessage(error))
@@ -174,6 +175,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let editorRevealRevision = 0
 
     const publish = (): void => {
+      if (signal.aborted) {
+        return
+      }
       feed.liveChanged()
       StudioMatrixSketches.examples(
         view.preview,
@@ -225,9 +229,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       signal,
       view,
     }, projectFiles)
-    partialSession = session
+    lifetime.add(() => session.dispose())
     const inspection = new StudioInspection({ active: () => session.active(), project, publish, view })
     const drawer = new StudioDrawerPanels({ activePreview, handshake, render: publish, tabs: view.drawerTabs })
+    lifetime.add(() => drawer.dispose())
     const search = new StudioProjectSearch({
       diagnostics: () => compileState.diagnostics ?? [],
       input: view.searchInput,
@@ -238,6 +243,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       signal,
       status: view.status,
     })
+    lifetime.add(() => search.dispose())
     const mutations = new StudioSourceMutations({
       activeFile: () => session.activeFile(),
       activePath: () => session.activePath(),
@@ -260,9 +266,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       status: view.status,
     })
     const feed = new StudioFeedController({
-      browse: request => StudioMatrixSketches.runFeed(view.preview, () => StudioApiClient.feedBrowse(request)),
+      browse: request => StudioMatrixSketches.runFeed(view.preview, () => StudioApiClient.feedBrowse(request), signal),
       mutate: request =>
-        StudioMatrixSketches.runFeed(view.preview, revision => StudioApiClient.feedAction(request(revision))),
+        StudioMatrixSketches.runFeed(view.preview, revision => StudioApiClient.feedAction(request(revision)), signal),
       context: () => {
         const cell = activePreview.current()?.cell
         const scenario = previewManifest?.scenarios.find(item => item.scenarioId === cell?.scenarioId)
@@ -289,6 +295,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       },
       requestId: () => crypto.randomUUID(),
     })
+    lifetime.add(() => {
+      refreshFeed = () => {}
+      feed.dispose()
+    })
     refreshFeed = () => {
       void feed.refresh()
     }
@@ -296,6 +306,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       view.preview,
       (payload, sketchId, rectId) => feed.drop(payload, sketchId, rectId),
     )
+    lifetime.add(disconnectFeed)
     const scenarios = new StudioScenarioActions({
       activePreview,
       apply: envelope => mutations.apply(envelope),
@@ -318,12 +329,14 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     const requireAllTabsSaved = (message: string): boolean => session.requireAllSaved(message)
 
     const betaShip = mountStudioBetaShip({ appName: handshake.identity.appName, requireAllTabsSaved, view })
+    lifetime.add(() => betaShip.dispose())
     mountStudioAgentChat(root, (path, refresh) => session.openFile(path, refresh))
     void drawer.loadTestStatus()
 
     let canvasViewport: ReturnType<typeof mountCanvasViewport> | undefined
     const canvasGesturesOwned = (): boolean => studioLayoutOwnsCanvasGestures(root.dataset['layoutPreset'])
     const disposeFeedDropOverlay = mountFeedDropOverlay(view.preview, previews, canvasGesturesOwned)
+    lifetime.add(disposeFeedDropOverlay)
     const previewWiring = {
       activePreview,
       canvasGesturesOwned,
@@ -361,6 +374,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }
     }
     root.addEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership)
+    lifetime.add(() => root.removeEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership))
     publish()
     void feed.refresh()
     view.searchInput.addEventListener('input', () => search.schedule())
@@ -444,6 +458,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         }),
     })
     await configureStudioSessionPickers({ handshake, requireAllTabsSaved, signal, view })
+    StudioMountSignal.throwIfAborted(signal)
     await session.restore(handshake.entryPath, () => StudioMountSignal.throwIfAborted(signal))
     StudioMountSignal.throwIfAborted(signal)
     const disconnectEvents = connectStudioEvents(view.status, openCompileDiagnostic, {
@@ -504,6 +519,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         StudioMatrixView.renderSketches(view.preview, project, catalog)
       },
     })
+    lifetime.add(disconnectEvents)
     // The preview area is a canvas before it is a list: zoom and pan come up before anything is
     // selected, so the whole app can be seen at once and one view brought close.
     const canvasPersistence = new StudioCanvasPersistence({
@@ -511,6 +527,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       save: (request, keepalive) => StudioApiClient.saveCanvasViewport(request, keepalive),
       onError: error => showSourceActionError(view.status, error),
     })
+    lifetime.add(() => canvasPersistence.dispose())
     const flushCanvas = (): void => {
       void canvasPersistence.flush(true)
     }
@@ -520,7 +537,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }
     }
     window.addEventListener('pagehide', flushCanvas)
+    lifetime.add(() => window.removeEventListener('pagehide', flushCanvas))
     document.addEventListener('visibilitychange', onCanvasVisibility)
+    lifetime.add(() => document.removeEventListener('visibilitychange', onCanvasVisibility))
     canvasViewport = mountCanvasViewport({
       enabled: () => root.dataset['layoutPreset'] === 'design' || root.dataset['layoutPreset'] === 'draw',
       canPanWithoutSpace: event =>
@@ -541,6 +560,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             .find(group => group.dataset['taoStudioGroupViewId'] === focused)?.getBoundingClientRect()
       },
     })
+    lifetime.add(() => canvasViewport?.dispose())
     publishCanvasGestureOwnership()
     const canvasFocus = mountStudioCanvasFocus({
       button: view.canvasFocus,
@@ -554,13 +574,15 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       selectedOwner: () => inspection.selectedOwnerIdentity(),
       status: view.status,
     })
-    disposeBrowserLaunch = mountStudioBrowserLaunch({
+    lifetime.add(() => canvasFocus.dispose())
+    const disposeBrowserLaunch = mountStudioBrowserLaunch({
       available: config.previewUrl !== undefined,
       button: view.browser,
       onError: error => showSourceActionError(view.status, error),
       open: () => StudioApiClient.browserOpen(),
       status: view.status,
     })
+    lifetime.add(disposeBrowserLaunch)
     mountStudioPreviewReload(
       view.reload,
       view.status,
@@ -571,6 +593,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       ...previewWiring,
       onInspected: () => canvasFocus.update(),
     })
+    lifetime.add(disconnectPreviewMessages)
     const keydownListener = (event: KeyboardEvent): void => {
       if (isStudioSaveShortcut(event)) {
         event.preventDefault()
@@ -583,6 +606,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }
     }
     window.addEventListener('keydown', keydownListener, { capture: true })
+    lifetime.add(() => window.removeEventListener('keydown', keydownListener, { capture: true }))
     const beforeUnloadListener = (event: BeforeUnloadEvent): void => {
       if (betaShip.active() || session.hasDirtyTabs()) {
         event.preventDefault()
@@ -590,6 +614,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }
     }
     window.addEventListener('beforeunload', beforeUnloadListener)
+    lifetime.add(() => window.removeEventListener('beforeunload', beforeUnloadListener))
     const unregisterProductHost = registerStudioProductHostActions({
       async applyInspectorAction(action, proposed) {
         const inspected = inspection.selected()
@@ -783,48 +808,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         await mutations.undoLatest()
       },
     })
-    let disposed = false
-    const cleanup = (): void => {
-      if (disposed) {
-        return
-      }
-      disposed = true
-      disposeDialogs()
+    lifetime.add(() => {
       unregisterProductHost()
       publishStudioProductHostState({})
-      disconnectEvents()
-      window.removeEventListener('keydown', keydownListener, { capture: true })
-      window.removeEventListener('beforeunload', beforeUnloadListener)
-      root.removeEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership)
-      betaShip.dispose()
-      devicePanel.dispose()
-      disposeBrowserLaunch?.()
-      disconnectPreviewMessages()
-      canvasFocus.dispose()
-      canvasViewport?.dispose()
-      disposeFeedDropOverlay()
-      previewActivation.dispose()
-      window.removeEventListener('pagehide', flushCanvas)
-      document.removeEventListener('visibilitychange', onCanvasVisibility)
-      canvasPersistence.dispose()
-      view.dispose()
-      search.dispose()
-      refreshFeed = () => {}
-      disconnectFeed()
-      feed.dispose()
-      drawer.dispose()
-      session.dispose()
-      disconnectPreviews(previews)
-    }
-    return cleanup
+    })
+    return lifetime.dispose
   } catch (error) {
-    disposeDialogs()
-    view.dispose()
-    partialSession?.dispose()
-    partialActivation?.dispose()
-    partialDevicePanel?.dispose()
-    disposeBrowserLaunch?.()
-    disconnectPreviews(partialPreviews)
+    lifetime.dispose()
     if (!StudioMountSignal.isAbortError(error)) {
       view.status.dataset['state'] = 'error'
       view.status.textContent = Errors.messageOf(error)

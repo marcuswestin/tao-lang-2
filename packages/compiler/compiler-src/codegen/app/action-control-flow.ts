@@ -101,18 +101,7 @@ export function actionBlockInterruptsAsk(
       return true
     }
     if (AST.isDoStatement(statement)) {
-      const action = ASTUtils.resolveActionInvocation(statement).action
-      const target = AST.isCommandDeclaration(action) ? commandActionTarget(action) : action
-      if (!target) {
-        return false
-      }
-      if (AST.isActionExpression(target)) {
-        return actionBlockInterruptsAsk(target.block, seen)
-      }
-      if (target.foreign || seen.has(target)) {
-        return false
-      }
-      return actionBlockInterruptsAsk(target.block, new Set([...seen, target]))
+      return actionInvocationInterruptsAsk(statement, seen)
     }
     if (AST.isAsyncActionStatement(statement)) {
       return actionBlockInterruptsAsk(statement.block, seen)
@@ -124,8 +113,27 @@ export function actionBlockInterruptsAsk(
       return ASTUtils.guardBranches(statement).some(branch => actionBlockInterruptsAsk(branch.block, seen))
     }
     if (AST.isWhenDoStatement(statement)) {
-      return statement.outcomes.some(outcome => actionBlockInterruptsAsk(outcome.block, seen))
+      return actionInvocationInterruptsAsk(statement.invocation, seen)
+        || statement.outcomes.some(outcome => actionBlockInterruptsAsk(outcome.block, seen))
     }
     return false
   }) ?? false
+}
+
+function actionInvocationInterruptsAsk(
+  invocation: AST.DoStatement,
+  seen: ReadonlySet<AST.ActionDeclaration>,
+): boolean {
+  const action = ASTUtils.resolveActionInvocation(invocation).action
+  const target = AST.isCommandDeclaration(action) ? commandActionTarget(action) : action
+  if (!target) {
+    return false
+  }
+  if (AST.isActionExpression(target)) {
+    return actionBlockInterruptsAsk(target.block, seen)
+  }
+  if (target.foreign || seen.has(target)) {
+    return false
+  }
+  return actionBlockInterruptsAsk(target.block, new Set([...seen, target]))
 }

@@ -325,6 +325,15 @@ async function qualify(root: string): Promise<void> {
   if (!['vanilla', 'xcode'].includes(profile) || !/@sha256:[a-f0-9]{64}$/.test(source)) {
     Errors.throwUnexpected('VM qualification requires a known profile and digest-pinned source.')
   }
+  const summary = await FS.readJson<{ format?: string; scenarios?: Array<{ status?: string }> }>(
+    FS.resolvePath('guest/steps/acceptance-summary.json', logs),
+  )
+  if (
+    summary.format !== 'tao-standalone-acceptance-v1' || !Array.isArray(summary.scenarios)
+    || summary.scenarios.length === 0 || summary.scenarios.some(scenario => scenario.status !== 'passed')
+  ) {
+    Errors.throwHostEnvironment('Collected acceptance summary is not complete and passing; the base is not qualified.')
+  }
   const tools: Record<string, unknown> = {}
   if (profile === 'xcode') {
     const runtimes = await FS.readJson<{ runtimes: Array<{ identifier: string; isAvailable: boolean }> }>(

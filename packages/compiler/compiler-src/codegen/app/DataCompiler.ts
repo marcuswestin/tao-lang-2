@@ -302,6 +302,7 @@ function compileEntityDataField(
       cases: ${gen.jsLiteral(AST.caseSetCasesOf(type.declaration).map(AST.caseSetCaseName))},
       enumValues: () => ${gen.scopeName(type.declaration)},
       ${metadata}
+      ${compileEntityFieldDefault(field, defaultModifier)}
     },`
   }
   if (type.kind === 'primitive') {
@@ -386,6 +387,9 @@ function compileEntityFieldDefault(
     return field.boolean ? gen`defaultValue: false,` : gen.noop()
   }
   if (modifier.defaultCase) {
+    if (Type.dataFieldType(field).kind === 'enum') {
+      return gen`defaultValue: ${gen.jsLiteral(modifier.defaultCase)},`
+    }
     return gen`defaultValue: ${modifier.defaultCase === field.name ? 'true' : 'false'},`
   }
   const value = modifier.defaultValue
