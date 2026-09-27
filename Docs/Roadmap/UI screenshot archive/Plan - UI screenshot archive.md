@@ -11,11 +11,12 @@ is a history, not a gate: nothing fails because a screenshot changed.
 - **Sizes**: one width per device preset — `phone` 390×844, `tablet` 768×1024, `laptop` 1440×900,
   the scenario presets in `packages/compiler/compiler-src/studio-preview-manifest.ts`. No extra
   breakpoint widths.
-- **Appearance**: light and dark at every size, for scenarios that do not author an appearance. A
-  scenario's `appearance` clause outranks the cell's scheme in the preview runtime
-  (`packages/apps/expo-host/expo-host-src/runtime.ts:679`), and Studio's own scheme control is
-  read-only for the same reason, so an authored scenario is captured only in its own appearance.
-  Nearly every reference-app scenario authors one.
+- **Appearance**: light and dark at every size, for every scenario. A scenario's `appearance`
+  clause outranks the cell's scheme in the preview runtime, except for a cell reconfigured to an
+  explicit preference (`packages/apps/expo-host/expo-host-src/runtime.ts`, `studioCellRuntime`).
+  Studio's own scheme control stays read-only for an authored scenario, so only a session-only
+  override such as the capture's appearance pass sets one. Every reference app and generated
+  starter declares a dark palette through `when Scheme is Dark` colors.
 - **Native platforms**: iOS simulator captures at milestones only; Android later. Web captures are
   the routine ones.
 - **Websites**: deferred; no website source is in this checkout.
@@ -38,12 +39,16 @@ controls, and safe areas, not arrangement.
 | Product                                | Web (routine)                       | iOS simulator (milestone) | Android | Other                   |
 | -------------------------------------- | ----------------------------------- | ------------------------- | ------- | ----------------------- |
 | WordFlower, HNReader, Pantry, Notebook | phone, tablet, laptop × light, dark | phone                     | later   | —                       |
-| Studio                                 | laptop × light, dark                | —                         | —       | native shell, milestone |
+| Studio                                 | laptop × previews light, dark       | —                         | —       | native shell, milestone |
 | Companion app                          | —                                   | phone                     | later   | —                       |
 | Websites                               | deferred                            | —                         | —       | —                       |
 
 One width per device misses Studio's two narrower layouts. For the Tao apps it happens to cover
 WordFlower's one flip, since `phone` stacks its panes and `tablet` sets them side by side.
+
+Studio's chrome is dark-only (`packages/ides/studio/studio-src/StudioClientStylesheet.ts` sets
+`color-scheme: dark` and has no light theme), so its light and dark shots differ only in the preview
+cells, whose scheme the appearance pass sets.
 
 Native Studio loads the same web client inside a native shell
 (`packages/ides/studio-tooling/studio-tooling-src/StudioNative.ts:59`), so its captures record only
@@ -54,15 +59,23 @@ the window chrome.
 - **Shot list**: a Tao app's `scenarios` blocks are its shot list. Each scenario is captured at
   every device width, overriding its declared device through Studio's session-only cell
   reconfigure route, so the Tao source is untouched. Studio and the companion app get a small
-  declarative list of stable keys naming how to reach each state.
+  declarative list of stable keys naming how to reach each state. Studio's list, `studioStates` in
+  `QaScreenshots.ts`, is its four layout presets (run, design, code, draw), each reached from a
+  freshly loaded session page with the canvas reset to 100 % at its top left and the agent panel
+  minimized, and captured as the whole 1440×900 window once the on-screen previews settle, with the
+  previews at their authored sizes. Studio remembers its layout, so the capture restores the one the
+  session opened in before the cell captures that follow.
 - **Capture**: `tao _preview qa <project> --screenshot --dest <store>` drives `tao review`'s cell
   capture (`packages/ides/studio-tooling/studio-tooling-src/QaScreenshots.ts`); `_preview` holds
-  commands under development until one graduates to a released name. Agents run it as
-  `./agent unsandboxed storage qa <project> [--note …]`, since Studio needs the host's Watchman;
-  `storage sync` and `storage push` handle the archive's remote. Each capture hides everything on
-  the Studio page but the cell, and the runtime's floating dev menu inside it, so tooling stays out
-  of the shot. Studio's CDP capture and Appium are the planned adapters for Studio itself and native
-  targets. No new dependency.
+  commands under development until one graduates to a released name; `--studio` adds Studio's own
+  shots. Agents run it as `./agent unsandboxed storage qa <project>… [--studio] [--note …]`, since
+  Studio needs the host's Watchman; each project is its own run, `--studio` rides on the first, and
+  the runs of one invocation archive as one commit. `storage sync` and `storage push` handle the
+  archive's remote. Each capture hides everything on the Studio page but the cell, and the
+  runtime's floating dev menu inside it, so tooling stays out of the shot. Studio's CDP capture is
+  the adapter for Studio itself, and Appium the planned one for native targets. No new dependency.
+  A capture removes what it leaves in ignored folders: its work directory once the run is written,
+  and the session records its Studio launches add under the project's `.tao/sessions/`.
 - **Apps**: Studio previews one app per session, so a run launches Studio once per app. The first
   launch opens Studio's default app and captures its own scenarios and every view scenario. Every
   app whose source reaches a view lists its scenarios, so capturing them once avoids a duplicate per
@@ -82,9 +95,10 @@ the window chrome.
   `<App>_<Subject>_<group>-<entry>_<device>-<appearance>.png`, the subject left out when it is the
   app itself and the source file appended only when two files declare the same group and entry.
   Git stores identical PNGs once, so an unchanged screen adds no bytes to the repository.
-- **Commits**: one per run, summarised by what changed —
-  `QA WordFlower, WordFlowerDark: 2 changed, 1 failed of 14 screenshots`, then bullets for the run,
-  its selection, its source commit, the changed, new, and failed names, and the note.
+- **Commits**: one per invocation, summarised by what changed —
+  `QA WordFlower, WordFlowerDark, Studio: 2 changed, 1 failed of 14 screenshots`, then bullets for
+  each run and its selection, the source commit, the changed, new, and failed names, and the note.
+  A Studio shot is named `Studio_<App>_<state>_laptop-<appearance>.png` after the app Studio opened.
 - **Timeline**: a generated, ignored `index.html` with one filmstrip per screenshot name, showing
   only the runs where the pixels changed or the capture failed, each labelled with its commit
   subject and note. A renderer-fingerprint change is labelled as such rather than as a design
@@ -115,12 +129,16 @@ it. So:
    byte for byte. Studio's review capture once flagged one shot in fifteen as changing between two
    consecutive settled captures; it now captures in a window that holds every cell and repeats until
    two consecutive captures agree, keeping `unstable-<name>` beside a shot that never does.
-2. The other Tao apps (done), then Studio on web. HNReader, Pantry, and Notebook capture without a
+2. **The other Tao apps and Studio on web** (done). HNReader, Pantry, and Notebook capture without a
    failure. Getting there fixed two Studio defects that also stalled `tao review`: a capture now
    scrolls its cell into view while it settles, since Chrome pauses animation frames in an offscreen
    preview frame, and a cell without steps stays ready across a re-render of the revision its frame
    already applied, where it used to fall back to pending and wait for an acknowledgement the frame
-   sends only once.
+   sends only once. The in-frame wait before an element capture is also bounded now, since the same
+   paused frames left it waiting forever. Studio's own four layouts are captured with `--studio`,
+   the agent panel minimized. Capturing dark exposed that a focused view scenario always resolved its
+   design light, because Studio's subject host dropped the scheme the app shell stamps; it now
+   forwards it.
 3. Milestone native captures: iOS for the reference apps and the companion app, and the native
    Studio shell.
 4. Android, and the websites once their source or URL is named.
