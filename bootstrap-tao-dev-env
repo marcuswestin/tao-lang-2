@@ -1,0 +1,111 @@
+#!/bin/sh
+# Explicit noninteractive Linux tool activation; repository dependencies stay in ./agent setup.
+set -eu
+
+tools_only=false
+install_nix=false
+for argument in "$@"; do
+  case "$argument" in
+    --tools-only) tools_only=true ;;
+    --install-nix) install_nix=true ;;
+    --help)
+      printf 'Usage: ./bootstrap-tao-dev-env [--install-nix] [--tools-only]\n'
+      printf 'Build the locked portable Linux profile, then run ./agent setup.\n'
+      printf 'Use --tools-only to prepare a reusable tools image without repository dependencies.\n'
+      exit 0 ;;
+    *) printf 'Unknown bootstrap option: %s\n' "$argument" >&2; exit 2 ;;
+  esac
+done
+
+repository=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+cd "$repository"
+if [ "$(uname -s)" != Linux ]; then
+  printf 'Portable bootstrap supports Linux. On macOS use ./enter-tao-dev-env.\n' >&2
+  exit 1
+fi
+
+environment="$repository/packages/cli/dev-cli/dev-cli-src/environment"
+if "$install_nix"; then
+  # The installer waits for an active installation before judging its pending marker.
+  /bin/sh "$environment/nix-bootstrap.sh"
+fi
+if [ -f "$HOME/.local/state/tao-contributor/nix-bootstrap.pending" ]; then
+  printf 'A previous Nix bootstrap did not complete. Recreate the disposable environment or recover its recorded installation before retrying.\n' >&2
+  exit 1
+fi
+
+# Discover an installed Nix without assuming setup-shell exports survive the next cloud process.
+if ! command -v nix-build >/dev/null 2>&1; then
+  for nix_bin in "$HOME/.nix-profile/bin" /nix/var/nix/profiles/default/bin; do
+    if [ -x "$nix_bin/nix-build" ]; then
+      PATH="$nix_bin:$PATH"
+      export PATH
+      break
+    fi
+  done
+fi
+if ! command -v nix-build >/dev/null 2>&1; then
+  printf 'Nix is missing. In a disposable Linux environment run ./bootstrap-tao-dev-env --install-nix.\n' >&2
+  exit 1
+fi
+
+# Only our fresh single-user container installation needs these process-local settings. A marker
+# records the exact binary so an unrelated preinstalled Nix keeps its own daemon/build policy.
+managed_nix_marker="$HOME/.local/state/tao-contributor/nix-bootstrap"
+if [ -f "$managed_nix_marker" ]; then
+  managed_nix_binary=
+  IFS= read -r managed_nix_binary < "$managed_nix_marker" || true
+  resolved_nix_binary=$(readlink -f "$(command -v nix-build)")
+  if [ -n "$managed_nix_binary" ] && [ "$managed_nix_binary" = "$resolved_nix_binary" ]; then
+    NIX_CONFIG="${NIX_CONFIG:-}
+store = local
+build-users-group =
+sandbox = false"
+    export NIX_CONFIG
+  fi
+fi
+
+for required in flock sha256sum; do
+  if ! command -v "$required" >/dev/null 2>&1; then
+    printf 'Portable bootstrap needs %s from the Linux base image.\n' "$required" >&2
+    exit 1
+  fi
+done
+
+mkdir -p .devenv/portable-generations
+exec 9>.devenv/portable-bootstrap.lock
+flock -w 600 9 || { printf 'Timed out waiting for portable bootstrap.\n' >&2; exit 1; }
+
+# Keep each generation rooted in the Nix store, including generations used by concurrent commands.
+identity=$({
+  uname -sm
+  cat devenv.lock "$environment/toolchain-packages.nix" "$environment/portable-profile.nix"
+} | sha256sum)
+identity=${identity%% *}
+generation="$repository/.devenv/portable-generations/$identity"
+if [ ! -x "$generation/bin/bun" ] || [ ! -x "$generation/bin/node" ] || [ ! -x "$generation/bin/zsh" ]; then
+  printf 'Portable bootstrap: building locked Linux tools...\n'
+  nix-build "$environment/portable-profile.nix" --out-link "$generation"
+else
+  printf 'Portable bootstrap: reusing locked Linux tools.\n'
+fi
+
+if [ -e .devenv/profile ] && [ ! -L .devenv/profile ]; then
+  printf 'Refusing to replace .devenv/profile because it is not a symbolic link.\n' >&2
+  exit 1
+fi
+publication="$repository/.devenv/portable-profile-next-$$"
+trap 'rm -f "$publication"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+ln -s "portable-generations/$identity" "$publication"
+mv -Tf "$publication" "$repository/.devenv/profile"
+flock -u 9
+exec 9>&-
+
+printf 'Portable bootstrap: profile %s\n' "$identity"
+if "$tools_only"; then
+  exit 0
+fi
+exec "$repository/agent" setup

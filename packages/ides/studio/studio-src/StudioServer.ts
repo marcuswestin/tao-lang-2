@@ -1,5 +1,5 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
-import { CLI, Errors, Json, ReleaseCapabilities, Repo, Switch } from '@shared'
+import { Assert, CLI, Errors, Json, ReleaseCapabilities, Repo, Switch } from '@shared'
 import type { AgentChatProvider } from './agent-chat/AgentChatProvider'
 import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
@@ -76,6 +76,7 @@ export type StudioServerOptions = {
   deviceLauncher?: StudioDeviceLauncher
   generationProvider?: GenerationProvider
   hostname?: string
+  openBrowser?: (url: string) => Promise<void>
   port?: number
   previewUrl?: string
   shipBeta?: StudioBetaShip
@@ -168,14 +169,14 @@ async function dispatch<ContextT>(
   return undefined
 }
 
-/** Session routes are answered by one of four tables; every route belongs to exactly one of these key sets. */
+/** Session routes use the handler tables below, except the browser launch that reads its session resource directly. */
 type StudioLaunchRouteKey = 'deviceLaunch' | 'deviceLaunchOpen'
 type StudioDeviceRouteKey = Exclude<Extract<keyof typeof routes, `device${string}`>, StudioLaunchRouteKey>
 type StudioTestRouteKey = Extract<keyof typeof routes, `tests${string}`>
 type StudioSocketRouteKey = 'events' | 'languageLsp'
 type StudioSessionRouteKey = Exclude<
   keyof typeof routes,
-  StudioDeviceRouteKey | StudioLaunchRouteKey | StudioSocketRouteKey | StudioTestRouteKey
+  StudioDeviceRouteKey | StudioLaunchRouteKey | StudioSocketRouteKey | StudioTestRouteKey | 'browserOpen'
 >
 type StudioManagerRouteKey = keyof typeof StudioRoutes.manager
 
@@ -302,6 +303,9 @@ export async function startStudioSessionServer(
           return response(request, url, requestOptions, { error: 'Studio session not found.' }, 404)
         }
         subscribeSession(route.sessionId)
+        if (at(request, route.pathname, routes.browserOpen)) {
+          return renderReply(request, url, requestOptions, await openBrowser(resource.previewUrl, options.openBrowser))
+        }
         // Each of these answers only the routes it owns, and hands the rest on in the order they are tried.
         const scoped = await handleTestRequest(resource, request, url, requestOptions, route.pathname)
           ?? await handleDeviceRequest(route.sessionId, resource, request, url, requestOptions, route.pathname)
@@ -436,6 +440,26 @@ async function initializeEventSocket(
 
 function deviceStateEvent(status: StudioDeviceStateEvent['status']): StudioDeviceStateEvent {
   return { channel: studioProtocolChannel, protocolVersion: studioProtocolVersion, status, type: 'device-state' }
+}
+
+/** Launch only the session's standalone app URL; request bodies and the server-wide preview fallback cannot select it. */
+async function openBrowser(
+  previewUrl: string | undefined,
+  open: StudioServerOptions['openBrowser'],
+): Promise<StudioReply> {
+  if (open === undefined) {
+    return jsonReply({ error: 'This Studio service does not include browser launch tooling.' }, 501)
+  }
+  const url = previewUrl === undefined ? null : URL.parse(previewUrl)
+  if (url === null || (url.protocol !== 'http:' && url.protocol !== 'https:')) {
+    return jsonReply({ error: 'This project has no web preview available to open in a browser.' }, 503)
+  }
+  try {
+    await open(url.href)
+    return jsonReply({ opened: true, url: url.href })
+  } catch {
+    return jsonReply({ error: 'Could not open the app in a browser. Try again.' }, 502)
+  }
 }
 
 /** Every device route shares this prefix, and an unknown path under it is still the gateway's to refuse. */
@@ -760,6 +784,8 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
   },
   dataFill: async ({ datasource, request }) => jsonReply(await datasource.fill(dataFillRequest(await request.json()))),
   canvasViewport: bodyTo((session, body) => session.saveCanvasViewport(body)),
+  feedBrowse: bodyTo((session, body) => session.browseFeed(body)),
+  feedAction: bodyTo((session, body) => session.applyFeedAction(body)),
   file: async ({ session, url }) =>
     jsonReply(await session.readFile(requiredQuery(url, 'path', 'Missing Studio file path.'))),
   fileCreate: bodyTo((session, body) => session.createFile(createFileRequest(body)), 201),
@@ -973,11 +999,17 @@ function renameFileRequest(value: unknown): StudioRenameFileRequest {
 }
 
 function moveGeneratedSourceRequest(value: unknown): StudioMoveGeneratedSourceRequest {
-  return requiredStrings(
+  const request = requiredStrings(
     value,
     ['path', 'sourceVersion', 'targetPackage', 'writeId'],
     'Expected path, targetPackage, sourceVersion, and writeId to move generated source.',
   )
+  const relocateScenarios = (value as Record<string, unknown>)['relocateScenarios']
+  Assert.input(
+    relocateScenarios === undefined || typeof relocateScenarios === 'boolean',
+    'Expected a boolean scenario relocation choice.',
+  )
+  return { ...request, ...(relocateScenarios === undefined ? {} : { relocateScenarios }) }
 }
 
 function deleteFileRequest(value: unknown): StudioDeleteFileRequest {

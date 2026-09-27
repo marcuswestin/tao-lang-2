@@ -137,9 +137,21 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     browser = await StudioCdp.launchChrome({ artifactRoot: artifactParent })
     await browser.setViewport(1_440, 900)
     await browser.goto(`${studio.url}/sessions/${encodeURIComponent(current.sessionId)}`)
-    await browser.waitFor(`document.querySelector('.chat-cloud:not(:disabled)') instanceof HTMLInputElement`, {
-      timeoutMs: 30_000,
-    })
+    try {
+      await browser.waitFor(`document.querySelector('.chat-cloud:not(:disabled)') instanceof HTMLInputElement`, {
+        timeoutMs: 30_000,
+      })
+    } catch (cause) {
+      const page = await browser.evaluate<string>('document.body.innerText')
+      Errors.throwHostEnvironment(
+        `Studio chat did not become ready: ${JSON.stringify({ page, browser: browser.browserFailures() })}`,
+        { cause },
+      )
+    }
+    Expect(await browser.evaluate<number>(`document.querySelectorAll('.studio-preview iframe').length`)).toBe(0)
+    Expect(await browser.evaluate<boolean>(`document.querySelector('[data-tao-studio-draw-canvas]') !== null`)).toBe(
+      true,
+    )
     await browser.click('.chat-cloud')
     await browser.waitFor(`document.querySelector('.chat-status')?.getAttribute('data-state') === 'on'`)
 
@@ -201,6 +213,8 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     // The manual edit is a real CodeMirror save between previewing and approving the reverse diff.
     await browser.click('.studio-agent-collapse')
     await browser.waitFor(`document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'true'`)
+    await browser.click('[data-preset="code"]')
+    await browser.waitFor(`document.querySelector('.studio-editor .cm-content')?.checkVisibility() === true`)
     const appliedSource = await FS.readText(sourcePath)
     const manualSource = appliedSource.replace('Text("Agent")', 'Text("Manual")')
     await browser.click('.cm-content')

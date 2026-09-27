@@ -303,6 +303,26 @@ deterministic native-module substitutes owned by the runtime test harness.
 **Does not belong here:** Location, permissions, declared failures, `when do` outcomes, raw
 Vibration, vendor enums or result objects, or app-authored native bindings.
 
+## Native Bridge
+
+A device and simulator demo for generated Expo and React Native API bindings. `NativeBridge` starts at a
+surface chooser, with separate Haptics, Vibration, and Clipboard scenes. It declares no scenarios,
+so Studio opens the ordinary app on the phone without preparation or replay steps.
+Each surface keeps generated bindings in its own `Generated/` directory; authored UI lives beside
+it. The entry's README owns launch and regeneration commands and the extension pattern.
+
+**Belongs here:** device controls for all generated Haptics enum values, React Native vibration and
+cancellation, and Clipboard text/HTML, image, URL, and subscription operations. Navigation journeys
+check that each screen is reachable and can be left without starting native effects. A maintained-app
+runtime suite exercises Clipboard input, controls, previews and listener cleanup, all Haptics controls,
+and vibration/cancellation with native substitutes. An explicit `.host-tests/Clipboard.test.tao` journey uses
+the real module in an isolated iOS Simulator build for formats, availability, and listener controls.
+Package tests also cover generated contracts. Cross-app paste permissions remain pending; physical
+haptic feel is deliberately excluded from this slice.
+
+**Does not belong here:** handwritten binding implementations, new language semantics, or the
+semantic `@tao/device` facade covered by Device Kit.
+
 ## Native Components
 
 Exercise `@tao/ui`'s published components against their platform-native implementations.
@@ -417,5 +437,18 @@ isolation are verified separately by the reference server/provider tests; only c
 journeys establish the user-facing behavior. AuthReviewClerk selects the managed adapter with a
 placeholder publishable key; configure its development instance and gateway before use. Its opt-in
 browser journey passed on 2026-09-26 against the SQLite reference gateway, including real password
-and email-code UI, profile and note persistence, reload and logout. Clerk over InstantDB and
-physical-device acceptance remain outstanding.
+and email-code UI, profile and note persistence, reload and logout. The same journey passed with
+local InstantDB storage and independent row/guest-access checks on 2026-09-26. Physical-device
+acceptance remains outstanding. `just clerk-review` configures this app from the encrypted development
+credentials, starts its local InstantDB gateway, and opens Studio for manual iPhone review. Install
+Tao Companion with `just studio-companion-install roPhone`, keep the phone and Mac on the same
+network, then choose the phone in Studio and open the app. Select the "Clerk and InstantDB / iPhone"
+scenario to send the app to Companion. Clerk sign-in requires Internet access.
+The custom password input is masked and authentication problems wrap on a phone. Known Clerk
+configuration failures, including disabled native API access, are distinguished from rejected
+credentials without exposing provider response text.
+Fill buttons beside the custom email and password fields insert separate review values without
+submitting; the email-code form offers the same email shortcut. The phone form scrolls and keeps its
+input rows compact. Password and registration challenges open the code form, and Sign in explicitly
+leaves registration mode. Tao journeys cover filling, code verification and cancellation/retry;
+real registration still requires manual acceptance.

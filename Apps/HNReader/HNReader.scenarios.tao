@@ -1,3 +1,5 @@
+use Comment, Story from @model
+
 // The shipping app is the subject, so these open with the project rather than behind an app switch.
 // The fixture is what the cell starts from; an online scenario then fills over it through the real
 // adapter, and the offline one shows exactly these rows and says where they came from.

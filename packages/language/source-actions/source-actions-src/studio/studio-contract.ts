@@ -48,6 +48,7 @@ export type StudioInsertProjectViewPatchRequest = {
   bindings?: Readonly<Record<string, string>>
   kind: 'insert-project-view'
   viewName: string
+  viewSourcePath?: string
 }
 
 export type StudioSketchScenarioFixtureBinding = Readonly<{

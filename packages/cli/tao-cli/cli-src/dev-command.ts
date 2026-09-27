@@ -10,10 +10,11 @@ import { createInkDevLoopReporter } from './dev/dev-loop-tui'
 /** TaoDevCommandOptions supplies explicit selection, terminal state, and a focused loop seam. */
 type TaoDevCommandOptions = {
   appName?: string
+  device?: string
   input?: Readable
   interactive?: boolean
   output?: Writable
-  runLoop?: (selection: DevAppSelection) => Promise<DevLoopOutcome>
+  runLoop?: (selection: DevAppSelection, device?: string) => Promise<DevLoopOutcome>
   startupTargets?: readonly DevStartupTarget[]
 }
 
@@ -22,6 +23,9 @@ export async function runTaoDev(
   targetPath = '.',
   options: TaoDevCommandOptions = {},
 ): Promise<number> {
+  if (options.device !== undefined) {
+    ReleaseCapabilities.require('companion')
+  }
   for (const target of options.startupTargets ?? []) {
     ReleaseCapabilities.require(ReleaseCapabilities.targetCapability(target))
   }
@@ -29,7 +33,7 @@ export async function runTaoDev(
   // `runDevLoop` renders through whichever reporter it is given; the dashboard is `tao dev`'s to
   // own, so this is the one place that wires the Ink implementation in.
   const runLoop = options.runLoop
-    ?? (selection => runDevLoop(selection, createInkDevLoopReporter(), options.startupTargets))
+    ?? ((selection, device) => runDevLoop(selection, createInkDevLoopReporter(), options.startupTargets, device))
   let current = await initialSelection(target, options)
   if (current.kind !== 'selected') {
     return exitTaoDev(current.kind === 'exit' ? current.exitCode : 0, options)
@@ -43,7 +47,7 @@ export async function runTaoDev(
         await TaoAppModules.ensureProject(currentApp.projectRoot)
       }
       const previousProject = currentApp.projectRoot
-      const outcome = await runLoop(currentApp)
+      const outcome = await runLoop(currentApp, options.device)
       const exitCode = await Switch.kind<typeof outcome, Promise<number | undefined>>(outcome, {
         exit: async exit => exit.exitCode,
         restart: async () => undefined,

@@ -1,3 +1,4 @@
+use Bookmark, Bookmarks, Comment, Comments, ReadingEntries, ReadingEntry, Stories, Story from @model
 use CloudKit from @tao/data/providers/cloudkit
 use Http from @tao/data/providers/http
 use Local from @tao/data/providers/local
@@ -140,58 +141,6 @@ design HNDesign {
       problemTitle [size 16, weight 700, ink ink]
       stateBox [content center, pad 24]
    }
-}
-
-folder
-data Stories / Story {
-   HnId number (unique),
-   Title text,
-   Url text (default ""),
-   Score number,
-   Author text,
-   CommentCount number,
-   // A story's front-page rank, or 0 for a story that reached the store some other way. Feeds over
-   // one entity share its rows, so a feed's query filters on its own materialized field.
-   Rank number (default 0),
-   Comments (owned),
-
-   order by Rank,
-}
-
-folder
-data Comments / Comment {
-   Story,
-   HnId number (unique),
-   Author text,
-   Text text,
-   Depth number,
-   Ordering number,
-
-   order by Ordering,
-}
-
-// The reader's own rows, in the other datasource. `reference` is what a link across that boundary
-// is: the story's unique HnId is what a bookmark stores, so it names a story the feed holds without
-// the two stores needing to know about each other. A story that drops out of the feed leaves the
-// bookmark alone, reading as missing until the feed serves it again.
-folder
-data Bookmarks / Bookmark {
-   Story (reference),
-   Note text (default ""),
-   CreatedAt time (default now),
-
-   order by CreatedAt,
-}
-
-// One local row per story. StoryHnId is its stable reconciliation key, while Story is the
-// cross-datasource handle whose missing state remains observable.
-folder
-data ReadingEntries / ReadingEntry {
-   StoryHnId number (unique),
-   Story (reference),
-   OpenedAt time (default now),
-
-   order by OpenedAt desc,
 }
 
 scene FrontPage() {

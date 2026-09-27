@@ -61,15 +61,30 @@ export type AppiumWebDriverSession = Readonly<{
   openDeepLink?: (url: string, appId: string) => Promise<void>
   pressKey?: (key: string) => Promise<void>
   screenshot?: () => Promise<Uint8Array>
+  revealElement?: (element: AppiumElement) => Promise<void>
   scroll?: (input: Readonly<{ deltaX: number; deltaY: number; element?: AppiumElement }>) => Promise<void>
   terminateApp?: (appId: string) => Promise<void>
 }>
+
+/** Optional evidence capture; observations describe native chrome without asserting acceptance. */
+export type AppiumNavigationDiagnosticsSession =
+  & HostSession
+  & Readonly<{
+    captureNavigationDiagnostics: (name: string, titles?: readonly string[]) => Promise<{ artifactPath: string }>
+  }>
 
 /** AppiumXcuiTestDeepLinkSession is the narrow driver capability used only by the native test-control bridge. */
 export type AppiumXcuiTestDeepLinkSession =
   & HostSession
   & Readonly<{
     openDeepLink: (url: string) => Promise<void>
+  }>
+
+/** Native target reveal lets XCTest choose the enclosing scroll container and direction. */
+export type AppiumXcuiTestRevealSession =
+  & HostSession
+  & Readonly<{
+    revealObservation: (observation: HostObservation) => Promise<void>
   }>
 
 /** AppiumXcuiTestClient is the only seam a real Appium server/WebDriver implementation must bind. */
@@ -151,7 +166,7 @@ export function appiumXcuiTestCapabilities(
     platformName: 'iOS',
   } as const
   if (target.kind === 'simulator') {
-    return base
+    return { ...base, 'appium:simulatorPasteboardAutomaticSync': 'off' }
   }
   return {
     ...base,
@@ -398,6 +413,63 @@ class AppiumXcuiTestSession implements HostSession {
     })
   }
 
+  async captureNavigationDiagnostics(name: string, titles: readonly string[] = []): Promise<{ artifactPath: string }> {
+    return await this.#serialize(async () => {
+      await this.#assertUsable()
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(name)) {
+        Errors.throwUserInput('Appium diagnostic names must use only letters, numbers, dots, underscores, or dashes.')
+      }
+      const findChildren = this.#session.findElementsFrom
+      if (findChildren === undefined) {
+        return unsupported('inspect', 'The injected Appium client does not expose subtree queries.')
+      }
+      const describe = async (element: AppiumElement) => ({
+        id: element.id,
+        label: await element.getAttribute?.('label'),
+        name: await element.getAttribute?.('name'),
+        type: await element.getAttribute?.('type'),
+        text: await element.getText?.(),
+        visible: await element.isDisplayed(),
+        rect: await element.getRect?.(),
+      })
+      const bars = await this.#session.findElements({
+        using: '-ios class chain',
+        value: '**/XCUIElementTypeNavigationBar',
+      })
+      const navigationBars = []
+      for (const bar of bars) {
+        const children = await findChildren.call(this.#session, bar, {
+          using: '-ios class chain',
+          value: '**/*',
+        })
+        navigationBars.push({ ...await describe(bar), children: await Promise.all(children.map(describe)) })
+      }
+      const matchingTitles = []
+      for (const title of titles) {
+        const matches = await this.#session.findElements({
+          using: '-ios predicate string',
+          value: `label == ${JSON.stringify(title)} OR name == ${JSON.stringify(title)}`,
+        })
+        matchingTitles.push({ title, elements: await Promise.all(matches.map(describe)) })
+      }
+      await this.#assertUsable()
+      const identity = [this.#target.kind, this.#target.udid, this.#descriptor.lease.generation]
+        .map(safeSegment).join('-')
+      const artifactPath = FS.resolvePath(
+        `appium/navigation/${identity}-${++this.#screenshotSequence}-${name}.json`,
+        this.#artifactRoot,
+      )
+      await FS.writeJson(artifactPath, {
+        version: 1,
+        sessionId: this.#descriptor.id,
+        revision: this.#revision,
+        navigationBars,
+        matchingTitles,
+      })
+      return { artifactPath }
+    })
+  }
+
   async close(lease: HostLeaseIdentity): Promise<void> {
     await this.#serialize(async () => {
       await this.#assertCloseLease(lease)
@@ -423,6 +495,18 @@ class AppiumXcuiTestSession implements HostSession {
         throw new HostControlError('unsupported', 'The injected Appium client does not expose XCUITest deep links.')
       }
       await this.#session.openDeepLink(url, this.#target.appId)
+      this.#advanceObservationRevision()
+    })
+  }
+
+  async revealObservation(observation: HostObservation): Promise<void> {
+    await this.#serialize(async () => {
+      await this.#assertUsable()
+      const element = this.#elementFor(observation)
+      if (this.#session.revealElement === undefined) {
+        return unsupported('scroll', 'The injected Appium client does not expose native target reveal.')
+      }
+      await this.#session.revealElement(element)
       this.#advanceObservationRevision()
     })
   }

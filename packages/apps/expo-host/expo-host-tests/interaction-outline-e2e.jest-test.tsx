@@ -3,7 +3,7 @@ import TR from '@runtime/TR'
 import { interactionOutline } from '@runtime/TR-interaction-outline'
 import * as TaoReactNative from '@runtime/TR-react-native'
 import { SelectableRow } from '@runtime/TR-selectable-row'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, testOverrideSlot } from '@shared/test'
 import { act, fireEvent, render, within } from '@testing-library/react-native'
 import React from 'react'
 import * as RN from 'react-native'
@@ -18,6 +18,20 @@ const catalog = `
     Body text (default "")
   }
 `
+
+const navigatorSlot = testOverrideSlot<PropertyDescriptor | undefined>({
+  read: () => Object.getOwnPropertyDescriptor(globalThis, 'navigator'),
+  equals: (left, right) =>
+    (['configurable', 'enumerable', 'writable', 'value', 'get', 'set'] as const)
+      .every(key => left?.[key] === right?.[key]),
+  write: descriptor => {
+    if (descriptor) {
+      Object.defineProperty(globalThis, 'navigator', descriptor)
+    } else {
+      delete (globalThis as { navigator?: unknown }).navigator
+    }
+  },
+})
 
 function nodes(kind?: TR.OutlineNode['kind']): readonly TR.OutlineNode[] {
   return TR.Interaction.Outline.read().nodes.filter(node => kind === undefined || node.kind === kind)
@@ -72,82 +86,94 @@ Describe('interaction outline runtime', () => {
     }
   })
 
-  Test('claims handled browser shortcuts before the browser default without requiring app-root focus', async () => {
-    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
-      ActivityIndicator: RN.ActivityIndicator,
-      BackHandler: RN.BackHandler,
-      Image: RN.Image,
-      KeyboardAvoidingView: RN.KeyboardAvoidingView,
-      Modal: RN.Modal,
-      Platform: { OS: 'web' },
-      Pressable: RN.Pressable,
-      ScrollView: RN.ScrollView,
-      Switch: RN.Switch,
-      Text: RN.Text,
-      TextInput: RN.TextInput,
-      View: RN.View,
-    })
-    let documentKeyDown: ((event: Record<string, unknown>) => void) | undefined
-    const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document')
-    Object.defineProperty(globalThis, 'document', {
-      configurable: true,
-      value: {
-        addEventListener: (_type: string, listener: (event: Record<string, unknown>) => void) => {
-          documentKeyDown = listener
-        },
-        removeEventListener: (_type: string, listener: (event: Record<string, unknown>) => void) => {
-          if (documentKeyDown === listener) {
-            documentKeyDown = undefined
-          }
-        },
-      },
-    })
-    try {
-      await testCompileApp(
-        `
-          use Col, FormButton from @tao/ui
-          use StackNav from @tao/nav
-          app KeyApp { Name "Keys" Navigator StackNav { Initial Home } }
-          scene Home() {
-            Title "Home"
-            render Col() { FormButton("Next") { on press -> { } } }
-          }
-        `,
-        async screen => {
-          Expect(screen.queryByText('Command palette')).toBeNull()
-          let palettePrevented = false
-          let paletteStopped = false
-          const palette = {
-            key: 'k',
-            metaKey: true,
-            preventDefault: () => palettePrevented = true,
-            stopPropagation: () => paletteStopped = true,
-          }
-          await act(async () => {
-            documentKeyDown?.(palette)
-          })
-          Expect(palettePrevented).toBe(true)
-          Expect(paletteStopped).toBe(true)
-          Expect(TR.Interaction.Attention.read().mode).toBe('palette')
-          Expect(screen.getByText('Command palette')).toBeDefined()
+  for (
+    const { platform, modifier } of [
+      { platform: 'MacIntel', modifier: { metaKey: true } },
+      { platform: 'Linux x86_64', modifier: { ctrlKey: true } },
+    ]
+  ) {
+    Test(
+      `claims handled ${platform} browser shortcuts before the browser default without requiring app-root focus`,
+      async () => {
+        const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+          ActivityIndicator: RN.ActivityIndicator,
+          BackHandler: RN.BackHandler,
+          Image: RN.Image,
+          KeyboardAvoidingView: RN.KeyboardAvoidingView,
+          Modal: RN.Modal,
+          Platform: { OS: 'web' },
+          Pressable: RN.Pressable,
+          ScrollView: RN.ScrollView,
+          Switch: RN.Switch,
+          Text: RN.Text,
+          TextInput: RN.TextInput,
+          View: RN.View,
+        })
+        let documentKeyDown: ((event: Record<string, unknown>) => void) | undefined
+        const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document')
+        Object.defineProperty(globalThis, 'document', {
+          configurable: true,
+          value: {
+            addEventListener: (_type: string, listener: (event: Record<string, unknown>) => void) => {
+              documentKeyDown = listener
+            },
+            removeEventListener: (_type: string, listener: (event: Record<string, unknown>) => void) => {
+              if (documentKeyDown === listener) {
+                documentKeyDown = undefined
+              }
+            },
+          },
+        })
+        const restoreNavigator = navigatorSlot.install({ configurable: true, value: { platform } })
+        try {
+          await testCompileApp(
+            `
+            use Col, FormButton from @tao/ui
+            use StackNav from @tao/nav
+            app KeyApp { Name "Keys" Navigator StackNav { Initial Home } }
+            scene Home() {
+              Title "Home"
+              render Col() { FormButton("Next") { on press -> { } } }
+            }
+          `,
+            async screen => {
+              Expect(screen.queryByText('Command palette')).toBeNull()
+              let palettePrevented = false
+              let paletteStopped = false
+              const palette = {
+                key: 'k',
+                ...modifier,
+                preventDefault: () => palettePrevented = true,
+                stopPropagation: () => paletteStopped = true,
+              }
+              await act(async () => {
+                documentKeyDown?.(palette)
+              })
+              Expect(palettePrevented).toBe(true)
+              Expect(paletteStopped).toBe(true)
+              Expect(TR.Interaction.Attention.read().mode).toBe('palette')
+              Expect(screen.getByText('Command palette')).toBeDefined()
 
-          let browserKeyPrevented = false
-          const browserKey = { key: 'F7', preventDefault: () => browserKeyPrevented = true }
-          await act(async () => {
-            documentKeyDown?.(browserKey)
-          })
-          Expect(browserKeyPrevented).toBe(false)
-        },
-      )
-    } finally {
-      if (previousDocument) {
-        Object.defineProperty(globalThis, 'document', previousDocument)
-      } else {
-        delete (globalThis as { document?: unknown }).document
-      }
-      restoreRuntime.mockRestore()
-    }
-  })
+              let browserKeyPrevented = false
+              const browserKey = { key: 'F7', preventDefault: () => browserKeyPrevented = true }
+              await act(async () => {
+                documentKeyDown?.(browserKey)
+              })
+              Expect(browserKeyPrevented).toBe(false)
+            },
+          )
+        } finally {
+          restoreNavigator()
+          if (previousDocument) {
+            Object.defineProperty(globalThis, 'document', previousDocument)
+          } else {
+            delete (globalThis as { document?: unknown }).document
+          }
+          restoreRuntime.mockRestore()
+        }
+      },
+    )
+  }
 
   Test('handles web keys from the focusable app host and prevents only handled input', async () => {
     const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({

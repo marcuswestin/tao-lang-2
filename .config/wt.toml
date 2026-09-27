@@ -8,4 +8,5 @@
 # `devenv shell` builds the profile on first entry; `./agent` can reuse the primary checkout's
 # profile in a linked worktree when one exists.
 [pre-start]
-setup = "devenv shell --no-tui ./agent setup"
+# Automated setup must not offer personal shell configuration, even when it inherits a terminal.
+setup = "TAO_DEV_SHELL_SETUP=0 devenv shell --no-tui ./agent setup"

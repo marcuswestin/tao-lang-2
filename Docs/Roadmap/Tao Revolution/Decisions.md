@@ -249,7 +249,7 @@ bites, the case type is the qualifier: `Course.Dinner`.
   position, which is the collision that ruled out `Name: Type` in parameter lists. `item` remains a
   bare primitive type (a value of any item shape) and the value constructor's head.
 - **A structural type may be written inline wherever a type is accepted**, a return position
-  included: `action FetchRecipe(Link text) returns { Foo, Bar } { … }`. A type expression is a
+  included: `function RecipeFields(Link text) returns { Foo, Bar } { … }`. A type expression is a
   type expression, so `number` and `{ … }` are accepted in exactly the same places — there is no
   position that takes one and refuses the other.
 - **The adjacent `} {` in that line is unambiguous.** The field list's brace balance closes the type,
@@ -2276,6 +2276,20 @@ view CodeEditor(Content text, Change action(text)) accepts content slots @toolba
 
 ### Action failures
 
+**Clipboard result and listener decision (2026-09-26).** A foreign declaration uses
+`action Read() returns text from ./Bindings.ts`. Inside an action, `let Pasted = do Read()` awaits
+the result and creates an immutable local value for the following statements. The invocation keeps
+ordinary joined transaction and failure semantics. Native Tao action bodies do not return values,
+and a result-bearing foreign action cannot use `runs latest`. This does not make the ordinary
+`from` value expression asynchronous.
+
+Generated native subscriptions belong to the lexical mounted view owning the calling action and
+are automatically disposed when it unmounts. Registration without that owner fails before native
+registration. A generated `Remove` action permits early idempotent disposal; a deprecated removal
+entry uses the same lifetime. Disposal ignores arriving events and queued callbacks that have not
+started; it does not cancel a callback already executing. Failed transactions and savepoints dispose
+subscriptions created by the rolled-back work. Clipboard reads and writes require no subscription.
+
 A native action declares a failure where it detects it, and its failure contract is inferred:
 
 ```swift
@@ -2437,8 +2451,8 @@ action FetchRecipe fails NotARecipe
 action FetchRecipe returns { Foo: 1, Bar: ["123", "abc"] }
 ```
 
-- The MVP implements declared-case failure stubs for foreign actions with no result. Value-return
-  stubs remain Post-MVP until return-valued actions have their complete language and runtime path.
+- The MVP implements declared-case failure stubs for foreign actions. Result-bearing foreign actions
+  now have the Clipboard language/runtime path above; value-return test stubs remain Post-MVP.
 - A success stub supplies the **value**, so it needs no type name and works whether the action's
   return type was named or written inline.
 - **A preference in a test is an ordinary update, and the device locale is a scenario pin — both

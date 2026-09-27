@@ -322,7 +322,10 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
         continue
       }
       if (carrier.kind === 'action-block') {
-        scope = this.createScopeForNodes(AST.askDeclarationsOwnedByActionBlock(carrier.block), scope)
+        const results = AST.actionResultDeclarationsOwnedByActionBlock(carrier.block).filter(binding =>
+          (binding.$cstNode?.end ?? Infinity) <= (reference.$cstNode?.offset ?? 0)
+        )
+        scope = this.createScopeForNodes([...AST.askDeclarationsOwnedByActionBlock(carrier.block), ...results], scope)
         continue
       }
       const forBinding = AST.forBindingOwnedByBlock(carrier.block)

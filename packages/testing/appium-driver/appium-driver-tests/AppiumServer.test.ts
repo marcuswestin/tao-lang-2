@@ -1,5 +1,6 @@
 import { CLI, Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { mobileAppiumEnvironment } from '../appium-driver-src/AppiumMobileServer'
 import { startAppiumServer } from '../appium-driver-src/AppiumServer'
 
 Describe('Appium server ownership', () => {
@@ -27,6 +28,57 @@ Describe('Appium server ownership', () => {
     Expect(events).toEqual([])
     await server.close()
     Expect(events).toEqual(['kill:SIGTERM', 'wait', 'close-output', 'dispose', 'release-port'])
+    await server.close()
+    Expect(events).toEqual(['kill:SIGTERM', 'wait', 'close-output', 'dispose', 'release-port'])
+  })
+
+  Test('mobile children explicitly clear inherited Clerk credentials and preserve other environment values', () => {
+    const environment = mobileAppiumEnvironment('/owned-artifacts', {
+      CLERK_SECRET_KEY: 'sentinel-secret-key',
+      CLERK_TESTING_TOKEN: 'sentinel-testing-token',
+      PATH: '/toolchain/bin',
+      APPIUM_HOME: '/global-appium-home',
+    })
+
+    Expect(environment).toEqual({
+      CLERK_SECRET_KEY: undefined,
+      CLERK_TESTING_TOKEN: undefined,
+      PATH: '/toolchain/bin',
+      APPIUM_HOME: '/owned-artifacts/appium-home',
+    })
+    // Omission would let Platform restore the inherited credential during its environment merge.
+    Expect(Object.hasOwn(environment, 'CLERK_SECRET_KEY')).toBe(true)
+    Expect(Object.hasOwn(environment, 'CLERK_TESTING_TOKEN')).toBe(true)
+  })
+
+  Test('quiet sessions discard sensitive driver output while retaining process and port ownership', async () => {
+    const events: string[] = []
+    const process = fakeProcess(events)
+    let startedSpec: CLI.CommandSpec | undefined
+    const server = await startAppiumServer({
+      fetch: async () => new Response('{}', { status: 200 }),
+      quiet: true,
+      reservations: {
+        reserve: async () => ({
+          port: 47234,
+          release: async () => {
+            events.push('release-port')
+          },
+        }),
+      },
+      start: (_command, spec) => {
+        startedSpec = spec
+        spec?.onOutput?.('stdout', Buffer.from('sentinel-secret-password'))
+        spec?.onOutput?.('stderr', Buffer.from('sentinel-secret-token'))
+        return process
+      },
+    })
+
+    Expect(startedSpec?.stdio).toBe('ignore')
+    Expect(startedSpec?.prefixedOutput).toBeUndefined()
+    Expect(startedSpec?.onOutput).toBeUndefined()
+    Expect(server.logs()).toBe('')
+    Expect(events).toEqual([])
     await server.close()
     Expect(events).toEqual(['kill:SIGTERM', 'wait', 'close-output', 'dispose', 'release-port'])
   })

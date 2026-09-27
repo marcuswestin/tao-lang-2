@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 187 applicable release acceptance cells are incomplete.
 
-Candidate source: `d5bdeaefd03740d976cc14da01b80688aa6fbe89`. Working-tree content hashes are stored per observation.
+Candidate source: `de8eeeffc7e2f1b288d07601d48fb5c4f3a6e8a8`. Working-tree content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -46,14 +46,14 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | text      | 299            | 2        | 0            | 0             | 297     | 0       | 0        | 2    | 0.7%       | 0.0%     |
+| 1                | text      | 308            | 2        | 0            | 1             | 306     | 0       | 0        | 1    | 0.6%       | 0.0%     |
 
 ## Scoped development probes
 
 | Introduced phase | Dimension  | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | ---------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | functional | 2              | 2        | 1            | 1             | 0       | 0       | 0        | 0    | 100.0%     | 50.0%    |
-| 1                | visual     | 7              | 7        | 0            | 4             | 0       | 1       | 2        | 0    | 100.0%     | 0.0%     |
+| 1                | functional | 2              | 2        | 0            | 2             | 0       | 0       | 0        | 0    | 100.0%     | 0.0%     |
+| 1                | visual     | 7              | 7        | 0            | 7             | 0       | 0       | 0        | 0    | 100.0%     | 0.0%     |
 | 2                | visual     | 4              | 2        | 0            | 4             | 2       | 0       | 0        | 0    | 50.0%      | 0.0%     |
 
 ## Recorded assessments
@@ -66,11 +66,11 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - [visual:notebook / visual / notes-groceries / agent](results/20260926231624456-8caf176a-7cb8-46c8-becf-10b68970c3b9.json): **pass**, needs-recheck; execution profile development.
 - [visual:notebook / visual / notes-ideas / agent](results/20260926231625124-1f62f25f-5b3a-4bb0-a716-4a42b8c9fb3f.json): **pass**, needs-recheck; execution profile development.
 - [visual:notebook / visual / tablet-dark / agent](results/20260926231625849-b6c08f5f-feef-40e5-bf85-0ea10ee43baa.json): **blocked**, needs-recheck; execution profile development.
-- [visual:reading-list / visual / phone-light / agent](results/20260926234036716-9356b414-ab5b-41ef-9b3f-50a093807ccd.json): **friction**, current; execution profile development.
-- [visual:reading-list / visual / desktop / agent](results/20260926234037246-bfcc3df6-830e-41e5-9bae-c8e820058176.json): **blocked**, current; execution profile development.
-- [visual:reading-list / visual / phone-dark / agent](results/20260926234037805-b0b87da2-d03a-4c27-90b4-5a7b2bc70095.json): **friction**, current; execution profile development.
-- [source:tutorial-replay / functional / source-test / agent](results/20260926234030950-0bffcf10-c348-45bf-a81d-17168b22b136.json): **pass**, current; execution profile development.
-- [doc:README.md / text / source / agent](results/20260926231620093-f4e8c58e-525c-43d6-8ff8-0cfab60aa771.json): **fail**, current; execution profile development.
+- [visual:reading-list / visual / phone-light / agent](results/20260926234036716-9356b414-ab5b-41ef-9b3f-50a093807ccd.json): **friction**, needs-recheck; execution profile development.
+- [visual:reading-list / visual / desktop / agent](results/20260926234037246-bfcc3df6-830e-41e5-9bae-c8e820058176.json): **blocked**, needs-recheck; execution profile development.
+- [visual:reading-list / visual / phone-dark / agent](results/20260926234037805-b0b87da2-d03a-4c27-90b4-5a7b2bc70095.json): **friction**, needs-recheck; execution profile development.
+- [source:tutorial-replay / functional / source-test / agent](results/20260926234030950-0bffcf10-c348-45bf-a81d-17168b22b136.json): **pass**, needs-recheck; execution profile development.
+- [doc:README.md / text / source / agent](results/20260926231620093-f4e8c58e-525c-43d6-8ff8-0cfab60aa771.json): **fail**, needs-recheck; execution profile development.
 - [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20260926231620881-041146d0-d93e-4f40-ac21-0bf852df556d.json): **fail**, current; execution profile development.
 
 ## Unresolved findings and accepted limitations

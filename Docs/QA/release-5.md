@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 395 applicable release acceptance cells are incomplete.
 
-Candidate source: `d5bdeaefd03740d976cc14da01b80688aa6fbe89`. Working-tree content hashes are stored per observation.
+Candidate source: `de8eeeffc7e2f1b288d07601d48fb5c4f3a6e8a8`. Working-tree content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -46,7 +46,7 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | text      | 299            | 2        | 0            | 2             | 297     | 0       | 0        | 0    | 0.7%       | 0.0%     |
+| 1                | text      | 308            | 2        | 0            | 2             | 306     | 0       | 0        | 0    | 0.6%       | 0.0%     |
 
 ## Scoped development probes
 
@@ -504,8 +504,8 @@ These are scoped observations; supplementary source checks do not fill public-ar
 
 ## Inventory exclusions
 
-- 1: Generated harness copy; canonical .rulesync or agents source is inventoried.
-- 144: Frozen archive; outside active-document review.
+- 2: Generated harness copy; canonical .rulesync or agents source is inventoried.
+- 152: Frozen archive; outside active-document review.
 - 10: QA evidence or generated register output; excluded from its own freshness inputs.
 
 Every excluded path and reason: [inventory](inventory.json).

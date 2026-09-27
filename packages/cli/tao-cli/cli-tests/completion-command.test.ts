@@ -89,6 +89,11 @@ Describe('tao completion install', () => {
 })
 
 Describe('tao shell completion surface', () => {
+  Test('completes the physical device selector on dev', async () => {
+    const lines = await captureCompletionRequest(['dev', '--de'])
+    Expect(lines.some(line => line.startsWith('--device\t'))).toBe(true)
+  })
+
   Test('completes command names for the requested prefix', async () => {
     const lines = await captureCompletionRequest(['c'])
 

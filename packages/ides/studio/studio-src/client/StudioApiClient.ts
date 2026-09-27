@@ -5,6 +5,12 @@ import type { StudioDeviceLaunchInfo, StudioDeviceLaunchOpenResult } from '../de
 import type { StudioDeviceStatus } from '../device/StudioDeviceStatus'
 import type { StudioCompileSnapshot, StudioWriteAcknowledgement } from '../StudioCompileCoordinator'
 import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
+import type {
+  StudioFeedActionRequest,
+  StudioFeedBrowseRequest,
+  StudioFeedBrowseResult,
+  StudioFeedState,
+} from '../StudioFeedProtocol'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import {
   type StudioCanvasViewport,
@@ -256,6 +262,7 @@ export const StudioApiClient = {
     await request(routes.devicePairingDecline, { devicePublicKey }),
   deviceCapture: async (): Promise<{ capture?: StudioRuntimeCaptureArtifact; error?: string }> =>
     await request(routes.deviceCapture, {}),
+  browserOpen: async (): Promise<{ opened: true; url: string }> => await request(routes.browserOpen, {}),
   deviceLaunch: async (): Promise<StudioDeviceLaunchInfo> => await get(routes.deviceLaunch),
   deviceLaunchOpen: async (hostId: string, route: 'auto' | 'cable' = 'auto'): Promise<StudioDeviceLaunchOpenResult> =>
     await request(routes.deviceLaunchOpen, { hostId, route }),
@@ -294,6 +301,9 @@ export const StudioApiClient = {
     await request(routes.previewCellReconfigure, body),
   renameFile: async (body: StudioRenameFileRequest): Promise<StudioRenameFileResult> =>
     await request(routes.fileRename, body),
+  feedBrowse: async (body: StudioFeedBrowseRequest): Promise<StudioFeedBrowseResult> =>
+    await request(routes.feedBrowse, body),
+  feedAction: async (body: StudioFeedActionRequest): Promise<StudioFeedState> => await request(routes.feedAction, body),
   sketchAction: async (body: StudioSketchCatalogRequest): Promise<StudioSketchActionResult> =>
     await request(routes.sketchAction, body),
   sketchFlowAction: async (body: StudioSketchFlowActionRequest): Promise<StudioSketchSnapApplyResult> =>

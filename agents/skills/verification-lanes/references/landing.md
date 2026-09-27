@@ -44,8 +44,9 @@ A queued merge conflict removes this request from the queue without taking the l
 commit it here, then rerun `./agent unsandboxed land`. A dead waiter is pruned; the lock itself is never stolen.
 `./agent board` shows the live queue and holder.
 
-**Inside the lock**, in one `try`/`finally`, it rechecks the preflight, fetches `origin/main`, merges it into the
-branch, fast-forwards local `main`, runs the cheap-gate barrier, runs `verify-full`, squashes,
+**Inside the lock**, in one `try`/`finally`, it rechecks the preflight, successfully fetches `origin/main`
+again and merges that fetched tip into the branch, runs the cheap-gate barrier and `verify-full`, then
+fast-forwards local `main` once the verified remote tip is stable, squashes,
 pushes, archives, and releases. Local `main` being behind, or the branch not yet containing `main`,
 is no longer a precondition — that requirement is what made a landing lose a race it had already
 paid a full verification for.

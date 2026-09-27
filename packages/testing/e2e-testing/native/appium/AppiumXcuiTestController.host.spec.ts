@@ -8,6 +8,7 @@ import {
   type AppiumLease,
   type AppiumLeaseManager,
   type AppiumLocator,
+  type AppiumNavigationDiagnosticsSession,
   type AppiumReceiptSink,
   type AppiumRevisionPublisher,
   type AppiumSessionReceipt,
@@ -16,6 +17,7 @@ import {
   type AppiumXcuiTestCapabilities,
   appiumXcuiTestCapabilities,
   type AppiumXcuiTestDeepLinkSession,
+  type AppiumXcuiTestRevealSession,
   createAppiumXcuiTestController,
   iosTargetLeaseName,
 } from './AppiumXcuiTestController'
@@ -44,6 +46,7 @@ test('allocates collision-free Appium resources for two simulator UDIDs', async 
     secondClient.capabilities[0]?.['appium:derivedDataPath'],
   )
   expect(firstClient.capabilities[0]).not.toHaveProperty('appium:autoAcceptAlerts')
+  expect(firstClient.capabilities[0]?.['appium:simulatorPasteboardAutomaticSync']).toBe('off')
   expect(firstClient.sessions[0]?.alertDismissals).toBe(1)
   expect(secondClient.sessions[0]?.alertDismissals).toBe(1)
   expect(
@@ -101,6 +104,66 @@ test('retains target and derived-port leases when an escaped session cannot be d
     .toThrow(
       "Machine resource 'ios-simulator:SIM-ESCAPED-OPEN' is busy",
     )
+})
+
+test('captures hidden navigation descendants and refuses capture after session close', async () => {
+  const artifactRoot = await Repo.mkScratchDir('tao-native-navigation-diagnostics-')
+  const client = new FakeClient('diagnostics')
+  const driver = client.sessions[0]!
+  driver.visible = false
+  const bar = new FakeElement(driver, 'bar', 'Library workspace')
+  const title = Object.assign(
+    new FakeElement(driver, 'title', 'Library workspace', { x: 0, y: 0, width: 0, height: 0 }),
+    {
+      getAttribute: async (name: string) =>
+        ({ label: 'Library workspace', name: 'Library workspace', type: 'XCUIElementTypeStaticText' })[
+          name as 'label' | 'name' | 'type'
+        ],
+    },
+  )
+  driver.findElements = async locator => {
+    if (locator.using === '-ios predicate string') {
+      expect(locator.value).toBe('label == "Library workspace" OR name == "Library workspace"')
+      return [title]
+    }
+    expect(locator).toEqual({ using: '-ios class chain', value: '**/XCUIElementTypeNavigationBar' })
+    return [bar]
+  }
+  Object.assign(driver, {
+    findElementsFrom: async (scope: AppiumElement, locator: AppiumLocator) => {
+      expect(scope.id).toBe('bar')
+      expect(locator.value).toBe('**/*')
+      return [title]
+    },
+  })
+  const session = await open(
+    appiumController(client, new FakeLeases(), simulator('SIM-DIAGNOSTICS')),
+    'acceptance',
+    artifactRoot,
+  ) as AppiumNavigationDiagnosticsSession
+  try {
+    const capture = await session.captureNavigationDiagnostics('root', ['Library workspace'])
+    expect(await FS.readJson(capture.artifactPath)).toMatchObject({
+      matchingTitles: [{ title: 'Library workspace', elements: [{ id: 'title', visible: false }] }],
+      navigationBars: [{
+        id: 'bar',
+        visible: false,
+        children: [{
+          id: 'title',
+          label: 'Library workspace',
+          type: 'XCUIElementTypeStaticText',
+          text: 'Library workspace',
+          visible: false,
+          rect: { width: 0, height: 0 },
+        }],
+      }],
+    })
+    await session.close(session.descriptor().lease)
+    await expect(session.captureNavigationDiagnostics('closed')).rejects.toThrow('closed')
+  } finally {
+    await session.close(session.descriptor().lease)
+    await FS.remove(artifactRoot)
+  }
 })
 
 test('writes immutable screenshot evidence for repeated captures across two sessions', async () => {
@@ -313,6 +376,50 @@ test('reports a busy target, keeps inputs isolated, and releases only the sessio
   expect(secondClient.sessions[0]?.deleted).toBe(false)
 
   await secondSession.close(secondSession.descriptor().lease)
+})
+
+test('native reveal invalidates its observation and requires a fresh lookup before input', async () => {
+  const client = new FakeClient('reveal')
+  client.sessions[0]!.visible = false
+  const controller = appiumController(client, new FakeLeases(), simulator('SIM-REVEAL'))
+  const session = await open(controller) as AppiumXcuiTestRevealSession
+  try {
+    const request = { expectedRevision: revision, target: { kind: 'accessibility' as const, name: 'entry' } }
+    const hidden = await session.observe(request)
+    expect(hidden.visible).toBe(false)
+    await session.revealObservation(hidden)
+    await expect(session.revealObservation(hidden)).rejects.toThrow('Observation is no longer current')
+    await expect(session.perform(typeAction(session, hidden, 'stale write'))).rejects.toThrow(
+      'Observation is no longer current',
+    )
+    expect(client.sessions[0]!.revealed).toHaveLength(1)
+    expect(client.sessions[0]!.input).toEqual([])
+    const visible = await session.observe(request)
+    expect(visible.visible).toBe(true)
+    await session.perform(typeAction(session, visible, 'fresh write'))
+    expect(client.sessions[0]!.input).toEqual(['fresh write'])
+  } finally {
+    await controller.close()
+  }
+})
+
+test('native reveal rejects foreign observation leases and fenced target leases before dispatch', async () => {
+  const leases = new FakeLeases()
+  const client = new FakeClient('reveal-fenced')
+  const controller = appiumController(client, leases, simulator('SIM-REVEAL-FENCED'))
+  const session = await open(controller) as AppiumXcuiTestRevealSession
+  const observation = await session.observe({
+    expectedRevision: revision,
+    target: { kind: 'accessibility', name: 'entry' },
+  })
+  await expect(session.revealObservation({
+    ...observation,
+    lease: { ...observation.lease, generation: 'foreign-lease' },
+  })).rejects.toThrow('no longer current')
+  leases.fence('ios-simulator:SIM-REVEAL-FENCED')
+  await expect(session.revealObservation(observation)).rejects.toThrow('is no longer current')
+  expect(client.sessions[0]!.revealed).toEqual([])
+  await expect(controller.close()).rejects.toThrow('is no longer current')
 })
 
 test('fences stale leases before they can mutate a session', async () => {
@@ -610,6 +717,7 @@ class FakeClient {
 }
 
 class FakeSession implements AppiumWebDriverSession {
+  readonly revealed: string[] = []
   alertDismissals = 0
   deleted = false
   deleteAttempts = 0
@@ -631,6 +739,11 @@ class FakeSession implements AppiumWebDriverSession {
 
   constructor(name: string) {
     this.id = `${name}-session`
+  }
+
+  async revealElement(element: AppiumElement): Promise<void> {
+    this.revealed.push(element.id)
+    this.visible = true
   }
 
   async deleteSession(): Promise<void> {

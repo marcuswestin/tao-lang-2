@@ -107,8 +107,8 @@
     "docker-desktop start",
     "watchman start", "watchman status", "watchman stop",
     "local-instantdb start", "local-instantdb stop",
-    "companion-host-build",
-    "standalone-cli-vm-setup", "standalone-cli-clean-machine",
+    "companion-host-build", "studio-companion-install", "clerk-review",
+    "standalone-cli-vm-setup", "standalone-cli-clean-machine", "contributor-linux-test",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",
     "simulators install", "simulators open-url", "simulators uninstall", "simulators open",
     "devices list", "devices apps", "devices launch",
@@ -168,6 +168,8 @@
           // Pinned native Studio launcher, engine, and runtime release artifacts.
           "hutch.blackboard.sh",
           "electrobun-artifacts.blackboard.sh",
+          // Compiler used to rebuild the pinned native engine with its reviewed transport patch.
+          "ziglang.org",
           "expo.dev",
           "*.expo.dev",
           "*.expo.io",
@@ -176,6 +178,16 @@
           // artifact CDN during native builds. These network rules do not grant a host escape.
           "repo1.maven.org",
           "repo.reactnative.dev",
+          // Contributor Ubuntu image: token exchange, registry, and documented blob delivery.
+          // https://docs.docker.com/desktop/setup/allow-list/
+          "auth.docker.io",
+          "registry-1.docker.io",
+          "production.cloudfront.docker.com",
+          // The fixed amd64 Ubuntu base installs prerequisites from these package archives.
+          "archive.ubuntu.com",
+          "security.ubuntu.com",
+          // nix-bootstrap.sh downloads its checksum-pinned release directly, without channels.
+          "releases.nixos.org",
           "cache.nixos.org",
           "*.cachix.org",
           "*.anthropic.com",

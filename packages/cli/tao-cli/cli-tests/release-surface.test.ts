@@ -12,6 +12,7 @@ Describe('Immutable public release surfaces', () => {
           source,
           `
           import { createCommands } from ${JSON.stringify(FS.resolvePath('tao-cli.ts', cli))}
+          import { runTaoDev } from ${JSON.stringify(FS.resolvePath('dev-command.ts', cli))}
           import { runTaoBuild } from ${JSON.stringify(FS.resolvePath('build-command.ts', cli))}
           import { runShipCommand } from ${JSON.stringify(FS.resolvePath('ship-command.ts', cli))}
           import { HCI, ReleaseCapabilities } from ${
@@ -25,6 +26,10 @@ Describe('Immutable public release surfaces', () => {
             () => runShipCommand('/missing-project', {}),
           ]) {
             try { await operation() } catch (error) { errors.push(String(error)) }
+          }
+          if (ReleaseCapabilities.current().phase < 4) {
+            try { await runTaoDev('/missing-project', { device: 'phone' }) }
+            catch (error) { errors.push(String(error)) }
           }
           HCI.writeLine(JSON.stringify({
             phase: ReleaseCapabilities.current().phase,
@@ -61,9 +66,13 @@ Describe('Immutable public release surfaces', () => {
         Expect(value.dev).not.toContain('--desktop')
         Expect(value.dev).not.toContain('--android')
         Expect(value.dev.includes('--ios')).toBe(phase >= 2)
+        Expect(value.dev.includes('--device')).toBe(phase >= 4)
         Expect(value.commands.includes('ship')).toBe(phase === 5)
         Expect(value.ship ?? []).not.toContain('--update')
-        Expect(value.errors).toHaveLength(3)
+        Expect(value.errors).toHaveLength(phase < 4 ? 4 : 3)
+        if (phase < 4) {
+          Expect(value.errors[3]).toContain('Companion')
+        }
         Expect(value.errors[0]).toContain('Desktop app builds is unavailable')
         Expect(value.errors[1]).toContain(
           phase === 5 ? 'Over-the-air updates is unavailable' : 'TestFlight shipping is unavailable',

@@ -10,6 +10,7 @@ import {
   markExternalEffect,
   resumeActionContinuation,
   runAction,
+  runActionResult,
   skippedActionRun,
   type TaoActionContinuation,
   type TaoActionReceipt,
@@ -111,6 +112,7 @@ import { LayoutControls } from './TR-layout'
 import { openUrl } from './TR-linking'
 import { NativeHosts } from './TR-native-hosts'
 import { NativeModules } from './TR-native-modules'
+import { nativeSubscription, type TaoActionOwner, useActionOwner } from './TR-native-subscription'
 import {
   NavigationControls,
   NavKindControls,
@@ -429,13 +431,20 @@ class TR {
     collection: TR.Evaluable,
     render: (value: TR.Value<any>, index: number) => React.ReactNode,
     select?: (value: TR.Value<any>, index: number) => unknown,
-    frame?: Omit<TaoRuntimeFailureFrame, 'arguments' | 'boundary'> & { interaction?: TaoOutlineLoopNode },
+    frame?: Omit<TaoRuntimeFailureFrame, 'arguments' | 'boundary'> & {
+      interaction?: TaoOutlineLoopNode
+      owner?: TaoActionOwner
+    },
   ): React.ReactNode {
     const values = collection.evaluate().jsValue
     if (!Array.isArray(values)) {
       return null
     }
-    const { interaction: descriptor, ...diagnosticsFrame } = frame ?? {}
+    const { interaction: descriptor, owner, ...diagnosticsFrame } = frame ?? {}
+    const selection = select && owner ? TR.Action(select, { name: 'on select', owner }) : undefined
+    const selectRow = selection && owner
+      ? (value: TR.Value<any>, index: number) => selection.jsValue.invokeOwned(owner, () => owner.active, value, index)
+      : select
     const items = values.map((value, index) => {
       const runtimeValue = new RuntimeValue(value)
       const itemKey = stableListKey(value, index)
@@ -449,11 +458,15 @@ class TR {
           key: itemKey,
           stateKey: () => JSON.stringify(diagnosticsArguments()),
         },
-        createElement(ForEachItem, { descriptor, index, itemKey, render, runtimeValue, select }),
+        createElement(ForEachItem, { descriptor, index, itemKey, render, runtimeValue, select: selectRow }),
       )
     })
     return createElement(ForEachCollection, { descriptor, items })
   }
+
+  static UseActionOwner = useActionOwner
+
+  static NativeSubscription = nativeSubscription
 
   /** Action creates runtime Tao actions from generated callbacks. */
   static Action<Args extends any[]>(
@@ -478,7 +491,8 @@ class TR {
     implementation: (...arguments_: any[]) => unknown,
     name: string,
     failures: readonly TaoDeclaredFailure[],
-    options: Readonly<{ requiredArguments?: number; runs?: 'latest'; testStubKey?: string }> = {},
+    options: Readonly<{ requiredArguments?: number; runs?: 'latest'; testStubKey?: string; owner?: TaoActionOwner }> =
+      {},
   ): TR.Action<Args> {
     const requiredArguments = options.requiredArguments ?? implementation.length
     return new RuntimeAction(
@@ -503,7 +517,7 @@ class TR {
             RuntimeAssert(declared !== undefined, 'validated foreign action test stub names a declared failure')
             throw new TaoActionFailure(stubbedCase, declared.sentence)
           }
-          await implementation(...arguments_.map(argument => argument?.evaluate().jsValue))
+          return await implementation(...arguments_.map(argument => argument?.evaluate().jsValue))
         } catch (error) {
           if (error instanceof TaoActionFailure) {
             throw error
@@ -517,7 +531,7 @@ class TR {
           )
         }
       },
-      { name },
+      { name, owner: options.owner },
       options.runs,
     )
   }
@@ -574,6 +588,14 @@ class TR {
     ...args: Args
   ): void | Promise<void> {
     return action.evaluate().jsValue.invokeJoined(...args)
+  }
+
+  /** DoResult awaits a foreign value without releasing the caller's transaction. */
+  static async DoResult<ResultT>(
+    action: { evaluate(): { jsValue: { invokeJoinedResult(...args: any[]): Promise<unknown> } } },
+    ...args: any[]
+  ): Promise<TR.Value<ResultT>> {
+    return TR.Value(await action.evaluate().jsValue.invokeJoinedResult(...args) as ResultT)
   }
 
   /**
@@ -1055,19 +1077,50 @@ class RuntimeActionValue<Args extends any[] = any[]> {
     private readonly name = 'action',
     runs?: 'latest',
     private readonly interrupt = false,
+    private readonly owner?: TaoActionOwner,
   ) {
     this.#latest = runs === 'latest' ? new LatestActionInvocations<Args>() : undefined
   }
 
   invoke(...args: Args): void | Promise<void> {
     const run = (latestArgs: Args) =>
-      runAction(this.name, latestArgs, () => this.body(...latestArgs), false, this.interrupt)
+      runAction(
+        this.name,
+        latestArgs,
+        () => this.body(...latestArgs),
+        false,
+        this.interrupt,
+        undefined,
+        undefined,
+        this.owner,
+      )
     return this.#latest?.invoke(args, run) ?? run(args)
   }
 
   invokeJoined(...args: Args): void | Promise<void> {
-    const run = (latestArgs: Args) => runAction(this.name, latestArgs, () => this.body(...latestArgs), true)
+    const run = (latestArgs: Args) =>
+      runAction(this.name, latestArgs, () => this.body(...latestArgs), true, false, undefined, undefined, this.owner)
     return this.#latest?.invoke(args, run) ?? run(args)
+  }
+
+  invokeOwned(owner: TaoActionOwner, active: () => boolean, ...args: Args): void | Promise<void> {
+    const run = (latestArgs: Args) =>
+      runAction(
+        this.name,
+        latestArgs,
+        () => active() ? this.body(...latestArgs) : undefined,
+        false,
+        this.interrupt,
+        undefined,
+        undefined,
+        owner,
+      )
+    return this.#latest?.invoke(args, run) ?? run(args)
+  }
+
+  invokeJoinedResult(...args: Args): Promise<unknown> {
+    RuntimeAssert.input(!this.#latest, 'An action that returns a value cannot use runs latest.')
+    return runActionResult(this.name, args, () => this.body(...args), this.owner)
   }
 
   invokeReceipt(...args: Args): Promise<TaoActionReceipt> {
@@ -1081,6 +1134,7 @@ class RuntimeActionValue<Args extends any[] = any[]> {
           this.interrupt,
           undefined,
           resolve,
+          this.owner,
         )
       try {
         const pending = this.#latest ? this.#latest.invoke(args, run) : run(args)
@@ -1139,6 +1193,7 @@ class LatestActionInvocations<Args extends any[]> {
 
 type RuntimeActionMetadata = {
   name?: string
+  owner?: TaoActionOwner
   /** interrupt is compiler-owned and marks a response action that may settle its suspended ask. */
   interrupt?: boolean
 }
@@ -1151,7 +1206,7 @@ class RuntimeAction<Args extends any[] = any[]> {
     metadata: RuntimeActionMetadata = {},
     runs?: 'latest',
   ) {
-    this.jsValue = new RuntimeActionValue(body, metadata.name ?? 'action', runs, metadata.interrupt)
+    this.jsValue = new RuntimeActionValue(body, metadata.name ?? 'action', runs, metadata.interrupt, metadata.owner)
   }
 
   evaluate(): RuntimeAction<Args> {

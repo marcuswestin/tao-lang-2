@@ -36,7 +36,7 @@ Describe('agent entrypoint', () => {
         helper,
         'tao_activate_devenv_profile() { return 0; }\ntao_bun_temp_dir() { echo "$1"; }\ntao_warn_on_detached_head() { :; }\n',
       )
-      await FS.writeText(dependencyScript, '#!/bin/zsh\nexit 0\n')
+      await FS.writeText(dependencyScript, '#!/bin/sh\nexit 0\n')
       await FS.writeText(build, '')
       await FS.writeText(stamp, '')
       await FS.mkdir(bin)
@@ -46,14 +46,14 @@ Describe('agent entrypoint', () => {
       const fakeTao = FS.resolvePath('tao', root)
       await FS.writeText(
         fakeBun,
-        '#!/bin/zsh\nif [[ "$1" == */agent-host-command-check.ts ]]; then shift; exec "$TAO_REAL_BUN" "$TAO_REAL_CHECKER" "$@"; fi\nif [[ "$1" == */agent-host-dispatch.ts ]]; then shift; exec "$TAO_REAL_BUN" "$TAO_REAL_DISPATCHER" "$@"; fi\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n',
+        '#!/usr/bin/env zsh\nif [[ "$1" == */agent-host-command-check.ts ]]; then shift; exec "$TAO_REAL_BUN" "$TAO_REAL_CHECKER" "$@"; fi\nif [[ "$1" == */agent-host-dispatch.ts ]]; then shift; exec "$TAO_REAL_BUN" "$TAO_REAL_DISPATCHER" "$@"; fi\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n',
       )
       await FS.chmod(fakeBun, 0o755)
-      await FS.writeText(fakePs, '#!/bin/zsh\nexit 0\n')
+      await FS.writeText(fakePs, '#!/bin/sh\nexit 0\n')
       await FS.chmod(fakePs, 0o755)
-      await FS.writeText(fakeXcrun, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n')
+      await FS.writeText(fakeXcrun, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n')
       await FS.chmod(fakeXcrun, 0o755)
-      await FS.writeText(fakeTao, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n')
+      await FS.writeText(fakeTao, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_TEST_ARGS"\n')
       await FS.chmod(fakeTao, 0o755)
       const env = {
         PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
@@ -130,7 +130,7 @@ Describe('agent entrypoint', () => {
       Expect((await FS.readText(marker)).split('\n').filter(Boolean)).toEqual([build, 'test'])
 
       await FS.remove(marker)
-      await FS.writeText(fakePs, '#!/bin/zsh\nexit 1\n')
+      await FS.writeText(fakePs, '#!/bin/sh\nexit 1\n')
       const deniedProcessTable = await CLI.run('zsh', {
         args: [agent, 'unsandboxed', 'test'],
         cwd: root,

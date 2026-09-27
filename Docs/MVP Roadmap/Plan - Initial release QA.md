@@ -29,6 +29,53 @@ not silently turn a QA run into implementation. Each record tracks **current / n
 separately from outcome; changed artifacts, claims or dependencies invalidate the affected proof.
 Later-phase stories remain scoped to their phase and do not block release 1.
 
+### Live native authentication acceptance
+
+Authentication remains development-only and outside the five public releases. The following lanes
+retain development acceptance without adding a public release claim.
+
+Run the Clerk/InstantDB iOS journey after changing native auth, gateway exchange, or session restoration,
+and again against the pre-MVP candidate. This is explicit host acceptance, outside `verify`,
+`verify-changed`, and the credential-free `verify-full` membership: it needs an installed iOS runtime,
+Xcode, materialized development Clerk keys, network access, and the local InstantDB stack. Missing
+prerequisites fail the requested run rather than silently reporting a pass. Deterministic auth and
+sensitive-log regression tests stay in ordinary verification.
+
+From the repository root:
+
+```sh
+./agent unsandboxed local-instantdb start
+TAO_CLERK_LIVE=1 TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-ios-auth.test.ts
+```
+
+For an iteration using a Companion simulator binary already built from the intended native sources,
+set `TAO_CLERK_IOS_APP_PATH` to its `.app` directory. The receipt labels this as supplied-binary evidence
+and records its path and executable hash; omit it for fresh-build acceptance.
+
+The journey owns a fresh simulator, synthetic Clerk user, and ephemeral Instant app. Builds and
+relaunches use background commands. The native driver preserves an already-running Simulator or
+Device Hub, or runs headless if neither is running; avoid opening or quitting that host during
+driver startup because Appium chooses its presentation mode from that state. It compares
+Studio pairing codes, selects the authored iPhone scenario, signs in through native controls, saves
+profile and notes, checks their ownership directly in Instant, relaunches the process, and checks
+sign-out isolation and email-code authentication. Stage receipts and cleanup ownership records live
+under `.artifacts/tests/studio-smoke/`; request logs, credentials, and screenshots are excluded.
+A green simulator journey is automated evidence only. Physical-device LAN behavior, real registration,
+and the distributed TestFlight build retain their separate acceptance boundaries.
+
+The separate phone-review regression runs the actual `clerk-review --no-browser` command with stored
+development credentials, its LAN gateway, and the unchanged authored **Fill email / Fill password**
+values. It does not provision a replacement account, change the password, or write profile/note data.
+It checks password sign-in and signs out only its simulator session. A provider-required verification
+challenge fails this unattended journey rather than being bypassed. It remains an explicit live lane:
+
+```sh
+TAO_CLERK_LIVE=1 ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-ios-review.test.ts
+```
+
+This covers the manual review setup that the disposable-account journey intentionally replaces.
+It still does not prove physical-device network permissions or the installed phone binary.
+
 ### Tags
 
 - **A** — an agent can run the whole story and judge the observable result from the released surface.

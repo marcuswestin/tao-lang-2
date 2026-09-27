@@ -52,7 +52,7 @@ Describe('run artifacts timings', () => {
     })
   })
 
-  Test("records a real node's own CPU time as its duration, once it clears the plausibility floor", async () => {
+  Test("records a real node's CPU accounting independently of scheduling delays", async () => {
     await withRepository(async root => {
       const location = RunArtifacts.locate({
         lane: 'test',
@@ -70,14 +70,36 @@ Describe('run artifacts timings', () => {
 
       await WorkGraph.run([state], { watchInterrupt: () => () => {} })
       Expect(state.status).toBe('passed')
+      Expect(Number.isFinite(state.cpuMs)).toBe(true)
+      Expect(state.cpuMs).toBeGreaterThan(0)
 
       await RunArtifacts.finishRun({ location, states: [state], summary: { ok: true } })
 
       const store = await RunTimings.load({ repositoryRoot: root })
-      // A tight in-process loop spends nearly all of its wall time on CPU, so the sample clears
-      // `CPU_PLAUSIBILITY_MIN_RATIO` and `record` prefers it over wall time for this node's duration.
-      Expect(store.nodes['cpu-burner']?.source).toBe('cpu')
+      // Contention can stretch elapsed time without adding CPU time. Preserve the real accounting;
+      // fixed samples below prove duration selection without assuming a share of the host CPU.
       Expect(store.nodes['cpu-burner']?.lastCpuMs).toBe(state.cpuMs)
+      Expect(store.nodes['cpu-burner']?.lastWallMs).toBe(state.elapsedMs)
+    })
+  })
+
+  Test('selects CPU duration at the plausibility floor and wall duration below it', async () => {
+    await withRepository(async root => {
+      const location = RunArtifacts.locate({ lane: 'test', repositoryRoot: root, stamp: 'threshold' })
+      const atFloor = finishedState('at-floor', { elapsedMs: 10_000, startedAt: 0 })
+      const belowFloor = finishedState('below-floor', { elapsedMs: 10_000, startedAt: 0 })
+      atFloor.cpuMs = 2_000
+      belowFloor.cpuMs = 1_999
+
+      await RunArtifacts.finishRun({ location, states: [atFloor, belowFloor], summary: { ok: true } })
+
+      const store = await RunTimings.load({ repositoryRoot: root })
+      Expect(store.nodes['at-floor']?.source).toBe('cpu')
+      Expect(store.nodes['at-floor']?.emaMs).toBe(2_000)
+      Expect(store.nodes['at-floor']?.lastCpuMs).toBe(2_000)
+      Expect(store.nodes['below-floor']?.source).toBe('wall')
+      Expect(store.nodes['below-floor']?.emaMs).toBe(10_000)
+      Expect(store.nodes['below-floor']?.lastCpuMs).toBe(1_999)
     })
   })
 

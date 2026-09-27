@@ -10,6 +10,7 @@ import {
 import { mountedDesignStyle } from './TR-mounted-design'
 import type { TaoNavigationCommand } from './TR-navigation-host-slots'
 import { requireReactNativeRuntime } from './TR-react-native'
+import { catalystPalette, SchemeControls } from './TR-scheme'
 import type { TaoProps } from './TR-TaoProps'
 
 type CommandRole = 'button' | 'menuitem'
@@ -37,10 +38,16 @@ export function NavigationCommandButton(props: {
   testID?: string
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
+  const scheme = SchemeControls.use()
+  const defaultColor = catalystPalette(props.taoProps?.scheme ?? scheme.resolved)?.color
   const designStyle = mountedDesignStyle(props.taoProps, 'NavigationChromeButton', 'row')
   const nativeHeader = props.nativeHeader && runtime.Platform?.OS === 'android'
   const color = nativeHeader ? runtime.PlatformColor?.('?android:attr/colorForeground') : undefined
-  const textStyle = { ...navigationTextStyle(designStyle), ...(color === undefined ? {} : { color }) }
+  const textStyle = {
+    ...(defaultColor === undefined ? {} : { color: defaultColor }),
+    ...navigationTextStyle(designStyle),
+    ...(color === undefined ? {} : { color }),
+  }
   const Icon = props.command.icon ? fontAwesomeIcon() : undefined
   const icon = supportedIcon(props.command.icon, Icon)
   const fallbackGlyph = props.command.icon ? iconFallbacks[props.command.icon]?.fallback : undefined
@@ -92,7 +99,7 @@ export function NavigationCommandButton(props: {
       icon
         ? createElement(Icon!, {
           accessible: false,
-          color: color ?? designStyle?.['color'],
+          color: color ?? designStyle?.['color'] ?? defaultColor,
           name: icon.glyph as any,
           size: nativeHeader ? 24 : 16,
           testID: navigationCommandIconTestId(icon.source),

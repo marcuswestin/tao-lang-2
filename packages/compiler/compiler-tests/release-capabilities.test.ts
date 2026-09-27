@@ -4,6 +4,20 @@ import { ReleaseCapabilities } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 
 Describe('compiler release eligibility', () => {
+  Test('source overrides retain the selected release policy', async () => {
+    await withTaoFiles('release-overrides-', {
+      'Main.tao': 'let Label = "Original"',
+      'Project.tao': 'project { id "release-overrides" name "Overrides" }',
+    }, async (paths, root) => {
+      const options = { sourceOverrides: { 'Main.tao': 'use Http from @tao/data/providers/http\ntype Remote is Http' } }
+      const early = await Workspace.openProfile(root, ReleaseCapabilities.profile(1), options)
+      const later = await Workspace.openProfile(root, ReleaseCapabilities.profile(2), options)
+      const first = await early.validate(paths['Main.tao'])
+      const second = await later.validate(paths['Main.tao'])
+      Expect(first.diagnostics.some(d => d.code === 'release-capability')).toBe(true)
+      Expect(second.diagnostics.filter(d => d.code === 'release-capability')).toEqual([])
+    })
+  })
   Test(
     'editor checks nested project pins before validation and completion while compiler development remains available',
     async () => {

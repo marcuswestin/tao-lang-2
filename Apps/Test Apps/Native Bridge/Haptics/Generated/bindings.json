@@ -1,0 +1,195 @@
+{
+  "schemaVersion": 1,
+  "catalog": {
+    "source": "expo",
+    "packageName": "expo-haptics",
+    "packageVersion": "57.0.3",
+    "declaration": "build/Haptics.d.ts",
+    "declarationHash": "fa45824c8c2880fa2dfd6cdd0c04ea79a003cba6f2fd6da5308a287fa995d301",
+    "enums": [
+      {
+        "name": "AndroidHaptics",
+        "members": [
+          {
+            "name": "Confirm",
+            "value": "confirm"
+          },
+          {
+            "name": "Reject",
+            "value": "reject"
+          },
+          {
+            "name": "Gesture_Start",
+            "value": "gesture-start"
+          },
+          {
+            "name": "Gesture_End",
+            "value": "gesture-end"
+          },
+          {
+            "name": "Toggle_On",
+            "value": "toggle-on"
+          },
+          {
+            "name": "Toggle_Off",
+            "value": "toggle-off"
+          },
+          {
+            "name": "Clock_Tick",
+            "value": "clock-tick"
+          },
+          {
+            "name": "Context_Click",
+            "value": "context-click"
+          },
+          {
+            "name": "Drag_Start",
+            "value": "drag-start"
+          },
+          {
+            "name": "Keyboard_Tap",
+            "value": "keyboard-tap"
+          },
+          {
+            "name": "Keyboard_Press",
+            "value": "keyboard-press"
+          },
+          {
+            "name": "Keyboard_Release",
+            "value": "keyboard-release"
+          },
+          {
+            "name": "Long_Press",
+            "value": "long-press"
+          },
+          {
+            "name": "Virtual_Key",
+            "value": "virtual-key"
+          },
+          {
+            "name": "Virtual_Key_Release",
+            "value": "virtual-key-release"
+          },
+          {
+            "name": "No_Haptics",
+            "value": "no-haptics"
+          },
+          {
+            "name": "Segment_Tick",
+            "value": "segment-tick"
+          },
+          {
+            "name": "Segment_Frequent_Tick",
+            "value": "segment-frequent-tick"
+          },
+          {
+            "name": "Text_Handle_Move",
+            "value": "text-handle-move"
+          }
+        ]
+      },
+      {
+        "name": "ImpactFeedbackStyle",
+        "members": [
+          {
+            "name": "Light",
+            "value": "light"
+          },
+          {
+            "name": "Medium",
+            "value": "medium"
+          },
+          {
+            "name": "Heavy",
+            "value": "heavy"
+          },
+          {
+            "name": "Soft",
+            "value": "soft"
+          },
+          {
+            "name": "Rigid",
+            "value": "rigid"
+          }
+        ]
+      },
+      {
+        "name": "NotificationFeedbackType",
+        "members": [
+          {
+            "name": "Success",
+            "value": "success"
+          },
+          {
+            "name": "Warning",
+            "value": "warning"
+          },
+          {
+            "name": "Error",
+            "value": "error"
+          }
+        ]
+      }
+    ],
+    "operations": [
+      {
+        "name": "impactAsync",
+        "parameters": [
+          {
+            "name": "style",
+            "type": {
+              "kind": "enum",
+              "name": "ImpactFeedbackStyle"
+            },
+            "optional": true
+          }
+        ],
+        "asynchronous": true,
+        "platforms": []
+      },
+      {
+        "name": "notificationAsync",
+        "parameters": [
+          {
+            "name": "type",
+            "type": {
+              "kind": "enum",
+              "name": "NotificationFeedbackType"
+            },
+            "optional": true
+          }
+        ],
+        "asynchronous": true,
+        "platforms": []
+      },
+      {
+        "name": "performAndroidHapticsAsync",
+        "parameters": [
+          {
+            "name": "type",
+            "type": {
+              "kind": "enum",
+              "name": "AndroidHaptics"
+            },
+            "optional": false
+          }
+        ],
+        "asynchronous": true,
+        "platforms": [
+          "android"
+        ]
+      },
+      {
+        "name": "selectionAsync",
+        "parameters": [],
+        "asynchronous": true,
+        "platforms": []
+      }
+    ]
+  },
+  "target": {
+    "module": "expo-haptics",
+    "receiver": []
+  },
+  "diagnostics": []
+}

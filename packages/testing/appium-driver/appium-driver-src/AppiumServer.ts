@@ -23,6 +23,7 @@ export type StartAppiumServerOptions = Readonly<{
   environment?: Record<string, string | undefined>
   fetch?: AppiumFetch
   pollIntervalMs?: number
+  quiet?: boolean
   reservations: AppiumPortReservations
   shutdownTimeoutMs?: number
   start?: typeof CLI.start
@@ -65,10 +66,11 @@ export async function startAppiumServer(options: StartAppiumServerOptions): Prom
     process = start(command, {
       args: ['server', '--address', '127.0.0.1', '--port', String(reservation.port)],
       env: options.environment,
-      onOutput: (_stream, chunk) => logs.append(chunk.toString('utf8')),
-      prefixedOutput: { processName: `appium-${reservation.port}` },
+      // Auth journeys must not echo or retain WebDriver request bodies.
+      onOutput: options.quiet === true ? undefined : (_stream, chunk) => logs.append(chunk.toString('utf8')),
+      prefixedOutput: options.quiet === true ? undefined : { processName: `appium-${reservation.port}` },
       processPolicy: 'server',
-      stdio: 'pipe',
+      stdio: options.quiet === true ? 'ignore' : 'pipe',
     })
   } catch (error) {
     await reservation.release()

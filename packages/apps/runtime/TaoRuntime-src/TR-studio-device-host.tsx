@@ -121,8 +121,9 @@ export type TaoStudioDeviceScriptOrigin = {
 
 type TaoStudioDeviceHostAction = 'forget' | 'reconnect'
 
-/** What the screen shows for one client snapshot: the assigned cell, or one named overlay. */
+/** What the screen shows: an ordinary app, an assigned scenario, or a connection/revision overlay. */
 export type TaoStudioDeviceHostPresentation =
+  | { kind: 'app'; manifestRevision: string }
   | { assignment: TaoStudioDeviceAssignment; kind: 'cell' }
   | {
     actions: readonly TaoStudioDeviceHostAction[]
@@ -402,6 +403,18 @@ export function deviceHostPresentation(
     })
   }
   if (state.assignment === undefined) {
+    const manifest = state.manifest
+    if (manifest !== undefined && manifest.scenarios.length === 0) {
+      if (manifest.compileRevision !== publication.compileRevision) {
+        return deviceOverlay({
+          message: `Stale bundle: device has revision ${publication.compileRevision}, `
+            + `Studio published ${manifest.compileRevision} — waiting for Fast Refresh.`,
+          reason: 'stale-bundle',
+          title: 'Waiting for Fast Refresh',
+        })
+      }
+      return { kind: 'app', manifestRevision: manifest.manifestRevision }
+    }
     return deviceOverlay({
       message: 'Connected. Waiting for Tao Studio to assign a scenario.',
       reason: 'waiting-for-cell',
@@ -680,7 +693,11 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
   const [remoteHighlight, setRemoteHighlight] = React.useState<readonly StudioInspectRect[]>([])
   const [containedFailure, setContainedFailure] = React.useState<string | undefined>(undefined)
   const [viewportNoticeSeen, setViewportNoticeSeen] = React.useState(false)
-  const identityKey = presentation.kind === 'cell' ? cellIdentityKey(presentation.assignment.identity) : undefined
+  const identityKey = presentation.kind === 'cell'
+    ? cellIdentityKey(presentation.assignment.identity)
+    : presentation.kind === 'app'
+    ? `app:${props.publication.compileRevision}:${presentation.manifestRevision}`
+    : undefined
   const assignedScenario = presentation.kind === 'cell'
     ? state.manifest?.scenarios.find(scenario => scenario.cellId === presentation.assignment.identity.cellId)
     : undefined
@@ -735,6 +752,7 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
       sink: entries => client.log(entries),
     }), [client])
   const identity = presentation.kind === 'cell' ? presentation.assignment.identity : undefined
+  const appManifestRevision = presentation.kind === 'app' ? presentation.manifestRevision : undefined
   const appliedKey = React.useRef<string | undefined>(undefined)
   const erroredKey = React.useRef<string | undefined>(undefined)
   const compileRevision = props.publication.compileRevision
@@ -750,15 +768,21 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
   // acknowledgement would otherwise claim a revision the phone is showing an error screen for, not
   // the assigned cell.
   React.useEffect(() => {
-    if (identityKey === undefined || identity === undefined) {
+    if (identityKey === undefined) {
+      appliedKey.current = undefined
+      erroredKey.current = undefined
       return
     }
     if (!shouldAcknowledgeCell(identityKey, appliedKey.current, erroredKey.current)) {
       return
     }
     appliedKey.current = identityKey
-    client.applied(identity, compileRevision)
-  }, [client, compileRevision, identity, identityKey])
+    if (identity !== undefined) {
+      client.applied(identity, compileRevision)
+    } else if (appManifestRevision !== undefined) {
+      client.appliedApp(compileRevision, appManifestRevision)
+    }
+  }, [appManifestRevision, client, compileRevision, identity, identityKey])
 
   // A selection belongs to the cell it was made in: a new scenario, or a recompile that re-assigns
   // one, renders a different tree, and holding onto rectangles measured in the old one would outline
@@ -863,7 +887,9 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
     networkToggle('slow', 'slow-network', 'Slow network'),
     menuToggle('layout-bounds', 'Layout bounds', devMode.layoutBounds, () => Dev.toggleLayoutBounds()),
     { id: 'scenarios', label: 'Scenarios', onPress: () => setSheetOpen(true) },
-  ] satisfies readonly DeviceMenuAction[]).map(action => ({
+  ] satisfies readonly DeviceMenuAction[]).filter(action =>
+    presentation.kind === 'cell' || action.id === 'layout-bounds' || action.id === 'scenarios'
+  ).map(action => ({
     ...action,
     onPress: () => {
       action.onPress()
@@ -880,6 +906,12 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
       manifest: props.manifest,
       onError: handleCellError,
     })
+    : presentation.kind === 'app'
+    ? createElement(
+      StudioPreview.ErrorBoundary,
+      { key: identityKey, onError: handleCellError },
+      createElement(DeviceCellFrame, { bareView: false, testID: 'tao-studio-device-app' }, createElement(props.App)),
+    )
     : createElement(DeviceOverlay, { client, presentation })
   const observedContent = presentation.kind === 'cell'
     ? createElement(StudioDeviceLens, { client, sourceVersions: props.publication.sourceVersions }, content)
@@ -925,7 +957,7 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
           ),
         ],
       }),
-      presentation.kind === 'cell'
+      presentation.kind !== 'overlay'
         ? createElement(DeviceBadge, {
           actions: menuActions,
           onPress: () => setMenuOpen(open => !open),

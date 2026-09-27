@@ -14,7 +14,7 @@ StateDeclaration:
 
 ActionDeclaration:
     visibility=DeclarationVisibility? 'action' name=ID parameterList=ParameterList
-    (runsLatest?='runs' 'latest')? (block=ActionBlock | foreign=ForeignActionImplementation);
+    ('returns' returnType=TypeExpression optionalResult?='?'?)? (runsLatest?='runs' 'latest')? (block=ActionBlock | foreign=ForeignActionImplementation);
 
 // A foreign action publishes the failures its TypeScript implementation may deliberately raise.
 // Repeating a case is intentional: one stable case may have several place-specific sentences.
@@ -31,7 +31,7 @@ ActionBlock:
     '{' statements+=ActionStatement* '}';
 
 ActionStatement:
-    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
+    AsyncActionStatement | SetStatement | ToggleStatement | DoStatement | WhenDoStatement | FailStatement | CheckStatement | GuardActionStatement | IfActionStatement | AskStatement | ActionResultStatement | RespondStatement | CreateStatement | UpdateStatement | DeleteStatement | RetryStatement | ContextualPresentStatement | SelectionActivateStatement | DismissStatement | ReplaceStatement | DeclarationSlotFill;
 
 FailStatement:
     'fail' case=[CaseSetCase:ID] sentence=STRING;
@@ -45,6 +45,9 @@ AsyncActionStatement:
 
 AskStatement:
     'let' name=ID '=' 'ask' view=[ViewDeclaration:ID] '(' argumentList=ArgumentList? ')';
+
+ActionResultStatement:
+    'let' name=ID '=' invocation=DoStatement;
 
 RespondStatement:
     'respond' case=[CaseSetCase:ID]?;

@@ -28,6 +28,9 @@ export const ActionsFormatter = {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('action')
     f.noSpaceBefore('(')
+    f.oneSpaceBefore('returns')
+    f.oneSpaceAfter('returns')
+    f.noSpaceBefore('?')
     f.oneSpaceBefore('runs')
     f.oneSpaceAfter('runs')
   },
@@ -169,6 +172,12 @@ export const ActionsFormatter = {
     if (f.node.payload !== undefined) {
       f.oneSpaceAfter('->')
     }
+  },
+
+  ActionResultStatement(f) {
+    f.oneSpaceAfter('let')
+    f.oneSpaceBefore('=')
+    f.oneSpaceAfter('=')
   },
 
   /** AskStatement formats its local binding and dialogue invocation. */

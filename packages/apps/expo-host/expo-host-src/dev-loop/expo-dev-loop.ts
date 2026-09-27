@@ -11,6 +11,7 @@ import { ExpoRunner, type ExpoRunnerSession } from './expo-runner/ExpoRunner'
 import type { DevStartupTarget } from './expo-runner/run-targets'
 import { handleCommandKey } from './keyboard-input/CommandKeys'
 import Commands from './keyboard-input/Commands'
+import { CompanionIdentity } from './prebuilt-host/CompanionIdentity'
 import Run from './Run'
 
 /** DevAppSelection identifies the exact app declaration selected by the Tao CLI. */
@@ -32,7 +33,7 @@ export async function createDevLoopExpoSession(
   preferredPort: number = PREFERRED_EXPO_PORT,
   stateRoot?: string,
 ): Promise<ExpoRunnerSession> {
-  return await ExpoRunner.createSessionWithAvailablePort(preferredPort, { stateRoot })
+  return await ExpoRunner.createSessionWithAvailablePort(preferredPort, { scheme: CompanionIdentity.scheme, stateRoot })
 }
 
 /**
@@ -46,10 +47,11 @@ export async function runDevLoop(
   selection: DevAppSelection,
   reporter: DevLoopReporter = lineDevLoopReporter(),
   startupTargets: readonly DevStartupTarget[] = [],
+  device?: string,
 ): Promise<DevLoopOutcome> {
   const restoreDevLoopReporter = setDevLoopReporter(reporter)
   try {
-    return await runDevLoopWithActiveReporter(selection, startupTargets)
+    return await runDevLoopWithActiveReporter(selection, startupTargets, device)
   } finally {
     restoreDevLoopReporter()
   }
@@ -58,6 +60,7 @@ export async function runDevLoop(
 async function runDevLoopWithActiveReporter(
   selection: DevAppSelection,
   startupTargets: readonly DevStartupTarget[],
+  device?: string,
 ): Promise<DevLoopOutcome> {
   const toolchainRepo = Repo.tryGetRoot(RuntimeToolchainPaths.packageRoot)
   const repoRoot = toolchainRepo ?? selection.projectRoot
@@ -208,6 +211,7 @@ async function runDevLoopWithActiveReporter(
         runtimeRoot: runtime.root,
         restart: () => finish({ kind: 'restart' }),
         selectApp: () => finish({ kind: 'select-app' }),
+        shouldStop,
         stopServices,
       })
     })
@@ -251,6 +255,13 @@ async function runDevLoopWithActiveReporter(
       return await done
     }
     void expo.openStartupTargets(startupTargets.filter(target => target !== 'desktop'), shouldStop)
+    if (device !== undefined) {
+      void expo.openPhysicalDevice(device, shouldStop).catch(error => {
+        if (!shouldStop()) {
+          DevLoopOutput.logDevLoop('dev', `Could not open device: ${Errors.formatForUser(error)}`, 'warn')
+        }
+      })
+    }
     if (startupTargets.includes('desktop')) {
       void openDesktop()
     }

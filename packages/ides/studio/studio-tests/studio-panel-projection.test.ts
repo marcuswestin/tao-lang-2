@@ -230,6 +230,84 @@ Describe('Studio structured panel projection', () => {
     ).toThrow('non-negative integer')
   })
 
+  Test('Feed projects bounded schema-backed rows and disables edits during pending work', () => {
+    const panels = StudioPanelProjection.project({
+      ...baseInput(),
+      feed: {
+        entities: ['Posts'],
+        entity: 'Posts',
+        source: 'Generated',
+        seed: 'replay-42',
+        rows: Array.from({ length: 251 }, (_, index) => ({
+          rowId: `row-${index}`,
+          label: `Post ${index}`,
+          fields: [{
+            path: ['author', 'avatar'],
+            label: 'Avatar',
+            value: 'https://example.test/a.png',
+            presentation: 'image' as const,
+          }],
+        })),
+        selectedRowId: 'row-0',
+        loading: false,
+        pending: true,
+        error: 'Keep failed',
+        canKeep: true,
+        canDiscard: true,
+        canUndo: true,
+      },
+    })
+    const feed = panels.Drawer.Data.Feed
+    Expect(feed.Rows).toHaveLength(250)
+    Expect(feed).toMatchObject({
+      Entity: 'Posts',
+      Source: 'Generated',
+      Seed: 'replay-42',
+      Pending: true,
+      CanKeep: false,
+      CanDiscard: false,
+      CanUndo: false,
+      Error: 'Keep failed',
+      Sources: ['Fixture', 'Generated', 'Live', 'Library'],
+    })
+    Expect(feed.Rows[0]?.Selected).toBe(true)
+    Expect(feed.Rows[1]?.Selected).toBe(false)
+    Expect(feed.Rows[0]?.SelectAction).toEqual({
+      Name: 'feed-action',
+      Payload: '{"type":"select-row","rowId":"row-0"}',
+    })
+    Expect(JSON.parse(feed.Rows[0]?.DragPayload ?? '{}')).toEqual({ kind: 'entity', entity: 'Posts', rowId: 'row-0' })
+    Expect(JSON.parse(feed.Rows[0]?.Fields[0]?.DragPayload ?? '{}')).toEqual({
+      kind: 'field',
+      entity: 'Posts',
+      rowId: 'row-0',
+      path: ['author', 'avatar'],
+      presentation: 'image',
+    })
+    Expect(feed.KeepAction.Payload).toBe('{"type":"keep"}')
+    Expect(feed.DiscardAction.Payload).toBe('{"type":"discard"}')
+    Expect(feed.UndoAction.Payload).toBe('{"type":"undo"}')
+    Expect(Object.isFrozen(feed.Rows[0]?.Fields)).toBe(true)
+  })
+
+  Test('Feed keeps Discard available while refreshing a pending example', () => {
+    const panels = StudioPanelProjection.project({
+      ...baseInput(),
+      feed: {
+        entities: [],
+        entity: '',
+        source: 'Fixture',
+        seed: 'seed',
+        rows: [],
+        loading: true,
+        pending: false,
+        canKeep: true,
+        canDiscard: true,
+      },
+    })
+    Expect(panels.Drawer.Data.Feed).toMatchObject({ CanKeep: false, CanDiscard: true })
+  })
+
   Test('empty panels wait for the first compile with nothing to show', () => {
     const panels = StudioPanelProjection.empty()
 
@@ -241,6 +319,13 @@ Describe('Studio structured panel projection', () => {
     Expect(panels.Drawer.Tab).toBe('Problems')
     Expect(panels.Drawer.Tests.Available).toBe(false)
     Expect(panels.Search.Rows).toEqual([])
+    Expect(panels.Drawer.Data.Feed).toMatchObject({
+      Rows: [],
+      CanKeep: false,
+      CanDiscard: false,
+      Loading: false,
+      Pending: false,
+    })
   })
 })
 

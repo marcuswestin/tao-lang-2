@@ -1,0 +1,9 @@
+// Generated from public native API declarations. Regenerate instead of editing.
+public
+action Cancel() from ./Bindings.ts
+
+public
+type VibratePattern is number | list of number
+
+public
+action Vibrate(Pattern VibratePattern? default none, Repeat boolean? default none) from ./Bindings.ts

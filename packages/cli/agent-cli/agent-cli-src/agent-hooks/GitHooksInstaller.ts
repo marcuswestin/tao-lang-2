@@ -28,14 +28,13 @@ export async function gitHooksDir(worktree: string): Promise<string | undefined>
 
 /** gitHookEntry returns the entry script text for one hook event. */
 function gitHookEntry(event: string): string {
-  return `#!/bin/zsh
+  return `#!/bin/sh
 ${GIT_HOOK_MARKER} ${event}
 # Written by \`./agent setup\`. Asks the committing worktree for its own copy; never fails a commit.
-emulate zsh
 worktree="$(git rev-parse --show-toplevel 2>/dev/null)"
 script="$worktree/${GIT_HOOK_SCRIPT}"
-[[ -x "$script" ]] || script="$worktree/${GIT_HOOK_SCRIPT_LEGACY}"
-[[ -n "$worktree" && -x "$script" ]] && "$script" ${event} "$@"
+[ -x "$script" ] || script="$worktree/${GIT_HOOK_SCRIPT_LEGACY}"
+[ -n "$worktree" ] && [ -x "$script" ] && "$script" ${event} "$@"
 exit 0
 `
 }

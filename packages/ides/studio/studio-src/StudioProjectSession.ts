@@ -30,6 +30,8 @@ import {
   type StudioSourceChange,
   type StudioWatchResult,
 } from './StudioCompileCoordinator'
+import type { StudioFeedBrowseResult, StudioFeedState } from './StudioFeedProtocol'
+import { StudioFeedSession } from './StudioFeedSession'
 import { StudioGeneratedSources } from './StudioGeneratedSources'
 import { type StudioCellRuntime, StudioMatrixSession } from './StudioMatrixSession'
 import type { StudioCellInstanceIdentity, StudioPreviewManifestV2 } from './StudioPreviewManifest'
@@ -190,6 +192,7 @@ export class StudioProjectSession {
   readonly #coordinator: StudioCompileCoordinator
   readonly #fileOperations: StudioFileOperations
   readonly #files: StudioProjectFiles
+  readonly #feed: StudioFeedSession
   readonly #ledger: StudioCheckpointLedger
   readonly #listeners = new Set<(event: StudioSessionEvent) => void>()
   readonly #previewLayoutMeasurements = new Map<
@@ -241,6 +244,18 @@ export class StudioProjectSession {
       projectRoot,
       sketchCatalog: this.#sketchCatalog,
       workspace,
+    })
+    this.#feed = new StudioFeedSession({
+      catalog: this.#sketchCatalog,
+      compile: writes => this.#coordinator.noteStudioFileMutation(writes),
+      entryPath,
+      files,
+      manifest: () => this.previewManifest(),
+      projectRoot,
+      publish: catalog => {
+        this.#emitSketchCatalog(catalog)
+        this.#emitFiles(this.#files.list())
+      },
     })
   }
 
@@ -334,7 +349,7 @@ export class StudioProjectSession {
     rolledBack: boolean
     sourceVersions: readonly { path: string; sourceVersion: string }[]
   }> {
-    return this.#mutate(async () => {
+    return this.#edit(async () => {
       const before = await Promise.all(request.edits.map(async edit => {
         const current = await this.readFile(edit.path)
         return { content: current.content, path: current.path, sourceVersion: current.sourceVersion }
@@ -386,7 +401,7 @@ export class StudioProjectSession {
   }
 
   undoAgentFiles(writeId: string): Promise<{ compile: StudioCompileCompletion; restored: string[] }> {
-    return this.#mutate(async () => {
+    return this.#edit(async () => {
       const before = this.#agentUndoStack[this.#agentUndoStack.length - 1]
       Assert.input(before !== undefined, 'Nothing applied by the agent to undo.')
       // Undo is another delayed source write. A person may have edited one of these files after the agent
@@ -624,7 +639,19 @@ export class StudioProjectSession {
   }
 
   sketchCatalog(): Promise<StudioSketchCatalogSnapshot> {
-    return this.#mutate(() => this.#reconcileSketchCatalog())
+    return this.#mutate(async () => this.#feed.catalog() ?? await this.#reconcileSketchCatalog())
+  }
+
+  feedSourceOverrides(): Readonly<Record<string, string>> | undefined {
+    return this.#feed.sourceOverrides()
+  }
+
+  browseFeed(input: unknown): Promise<StudioFeedBrowseResult> {
+    return this.#mutate(() => this.#feed.browse(input))
+  }
+
+  applyFeedAction(input: unknown): Promise<StudioFeedState> {
+    return this.#mutate(() => this.#feed.action(input))
   }
 
   async #reconcileSketchCatalog(): Promise<StudioSketchCatalogSnapshot> {
@@ -710,7 +737,7 @@ export class StudioProjectSession {
   }
 
   applySketchAction(input: unknown): Promise<StudioSketchActionResult> {
-    return this.#mutate(() =>
+    return this.#edit(() =>
       this.#sketchCatalog.transaction(async transaction => {
         const request = input as StudioSketchCatalogRequest
         const identified = Json.isRecord(input) && typeof input['requestId'] === 'string'
@@ -820,7 +847,7 @@ export class StudioProjectSession {
   }
 
   applySketchSnap(input: unknown): Promise<StudioSketchSnapApplyResult> {
-    return this.#mutate(async () => {
+    return this.#edit(async () => {
       const request = StudioSessionRequests.parseSketchSnapRequest(input)
       const key = requestKey(request)
       const cached = cachedResult(this.#sketchSnapResults, key, 'Snap')
@@ -870,7 +897,7 @@ export class StudioProjectSession {
 
   /** Applies an authenticated rect-based flow edit as one generated-source/catalog checkpoint. */
   applySketchFlowAction(input: unknown): Promise<StudioSketchSnapApplyResult> {
-    return this.#mutate(() =>
+    return this.#edit(() =>
       this.#sketchCatalog.transaction(async transaction => {
         const request = StudioSessionRequests.parseSketchFlowActionRequest(input)
         const key = requestKey(request)
@@ -977,7 +1004,7 @@ export class StudioProjectSession {
   }
 
   applySketchUnsnap(input: unknown): Promise<StudioSketchSnapApplyResult> {
-    return this.#mutate(async () => {
+    return this.#edit(async () => {
       const request = StudioSessionRequests.parseSketchUnsnapRequest(input)
       const key = requestKey(request)
       const cached = cachedResult(this.#sketchSnapResults, key, 'Unsnap')
@@ -1053,7 +1080,7 @@ export class StudioProjectSession {
   }
 
   undoSketchSnap(input: unknown): Promise<StudioSketchSnapUndoResult> {
-    return this.#mutate(async () => {
+    return this.#edit(async () => {
       const request = StudioSessionRequests.parseSketchSnapUndoRequest(input)
       const key = requestKey(request)
       const cached = cachedResult(this.#sketchSnapUndoResults, key, 'Snap undo')
@@ -1419,27 +1446,27 @@ export class StudioProjectSession {
   }
 
   createFile(request: StudioCreateFileRequest): Promise<StudioCreateFileResult> {
-    return this.#mutate(() => this.#fileOperations.createFile(request))
+    return this.#edit(() => this.#fileOperations.createFile(request))
   }
 
   renameFile(request: StudioRenameFileRequest): Promise<StudioRenameFileResult> {
-    return this.#mutate(() => this.#fileOperations.renameFile(request))
+    return this.#edit(() => this.#fileOperations.renameFile(request))
   }
 
   moveGeneratedSource(request: StudioMoveGeneratedSourceRequest): Promise<StudioMoveGeneratedSourceResult> {
-    return this.#mutate(() => this.#fileOperations.moveGeneratedSource(request))
+    return this.#edit(() => this.#fileOperations.moveGeneratedSource(request))
   }
 
   deleteFile(request: StudioDeleteFileRequest): Promise<StudioDeleteFileResult> {
-    return this.#mutate(() => this.#fileOperations.deleteFile(request))
+    return this.#edit(() => this.#fileOperations.deleteFile(request))
   }
 
   syncDraft(request: StudioDraftWriteRequest): Promise<StudioDraftWriteResult> {
-    return this.#mutate(() => this.#fileOperations.syncDraft(request))
+    return this.#edit(() => this.#fileOperations.syncDraft(request))
   }
 
   applySourceAction(input: unknown): Promise<StudioSourceActionResult> {
-    return this.#mutate(async () => {
+    return this.#edit(async () => {
       const envelope = StudioProtocol.parseSourceActionEnvelope(input)
       Assert.input(envelope, 'Expected a valid Tao Studio source-action v2 envelope.')
       StudioSessionRequests.requireSessionIdentity(envelope, this.identity())
@@ -1514,15 +1541,24 @@ export class StudioProjectSession {
 
   async #prepareSourceAction(envelope: StudioSourceActionEnvelope): Promise<PreparedSourceAction> {
     this.#acceptPreviewIdentity(envelope)
-    const { current, parsed, path } = await this.#parseVersionedFile(
+    const loaded = await this.#parseVersionedFile(
       envelope.identity,
       'apply a Studio source action',
     )
+    const { current, path } = loaded
+    let parsed = loaded.parsed
     const request = StudioSessionRequests.sourcePatchRequest(envelope)
     StudioSessionRequests.requireSourceActionPreconditions(envelope, request)
     this.#requireScenarioActionIdentity(envelope, request)
     try {
-      const workspaceFiles = parsed.files.map(file => file.ast)
+      let workspaceFiles = parsed.files.map(file => file.ast)
+      if (request.kind === 'insert-project-view' && request.viewSourcePath !== undefined) {
+        const viewPath = await this.#files.resolveTaoFile(request.viewSourcePath)
+        request.viewSourcePath = viewPath
+        const entries = await this.#workspace.parseFiles([path, viewPath])
+        parsed = entries[0]!
+        workspaceFiles = [...new Set(entries.flatMap(entry => entry.files.map(file => file.ast)))]
+      }
       if (request.kind === 'wrap-render') {
         const directory = FS.dirname(path)
         for (const siblingPath of this.#files.absolutePaths()) {
@@ -1600,7 +1636,7 @@ export class StudioProjectSession {
   }
 
   undoSourceAction(input: unknown): Promise<StudioSourceActionUndoResult> {
-    return this.#mutate(async () => {
+    return this.#edit(async () => {
       const envelope = StudioProtocol.parseSourceActionUndoEnvelope(input)
       Assert.input(envelope, 'Expected a valid Tao Studio source-action undo v2 envelope.')
       StudioSessionRequests.requireSessionIdentity(envelope, this.identity())
@@ -1780,6 +1816,13 @@ export class StudioProjectSession {
     const result = this.#mutationLane.then(mutation, mutation)
     this.#mutationLane = result.then(() => undefined, () => undefined)
     return result
+  }
+
+  #edit<T>(mutation: () => Promise<T>): Promise<T> {
+    return this.#mutate(() => {
+      this.#feed.requireNoDraft()
+      return mutation()
+    })
   }
 }
 

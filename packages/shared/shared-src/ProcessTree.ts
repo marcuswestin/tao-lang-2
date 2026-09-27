@@ -2,6 +2,7 @@ import * as Errors from './core/Errors'
 import { sleep } from './core/Time'
 import * as Platform from './Platform'
 import { inspectDarwinProcesses } from './ProcessTreeDarwin'
+import { createLinuxProcessInspector } from './ProcessTreeLinux'
 
 /**
  * Stopping a child is not stopping what the child started. A lane that signals only its direct
@@ -21,7 +22,7 @@ import { inspectDarwinProcesses } from './ProcessTreeDarwin'
 export type TrackedProcess = {
   command: string
   pid: number
-  /** Kernel process start time, including microseconds on Darwin, protects against PID reuse. */
+  /** Kernel start identity: seconds:microseconds on Darwin, raw ticks since boot on Linux. */
   startedAt: string
 }
 
@@ -43,29 +44,24 @@ const FORCE_KILL_GRACE_MS = 250
 /** How often a wait loop re-reads whether the tree it stopped has gone. */
 const EXIT_POLL_MS = 25
 
+const linuxProcesses = createLinuxProcessInspector()
+
+function requireProcessInspectionPlatform(): void {
+  if (Platform.hostPlatform !== 'darwin' && Platform.hostPlatform !== 'linux') {
+    Errors.throwHostEnvironment(`Process inspection is not implemented on ${Platform.hostPlatform}.`)
+  }
+}
+
 /**
  * descendantProcesses snapshots the whole owned tree before a teardown can orphan an escaped
  * process group. Each PID carries its OS start identity so a later signal cannot hit a reused PID.
  */
 function descendantProcesses(rootPid: number): TrackedProcess[] {
-  if (process.platform === 'darwin') {
+  requireProcessInspectionPlatform()
+  if (Platform.hostPlatform === 'darwin') {
     return darwinDescendantProcesses(rootPid)
   }
-  const byParent = new Map<number, TrackedProcess[]>()
-  for (const process of processTable()) {
-    const children = byParent.get(process.ppid) ?? []
-    children.push(process)
-    byParent.set(process.ppid, children)
-  }
-  const descendants: Array<TrackedProcess & { depth: number }> = []
-  const visit = (pid: number, depth: number) => {
-    for (const child of byParent.get(pid) ?? []) {
-      descendants.push({ ...child, depth })
-      visit(child.pid, depth + 1)
-    }
-  }
-  visit(rootPid, 1)
-  return descendants.toSorted((left, right) => right.depth - left.depth).map(({ depth: _depth, ...process }) => process)
+  return linuxProcesses.descendants(rootPid).map(({ group: _group, ...entry }) => entry)
 }
 
 /**
@@ -79,14 +75,19 @@ function darwinDescendantProcesses(rootPid: number): TrackedProcess[] {
 
 /** processGroupOf reads the kernel process group rather than trusting the spawn options. */
 function processGroupOf(pid: number): number | undefined {
-  if (process.platform !== 'darwin') {
-    Errors.throwHostEnvironment('Reading a process group id is only implemented on macOS.')
+  requireProcessInspectionPlatform()
+  if (Platform.hostPlatform === 'linux') {
+    return linuxProcesses.identity(pid)?.group
   }
   return inspectDarwinProcesses('identities', [pid])[0]?.group
 }
 
-/** processTable uses the repository-approved fixed process listing, not caller-shaped ps arguments. */
+/** processTable reads procfs on Linux and the fixed process listing on Darwin. */
 function processTable(): ProcessTableEntry[] {
+  requireProcessInspectionPlatform()
+  if (Platform.hostPlatform === 'linux') {
+    return linuxProcesses.table().map(({ group: _group, ...entry }) => entry)
+  }
   const result = Platform.spawnSync('ps', {
     args: ['-axo', 'pid=,ppid=,lstart=,command='],
   })
@@ -129,6 +130,13 @@ function signalTrackedProcesses(
 const systemProcessSignalSeams: ProcessSignalSeams = {
   identities: currentProcessIdentities,
   signal: (pids, signal) => {
+    requireProcessInspectionPlatform()
+    if (Platform.hostPlatform === 'linux') {
+      for (const pid of pids) {
+        Platform.signalProcess(pid, signal)
+      }
+      return
+    }
     Platform.spawnSync('/bin/kill', {
       args: [`-${signal.replace(/^SIG/, '')}`, '--', ...pids.map(String)],
       stdio: 'ignore',
@@ -154,20 +162,16 @@ function sameProcess(current: TrackedProcess | undefined, expected: TrackedProce
 
 /**
  * currentProcessIdentities answers for exactly the PIDs it was asked about; a PID that is gone is
- * absent from the result. Outside Darwin the only reading available is `ps`, whose `lstart` has
- * one-second granularity — enough to catch a PID the kernel handed on minutes later, not enough to
- * catch one reused inside the same second. Darwin's libproc start time is microsecond-precise and
- * runs directly under Bun, or in a Bun helper when the caller runs under Node.
+ * absent from the result. Linux reads the kernel's raw start ticks from /proc, and Darwin's
+ * libproc start time is microsecond-precise. Neither relies on rounded ps wall-clock timestamps.
  */
 function currentProcessIdentities(pids: readonly number[]): Map<number, TrackedProcess> {
-  if (process.platform !== 'darwin') {
-    // Filtered to the asked-about PIDs: the table is every process on the host, and handing the
-    // whole of it back made callers that pair each entry with its expected identity look up
-    // processes they never asked about and find nothing.
-    const wanted = new Set(pids)
-    return new Map(
-      processTable().filter(entry => wanted.has(entry.pid)).map(entry => [entry.pid, entry]),
-    )
+  requireProcessInspectionPlatform()
+  if (Platform.hostPlatform === 'linux') {
+    return new Map(pids.flatMap(pid => {
+      const entry = linuxProcesses.identity(pid)
+      return entry === undefined ? [] : [[pid, entry] as const]
+    }))
   }
   return new Map(
     inspectDarwinProcesses('identities', pids).map(({ group: _group, ...process }) => [process.pid, process]),
@@ -192,6 +196,10 @@ function signalProcessGroup(pid: number | undefined, signal: Platform.ProcessSig
   if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 1) {
     return false
   }
+  requireProcessInspectionPlatform()
+  if (Platform.hostPlatform === 'linux') {
+    return Platform.signalProcess(-pid, signal)
+  }
   const result = Platform.spawnSync('/bin/kill', {
     args: [`-${signal.replace(/^SIG/, '')}`, '--', `-${pid}`],
     stdio: 'ignore',
@@ -210,6 +218,10 @@ async function waitForProcessGroupExit(pid: number | undefined): Promise<void> {
 }
 
 function processGroupIsAlive(pid: number): boolean {
+  requireProcessInspectionPlatform()
+  if (Platform.hostPlatform === 'linux') {
+    return linuxProcesses.groupIsAlive(pid)
+  }
   return Platform.spawnSync('/bin/kill', { args: ['-0', '--', `-${pid}`], stdio: 'ignore' }).status === 0
 }
 

@@ -20,8 +20,11 @@ export type WorkspaceLspContributions = {
 }
 
 /** createWorkspaceServices creates parser and validator services for one package context. */
-export function createWorkspaceServices(packagesContext: Packages.Context): WorkspaceServices {
-  return assembleWorkspaceServices(packagesContext, options => Parser.createContext(options))
+export function createWorkspaceServices(
+  packagesContext: Packages.Context,
+  sourceOverrides?: Readonly<Record<string, string>>,
+): WorkspaceServices {
+  return { ...assembleWorkspaceServices(packagesContext, options => Parser.createContext(options)), sourceOverrides }
 }
 
 /** createWorkspaceLspServices creates Langium LSP services for one package context. */

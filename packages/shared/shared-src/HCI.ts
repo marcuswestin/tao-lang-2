@@ -24,8 +24,11 @@ type TextPromptOptions = TerminalStreams & {
 
 /** ConfirmPromptOptions declares options for yes/no prompts. */
 type ConfirmPromptOptions = TerminalStreams & {
+  /** Called when terminal input closes or the user presses Ctrl+C, not on external cancellation. */
+  onCancel?: () => void
   message: string
   defaultValue?: boolean
+  signal?: AbortSignal
 }
 
 /** Choice declares one selectable prompt value. */
@@ -205,24 +208,38 @@ export async function askText(options: TextPromptOptions): Promise<string> {
 
 /** askConfirm prompts for a yes/no response. */
 export async function askConfirm(options: ConfirmPromptOptions): Promise<boolean> {
+  options.signal?.throwIfAborted()
   if (!isInteractive(options)) {
     return getNonInteractiveDefault(options.message, options.defaultValue)
   }
 
   return withReadline(options, async readline => {
-    while (true) {
-      const value = (await readline.question(formatConfirmQuestion(options))).trim().toLowerCase()
+    const cancelled = new AbortController()
+    const signal = options.signal === undefined ? cancelled.signal : AbortSignal.any([options.signal, cancelled.signal])
+    const cancel = () => {
+      cancelled.abort()
+      options.onCancel?.()
+    }
+    readline.on('SIGINT', cancel)
+    readline.on('close', cancel)
+    try {
+      while (true) {
+        const value = (await readline.question(formatConfirmQuestion(options), { signal })).trim().toLowerCase()
 
-      if (value === '' && options.defaultValue !== undefined) {
-        return options.defaultValue
+        if (value === '' && options.defaultValue !== undefined) {
+          return options.defaultValue
+        }
+        if (value === 'y' || value === 'yes') {
+          return true
+        }
+        if (value === 'n' || value === 'no') {
+          return false
+        }
+        writeOutput(options, 'Answer yes or no.\n')
       }
-      if (value === 'y' || value === 'yes') {
-        return true
-      }
-      if (value === 'n' || value === 'no') {
-        return false
-      }
-      writeOutput(options, 'Answer yes or no.\n')
+    } finally {
+      readline.off('SIGINT', cancel)
+      readline.off('close', cancel)
     }
   })
 }
