@@ -84,8 +84,8 @@ cell and delegates initial Pencil input to a native sidecar.
 - `@/` is committed generated source, not a scratch cache. Fixers check it but do not rewrite it.
 - Source actions keep the existing project, app, preview, source-version, revision-bound range,
   render-owner, node-kind, and cell/scenario trust boundary.
-- The positioned container is a language capability forced by Studio, but still follows the normal
-  WordFlower tranche and absorption process.
+- `Layer`, the capability Studio forces for free rectangles, was decided directly by the Developer
+  on 2026-09-27 rather than through a WordFlower tranche.
 - Runtime interaction states remain runtime-owned, modality-neutral, unsettable, and unrestored per
   KEY-D8. Scenario steps produce them through ordinary events.
 - The native sidecar never owns Tao source or durable sketch state.
@@ -221,7 +221,7 @@ The following rulings are recorded verbatim from the project requirement authori
 > Expo module, declared as a foreign view with `accepts content slots`) owns all canvas input at
 > first — ink, selection, move, resize — and emits typed events (`Drew action(RectShape)`,
 > `Wrote action(text, Rect)`, `Moved action(Rect, RectShape)`); Tao owns the data, the rectangle
-> rendering through the positioned container, and every source action to the paired Mac. The
+> rendering through `Layer`, and every source action to the paired Mac. The
 > sidecar shrinks toward ink-only as Tao gesture primitives land from the drag-and-drop example app.
 
 > **FS-D19 — Rectangle creation is a pencil mode, not recognition.** Hold the pencil's side
@@ -232,7 +232,7 @@ The following rulings are recorded verbatim from the project requirement authori
 
 > **FS-D20 — Order.** The scenario and stdlib tranche (L1) first, then Studio slices 1 (Draw)
 > and 2 (Snap) together, then 3 (Feed), then the executable-dialect tranche (L2) and slice 4
-> (Variants), then the positioned container (L3) and slice 5 (Tao-rendered canvas), slice 6
+> (Variants), then `Layer` (L3, landed early on 2026-09-27) and slice 5 (Tao-rendered canvas), slice 6
 > (Focus-in) when the interaction outline's provenance has landed, slice 7 (Companion) after the
 > companion app shell exists. If budget runs out, later slices are dropped, never interleaved
 > half done.
@@ -770,7 +770,7 @@ it does not add a second editing protocol.
 
 | Need                               | Options                                                                                                                                  | Recommendation                                                                                     |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Free placement                     | (a) Studio catalog rows; (b) `Sketch` + `at` product source; (c) general absolute layout; (d) `.tao-sketch`                              | **Settled: (a), FS-D1.** The later positioned container renders catalog data in Studio only.       |
+| Free placement                     | (a) Studio catalog rows; (b) `Sketch` + `at` product source; (c) general absolute layout; (d) `.tao-sketch`                              | **Settled: (a), FS-D1.** `Layer` renders catalog data in Studio only.                              |
 | Where a new view is written        | (a) generated `@/studio/<Name>.tao`; (b) feature folder plus `Scenarios.tao`; (c) one app-root file; (d) ask                             | **Settled: (a), FS-D3/D6.** Move to package performs the deliberate transition to authored source. |
 | Placeholder rendering              | (a) `Placeholder`; (b) Studio chrome over empty `Box`; (c) dev-only bundle                                                               | **Settled: (a), FS-D10.** Development hatches; release keeps only the empty size and warns.        |
 | Example rows                       | (a) fixture only; (b) fixture, generated, live, library, all promoted to fixture on save; (c) Studio-owned example store                 | (b); (c) is the `example` declaration Studio already rejected                                      |
@@ -795,7 +795,7 @@ decided conditional-styling grammar, of which the executable tranche implements 
 
 **Missing — language.** L1's ordered scenario steps, omitted-action stand-ins, optional fixture,
 `Placeholder`, and settled spacer; postfix `when` over parameters and interaction states; `yes / no`
-parameter types and literals; L3's positioned container and direct-child offset. Text scale, loading,
+parameter types and literals; L3's `Layer` has landed. Text scale, loading,
 and empty remain out-of-scope world controls.
 
 **Missing — compiler and manifest.** Measured layout rectangles reported per render node for

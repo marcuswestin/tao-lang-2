@@ -47,8 +47,8 @@ FS-D1–FS-D20 or reordering the FS-D20 sequence.
 | 5  | Slice 3 — Feed                     | Bind a sketch to real, generated, live, or library data      | Slice 2                                     | XL   |
 | 6  | L2 — executable dialect            | WordFlower yes/no parameters and postfix conditions          | Slice 3                                     | XL   |
 | 7  | Slice 4 — Variants                 | Duplicate scenario cells and edit one argument state         | L2                                          | L    |
-| 8  | L3 — positioned container          | Studio's Tao client renders free rectangle rows              | Slice 4; settled container/offset spellings | XL   |
-| 9  | Slice 5 — Tao-rendered canvas      | Replace the matrix overlay with the L3 container             | L3                                          | M    |
+| 8  | L3 — `Layer` (landed 2026-09-27)   | Studio's Draw canvas renders free rectangles as layers       | Landed ahead of Slice 4 by Developer choice | S    |
+| 9  | Slice 5 — Tao-rendered canvas      | Replace the matrix overlay with `Layer` views                | L3                                          | M    |
 | 10 | Slice 6 — Focus-in                 | Open an occurrence's owning view with provenance arguments   | Interaction-outline provenance              | L    |
 | 11 | Slice 7 — Companion                | Pencil-mode sketching in one paired native cell              | Slice 5; companion app shell                | XL   |
 
@@ -372,7 +372,7 @@ forcing example only if one of its screens needs an overlay.
 
 **Decision.** FS-D5.
 
-**Goal.** Replace the TypeScript rectangle overlay with the L3 container in Studio's own Tao client.
+**Goal.** Replace the TypeScript rectangle overlay with `Layer` views in Studio's own Tao client.
 
 **Dependencies.** L3. **Size.** M.
 
