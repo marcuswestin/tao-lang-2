@@ -1,4 +1,5 @@
 import { applyCanvasViewport, isStudioTypingTarget } from './matrix/StudioCanvasViewport'
+import { StudioDrawLiveCells } from './matrix/StudioDrawLiveCells'
 import { mountFeedDropOverlay } from './matrix/StudioFeedDropOverlays'
 import { StudioMatrixSketches } from './matrix/StudioMatrixSketches'
 import { mountPreviewActivation } from './matrix/StudioPreviewActivation'
@@ -339,6 +340,31 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     )
     lifetime.add(disconnectFeed)
     lifetime.add(StudioMatrixSketches.connectEdits(view.preview, edit => mutations.recordSketchEdit(edit)))
+    lifetime.add(StudioDrawLiveCells.connect(view.preview))
+    lifetime.add(StudioMatrixSketches.connectInsert(view.preview, async request => {
+      // A frame dropped onto a running view renders inside it: the edit names that view's cell and
+      // the file and version the cell compiled, whichever file the editor has open.
+      const preview = previews.find(candidate => candidate.cell?.cellId === request.cellId)
+      if (preview?.cell === undefined || request.source === undefined) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = `Wait for ${request.targetView} to finish compiling, then drop again.`
+        return
+      }
+      // The target cell becomes the active preview, as any cell a visual edit comes from does, so the
+      // edit's ⌘Z walks back under that same cell's identity.
+      activePreview.activate(preview)
+      await mutations.submitPreviewAction(
+        { kind: 'insert-project-view', viewName: request.viewName, viewSourcePath: request.viewSourcePath },
+        {
+          ...handshake.identity,
+          ...(preview.cellIdentity ?? {}),
+          path: request.source.path,
+          previewInstanceId: preview.previewInstanceId,
+          scenarioId: preview.cell.scenarioId,
+          sourceVersion: request.source.version,
+        },
+      )
+    }))
     const scenarios = new StudioScenarioActions({
       activePreview,
       apply: envelope => mutations.apply(envelope),

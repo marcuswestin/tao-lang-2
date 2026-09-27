@@ -19,6 +19,8 @@ import {
   StudioSketchView,
   type StudioSketchViewFlowActionRequest,
 } from '../StudioSketchView'
+import { applyCanvasViewport } from './StudioCanvasViewport'
+import { StudioDrawLiveCells, type StudioDrawLiveTarget } from './StudioDrawLiveCells'
 import { type StudioSketchGeometry, StudioSketchUndo } from './StudioSketchUndo'
 
 const mountedSketches = new WeakMap<HTMLElement, MountedMatrixSketches>()
@@ -27,6 +29,7 @@ type MountedMatrixSketches = {
   catalog: StudioSketchCatalogSnapshot
   exampleValues?: StudioFeedExampleValues
   feedDrop?: (payload: StudioFeedDrop, sketchId: string, rectId?: string) => Promise<void>
+  insertView?: (request: StudioDrawViewInsert) => Promise<void>
   mount?: MountedStudioSketchView
   mutationLane: StudioSketchMutationLane
   project: string
@@ -47,6 +50,29 @@ export type StudioSketchEdit = Readonly<{
   scope: string
   undo: () => Promise<boolean>
 }>
+
+/** A frame dropped onto another view's running cell: render `viewName`, written in `viewSourcePath`, inside `targetView`. */
+export type StudioDrawViewInsert = Readonly<{
+  cellId: string
+  /** The target view's file and compiled version; missing while its cell has not compiled one file. */
+  source?: Readonly<{ path: string; version: string }>
+  targetView: string
+  viewName: string
+  viewSourcePath: string
+}>
+
+/**
+ * The view a whole frame stands for when it is dropped into another: a drawn view's generated file,
+ * or the file a detached definition is written in. A render card is one call of a view, not a view.
+ */
+function studioDrawnFrameView(
+  sketch: Pick<StudioSketch, 'definitionPath' | 'render' | 'view'>,
+): Readonly<{ viewName: string; viewSourcePath: string }> | undefined {
+  if (sketch.render !== undefined) {
+    return undefined
+  }
+  return { viewName: sketch.view, viewSourcePath: sketch.definitionPath ?? `@/studio/${sketch.view}.tao` }
+}
 
 export type StudioSketchSnapMutationState = {
   catalog: StudioSketchCatalogSnapshot
@@ -122,6 +148,8 @@ export const StudioDrawCanvas = {
       host.dataset['taoStudioDrawCanvas'] = 'true'
       host.setAttribute('aria-label', 'Draw canvas')
       parent.append(host)
+      // A canvas mounted after the grid starts under the pan and zoom the grid already has.
+      applyCanvasViewport(parent)
     }
     for (const child of [...parent.children]) {
       if (child.classList.contains('studio-empty')) {
@@ -188,6 +216,15 @@ export const StudioMatrixSketches = {
     state.recordEdit = record
     return () => {
       state.recordEdit = undefined
+    }
+  },
+  /** connectInsert renders a frame dropped onto another view's running cell until the returned disconnect. */
+  connectInsert(parent: HTMLElement, insert: (request: StudioDrawViewInsert) => Promise<void>): () => void {
+    const state = mountedSketches.get(parent)
+    Assert.defined(state, 'mounted Studio sketches before connecting view drops')
+    state.insertView = insert
+    return () => {
+      state.insertView = undefined
     }
   },
   async runFeed<Result extends StudioFeedState>(
@@ -371,6 +408,21 @@ function renderMatrixSketches(
       onUnsnap: async request => await applySketchUnsnap(state, request),
       onUndoSnap: async request => await undoSketchSnap(state, request),
       renderableViews: () => state.renderableViews,
+      dropInto: {
+        target: (point, sketch) => dropIntoTarget(parent, state, point, sketch)?.cellId,
+        drop: async (point, sketch) => {
+          const target = dropIntoTarget(parent, state, point, sketch)
+          const frameView = studioDrawnFrameView(sketch)
+          if (target !== undefined && frameView !== undefined) {
+            await state.insertView?.({
+              cellId: target.cellId,
+              ...(target.source === undefined ? {} : { source: target.source }),
+              targetView: target.view,
+              ...frameView,
+            })
+          }
+        },
+      },
       sketches: state.catalog.sketches,
       exampleValues: state.exampleValues,
       sourceVersions: state.sourceVersions,
@@ -378,6 +430,18 @@ function renderMatrixSketches(
   } else {
     state.mount.render(state.catalog.sketches, state.sourceVersions, state.exampleValues)
   }
+}
+
+/** The running view under a dragged frame that could take it, when a drop is connected and the frame is a view. */
+function dropIntoTarget(
+  parent: HTMLElement,
+  state: MountedMatrixSketches,
+  point: Readonly<{ x: number; y: number }>,
+  sketch: StudioSketch,
+): StudioDrawLiveTarget | undefined {
+  return state.insertView === undefined || studioDrawnFrameView(sketch) === undefined
+    ? undefined
+    : StudioDrawLiveCells.at(parent, point, sketch.view)
 }
 
 async function applySketchFlowAction(

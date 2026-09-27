@@ -14,6 +14,8 @@ export type StudioMatrixGroup<Item> = {
   cells: readonly StudioMatrixCell<Item>[]
   id: string
   label: string
+  /** The one Tao file a drawn view's scenarios live in, with its compiled source version. */
+  sketchSourcePath?: string
   sketchSourceVersion?: string
   sketchView?: string
   /** The one view every scenario in the group focuses, when the group is a focused-view group. */
