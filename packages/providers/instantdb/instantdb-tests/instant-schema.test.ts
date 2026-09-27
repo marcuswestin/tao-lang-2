@@ -133,6 +133,8 @@ Describe('InstantDB permission rules', () => {
       allow: {
         create: "auth.id == data.id && auth.id in data.ref('$user.id')",
         delete: 'false',
+        // Linking the account to its own `$users` row is what a first sign-in's create needs.
+        link: { $user: 'auth.id == data.id && auth.id == linkedData.id' },
         unlink: { $user: 'false' },
         update: "principal0 && request.modifiedFields.all(f, (principal0 && f in ['displayName']))",
         view: 'principal0',

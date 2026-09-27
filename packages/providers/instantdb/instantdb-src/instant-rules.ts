@@ -12,7 +12,11 @@ import { accountNamespace, accountUserLabel, type InstantEntityMapping, type Ins
  * Link semantics the rules rely on, observed on InstantDB rather than assumed:
  * - linking an existing row names the link label in `request.modifiedFields`, unlinking does not,
  *   so each forward relation also gets an `unlink` rule;
- * - an explicit `link` rule replaces the forward row's update check, so none is ever emitted;
+ * - an explicit `link` rule replaces the forward row's update check, so none is emitted for a Tao
+ *   relation;
+ * - linking to a `$users` row also checks that row's update rule, which InstantDB denies, unless the
+ *   forward label has a `link` rule; the account's `$user` link has one, so a person's first sign-in
+ *   can create their own account row;
  * - a create and its links are checked together against the created row.
  *
  * The first hop of every principal path is an owner, and owners are immutable: nothing may unlink
@@ -130,9 +134,12 @@ function policyRules(
   const create = isAccount
     ? `auth.id == data.id && auth.id in data.ref('${accountUserLabel}.id')`
     : anyOf('create')
+  const link: Record<string, Record<string, string>> = isAccount
+    ? { link: { [accountUserLabel]: 'auth.id == data.id && auth.id == linkedData.id' } }
+    : {}
   const view = anyOf('read')
   return {
-    allow: { create, delete: anyOf('delete'), unlink, update, view },
+    allow: { create, delete: anyOf('delete'), ...link, unlink, update, view },
     ...(bindings.length === 0 ? {} : { bind: bindings }),
   }
 }

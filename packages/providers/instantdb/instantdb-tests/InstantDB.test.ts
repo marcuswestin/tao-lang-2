@@ -1,6 +1,6 @@
 import type TR from '@runtime/TR'
 import { Errors } from '@shared/core'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, until } from '@shared/test'
 import { acquireInstantClient } from '../instantdb-src/instant-clients'
 import { InstantDBProvider } from '../instantdb-src/InstantDB'
 import { notesSchema, publicNotesSchema } from './fixtures'
@@ -335,6 +335,139 @@ Describe('InstantDB provider', () => {
   })
 })
 
+Describe('InstantDB sign-in', () => {
+  const subject = uuid(60)
+  const accountQuery = { accounts: { $: { fields: ['id'], where: { id: subject } } } }
+
+  /** signIn authenticates with an InstantAuth Session proof for `appId`, as the runtime passes it. */
+  function signIn(
+    sdk: ReturnType<typeof fakeInstantSDK>,
+    appId: string,
+    options: { signal?: AbortSignal; value?: Record<string, unknown> } = {},
+  ) {
+    const context: TR.DataAuthenticationContext = {
+      configuration: { AppId: appId },
+      schema: notesSchema,
+      principal: { issuer: `instantdb:${appId}`, subject },
+      provider: 'InstantAuth',
+      proof: (async () => ({
+        issuer: `instantdb:${appId}`,
+        kind: 'Session',
+        provider: 'InstantAuth',
+        subject,
+        value: options.value ?? { appId, refreshToken: 'refresh-token' },
+      })) as TR.DataAuthenticationContext['proof'],
+      signal: options.signal ?? new AbortController().signal,
+    }
+    return InstantDBProvider(() => sdk.instantSDK as never).authenticate!(context)
+  }
+
+  /** answerAccountLookup serves the account lookup its first result once authenticate subscribes. */
+  async function answerAccountLookup(sdk: ReturnType<typeof fakeInstantSDK>, rows: readonly object[]) {
+    await until(() => sdk.cores.length > 0 && sdk.core().queries.length > 0, { description: 'the account lookup' })
+    Expect(sdk.core().queries).toEqual([accountQuery])
+    sdk.latestSubscription()({ data: { accounts: rows } })
+  }
+
+  Test(
+    "creates the user's account row linked to its $users row on first sign-in and resolves to the user",
+    async () => {
+      const sdk = fakeInstantSDK({ signedIn: subject })
+      const resolving = signIn(sdk, nextAppId())
+      await answerAccountLookup(sdk, [])
+      const authentication = await resolving
+      Expect(authentication.accountId).toBe(subject)
+      Expect(sdk.core().transactions).toEqual([[
+        { args: {}, id: subject, namespace: 'accounts', op: 'create' },
+        { args: { $user: subject }, id: subject, namespace: 'accounts', op: 'link' },
+      ]])
+      // The auth provider signed this very client in, so the token is not spent again.
+      Expect(sdk.core().tokenSignIns).toEqual([])
+      await until(() => sdk.core().unsubscribes === 1, { description: 'the lookup to unsubscribe' })
+
+      // Release drops the lease authenticate took and never signs InstantDB out.
+      await authentication.release!(new AbortController().signal)
+      Expect(sdk.core().shutdowns).toBe(1)
+      Expect(await sdk.core().getAuth()).toEqual({ id: subject })
+    },
+  )
+
+  Test('keeps an existing account row and signs a client that has not caught up in with the token', async () => {
+    const sdk = fakeInstantSDK({ tokenUser: subject })
+    const resolving = signIn(sdk, nextAppId())
+    await answerAccountLookup(sdk, [{ id: subject }])
+    Expect((await resolving).accountId).toBe(subject)
+    Expect(sdk.core().tokenSignIns).toEqual(['refresh-token'])
+    Expect(sdk.core().transactions).toEqual([])
+  })
+
+  Test('accepts the row another device created first, and reports a create the server refused', async () => {
+    // Both devices found no row; this one's create lost to the other's.
+    const sdk = fakeInstantSDK({ signedIn: subject })
+    const second = signIn(sdk, nextAppId())
+    await until(() => sdk.cores.length > 0, { description: 'the shared client' })
+    sdk.core().failTransactionsWith({ body: { type: 'record-not-unique' }, status: 400 })
+    sdk.core().serveQueryOnce({ accounts: [{ id: subject }] })
+    await answerAccountLookup(sdk, [])
+    Expect((await second).accountId).toBe(subject)
+
+    const refused = fakeInstantSDK({ signedIn: subject })
+    const losing = signIn(refused, nextAppId())
+    await until(() => refused.cores.length > 0, { description: 'the shared client' })
+    refused.core().failTransactionsWith({ body: { message: 'token=hidden', type: 'permission-denied' }, status: 400 })
+    await answerAccountLookup(refused, [])
+    await Expect(losing).rejects.toThrow(/^InstantDB account setup failed \(permission-denied\)\.$/)
+    // A failed sign-in holds no lease.
+    Expect(refused.core().shutdowns).toBe(1)
+  })
+
+  Test(
+    'refuses a proof for another InstantDB address or from another provider before touching the client',
+    async () => {
+      const sdk = fakeInstantSDK()
+      const appId = nextAppId()
+      await Expect(signIn(sdk, appId, { value: { appId: 'other-app', refreshToken: 'refresh-token' } })).rejects
+        .toThrow(
+          'Auth InstantAuth and Datasource InstantDB name different InstantDB apps. Give both the same AppId, ApiURI, and WebsocketURI.',
+        )
+      await Expect(
+        signIn(sdk, appId, { value: { apiURI: 'http://localhost:9020', appId, refreshToken: 'refresh-token' } }),
+      ).rejects.toBeInstanceOf(Errors.UserInputError)
+      await Expect(signIn(sdk, appId, { value: { accountId: 'a', token: 't' } })).rejects.toThrow(
+        'InstantDB accepts Session proofs from InstantAuth only.',
+      )
+      Expect(sdk.inits).toEqual([])
+    },
+  )
+
+  Test('asks for a new sign-in when the server refuses the token or it signs in someone else', async () => {
+    for (const options of [{ tokenRefusal: { status: 401 } }, { tokenUser: uuid(61) }]) {
+      const sdk = fakeInstantSDK(options)
+      const resolving = signIn(sdk, nextAppId())
+      await Expect(resolving).rejects.toThrow(/^Sign in again to access account data\.$/)
+      await Expect(resolving).rejects.toBeInstanceOf(Errors.UserInputError)
+      Expect(sdk.core().queries).toEqual([])
+      Expect(sdk.core().shutdowns).toBe(1)
+    }
+    const offline = fakeInstantSDK({ tokenRefusal: new TypeError('Network request failed') })
+    const failing = signIn(offline, nextAppId())
+    await Expect(failing).rejects.toThrow(/^InstantDB sign-in failed\.$/)
+    await Expect(failing).rejects.toBeInstanceOf(Errors.HostEnvironmentError)
+  })
+
+  Test('stops when the account lifetime ends during the lookup, releasing the client', async () => {
+    const sdk = fakeInstantSDK({ signedIn: subject })
+    const lifetime = new AbortController()
+    const resolving = signIn(sdk, nextAppId(), { signal: lifetime.signal })
+    await until(() => sdk.cores.length > 0 && sdk.core().queries.length > 0, { description: 'the account lookup' })
+    lifetime.abort()
+    await Expect(resolving).rejects.toThrow('The authentication request was cancelled.')
+    Expect(sdk.core().transactions).toEqual([])
+    Expect(sdk.core().shutdowns).toBe(1)
+    await until(() => sdk.core().unsubscribes === 1, { description: 'the lookup to unsubscribe' })
+  })
+})
+
 Describe('InstantDB client registry', () => {
   Test('keys clients by app and endpoints, counts leases, and releases once', () => {
     const sdk = fakeInstantSDK()
@@ -363,18 +496,45 @@ function uuid(n: number): string {
 
 type FakeCore = ReturnType<typeof fakeCore>
 
-function fakeCore() {
+/** FakeClientOptions set who a new client is signed in as and what signing in with a refresh token does. */
+type FakeClientOptions = Readonly<{ signedIn?: string; tokenRefusal?: unknown; tokenUser?: string }>
+
+function fakeCore(options: FakeClientOptions = {}) {
   const state = {
     queries: [] as unknown[],
+    queryOnceResult: {} as unknown,
     shutdownFailure: undefined as { error: unknown } | undefined,
     shutdowns: 0,
+    signInFailure: (options.tokenRefusal === undefined ? undefined : { error: options.tokenRefusal }) as
+      | { error: unknown }
+      | undefined,
     subscriptions: [] as ((result: unknown) => void)[],
+    tokenSignIns: [] as string[],
     transactionFailure: undefined as { error: unknown } | undefined,
     transactions: [] as Chunk[][],
     unsubscribeFailure: undefined as { error: unknown } | undefined,
     unsubscribes: 0,
+    user: (options.signedIn === undefined ? null : { id: options.signedIn }) as { id: string } | null,
   }
   return {
+    auth: {
+      signInWithToken: async (token: string) => {
+        state.tokenSignIns.push(token)
+        if (state.signInFailure !== undefined) {
+          throw state.signInFailure.error
+        }
+        state.user = { id: options.tokenUser ?? `user-of-${token}` }
+        return { user: state.user }
+      },
+    },
+    getAuth: async () => state.user,
+    queryOnce: async () => ({ data: state.queryOnceResult }),
+    serveQueryOnce: (data: unknown) => {
+      state.queryOnceResult = data
+    },
+    get tokenSignIns() {
+      return state.tokenSignIns
+    },
     failNextShutdownWith: (error: unknown) => {
       state.shutdownFailure = { error }
     },
@@ -413,11 +573,11 @@ function fakeCore() {
     get subscriptions() {
       return state.subscriptions
     },
-    transact: async (chunks: Chunk[]) => {
+    transact: async (chunks: Chunk | Chunk[]) => {
       if (state.transactionFailure !== undefined) {
         throw state.transactionFailure.error
       }
-      state.transactions.push(chunks)
+      state.transactions.push(Array.isArray(chunks) ? chunks : [chunks])
       return { status: 'synced' }
     },
     get transactions() {
@@ -430,7 +590,7 @@ function fakeCore() {
 }
 
 /** fakeInstantSDK emulates the SDK boundary, including its one cached core per init config. */
-function fakeInstantSDK() {
+function fakeInstantSDK(options: FakeClientOptions = {}) {
   const cores = new Map<string, FakeCore>()
   const inits: Record<string, unknown>[] = []
   let minted = 100
@@ -443,6 +603,14 @@ function fakeInstantSDK() {
     })
   }
   const row = (namespace: string, id: string) => ({
+    // A created row's chained link travels with it, as the SDK's chunk does.
+    create: (args: unknown) => {
+      const created = { args, id, namespace, op: 'create' }
+      return Object.defineProperty(created, 'link', {
+        enumerable: false,
+        value: (link: unknown) => [created, { args: link, id, namespace, op: 'link' }],
+      })
+    },
     delete: () => ({ id, namespace, op: 'delete' }),
     link: (args: unknown) => ({ args, id, namespace, op: 'link' }),
     unlink: (args: unknown) => ({ args, id, namespace, op: 'unlink' }),
@@ -461,7 +629,7 @@ function fakeInstantSDK() {
     init: (config: Record<string, unknown>) => {
       inits.push(config)
       const key = JSON.stringify([config['appId'], config['apiURI'], config['websocketURI']])
-      const core = cores.get(key) ?? fakeCore()
+      const core = cores.get(key) ?? fakeCore(options)
       cores.set(key, core)
       return { core }
     },

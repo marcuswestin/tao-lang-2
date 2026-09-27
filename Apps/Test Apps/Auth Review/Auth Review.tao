@@ -1,7 +1,9 @@
 use Account, AccountView, LoginFlow, Session, SignIn, SignInFlow, SignInView, SignOut from @tao/auth
 use Clerk from @tao/auth/clerk
+use InstantAuth from @tao/auth/instantdb
 use LocalAuth from @tao/auth/local
 use TestAuth from @tao/auth/testing
+use InstantDB from @tao/data/providers/instantdb
 use Memory from @tao/data/providers/memory
 use Reference from @tao/data/providers/reference
 use StackNav from @tao/nav
@@ -35,6 +37,15 @@ app AuthReviewLocal = AuthReview with {
 app AuthReviewClerk = AuthReviewLocal with {
    Auth Clerk {
       PublishableKey "pk_test_REPLACE_WITH_YOUR_KEY"
+}  }
+
+// Replace the App ID with your Instant Cloud app's and push its schema and rules before running.
+app AuthReviewInstant = AuthReview with {
+   Auth InstantAuth {
+      AppId "REPLACE_WITH_INSTANT_APP_ID"
+   }
+   Datasource InstantDB {
+      AppId "REPLACE_WITH_INSTANT_APP_ID"
 }  }
 
 let Me = Account

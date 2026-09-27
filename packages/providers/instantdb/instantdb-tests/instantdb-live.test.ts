@@ -1,13 +1,20 @@
 import type TR from '@runtime/TR'
 import { Platform } from '@shared'
-import { Assert, Errors } from '@shared/core'
 import { Describe, Expect, MockModule, Test, until } from '@shared/test'
-import { acquireInstantClient, type InstantSDK } from '../instantdb-src/instant-clients'
+import { acquireInstantClient } from '../instantdb-src/instant-clients'
 import { pushInstantSchema } from '../instantdb-src/instant-push'
 import { instantRules } from '../instantdb-src/instant-rules'
 import { instantMapping } from '../instantdb-src/instant-schema'
 import { InstantDBProvider } from '../instantdb-src/InstantDB'
-import { notesPolicy, notesSchema, publicNotesSchema } from './fixtures'
+import {
+  alternateHost,
+  bunInstantSDK,
+  type EphemeralApp,
+  ephemeralApp,
+  notesPolicy,
+  notesSchema,
+  publicNotesSchema,
+} from './fixtures'
 
 // The React Native SDK's two native modules, doubled so it loads under Bun (see `bunInstantSDK`).
 MockModule('react-native-get-random-values', () => ({}))
@@ -21,10 +28,11 @@ MockModule('@react-native-community/netinfo', () => ({
 const apiURI = Platform.runtimeProcess.env['TAO_INSTANT_LIVE_API_URL']
 const liveTest = apiURI === undefined ? Test['skip'] : Test
 const timeout = 120_000
+const title = 'Tao InstantDB provider'
 
 Describe('InstantDB per-row provider against local InstantDB (requires TAO_INSTANT_LIVE_API_URL)', () => {
   liveTest('pushes the generated schema and rules additively and refuses a removal', async () => {
-    const app = await ephemeralApp()
+    const app = await ephemeralApp(apiURI!, title)
     const mapping = instantMapping(publicNotesSchema)
     const generated = { rules: instantRules(mapping), schema: mapping.schema }
     const first = await pushInstantSchema(app.target, generated)
@@ -51,7 +59,7 @@ Describe('InstantDB per-row provider against local InstantDB (requires TAO_INSTA
   }, timeout)
 
   liveTest("round-trips rows between two clients, which converge on each other's writes", async () => {
-    const app = await ephemeralApp()
+    const app = await ephemeralApp(apiURI!, title)
     const mapping = instantMapping(publicNotesSchema)
     await pushInstantSchema(app.target, { rules: instantRules(mapping), schema: mapping.schema })
     const alpha = await liveConnection(app, 'primary', publicNotesSchema)
@@ -116,7 +124,7 @@ Describe('InstantDB per-row provider against local InstantDB (requires TAO_INSTA
   }, timeout)
 
   liveTest('owner rules keep each account to its own rows, for reads and writes', async () => {
-    const app = await ephemeralApp()
+    const app = await ephemeralApp(apiURI!, title)
     const mapping = instantMapping(notesSchema)
     const generated = { rules: instantRules(mapping, notesPolicy), schema: mapping.schema }
     await pushInstantSchema(app.target, generated)
@@ -124,7 +132,7 @@ Describe('InstantDB per-row provider against local InstantDB (requires TAO_INSTA
     Expect((await pushInstantSchema(app.target, generated)).changes).toEqual([])
     const alice = await app.user('alice@example.test')
     const bob = await app.user('bob@example.test')
-    // Account rows are provisioned by the admin here; a later auth provider creates them on sign-in.
+    // Account rows are provisioned by the admin here; signing in creates them (InstantDB-sign-in-live).
     await app.admin('/admin/transact', {
       steps: [alice, bob].flatMap(user => [
         ['update', 'accounts', user.id, { displayName: user.email }],
@@ -268,103 +276,4 @@ function emptyEnvelope(schema: TR.DataSchemaDefinition): string {
     rows: Object.fromEntries(Object.keys(schema.entities).map(entity => [entity, []])),
     schemaVersion: schema.schemaVersion ?? 1,
   })
-}
-
-function alternateHost(uri: string): string {
-  const url = new URL(uri)
-  url.hostname = url.hostname === 'localhost' ? '127.0.0.1' : 'localhost'
-  return url.origin
-}
-
-type EphemeralApp = Awaited<ReturnType<typeof ephemeralApp>>
-
-async function ephemeralApp() {
-  const base = new URL(apiURI!).origin
-  Assert.input(
-    ['localhost', '127.0.0.1'].includes(new URL(base).hostname),
-    'The InstantDB live tests run only against a local InstantDB.',
-  )
-  const created = await fetch(`${base}/dash/apps/ephemeral`, {
-    body: JSON.stringify({ title: `Tao InstantDB provider ${Platform.randomUUID()}` }),
-    headers: { 'content-type': 'application/json' },
-    method: 'POST',
-  })
-  Expect(created.status).toBe(200)
-  const { app } = await created.json() as { app: { 'admin-token': string; id: string } }
-  const token = app['admin-token']
-  const call = (path: string, body: unknown, headers: Record<string, string> = {}) =>
-    fetch(`${base}${path}`, {
-      body: JSON.stringify(body),
-      headers: {
-        'app-id': app.id,
-        authorization: `Bearer ${token}`,
-        'content-type': 'application/json',
-        ...headers,
-      },
-      method: 'POST',
-    })
-  const admin = async (path: string, body: unknown): Promise<Record<string, unknown>> => {
-    const response = await call(path, body)
-    if (!response.ok) {
-      Errors.throwHostEnvironment(`InstantDB admin ${path} failed: ${await response.text()}`)
-    }
-    return await response.json() as Record<string, unknown>
-  }
-  const rows = (result: Record<string, unknown>, namespace: string) =>
-    (result[namespace] ?? []) as Record<string, unknown>[]
-  return {
-    admin,
-    adminAs: (email: string, path: string, body: unknown) => call(path, body, { 'as-email': email }),
-    adminQuery: async (namespace: string) =>
-      rows(await admin('/admin/query', { query: { [namespace]: {} } }), namespace),
-    apiURI: base,
-    id: app.id,
-    queryAs: async (email: string, namespace: string) => {
-      const response = await call('/admin/query', { query: { [namespace]: {} } }, { 'as-email': email })
-      Expect(response.status).toBe(200)
-      return rows(await response.json() as Record<string, unknown>, namespace)
-    },
-    target: { apiURI: base, appId: app.id, token },
-    user: async (email: string) => {
-      const { user } = await admin('/admin/refresh_tokens', { email }) as {
-        user: { id: string; refresh_token: string }
-      }
-      return { email, id: user.id, refreshToken: user.refresh_token }
-    },
-  }
-}
-
-/**
- * The live tests run the React Native SDK itself under Bun. Its two native modules are doubled at
- * the top of this file (random values come from Bun's own `crypto`, and the network always reports
- * online); storage is in memory through the SDK's `Store` option, because Bun resolves the package's
- * browser storage rather than AsyncStorage. The SDK only connects where `window` exists.
- */
-async function bunInstantSDK(): Promise<InstantSDK> {
-  const native = await import('@instantdb/react-native')
-  const host = globalThis as { window?: unknown }
-  host.window ??= globalThis
-  class MemoryStore extends native.StoreInterface {
-    private readonly values = new Map<string, unknown>()
-    async getItem(key: string) {
-      return this.values.get(key) ?? null
-    }
-    async removeItem(key: string) {
-      this.values.delete(key)
-    }
-    async multiSet(pairs: Array<[string, unknown]>) {
-      for (const [key, value] of pairs) {
-        this.values.set(key, value)
-      }
-    }
-    async getAllKeys() {
-      return [...this.values.keys()]
-    }
-  }
-  return {
-    i: native.i,
-    id: native.id,
-    init: config => native.init({ ...config, Store: MemoryStore }),
-    tx: native.tx,
-  }
 }

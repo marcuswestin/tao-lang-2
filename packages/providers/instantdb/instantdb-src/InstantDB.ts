@@ -1,6 +1,11 @@
 import type TR from '@runtime/TR'
-import { Errors, Switch } from '@shared/core'
-import { acquireInstantClient, type InstantClientLease, type InstantSDK } from './instant-clients'
+import { Assert, Errors, Switch } from '@shared/core'
+import {
+  acquireInstantClient,
+  type InstantClientAddress,
+  type InstantClientLease,
+  type InstantSDK,
+} from './instant-clients'
 import {
   instantQuery,
   type InstantQueryResult,
@@ -10,16 +15,24 @@ import {
   rowOperations,
   snapshotNextId,
 } from './instant-rows'
-import { instantMapping } from './instant-schema'
+import { accountNamespace, accountUserLabel, instantMapping } from './instant-schema'
 import { optionalConfigurationText, requiredConfigurationText } from './provider-configuration'
 
 export { InstantAuthProvider } from './InstantAuth'
 
 const providerName = 'InstantDB'
 
-type TransactionChunk = Exclude<Parameters<InstantClientLease['db']['core']['transact']>[0], readonly unknown[]>
+type InstantCore = InstantClientLease['db']['core']
+type TransactionChunk = Exclude<Parameters<InstantCore['transact']>[0], readonly unknown[]>
 type SubscriptionResult = Readonly<{ data?: InstantQueryResult; error?: unknown }>
 type InstantCleanupFailure = Readonly<{ error: unknown; operation: 'shutdown' | 'unsubscribe' }>
+/** InstantSession is the value of InstantAuth's `Session` proof. */
+type InstantSession = Readonly<{
+  apiURI?: string | undefined
+  appId: string
+  refreshToken: string
+  websocketURI?: string | undefined
+}>
 
 /**
  * InstantDBProvider stores each Tao entity as an InstantDB namespace, one InstantDB row per Tao
@@ -30,20 +43,74 @@ type InstantCleanupFailure = Readonly<{ error: unknown; operation: 'shutdown' | 
  *
  * `StorageKey` is still accepted, but namespaces are app-wide: two datasources on one app that
  * declare the same collection share its rows.
+ *
+ * It accepts InstantAuth's `Session` proof for the same InstantDB address. The account is the
+ * InstantDB user: `authenticate` makes sure the shared client is signed in as that user and that
+ * the user's `accounts` row exists, creating it on first sign-in, and resolves the account id to
+ * the user id. The row starts with no fields, so a Tao account with required fields reads as
+ * incomplete until the person completes it.
  */
 export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.DataProvider {
   return {
     testNetwork: 'remote',
+    authenticate: async context => {
+      const address = instantAddress({ configuration: context.configuration, schema: context.schema, storageKey: '' })
+      const mapping = instantMapping(context.schema)
+      Assert.input(
+        mapping.entities[mapping.accountEntity] !== undefined,
+        `${providerName} signs in to an ${mapping.accountEntity}; declare it in this datasource's data.`,
+      )
+      const proof = await context.proof('Session', context.signal)
+      const session = sessionOf(proof.value)
+      if (
+        session.appId !== address.appId || session.apiURI !== address.apiURI
+        || session.websocketURI !== address.websocketURI
+      ) {
+        Errors.throwUserInput(
+          `Auth ${context.provider} and Datasource ${providerName} name different InstantDB apps. Give both the same AppId, ApiURI, and WebsocketURI.`,
+        )
+      }
+      throwIfCancelled(context.signal)
+      let sdk: InstantSDK
+      let lease: InstantClientLease
+      try {
+        sdk = loadSDK()
+        lease = acquireInstantClient(sdk, address, mapping.schema)
+      } catch (error) {
+        throw instantFailure('initialization', error)
+      }
+      try {
+        const core = lease.db.core
+        // With one address the auth provider signed this very client in; the token covers a client
+        // that has not caught up with it.
+        const user = await core.getAuth()
+        throwIfCancelled(context.signal)
+        if (user?.id !== proof.subject) {
+          await signInWithToken(core, session.refreshToken, proof.subject)
+          throwIfCancelled(context.signal)
+        }
+        await ensureAccount(sdk, core, proof.subject, context.signal)
+        throwIfCancelled(context.signal)
+      } catch (error) {
+        lease.release()
+        throw error
+      }
+      return {
+        accountId: proof.subject,
+        // Signing out of InstantDB is the auth provider's; this drops only the lease taken here.
+        release: async () => {
+          lease.release()
+        },
+      }
+    },
     connect: context => {
-      const appId = requiredConfigurationText(providerName, context, 'AppId')
-      const apiURI = optionalConfigurationText(providerName, context, 'ApiURI')
-      const websocketURI = optionalConfigurationText(providerName, context, 'WebsocketURI')
+      const address = instantAddress(context)
       const mapping = instantMapping(context.schema)
       let sdk: InstantSDK
       let lease: InstantClientLease
       try {
         sdk = loadSDK()
-        lease = acquireInstantClient(sdk, { apiURI, appId, websocketURI }, mapping.schema)
+        lease = acquireInstantClient(sdk, address, mapping.schema)
       } catch (error) {
         throw instantFailure('initialization', error)
       }
@@ -193,7 +260,7 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
             // 'enqueued' is success too: the SDK holds the transaction durably until it reconnects.
             await core.transact(operations.map(operation => chunkOf(sdk, operation)))
           } catch (error) {
-            throw saveFailure(error)
+            throw serverFailure('save', error)
           }
         },
         subscribe: next => {
@@ -224,11 +291,110 @@ function chunkOf(sdk: InstantSDK, operation: InstantRowOperation): TransactionCh
   })
 }
 
+/** instantAddress reads the address that keys the shared client from the declaration's configuration. */
+function instantAddress(context: TR.DataProviderContext): InstantClientAddress {
+  return {
+    apiURI: optionalConfigurationText(providerName, context, 'ApiURI'),
+    appId: requiredConfigurationText(providerName, context, 'AppId'),
+    websocketURI: optionalConfigurationText(providerName, context, 'WebsocketURI'),
+  }
+}
+
+/** sessionOf reads InstantAuth's `Session` proof; any other Session value cannot sign InstantDB in. */
+function sessionOf(value: Readonly<Record<string, unknown>>): InstantSession {
+  const text = (name: string): boolean => typeof value[name] === 'string' && value[name] !== ''
+  const optionalText = (name: string): boolean => value[name] === undefined || text(name)
+  Assert.input(
+    text('appId') && text('refreshToken') && optionalText('apiURI') && optionalText('websocketURI'),
+    `${providerName} accepts Session proofs from InstantAuth only.`,
+  )
+  return value as InstantSession
+}
+
+function throwIfCancelled(signal: AbortSignal): void {
+  if (signal.aborted) {
+    throw Errors.abortError('The authentication request was cancelled.')
+  }
+}
+
+/** signInWithToken signs the shared client in; the server refusing the token means signing in again. */
+async function signInWithToken(core: InstantCore, refreshToken: string, subject: string): Promise<void> {
+  let user: Readonly<{ id: string }>
+  try {
+    user = (await core.auth.signInWithToken(refreshToken)).user
+  } catch (error) {
+    const status = typeof error === 'object' && error !== null ? (error as { status?: unknown }).status : undefined
+    if (typeof status === 'number' && status >= 400 && status < 500) {
+      Errors.throwUserInput('Sign in again to access account data.', { cause: error })
+    }
+    throw instantFailure('sign-in', error)
+  }
+  Assert.input(user.id === subject, 'Sign in again to access account data.')
+}
+
+/**
+ * ensureAccount makes sure the user's `accounts` row exists, linked to its `$users` row, as the
+ * generated rules require of a new account. The existence check reads through the SDK's cache, so a
+ * returning user signs in offline. Two devices signing in at once may both find no row; `create`
+ * refuses a row that exists, so the device that loses re-reads the server and accepts the winner's.
+ */
+async function ensureAccount(sdk: InstantSDK, core: InstantCore, id: string, signal: AbortSignal): Promise<void> {
+  const query = { [accountNamespace]: { $: { fields: ['id'], where: { id } } } }
+  const holds = (data: InstantQueryResult | undefined): boolean =>
+    (data?.[accountNamespace] ?? []).some(row => row['id'] === id)
+  if (holds(await firstResult(core, query, signal))) {
+    return
+  }
+  const row = sdk.tx[accountNamespace]![id]!
+  try {
+    await core.transact(row.create({}).link({ [accountUserLabel]: id }))
+  } catch (error) {
+    let existing: InstantQueryResult | undefined
+    try {
+      existing = (await core.queryOnce(query as never)).data as InstantQueryResult
+    } catch {
+      throw serverFailure('account setup', error)
+    }
+    if (!holds(existing)) {
+      throw serverFailure('account setup', error)
+    }
+  }
+}
+
+/** firstResult reads a query's first result, from the SDK's cache when it holds one. */
+function firstResult(core: InstantCore, query: object, signal: AbortSignal): Promise<InstantQueryResult | undefined> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    let stop: (() => void) | undefined
+    const settle = (finish: () => void): void => {
+      if (settled) {
+        return
+      }
+      settled = true
+      signal.removeEventListener('abort', cancel)
+      // The callback may run inside `subscribeQuery`, before it has returned its unsubscribe.
+      void Promise.resolve().then(() => stop?.())
+      finish()
+    }
+    const cancel = (): void => settle(() => reject(Errors.abortError('The authentication request was cancelled.')))
+    signal.addEventListener('abort', cancel, { once: true })
+    try {
+      stop = core.subscribeQuery(query as never, (result: SubscriptionResult) => {
+        settle(() =>
+          result.error === undefined ? resolve(result.data) : reject(instantFailure('account lookup', result.error))
+        )
+      })
+    } catch (error) {
+      settle(() => reject(instantFailure('account lookup', error)))
+    }
+  })
+}
+
 /**
  * A refusal from the server names its kind (`permission-denied`, `record-not-unique`) so a person
  * can tell a rule from a conflict; the server's own message may echo data and stays in the cause.
  */
-function saveFailure(error: unknown): Error {
+function serverFailure(operation: string, error: unknown): Error {
   if (Errors.isTaoError(error)) {
     return error
   }
@@ -236,7 +402,7 @@ function saveFailure(error: unknown): Error {
     ? (error as { body?: { type?: unknown } }).body?.type
     : undefined
   const reason = typeof type === 'string' && /^[a-z][a-z-]{0,63}$/.test(type) ? ` (${type})` : ''
-  return new Errors.HostEnvironmentError(`InstantDB save failed${reason}.`, { cause: error })
+  return new Errors.HostEnvironmentError(`InstantDB ${operation} failed${reason}.`, { cause: error })
 }
 
 function instantFailure(operation: string, error: unknown): Error {
