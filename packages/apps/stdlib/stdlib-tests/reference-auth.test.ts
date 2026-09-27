@@ -118,7 +118,7 @@ Describe('Reference account resolution', () => {
     f.issuing.issue = async () => {
       proofs += 1
       if (proofs === 2) {
-        throw new Errors.UserInputError('Finish signing out before using this Clerk session again.')
+        Errors.throwUserInput('Finish signing out before using this Clerk session again.')
       }
       return { kind: 'IdentityToken', issuer, subject: 'alice', token: 'clerk-alice' }
     }
