@@ -36,13 +36,14 @@ clauses. Later entries replace only the same semantic slot.
 
 Container defaults:
 
-| View          | Defaults before caller clauses                                          |
-| ------------- | ----------------------------------------------------------------------- |
-| `Col`         | Column, `content top stretch`, `fill`.                                  |
-| `Row`         | Row, `content baseline left`, `fill`.                                   |
-| `Stack`       | Column, `content top center`, `hug`.                                    |
-| `Box`         | Row, `content left center`, `hug`.                                      |
-| `WrappingRow` | Row, `content baseline left`, `compress`, `hug`, plus `flexWrap: wrap`. |
+| View          | Defaults before caller clauses                                                                                               |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `Col`         | Column, `content top stretch`, `fill`.                                                                                       |
+| `Row`         | Row, `content baseline left`, `fill`.                                                                                        |
+| `Stack`       | Column, `content top center`, `hug`.                                                                                         |
+| `Box`         | Row, `content left center`, `hug`.                                                                                           |
+| `WrappingRow` | Row, `content baseline left`, `compress`, `hug`, plus `flexWrap: wrap`.                                                      |
+| `Layer`       | Column, `content top center`, `hug`, plus `position: absolute` and each given inset; a bare axis gets `top: 0` or `left: 0`. |
 
 Bare `fill` replaces earlier `aligned`/`centered`, `claim`/`hug`, and physical dimensions, except
 that `width max N` remains as a cap. A later alignment or growth clause can replace one half of

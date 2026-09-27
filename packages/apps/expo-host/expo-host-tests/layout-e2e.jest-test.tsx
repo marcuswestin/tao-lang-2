@@ -153,6 +153,48 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('floats a Layer from its insets, defaulting a bare axis to its start edge', async () => {
+    await testCompileApp(
+      `
+        app LayerInsets {
+            view MainView
+        }
+
+        use Box, Layer, Text from @tao/ui
+
+        view MainView() {
+            render Box()[width 200, height 100] {
+                Text("In flow")
+                Layer(InsetBottom: 8, InsetRight: 12)[gap 5] {
+                    Text("Corner")
+                }
+                Layer()[gap 6] {
+                    Text("Origin")
+                }
+                Layer(InsetBottom: 20)[gap 7] {
+                    Text("Bottom only")
+                }
+            }
+        }
+      `,
+      screen => {
+        const styleWithGap = (gap: number) =>
+          screen.UNSAFE_getAllByType(RN.View)
+            .map(view => RN.StyleSheet.flatten(view.props.style))
+            .find(style => style?.gap === gap)
+
+        ExpectScreen(screen).toHaveText('In flow')
+        ExpectScreen(screen).toHaveText('Corner')
+        Expect(styleWithGap(5)).toMatchObject({ position: 'absolute', bottom: 8, right: 12, flexDirection: 'column' })
+        Expect(styleWithGap(5)?.top).toBeUndefined()
+        Expect(styleWithGap(5)?.left).toBeUndefined()
+        Expect(styleWithGap(6)).toMatchObject({ position: 'absolute', top: 0, left: 0 })
+        Expect(styleWithGap(7)).toMatchObject({ position: 'absolute', bottom: 20, left: 0 })
+        Expect(styleWithGap(7)?.top).toBeUndefined()
+      },
+    )
+  })
+
   Test('applies axis-relative fill through wrapper view root layout clauses', async () => {
     await testCompileApp(
       `

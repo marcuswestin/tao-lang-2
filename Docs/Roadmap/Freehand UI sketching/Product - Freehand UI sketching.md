@@ -60,8 +60,8 @@ cell and delegates initial Pencil input to a native sidecar.
   endpoint when projection is ambiguous, including overlap or two clean separating axes. Unsnap
   prefers the remembered rectangle position, dropping stale render matches and falling back to
   measured layout.
-- Free rectangle rendering begins as a TypeScript matrix overlay. A later positioned-container
-  tranche moves it into Studio's own Tao client after the `Canvas` and offset spellings are settled.
+- Free rectangle rendering begins as a TypeScript matrix overlay. Studio's own Tao client later
+  renders each rectangle as a `@tao/ui` `Layer` placed by its insets (FS-D5).
 - The companion waits for Tao rendering and an app shell. One device renders one cell. PencilKit
   initially owns canvas input and emits typed events; Tao owns data, rendering, and source actions.
 
@@ -143,11 +143,11 @@ The following rulings are recorded verbatim from the project requirement authori
 > server's provider and committed by default. The companion app reads it through the paired session,
 > never the file.
 
-> **FS-D5 — Rendering the rectangles.** The language direction is a positioned container, working
-> name `Canvas`, whose direct children carry an offset clause, working name `at x y`, with Studio's
-> own Tao client as the forcing feature. It is decided through the tranche process; its spelling is
-> settled with the Developer in `2 - Next` before that tranche starts. Until it lands, Studio draws rectangles
-> as a TypeScript overlay in the matrix view. Tao rendering must land before the companion slice.
+> **FS-D5 — Rendering the rectangles** (amended 2026-09-27). Studio's Tao client renders each free
+> rectangle as a `@tao/ui` `Layer`, placed by its `InsetTop` and `InsetLeft` inside the canvas
+> frame; `Decisions.md` §9 owns the view. This replaces the earlier `Canvas` container with
+> `at x y` child offsets. Until Studio's client adopts it, Studio draws rectangles as a TypeScript
+> overlay in the matrix view. Tao rendering must land before the companion slice.
 
 > **FS-D6 — What travels with a view.** Declarations that relate only to the view, its `scenarios`
 > group above all, live in the view's file. Shared declarations, the example fixture `Sketches`
@@ -580,10 +580,9 @@ Free geometry is separate. Studio's server persists it in
 ```
 
 The matrix initially renders those rows as a TypeScript overlay. Snapping writes only the projected
-flowed elements into the view and removes the corresponding free rows. A later language tranche
-settles a positioned container, working name `Canvas`, and child offset, working name `at x y`, so
-Studio's own Tao client can render the same catalog. Those constructs render Studio data; they do not
-put free placement into product source (FS-D1, FS-D4, FS-D5).
+flowed elements into the view and removes the corresponding free rows. Studio's own Tao client
+renders the same catalog as `Layer` views inside the canvas frame. The rows stay Studio data; a
+`Layer` in product source is an authored overlay, never a free rectangle (FS-D1, FS-D4, FS-D5).
 
 ### Placeholders and spacers
 
@@ -627,8 +626,8 @@ interactive after replay (FS-D7, FS-D17).
 - Postfix `when` over a parameter (`background muted when Disabled`) and over interaction states,
   which are decided but not executable: the parser admits only `when Scheme is Light` or `Dark`.
 - `yes / no` as a parameter type, with `yes` and `no` literals, in the executable dialect.
-- The positioned container and offset used by Studio's own client (L3), after their spellings and
-  relationship to KEY-D7's floating layers are settled in `2 - Next`.
+- `Layer`, which floats its children over the parent's flow by optional edge insets (L3, decided
+  2026-09-27 in `Decisions.md` §9); it is distinct from KEY-D7's host-owned floating layers.
 
 There is no sketch-tier syntax, release diagnostic, `while pressed`, or action-stand-in spelling.
 
@@ -640,7 +639,7 @@ The existing scenario canvas renders grouped rows of cells. A sketch is a genera
 scenario cell plus its free catalog rows, so it lives on the same canvas next to the app. Cells keep
 their iframe realm. Until Slice 5, the matrix's TypeScript layer renders free rectangles, selection,
 insertion lines, size badges, and field chips above the preview. Flowed elements remain preview
-nodes. After L3, Studio's Tao client renders the catalog through the positioned container (FS-D5).
+nodes. After L3, Studio's Tao client renders the catalog as `Layer` views (FS-D5).
 
 ### Identity and trust
 

@@ -340,33 +340,31 @@ scenario naming and `when` output.
 
 ---
 
-## L3 — the positioned container
+## L3 — `Layer`
 
-**Decision.** FS-D5, constrained by KEY-D7.
+**Decision.** FS-D5, amended 2026-09-27: `Decisions.md` §9 decides `Layer`, replacing the `Canvas`
+container and `at x y` offset this slice first proposed.
 
 **Goal.** Let Studio's own Tao client render Studio-owned rectangle rows without making absolute
-positioning a product-layout escape hatch.
+positioning a clause every view accepts.
 
-**Dependencies.** Slice 4 and the spellings below. **Size.** XL.
+**Dependencies.** Slice 4. **Size.** S.
 
-**Forcing feature.** The Studio canvas renders its catalog through a positioned container and direct
-child offsets.
+**Forcing feature.** Studio's Draw canvas renders free rectangles as `Layer` views inside the
+canvas frame.
 
-**Introduces.** One positioned stdlib container and one direct-child offset clause, with validation
-restricting offsets to that parent. The runtime accepts reactive Studio data and preserves ordinary
-selection, accessibility, and event semantics. WordFlower contains the smallest honest forcing
-example needed to absorb the spelling.
+**Introduces.** Implemented 2026-09-27: `@tao/ui` `Layer` with optional `InsetTop`, `InsetRight`,
+`InsetBottom`, and `InsetLeft`, lowered to React Native absolute positioning inside the injected
+render. An axis with no inset sits at its start edge; children stack and hug like `Stack`; source
+order is paint order. Because `Layer` is a view and not a clause, no validation restricts where it
+appears.
 
-**Tests.** Tao behavior tests prove offsets, sizing, ordering, invalid parents/nesting, events, and
-web/native behavior. Studio journey compares Tao rendering against the Slice 1 overlay geometry.
+**Tests.** `Apps/Test Apps/Runtime Stdlib Tests` renders a `Layer` in its Tao behavior test, and
+`layout-e2e.jest-test.tsx` asserts the lowered styles, since Tao tests cannot yet assert layout.
+The Studio journey against Slice 1 overlay geometry lands with Slice 5.
 
-**Reconcile.** `Decisions.md` §9 and KEY-D7's floating anchored-layer relationship, Layout/UI,
-stdlib catalog, WordFlower tiers, and Coverage.
-
-**Open before starting.** Settle in `2 - Next` the container name (`Canvas` recommended), the offset
-spelling (`at x y` recommended), accepted value types, whether nesting is legal, and the explicit
-relationship to KEY-D7's floating anchored layers. This container renders Studio data; it does not
-reinstate product-source sketches withdrawn by FS-D1.
+**Reconcile.** Done for `Decisions.md` §9, Layout/UI, and the product document. WordFlower gains a
+forcing example only if one of its screens needs an overlay.
 
 ---
 
