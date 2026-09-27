@@ -8,6 +8,8 @@ async function prepare(fixture: {
   runtimeIdentifier?: string
   installedVersion?: string
   importedVersion?: string
+  exportFormat?: 'bundle' | 'dmg' | 'empty'
+  retainedExport?: boolean
   apply?: boolean
   interactive?: boolean
   missingDeviceSdk?: boolean
@@ -18,6 +20,10 @@ async function prepare(fixture: {
   const writes: string[] = []
   const prompts: string[] = []
   const diagnostics: { path: string; value: unknown }[] = []
+  const work = `/repo/.artifacts/${fixture.platform === 'watchos' ? 'watchos' : 'visionos'}-setup/27.1-27.1`
+  const exportName = fixture.exportFormat === 'bundle'
+    ? `${fixture.platform === 'watchos' ? 'watchsimulator' : 'xrsimulator'}_27.1_24R362.exportedBundle`
+    : `${fixture.platform ?? 'visionOS'}.dmg`
   let deviceSdkAvailable = !fixture.missingDeviceSdk
   let imported = false
   const output = await withCapturedOutput(() =>
@@ -40,11 +46,18 @@ async function prepare(fixture: {
       },
       files: {
         homeDir: () => '/Users/test',
-        exists: async path => path === '/Applications/Xcode-27.1.app/Contents/Developer/usr/bin/xcodebuild',
+        exists: async path =>
+          path === '/Applications/Xcode-27.1.app/Contents/Developer/usr/bin/xcodebuild'
+          || fixture.retainedExport === true && path === work
+          || fixture.exportFormat === 'bundle' && path.endsWith(`${exportName}/ExportedMetadata.plist`),
         isFile: async () => false,
         isSymbolicLink: async () => false,
         listDir: async path =>
-          path.includes('/runtime-') ? [`${fixture.platform ?? 'visionOS'}.dmg`] : ['Xcode-27.1.app'],
+          path === work && fixture.retainedExport
+            ? ['runtime-prior']
+            : path.includes('/runtime-')
+            ? fixture.exportFormat === 'empty' ? [] : [exportName]
+            : ['Xcode-27.1.app'],
         mkdir: async path => {
           writes.push(path)
         },
@@ -186,14 +199,22 @@ Describe('shared Apple toolchain setup', () => {
   })
 
   Test('reuses Xcode, downloads watchOS by command line, and requires a real runtime recheck', async () => {
-    const result = await prepare({ platform: 'watchos', runtimeVersion: '27.1', installedVersion: '27.0', apply: true })
+    const result = await prepare({
+      platform: 'watchos',
+      runtimeVersion: '27.1',
+      installedVersion: '27.0',
+      exportFormat: 'bundle',
+      apply: true,
+    })
     Expect(result.receipt.status).toBe('ready')
     Expect(result.receipt.deviceSdk).toBe('27.1')
     Expect(result.calls.some(call => call.spec.args?.includes('watchsimulator'))).toBe(true)
     const download = result.calls.find(call => call.spec.args?.includes('-downloadPlatform'))!
     Expect(download.spec.args?.slice(0, 4)).toEqual(['-downloadPlatform', 'watchOS', '-buildVersion', '27.1'])
     Expect(download.spec.env).toEqual({ DEVELOPER_DIR: '/Applications/Xcode-27.1.app/Contents/Developer' })
-    Expect(result.calls.some(call => call.spec.args?.includes('-importPlatform'))).toBe(true)
+    const imported = result.calls.find(call => call.spec.args?.includes('-importPlatform'))!
+    Expect(imported.spec.args?.at(-1)).toContain('watchsimulator_27.1_24R362.exportedBundle')
+    Expect(imported.spec.args?.at(-1)).not.toContain('/Restore/')
     Expect(result.calls.filter(call => call.spec.args?.includes('runtimes'))).toHaveLength(2)
     Expect(result.writes.some(path => path.startsWith('/repo/.artifacts/watchos-setup/27.1-27.1/'))).toBe(true)
     Expect(
@@ -214,6 +235,36 @@ Describe('shared Apple toolchain setup', () => {
     Expect(importWithoutRuntime.calls.some(call => call.spec.args?.includes('-importPlatform'))).toBe(true)
     Expect(importWithoutRuntime.receipt.status).toBe('needs-action')
     Expect(importWithoutRuntime.receipt.runtimeAvailable).toBe(false)
+  })
+
+  Test('reuses a retained exported bundle on rerun without downloading it again', async () => {
+    const result = await prepare({
+      platform: 'watchos',
+      runtimeVersion: '27.1',
+      installedVersion: '27.0',
+      exportFormat: 'bundle',
+      retainedExport: true,
+      apply: true,
+    })
+    Expect(result.receipt.status).toBe('ready')
+    Expect(result.calls.some(call => call.spec.args?.includes('-downloadPlatform'))).toBe(false)
+    Expect(result.calls.find(call => call.spec.args?.includes('-importPlatform'))?.spec.args?.at(-1))
+      .toContain('/runtime-prior/watchsimulator_27.1_24R362.exportedBundle')
+    Expect(result.output).toContain('Reusing the retained watchOS')
+  })
+
+  Test('reports an incomplete export as a format problem without suggesting license acceptance', async () => {
+    const result = await prepare({
+      platform: 'watchos',
+      runtimeVersion: '27.1',
+      installedVersion: '27.0',
+      exportFormat: 'empty',
+      apply: true,
+    })
+    Expect(result.receipt.status).toBe('needs-action')
+    Expect(result.receipt.remaining.join('\n')).toContain('no single complete .exportedBundle or .dmg')
+    Expect(result.receipt.remaining.join('\n')).not.toContain('license acceptance')
+    Expect(result.calls.some(call => call.spec.args?.includes('-importPlatform'))).toBe(false)
   })
 
   Test('hands missing device platform support back without opening Xcode in inspection mode', async () => {

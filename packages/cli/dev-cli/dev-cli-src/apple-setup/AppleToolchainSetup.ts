@@ -116,6 +116,7 @@ async function prepare(options: AppleSetupOptions, platform: AppleSetupPlatform)
   )
   const runId = Platform.randomUUID()
   let verificationFailed = false
+  let exportInspectionFailed = false
   const receipt: AppleSetupReceipt = {
     requested: { xcodeVersion: options.xcodeVersion, runtimeVersion: options.runtimeVersion },
     mode: options.apply ? 'apply' : 'plan',
@@ -281,6 +282,24 @@ async function prepare(options: AppleSetupOptions, platform: AppleSetupPlatform)
       Errors.throwHostEnvironment('CoreSimulator returned an invalid device inventory.')
     }
     receipt.simulatorHealthy = true
+  }
+  const exportedRuntime = async (directory: string): Promise<string | undefined> => {
+    const candidates = (await files.listDir(directory)).filter(name =>
+      name.endsWith('.exportedBundle') || name.endsWith('.dmg')
+    )
+    if (candidates.length !== 1) {
+      return undefined
+    }
+    const path = `${directory}/${candidates[0]}`
+    if (await files.isSymbolicLink(path)) {
+      return undefined
+    }
+    // Xcode 26.4+ exports the signed metadata and image together as a directory. Import that
+    // directory, never the nested Restore/*.dmg, so Xcode can validate the complete bundle.
+    if (path.endsWith('.exportedBundle') && !await files.exists(`${path}/ExportedMetadata.plist`)) {
+      return undefined
+    }
+    return path
   }
   const disk = async (path: string, minimumGiB: number) => {
     const report = await requireSuccess('/bin/df', ['-Pk', path])
@@ -575,80 +594,100 @@ async function prepare(options: AppleSetupOptions, platform: AppleSetupPlatform)
       await disk('/Library/Developer', 15)
     }
     if (!receipt.runtimeAvailable && options.apply) {
-      const downloads = `${work}/runtime-${runId}`
-      receipt.ownedPaths.push({
-        path: downloads,
-        purpose: 'Apple runtime export',
-        cleanup: 'Remove after runtime verification; keep on failure to resume.',
-      })
+      let image: string | undefined
+      if (await files.exists(work)) {
+        for (const name of (await files.listDir(work)).filter(name => name.startsWith('runtime-'))) {
+          const directory = `${work}/${name}`
+          if (!await files.isSymbolicLink(directory)) {
+            image = await exportedRuntime(directory)
+          }
+          if (image) {
+            notice(
+              `Reusing the retained ${platform.label} ${options.runtimeVersion} Simulator runtime export at ${image}.`,
+            )
+            break
+          }
+        }
+      }
       receipt.ownedPaths.push({
         path: '/Library/Developer/CoreSimulator',
         purpose: 'Apple-managed shared simulator runtime installation',
         cleanup: 'Manage installed runtimes through Xcode Settings; do not remove this shared directory.',
       })
-      await save()
-      await files.mkdir(downloads)
-      notice(
-        `Downloading ${platform.label} ${options.runtimeVersion} Simulator runtime... This can take several minutes and may update shared CoreSimulator components.`,
-      )
-      const download = await command('/usr/bin/xcodebuild', [
-        '-downloadPlatform',
-        platform.label,
-        '-buildVersion',
-        options.runtimeVersion,
-        '-exportPath',
-        downloads,
-        '-architectureVariant',
-        (options.hostArch ?? Platform.hostArch) === 'arm64' ? 'arm64' : 'universal',
-      ], selected)
-      if (download.exitCode !== 0 || download.error) {
-        const diagnostic = (download.stderr || download.stdout || download.error?.message || 'no diagnostic').trim()
-        receipt.remaining.push(`Simulator runtime download failed: ${diagnostic}`)
-        const instructions = `In Xcode at ${
-          quote(selected)
-        }, open Xcode > Settings > Components. Find ${platform.label} ${options.runtimeVersion} under Platform Support, or use the + button under Other Installed Platforms to select that exact version. Click Get or Download & Install and wait for installation to finish. Developer Documentation is a separate download. Leave the default Xcode selection unchanged, then return to this Terminal. If that runtime is not listed, stop here; another ${platform.label} version does not satisfy this request.`
-        receipt.remaining.push(instructions)
-        if (options.json || !terminal.isInteractive()) {
-          return await finish()
-        }
+      if (!image) {
+        const downloads = `${work}/runtime-${runId}`
+        receipt.ownedPaths.push({
+          path: downloads,
+          purpose: 'Apple runtime export',
+          cleanup: 'Remove after runtime verification; keep on failure to resume.',
+        })
         await save()
-        notice(receipt.remaining.join('\n'))
-        if (!await waitToContinue(`Press Enter to open ${selected}, or type q and Enter to stop`)) {
-          return await finish()
-        }
-        notice(`Opening ${selected}...`)
-        await requireSuccess('/usr/bin/open', [selected])
-        if (
-          !await waitToContinue(
-            'After installing the simulator runtime in Xcode, press Enter to continue, or type q and Enter to stop',
-          )
-        ) {
-          return await finish()
-        }
-        receipt.runtimeAvailable = false
-        receipt.simulatorHealthy = false
-        notice('Checking the installed runtime and CoreSimulator service...')
-        await inspectRuntime(selected, options.runtimeVersion)
-        if (receipt.runtimeAvailable && receipt.simulatorHealthy) {
-          receipt.remaining = []
-          receipt.status = 'ready'
-        } else {
-          receipt.remaining.push(
-            `${platform.label} ${options.runtimeVersion} is still unavailable. Complete its runtime installation, then rerun the same command.`,
-          )
-        }
-        return await finish()
-      }
-      const images = (await files.listDir(downloads)).filter(name => name.endsWith('.dmg'))
-      if (images.length !== 1) {
-        Errors.throwHostEnvironment(
-          `Expected one Apple runtime image in ${downloads}; inspect the export before retrying.`,
+        await files.mkdir(downloads)
+        notice(
+          `Downloading ${platform.label} ${options.runtimeVersion} Simulator runtime... This can take several minutes and may update shared CoreSimulator components.`,
         )
+        const download = await command('/usr/bin/xcodebuild', [
+          '-downloadPlatform',
+          platform.label,
+          '-buildVersion',
+          options.runtimeVersion,
+          '-exportPath',
+          downloads,
+          '-architectureVariant',
+          (options.hostArch ?? Platform.hostArch) === 'arm64' ? 'arm64' : 'universal',
+        ], selected)
+        if (download.exitCode !== 0 || download.error) {
+          const diagnostic = (download.stderr || download.stdout || download.error?.message || 'no diagnostic').trim()
+          receipt.remaining.push(`Simulator runtime download failed: ${diagnostic}`)
+          const instructions = `In Xcode at ${
+            quote(selected)
+          }, open Xcode > Settings > Components. Find ${platform.label} ${options.runtimeVersion} under Platform Support, or use the + button under Other Installed Platforms to select that exact version. Click Get or Download & Install and wait for installation to finish. Developer Documentation is a separate download. Leave the default Xcode selection unchanged, then return to this Terminal. If that runtime is not listed, stop here; another ${platform.label} version does not satisfy this request.`
+          receipt.remaining.push(instructions)
+          if (options.json || !terminal.isInteractive()) {
+            return await finish()
+          }
+          await save()
+          notice(receipt.remaining.join('\n'))
+          if (!await waitToContinue(`Press Enter to open ${selected}, or type q and Enter to stop`)) {
+            return await finish()
+          }
+          notice(`Opening ${selected}...`)
+          await requireSuccess('/usr/bin/open', [selected])
+          if (
+            !await waitToContinue(
+              'After installing the simulator runtime in Xcode, press Enter to continue, or type q and Enter to stop',
+            )
+          ) {
+            return await finish()
+          }
+          receipt.runtimeAvailable = false
+          receipt.simulatorHealthy = false
+          notice('Checking the installed runtime and CoreSimulator service...')
+          await inspectRuntime(selected, options.runtimeVersion)
+          if (receipt.runtimeAvailable && receipt.simulatorHealthy) {
+            receipt.remaining = []
+            receipt.status = 'ready'
+          } else {
+            receipt.remaining.push(
+              `${platform.label} ${options.runtimeVersion} is still unavailable. Complete its runtime installation, then rerun the same command.`,
+            )
+          }
+          return await finish()
+        }
+        image = await exportedRuntime(downloads)
+        if (!image) {
+          exportInspectionFailed = true
+          Errors.throwHostEnvironment(
+            `Xcode exported no single complete .exportedBundle or .dmg in ${downloads}. Found: ${
+              (await files.listDir(downloads)).join(', ') || '(nothing)'
+            }. Inspect the retained export before retrying.`,
+          )
+        }
       }
       notice(
         `Installing ${platform.label} ${options.runtimeVersion} Simulator runtime... This can take several minutes.`,
       )
-      await requireSuccess('/usr/bin/xcodebuild', ['-importPlatform', `${downloads}/${images[0]}`], selected)
+      await requireSuccess('/usr/bin/xcodebuild', ['-importPlatform', image], selected)
       receipt.runtimeAvailable = false
       receipt.simulatorHealthy = false
       notice('Checking the installed runtime and CoreSimulator service...')
@@ -665,7 +704,7 @@ async function prepare(options: AppleSetupOptions, platform: AppleSetupPlatform)
   } catch (error) {
     receipt.status = 'needs-action'
     receipt.remaining.push(Errors.messageOf(error))
-    if (options.apply && !verificationFailed) {
+    if (options.apply && !verificationFailed && !exportInspectionFailed) {
       receipt.remaining.push(
         'If Apple requests sign-in, license acceptance, first launch or administrator access, complete that step in Xcode or Finder, then rerun the same setup command.',
       )
