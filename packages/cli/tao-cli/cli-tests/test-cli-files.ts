@@ -166,9 +166,13 @@ export async function runTaoCliForTest(args: readonly string[]): Promise<TaoCliT
   const stdout = Platform.runtimeProcess.stdout
   const stderr = Platform.runtimeProcess.stderr
   const exit = Platform.runtimeProcess.exit
+  const setExitCode = Platform.runtimeProcess.setExitCode
   const stdoutChunks: Buffer[] = []
   const stderrChunks: Buffer[] = []
   let exitCode = 0
+  Platform.runtimeProcess.setExitCode = code => {
+    exitCode = Number(code ?? 0)
+  }
 
   Platform.runtimeProcess.stdout = captureStream(stdoutChunks) as typeof Platform.runtimeProcess.stdout
   Platform.runtimeProcess.stderr = captureStream(stderrChunks) as typeof Platform.runtimeProcess.stderr
@@ -187,6 +191,7 @@ export async function runTaoCliForTest(args: readonly string[]): Promise<TaoCliT
     Platform.runtimeProcess.stdout = stdout
     Platform.runtimeProcess.stderr = stderr
     Platform.runtimeProcess.exit = exit
+    Platform.runtimeProcess.setExitCode = setExitCode
   }
 
   return {

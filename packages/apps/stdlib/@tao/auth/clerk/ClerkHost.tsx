@@ -1,6 +1,6 @@
 import { Assert } from '@shared/core'
 import React, { useEffect, useState } from 'react'
-import { bindClerkDriverHost, releaseClerkHostWhenIdle } from './ClerkDriver'
+import { bindClerkDriverHost, classifyClerkSignInError, releaseClerkHostWhenIdle } from './ClerkDriver'
 
 type HostProps = { configuration: Readonly<Record<string, unknown>>; children?: React.ReactNode }
 let nativeOwner: object | undefined
@@ -13,7 +13,7 @@ function Binding({ configuration, children }: HostProps) {
       return bindClerkDriverHost(
         configuration,
         clerk,
-        error => isClerkAPIResponseError(error) && error.status >= 400 && error.status < 500 && error.status !== 429,
+        error => isClerkAPIResponseError(error) ? classifyClerkSignInError(error) : undefined,
       )
     }
     return undefined

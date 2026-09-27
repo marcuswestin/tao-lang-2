@@ -1,5 +1,8 @@
 # Native device capability findings
 
+The later [generated native bindings proof of concept](Findings%20-%20Generated%20native%20bindings.md)
+imports the complete raw Haptics surface and React Native Vibration alongside these curated capabilities.
+
 ## What shipped
 
 The existing sidecar bridge already supports parameterized action fields end to end: parser, validator, compiler, and `TR.Do` all preserve and invoke action parameters. This tranche therefore required no language change.

@@ -1,8 +1,10 @@
 # Native navigation acceptance
 
-Implementation and native acceptance are separate. This record follows the approved order:
-iPhone, iPad, bounded Mac Catalyst feasibility, then Android compatibility. Neither desktop nor
-Android can invalidate completed Apple mobile evidence.
+Implementation and native acceptance are separate. The original acceptance order was iPhone,
+iPad, bounded Mac Catalyst feasibility, then Android compatibility. A subsequent authorization
+started a separate [Mac Catalyst proof of concept](<Mac Catalyst proof of concept.md>) allowing
+small isolated compatibility patches. That experiment does not close outstanding Apple mobile
+acceptance or invalidate its completed evidence.
 
 ## Implemented scope
 
@@ -53,12 +55,12 @@ each relaunch so restarting cannot erase a prior process's fallback failure.
 
 ## Platform evidence and remaining work
 
-| Platform | Current result                                                                                                                         | Remaining acceptance                                                                                                                                                                              |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| iPhone   | Native three-stack simulator journey and HNReader smoke passed; physical installation/launch confirmed separately.                     | Physical Liquid Glass, gestures, menus, sheets, keyboard/insets and accessibility review.                                                                                                         |
-| iPad     | Native three-stack simulator journey passed with tab/sidebar controller mode.                                                          | Inline title visibility, compact/expanded windows, rotation, sidebar switching, pointer, keyboard, VoiceOver and sheet/menu placement.                                                            |
-| macOS    | **Blocked**: the unchanged pinned slider module fails Catalyst compilation.                                                            | A separately authorized native-module/dependency proposal is required; no Mac UI accepted.                                                                                                        |
-| Android  | **Working with named limitations**: Release emulator journey passed with native tabs/stacks, ordinary Back and retained per-tab state. | Portable toolbar/menu and modal fidelity; root exit, keyboard-dismissal precedence, modal precedence, relaunch/background/resume, predictive Back and physical-device acceptance remain unproven. |
+| Platform | Current result                                                                                                                         | Remaining acceptance                                                                                                                                                                                         |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| iPhone   | Native three-stack simulator journey and HNReader smoke passed; physical installation/launch confirmed separately.                     | Physical Liquid Glass, gestures, menus, sheets, keyboard/insets and accessibility review.                                                                                                                    |
+| iPad     | Native three-stack simulator journey and six title assertions passed with tab/sidebar controller mode.                                 | Physical title review, compact/expanded windows, rotation, sidebar switching, pointer, keyboard, VoiceOver and sheet/menu placement.                                                                         |
+| macOS    | **Working with named limitations**: Catalyst/Mac native hosts, Save menu/shortcut and HNReader history smoke observed.                 | Repaired sidebar sizing, manual typing, keyboard-only and appearance review; dark adaptation implemented with partial native evidence. See the separate proof-of-concept record for build-specific evidence. |
+| Android  | **Working with named limitations**: Release emulator journey passed with native tabs/stacks, ordinary Back and retained per-tab state. | Portable toolbar/menu and modal fidelity; root exit, keyboard-dismissal precedence, modal precedence, relaunch/background/resume, predictive Back and physical-device acceptance remain unproven.            |
 
 The successful iPhone run was `8c7a2f77-2418-482e-8f2c-507557ea2754`; its source-linked event
 receipt and screenshot are preserved under `.artifacts/native-navigation-evidence/iphone-proof.json`
@@ -129,6 +131,73 @@ Semantic modal precedence and restoration remain covered by deterministic journe
 emulator receipt. No physical Android device was available. Native Material menus/sheets, rails,
 system predictive Back and interactive in-stack prediction are not claimed by this result.
 
+### iPad title follow-up, 2026-09-26
+
+On `feat/ipad-navigation-appearance`, based on landed Catalyst POC `f6cb6a19`, fresh baseline
+`6dee4e09-f23c-4b08-a94c-bad8c7c1cdb4` reproduced the missing root title on iPad Pro 13-inch
+(M5) simulator `60B293E6-B327-4BBA-A108-E05E927B084B`, iPadOS 26.5, Xcode 27. Native diagnostics
+showed correct navigation-bar title metadata but no visible title text, including the toolbar-free
+Library root. Pushed detail titles were visible below the system tabs.
+
+The iPad adapter now supplies the pinned screens package's native header center view, mapping to
+UIKit's `navigationItem.titleView`, while retaining native title metadata. It uses the system label
+color and a single-line heading; Header false and enclosing navigation chrome suppress it. iPhone
+and Catalyst retain their existing title paths. No large-title mode or Tao syntax was added.
+
+Candidate run `f6da80f8-2ece-4907-8f79-90f5d10e8145` passed assertions for all six root/detail
+titles, the retained-state journey, and native tabs/stack receipts. The root screenshot visibly
+shows Notes workspace below the native top tabs. Evidence lives in
+`.artifacts/host-testing/<run-id>/appium-ios/proof.receipt.json`, `appium/navigation/`, and
+`appium/screenshots/`. This supersedes the missing-title simulator limitation above. Multiple
+accessibility-tree matches for the custom title were reviewed against the pinned native implementation
+and do not establish multiple VoiceOver stops; actual VoiceOver acceptance remains unverified.
+
+Physical iPad Pro 13-inch (M4), `00008132-000259993C85001C`, paired on iPadOS 26.7 (23H24).
+Initial install `f9d0ac7f-4638-4103-b98e-0ab08e8c2e0f` failed with Developer Mode disabled.
+Retry `e2f43eb0-2f71-4d1a-b38e-fc317e6a76f5` reported the same Developer Mode block; no app
+was installed by either attempt.
+After enabling Developer Mode and restarting, run `b0250107-d3ee-459c-b80a-2d8158f71dab`
+built and installed the Release fixture successfully. Named installed-app inventory and launch
+confirmed `dev.tao.taohostnativenavigationb0250107d3ee459cb80a2d8158f71dab`, version 1.0.0 (1).
+The build uses `f6cb6a19` plus the current uncommitted follow-up; its source snapshot, inventory
+and launch receipts are under `.artifacts/ipad-navigation-evidence/physical-b0250107-*`.
+Installation and launch do not establish the native-host banner or physical acceptance.
+The developer's screenshot then confirmed the Notes workspace title and native tabs/stack banner.
+It also demonstrated a failure: the expanded floating sidebar obscures the leading form labels and
+notebook content while the body retains the full-window width. Screenshot retained at
+`.artifacts/ipad-navigation-evidence/physical-b0250107-sidebar-overlap.png`. Detail taps and rotation
+were not reported and remain untested.
+
+The native frame used UIKit automatic scroll adjustment, which applies horizontal adjustment only
+to horizontally scrollable views. The iPad-only frame now requests all safe-area edges with
+`contentInsetAdjustmentBehavior: always`; authored nested scroll views, iPhone and Catalyst keep
+their prior behavior. This uses the existing public native prop and does not generalize a patch.
+
+Physical comparison run `9f358d41-03ae-4432-a432-af5b6d255f0d` built, installed and launched
+`dev.tao.taohostnativenavigation9f358d4103ae4432a432af5b6d255f0d` (1.0.0, build 1). After being
+asked to check Notes labels and both draft-field edges with the sidebar open, then Library beside
+the open sidebar, the developer confirmed “Yep. That looks good” and authorized landing/archive.
+This closes the demonstrated sidebar occlusion for those physical checks. It does not close the
+full iPad matrix: compact windows, rotation, retained state across adaptation, pointer, keyboard,
+VoiceOver, menu/sheet placement and appearance/accessibility variants remain untested physically.
+
+### Handoff after this slice
+
+- **iPad:** working with named limitations. Root title/native host and the demonstrated sidebar
+  defect have physical evidence; six root/detail titles and independent state retention have
+  simulator evidence.
+- **Catalyst:** dark adaptation implemented with partial native observations; final-wrapper native
+  retest, live appearance switching and the broader desktop matrix remain open in its own record.
+- **iPhone:** next requested acceptance slice. Rebuild current main for roPhone before the short,
+  interactive physical checklist; older installed fixtures are not acceptance of subsequent changes.
+- **Deferred:** full mobile accessibility/appearance matrices, Header false/nested navigation and
+  HNReader physical restoration smoke. Existing deterministic and simulator evidence remains
+  separate. No app publication, production Catalyst support or Android follow-up is part of this slice.
+
+The local artifact directories and installed fixtures remain available for review. Xcode DerivedData
+and temporary result bundles remain tool-owned; task-local external-directory notes identify them.
+No unrelated output was removed and no system appearance settings need restoring.
+
 ## Bounded platform gates
 
 Catalyst is the only first candidate. The pinned React Native scripts contain Catalyst post-install
@@ -140,7 +209,7 @@ edits or a desktop navigation redesign. A webview shell or an iPad app merely ru
 not satisfy the gate. Native Mac chrome, usable menus, keyboard and window resizing must all be
 reviewed after a successful build.
 
-The actual Catalyst attempt enabled `SUPPORTS_MACCATALYST`, CocoaPods' Catalyst post-install mode,
+The earlier unchanged-module Catalyst attempt enabled `SUPPORTS_MACCATALYST`, CocoaPods' Catalyst post-install mode,
 an iOS 16.4/Catalyst 13.3 deployment target in the isolated trial target, and Expo's supported
 source-module build switch because its precompiled Expo frameworks lacked Catalyst slices. React
 Native and Hermes already supplied Catalyst slices. The source build then failed in the unchanged
@@ -149,6 +218,10 @@ Native and Hermes already supplied Catalyst slices. The source build then failed
 Catalyst). This fails the requirement that pinned native modules build unchanged. No dependency
 source, manifest or lockfile was modified. Build evidence is retained in the task-local
 `.artifacts/native-navigation-catalyst/Build-expo-source.xcresult` and `conclusion.md`.
+
+The later authorized proof of concept uses a task-owned copy of the pinned slider with a one-line
+type correction. Its separate record owns the new build and UI evidence; the historical failed
+trial above remains valid for the stricter unchanged-module requirement.
 
 Android results must report tabs/stacks, toolbar/menu fidelity and sheet behavior separately.
 The iOS descriptor API is not an Android toolbar implementation; current Android commands remain

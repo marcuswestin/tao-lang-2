@@ -1,0 +1,230 @@
+use Button, Col, ScrollView, TextMultiline from @tao/ui
+use AndroidHaptics, ImpactAsync, ImpactFeedbackStyle, NotificationAsync, NotificationFeedbackType, PerformAndroidHapticsAsync, SelectionAsync from ./Generated/Bindings.tao
+
+public
+scene HapticsDemo() {
+   Title "Haptics · Expo"
+   state Status = "Ready"
+   state ShowAndroid = false
+   action Run0() {
+      do ImpactAsync()
+      set Status = "Completed: ImpactAsync default"
+   }
+   action Run1() {
+      do ImpactAsync(Style: Light)
+      set Status = "Completed: ImpactAsync Light"
+   }
+   action Run2() {
+      do ImpactAsync(Style: Medium)
+      set Status = "Completed: ImpactAsync Medium"
+   }
+   action Run3() {
+      do ImpactAsync(Style: Heavy)
+      set Status = "Completed: ImpactAsync Heavy"
+   }
+   action Run4() {
+      do ImpactAsync(Style: Soft)
+      set Status = "Completed: ImpactAsync Soft"
+   }
+   action Run5() {
+      do ImpactAsync(Style: Rigid)
+      set Status = "Completed: ImpactAsync Rigid"
+   }
+   action Run6() {
+      do NotificationAsync()
+      set Status = "Completed: NotificationAsync default"
+   }
+   action Run7() {
+      do NotificationAsync(Type: Success)
+      set Status = "Completed: NotificationAsync Success"
+   }
+   action Run8() {
+      do NotificationAsync(Type: Warning)
+      set Status = "Completed: NotificationAsync Warning"
+   }
+   action Run9() {
+      do NotificationAsync(Type: Error)
+      set Status = "Completed: NotificationAsync Error"
+   }
+   action Run10() {
+      do PerformAndroidHapticsAsync(Type: Confirm)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Confirm"
+   }
+   action Run11() {
+      do PerformAndroidHapticsAsync(Type: Reject)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Reject"
+   }
+   action Run12() {
+      do PerformAndroidHapticsAsync(Type: Gesture_Start)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Gesture_Start"
+   }
+   action Run13() {
+      do PerformAndroidHapticsAsync(Type: Gesture_End)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Gesture_End"
+   }
+   action Run14() {
+      do PerformAndroidHapticsAsync(Type: Toggle_On)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Toggle_On"
+   }
+   action Run15() {
+      do PerformAndroidHapticsAsync(Type: Toggle_Off)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Toggle_Off"
+   }
+   action Run16() {
+      do PerformAndroidHapticsAsync(Type: Clock_Tick)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Clock_Tick"
+   }
+   action Run17() {
+      do PerformAndroidHapticsAsync(Type: Context_Click)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Context_Click"
+   }
+   action Run18() {
+      do PerformAndroidHapticsAsync(Type: Drag_Start)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Drag_Start"
+   }
+   action Run19() {
+      do PerformAndroidHapticsAsync(Type: Keyboard_Tap)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Keyboard_Tap"
+   }
+   action Run20() {
+      do PerformAndroidHapticsAsync(Type: Keyboard_Press)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Keyboard_Press"
+   }
+   action Run21() {
+      do PerformAndroidHapticsAsync(Type: Keyboard_Release)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Keyboard_Release"
+   }
+   action Run22() {
+      do PerformAndroidHapticsAsync(Type: Long_Press)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Long_Press"
+   }
+   action Run23() {
+      do PerformAndroidHapticsAsync(Type: Virtual_Key)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Virtual_Key"
+   }
+   action Run24() {
+      do PerformAndroidHapticsAsync(Type: Virtual_Key_Release)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Virtual_Key_Release"
+   }
+   action Run25() {
+      do PerformAndroidHapticsAsync(Type: No_Haptics)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync No_Haptics"
+   }
+   action Run26() {
+      do PerformAndroidHapticsAsync(Type: Segment_Tick)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Segment_Tick"
+   }
+   action Run27() {
+      do PerformAndroidHapticsAsync(Type: Segment_Frequent_Tick)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Segment_Frequent_Tick"
+   }
+   action Run28() {
+      do PerformAndroidHapticsAsync(Type: Text_Handle_Move)
+      set Status = "Completed: Android only: PerformAndroidHapticsAsync Text_Handle_Move"
+   }
+   action Run29() {
+      do SelectionAsync()
+      set Status = "Completed: SelectionAsync"
+   }
+   render ScrollView() {
+      Col() [screen] {
+         TextMultiline("Tap a control to feel the result on a physical device. Status reports API completion.")
+         TextMultiline("Status: { Status }")
+         Button("ImpactAsync default") {
+            on press Run0
+         }
+         Button("ImpactAsync Light") {
+            on press Run1
+         }
+         Button("ImpactAsync Medium") {
+            on press Run2
+         }
+         Button("ImpactAsync Heavy") {
+            on press Run3
+         }
+         Button("ImpactAsync Soft") {
+            on press Run4
+         }
+         Button("ImpactAsync Rigid") {
+            on press Run5
+         }
+         Button("NotificationAsync default") {
+            on press Run6
+         }
+         Button("NotificationAsync Success") {
+            on press Run7
+         }
+         Button("NotificationAsync Warning") {
+            on press Run8
+         }
+         Button("NotificationAsync Error") {
+            on press Run9
+         }
+         Button("SelectionAsync") {
+            on press Run29
+         }
+         Button("Show or hide Android haptics") {
+            on press -> { toggle ShowAndroid }
+         }
+         when ShowAndroid {
+            true -> {
+               TextMultiline("Android only. No_Haptics intentionally produces no pulse.")
+               Button("Android only: PerformAndroidHapticsAsync Confirm") {
+                  on press Run10
+               }
+               Button("Android only: PerformAndroidHapticsAsync Reject") {
+                  on press Run11
+               }
+               Button("Android only: PerformAndroidHapticsAsync Gesture_Start") {
+                  on press Run12
+               }
+               Button("Android only: PerformAndroidHapticsAsync Gesture_End") {
+                  on press Run13
+               }
+               Button("Android only: PerformAndroidHapticsAsync Toggle_On") {
+                  on press Run14
+               }
+               Button("Android only: PerformAndroidHapticsAsync Toggle_Off") {
+                  on press Run15
+               }
+               Button("Android only: PerformAndroidHapticsAsync Clock_Tick") {
+                  on press Run16
+               }
+               Button("Android only: PerformAndroidHapticsAsync Context_Click") {
+                  on press Run17
+               }
+               Button("Android only: PerformAndroidHapticsAsync Drag_Start") {
+                  on press Run18
+               }
+               Button("Android only: PerformAndroidHapticsAsync Keyboard_Tap") {
+                  on press Run19
+               }
+               Button("Android only: PerformAndroidHapticsAsync Keyboard_Press") {
+                  on press Run20
+               }
+               Button("Android only: PerformAndroidHapticsAsync Keyboard_Release") {
+                  on press Run21
+               }
+               Button("Android only: PerformAndroidHapticsAsync Long_Press") {
+                  on press Run22
+               }
+               Button("Android only: PerformAndroidHapticsAsync Virtual_Key") {
+                  on press Run23
+               }
+               Button("Android only: PerformAndroidHapticsAsync Virtual_Key_Release") {
+                  on press Run24
+               }
+               Button("Android only: PerformAndroidHapticsAsync No_Haptics") {
+                  on press Run25
+               }
+               Button("Android only: PerformAndroidHapticsAsync Segment_Tick") {
+                  on press Run26
+               }
+               Button("Android only: PerformAndroidHapticsAsync Segment_Frequent_Tick") {
+                  on press Run27
+               }
+               Button("Android only: PerformAndroidHapticsAsync Text_Handle_Move") {
+                  on press Run28
+            }  }
+            otherwise -> { }
+}  }  }  }

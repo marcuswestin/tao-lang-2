@@ -1,4 +1,18 @@
-#!/bin/zsh
+#!/bin/sh
+
+if [ -z "${ZSH_VERSION:-}" ]; then
+  SCRIPT_PATH=$0
+  while [ -L "$SCRIPT_PATH" ]; do
+    SCRIPT_LINK=$(readlink "$SCRIPT_PATH") || exit 1
+    case "$SCRIPT_LINK" in
+      /*) SCRIPT_PATH=$SCRIPT_LINK ;;
+      *) SCRIPT_PATH=${SCRIPT_PATH%/*}/$SCRIPT_LINK ;;
+    esac
+  done
+  SCRIPT_DIR=$(CDPATH= cd -- "${SCRIPT_PATH%/*}" && pwd -P) || exit 1
+  . "$SCRIPT_DIR/packages/cli/dev-cli/dev-cli-src/environment/repo-shell.sh"
+  tao_exec_repo_zsh "$SCRIPT_DIR" "$0" "$@"
+fi
 
 # Run under zsh's own defaults regardless of the developer's ~/.zshenv. `BASH_REMATCH` in
 # particular moves regex captures out of `match`, which would blank the denied path in exactly
@@ -18,6 +32,13 @@ if [[ "${1:-}" == unsandboxed ]]; then
 fi
 
 SCRIPT_DIR="${0:A:h}"
+if [[ "$HOST_COMMAND_REQUESTED" == false && "${1:-}" == setup && "${2:-}" == --environment ]]; then
+  if (( $# != 2 )); then
+    echo 'Usage: ./agent setup --environment' >&2
+    exit 2
+  fi
+  exec "$SCRIPT_DIR/enter-tao-dev-env" --setup-only
+fi
 AGENT_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/agent-cli"
 DEV_CLI_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/dev-cli"
 CLI_KIT_PACKAGE_DIR="$SCRIPT_DIR/packages/cli/cli-kit"
@@ -36,7 +57,7 @@ function enter_devenv_if_needed() {
   tao_activate_devenv_profile "$SCRIPT_DIR" "$DEVENV_PROFILE" && return
 
   echo "Tao's pinned devenv profile is unavailable." >&2
-  echo "Run ./enter-tao-dev-env from a regular terminal to build the pinned environment." >&2
+  echo "On macOS run ./enter-tao-dev-env; on Linux run ./bootstrap-tao-dev-env --install-nix." >&2
   exit 1
 }
 

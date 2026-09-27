@@ -4,6 +4,7 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import {
   companionInstallArgs,
   companionInstallEnv,
+  prepareCompanionIosInstall,
   throwStudioDeviceFailure,
 } from './StudioCompanionDevice'
 
@@ -134,11 +135,13 @@ export function createStudioCompanionSimulator(options: StudioCompanionSimulator
       )
     }
     await boot(input.id)
+    const env = companionInstallEnv(Platform.runtimeProcess.env, repoRoot())
+    await prepareCompanionIosInstall({ root, env, run })
     const args = companionInstallArgs(input.id)
     const result = await run('bunx', {
       args,
       cwd: root,
-      env: companionInstallEnv(Platform.runtimeProcess.env, repoRoot()),
+      env,
       prefixedOutput: { processName: 'expo' },
     })
     if (result.error !== undefined) {

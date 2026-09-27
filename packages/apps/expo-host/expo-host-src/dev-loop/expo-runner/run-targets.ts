@@ -41,7 +41,8 @@ export function createExpoTargets(
   return {
     openAndroid: () => openAndroid(context),
     openIosSimulator: (shouldStop?: () => boolean) => openIosSimulator(context, shouldStop),
-    openPhysicalDevice: () => openPhysicalDevice(config, metro, android),
+    openPhysicalDevice: (device?: string, shouldStop?: () => boolean) =>
+      openPhysicalDevice(config, metro, android, { device, shouldStop }),
     openPreparedAndroid: (url?: string) => openPreparedAndroid(context, url),
     openStartupTargets: (requested?: readonly DevStartupTarget[], shouldStop?: () => boolean) =>
       openStartupTargets(context, requested, shouldStop),

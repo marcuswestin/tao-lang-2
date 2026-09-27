@@ -18,8 +18,36 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   protected constructor(protected readonly project: ProjectContext<ServicesT>) {}
 
   /** open creates a Workspace rooted at `directoryPath`. */
-  static async open(directoryPath: string): Promise<Workspace> {
-    return new Workspace(await createProjectContext(directoryPath, createWorkspaceServices))
+  static async open(
+    directoryPath: string,
+    options: { sourceOverrides?: Readonly<Record<string, string>> } = {},
+  ): Promise<Workspace> {
+    const root = FS.resolvePath(directoryPath)
+    const sourceOverrides: Record<string, string> = {}
+    for (const [path, source] of Object.entries(options.sourceOverrides ?? {})) {
+      const resolved = FS.resolvePath(path, root)
+      Assert.input(
+        FS.extname(resolved) === '.tao' && FS.pathIsWithin(resolved, root),
+        'Source overrides must name Tao files inside the workspace root.',
+      )
+      let ancestor = resolved
+      while (!await FS.exists(ancestor) && !await FS.isSymbolicLink(ancestor)) {
+        ancestor = FS.dirname(ancestor)
+      }
+      Assert.input(
+        FS.pathIsWithin(await FS.realPath(ancestor), await FS.realPath(root)),
+        'Source overrides must remain physically inside the workspace root.',
+      )
+      sourceOverrides[resolved] = source
+    }
+    const snapshot = Object.freeze(sourceOverrides)
+    return new Workspace(
+      await createProjectContext(
+        root,
+        context => createWorkspaceServices(context, snapshot),
+        Object.keys(snapshot),
+      ),
+    )
   }
 
   /** shared returns a process-shared Workspace rooted at `directoryPath`. */
@@ -187,6 +215,9 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   }
 
   private async writeBridgeMetadata(files: readonly ParseResult['entry'][]): Promise<void> {
+    if (Object.keys(this.project.services.sourceOverrides ?? {}).length > 0) {
+      return
+    }
     const projectRoot = await Packages.containingProjectRoot(this.project.root) ?? this.project.root
     await BridgeMetadata.write(files.filter(file => FS.pathIsWithin(file.path, projectRoot)))
   }

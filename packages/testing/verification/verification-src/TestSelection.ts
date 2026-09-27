@@ -110,6 +110,7 @@ const WORKFLOW_PATHS = [
   'dev',
   'tao',
   'enter-tao-dev-env',
+  'bootstrap-tao-dev-env',
 ]
 const WORKFLOW_PREFIXES = [
   '.rulesync/',
@@ -130,6 +131,8 @@ const EVERYTHING_PATHS = new Set([
   'devenv.yaml',
   'package.json',
   'packages/tsconfig.base.json',
+  'packages/cli/dev-cli/dev-cli-src/environment/toolchain-packages.nix',
+  'packages/cli/dev-cli/dev-cli-src/environment/portable-profile.nix',
 ])
 
 /**

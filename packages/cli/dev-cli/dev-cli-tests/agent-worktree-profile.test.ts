@@ -3,6 +3,7 @@ import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test 
 
 const PROFILE_SCRIPT = Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh')
 const DEPENDENCY_SCRIPT = Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh')
+const SHELL_SCRIPT = 'packages/cli/dev-cli/dev-cli-src/environment/repo-shell.sh'
 
 type ProfileFixture = {
   commonGitDir: string
@@ -287,13 +288,24 @@ Describe('agent worktree profile bootstrap', () => {
         [
           'lock_file="$2/bootstrap.lock"',
           'ready_file="$2/bootstrap.ready"',
-          'function hold_lock() { print -r -- ready > "$ready_file"; sleep 0.2 }',
+          'release_file="$2/bootstrap.release"',
+          'function hold_lock() {',
+          '  print -r -- ready > "$ready_file"',
+          '  local deadline=$((SECONDS + 30))',
+          '  until [[ -f "$release_file" ]]; do (( SECONDS < deadline )) || return 7; sleep 0.01; done',
+          '}',
           'tao_run_with_lock "$lock_file" 2 hold_lock &',
           'holder_pid=$!',
-          'for attempt in {1..100}; do [[ -f "$ready_file" ]] && break; sleep 0.01; done',
+          'trap \'touch "$release_file"; wait "$holder_pid"\' EXIT',
+          'deadline=$((SECONDS + 30))',
+          'until [[ -f "$ready_file" ]]; do (( SECONDS < deadline )) || exit 8; sleep 0.01; done',
           '[[ -f "$ready_file" ]] || exit 8',
+          // Deliberately schedule the contender after the old fixed holder delay.
+          'sleep 0.3',
           'if tao_run_with_lock "$lock_file" 0.05 true; then exit 9; fi',
-          'wait "$holder_pid"',
+          'touch "$release_file"',
+          'wait "$holder_pid" || exit 10',
+          'trap - EXIT',
           'tao_run_with_lock "$lock_file" 0.1 print -r -- acquired',
         ].join('\n'),
         fixture,
@@ -373,6 +385,10 @@ Describe('agent worktree profile bootstrap', () => {
       const devPath = FS.resolvePath('dev', fixture.worktree)
       await FS.writeText(devPath, await FS.readText(Repo.resolvePath('dev')))
       await FS.writeText(
+        FS.resolvePath(SHELL_SCRIPT, fixture.worktree),
+        await FS.readText(Repo.resolvePath(SHELL_SCRIPT)),
+      )
+      await FS.writeText(
         FS.resolvePath('packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.zsh', fixture.worktree),
         await FS.readText(PROFILE_SCRIPT),
       )
@@ -381,7 +397,7 @@ Describe('agent worktree profile bootstrap', () => {
 
       Expect(result.exitCode).not.toBe(0)
       Expect(result.stderr).toContain('pinned devenv profile is unavailable')
-      Expect(result.stderr).toContain('./enter-tao-dev-env')
+      Expect(result.stderr).toContain('./bootstrap-tao-dev-env')
     } finally {
       await FS.remove(testRoot)
     }
@@ -489,6 +505,7 @@ Describe('agent worktree profile bootstrap', () => {
 
     Expect(commands).toContain('packages/cli/dev-cli/dev-cli-src/cli/ensure-dependencies.zsh')
     Expect(commands).toContain('--health')
+    Expect(commands).toContain('packages/cli/dev-cli/dev-cli-src/cli/initial-dev-branch.zsh')
     Expect(commands).not.toContain('bun install')
     Expect(names).not.toContain('deps')
     Expect(names).not.toContain('setup')
@@ -510,7 +527,7 @@ Describe('agent worktree profile bootstrap', () => {
       await FS.writeText(
         FS.resolvePath('bun', fakeBin),
         [
-          '#!/bin/zsh',
+          '#!/usr/bin/env zsh',
           'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
           '[[ "$1" == run ]]',
           '',
@@ -562,7 +579,7 @@ Describe('agent worktree profile bootstrap', () => {
       await FS.writeText(
         FS.resolvePath('bun', fakeBin),
         [
-          '#!/bin/zsh',
+          '#!/usr/bin/env zsh',
           'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
           'if [[ "$1" == run ]]; then',
           '  [[ -f "$TAO_TEST_REPAIRED" ]] && exit 0',
@@ -629,7 +646,7 @@ Describe('agent worktree profile bootstrap', () => {
       await FS.writeText(
         FS.resolvePath('bun', fakeBin),
         [
-          '#!/bin/zsh',
+          '#!/usr/bin/env zsh',
           'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
           'if [[ "$1" == run ]]; then',
           '  [[ -f "$TAO_TEST_REPAIRED" ]] && exit 0',
@@ -946,8 +963,14 @@ async function git(cwd: string, args: readonly string[]): Promise<void> {
 
 /** justCommands returns the commands a recipe would run, so tests assert behavior, not layout. */
 async function justCommands(name: string, ...args: string[]): Promise<string> {
-  const result = await CLI.run('just', { args: ['--dry-run', name, ...args], cwd: Repo.getRoot() })
-  Expect(result.exitCode).toBe(0)
+  const result = await CLI.run('just', {
+    args: ['--dry-run', name, ...args],
+    cwd: Repo.getRoot(),
+    processPolicy: 'test',
+    // budget-ok: a recipe dry run must terminate its child before the enclosing 120-second test timeout.
+    timeoutMs: 20_000,
+  })
+  Expect(result).toMatchObject({ exitCode: 0, signal: null, error: undefined })
   return `${result.stdout}${result.stderr}`
 }
 
@@ -979,7 +1002,7 @@ async function runAgentInstall(testRoot: string, attemptOutputs: readonly string
   await FS.writeText(
     FS.resolvePath('bun', fakeBin),
     [
-      '#!/bin/zsh',
+      '#!/usr/bin/env zsh',
       'print -r -- attempt >> "$TAO_TEST_ATTEMPT_LOG"',
       'attempt=$(wc -l < "$TAO_TEST_ATTEMPT_LOG" | tr -d " ")',
       'output_file="$TAO_TEST_OUTPUTS/$attempt.txt"',
@@ -1048,7 +1071,7 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
   await FS.writeText(
     fakeGit,
     [
-      '#!/bin/zsh',
+      '#!/usr/bin/env zsh',
       'if [[ " $* " == *" --absolute-git-dir "* ]]; then',
       '  print -r -- "$TAO_TEST_GIT_DIR"',
       'elif [[ " $* " == *" --git-common-dir "* ]]; then',
@@ -1059,14 +1082,14 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
       '',
     ].join('\n'),
   )
-  await FS.writeText(fakeGetconf, '#!/bin/zsh\nprint -r -- "$TAO_TEST_DARWIN_TEMP_DIR"\n')
+  await FS.writeText(fakeGetconf, '#!/usr/bin/env zsh\nprint -r -- "$TAO_TEST_DARWIN_TEMP_DIR"\n')
   await Promise.all([makeExecutable(fakeGetconf), makeExecutable(fakeGit)])
   if (withPrimaryProfile) {
     const primaryNode = FS.resolvePath('bin/node', primaryProfile)
     const primaryBun = FS.resolvePath('bin/bun', primaryProfile)
     await FS.mkdir(FS.resolvePath('libexec/android-sdk', primaryProfile))
-    await FS.writeText(primaryNode, '#!/bin/zsh\nprint -r -- v24.test\n')
-    await FS.writeText(primaryBun, '#!/bin/zsh\nprint -r -- 1.4.2\n')
+    await FS.writeText(primaryNode, '#!/usr/bin/env zsh\nprint -r -- v24.test\n')
+    await FS.writeText(primaryBun, '#!/usr/bin/env zsh\nprint -r -- 1.4.2\n')
     await Promise.all([makeExecutable(primaryNode), makeExecutable(primaryBun)])
   }
   return {
@@ -1096,6 +1119,7 @@ async function makeExecutable(path: string): Promise<void> {
 
 async function copyBootstrapScripts(worktree: string): Promise<void> {
   await Promise.all([
+    FS.writeText(FS.resolvePath(SHELL_SCRIPT, worktree), await FS.readText(Repo.resolvePath(SHELL_SCRIPT))),
     FS.writeText(FS.resolvePath('agent', worktree), await FS.readText(Repo.resolvePath('agent'))),
     FS.writeText(FS.resolvePath('dev', worktree), await FS.readText(Repo.resolvePath('dev'))),
     FS.writeText(
@@ -1117,7 +1141,7 @@ async function writeBootstrapBun(path: string): Promise<void> {
   await FS.writeText(
     path,
     [
-      '#!/bin/zsh',
+      '#!/usr/bin/env zsh',
       'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
       'if [[ "$1" == install ]]; then',
       '  [[ "${TAO_TEST_BUN_INSTALL_FAILURE:-}" == 1 ]] && exit 1',

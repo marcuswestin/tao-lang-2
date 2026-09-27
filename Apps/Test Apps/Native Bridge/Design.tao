@@ -1,0 +1,6 @@
+folder
+design NativeBridgeDesign {
+   styles {
+      screen [gap 12, pad 20]
+   }
+}

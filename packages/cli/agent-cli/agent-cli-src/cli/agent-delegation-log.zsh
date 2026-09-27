@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 
 # The delegation hooks for Claude Code and Codex, rendered into .claude/settings.json and
 # .codex/hooks.json from .rulesync/hooks.jsonc. Each invocation writes one file under
@@ -7,7 +7,7 @@
 #
 # One file per event rather than appended lines, because the guidance this log exists to tune asks
 # for three to five concurrent agents, so simultaneous hooks are the designed case and not an edge:
-# a payload runs to kilobytes, zsh flushes one in several writes, and concurrent appends to a shared
+# a payload runs to kilobytes, the shell flushes one in several writes, and concurrent appends to a shared
 # file interleave and destroy both records. Separate files cannot collide, and the write lands
 # through a rename so a reader never sees a partial one.
 #
@@ -16,12 +16,19 @@
 # tolerant where a hook on every Agent call cannot afford to be slow. It never fails a tool call.
 # A PreToolUse hook that exits non-zero can block the call it precedes, so every path here exits 0
 # and every write is best-effort; a lost event costs a row in a report.
-emulate zsh
 set -u
 
 EVENT="${1:-unknown}"
-SCRIPT_DIR="${0:A:h}"
-REPO_ROOT="${SCRIPT_DIR:h:h:h:h:h}"
+SCRIPT_PATH="$0"
+while [[ -L "$SCRIPT_PATH" ]]; do
+  SCRIPT_LINK="$(readlink "$SCRIPT_PATH")" || exit 0
+  case "$SCRIPT_LINK" in
+    /*) SCRIPT_PATH="$SCRIPT_LINK" ;;
+    *) SCRIPT_PATH="$(dirname "$SCRIPT_PATH")/$SCRIPT_LINK" ;;
+  esac
+done
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$SCRIPT_PATH")" && pwd -P)" || exit 0
+REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../../../../.." && pwd -P)" || exit 0
 EVENTS_DIR="$REPO_ROOT/.artifacts/delegation/events"
 
 # Newlines are only formatting inside a JSON document: a newline within a string arrives escaped, so

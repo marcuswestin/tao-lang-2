@@ -10,6 +10,7 @@ import {
   type StudioRecentProject,
   StudioSessionManager,
 } from '@studio'
+import { StudioBrowser } from './StudioBrowser'
 import { createRecentProjectStore, openStudioProjectResource } from './StudioDev'
 
 export type StudioPackagedServiceOptions = {
@@ -143,6 +144,7 @@ export async function startStudioPackagedService(
       canvasViewportStore,
       compileOnStart: false,
       deviceGateway,
+      openBrowser: StudioBrowser.open,
     })
   } catch (error) {
     return await rollbackPackagedStart(error, [

@@ -258,6 +258,63 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).toContain('PlaylistRow(Playlist: Playlist)')
   })
 
+  for (const visibility of ['public', 'private']) {
+    Test(`inserts only a public imported generated view into a typed loop (${visibility})`, async () => {
+      await withTaoFiles('tao-source-actions-imported-row-', {
+        'Data.tao': 'public data Playlists / Playlist { Title text }',
+        '@/studio/View1.tao': `use Playlist from ../../Data\nuse Text from @tao/ui\n${
+          visibility === 'public' ? 'public ' : ''
+        }view View1(Playlist) { render Text(Playlist.Title) }`,
+        'Main.tao': `
+          use Playlists, Playlist from ./Data
+          use Col, Text from @tao/ui
+          view Main() {
+            query Playlists = Playlists
+            render Col() {
+              loop Playlists / Playlist { Text(Playlist.Title) }
+            }
+          }
+        `,
+      }, async (paths, root) => {
+        const workspace = await Workspace.open(root)
+        const parsed = await workspace.parseFiles([paths['Main.tao'], paths['@/studio/View1.tao']])
+        const document = parsed[0]!.entry.document
+        const loopRender = AST.streamAllContents(document.parseResult.value).filter(AST.isRender)
+          .find(render => render.$cstNode?.text === 'Text(Playlist.Title)')!
+        const request = {
+          beforeId: renderId(loopRender),
+          kind: 'insert-project-view' as const,
+          viewName: 'View1',
+          viewSourcePath: paths['@/studio/View1.tao'],
+        }
+        const context = { files: [...new Set(parsed.flatMap(result => result.files.map(file => file.ast)))] }
+        if (visibility === 'private') {
+          await Expect(SourceActions.applyStudioPatch(document, request, context)).rejects.toThrow(
+            'only import a public project view',
+          )
+          return
+        }
+        const patch = await SourceActions.applyStudioPatch(document, request, context)
+        Expect(patch.content).toContain('use View1 from @/studio')
+        Expect(patch.content).toContain('View1(Playlist: Playlist)\n         Text(Playlist.Title)')
+        const validated =
+          await (await Workspace.open(root, { sourceOverrides: { [paths['Main.tao']]: patch.content } })).validate(
+            paths['Main.tao'],
+          )
+        Expect(validated.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+        const imported = validated.entry.ast.statements.filter(AST.isUseStatement)
+          .flatMap(AST.resolvedImportedDeclarations).find(declaration => declaration.name === 'View1')
+        Expect.Is(imported, AST.isViewDeclaration)
+        Expect(AST.getDocument(imported).uri.fsPath).toBe(paths['@/studio/View1.tao'])
+        await Expect(SourceActions.applyStudioPatch(document, {
+          kind: 'insert-project-view',
+          viewName: 'View1',
+          viewSourcePath: paths['@/studio/View1.tao'],
+        }, context)).rejects.toThrow('unresolved required parameters: Playlist')
+      })
+    })
+  }
+
   Test('rejects ambiguous inferred values but accepts one explicit parser-resolved lexical binding', async () => {
     const document = await parseDocument(`
       use Col, Text from @tao/ui

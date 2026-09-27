@@ -5,6 +5,41 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const DISPATCHER = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-host-dispatch.ts')
 
 Describe('named host command dispatch', () => {
+  Test('bounds Watchman management to fixed lifecycle actions', async () => {
+    const root = await mkTestDir('tao-watchman-host-')
+    try {
+      const source = FS.resolvePath('permissions.jsonc', root)
+      const log = FS.resolvePath('dev.log', root)
+      await FS.writeText(
+        source,
+        JSON.stringify({
+          agentHostCommands: ['watchman start', 'watchman status', 'watchman stop'],
+        }),
+      )
+      const dev = FS.resolvePath('dev', root)
+      await FS.writeText(dev, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\nexit "${TAO_DEV_EXIT:-0}"\n')
+      await FS.chmod(dev, 0o755)
+      const invoke = (args: string[], exitCode = '0') =>
+        CLI.run(Platform.runtimeProcess.execPath, {
+          args: [DISPATCHER, source, 'watchman', ...args],
+          cwd: root,
+          env: { TAO_HOST_LOG: log, TAO_DEV_EXIT: exitCode },
+        })
+      for (const action of ['start', 'status', 'stop']) {
+        Expect((await invoke([action])).exitCode).toBe(0)
+        Expect(await FS.readText(log)).toBe(`watchman\n${action}\n`)
+      }
+      await FS.remove(log)
+      for (const args of [[], ['watch-del-all'], ['start', '--sockname', '/foreign'], ['stop', '--help']]) {
+        Expect((await invoke(args)).exitCode).toBe(2)
+      }
+      Expect(await FS.exists(log)).toBe(false)
+      Expect((await invoke(['start'], '7')).exitCode).toBe(7)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('bounds Studio lifecycle selectors and preserves stop failures', async () => {
     const root = await mkTestDir('tao-studio-lifecycle-host-')
     try {
@@ -12,7 +47,7 @@ Describe('named host command dispatch', () => {
       const log = FS.resolvePath('dev.log', root)
       await FS.writeText(source, '{ "agentHostCommands": ["studio-ps", "studio-stop"] }')
       const dev = FS.resolvePath('dev', root)
-      await FS.writeText(dev, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\nexit "${TAO_DEV_EXIT:-0}"\n')
+      await FS.writeText(dev, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\nexit "${TAO_DEV_EXIT:-0}"\n')
       await FS.chmod(dev, 0o755)
       const invoke = (args: string[], exitCode = '0') =>
         CLI.run(Platform.runtimeProcess.execPath, {
@@ -78,7 +113,7 @@ Describe('named host command dispatch', () => {
       const log = FS.resolvePath('open.log', root)
       await FS.writeText(source, '{ "agentHostCommands": ["docker-desktop start"] }')
       const open = FS.resolvePath('open', bin)
-      await FS.writeText(open, '#!/bin/zsh\nprintf "%s\\n" "$@" >> "$TAO_HOST_LOG"\nexit "${TAO_OPEN_EXIT:-0}"\n')
+      await FS.writeText(open, '#!/bin/sh\nprintf "%s\\n" "$@" >> "$TAO_HOST_LOG"\nexit "${TAO_OPEN_EXIT:-0}"\n')
       await FS.chmod(open, 0o755)
       const invoke = (args: string[], exitCode = '0') =>
         CLI.run(Platform.runtimeProcess.execPath, {
@@ -108,7 +143,7 @@ Describe('named host command dispatch', () => {
       const log = FS.resolvePath('dev.log', root)
       await FS.writeText(source, '{ "agentHostCommands": ["reclaim --execute"] }')
       const dev = FS.resolvePath('dev', root)
-      await FS.writeText(dev, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.writeText(dev, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
       await FS.chmod(dev, 0o755)
       const executed = await CLI.run(Platform.runtimeProcess.execPath, {
         args: [DISPATCHER, source, 'reclaim', '--execute'],
@@ -137,7 +172,7 @@ Describe('named host command dispatch', () => {
       const log = FS.resolvePath('dev.log', root)
       await FS.writeText(source, '{ "agentHostCommands": ["prepare-release studio", "prepare-release ide-extension"] }')
       const dev = FS.resolvePath('dev', root)
-      await FS.writeText(dev, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.writeText(dev, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
       await FS.chmod(dev, 0o755)
       const result = await CLI.run(Platform.runtimeProcess.execPath, {
         args: [DISPATCHER, source, 'prepare-release', 'studio', '--repo', 'owner/repo', '--version', '0.0.1'],
@@ -169,7 +204,7 @@ Describe('named host command dispatch', () => {
       const open = FS.resolvePath('open', bin)
       await FS.writeText(
         open,
-        '#!/bin/zsh\nprintf "%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$2" == Simulator ]]; then exit 1; fi\n',
+        '#!/usr/bin/env zsh\nprintf "%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$2" == Simulator ]]; then exit 1; fi\n',
       )
       await FS.chmod(open, 0o755)
       const result = await CLI.run(Platform.runtimeProcess.execPath, {
@@ -196,11 +231,11 @@ Describe('named host command dispatch', () => {
       const open = FS.resolvePath('open', bin)
       await FS.writeText(
         xcrun,
-        '#!/bin/zsh\nprintf "xcrun:%s\\n" "$*" >> "$TAO_HOST_LOG"\nprint -u2 "Unable to boot device in current state: Booted"\nexit 1\n',
+        '#!/usr/bin/env zsh\nprintf "xcrun:%s\\n" "$*" >> "$TAO_HOST_LOG"\nprint -u2 "Unable to boot device in current state: Booted"\nexit 1\n',
       )
       await FS.writeText(
         open,
-        '#!/bin/zsh\nprintf "open:%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$1" == -a && "$2" == Simulator ]]; then exit 1; fi\n',
+        '#!/usr/bin/env zsh\nprintf "open:%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$1" == -a && "$2" == Simulator ]]; then exit 1; fi\n',
       )
       await FS.chmod(xcrun, 0o755)
       await FS.chmod(open, 0o755)
@@ -233,7 +268,7 @@ Describe('named host command dispatch', () => {
       await FS.mkdir(ios)
       await FS.writeText(FS.resolvePath('Podfile', ios), '')
       const pod = FS.resolvePath('pod', bin)
-      await FS.writeText(pod, '#!/bin/zsh\nprintf "%s\\n" "$PWD" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.writeText(pod, '#!/bin/sh\nprintf "%s\\n" "$PWD" "$@" > "$TAO_HOST_LOG"\n')
       await FS.chmod(pod, 0o755)
       const env = { PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`, TAO_HOST_LOG: log }
 
@@ -266,7 +301,7 @@ Describe('named host command dispatch', () => {
       await FS.writeText(source, '{ "agentHostCommands": ["processes list", "processes started"] }')
       await FS.mkdir(bin)
       const ps = FS.resolvePath('ps', bin)
-      await FS.writeText(ps, '#!/bin/zsh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
+      await FS.writeText(ps, '#!/bin/sh\nprintf "%s\\n" "$@" > "$TAO_HOST_LOG"\n')
       await FS.chmod(ps, 0o755)
       const env = { PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`, TAO_HOST_LOG: log }
 

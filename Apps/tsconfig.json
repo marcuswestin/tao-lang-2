@@ -15,6 +15,15 @@
       ],
       "@tao/runtime": [
         "../packages/apps/runtime/TaoRuntime-src/TR.ts"
+      ],
+      "expo-clipboard": [
+        "../packages/apps/expo-host/node_modules/expo-clipboard"
+      ],
+      "expo-haptics": [
+        "../packages/apps/expo-host/node_modules/expo-haptics"
+      ],
+      "react-native": [
+        "../packages/apps/expo-host/node_modules/react-native"
       ]
     },
     "skipLibCheck": true,

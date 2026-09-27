@@ -328,6 +328,110 @@ function generationManifest(): StudioPreviewManifestV2 {
   }
 }
 
+Describe('Studio browser launch', () => {
+  async function start(previews: readonly (string | undefined)[], options: StudioServerOptions = {}) {
+    let nextId = 0
+    const manager = new StudioSessionManager({ createSessionId: () => `browser_${nextId++}` })
+    for (const [index, previewUrl] of previews.entries()) {
+      manager.add({
+        previewUrl,
+        session: {
+          appName: `App${index}`,
+          projectRoot: `/projects/App${index}`,
+          subscribe: () => () => {},
+        } as unknown as StudioProjectSession,
+      })
+    }
+    return await startStudioSessionServer(manager, { ...options, compileOnStart: false })
+  }
+
+  Test('opens each session app and refuses requests outside its session and origin boundary', async () => {
+    const opened: string[] = []
+    const server = await start(['http://127.0.0.1:8081/', 'https://localhost:8082/app?project=second'], {
+      openBrowser: async url => void opened.push(url),
+      previewUrl: 'https://fallback.example/',
+    })
+    try {
+      const first = await fetch(`${server.url}/sessions/browser_0/api/browser/open`, {
+        body: JSON.stringify({ url: 'file:///private/should-not-open' }),
+        headers: { 'content-type': 'application/json', origin: server.url },
+        method: 'POST',
+      })
+      Expect(first.status).toBe(200)
+      Expect(await first.json()).toEqual({ opened: true, url: 'http://127.0.0.1:8081/' })
+      const second = await fetch(`${server.url}/sessions/browser_1/api/browser/open`, { method: 'POST' })
+      Expect(second.status).toBe(200)
+      Expect(await second.json()).toEqual({ opened: true, url: 'https://localhost:8082/app?project=second' })
+
+      for (const origin of ['https://hostile.example', 'http://127.0.0.1:8081', 'https://localhost:8082']) {
+        const rejected = await fetch(`${server.url}/sessions/browser_0/api/browser/open`, {
+          headers: { origin },
+          method: 'POST',
+        })
+        Expect(rejected.status).toBe(403)
+      }
+      for (const path of ['/api/browser/open', '/sessions/unknown/api/browser/open']) {
+        Expect((await fetch(`${server.url}${path}`, { method: 'POST' })).status).toBe(404)
+      }
+      Expect((await fetch(`${server.url}/sessions/browser_0/api/browser/open`)).status).toBe(404)
+      Expect(opened).toEqual(['http://127.0.0.1:8081/', 'https://localhost:8082/app?project=second'])
+    } finally {
+      await server.stop()
+    }
+  })
+
+  Test('refuses absent or non-web session URLs without using the global preview fallback', async () => {
+    const opened: string[] = []
+    const previews = [
+      undefined,
+      'invalid URL',
+      'file:///private/app.html',
+      'javascript:alert(1)',
+      'ftp://localhost/app',
+    ]
+    const server = await start(previews, {
+      openBrowser: async url => void opened.push(url),
+      previewUrl: 'https://fallback.example/',
+    })
+    try {
+      for (const index of previews.keys()) {
+        const response = await fetch(`${server.url}/sessions/browser_${index}/api/browser/open`, { method: 'POST' })
+        Expect(response.status).toBe(503)
+        Expect(await response.json()).toEqual({
+          error: 'This project has no web preview available to open in a browser.',
+        })
+      }
+      Expect(opened).toEqual([])
+    } finally {
+      await server.stop()
+    }
+  })
+
+  Test('reports unavailable launch tooling and contains host opener failures', async () => {
+    for (
+      const [openBrowser, status, error] of [
+        [undefined, 501, 'This Studio service does not include browser launch tooling.'],
+        [
+          async () => {
+            Errors.throwHostEnvironment('Private host executable /private/tools/browser failed')
+          },
+          502,
+          'Could not open the app in a browser. Try again.',
+        ],
+      ] as const
+    ) {
+      const server = await start(['http://127.0.0.1:8081/'], { openBrowser })
+      try {
+        const response = await fetch(`${server.url}/sessions/browser_0/api/browser/open`, { method: 'POST' })
+        Expect(response.status).toBe(status)
+        Expect(await response.json()).toEqual({ error })
+      } finally {
+        await server.stop()
+      }
+    }
+  })
+})
+
 Test('Studio routes every session request through an opaque window ID and refuses unscoped paths', () => {
   Expect(StudioServerTesting.studioSessionRoute('/sessions/first_session/api/protocol')).toEqual({
     pathname: '/api/protocol',

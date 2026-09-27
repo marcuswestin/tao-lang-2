@@ -148,10 +148,69 @@ async function readStore(): Promise<SecretStore> {
   return parseStore(await FS.readText(path))
 }
 
+/** Every encrypted-store writer uses this lock; prompts and encryption happen before entering it. */
+async function withStoreMutation<Value>(work: () => Promise<Value>): Promise<Value> {
+  return await FS.withFileMutationLock(Repo.resolvePath(STORE_PATH), Repo.getRoot(), work)
+}
+
 async function writeStore(store: SecretStore): Promise<void> {
   const path = Repo.resolvePath(STORE_PATH)
+  const temporary = `${path}.${Platform.randomUUID()}.tmp`
   await FS.mkdir(FS.dirname(path))
-  await FS.writeText(path, formatStore(store))
+  try {
+    await FS.writeText(temporary, formatStore(store), { mode: 0o600 })
+    await FS.move(temporary, path)
+  } finally {
+    await FS.remove(temporary)
+  }
+}
+
+/** Prepare an encrypted batch without decrypting existing values or writing partial credentials. */
+export async function prepareSecretBatch(environment = {
+  cipher: ageCipher(),
+  now: () => new Date(),
+  read: readStore,
+  write: writeStore,
+}) {
+  const original = await environment.read()
+  if (original.recipients.length === 0) {
+    Errors.throwUserInput('The secret store lists no recipients. Run `just secrets setup` first.')
+  }
+  return {
+    existingNames: Object.keys(original.secrets),
+    save: async (values: Readonly<Record<string, string>>, notes: Readonly<Record<string, string>> = {}) => {
+      const encrypted: Record<string, string> = {}
+      for (const [name, value] of Object.entries(values)) {
+        requireSecretName(name)
+        if (value.trim() === '') {
+          Errors.throwUserInput('No value was entered, so nothing was stored.')
+        }
+        encrypted[name] = await environment.cipher.encrypt(value, original.recipients)
+      }
+      await withStoreMutation(async () => {
+        const current = await environment.read()
+        if (
+          JSON.stringify(current.recipients) !== JSON.stringify(original.recipients)
+          || Object.keys(values).some(name =>
+            JSON.stringify(current.secrets[name]) !== JSON.stringify(original.secrets[name])
+          )
+        ) {
+          Errors.throwUserInput(
+            'The recipients or selected secrets changed during setup. Run setup again to preserve those changes.',
+          )
+        }
+        let updated = current
+        for (const [name, armor] of Object.entries(encrypted)) {
+          const note = notes[name]
+          updated = withSecret(updated, name, armor, {
+            now: environment.now(),
+            ...(note === undefined ? {} : { note }),
+          })
+        }
+        await environment.write(updated)
+      })
+    },
+  }
 }
 
 /** decrypt writes every secret into the generated environment file, replacing it wholesale. */
@@ -187,21 +246,15 @@ async function decryptedValues(store: SecretStore, cipher: Cipher): Promise<Map<
 /** add encrypts one pasted secret into the store, without echoing it or writing it anywhere in the clear. */
 async function addSecret(name: string, environment: SecretsEnvironment, note?: string): Promise<number> {
   const key = requireSecretName(name)
-  const store = await readStore()
-  // Everything that can refuse this is checked before a secret is asked for. Asking someone to paste a
-  // credential and only then saying it cannot be stored wastes the one action that has to be deliberate.
-  if (store.recipients.length === 0) {
-    Errors.throwUserInput(
-      'The secret store lists no recipients, so nothing could read what you pasted. Run `just secrets setup` first.',
-    )
-  }
+  const batch = await prepareSecretBatch({
+    cipher: environment.cipher,
+    now: environment.now,
+    read: readStore,
+    write: writeStore,
+  })
   const secret = await environment.promptSecret(`Paste the value for ${key} (hidden; a paste submits itself):`)
-  if (secret.trim() === '') {
-    Errors.throwUserInput('No value was entered, so nothing was stored.')
-  }
-  const armor = await environment.cipher.encrypt(secret, store.recipients)
-  await writeStore(withSecret(store, key, armor, { now: environment.now(), ...(note === undefined ? {} : { note }) }))
-  const replaced = store.secrets[key] !== undefined
+  await batch.save({ [key]: secret }, note === undefined ? {} : { [key]: note })
+  const replaced = batch.existingNames.includes(key)
   HCI.writeSuccess(`${replaced ? 'Replaced' : 'Added'} ${key} in ${STORE_PATH}.\n`)
   HCI.writeLine(`Run \`just secrets\` to write it into ${SecretsFile.ENV_PATH}.`)
   return 0
@@ -252,23 +305,27 @@ async function setupSecrets(): Promise<number> {
   // on an existing identity left a machine whose key worked and whose store listed no one to encrypt to, and
   // no command that would fix it.
   const recipient = await recipientOf(identity)
-  const store = await readStore()
-  if (store.recipients.includes(recipient)) {
+  const result = await withStoreMutation(async () => {
+    const store = await readStore()
+    if (store.recipients.includes(recipient)) {
+      return { added: false, count: 0 }
+    }
+    await writeStore({ ...store, recipients: [...store.recipients, recipient] })
+    return { added: true, count: Object.keys(store.secrets).length }
+  })
+  if (!result.added) {
     HCI.writeLine(`This machine can already read the repository's secrets. Identity: ${homePath(identity)}`)
     return 0
   }
-  await writeStore({ ...store, recipients: [...store.recipients, recipient] })
   HCI.writeSuccess(
     existed
       ? `Recorded this machine's existing identity as a recipient.\n`
       : `This machine can now read the repository's secrets. Its key stays in the Secure Enclave.\n`,
   )
   HCI.writeLine(`Recipient added to ${STORE_PATH}; commit that so this machine keeps access.`)
-  if (Object.keys(store.secrets).length > 0) {
+  if (result.count > 0) {
     HCI.writeLine(
-      `The ${
-        Object.keys(store.secrets).length
-      } secret(s) already stored were encrypted without this machine. Someone who can read them must run \`just secrets add\` again for each.`,
+      `The ${result.count} secret(s) already stored were encrypted without this machine. Someone who can read them must run \`just secrets add\` again for each.`,
     )
   }
   return 0

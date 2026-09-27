@@ -2,13 +2,26 @@ import { CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 
 // The binary here is a shell script standing in for Tao, so these cover the install script alone
-// and run anywhere; `just standalone-cli-acceptance` installs a real build the same way.
+// and model the supported host explicitly; `just standalone-cli-acceptance` installs a real build.
 const INSTALL_SCRIPT = Repo.resolvePath('packages/cli/tao-cli/cli-src/standalone-install.sh')
 // It answers only when asked the way the installer must ask, from `/` and naming no version, because a
 // real release asked from inside a pinned project would hand the question to the release pinned there.
 const STAND_IN = '#!/bin/sh\n[ "$1" = --version ] && [ "$(pwd)" = / ] && [ -z "${TAO_VERSION:-}" ] && echo 0.4.0\n'
 
 Describe('standalone install script', () => {
+  Test('refuses Linux before creating an installation or downloading a release', async () => {
+    await withRelease(async ({ home, install }) => {
+      const result = await install({ PATH: '/usr/bin:/bin' }, { system: 'Linux', architecture: 'x86_64' })
+
+      Expect(result.exitCode).not.toBe(0)
+      Expect(result.stderr).toBe(
+        'Tao install: Tao is built only for macOS on Apple silicon so far, and this is Linux on x86_64.\n',
+      )
+      Expect(result.stdout).toBe('')
+      Expect(await FS.exists(FS.resolvePath('.tao', home))).toBe(false)
+    })
+  })
+
   Test('installs and links the release inside the Tao home only', async () => {
     await withRelease(async ({ home, install }) => {
       const userBin = FS.resolvePath('.tao/bin', home)
@@ -162,7 +175,10 @@ type Release = {
   home: string
   releases: string
   listing: string
-  install: (env: Record<string, string>) => Promise<CLI.CommandResult>
+  install: (
+    env: Record<string, string>,
+    platform?: { system: 'Darwin' | 'Linux'; architecture: 'arm64' | 'x86_64' },
+  ) => Promise<CLI.CommandResult>
 }
 
 async function withRelease(run: (release: Release) => Promise<void>): Promise<void> {
@@ -186,11 +202,27 @@ async function withRelease(run: (release: Release) => Promise<void>): Promise<vo
     ])
     const home = FS.resolvePath('home', root)
     await FS.mkdir(home)
+    // Model the macOS command contracts on every test host. Keep tooling and system directories
+    // outside the fixture user's ownership, including when the suite itself runs as root.
+    const tools = FS.resolvePath('tools', root)
+    const shims = {
+      uname: '#!/bin/sh\n[ "$#" = 1 ] || exit 2\ncase "$1" in\n'
+        + '  -s) printf "%s\\n" "$TAO_INSTALL_TEST_SYSTEM" ;;\n'
+        + '  -m) printf "%s\\n" "$TAO_INSTALL_TEST_ARCH" ;;\n  *) exit 2 ;;\nesac\n',
+      stat: '#!/bin/sh\n[ "$#" = 3 ] && [ "$1" = -f ] && [ "$2" = %u ] || exit 2\n'
+        + 'case "$3" in\n  "$HOME"/*) id -u ;;\n  *) printf "%s\\n" -1 ;;\nesac\n',
+      plutil: '#!/bin/sh\nexec "$TAO_INSTALL_TEST_BUN" "$TAO_INSTALL_TEST_PLUTIL" "$@"\n',
+    }
+    for (const [name, source] of Object.entries(shims)) {
+      const path = FS.resolvePath(name, tools)
+      await FS.writeText(path, source)
+      await FS.chmod(path, 0o755)
+    }
     await run({
       home,
       releases,
       listing,
-      install: env =>
+      install: (env, platform = { system: 'Darwin', architecture: 'arm64' }) =>
         CLI.run('/bin/sh', {
           args: [INSTALL_SCRIPT],
           cwd: home,
@@ -200,6 +232,11 @@ async function withRelease(run: (release: Release) => Promise<void>): Promise<vo
             TAO_RELEASES: `file://${releases}`,
             TAO_RELEASE_INDEX_URL: `file://${listing}`,
             ...env,
+            PATH: `${tools}:${env['PATH'] ?? '/usr/bin:/bin'}`,
+            TAO_INSTALL_TEST_SYSTEM: platform.system,
+            TAO_INSTALL_TEST_ARCH: platform.architecture,
+            TAO_INSTALL_TEST_BUN: Platform.runtimeProcess.execPath,
+            TAO_INSTALL_TEST_PLUTIL: FS.resolvePath('fixtures/install-plutil.ts', import.meta.dir),
           },
         }),
     })

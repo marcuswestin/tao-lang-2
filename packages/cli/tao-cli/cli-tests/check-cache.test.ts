@@ -1,4 +1,4 @@
-import { Diagnostic, FS, Platform, Repo } from '@shared'
+import { CLI, Diagnostic, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { CheckCache } from '../cli-src/check-cache'
 import { type CheckWorkspaceOutcome, runCheck, runFix } from '../cli-src/source-commands'
@@ -50,15 +50,23 @@ Describe('tao check per-workspace stamp', () => {
       const appPath = FS.resolvePath('fixture/App.tao', rootDir)
       await FS.writeText(appPath, CANONICAL_VIEW)
       await FS.writeText(FS.resolvePath('Secret.txt', deniedRoot), 'private\n')
-      await FS.chmod(deniedRoot, 0o000)
-      await Expect(FS.listDir(deniedRoot)).rejects.toThrow()
-
-      const results = await runCheck(appPath)
+      // Isolate the filesystem fault: module mocks must not leak into the other check fixtures.
+      const probe = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [FS.resolvePath('fixtures/check-unreadable-sibling.ts', import.meta.dir), rootDir],
+        processPolicy: 'test',
+      })
+      Expect({ exitCode: probe.exitCode, stderr: probe.stderr }).toEqual({ exitCode: 0, stderr: '' })
+      const { results, traversedByCheck, deniedByWalk } = JSON.parse(probe.stdout) as {
+        results: Awaited<ReturnType<typeof runCheck>>
+        traversedByCheck: string[]
+        deniedByWalk: string[]
+      }
+      Expect(traversedByCheck).not.toContain('denied')
+      Expect(deniedByWalk).toEqual(['denied'])
       const app = results.find(result => result.path === appPath)
       Expect(app?.error).toBeUndefined()
       Expect(app?.diagnostics?.some(Diagnostic.isError)).toBe(true)
     } finally {
-      await FS.chmod(deniedRoot, 0o700).catch(() => {})
       await FS.remove(rootDir)
     }
   })

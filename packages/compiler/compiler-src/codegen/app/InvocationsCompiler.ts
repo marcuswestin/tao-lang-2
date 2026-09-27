@@ -197,7 +197,7 @@ export const InvocationsCompiler = {
           ${handler.payload ? gen`${gen.scopeName(handler.payload)} = _TaoEventValue` : ''}
           ${Compile.ActionBlockBody(handler.block)}
         })
-      }${actionBlockInterruptsAsk(handler.block) ? gen`, { interrupt: true }` : gen``})
+      }, { owner: _TaoActionOwner, ${actionBlockInterruptsAsk(handler.block) ? gen`interrupt: true` : gen``} })
     `
   },
 

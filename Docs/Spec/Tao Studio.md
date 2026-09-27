@@ -118,6 +118,16 @@ scenario record and initially one preview cell per authored entry. Focused previ
 isolated app-owned navigation occurrence, so contextual presentation and Back work exactly as they do
 inside an app while remaining isolated from other cells.
 
+When the selected app has no applicable scenarios, Studio launches the ordinary app in both the
+browser preview and the paired native device. It applies no scenario fixtures, environment overrides,
+preparation or replay steps. Local `tao dev` also launches the ordinary app; scenario declarations
+remain metadata there. Removing the last scenario during a Studio session returns the device to the
+ordinary app once the matching bundle is loaded.
+
+For direct physical-device development without Studio, `tao dev --device <name-or-id>` opens the
+ordinary app in the installed Tao Companion. It shares the device-launch contract with Studio,
+but starts no Studio gateway or scenario host. Stop Studio's session first if it owns that project.
+
 ## Studio compilation manifest
 
 Preview compilation emits `TaoStudioManifest.ts` with format version 2. Production compilation does
@@ -213,7 +223,7 @@ The preview-manifest environment has three parts:
 - `viewport`: positive width and height plus an optional preset name;
 - `network`: non-negative latency and normal, offline, or explicit-error outcome;
 - `scheme`: requested System, Light, or Dark appearance plus resolved Light/Dark, resolution source, and
-  the reactive-browser or fixed-Light-native capability.
+  the host's reactive-browser, reactive-catalyst, pinned-native, or fixed-light-native capability.
 
 The runtime provider overlay isolates seeded load/persist snapshots from the configured durable
 provider. It never calls that provider's durable `load` or `persist`; it delegates only remote `fill`,
@@ -228,11 +238,14 @@ binding, so cell-local seed, persistence, latency, offline, and injected-fill be
 `TR.Data` path as the app rather than a parallel store.
 
 Scheme is resolved by the ordinary Tao runtime, never by Studio CSS. A scenario pin wins over the
-Appearance preference, whose System value follows the browser environment. The resolved value flows
+Appearance preference, whose System value follows the browser environment or native Catalyst appearance. The resolved value flows
 through mounted design conditions independently per preview cell. Runtime capture records requested,
 resolved, source, and capability; replay freezes that record, and authored scenario save writes the
 resolved Light or Dark pin. Native hosts without reactive appearance report `fixed-light-native` and
-resolve to Light rather than implying unsupported parity.
+resolve to Light rather than implying unsupported parity. Native scenario pins report `pinned-native`;
+they do not imply that an ordinary mobile host follows system appearance. Catalyst's local trial
+opts into native appearance changes and reports `reactive-catalyst`. These capture capabilities do
+not add a Studio deployment target or establish physical appearance acceptance.
 
 ## Editing, identity, and trust
 
@@ -409,11 +422,35 @@ rectangle without disturbing geometry, total order, or its Snap target. Paramete
 `insert-project-view` derives exact-type arguments from declarations visible at its insertion gap,
 including the nearest loop row and owning-view parameters; unresolved or ambiguous required values
 fail before mutation, and an explicit structured binding can disambiguate.
+The project-view palette identifies the exact declaration file, including generated views. Inserting
+a public view from another file adds a validated ordinary import before applying the scoped arguments.
 
-These are server-side and source-action foundations, not yet the complete Feed gesture. The current
-Studio client does not yet expose the four-source row browser, drag entity/field chips, Keep as one
-multi-file transaction, or Move-to-package scenario-group relocation. Until those land, callers must
-not present Slice 3 as an end-to-end Studio workflow.
+The Data panel exposes Fixture, Generated, Live, and Library sources with a visible generation seed.
+Fixture uses the active scenario's fixture; Library uses other project fixtures. Live uses the active
+preview's captured entity tables. Private fields are excluded, invalid rows carry an explanation,
+and each source is bounded to 250 rows per entity. Entity drops prepare a required sketch parameter;
+field drops prepare a typed free-rectangle binding or rewrite a tagged snapped leaf. Text fields offer
+explicit text and image presentations. Collection drops propose a loop with a typed row view.
+Entity drops check declaration visibility before generating the shared fixture. An entity unavailable
+to `@/studio` reports its source and visibility restriction instead of a fixture-handle error; binding
+it requires an importable model declaration under the existing package rules.
+
+Pending examples compile through immutable session source overrides, including a virtual shared
+fixture. They do not write project source or the catalog. Keep writes the view, shared fixture, and
+binding catalog as one rollback-capable operation. Undo Keep restores that operation as a unit and
+refuses newer edits; Discard abandons the pending example. Source versions, draft revisions, catalog
+revisions, and server-issued row IDs guard gestures against stale state. Other source and geometry
+edits require keeping or discarding a pending example first.
+Drops onto a preview cell select that cell's scenario; existing scenarios keep their own example
+arguments. Discard remains available while browsing or when another editor has an unsaved buffer.
+
+Move to package offers scenario relocation to the app's `Scenarios.tao`, enabled by default, and
+preserves scenario arguments, fixture imports, and journey tags. The move retains ordinary package
+visibility and import-boundary validation; it cannot make an authored package depend on app-private
+source. Unsupported fixture expressions, cyclic creation dependencies, unresolved live relation IDs,
+and exact time values that cannot be represented by fixture syntax are refused rather than converted
+to different values. Optional field bindings require a source fallback; `now` fixture values remain
+supported.
 
 The catalog is intended to be recovered through version control. A malformed or unsupported catalog
 blocks publication instead of discarding geometry. Restore a known-good committed copy or repair it
@@ -559,13 +596,23 @@ project views, grouped scenarios, commands, and component/view insertions. The c
 stdlib catalog plus compiler-manifest project views; drag to canvas emits position-aware source actions,
 and drag to editor inserts formatted snippets with required-parameter placeholders selected for editing.
 
-In Design, hold Space while dragging or scrolling to pan the canvas over either empty background or preview apps.
-Without Space, scrolling belongs to the embedded app and neither left- nor middle-button dragging pans.
-Pinch and modifier-wheel zoom remain available without Space.
+New preview connections begin in Run interaction mode. The workbench initially uses the Run layout,
+while preserving an explicitly saved layout preference. The toolbar Browser action opens the
+session's standalone app URL in Chrome; Device launches the companion. Browser
+launch accepts no caller-provided URL and reports an unavailable preview or opener failure in Studio.
+
+In Design, dragging empty canvas or an inactive preview pans without Space; ordinary wheel and
+trackpad scrolling over those surfaces also pans. In Draw, ordinary dragging draws or edits rectangles,
+while Space-drag pans the Draw canvas. Pinch and modifier-wheel zoom remain available without Space.
+Previews start inactive and accept no mouse input. The first click selects a preview without forwarding
+that click to its app; subsequent input reaches it. Only one preview can be active, shown by its accent
+outline. Clicking outside deselects it, and clicking another preview transfers activation. In Design,
+ordinary scrolling inside the selected preview belongs to the app. A canvas drag does not select a
+preview, and selection for input is separate from the inspector's retained editing context.
 For the entire time Space is held, a transparent canvas shield makes previews neutral pan surfaces:
 hover, clicks, dragging, and wheel input cannot interact with the embedded apps, including between drags.
 A focused preview suppresses mouse input immediately and forwards Space to the host. Text inputs keep
-normal Space typing, and Run keeps app interaction when the canvas does not own the gesture.
+normal Space typing, and Run keeps selected-app interaction when the canvas does not own the gesture.
 Releasing Space or the pointer, or losing window focus, ends a pan; losing focus also clears held Space.
 Canvas shortcuts (⌘/Ctrl+0 fit, 1 reset, +/− zoom) also work from focused previews outside text entry.
 The zoom menu offers Fit all, 100%, Zoom to selection, and Zoom to focused frame; unavailable targets
@@ -747,7 +794,7 @@ Scenarios declared in imported files and authored `run App at Destination(...)` 
 Studio compilation with actionable messages. This satisfies the current mount-or-reject and execute-or-reject
 boundary without publishing blank cells or silently substituting the selected app's default route.
 
-A physical iPhone or iPad renders one cell through the Tao Companion development build
+A physical iPhone or iPad renders the ordinary app, or one scenario cell, through the Tao Companion development build
 (`packages/ides/studio-companion-app`, an Expo dev client with a fixed bundle id and scheme). Every Studio launch
 starts one `tao-studio-device-v1` gateway beside the loopback server, bound to every interface on an
 ephemeral port and carrying pairing, project/app identity, scenario bootstrap, revision state, and
@@ -768,9 +815,16 @@ trust. The protocol, threat model, and message set are in
 `Docs/Roadmap/Tao Studio companion app/Slice 1 - Device protocol and trust.md`. After pairing is
 confirmed, a device may send `device.selectCell`, `device.selectSource`, `device.setNetwork`,
 `device.sourceAction` (validated and applied with the same identity tuple as a browser request),
-`device.applied`, `device.log`, `device.report`, and runtime-capture results; before confirmation only
+`device.applied`, `device.appApplied`, `device.log`, `device.report`, and runtime-capture results; before confirmation only
 `device.ping` is answered. Studio now advertises authenticated Bonjour candidates and a trusted device
 rediscovers the current gateway and Metro endpoints after a network or session change; the advertisement
 is bound to Studio's pinned identity and the QR/deep-link route remains the fallback. The device panel
 exposes LAN/cable choice. The Tao relay and companion beta delivery remain roadmap work, and this
 software contract is not evidence of a successful physical cable or other real-device run.
+
+Without scenarios, the native host renders the generated app directly inside its error boundary and
+acknowledges the published compile and manifest revisions with `device.appApplied`. The gateway accepts
+that acknowledgement only for its current scenario-free publication with no assigned cell. This updates
+the device's applied status without replacing the browser preview instance. Pairing and bundle revision
+checks still apply. The device menu keeps layout bounds and session status; scenario-dependent inspection,
+source edits and environment overrides require an assigned cell.

@@ -35,14 +35,18 @@ const publication = {
 }
 
 /** A client already holding an assignment, so the host mounts the cell on its first render. */
-function stubClient(): {
+function stubClient(overrides: Partial<TaoStudioDeviceClientState> = {}): {
   applied: TaoStudioDeviceCellIdentity[]
+  appliedApps: { compileRevision: number; manifestRevision: string }[]
   client: StudioDeviceClient
   reports: { level: string; message: string }[]
+  update(next: Partial<TaoStudioDeviceClientState>): void
 } {
   const applied: TaoStudioDeviceCellIdentity[] = []
+  const appliedApps: { compileRevision: number; manifestRevision: string }[] = []
   const reports: { level: string; message: string }[] = []
-  const state: TaoStudioDeviceClientState = {
+  const listeners = new Set<() => void>()
+  let state: TaoStudioDeviceClientState = {
     assignment: { identity, runtime: { cell: { environment: {} } } },
     attempts: 0,
     phase: 'connected',
@@ -54,12 +58,17 @@ function stubClient(): {
       projectLabel: 'demo',
       sessionId: 'session-1',
     },
+    ...overrides,
   }
   return {
     applied,
+    appliedApps,
     client: {
       applied(cellIdentity) {
         applied.push(cellIdentity)
+      },
+      appliedApp(compileRevision, manifestRevision) {
+        appliedApps.push({ compileRevision, manifestRevision })
       },
       async forgetStudio() {},
       reconnect() {},
@@ -75,9 +84,21 @@ function stubClient(): {
       async start() {},
       state: () => state,
       stop() {},
-      subscribe: () => () => {},
+      subscribe(listener) {
+        const notify = () => listener(state)
+        listeners.add(notify)
+        return () => {
+          listeners.delete(notify)
+        }
+      },
     },
     reports,
+    update(next) {
+      state = { ...state, ...next }
+      for (const listener of listeners) {
+        listener()
+      }
+    },
   }
 }
 
@@ -150,6 +171,69 @@ describe('Studio device host acknowledgement', () => {
     expect(stub.reports[0]?.message).toContain('the cell exploded')
     // The acknowledgement names what is on screen; an error screen is not the assigned revision.
     expect(stub.applied).toEqual([])
+  })
+
+  test('mounts an interactive ordinary app without constructing a scenario and acknowledges it', async () => {
+    const stub = stubClient({
+      assignment: undefined,
+      manifest: { compileRevision: 4, manifestRevision: 'compile:4', scenarios: [] },
+    })
+    const cellRuntime = jest.fn((): never => Errors.throwUnexpected('No scenario should be constructed'))
+    function App() {
+      const count = TR.State(() => TR.Value(0))
+      return createElement(Pressable, {
+        onPress: () => TR.Set(count, () => TR.Value(count.evaluate().jsValue + 1)),
+      }, createElement(Text, null, `Count ${count.evaluate().jsValue}`))
+    }
+    const screen = render(createElement(TR.Studio.DeviceHost, {
+      App,
+      cellRuntime,
+      client: stub.client,
+      manifest: {},
+      publication,
+    }))
+    fireEvent.press(screen.getByText('Count 0'))
+    expect(screen.getByText('Count 1')).toBeTruthy()
+    expect(cellRuntime).not.toHaveBeenCalled()
+    expect(stub.applied).toEqual([])
+    expect(stub.appliedApps).toEqual([{ compileRevision: 4, manifestRevision: 'compile:4' }])
+    expect(screen.queryByText('Waiting for a scenario')).toBeNull()
+    expect(screen.getByTestId('tao-studio-device-badge')).toBeTruthy()
+
+    act(() => stub.update({ phase: 'disconnected' }))
+    expect(screen.queryByText('Count 1')).toBeNull()
+    act(() => stub.update({ phase: 'connected' }))
+    expect(screen.getByText('Count 0')).toBeTruthy()
+    expect(stub.appliedApps).toHaveLength(2)
+  })
+
+  test('reports an ordinary app render failure without claiming its revision was applied', async () => {
+    const stub = stubClient({
+      assignment: undefined,
+      manifest: { compileRevision: 4, manifestRevision: 'compile:4', scenarios: [] },
+    })
+    const screen = renderHost((): never => Errors.throwUnexpected('ordinary app exploded'), stub.client)
+    expect(screen.getByText(/Tao Studio preview error/)).toBeTruthy()
+    expect(stub.reports[0]?.message).toContain('ordinary app exploded')
+    expect(stub.appliedApps).toEqual([])
+  })
+
+  test('unmounts scenario providers when the last scenario disappears, then accepts a new assignment', () => {
+    const stub = stubClient()
+    const screen = renderHost(() => createElement(Text, null, 'app content'), stub.client)
+    expect(screen.getByTestId('tao-studio-device-cell')).toBeTruthy()
+    act(() =>
+      stub.update({
+        assignment: undefined,
+        manifest: { compileRevision: 4, manifestRevision: 'compile:4', scenarios: [] },
+      })
+    )
+    expect(screen.queryByTestId('tao-studio-device-cell')).toBeNull()
+    expect(screen.getByText('app content')).toBeTruthy()
+    expect(stub.appliedApps).toHaveLength(1)
+    act(() => stub.update({ assignment: { identity, runtime: {} } }))
+    expect(screen.getByTestId('tao-studio-device-cell')).toBeTruthy()
+    expect(stub.applied).toHaveLength(2)
   })
 })
 

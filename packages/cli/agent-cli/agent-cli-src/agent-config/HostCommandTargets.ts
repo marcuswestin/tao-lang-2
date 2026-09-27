@@ -29,6 +29,10 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'studio-ps': { command: './dev', fixedArgs: ['studio-ps'], argsPolicy: 'studio-list' },
   'studio-stop': { command: './dev', fixedArgs: ['studio-stop'], argsPolicy: 'studio-stop' },
   'docker-desktop start': { command: 'open', fixedArgs: ['-a', 'Docker'], argsPolicy: 'none' },
+  // One daemon serves this login's worktrees; no arbitrary Watchman commands or socket overrides.
+  'watchman start': { command: './dev', fixedArgs: ['watchman', 'start'], argsPolicy: 'none' },
+  'watchman status': { command: './dev', fixedArgs: ['watchman', 'status'], argsPolicy: 'none' },
+  'watchman stop': { command: './dev', fixedArgs: ['watchman', 'stop'], argsPolicy: 'none' },
   // The local InstantDB stack is Docker Compose; running its two recipes on the host keeps the Docker
   // socket, which is root-equivalent, out of every agent sandbox.
   'local-instantdb start': { command: 'just', fixedArgs: ['start-local-instantdb'], argsPolicy: 'none' },
@@ -37,11 +41,17 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   // sequence; naming the whole build keeps an agent from stitching it together from lower-level
   // operations and a hand-written placement step.
   'companion-host-build': { command: './dev', fixedArgs: ['companion-host-build'] },
+  'studio-companion-install': { command: './dev', fixedArgs: ['studio-companion-install'] },
+  'clerk-review': { command: 'just', fixedArgs: ['clerk-review'], server: true },
   'standalone-cli-vm-setup': { command: 'just', fixedArgs: ['standalone-cli-vm-setup'], argsPolicy: 'none' },
   'standalone-cli-clean-machine': {
     command: 'just',
     fixedArgs: ['standalone-cli-clean-machine'],
     argsPolicy: 'standalone-vm',
+  },
+  'contributor-linux-test': {
+    command: '/bin/sh',
+    fixedArgs: ['packages/cli/dev-cli/dev-cli-src/environment/contributor-linux-test.sh'],
   },
   'simulators list': { command: 'xcrun', fixedArgs: ['simctl', 'list', 'devices'] },
   'simulators boot': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },

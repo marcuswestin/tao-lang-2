@@ -1,5 +1,3 @@
-/// <reference path="../../../apps/expo-host/expo-host-src/dev-loop/expo-runner/better-opn.d.ts" />
-
 import { DEV_DATA_ROOT_PATH, devDataAppKey, devDataManifest } from '@expo-host/dev-loop/dev-data/DevDataBootstrap'
 import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { ExpoRunner } from '@expo-host/dev-loop/expo-runner/ExpoRunner'
@@ -25,7 +23,7 @@ import {
   type StudioSessionResource,
 } from '@studio'
 import { enclosingWatchRoot } from '@verification/WatchmanHealth'
-import betterOpen from 'better-opn'
+import { StudioBrowser } from './StudioBrowser'
 import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
 import { createStudioDeviceLauncher } from './StudioDeviceLaunch'
 import { describeOwnProcess, openLaunchRecord, type StudioLaunchRecord } from './StudioLaunchManifest'
@@ -224,6 +222,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       deviceLauncher: createStudioDeviceLauncher(),
       generationProvider: foundationModels.provider,
       hostname: options.hostname,
+      openBrowser: StudioBrowser.open,
       port: options.port,
     })
     const sessionUrl = `${server.url}${StudioSessionPath.window(initial.sessionId)}`
@@ -307,7 +306,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       ? undefined
       : openTarget({ browser: options.browser, opened: requestedStop, sessionUrl })
     if (target !== undefined) {
-      await betterOpen(target)
+      await StudioBrowser.open(target)
     }
     if (!requestedStop) {
       HCI.logProcessInfo(

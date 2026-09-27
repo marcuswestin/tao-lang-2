@@ -987,7 +987,14 @@ const MAX_TEST_DEADLINE_MS = 120_000
  * behavior coverage.
  */
 function taoAppsSuite(roots: readonly string[], pattern: string, repositoryRoot: string): TestProcess {
-  const args = ['test', ...roots, ...(pattern.length > 0 ? ['--name', pattern, '--pass-with-no-tests'] : [])]
+  // The graph's silence bound must observe runner output even though this child's stdout is piped.
+  const args = [
+    'test',
+    '--output',
+    'lines',
+    ...roots,
+    ...(pattern.length > 0 ? ['--name', pattern, '--pass-with-no-tests'] : []),
+  ]
   return { args, command: './tao', cwd: repositoryRoot, env: testTaoHome(repositoryRoot), files: roots }
 }
 

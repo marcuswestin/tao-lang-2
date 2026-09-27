@@ -7,6 +7,7 @@ import {
   type StudioPreviewCanvasGestureMessage,
   type StudioPreviewCanvasPanKeyMessage,
   type StudioPreviewCanvasShortcutMessage,
+  type StudioPreviewFeedDropMessage,
   type StudioPreviewIdentity,
   type StudioPreviewRuntimeUpdateMessage,
   StudioProtocol,
@@ -38,9 +39,11 @@ type StudioPreviewMessageActions = {
   activate?: () => void
   applySourceAction: (envelope: StudioSourceActionEnvelope) => Promise<void>
   canvasGesture?: (gesture: StudioPreviewCanvasGestureMessage) => void
+  canvasGesturesOwned?: () => boolean
   canvasPanKey?: (message: StudioPreviewCanvasPanKeyMessage) => void
   canvasShortcut?: (message: StudioPreviewCanvasShortcutMessage) => void
   changed?: () => void
+  feedDrop?: (message: StudioPreviewFeedDropMessage) => Promise<void>
   inspect: (selection: StudioInspectorSelection) => void
   reveal?: () => void
 }
@@ -189,7 +192,7 @@ export function configureInteractionMode(
     })
   }
   button.addEventListener('click', () => setMode(button.dataset['mode'] === 'edit' ? 'run' : 'edit'))
-  setMode('edit')
+  setMode('run')
 }
 
 function matchesExactPreviewCellIdentity(
@@ -227,8 +230,10 @@ export async function handlePreviewMessage(
   const ignored = (): void => {}
   await Switch.property<StudioWindowMessage, 'type', Promise<void> | void>(message, 'type', {
     'debug-command': ignored,
+    'feed-drop-at-point': ignored,
     'highlight-source': ignored,
-    'preview-applied': type => receivePreviewApplied(preview, received(message, type), handshake),
+    'preview-applied': type =>
+      receivePreviewApplied(preview, received(message, type), handshake, actions.canvasGesturesOwned?.()),
     'preview-console': type => receiveConsole(preview, received(message, type), actions),
     'preview-canvas-gesture': type => actions.canvasGesture?.(received(message, type)),
     'preview-canvas-pan-key': type => actions.canvasPanKey?.(received(message, type)),
@@ -236,6 +241,16 @@ export async function handlePreviewMessage(
     'preview-debug': type => receiveDebug(preview, received(message, type), actions),
     'preview-fixture-capture-failed': type => receiveFixtureCapture(preview, received(message, type), actions),
     'preview-fixture-captured': type => receiveFixtureCapture(preview, received(message, type), actions),
+    'preview-feed-drop': async type => {
+      const drop = received(message, type)
+      Assert.input(
+        matchesExactPreviewCellIdentity(preview, drop.identity),
+        'The Feed drop belongs to an outdated preview. Wait for the current preview and try again.',
+      )
+      Assert.input(preview.interactionMode === 'edit', 'Switch to Edit mode before dropping a Feed field.')
+      Assert.input(actions.feedDrop !== undefined, 'Feed drops are not connected to this preview.')
+      await actions.feedDrop(drop)
+    },
     'preview-hover-source': ignored,
     'preview-journey-recording-state': type => receiveJourneyRecording(preview, received(message, type), actions),
     'preview-journey-replay-failed': type => receiveJourneyReplay(preview, received(message, type)),
@@ -395,6 +410,7 @@ async function receivePreviewApplied(
   preview: StudioPreviewConnection,
   message: StudioWindowMessageOf<'preview-applied'>,
   handshake: StudioHandshake,
+  canvasGesturesOwned?: boolean,
 ): Promise<void> {
   postInteractionMode(preview, handshake)
   const identity = preview.cellIdentity
@@ -406,6 +422,11 @@ async function receivePreviewApplied(
   )
   if (!currentCell) {
     return
+  }
+  // The bridge's React effect can mount after iframe load, or remount without another load.
+  // Its acknowledgement is the first reliable opportunity to restore canvas key ownership.
+  if (canvasGesturesOwned !== undefined) {
+    postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned)
   }
   if (identity !== undefined) {
     preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)

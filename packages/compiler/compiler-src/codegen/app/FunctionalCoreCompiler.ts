@@ -251,6 +251,7 @@ export const FunctionalCoreCompiler = {
           end: ${cst.end},
         },
         interaction: ${Compile.OutlineLoopReference(statement)},
+        ${selectHandler ? gen`owner: _TaoActionOwner,` : gen.noop()}
       })}
     `
   },

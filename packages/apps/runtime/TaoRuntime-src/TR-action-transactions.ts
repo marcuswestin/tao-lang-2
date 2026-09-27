@@ -1,5 +1,6 @@
 import { Arrays } from './core/RuntimeCore'
 import { type TestActionStubContext, TestActionStubs } from './TR-action-test-stubs'
+import { RuntimeAssert } from './TR-assert'
 import { journalSettle, journalStart, type TaoDebugJournalEntry } from './TR-debug-journal'
 import {
   recordActionFailureFrames,
@@ -8,6 +9,7 @@ import {
   TaoActionFailure,
   type TaoActionFailureReport,
 } from './TR-errors'
+import type { TaoActionOwner } from './TR-native-subscription'
 
 /** A receipt belongs to one root, including roots whose contained failure never rejects. */
 export type TaoActionReceipt = Readonly<{
@@ -57,7 +59,10 @@ let launchGeneration = 0
 
 class ActionTransaction {
   readonly afterCommit: Array<() => void> = []
-  readonly detached: Array<{ body: () => PromiseLike<unknown>; testStubs: TestActionStubContext }> = []
+  readonly rollbackEffects: Array<() => void> = []
+  readonly detached: Array<
+    { body: () => PromiseLike<unknown>; testStubs: TestActionStubContext; owner?: TaoActionOwner }
+  > = []
   readonly frames: string[] = []
   readonly frameTrail: string[] = []
   readonly resources = new Map<object, TransactionResource<any>>()
@@ -72,6 +77,7 @@ class ActionTransaction {
     readonly launch: number,
     readonly testStubs: TestActionStubContext,
     readonly receipt?: (receipt: TaoActionReceipt) => void,
+    readonly owner?: TaoActionOwner,
   ) {}
 
   pushFrame(name: string): void {
@@ -118,6 +124,7 @@ class ActionTransaction {
     const keys = new Set(this.resources.keys())
     const afterCommit = this.afterCommit.length
     const detached = this.detached.length
+    const rollbackEffects = this.rollbackEffects.length
     return () => {
       for (const [key, resource] of [...this.resources]) {
         if (keys.has(key)) {
@@ -134,6 +141,7 @@ class ActionTransaction {
       }
       this.afterCommit.length = afterCommit
       this.detached.length = detached
+      this.cleanEffects(this.rollbackEffects.splice(rollbackEffects))
     }
   }
 
@@ -169,8 +177,18 @@ class ActionTransaction {
     }
   }
 
+  private cleanEffects(effects: Array<() => void>): void {
+    for (const cleanup of effects) {
+      try {
+        cleanup()
+      } catch (error) {
+        reportUnownedFailure(error)
+      }
+    }
+  }
+
   rollback(): void {
-    // Overlays are private until commit, so a body failure has no published resource to undo.
+    this.cleanEffects(this.rollbackEffects.splice(0))
   }
 }
 
@@ -266,6 +284,7 @@ export function runAction(
   interrupt = false,
   testStubs = TestActionStubs.capture(),
   onReceipt?: (receipt: TaoActionReceipt) => void,
+  owner?: TaoActionOwner,
 ): void | Promise<void> {
   if (join && activeTransaction) {
     return runJoinedAction(activeTransaction, name, body)
@@ -281,7 +300,7 @@ export function runAction(
     actionReceipts.set(receipt, launch)
   }
   const run = (): void | Promise<void> => {
-    const transaction = new ActionTransaction(launch, testStubs, receipt)
+    const transaction = new ActionTransaction(launch, testStubs, receipt, owner)
     let pending = false
     activeTransaction = transaction
     transaction.pushFrame(name)
@@ -393,7 +412,7 @@ function finishRoot(transaction: ActionTransaction, suspendedTransaction?: Actio
     return
   }
   for (const detached of transaction.detached) {
-    void enqueueDetached(detached.body, detached.testStubs)
+    void enqueueDetached(detached.body, detached.testStubs, detached.owner)
   }
   transaction.receipt?.({
     outcome: transaction.committed ? 'committed' : 'failed',
@@ -471,8 +490,12 @@ function runJoinedAction(
   }
 }
 
-async function enqueueDetached(body: () => PromiseLike<unknown>, testStubs: TestActionStubContext): Promise<void> {
-  await runAction('async', [], body, false, false, testStubs)
+async function enqueueDetached(
+  body: () => PromiseLike<unknown>,
+  testStubs: TestActionStubContext,
+  owner?: TaoActionOwner,
+): Promise<void> {
+  await runAction('async', [], body, false, false, testStubs, undefined, owner)
 }
 
 /**
@@ -527,7 +550,7 @@ export function existingTransactionResource<ValueT>(key: object): ValueT | undef
 /** deferDetached starts an `async` body after its caller commits or rolls back. */
 export function deferDetached(body: () => PromiseLike<unknown>): void {
   if (activeTransaction) {
-    activeTransaction.detached.push({ body, testStubs: activeTransaction.testStubs })
+    activeTransaction.detached.push({ body, testStubs: activeTransaction.testStubs, owner: activeTransaction.owner })
     return
   }
   // Host-authored detached work outside a Tao action preserves the established immediate behavior.
@@ -570,4 +593,58 @@ export function actionFailureCaseName(value: { evaluate(): { jsValue: unknown } 
     }
   }
   return 'Failure'
+}
+
+/** Joined result calls retain the same transaction and failure frames as ordinary do. */
+export async function runActionResult(
+  name: string,
+  arguments_: readonly unknown[],
+  body: () => unknown,
+  owner?: TaoActionOwner,
+): Promise<unknown> {
+  const joined = activeTransaction
+  let result: unknown
+  let completed = false
+  let failed = false
+  let failure: unknown
+  let receipt: TaoActionReceipt | undefined
+  await runAction(
+    name,
+    arguments_,
+    async () => {
+      try {
+        result = await body()
+        completed = true
+      } catch (error) {
+        failed = true
+        failure = error
+        throw error
+      }
+    },
+    true,
+    false,
+    undefined,
+    outcome => {
+      receipt = outcome
+    },
+    owner,
+  )
+  if (failed) {
+    throw failure
+  }
+  RuntimeAssert.input(
+    completed && (joined ? !abandonedByLaunch(joined) : receipt?.outcome === 'committed'),
+    'The action ended before its result could be used.',
+  )
+  return result
+}
+
+/** Registration reads ownership from the calling transaction rather than a render-global slot. */
+export function actionOwner(): TaoActionOwner | undefined {
+  return activeTransaction?.owner
+}
+
+/** Native resources acquired by a failing transaction are removed even while the view stays mounted. */
+export function registerActionCleanup(cleanup: () => void): void {
+  activeTransaction?.rollbackEffects.push(cleanup)
 }

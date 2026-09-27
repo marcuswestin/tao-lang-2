@@ -16,6 +16,10 @@ Describe('merge recovery', () => {
 
       const merge = await CLI.run('git', { args: ['merge', main], cwd: root })
       Expect(merge.exitCode).not.toBe(0)
+      Expect(merge.stdout).toContain('CONFLICT')
+      Expect((await CLI.run('git', { args: ['rev-parse', '--verify', '-q', 'MERGE_HEAD'], cwd: root })).exitCode).toBe(
+        0,
+      )
       await MergeRecovery.run({ root })
 
       Expect(await git(root, ['status', '--porcelain'])).toBe('')
@@ -65,6 +69,9 @@ Describe('merge recovery', () => {
 async function repository(): Promise<string> {
   const root = await mkGitTestDir('tao-merge-recover-')
   await initGitTestRepository(root)
+  // Merges need an identity too; a clean contributor has no personal Git config.
+  await git(root, ['config', 'user.name', 'Tao Test'])
+  await git(root, ['config', 'user.email', 'tao@example.test'])
   await FS.writeText(FS.resolvePath('protected.txt', root), 'base\n')
   await commit(root, 'base')
   return root

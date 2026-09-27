@@ -123,10 +123,21 @@ Describe('agent CLI generation provider', () => {
     Expect(run).toEqual({ exitCode: 0, stderr: '', stdout: 'unset unset\n', timedOut: false })
 
     // This is the timeoutMs under test — the child sleeps 30s and the test proves the runner's own
-    // timeout fires, not that the run is fast.
-    const slow = await sharedAgentCliRunner('sh', { args: ['-c', 'sleep 30'], env, timeoutMs: 300 }) // budget-ok: timeout value under test.
+    // timeout fires, not that the run is fast. Explicit exec makes sleep the direct child:
+    // a retained shell can instead exit with the signalled descendant's numeric status.
+    const slow = await sharedAgentCliRunner('sh', { args: ['-c', 'exec sleep 30'], env, timeoutMs: 300 }) // budget-ok: timeout value under test.
     Expect(slow.timedOut).toBe(true)
     Expect(slow.exitCode).toBeNull()
+  })
+
+  Test("preserves a timed-out command's own exit status when it handles termination", async () => {
+    const result = await sharedAgentCliRunner('sh', {
+      args: ['-c', "trap 'exit 42' TERM; sleep 30 & wait; exit 42"],
+      timeoutMs: 300, // budget-ok: timeout value under test.
+    })
+
+    Expect(result.timedOut).toBe(true)
+    Expect(result.exitCode).toBe(42)
   })
 
   Test('drives Codex exec with an output schema file and reads the last message file', async () => {

@@ -367,7 +367,15 @@ Describe('Studio device trust store', () => {
         `
         return await CLI.run('bun', { args: ['-e', script], stdio: 'pipe' })
       }))
-      Expect(workers.map(worker => worker.exitCode)).toEqual(Array(8).fill(0))
+      Expect(workers.flatMap((worker, index) =>
+        worker.exitCode === 0 ? [] : [{
+          worker: index,
+          exitCode: worker.exitCode,
+          signal: worker.signal,
+          stderr: worker.stderr,
+          error: worker.error?.message,
+        }]
+      )).toEqual([])
       const results = workers.map(worker => JSON.parse(worker.stdout.trim()) as { identity: string; key: string })
       Expect(new Set(results.map(result => result.identity)).size).toBe(1)
       const reloaded = await StudioDeviceTrustStore.open(root)
