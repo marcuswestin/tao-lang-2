@@ -9,7 +9,7 @@ import {
 import { downloadCompatibleHost, type HostDownloadOptions } from '@expo-host/dev-loop/prebuilt-host/HostReleases'
 import { findCompatibleHost, obtainCompatibleHost } from '@expo-host/dev-loop/prebuilt-host/PrebuiltHosts'
 import { prepareSimulatorCompanion } from '@expo-host/dev-loop/prebuilt-host/SimulatorCompanion'
-import { CLI, Errors, FS, Repo } from '@shared'
+import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 
 /**
@@ -239,42 +239,104 @@ Describe('prebuilt host releases', () => {
     })
   })
 
+  async function downloadArchiveFixture(
+    root: string,
+    bundleName: string,
+    useZipFixture = Platform.hostPlatform === 'linux',
+  ) {
+    const env = { ...Platform.runtimeProcess.env }
+    if (useZipFixture) {
+      const bin = FS.resolvePath('bin', root)
+      const shim = FS.resolvePath('ditto', bin)
+      await FS.writeText(
+        shim,
+        await FS.readText(Repo.resolvePath(
+          'packages/apps/expo-host/expo-host-tests/fixtures/ditto-zip-fixture.py',
+        )),
+      )
+      await FS.chmod(shim, 0o755)
+      env['PATH'] = `${bin}:${env['PATH'] ?? ''}`
+      env['TAO_ZIP_FIXTURE_LOG'] = FS.resolvePath('ditto.jsonl', root)
+    }
+    // Only this child sees the Linux command fixture; sibling tests retain their PATH.
+    await CLI.mustRun(Platform.runtimeProcess.execPath, {
+      args: [
+        Repo.resolvePath('packages/apps/expo-host/expo-host-tests/fixtures/prebuilt-host-archive.ts'),
+        root,
+        bundleName,
+      ],
+      cwd: Repo.getRoot(),
+      env,
+      processPolicy: 'test',
+      timeoutMs: 20_000, // budget-ok: parent-owned bound for this small archive command fixture.
+    })
+    const manifest: HostManifest = { format: 1, hostVersion: '1.0.0', nativeKit: {}, platform: 'ios-simulator' }
+    const directory = FS.resolvePath(`hosts/${hostKey(manifest)}/ios-simulator`, root)
+    const zip = FS.resolvePath('tao-companion-ios-simulator.app.zip', root)
+    Expect(Array.from((await FS.readFile(zip)).slice(0, 4))).toEqual([80, 75, 3, 4])
+    if (useZipFixture) {
+      const calls = (await FS.readText(FS.resolvePath('ditto.jsonl', root))).trim().split('\n')
+        .map(line => JSON.parse(line) as string[])
+      Expect(calls).toHaveLength(2)
+      Expect(calls[0]).toEqual(['-c', '-k', '--keepParent', FS.resolvePath(`bundle/${bundleName}`, root), zip])
+      Expect(calls[1]?.slice(0, 2)).toEqual(['-x', '-k'])
+      const staging = calls[1]![3]!
+      Expect(staging.startsWith(`${directory}.staging-`)).toBe(true)
+      Expect(calls[1]).toEqual(['-x', '-k', FS.resolvePath('host.zip', staging), staging])
+    }
+    const result = await FS.readJson<{ binaryPath?: string; error?: string }>(FS.resolvePath('result.json', root))
+    return { directory, manifest, result }
+  }
+
   Test('unpacks a simulator host published as a zipped app bundle', async () => {
     await withHostDirectory(async root => {
-      const app = FS.resolvePath('bundle/Tao Companion.app', root)
-      await FS.writeText(FS.resolvePath('Info.plist', app), '<plist/>')
-      const zip = FS.resolvePath('tao-companion-ios-simulator.app.zip', root)
-      await CLI.mustRun('ditto', { args: ['-c', '-k', '--keepParent', app, zip] })
-      const archive = (await FS.readFile(zip)).slice().buffer
-      const manifest: HostManifest = { format: 1, hostVersion: '1.0.0', nativeKit: {}, platform: 'ios-simulator' }
-      const fetch = fakeGitHub({
-        [RELEASES_URL]: [{
-          assets: [
-            { browser_download_url: 'https://dl/ios/m.json', name: 'tao-host-ios-simulator.json', size: 1 },
-            {
-              browser_download_url: 'https://dl/ios/app.zip',
-              name: 'tao-companion-ios-simulator.app.zip',
-              size: archive.byteLength,
-            },
-          ],
-          draft: false,
-          tag_name: 'companion-host-1.0.0-ios',
-        }],
-        'https://dl/ios/m.json': manifest,
-        'https://dl/ios/app.zip': archive,
-      })
-      const hostsRoot = FS.resolvePath('hosts', root)
+      const { directory, manifest, result } = await downloadArchiveFixture(root, 'Tao Companion.app')
 
-      const search = await withCapturedOutput(() =>
-        downloadCompatibleHost('ios-simulator', {}, { fetch, hostsRoot, repository: 'tao/tao' })
-      )
-
-      const directory = FS.resolvePath(`${hostKey(manifest)}/ios-simulator`, hostsRoot)
-      Expect(search.result.host?.binaryPath).toBe(FS.resolvePath('Tao Companion.app', directory))
+      Expect(result.error).toBeUndefined()
+      Expect(result.binaryPath).toBe(FS.resolvePath('Tao Companion.app', directory))
       Expect(await FS.readText(FS.resolvePath('Tao Companion.app/Info.plist', directory))).toBe('<plist/>')
+      Expect(await readHostManifest(directory)).toEqual(manifest)
       Expect((await FS.listDir(directory)).toSorted()).toEqual(['Tao Companion.app', 'tao-host.json'])
     })
   })
+
+  Test('rejects a real archive whose extracted bundle has the wrong name', async () => {
+    await withHostDirectory(async root => {
+      const { directory, result } = await downloadArchiveFixture(root, 'Wrong Companion.app')
+
+      Expect(result.error).toBe('The downloaded host archive did not hold Tao Companion.app.')
+      Expect(result.binaryPath).toBeUndefined()
+      Expect(await FS.exists(directory)).toBe(false)
+    })
+  })
+
+  Test(
+    'the portable ZIP command fixture extracts real bytes and rejects unsupported arguments and invalid ZIPs',
+    async () => {
+      await withHostDirectory(async root => {
+        const { directory, result } = await downloadArchiveFixture(root, 'Tao Companion.app', true)
+        Expect(result.error).toBeUndefined()
+        Expect(await FS.readText(FS.resolvePath('Tao Companion.app/Info.plist', directory))).toBe('<plist/>')
+        const shim = FS.resolvePath('bin/ditto', root)
+        const unsupported = await CLI.run(shim, {
+          args: ['-x', '-k'],
+          processPolicy: 'test',
+          timeoutMs: 20_000, // budget-ok: parent-owned bound for the small ZIP command fixture.
+        })
+        Expect(unsupported.exitCode).not.toBe(0)
+        Expect(unsupported.stderr).toContain('Unsupported ditto fixture arguments')
+        const invalid = FS.resolvePath('invalid.zip', root)
+        await FS.writeText(invalid, 'not a ZIP')
+        const corrupt = await CLI.run(shim, {
+          args: ['-x', '-k', invalid, FS.resolvePath('invalid-output', root)],
+          processPolicy: 'test',
+          timeoutMs: 20_000, // budget-ok: parent-owned bound for the small ZIP command fixture.
+        })
+        Expect(corrupt.exitCode).not.toBe(0)
+        Expect(corrupt.stderr).toContain('BadZipFile')
+      })
+    },
+  )
 
   Test('reads past a full page of other releases to reach a host, and stops at a short page', async () => {
     // CLI and Studio releases share the list, so thirty of them can push every host off page one.

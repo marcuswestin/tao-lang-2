@@ -49,6 +49,10 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
     fixedArgs: ['standalone-cli-clean-machine'],
     argsPolicy: 'standalone-vm',
   },
+  'contributor-linux-test': {
+    command: '/bin/sh',
+    fixedArgs: ['packages/cli/dev-cli/dev-cli-src/environment/contributor-linux-test.sh'],
+  },
   'simulators list': { command: 'xcrun', fixedArgs: ['simctl', 'list', 'devices'] },
   'simulators boot': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
   'simulators run': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },

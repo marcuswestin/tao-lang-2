@@ -1,10 +1,12 @@
-import { CLI, FS, Platform, Repo } from '@shared'
+import { Assert, CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 
 const ENTRY = Repo.resolvePath('enter-tao-dev-env')
 const SHELL_SOURCE = 'packages/cli/dev-cli/dev-cli-src/shell'
 
 async function prepareFixture(fixture: string): Promise<Record<string, string | undefined>> {
+  const zsh = await CLI.commandPath('zsh')
+  Assert.defined(zsh, 'the managed toolchain supplies zsh')
   const bin = FS.resolvePath('bin', fixture)
   const stub = FS.resolvePath('devenv', bin)
   await FS.copyFile(ENTRY, FS.resolvePath('enter-tao-dev-env', fixture))
@@ -16,7 +18,7 @@ printf '%s|%s|%s\\n' "$PWD" "$DEVENV_TUI" "$*" >> "$TAO_TEST_DEVENV_LOG"
 if [ "$*" = 'shell --no-tui -- zsh -i' ]; then
   printf '%s\\n%s\\n' "$ZDOTDIR" "$TAO_ORIGINAL_ZDOTDIR" > "$TAO_TEST_STARTUP_ENV"
   if [ -n "$TAO_TEST_STARTUP_SCRIPT" ]; then
-    exec /bin/zsh -f "$TAO_TEST_STARTUP_SCRIPT"
+    exec "$TAO_TEST_ZSH" -f "$TAO_TEST_STARTUP_SCRIPT"
   fi
 fi
 `,
@@ -25,7 +27,8 @@ fi
   return {
     ...Platform.runtimeProcess.env,
     PATH: `${bin}:/usr/bin:/bin`,
-    SHELL: '/bin/zsh',
+    SHELL: zsh,
+    TAO_TEST_ZSH: zsh,
     ZDOTDIR: undefined,
     DEVENV_ROOT: fixture,
     TAO_TEST_DEVENV_LOG: FS.resolvePath('calls.log', fixture),
