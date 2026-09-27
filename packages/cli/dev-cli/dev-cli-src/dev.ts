@@ -853,7 +853,8 @@ await runWithCommands(commands => {
     )
     .option('--platform <platform>', 'android, or ios-simulator for an iOS Simulator host.', 'android')
     .option('--abi <abis>', 'Comma-separated Android ABIs to build; arm64-v8a,x86_64 by default.')
-    .action(async (options: { abi?: string; platform: string }) => {
+    .option('--developer-dir <path>', 'Task-scoped Xcode Contents/Developer directory for ios-simulator.')
+    .action(async (options: { abi?: string; developerDir?: string; platform: string }) => {
       try {
         if (options.platform !== 'android' && options.platform !== 'ios-simulator') {
           Errors.throwUserInput(`--platform takes android or ios-simulator, not ${options.platform}.`)
@@ -863,6 +864,7 @@ await runWithCommands(commands => {
         Platform.runtimeProcess.exit(
           await runCompanionHostBuild({
             platform: options.platform,
+            ...(options.developerDir === undefined ? {} : { developerDir: options.developerDir }),
             ...(architectures === undefined ? {} : { architectures }),
           }),
         )

@@ -952,7 +952,7 @@ Describe('Tao Companion shell configuration', () => {
     Expect(plugins.map(pluginName)).toContain('expo-dev-client')
     Expect(declaredPlugin('expo-build-properties')).toEqual([
       'expo-build-properties',
-      { ios: { enableSceneSupport: true } },
+      { ios: { deploymentTarget: '17.0', enableSceneSupport: true } },
     ])
     // A development build's entitlements come from the shell, not from the bundle it loads, so the
     // Companion declares every iCloud service a Tao app can bind. The container is derived from this

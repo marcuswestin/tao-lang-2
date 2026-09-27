@@ -1,13 +1,123 @@
 import { hostKey, type HostManifest, writeHostManifest } from '@expo-host/dev-loop/prebuilt-host/HostManifest'
-import { type CLI, FS } from '@shared'
+import { type CLI, FS, Platform } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import {
   companionGradleArgs,
   companionGradleEnv,
+  runCompanionHostBuild,
   runCompanionHostPublish,
 } from '@studio-tooling/CompanionHostBuild'
 
 Describe('Companion host build', () => {
+  Test(
+    'scopes Xcode to prebuild, pods, build, inspection, and copying without changing process selection',
+    async () => {
+      const fixture = await simulatorBuildFixture()
+      const original = Platform.runtimeProcess.env['DEVELOPER_DIR']
+      try {
+        const result = await withCapturedOutput(() =>
+          runCompanionHostBuild({
+            repositoryRoot: fixture.root,
+            platform: 'ios-simulator',
+            developerDir: fixture.developerDir,
+            hostPlatform: 'darwin',
+            run: fixture.run,
+          })
+        )
+        Expect(result.result).toBe(0)
+        Expect(fixture.calls.map(call => call.command)).toEqual([
+          '/usr/bin/xcodebuild',
+          '/usr/bin/xcodebuild',
+          '/usr/bin/xcrun',
+          'bunx',
+          'pod',
+          'xcodebuild',
+          'plutil',
+          'otool',
+          'ditto',
+        ])
+        for (const call of fixture.calls) {
+          Expect(call.spec.env?.['DEVELOPER_DIR']).toBe(await FS.realPath(fixture.developerDir))
+        }
+        Expect(fixture.calls.find(call => call.command === 'pod')?.spec.env?.['LANG']).toBe('en_US.UTF-8')
+        Expect(fixture.calls.find(call => call.command === 'xcodebuild')?.spec.env?.['LC_ALL']).toBe('en_US.UTF-8')
+        Expect(Platform.runtimeProcess.env['DEVELOPER_DIR']).toBe(original)
+        Expect(fixture.calls.some(call => call.command.includes('xcode-select'))).toBe(false)
+      } finally {
+        await FS.remove(fixture.root)
+      }
+    },
+  )
+
+  Test('rejects an Android override and unsafe or missing Xcode paths before prebuild or cache writes', async () => {
+    const fixture = await simulatorBuildFixture()
+    try {
+      await Expect(
+        runCompanionHostBuild({
+          repositoryRoot: fixture.root,
+          platform: 'android',
+          developerDir: fixture.developerDir,
+          run: fixture.run,
+        }),
+      ).rejects.toThrow('--platform ios-simulator')
+      for (
+        const developerDir of [
+          'relative/Xcode.app/Contents/Developer',
+          '/Library/Developer/CommandLineTools',
+          `${fixture.developerDir}\n`,
+        ]
+      ) {
+        await Expect(
+          runCompanionHostBuild({
+            repositoryRoot: fixture.root,
+            platform: 'ios-simulator',
+            developerDir,
+            hostPlatform: 'darwin',
+            run: fixture.run,
+          }),
+        ).rejects.toThrow('absolute Xcode')
+      }
+      await Expect(
+        runCompanionHostBuild({
+          repositoryRoot: fixture.root,
+          platform: 'ios-simulator',
+          developerDir: `${fixture.root}/Missing.app/Contents/Developer`,
+          hostPlatform: 'darwin',
+          run: fixture.run,
+        }),
+      ).rejects.toThrow('missing or incomplete')
+      Expect(fixture.calls).toEqual([])
+      Expect(await FS.exists(`${fixture.packageRoot}/ios`)).toBe(false)
+      Expect(await FS.exists(`${fixture.root}/.artifacts/hosts`)).toBe(false)
+    } finally {
+      await FS.remove(fixture.root)
+    }
+  })
+
+  Test(
+    'stops before native project creation when first-launch status fails or xcrun selects another Xcode',
+    async () => {
+      for (const failure of ['first-launch', 'selection']) {
+        const fixture = await simulatorBuildFixture(failure)
+        try {
+          await Expect(
+            runCompanionHostBuild({
+              repositoryRoot: fixture.root,
+              platform: 'ios-simulator',
+              developerDir: fixture.developerDir,
+              hostPlatform: 'darwin',
+              run: fixture.run,
+            }),
+          ).rejects.toThrow(failure === 'first-launch' ? 'license requires attention' : 'did not select xcodebuild')
+          Expect(fixture.calls.some(call => call.command === 'bunx')).toBe(false)
+          Expect(await FS.exists(`${fixture.packageRoot}/ios`)).toBe(false)
+          Expect(await FS.exists(`${fixture.root}/.artifacts/hosts`)).toBe(false)
+        } finally {
+          await FS.remove(fixture.root)
+        }
+      }
+    },
+  )
   Test('asks Gradle for the named ABIs and an in-process Kotlin compile, with no proxy when none is set', () => {
     Expect(companionGradleArgs(['arm64-v8a', 'x86_64'], {})).toEqual([
       '-PreactNativeArchitectures=arm64-v8a,x86_64',
@@ -58,6 +168,54 @@ Describe('Companion host build', () => {
     await Expect(companionGradleEnv('/nonexistent-checkout', {})).rejects.toThrow('Enter `./enter-tao-dev-env`')
   })
 })
+
+async function simulatorBuildFixture(failure?: string) {
+  const root = await mkTestDir('tao-companion-xcode-')
+  const packageRoot = FS.resolvePath('packages/ides/studio-companion-app', root)
+  const developerDir = FS.resolvePath('Xcode-beta.app/Contents/Developer', root)
+  await FS.writeText(`${developerDir}/usr/bin/xcodebuild`, 'fixture')
+  await FS.writeJson(`${packageRoot}/app.json`, { expo: { version: '1.0.0' } })
+  await FS.writeJson(`${packageRoot}/package.json`, { dependencies: {} })
+  const calls: { command: string; spec: CLI.CommandSpec }[] = []
+  const run: typeof CLI.run = async (command, spec = {}) => {
+    calls.push({ command, spec })
+    const args = [...spec.args ?? []]
+    let stdout = ''
+    if (args.includes('-version')) {
+      stdout = 'Xcode 27.1\nBuild version 18B'
+    }
+    if (args.includes('--find')) {
+      stdout = failure === 'selection'
+        ? '/other/Xcode.app/Contents/Developer/usr/bin/xcodebuild'
+        : `${await FS.realPath(developerDir)}/usr/bin/xcodebuild`
+    }
+    if (command === 'bunx') {
+      await FS.mkdir(`${packageRoot}/ios/Tao.xcworkspace`)
+    }
+    if (command === 'xcodebuild') {
+      await FS.mkdir(`${packageRoot}/ios/build/Build/Products/Debug-iphonesimulator/Tao.app`)
+    }
+    if (command === 'plutil') {
+      stdout = 'Tao'
+    }
+    if (command === 'otool') {
+      stdout = 'sectname __entitlements'
+    }
+    if (command === 'ditto') {
+      await FS.copyDirectory(args[0]!, args[1]!)
+    }
+    const failed = failure === 'first-launch' && args.includes('-checkFirstLaunchStatus')
+    return {
+      command,
+      args,
+      stdout,
+      stderr: failed ? 'license requires attention' : '',
+      exitCode: failed ? 1 : 0,
+      signal: null,
+    }
+  }
+  return { root, packageRoot, developerDir, calls, run }
+}
 
 Describe('Companion host publish', () => {
   /** A checkout whose Companion declares no dependencies, so its native kit is empty. */
