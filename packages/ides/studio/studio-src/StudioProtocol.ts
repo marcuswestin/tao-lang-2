@@ -728,10 +728,15 @@ export type StudioPreviewCanvasPanKeyMessage = {
   type: 'preview-canvas-pan-key'
 }
 
+/** Every canvas command a shortcut can name; the two `zoom-*` targets frame the selection or the focused frame. */
+const studioCanvasShortcutCommands = ['fit', 'reset', 'zoom-focused', 'zoom-in', 'zoom-out', 'zoom-selection'] as const
+
+export type StudioCanvasShortcutCommand = typeof studioCanvasShortcutCommands[number]
+
 /** Canvas commands from an authenticated focused preview. */
 export type StudioPreviewCanvasShortcutMessage = {
   channel: typeof studioProtocolChannel
-  command: 'fit' | 'reset' | 'zoom-in' | 'zoom-out'
+  command: StudioCanvasShortcutCommand
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   type: 'preview-canvas-shortcut'
@@ -1195,15 +1200,10 @@ function parsePreviewCanvasPanKey(value: StudioJsonObject): StudioPreviewCanvasP
 
 function parsePreviewCanvasShortcut(value: StudioJsonObject): StudioPreviewCanvasShortcutMessage | undefined {
   const identity = parsePreviewIdentity(value['identity'])
-  const command = value['command']
-  return identity === undefined
-      || (command !== 'fit' && command !== 'reset' && command !== 'zoom-in' && command !== 'zoom-out')
+  const command = studioCanvasShortcutCommands.find(candidate => candidate === value['command'])
+  return identity === undefined || command === undefined
     ? undefined
-    : envelope({
-      command: command as StudioPreviewCanvasShortcutMessage['command'],
-      identity,
-      type: 'preview-canvas-shortcut',
-    })
+    : envelope({ command, identity, type: 'preview-canvas-shortcut' })
 }
 
 function parseCanvasGestureOwnership(value: StudioJsonObject): StudioCanvasGestureOwnershipMessage | undefined {

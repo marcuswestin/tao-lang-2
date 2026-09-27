@@ -547,8 +547,9 @@ kbd {
 [data-tao-studio-sketch-name] { color: var(--studio-text); font-size: 12px; font-weight: 600; line-height: 16px; pointer-events: none; white-space: nowrap; }
 [data-tao-studio-sketch-rect] { background: #dce6f5; border: 1px solid #7693bc; box-sizing: border-box; cursor: move; overflow: visible; }
 [data-tao-studio-sketch-rect-kind="Text"] { background: transparent; border-color: #9ca8b8; }
-[data-tao-studio-sketch-rect][data-selected="true"] { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
-[data-tao-studio-sketch-handle] { background: #fff; border: 1px solid var(--studio-accent); border-radius: 50%; height: 8px; padding: 0; position: absolute; width: 8px; }
+/* The canvas writes the inverse of its zoom, so selection strokes and handles keep one on-screen size. */
+[data-tao-studio-sketch-rect][data-selected="true"] { outline: calc(2px * var(--studio-canvas-counter-scale, 1)) solid var(--studio-accent); outline-offset: calc(1px * var(--studio-canvas-counter-scale, 1)); }
+[data-tao-studio-sketch-handle] { background: #fff; border: 1px solid var(--studio-accent); border-radius: 50%; height: 8px; padding: 0; position: absolute; transform: scale(var(--studio-canvas-counter-scale, 1)); width: 8px; }
 [data-tao-studio-sketch-handle="north-west"] { cursor: nwse-resize; left: -5px; top: -5px; }
 [data-tao-studio-sketch-handle="north"] { cursor: ns-resize; left: calc(50% - 4px); top: -5px; }
 [data-tao-studio-sketch-handle="north-east"] { cursor: nesw-resize; right: -5px; top: -5px; }

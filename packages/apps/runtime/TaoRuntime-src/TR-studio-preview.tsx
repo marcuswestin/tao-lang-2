@@ -98,8 +98,10 @@ type StudioPreviewMessageEvent = {
 }
 
 type StudioPreviewPointerEvent = {
+  altKey?: boolean
   clientX?: number
   clientY?: number
+  code?: string
   ctrlKey?: boolean
   deltaX?: number
   deltaY?: number
@@ -109,6 +111,7 @@ type StudioPreviewPointerEvent = {
   metaKey?: boolean
   preventDefault?(): void
   repeat?: boolean
+  shiftKey?: boolean
   stopImmediatePropagation?(): void
   stopPropagation?(): void
   target?: unknown
@@ -1045,23 +1048,17 @@ export function mountStudioPreviewBridge(
   }
   const onCanvasShortcutKeyDown = (event: StudioPreviewPointerEvent) => {
     if (
-      !canvasGesturesOwned || !(event.metaKey === true || event.ctrlKey === true) || event.isComposing === true
+      !canvasGesturesOwned || event.isComposing === true
       || event.taoStudioJourney === true || isCanvasTypingTarget(previewElementFromEvent(event))
     ) {
       return
     }
-    const commands: Readonly<Record<string, 'fit' | 'reset' | 'zoom-in' | 'zoom-out'>> = {
-      '0': 'fit',
-      '1': 'reset',
-      '=': 'zoom-in',
-      '+': 'zoom-in',
-      '-': 'zoom-out',
-    }
-    if (event.key === undefined || !Object.hasOwn(commands, event.key)) {
+    const command = canvasShortcutCommand(event)
+    if (command === undefined) {
       return
     }
     blockAppPointerEvent(event)
-    postToStudio(host, config, 'preview-canvas-shortcut', { command: commands[event.key] })
+    postToStudio(host, config, 'preview-canvas-shortcut', { command })
   }
   const onCanvasPanKeyDown = (event: StudioPreviewPointerEvent) => {
     if (
@@ -1587,6 +1584,35 @@ function recordingControl(
 
 function previewElementFromEvent(event: StudioPreviewPointerEvent): StudioPreviewElement | undefined {
   return isStudioElement(event.target) ? event.target : undefined
+}
+
+type StudioPreviewCanvasCommand = 'fit' | 'reset' | 'zoom-focused' | 'zoom-in' | 'zoom-out' | 'zoom-selection'
+
+const modifiedCanvasCommands: Readonly<Record<string, StudioPreviewCanvasCommand>> = {
+  '0': 'fit',
+  '1': 'reset',
+  '=': 'zoom-in',
+  '+': 'zoom-in',
+  '-': 'zoom-out',
+}
+
+/** Shift turns a digit into layout-dependent punctuation, so ⇧1 and ⇧2 are read from the physical key. */
+const shiftedCanvasCommands: Readonly<Record<string, StudioPreviewCanvasCommand>> = {
+  Digit1: 'zoom-selection',
+  Digit2: 'zoom-focused',
+}
+
+/** The runtime imports nothing from Studio, so it names the canvas commands the Studio client also names. */
+function canvasShortcutCommand(event: StudioPreviewPointerEvent): StudioPreviewCanvasCommand | undefined {
+  if (event.metaKey === true || event.ctrlKey === true) {
+    return event.key !== undefined && Object.hasOwn(modifiedCanvasCommands, event.key)
+      ? modifiedCanvasCommands[event.key]
+      : undefined
+  }
+  return event.shiftKey === true && event.altKey !== true && event.code !== undefined
+      && Object.hasOwn(shiftedCanvasCommands, event.code)
+    ? shiftedCanvasCommands[event.code]
+    : undefined
 }
 
 /** Text entry retains Space even when a containing preview belongs to the Design canvas. */

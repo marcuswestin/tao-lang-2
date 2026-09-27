@@ -135,7 +135,7 @@ Describe('Studio session paths and routes', () => {
       command: 'fit',
     }
     const event = { data: message, origin: expectation.origin, source: previewWindow }
-    for (const command of ['fit', 'reset', 'zoom-in', 'zoom-out']) {
+    for (const command of ['fit', 'reset', 'zoom-focused', 'zoom-in', 'zoom-out', 'zoom-selection']) {
       Expect(StudioProtocol.parseWindowMessage({ ...event, data: { ...message, command } }, expectation)).toMatchObject(
         { command },
       )

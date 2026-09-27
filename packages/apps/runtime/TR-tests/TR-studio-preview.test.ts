@@ -496,6 +496,9 @@ Describe('Studio preview runtime bridge', () => {
       }
     }
     fake.dispatchDocument('keydown', { ...key, key: '+', repeat: true })
+    const shifted = { preventDefault: key.preventDefault, shiftKey: true }
+    fake.dispatchDocument('keydown', { ...shifted, code: 'Digit1', key: '!' })
+    fake.dispatchDocument('keydown', { ...shifted, code: 'Digit2', key: '@' })
     const shortcuts = fake.messages.filter(post =>
       (post.message as { type?: string }).type === 'preview-canvas-shortcut'
     )
@@ -512,6 +515,8 @@ Describe('Studio preview runtime bridge', () => {
         'zoom-in',
         'zoom-out',
         'zoom-in',
+        'zoom-selection',
+        'zoom-focused',
       ])
     Expect(shortcuts[0]).toEqual({
       message: {
@@ -523,7 +528,7 @@ Describe('Studio preview runtime bridge', () => {
       },
       targetOrigin: 'http://127.0.0.1:5500',
     })
-    Expect(cancellations).toBe(11)
+    Expect(cancellations).toBe(13)
     Expect(appKeys).toEqual([])
     fake.dispatchDocument('keydown', { key: '0', preventDefault: key.preventDefault })
     fake.dispatchDocument('keydown', { ...key, key: 's' })
@@ -548,13 +553,13 @@ Describe('Studio preview runtime bridge', () => {
       })
     }
     Expect(appKeys).toEqual(['0', 's', 'toString', '0', '0', '0', '0', '0', '0', '0', '0', '0'])
-    Expect(cancellations).toBe(11)
+    Expect(cancellations).toBe(13)
     Expect(fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-canvas-shortcut'))
-      .toHaveLength(11)
+      .toHaveLength(13)
     fake.dispatchWindow('message', canvasGestureOwnershipMessage(false, fake.parent))
     fake.dispatchDocument('keydown', key)
     Expect(appKeys).toHaveLength(13)
-    Expect(cancellations).toBe(11)
+    Expect(cancellations).toBe(13)
     cleanup()
   })
 
