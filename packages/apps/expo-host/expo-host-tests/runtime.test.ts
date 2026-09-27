@@ -339,8 +339,7 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain('setBootstrapError(error)')
         Expect(stableRoot).toContain("value?.type === 'preview-runtime-update'")
         Expect(stableRoot).toContain('event.source !== window.parent')
-        // A same-identity runtime update must not replace the applied cell object (a new cell
-        // object rebuilds the provider overlay without the remount that alone would justify it).
+        // A same-identity runtime update need not repeat bridge/publication effects.
         // `studio-preview-runtime-dedupe.jest-test.tsx` mirrors this exact comparison to prove the
         // behavior against real data/provider primitives it cannot reach by importing this module;
         // an edit here without a matching edit there fails this assertion instead of silently
@@ -360,6 +359,19 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain('<TR.Studio.Failure error={bootstrapError} />')
         Expect(stableRoot).toContain('<TR.Studio.ErrorBoundary resetKey={[')
         Expect(stableRoot).not.toContain('<TR.Studio.ErrorBoundary key={[')
+        // The runtime Jest regression mirrors these generated lifetime lines and exercises real
+        // providers/fixture hooks across source publications and changed cell contracts.
+        Expect(stableRoot).toContain('const resolvedCell = studioCellRuntime(cell, manifest)')
+        Expect(stableRoot).toContain('const cellContract = JSON.stringify(resolvedCell)')
+        Expect(stableRoot).toContain('const replayPublication = resolvedCell.scenario.steps?.length')
+        Expect(stableRoot).toContain('? [config.compileRevision, config.manifestRevision, config.previewInstanceId]')
+        Expect(stableRoot).toContain(
+          'const cellKey = JSON.stringify([cell.identity.cellId, cell.identity.cellRevision, cellContract, replayPublication])',
+        )
+        Expect(stableRoot).toContain(
+          '<StudioPreviewCellContent key={cellKey} cellContract={cellContract} config={config} />',
+        )
+        Expect(stableRoot).toContain('const [TaoStudioCell] = React.useState(() => JSON.parse(cellContract))')
         Expect(stableRoot).toContain('manifest={active.manifest}')
         Expect(stableRoot).toContain(
           'const active = TaoStudioPreviewBootstrap?.cell === true ? appliedRuntime : wholeApp',

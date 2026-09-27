@@ -1,3 +1,8 @@
+import { applyCanvasViewport } from './matrix/StudioCanvasViewport'
+import { mountFeedDropOverlay } from './matrix/StudioFeedDropOverlays'
+import { StudioMatrixSketches } from './matrix/StudioMatrixSketches'
+import { mountPreviewActivation } from './matrix/StudioPreviewActivation'
+import { StudioFeedController } from './StudioFeedController'
 /**
  * StudioApp mounts the imperative workbench shell and wires its parts together. Each part under
  * `./app/` owns its own state behind an explicit dependency object; this file is the one place that
@@ -99,6 +104,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
   const disposeDialogs = StudioDialog.mount({ container: root, signal })
   // The tabs' EditorViews are document models; the editor a person sees is the one Tao mounts.
   const focusVisibleEditor = (): void => root.querySelector<HTMLElement>('.studio-editor .cm-content')?.focus()
+  let partialActivation: ReturnType<typeof mountPreviewActivation> | undefined
   let disposeBrowserLaunch: (() => void) | undefined
   let partialSession: StudioEditorSession | undefined
   let partialPreviews: Awaited<ReturnType<typeof connectPreviews>> = []
@@ -118,9 +124,11 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     try {
       initialCellId = window.localStorage.getItem(cellStorageKey) ?? undefined
     } catch {}
+    let refreshFeed = (): void => {}
     const activePreview = new StudioActivePreview(previews, {
       initialCellId,
       onActivate: preview => {
+        refreshFeed()
         const id = preview.cell?.cellId ?? preview.cellIdentity?.cellId
         if (id !== undefined) {
           try {
@@ -129,6 +137,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         }
       },
     })
+    const previewActivation = mountPreviewActivation(view.preview, previews)
+    partialActivation = previewActivation
     configureInteractionMode(view.interactionMode, previews, handshake)
     let deviceLogs: readonly StudioDeviceLog[] = []
     let deviceLensSamples: NonNullable<StudioDeviceStatus['lensSamples']> = []
@@ -163,7 +173,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let fileTree: ReturnType<typeof mountStudioFileTree> | undefined
     let editorRevealRevision = 0
 
-    const publish = (): void =>
+    const publish = (): void => {
+      feed.liveChanged()
+      StudioMatrixSketches.examples(
+        view.preview,
+        feed.examples(previewManifest, activePreview.current()?.cell?.scenarioId),
+      )
       publishStudioHostSnapshot({
         activeFile: session.activeFile(),
         activePath: session.activePath(),
@@ -173,6 +188,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         deviceLensSamples,
         deviceLogs,
         drawerTab: drawer.tab(),
+        feed: feed.panel(),
         editor: session.editor(),
         inspected: inspection.selected(),
         inspection: inspection.inspection(),
@@ -185,6 +201,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         sourceActionBusy: mutations.busy(),
         tests: drawer.tests(),
       })
+    }
     const renderInspector = (): void => inspection.render()
     const advanceEditorReveal = (): void => {
       editorRevealRevision += 1
@@ -242,6 +259,43 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       requireActiveDraftSaved: () => session.requireActiveDraftSaved(),
       status: view.status,
     })
+    const feed = new StudioFeedController({
+      browse: request => StudioMatrixSketches.runFeed(view.preview, () => StudioApiClient.feedBrowse(request)),
+      mutate: request =>
+        StudioMatrixSketches.runFeed(view.preview, revision => StudioApiClient.feedAction(request(revision))),
+      context: () => {
+        const cell = activePreview.current()?.cell
+        const scenario = previewManifest?.scenarios.find(item => item.scenarioId === cell?.scenarioId)
+        const subject = previewManifest?.subjects.find(item => item.subjectId === scenario?.subjectId)
+        return {
+          activeScenarioId: cell?.scenarioId,
+          cellId: cell?.cellId,
+          sketchId: subject?.kind === 'view'
+            ? StudioMatrixSketches.sketchForView(view.preview, subject.viewName)
+            : undefined,
+          liveRows: Object.fromEntries(
+            drawer.data().result.map(
+              table => [table.entity, table.rows.map((fields, index) => ({ fields, key: String(index) }))],
+            ),
+          ),
+        }
+      },
+      canMutate: () => mutations.canMutate(),
+      publish,
+      receive: state => {
+        for (const file of state.files ?? []) {
+          session.applyFileEvent(file)
+        }
+      },
+      requestId: () => crypto.randomUUID(),
+    })
+    refreshFeed = () => {
+      void feed.refresh()
+    }
+    const disconnectFeed = StudioMatrixSketches.connectFeed(
+      view.preview,
+      (payload, sketchId, rectId) => feed.drop(payload, sketchId, rectId),
+    )
     const scenarios = new StudioScenarioActions({
       activePreview,
       apply: envelope => mutations.apply(envelope),
@@ -269,6 +323,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
 
     let canvasViewport: ReturnType<typeof mountCanvasViewport> | undefined
     const canvasGesturesOwned = (): boolean => studioLayoutOwnsCanvasGestures(root.dataset['layoutPreset'])
+    const disposeFeedDropOverlay = mountFeedDropOverlay(view.preview, previews, canvasGesturesOwned)
     const previewWiring = {
       activePreview,
       canvasGesturesOwned,
@@ -285,6 +340,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         command: import('../StudioProtocol').StudioPreviewCanvasShortcutMessage['command'],
         iframe: HTMLIFrameElement,
       ) => canvasViewport?.iframeShortcut(command, iframe),
+      onFeedDrop: async (message: import('../StudioProtocol').StudioPreviewFeedDropMessage) => {
+        const target = StudioMatrixSketches.feedTarget(view.preview, message)
+        await feed.drop(message.drop, target.sketchId, target.rectId, message.identity.cellId)
+      },
       preview: view.preview,
       previews,
       publish,
@@ -293,15 +352,17 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     const wirePreview = wireStudioPreviews(previewWiring)
     const publishCanvasGestureOwnership = (): void => {
-      if (!canvasGesturesOwned()) {
-        canvasViewport?.cancelPan()
-      }
+      canvasViewport?.cancelPan()
+      previewActivation.clear()
+      view.preview.dataset['canvasWorkspace'] = root.dataset['layoutPreset'] === 'draw' ? 'draw' : 'preview'
+      applyCanvasViewport(view.preview)
       for (const preview of previews) {
         postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned())
       }
     }
     root.addEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership)
     publish()
+    void feed.refresh()
     view.searchInput.addEventListener('input', () => search.schedule())
     for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('[data-drawer-tab]')) {
       button.addEventListener('click', () => {
@@ -418,11 +479,17 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         fileTree?.setFiles(files)
       },
       onManifest(manifest) {
+        const previousCompileRevision = previewManifest?.compileRevision
         previewManifest = manifest
+        if (previousCompileRevision !== manifest.compileRevision) {
+          void feed.refresh()
+        }
+        publish()
         devicePanel.setManifest(manifest)
         if (config.previewUrl !== undefined) {
           void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
             activePreview.reconcile(wirePreview)
+            previewActivation.reconcile()
             previewNotice.render()
             previewNotice.checkBundle()
           }).catch(error => {
@@ -455,7 +522,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     window.addEventListener('pagehide', flushCanvas)
     document.addEventListener('visibilitychange', onCanvasVisibility)
     canvasViewport = mountCanvasViewport({
-      enabled: () => root.dataset['layoutPreset'] === 'design',
+      enabled: () => root.dataset['layoutPreset'] === 'design' || root.dataset['layoutPreset'] === 'draw',
+      canPanWithoutSpace: event =>
+        root.dataset['layoutPreset'] === 'design'
+        && previewActivation.canPanWithoutSpace(event),
       host: view.preview,
       initialState: handshake.canvasViewport,
       onChange: next => canvasPersistence.changed(next),
@@ -471,6 +541,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             .find(group => group.dataset['taoStudioGroupViewId'] === focused)?.getBoundingClientRect()
       },
     })
+    publishCanvasGestureOwnership()
     const canvasFocus = mountStudioCanvasFocus({
       button: view.canvasFocus,
       onError: error => showSourceActionError(view.status, error),
@@ -570,7 +641,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         Assert.input(projectView, `Tao Studio project view is no longer available: ${viewName}`)
         mutations.insertProjectView(projectView)
       },
-      async moveGeneratedSource(path, sourceVersion, initialTargetPackage) {
+      async moveGeneratedSource(path, sourceVersion, initialTargetPackage, relocateScenarios = true) {
         const selected = projectFiles.find(file => file.path === path && file.sourceVersion === sourceVersion)
         Assert.input(selected, `Tao Studio generated source is no longer current: ${path}`)
         const current = await session.prepareMutation(selected, () => projectFiles, async () => {
@@ -585,6 +656,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             path: current.path,
             sourceVersion: current.sourceVersion,
             targetPackage,
+            relocateScenarios,
             writeId: `move-generated-${crypto.randomUUID()}`,
           })
           if (result.status === 'confirmation-required') {
@@ -625,8 +697,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         await navigation.openSource(path, sourceVersion, start)
       },
       async productPanelAction(name, payload) {
+        if (name === 'feed-action') {
+          await feed.execute(payload)
+          return
+        }
         if (name.startsWith('scenario-')) {
           await scenarios.execute(name, payload)
+          await feed.refresh()
           return
         }
         if (name === 'capture-fixture') {
@@ -725,11 +802,16 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       disconnectPreviewMessages()
       canvasFocus.dispose()
       canvasViewport?.dispose()
+      disposeFeedDropOverlay()
+      previewActivation.dispose()
       window.removeEventListener('pagehide', flushCanvas)
       document.removeEventListener('visibilitychange', onCanvasVisibility)
       canvasPersistence.dispose()
       view.dispose()
       search.dispose()
+      refreshFeed = () => {}
+      disconnectFeed()
+      feed.dispose()
       drawer.dispose()
       session.dispose()
       disconnectPreviews(previews)
@@ -739,6 +821,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     disposeDialogs()
     view.dispose()
     partialSession?.dispose()
+    partialActivation?.dispose()
     partialDevicePanel?.dispose()
     disposeBrowserLaunch?.()
     disconnectPreviews(partialPreviews)
