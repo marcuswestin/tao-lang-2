@@ -24,9 +24,20 @@ function liveEnvironment(): SetupEnvironment {
 
 /** Offers developer-owned shell activation only when a terminal can ask for consent. */
 export async function runDirenvSetup(
-  options: { configure?: boolean } = {},
+  options: { configure?: boolean; prepare?: boolean } = {},
   environment: SetupEnvironment = liveEnvironment(),
 ): Promise<number> {
+  if (options.prepare) {
+    try {
+      await prepareEnvironment(environment)
+    } catch (cause) {
+      environment.write(
+        `Development shell preparation was unavailable; directory entry will retry normally.\n${
+          Errors.asError(cause).message
+        }`,
+      )
+    }
+  }
   if (environment.env['TAO_DEV_SHELL_SETUP'] === '0' || !environment.interactive()) {
     return 0
   }
@@ -157,6 +168,76 @@ export async function runDirenvSetup(
       return 0
     },
   )
+}
+
+// Warm devenv's own per-checkout cache instead of caching exported shells ourselves: its
+// evaluator tracks imported files and configuration changes, and keeps writable state local.
+async function prepareEnvironment(environment: SetupEnvironment): Promise<void> {
+  const { env, fs, run, write } = environment
+  const home = env['HOME']
+  if (!home || !await fs.exists(FS.resolvePath('.tao-dev/shell/repositories', home))) {
+    return
+  }
+  const root = environment.root()
+  const canonicalRoot = await fs.realPath(root)
+  if (
+    env['TAO_DEVENV'] === '1' && env['DEVENV_ROOT']
+    && await fs.realPath(env['DEVENV_ROOT']).catch(() => '') === canonicalRoot
+  ) {
+    return
+  }
+  if (!await fs.exists(FS.resolvePath('devenv.nix', root))) {
+    return
+  }
+  const git = await run('git', {
+    args: ['rev-parse', '--path-format=absolute', '--git-common-dir'],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (git.exitCode !== 0) {
+    return
+  }
+  const common = await fs.realPath(git.stdout.trim())
+  const hash = await run('git', {
+    args: ['hash-object', '--stdin'],
+    stdin: `${common}\n`,
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (hash.exitCode !== 0 || !/^[a-f0-9]{40,64}$/.test(hash.stdout.trim())) {
+    return
+  }
+  const record = FS.resolvePath(`.tao-dev/shell/repositories/${hash.stdout.trim()}`, home)
+  if (
+    await readOptional(fs, FS.resolvePath('choice', record)) !== 'enabled\n'
+    || await readOptional(fs, FS.resolvePath('common-dir', record)) !== `${common}\n`
+  ) {
+    return
+  }
+  const worktrees = await run('git', {
+    args: ['worktree', 'list', '--porcelain', '-z'],
+    cwd: root,
+    stdio: 'pipe',
+  })
+  if (worktrees.exitCode !== 0 || !worktrees.stdout.split('\0').includes(`worktree ${canonicalRoot}`)) {
+    return
+  }
+  // Optional preparation must not make a missing Nix installation fail portable setup. It
+  // neither authorizes .envrc nor changes the installed hook, consent record, or shell settings.
+  write('Preparing this checkout’s development shell for automatic directory entry...')
+  const prepared = await run('devenv', {
+    args: ['shell', '--no-tui', '--', 'true'],
+    cwd: root,
+    env: { ...env, DEVENV_TUI: 'false' },
+    stdio: 'pipe',
+    processPolicy: 'test',
+    timeoutMs: 60_000,
+  })
+  if (prepared.exitCode !== 0) {
+    write(
+      `Development shell preparation was unavailable (exit ${prepared.exitCode}); directory entry will retry normally.\n${prepared.stderr.trim()}`,
+    )
+  }
 }
 
 function quote(value: string): string {
