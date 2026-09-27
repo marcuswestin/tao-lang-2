@@ -93,7 +93,9 @@ function createRuntimeJestConfig(options) {
     },
     // Bun isolated installs put React Native's ESM Jest setup under node_modules/.bun,
     // outside the path shape handled by jest-expo's default transform allowlist.
-    transformIgnorePatterns: [],
+    // TypeScript's compiler is already CommonJS. Transforming its large bundle adds cold
+    // preparation work inside native-binding tests without changing executable syntax.
+    transformIgnorePatterns: ['/node_modules/typescript/lib/typescript\\.js$'],
   }
 }
 

@@ -538,7 +538,7 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
         ctx.error(memberAccess, typeValidationMessages.unknownMember(typeName, member))
         return
       }
-      current = Type.dataFieldType(field)
+      current = Type.dataFieldValueType(field)
       typeName = Type.displayName(current)
       continue
     }
@@ -551,7 +551,7 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       ctx.error(memberAccess, typeValidationMessages.unknownMember(typeName, member))
       return
     }
-    current = AST.isEntityDataField(property) ? Type.dataFieldType(property) : Type.ofPropertyRead(property)
+    current = AST.isEntityDataField(property) ? Type.dataFieldValueType(property) : Type.ofPropertyRead(property)
     if (current.kind === 'unresolved') {
       return
     }

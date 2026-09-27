@@ -41,10 +41,11 @@ export type TestRunOptions = {
  * suites run, and an optional test-name pattern filtered over whatever that scope chose. They
  * compose rather than exclude each other, which is what `just test "<name>"` means — the suites this
  * branch's diff reaches, filtered to the tests matching that name. A pattern therefore only ever
- * narrows a run; it never widens one back out to every suite.
+ * narrows a run; it never widens one back out to every suite. Mutation evidence keeps the selected
+ * tests' raw verdicts separate from ordinary history, retries, tolerance and learned timings.
  */
 export type TestRunRequest =
-  & { pattern?: string }
+  & { evidenceMode?: 'mutation'; pattern?: string }
   & (
     | { kind: 'changed'; reference?: string }
     | { kind: 'file'; path: string }
@@ -54,6 +55,7 @@ export type TestRunRequest =
 
 type PreparedRun = {
   changed?: ChangedSelection
+  evidenceMode?: 'mutation'
   files?: readonly TestFile[]
   kind: TestRunRequest['kind']
   pattern: string
@@ -129,6 +131,8 @@ type SuiteSelectionResult = {
 }
 
 const LANE = 'dev-test'
+const MUTATION_EVIDENCE_NOTICE =
+  'Mutation run: raw failures are fatal; automatic retries, flake tolerance, ledger writes and timing learning are disabled.'
 /** How much of a failing suite's output a quiet run repeats; the whole of it is in the log file. */
 const QUIET_FAILURE_OUTPUT_LINES = 40
 const PERFORMANCE_CHECKS = 'performance-checks'
@@ -303,6 +307,11 @@ async function runTestFile(path: string, options: TestRunOptions = {}): Promise<
   return runTestRequest({ kind: 'file', path }, options)
 }
 
+/** Deliberate mutations retain raw results without teaching or borrowing ordinary test evidence. */
+async function runTestMutation(path: string, options: TestRunOptions = {}): Promise<number> {
+  return runTestRequest({ evidenceMode: 'mutation', kind: 'file', path }, options)
+}
+
 async function runRetryTests(options: TestRunOptions = {}): Promise<number> {
   return runTestRequest({ kind: 'retry' }, options)
 }
@@ -353,12 +362,13 @@ async function runTestRequest(request: TestRunRequest, options: TestRunOptions =
     await printAdvisory(prepared, await TestLedger.load(repositoryRoot))
     return 0
   }
-  const location = RunArtifacts.locate({ lane: LANE, repositoryRoot })
+  const lane = prepared.evidenceMode === 'mutation' ? 'dev-test-mutation' : LANE
+  const location = RunArtifacts.locate({ lane, repositoryRoot })
   // `./dev test` is always a top-level lane now: a verification run schedules the same suite nodes
   // in its own graph rather than starting this command inside itself, so there is no nested runner
   // left to hand a divided budget to.
   const machineLane = await MachineLanes.acquire({
-    lane: LANE,
+    lane,
     registryRoot: options.registryRoot,
     repositoryRoot: location.repositoryRoot,
     requestedJobs: options.jobs,
@@ -380,13 +390,22 @@ type RunSuitesOptions = {
 
 async function runSuites(options: RunSuitesOptions): Promise<number> {
   const { location, machineLane, prepared } = options
+  const mutation = prepared.evidenceMode === 'mutation'
+  const timings: TimingsStore = mutation
+    ? { nodes: {}, version: 1 }
+    : await RunTimings.load({ repositoryRoot: location.repositoryRoot })
   const reportRoot = Shared.FS.resolvePath('test-results', location.logRoot)
   await Shared.FS.mkdir(reportRoot)
   const { plans, states } = await testNodesFor({
     prepared,
+    ledger: mutation ? TestLedger.empty() : undefined,
     reportRoot,
     repositoryRoot: location.repositoryRoot,
+    timings,
   })
+  if (mutation) {
+    Shared.HCI.writeLine(MUTATION_EVIDENCE_NOTICE)
+  }
   printSelection(prepared, states, plans)
   if (states.length === 0) {
     if (prepared.kind === 'changed') {
@@ -401,9 +420,8 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   const mode = options.mode ?? WorkReporter.resolveMode()
   const graphStates = TaoAppSharedRun.attach(states, location.logRoot, location.repositoryRoot)
   await RunArtifacts.assignLogPaths(graphStates, location)
-  const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
-  const reporter = WorkReporter.create({ lane: LANE, logRoot: location.logRoot, mode })
+  const reporter = WorkReporter.create({ lane: location.lane, logRoot: location.logRoot, mode })
   const liveArtifacts = RunArtifacts.liveWriter(location, event => reporter.handle(event))
 
   const result = await WorkGraph.run(graphStates, {
@@ -414,7 +432,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   })
   await liveArtifacts.finish()
   await reporter.finish()
-  if (!result.interrupted) {
+  if (!result.interrupted && !mutation) {
     await ContentionRetry.confirmContendedFailures({
       contention: machineLane.report(),
       location,
@@ -443,7 +461,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   // to remove. An interrupted run tolerates nothing: it did not finish, so its failures weigh
   // nothing. The states stay `failed`, exactly as in the gate lanes — the summary is the one place a
   // verdict is decided, which is why the exit code below is taken from it.
-  const tolerance = result.interrupted
+  const tolerance = result.interrupted || mutation
     ? FlakeTolerance.empty()
     : FlakeTolerance.apply(states, await TestLedger.tolerated(location.repositoryRoot))
   const toleratedFlakes = tolerance.demoted.map(flake => ({
@@ -452,7 +470,9 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
     id: flake.id,
     node: flake.node,
   }))
-  const ledger = result.interrupted
+  const ledger = mutation
+    ? TestLedger.empty()
+    : result.interrupted
     ? await TestLedger.load(location.repositoryRoot)
     : await TestLedger.recordRun({
       fullRun: completeRun(prepared),
@@ -469,13 +489,16 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
     elapsedMs,
     expectedMs,
     interrupted: result.interrupted,
-    lane: LANE,
+    lane: location.lane,
     logRoot: location.logRoot,
     schedule: WorkSchedule.report(result),
     states: graphStates,
     suiteOf: name => states.find(state => state.name === name)?.suite,
     toleratedFlakes,
   })
+  if (mutation) {
+    summary.warnings = [...summary.warnings, MUTATION_EVIDENCE_NOTICE]
+  }
   const summaryPath = await RunArtifacts.finishRun({
     cpuOnly: contention.contended,
     location,
@@ -494,7 +517,9 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   if (prepared.kind === 'retry') {
     printRetryHonesty(prepared)
   }
-  await printAdvisory(prepared, ledger)
+  if (!mutation) {
+    await printAdvisory(prepared, ledger)
+  }
   // A demoted failure is still a failure; it just is not this branch's. The names and the recorded
   // history that bought the pass belong on the terminal, not only in `summary.json` — a gate lane
   // gets them free from `formatGateSummary`, and this lane prints no such rollup. Only these
@@ -518,7 +543,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
  * say what a suite costs.
  */
 function completeRun(prepared: PreparedRun): boolean {
-  return prepared.kind === 'full' && prepared.pattern.length === 0
+  return prepared.evidenceMode !== 'mutation' && prepared.kind === 'full' && prepared.pattern.length === 0
 }
 
 function partialTaoAppRun(prepared: PreparedRun): boolean {
@@ -528,19 +553,19 @@ function partialTaoAppRun(prepared: PreparedRun): boolean {
 
 async function prepareRun(request: TestRunRequest, repositoryRoot: string): Promise<PreparedRun> {
   // The pattern rides along every scope: it filters the tests inside whatever suites the scope chose.
-  const pattern = request.pattern ?? ''
+  const settings = { evidenceMode: request.evidenceMode, pattern: request.pattern ?? '' }
   if (request.kind === 'full') {
-    return { kind: 'full', pattern }
+    return { kind: 'full', ...settings }
   }
   if (request.kind === 'file') {
-    return { files: await testFilesAt(request.path, repositoryRoot), kind: 'file', pattern }
+    return { files: await testFilesAt(request.path, repositoryRoot), kind: 'file', ...settings }
   }
 
   if (request.kind === 'changed') {
     const changed = await TestSelection.changedSelection(request.reference, repositoryRoot)
     const [graph, inventory] = await Promise.all([PackageGraph.load(repositoryRoot), suiteInventory(repositoryRoot)])
     const plan = TestSelection.planChangedSuites(changed.changedPaths, graph, inventory)
-    return { changed, kind: 'changed', pattern, plan: await withExistingAppRoots(plan, repositoryRoot) }
+    return { changed, kind: 'changed', ...settings, plan: await withExistingAppRoots(plan, repositoryRoot) }
   }
   const changed = await TestSelection.changedSelection(undefined, repositoryRoot)
   const retry = await TestLedger.selectRetryFiles(await allTestFiles(repositoryRoot), repositoryRoot)
@@ -548,7 +573,7 @@ async function prepareRun(request: TestRunRequest, repositoryRoot: string): Prom
     changed,
     files: retry.files,
     kind: 'retry',
-    pattern,
+    ...settings,
     retryGreenTestCount: retry.greenTestCount,
     retryStamp: retry.lastFullRunStartedAt,
   }
@@ -1081,6 +1106,7 @@ export const TestRunner = {
   runChangedTests,
   runRetryTests,
   runTestFile,
+  runTestMutation,
   runTestRequest,
   runTests,
   starvationAdjustedTimeoutMs,

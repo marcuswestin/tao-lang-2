@@ -219,6 +219,8 @@ export type TaoDataConnectionObserver = Readonly<{
 /** TaoDataProviderContext is the provider-neutral mount passed to a package implementation. */
 export type TaoDataProviderContext = Readonly<{
   auth?: TaoDataAuthBinding
+  /** Device-local account custody fences persistence without granting remote authority. */
+  signal?: AbortSignal
   configuration: Readonly<Record<string, unknown>>
   schema: TaoDataSchemaDefinition
   storageKey: string
@@ -265,6 +267,8 @@ export type TaoConfiguredDatasource = Readonly<{
 
 /** TaoAppDatasourceBinding is one store an app mounts and the datasource filling it. */
 export type TaoAppDatasourceBinding = Readonly<{
+  /** Compiler-owned local companion custody, keyed by the app's canonical declaration identity. */
+  localOnly?: string
   source: TaoConfiguredDatasource
   /** storageName is the bound declaration's name, present only for a store a `Data` slot declares. */
   storageName?: string

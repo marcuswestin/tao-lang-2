@@ -4,6 +4,88 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 const AUDIT = Repo.resolvePath('packages/cli/tao-cli/cli-src/standalone-filesystem-audit.ts')
 
 Describe('standalone filesystem audit', () => {
+  Test(
+    'accepts observed Tahoe metadata shapes but rejects changed ownership, links, children, and Bun shims',
+    async () => {
+      const fixture = await mkTestDir('tao-filesystem-tahoe-metadata-')
+      const before = FS.resolvePath('before.json', fixture)
+      const after = FS.resolvePath('after.json', fixture)
+      const diff = FS.resolvePath('diff.json', fixture)
+      const report = FS.resolvePath('diff.txt', fixture)
+      const scope = FS.resolvePath('scope.json', fixture)
+      const prefix = '/guest/admin/'
+      const shapes = [
+        ['Library/Caches/com.apple.Safari.SafeBrowsing', 'directory', 160, 192],
+        ['Library/Caches/com.apple.Safari.SafeBrowsing/Cache.db-shm', 'file', 32768, 32768],
+        ['Library/Caches/com.apple.Safari.SafeBrowsing/Cache.db-wal', 'file', 41232, 49472],
+        ['Library/Safari/PasswordBreachStore.plist', 'file', 335, 335],
+      ] as const
+      const entry = (kind: string, size: number, modifiedMs: number) => ({
+        kind,
+        size,
+        modifiedMs,
+        device: 1,
+        mode: kind === 'file' ? 0o100644 : 0o40755,
+        uid: 501,
+        gid: 20,
+      })
+      const snapshot = (entries: Record<string, unknown>) => ({
+        entries,
+        issues: [],
+        root: '/guest',
+        skippedMounts: [],
+      })
+      const prior = Object.fromEntries(shapes.map(([path, kind, size]) => [prefix + path, entry(kind, size, 1)]))
+      const current = Object.fromEntries(shapes.map(([path, kind, , size]) => [prefix + path, entry(kind, size, 2)]))
+      for (const path of ['Library/PrivateCloudCompute', 'Library/Caches/com.apple.Safari.SafeBrowsing/fsCachedData']) {
+        current[prefix + path] = entry('directory', 64, 2)
+      }
+      prior['/guest/acceptance/home/.tao'] = entry('directory', 64, 1)
+      current['/guest/acceptance/home/.tao'] = entry('directory', 64, 2)
+      const compare = () =>
+        CLI.run(Platform.runtimeProcess.execPath, {
+          args: ['run', AUDIT, 'compare', before, after, diff, report, scope],
+        })
+      try {
+        await FS.writeJson(scope, { guestHome: '/admin', guestTemp: '/tmp', root: '/acceptance' })
+        await FS.writeJson(before, snapshot(prior))
+        await FS.writeJson(after, snapshot(current))
+        const initial = await compare()
+        Expect((await FS.readJson<{ violations: string[] }>(diff)).violations).toEqual([])
+        Expect(initial.exitCode).toBe(0)
+        for (const [path, value] of Object.entries(current)) {
+          if (!path.startsWith(prefix)) {
+            continue
+          }
+          for (
+            const mutation of [{ uid: 502 }, { gid: 0 }, { mode: 0o40777 }, { kind: 'symlink', linkTarget: '/outside' }]
+          ) {
+            await FS.writeJson(after, snapshot({ ...current, [path]: { ...value, ...mutation } }))
+            Expect((await compare()).exitCode).not.toBe(0)
+            Expect((await FS.readJson<{ violations: string[] }>(diff)).violations).toContain(path)
+          }
+        }
+        const forbidden = [
+          `${prefix}Library/PrivateCloudCompute/tool-cache`,
+          `${prefix}Library/Caches/com.apple.Safari.SafeBrowsing/fsCachedData/tool-cache`,
+          '/guest/private/tmp/bun-node-744846f84',
+          '/guest/private/tmp/bun-node-744846f84/node',
+        ]
+        await FS.writeJson(
+          after,
+          snapshot({
+            ...current,
+            ...Object.fromEntries(forbidden.map(path => [path, entry('file', 10, 2)])),
+          }),
+        )
+        Expect((await compare()).exitCode).not.toBe(0)
+        Expect((await FS.readJson<{ violations: string[] }>(diff)).violations).toEqual(forbidden.sort())
+      } finally {
+        await FS.remove(fixture)
+      }
+    },
+  )
+
   Test('compares remounted disks under one logical root without losing real metadata changes', async () => {
     const fixture = await mkTestDir('tao-filesystem-remount-')
     const disk = FS.resolvePath('mounted-disk', fixture)

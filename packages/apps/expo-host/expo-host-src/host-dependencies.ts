@@ -57,6 +57,9 @@ async function ensure(options: EnsureOptions = {}): Promise<void> {
 async function ensureIn(host: HostInstall, options: EnsureOptions = {}): Promise<void> {
   const identity = Platform.sha256Hex(await FS.readFile(FS.resolvePath('bun.lock', host.hostFiles)))
   if (await installedWith(host.installRoot, identity)) {
+    await FS.withFileMutationLock(host.installRoot, FS.dirname(host.installRoot), async () => {
+      await RuntimeToolchainPaths.prepareNodeLauncher(host.installRoot)
+    })
     await linkBesideHostFiles(host)
     return
   }
@@ -66,6 +69,7 @@ async function ensureIn(host: HostInstall, options: EnsureOptions = {}): Promise
   }
   await FS.mkdir(host.installRoot)
   await FS.withFileMutationLock(host.installRoot, FS.dirname(host.installRoot), async () => {
+    await RuntimeToolchainPaths.prepareNodeLauncher(host.installRoot)
     if (await installedWith(host.installRoot, identity)) {
       return
     }
@@ -116,6 +120,7 @@ async function installWithThisBinary(installRoot: string): Promise<void> {
     args: ['install', '--frozen-lockfile', '--cwd', installRoot],
     env: {
       ...Platform.runtimeProcess.env,
+      ...RuntimeToolchainPaths.nodeLauncherEnvironment(installRoot),
       BUN_BE_BUN: '1',
       BUN_INSTALL_CACHE_DIR: TaoHome.resolve('cache/bun'),
     },
