@@ -145,6 +145,9 @@ trimmed by the language slice:
   checks of the local acceptance have not been repeated there.
 - WordFlower binds the per-row adapter. Its hosted Instant app still holds the old snapshot schema;
   pushing WordFlower's schema there, and abandoning the snapshot data, is a Developer action below.
+- What remains was deferred on 2026-09-27 to finish before MVP: the work is `A20` in
+  `Docs/MVP Roadmap/Agent MVP Roadmap.md`, and the open questions are `R15` in
+  `Docs/MVP Roadmap/Developer MVP Roadmap.md`.
 
 ## Acceptance
 
