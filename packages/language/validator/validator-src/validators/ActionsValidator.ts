@@ -39,6 +39,10 @@ const actionValidationMessages = {
   asyncPlacement: '`async` is allowed only inside an action block.',
   foreignActionPath: 'A foreign action implementation path must name a relative TypeScript or TSX module.',
   foreignActionMissing: (path: string) => `Foreign action implementation '${path}' does not exist.`,
+  returnNative: '`returns` is allowed only on a foreign action.',
+  returnLatest: 'A foreign action with a result cannot use `runs latest`.',
+  resultRequired: 'A result binding requires a named foreign action that declares `returns`.',
+  duplicateResult: (name: string) => `Action result '${name}' is declared more than once in this action block.`,
   runsLatestNative: '`runs latest` is allowed only on a foreign action.',
 }
 
@@ -47,6 +51,12 @@ export const ActionsValidator = {
   checks: {
     [AST.ActionDeclaration.$type]: (action, ctx) => {
       validateParameters(action, ctx)
+      if (action.returnType && !action.foreign) {
+        ctx.error(action, actionValidationMessages.returnNative)
+      }
+      if (action.returnType && action.runsLatest) {
+        ctx.error(action, actionValidationMessages.returnLatest)
+      }
       if (action.runsLatest && !action.foreign) {
         ctx.error(action, actionValidationMessages.runsLatestNative)
       }
@@ -54,6 +64,21 @@ export const ActionsValidator = {
         if (!/^\.\.?\/.+\.tsx?$/.test(action.foreign.path)) {
           ctx.error(action.foreign, actionValidationMessages.foreignActionPath)
         }
+      }
+    },
+    [AST.ActionResultStatement.$type]: (statement, ctx) => {
+      const action = ASTUtils.resolveActionInvocation(statement.invocation).action
+      if (!AST.isActionDeclaration(action) || !action.foreign || !action.returnType) {
+        ctx.error(statement, actionValidationMessages.resultRequired)
+      }
+    },
+    [AST.ActionBlock.$type]: (block, ctx) => {
+      const seen = new Set(AST.askDeclarationsOwnedByActionBlock(block).map(binding => binding.name))
+      for (const binding of AST.actionResultDeclarationsOwnedByActionBlock(block)) {
+        if (seen.has(binding.name)) {
+          ctx.error(binding, actionValidationMessages.duplicateResult(binding.name))
+        }
+        seen.add(binding.name)
       }
     },
     [AST.AsyncActionStatement.$type]: (statement, ctx) => {

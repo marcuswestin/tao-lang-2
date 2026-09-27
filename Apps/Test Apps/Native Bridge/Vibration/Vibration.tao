@@ -1,0 +1,25 @@
+use Button, Col, ScrollView, Text, TextMultiline from @tao/ui
+use Cancel, Vibrate from ./Generated/Bindings.tao
+
+public
+scene VibrationDemo() {
+   Title "Vibration · React Native"
+   state Status = "Ready"
+   action Pulse() {
+      do Vibrate(Pattern: 200, Repeat: false)
+      set Status = "Vibration requested"
+   }
+   action Stop() {
+      do Cancel()
+      set Status = "Cancellation requested"
+   }
+   render ScrollView() {
+      Col() [screen] {
+         TextMultiline("Requests a 200 ms vibration on Android. iOS uses a fixed system pulse. Cancel stops patterns; it cannot shorten an iOS pulse already underway.")
+         Text("Status: { Status }")
+         Button("Vibrate") {
+            on press Pulse
+         }
+         Button("Cancel vibration") {
+            on press Stop
+}  }  }  }

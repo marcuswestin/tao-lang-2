@@ -1,0 +1,385 @@
+{
+  "schemaVersion": 1,
+  "catalog": {
+    "source": "expo",
+    "packageName": "expo-clipboard",
+    "packageVersion": "57.0.2",
+    "declaration": "build/Clipboard.d.ts",
+    "declarationHash": "c4d202ca1e4b5e171cb6b07e2181e37f42421eb9c33db1332cca02485a167a24",
+    "enums": [
+      {
+        "name": "ContentType",
+        "members": [
+          {
+            "name": "PLAIN_TEXT",
+            "value": "plain-text"
+          },
+          {
+            "name": "HTML",
+            "value": "html"
+          },
+          {
+            "name": "IMAGE",
+            "value": "image"
+          },
+          {
+            "name": "URL",
+            "value": "url"
+          }
+        ]
+      },
+      {
+        "name": "GetImageOptionsFormat",
+        "members": [
+          {
+            "name": "Png",
+            "value": "png"
+          },
+          {
+            "name": "Jpeg",
+            "value": "jpeg"
+          }
+        ],
+        "literal": true
+      },
+      {
+        "name": "StringFormat",
+        "members": [
+          {
+            "name": "PLAIN_TEXT",
+            "value": "plainText"
+          },
+          {
+            "name": "HTML",
+            "value": "html"
+          }
+        ]
+      }
+    ],
+    "records": [
+      {
+        "name": "ClipboardEvent",
+        "fields": [
+          {
+            "name": "contentTypes",
+            "optional": false,
+            "type": {
+              "kind": "list",
+              "element": {
+                "kind": "enum",
+                "name": "ContentType"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "ClipboardImage",
+        "fields": [
+          {
+            "name": "data",
+            "optional": false,
+            "type": {
+              "kind": "primitive",
+              "name": "text"
+            }
+          },
+          {
+            "name": "size",
+            "optional": false,
+            "type": {
+              "kind": "record",
+              "name": "ClipboardImageSize"
+            }
+          }
+        ]
+      },
+      {
+        "name": "ClipboardImageSize",
+        "fields": [
+          {
+            "name": "width",
+            "optional": false,
+            "type": {
+              "kind": "primitive",
+              "name": "number"
+            }
+          },
+          {
+            "name": "height",
+            "optional": false,
+            "type": {
+              "kind": "primitive",
+              "name": "number"
+            }
+          }
+        ]
+      },
+      {
+        "name": "EventSubscription",
+        "fields": [
+          {
+            "name": "remove",
+            "optional": false,
+            "type": {
+              "kind": "callback",
+              "parameters": []
+            }
+          }
+        ],
+        "disposal": "remove"
+      },
+      {
+        "name": "GetImageOptions",
+        "fields": [
+          {
+            "name": "format",
+            "optional": false,
+            "type": {
+              "kind": "enum",
+              "name": "GetImageOptionsFormat"
+            }
+          },
+          {
+            "name": "jpegQuality",
+            "optional": true,
+            "type": {
+              "kind": "primitive",
+              "name": "number"
+            }
+          }
+        ]
+      },
+      {
+        "name": "GetStringOptions",
+        "fields": [
+          {
+            "name": "preferredFormat",
+            "optional": true,
+            "type": {
+              "kind": "enum",
+              "name": "StringFormat"
+            }
+          }
+        ]
+      },
+      {
+        "name": "SetStringOptions",
+        "fields": [
+          {
+            "name": "inputFormat",
+            "optional": true,
+            "type": {
+              "kind": "enum",
+              "name": "StringFormat"
+            }
+          }
+        ]
+      }
+    ],
+    "excluded": [
+      "ClipboardPasteButton",
+      "isPasteButtonAvailable"
+    ],
+    "operations": [
+      {
+        "name": "addClipboardListener",
+        "parameters": [
+          {
+            "name": "listener",
+            "type": {
+              "kind": "callback",
+              "parameters": [
+                {
+                  "name": "event",
+                  "type": {
+                    "kind": "record",
+                    "name": "ClipboardEvent"
+                  },
+                  "optional": false
+                }
+              ]
+            },
+            "optional": false
+          }
+        ],
+        "result": {
+          "kind": "record",
+          "name": "EventSubscription"
+        },
+        "asynchronous": false,
+        "platforms": []
+      },
+      {
+        "name": "getImageAsync",
+        "parameters": [
+          {
+            "name": "options",
+            "type": {
+              "kind": "record",
+              "name": "GetImageOptions"
+            },
+            "optional": false
+          }
+        ],
+        "result": {
+          "kind": "nullable",
+          "value": {
+            "kind": "record",
+            "name": "ClipboardImage"
+          }
+        },
+        "asynchronous": true,
+        "platforms": []
+      },
+      {
+        "name": "getStringAsync",
+        "parameters": [
+          {
+            "name": "options",
+            "type": {
+              "kind": "record",
+              "name": "GetStringOptions"
+            },
+            "optional": true
+          }
+        ],
+        "result": {
+          "kind": "primitive",
+          "name": "text"
+        },
+        "asynchronous": true,
+        "platforms": []
+      },
+      {
+        "name": "getUrlAsync",
+        "parameters": [],
+        "result": {
+          "kind": "nullable",
+          "value": {
+            "kind": "primitive",
+            "name": "text"
+          }
+        },
+        "asynchronous": true,
+        "platforms": [
+          "ios",
+          "macos"
+        ]
+      },
+      {
+        "name": "hasImageAsync",
+        "parameters": [],
+        "result": {
+          "kind": "primitive",
+          "name": "boolean"
+        },
+        "asynchronous": true,
+        "platforms": []
+      },
+      {
+        "name": "hasStringAsync",
+        "parameters": [],
+        "result": {
+          "kind": "primitive",
+          "name": "boolean"
+        },
+        "asynchronous": true,
+        "platforms": []
+      },
+      {
+        "name": "hasUrlAsync",
+        "parameters": [],
+        "result": {
+          "kind": "primitive",
+          "name": "boolean"
+        },
+        "asynchronous": true,
+        "platforms": [
+          "ios",
+          "macos"
+        ]
+      },
+      {
+        "name": "removeClipboardListener",
+        "parameters": [
+          {
+            "name": "subscription",
+            "type": {
+              "kind": "record",
+              "name": "EventSubscription"
+            },
+            "optional": false
+          }
+        ],
+        "asynchronous": false,
+        "platforms": []
+      },
+      {
+        "name": "setImageAsync",
+        "parameters": [
+          {
+            "name": "base64Image",
+            "type": {
+              "kind": "primitive",
+              "name": "text"
+            },
+            "optional": false
+          }
+        ],
+        "asynchronous": true,
+        "platforms": []
+      },
+      {
+        "name": "setStringAsync",
+        "parameters": [
+          {
+            "name": "text",
+            "type": {
+              "kind": "primitive",
+              "name": "text"
+            },
+            "optional": false
+          },
+          {
+            "name": "options",
+            "type": {
+              "kind": "record",
+              "name": "SetStringOptions"
+            },
+            "optional": true
+          }
+        ],
+        "result": {
+          "kind": "primitive",
+          "name": "boolean"
+        },
+        "asynchronous": true,
+        "platforms": []
+      },
+      {
+        "name": "setUrlAsync",
+        "parameters": [
+          {
+            "name": "url",
+            "type": {
+              "kind": "primitive",
+              "name": "text"
+            },
+            "optional": false
+          }
+        ],
+        "asynchronous": true,
+        "platforms": [
+          "ios",
+          "macos"
+        ]
+      }
+    ]
+  },
+  "target": {
+    "module": "expo-clipboard",
+    "receiver": []
+  },
+  "diagnostics": []
+}

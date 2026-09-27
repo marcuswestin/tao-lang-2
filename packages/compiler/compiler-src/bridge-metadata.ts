@@ -8,6 +8,7 @@ type BridgeContract = { arity?: string; exportName: string; path: string; result
 
 /** BridgeMetadata is the TypeScript-facing contract generated beside each Tao boundary source. */
 export const BridgeMetadata = {
+  resultType: typescriptType,
   /** typesFor mirrors the exported contract types in compiled Tao modules for copied sidecars. */
   typesFor(file: AST.TaoFile): string {
     const contracts = contractsOf(file)
@@ -117,12 +118,13 @@ function contractsOf(file: AST.TaoFile): BridgeContract[] {
     const parameters = AST.parametersOf(action).map((parameter, index) =>
       `arg${index}: ${foreignActionParameterType(Type.ofParameter(parameter))}`
     )
+    const result = action.returnType ? typescriptType(Type.ofActionResult(action)) : 'void'
     contracts.push({
       arity: String(parameters.length),
       exportName: action.name,
       path: action.foreign.path,
-      result: 'void | Promise<void>',
-      type: `(${parameters.join(', ')}) => void | Promise<void>`,
+      result: `${result} | Promise<${result}>`,
+      type: `(${parameters.join(', ')}) => ${result} | Promise<${result}>`,
     })
   }
   for (const view of AST.streamAllContents(file).filter(AST.isViewDeclaration)) {

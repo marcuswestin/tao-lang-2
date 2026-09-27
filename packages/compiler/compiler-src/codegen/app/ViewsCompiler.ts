@@ -185,6 +185,8 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
   }(_ViewProps: ${parameterList}) {
       TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(renderable.name)})
       TR.Interaction.UseOccurrence(_ViewProps.__tao)
+      const _TaoActionOwner = TR.UseActionOwner()
+      void _TaoActionOwner
       const _TaoAuthScope = TR.Auth.UseOptionalContext()
       void _TaoAuthScope
       return TR.BlockScope(_Scope, _Scope => {
@@ -272,6 +274,8 @@ function compileForeignView(view: AST.ViewDeclaration, options: CodegenOptions):
   }(_ViewProps: ${parameterList}) {
       TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(view.name)})
       TR.Interaction.UseOccurrence(_ViewProps.__tao)
+      const _TaoActionOwner = TR.UseActionOwner()
+      void _TaoActionOwner
       const _TaoAuthScope = TR.Auth.UseOptionalContext()
       void _TaoAuthScope
       return TR.BlockScope(_Scope, _Scope => {

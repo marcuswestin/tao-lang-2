@@ -60,8 +60,13 @@ git clone <repository> tao && cd tao
 ./tao create "A reading list"
 ```
 
-The entry script builds the pinned toolchain, runs `./agent setup`, and opens an interactive
-development shell; type `exit` to leave. At the end of successful setup, a developer terminal offers
+The entry script enters the pinned environment once, runs `./agent setup`, and opens your interactive
+shell in that same environment. A failed setup stops entry. Running it again inside this checkout's
+active environment returns immediately without repeating setup or nesting another shell. A different
+checkout still enters its own environment. `./enter-tao-dev-env --setup-only` explicitly refreshes
+the pinned environment and runs setup without an interactive shell. Type `exit` to leave.
+
+At the end of successful setup, a developer terminal offers
 to install the pinned direnv and enable automatic environments for this repository and all its
 registered Git worktrees. After opting in, open a new terminal and enter a checkout to load its
 tools automatically. Without activation, run the entry script when you return to the checkout.

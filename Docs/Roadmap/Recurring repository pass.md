@@ -21,8 +21,9 @@ notes after each completed pass; Git history is the longer record.
   before treating a `reclaimable` checkout as disposable; preserve live and owner-unknown roots,
   including the broken-pointer directories, until ownership is established. The
   [open developer-environment index](<Developer environment upgrades.md>) still needs a small,
-  owner-aware shortlist; `DEVENV-094` needs a quiet-machine admission experiment and `DEVENV-055`
-  its native-host proof.
+  owner-aware shortlist; `DEVENV-094` needs a quiet-machine admission experiment. `DEVENV-055`
+  received its native-compilation proof through the Native Bridge simulator journey on 2026-09-27
+  and is archived; this did not exercise iCloud service behavior.
 - Include the periodic isolation checks below. Local Linux success does not establish actual
   hosted-cloud compatibility; record hosted network, permissions, and setup-hook proof separately.
 - Recheck `uuid`, Appium pins, and Nixpkgs using the

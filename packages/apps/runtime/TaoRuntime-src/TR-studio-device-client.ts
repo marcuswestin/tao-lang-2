@@ -173,6 +173,7 @@ export type TaoStudioDeviceClientState = Readonly<{
 
 export type StudioDeviceClient = {
   applied(identity: TaoStudioDeviceCellIdentity, compileRevision: number): void
+  appliedApp(compileRevision: number, manifestRevision: string): void
   forgetStudio(): Promise<void>
   reconnect(): void
   report(level: 'error' | 'info', message: string): void
@@ -522,6 +523,17 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     failed(attempt, rejected.code, rejected.message, { halt: !transientRejectCodes.has(rejected.code) })
   }
 
+  /** A published empty manifest ends scenario rendering; remembered choices must still exist. */
+  const manifestSelection = (manifest: TaoStudioDeviceManifest | undefined): Partial<TaoStudioDeviceClientState> => {
+    if (manifest?.scenarios.length === 0) {
+      return { assignment: undefined, cellUnavailable: undefined, selectedCellId: undefined }
+    }
+    if (manifest !== undefined && !manifest.scenarios.some(cell => cell.cellId === snapshot.selectedCellId)) {
+      return { cellUnavailable: undefined, selectedCellId: undefined }
+    }
+    return {}
+  }
+
   const receiveWelcome = (
     attempt: Attempt,
     welcome: Extract<TaoStudioDeviceStudioMessage, { type: 'studio.welcome' }>,
@@ -541,6 +553,7 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
       compile: welcome.compile,
       lastError: undefined,
       manifest: welcome.manifest,
+      ...manifestSelection(welcome.manifest),
       phase: 'connected',
       retryAt: undefined,
       welcome: {
@@ -557,11 +570,11 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
 
   /**
    * Studio assigns a cell only when the device names one, so a device with no choice yet asks for
-   * the manifest's first scenario; a person's earlier choice wins over that default, including
-   * across reconnects.
+   * the manifest's first scenario; a person's earlier choice wins while it remains available.
    */
   const selectDefaultCell = (attempt: Attempt): void => {
-    const cellId = snapshot.selectedCellId ?? snapshot.manifest?.scenarios[0]?.cellId
+    const scenarios = snapshot.manifest?.scenarios
+    const cellId = scenarios?.find(cell => cell.cellId === snapshot.selectedCellId)?.cellId ?? scenarios?.[0]?.cellId
     if (cellId !== undefined) {
       sendSealed(attempt, { cellId, type: 'device.selectCell' })
     }
@@ -602,7 +615,7 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
       'studio.error': error => update({ lastError: { code: error.code, message: error.message } }),
       'studio.highlightSource': highlight => update({ highlight: highlight.occurrence }),
       'studio.manifest': announced => {
-        update({ manifest: announced.manifest })
+        update({ manifest: announced.manifest, ...manifestSelection(announced.manifest) })
         if (snapshot.selectedCellId === undefined && snapshot.assignment === undefined) {
           selectDefaultCell(attempt)
         }
@@ -816,6 +829,10 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
         identity: cellIdentity,
         type: 'device.applied',
       })
+      update({ appliedRevision: compileRevision })
+    },
+    appliedApp(compileRevision, manifestRevision) {
+      sendWhenConnected({ compileRevision, manifestRevision, type: 'device.appApplied' })
       update({ appliedRevision: compileRevision })
     },
     async forgetStudio() {

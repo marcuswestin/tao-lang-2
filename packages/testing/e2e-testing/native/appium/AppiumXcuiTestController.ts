@@ -61,6 +61,7 @@ export type AppiumWebDriverSession = Readonly<{
   openDeepLink?: (url: string, appId: string) => Promise<void>
   pressKey?: (key: string) => Promise<void>
   screenshot?: () => Promise<Uint8Array>
+  revealElement?: (element: AppiumElement) => Promise<void>
   scroll?: (input: Readonly<{ deltaX: number; deltaY: number; element?: AppiumElement }>) => Promise<void>
   terminateApp?: (appId: string) => Promise<void>
 }>
@@ -77,6 +78,13 @@ export type AppiumXcuiTestDeepLinkSession =
   & HostSession
   & Readonly<{
     openDeepLink: (url: string) => Promise<void>
+  }>
+
+/** Native target reveal lets XCTest choose the enclosing scroll container and direction. */
+export type AppiumXcuiTestRevealSession =
+  & HostSession
+  & Readonly<{
+    revealObservation: (observation: HostObservation) => Promise<void>
   }>
 
 /** AppiumXcuiTestClient is the only seam a real Appium server/WebDriver implementation must bind. */
@@ -158,7 +166,7 @@ export function appiumXcuiTestCapabilities(
     platformName: 'iOS',
   } as const
   if (target.kind === 'simulator') {
-    return base
+    return { ...base, 'appium:simulatorPasteboardAutomaticSync': 'off' }
   }
   return {
     ...base,
@@ -487,6 +495,18 @@ class AppiumXcuiTestSession implements HostSession {
         throw new HostControlError('unsupported', 'The injected Appium client does not expose XCUITest deep links.')
       }
       await this.#session.openDeepLink(url, this.#target.appId)
+      this.#advanceObservationRevision()
+    })
+  }
+
+  async revealObservation(observation: HostObservation): Promise<void> {
+    await this.#serialize(async () => {
+      await this.#assertUsable()
+      const element = this.#elementFor(observation)
+      if (this.#session.revealElement === undefined) {
+        return unsupported('scroll', 'The injected Appium client does not expose native target reveal.')
+      }
+      await this.#session.revealElement(element)
       this.#advanceObservationRevision()
     })
   }
