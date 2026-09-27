@@ -144,3 +144,30 @@ binary hashes are retained in `.artifacts/duo-acceptance/build-receipt.json`; th
 The global developer selection remains `/Applications/Xcode.app/Contents/Developer`.
 No older host was found in the inspected local caches, and a release API request returned 404;
 an older compatible published host and old-SDK comparison remain unestablished.
+
+## Fresh Duo finish check — 2026-09-27 UTC
+
+`feat/iphone-duo-finish` started in its own clean checkout at
+`b2be40fe3584cc8481bff71dd7535e1354074f38`, preserving both preceding branches. Its effective
+session instructions specify `workspace-write` and approval policy `never`. One supported
+app-selection request for `/Applications/Xcode-27.1.app/Contents/Applications/DeviceHub.app`
+again returned `Computer Use was not approved to use Device Hub`, without an app binding,
+accessibility state, or screenshot. UI acceptance stopped; no alternate route or further
+fresh-task retry was attempted. Resuming requires approval for Device Hub through the desktop
+application's supported controls and a successful supported inspection. The layer causing the
+denial remains unknown; another checkout alone has not resolved it.
+
+The named host capability check succeeded and found Hutch. Inspection-only
+`setup-ios --xcode-version 27.1 --runtime-version 27.1 --json` reported ready, Xcode build
+`27A9269`, SDK `27.1`, and a healthy available runtime. Global developer selection remained
+`/Applications/Xcode.app/Contents/Developer`; Duo `E8F814CE-F94E-4035-97A9-359EA8CA2230` was
+shutdown. No new host was built, installed, or launched while UI acceptance was blocked.
+The earlier binary receipt remains historical and does not describe an installed binary in
+this checkout. Neither app nor any part of the display/fold/presentation matrix was accepted.
+Old-host/new-SDK comparison and broad verification remain outstanding; landing is held.
+
+Before resuming, account for `app-dev --ios` selecting the first booted iOS simulator.
+The documented Studio selected-simulator action provides explicit targeting for an installed
+Companion; booting Duo alone does not make the generic launch safe when another device is
+already booted. Current disposition and ownership are retained at
+`.artifacts/duo-acceptance/disposition.md` in the finish checkout.
