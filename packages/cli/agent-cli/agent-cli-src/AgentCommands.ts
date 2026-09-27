@@ -64,6 +64,7 @@ export const JUST_COMMANDS = [
   'test-changed',
   'test-file',
   'test-host',
+  'test-mutation',
   'test-retry',
   'typecheck',
   // Each verification scope is its own name rather than a flag on one name, so an agent reaches it

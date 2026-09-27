@@ -6,31 +6,18 @@ notes after each completed pass; Git history is the longer record.
 
 ## Current status
 
-- **Reviewed through:** `e94c3e1a480a8efaffdf359cf6e3f43f6653c527` on local `main` (2026-09-25). The prior review integrated as `d296b239`; the [September 2026 repository review](<September 2026 repository review.md>) now disposes that landing and the 41 later first-parent landings. Three read-only specialist reviews and an independent challenge checked current behavior. The present pass branch carries two focused repairs; `./agent verify` and finalization passed, while landing remains unauthorized.
-- **Outcome:** Query search combined words from separate `(search)` fields, and a stamped installed Expo host reused missing packages. Both have focused before/after regressions and repairs on the pass branch. The Developer deferred explicit prerelease installation and WordFlower outline export choices until after MVP. The original Git-only computer inventory found 16 reclaimable, 15 live, and five unclassified registered worktrees; follow-up found Codex tasks attached to two Git-reclaimable trees. `reclaim` now reports local task links and treats known attachments as live, while unknown provider associations still need an app check. A clean 39.2 GiB worktree contains 31.3 GiB of older host-test artifacts, and two unregistered worktree directories have broken or reused Git pointers. Tao cache roots and OS temp entries have grown; no owner-unknown or active state was deleted. Temporary-state creation and cleanup code was excluded at the Developer's request because another task owns it.
-- **Security and host follow-up:** `bun audit` still reports one moderate `uuid` record with no affected caller demonstrated through its installed `xcode` parent; the pinned Nixpkgs patch lags later fixes without a Linux closure. The [dependency advisory follow-up](<Dependency advisory follow-up.md>) retains both owners and the September 28 review date. Real HNReader Studio smoke passed, but the new-emulator exit-log path, packaged installation, signing, distribution, and external-service acceptance were not exercised. Official sources describe Codex cloud's reference Ubuntu-based container and Claude Code cloud's Ubuntu 24.04 x86_64 VM; neither publishes the exact hosted image digest.
+- **Reviewed through:** `0e3f6a9bc5d63042e2eb4a60d6c1be78986d12fe` (2026-09-27), the 41 first-parent landings after `e94c3e1a`. The [September 27 repository health review](<September 27 repository health review.md>) records every disposition. The prior pass landed as `c85bcec5`; the review and independent repairs are complete on `feat/repository-health-2026-09-27`, including the approved L3 account-isolation follow-up; landing remains separate.
+- **Repairs:** Reference retry selection, enum defaults and optional data-field consistency, handled cancellation of suspended asks, Studio Feed dispatch/lifetime, mutation evidence isolation, invocation-owned failure summaries, and machine lease cleanup that finishes before verification returns. Fresh isolation runs also exposed runtime launcher ownership, collected receipt, portable shell and test-fixture defects. Repairs through `0f5f6ba7` are committed and independently reviewed; the subsequent Developer-approved account-isolated local-only repair adds scoped persistent storage and account-switch lifetime coverage.
+- **Health:** No machine deletion is justified by the current inventory: 29 registered worktrees are protected/live and two unclassified; an unregistered broken-pointer root remains owner-unknown. Earlier large-root cleanup is observed, not claimed as this pass's work. Routing audit found no mismatch, but completed-task cost evidence is unavailable.
+- **Acceptance:** Repaired vanilla and prepared-Xcode CLI acceptance on `84e7da1b` and headless HNReader Feed/edit/reopen acceptance are recorded separately from the failed baseline. Ubuntu runs on `206858d2` and `ee79a599` exposed the repaired shell, optional-direnv fixture and cold runtime-preparation defects; fresh cold/cached ARM64 acceptance completed on `0f5f6ba7`; both modes exercised runtime suites without retry and recorded the intentional real-direnv skip in the developer-CLI suite. Run-specific isolation resources are removed and ownership released. No timeout or dependency increase was used. The [dependency advisory follow-up](<Dependency advisory follow-up.md>) retains uuid, stream-json and Nixpkgs dispositions for September 28.
 
 ## Consider next time
 
-- Start after `e94c3e1a` or a newer first-parent boundary established during landing. Leave the
-  explicit-prerelease and WordFlower-outline product choices until after MVP.
-  Check the [emulator log repair](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>)
-  under a real **new** emulator launch when one is available.
-- Keep the read-only worktree and computer-file inventory, but leave temporary-state creation and
-  cleanup implementation with its current owner. Check Codex, Claude, and Cursor task associations
-  before treating a `reclaimable` checkout as disposable; preserve live and owner-unknown roots,
-  including the broken-pointer directories, until ownership is established. The
-  [open developer-environment index](<Developer environment upgrades.md>) still needs a small,
-  owner-aware shortlist; `DEVENV-094` needs a quiet-machine admission experiment. `DEVENV-055`
-  received its native-compilation proof through the Native Bridge simulator journey on 2026-09-27
-  and is archived; this did not exercise iCloud service behavior.
-- Include the periodic isolation checks below. Local Linux success does not establish actual
-  hosted-cloud compatibility; record hosted network, permissions, and setup-hook proof separately.
-- Recheck `uuid`, Appium pins, and Nixpkgs using the
-  [advisory register](<Dependency advisory follow-up.md>) and current primary sources. Use host,
-  Linux, device, installed-binary, and public-distribution evidence only for the acceptance each
-  actually exercises. Include [`bun audit`](https://bun.sh/docs/pm/cli/audit) and inspect any
-  `devenv.lock` change against the [Nixpkgs tracker](https://tracker.security.nixos.org/).
+- Start after `0e3f6a9b` or a newer explicitly reviewed first-parent boundary. Carry forward any unfinished acceptance or semantic decisions from the current pass report; do not infer completion from its source-review boundary.
+- Authenticated local-only custody is now decided: account-isolated persistence. Keep its follow-up acceptance distinct from the earlier optional-field repair and isolation-tested commits.
+- Preserve active and owner-unknown worktrees and shared caches. Recheck task associations before reclamation. The previous temporary-state cleanup owner completed its work; future growth observations still need lifecycle and ownership evidence before deletion.
+- Keep native ARM Linux, native amd64, actual hosted-cloud execution, prepared Xcode CLI acceptance, native builds, devices, signing and distribution as distinct evidence boundaries. A prepared base passing CLI scenarios does not establish native app acceptance.
+- Recheck the advisory register on September 28. Explicit prerelease installation and WordFlower outline export remain deferred until after MVP. New-emulator exit-log acceptance, quiet-machine admission measurement and deferred human startup confirmation remain separate follow-ups.
 
 ## Periodic isolation checks
 

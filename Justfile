@@ -314,6 +314,11 @@ test-changed ref="": _compile-word-flower-app
 test-file path: _compile-word-flower-app
     ./dev test-file "{{ path }}"
 
+# Run deliberate mutation checks with raw verdicts, without retries, flake tolerance or ordinary evidence updates
+[group('Dev')]
+test-mutation path: _compile-word-flower-app
+    ./dev test-mutation {{ quote(path) }}
+
 # Re-run files that are not green since this checkout's latest complete test run
 [group('Dev')]
 test-retry: _compile-word-flower-app
@@ -656,7 +661,7 @@ _deps:
 
 # Generate completion during explicit setup so entering a directory never bootstraps dependencies.
 _shell-completion: _deps
-    #!/bin/zsh
+    #!/usr/bin/env zsh
     set -e
     cache=.artifacts/cache/dev-shell
     mkdir -p "$cache"

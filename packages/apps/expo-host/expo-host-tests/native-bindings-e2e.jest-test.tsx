@@ -93,7 +93,7 @@ Describe('generated native Haptics bindings', () => {
       ['NotificationDefault', 'NotificationAsync()'],
       ['Selection', 'SelectionAsync()'],
     ]
-    await testCompileFiles('App.tao', {
+    await testCompileFiles('App.tao', async () => ({
       ...await generatedFiles(),
       'App.tao': `
         use ImpactAsync, NotificationAsync, SelectionAsync, PerformAndroidHapticsAsync from ./Bindings.tao
@@ -112,7 +112,7 @@ Describe('generated native Haptics bindings', () => {
         }
         ${nativeButton}
       `,
-    }, async screen => {
+    }), async screen => {
       for (const [name] of cases) {
         await act(async () => {
           await fireEvent.press(screen.getByText(name!))
@@ -134,7 +134,7 @@ Describe('generated native Haptics bindings', () => {
       native.selectionAsync.mockClear().mockImplementationOnce(() => completion.promise)
         .mockImplementationOnce(() => rejection.promise)
       native.notificationAsync.mockClear().mockResolvedValue(undefined)
-      await testCompileFiles('App.tao', {
+      await testCompileFiles('App.tao', async () => ({
         ...await generatedFiles(),
         'App.tao': `
         use NotificationAsync, SelectionAsync from ./Bindings.tao
@@ -146,7 +146,7 @@ Describe('generated native Haptics bindings', () => {
         }
         ${nativeButton}
       `,
-      }, async screen => {
+      }), async screen => {
         let completed = false
         let second: Promise<unknown> | undefined
         const failures: unknown[] = []

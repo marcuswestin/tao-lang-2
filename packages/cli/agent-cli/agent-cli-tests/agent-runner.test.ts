@@ -1,5 +1,5 @@
 import { FS, Platform, Time } from '@shared'
-import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import { resolveRunStdio, runAgentCommand } from '../agent-cli-src/runner/AgentRunner'
 
 /**
@@ -77,17 +77,15 @@ Describe('agent runner', () => {
   Test("prefers a lane's own summary.json failures over the fallback parser", async () => {
     const scratch = await mkTestDir('tao-agent-runner-summary-')
     try {
-      const summaryPath = FS.resolvePath('.artifacts/logs/probe/latest/summary.json', scratch)
-      // `probe` names no real lane, so the run is found only through the `Summary:` line it prints —
-      // the same mechanism a real lane recipe uses, and the only one this test's fake command can
-      // reach now that a guessed lane directory is trusted for a fixed table of real lanes only.
+      const summaryPath = FS.resolvePath('.artifacts/logs/probe/run-1/summary.json', scratch)
+      // The run is found through the immutable `Summary:` path it prints, just like a real lane.
       // A (fail) line the fallback parser would read differently, so the assertion below can tell
       // which source actually won.
       const script = await writeProbeScript(scratch, [
         `await Bun.write(${JSON.stringify(summaryPath)}, JSON.stringify({`,
         "  failures: [{ error: 'from summary.json', gate: 'probe', test: 'from-summary' }],",
         '}))',
-        `${LOG}('Summary: .artifacts/logs/probe/latest/summary.json')`,
+        `${LOG}('Summary: .artifacts/logs/probe/run-1/summary.json')`,
         `${LOG}('(fail) from-fallback')`,
         `${EXIT}(1)`,
       ])
@@ -146,6 +144,55 @@ Describe('agent runner', () => {
       Expect(captured.result).toBe(1)
       Expect(captured.stdout).toContain('a fallback failure')
       Expect(captured.stdout).toContain('expect(received).toBe(expected)')
+    } finally {
+      await FS.remove(scratch)
+    }
+  })
+
+  Test('reports only its own result while another command publishes a failing test summary', async () => {
+    const scratch = await mkTestDir('tao-agent-runner-concurrent-summary-')
+    try {
+      for (const exitCode of [1, 0]) {
+        const ready = FS.resolvePath(`ready-${exitCode}`, scratch)
+        const release = FS.resolvePath(`release-${exitCode}`, scratch)
+        const script = await writeProbeScript(scratch, [
+          `await Bun.write(${JSON.stringify(ready)}, 'ready')`,
+          `while (!await Bun.file(${JSON.stringify(release)}).exists()) {`,
+          '  await new Promise(resolve => setImmediate(resolve))',
+          '}',
+          ...(exitCode === 0 ? [] : [
+            `${LOG}('error: current command failure')`,
+            `${LOG}('(fail) current command assertion')`,
+          ]),
+          `${EXIT}(${exitCode})`,
+        ])
+        const captured = await withCapturedOutput(async () => {
+          const running = runAgentCommand({
+            args: ['--json'],
+            command: 'test-host',
+            cwd: scratch,
+            spawnArgs: [script],
+            spawnCommand: 'bun',
+          })
+          try {
+            await until(() => FS.exists(ready), { description: 'the reported command to start' })
+            // This writer is independent of the running command. Its recent timestamp cannot
+            // establish that the host command ran this unrelated compiler assertion.
+            await FS.writeJson(FS.resolvePath('.artifacts/logs/dev-test/latest/summary.json', scratch), {
+              failures: [{ gate: 'compiler', test: 'foreign test assertion' }],
+            })
+          } finally {
+            await FS.writeText(release, 'continue')
+          }
+          return await running
+        })
+        Expect(captured.result).toBe(exitCode)
+        const report = JSON.parse(captured.stdout) as { exitCode: number; failures: Array<{ test?: string }> }
+        Expect(report.exitCode).toBe(exitCode)
+        Expect(report.failures.map(failure => failure.test)).toEqual(
+          exitCode === 0 ? [] : ['current command assertion'],
+        )
+      }
     } finally {
       await FS.remove(scratch)
     }

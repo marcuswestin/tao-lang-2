@@ -1,7 +1,7 @@
 {
   "version": 1,
   "phase": 1,
-  "commit": "de8eeeffc7e2f1b288d07601d48fb5c4f3a6e8a8",
+  "commit": "a8682c2577ab4450524ca7e49537395d8a43758e",
   "surfaces": [
     {
       "id": "doc:.github/CONTRIBUTING.md",
@@ -1678,7 +1678,7 @@
           "source"
         ]
       },
-      "sourceHash": "2dbf9d11cc935fb12db93546f55ac2ca2672b0c006c46226f7e79100108ef1bf",
+      "sourceHash": "62f038982d0868261dfaaa04eb69210735f52763990e9346e68ac24e40915c36",
       "rendererHash": "not-applicable",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -2434,7 +2434,7 @@
           "source"
         ]
       },
-      "sourceHash": "b97c7c899bed3b77e60808fae9081f90bfb5faeaf41b34c8af1371e929a56a5f",
+      "sourceHash": "afa1d35da7fb690839fcaf3fb17030531d2eece6ff5755870e0b08afc195d86b",
       "rendererHash": "not-applicable",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -2490,7 +2490,7 @@
           "source"
         ]
       },
-      "sourceHash": "f3884cdf78011db5433059f5e399ae779fa60676b9372ee544c7610b7d19e1bc",
+      "sourceHash": "af50024f4ebb6012efa82170445b426732886653513a5409aa0dd89a810e2020",
       "rendererHash": "not-applicable",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -2518,7 +2518,7 @@
           "source"
         ]
       },
-      "sourceHash": "60b6046ab419486a512946f39bd05a2bd8e31efb56fd23db52b7e2a77e7822fc",
+      "sourceHash": "38c5e1a7c5b2ec3c9294d799c72e08e53a8f52d196663f6ef149611871c0e39d",
       "rendererHash": "not-applicable",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -4086,7 +4086,7 @@
           "source"
         ]
       },
-      "sourceHash": "853158b7ae32f5c27b14054bb986ba35f4968d432d8cd8df0af2750cf4279133",
+      "sourceHash": "9e41cd1f7e21fc455c6ee8aa513c007e6d287b101171c436a4f32f8290031d21",
       "rendererHash": "not-applicable",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -4512,34 +4512,6 @@
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
     },
     {
-      "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-MUTATION-FAILURES-CAN-BE-TOLERATED-AS-FLAKES.md",
-      "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-MUTATION-FAILURES-CAN-BE-TOLERATED-AS-FLAKES.md",
-      "kind": "document",
-      "source": "Docs/Roadmap/Developer environment upgrades/DEVENV-MUTATION-FAILURES-CAN-BE-TOLERATED-AS-FLAKES.md",
-      "phase": 1,
-      "tags": [
-        "A"
-      ],
-      "channels": [
-        "source"
-      ],
-      "dimensions": [
-        "text"
-      ],
-      "requirements": [
-        "agent"
-      ],
-      "dimensionChannels": {
-        "text": [
-          "source"
-        ]
-      },
-      "sourceHash": "e73f18b603e7ed2bbd847422e50db15168cf724516968534bb3e105ab9443d1a",
-      "rendererHash": "not-applicable",
-      "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
-      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
-    },
-    {
       "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md",
       "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-NATIVE-SESSION-TIMESTAMPS-USE-MONOTONIC-TIME.md",
       "kind": "document",
@@ -4899,34 +4871,6 @@
         ]
       },
       "sourceHash": "63028a75b533bc59b328128f8553ae07b1eb699d1409c77990c7b6b91545103e",
-      "rendererHash": "not-applicable",
-      "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
-      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
-    },
-    {
-      "id": "doc:Docs/Roadmap/Developer environment upgrades/DEVENV-WORKFLOW-REPORTS-INCLUDE-CONCURRENT-TEST-FAILURES.md",
-      "title": "Docs/Roadmap/Developer environment upgrades/DEVENV-WORKFLOW-REPORTS-INCLUDE-CONCURRENT-TEST-FAILURES.md",
-      "kind": "document",
-      "source": "Docs/Roadmap/Developer environment upgrades/DEVENV-WORKFLOW-REPORTS-INCLUDE-CONCURRENT-TEST-FAILURES.md",
-      "phase": 1,
-      "tags": [
-        "A"
-      ],
-      "channels": [
-        "source"
-      ],
-      "dimensions": [
-        "text"
-      ],
-      "requirements": [
-        "agent"
-      ],
-      "dimensionChannels": {
-        "text": [
-          "source"
-        ]
-      },
-      "sourceHash": "c16e19eada8cac2beb69beeb102bf57ffe88d94a408ab67e910bd4b9e267da39",
       "rendererHash": "not-applicable",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -5402,7 +5346,7 @@
           "source"
         ]
       },
-      "sourceHash": "0fe5ce8020c6607f15a55dc802eaaa6af4d370bf1467ddafbf8dde2ee2fd567b",
+      "sourceHash": "28623b4b37a62612f8d0c7f874a4bb7551728639b60c232eda2fc531627469a5",
       "rendererHash": "not-applicable",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -5459,6 +5403,34 @@
         ]
       },
       "sourceHash": "b6d6c451288096b275183145ffd2c708f7fbe33c608a4cfb4833d405b5c21ad0",
+      "rendererHash": "not-applicable",
+      "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
+      "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
+    },
+    {
+      "id": "doc:Docs/Roadmap/September 27 repository health review.md",
+      "title": "Docs/Roadmap/September 27 repository health review.md",
+      "kind": "document",
+      "source": "Docs/Roadmap/September 27 repository health review.md",
+      "phase": 1,
+      "tags": [
+        "A"
+      ],
+      "channels": [
+        "source"
+      ],
+      "dimensions": [
+        "text"
+      ],
+      "requirements": [
+        "agent"
+      ],
+      "dimensionChannels": {
+        "text": [
+          "source"
+        ]
+      },
+      "sourceHash": "c240638ff4cef8d7f5411d1f6fb499fbc572b65c8420f388ccab624e90ebef70",
       "rendererHash": "not-applicable",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -5598,7 +5570,7 @@
           "source"
         ]
       },
-      "sourceHash": "25b77ea4dac295b0b565e3ec0377b5de0534de4d4c36815b6c660e5d0788d178",
+      "sourceHash": "a72e3de6be4464fa1fb9b638868f0929e31e74537e0936f1e7c9c543faceacd9",
       "rendererHash": "not-applicable",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -6158,7 +6130,7 @@
           "source"
         ]
       },
-      "sourceHash": "c6600b8e19cdd456a65d477e3c235cef83b0c9595f1da344749a1c6937e447e7",
+      "sourceHash": "8968a7cbd7e8a381aeb8833c6a1681882dcf993ae0e6cc462b29c66f28397e0c",
       "rendererHash": "not-applicable",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -6326,7 +6298,7 @@
           "source"
         ]
       },
-      "sourceHash": "1117ad510148a827379f3a97775f2079b3f02582bc5b4f9a1f7ad0ed5b88ba92",
+      "sourceHash": "74073073d6dbd5d51e0055fd829190f1618d07361b78364ec773a089e26ad90f",
       "rendererHash": "not-applicable",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -8661,8 +8633,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "56a9119cd6d32c08fec13436caf91aa282d0132bb7db45653c57b8c9a9210a83",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "03ad7bc82260aa9314531a062b1cd9bec025f5533a973b37160d717ae643f600",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -8697,8 +8669,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "cab96b34ceff6183b7fc142eb8e1ed6235396c21f1695bb4d5d329d3bdf802ca",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "6abfbdb41fb51d5f2ffe1df2ef4ce4b90e4a53eea2759ce3ba8b8c099ffef19b",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -8734,8 +8706,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "0d93662bde0ed4776d251787ef86af0bcaa39b6d171f734929621ba148730788",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "a1d49d796ddb3643e49016c2a6e2ef1f3a308c6205e1e6e083ee0a2a8866665b",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -8770,8 +8742,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "7bef3e1c5601217d9cedf3182376ecbe0b8d66f9c564b2b65bdd28dd25249471",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "9e75453fa6a281c5f5e96764d9f3758f7e29ac37e2a7929814ff586619cacb2d",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -8806,8 +8778,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "2e15e5814485a8a8e42a146a8973afd85e2bf6cc4438a50fdebb51b0d051d181",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "3dd8bc3f56b2c5114894023e9b321c20f03c8f1dae1132ea92e6e404a93fa8f8",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -8844,8 +8816,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "349bb8c78ae8401536f05587a47b8ee0539d7367a47a2edad269337f24b55336",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "75ab1918a9e95a5fdf18a1f26e2048eee7265a40b9a4849b908918a774ff80a6",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -8882,8 +8854,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "b0a2ca08a1ef589e62dfcdae0443b13210b541a02eed47ae034348a8bb4f5925",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "3e0f6d82968b1660abe055167afce34a6c6090bdd4bba8a1bf3eac3f331a6a1e",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -8920,8 +8892,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "20089edd9123cb6677f76ef0359be5e376d7cbf5a1a22200338a28834c09678a",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "2a60ce79d3d2483b263009dee90777f380c4a7a5d8c1042bf324938a8821af81",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -8960,8 +8932,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "909d6c0c6ce2061c339d147bbc5b4298197ff03a2300aee0e49cd2281861c8b1",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "f5ae9470e12ae3d4003ed3d77e5e568713f4c511b753ef3fb241cb323f962e80",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -8996,8 +8968,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "f721a728ae2c35a889663e5bd9e95a9e069a80cf26dcd69bf3083210425ac27e",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "07a678ff3bccf3d427df12c395def9270efed0a67ecf91acbb8a14e359b26e77",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9032,8 +9004,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "ba9201b6ca305fc3a250332aa99570600caa4bb5da264b396764b59745fd77c5",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "2432f2a021f6cca727ef2be7fbae2f0ef36dfc3ae850aabecf2fc20a6873edc6",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9068,8 +9040,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "b92985a091cc3d53c9959d93533f6e17d5c4cec54daf464805fe9d292367bec5",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "959cabaa0f42c91a56e1d2a49a98f6b363e42a195cceeefb4a85ebb98eb66187",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9105,8 +9077,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "c1db2e183570e68b3a00499bfa6334d0da4495be94d4dab7359ffde442f18488",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "86d316d645baaeaad828e0221b1a2719391efaa9de72af747e95de760506296a",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9141,8 +9113,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "6951fe64104a31244a4ca05e549d88b63b45d272867fc067ef625272ff20a428",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "054392e25386bc4a2569ee7f596af6c1219dbef7d2dc58d68c9c832e0fc0b555",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9178,8 +9150,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "76b25b3a35a55292718d081a40d4cf47418226d418b50ff9ce2f53fa34d08022",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "820109652b80e40f944029aa7b3835059d52d7e327fa38a55e58ca5aff45485d",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9219,8 +9191,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "d024e38a49fac362ac014e1e02b97c91af34a6b3a73e8ae9be0571ca6f55a68d",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "1475f1559f3238724e1ee130c4fdf2bdd1a004b193efff9711f60d6bba7118d5",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9260,8 +9232,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "256487c30d9943be19f4e0b6234917d13d4dbc2dec3cb4fa94cea89499f871bd",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "1afc2d9ceaee8ef4fad43ccd28cf70da99625455fa9b5d4977ff7d6608fbf22e",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9300,8 +9272,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "9a0a383e9db73ecb0a75df4f4b4733b4a199bba3ca3ef2c499f032755910491e",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "987cb375ac4afc896ea50fcc051b58cb2392c9b21b9c95b19494d23c648d30b6",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9340,8 +9312,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "698e35806f4df79dea3a4d80824a14b7649f283199787eccf6b88d94d49b8db7",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "c35efe4ce5ef0e976c7093bade6ed69f254038f7b1efae371897e6663b40ae6a",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9380,8 +9352,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "d315a148f593b23830f8b338a9027b605ea169c38a70b5faa80192bfb5c625d7",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "de197bb9759d4165aafff1f0e720b82969529e21ecf7e29940ed67f59fc2389b",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9420,8 +9392,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "8ea9775c2ff40e1e20386cec3d3de2a9b6199ea4a07478bd31f58857a3367ba0",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "36866f783278571c0b0eb6bc7fad71c0c4026b967eedd6fbbb402143e94ea5af",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9460,8 +9432,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "4781223310fe834b5e3d6368aa7060922e4d1649b1372a4f87de418545903375",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "b351372cbb2fda079405dfd2a645e03824594c2ab391331066939b60463aee30",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9500,8 +9472,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "171df375f13db7b0958d8982eb3b0485d0346f290b5e8ee343ab5947035df9b3",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "bf1170fb739cbfc6e25de35a94beaa10d33620a91aefb0044b10848a81c649e9",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9540,8 +9512,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "1ed37552084ec89e1320fb80bb85c650b994aba600f7e785b3edff16f8b59006",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "a2feb56571a25c19a56071531e312778e67cda29234951e0c18b3ea6c0fde31c",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9580,8 +9552,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "5a04dcd2f20ff5a0f89291116a2c91b128ff186b0152aa3b924a7c1362c70870",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "42a782a97133e5ad7026ab64af77370801f9a7e4e668a1c849ed752c0d92473d",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9621,8 +9593,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "8c4d1ae6ac5f459cd99f40517572d33e758021437ec5f30242f3b4a1279598b3",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "833cf67f4d8cce4a6c425f072ce55e74ac7683db34189fedde1b3f6908b347de",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9661,8 +9633,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "70112cbe04245ea1d317d8a63e2adf2a147d3d37c5e5370fc1985214bb438f26",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "99225bec5c7e76d32bde8f0c4881ab735344aea5ec2b11b21b5ac28bee818d2c",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9701,8 +9673,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "8b5311d1156e6c3ea9d81032cf3bca5a7075143bf368ef8b82352a96d1bf86ca",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "adee9b61d842a7f888b434900c74569d25a81a8f9c20b1412a43e53d07e16b7c",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9741,8 +9713,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "627118c683fd47dadde30289f6094fb7a49c647bb0a3d73e4acc9b183ad2a62f",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "8321639502ce7fc9501e533c27fe644cafb5483f541cac2848d755c00f8aa8a3",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9781,8 +9753,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "d59eb1da57b7b80e7eb17c33c2df6eba0bbdd722c7d28532c4f8d1de775787dc",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "fb6002891029609d760d2642e97b83d4523cf3b9df16a1b0ef5de4c3614a2e17",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9821,8 +9793,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "b9d2c739f35bcedb8c86bc94be7f8f05e640756424fee0ad8c2e8738b0bc5992",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "a7834e67e0c6df9b6adc0e1527bc24a96468a6a57e9b01b4e21ba64243011f82",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9861,8 +9833,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "7b221a173dbe6f68d94afb4c556624db57f192bab8addb22ba42b7636b1cd8df",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "543fed81e239010ae7a381cbc65021e27395e4d63da3a5c2d950e9b954d0b24a",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9901,8 +9873,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "62e45ad6c25b5e8079e704c59b82ac1812da357d88ab00d23ac4a860595d8049",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "d4aece4f17dab929cb15637a5f6a139d883e4969a67c17d1f5457149d80e558f",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9940,8 +9912,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "3d467731fb0517ff66ea64b957c4425913b7bff9aec9fdb531bd6245ec79abd7",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "522c20b1ac45e46e86a083965f4533282648ccff3f86c210977faa06dcd354fc",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -9982,8 +9954,8 @@
         "human",
         "developer"
       ],
-      "sourceHash": "15d577027e80f4f9db022f28f54230834feebd6c861941292674847172716436",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "30206a152aef28cf876eb8e9e7829cc2d8754f533f87468457408bc5973b998d",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10019,8 +9991,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "0abf5d4ed1e0e826b7c1c77f31f06072956d30cfd47dece996dac098e45d6cc5",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "9a9424158770e5083157d0ed39c903eb6ca3b0bdf415a47de49d3813b5ba2a1e",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10059,8 +10031,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "1a8a90af3308b7ac6c42d3bbb0701aa8789dbdf5e6e6e01ad5716a8fed2fa68e",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "4fadcd67dafae5b42c2de4a7879db8f174fae58fdab403cf4ec065035b879bcf",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10097,8 +10069,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "3dbe0e16dfad53e7bff840469db4a2d1719f538db1b57aff767d897aa8982855",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "5f7b1b9ffcf7df6748edb31d054576958ad6d1e930063f89841e8c85c739d825",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10134,8 +10106,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "99068c83554ae1a3a19303136399fda5018962235e9d18cf0859e07776a051f1",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "263f7dad645e0036e7c2cee1b6be28ec1b45fff89bfc867e65a102161b2c9cd5",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10174,8 +10146,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "f50fdf4c7e5ea0d98bacd19df0ac6210c3ec47400baa49cb28b8bed864579750",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "d1e476ebe23ce12c888cf7033c7052c1411bd5265b7d0f8687b49dfcadf2ac4a",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10211,8 +10183,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "1ccea33d2ff1f9794cc017ba4daa07dc01eb3ec7a0004ecf3ad536c3ecf3f9e7",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "14ad9359e6321419fd53a9a839f5ce6cbd85c3d8638c2b1bd4ad4a32efbf2bc2",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10248,8 +10220,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "92104c624a82c1c91e698ea2a168e5de50e7b11959c61c447f89374fcb19dc2f",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "97850f73d0d6219e64b59d3c436f0def9e47d3c7be62a0d161851e0fa83d4c76",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10285,8 +10257,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "286c0ef2b9aa269c935ce94b76e486dfd641f3d2af38b19124cdebb13e87b82a",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "6098b0b0587b61014080491df39e49a211b3eb291f248ce63a359aabbac7d05c",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10322,8 +10294,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "ca9355b38db73eef4a810b72a09f291e9e3a904761ddbf4268c8a343b71f61c3",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "c7a0a55b3f636e7780321abc2d9e75adcb5eff2def5ec91431f701b0d1cca9cc",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10359,8 +10331,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "caae0f1d1e07af419599dc3bb90224fd2a9c1f4a60ba557146edf6afa05bad85",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "8c988dc8bd288236839c5be9108f1ee0c2de3adc42bc8b104cf0349bc8351812",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10396,8 +10368,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "d95005f28f9e1ac3ede02fbc8160da3586867f619dc2d9e43a19116f126e4646",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "302daad3ad6167df0fb3b46580f1f5bb1b8e487bdd9e993c712af31ae66019f8",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10433,8 +10405,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "3cb654b6dec77cd01088af54ef29c180ca132ea6193c8c5352bfea396be7b67c",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "9f8c976fabf8e4b97e14264d344987565d37e5133c344356d6133db251cb0b9e",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10470,8 +10442,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "269a64582726298ae416cca08cf505a9f19ac63be9eaf959586688c2a4fd41aa",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "324d5fe4524b08f49f9ea6e6925f968c962723e98b0ae6fe36d06f74d5006fb1",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10508,8 +10480,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "573f9e293e96ce45a2ff357008a04bfe6ac1ff7c9e37d58ab4396cf490f1648c",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "0f6224407533b8a35010e1fe7bc310cd48598322edf4fd42bf4b21334a1a7ea6",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393"
     },
     {
@@ -10546,8 +10518,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "f75686a8f81b909cfc5d7f560954e3d6cfff7883a5ddd2bf69b3c8a2a7979e32",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "94a75d2c7a1f1b80eeca42ba0d06637c04eb0bf16d5de18c4c65ffa49d9a9c74",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Two real Apple devices with the same person: offline edit reconciliation, relaunch persistence and account-switch isolation. This does not accept the deferred hosted-data APP3 story."
     },
@@ -10587,8 +10559,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "f75686a8f81b909cfc5d7f560954e3d6cfff7883a5ddd2bf69b3c8a2a7979e32",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "94a75d2c7a1f1b80eeca42ba0d06637c04eb0bf16d5de18c4c65ffa49d9a9c74",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Exercise adapter success/error/retry, datasource identity and writes, and references across sources."
     },
@@ -10628,8 +10600,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "f75686a8f81b909cfc5d7f560954e3d6cfff7883a5ddd2bf69b3c8a2a7979e32",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "94a75d2c7a1f1b80eeca42ba0d06637c04eb0bf16d5de18c4c65ffa49d9a9c74",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Inspect adaptive design and interactive scenario identity in the native workbench; source tests remain supplementary."
     },
@@ -10657,8 +10629,8 @@
           "browser-preview"
         ]
       },
-      "sourceHash": "f75686a8f81b909cfc5d7f560954e3d6cfff7883a5ddd2bf69b3c8a2a7979e32",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "94a75d2c7a1f1b80eeca42ba0d06637c04eb0bf16d5de18c4c65ffa49d9a9c74",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -10686,8 +10658,8 @@
           "source-test"
         ]
       },
-      "sourceHash": "f75686a8f81b909cfc5d7f560954e3d6cfff7883a5ddd2bf69b3c8a2a7979e32",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "94a75d2c7a1f1b80eeca42ba0d06637c04eb0bf16d5de18c4c65ffa49d9a9c74",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -10719,8 +10691,8 @@
           "desktop"
         ]
       },
-      "sourceHash": "f75686a8f81b909cfc5d7f560954e3d6cfff7883a5ddd2bf69b3c8a2a7979e32",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "94a75d2c7a1f1b80eeca42ba0d06637c04eb0bf16d5de18c4c65ffa49d9a9c74",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -10754,8 +10726,8 @@
           "notes-ideas"
         ]
       },
-      "sourceHash": "f75686a8f81b909cfc5d7f560954e3d6cfff7883a5ddd2bf69b3c8a2a7979e32",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "94a75d2c7a1f1b80eeca42ba0d06637c04eb0bf16d5de18c4c65ffa49d9a9c74",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -10789,8 +10761,8 @@
           "sketch-draft-2"
         ]
       },
-      "sourceHash": "f75686a8f81b909cfc5d7f560954e3d6cfff7883a5ddd2bf69b3c8a2a7979e32",
-      "rendererHash": "a65d740063ca49f3377fb17c3f46c64fc93e07a248d9f8341218ec79cac5ffe4",
+      "sourceHash": "94a75d2c7a1f1b80eeca42ba0d06637c04eb0bf16d5de18c4c65ffa49d9a9c74",
+      "rendererHash": "cf0a87c6f9dd727bbb1312378cfd624d16cff0ec9c07b225ed843aec0c733617",
       "profileHash": "4ebf52aef103d51c7cdcd39bbc187d14764c4066bcdd8690844ce1525ace3393",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     }
@@ -11393,6 +11365,14 @@
       "sha256": "b6291c81b73ed3070848130950bcb7013586093c98796e582f25c33771cf520b"
     },
     {
+      "path": "Apps/Test Apps/Data MVP/Enum Fields.tao",
+      "sha256": "af04890b52e959c1e2eb3cacc2432eaf365bf93894c35d5677d1f894367e4461"
+    },
+    {
+      "path": "Apps/Test Apps/Data MVP/Enum Fields.test.tao",
+      "sha256": "86bd16b173851dd7ade459e99a5c28b1285b5fac45efdeb133319e891f818ef6"
+    },
+    {
       "path": "Apps/Test Apps/Data MVP/Project.tao",
       "sha256": "64788cf78514e348e042c24c21dd57c17d349ab17c101f03dc574416e761deb8"
     },
@@ -11702,7 +11682,7 @@
     },
     {
       "path": "Apps/Test Apps/README.md",
-      "sha256": "2dbf9d11cc935fb12db93546f55ac2ca2672b0c006c46226f7e79100108ef1bf"
+      "sha256": "62f038982d0868261dfaaa04eb69210735f52763990e9346e68ac24e40915c36"
     },
     {
       "path": "Apps/Test Apps/Reactive Editing/Project.tao",
@@ -11990,7 +11970,7 @@
     },
     {
       "path": "Justfile",
-      "sha256": "00f4a2b509cf0e49c539b8f5946752981c60115cda912d6bd0da8806d235d4ca"
+      "sha256": "a2cdba1a0283f3555a75a7fbeed4777587cae72dc04040e75d6479d7b823ef1a"
     },
     {
       "path": "bun.lock",
@@ -12338,7 +12318,7 @@
     },
     {
       "path": "packages/apps/expo-host/expo-host-src/host-dependencies.ts",
-      "sha256": "3389252ad3f98664c8db119494c85786c4c700dee5a05c8a45d56a17cf84c151"
+      "sha256": "fcbfd7c575d854f08c437a3acb733fb7d7f59a7878b091511990c1697c3784e5"
     },
     {
       "path": "packages/apps/expo-host/expo-host-src/managed-node.ts",
@@ -12354,7 +12334,7 @@
     },
     {
       "path": "packages/apps/expo-host/expo-host-src/runtime-toolchain-paths.ts",
-      "sha256": "0b5b48832d381e86f01aa722f7a514e943457936ff395c4d3b00f31ccabb5ae0"
+      "sha256": "631dfa0177e94f2efd96dabdd431c6355479478a71ce364709869e4624c8724b"
     },
     {
       "path": "packages/apps/expo-host/expo-host-src/runtime.ts",
@@ -12366,7 +12346,7 @@
     },
     {
       "path": "packages/apps/expo-host/expo-host-src/testing/compile-app.tsx",
-      "sha256": "61e6ccc7ee8e7feb5bc124dfc9213bc28e84178932ca564d65e15762b17f0c99"
+      "sha256": "a141b6c58e5f09e4f6c9990babec7a76580fe011509db8bb02bcff1a579637d0"
     },
     {
       "path": "packages/apps/expo-host/expo-host-src/testing/device-module-mocks/tao-device-modules.setup.ts",
@@ -12386,7 +12366,7 @@
     },
     {
       "path": "packages/apps/expo-host/expo-host-src/testing/runtime-testing.ts",
-      "sha256": "26d9cce12eb3ebdb65ebf45921985075c07c8299b7219c0dc1e64f7d2e4ebc3d"
+      "sha256": "d314c88183215e3b1f9db1aabd65358c039878d17fd0d494f8a9c1a7d708a1c7"
     },
     {
       "path": "packages/apps/expo-host/expo-host-src/testing/tao-test-plan.tsx",
@@ -12463,6 +12443,10 @@
     {
       "path": "packages/apps/expo-host/expo-host-tests/async-storage-mock.ts",
       "sha256": "13745c6561eba2a78044e686aa3a0e749cfa6c3ad8be577bc8db5ea13eb7b00f"
+    },
+    {
+      "path": "packages/apps/expo-host/expo-host-tests/auth-local-data.jest-test.tsx",
+      "sha256": "0ee9fccf694fbe0dbd76743bff74803a7c52f877fbbce85fef41beea1777bf56"
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/auth-provider-host.jest-test.tsx",
@@ -12546,7 +12530,7 @@
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/host-dependencies.test.ts",
-      "sha256": "bcc252f5dc14c0a788612ef811efa387be5ddbba42a2d4d35a4140e763756b6e"
+      "sha256": "95a76213dc9f73ab13f94d02c4ee7cbc9d43005be379fc6ace3ffe2a10ddaa29"
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/injections-e2e.jest-test.tsx",
@@ -12586,7 +12570,7 @@
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/native-bindings-e2e.jest-test.tsx",
-      "sha256": "61a9360e87ff707c236228bde4888bef1449f534d07bda5c83cb2a11cb2e6302"
+      "sha256": "1734dad73d2bf6d2458703595935886bf4f40a8062a4a5becefe6b09787e7aea"
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/native-bridge-demo.jest-test.tsx",
@@ -12594,7 +12578,7 @@
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/native-clipboard-bindings.jest-test.tsx",
-      "sha256": "009a8376e65d44507aebc728fa7fa71f3ab9d2c9530dc455e9dcb120685ce496"
+      "sha256": "435e0dbe5d6808de6d658ce6d8c30b886b22183af18622ce183588fd99c65c8f"
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/navigation-accessibility.jest-test.tsx",
@@ -12602,7 +12586,7 @@
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/navigation-e2e.jest-test.tsx",
-      "sha256": "c52783349664896cb6a1f6bdaf68d10f137d7fc3f02c5209a92646131e9c9da0"
+      "sha256": "c2e21fde66698f847690989a4429c95bb22048e8cb9e3553e88c202c3bd46fc7"
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/navigation-native-tabs.jest-test.tsx",
@@ -12635,6 +12619,10 @@
     {
       "path": "packages/apps/expo-host/expo-host-tests/runtime-containment.jest-test.tsx",
       "sha256": "11826d1a41d03d4b2918a6e580f168078810e2c835ddedc1e365256094e6ba9e"
+    },
+    {
+      "path": "packages/apps/expo-host/expo-host-tests/runtime-fixture-lifecycle.jest-test.tsx",
+      "sha256": "76a714555966d6ae25df98051bac41b93126b2773b86093f07e06cffc86d187a"
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/runtime-overlays.test.ts",
@@ -12702,7 +12690,7 @@
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/test-compile-app.tsx",
-      "sha256": "669a37f7492e50bc8b58b90319d453e4544b7c115a13a6e1a05a51408e7f285d"
+      "sha256": "5093fb4ddb10debb6816f3d4e8071f7793abd29e0f1c1f179de6c4d3cf81d235"
     },
     {
       "path": "packages/apps/expo-host/expo-host-tests/test-device-fixture-e2e.jest-test.tsx",
@@ -12770,7 +12758,7 @@
     },
     {
       "path": "packages/apps/expo-host/jest.shared.config.cjs",
-      "sha256": "7792eb33b43edd60f47ede6bcb54a1bde49c175e2bc66e65d254d9e81828b1fa"
+      "sha256": "f2fe31b4c16f9053a511885cf321d2f485f93a511ea15c0fc9ae1c3bd0fd5caf"
     },
     {
       "path": "packages/apps/expo-host/jest.tao-test.config.cjs",
@@ -13062,7 +13050,7 @@
     },
     {
       "path": "packages/apps/runtime/TaoRuntime-src/TR-auth.ts",
-      "sha256": "0a741bcd41cd706c8e0cda0afc9e599d362321c9c2812975b8b79446014091d0"
+      "sha256": "bcc3b9873e4e3845d1700b3813da136313ea9dfad8a180661a8d8bcfbe5c97df"
     },
     {
       "path": "packages/apps/runtime/TaoRuntime-src/TR-clipboard.ts",
@@ -13106,7 +13094,7 @@
     },
     {
       "path": "packages/apps/runtime/TaoRuntime-src/TR-data-schema.ts",
-      "sha256": "eefd9a0c2a4560307338ad10a8b5b35142909e9db150ac8b9914eb14de81db12"
+      "sha256": "6a83796ffc9e39a31d22fed8403f95917f01474b4e05fcabe8318f803302f69e"
     },
     {
       "path": "packages/apps/runtime/TaoRuntime-src/TR-data-sync.ts",
@@ -13122,7 +13110,7 @@
     },
     {
       "path": "packages/apps/runtime/TaoRuntime-src/TR-data.ts",
-      "sha256": "773140df2830d7002c755b455b5f2123680ff02845a31e56a7e196d97439089d"
+      "sha256": "9612f63deccb8aae4f270a8eb7d1a4b1918a399e3e26f354074ac736829cdb4e"
     },
     {
       "path": "packages/apps/runtime/TaoRuntime-src/TR-debug-journal.ts",
@@ -13618,7 +13606,7 @@
     },
     {
       "path": "packages/apps/stdlib/@tao/data/providers/local/Local.ts",
-      "sha256": "4e1d051e4bd1161b9ddc53ee62cc5f9e12ccc596b557eba4d2c693bd76228253"
+      "sha256": "55ea9757a8dc5659a8a69b00ed8c1a920b2802c44f07c25c81a87dbb33f7271a"
     },
     {
       "path": "packages/apps/stdlib/@tao/data/providers/memory/Memory.tao",
@@ -13638,7 +13626,7 @@
     },
     {
       "path": "packages/apps/stdlib/@tao/data/providers/reference/Reference.ts",
-      "sha256": "3d04b8f01886af802c544a922ef8ff5f466ad949fba1a91422087330033be7d5"
+      "sha256": "86f53f1efe74c90d5e92b5fd9296878f39836f3e855fd700c648ef7c4b67ff61"
     },
     {
       "path": "packages/apps/stdlib/@tao/data/providers/reference/ReferenceCoordinator.ts",
@@ -13773,6 +13761,10 @@
       "sha256": "3777e07b5db1c6c192969368fed8fb8b6626f7963f25c95d4b578898f74d0e98"
     },
     {
+      "path": "packages/apps/stdlib/stdlib-tests/local-account-data.test.ts",
+      "sha256": "8b11b3e8d0a3d9b7e392f3cb8b159351aaaeb392b90a28a20e1331ed989ebf18"
+    },
+    {
       "path": "packages/apps/stdlib/stdlib-tests/local-auth.test.ts",
       "sha256": "1fb53ac5b0fe22c2f8719ed885a860474350d01ea88b7bff22ca66b0a8dae9e5"
     },
@@ -13786,7 +13778,7 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/AgentCommands.ts",
-      "sha256": "9f6c148ff72ceb83e2e756cb16bc95a347c07159c57d783117ce17b5fc8692bd"
+      "sha256": "c0da96fe1c35d101a935535dca7ee32a23fcc29af74085f2d7421124cbe88712"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/agent-config/AgentConfigFreshness.ts",
@@ -13946,11 +13938,11 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/runner/AgentRunner.ts",
-      "sha256": "52e31a9857f9f59a373767a2925da54b7fdbcbe9d2657ebb3d84874de8d0d858"
+      "sha256": "e698ec71435c82353fbed2b34fdb2017a2b6c22c765aacaa27a65bebc0f35b1c"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/runner/FailureParser.ts",
-      "sha256": "d4c433bacca1ca40250f21aae59f02e87d1b7f3079b62badcd10ecd043290217"
+      "sha256": "fc5890f687e7c43babc34a5a1dce6272ec06ba0fc93794d2f9582b3dd20c423c"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/runner/OutputPolicy.ts",
@@ -13958,7 +13950,7 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-src/runner/SummaryFailures.ts",
-      "sha256": "9d43fecc3e2185d0a467e447ce915db89a1d65a95b633fb88661f86a8a3ccb2f"
+      "sha256": "ea8b97b2c0e0a342f77c08577e29be37bf280466a9066d4eab4470d103bc80f8"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts",
@@ -13990,7 +13982,7 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-tests/agent-runner.test.ts",
-      "sha256": "d3c93a962ffdecc4be58597b0ce4bdf9c6f873ac650290099879cced016e7690"
+      "sha256": "71ef0aa2634c923f9dbefd93f4babb634708b4565e1a95300213844817e1dc68"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-tests/claude-profiles-generation.test.ts",
@@ -14034,11 +14026,15 @@
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-tests/summary-failures.test.ts",
-      "sha256": "6971e68f1fb934d942abe105f99aa64a6c55a12b623b1a08a62a7171d26c3cbe"
+      "sha256": "0c27f3d65e650a2f87f07b2329fc31b62110450b2476b2ea7cb5b6bcefd44e78"
     },
     {
       "path": "packages/cli/agent-cli/agent-cli-tests/worktree-placement.test.ts",
       "sha256": "2029409230ae5e01c8e80e22300b06fdf529cef8e132d39fbf90e14a8a6eeca9"
+    },
+    {
+      "path": "packages/cli/agent-cli/agent-cli-tests/worktree-setup.test.ts",
+      "sha256": "ff9ac4209a7896dc958191a24243d78c9c229238b2e25744faf78dbde6a7de84"
     },
     {
       "path": "packages/cli/agent-cli/package.json",
@@ -14110,7 +14106,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/dev.ts",
-      "sha256": "654cd7aacbf77059bda0eeb105165ff4d2a026f705dfc7447e028a9715f28d2a"
+      "sha256": "2e301e29113617d0fe798b2ca8f316857b8ed3ba7fb982ac147cd926bcccd227"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-src/doctor/AgentCapabilities.ts",
@@ -14278,7 +14274,7 @@
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/direnv-activation.test.ts",
-      "sha256": "5d5dde20aff8a796cf85610c2e729686c60c4be7f94f91ebec21e8007e0ed0da"
+      "sha256": "5852d10338516f6b932f5192666f129f4a9f738f487d564a51d16973ad19c70f"
     },
     {
       "path": "packages/cli/dev-cli/dev-cli-tests/direnv-setup-integration.test.ts",
@@ -14426,7 +14422,7 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-src/bridge-check.ts",
-      "sha256": "bceb1484b42ec10e9ea378e778652871b1871a2194265471178077a9ac565eb2"
+      "sha256": "6203bc07dc3af89d33fdac11aa6f0e8470f601b7797ba15ba8b8e0b6889c4f96"
     },
     {
       "path": "packages/cli/tao-cli/cli-src/build-command.ts",
@@ -14502,7 +14498,7 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-src/dev-command.ts",
-      "sha256": "ddb90a265d64045be172ea7451b999fa2b3388e185e08a72ee1e4b21bb59c1da"
+      "sha256": "2981a4f344a0dcc6fbb2674e1c6b06ab50e47151ac8957e7fbcd53e86da1a7e6"
     },
     {
       "path": "packages/cli/tao-cli/cli-src/dev/dev-loop-tui.ts",
@@ -14598,11 +14594,11 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-src/standalone-clean-machine.sh",
-      "sha256": "03cc7c56ffdc0fbfbf034c3b7d553d8759acda44f25ab0ec1e296537aca39a2e"
+      "sha256": "61a1b7560d704fc1e7a268364aa5d235bdc3e76aeda7e8e9c524ef41ad54ef40"
     },
     {
       "path": "packages/cli/tao-cli/cli-src/standalone-filesystem-audit.ts",
-      "sha256": "010613af320f41cda4fa583d19d06aeda5e11367813c3f3f0c57d23043ce7cd2"
+      "sha256": "3baa3682e32ee5e1cf89874a2cabbdb26e0f04a0a39477455b3e01da2b9e41d2"
     },
     {
       "path": "packages/cli/tao-cli/cli-src/standalone-install.sh",
@@ -14618,7 +14614,7 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-src/standalone-vm.ts",
-      "sha256": "9d066894845b1bd74ff9b4ae7419293fe39b0ea2723b24577aea25c314ab1214"
+      "sha256": "0b116ca24db8e9f0b3ccfd4a0fc6ea92737a1072d6b345e884baac0c6470b650"
     },
     {
       "path": "packages/cli/tao-cli/cli-src/subprocess-test-api.ts",
@@ -14818,7 +14814,7 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-tests/release-surface.test.ts",
-      "sha256": "06972757ebf19a99944a304705772d3f513e985334ef1d0bad001b5a7ca58e8d"
+      "sha256": "0aae6a3ee0c1c7188281efdec88a68dcfffaa72faa99543750c7068f449719fc"
     },
     {
       "path": "packages/cli/tao-cli/cli-tests/review-command.test.ts",
@@ -14882,7 +14878,7 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-tests/standalone-filesystem-audit.test.ts",
-      "sha256": "2d8d55ac57279d4fbe44a3e21bb00ef4bb4439686af15c114180da5eb078c530"
+      "sha256": "d2ac77378c48e2146879f6c0cdf8943b033c66595ea1ddc42ea0aae9558eb5ae"
     },
     {
       "path": "packages/cli/tao-cli/cli-tests/standalone-install.test.ts",
@@ -14898,7 +14894,7 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-tests/standalone-vm.test.ts",
-      "sha256": "bfa1fddde3a8cd383073ba00bb92b5f56773ed9d2479d9252500097fae7f8e12"
+      "sha256": "867b8d803d95f9f04df072692e2727fdce4ccff86d92d36e3fc4eea8d540c89f"
     },
     {
       "path": "packages/cli/tao-cli/cli-tests/starter-update.test.ts",
@@ -15018,7 +15014,7 @@
     },
     {
       "path": "packages/compiler/compiler-src/codegen/app/AppCompiler.ts",
-      "sha256": "3d5b494bd377091e2994acf3a037ba4cdd30d1d3d548c3d507d142e431b3f992"
+      "sha256": "0a0cdd0e7e4ef00e6cf43c7159c62bfa86ec95cab510c8de12ec475a1c2cb95f"
     },
     {
       "path": "packages/compiler/compiler-src/codegen/app/ConfigurationCompiler.ts",
@@ -15026,7 +15022,7 @@
     },
     {
       "path": "packages/compiler/compiler-src/codegen/app/DataCompiler.ts",
-      "sha256": "d118dfbdbc56f00cdfa03e2327b6d15eeff30ac7601966b4cab4b8a2b4846b17"
+      "sha256": "d2230cc95008f4961652370e947cb1dd916546d3a8994f9af72f5d2cb3a41248"
     },
     {
       "path": "packages/compiler/compiler-src/codegen/app/DesignCompiler.ts",
@@ -15098,7 +15094,7 @@
     },
     {
       "path": "packages/compiler/compiler-src/codegen/app/action-control-flow.ts",
-      "sha256": "b208166c2aac8bc2c2dd53b6137cfbba984d3e95e074f5596bcbcdbd5f737a32"
+      "sha256": "b8b7ae34558f276250bf14a303cdb76867c054604fd5b7950f213f17f64dbd0d"
     },
     {
       "path": "packages/compiler/compiler-src/codegen/app/auth-context.ts",
@@ -15210,7 +15206,7 @@
     },
     {
       "path": "packages/compiler/compiler-tests/auth-account.test.ts",
-      "sha256": "ccf083b7fa69e55f367af30468d0e55500337b8e9f99a14a3a3ce40e61c94dfd"
+      "sha256": "9e566ba3e9828d723146a681869588d048f09db958dff76c55fddd244a582a4e"
     },
     {
       "path": "packages/compiler/compiler-tests/checkbox-test-plan.test.ts",
@@ -15219,6 +15215,10 @@
     {
       "path": "packages/compiler/compiler-tests/compiler.test.ts",
       "sha256": "7441023df94feba47eb287d5629354e0e4ab693987fe08360f05451e62f2ceac"
+    },
+    {
+      "path": "packages/compiler/compiler-tests/data-defaults.test.ts",
+      "sha256": "2391f71514d0f0f882ba695953177e83f62bb125e990021bf21572472734eab0"
     },
     {
       "path": "packages/compiler/compiler-tests/debug-instrumentation.test.ts",
@@ -15230,7 +15230,7 @@
     },
     {
       "path": "packages/compiler/compiler-tests/effect-outcomes.test.ts",
-      "sha256": "f34dc265ac056ad7c104e3d1afc02e6ee015d99c28ec5c2279d2e646ddc644fe"
+      "sha256": "6a9d53ac0797c7bf828e3f705f82c7642dd9f58d5eade6cea79c7cbe1a5da82b"
     },
     {
       "path": "packages/compiler/compiler-tests/files.test.ts",
@@ -16030,7 +16030,7 @@
     },
     {
       "path": "packages/ides/studio/studio-src/client/StudioApp.ts",
-      "sha256": "1435b41b81d064b7345f92c39af1a85967f3a092443d22a0c1b5f608060871c8"
+      "sha256": "65e276cb703a8365c3698ab20bf15a3e397fc0b054484e41f4f742a3230cdf57"
     },
     {
       "path": "packages/ides/studio/studio-src/client/StudioDeviceCapture.ts",
@@ -16054,7 +16054,7 @@
     },
     {
       "path": "packages/ides/studio/studio-src/client/StudioFeedController.ts",
-      "sha256": "454d105a346c64f0508bbab0a90d73d0f34eaa6e3913bef1e75db5858f90c20f"
+      "sha256": "13343d369a80a042fb0a8fd2733df776f9f65f587f9d80da550272947cc0cd28"
     },
     {
       "path": "packages/ides/studio/studio-src/client/StudioFeedSamples.ts",
@@ -16157,6 +16157,10 @@
       "sha256": "262eb24d8c59d6a8ddbd6f72f455e2d164cd32e5fc99af5855774397a642589d"
     },
     {
+      "path": "packages/ides/studio/studio-src/client/app/StudioMountLifetime.ts",
+      "sha256": "61f1086695e74eb81f27211fb9d539487b7360a27f98f833f44b75fd23e581e2"
+    },
+    {
       "path": "packages/ides/studio/studio-src/client/app/StudioMountSignal.ts",
       "sha256": "a7d19f7b02171049a454220f7812205e93555116545385253c7af67acbae3db9"
     },
@@ -16170,7 +16174,7 @@
     },
     {
       "path": "packages/ides/studio/studio-src/client/app/StudioPreviewWiring.ts",
-      "sha256": "0c5dd8c6b3fa4233332e9ea19482a8c878a228ecf422cca6dc3944cebeee6567"
+      "sha256": "69242d5b2b6c9c90cd99eaf9ca2f6be0c652a09aab911010d5e2d70876a27448"
     },
     {
       "path": "packages/ides/studio/studio-src/client/app/StudioProductHostState.ts",
@@ -16234,7 +16238,7 @@
     },
     {
       "path": "packages/ides/studio/studio-src/client/matrix/StudioMatrixSketches.ts",
-      "sha256": "4867d8bf93c994a09690093dc2ad3d86b31a5a9727e4056d8e0ab1fef06baea8"
+      "sha256": "3377340e72cd5803622ef25a3d8b2395ff3349f633fb390b909ecb4fdf127fde"
     },
     {
       "path": "packages/ides/studio/studio-src/client/matrix/StudioPreviewActivation.ts",
@@ -16526,7 +16530,7 @@
     },
     {
       "path": "packages/ides/studio/studio-tests/studio-feed-controller.test.ts",
-      "sha256": "760f6e4b36db8062a94d28bfaa90eea4f53becb19cf5913e25af6a8f04e75a4a"
+      "sha256": "c540db8afc0c1f7fcec2bbb07c4c03a907b7fb1e6686c00c9e2455b427b3bf7b"
     },
     {
       "path": "packages/ides/studio/studio-tests/studio-feed-draft.test.ts",
@@ -16534,7 +16538,7 @@
     },
     {
       "path": "packages/ides/studio/studio-tests/studio-feed-drop-overlays.test.ts",
-      "sha256": "3e38fe93a567bf2b7d13512ec7466304eaf00a7f6e5bde3ec4e4abbf7193543b"
+      "sha256": "e9dbc5a2f1eb7d9382bc1cd9cb94947506c1a4783ef41a56cb176ccad374d1de"
     },
     {
       "path": "packages/ides/studio/studio-tests/studio-feed-examples.test.ts",
@@ -16599,6 +16603,10 @@
     {
       "path": "packages/ides/studio/studio-tests/studio-matrix-session.test.ts",
       "sha256": "2d41be48612f6e6ad38187f2ba1723149ef02a458a18da7b87b5ad4790ed42a0"
+    },
+    {
+      "path": "packages/ides/studio/studio-tests/studio-mount-lifecycle.test.ts",
+      "sha256": "6b0db4a638d4d5a9c99c527c9f3de1f2b448a830b6ea96a37fe0cf90f190f8d1"
     },
     {
       "path": "packages/ides/studio/studio-tests/studio-panel-projection.test.ts",
@@ -16730,7 +16738,7 @@
     },
     {
       "path": "packages/language/ast-utils/ast-utils-src/Type.ts",
-      "sha256": "13de3301dc4ba46c75c4f581673db93af7b854fb4e47a691f2a692c65c3fd20c"
+      "sha256": "3af555de0c4e1274935cf181d77b9ea2fb3e150f22bdb1a551ee77e7e2c55947"
     },
     {
       "path": "packages/language/ast-utils/ast-utils-src/Units.ts",
@@ -16766,7 +16774,7 @@
     },
     {
       "path": "packages/language/ast-utils/ast-utils-src/data-write-bindings.ts",
-      "sha256": "b2b7e04e1565d5f086428441611cac38e8ccd1cc6f50c5331d22b1dbf707a61d"
+      "sha256": "2e872240ffeaf7eaa36e9d864b009a0df13f6560e9264d8406f885b3cb14af48"
     },
     {
       "path": "packages/language/ast-utils/ast-utils-src/datasource-values.ts",
@@ -17654,7 +17662,7 @@
     },
     {
       "path": "packages/language/validator/validator-src/validators/types-validator.ts",
-      "sha256": "ac6163e032105076f3ffc0118bbfa043e0c85206663071606fee84228105a53f"
+      "sha256": "2e03f2ce2317f8e0fb2ddec30668ff79e41929803cbbdaf6fb59ab24397d0916"
     },
     {
       "path": "packages/language/validator/validator-src/validators/units-validator.ts",
@@ -17731,6 +17739,10 @@
     {
       "path": "packages/language/validator/validator-tests/configuration-sidecars.test.ts",
       "sha256": "bc1d9c274d20eed92b9c830f9443e1cb6e1d0aa74ecab5853c8b9a57168336d8"
+    },
+    {
+      "path": "packages/language/validator/validator-tests/data-optional-fields.test.ts",
+      "sha256": "82399187f4aa627f6bed704bc429a2a65533e2aebb3cedf87ae124effb695e41"
     },
     {
       "path": "packages/language/validator/validator-tests/design.test.ts",
@@ -18078,7 +18090,7 @@
     },
     {
       "path": "packages/services/account-server/account-server-tests/fixtures/reference-test.ts",
-      "sha256": "73599645f6cad7a3eb7027aeff74288bb7f3313141663e1ca07c3b19ac10290d"
+      "sha256": "74fc1b227a2f61e760074a9f60d964d90dd3d0acc365559b4cff5e9f8b23ad80"
     },
     {
       "path": "packages/services/account-server/account-server-tests/fixtures/server-process.ts",
@@ -18091,6 +18103,10 @@
     {
       "path": "packages/services/account-server/account-server-tests/reference-provider.test.ts",
       "sha256": "4a9c70de231014c1f09e24aaa64d3cd9790c3cb37f188109e117b04abace960e"
+    },
+    {
+      "path": "packages/services/account-server/account-server-tests/reference-retry.test.ts",
+      "sha256": "5a2428a942a9c6bd451b649d4bc08ad81da9e16075b4e0f7cea56eaeeff5ffab"
     },
     {
       "path": "packages/services/account-server/account-server-tests/serve.test.ts",
@@ -18698,7 +18714,7 @@
     },
     {
       "path": "packages/testing/host-control/host-control-src/MachineResources.ts",
-      "sha256": "edcbec53fd600e4632ff361211b82c82368d5ecb7239740ef465d248b3c03245"
+      "sha256": "c150e30cc422ebf5aef5c3b6e219d8ebf5f3917fcde631fdca847682330c8b71"
     },
     {
       "path": "packages/testing/host-control/host-control-src/host-control.ts",
@@ -18722,7 +18738,7 @@
     },
     {
       "path": "packages/testing/host-control/host-control-tests/MachineResources.test.ts",
-      "sha256": "ffddf7cd399d584e088f2dab3636d8081dbc9696e33c02e7019128630bc99222"
+      "sha256": "db0d409146b0638beac4cea544021c3c5a3d4e229c53e963d12a0a0611b65cf1"
     },
     {
       "path": "packages/testing/host-control/package.json",
@@ -18794,7 +18810,7 @@
     },
     {
       "path": "packages/testing/verification/verification-src/GateRunner.ts",
-      "sha256": "a8bc5cfc6581980bcd495c0fd2b52c7d6157fdef4ea71636d5370b153d5bbda6"
+      "sha256": "316ca006dcb9af51f908b60a6ebc0c5312ed97d66376513deb7c57611e4a52a1"
     },
     {
       "path": "packages/testing/verification/verification-src/GeneratedEvidence.ts",
@@ -18882,7 +18898,7 @@
     },
     {
       "path": "packages/testing/verification/verification-src/TestRunner.ts",
-      "sha256": "bb331a1b70ee04fe4881efa9bf421add922facd366d825f482cdeefba0ea4133"
+      "sha256": "0851ac7e61319180ec497d31304a038b3daca4c49bbcd84dec266b2bbcb181be"
     },
     {
       "path": "packages/testing/verification/verification-src/TestSelection.ts",
@@ -18990,7 +19006,7 @@
     },
     {
       "path": "packages/testing/verification/verification-tests/gate-runner.test.ts",
-      "sha256": "e8044a675170a374885c44ad91a75317962e725cace9b88ed06c7ad17490271a"
+      "sha256": "81478e103c188d20af3cc465ef1a297099e21cdb7d103bf94979250e13010b84"
     },
     {
       "path": "packages/testing/verification/verification-tests/green-record-policy.test.ts",
@@ -19063,6 +19079,10 @@
     {
       "path": "packages/testing/verification/verification-tests/test-ledger.test.ts",
       "sha256": "224fc60902e113ff5651d7aceb7a1a4d2292eef88f267787a1e6ea941d09564d"
+    },
+    {
+      "path": "packages/testing/verification/verification-tests/test-mutation.test.ts",
+      "sha256": "a9cc560168c01ee45886ebcb099912308e0cf2d8df654209ce07eebb88303d92"
     },
     {
       "path": "packages/testing/verification/verification-tests/test-runner.test.ts",
@@ -19727,6 +19747,10 @@
       "reason": "Frozen archive; outside active-document review."
     },
     {
+      "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-MUTATION-FAILURES-CAN-BE-TOLERATED-AS-FLAKES.md",
+      "reason": "Frozen archive; outside active-document review."
+    },
+    {
       "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-NODE-WORKER-TEARDOWN-LOADS-BUN-FFI.md",
       "reason": "Frozen archive; outside active-document review."
     },
@@ -19744,6 +19768,10 @@
     },
     {
       "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-SANDBOXED-TAO-CHECK-CRASHES-ON-A-DENIED-TMPDIR-SIBLING.md",
+      "reason": "Frozen archive; outside active-document review."
+    },
+    {
+      "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-STANDALONE-RUNTIME-SHIMS-ESCAPE-OWNED-STORAGE.md",
       "reason": "Frozen archive; outside active-document review."
     },
     {
@@ -19768,6 +19796,18 @@
     },
     {
       "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-THE-ANDROID-EMULATOR-CANNOT-START-IN-THE-SANDBOX.md",
+      "reason": "Frozen archive; outside active-document review."
+    },
+    {
+      "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-TIMED-OUT-RUNTIME-FIXTURES-MOUNT-LATE.md",
+      "reason": "Frozen archive; outside active-document review."
+    },
+    {
+      "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-VM-ACCEPTANCE-RECEIPT-REMAINS-NONTERMINAL.md",
+      "reason": "Frozen archive; outside active-document review."
+    },
+    {
+      "path": "Docs/Roadmap/Developer environment upgrades/Archive/DEVENV-WORKFLOW-REPORTS-INCLUDE-CONCURRENT-TEST-FAILURES.md",
       "reason": "Frozen archive; outside active-document review."
     }
   ]

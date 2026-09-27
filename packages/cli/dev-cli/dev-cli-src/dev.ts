@@ -212,6 +212,16 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('test-mutation')
+    .description('Run deliberate mutation checks without retries, flake tolerance or ordinary evidence updates.')
+    .argument('<path>', 'Repository-relative test file, or a directory whose test files all run.')
+    .option('--output <mode>', OUTPUT_OPTION_HELP)
+    .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
+    .action(async (path: string, options: TestCommandOptions = {}) => {
+      await runExitCommand(() => TestRunner.runTestMutation(path, testRunOptions(options)))
+    })
+
+  commands
     .command('test-retry')
     .description("Re-run files not green since this checkout's latest complete test run.")
     .option('--output <mode>', OUTPUT_OPTION_HELP)

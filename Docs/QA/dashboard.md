@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 187 applicable release acceptance cells are incomplete.
 
-Candidate source: `de8eeeffc7e2f1b288d07601d48fb5c4f3a6e8a8`. Working-tree content hashes are stored per observation.
+Candidate source: `a8682c2577ab4450524ca7e49537395d8a43758e`. Working-tree content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -46,7 +46,7 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | text      | 308            | 2        | 0            | 1             | 306     | 0       | 0        | 1    | 0.6%       | 0.0%     |
+| 1                | text      | 307            | 2        | 0            | 1             | 305     | 0       | 0        | 1    | 0.7%       | 0.0%     |
 
 ## Scoped development probes
 
