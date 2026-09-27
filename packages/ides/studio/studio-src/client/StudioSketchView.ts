@@ -881,9 +881,9 @@ export const StudioSketchView = {
     }
     const boardTools: StudioSketchBoardTools = {
       current: () => tool,
+      handBack: () => setTool(StudioSketchTools.afterDraw()),
       // A drawn Text rectangle opens for typing once its commit has settled and the board re-rendered.
       drawn: (sketchId, rectId) => {
-        setTool(StudioSketchTools.afterDraw())
         const rect = sketches.find(sketch => sketch.id === sketchId)?.rects.find(candidate => candidate.id === rectId)
         const element = [...frames.get(sketchId)?.querySelectorAll<HTMLElement>('[data-tao-studio-sketch-rect]') ?? []]
           .find(candidate => candidate.dataset['taoStudioSketchRect'] === rectId)
@@ -1269,10 +1269,11 @@ type StudioSketchGestureLock = Readonly<{
   end(): void
 }>
 
-/** The canvas's active tool as a board reads it, and the hand-back once a board has drawn. */
+/** The canvas's active tool as a board reads it, the hand-back when a draw is released, and its settled commit. */
 type StudioSketchBoardTools = Readonly<{
   current(): StudioSketchTool
   drawn(sketchId: string, rectId: string): void
+  handBack(): void
 }>
 
 function renderSketch(
@@ -1900,6 +1901,10 @@ function renderSketch(
     paint()
     if (clickedFrame) {
       selectFrame()
+    }
+    // The tool goes back to V on release, not when the commit answers: a tool picked in between is the person's.
+    if (change?.kind === 'add') {
+      tools.handBack()
     }
     StudioSketchPointerRelease.afterCommit(
       () => change === undefined ? undefined : onChange?.(change),

@@ -1537,6 +1537,32 @@ Test('mounted V sweeps a marquee across empty sketch space, Shift adds to it, an
   }
 })
 
+Test('mounted R hands back to V on release, so a tool picked before the commit answers is kept', async () => {
+  let answer: () => void = () => {}
+  const { board, changes, dom, host, mounted } = mountTextEditor(() =>
+    new Promise<void>(resolve => {
+      answer = resolve
+    })
+  )
+  const tool = (): string | undefined =>
+    dom.find(host, 'taoStudioSketchWorkspace', 'true').dataset['taoStudioSketchTool']
+  try {
+    pickTool(dom, host, 'rect')
+    board.dispatchTree(pointer('pointerdown', board, 6, 200, 50))
+    board.dispatchTree(pointer('pointermove', board, 6, 260, 80))
+    board.dispatchTree(pointer('pointerup', board, 6, 260, 80))
+    Expect(changes.map(change => change.kind)).toEqual(['add'])
+    Expect(tool()).toBe('select')
+    pickTool(dom, host, 'rect')
+    answer()
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(tool()).toBe('rect')
+  } finally {
+    mounted.dispose()
+  }
+})
+
 Test('mounted tool strip: R draws a frame on empty canvas, T draws Text and opens it, each hands back to V', () => {
   const restore = elementSlot.install({ configurable: true, value: SketchTestElement })
   const dom = new SketchTestDocument()

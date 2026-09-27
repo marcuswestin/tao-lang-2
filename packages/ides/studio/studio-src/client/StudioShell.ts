@@ -481,19 +481,21 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
     previewSized: false,
   }
   const apply = (): void => {
+    // The side panes take their width first: Design derives the canvas from the centre column they leave.
+    const sides = studioPaneVisibility(root.dataset['layoutPreset'], sizes)
+    left.hidden = sides.left
+    right.hidden = sides.right
+    shell.style.setProperty('--studio-left-size', `${sizes.left}px`)
+    shell.style.setProperty('--studio-right-size', `${sizes.right}px`)
     if (designLayout.active && !designLayout.previewSized) {
       sizes.preview = studioDesignPreviewSize(center.getBoundingClientRect().width, sizes.right)
     }
     const hidden = studioPaneVisibility(root.dataset['layoutPreset'], sizes)
-    left.hidden = hidden.left
-    right.hidden = hidden.right
     preview.hidden = hidden.preview
     bottom.hidden = hidden.bottom
     editorPane.hidden = hidden.editor
     environmentPane.hidden = hidden.environment
     visualPane.hidden = hidden.visual
-    shell.style.setProperty('--studio-left-size', `${sizes.left}px`)
-    shell.style.setProperty('--studio-right-size', `${sizes.right}px`)
     center.style.setProperty('--studio-preview-size', `${sizes.preview}px`)
     center.style.setProperty('--studio-bottom-size', `${sizes.bottom}px`)
     for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
