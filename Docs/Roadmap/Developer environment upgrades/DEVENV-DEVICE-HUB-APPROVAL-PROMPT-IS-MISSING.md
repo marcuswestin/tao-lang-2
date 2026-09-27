@@ -94,3 +94,19 @@ remain unproven**. The September 26 approval and screenshot evidence remain vali
 stated limits. Device Control and Data Access is still unverified. Documentation landing is
 independent of Computer Use acceptance. No device app or configuration was changed by this
 continuation; no permission settings or saved consent records were manually edited.
+
+## Duo acceptance continuation — 2026-09-27 UTC
+
+The independent `feat/iphone-duo-acceptance` checkout started at `c21b2226eeba`. Its effective
+session instructions specify `workspace-write` and approval policy `never`. One supported
+app-selection attempt using `/Applications/Xcode-27.1.app/Contents/Applications/DeviceHub.app`
+returned `Computer Use was not approved to use Device Hub`. No app binding, accessibility tree,
+or screenshot was returned. The task did not retry through another control or capture route.
+Its named `./agent unsandboxed capabilities` command also refused before host dispatch because
+it detected the sandbox; that shell result is separate from the application-access denial.
+
+Neither HNReaderStub nor Native Navigation was visually accepted. The requested fold, rotation,
+Split View, keyboard, and active-presentation matrix remains unrun, with no manual results
+supplied. Evidence and resource ownership are retained in the task checkout's
+`.artifacts/duo-acceptance/disposition.md`. The source of the effective policy remains unknown;
+no saved permission, generated configuration, or global Xcode selection was changed.
