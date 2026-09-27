@@ -6,10 +6,16 @@ type Environment = NonNullable<Parameters<typeof runInstantReview>[1]>
 
 const APP_ID = '3f2a9c1e-5b7d-4e8f-9a0b-1c2d3e4f5a6b'
 const TOKEN = 'private-admin-token'
+// A development key for tao-review.clerk.accounts.dev, the shape just setup-clerk stores.
+const PUBLISHABLE_KEY = `pk_test_${Buffer.from('tao-review.clerk.accounts.dev$').toString('base64')}`
 const SOURCE = [
   'app AuthReviewInstant = AuthReview with {',
   '   Auth InstantAuth { AppId "REPLACE_WITH_INSTANT_APP_ID" }',
   '   Datasource InstantDB { AppId "REPLACE_WITH_INSTANT_APP_ID" }',
+  '}',
+  'app AuthReviewInstantClerk = AuthReviewInstant with {',
+  '   Auth Clerk { PublishableKey "pk_test_REPLACE_WITH_YOUR_KEY" }',
+  '   Datasource with { ClerkClientName "clerk" }',
   '}',
 ].join('\n')
 
@@ -23,7 +29,11 @@ async function fixture() {
   const handlers = new Map<string, () => void>()
   const exitCodes: Record<string, number> = { instantdb: 0, dev: 0 }
   const environment: Environment = {
-    secrets: async () => ({ AUTH_REVIEW_INSTANT_APP_ID: APP_ID, AUTH_REVIEW_INSTANT_ADMIN_TOKEN: TOKEN }),
+    secrets: async () => ({
+      AUTH_REVIEW_INSTANT_APP_ID: APP_ID,
+      AUTH_REVIEW_INSTANT_ADMIN_TOKEN: TOKEN,
+      CLERK_PUBLISHABLE_KEY: PUBLISHABLE_KEY,
+    }),
     source: async () => SOURCE,
     project: async () => root,
     writeOwnership: FS.writeJson,
@@ -73,6 +83,52 @@ Test('review pushes with the token only in the push child, then runs tao dev on 
   Expect(printed).not.toContain(TOKEN)
   Expect(await FS.exists(f.root)).toBe(false)
   Expect(f.handlers.size).toBe(0)
+})
+
+Test('the Clerk variant pushes and runs AuthReviewInstantClerk with the stored publishable key', async () => {
+  const f = await fixture()
+  Expect(await runInstantReview({ clerk: true, device: 'roPhone' }, f.environment)).toBe(0)
+  Expect(f.runs.map(run => run.args.filter(arg => !arg.endsWith('.tao')))).toEqual([
+    ['instantdb', 'push', '--app', 'AuthReviewInstantClerk'],
+    ['dev', '--app', 'AuthReviewInstantClerk', '--device', 'roPhone'],
+  ])
+  Expect(f.runs[1]!.source).toContain(`PublishableKey "${PUBLISHABLE_KEY}"`)
+  Expect(f.runs[1]!.source).not.toContain('REPLACE_WITH')
+  Expect(f.output.join('\n')).toContain('AuthReviewInstantClerk against Instant app 3f2a9c1e…')
+  Expect(await FS.exists(f.root)).toBe(false)
+})
+
+Test('the InstantAuth variant leaves the Clerk placeholder alone and needs no Clerk key', async () => {
+  const f = await fixture()
+  f.environment.secrets = async () => ({ AUTH_REVIEW_INSTANT_APP_ID: APP_ID, AUTH_REVIEW_INSTANT_ADMIN_TOKEN: TOKEN })
+  Expect(await runInstantReview({ skipPush: true }, f.environment)).toBe(0)
+  Expect(f.runs[0]!.source).toContain('pk_test_REPLACE_WITH_YOUR_KEY')
+})
+
+Test('the Clerk variant refuses a missing or non-development publishable key before preparing a copy', async () => {
+  const f = await fixture()
+  f.environment.project = async () => Errors.throwUnexpected('Must not prepare a project')
+  try {
+    f.environment.secrets = async () => ({ AUTH_REVIEW_INSTANT_APP_ID: APP_ID, AUTH_REVIEW_INSTANT_ADMIN_TOKEN: TOKEN })
+    await Expect(runInstantReview({ clerk: true }, f.environment)).rejects.toThrow('needs CLERK_PUBLISHABLE_KEY.')
+    f.environment.secrets = async () => ({})
+    await Expect(runInstantReview({ clerk: true }, f.environment)).rejects.toThrow(
+      'AUTH_REVIEW_INSTANT_APP_ID, AUTH_REVIEW_INSTANT_ADMIN_TOKEN, and CLERK_PUBLISHABLE_KEY',
+    )
+    for (const key of [`pk_live_${Buffer.from('clerk.example.com$').toString('base64')}`, 'pk_test_not-base64']) {
+      f.environment.secrets = async () => ({
+        AUTH_REVIEW_INSTANT_APP_ID: APP_ID,
+        AUTH_REVIEW_INSTANT_ADMIN_TOKEN: TOKEN,
+        CLERK_PUBLISHABLE_KEY: key,
+      })
+      await Expect(runInstantReview({ clerk: true }, f.environment)).rejects.toThrow(
+        'is not a development Clerk publishable key',
+      )
+    }
+    Expect(f.runs).toEqual([])
+  } finally {
+    await FS.remove(f.root)
+  }
 })
 
 Test('dry run plans the push and starts no dev loop', async () => {

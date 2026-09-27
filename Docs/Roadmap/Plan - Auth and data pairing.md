@@ -143,7 +143,10 @@ trimmed by the language slice:
 - Choose or create the Instant Cloud app and store its app ID and admin token in the repository
   secret store.
 - In Clerk, add `email` and `email_verified` claims to the session token (InstantDB reads
-  `email_verified` as a boolean); register the Clerk publishable key as an InstantDB auth client.
+  `email_verified` as a boolean).
+- In the Instant app's Auth settings, add a Clerk client named `clerk` with the development
+  publishable key. `AuthReviewInstantClerk` signs in through that name (`ClerkClientName`), and
+  `just instant-review --clerk` runs it with the publishable key from the secret store.
 
 ## InstantDB facts this plan rests on
 
