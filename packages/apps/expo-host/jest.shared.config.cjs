@@ -86,6 +86,9 @@ function createRuntimeJestConfig(options) {
       '^react-native$': `${dependencyRoot}/react-native`,
       '^react-native-safe-area-context$': '<rootDir>/expo-host-tests/safe-area-context-mock.tsx',
       '^@react-native-async-storage/async-storage$': '<rootDir>/expo-host-tests/async-storage-mock.ts',
+      // Provider SDKs such as InstantDB's read connectivity from NetInfo, whose native module Jest
+      // lacks; the package's own mock always reports online.
+      '^@react-native-community/netinfo$': `${dependencyRoot}/@react-native-community/netinfo/jest/netinfo-mock.js`,
       // Tao journeys exercise the portable controls. Installed optional native hosts are present
       // on development machines but cannot provide their device UI through react-test-renderer.
       '^@(react-native-community/(datetimepicker|slider)|react-native-picker/picker|react-native-segmented-control/segmented-control)$':

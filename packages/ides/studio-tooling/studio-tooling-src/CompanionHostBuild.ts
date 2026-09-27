@@ -37,8 +37,11 @@ const UTF8_LOCALE = { LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' }
 /** CompanionHostBuildOptions choose the platform, and narrow an Android build to fewer ABIs. */
 export type CompanionHostBuildOptions = {
   architectures?: readonly string[]
+  developerDir?: string
+  hostPlatform?: string
   platform?: HostPlatform
   repositoryRoot?: string
+  run?: typeof CLI.run
 }
 
 /** runCompanionHostBuild builds one platform's host into the checkout's host cache and returns an exit code. */
@@ -46,24 +49,88 @@ export async function runCompanionHostBuild(options: CompanionHostBuildOptions =
   const root = options.repositoryRoot ?? Repo.getRoot()
   const packageRoot = FS.resolvePath(CompanionIdentity.packagePath, root)
   const platform = options.platform ?? 'android'
+  const environment = await companionXcodeEnvironment(options, platform)
+  const execute = options.run ?? CLI.run
+  const run: typeof CLI.run = (command, spec = {}) =>
+    execute(command, {
+      ...spec,
+      env: { ...environment, ...spec.env },
+    })
 
   HCI.writeLine(`Generating the ${CompanionIdentity.name} ${platform} project with expo prebuild.`)
-  await CLI.mustRun('bunx', {
+  await requireBuildCommand(run, 'bunx', {
     args: ['expo', 'prebuild', '--platform', platform === 'android' ? 'android' : 'ios', '--no-install'],
     cwd: packageRoot,
     stdio: 'inherit',
   })
   const binary = platform === 'android'
     ? await assembleAndroid(root, packageRoot, options.architectures ?? DEFAULT_ARCHITECTURES)
-    : await buildIosSimulator(packageRoot)
+    : await buildIosSimulator(packageRoot, run)
 
   const manifest = await companionHostManifest(packageRoot, platform)
   const hostDirectory = checkoutHostDirectory(root, manifest)
-  await placeHost(hostDirectory, binary, manifest)
+  await placeHost(hostDirectory, binary, manifest, run)
   HCI.writeSuccess(
     `Built ${CompanionIdentity.name} ${manifest.hostVersion} for ${platform} at ${FS.displayPath(hostDirectory)}.\n`,
   )
   return 0
+}
+
+/** Explicit Xcode selection is checked before Expo or any build/cache filesystem mutation. */
+async function companionXcodeEnvironment(
+  options: CompanionHostBuildOptions,
+  platform: HostPlatform,
+): Promise<Platform.ProcessEnv> {
+  const environment = { ...Platform.runtimeProcess.env }
+  const developerDir = options.developerDir
+  if (developerDir === undefined) {
+    return environment
+  }
+  if (platform !== 'ios-simulator') {
+    Errors.throwUserInput('--developer-dir requires --platform ios-simulator.')
+  }
+  if (
+    !FS.isAbsolute(developerDir) || /[\x00-\x1f]/u.test(developerDir)
+    || !FS.resolvePath(developerDir).endsWith('.app/Contents/Developer')
+  ) {
+    Errors.throwUserInput('--developer-dir must be an absolute Xcode .app/Contents/Developer directory.')
+  }
+  if ((options.hostPlatform ?? Platform.hostPlatform) !== 'darwin') {
+    Errors.throwHostEnvironment('--developer-dir requires macOS.')
+  }
+  if (!await FS.isDirectory(developerDir) || !await FS.isFile(FS.resolvePath('usr/bin/xcodebuild', developerDir))) {
+    Errors.throwHostEnvironment(`The selected Xcode Developer directory is missing or incomplete: ${developerDir}`)
+  }
+  const selected = await FS.realPath(developerDir)
+  environment['DEVELOPER_DIR'] = selected
+  const execute = options.run ?? CLI.run
+  const version = await requireBuildCommand(execute, '/usr/bin/xcodebuild', { args: ['-version'], env: environment })
+  if (!/^Xcode \d/mu.test(version.stdout)) {
+    Errors.throwHostEnvironment(`The selected developer directory did not report an Xcode version: ${selected}`)
+  }
+  await requireBuildCommand(execute, '/usr/bin/xcodebuild', { args: ['-checkFirstLaunchStatus'], env: environment })
+  const resolved = await requireBuildCommand(execute, '/usr/bin/xcrun', {
+    args: ['--find', 'xcodebuild'],
+    env: environment,
+  })
+  if (resolved.stdout.trim() !== FS.resolvePath('usr/bin/xcodebuild', selected)) {
+    Errors.throwHostEnvironment(`xcrun did not select xcodebuild from ${selected}.`)
+  }
+  return environment
+}
+
+async function requireBuildCommand(
+  run: typeof CLI.run,
+  command: string,
+  spec: CLI.CommandSpec,
+): Promise<CLI.CommandResult> {
+  const result = await run(command, spec)
+  if (result.error !== undefined || result.exitCode !== 0 || result.signal !== null) {
+    Errors.throwHostEnvironment(
+      `${command} failed: ${result.stderr || result.stdout || result.error?.message || 'see command output'}`,
+    )
+  }
+  return result
 }
 
 async function assembleAndroid(root: string, packageRoot: string, architectures: readonly string[]): Promise<string> {
@@ -92,17 +159,17 @@ async function assembleAndroid(root: string, packageRoot: string, architectures:
  * and Intel Macs both run it — with Xcode's derived data kept inside the package's own `ios/`, so the
  * built app is found at a known path. CocoaPods needs a UTF-8 locale to read the podspecs.
  */
-async function buildIosSimulator(packageRoot: string): Promise<string> {
+async function buildIosSimulator(packageRoot: string, run: typeof CLI.run): Promise<string> {
   const iosRoot = FS.resolvePath('ios', packageRoot)
   HCI.writeLine(`Installing ${CompanionIdentity.name}'s pods.`)
-  await CLI.mustRun('pod', { args: ['install'], cwd: iosRoot, env: UTF8_LOCALE, stdio: 'inherit' })
+  await requireBuildCommand(run, 'pod', { args: ['install'], cwd: iosRoot, env: UTF8_LOCALE, stdio: 'inherit' })
 
   const workspace = (await FS.listDir(iosRoot)).find(name => name.endsWith('.xcworkspace'))
   if (workspace === undefined) {
     Errors.throwUnexpected(`Expected: expo prebuild leaves an Xcode workspace in ${FS.displayPath(iosRoot)}.`)
   }
   HCI.writeLine(`Building ${CompanionIdentity.name} for the iOS Simulator with xcodebuild.`)
-  const xcodebuild = await CLI.run('xcodebuild', {
+  const xcodebuild = await run('xcodebuild', {
     args: [
       '-workspace',
       workspace,
@@ -136,7 +203,7 @@ async function buildIosSimulator(packageRoot: string): Promise<string> {
     Errors.throwUnexpected(`Expected: xcodebuild leaves the built app in ${FS.displayPath(products)}.`)
   }
   const appPath = FS.resolvePath(app, products)
-  await requireSimulatorEntitlements(appPath)
+  await requireSimulatorEntitlements(appPath, run)
   return appPath
 }
 
@@ -147,11 +214,11 @@ async function buildIosSimulator(packageRoot: string): Promise<string> {
  * build without the section would pass that module's guard and then abort inside CloudKit. It is
  * refused here instead, where the cause is still visible.
  */
-async function requireSimulatorEntitlements(appPath: string): Promise<void> {
-  const executable = await CLI.mustRun('plutil', {
+async function requireSimulatorEntitlements(appPath: string, run: typeof CLI.run): Promise<void> {
+  const executable = await requireBuildCommand(run, 'plutil', {
     args: ['-extract', 'CFBundleExecutable', 'raw', FS.resolvePath('Info.plist', appPath)],
   })
-  const loadCommands = await CLI.mustRun('otool', {
+  const loadCommands = await requireBuildCommand(run, 'otool', {
     args: ['-l', FS.resolvePath(executable.stdout.trim(), appPath)],
   })
   if (!/sectname __entitlements\b/u.test(loadCommands.stdout)) {
@@ -368,19 +435,24 @@ async function companionVersion(packageRoot: string): Promise<string> {
  * cache meanwhile finds the old host, then none, then the new one — never an APK without its
  * manifest or a manifest describing a different APK.
  */
-async function placeHost(hostDirectory: string, binaryPath: string, manifest: HostManifest): Promise<void> {
+async function placeHost(
+  hostDirectory: string,
+  binaryPath: string,
+  manifest: HostManifest,
+  run: typeof CLI.run,
+): Promise<void> {
   const staging = `${hostDirectory}.staging-${Platform.randomUUID()}`
   await FS.mkdir(staging)
-  await copyHostBinary(binaryPath, FS.resolvePath(HOST_BINARIES[manifest.platform], staging))
+  await copyHostBinary(binaryPath, FS.resolvePath(HOST_BINARIES[manifest.platform], staging), run)
   await writeHostManifest(staging, manifest)
   await FS.remove(hostDirectory)
   await FS.move(staging, hostDirectory)
 }
 
 /** An app bundle is copied with `ditto`, which keeps its symbolic links, modes, and signature intact. */
-async function copyHostBinary(from: string, to: string): Promise<void> {
+async function copyHostBinary(from: string, to: string, run: typeof CLI.run): Promise<void> {
   if (await FS.isDirectory(from)) {
-    await CLI.mustRun('ditto', { args: [from, to] })
+    await requireBuildCommand(run, 'ditto', { args: [from, to] })
   } else {
     await FS.copyFile(from, to)
   }

@@ -84,6 +84,32 @@ development path for interactive use.
 hard-coded app ID in `WordFlower.tao`; it needs no local server. The hosted app must exist in the
 Instant dashboard before using this variant on a device.
 
+### The hosted Instant app's schema and admin token
+
+Since `fd4c1012`, both InstantDB variants store one InstantDB row per Tao row. The hosted app still
+holds the schema and rows of the earlier snapshot adapter, and `WordFlowerInstantDB` has not run
+against it since the switch. Before the next hosted run, push WordFlower's schema and rules with
+that app's admin token (Instant dashboard, the app's Admin tab) in `INSTANT_APP_ADMIN_TOKEN`:
+
+```sh
+./agent tao instantdb push "Apps/WordFlower/1 - Current/WordFlower.tao" --app WordFlowerInstantDB --dry-run
+./agent tao instantdb push "Apps/WordFlower/1 - Current/WordFlower.tao" --app WordFlowerInstantDB
+```
+
+- The push compiles the app and applies the compiler's `TaoDataSchema.json` and, when the project
+  declares `access` rules, `TaoDataPolicy.json`. WordFlower declares none, so the push makes every
+  namespace public; whether it should refuse instead is an open question under `A20` in
+  `Docs/MVP Roadmap/Agent MVP Roadmap.md`. The snapshot rows are not migrated.
+- The repository secret store holds no token for this app. `AUTH_REVIEW_INSTANT_APP_ID` and
+  `AUTH_REVIEW_INSTANT_ADMIN_TOKEN` belong to Auth Review's Instant app, which `just instant-review`
+  pushes and runs. `just secrets` decrypts the store into `.env.secrets`, where the two app IDs can
+  be compared.
+- If Auth Review's app ID is WordFlower's (`9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f`), do not push:
+  an Instant app holds one permission-rules document, so each app's push replaces the other's
+  rules. Give WordFlower an app of its own first.
+- To make this a one-liner like `instant-review`, store the token with
+  `just secrets add WORDFLOWER_INSTANT_ADMIN_TOKEN` and add a recipe that pushes with it (`A20`).
+
 For local development, `WordFlowerLocalInstantDB` uses the repository's fixture at
 `http://localhost:9020` with the same seeded app ID. Start that fixture before launching it:
 

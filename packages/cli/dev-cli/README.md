@@ -1,4 +1,4 @@
-# Repository lanes
+# Repository development workflows
 
 How `check`, `verify`, `verify-full`, and `./agent test` behave when several worktrees of this
 repository are working at once. `packages/testing/verification` owns the scheduler and the gate
@@ -36,6 +36,12 @@ headset setup. `--simulator --runtime-version <version>` selects the separate si
 `--device`, `--team`, and `--bundle-id` make choices explicit; `--json` suppresses interactive
 prompts. A simulator never counts as a paired headset. An unknown readiness field, failed native
 command, or missing launch process ID remains incomplete.
+
+For iOS, interactive `--apply` waits if the requested Xcode archive is missing; download Apple's
+`.xip` into Downloads, then press Enter to rescan or type `q` to stop. It rechecks first-launch
+readiness after Xcode's prompts and the exact installed runtime after a Components download. JSON
+and noninteractive runs report those steps without waiting. Child commands use the selected Xcode
+through `DEVELOPER_DIR`; neither setup command changes the global `xcode-select` setting.
 
 See [VisionHello's guided workflow](../../../Apps/VisionHello/README.md) for examples, manual
 Device Hub steps, signing prerequisites, retained diagnostics, and the physical acceptance boundary.

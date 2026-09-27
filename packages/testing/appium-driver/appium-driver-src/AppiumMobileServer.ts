@@ -11,21 +11,31 @@ import {
 export async function startMobileAppiumServer(options: {
   artifactRoot: string
   driver: 'uiautomator2' | 'xcuitest'
+  environment?: Readonly<Record<string, string | undefined>>
   quiet?: boolean
   runId: string
-}): Promise<AppiumServer> {
-  await ensureAppiumDriver(options.driver, options.artifactRoot)
-  return await startAppiumServer({
+}, dependencies: {
+  ensureDriver?: typeof ensureAppiumDriver
+  startServer?: typeof startAppiumServer
+} = {}): Promise<AppiumServer> {
+  const environment = mobileAppiumEnvironment(options.artifactRoot, {
+    ...Platform.runtimeProcess.env,
+    ...options.environment,
+  })
+  await (dependencies.ensureDriver ?? ensureAppiumDriver)(options.driver, environment)
+  return await (dependencies.startServer ?? startAppiumServer)({
     command: appiumCommand(),
-    environment: mobileAppiumEnvironment(options.artifactRoot),
+    environment,
     reservations: appiumPortReservations(options.runId),
     quiet: options.quiet,
   })
 }
 
-async function ensureAppiumDriver(driver: 'uiautomator2' | 'xcuitest', artifactRoot: string): Promise<void> {
+async function ensureAppiumDriver(
+  driver: 'uiautomator2' | 'xcuitest',
+  environment: Record<string, string | undefined>,
+): Promise<void> {
   const command = appiumCommand()
-  const environment = mobileAppiumEnvironment(artifactRoot)
   const home = environment['APPIUM_HOME']!
   const packageName = `appium-${driver}-driver`
   const source = await FS.realPath(Repo.resolvePath(`packages/testing/appium-driver/node_modules/${packageName}`))

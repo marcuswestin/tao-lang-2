@@ -385,7 +385,7 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('inverseField: "Workspace"')
     Expect(compiled.code).toContain('defaultValue: false')
     Expect(compiled.code).toContain('defaultValue: true')
-    Expect(compiled.code.match(/onDelete: 'cascade'/g)).toHaveLength(2)
+    Expect(compiled.code.match(/onDelete: "cascade"/g)).toHaveLength(2)
     Expect(compiled.code).toContain('inverseField: "Document"')
     Expect(compiled.code).toContain('TR.Data.Configure(_Scope.__tao_type_Local, {')
     Expect(compiled.code).toContain('"StorageKey": TR.Value("WordFlowerData")')
@@ -496,12 +496,44 @@ Describe('compiler: language lowering', () => {
     // Membership is structural: it partitions the catalog and never crosses the provider boundary.
     Expect(compiled.code).not.toContain('"Data":')
     // A reference stores the target's unique value rather than a row handle in this store.
-    Expect(compiled.code).toContain("kind: 'reference'")
+    Expect(compiled.code).toContain('kind: "reference"')
     Expect(compiled.code).toContain('store: "Stories"')
     // The project's stores are linked, so a reference resolves among them and nowhere else.
     Expect(compiled.code).toContain(
       'TR.Data.LinkStores([_Scope._TaoDataCatalog_Bookmarks, _Scope._TaoDataCatalog_Stories])',
     )
+    // The stored shape of each store is also written for tools that provision a backend, without the
+    // runtime-only keys such as defaults.
+    const stored = compiled.files.find(file => file.relativePath === 'TaoDataSchema.json')
+    Expect(JSON.parse(stored?.code ?? '{}')).toEqual({
+      stores: {
+        Bookmarks: {
+          name: 'Bookmarks',
+          schemaVersion: 1,
+          entities: {
+            Bookmark: {
+              collection: 'Bookmarks',
+              fields: {
+                Note: { kind: 'text' },
+                Story: { kind: 'reference', relation: 'Story', referenceField: 'HnId', store: 'Stories' },
+              },
+              inverseFields: {},
+            },
+          },
+        },
+        Stories: {
+          name: 'Stories',
+          schemaVersion: 1,
+          entities: {
+            Story: {
+              collection: 'Stories',
+              fields: { HnId: { kind: 'number', unique: true }, Title: { kind: 'text' } },
+              inverseFields: {},
+            },
+          },
+        },
+      },
+    })
   })
 
   Test('gives collection sets with the same underscore join distinct store identities', async () => {
@@ -720,6 +752,10 @@ Describe('compiler: language lowering', () => {
 
     Expect(compiled.code).toContain("_Scope._TaoDataCatalog = TR.Data.Schema({\n  name: 'Data',")
     Expect(compiled.code).toContain("_Scope._TaoLocalDataCatalog = TR.Data.Schema({\n  name: 'LocalData',")
+    // Rows that never leave the device have no stored schema for a backend to provision.
+    const stored = JSON.parse(compiled.files.find(file => file.relativePath === 'TaoDataSchema.json')?.code ?? '{}')
+    Expect(Object.keys(stored.stores)).toEqual(['Data'])
+    Expect(Object.keys(stored.stores.Data.entities)).toEqual(['Note'])
     // The synced catalog keeps only the synced entity, and the local catalog only the local one.
     Expect(compiled.code.slice(compiled.code.indexOf("name: 'Data',"), compiled.code.indexOf("name: 'LocalData',")))
       .toContain('collection: "Notes"')

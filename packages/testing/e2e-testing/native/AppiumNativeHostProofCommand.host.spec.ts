@@ -6,9 +6,80 @@ import {
   cleanupAppiumNativeHostProof,
   parseAndroidAvdName,
   requireNativeNavigationHosts,
+  runIosBuildOnly,
   shouldReleaseAppiumTargetLease,
 } from '../AppiumNativeHostProofCommand'
 import { type HostJourney, runHostJourney } from '../journey/HostJourney'
+
+test('build-only installs and exports with scoped Xcode, releases its lease, and retains the app for inspection', async () => {
+  const events: string[] = []
+  const receipts: unknown[] = []
+  const environment = { DEVELOPER_DIR: '/Applications/Xcode-beta.app/Contents/Developer' }
+  const request = {
+    kind: 'native',
+    mode: 'ios',
+    device: 'simulator',
+    subject: 'native-navigation',
+    seed: 1,
+    browserChannel: 'chrome',
+    buildOnly: true,
+    output: '/retained',
+  } as const
+  const context = { artifactRoot: '/artifacts', environment, playwright: '', runId: 'run-id' }
+  const build = { appId: 'unique-app', root: '/build', compiledArtifactDigest: 'compiled', entrySourceDigest: 'source' }
+  await runIosBuildOnly(request, context, build, {
+    acquire: async () => {
+      events.push('acquire')
+      return {
+        release: async () => {
+          events.push('release')
+        },
+      }
+    },
+    install: async (platform, device, preparation, env) => {
+      expect([platform, device, preparation, env]).toEqual(['ios', 'simulator', build, environment])
+      events.push('install')
+    },
+    appPath: async () => '/build/Review.app',
+    exportApp: async input => {
+      expect(input).toEqual({
+        appPath: '/build/Review.app',
+        output: '/retained',
+        environment,
+        appId: 'unique-app',
+        runId: 'run-id',
+      })
+      events.push('export')
+    },
+    writeReceipt: async (_path, receipt) => {
+      receipts.push(receipt)
+      events.push('receipt')
+    },
+  })
+  expect(events).toEqual(['acquire', 'install', 'export', 'receipt', 'release'])
+  expect(receipts).toEqual([
+    expect.objectContaining({
+      status: 'installed',
+      mode: 'build-install-only',
+      appId: 'unique-app',
+      acceptance: 'Build and simulator installation only; no launch, visual inspection, or journey acceptance claimed.',
+    }),
+  ])
+  const failed: unknown[] = []
+  await expect(runIosBuildOnly(request, context, build, {
+    acquire: async () => ({
+      release: async () => {
+        events.push('failed-release')
+      },
+    }),
+    install: async () => Errors.throwHostEnvironment('build failed'),
+    writeReceipt: async (_path, receipt) => {
+      failed.push(receipt)
+    },
+  })).rejects.toThrow('build failed')
+  expect(failed).toEqual([expect.objectContaining({ status: 'failed', failure: 'build failed' })])
+  expect(events.at(-1)).toBe('failed-release')
+})
 
 test("escapes Android control query separators for adb's device-side shell parse", () => {
   expect(androidShellUrl('taohost://control?runId=one&advanceMs=1000')).toBe(

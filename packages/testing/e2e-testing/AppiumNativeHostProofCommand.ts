@@ -17,6 +17,7 @@ import { runAppiumAndroidHostProof } from './native/appium-android/AppiumAndroid
 import { runAppiumIosHostProof } from './native/appium/AppiumIosHostProof'
 import { createAppiumXcuiTestController, iosTargetLeaseName } from './native/appium/AppiumXcuiTestController'
 import { appiumAndroidClient, appiumXcuiTestClient } from './native/AppiumMobileClients'
+import { exportNativeIosApp } from './native/NativeIosAppExport'
 
 type AppiumMobilePlatform = 'android' | 'ios'
 type AppiumProof =
@@ -36,6 +37,9 @@ export async function runAppiumNativeHostProofCommand(
     seed: request.seed,
     subject: request.subject,
   })
+  if (request.buildOnly) {
+    return await runIosBuildOnly(request, context, preparation)
+  }
   const revision: HostRevision = Object.freeze({
     build: preparation.compiledArtifactDigest,
     source: preparation.entrySourceDigest,
@@ -48,12 +52,26 @@ export async function runAppiumNativeHostProofCommand(
   let proofFailure: unknown
   let cleanupFailures: readonly AppiumCleanupFailure[] = []
   try {
-    await buildAndInstall(platform, request.device, preparation)
-    server = await startMobileAppiumServer({ artifactRoot: context.artifactRoot, driver, runId: context.runId })
+    await buildAndInstall(platform, request.device, preparation, context.environment)
+    if (request.output !== undefined) {
+      await exportNativeIosApp({
+        appPath: await builtIosAppPath(preparation),
+        output: request.output,
+        environment: context.environment,
+        appId: preparation.appId,
+        runId: context.runId,
+      })
+    }
+    server = await startMobileAppiumServer({
+      artifactRoot: context.artifactRoot,
+      driver,
+      environment: context.environment,
+      runId: context.runId,
+    })
     await FS.writeText(FS.resolvePath('appium/server.url.txt', context.artifactRoot), `${server.url}\n`)
     const factory = createAppiumWebDriverClient(createAppiumHttpTransport({ serverUrl: server.url }))
     const fault = preparation.fault === undefined ? undefined : appiumFault(preparation.fault.kind, journey)
-    const control = nativeClockControl(platform, request.device, preparation, context.runId)
+    const control = nativeClockControl(platform, request.device, preparation, context.runId, context.environment)
     proof = platform === 'ios'
       ? await runAppiumIosHostProof({
         artifactRoot: context.artifactRoot,
@@ -95,7 +113,7 @@ export async function runAppiumNativeHostProofCommand(
       releaseTargetLease: shouldReleaseAppiumTargetLease(proof),
       server,
       targetLease,
-      uninstall: async () => await uninstall(platform, request.device, preparation.appId),
+      uninstall: async () => await uninstall(platform, request.device, preparation.appId, context.environment),
     })
   }
   if (proofFailure !== undefined) {
@@ -125,6 +143,66 @@ export async function runAppiumNativeHostProofCommand(
     })
   }
   await reportProof(request, context, preparation, proof!)
+}
+
+/** Installs a review build and deliberately leaves it on the simulator; this proves no UI journey. */
+export async function runIosBuildOnly(
+  request: SimulatorNativeHostTestingRequest,
+  context: HostTestingContext,
+  preparation: HostBuild,
+  dependencies: {
+    acquire?: (...args: Parameters<typeof acquireTargetLease>) => Promise<Pick<MachineResourceLease, 'release'>>
+    install?: typeof buildAndInstall
+    exportApp?: typeof exportNativeIosApp
+    appPath?: typeof builtIosAppPath
+    writeReceipt?: typeof FS.writeJson
+  } = {},
+): Promise<void> {
+  if (request.mode !== 'ios') {
+    Errors.throwUserInput('--build-only is supported only for ios.')
+  }
+  const lease = await (dependencies.acquire ?? acquireTargetLease)(
+    'ios',
+    request.device,
+    preparation.appId,
+    context.runId,
+  )
+  const writeReceipt = dependencies.writeReceipt ?? FS.writeJson
+  const receipt = {
+    mode: 'build-install-only',
+    appId: preparation.appId,
+    device: request.device,
+    runId: context.runId,
+    developerDir: context.environment['DEVELOPER_DIR'],
+    output: request.output,
+    acceptance: 'Build and simulator installation only; no launch, visual inspection, or journey acceptance claimed.',
+    cleanup: 'Installed app retained for Developer inspection; remove only after inspection is finished.',
+  }
+  try {
+    await (dependencies.install ?? buildAndInstall)('ios', request.device, preparation, context.environment)
+    if (request.output !== undefined) {
+      await (dependencies.exportApp ?? exportNativeIosApp)({
+        appPath: await (dependencies.appPath ?? builtIosAppPath)(preparation),
+        output: request.output,
+        environment: context.environment,
+        appId: preparation.appId,
+        runId: context.runId,
+      })
+    }
+    await writeReceipt(FS.resolvePath('build-install-only.json', context.artifactRoot), {
+      ...receipt,
+      status: 'installed',
+    })
+  } catch (error) {
+    await writeReceipt(FS.resolvePath('build-install-only.json', context.artifactRoot), {
+      ...receipt,
+      status: 'failed',
+      failure: Errors.messageOf(error),
+    })
+    throw error
+  } finally {
+    await lease.release()
+  }
 }
 
 export type AppiumCleanupFailure = Readonly<{ error: unknown; operation: string }>
@@ -320,7 +398,12 @@ export function appiumFault(
     : { expectedAssertion: expected, kind }
 }
 
-async function buildAndInstall(platform: AppiumMobilePlatform, device: string, build: HostBuild): Promise<void> {
+async function buildAndInstall(
+  platform: AppiumMobilePlatform,
+  device: string,
+  build: HostBuild,
+  environment: Platform.ProcessEnv,
+): Promise<void> {
   const expo = FS.resolvePath('node_modules/.bin/expo', build.root)
   const androidDeviceName = platform === 'android' ? await androidExpoDeviceName(device) : undefined
   const args = platform === 'ios'
@@ -339,7 +422,7 @@ async function buildAndInstall(platform: AppiumMobilePlatform, device: string, b
     args,
     cwd: build.root,
     env: {
-      ...Platform.runtimeProcess.env,
+      ...environment,
       CI: '1',
       EXPO_NO_DOTENV: '1',
       TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: Repo.resolvePath('packages/apps/expo-host'),
@@ -355,7 +438,7 @@ async function buildAndInstall(platform: AppiumMobilePlatform, device: string, b
     })
   }
   if (platform === 'ios') {
-    await CLI.mustRun('xcrun', { args: ['simctl', 'install', device, await builtIosAppPath(build)] })
+    await CLI.mustRun('xcrun', { args: ['simctl', 'install', device, await builtIosAppPath(build)], env: environment })
   }
   if (platform === 'android' && !await FS.isFile(androidApkPath(build))) {
     Errors.throwHostEnvironment(`Expo completed without the expected release APK: ${androidApkPath(build)}`)
@@ -434,6 +517,7 @@ function nativeClockControl(
   device: string,
   build: HostBuild,
   runId: string,
+  environment: Platform.ProcessEnv,
 ) {
   const controlUrl = (request: Readonly<{ milliseconds: number; runId: string }>): string => {
     if (request.runId !== runId) {
@@ -446,7 +530,7 @@ function nativeClockControl(
     async advance(request: Readonly<{ milliseconds: number; runId: string }>) {
       const url = controlUrl(request)
       if (platform === 'ios') {
-        await CLI.mustRun('xcrun', { args: ['simctl', 'openurl', device, url] })
+        await CLI.mustRun('xcrun', { args: ['simctl', 'openurl', device, url], env: environment })
       } else {
         await CLI.mustRun('adb', {
           args: [
@@ -473,9 +557,14 @@ export function androidShellUrl(url: string): string {
   return url.replaceAll('&', '\\&')
 }
 
-async function uninstall(platform: AppiumMobilePlatform, device: string, appId: string): Promise<void> {
+async function uninstall(
+  platform: AppiumMobilePlatform,
+  device: string,
+  appId: string,
+  environment: Platform.ProcessEnv,
+): Promise<void> {
   const result = platform === 'ios'
-    ? await CLI.run('xcrun', { args: ['simctl', 'uninstall', device, appId] })
+    ? await CLI.run('xcrun', { args: ['simctl', 'uninstall', device, appId], env: environment })
     : await CLI.run('adb', { args: ['-s', device, 'uninstall', appId] })
   if (result.error !== undefined || (result.exitCode !== 0 && !result.stderr.includes('not installed'))) {
     Errors.throwHostEnvironment(`Could not uninstall the isolated ${platform} application '${appId}'.`, {

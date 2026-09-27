@@ -207,6 +207,13 @@ writes against the resulting relationship state, and commits a multi-row submiss
 Its durable operation receipts make retrying the same accepted submission idempotent. A client
 query, filtered UI, or cached snapshot is not an authorization boundary.
 
+Beside the policy, the compiler emits `TaoDataSchema.json`: each synced store's stored shape, keyed
+by store name. It lists every entity's collection, stored fields (kind, enum cases, optionality,
+index, uniqueness, relation or reference target, and cascade), inverse fields, and unique
+constraints, and leaves out what only the client reads, such as defaults, titles, and required
+sentences. Device-only stores have none. Tools that provision a backend read it instead of lowering
+the source again; `tao instantdb push` does.
+
 ### Local reference integration
 
 `LocalAuth` in `@tao/auth/local` and `Reference` in `@tao/data/providers/reference` connect to the
