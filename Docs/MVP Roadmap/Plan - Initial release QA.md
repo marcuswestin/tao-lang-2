@@ -47,6 +47,19 @@ under `.artifacts/tests/studio-smoke/`; request logs, credentials, and screensho
 A green simulator journey is automated evidence only. Physical-device LAN behavior, real registration,
 and the distributed TestFlight build retain their separate acceptance boundaries.
 
+The separate phone-review regression runs the actual `clerk-review --no-browser` command with stored
+development credentials, its LAN gateway, and the unchanged authored **Fill email / Fill password**
+values. It does not provision a replacement account, change the password, or write profile/note data.
+It checks password sign-in and signs out only its simulator session. A provider-required verification
+challenge fails this unattended journey rather than being bypassed. It remains an explicit live lane:
+
+```sh
+TAO_CLERK_LIVE=1 ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/clerk-ios-review.test.ts
+```
+
+This covers the manual review setup that the disposable-account journey intentionally replaces.
+It still does not prove physical-device network permissions or the installed phone binary.
+
 ### Tags
 
 - **A** — an agent can run the whole story and judge the observable result from the released surface.
