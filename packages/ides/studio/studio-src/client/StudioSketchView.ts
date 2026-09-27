@@ -6,6 +6,7 @@ import type {
 } from '../StudioProjectSession'
 import type { StudioSketch, StudioSketchRect } from '../StudioSketchCatalog'
 import { canvasScale, isStudioTypingTarget } from './matrix/StudioCanvasViewport'
+import { studioDrawLiveHeight } from './matrix/StudioDrawLiveCells'
 import { type StudioFeedDrop, StudioFeedTransfer } from './StudioFeedController'
 import type { StudioFeedExampleValues, StudioFeedSample } from './StudioFeedSamples'
 import { StudioSketchBadge, type StudioSketchConvertIntent } from './StudioSketchBadge'
@@ -92,6 +93,8 @@ export type StudioSketchViewOptions = Readonly<{
   onCreateSketch?: (input: Readonly<{ height: number; width: number; x: number; y: number }>) => Promise<void> | void
   /** onDeleteRects deletes free rectangles from one sketch and answers with the catalog's sketches afterwards. */
   onDeleteRects?: (sketchId: string, rectIds: readonly string[]) => Promise<readonly StudioSketch[]>
+  /** dropInto lets a whole frame be dragged onto another view's running cell to render its view there. */
+  dropInto?: StudioSketchDropInto
   onFeedDrop?: (payload: StudioFeedDrop, sketchId: string, rectId?: string) => Promise<void>
   onError?: (error: unknown) => void
   onFlowAction?: (request: StudioSketchViewFlowActionRequest) => Promise<StudioSketchSnapApplyResult>
@@ -116,6 +119,19 @@ export type StudioSketchViewOptions = Readonly<{
   exampleValues?: StudioFeedExampleValues
   sourceVersion?: string
   sourceVersions?: Readonly<Record<string, string>>
+}>
+
+/** Viewport coordinates, as a pointer event reports them. */
+type StudioSketchClientPoint = Readonly<{ x: number; y: number }>
+
+/**
+ * Where a dragged frame can land besides the canvas: `target` names the running cell under the point
+ * that would take it, if any, which the frame carries while it hovers, and `drop` renders the frame's
+ * view into that cell's view.
+ */
+export type StudioSketchDropInto = Readonly<{
+  drop: (point: StudioSketchClientPoint, sketch: StudioSketch) => Promise<void>
+  target: (point: StudioSketchClientPoint, sketch: StudioSketch) => string | undefined
 }>
 
 type StudioSketchViewSnapRequest = Readonly<{
@@ -923,8 +939,12 @@ export const StudioSketchView = {
         // The capture was already gone.
       }
       delete drag.frame.dataset['taoStudioSketchMoving']
+      delete drag.frame.dataset['taoStudioSketchDropInto']
       gestureLock.end()
     }
+    /** The view a frame released at this point would be rendered into, when it is over another's running cell. */
+    const dropIntoTarget = (sketch: StudioSketch, event: PointerEvent): string | undefined =>
+      options.dropInto?.target({ x: event.clientX, y: event.clientY }, sketch)
     /**
      * attachFrame makes a root rectangle selectable and movable as a whole: its header selects it and
      * drags it, a card's body selects it, and a right-click or Control-click anywhere on it opens its menu.
@@ -982,6 +1002,12 @@ export const StudioSketchView = {
         if (next.drag.moved) {
           frame.style.left = `${next.x}px`
           frame.style.top = `${next.y}px`
+          const into = dropIntoTarget(sketch, event)
+          if (into === undefined) {
+            delete frame.dataset['taoStudioSketchDropInto']
+          } else {
+            frame.dataset['taoStudioSketchDropInto'] = into
+          }
         }
       })
       name.addEventListener('pointerup', event => {
@@ -996,6 +1022,16 @@ export const StudioSketchView = {
           frame.style.left = `${sketch.x}px`
           frame.style.top = `${sketch.y}px`
           endFrameDrag(drag)
+          return
+        }
+        // Released over another view's running cell, the frame renders there and stays where it was.
+        if (options.dropInto !== undefined && dropIntoTarget(sketch, event) !== undefined) {
+          frame.style.left = `${sketch.x}px`
+          frame.style.top = `${sketch.y}px`
+          endFrameDrag(drag)
+          void options.dropInto.drop({ x: event.clientX, y: event.clientY }, sketch).catch(error =>
+            options.onError?.(error)
+          )
           return
         }
         frame.style.left = `${next.x}px`
@@ -1489,7 +1525,9 @@ function renderSketch(
   dropTarget.style.border = '1px dashed currentColor'
   dropTarget.style.display = 'flex'
   dropTarget.style.justifyContent = 'center'
-  dropTarget.style.minHeight = '44px'
+  // In Draw the view's running cell is laid over this slot, which grows to the cell's height.
+  dropTarget.dataset['taoStudioDrawLiveSlot'] = sketch.view
+  dropTarget.style.minHeight = `max(44px, var(${studioDrawLiveHeight}, 0px))`
   dropTarget.style.width = `${sketch.width}px`
   frame.append(name, board, dropTarget, toolbar)
   const gapIndicator = document.createElement('div')
@@ -1502,7 +1540,16 @@ function renderSketch(
     // the visible sibling target underneath the free-geometry overlay remains reachable.
     const targets = document.elementsFromPoint?.(event.clientX, event.clientY)
       ?? [document.elementFromPoint(event.clientX, event.clientY)].filter(candidate => candidate !== null)
-    return StudioSketchDragTarget.ownsAny(targets, sketch.id)
+    return StudioSketchDragTarget.ownsAny(targets, sketch.id) || overLiveSlot(event)
+  }
+  /** In Draw a filled slot lets pointers through to the boards around it, so hit testing cannot see it. */
+  const overLiveSlot = (event: PointerEvent): boolean => {
+    if (dropTarget.dataset['taoStudioDrawLiveFilled'] === undefined) {
+      return false
+    }
+    const rect = dropTarget.getBoundingClientRect()
+    return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top
+      && event.clientY <= rect.bottom
   }
   const moveRelease = (event: PointerEvent): StudioSketchMoveRelease => ({
     duplicate: duplicateSourceId !== undefined,

@@ -13,6 +13,7 @@ import {
   StudioSketchChanges,
   StudioSketchDragOneIn,
   StudioSketchDragTarget,
+  type StudioSketchDropInto,
   StudioSketchErrors,
   StudioSketchFlowControls,
   StudioSketchFrameDrag,
@@ -584,6 +585,48 @@ Test('mounted drag-one-in sees through its moved rectangle and holds capture unt
   await Promise.resolve()
   Expect(board.releasedPointers).toEqual([1])
   mounted.dispose()
+})
+
+Test('mounted drag-one-in finds a filled Draw slot by its bounds, since hit testing passes through it', () => {
+  const release = (filled: boolean): unknown[] => {
+    const dom = new SketchTestDocument()
+    const host = dom.createElement('main')
+    const requests: unknown[] = []
+    const mounted = StudioSketchView.mount(host as unknown as HTMLElement, {
+      onSnap: request => {
+        requests.push(request)
+        return Deferred<StudioSketchSnapApplyResult>().promise
+      },
+      sketches: [testSketch()],
+      sourceVersion: 'source-1',
+    })
+    const board = dom.find(host, 'taoStudioSketch', 'sketch-1')
+    const rect = dom.find(board, 'taoStudioSketchRect', 'back')
+    const dropTarget = dom.find(host, 'taoStudioSketchDropTarget', 'sketch-1')
+    if (filled) {
+      dropTarget.dataset['taoStudioDrawLiveFilled'] = 'true'
+    }
+    dropTarget.getBoundingClientRect = () => ({
+      bottom: 900,
+      height: 900,
+      left: 400,
+      right: 800,
+      toJSON: () => ({}),
+      top: 0,
+      width: 400,
+      x: 400,
+      y: 0,
+    })
+    // The running view is what lies under the pointer, so only the moved rectangle is hit.
+    dom.hitTest = [rect]
+    board.dispatch('pointerdown', pointer('pointerdown', rect, 1, 15, 15))
+    board.dispatch('pointermove', pointer('pointermove', rect, 1, 420, 30))
+    board.dispatch('pointerup', pointer('pointerup', rect, 1, 420, 30))
+    mounted.dispose()
+    return requests
+  }
+  Expect(release(true)).toHaveLength(1)
+  Expect(release(false)).toHaveLength(0)
 })
 
 // One button means two things, and which one it means is carried by a selector that an authoritative
@@ -1241,7 +1284,7 @@ function renderCard(): StudioSketch {
 }
 
 /** Mounts a drawn sketch and a render card with every whole-frame callback recorded. */
-function mountFrames() {
+function mountFrames(dropInto?: StudioSketchDropInto) {
   const restore = elementSlot.install({ configurable: true, value: SketchTestElement })
   const dom = new SketchTestDocument()
   const host = dom.createElement('main')
@@ -1270,6 +1313,7 @@ function mountFrames() {
       return [testSketch(), renderCard()].filter(sketch => sketch.id !== sketchId)
     },
     sketches: [testSketch(), renderCard()],
+    ...(dropInto === undefined ? {} : { dropInto }),
   })
   const frame = (id = 'sketch-1') => dom.find(host, 'taoStudioSketchFrame', id)
   const key = (value: string, target?: SketchTestElement): void => {
@@ -1447,6 +1491,44 @@ Test('mounted header drag moves the frame live and commits one move at the end',
     await settled()
     Expect(fixture.errors).toEqual([failure])
     Expect(frame().style).toMatchObject({ left: '84px', top: '54px' })
+  } finally {
+    fixture.dispose()
+  }
+})
+
+Test('mounted header drag onto a running view drops the frame into it and leaves the frame where it was', async () => {
+  const drops: unknown[] = []
+  // Anything right of x=250 is another view's running cell.
+  const fixture = mountFrames({
+    drop: async (point, sketch) => {
+      drops.push([point, sketch.id])
+    },
+    target: point => point.x > 250 ? 'cell-2' : undefined,
+  })
+  const { calls, dom, frame } = fixture
+  try {
+    const moving = frame()
+    const name = dom.find(moving, 'taoStudioSketchName', 'sketch-1')
+    name.dispatchTree(pointer('pointerdown', name, 5, 100, 10))
+    name.dispatchTree(pointer('pointermove', name, 5, 200, 10))
+    Expect(moving.dataset['taoStudioSketchDropInto']).toBeUndefined()
+    name.dispatchTree(pointer('pointermove', name, 5, 300, 10))
+    Expect(moving.dataset['taoStudioSketchDropInto']).toBe('cell-2')
+    name.dispatchTree(pointer('pointerup', name, 5, 300, 10))
+    await settled()
+    Expect(drops).toEqual([[{ x: 300, y: 10 }, 'sketch-1']])
+    // The drawing stays on the canvas where it was; only the running view gains a render.
+    Expect(calls).toEqual([])
+    Expect(frame().style).toMatchObject({ left: '24px', top: '24px' })
+    Expect(frame().dataset['taoStudioSketchDropInto']).toBeUndefined()
+    Expect(frame().dataset['taoStudioSketchMoving']).toBeUndefined()
+
+    // Released away from any running view, the same drag is an ordinary move.
+    name.dispatchTree(pointer('pointerdown', name, 6, 100, 10))
+    name.dispatchTree(pointer('pointermove', name, 6, 130, 20))
+    name.dispatchTree(pointer('pointerup', name, 6, 130, 20))
+    Expect(calls).toEqual([['move', { sketchId: 'sketch-1', x: 54, y: 34 }]])
+    Expect(drops).toHaveLength(1)
   } finally {
     fixture.dispose()
   }

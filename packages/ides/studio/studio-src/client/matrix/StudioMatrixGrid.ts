@@ -50,6 +50,10 @@ function reconcileMatrix<Item>(
       row.dataset['taoStudioGroupView'] = group.subjectView
       row.dataset['taoStudioGroupViewId'] = group.subjectViewId
     }
+    // A drawn view's row is what Draw lays under that view's frame on its canvas.
+    writeOptionalData(row, 'taoStudioGroupSketchView', group.sketchView)
+    writeOptionalData(row, 'taoStudioGroupSourcePath', group.sketchSourcePath)
+    writeOptionalData(row, 'taoStudioGroupSourceVersion', group.sketchSourceVersion)
     const heading = row.querySelector<HTMLElement>(':scope > .studio-preview-group-label')
       ?? document.createElement('h2')
     heading.className = 'studio-preview-group-label'
@@ -79,6 +83,14 @@ function reconcileMatrix<Item>(
   retireDepartedPreviewChildren(parent, canvas)
   applyCanvasFocus(parent)
   applyCanvasViewport(parent)
+}
+
+function writeOptionalData(element: HTMLElement, key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete element.dataset[key]
+  } else {
+    element.dataset[key] = value
+  }
 }
 
 /**
