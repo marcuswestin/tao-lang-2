@@ -40,7 +40,12 @@
   a captured verifier diagnosis. No cache-retention assertion failed before the lifecycle timeout.
   Checkout doctor remained usable but itself took 82.0s and observed another lane plus load 224.4.
   These failures do not establish a Hutch regression or an uncontended scheduling result; their
-  retry disposition must remain separate from the failed run.
+  retry disposition must remain separate from the failed run. `./agent test-retry` recovered the
+  Expo-host and account-server suites, but CLI, compiler, Studio, and validator nodes still failed.
+  Several 300s node deadlines reported after over 1,200s. The retry was interrupted with SIGINT
+  after 1,406.8s (exit 130), not accepted as green; log
+  `.artifacts/logs/agent/test-retry/2026-09-27T00-27-44-080Z-61621.log`. No uncontended control was
+  established, and nothing about that interruption settles the cause of the original failures.
 - **Workaround:** Verify when the machine is quiet, or read the `contention` block in
   `summary.json` before treating a slow lane as a regression.
 - **Proposed change:** Admit whole heavy lanes machine-wide in arrival order rather than splitting
