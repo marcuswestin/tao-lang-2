@@ -3,8 +3,8 @@ import { AST, codeProjectRoot, type ParsedFile } from '@parser'
 import { Assert, Errors, FS } from '@shared'
 import type { ValidationResult } from '@validator'
 import { authPolicy } from '../../auth-policy'
-import { storedDataSchemaFile, storedDataSchemas } from '../../stored-data-schema'
 import { BridgeMetadata } from '../../bridge-metadata'
+import { storedDataSchemaFile, storedDataSchemas } from '../../stored-data-schema'
 import {
   compileStudioPreviewManifest,
   studioPreviewManifestModule,
