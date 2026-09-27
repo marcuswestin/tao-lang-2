@@ -259,10 +259,14 @@ datasource supports, and `access` rules require `Auth`. Each error names the use
 `Reference` accepts Clerk tokens and LocalAuth sessions; `Memory` accepts only `TestIdentity`. Local,
 Dev, Http, iCloud, CloudKit, and the current InstantDB adapter accept nothing, so an app with `Auth`
 cannot bind them: client-side filtering is not remote authorization. The runtime repeats the pairing
-check when it binds a store. After the auth provider signs in, the datasource holding `Account`
-turns its proof into the application Account; the public session reports signed in only once that
-resolves, and a failed resolution is an error. Sign-out releases the datasource's session before the
-auth provider signs out.
+check whenever it chooses the datasource that resolves the signed-in Account. After the auth provider
+signs in, the datasource holding `Account` turns its proof into the application Account; the public
+session reports signed in only once that resolves, and a failed resolution is an error. Sign-out
+shows signed out at once, then releases the datasource's session before the auth provider signs out,
+waiting at most five seconds; a release still running then is abandoned, reported as an unconfirmed
+remote sign-out, and retried on the next sign-out. A sign-in or restoration waits for the provider
+sign-out in flight before contacting the provider. An account resolution still in flight when
+sign-out begins is released when it finishes, which can be after the provider has signed out.
 
 `Offline` declares the working set persisted by `Reference`; it is not permission to fetch a row.
 The current compiler supports the current account and its direct inverse collections, such as

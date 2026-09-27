@@ -212,6 +212,28 @@ Describe('Reference account resolution', () => {
     Expect(f.timers.every(timer => timer.cancelled)).toBe(true)
   })
 
+  Test('an aborted release cancels its revocation request and keeps the session for the retry', async () => {
+    const f = fixture()
+    const authentication = await f.authenticate()
+    const signals: NonNullable<RequestInit['signal']>[] = []
+    f.transport.respond = async (_url, options) => {
+      const request = options!.signal!
+      signals.push(request)
+      return await new Promise<Response>((_resolve, reject) => {
+        request.addEventListener('abort', () => reject(Errors.abortError('The revocation was cancelled.')))
+      })
+    }
+    const deadline = new AbortController()
+    const releasing = authentication.release!(deadline.signal)
+    await until(() => signals.length === 1)
+    deadline.abort()
+    await Expect(releasing).rejects.toThrow('could not confirm sign-out')
+    Expect(signals[0]!.aborted).toBe(true)
+    f.transport.respond = async () => Response.json({})
+    await authentication.release!(signal())
+    Expect(f.revoked()).toEqual([`Bearer ${token}`, `Bearer ${token}`])
+  })
+
   Test('uses the LocalAuth server session directly, without network or release', async () => {
     const f = fixture('LocalAuth')
     const session = { ...gatewaySession(), issuer: 'local', subject: 'alice', expiresAt: 600_000 }

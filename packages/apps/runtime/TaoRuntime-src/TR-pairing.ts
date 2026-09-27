@@ -3,7 +3,8 @@
  * blocks. An auth provider issues sign-in proofs of runtime-owned kinds; a datasource accepts kinds,
  * optionally only from named auth declarations, and lists the data capabilities it guarantees. The
  * compiler rejects an app whose Auth and Datasource cannot pair; the runtime repeats the pairing
- * check when it binds a store, so hand-written or stale generated code cannot skip it.
+ * check whenever it chooses the datasource to resolve the signed-in Account, so hand-written or stale
+ * generated code cannot skip it.
  */
 
 /** TaoAuthProofKind is the closed set of sign-in proof kinds an auth provider can issue. */

@@ -1,5 +1,6 @@
 import TR from '@runtime/TR'
-import { Deferred, Describe, Expect, Test, until } from '@shared/test'
+import { Deferred, Describe, Expect, settle, Test, until } from '@shared/test'
+import { RuntimeAuthScope } from '../TaoRuntime-src/TR-auth'
 import type { TaoDataConnectionObserver } from '../TaoRuntime-src/TR-data'
 import { HostEnvironmentError, onUnownedFailure } from '../TaoRuntime-src/TR-errors'
 
@@ -403,11 +404,112 @@ Describe('mounted app authentication', () => {
     harness.scope.dispose()
   })
 
+  Test(
+    'a sign-in during a pending release waits for the provider sign-out, which cannot end the new session',
+    async () => {
+      const events: string[] = []
+      const releasing = Deferred<void>()
+      let signedIn: string | undefined
+      const harness = authHarness({
+        restore: async () => {
+          signedIn = 'alice'
+          return alice
+        },
+        signIn: async () => {
+          events.push('provider signIn bob')
+          signedIn = 'bob'
+          return { outcome: { status: 'completed' }, session: bob }
+        },
+        signOut: async signal => {
+          events.push(`provider signOut of ${signedIn} aborted=${signal.aborted}`)
+          signedIn = undefined
+          return { status: 'completed' }
+        },
+      }, {
+        provider: {
+          authenticate: async context => ({
+            accountId: accountOf(context.principal),
+            release: async () => {
+              await releasing.promise
+              events.push(`release ${context.principal.subject}`)
+            },
+          }),
+        },
+      })
+      await harness.scope.restore()
+      const signingOut = harness.scope.signOut()
+      Expect(harness.scope.session).toEqual({ state: 'SignedOut' })
+      const signingIn = harness.scope.signIn(input)
+      await until(() => harness.scope.session.state === 'Authenticating')
+      await settle()
+      Expect(events).toEqual([])
+      releasing.resolve()
+      Expect(await signingIn).toEqual({ status: 'completed' })
+      Expect(await signingOut).toEqual({ status: 'cancelled' })
+      Expect(events).toEqual(['release alice', 'provider signOut of alice aborted=false', 'provider signIn bob'])
+      Expect(signedIn).toBe('bob')
+      Expect(harness.scope.session.identity?.accountId).toBe('account-b')
+      harness.scope.dispose()
+    },
+  )
+
+  Test(
+    'a release that outlasts its deadline is abandoned, the provider signs out, and the next sign-out retries it',
+    async () => {
+      const clock = manualTimers()
+      const order: string[] = []
+      const signals: AbortSignal[] = []
+      let hang = true
+      const harness = authHarness({
+        restore: async () => alice,
+        signOut: async () => {
+          order.push('provider')
+          return { status: 'completed' }
+        },
+      }, {
+        timers: clock.timers,
+        provider: {
+          authenticate: async () => ({
+            accountId: 'account-a',
+            release: async signal => {
+              order.push('release')
+              signals.push(signal)
+              if (hang) {
+                // A hung revoke that ignores its signal still cannot hold back the provider sign-out.
+                await new Promise<never>(() => undefined)
+              }
+            },
+          }),
+        },
+      })
+      await harness.scope.restore()
+      const signingOut = harness.scope.signOut()
+      await until(() => clock.pending.length === 1)
+      Expect(clock.pending[0]!.delayMs).toBe(5_000)
+      await settle()
+      Expect(order).toEqual(['release'])
+      clock.fire()
+      Expect(await signingOut).toEqual({
+        status: 'error',
+        message: 'Signed out on this device. Remote sign-out could not be confirmed.',
+      })
+      Expect(order).toEqual(['release', 'provider'])
+      Expect(signals[0]!.aborted).toBe(true)
+      hang = false
+      Expect(await harness.scope.signOut()).toEqual({ status: 'completed' })
+      Expect(order).toEqual(['release', 'provider', 'release', 'provider'])
+      Expect(signals[1]!.aborted).toBe(false)
+      Expect(clock.pending).toEqual([])
+      harness.scope.dispose()
+    },
+  )
+
   Test('stamps checked proofs and refuses expired, mismatched, and unissued ones', async () => {
     const cases: readonly [TR.AuthIssuedProof, TR.AuthPairing | undefined, string | undefined][] = [
       [{ kind: 'Session', issuer: 'local', subject: 'alice', value: { token: 't' } }, undefined, undefined],
       [{ kind: 'Session', issuer: 'local', subject: 'alice', value: {}, expiresAt: 0 }, undefined, 'expired'],
       [{ kind: 'Session', issuer: 'local', subject: 'bob', value: {} }, undefined, 'does not match'],
+      [{ kind: 'Session', issuer: 'elsewhere', subject: 'alice', value: {} }, undefined, 'does not match'],
       [{ kind: 'IdentityToken', issuer: 'local', subject: 'alice', token: 't' }, undefined, 'does not match'],
       [
         { kind: 'Session', issuer: 'local', subject: 'alice', value: {} },
@@ -1192,6 +1294,7 @@ type HarnessOptions = {
   declaration?: TR.DataSchema
   provider?: Partial<TR.DataProvider>
   testing?: true
+  timers?: ReturnType<typeof manualTimers>['timers']
 }
 
 /** authHarness mounts a deterministic auth provider over one bound account datasource. */
@@ -1220,7 +1323,7 @@ function authHarness(overrides: Partial<TR.AuthConnection> = {}, options: Harnes
     ),
     {},
   )
-  const scope = TR.Auth.CreateScope(source)
+  const scope = options.timers ? new RuntimeAuthScope(source, options.timers) : TR.Auth.CreateScope(source)
   const declaration = options.declaration ?? TR.Data.Schema(definition)
   const contexts = options.contexts ?? []
   const data = dataSource(contexts, options.provider, options.dataPairing)
@@ -1236,6 +1339,32 @@ function authHarness(overrides: Partial<TR.AuthConnection> = {}, options: Harnes
     emit: (session: TR.AuthConnectionSession) => listener?.(session),
     closed: () => closed,
     stopped: () => stopped,
+  }
+}
+
+/** manualTimers records scheduled callbacks so a test fires the release deadline itself. */
+function manualTimers() {
+  const pending: { callback: () => void; delayMs: number }[] = []
+  return {
+    pending,
+    timers: {
+      clearTimeout: (handle: unknown) => {
+        const index = pending.findIndex(timer => timer === handle)
+        if (index >= 0) {
+          pending.splice(index, 1)
+        }
+      },
+      setTimeout: (callback: () => void, delayMs: number) => {
+        const timer = { callback, delayMs }
+        pending.push(timer)
+        return timer
+      },
+    },
+    fire: () => {
+      for (const timer of pending.splice(0)) {
+        timer.callback()
+      }
+    },
   }
 }
 

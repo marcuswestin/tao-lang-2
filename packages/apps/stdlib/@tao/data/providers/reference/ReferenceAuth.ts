@@ -87,7 +87,8 @@ async function gatewayAuthentication(
   let accountId: string | undefined
   const active = (): boolean => !released && !context.signal.aborted
 
-  function revoke(value: AccountProtocol.Session): Promise<void> {
+  /** revoke ends one gateway session; a revocation already running is joined rather than repeated. */
+  function revoke(value: AccountProtocol.Session, signal?: AbortSignal): Promise<void> {
     const running = revocations.get(value.token)
     if (running) {
       return running
@@ -97,6 +98,7 @@ async function gatewayAuthentication(
         method: 'POST',
         headers: { Authorization: `Bearer ${value.token}`, 'Content-Type': 'application/json' },
         body: '{}',
+        ...(signal ? { signal: signal as NonNullable<Parameters<typeof fetch>[1]>['signal'] } : {}),
       })
       Assert.input(response.ok || response.status === 401, 'The account gateway could not confirm sign-out.')
       sessions.delete(value.token)
@@ -193,12 +195,14 @@ async function gatewayAuthentication(
       Assert.input(current !== undefined && current.expiresAt > now(), 'Sign in again to access account data.')
       return current.token
     },
-    release: async () => {
+    // The runtime aborts `signal` when a release outlasts its deadline; the unrevoked sessions stay
+    // recorded, so the next release retries them.
+    release: async signal => {
       released = true
       cancelRefresh?.()
       cancelRefresh = undefined
       current = undefined
-      const results = await Promise.allSettled([...sessions.values()].map(revoke))
+      const results = await Promise.allSettled([...sessions.values()].map(value => revoke(value, signal)))
       Assert.input(
         results.every(result => result.status === 'fulfilled'),
         'The account gateway could not confirm sign-out.',

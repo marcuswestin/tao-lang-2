@@ -152,7 +152,24 @@ type AccountAttempt = {
   token: number
 }
 type PendingState = 'Authenticating' | 'Restoring'
+/** PendingRelease is one running data-side release; the controller abandons it at the deadline. */
+type PendingRelease = Readonly<{ controller: AbortController; running: Promise<void> }>
+/** AuthTimers schedules the release deadline; tests inject timers they fire themselves. */
+type AuthTimers = Readonly<{
+  clearTimeout(handle: unknown): void
+  setTimeout(callback: () => void, delayMs: number): unknown
+}>
 
+/**
+ * releaseDeadlineMs bounds how long a sign-out waits for data-side releases before the provider signs
+ * out. A release is one revoke round trip, so five seconds admits a slow mobile network, while a hung
+ * one cannot hold back the provider's sign-out, and its durable record, for longer than that.
+ */
+const releaseDeadlineMs = 5_000
+const hostTimers: AuthTimers = {
+  clearTimeout: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+}
 const restoreFailed = 'Unable to restore your session.'
 const signInFailed = 'Unable to sign in. Please try again.'
 const remoteSignOutUnconfirmed = 'Signed out on this device. Remote sign-out could not be confirmed.'
@@ -209,8 +226,11 @@ export class RuntimeAuthScope {
   /** pendingState is how the in-progress account resolution presents: restoring or signing in. */
   private pendingState: PendingState = 'Authenticating'
   /** unreleased holds data-side sessions to end; a failed release is retried on the next sign-out. */
-  private readonly unreleased = new Map<TaoDataAuthentication, Promise<void> | undefined>()
-  private readonly releaseSignal = new AbortController().signal
+  private readonly unreleased = new Map<TaoDataAuthentication, PendingRelease | undefined>()
+  /** signingOut settles once every provider sign-out in flight has finished; sign-ins wait for it. */
+  private signingOut: Promise<void> | undefined
+  /** providerSessions counts provider sign-ins and restores, so a sign-out never ends a newer session. */
+  private providerSessions = 0
   private signingIn = false
   private dataAuth: TaoDataAuthBinding | undefined
   private cleanup: Promise<boolean> = Promise.resolve(true)
@@ -231,7 +251,7 @@ export class RuntimeAuthScope {
   readonly subscribe = this.changes.subscribe
   readonly snapshot = this.changes.snapshot
 
-  constructor(readonly source?: TaoConfiguredAuth) {
+  constructor(readonly source?: TaoConfiguredAuth, private readonly timers: AuthTimers = hostTimers) {
     this.current = source ? Object.freeze({ state: 'Restoring' }) : signedOut
   }
 
@@ -312,6 +332,10 @@ export class RuntimeAuthScope {
     let resolving: Promise<void>
     try {
       const connection = this.connect()
+      if (this.signingOut && !(await this.afterProviderSignOut(operation.generation))) {
+        return
+      }
+      this.providerSessions += 1
       const session = await connection.restore(operation.signal)
       if (!this.isCurrent(operation.generation)) {
         return
@@ -349,6 +373,10 @@ export class RuntimeAuthScope {
     let result: TaoAuthResult
     try {
       void this.accept({ state: 'Authenticating' })
+      if (this.signingOut && !(await this.afterProviderSignOut(operation.generation))) {
+        return cancelled
+      }
+      this.providerSessions += 1
       result = await connection.signIn(input, operation.signal)
       if (!this.isCurrent(operation.generation)) {
         return cancelled
@@ -415,12 +443,11 @@ export class RuntimeAuthScope {
 
   /** abandonProviderSession signs the provider out of a sign-in the app did not accept. */
   private abandonProviderSession(): void {
-    const connection = this.connection
-    if (!connection) {
+    if (!this.connection) {
       return
     }
     void trackAuthOperation(
-      Promise.resolve().then(() => connection.signOut(new AbortController().signal)).catch(error => {
+      this.signOutProvider(Promise.resolve()).catch(error => {
         warnContainedFailure('Abandoning an unaccepted sign-in failed.', error)
         return cancelled
       }),
@@ -441,14 +468,14 @@ export class RuntimeAuthScope {
     void this.accept(signedOut)
     this.finishPresentation(cancelled)
     const cleanup = this.cleanup
+    const releasing = this.releaseBeforeSignOut()
     try {
-      const released = await this.releasePending()
-      const outcome = await this.connection?.signOut(operation.signal) ?? completed
+      const outcome = await this.signOutProvider(releasing)
       const cleaned = await cleanup
       if (!this.isCurrent(operation.generation)) {
         return cancelled
       }
-      if (!released) {
+      if (!(await releasing)) {
         return { status: 'error', message: remoteSignOutUnconfirmed }
       }
       return cleaned
@@ -460,6 +487,41 @@ export class RuntimeAuthScope {
         ? { status: 'error', message: remoteSignOutUnconfirmed }
         : cancelled
     }
+  }
+
+  /**
+   * signOutProvider signs the provider out once `before` settles. Sign-ins and restores wait for it
+   * before contacting the provider, so it cannot end the next user's session; should one have reached
+   * the provider anyway, it leaves that session alone. A later operation does not cancel it: the
+   * signal it passes never aborts, because an explicit sign-out must still reach the provider.
+   */
+  private signOutProvider(before: Promise<unknown>): Promise<TaoAuthOutcome> {
+    const connection = this.connection
+    const sessions = this.providerSessions
+    const signingOut = before.then(() => {
+      if (!connection) {
+        return completed
+      }
+      return sessions === this.providerSessions ? connection.signOut(new AbortController().signal) : cancelled
+    })
+    const settled: Promise<void> = Promise.allSettled([this.signingOut, signingOut]).then(() => {
+      if (this.signingOut === settled) {
+        this.signingOut = undefined
+      }
+    })
+    this.signingOut = settled
+    return signingOut
+  }
+
+  /** afterProviderSignOut waits out every provider sign-out in flight; false once `generation` is superseded. */
+  private async afterProviderSignOut(generation: number): Promise<boolean> {
+    while (this.signingOut) {
+      await this.signingOut
+      if (!this.isCurrent(generation)) {
+        return false
+      }
+    }
+    return this.isCurrent(generation)
   }
 
   /**
@@ -674,7 +736,9 @@ export class RuntimeAuthScope {
     this.unwatch()
     this.finishPresentation(cancelled)
     this.current = signedOut
-    // Unmounting keeps the data-side session for the next launch to restore; it is not a sign-out.
+    // Unmounting is not a sign-out: nothing is released and the provider stays signed in for the next
+    // launch to restore. A datasource session held only in memory, such as a Reference gateway
+    // session, is not restored; the next launch resolves a new one and the old one expires.
     this.principal = undefined
     this.authentication = undefined
     this.attempt = undefined
@@ -914,7 +978,8 @@ export class RuntimeAuthScope {
         return
       }
       if (token !== this.attemptToken) {
-        // Superseded before it was handed out: end the backend session it created.
+        // Superseded before it was handed out: end the backend session it created. A sign-out does
+        // not wait for a resolution in flight, so this release can follow the provider's sign-out.
         this.queueRelease(result)
         void this.releasePending()
         return
@@ -1035,22 +1100,53 @@ export class RuntimeAuthScope {
   /** releasePending ends every queued data-side session; a failure stays queued for the next sign-out. */
   private releasePending(): Promise<boolean> {
     return Promise.all([...this.unreleased.keys()].map(result => {
-      let running = this.unreleased.get(result)
-      if (!running) {
-        running = Promise.resolve().then(() => result.release!(this.releaseSignal)).then(
+      let pending = this.unreleased.get(result)
+      if (!pending) {
+        const controller = new AbortController()
+        const running: Promise<void> = Promise.resolve().then(() => result.release!(controller.signal)).then(
           () => {
             this.unreleased.delete(result)
           },
           error => {
-            this.unreleased.set(result, undefined)
+            // A release abandoned at the deadline is already queued again; a retry may be running.
+            if (this.unreleased.get(result)?.running === running) {
+              this.unreleased.set(result, undefined)
+            }
             warnContainedFailure('Remote account sign-out could not be confirmed.', error)
             throw error
           },
         )
-        this.unreleased.set(result, running)
+        pending = { controller, running }
+        this.unreleased.set(result, pending)
       }
-      return running.then(() => true, () => false)
+      return pending.running.then(() => true, () => false)
     })).then(results => results.every(Boolean))
+  }
+
+  /**
+   * releaseBeforeSignOut waits at most `releaseDeadlineMs` for the queued releases. At the deadline it
+   * aborts the ones still running and queues them again, so the next sign-out retries them.
+   */
+  private releaseBeforeSignOut(): Promise<boolean> {
+    const releasing = this.releasePending()
+    if (this.unreleased.size === 0) {
+      return releasing
+    }
+    return new Promise(resolve => {
+      const deadline = this.timers.setTimeout(() => {
+        for (const [result, pending] of this.unreleased) {
+          if (pending) {
+            this.unreleased.set(result, undefined)
+            pending.controller.abort()
+          }
+        }
+        resolve(false)
+      }, releaseDeadlineMs)
+      void releasing.then(released => {
+        this.timers.clearTimeout(deadline)
+        resolve(released)
+      })
+    })
   }
 
   private invalidateIdentity(): void {
