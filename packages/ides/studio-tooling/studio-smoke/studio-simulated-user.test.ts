@@ -208,6 +208,11 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         const rect = frame.getBoundingClientRect()
         return { height: rect.height, width: rect.width }
       })()`)
+      await browser.clickAtOffset('.studio-preview-cell .studio-preview-activation-shield', {
+        x: transformedFrame.width * 0.72,
+        y: transformedFrame.height * 0.62,
+      })
+      await browser.waitFor(`document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`)
       await browser.clickAtOffset('.studio-preview-cell iframe', {
         x: transformedFrame.width * 0.72,
         y: transformedFrame.height * 0.62,

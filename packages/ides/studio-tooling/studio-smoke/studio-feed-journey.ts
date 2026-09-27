@@ -53,6 +53,10 @@ export async function exerciseStudioFeed(
   const beforeCatalog = await session.sketchCatalog()
   const board = `[data-tao-studio-sketch="${sketchId}"]`
   await browser.click('[data-preset="design"]')
+  if (await browser.evaluate<boolean>(`document.querySelector('.studio-interaction-mode')?.dataset.mode === 'run'`)) {
+    await browser.click('.studio-interaction-mode')
+  }
+  await browser.waitFor(`document.querySelector('.studio-interaction-mode')?.dataset.mode === 'edit'`)
   await browser.pressShortcut('k')
   await browser.insertText('show data')
   await browser.waitFor(`document.querySelector('.studio-command-result strong')?.textContent === 'Show Data'`)
