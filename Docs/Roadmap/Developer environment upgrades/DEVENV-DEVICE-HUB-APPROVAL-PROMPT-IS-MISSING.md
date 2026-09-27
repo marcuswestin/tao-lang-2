@@ -110,3 +110,37 @@ Split View, keyboard, and active-presentation matrix remains unrun, with no manu
 supplied. Evidence and resource ownership are retained in the task checkout's
 `.artifacts/duo-acceptance/disposition.md`. The source of the effective policy remains unknown;
 no saved permission, generated configuration, or global Xcode selection was changed.
+
+## Independent Duo completion check — 2026-09-27 UTC
+
+The clean `feat/iphone-duo-completion` checkout branched from the requested
+`a66fd77290f8ccb98706cdcb915e470304bba732`, leaving `feat/iphone-duo-acceptance` unchanged.
+Its effective session instructions again specify `workspace-write` and approval policy `never`.
+One supported app-selection request for
+`/Applications/Xcode-27.1.app/Contents/Applications/DeviceHub.app` returned exactly:
+
+```text
+Computer Use was not approved to use Device Hub
+```
+
+UI acceptance stopped at that denial; no alternate control or capture route was attempted.
+Neither HNReaderStub nor Native Navigation was observed rendering. Closed outer display, open
+inner portrait/landscape, book/tabletop folds, both Split View sides, keyboard, and active
+sheet/dialog continuity all remain unverified. No demonstrated visual defect justified a
+compatibility change.
+
+The separate named `./agent unsandboxed capabilities` operation succeeded and reported no
+sandbox detected, unlike the prior task. `setup-ios --xcode-version 27.1 --runtime-version 27.1`
+reported ready, and simulator inventory found Duo shutdown with its expected UDID. These shell
+results do not grant access to Device Hub. A later JSON setup probe with output redirection was
+refused before host dispatch as still sandboxed; it was not retried with another spelling.
+Current evidence and cleanup ownership live in this checkout's
+`.artifacts/duo-acceptance/disposition.md`.
+
+The merged Companion was rebuilt successfully in this checkout using scoped Xcode 27.1
+(`27A9269`) and `iphonesimulator27.1` (`24A94403`), for arm64 and x86_64. Its manifest and
+binary hashes are retained in `.artifacts/duo-acceptance/build-receipt.json`; the host is at
+`.artifacts/hosts/1.0.0-f05fbf78600c/ios-simulator`. It was not installed or visually accepted.
+The global developer selection remains `/Applications/Xcode.app/Contents/Developer`.
+No older host was found in the inspected local caches, and a release API request returned 404;
+an older compatible published host and old-SDK comparison remain unestablished.
