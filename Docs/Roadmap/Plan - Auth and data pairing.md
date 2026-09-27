@@ -28,9 +28,10 @@ Settled with the Developer on 2026-09-27:
    features without running TypeScript.
 4. **No email identity rule in the language.** Each auth provider decides whether email
    verification is required; unverified accounts allow guest and temporary accounts that work at
-   once. A datasource that keys identity by email may refuse unverified proofs: the InstantDB
-   datasource accepts a Clerk `IdentityToken` only when its email is verified, because InstantDB
-   looks users up by email.
+   once. A datasource may still refuse unverified proofs where its identity depends on email. The
+   InstantDB datasource does not need to: InstantDB matches a Clerk user by verified email _or_ by
+   the Clerk subject, and drops an unverified email rather than refusing the token, so an unverified
+   Clerk account becomes an InstantDB user keyed by its subject alone.
 5. **The snapshot InstantDB adapter is replaced** by a per-row adapter, and WordFlower moves to it.
    The hosted demo's snapshot-shaped data is abandoned.
 
@@ -141,5 +142,19 @@ trimmed by the language slice:
 
 - Choose or create the Instant Cloud app and store its app ID and admin token in the repository
   secret store.
-- In Clerk, add `email` and `email_verified` claims to the session token; register the Clerk
-  publishable key as an InstantDB auth client.
+- In Clerk, add `email` and `email_verified` claims to the session token (InstantDB reads
+  `email_verified` as a boolean); register the Clerk publishable key as an InstantDB auth client.
+
+## InstantDB facts this plan rests on
+
+Checked against `@instantdb/react-native` 1.0.22 and the InstantDB server source on 2026-09-27.
+
+- InstantDB keeps its session independently of Clerk; the app must sign out of InstantDB itself.
+  The data side's `release` does this before the auth provider signs out.
+- InstantDB persists its session in AsyncStorage, not secure storage.
+- `signInAsGuest()` takes no arguments in 1.0.22. Signing a guest in by email keeps the guest's
+  user ID when the email is new and links the guest to the existing user when it is not.
+- Tests obtain a magic code from local InstantDB with `POST /admin/magic_code`, and act as a user
+  with the `as-email`, `as-token`, or `as-guest` admin headers.
+- Instant Cloud closed new signups and shuts down on 2027-08-31. Whether an existing account can
+  still create apps is unconfirmed.
