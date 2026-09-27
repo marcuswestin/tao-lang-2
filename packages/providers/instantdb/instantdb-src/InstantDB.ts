@@ -168,6 +168,32 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
         storeView = projected.snapshot
         observer?.snapshot(projected.snapshot)
       }
+      /** write sends one commit as one atomic transaction; 'none' when the commit changed no row. */
+      const write = async (
+        snapshot: string,
+        intents: readonly TR.DataWriteIntent[],
+        writeContext: TR.DataWriteContext | undefined,
+      ): Promise<'enqueued' | 'none' | 'synced'> => {
+        const operations = rowOperations(
+          mapping,
+          context.schema,
+          writeContext?.previousSnapshot ?? storeView,
+          snapshot,
+          intents,
+          identities,
+        )
+        nextId = Math.max(nextId, snapshotNextId(snapshot))
+        storeView = snapshot
+        if (operations.length === 0) {
+          return 'none'
+        }
+        try {
+          // 'enqueued' is success too: the SDK holds the transaction durably until it reconnects.
+          return (await core.transact(operations.map(operation => chunkOf(sdk, operation)))).status
+        } catch (error) {
+          throw serverFailure('save', error)
+        }
+      }
 
       return {
         close: () => {
@@ -243,26 +269,12 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
         referenceToken: reference => identities.remote(reference.id),
         resolveReference: reference => identities.local(reference.token),
         save: async (snapshot, intents = [], writeContext) => {
-          const operations = rowOperations(
-            mapping,
-            context.schema,
-            writeContext?.previousSnapshot ?? storeView,
-            snapshot,
-            intents,
-            identities,
-          )
-          nextId = Math.max(nextId, snapshotNextId(snapshot))
-          storeView = snapshot
-          if (operations.length === 0) {
-            return
-          }
-          try {
-            // 'enqueued' is success too: the SDK holds the transaction durably until it reconnects.
-            await core.transact(operations.map(operation => chunkOf(sdk, operation)))
-          } catch (error) {
-            throw serverFailure('save', error)
-          }
+          await write(snapshot, intents, writeContext)
         },
+        // A profile form waits for the server's receipt; an offline transaction is only queued.
+        submit: async (snapshot, intents = [], writeContext) => ({
+          status: await write(snapshot, intents, writeContext) === 'enqueued' ? 'queued' : 'saved',
+        }),
         subscribe: next => {
           observer = next
           const replay = missedResult

@@ -54,6 +54,15 @@ Describe('InstantAuth signing in to InstantDB through the runtime (requires TAO_
       })
       Expect(TR.IsIncomplete(account, required).jsValue).toBe(true)
 
+      // Completing the profile waits for InstantDB's receipt, then reads back as complete.
+      Expect(await TR.Auth.SaveProfile(alice.scope, account, { DisplayName: TR.Value('Alice') })).toEqual({
+        status: 'completed',
+      })
+      Expect((await app.queryAs('alice@example.test', 'accounts')).map(row => row['displayName'])).toEqual(['Alice'])
+      await until(() => TR.IsIncomplete(account, required).jsValue === false, {
+        description: "alice's completed profile to load",
+      })
+
       TR.Data.Create(alice.store, 'Note', {
         Body: TR.Value('alice private'),
         Owner: TR.Value(alice.store.entity('Account', aliceId)),
