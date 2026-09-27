@@ -1,6 +1,6 @@
 import React from 'react'
 import { RuntimeAssert } from './TR-assert'
-import type { TaoDataAuthBinding } from './TR-auth'
+import type { TaoAuthPrincipal, TaoAuthProof, TaoDataAuthBinding } from './TR-auth'
 import { entityHandle, metadataOf } from './TR-data-entity'
 import { UnboundConnection } from './TR-data-provider'
 import {
@@ -24,6 +24,7 @@ import type { TaoSyncWriteRecovery } from './TR-data-sync'
 import { type Evaluable, evaluatedFields } from './TR-data-values'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { canonicalDescriptor } from './TR-navigation-identity'
+import type { TaoAuthProofKind, TaoDataPairing } from './TR-pairing'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import { StudioEnvironmentControls } from './TR-studio-environment'
 import { useStudioLensScope } from './TR-studio-lens'
@@ -226,10 +227,40 @@ export type TaoDataProviderContext = Readonly<{
   storageKey: string
 }>
 
+/**
+ * TaoDataAuthenticationContext is what the datasource holding `Account` receives once the auth
+ * provider reports a signed-in principal. `provider` is the auth declaration's name; `proof` pulls a
+ * fresh sign-in proof the runtime has checked against the principal, the declaration, and expiry.
+ * `signal` aborts when this principal's data access ends; `testing` marks a testing auth provider.
+ */
+export type TaoDataAuthenticationContext = Readonly<{
+  configuration: Readonly<Record<string, unknown>>
+  schema: TaoDataSchemaDefinition
+  principal: TaoAuthPrincipal
+  provider: string
+  proof<KindT extends TaoAuthProofKind>(
+    kind: KindT,
+    signal: AbortSignal,
+  ): Promise<Extract<TaoAuthProof, { kind: KindT }>>
+  signal: AbortSignal
+  testing?: true
+}>
+
+/**
+ * TaoDataAuthentication is the application account a datasource resolved. `credential` is the
+ * datasource's own transport credential source, and `release` ends any backend session the exchange
+ * created; the runtime calls it before the auth provider signs out and retries it after a failure.
+ */
+export type TaoDataAuthentication = Readonly<{
+  accountId: string
+  credential?(signal: AbortSignal): Promise<string>
+  release?(signal: AbortSignal): Promise<void>
+}>
+
 /** TaoDataProvider is the clean package boundary implemented by Local, Memory, and remote providers. */
 export type TaoDataProvider = {
-  /** Server providers enforce resource credentials and grants; test authority requires TestAuth. */
-  authenticatedAuthority?: 'server' | 'test'
+  /** Resolves a signed-in principal to an account; a datasource without it cannot hold an Auth app's data. */
+  authenticate?(context: TaoDataAuthenticationContext): Promise<TaoDataAuthentication>
   connect(context: TaoDataProviderContext): TaoDataConnection
   /** Test stand-ins model remote saves or local snapshots awaiting background upload. */
   testNetwork?: 'deferred' | 'remote'
@@ -252,6 +283,7 @@ export type TaoDatasourceDeclaration = Readonly<{
   canonicalIdentity?: TaoDeclarationIdentity
   identity: symbol
   name: string
+  pairing?: TaoDataPairing
   provider: TaoDataProvider
 }>
 
@@ -367,11 +399,13 @@ export const DataControls = {
     name: string,
     provider: TaoDataProvider,
     canonicalIdentity?: TaoDeclarationIdentity,
+    pairing?: TaoDataPairing,
   ): TaoDatasourceDeclaration {
     return Object.freeze({
       ...(canonicalIdentity ? { canonicalIdentity } : {}),
       identity: Symbol(name),
       name,
+      ...(pairing ? { pairing } : {}),
       provider,
     })
   },

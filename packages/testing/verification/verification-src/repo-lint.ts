@@ -530,7 +530,6 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:510',
   'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:511',
   'packages/shared/shared-tests/test-helpers.test.ts:45',
-  'packages/providers/instantdb/instantdb-tests/InstantDB.test.ts:60',
   'packages/ides/studio/studio-tests/studio-server-datasource.test.ts:204',
 ]
 

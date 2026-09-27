@@ -1,6 +1,6 @@
-import { Errors, HCI } from '@shared'
+import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
-import type { TaoDevApp, TaoDevProject } from './dev-app-discovery'
+import { discoverTaoDevProjects, type TaoDevApp, type TaoDevProject } from './dev-app-discovery'
 
 const NUMBERED_APP_CHOICES = 9
 const QUIT_KEY = 'Q'
@@ -64,6 +64,36 @@ export async function selectTaoDevApp(
       printChoicePrompt(options)
     }
   }, options)
+}
+
+/**
+ * chooseTaoApp resolves the one app a single-shot command acts on: the `--app` name, the only app
+ * under the path, or a choice made at the terminal. `activity` names the command in a cancellation.
+ */
+export async function chooseTaoApp(path: string, appName: string | undefined, activity: string): Promise<TaoDevApp> {
+  const projects = await discoverTaoDevProjects(path)
+  const apps = projects.flatMap(project => project.apps)
+  if (apps.length === 0) {
+    Errors.throwUserInput(`No runnable Tao apps found under ${FS.displayPath(FS.resolvePath(path))}.`)
+  }
+  if (appName !== undefined) {
+    const matches = apps.filter(app => app.appName === appName)
+    if (matches.length !== 1) {
+      Errors.throwUserInput(`--app '${appName}' must identify exactly one runnable app (${matches.length} found).`)
+    }
+    return matches[0]!
+  }
+  if (apps.length === 1) {
+    return apps[0]!
+  }
+  if (!HCI.isInteractive()) {
+    Errors.throwUserInput('Multiple Tao apps found; choose one with --app in a non-interactive terminal.')
+  }
+  const selected = await selectTaoDevApp(projects)
+  if (selected.kind !== 'selected') {
+    Errors.throwUserInput(`${activity} app selection was cancelled.`)
+  }
+  return selected.app
 }
 
 /** keyForChoiceIndex labels choices 1-9 followed by A-Z, reserving Q for quit. */

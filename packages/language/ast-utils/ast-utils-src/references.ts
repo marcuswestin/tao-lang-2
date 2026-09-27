@@ -1,8 +1,12 @@
 import { AST } from '@parser'
 import { Type } from './Type'
 
-/** referencedNames returns the external and unresolved names used in `file` outside of use statements. */
-export function referencedNames(file: AST.TaoFile): Set<string> {
+/**
+ * referencedNames returns the external and unresolved names used in `file` outside of use statements.
+ * `runtimeOnly` leaves out the auth provider types named by `accepts { Kind from Auth }`: pairing
+ * compares that type by name, so naming it needs no runtime import of its module.
+ */
+export function referencedNames(file: AST.TaoFile, options: { runtimeOnly?: boolean } = {}): Set<string> {
   const names = new Set<string>()
   for (const node of AST.streamAllContents(file)) {
     if (AST.isUseStatement(node)) {
@@ -27,7 +31,7 @@ export function referencedNames(file: AST.TaoFile): Set<string> {
         names.add(AST.caseSetOwningCase(target).name)
       }
     }
-    if (AST.isNamedTypeReference(node)) {
+    if (AST.isNamedTypeReference(node) && !(options.runtimeOnly && AST.isConfigurationAcceptedProof(node.$container))) {
       names.add(node.root)
     }
     if (AST.isEntityDataField(node) && !node.primitive && !node.boolean) {

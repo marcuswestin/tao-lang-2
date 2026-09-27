@@ -6,7 +6,8 @@ import "./terminals"
 
 entry ConfigurationGrammarEntrypoint:
     // Includes declaration-contract helpers consumed from `types` so Langium marks them reachable.
-    NavDeclaration | DatasourceDeclaration | ConfigurationDeclarationBlock;
+    NavDeclaration | DatasourceDeclaration | ConfigurationDeclarationBlock | ConfigurationIssues | ConfigurationAccepts
+    | ConfigurationSupports;
 
 NavDeclaration:
     visibility=DeclarationVisibility? 'nav' name=ID ('=' value=Expression | block=ConfigurationBlock);
@@ -35,5 +36,27 @@ ConfigurationImplementation:
 
 ConfigurationImplementationProtocol returns string:
     'nav' | 'provider';
+
+// Pairing: an auth provider type issues sign-in proofs, and a datasource type accepts proofs and
+// supports data capabilities. Proof kinds, capabilities, and levels are closed vocabularies parsed
+// as `ID` and validated against their tables, so none of those words becomes a keyword.
+ConfigurationIssues:
+    'issues' '{' (proofs+=ConfigurationIssuedProof (',' proofs+=ConfigurationIssuedProof)*)? '}';
+
+ConfigurationIssuedProof:
+    kind=ID;
+
+ConfigurationAccepts:
+    'accepts' '{' (proofs+=ConfigurationAcceptedProof (',' proofs+=ConfigurationAcceptedProof)*)? '}';
+
+// `from` names the auth provider type the proof must come from.
+ConfigurationAcceptedProof:
+    kind=ID ('from' issuer=NamedTypeReference)?;
+
+ConfigurationSupports:
+    'supports' '{' (capabilities+=ConfigurationCapability (',' capabilities+=ConfigurationCapability)*)? '}';
+
+ConfigurationCapability:
+    capability=ID level=ID?;
 
 type PrimitiveValueDeclaration = NavDeclaration | DatasourceDeclaration;
