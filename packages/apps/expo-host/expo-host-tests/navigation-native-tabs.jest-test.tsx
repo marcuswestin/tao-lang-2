@@ -27,6 +27,7 @@ Describe('native tab reconciliation', () => {
     const nativeModule: NativeNavigationModule = screens
     Expect(typeof nativeModule.Tabs!.Host).toBe('function')
     Expect(typeof screens.Tabs.Screen).toBe('function')
+    Expect(typeof nativeModule.ScreenStackHeaderCenterView).toBe('function')
   })
 
   Test('blocks native and late selection while covered and acknowledges prevented requests', () => {

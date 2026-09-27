@@ -655,7 +655,7 @@ type StudioPreviewSchemeMessage = {
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   scheme: Readonly<{
-    capability: 'fixed-light-native' | typeof reactiveBrowserSchemeCapability
+    capability: 'fixed-light-native' | 'pinned-native' | 'reactive-catalyst' | typeof reactiveBrowserSchemeCapability
     requested: 'dark' | 'light' | 'system'
     resolved: 'dark' | 'light'
     source: 'native-fixed' | 'preference' | 'scenario' | 'system'
@@ -1193,7 +1193,9 @@ function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage
   if (
     identity === undefined
     || !isObject(scheme)
-    || !['fixed-light-native', reactiveBrowserSchemeCapability].includes(String(scheme['capability']))
+    || !['fixed-light-native', 'pinned-native', 'reactive-catalyst', reactiveBrowserSchemeCapability].includes(
+      String(scheme['capability']),
+    )
     || !['dark', 'light', 'system'].includes(String(scheme['requested']))
     || !['dark', 'light'].includes(String(scheme['resolved']))
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(String(scheme['source']))
@@ -1203,6 +1205,8 @@ function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage
     || (scheme['source'] === 'native-fixed' && scheme['capability'] !== 'fixed-light-native')
     || (scheme['capability'] === 'fixed-light-native'
       && (scheme['resolved'] !== 'light' || scheme['source'] !== 'native-fixed'))
+    || (scheme['capability'] === 'pinned-native'
+      && (scheme['source'] !== 'scenario' || scheme['resolved'] !== scheme['requested']))
   ) {
     return undefined
   }
