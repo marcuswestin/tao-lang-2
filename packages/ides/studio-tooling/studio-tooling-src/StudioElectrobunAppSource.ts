@@ -290,7 +290,7 @@ export function mainSource(): string {
       const url = new URL(target)
       url.searchParams.set('native-window', kind.toLowerCase())
       const window = new BrowserWindow({
-        title: kind === 'Welcome' ? 'Tao Studio' : 'Tao Studio — Project',
+        title: (process.env.TAO_STUDIO_APP_NAME ?? 'Tao Studio') + (kind === 'Welcome' ? '' : ' — Project'),
         url: url.href,
         hidden: forceHidden || !showWindows,
         frame: { x: kind === 'Welcome' ? 120 : 180, y: kind === 'Welcome' ? 100 : 140, width: 1400, height: 900 },
