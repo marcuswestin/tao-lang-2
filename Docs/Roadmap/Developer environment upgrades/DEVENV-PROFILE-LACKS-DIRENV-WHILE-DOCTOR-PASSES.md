@@ -5,7 +5,7 @@
 - **Area:** Shared development profile, linked worktrees, verification diagnostics
 - **Impact:** Finalization fails in the real direnv activation test even though doctor reports the checkout usable.
 - **Evidence:** On 2026-09-27, `feat/iphone-duo-acceptance` at `c21b2226eeba` ran `./agent unsandboxed finalize`. Verification failed in `packages/cli/dev-cli/dev-cli-tests/direnv-activation.test.ts:63` resolving `.devenv/profile/bin/direnv`, with `ENOENT`. The checkout profile links to the primary checkout's profile; direct inspection confirmed that the primary profile also lacks `bin/direnv`. `./agent doctor` then passed its profile check and reported the checkout usable. The finalization log is retained in the task checkout at `.artifacts/logs/agent/finalize/2026-09-27T06-06-22-861Z-89838.log`. This establishes missing profile content and a diagnostic gap, not whether the current pinned environment or an older materialized profile caused it.
-- **Workaround:** The Developer reported completing the supported environment rebuild on September 27; the finish checkout now resolves direnv and Hutch. The missing-tool symptom is recovered, while a separate real-direnv reload assertion and the diagnostic acceptance remain unresolved. Coordinate any future shared-profile replacement with its users.
+- **Workaround:** The Developer reported completing the supported environment rebuild on September 27; the finish checkout now resolves direnv and Hutch. The missing-tool symptom is recovered. The separate real-direnv fixture now gives its initial file an older modification time, and the focused integration test passes; incomplete-profile diagnostic acceptance remains unresolved. Coordinate any future shared-profile replacement with its users.
 - **Proposed change:** Compare the materialized shared profile with the pinned environment in a separate environment-recovery slice. Restore the expected profile through the supported environment setup workflow if stale, and make doctor diagnose tools required by real environment tests.
 - **Dependencies:** A supported environment setup session and coordination with users of the shared primary profile.
 - **Acceptance:** Doctor names the missing required tool in an incomplete profile; the real direnv activation test and finalization succeed with the supported pinned profile.
@@ -63,3 +63,25 @@ case and the selected lane, with evidence at
 That differing result does not explain the earlier failure or establish reliable reload behavior.
 The historical full-run timeout exceptions and broad readiness remain outstanding, separately
 from Device Hub's application-access denial.
+
+## Deterministic real-direnv fixture — 2026-09-27 UTC
+
+The 22:17 UTC selected lane and a subsequent focused run reproduced the absent second
+loading/export messages. The focused runner tolerated its failure based on earlier outcome
+reversals; its successful wrapper exit was not a passing raw test. Direnv 2.37.1's
+[watch implementation](https://github.com/direnv/direnv/blob/v2.37.1/internal/cmd/file_times.go)
+stores and compares modification times with whole-second `Unix()` values. Its
+[export command](https://github.com/direnv/direnv/blob/v2.37.1/internal/cmd/cmd_export.go)
+can skip reloading when those watches have not changed. The exact timestamps of the failing
+run were not captured, so this establishes a mechanism consistent with the failures rather
+than measuring the collision in that instance.
+
+The real-direnv integration fixture now sets its initial configuration's modification time to
+2000-01-01 before the first activation. The script's existing overwrite produces a distinct
+whole-second timestamp without sleeping. All stderr, exported-value, exit-status, completion,
+and unload assertions remain unchanged; no production shell behavior changed. The focused
+post-edit run at 22:20 UTC passed all eight tests, including the real-direnv case, without skips
+or tolerated failures. Evidence:
+`.artifacts/logs/dev-test/2026-09-27T22-20-14-441Z-7787-bc881ef4/cli_dev-cli.log`.
+This verifies reload after an observable timestamp change; it does not add a promise of
+same-second content-only reloads. Doctor's missing-required-tool diagnostic remains unverified.

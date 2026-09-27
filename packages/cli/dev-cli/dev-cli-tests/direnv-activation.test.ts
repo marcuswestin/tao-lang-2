@@ -219,6 +219,8 @@ print -r -- "created|$TAO_TEST_ACTIVE"
     async () => {
       const test = await fixture(true)
       try {
+        // Direnv watches whole-second mtimes; make the script's rewrite observably newer.
+        await FS.setModifiedTimeMs(FS.resolvePath('.envrc', test.root), Date.UTC(2000, 0, 1))
         Expect(
           await runShell(
             test,
