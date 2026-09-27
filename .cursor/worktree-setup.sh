@@ -7,4 +7,5 @@
 # worktrees.json is plain JSON with no room for comments, which is why this script exists.
 set -e
 cd "${0:A:h}/.."
+export TAO_DEV_SHELL_SETUP=0
 exec devenv shell --no-tui ./agent setup
