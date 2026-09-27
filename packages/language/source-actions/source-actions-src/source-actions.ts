@@ -88,10 +88,15 @@ const SourceActions = {
 
 export type { SourceActionOptions }
 export {
+  type StudioAddRenderScenarioPatchRequest,
   type StudioAddSketchEntityParameterPatchRequest,
   type StudioAppendScenarioStepsPatchRequest,
   type StudioBindSketchFieldPatchRequest,
+  type StudioClearLayoutEntryPatchRequest,
   type StudioComponentKind,
+  type StudioCopyViewPatchRequest,
+  type StudioExtractViewPatchRequest,
+  type StudioGroupRendersPatchRequest,
   type StudioInsertCapturedFixturePatchRequest,
   type StudioInsertComponentPatchRequest,
   type StudioInsertProjectViewPatchRequest,
@@ -107,6 +112,7 @@ export {
   type StudioMoveRenderRequest,
   type StudioRenderGap,
   type StudioRenderInspection,
+  type StudioRetargetScenarioRenderPatchRequest,
   type StudioScenarioArgumentValue,
   type StudioSetLayoutEntryPatchRequest,
   type StudioSetScenarioArgumentsPatchRequest,

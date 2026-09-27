@@ -37,7 +37,7 @@ export function resolveDataWriteBindings(
     candidateLabel: write => write.label,
     targetName: field => field.name,
     candidateType: write => Type.ofExpression(write.value),
-    targetType: field => Type.dataFieldType(field),
+    targetType: field => Type.dataFieldValueType(field),
     namedTypeAccepts: (actual, expected) => Type.isCastCompatible(actual, expected),
     afterNamedBinding: ({ bind, remainingCandidates, remainingTargets }) => {
       // A boolean case written by reference names its field by declaration identity, before types.
@@ -59,7 +59,7 @@ export function resolveDataWriteBindings(
       }
     },
     duplicateTargetTypesOnlyWithCandidates: true,
-    targetRequiresValue: field => requireAll && !hasDataFieldDefault(field),
+    targetRequiresValue: field => requireAll && !field.optional && !hasDataFieldDefault(field),
     unresolvedCandidatesExcuseMissing: false,
   })
   return {
@@ -70,7 +70,7 @@ export function resolveDataWriteBindings(
 
 /** createRequiresField is whether a create must supply this field: a stored value with no default. */
 export function createRequiresField(field: DataFieldDefinition): boolean {
-  return Type.dataFieldType(field).kind !== 'list' && !hasDataFieldDefault(field)
+  return Type.dataFieldType(field).kind !== 'list' && !field.optional && !hasDataFieldDefault(field)
 }
 
 function hasDataFieldDefault(field: DataFieldDefinition): boolean {

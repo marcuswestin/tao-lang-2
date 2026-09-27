@@ -1,4 +1,5 @@
 import TR from '@runtime/TR'
+import { Errors } from '@shared/core'
 import { Describe, Expect, Test } from '@shared/test'
 import { act, render } from '@testing-library/react-native'
 import React from 'react'
@@ -113,7 +114,7 @@ function connection(close?: () => void): TR.AuthConnection {
     restore: async () => ({ state: 'SignedOut' }),
     signIn: async () => ({ outcome: { status: 'cancelled' } }),
     signOut: async () => ({ status: 'completed' }),
-    credential: async request => ({ audience: request.audience, value: 'fixture-credential' }),
+    proof: async () => Errors.throwUserInput('Sign in to access this resource.'),
     close,
   }
 }

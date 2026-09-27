@@ -2,7 +2,7 @@ import { Errors } from '@shared'
 import { Deferred, Describe, Expect, settle, Test } from '@shared/test'
 import { runSetupClerk } from '../dev-cli-src/clerk/SetupClerkCommand'
 import { prepareSecretBatch } from '../dev-cli-src/secrets/SecretsCommand'
-import { type SecretStore } from '../dev-cli-src/secrets/SecretStore'
+import { type Cipher, type SecretStore } from '../dev-cli-src/secrets/SecretStore'
 
 const publishableKey = 'pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk'
 
@@ -151,9 +151,34 @@ Describe('Clerk setup wizard', () => {
   })
 })
 
+/**
+ * A cipher that decrypts nothing but the wrapped store key, so a batch that decrypted a value fails; each store
+ * key it makes is numbered, and `stored` is a store whose key it can unwrap.
+ */
+function encryptOnly(encrypt: (value: string) => Promise<string>): Cipher {
+  let keys = 0
+  return {
+    decrypt: async armor =>
+      armor === 'wrapped-store-secret-0' ? 'store-secret-0' : Errors.throwUnexpected('No decryption'),
+    decryptWithKey: async () => Errors.throwUnexpected('No decryption'),
+    encrypt,
+    generateKey: async () => {
+      keys++
+      return { recipient: `store-recipient-${keys}`, secretKey: `store-secret-${keys}` }
+    },
+    recipientOfKey: async secretKey => secretKey.replace('secret', 'recipient'),
+  }
+}
+
+const stored: SecretStore = {
+  recipients: ['recipient'],
+  storeKey: { recipient: 'store-recipient-0', wrappedFor: ['recipient'], wrappedKey: ['wrapped-store-secret-0'] },
+  secrets: {},
+}
+
 Describe('Encrypted setup batch', () => {
   Test('overlapping saves preserve both unrelated encrypted additions', async () => {
-    let current: SecretStore = { recipients: ['recipient'], secrets: {} }
+    let current = stored
     const writing = Deferred()
     const release = Deferred()
     const secondEncrypted = Deferred()
@@ -168,15 +193,12 @@ Describe('Encrypted setup batch', () => {
         current = value
       },
       now: () => new Date('2026-01-01'),
-      cipher: {
-        decrypt: async () => Errors.throwUnexpected('No decryption'),
-        encrypt: async (value: string) => {
-          if (value === 'second') {
-            secondEncrypted.resolve()
-          }
-          return `armor:${value}`
-        },
-      },
+      cipher: encryptOnly(async value => {
+        if (value === 'second') {
+          secondEncrypted.resolve()
+        }
+        return `armor:${value}`
+      }),
     }
     const first = await prepareSecretBatch(environment)
     const second = await prepareSecretBatch(environment)
@@ -189,6 +211,8 @@ Describe('Encrypted setup batch', () => {
     await Promise.all([savingFirst, savingSecond])
     Expect(current.secrets['FIRST']?.value).toEqual(['armor:first'])
     Expect(current.secrets['SECOND']?.value).toEqual(['armor:second'])
+    // Both batches unlocked the recorded store key and encrypted to it; neither made another.
+    Expect(current.storeKey).toEqual(stored.storeKey)
   })
   Test('encrypts everything before one write and preserves unrelated entries', async () => {
     const original: SecretStore = {
@@ -202,10 +226,7 @@ Describe('Encrypted setup batch', () => {
         written.push(value)
       },
       now: () => new Date('2026-01-01'),
-      cipher: {
-        decrypt: async () => Errors.throwUnexpected('No decryption'),
-        encrypt: async value => `armor:${value}`,
-      },
+      cipher: encryptOnly(async value => `armor:${value}`),
     })
     await batch.save({ FIRST: 'first', SECOND: 'second' })
     Expect(written).toHaveLength(1)
@@ -223,15 +244,12 @@ Describe('Encrypted setup batch', () => {
           written.push(value)
         },
         now: () => new Date('2026-01-01'),
-        cipher: {
-          decrypt: async () => Errors.throwUnexpected('No decryption'),
-          encrypt: async value => {
-            if (mode === 'encryption' && value === 'second') {
-              Errors.throwHostEnvironment('Encryption failed')
-            }
-            return 'armor'
-          },
-        },
+        cipher: encryptOnly(async value => {
+          if (mode === 'encryption' && value === 'second') {
+            Errors.throwHostEnvironment('Encryption failed')
+          }
+          return 'armor'
+        }),
       })
       await Expect(batch.save({ FIRST: 'first', SECOND: 'second' })).rejects.toThrow()
       Expect(written).toEqual([])

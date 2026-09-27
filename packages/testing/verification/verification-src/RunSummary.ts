@@ -175,7 +175,9 @@ const CHROME_PRE_DEVTOOLS_HOST_ABORT =
 const ASSERTION_DETAIL = /AssertionError|expect\(received\)/i
 
 const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
-  { kind: 'native-host-busy', pattern: /Machine resource 'studio-native-host' is busy/i },
+  // Each worktree's host lease is `studio-native-host:<bundle id>`; probing launches share one
+  // machine-wide `studio-native-probe`.
+  { kind: 'native-host-busy', pattern: /Machine resource 'studio-native-(?:host(?::[^']*)?|probe)' is busy/i },
   { kind: 'hutch-install-timeout', pattern: /Hutch install timed out after/i },
   { kind: 'electrobun-prepare-timeout', pattern: /Hutch electrobun prepare timed out after/i },
   {

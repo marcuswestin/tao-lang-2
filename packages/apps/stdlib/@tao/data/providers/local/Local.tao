@@ -2,6 +2,7 @@
 public
 type Local is datasource with {
    StorageKey text
+   supports { Relations, UniqueFields, UniqueTogether }
 
    provider LocalProvider from ./Local.ts
 }

@@ -89,10 +89,12 @@ import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
 import { StudioScenarioControls } from '../studio-src/client/StudioScenarioControls'
 import {
   studioDesignPreviewSize,
+  studioDraggedPaneSize,
   StudioGlobalLoading,
   studioLayoutOwnsCanvasGestures,
   StudioPaneMinimums,
   StudioPaneSizes,
+  studioPaneVisibility,
   studioSearchBlurIntent,
   studioShellMarkup,
   studioShellRailPanels,
@@ -1393,6 +1395,15 @@ Test(
   },
 )
 
+Test('a dragged divider collapses its pane past half the minimum and otherwise stays within its bounds', () => {
+  Expect(studioDraggedPaneSize(130, 280, 900)).toBe(0)
+  Expect(studioDraggedPaneSize(141, 280, 900)).toBe(280)
+  Expect(studioDraggedPaneSize(500, 280, 900)).toBe(500)
+  Expect(studioDraggedPaneSize(1400, 280, 900)).toBe(900)
+  // A window too narrow for the floor still lets the pane keep its minimum rather than vanish.
+  Expect(studioDraggedPaneSize(400, 280, 120)).toBe(280)
+})
+
 Test('Studio pane sizes load safe defaults and persist all divider dimensions', () => {
   Expect(StudioPaneMinimums).toEqual({ bottom: 96, left: 180, preview: 280, right: 320 })
   let stored: string | null = '{"left":312,"right":296,"bottom":205,"preview":516}'
@@ -2079,8 +2090,8 @@ Test('Studio canvas mode focuses only a group whose every scenario renders one v
     scenarios,
     subjects: [
       { appName: 'Garden', kind: 'app', subjectId: 'app:Garden' },
-      { kind: 'view', subjectId: 'view:StoryRow', viewName: 'StoryRow' },
-      { kind: 'view', subjectId: 'view:CommentRow', viewName: 'CommentRow' },
+      { kind: 'view', source: { path: '/workspace/Rows.tao' }, subjectId: 'view:StoryRow', viewName: 'StoryRow' },
+      { kind: 'view', source: { path: '/workspace/Rows.tao' }, subjectId: 'view:CommentRow', viewName: 'CommentRow' },
     ],
   } as unknown as Pick<StudioPreviewManifestV2, 'scenarios' | 'subjects'>
   const groupId = (group: string): string => StudioScenarioControls.groupId('/Garden.tao', group)
@@ -2094,6 +2105,28 @@ Test('Studio canvas mode focuses only a group whose every scenario renders one v
   }))
   Expect(StudioMatrixLayout.focusable(groups, 'view:StoryRow')).toBe(true)
   Expect(StudioMatrixLayout.focusable(groups, 'view:CommentRow')).toBe(false)
+  // A render rectangle can start from any view some scenario renders, whichever group holds it.
+  Expect(StudioMatrixLayout.renderableViews(manifest, '/workspace')).toEqual(['CommentRow', 'StoryRow'])
+})
+
+Test('Studio render rectangles never start from another sketch generated under @/studio/', () => {
+  const manifest = {
+    scenarios: [
+      { ...scenario('novel', 'states', '/workspace/Rows.tao'), subjectId: 'view:StoryRow' },
+      { ...scenario('drawn', 'sketch', '/workspace/@/studio/Sketches.tao'), subjectId: 'view:View1' },
+      { ...scenario('nested', 'sketch', '/workspace/@/studio/View2.tao'), subjectId: 'view:View2' },
+    ],
+    subjects: [
+      { kind: 'view', source: { path: '/workspace/Rows.tao' }, subjectId: 'view:StoryRow', viewName: 'StoryRow' },
+      { kind: 'view', source: { path: '/workspace/@/studio/View1.tao' }, subjectId: 'view:View1', viewName: 'View1' },
+      { kind: 'view', source: { path: '/workspace/@/studio/View2.tao' }, subjectId: 'view:View2', viewName: 'View2' },
+    ],
+  } as unknown as Pick<StudioPreviewManifestV2, 'scenarios' | 'subjects'>
+
+  Expect(StudioMatrixLayout.renderableViews(manifest, '/workspace')).toEqual(['StoryRow'])
+  Expect(StudioMatrixLayout.renderableViews(manifest, '/workspace/')).toEqual(['StoryRow'])
+  // Only the project's own generated tree is excluded; an `@/studio` directory elsewhere is not its.
+  Expect(StudioMatrixLayout.renderableViews(manifest, '/other')).toEqual(['StoryRow', 'View1', 'View2'])
 })
 
 Test('Studio canvas Focus keeps same-named declarations distinct by canonical subject identity', () => {
@@ -2890,6 +2923,7 @@ Test('Studio preview message wiring dispatches one editor selection per incoming
       select() {
         inspections += 1
       },
+      selected: () => undefined,
       // Reintroducing the old second selection path records another editor dispatch here.
       selectSourceInEditor() {
         dispatches += 1
@@ -2936,6 +2970,95 @@ Test('Studio preview message wiring dispatches one editor selection per incoming
 
   await until(() => inspections === 1)
   Expect(dispatches).toBe(1)
+})
+
+Test('Studio clears other cells on a fresh preview pick and leaves the canvas focused in Design and Draw', async () => {
+  const pickedWindow = {}
+  const cleared: unknown[] = []
+  const otherWindow = { postMessage: (message: unknown) => cleared.push(message) }
+  const picked = previewConnection('preview-picked', 'first', pickedWindow)
+  const other = previewConnection('preview-other', 'second', otherWindow)
+  const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
+  let joins = false
+  let canvasOwnsInput = true
+  let focuses = 0
+  let inspections = 0
+  const listener = studioPreviewMessageListener({
+    activePreview: new StudioActivePreview([picked, other]),
+    canvasGesturesOwned: () => false,
+    canvasOwnsInput: () => canvasOwnsInput,
+    drawer: { loadDataIfVisible() {}, renderIfLogs() {} },
+    handshake,
+    inspection: {
+      highlightOnDevice: async () => {},
+      inspect: async () => {},
+      select() {
+        inspections += 1
+        return joins
+      },
+      selected: () => undefined,
+    },
+    mutations: { submitPreview: async () => {} },
+    onInspected() {},
+    onReveal() {},
+    preview: {} as HTMLElement,
+    previews: [picked, other],
+    publish() {},
+    session: {
+      openFile: async () => ({
+        editor: {
+          dispatch() {},
+          focus() {
+            focuses += 1
+          },
+          state: { doc: { length: 40 } },
+        } as unknown as EditorView,
+        file: { content: 'view Main() {}', path: 'Garden.tao', sourceVersion: 'source-2' },
+      }),
+    },
+    status: {} as HTMLElement,
+  } as never)
+  const pick = (additive?: true) =>
+    listener({
+      data: {
+        ...(additive === undefined ? {} : { additive }),
+        channel: studioProtocolChannel,
+        identity: {
+          ...picked.cellIdentity,
+          path: '/workspace/Garden.tao',
+          previewInstanceId: picked.previewInstanceId,
+          sourceVersion: 'source-2',
+        },
+        protocolVersion: studioProtocolVersion,
+        range: { end: 12, start: 4 },
+        type: 'preview-select-source',
+      },
+      origin: picked.origin,
+      source: pickedWindow,
+    } as MessageEvent)
+
+  // A pick that starts a selection tells every other cell to drop its outlines, and the editor follows
+  // it without taking the keyboard from the canvas.
+  pick()
+  await until(() => inspections === 1)
+  Expect(cleared).toEqual([{
+    channel: studioProtocolChannel,
+    identity: { ...other.cellIdentity, previewInstanceId: 'preview-other' },
+    protocolVersion: studioProtocolVersion,
+    type: 'clear-selection',
+  }])
+  Expect(focuses).toBe(0)
+
+  // A shift-click that joins this cell's selection leaves the others alone.
+  joins = true
+  pick(true)
+  await until(() => inspections === 2)
+  Expect(cleared).toHaveLength(1)
+
+  // Code has no canvas, so the editor takes focus there.
+  canvasOwnsInput = false
+  pick()
+  await until(() => focuses === 1)
 })
 
 Test('Studio attaches the active cell scenario to preview-originated source actions', async () => {
@@ -3691,13 +3814,13 @@ Test('Studio source mutations share one envelope and bind undo to the file the e
       message: 'compiled',
       status: 'compiled' as const,
     }
-    const result = (checkpointId: string): Response =>
+    const result = (checkpointId: string, path = 'Garden.tao'): Response =>
       Response.json({
         checkpoint: { id: checkpointId, status: 'committed' },
         compile,
         content: 'view Main',
         edits: [],
-        path: 'Garden.tao',
+        path,
       })
     const status = { dataset: {} as Record<string, string | undefined>, textContent: '' } as unknown as HTMLElement
     const events: string[] = []
@@ -3737,8 +3860,15 @@ Test('Studio source mutations share one envelope and bind undo to the file the e
       'inspector',
     ])
     Expect(mutations.canUndo()).toBe(true)
+    Expect(mutations.edits()).toMatchObject([{
+      id: 'checkpoint-1',
+      label: 'Gap 16',
+      path: 'Garden.tao',
+      undoable: true,
+    }])
     activePath = 'Other.tao'
     Expect(mutations.canUndo()).toBe(false)
+    Expect(mutations.edits()).toMatchObject([{ undoable: false }])
     activePath = 'Garden.tao'
 
     // A refused mutation reports in the status line and leaves the undo stack and busy flag alone.
@@ -3776,6 +3906,66 @@ Test('Studio source mutations share one envelope and bind undo to the file the e
       'inspector',
     ])
     Expect(mutations.canUndo()).toBe(false)
+    Expect(replies).toHaveLength(0)
+
+    // An undo the server refuses because the file changed since says so once and retires every edit in
+    // that file, so the refused one never stays on top of the stack for the next ⌘Z.
+    replies.push(() => result('checkpoint-2'))
+    Expect(await mutations.submitLocal(envelope.action, selected.identity)).toBe(true)
+    replies.push(() => result('checkpoint-3'))
+    Expect(await mutations.submitLocal(envelope.action, selected.identity)).toBe(true)
+    replies.push(() =>
+      Response.json(
+        { details: { code: 'stale-source', path: 'Garden.tao' }, error: 'Garden.tao changed.' },
+        { status: 409 },
+      )
+    )
+    await mutations.undoLatest()
+    Expect(status.dataset['state']).toBe('error')
+    Expect(status.textContent).toBe(
+      'Garden.tao changed after “Gap 16”, so its visual edits can no longer be undone.',
+    )
+    Expect(mutations.canUndo()).toBe(false)
+    Expect(mutations.edits().map(edit => [edit.id, edit.undoable])).toEqual([
+      ['checkpoint-3', false],
+      ['checkpoint-2', false],
+    ])
+    const undoRequests = requests.length
+    await mutations.undoLatest()
+    Expect(requests).toHaveLength(undoRequests)
+
+    // Saving the file from the code editor retires its visual edits the same way.
+    replies.push(() => result('checkpoint-4'))
+    Expect(await mutations.submitLocal(envelope.action, selected.identity)).toBe(true)
+    Expect(mutations.canUndo()).toBe(true)
+    mutations.retirePath('Other.tao')
+    Expect(mutations.canUndo()).toBe(true)
+    mutations.retirePath('Garden.tao')
+    Expect(mutations.canUndo()).toBe(false)
+
+    // Undo walks back the open file's newest edit, even when another file was edited since.
+    replies.push(() => result('checkpoint-5'))
+    Expect(await mutations.submitLocal(envelope.action, selected.identity)).toBe(true)
+    replies.push(() => result('checkpoint-6', 'Other.tao'))
+    Expect(await mutations.apply(envelope)).toBe(true)
+    Expect(mutations.canUndo()).toBe(true)
+    Expect(mutations.edits().map(edit => [edit.id, edit.undoable])).toEqual([
+      ['checkpoint-6', false],
+      ['checkpoint-5', true],
+      ['checkpoint-4', false],
+      ['checkpoint-3', false],
+      ['checkpoint-2', false],
+    ])
+    mutations.retirePath('Garden.tao')
+    mutations.retirePath('Other.tao')
+
+    // submitLocal answers whether the edit landed: a stale render is refused before any request.
+    Expect(await mutations.submitLocal(envelope.action, { ...selected.identity, sourceVersion: 'source-0' })).toBe(
+      false,
+    )
+    Expect(status.textContent).toBe('Wait for the refreshed preview before editing this render.')
+    replies.push(() => Response.json({ error: 'That render moved.' }, { status: 409 }))
+    Expect(await mutations.submitLocal(envelope.action, selected.identity)).toBe(false)
     Expect(replies).toHaveLength(0)
 
     // Imported parameterized views use the selected source gap even when no editor is mounted.
@@ -3883,6 +4073,39 @@ Test('Studio Design split recomputes from each current host width', () => {
   Expect(studioDesignPreviewSize(700, 320)).toBe(280)
 })
 
+Test('Studio pane collapse hides the code column in Draw and never the dissolved inspector aside', () => {
+  const open = { bottom: 180, left: 360, preview: 440, right: 440 }
+  const none = {
+    bottom: false,
+    editor: false,
+    environment: false,
+    left: false,
+    preview: false,
+    right: false,
+    visual: false,
+  }
+  for (const preset of ['design', 'code', 'run', 'draw', undefined]) {
+    Expect(studioPaneVisibility(preset, open)).toEqual(none)
+  }
+  // Elsewhere each divider hides its own pane.
+  Expect(studioPaneVisibility('code', { ...open, preview: 0, right: 0 })).toEqual({
+    ...none,
+    preview: true,
+    right: true,
+  })
+  // Draw's preview divider sizes the code column, and the aside is `display: contents` there, so
+  // hiding it would take both inspector panes; the right divider hides only the selection pane.
+  Expect(studioPaneVisibility('draw', { ...open, preview: 0, right: 0 })).toEqual({
+    ...none,
+    editor: true,
+    environment: true,
+    visual: true,
+  })
+  // Run shows nothing but the preview, so a collapsed preview size never blanks it.
+  Expect(studioPaneVisibility('run', { ...open, preview: 0 })).toEqual(none)
+  Expect(studioPaneVisibility('design', { ...open, bottom: 0, left: 0 })).toEqual({ ...none, bottom: true, left: true })
+})
+
 Test('Studio canvas gesture ownership is exclusive to Design layout', () => {
   Expect(studioLayoutOwnsCanvasGestures('design')).toBe(true)
   Expect(studioLayoutOwnsCanvasGestures('run')).toBe(false)
@@ -3962,12 +4185,14 @@ Test('Studio Focus frames a view it entered before the owning cell reported a re
   }
   // No measurement yet: entering focus can frame nothing.
   let measured: { height: number; width: number; x: number; y: number } | undefined
+  const shown: string[] = []
   const focus = mountStudioCanvasFocus({
     button,
     matrix,
     onError: error => {
       throw error
     },
+    onFocused: viewId => shown.push(viewId),
     ownerFrame: viewId => viewId === owner.id ? measured : undefined,
     preview,
     previews: () => [connection],
@@ -3978,6 +4203,8 @@ Test('Studio Focus frames a view it entered before the owning cell reported a re
   click?.()
   await until(() => focused === owner.id)
   Expect(viewports).toEqual([])
+  // Focusing a view also brings its declaration into the code pane.
+  Expect(shown).toEqual([owner.id])
 
   // The cell reports its rectangle afterwards, and the next inspection applies it.
   measured = { height: 120.2, width: 240.1, x: 0, y: 0 }

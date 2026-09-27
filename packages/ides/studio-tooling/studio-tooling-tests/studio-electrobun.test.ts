@@ -282,6 +282,8 @@ Describe('Studio Electrobun project', () => {
       await FS.writeText(stalePayloadPath, 'stale')
       const project = await StudioElectrobun.create({
         ...options,
+        appName: 'Tao Studio — feature-a',
+        bundleIdentifier: 'com.devtao.studio.feature-a-0123abcd',
         outputRoot,
         projectUrl: options.studioUrl + '/sessions/initial',
         runProbe: true,
@@ -306,6 +308,7 @@ Describe('Studio Electrobun project', () => {
         command: 'hutch',
         cwd: project.root,
         env: {
+          TAO_STUDIO_APP_NAME: 'Tao Studio — feature-a',
           TAO_STUDIO_ELECTROBUN_RESULT_PATH: project.runtimeResultPath,
           TAO_STUDIO_ELECTROBUN_RUN_PROBE: 'true',
           TAO_STUDIO_ELECTROBUN_SHOW_WINDOWS: 'false',
@@ -316,6 +319,9 @@ Describe('Studio Electrobun project', () => {
       })
       Expect(project.buildCanary.args).toEqual(['run', 'build:canary'])
       Expect(project.buildStable.args).toEqual(['run', 'build:stable'])
+      const config = await FS.readText(project.configPath)
+      Expect(config).toContain('name: "Tao Studio — feature-a"')
+      Expect(config).toContain('identifier: "com.devtao.studio.feature-a-0123abcd"')
     } finally {
       await FS.remove(outputRoot)
     }

@@ -28,6 +28,12 @@
   retries are `.artifacts/logs/dev-test/2026-09-26T22-23-47-694Z-43035-99bd2067/summary.json`
   and `.artifacts/logs/dev-test/2026-09-26T22-23-48-592Z-43200-845f1769/summary.json`.
   These are observations under contention, not a measured causal explanation or an admission benchmark.
+  A 2026-09-27 UTC `verify-changed` in `feat/visionos-development-setup` stopped after 506.5s
+  with `Timed out waiting for the machine-lane registry lock.` The board sampled two concurrent
+  lanes, each reporting 16/16 slots, and load 220.7 on 16 CPUs. Type checking took 230.6s;
+  several suites timed out or were interrupted. The command log is
+  `.artifacts/logs/agent/verify-changed/2026-09-27T00-07-22-109Z-38825.log`.
+  This is another contention observation; no scheduler settings or foreign processes were changed.
   A 2026-09-27 UTC (2026-09-26 local) `verify-changed` in `feat/native-tooling-followup`
   failed after 812.9s wrapper / 800.6s lane time, with three overlapping lanes and peak load 273.2
   on 16 CPUs. An earlier run of the repair passed in 74.9s; this later run also included its updated

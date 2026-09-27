@@ -1,9 +1,22 @@
 import TR from '@runtime/TR'
 import React from 'react'
-import { Button, Modal, Text, TextInput, View } from 'react-native'
+import { Button, Modal, StyleSheet, Text, TextInput, View } from 'react-native'
 import { type AuthFlow, type LoginFlowValue, SignInFlow } from './AuthFlow'
 
 type AuthProps = { Auth?: TR.AuthScope; Account?: TR.Evaluable; Layout?: TR.TaoVisualLayout; Tag?: string }
+
+// A bare native text field has no outline on iOS, so these views draw one to stay findable.
+const styles = StyleSheet.create({
+  form: { gap: 8 },
+  field: {
+    borderColor: '#8e8e93',
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  sheet: { gap: 8, padding: 16 },
+})
 
 /** Supplied and presented UI share the headless flow, including failure and cancellation state. */
 export function SignInView(props: AuthProps & { Flow?: LoginFlowValue | null }): React.ReactElement {
@@ -25,16 +38,19 @@ function isAuthFlow(flow: LoginFlowValue): flow is AuthFlow {
 }
 
 function SignInForm({ scope, flow: supplied }: { scope: TR.AuthScope; flow?: AuthFlow }): React.ReactElement {
-  const [flow] = React.useState(() => supplied ?? SignInFlow(scope, scope.capabilities.methods[0] ?? 'Password'))
+  // The supplied view offers the provider's first method; before the provider connects the flow chooses once it has.
+  const [flow] = React.useState(() => supplied ?? SignInFlow(scope, scope.capabilities.methods[0] ?? null))
   const [, changed] = React.useReducer(value => value + 1, 0)
   React.useEffect(() => flow.subscribe(changed), [flow])
   const code = flow.Step === 'Code'
   return (
-    <View accessibilityLabel="Sign in">
+    <View accessibilityLabel="Sign in" style={styles.form}>
       <Text>{code ? 'Enter your code' : 'Sign in'}</Text>
       {!code && (
         <TextInput
+          style={styles.field}
           accessibilityLabel="Email"
+          placeholder="Email"
           value={flow.Email}
           autoCapitalize="none"
           keyboardType="email-address"
@@ -43,7 +59,9 @@ function SignInForm({ scope, flow: supplied }: { scope: TR.AuthScope; flow?: Aut
       )}
       {flow.Step === 'Password' && (
         <TextInput
+          style={styles.field}
           accessibilityLabel="Password"
+          placeholder="Password"
           value={flow.Password}
           secureTextEntry
           onChangeText={value => flow.writeMember(['Password'], value)}
@@ -51,9 +69,13 @@ function SignInForm({ scope, flow: supplied }: { scope: TR.AuthScope; flow?: Aut
       )}
       {code && (
         <TextInput
+          style={styles.field}
           accessibilityLabel="Code"
+          placeholder="Code"
           value={flow.Code}
-          secureTextEntry
+          keyboardType="number-pad"
+          textContentType="oneTimeCode"
+          autoComplete="one-time-code"
           onChangeText={value => flow.writeMember(['Code'], value)}
         />
       )}
@@ -99,11 +121,15 @@ export function AuthPresentation({ scope }: { scope: TR.AuthScope }): React.Reac
   return (
     <Modal
       visible={scope.presenting}
+      animationType="slide"
+      presentationStyle="pageSheet"
       onRequestClose={() => {
         scope.cancel()
       }}
     >
-      <SignInForm scope={scope} />
+      <View style={styles.sheet}>
+        <SignInForm scope={scope} />
+      </View>
     </Modal>
   )
 }
@@ -139,8 +165,14 @@ export function AccountView({ Account, Auth }: AuthProps): React.ReactElement {
     return <Text>Loading account…</Text>
   }
   return (
-    <View accessibilityLabel="Account profile">
-      <TextInput accessibilityLabel="Display name" value={displayName} onChangeText={setDisplayName} />
+    <View accessibilityLabel="Account profile" style={styles.form}>
+      <TextInput
+        style={styles.field}
+        accessibilityLabel="Display name"
+        placeholder="Display name"
+        value={displayName}
+        onChangeText={setDisplayName}
+      />
       {problem !== '' && <Text accessibilityRole="alert">{problem}</Text>}
       <Button
         title="Save profile"

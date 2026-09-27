@@ -2,6 +2,19 @@ import { CLI, FS, Platform, Repo, Text } from '@shared'
 import { Describe, Expect, initGitTestRepository, mkTestDir, Test } from '@shared/test'
 
 const HOOK = Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/shell/direnv-activation.zsh')
+const PROFILE = Repo.resolvePath('.devenv/profile')
+// The portable contributor profile intentionally omits opt-in full-shell direnv support.
+// A missing tool in a full profile must still fail the real integration test.
+const RealDirenvTest = await portableProfileWithoutDirenv(PROFILE) ? Test['skip'] : Test
+
+async function portableProfileWithoutDirenv(profile: string): Promise<boolean> {
+  if (await FS.isFile(FS.resolvePath('bin/direnv', profile))) {
+    return false
+  }
+  const entry = await FS.entryMetadata(profile)
+  return entry.kind === 'symlink' && /^portable-generations\/[a-f0-9]{64}$/.test(entry.linkTarget ?? '')
+}
+
 const COMPLETION = `print -r -- "completion|$PWD|$TAO_TEST_ACTIVE" >> "$TAO_TEST_LOG"
 export TAO_TEST_COMPLETED=yes
 `
@@ -11,7 +24,7 @@ exit 99
 `
 
 // Exercise the sourceable hook with real Git identities; only direnv's export protocol is faked.
-const DIRENV = `#!/bin/zsh -f
+const DIRENV = `#!/usr/bin/env -S zsh -f
 case "$1" in
   hook)
     cat <<'HOOK'
@@ -47,6 +60,7 @@ esac
 `
 
 async function fixture(realDirenv = false) {
+  const realDirenvPath = realDirenv ? await FS.realPath(FS.resolvePath('bin/direnv', PROFILE)) : undefined
   // Git fixtures must live outside a worktree's protected .git boundary. Removed in finally.
   const base = await mkTestDir('tao-direnv-hook-', { location: 'host' })
   const root = FS.resolvePath("repo with ' quote", base)
@@ -59,8 +73,8 @@ async function fixture(realDirenv = false) {
   await FS.writeText(FS.resolvePath('.tao-dev/shell/completion.zsh', home), COMPLETION.replace('=yes', '=fallback'))
   await FS.mkdir(FS.resolvePath('allowed', home))
   const direnv = FS.resolvePath('.tao-dev/shell/direnv/bin/direnv', home)
-  if (realDirenv) {
-    await FS.symlink(await FS.realPath(Repo.resolvePath('.devenv/profile/bin/direnv')), direnv)
+  if (realDirenvPath !== undefined) {
+    await FS.symlink(realDirenvPath, direnv)
   } else {
     await FS.writeText(direnv, DIRENV)
     await FS.chmod(direnv, 0o755)
@@ -89,14 +103,14 @@ async function runShell(
 ) {
   const startup = FS.resolvePath('probe.zsh', test.base)
   await FS.writeText(startup, script)
-  const result = await CLI.run('/bin/zsh', {
+  const result = await CLI.run('zsh', {
     args: ['-f', ...(interactive ? ['-i'] : []), startup],
     cwd: test.root,
     env: {
       ...Platform.runtimeProcess.env,
       HOME: test.home,
       ZDOTDIR: test.home,
-      PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
+      PATH: `${Repo.resolvePath('.devenv/profile/bin')}:/usr/bin:/bin:/usr/sbin:/sbin`,
       DIRENV_DIR: undefined,
       DIRENV_FILE: undefined,
       DIRENV_DIFF: undefined,
@@ -126,6 +140,24 @@ async function calls(test: Awaited<ReturnType<typeof fixture>>) {
 }
 
 Describe('automatic development shell activation', () => {
+  Test('omits real direnv coverage only for a published portable profile lacking the optional tool', async () => {
+    const base = await mkTestDir('tao-direnv-profile-')
+    try {
+      const full = FS.resolvePath('full', base)
+      await FS.mkdir(full)
+      Expect(await portableProfileWithoutDirenv(full)).toBe(false)
+      const generation = `portable-generations/${'a'.repeat(64)}`
+      await FS.mkdir(FS.resolvePath(generation, base))
+      const portable = FS.resolvePath('profile', base)
+      await FS.symlink(generation, portable)
+      Expect(await portableProfileWithoutDirenv(portable)).toBe(true)
+      await FS.writeText(FS.resolvePath('bin/direnv', portable), '#!/bin/sh\n')
+      Expect(await portableProfileWithoutDirenv(portable)).toBe(false)
+    } finally {
+      await FS.remove(base)
+    }
+  })
+
   Test('creates the installed loader only for an opted-in old devenv checkout without a tracked envrc', async () => {
     const test = await fixture()
     try {
@@ -181,42 +213,49 @@ print -r -- "created|$TAO_TEST_ACTIVE"
     }
   })
 
-  Test('uses real direnv to authorize a root, preserve status, update exports, and unload', async () => {
-    const test = await fixture(true)
-    try {
-      Expect(
-        await runShell(
-          test,
-          `
+  // Report an explicit skip on the minimal profile, while retaining every protocol fixture.
+  RealDirenvTest(
+    'uses real direnv to authorize a root, preserve status, update exports, and unload (requires full profile direnv)',
+    async () => {
+      const test = await fixture(true)
+      try {
+        Expect(
+          await runShell(
+            test,
+            `
+# Give direnv's timestamp-based watch distinct past mtimes without waiting for the clock.
+command touch -t 202001010000.00 .envrc
 source "$TAO_TEST_HOOK"
 _tao_dev_preserve_status 9
 _tao_dev_direnv_hook
 print -r -- "real|$?|$TAO_TEST_ACTIVE|$TAO_TEST_COMPLETED"
 print 'export TAO_TEST_ACTIVE=changed_with_real_direnv' > .envrc
+command touch -t 202001010000.02 .envrc
 _tao_dev_direnv_hook
 print -r -- "changed|$TAO_TEST_ACTIVE"
 cd "$TAO_TEST_BASE"
 _tao_dev_direnv_hook
 print -r -- "outside|$+TAO_TEST_ACTIVE"
 `,
-          true,
-          [
-            `direnv: loading ${test.root}/.envrc`,
-            'direnv: export +TAO_TEST_ACTIVE',
-            `direnv: loading ${test.root}/.envrc`,
-            'direnv: export +TAO_TEST_ACTIVE',
-            'direnv: unloading',
-            '',
-          ].join('\n'),
-        ),
-      ).toEqual(['real|9|first|yes', 'changed|changed_with_real_direnv', 'outside|0'])
-      Expect((await calls(test)).filter(line => line.startsWith('completion|'))).toEqual([
-        `completion|${test.root}|first`,
-      ])
-    } finally {
-      await FS.remove(test.base)
-    }
-  })
+            true,
+            [
+              `direnv: loading ${test.root}/.envrc`,
+              'direnv: export +TAO_TEST_ACTIVE',
+              `direnv: loading ${test.root}/.envrc`,
+              'direnv: export +TAO_TEST_ACTIVE',
+              'direnv: unloading',
+              '',
+            ].join('\n'),
+          ),
+        ).toEqual(['real|9|first|yes', 'changed|changed_with_real_direnv', 'outside|0'])
+        Expect((await calls(test)).filter(line => line.startsWith('completion|'))).toEqual([
+          `completion|${test.root}|first`,
+        ])
+      } finally {
+        await FS.remove(test.base)
+      }
+    },
+  )
 
   Test('allows current and future registered worktrees, loads completion after activation, and unloads', async () => {
     const test = await fixture()

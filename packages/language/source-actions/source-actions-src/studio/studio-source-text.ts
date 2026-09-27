@@ -162,6 +162,17 @@ export function requireIdentifier(value: string, label: string): void {
   }
 }
 
+/** requireViewName refuses a name Studio would write for a view: an identifier starting with a capital letter. */
+export function requireViewName(name: unknown): asserts name is string {
+  if (typeof name !== 'string') {
+    Errors.throwUserInput('Studio view name must be a string.')
+  }
+  requireIdentifier(name, 'view')
+  if (!/^[A-Z]/.test(name)) {
+    Errors.throwUserInput(`Studio view names start with a capital letter: ${name}`)
+  }
+}
+
 /**
  * requireDesignValueName refuses a name Studio would write for a new color, size, or style a render
  * names. Those names are lowercase, because a Capitalized design name is either a compile error or an

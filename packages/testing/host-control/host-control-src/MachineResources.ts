@@ -154,6 +154,7 @@ async function claim(
   }
 
   let released = false
+  let releasing: Promise<void> | undefined
   const lease: MachineResourceLease = {
     generation,
     owner,
@@ -168,17 +169,23 @@ async function claim(
         }
       }, options.lockTimeoutMs)
     },
-    release: async () => {
+    release: () => {
       if (released) {
-        return
+        return Promise.resolve()
       }
-      await withRegistryLock(root, async () => {
+      // Early release and a caller's final cleanup must join the same filesystem work.
+      // Otherwise one can return while the other still uses a disposable registry.
+      return releasing ??= withRegistryLock(root, async () => {
         const existing = normalizeResourceRecord(await readRecord<unknown>(path))
         if (existing?.id === generation) {
           await FS.remove(path)
         }
-      }, options.lockTimeoutMs)
-      released = true
+      }, options.lockTimeoutMs).then(() => {
+        released = true
+      }).catch(error => {
+        releasing = undefined
+        throw error
+      })
     },
   }
   return { lease, owner }

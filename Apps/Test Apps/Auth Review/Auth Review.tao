@@ -1,7 +1,9 @@
 use Account, AccountView, LoginFlow, Session, SignIn, SignInFlow, SignInView, SignOut from @tao/auth
 use Clerk from @tao/auth/clerk
+use InstantAuth from @tao/auth/instantdb
 use LocalAuth from @tao/auth/local
 use TestAuth from @tao/auth/testing
+use InstantDB from @tao/data/providers/instantdb
 use Memory from @tao/data/providers/memory
 use Reference from @tao/data/providers/reference
 use StackNav from @tao/nav
@@ -35,8 +37,15 @@ app AuthReviewLocal = AuthReview with {
 app AuthReviewClerk = AuthReviewLocal with {
    Auth Clerk {
       PublishableKey "pk_test_REPLACE_WITH_YOUR_KEY"
-      Endpoint "http://127.0.0.1:4738"
-      Resource "auth-review"
+}  }
+
+// Replace the App ID with your Instant Cloud app's and push its schema and rules before running.
+app AuthReviewInstant = AuthReview with {
+   Auth InstantAuth {
+      AppId "REPLACE_WITH_INSTANT_APP_ID"
+   }
+   Datasource InstantDB {
+      AppId "REPLACE_WITH_INSTANT_APP_ID"
 }  }
 
 let Me = Account
@@ -103,6 +112,7 @@ scene Authentication(Leave action()) {
             | otherwise -> Login()
 }  }  }
 
+// The default flow starts at the Email step when the provider offers no Password, as InstantAuth does.
 view Login() {
    state Flow = SignInFlow()
    state CodeFlow = SignInFlow(Method: "EmailCode")
@@ -144,10 +154,10 @@ view Login() {
          | otherwise -> { when Supplied
             | true -> SignInView(Flow)
             | otherwise -> {
-               if Flow.Step == "Code" or Flow.Step == "Cancelled" {
+               if Flow.Step == "Email" or Flow.Step == "Code" or Flow.Step == "Cancelled" {
                   CodeLogin(Flow, false)
                }
-               if Flow.Step != "Code" and Flow.Step != "Cancelled" {
+               if Flow.Step != "Email" and Flow.Step != "Code" and Flow.Step != "Cancelled" {
                   Row() [hug, gap 8, content left bottom] {
                      #email
                      TextInput(Value: Flow.Email, Label: "Account email") [claim 1] {
@@ -155,7 +165,7 @@ view Login() {
                      }
 
                      #fillEmail
-                     FormButton(Title: "Fill email") [hug] {
+                     FormButton(Title: "Fill email") {
                         on press -> { set Flow.Email = ReviewEmail }
                   }  }
                   Row() [hug, gap 8, content left bottom] {
@@ -165,7 +175,7 @@ view Login() {
                      }
 
                      #fillPassword
-                     FormButton(Title: "Fill password") [hug] {
+                     FormButton(Title: "Fill password") {
                         on press -> { set Flow.Password = ReviewPassword }
                   }  }
 
@@ -229,7 +239,7 @@ view CodeLogin(Flow LoginFlow, Supplied boolean) {
                   }
 
                   #fillCodeEmail
-                  FormButton(Title: "Fill email") [hug] {
+                  FormButton(Title: "Fill email") {
                      on press -> { set Flow.Email = ReviewEmail }
                }  }
 

@@ -1,0 +1,38 @@
+use EnumFields from ./
+
+test "Enum fields" {
+   test "creates default enum values and preserves explicit overrides" {
+      run EnumFields
+      press text "Add notes"
+      expect text "Default role: Reader"
+      expect text "Override role: Editor"
+   }
+   test "round trips omitted, absent, and concrete optional values" {
+      run EnumFields
+      press text "Add notes"
+      expect text "Omitted: none"
+      expect text "Absent: none"
+      expect text "Concrete: Editor"
+      expect text "Concrete remembered: none"
+      press text "Copy Concrete"
+      expect text "Copy Concrete: Editor"
+      press text "Copy Absent"
+      expect text "Copy Absent: none"
+      press text "Remember Concrete"
+      expect text "Concrete remembered: Editor"
+      press text "Clear Concrete"
+      expect text "Concrete: none"
+      expect text "Concrete remembered: Editor"
+      press text "Remember Concrete"
+      expect text "Concrete remembered: none"
+   }
+   test "preserves the implicit boolean default and explicit optional absence" {
+      run EnumFields
+      press text "Add notes"
+      expect text "Default flag: no"
+      expect text "Absent flag: none"
+      expect text "Concrete flag: yes"
+      press text "Clear Concrete"
+      expect text "Concrete flag: none"
+   }
+}

@@ -673,8 +673,13 @@ Test('Tao-owned inspector Data and Actions expose only the published active sele
     'wrap-row',
     'wrap-col',
     'wrap-stack',
+    'make-view',
     'remove-element',
   ])
+  Expect(JSON.parse(StudioInspectorAction(selection, 'make-view'))).toEqual({
+    kind: 'extract-view',
+    renderIds: ['/workspace/Garden.tao:20:42'],
+  })
   Expect(StudioInspectorActionLabel('wrap-col')).toBe('Wrap in Col')
   Expect(JSON.parse(StudioInspectorAction(selection, 'wrap-row'))).toEqual({
     kind: 'wrap-render',

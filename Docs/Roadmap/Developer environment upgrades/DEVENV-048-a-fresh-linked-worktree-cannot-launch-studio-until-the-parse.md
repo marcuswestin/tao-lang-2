@@ -11,6 +11,12 @@
   `direnv allow` was also needed first, and it must run from an unsandboxed shell because the allow file
   lives under `~/.local/share/direnv`.
 - **Workaround:** Run `just _parser-gen` after `./agent setup` in a new worktree.
+- **2026-09-26 recurrence:** After `./agent start-branch feat/visionos-minimal`, `./agent setup`
+  reported success but `./agent tao fix Apps/VisionHello` still failed with `Cannot find module
+  './_gen_tao-parser/module'` from `packages/language/parser/parser-src/parserASTExport.ts`.
+  `./agent parser-gen` repaired the checkout, after which the sample's fix and behavior journey
+  succeeded. This is a parser bootability recurrence, separate from the Studio host acceptance below;
+  the archived DEVENV-049 describes the same failure mode.
 - **Proposed change:** Implemented: the one setup recipe now orders `deps`, `_parser-gen`, and
   `_agent-config`, and every harness setup comment states the same bootability contract.
 - **Dependencies:** DEVENV-063 now makes the managed-host boundary fail fast, but a real Studio host

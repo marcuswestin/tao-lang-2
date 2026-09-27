@@ -81,8 +81,9 @@ Start with the deterministic HNReader variant so that the tour does not depend o
    restores the full workbench.
 
 The element-selection, focused-view, data-panel, scenario, layout, and Device-popover paths above
-were exercised. Freehand drawing lives on the Draw tab: in a scratch project, open **Draw**, drag
-empty canvas space to create a view, draw rectangles inside it, then use **Snap**, **Toggle
+were exercised. Freehand drawing lives on the Draw tab: in a scratch project, open **Draw**, press
+**R** and drag empty canvas space to create a view, press **R** again to draw each rectangle inside
+it (**T** draws text, **V** selects), then use **Snap**, **Toggle
 direction**, **Insert separator**, and the spacer-ratio control to turn the sketch into Tao structure.
 
 ## 3. Run the app outside Studio — verified

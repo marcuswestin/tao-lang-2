@@ -139,7 +139,7 @@ export async function runAgentCommand(options: RunAgentCommandOptions): Promise<
 
   const logUnavailable = await log.close()
 
-  const summary = await readSummaryFailures({ command: options.command, output, repositoryRoot, startedAt })
+  const summary = await readSummaryFailures({ output, repositoryRoot })
   const summaryFailures = summary?.failures
   // An empty `failures: []` from a lane that nonetheless failed is not a real answer — it means the
   // lane's own classifier named nothing, not that nothing broke — so the fallback parser still runs.

@@ -133,6 +133,11 @@ selected account may read. Account fixtures are deterministic test setup, not cr
 production provisioning endpoint. Existing fixtures without account declarations keep their
 ordinary provider-isolated row setup, and the `through` limitation above still applies.
 
+Authenticated `local only` fixture rows belong to the selected signed-in account. A fixture can
+create them for that account, but `for` another account is rejected: an actor override does not
+switch the local store's account. Seeding several accounts' local-only stores in one fixture is
+not supported.
+
 ## Tags and selectors
 
 `#tag` attaches to the immediately following render or loop:

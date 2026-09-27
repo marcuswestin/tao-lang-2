@@ -1,11 +1,29 @@
 import TR from '@runtime/TR'
+import { Errors } from '@shared/core'
 import { Deferred, Describe, Expect, Test, until } from '@shared/test'
 import { SignInFlow } from '../@tao/auth/AuthFlow'
 import { TestAuthProvider } from '../@tao/auth/testing/TestAuth'
+import { MemoryProvider } from '../@tao/data/providers/memory/Memory'
+
+/** testAuthScope pairs TestAuth with the Memory datasource that holds its deterministic Account. */
+function testAuthScope(): TR.AuthScope {
+  const scope = TR.Auth.CreateScope(TR.Auth.Configure(
+    TR.Auth.Declaration('TestAuth', TestAuthProvider(), { issues: ['TestIdentity'] }),
+    {},
+  ))
+  scope.bindDatasources([{
+    store: TR.Data.Schema({ name: 'Accounts', entities: { Account: { collection: 'Accounts', fields: {} } } }),
+    source: TR.Data.Configure(
+      TR.Data.Declaration('Memory', MemoryProvider(), undefined, { accepts: [{ kind: 'TestIdentity' }], supports: [] }),
+      {},
+    ),
+  }])
+  return scope
+}
 
 Describe('@tao/auth headless sign-in flow', () => {
   Test('keeps challenge failures editable, completes a valid code, and clears sensitive fields', async () => {
-    const scope = TR.Auth.CreateScope(TR.Auth.Configure(TR.Auth.Declaration('TestAuth', TestAuthProvider()), {}))
+    const scope = testAuthScope()
     await scope.restore()
     const flow = SignInFlow(scope, 'EmailCode')
     flow.writeMember(['Email'], 'alice@example.com')
@@ -34,7 +52,7 @@ Describe('@tao/auth headless sign-in flow', () => {
         restore: async () => ({ state: 'SignedOut' }),
         signIn: () => pending.promise,
         signOut: async () => ({ status: 'completed' }),
-        credential: async ({ audience }) => ({ audience, value: 'test-only' }),
+        proof: async () => Promise.reject(new Errors.UserInputError('Sign in to access this resource.')),
       }),
     }
     const scope = TR.Auth.CreateScope(TR.Auth.Configure(TR.Auth.Declaration('Pending', provider), {}))
@@ -54,8 +72,37 @@ Describe('@tao/auth headless sign-in flow', () => {
     scope.dispose()
   })
 
+  Test('a flow without a method follows the provider once it connects', async () => {
+    const requests: TR.AuthInput[] = []
+    const provider: TR.AuthProvider = {
+      connect: () => ({
+        capabilities: { methods: ['EmailCode'] },
+        restore: async () => ({ state: 'SignedOut' }),
+        signIn: async request => {
+          requests.push(request)
+          return { outcome: { status: 'rejected', message: 'Stop here' } }
+        },
+        signOut: async () => ({ status: 'completed' }),
+        proof: async () => Promise.reject(new Errors.UserInputError('Sign in to access this resource.')),
+      }),
+    }
+    const scope = TR.Auth.CreateScope(TR.Auth.Configure(TR.Auth.Declaration('CodeOnly', provider), {}))
+    const early = SignInFlow(scope)
+    const named = SignInFlow(scope, 'Password')
+    await scope.restore()
+    Expect(early.Step).toBe('Email')
+    early.writeMember(['Email'], 'alice@example.com')
+    await early.SendCode.invoke()
+    Expect(requests.map(request => request.method)).toEqual(['EmailCode'])
+    Expect(named.Step).toBe('Password')
+    await named.Submit.invoke()
+    Expect(named.Problem).toBe('This sign-in method is not available.')
+    Expect(requests.length).toBe(1)
+    scope.dispose()
+  })
+
   Test('a writable member updates the library flow without replacing its subscriptions or actions', async () => {
-    const scope = TR.Auth.CreateScope(TR.Auth.Configure(TR.Auth.Declaration('TestAuth', TestAuthProvider()), {}))
+    const scope = testAuthScope()
     await scope.restore()
     const flow = SignInFlow(scope)
     const owner = TR.Cell(TR.Value(flow))
@@ -73,7 +120,7 @@ Describe('@tao/auth headless sign-in flow', () => {
   })
 
   Test('a supplied flow can settle the action waiting for its sign-in presentation', async () => {
-    const scope = TR.Auth.CreateScope(TR.Auth.Configure(TR.Auth.Declaration('TestAuth', TestAuthProvider()), {}))
+    const scope = testAuthScope()
     await scope.restore()
     const presented = TR.Auth.SignInAction(scope).evaluate().jsValue.invoke()
     await until(() => scope.presenting)

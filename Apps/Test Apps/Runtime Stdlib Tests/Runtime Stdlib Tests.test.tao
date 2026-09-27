@@ -10,6 +10,7 @@ test "Runtime Stdlib Tests" {
       expect text "Tap me"
       press "Tap me"
       expect text "Label"
+      expect text "Floating badge"
       expect text "Wrapped"
    }
 }

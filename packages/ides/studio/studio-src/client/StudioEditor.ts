@@ -22,6 +22,18 @@ export function isStudioSaveShortcut(event: Pick<KeyboardEvent, 'altKey' | 'ctrl
   return !event.altKey && (event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 's'
 }
 
+/**
+ * The letter a shortcut names, lowercased. `key` follows the person's keyboard layout, as the save
+ * shortcut does; ⌥ turns it into a symbol on macOS (⌥G is "©"), so only then is the physical key read.
+ * The preview runtime keeps a copy (`shortcutLetter` in TR-studio-preview); keep the two in step.
+ */
+export function studioShortcutLetter(event: Pick<KeyboardEvent, 'altKey' | 'code' | 'key'>): string | undefined {
+  if (event.altKey) {
+    return event.code.startsWith('Key') ? event.code.slice(3).toLowerCase() : undefined
+  }
+  return event.key.toLowerCase()
+}
+
 /** Invalidates async file opens as soon as a newer navigation begins. */
 export class StudioOpenFileLifecycle {
   #revision = 0
@@ -37,9 +49,13 @@ export type StudioSourceEditor = {
   file: StudioDraftFile
 }
 
-/** Opens the exact Tao source observed by a preview, selects its range, and centers it in the editor. */
+/**
+ * Opens the exact Tao source observed by a preview, selects its range, and centers it in the editor.
+ * `focus: false` follows the selection without taking the keyboard, for when the canvas owns input.
+ */
 export const StudioSourceNavigation = {
   async openAndSelect(options: {
+    focus?: boolean
     identity: StudioSourceIdentity
     openFile: (path: string) => Promise<StudioSourceEditor | undefined>
     project: string
@@ -62,7 +78,9 @@ export const StudioSourceNavigation = {
       effects: EditorView.scrollIntoView(options.range.start, { y: 'center' }),
       selection: { anchor: options.range.start, head: options.range.end },
     })
-    opened.editor.focus()
+    if (options.focus !== false) {
+      opened.editor.focus()
+    }
     return opened
   },
 } as const

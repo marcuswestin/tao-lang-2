@@ -1,6 +1,6 @@
 # DEVENV-WORKFLOW-REPORTS-INCLUDE-CONCURRENT-TEST-FAILURES — Workflow reports include concurrent test failures
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Workflow diagnostics
 - **Impact:** A command's final failure summary can name a concurrent command's failed test, obscuring
@@ -19,3 +19,6 @@
 - **Acceptance:** Run one deliberately failing focused test concurrently with an independent host
   command. Each report includes only its own failures, while retaining its real verdict and logs.
 - **Source:** 2026-09-26 native-navigation acceptance.
+
+- **Resolution:** Removed the duplicated lane map and timestamp-based shared latest-summary fallback. A command now summarizes only its emitted summary path or its captured output. A controlled overlapping publisher reproduces foreign attribution before the repair and proves failed and successful commands retain their own outcomes afterward.
+- **Archived:** 2026-09-27.

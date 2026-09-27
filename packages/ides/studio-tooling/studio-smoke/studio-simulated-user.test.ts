@@ -254,21 +254,20 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       // body and the floating agent panel covers its lower half, so each is grabbed near its top,
       // where it is exposed and where a person reaching for it would take hold.
       const dividerGrip = { x: 2, y: 24 }
+      // Design gives the canvas all the width the editor's floor leaves, so a drag can only narrow it.
+      // The preview is the right-hand pane, so moving its left divider right decreases its width.
+      const initialPreview = await dividerSize(browser, 'preview')
+      await browser.dragBy('[data-divider="preview"]', { x: 40, y: 0 }, { offset: dividerGrip })
+      await browser.waitFor(
+        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) === ${
+          initialPreview - 40
+        }`,
+      )
       const initialLeft = await dividerSize(browser, 'left')
       await browser.dragBy('[data-divider="left"]', { x: 48, y: 0 }, { offset: dividerGrip })
       await browser.waitFor(
         `Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')) === ${
           initialLeft + 48
-        }`,
-      )
-      // Design mode derives the canvas width from whatever the rest of the workbench leaves, so
-      // widening the file tree just narrowed it. Read it again instead of predicting it.
-      const initialPreview = await dividerSize(browser, 'preview')
-      // The preview is the right-hand pane, so moving its left divider left increases its width.
-      await browser.dragBy('[data-divider="preview"]', { x: -40, y: 0 }, { offset: dividerGrip })
-      await browser.waitFor(
-        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) === ${
-          initialPreview + 40
         }`,
       )
       await browser.captureScreenshot('studio-resized-workbench')
@@ -471,6 +470,8 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.waitFor(
         `document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`,
       )
+      // V is the Draw canvas's resting tool; R draws the frame, then a rectangle inside it.
+      await browser.click(rectangleTool)
       await browser.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 76 }, { steps: 12 })
       await waitForSketchFile(browser, generatedSketchPath)
       await waitForFile(sketchCatalogPath)
@@ -498,6 +499,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         firstDraw,
         firstDrawOrigin,
       )
+      await drawingBrowser.click(rectangleTool)
       await drawingBrowser.dragBy(`[data-tao-studio-sketch="${createdSketchId}"]`, firstDraw, {
         offset: firstDrawOrigin,
         steps: 8,
@@ -1277,8 +1279,9 @@ async function expectPointerReachesBoard(
 }
 
 /**
- * The Draw preset gives the empty sketch canvas the whole window. Run keeps the live preview and
- * hides that canvas; Design leaves both a narrow column.
+ * The Draw preset is a workbench: code on the left, the sketch canvas in the middle column, and the
+ * inspector on the right. The canvas holds at least its 320px floor between them. Run keeps the live
+ * preview and hides that canvas.
  */
 async function enterDrawPreset(browser: StudioCdp): Promise<void> {
   await browser.waitFor(`document.querySelector('[data-preset="draw"]') instanceof HTMLButtonElement`, {
@@ -1289,7 +1292,7 @@ async function enterDrawPreset(browser: StudioCdp): Promise<void> {
     const host = document.querySelector('.tao-studio-product-host')
     const canvas = document.querySelector('.studio-draw-canvas')
     return host instanceof HTMLElement && host.dataset.layoutPreset === 'draw'
-      && canvas instanceof HTMLElement && canvas.getBoundingClientRect().width > window.innerWidth * 0.6
+      && canvas instanceof HTMLElement && canvas.getBoundingClientRect().width >= 320
   })()`)
 }
 
@@ -1427,6 +1430,9 @@ async function waitForSketchCatalog(
   )
 }
 
+/** The Draw strip's R tool; drawing hands back to V, so every draw picks it again. */
+const rectangleTool = '[data-tao-studio-draw-tool="rect"]'
+
 async function drawSketchRectangle(
   browser: StudioCdp,
   sketchId: string,
@@ -1435,6 +1441,8 @@ async function drawSketchRectangle(
   return await browser.evaluate<string>(`(() => {
     const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
     if (!(board instanceof HTMLElement)) throw new Error('Missing Studio sketch board')
+    const tool = document.querySelector(${JSON.stringify(rectangleTool)})
+    if (tool instanceof HTMLElement) tool.click()
     const generation = crypto.randomUUID()
     board.dataset.taoStudioSmokeGeneration = generation
     const bounds = board.getBoundingClientRect()

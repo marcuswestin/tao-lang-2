@@ -22,6 +22,12 @@
   Nix store. On 2026-09-25, after the branch's doctor repair, `./agent doctor` measured the same
   1.3.13 profile and correctly failed with a `direnv reload` instruction. The profile prerequisite
   remains external to this review branch.
+  On 2026-09-27 UTC, finalization of `feat/visionos-development-setup` integrated the new
+  `pkgs.direnv` prerequisite, but the borrowed profile lacked `bin/direnv`. Doctor still reported
+  the checkout usable; the real-direnv activation test failed with `ENOENT` on that path. The
+  documented `./agent setup --environment` rebuilt this checkout's profile successfully and
+  installed the missing tool. Nix reported a nonfatal timestamped GC-root symlink permission
+  warning. This is the same input-drift gap for a newly added tool rather than a Bun version.
   On 2026-09-26, merging `b0f939bc` into `feat/clerk-review-device-launch` exposed the same
   mid-session gap for a newly required tool: `devenv.nix` includes `pkgs.direnv`, but the existing
   store-backed profile has no `bin/direnv`. Finalization failed in the real-direnv activation test

@@ -1,10 +1,25 @@
 import TR from '@runtime/TR'
 import { createReactiveSource } from '@runtime/TR-reactive'
 
-/** A sign-in flow owns transient inputs and can be held by one mounted Tao state value. */
-export function SignInFlow(scope: TR.AuthScope, method = 'Password') {
+/**
+ * A sign-in flow owns transient inputs and can be held by one mounted Tao state value. Without a
+ * method it uses Password when the provider offers it and otherwise the method the provider lists
+ * first, so a form over an email-code-only provider starts at the email step. A method named
+ * explicitly is kept even when the provider lacks it, and signing in then says so.
+ */
+export function SignInFlow(scope: TR.AuthScope, requested: string | null = null) {
+  // A flow made before the provider connects cannot see its methods yet, so the choice waits for them.
+  let chosen = requested ?? undefined
+  function method(): string {
+    const offered = scope.capabilities.methods
+    if (chosen === undefined && offered.length > 0) {
+      chosen = offered.includes('Password') ? 'Password' : offered[0]!
+    }
+    return chosen ?? 'Password'
+  }
   const changes = createReactiveSource()
-  let step = method === 'EmailCode' ? 'Email' : 'Password'
+  // Undefined until the flow leaves its first step, which follows the method.
+  let step: string | undefined
   let email = ''
   let password = ''
   let code = ''
@@ -31,7 +46,7 @@ export function SignInFlow(scope: TR.AuthScope, method = 'Password') {
     problem = ''
     changed()
     const outcome = await scope.signIn({
-      method,
+      method: method(),
       ...(!resend && challengeId ? { challengeId } : {}),
       fields: { Email: email, Password: password, Code: code, Register: String(registration) },
     })
@@ -64,7 +79,7 @@ export function SignInFlow(scope: TR.AuthScope, method = 'Password') {
   }
   const flow = {
     get Step() {
-      return step
+      return step ?? (method() === 'EmailCode' ? 'Email' : 'Password')
     },
     get Email() {
       return email
@@ -124,7 +139,7 @@ export function SignInFlow(scope: TR.AuthScope, method = 'Password') {
       generation += 1
       scope.cancel()
       running = false
-      step = method === 'EmailCode' ? 'Email' : 'Password'
+      step = undefined
       problem = ''
       challengeId = undefined
       retryAt = 0

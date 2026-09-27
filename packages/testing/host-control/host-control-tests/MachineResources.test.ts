@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   MachineResourceBusyError,
@@ -39,6 +39,67 @@ const aliveIdentity = (startedAt: string) => async (): Promise<ProcessIdentity> 
 })
 
 Describe('machine resource leases', () => {
+  Test('concurrent releases join one pending registry cleanup', async () => {
+    const root = await mkTestDir('tao-host-control-release-')
+    try {
+      // Module mocking lives in an isolated worker because FS is an immutable module namespace.
+      const result = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [
+          `--tsconfig=${Repo.resolvePath('packages/testing/host-control/tsconfig.json')}`,
+          '-e',
+          `
+const shared = {...await import(${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/shared.ts'))})};
+const {MockModule, until, testOverrideSlot} = await import(${
+            JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts'))
+          });
+const {Platform} = shared;
+const FS = {...shared.FS};
+MockModule('@shared', () => ({...shared, FS}));
+const {MachineResources} = await import(${
+            JSON.stringify(Repo.resolvePath('packages/testing/host-control/host-control-src/MachineResources.ts'))
+          });
+const root = ${JSON.stringify(root)};
+const mutex = FS.resolvePath('.mutex', root);
+const path = FS.resolvePath('resource-release-control.lease', root);
+const lease = await MachineResources.acquire({command: 'release-control', name: 'release-control', registryRoot: root, repositoryRoot: root});
+await FS.writeJson(FS.resolvePath('blocker.json', root), {pid: Platform.runtimeProcess.pid, startedAt: new Date().toISOString()});
+await FS.symlink('blocker.json', mutex);
+const symlink = FS.symlink;
+let acquisitions = 0;
+const slot = testOverrideSlot({read: () => FS.symlink, write: value => {FS.symlink = value}});
+const restore = slot.install(async (target, link) => {
+  await symlink(target, link);
+  if (link === mutex) acquisitions += 1;
+});
+const first = lease.release();
+const second = lease.release();
+try {
+  await until(async () => (await FS.listDir(FS.resolvePath('.mutex-contenders', root))).length > 0);
+  const heldBeforeUnblock = await FS.exists(path);
+  await FS.remove(mutex);
+  await Promise.all([first, second]);
+  Platform.runtimeConsole.info(JSON.stringify({acquisitions, heldBeforeUnblock, remaining: await FS.exists(path), contenders: await FS.listDir(FS.resolvePath('.mutex-contenders', root))}));
+} finally {
+  await FS.remove(mutex);
+  await Promise.allSettled([first, second]);
+  restore();
+}
+`,
+        ],
+      })
+      Expect(result.stderr).toBe('')
+      Expect(result.exitCode).toBe(0)
+      Expect(JSON.parse(result.stdout)).toEqual({
+        acquisitions: 1,
+        heldBeforeUnblock: true,
+        remaining: false,
+        contenders: [],
+      })
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('protects the exact live owner regardless of lease age', async () => {
     const root = await mkTestDir('tao-host-control-live-owner-')
     try {

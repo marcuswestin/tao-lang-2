@@ -18,6 +18,31 @@ view Stack() {
    ```
 }
 
+// A layer floats over its parent's flow: it takes no room, and each inset is its distance from
+// that edge of the parent's box. An axis with no inset sits at its start edge, top or left. The
+// layer's own children stack and hug, and layers paint over earlier siblings in source order.
+// Presses on the layer's empty area reach what lies beneath it; its children still take theirs.
+public
+view Layer(InsetTop number? default none, InsetRight number? default none, InsetBottom number? default none, InsetLeft number? default none) {
+   render inject InsetTop, InsetRight, InsetBottom, InsetLeft, Content @@content, Layout @@layout, Tag @@tag ```ts
+      const inset = (value: number | null | undefined) => value == null ? undefined : value
+      const vertical = InsetTop == null && InsetBottom == null ? 0 : inset(InsetTop)
+      const horizontal = InsetLeft == null && InsetRight == null ? 0 : inset(InsetLeft)
+      return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
+        direction: 'column',
+        layout: TR.Layout.create([['content', 'top', 'center'], ['hug']]),
+        style: {
+          position: 'absolute',
+          top: vertical,
+          right: inset(InsetRight),
+          bottom: inset(InsetBottom),
+          left: horizontal,
+          pointerEvents: 'box-none',
+        },
+      })
+   ```
+}
+
 public
 view Col() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts

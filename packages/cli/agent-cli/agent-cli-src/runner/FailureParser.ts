@@ -1,6 +1,6 @@
 /**
- * The fallback failure parser: it runs only when a command's output names no `summary.json`, or
- * that lane's `latest/summary.json` predates this run. Verification owns the rich classification
+ * The fallback failure parser runs when a command's output names no usable `summary.json` failures.
+ * Verification owns the rich classification
  * (`RunSummary.classifyFailure`); this stays tiny and reads two shapes only — a Bun `(fail)` line
  * paired with the nearest `error:` line above it, and a bare `tsc` diagnostic.
  */

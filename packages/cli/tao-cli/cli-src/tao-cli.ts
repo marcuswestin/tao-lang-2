@@ -154,6 +154,7 @@ function createCommands(): Command {
     .option('--app <name>', 'Select a named app.')
     .option('--web', 'Export a static web artifact.')
     .option('--desktop', 'Build a locally runnable macOS app.')
+    .option('--visionos', 'Export an experimental visionOS Xcode project with bundled web UI.')
     .option('--agents', 'Build a background app service and bundled client executable (defaults to desktop).')
     .option('--output <directory>', 'Retain builds in this directory instead of the project’s .tao/builds.')
     .option('--ios', 'Show the status of local iOS builds.')
@@ -169,6 +170,7 @@ function createCommands(): Command {
           output?: string
           web?: boolean
           desktop?: boolean
+          visionos?: boolean
           ios?: boolean
           android?: boolean
           compileOnly?: boolean
@@ -176,7 +178,9 @@ function createCommands(): Command {
       ) => {
         try {
           const { runTaoBuild } = await import('./build-command')
-          const targets = (['web', 'desktop', 'ios', 'android'] as const).filter(target => options[target] === true)
+          const targets = (['web', 'desktop', 'ios', 'android', 'visionos'] as const).filter(target =>
+            options[target] === true
+          )
           if (options.agents && targets.length === 0) {
             targets.push('desktop')
           }
@@ -241,6 +245,31 @@ function createCommands(): Command {
       HCI.writeLine(JSON.stringify(result))
       if (!result.ok) {
         HCI.writeErrorLine(result.error.message)
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
+    .command('instantdb')
+    .description('Prepare the InstantDB app a Tao app syncs with.')
+    .command('push')
+    .argument('[path]', 'Tao file or directory whose app should be pushed.', '.')
+    .option('--app <name>', 'Select a named app.')
+    .option('--dry-run', 'Generate and plan, print what would change, and apply nothing.')
+    .option(
+      '--force',
+      'Apply a plan that is not purely additive; attributes the Tao schema does not declare stay on the server.',
+    )
+    .description(
+      "Push the app's generated InstantDB schema (additive changes only, unless forced) and permission rules."
+        + ' Reads the token from INSTANT_APP_ADMIN_TOKEN, or asks for it at a terminal.',
+    )
+    .action(async (path: string, options: { app?: string; dryRun?: boolean; force?: boolean }) => {
+      try {
+        const { runInstantDBPush } = await import('./instantdb-push-command')
+        await runInstantDBPush(path, { appName: options.app, dryRun: options.dryRun, force: options.force })
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.setExitCode(1)
       }
     })

@@ -1,5 +1,8 @@
 // Memory gives each configured datasource declaration an isolated process-local snapshot store.
 public
 type Memory is datasource with {
+   accepts { TestIdentity }
+   supports { Relations, UniqueFields, UniqueTogether, AccessRules, FieldUpdates, MembershipRules }
+
    provider MemoryProvider from ./Memory.ts
 }

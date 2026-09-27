@@ -111,6 +111,7 @@ async function create(options: StudioElectrobunOptions): Promise<StudioElectrobu
   await FS.writeJson(FS.resolvePath('tsconfig.json', root), generated.tsconfig)
 
   const environment = {
+    TAO_STUDIO_APP_NAME: safeAppName(options.appName ?? defaultStudioAppName),
     TAO_STUDIO_ELECTROBUN_RESULT_PATH: runtimeResultPath,
     TAO_STUDIO_ELECTROBUN_RUN_PROBE: options.runProbe === true ? 'true' : 'false',
     TAO_STUDIO_ELECTROBUN_SHOW_WINDOWS: options.showWindow === false ? 'false' : 'true',

@@ -9,10 +9,13 @@ import type { StoredLaunch, StudioLaunchManifest } from '../studio-tooling-src/S
 import type { StopReport } from '../studio-tooling-src/StudioLifecycle'
 import { StudioNative } from '../studio-tooling-src/StudioNative'
 
+const hostName = 'studio-native-host:com.devtao.studio.studio-visual-design-1a2b3c4d'
+const request = { command: 'studio-native', name: hostName }
+
 const holder: MachineResourceOwner = {
   command: 'studio-native',
   id: '46359-3fcaecc6',
-  name: 'studio-native-host',
+  name: hostName,
   pid: 46359,
   processStartedAt: 'Fri Sep  4 21:40:38 2026',
   repositoryRoot: '/worktrees/studio-visual-design',
@@ -26,20 +29,24 @@ const lease = {
 
 type Attempt = {
   acquire: NonNullable<Parameters<typeof StudioNative.testing.acquireNativeHostLease>[1]>['acquire']
+  names: string[]
   waits: number[]
 }
 
 /** busyOnce refuses the first claim with the holder above and grants every later one. */
 function busyOnce(): Attempt {
+  const names: string[] = []
   const waits: number[] = []
   return {
     acquire: async options => {
+      names.push(options.name)
       waits.push(options.waitTimeoutMs ?? -1)
       if (waits.length === 1) {
         throw new MachineResourceBusyError(holder)
       }
       return lease
     },
+    names,
     waits,
   }
 }
@@ -84,7 +91,7 @@ Describe('native host takeover', () => {
     const stoppedOwners: MachineResourceOwner[] = []
     const log: string[] = []
 
-    const acquired = await StudioNative.testing.acquireNativeHostLease('studio-native', {
+    const acquired = await StudioNative.testing.acquireNativeHostLease(request, {
       acquire: attempt.acquire,
       askConfirm: async message => {
         questions.push(message)
@@ -102,6 +109,7 @@ Describe('native host takeover', () => {
     Expect(questions).toEqual(['Stop that session and take the native host?'])
     Expect(stoppedOwners).toEqual([holder])
     Expect(attempt.waits).toEqual([0, 10_000])
+    Expect(attempt.names).toEqual([hostName, hostName])
     Expect(log[0]).toBe(
       'native host is held by studio-native in /worktrees/studio-visual-design (PID 46359), since 2026-09-05T01:40:40.292Z',
     )
@@ -112,7 +120,7 @@ Describe('native host takeover', () => {
     const attempt = busyOnce()
     let stops = 0
 
-    await Expect(StudioNative.testing.acquireNativeHostLease('studio-native', {
+    await Expect(StudioNative.testing.acquireNativeHostLease(request, {
       acquire: attempt.acquire,
       askConfirm: async () => false,
       isInteractive: () => true,
@@ -122,7 +130,7 @@ Describe('native host takeover', () => {
         return ''
       },
     })).rejects.toThrow(
-      "Machine resource 'studio-native-host' is busy: studio-native in /worktrees/studio-visual-design (PID 46359)",
+      `Machine resource '${hostName}' is busy: studio-native in /worktrees/studio-visual-design (PID 46359)`,
     )
     Expect(stops).toBe(0)
     Expect(attempt.waits).toEqual([0])
@@ -132,7 +140,7 @@ Describe('native host takeover', () => {
     const attempt = busyOnce()
     let prompts = 0
 
-    await Expect(StudioNative.testing.acquireNativeHostLease('studio-native', {
+    await Expect(StudioNative.testing.acquireNativeHostLease(request, {
       acquire: attempt.acquire,
       askConfirm: async () => {
         prompts += 1
@@ -148,7 +156,7 @@ Describe('native host takeover', () => {
 
   Test('takes a free host without asking', async () => {
     let prompts = 0
-    const acquired = await StudioNative.testing.acquireNativeHostLease('studio-native', {
+    const acquired = await StudioNative.testing.acquireNativeHostLease(request, {
       acquire: async () => lease,
       askConfirm: async () => {
         prompts += 1
@@ -234,5 +242,62 @@ Describe('native host takeover', () => {
     Expect(message).toBe(
       'studio-native (PID 46359) in /worktrees/studio-visual-design had already ended; nothing to stop',
     )
+  })
+  Test('a probing launch also takes the machine probe slot and releases both', async () => {
+    const events: string[] = []
+    const acquired = await StudioNative.testing.acquireNativeHostLeases({ ...request, probe: true }, {
+      acquire: async options => {
+        events.push(`acquire ${options.name} wait ${options.waitTimeoutMs}`)
+        return { owner: holder, release: async () => void events.push(`release ${options.name}`) }
+      },
+      isInteractive: () => false,
+      log: () => {},
+    })
+    await acquired.release()
+
+    Expect(events).toEqual([
+      `acquire ${hostName} wait 0`,
+      'acquire studio-native-probe wait 0',
+      'release studio-native-probe',
+      `release ${hostName}`,
+    ])
+  })
+
+  Test('an ordinary launch takes only its own worktree host', async () => {
+    const names: string[] = []
+    await StudioNative.testing.acquireNativeHostLeases({ ...request, probe: false }, {
+      acquire: async options => {
+        names.push(options.name)
+        return lease
+      },
+      log: () => {},
+    })
+
+    Expect(names).toEqual([hostName])
+  })
+
+  Test('a busy probe slot fails at once, offers no takeover, and gives the worktree host back', async () => {
+    const events: string[] = []
+    let prompts = 0
+    const probeHolder = { ...holder, command: 'studio-canary', name: 'studio-native-probe' }
+
+    await Expect(StudioNative.testing.acquireNativeHostLeases({ ...request, probe: true }, {
+      acquire: async options => {
+        events.push(`acquire ${options.name}`)
+        if (options.name === 'studio-native-probe') {
+          throw new MachineResourceBusyError(probeHolder)
+        }
+        return { owner: holder, release: async () => void events.push(`release ${options.name}`) }
+      },
+      askConfirm: async () => {
+        prompts += 1
+        return true
+      },
+      isInteractive: () => true,
+      log: () => {},
+    })).rejects.toThrow("Machine resource 'studio-native-probe' is busy: studio-canary")
+
+    Expect(prompts).toBe(0)
+    Expect(events).toEqual([`acquire ${hostName}`, 'acquire studio-native-probe', `release ${hostName}`])
   })
 })
