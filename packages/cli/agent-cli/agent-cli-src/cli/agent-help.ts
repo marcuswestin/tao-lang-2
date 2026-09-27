@@ -49,7 +49,7 @@ async function printAgentHelp(justCommands: readonly string[]): Promise<number> 
 const FALLBACK_DESCRIPTIONS: Partial<Record<string, string>> = {
   'ledger-index': 'Regenerate the developer-environment ledger index from its entry files',
   'parser-gen': 'Regenerate the parser from the grammar',
-  setup: 'Install dependencies and generate agent adapters',
+  setup: 'Install dependencies and generate agent adapters; offer optional developer shell activation',
   typecheck: 'Type-check every package',
 }
 
@@ -128,6 +128,9 @@ pinned client so removing a linked worktree does not break the daemon's launch p
 
 setup --environment builds this checkout's pinned Nix environment, then runs setup without opening
 an interactive shell. Use it when native tools such as Hutch are missing or the toolchain changed.
+At a developer terminal, successful setup ends with an optional direnv activation prompt. The choice
+is shared by this repository's worktrees under ~/.tao-dev. Noninteractive setup never prompts or
+changes personal shell settings. Run ./agent shell-setup to change a saved choice.
 setup installs with a frozen lockfile. After adding, removing, or moving a workspace package, or
 changing a package.json dependency, setup --refresh-lockfile is the one install that rewrites
 bun.lock.
