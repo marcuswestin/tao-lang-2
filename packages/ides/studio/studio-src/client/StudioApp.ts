@@ -1,4 +1,4 @@
-import { applyCanvasViewport } from './matrix/StudioCanvasViewport'
+import { applyCanvasViewport, isStudioTypingTarget } from './matrix/StudioCanvasViewport'
 import { mountFeedDropOverlay } from './matrix/StudioFeedDropOverlays'
 import { StudioMatrixSketches } from './matrix/StudioMatrixSketches'
 import { mountPreviewActivation } from './matrix/StudioPreviewActivation'
@@ -42,6 +42,12 @@ import {
 import { publishStudioHostSnapshot } from './app/StudioProductHostState'
 import { StudioProjectSearch } from './app/StudioProjectSearch'
 import { StudioScenarioActions } from './app/StudioScenarioActions'
+import {
+  isStudioSelectionCommand,
+  studioSelectionAction,
+  type StudioSelectionCommand,
+  studioSelectionShortcut,
+} from './app/StudioSelectionGrouping'
 import { configureStudioSessionPickers } from './app/StudioSessionPickers'
 import { StudioSourceMutations } from './app/StudioSourceMutations'
 import {
@@ -323,6 +329,21 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
 
     let canvasViewport: ReturnType<typeof mountCanvasViewport> | undefined
     const canvasGesturesOwned = (): boolean => studioLayoutOwnsCanvasGestures(root.dataset['layoutPreset'])
+    /** ⌘G and ⌥⌘G turn the preview selection into a view or a group; a lone element is a group of one. */
+    const applySelectionCommand = (command: StudioSelectionCommand): void => {
+      const inspected = inspection.selected()
+      if (inspected === undefined) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = 'Select elements in the preview before grouping them.'
+        return
+      }
+      const action = studioSelectionAction(
+        command,
+        inspection.selectedGroup(),
+        selection => studioCanvasSelectionBounds(view.preview, selection, previews),
+      )
+      void mutations.submitLocal(action, inspected.identity)
+    }
     const disposeFeedDropOverlay = mountFeedDropOverlay(view.preview, previews, canvasGesturesOwned)
     const previewWiring = {
       activePreview,
@@ -339,7 +360,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       onCanvasShortcut: (
         command: import('../StudioProtocol').StudioPreviewCanvasShortcutMessage['command'],
         iframe: HTMLIFrameElement,
-      ) => canvasViewport?.iframeShortcut(command, iframe),
+      ) =>
+        isStudioSelectionCommand(command)
+          ? applySelectionCommand(command)
+          : canvasViewport?.iframeShortcut(command, iframe),
       onFeedDrop: async (message: import('../StudioProtocol').StudioPreviewFeedDropMessage) => {
         const target = StudioMatrixSketches.feedTarget(view.preview, message)
         await feed.drop(message.drop, target.sketchId, target.rectId, message.identity.cellId)
@@ -580,6 +604,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         commands.toggle()
       } else if (event.key === 'Escape' && !view.commandOverlay.hidden) {
         commands.close()
+      } else {
+        const command = studioSelectionShortcut(event)
+        if (command !== undefined && inspection.selected() !== undefined && !isStudioTypingTarget(event.target)) {
+          event.preventDefault()
+          applySelectionCommand(command)
+        }
       }
     }
     window.addEventListener('keydown', keydownListener, { capture: true })
@@ -591,9 +621,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     window.addEventListener('beforeunload', beforeUnloadListener)
     const unregisterProductHost = registerStudioProductHostActions({
-      async applyInspectorAction(action, proposed) {
+      async applyInspectorAction(requested, proposed) {
         const inspected = inspection.selected()
         Assert.input(inspected, 'Select a rendered element before editing its source.')
+        // Make view acts on everything shift-selected, not just the element the inspector shows.
+        const action = requested.kind === 'extract-view'
+          ? { ...requested, renderIds: inspection.selectedGroup().map(selection => selection.renderId) }
+          : requested
         if (proposed) {
           await mutations.submitProposedLocal(action, inspected.identity)
         } else {

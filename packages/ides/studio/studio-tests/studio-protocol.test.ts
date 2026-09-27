@@ -135,7 +135,7 @@ Describe('Studio session paths and routes', () => {
       command: 'fit',
     }
     const event = { data: message, origin: expectation.origin, source: previewWindow }
-    for (const command of ['fit', 'reset', 'zoom-in', 'zoom-out']) {
+    for (const command of ['fit', 'group', 'make-view', 'reset', 'zoom-in', 'zoom-out']) {
       Expect(StudioProtocol.parseWindowMessage({ ...event, data: { ...message, command } }, expectation)).toMatchObject(
         { command },
       )
@@ -447,6 +447,19 @@ Describe('Studio protocol v1', () => {
     Expect(selected?.type).toBe('preview-select-source')
     Expect(selected?.type === 'preview-select-source' ? selected.identity.sourceVersion : undefined)
       .toBe('sha256:source-7')
+    Expect(selected).not.toHaveProperty('additive')
+    const sourceMessage = (type: string, additive: unknown) =>
+      StudioProtocol.parseMessage({
+        additive,
+        channel: studioProtocolChannel,
+        identity,
+        protocolVersion: studioProtocolVersion,
+        range: { end: 25, start: 10 },
+        type,
+      })
+    Expect(sourceMessage('preview-select-source', true)).toMatchObject({ additive: true })
+    Expect(sourceMessage('preview-select-source', 'yes')).not.toHaveProperty('additive')
+    Expect(sourceMessage('preview-hover-source', true)).not.toHaveProperty('additive')
   })
 
   Test('rejects untrusted origins, windows, project identities, and preview instances', () => {

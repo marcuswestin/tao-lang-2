@@ -2838,6 +2838,7 @@ Test('Studio preview message wiring dispatches one editor selection per incoming
       select() {
         inspections += 1
       },
+      selected: () => undefined,
       // Reintroducing the old second selection path records another editor dispatch here.
       selectSourceInEditor() {
         dispatches += 1

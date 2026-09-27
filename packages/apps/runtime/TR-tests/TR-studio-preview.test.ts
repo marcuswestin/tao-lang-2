@@ -472,6 +472,43 @@ Describe('Studio preview runtime bridge', () => {
     Expect(layoutMessages()).toHaveLength(4)
   })
 
+  Test('shift-click groups elements from one file and ⌘G or ⌥⌘G asks Studio to make a view or group', () => {
+    const first = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
+    const second = renderElement('/project/Main.tao', 30, 40, { height: 20, left: 30, top: 0, width: 20 })
+    const fake = previewHost([first, second])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    const posted = (type: string) => fake.messages.filter(post => (post.message as { type?: string }).type === type)
+    const selectG = (modifiers: Record<string, boolean>) =>
+      fake.dispatchDocument('keydown', {
+        code: 'KeyG',
+        key: 'g',
+        metaKey: true,
+        preventDefault: () => {},
+        ...modifiers,
+      })
+    selectG({})
+    Expect(posted('preview-canvas-shortcut')).toHaveLength(0)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    fake.dispatchDocument('click', { target: first })
+    fake.dispatchDocument('click', { shiftKey: true, target: second })
+    const selections = posted('preview-select-source').map(post => post.message as { additive?: true })
+    Expect(selections.map(message => message.additive)).toEqual([undefined, true])
+    const outlines = () => fake.overlays.filter(overlay => !overlay.removed).map(overlay => overlay.attributes)
+    Expect(outlines()).toEqual([
+      { 'data-tao-studio-overlay': 'selection' },
+      { 'data-tao-studio-overlay': 'selection-group' },
+    ])
+    selectG({})
+    selectG({ altKey: true })
+    Expect(posted('preview-canvas-shortcut').map(post => (post.message as { command: string }).command))
+      .toEqual(['make-view', 'group'])
+    fake.dispatchDocument('click', { shiftKey: true, target: second })
+    Expect(outlines()).toEqual([{ 'data-tao-studio-overlay': 'selection' }])
+    fake.dispatchDocument('click', { shiftKey: true, target: first })
+    Expect(outlines()).toEqual([{ 'data-tao-studio-overlay': 'selection' }])
+    cleanup()
+  })
+
   Test('forwards Design canvas shortcuts from the focused iframe and claims only those keys', () => {
     const fake = previewHost([])
     const cleanup = mountStudioPreviewBridge(config, fake.host)

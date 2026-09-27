@@ -7,7 +7,7 @@
  */
 
 import { Switch } from '@shared/core'
-import type { StudioCanvasViewport, StudioPreviewCanvasShortcutMessage } from '../../StudioProtocol'
+import type { StudioCanvasViewport, StudioCanvasZoomCommand } from '../../StudioProtocol'
 
 type StudioCanvasViewportState = StudioCanvasViewport
 type CanvasRect = Readonly<{ bottom: number; left: number; right: number; top: number }>
@@ -118,7 +118,7 @@ export type StudioCanvasViewportControls = Readonly<{
   iframeWheel: (gesture: StudioCanvasWheelGesture, frame: Element) => void
   /** Space presses in a focused preview cannot bubble into the parent document. */
   iframePanKey: (held: boolean, frame: Element) => void
-  iframeShortcut: (command: StudioPreviewCanvasShortcutMessage['command'], frame: Element) => void
+  iframeShortcut: (command: StudioCanvasZoomCommand, frame: Element) => void
   zoomTo: (scale: number, anchor?: Readonly<{ x: number; y: number }>) => void
 }>
 
@@ -252,7 +252,7 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     })
     publish()
   }
-  const shortcut = (command: StudioPreviewCanvasShortcutMessage['command']): void => {
+  const shortcut = (command: StudioCanvasZoomCommand): void => {
     Switch(command, {
       fit,
       reset,
@@ -502,13 +502,13 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     if (deps.enabled?.() === false) {
       return
     }
-    if (event.key === ' ' && !event.isComposing && !isTypingTarget(event.target)) {
+    if (event.key === ' ' && !event.isComposing && !isStudioTypingTarget(event.target)) {
       event.preventDefault()
       event.stopPropagation()
       setSpaceHeld(true)
       return
     }
-    if (event.isComposing || !(event.metaKey || event.ctrlKey) || isTypingTarget(event.target)) {
+    if (event.isComposing || !(event.metaKey || event.ctrlKey) || isStudioTypingTarget(event.target)) {
       return
     }
     const command = event.key === '0' ? 'fit' : event.key === '1'
@@ -621,7 +621,8 @@ export function nextStop(scale: number, direction: 1 | -1): number {
     ?? clampScale(direction === 1 ? maximumScale : minimumScale)
 }
 
-function isTypingTarget(target: EventTarget | null): boolean {
+/** Keys typed into a field or the code editor belong to it, not to canvas shortcuts. */
+export function isStudioTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
     return false
   }

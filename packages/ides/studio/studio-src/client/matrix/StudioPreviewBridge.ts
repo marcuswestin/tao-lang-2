@@ -44,7 +44,8 @@ type StudioPreviewMessageActions = {
   canvasShortcut?: (message: StudioPreviewCanvasShortcutMessage) => void
   changed?: () => void
   feedDrop?: (message: StudioPreviewFeedDropMessage) => Promise<void>
-  inspect: (selection: StudioInspectorSelection) => void
+  /** Additive selections come from a shift-click and join the selection instead of replacing it. */
+  inspect: (selection: StudioInspectorSelection, additive?: boolean) => void
   reveal?: () => void
 }
 
@@ -542,13 +543,16 @@ async function receiveSelectSource(
     return
   }
   actions.reveal?.()
-  actions.inspect(StudioInspector.selection({
-    ...message,
-    identity: {
-      ...message.identity,
-      ...(preview.cell === undefined ? {} : { scenarioId: preview.cell.scenarioId }),
-    },
-  }))
+  actions.inspect(
+    StudioInspector.selection({
+      ...message,
+      identity: {
+        ...message.identity,
+        ...(preview.cell === undefined ? {} : { scenarioId: preview.cell.scenarioId }),
+      },
+    }),
+    message.additive === true,
+  )
 }
 
 export function requestRuntimeCapture(

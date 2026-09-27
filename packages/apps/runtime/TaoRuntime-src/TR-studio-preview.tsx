@@ -98,8 +98,10 @@ type StudioPreviewMessageEvent = {
 }
 
 type StudioPreviewPointerEvent = {
+  altKey?: boolean
   clientX?: number
   clientY?: number
+  code?: string
   ctrlKey?: boolean
   deltaX?: number
   deltaY?: number
@@ -109,6 +111,7 @@ type StudioPreviewPointerEvent = {
   metaKey?: boolean
   preventDefault?(): void
   repeat?: boolean
+  shiftKey?: boolean
   stopImmediatePropagation?(): void
   stopPropagation?(): void
   target?: unknown
@@ -841,6 +844,9 @@ export function mountStudioPreviewBridge(
 
   let hoverTarget: StudioRenderTarget | undefined
   let selectedTarget: StudioRenderTarget | undefined
+  /** Shift-click adds elements from the same file; the selected target is always its last member. */
+  let selectedGroup: StudioRenderTarget[] = []
+  let groupOverlays: StudioPreviewOverlay[] = []
   let sourceTarget: StudioRenderTarget | undefined
   let overlay: StudioPreviewOverlay | undefined
   let dragOverlay: StudioPreviewOverlay | undefined
@@ -899,10 +905,12 @@ export function mountStudioPreviewBridge(
   const clearEditSelection = () => {
     hoverTarget = undefined
     selectedTarget = undefined
+    selectedGroup = []
     sourceTarget = undefined
     disarmDrag()
     overlay?.remove()
     overlay = undefined
+    redrawGroupOverlays()
   }
 
   const postRecordingState = (
@@ -1018,7 +1026,21 @@ export function mountStudioPreviewBridge(
     postRecordedStep(recording, target === undefined ? unresolvedRecordedStep('press') : { kind: 'press', ...target })
   }
 
+  /** Outlines every selected element other than the one the main overlay already follows. */
+  const redrawGroupOverlays = () => {
+    const others = selectedGroup.length > 1 ? selectedGroup.filter(member => member !== selectedTarget) : []
+    for (const extra of groupOverlays.splice(others.length)) {
+      extra.remove()
+    }
+    others.forEach((member, index) => {
+      const outline = groupOverlays[index] ?? createOverlay(host)
+      groupOverlays[index] = outline
+      outline.setAttribute('data-tao-studio-overlay', 'selection-group')
+      positionOverlay(outline, member.element.getBoundingClientRect())
+    })
+  }
   const redrawOverlay = () => {
+    redrawGroupOverlays()
     const target = sourceTarget ?? hoverTarget ?? selectedTarget
     if (target === undefined) {
       if (overlay !== undefined) {
@@ -1062,6 +1084,17 @@ export function mountStudioPreviewBridge(
     }
     blockAppPointerEvent(event)
     postToStudio(host, config, 'preview-canvas-shortcut', { command: commands[event.key] })
+  }
+  /** ⌘G makes a view of the selection and ⌥⌘G groups it in place; both need an edit-mode selection. */
+  const onSelectionShortcutKeyDown = (event: StudioPreviewPointerEvent) => {
+    if (
+      !editingGesture(event) || selectedTarget === undefined || !(event.metaKey === true || event.ctrlKey === true)
+      || event.isComposing === true || event.code !== 'KeyG' || isCanvasTypingTarget(previewElementFromEvent(event))
+    ) {
+      return
+    }
+    blockAppPointerEvent(event)
+    postToStudio(host, config, 'preview-canvas-shortcut', { command: event.altKey === true ? 'group' : 'make-view' })
   }
   const onCanvasPanKeyDown = (event: StudioPreviewPointerEvent) => {
     if (
@@ -1187,10 +1220,13 @@ export function mountStudioPreviewBridge(
     }
     hoverTarget = undefined
     sourceTarget = undefined
-    selectedTarget = target
+    const additive = event.shiftKey === true && selectedTarget !== undefined
+      && selectedTarget.identity.sourcePath === target.identity.sourcePath
+    selectedGroup = additive ? toggledGroupMember(selectedGroup, target) : [target]
+    selectedTarget = selectedGroup.at(-1)
     redrawOverlay()
     postLayoutMeasurements()
-    postSourceMessage(host, config, 'preview-select-source', target.identity)
+    postSourceMessage(host, config, 'preview-select-source', target.identity, additive)
   }
   const onMouseDown = (event: StudioPreviewPointerEvent) => {
     if (!editingGesture(event)) {
@@ -1384,6 +1420,7 @@ export function mountStudioPreviewBridge(
     ['input', onRecordedInput, true],
     ['blur', onRecordedBlur, true],
     ['keydown', onCanvasShortcutKeyDown, true],
+    ['keydown', onSelectionShortcutKeyDown, true],
     ['keydown', onCanvasPanKeyDown, true],
     ['keyup', onCanvasPanKeyUp, true],
     ['keydown', onRecordedKeyDown, true],
@@ -1777,12 +1814,14 @@ function postSourceMessage(
   config: StudioPreviewConfig,
   type: 'preview-hover-source' | 'preview-select-source',
   occurrence: TaoStudioIdentity,
+  additive = false,
 ): void {
   const sourceVersion = sourceVersionFor(config, occurrence.sourcePath)
   if (sourceVersion === undefined) {
     return
   }
   postToStudio(host, config, type, {
+    ...(additive ? { additive: true } : {}),
     identity: occurrenceIdentity(config, occurrence, sourceVersion),
     range: { end: occurrence.end, start: occurrence.start },
   })
@@ -2006,6 +2045,19 @@ const overlayBaseStyle = {
 /** The drop indicator's thickness, and the smallest extent it is drawn along its other axis. */
 const dropIndicatorThickness = 3
 const dropIndicatorMinimumLength = { across: 16, along: 24 } as const
+
+/**
+ * Shift-clicking a member removes it unless it is the last one; anything else joins the group.
+ * Studio's inspection applies the same rule, so both sides agree on what is selected.
+ */
+function toggledGroupMember(group: readonly StudioRenderTarget[], target: StudioRenderTarget): StudioRenderTarget[] {
+  const same = (member: StudioRenderTarget) =>
+    member.identity.start === target.identity.start && member.identity.end === target.identity.end
+  if (group.some(same)) {
+    return group.length > 1 ? group.filter(member => !same(member)) : [...group]
+  }
+  return [...group, target]
+}
 
 function createOverlay(host: StudioPreviewHost): StudioPreviewOverlay {
   const overlay = host.document.createElement('div')

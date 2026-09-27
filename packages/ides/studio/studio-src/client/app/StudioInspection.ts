@@ -36,6 +36,8 @@ export class StudioInspection {
   #inspection: StudioRenderInspection | undefined
   #requestRevision = 0
   #selected: StudioInspectorSelection | undefined
+  /** Every selected element, in the order they were added; the selection is always the last. */
+  #group: StudioInspectorSelection[] = []
 
   constructor(deps: StudioInspectionDeps) {
     this.#deps = deps
@@ -61,12 +63,32 @@ export class StudioInspection {
     return selected === undefined || name === undefined ? undefined : { id: `${selected.identity.path}#${name}`, name }
   }
 
-  select(selection: StudioInspectorSelection): void {
-    this.#selected = selection
+  /** The selected elements, which the preview keeps to one file; a single selection is a group of one. */
+  selectedGroup(): readonly StudioInspectorSelection[] {
+    return this.#group
+  }
+
+  /**
+   * An additive selection toggles membership: a new element joins, a member leaves unless it is the
+   * last one. The preview applies the same rule to its outlines. A plain selection starts over.
+   */
+  select(selection: StudioInspectorSelection, additive = false): void {
+    const current = this.#selected
+    if (!additive || current === undefined || current.identity.path !== selection.identity.path) {
+      this.#group = [selection]
+    } else if (this.#group.some(member => member.renderId === selection.renderId)) {
+      if (this.#group.length > 1) {
+        this.#group = this.#group.filter(member => member.renderId !== selection.renderId)
+      }
+    } else {
+      this.#group = [...this.#group, selection]
+    }
+    this.#selected = this.#group.at(-1)
   }
 
   /** A source mutation invalidates the selection: render ids do not survive a recompile. */
   clear(): void {
+    this.#group = []
     this.#selected = undefined
     this.#inspection = undefined
   }

@@ -171,12 +171,13 @@ export function studioPreviewMessageListener(deps: StudioPreviewMessagesDeps): (
         drawer.loadDataIfVisible()
         connection.changed?.()
       },
-      inspect(selection) {
-        inspection.select(selection)
+      inspect(selection, additive) {
+        inspection.select(selection, additive)
+        const selected = inspection.selected() ?? selection
         deps.publish()
         deps.onInspected()
-        void inspection.inspect(selection)
-        void inspection.highlightOnDevice(selection)
+        void inspection.inspect(selected)
+        void inspection.highlightOnDevice(selected)
       },
       reveal: deps.onReveal,
     }).catch(error => {
