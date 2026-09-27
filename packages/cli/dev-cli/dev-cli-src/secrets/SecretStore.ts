@@ -5,9 +5,11 @@
 // different lines and merge, where a whole-file scheme (SOPS included, whose MAC covers every value) produces
 // a conflict no one can resolve by hand because both sides are opaque.
 //
-// The values are encrypted to one store key rather than to each machine, and the store key's secret half is
-// what is encrypted to each machine. A Secure Enclave identity asks for a fingerprint per decryption, so
-// unwrapping one key and decrypting every value with it in software is one prompt per read, not one per value.
+// One credential opens everything. Values are encrypted to one store key rather than to each machine, and
+// only the store key's secret half is encrypted to each machine. Reading one secret, many, or all of them,
+// and adding one, each use the machine's credential exactly once, to unwrap that key, and check the unwrapped
+// key against the public half the store records. A value not encrypted to the store key is refused rather
+// than decrypted with the machine's credential, so a Secure Enclave identity never asks once per value.
 //
 // Nothing here does cryptography. `Cipher` is the seam to `age`, which owns all of it.
 
@@ -17,17 +19,22 @@ import { Errors, Json } from '@shared'
 export type Cipher = {
   /** Encrypts to every recipient, returning ASCII armor. It needs only public keys, so it never prompts. */
   encrypt: (plaintext: string, recipients: readonly string[]) => Promise<string>
-  /** Decrypts armor with the machine's identity. With a Secure Enclave identity this prompts for Touch ID. */
+  /**
+   * Decrypts armor with the machine's identity. With a Secure Enclave identity this prompts for Touch ID or the
+   * login passcode, so the store calls it only to unwrap the store key, never for a value.
+   */
   decrypt: (armor: string) => Promise<string>
   /** Decrypts armor with a software secret key such as the store key, which never prompts. */
   decryptWithKey: (armor: string, secretKey: string) => Promise<string>
   /** Creates a fresh software key pair; the secret half must be wrapped before anything stores it. */
   generateKey: () => Promise<{ recipient: string; secretKey: string }>
+  /** Derives the public recipient of a software secret key, which proves an unwrapped key is the recorded one. */
+  recipientOfKey: (secretKey: string) => Promise<string>
 }
 
 /** StoreKey is the key every value is encrypted to. Only its public half is readable in the committed file. */
 export type StoreKey = {
-  /** The public half, which `add` encrypts to without decrypting anything. */
+  /** The public half, which values are encrypted to and which an unwrapped secret half must match. */
   recipient: string
   /**
    * The machine recipients `wrappedKey` is encrypted to. A recipient listed in the store but missing here was
@@ -55,7 +62,7 @@ export type SecretStore = {
    * needs the matching identity, which for a Secure Enclave recipient exists on exactly one Mac.
    */
   recipients: readonly string[]
-  /** Absent until the first value is added or the first read moves older values onto it. */
+  /** Absent until the first value is added; a store holding values without one cannot be read. */
   storeKey?: StoreKey
   secrets: Readonly<Record<string, SecretEntry>>
 }
@@ -63,8 +70,9 @@ export type SecretStore = {
 const HEADER = `// Tao's committed secrets. Values are encrypted with age; keys, notes and dates are not.
 //
 // Every value is encrypted to the store key, whose secret half is itself encrypted to each machine in the
-// recipients below. Reading unwraps that key once, so one fingerprint reads the whole store. A Secure
-// Enclave recipient lives in one Mac's hardware, so a copy of this file is useless to anyone else.
+// recipients below. Reading or adding unwraps that key once with this machine's credential, so one
+// fingerprint covers the whole store, and a value not encrypted to the store key is refused, never decrypted.
+// A Secure Enclave recipient lives in one Mac's hardware, so a copy of this file is useless to anyone else.
 //
 // Do not hand-edit a value. Use \`just secrets add <KEY>\`, which encrypts what you paste and never echoes it.
 `

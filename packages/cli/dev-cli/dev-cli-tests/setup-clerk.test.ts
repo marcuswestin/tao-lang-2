@@ -151,23 +151,34 @@ Describe('Clerk setup wizard', () => {
   })
 })
 
-/** A cipher that fails any decryption, so a batch that tried one fails; each store key it makes is numbered. */
+/**
+ * A cipher that decrypts nothing but the wrapped store key, so a batch that decrypted a value fails; each store
+ * key it makes is numbered, and `stored` is a store whose key it can unwrap.
+ */
 function encryptOnly(encrypt: (value: string) => Promise<string>): Cipher {
   let keys = 0
   return {
-    decrypt: async () => Errors.throwUnexpected('No decryption'),
+    decrypt: async armor =>
+      armor === 'wrapped-store-secret-0' ? 'store-secret-0' : Errors.throwUnexpected('No decryption'),
     decryptWithKey: async () => Errors.throwUnexpected('No decryption'),
     encrypt,
     generateKey: async () => {
       keys++
       return { recipient: `store-recipient-${keys}`, secretKey: `store-secret-${keys}` }
     },
+    recipientOfKey: async secretKey => secretKey.replace('secret', 'recipient'),
   }
+}
+
+const stored: SecretStore = {
+  recipients: ['recipient'],
+  storeKey: { recipient: 'store-recipient-0', wrappedFor: ['recipient'], wrappedKey: ['wrapped-store-secret-0'] },
+  secrets: {},
 }
 
 Describe('Encrypted setup batch', () => {
   Test('overlapping saves preserve both unrelated encrypted additions', async () => {
-    let current: SecretStore = { recipients: ['recipient'], secrets: {} }
+    let current = stored
     const writing = Deferred()
     const release = Deferred()
     const secondEncrypted = Deferred()
@@ -200,8 +211,8 @@ Describe('Encrypted setup batch', () => {
     await Promise.all([savingFirst, savingSecond])
     Expect(current.secrets['FIRST']?.value).toEqual(['armor:first'])
     Expect(current.secrets['SECOND']?.value).toEqual(['armor:second'])
-    // Both batches made a store key; the second found the first's recorded and kept it.
-    Expect(current.storeKey?.recipient).toBe('store-recipient-1')
+    // Both batches unlocked the recorded store key and encrypted to it; neither made another.
+    Expect(current.storeKey).toEqual(stored.storeKey)
   })
   Test('encrypts everything before one write and preserves unrelated entries', async () => {
     const original: SecretStore = {
