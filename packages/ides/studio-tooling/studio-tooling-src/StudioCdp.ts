@@ -712,7 +712,7 @@ export class StudioCdp {
       }
     })()`)
     const tree = await this.client.send<{ frameTree: FrameTree }>('Page.getFrameTree')
-    const frameFingerprints: Array<readonly [string, string]> = []
+    const frameFingerprints: string[] = []
     for (const frame of childFrames(tree.frameTree)) {
       const world = await this.client.send<{ executionContextId: number }>('Page.createIsolatedWorld', {
         frameId: frame.id,
@@ -741,14 +741,13 @@ export class StudioCdp {
       })()`,
         world.executionContextId,
       )
-      frameFingerprints.push([frame.url, fingerprint])
+      frameFingerprints.push(fingerprint)
     }
+    // Frames are identified by what they render, not their URLs: every launch serves its previews
+    // from a fresh port and instance id, which would make no two launches' renderers comparable.
     const fontFingerprint = frameFingerprints.length === 0
       ? page.fontFingerprint
-      : Platform.sha256Hex(JSON.stringify([
-        page.fontFingerprint,
-        ...frameFingerprints.sort(([left], [right]) => left.localeCompare(right)),
-      ]))
+      : Platform.sha256Hex(JSON.stringify([page.fontFingerprint, ...[...new Set(frameFingerprints)].sort()]))
     return {
       colorGamut: page.colorGamut,
       deviceScaleFactor: page.deviceScaleFactor,

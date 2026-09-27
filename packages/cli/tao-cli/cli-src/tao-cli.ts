@@ -301,6 +301,68 @@ function createCommands(): Command {
           Platform.runtimeProcess.setExitCode(1)
         }
       })
+
+    // `_preview` holds commands under development: unlisted in help and free to change until one
+    // graduates to a released name.
+    const preview = commands
+      .command('_preview', { hidden: true })
+      .description('Unreleased commands under development; their interface may change.')
+    preview
+      .command('qa')
+      .argument('[path]', 'Tao project directory to capture in Studio.', '.')
+      .option('--app <name>', 'Select a named app within the project.')
+      .option('--screenshot', 'Capture every scenario across the device and appearance matrix.')
+      .option('--dest <directory>', 'Screenshot store to append this run to.')
+      .option('--devices <list>', 'Comma-separated devices: phone, tablet, laptop (default: all).')
+      .option('--appearances <list>', 'Comma-separated appearances: light, dark (default: both).')
+      .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
+      .option('--timeline', "Only regenerate the store's index.html from the runs it already holds.")
+      .description('Capture QA evidence for a Tao project.')
+      .action(async (
+        path: string,
+        options: {
+          app?: string
+          appearances?: string
+          dest?: string
+          devices?: string
+          note?: string
+          screenshot?: boolean
+          timeline?: boolean
+        },
+      ) => {
+        try {
+          if (options.dest === undefined || (options.screenshot === true) === (options.timeline === true)) {
+            Errors.throwUserInput(
+              'Choose what to do and where: tao _preview qa --screenshot --dest <directory>, or --timeline --dest <directory>.',
+            )
+          }
+          const { runQaScreenshots, writeQaTimeline } = await import('tao-studio-tooling/qa-screenshots')
+          if (options.timeline === true) {
+            HCI.writeSuccess(`Timeline: ${FS.displayPath(await writeQaTimeline(options.dest))}\n`)
+            return
+          }
+          const list = (value: string | undefined): string[] | undefined =>
+            value?.split(',').map(item => item.trim()).filter(Boolean)
+          const result = await runQaScreenshots(path, {
+            ...(options.app === undefined ? {} : { appName: options.app }),
+            ...(options.appearances === undefined ? {} : { appearances: list(options.appearances) }),
+            dest: options.dest,
+            ...(options.devices === undefined ? {} : { devices: list(options.devices) }),
+            ...(options.note === undefined ? {} : { note: options.note }),
+          })
+          HCI.writeSuccess(
+            `Captured ${result.captured} screenshots (${result.newBlobs} new, ${result.failed} failed): ${
+              FS.displayPath(result.timelinePath)
+            }\n`,
+          )
+          if (result.failed > 0) {
+            Platform.runtimeProcess.setExitCode(1)
+          }
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      })
   }
 
   commands

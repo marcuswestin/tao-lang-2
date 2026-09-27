@@ -96,7 +96,7 @@ type ReviewSurface = {
   manifest: ReviewSurfaceManifest
 }
 
-type ReviewBrowser = Pick<
+export type ReviewBrowser = Pick<
   StudioCdp,
   | 'browserEvents'
   | 'captureElementScreenshotAt'
@@ -156,18 +156,16 @@ export async function runStudioReview(
       repositoryRoot,
     })
     browser = await dependencies.launchBrowser(artifactRoot)
-    await browser.goto(launch.readiness.sessionUrl)
-    await browser.waitFor(
-      `document.querySelector('.studio-preview-grid[data-tao-review-manifest]') instanceof HTMLElement`,
-      { timeoutMs: 60_000 },
-    )
+    await openReviewGrid(browser, launch.readiness.sessionUrl)
     const initialSurface = await readReviewSurface(browser)
     validateReviewSurface(initialSurface)
-    const renderer = await browser.rendererFingerprint()
     const cells: StudioReviewCell[] = []
     for (const initialCell of initialSurface.cells) {
       cells.push(await captureReviewCell(browser, initialCell, artifactRoot, initialSurface.manifest))
     }
+    // Taken last: the fingerprint records each font's load status, which settles only once the
+    // captured cells have rendered.
+    const renderer = await browser.rendererFingerprint()
     const browserEvents = browser.browserEvents().map(event => ({
       kind: event.kind,
       level: event.level,
@@ -198,6 +196,24 @@ export async function runStudioReview(
     await browser?.close().catch(() => undefined)
     await launch?.stop().catch(() => undefined)
   }
+}
+
+/**
+ * openReviewGrid loads a Studio session's preview grid ready for capture. Screenshots are clips of
+ * the Studio page, so its floating agent chat window is hidden to keep it out of them.
+ */
+async function openReviewGrid(browser: ReviewBrowser, sessionUrl: string): Promise<void> {
+  await browser.goto(sessionUrl)
+  await browser.waitFor(
+    `document.querySelector('.studio-preview-grid[data-tao-review-manifest]') instanceof HTMLElement`,
+    { timeoutMs: 60_000 },
+  )
+  await browser.evaluate(`(() => {
+    const style = document.createElement('style')
+    style.textContent = '.studio-agent-panel { display: none !important; }'
+    document.head.append(style)
+    return true
+  })()`)
 }
 
 async function captureReviewCell(
@@ -731,6 +747,16 @@ function escapeAttribute(value: string): string {
 }
 
 export const StudioReview = {
+  /** The per-cell capture steps, for callers that drive one Studio session through several captures. */
+  capture: {
+    cell: captureReviewCell,
+    open: openReviewGrid,
+    surface: async (browser: ReviewBrowser): Promise<ReviewSurface> => {
+      const surface = await readReviewSurface(browser)
+      validateReviewSurface(surface)
+      return surface
+    },
+  },
   testing: {
     pairStatus,
     renderReviewHtml,

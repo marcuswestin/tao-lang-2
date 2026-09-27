@@ -6,7 +6,8 @@
   "module": "studio-tooling-src/StudioReview.ts",
   "exports": {
     ".": "./studio-tooling-src/StudioReview.ts",
-    "./studio-review": "./studio-tooling-src/StudioReview.ts"
+    "./studio-review": "./studio-tooling-src/StudioReview.ts",
+    "./qa-screenshots": "./studio-tooling-src/QaScreenshots.ts"
   },
   "devDependencies": {
     "@clerk/backend": "3.20.1",

@@ -11,7 +11,11 @@ is a history, not a gate: nothing fails because a screenshot changed.
 - **Sizes**: one width per device preset — `phone` 390×844, `tablet` 768×1024, `laptop` 1440×900,
   the scenario presets in `packages/compiler/compiler-src/studio-preview-manifest.ts`. No extra
   breakpoint widths.
-- **Appearance**: light and dark at every size.
+- **Appearance**: light and dark at every size, for scenarios that do not author an appearance. A
+  scenario's `appearance` clause outranks the cell's scheme in the preview runtime
+  (`packages/apps/expo-host/expo-host-src/runtime.ts:679`), and Studio's own scheme control is
+  read-only for the same reason, so an authored scenario is captured only in its own appearance.
+  Nearly every reference-app scenario authors one.
 - **Native platforms**: iOS simulator captures at milestones only; Android later. Web captures are
   the routine ones.
 - **Websites**: deferred; no website source is in this checkout.
@@ -43,18 +47,24 @@ the window chrome.
 
 ## Shape
 
-- **Shot list**: a Tao app's `scenarios` blocks are its shot list. Each scenario is captured across
-  the size × appearance matrix, overriding its declared device and appearance. Studio and the
-  companion app get a small declarative list of stable keys naming how to reach each state.
-- **Capture**: one command, with an adapter per surface over machinery that already exists — `tao
-  review` for Tao apps (`packages/ides/studio-tooling/studio-tooling-src/StudioReview.ts`), Studio's
-  CDP capture for Studio itself, and Appium for native targets. No new dependency.
-- **Store**: PNGs stored once each, named by sha256, so an unchanged screen adds no bytes. Each
-  capture run writes its own manifest — keys, hashes, renderer fingerprint, source commit and
-  subject, optional note — so two concurrent captures never edit the same file.
-- **Timeline**: a generated static page with one filmstrip per key, showing only the runs where the
-  hash changed, each labelled with its commit subject and note. A renderer-fingerprint change is
-  labelled as such rather than as a design change.
+- **Shot list**: a Tao app's `scenarios` blocks are its shot list. Each scenario is captured at
+  every device width, overriding its declared device through Studio's session-only cell
+  reconfigure route, so the Tao source is untouched. Studio and the companion app get a small
+  declarative list of stable keys naming how to reach each state.
+- **Capture**: `tao _preview qa <project> --screenshot --dest <store>` drives `tao review`'s cell
+  capture (`packages/ides/studio-tooling/studio-tooling-src/QaScreenshots.ts`); `_preview` holds
+  commands under development until one graduates to a released name. Agents run it as
+  `./agent unsandboxed ui-archive capture <project> [--note …]`, since Studio needs the host's
+  Watchman; `ui-archive sync` and `ui-archive push` handle the archive's remote. Studio's CDP capture
+  and Appium are the planned adapters for Studio itself and native targets. No new dependency.
+- **Store**: `storage/ui-screenshots/`. PNGs live once each under `blobs/<sha256>.png`, so an
+  unchanged screen adds no bytes. Each capture run writes its own `runs/<runId>.json` — keys,
+  hashes, renderer fingerprint, source commit and subject, optional note — so two concurrent
+  captures never edit the same file.
+- **Timeline**: a generated, ignored `index.html` with one filmstrip per key, showing only the runs
+  where the hash changed or the capture failed, each labelled with its commit subject and note. A
+  renderer-fingerprint change is labelled as such rather than as a design change. Every capture and
+  `ui-archive sync` regenerate it; `tao _preview qa --timeline --dest <store>` does so alone.
 
 ## Submodule rules
 
@@ -64,16 +74,22 @@ it. So:
 
 - The gitlink is set once and bumped only deliberately. `.gitmodules` sets `ignore = all`, so
   captured commits inside the archive never make a worktree look dirty to `finalize` or `land`.
-- The submodule is not initialised by default; the capture command initialises it in the worktree
-  that captures, and fetches the archive's `main` before writing.
+- The submodule, at `storage`, is not initialised by default. `ui-archive sync` initialises it in
+  the worktree that captures as a blobless partial clone (`--filter=blob:none`): every commit and
+  tree arrives, and a screenshot downloads only when checked out. A shallow clone would save less,
+  since the screenshots are the weight, and makes rebasing onto the archive's `main` fragile.
+- Sync puts the submodule on the archive's `main` at `origin/main` before any capture writes.
 - A capture commits inside the archive and pushes to the archive's own `main`, rebasing and
   retrying on a non-fast-forward. Per-run manifests make that rebase conflict-free.
 - Repository scans, formatting, and lint exclude the submodule path.
 
 ## Slices
 
-1. **Proof of concept**: the submodule and store, WordFlower captured on web across the full size ×
-   appearance matrix, and the timeline page.
+1. **Proof of concept** (done): the submodule and store, WordFlower captured on web across the size
+   × appearance matrix, and the timeline page. Two consecutive runs reproduced every image
+   byte for byte. Known noise: Studio's review capture occasionally reports "The preview changed
+   between two consecutive settled captures", most often for `states/novel`; the timeline shows such
+   a shot as a flagged failure.
 2. The other Tao apps, then Studio on web.
 3. Milestone native captures: iOS for the reference apps and the companion app, and the native
    Studio shell.

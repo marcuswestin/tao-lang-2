@@ -522,6 +522,24 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('ui-archive')
+    .description('Sync, capture into, or push the UI screenshot archive in the storage submodule.')
+    .argument('<action>', 'sync, capture, or push')
+    .argument('[path]', 'Tao project directory to capture.')
+    .option('--app <name>', 'Select a named app within the project.')
+    .option('--devices <list>', 'Comma-separated devices: phone, tablet, laptop (default: all).')
+    .option('--appearances <list>', 'Comma-separated appearances: light, dark (default: both).')
+    .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
+    .action(async (
+      action: string,
+      path: string | undefined,
+      options: { app?: string; appearances?: string; devices?: string; note?: string },
+    ) => {
+      const { UiArchive } = await import('./git/UiArchive')
+      await runExitCommand(() => UiArchive.run(action, path, options))
+    })
+
+  commands
     .command('delegation-report')
     .description('Summarise which subagents this repository spawned, at which model, and for how long.')
     .option('--json', 'Print the structured summary instead of a table.')
