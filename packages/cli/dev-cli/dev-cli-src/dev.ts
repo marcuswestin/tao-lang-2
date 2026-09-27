@@ -594,15 +594,29 @@ await runWithCommands(commands => {
     .description('Inspect or install a requested side-by-side Xcode and iOS Simulator runtime.')
     .requiredOption('--xcode-version <version>', 'The explicit Xcode version to use, such as 27.1.')
     .requiredOption('--runtime-version <version>', 'The explicit iOS Simulator runtime version, such as 27.1.')
-    .option(
-      '--archive <path>',
-      'Override automatic detection of the requested Xcode .xip in Downloads.',
-    )
+    .option('--archive <path>', 'Override automatic detection of the requested Xcode .xip in Downloads.')
     .option('--apply', 'Install requested components; in a terminal, wait for missing Xcode downloads and resume.')
     .option('--json', 'Print the structured setup report.')
     .action(async (options) => {
       const { IosSetupCommand } = await import('./ios-setup/IosSetupCommand')
-      Platform.runtimeProcess.exit(await IosSetupCommand.run(options))
+      await runExitCommand(() => IosSetupCommand.run(options))
+    })
+
+  commands
+    .command('setup-visionos [project]')
+    .description('Guide Vision Pro setup, pairing, signing, build, installation and launch; inspect by default.')
+    .requiredOption('--xcode-version <version>', 'The explicit Xcode version to reuse or install, such as 27.0.')
+    .option('--archive <path>', 'Override automatic detection of the requested Xcode .xip in Downloads.')
+    .option('--simulator', 'Set up an optional simulator instead of a physical headset; no signing team needed.')
+    .option('--runtime-version <version>', 'Exact visionOS Simulator runtime; required only with --simulator.')
+    .option('--device <identifier>', 'Choose a physical headset or simulator from the inspected inventory.')
+    .option('--team <identifier>', 'Your ten-character Apple development team ID for headset signing.')
+    .option('--bundle-id <identifier>', 'Your app bundle identifier; required for physical-device signing.')
+    .option('--apply', 'Install missing components, guide personal steps, then build, install and launch the app.')
+    .option('--json', 'Print a structured report without interactive prompts.')
+    .action(async (project: string | undefined, options) => {
+      const { VisionosSetupCommand } = await import('./visionos-setup/VisionosSetupCommand')
+      await runExitCommand(() => VisionosSetupCommand.run({ ...options, project: project ?? 'Apps/VisionHello' }))
     })
 
   commands
@@ -699,6 +713,40 @@ await runWithCommands(commands => {
         Platform.runtimeProcess.exit(1)
       }
     })
+
+  commands
+    .command('instant-review')
+    .description(
+      'Push Auth Review to the stored Instant Cloud app, then run it in tao dev from a disposable copy.',
+    )
+    .option('--device <name-or-id>', 'Open this physical device after Metro starts.')
+    .option('--ios', 'Open an iOS simulator after Metro starts.')
+    .option('--web', 'Open the web app after Metro starts.')
+    .option('--dry-run', 'Print what the push would change, apply nothing, and start no dev loop.')
+    .option('--skip-push', 'Start the dev loop without pushing the schema and rules.')
+    .option('--force', 'Push a plan that is not purely additive, leaving undeclared attributes on the app.')
+    .option('--clerk', 'Run the variant signed in through Clerk, with the stored Clerk publishable key.')
+    .action(
+      async (
+        options: {
+          clerk?: boolean
+          device?: string
+          ios?: boolean
+          web?: boolean
+          dryRun?: boolean
+          force?: boolean
+          skipPush?: boolean
+        },
+      ) => {
+        const { runInstantReview } = await import('./instantdb/InstantReviewCommand')
+        try {
+          Platform.runtimeProcess.exit(await runInstantReview(options))
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.exit(1)
+        }
+      },
+    )
 
   commands
     .command('secrets')
@@ -946,7 +994,7 @@ await runWithCommands(commands => {
   commands
     .command('studio-native')
     .description(
-      'Launch Tao Studio in its local Electrobun shell. When another session holds the native host, offers to stop it and proceed.',
+      "Launch this worktree's Tao Studio in its local Electrobun shell. When another session in this worktree holds its native host, offers to stop it and proceed.",
     )
     .argument('[project]', 'Tao project folder.', '.')
     .option('--entry <path>', 'Entry Tao file within the selected project.')

@@ -1,3 +1,6 @@
+use Clerk from @tao/auth/clerk
+use LocalAuth from @tao/auth/local
+
 // Reference connects to the local account/data server. Authentication is supplied by the app's
 // Auth provider; credentials never belong in datasource configuration.
 public
@@ -7,6 +10,8 @@ type Reference is datasource with {
    PollEvery duration is 1.s
    Offline list of data is []
    StorageLimitBytes number is 16777216
+   accepts { IdentityToken from Clerk, Session from LocalAuth }
+   supports { Relations, UniqueFields, UniqueTogether, AccessRules, FieldUpdates, MembershipRules }
 
    provider ReferenceProvider from ./Reference.ts
 }

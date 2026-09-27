@@ -60,8 +60,8 @@ cell and delegates initial Pencil input to a native sidecar.
   endpoint when projection is ambiguous, including overlap or two clean separating axes. Unsnap
   prefers the remembered rectangle position, dropping stale render matches and falling back to
   measured layout.
-- Free rectangle rendering begins as a TypeScript matrix overlay. A later positioned-container
-  tranche moves it into Studio's own Tao client after the `Canvas` and offset spellings are settled.
+- Free rectangle rendering begins as a TypeScript matrix overlay. Studio's own Tao client later
+  renders each rectangle as a `@tao/ui` `Layer` placed by its insets (FS-D5).
 - The companion waits for Tao rendering and an app shell. One device renders one cell. PencilKit
   initially owns canvas input and emits typed events; Tao owns data, rendering, and source actions.
 
@@ -84,8 +84,8 @@ cell and delegates initial Pencil input to a native sidecar.
 - `@/` is committed generated source, not a scratch cache. Fixers check it but do not rewrite it.
 - Source actions keep the existing project, app, preview, source-version, revision-bound range,
   render-owner, node-kind, and cell/scenario trust boundary.
-- The positioned container is a language capability forced by Studio, but still follows the normal
-  WordFlower tranche and absorption process.
+- `Layer`, the capability Studio forces for free rectangles, was decided directly by the Developer
+  on 2026-09-27 rather than through a WordFlower tranche.
 - Runtime interaction states remain runtime-owned, modality-neutral, unsettable, and unrestored per
   KEY-D8. Scenario steps produce them through ordinary events.
 - The native sidecar never owns Tao source or durable sketch state.
@@ -143,11 +143,11 @@ The following rulings are recorded verbatim from the project requirement authori
 > server's provider and committed by default. The companion app reads it through the paired session,
 > never the file.
 
-> **FS-D5 — Rendering the rectangles.** The language direction is a positioned container, working
-> name `Canvas`, whose direct children carry an offset clause, working name `at x y`, with Studio's
-> own Tao client as the forcing feature. It is decided through the tranche process; its spelling is
-> settled with the Developer in `2 - Next` before that tranche starts. Until it lands, Studio draws rectangles
-> as a TypeScript overlay in the matrix view. Tao rendering must land before the companion slice.
+> **FS-D5 — Rendering the rectangles** (amended 2026-09-27). Studio's Tao client renders each free
+> rectangle as a `@tao/ui` `Layer`, placed by its `InsetTop` and `InsetLeft` inside the canvas
+> frame; `Decisions.md` §9 owns the view. This replaces the earlier `Canvas` container with
+> `at x y` child offsets. Until Studio's client adopts it, Studio draws rectangles as a TypeScript
+> overlay in the matrix view. Tao rendering must land before the companion slice.
 
 > **FS-D6 — What travels with a view.** Declarations that relate only to the view, its `scenarios`
 > group above all, live in the view's file. Shared declarations, the example fixture `Sketches`
@@ -221,7 +221,7 @@ The following rulings are recorded verbatim from the project requirement authori
 > Expo module, declared as a foreign view with `accepts content slots`) owns all canvas input at
 > first — ink, selection, move, resize — and emits typed events (`Drew action(RectShape)`,
 > `Wrote action(text, Rect)`, `Moved action(Rect, RectShape)`); Tao owns the data, the rectangle
-> rendering through the positioned container, and every source action to the paired Mac. The
+> rendering through `Layer`, and every source action to the paired Mac. The
 > sidecar shrinks toward ink-only as Tao gesture primitives land from the drag-and-drop example app.
 
 > **FS-D19 — Rectangle creation is a pencil mode, not recognition.** Hold the pencil's side
@@ -232,7 +232,7 @@ The following rulings are recorded verbatim from the project requirement authori
 
 > **FS-D20 — Order.** The scenario and stdlib tranche (L1) first, then Studio slices 1 (Draw)
 > and 2 (Snap) together, then 3 (Feed), then the executable-dialect tranche (L2) and slice 4
-> (Variants), then the positioned container (L3) and slice 5 (Tao-rendered canvas), slice 6
+> (Variants), then `Layer` (L3, landed early on 2026-09-27) and slice 5 (Tao-rendered canvas), slice 6
 > (Focus-in) when the interaction outline's provenance has landed, slice 7 (Companion) after the
 > companion app shell exists. If budget runs out, later slices are dropped, never interleaved
 > half done.
@@ -580,10 +580,9 @@ Free geometry is separate. Studio's server persists it in
 ```
 
 The matrix initially renders those rows as a TypeScript overlay. Snapping writes only the projected
-flowed elements into the view and removes the corresponding free rows. A later language tranche
-settles a positioned container, working name `Canvas`, and child offset, working name `at x y`, so
-Studio's own Tao client can render the same catalog. Those constructs render Studio data; they do not
-put free placement into product source (FS-D1, FS-D4, FS-D5).
+flowed elements into the view and removes the corresponding free rows. Studio's own Tao client
+renders the same catalog as `Layer` views inside the canvas frame. The rows stay Studio data; a
+`Layer` in product source is an authored overlay, never a free rectangle (FS-D1, FS-D4, FS-D5).
 
 ### Placeholders and spacers
 
@@ -627,8 +626,8 @@ interactive after replay (FS-D7, FS-D17).
 - Postfix `when` over a parameter (`background muted when Disabled`) and over interaction states,
   which are decided but not executable: the parser admits only `when Scheme is Light` or `Dark`.
 - `yes / no` as a parameter type, with `yes` and `no` literals, in the executable dialect.
-- The positioned container and offset used by Studio's own client (L3), after their spellings and
-  relationship to KEY-D7's floating layers are settled in `2 - Next`.
+- `Layer`, which floats its children over the parent's flow by optional edge insets (L3, decided
+  2026-09-27 in `Decisions.md` §9); it is distinct from KEY-D7's host-owned floating layers.
 
 There is no sketch-tier syntax, release diagnostic, `while pressed`, or action-stand-in spelling.
 
@@ -640,7 +639,7 @@ The existing scenario canvas renders grouped rows of cells. A sketch is a genera
 scenario cell plus its free catalog rows, so it lives on the same canvas next to the app. Cells keep
 their iframe realm. Until Slice 5, the matrix's TypeScript layer renders free rectangles, selection,
 insertion lines, size badges, and field chips above the preview. Flowed elements remain preview
-nodes. After L3, Studio's Tao client renders the catalog through the positioned container (FS-D5).
+nodes. After L3, Studio's Tao client renders the catalog as `Layer` views (FS-D5).
 
 ### Identity and trust
 
@@ -771,7 +770,7 @@ it does not add a second editing protocol.
 
 | Need                               | Options                                                                                                                                  | Recommendation                                                                                     |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Free placement                     | (a) Studio catalog rows; (b) `Sketch` + `at` product source; (c) general absolute layout; (d) `.tao-sketch`                              | **Settled: (a), FS-D1.** The later positioned container renders catalog data in Studio only.       |
+| Free placement                     | (a) Studio catalog rows; (b) `Sketch` + `at` product source; (c) general absolute layout; (d) `.tao-sketch`                              | **Settled: (a), FS-D1.** `Layer` renders catalog data in Studio only.                              |
 | Where a new view is written        | (a) generated `@/studio/<Name>.tao`; (b) feature folder plus `Scenarios.tao`; (c) one app-root file; (d) ask                             | **Settled: (a), FS-D3/D6.** Move to package performs the deliberate transition to authored source. |
 | Placeholder rendering              | (a) `Placeholder`; (b) Studio chrome over empty `Box`; (c) dev-only bundle                                                               | **Settled: (a), FS-D10.** Development hatches; release keeps only the empty size and warns.        |
 | Example rows                       | (a) fixture only; (b) fixture, generated, live, library, all promoted to fixture on save; (c) Studio-owned example store                 | (b); (c) is the `example` declaration Studio already rejected                                      |
@@ -796,8 +795,8 @@ decided conditional-styling grammar, of which the executable tranche implements 
 
 **Missing — language.** L1's ordered scenario steps, omitted-action stand-ins, optional fixture,
 `Placeholder`, and settled spacer; postfix `when` over parameters and interaction states; `yes / no`
-parameter types and literals; L3's positioned container and direct-child offset. Text scale, loading,
-and empty remain out-of-scope world controls.
+parameter types and literals. (L3's `Layer` has landed, so it is no longer missing.) Text scale,
+loading, and empty remain out-of-scope world controls.
 
 **Missing — compiler and manifest.** Measured layout rectangles reported per render node for
 unsnap; argument bindings per rendered instance for focus-in; project-view insertion with argument

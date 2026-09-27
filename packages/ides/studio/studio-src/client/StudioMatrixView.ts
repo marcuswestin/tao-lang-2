@@ -35,6 +35,7 @@ export {
   currentSourceIdentity,
   handlePreviewMessage,
   postCanvasGestureOwnership,
+  postClearSelection,
   postDebugCommand,
   postEditorSelection,
   requestRuntimeCapture,
@@ -71,6 +72,8 @@ export const StudioMatrixView = {
   },
   reconcile: StudioMatrixGrid.reconcile,
   renderSketches: StudioMatrixSketches.render,
+  /** refreshSketches re-reads the sketch catalog so marks the server derives from the manifest show. */
+  refreshSketches: StudioMatrixSketches.refresh,
   /** focusView enters or leaves canvas mode for one view; `exit` runs when the bar's Back is pressed. */
   focusView: StudioMatrixGrid.focusView,
   /** focusedView reports the view canvas mode currently shows alone, if any. */

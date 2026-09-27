@@ -103,12 +103,17 @@ auth-review-server *ARGS:
 clerk-review *ARGS: _parser-gen
     ./dev clerk-review {{ ARGS }}
 
+# Push Auth Review to your Instant Cloud app and run it in tao dev; requires its stored App ID and admin token
+[group('Run')]
+instant-review *ARGS: _parser-gen
+    ./dev instant-review {{ ARGS }}
+
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
 studio project="Apps/HNReader": _parser-gen
     ./dev studio "{{ project }}"
 
-# Launch Tao Studio in its local Electrobun shell; offers to stop another session holding the native host
+# Launch this worktree's Tao Studio in its local Electrobun shell; offers to stop another session of it in this worktree
 [group('Run')]
 studio-native project="Apps/HNReader": _parser-gen
     ./dev studio-native "{{ project }}"
@@ -132,6 +137,11 @@ companion-host-build *ARGS:
 [group('Setup')]
 setup-ios *ARGS:
     ./dev setup-ios {{ ARGS }}
+
+# Guide Vision Pro toolchain, pairing, signing, build and launch; --simulator selects optional simulator setup
+[group('Setup')]
+setup-visionos *ARGS:
+    ./dev setup-visionos {{ ARGS }}
 
 # Publish the built Companion hosts to their GitHub release, where tao dev downloads them; needs gh
 [group('Run')]

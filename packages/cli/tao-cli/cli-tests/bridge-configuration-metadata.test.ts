@@ -8,6 +8,7 @@ Describe('TypeScript bridge configuration metadata', () => {
     await withTaoFixture({
       ...checkedProjectFile,
       'Main.tao': `public type Memory is datasource with {
+   supports { }
    provider MemoryProvider from ./Memory.ts
 }
 type CustomMemory is Memory with { }

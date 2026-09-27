@@ -9,62 +9,43 @@ Several agents and people work in linked worktrees beside the primary checkout (
 under `~/.codex/worktrees/`, in older ones still under `.claude/worktrees/`, and elsewhere. Every one of them is a full checkout with its own `node_modules`, its own `_gen_*`
 trees, and its own `.artifacts/`. What they cannot have their own copy of is the machine.
 
-## iOS Simulator setup
+## Apple development setup
 
-`setup-ios` is an explicit host setup workflow. Ordinary `./agent setup` continues to install
-repository dependencies and generate adapters; starting a session does not download Xcode or install
-Apple system components. From the repository root, inspect a requested pair of versions:
+`setup-ios` and `setup-visionos` share the signed Xcode installer, first-launch rechecks, exact
+simulator-runtime matching, and receipts in `dev-cli-src/apple-setup/AppleToolchainSetup.ts`.
+Use the named host operations from the repository root:
 
 ```sh
 ./agent unsandboxed setup-ios --xcode-version 27.1 --runtime-version 27.1
+./agent unsandboxed setup-visionos Apps/VisionHello --xcode-version 27.0
 ```
 
-The human menu exposes the same implementation as `just setup-ios`. The report inventories the
-host, searches for a matching Xcode, checks first-launch readiness, the simulator SDK, the requested
-runtime, and CoreSimulator. `--json` provides the structured report. Missing prerequisites remain
-visible instead of being inferred from a successful download.
+These inspect by default. Add `--apply` to install missing components and follow interactive
+instructions. Xcode downloads come from Apple; the command reuses completed archives in Downloads
+or accepts `--archive <path>`. Installation uses a versioned side-by-side app, validates Apple's
+signature, and never switches the global Xcode selection. Human sign-in, licenses, administrator
+authorization, and first-launch prompts stay with the person. Every continuation probes readiness
+again. A receipt records owned installation and extraction paths before writes so interrupted
+attempts remain inspectable.
 
-Add `--apply` to perform the installation steps. When Xcode is missing, download the requested
-version from [Apple Developer Downloads](https://developer.apple.com/download/applications/) into
-Downloads, keeping Apple's filename. The workflow automatically selects a single completed `.xip`
-whose filename matches the requested version; incomplete downloads and other versions are ignored.
-If no archive is found during interactive `--apply`, it prints the Apple download link and destination,
-then waits for Enter and scans again. Once the download is complete, installation continues in the
-same command. Type `q` and Enter to stop. Inspection, `--json`, and noninteractive runs report the
-missing download and exit without waiting.
-If several match, it lists them and asks for `--archive`; that option also selects an archive in
-another location or with a renamed filename. The extracted version and signature are still verified
-before installation. The workflow uses Apple's archive/signature validation,
-extracts under `.artifacts/ios-setup`, copies into a unique staging directory under `/Applications`,
-and publishes the validated application alongside the existing installation. It refuses to replace
-an occupied destination. Apple sign-in, license acceptance, and administrator steps remain
-explicit handoffs; it does not accept licenses or run `sudo` automatically.
-When first-launch setup is needed, interactive `--apply` explains the steps and opens the selected
-Xcode after Enter. After completing Apple's prompts, return to the terminal and press Enter again;
-the command rechecks readiness before continuing the simulator setup. Type `q` and Enter at either
-prompt to stop. Inspection, JSON, and noninteractive runs provide instructions without opening Xcode.
+The iOS command requires the requested simulator runtime and retains its existing receipt format
+under `.artifacts/ios-setup/`. Vision Pro setup defaults to a physical headset: it checks the
+visionOS device SDK, guides pairing and Developer Mode, selects the person's team and bundle ID,
+and builds, installs, and launches the exported Tao app. It does not require CoreSimulator for
+headset setup. `--simulator --runtime-version <version>` selects the separate simulator flow.
+`--device`, `--team`, and `--bundle-id` make choices explicit; `--json` suppresses interactive
+prompts. A simulator never counts as a paired headset. An unknown readiness field, failed native
+command, or missing launch process ID remains incomplete.
 
-Runtime downloads specify the requested version and architecture explicitly: `arm64` for native
-Apple silicon processes, `universal` for Intel or Rosetta processes. If the command-line download
-fails, interactive `--apply` offers to open Xcode after Enter and guides installation through
-Settings > Components. Return to the terminal and press Enter after installing the requested iOS
-runtime; the command checks the actual simulator inventory before reporting ready. Developer
-Documentation and a different iOS version do not satisfy that check. JSON and noninteractive runs
-report the download error and Components instructions without opening Xcode or waiting.
+For iOS, interactive `--apply` waits if the requested Xcode archive is missing; download Apple's
+`.xip` into Downloads, then press Enter to rescan or type `q` to stop. It rechecks first-launch
+readiness after Xcode's prompts and the exact installed runtime after a Components download. JSON
+and noninteractive runs report those steps without waiting. Child commands use the selected Xcode
+through `DEVELOPER_DIR`; neither setup command changes the global `xcode-select` setting.
 
-The selected Xcode applies through each child process's `DEVELOPER_DIR`. Neither the system's
-`xcode-select` setting nor shell startup files change. This separates the application bundles,
-but first-launch components and simulator runtimes use shared Apple services. Read the reported
-effects before applying, and recheck service health after installation. The workflow records its
-artifacts and remaining steps so the same request can resume after a download or manual setup.
-Interrupted attempts retain their staging directories for inspection; receipts identify their
-cleanup conditions. A retry uses fresh staging rather than trusting a partial copy or runtime export.
-
-This first slice sets up a simulator toolchain. Use `companion-host-build --platform ios-simulator`
-to build Tao's native host afterward, with `DEVELOPER_DIR` set to the selected Xcode's
-`Contents/Developer` directory for that command. Signing, provisioning, and release distribution
-remain separate workflows. A ready toolchain does not prove an app rendered or that its layout
-works on a particular simulator.
+See [VisionHello's guided workflow](../../../Apps/VisionHello/README.md) for examples, manual
+Device Hub steps, signing prerequisites, retained diagnostics, and the physical acceptance boundary.
+Neither setup command proves how an app looks or responds to input on a physical headset.
 
 ## What a lane takes
 
@@ -279,11 +260,17 @@ it sizes itself to `cpuCount` unless `TAO_TEST_JOBS` is set. Inside `check`, `ve
 doing.
 
 The window-server row is the honest gap. `verify-full`'s native Studio and canary lanes hold a `gui` resource
-so they never overlap **inside one run**, and across worktrees the machine-wide `studio-native-host`
-lease lets exactly one native Studio session run at a time. A second worktree's native lane does not
-wait or time out: it fails at once with the `native-host-busy` failure kind, naming the worktree and
-command that hold the host, so the summary says why before any minute is spent. Only interactive
-`just studio-native` offers to take the host over. If the registry lock under
+so they never overlap **inside one run**. Across worktrees, each worktree's development Studio is its
+own macOS app (the primary checkout keeps `com.devtao.studio`; a linked worktree gets
+`com.devtao.studio.<worktree>-<hash>` and a window name that shows the worktree), and the
+`studio-native-host:<bundle id>` lease allows one native Studio per worktree, so interactive native
+Studios in different worktrees run side by side. Launches that run the native runtime probe (the
+native smoke and the canary) also take the machine-wide `studio-native-probe` lease, because the
+probe registers a global keyboard shortcut. A lane that finds either lease held does not wait or
+time out: it fails at once with the `native-host-busy` failure kind, naming the worktree and command
+that hold it, so the summary says why before any minute is spent. Only interactive
+`just studio-native` offers to take its own worktree's host over. Each new worktree's app asks macOS
+for Accessibility and Automation permission once. If the registry lock under
 `~/.cache/tao/machine-lanes` belongs to a dead process, the allocator elects one reclaimer and
 removes only that stale lock. A live or unreadable owner is preserved and the waiting lane times
 out rather than risking concurrent registry writers; use `./agent doctor` to identify the owner.

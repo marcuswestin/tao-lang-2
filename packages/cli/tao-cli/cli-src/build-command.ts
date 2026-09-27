@@ -2,10 +2,10 @@ import Runtime, { HostDependencies, RuntimeToolchainPaths } from '@expo-host'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { AgentClientBuild } from './agent-client-build'
 import { buildDesktopApp } from './desktop-build'
-import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
-import { selectTaoDevApp } from './dev-app-selection'
+import { chooseTaoApp } from './dev-app-selection'
+import { exportVisionOSProject } from './visionos-project'
 
-export type BuildTarget = 'web' | 'desktop' | 'ios' | 'android'
+export type BuildTarget = 'web' | 'desktop' | 'ios' | 'android' | 'visionos'
 export type BuildRecord = {
   appName: string
   createdAt: string
@@ -27,7 +27,7 @@ type BuildOptions = {
   agents?: boolean
   output?: string
 }
-const targets = ['web', 'desktop', 'ios', 'android'] as const
+const targets = ['web', 'desktop', 'ios', 'android', 'visionos'] as const
 const runtimeFiles = [
   'index.ts',
   'app.json',
@@ -46,7 +46,7 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
   if (options.agents && (options.compileOnly || selectedTargets.some(target => target !== 'desktop'))) {
     Errors.throwUserInput('--agents requires a packaged desktop build.')
   }
-  const app = await chooseApp(path, options.appName)
+  const app = await chooseTaoApp(path, options.appName, 'Build')
   const buildsRoot = options.output ? FS.resolvePath(options.output) : FS.resolvePath('.tao/builds', app.projectRoot)
   if (
     FS.pathIsWithin(buildsRoot, app.projectRoot)
@@ -95,10 +95,22 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
       if (target === 'ios' || target === 'android') {
         Errors.throwUserInput(`Local ${target} builds are not yet implemented.`)
       }
-      const site = FS.resolvePath('site', target === 'web' ? FS.resolvePath('web', artifactRoot) : workRoot)
+      const site = FS.resolvePath(
+        'site',
+        target === 'web' ? FS.resolvePath('web', artifactRoot) : FS.resolvePath(target, workRoot),
+      )
       await exportWeb(snapshotApp, app.appName, workRoot, site, target)
       if (target === 'web') {
         return await finishWebArtifact(site)
+      }
+      if (target === 'visionos') {
+        const tests = FS.resolvePath('visionos/Tests.swift', snapshotRoot)
+        return await exportVisionOSProject({
+          appName: app.appName,
+          outputRoot: FS.resolvePath('visionos', artifactRoot),
+          siteRoot: site,
+          testSource: await FS.isFile(tests) ? await FS.readText(tests) : undefined,
+        })
       }
       const desktop = await buildDesktopApp({
         appName: app.appName,
@@ -229,50 +241,26 @@ async function chooseTargets(requested: readonly BuildTarget[]): Promise<BuildTa
   }
   if (!HCI.isInteractive()) {
     Errors.throwUserInput(
-      'Choose build targets with --web, --desktop, --ios, and/or --android in a non-interactive terminal.',
+      'Choose build targets with --web, --desktop, --ios, --android, and/or --visionos in a non-interactive terminal.',
     )
   }
-  HCI.writeLine('Build targets: 1. web  2. desktop  3. iOS (not yet implemented)  4. Android (not yet implemented)')
+  HCI.writeLine(
+    'Build targets: 1. web  2. desktop  3. iOS (not yet implemented)  4. Android (not yet implemented)  5. visionOS (Xcode project)',
+  )
   const answer = await HCI.askText({
     message: 'Select target numbers (comma-separated)',
     validate: value =>
-      parseTargetSelection(value) === undefined ? 'Choose one or more numbers from 1 to 4.' : undefined,
+      parseTargetSelection(value) === undefined ? 'Choose one or more numbers from 1 to 5.' : undefined,
   })
   return parseTargetSelection(answer)!
 }
 
 function parseTargetSelection(value: string): BuildTarget[] | undefined {
   const parts = value.split(',').map(part => part.trim())
-  if (parts.some(part => !/^[1-4]$/.test(part))) {
+  if (parts.some(part => !/^[1-5]$/.test(part))) {
     return undefined
   }
   return targets.filter((_, index) => parts.includes(String(index + 1)))
-}
-
-async function chooseApp(path: string, appName?: string): Promise<TaoDevApp> {
-  const projects = await discoverTaoDevProjects(path)
-  const apps = projects.flatMap(project => project.apps)
-  if (apps.length === 0) {
-    Errors.throwUserInput(`No runnable Tao apps found under ${FS.displayPath(FS.resolvePath(path))}.`)
-  }
-  if (appName !== undefined) {
-    const matches = apps.filter(app => app.appName === appName)
-    if (matches.length !== 1) {
-      Errors.throwUserInput(`--app '${appName}' must identify exactly one runnable app (${matches.length} found).`)
-    }
-    return matches[0]!
-  }
-  if (apps.length === 1) {
-    return apps[0]!
-  }
-  if (!HCI.isInteractive()) {
-    Errors.throwUserInput('Multiple Tao apps found; choose one with --app in a non-interactive terminal.')
-  }
-  const selected = await selectTaoDevApp(projects)
-  if (selected.kind !== 'selected') {
-    Errors.throwUserInput('Build app selection was cancelled.')
-  }
-  return selected.app
 }
 
 async function ensureBuildsIgnored(projectRoot: string): Promise<void> {

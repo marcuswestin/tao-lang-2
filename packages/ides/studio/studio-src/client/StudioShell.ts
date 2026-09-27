@@ -42,12 +42,46 @@ const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 360, preview
 const dividerWidth = 4
 const editorMinimum = 240
 
-/** The pane operations the rest of the shell drives: the rail reopens the left pane, presets reshape for Design. */
+/** The pane operations the rest of the shell drives: the rail reopens the left pane, presets reshape the panes. */
 type StudioPaneControls = Readonly<{
-  designLayout: (active: boolean) => void
   dispose: () => void
+  presetLayout: (preset: string | undefined) => void
   showLeft: () => void
 }>
+
+/** Which shell elements a collapsed pane hides; `true` hides that element. */
+export type StudioPaneVisibility = Readonly<{
+  bottom: boolean
+  editor: boolean
+  environment: boolean
+  left: boolean
+  preview: boolean
+  right: boolean
+  visual: boolean
+}>
+
+/**
+ * What collapsing each pane hides in a preset. Draw's workbench frame dissolves the inspector aside
+ * into its grid, so hiding the aside would take both inspector panes with it: there the right divider
+ * collapses only the selection pane on the right, and the preview divider collapses the code column
+ * (the editor and the environment pinned under it) rather than the canvas. Run shows only the
+ * preview, so its size never hides it there.
+ */
+export function studioPaneVisibility(
+  preset: string | undefined,
+  sizes: Readonly<Record<PaneName, number>>,
+): StudioPaneVisibility {
+  const draw = preset === 'draw'
+  return {
+    bottom: sizes.bottom === 0,
+    editor: draw && sizes.preview === 0,
+    environment: draw && sizes.preview === 0,
+    left: sizes.left === 0,
+    preview: !draw && preset !== 'run' && sizes.preview === 0,
+    right: !draw && sizes.right === 0,
+    visual: draw && sizes.right === 0,
+  }
+}
 const paneStorageKey = 'tao-studio:pane-sizes:v4'
 
 /** Emitted after the shell has synchronously committed a new layout preset to its root dataset. */
@@ -59,6 +93,22 @@ export function studioLayoutOwnsCanvasGestures(preset: string | undefined): bool
 }
 
 export const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
+
+/** The narrowest the flexible middle column of each preset may get while a side pane is dragged wider. */
+const studioMiddleFloor: Readonly<Record<string, number>> = { design: 240, draw: 320 }
+const studioDefaultMiddleFloor = 360
+
+/**
+ * studioDraggedPaneSize turns a dragged width into a pane size: dragging past half the pane's minimum
+ * collapses it, as double-click does, so a divider never just stops; short of that the pane holds its
+ * minimum, and it never grows past what leaves the rest of the layout usable.
+ */
+export function studioDraggedPaneSize(requested: number, minimum: number, maximum: number): number {
+  if (requested < minimum / 2) {
+    return 0
+  }
+  return Math.max(minimum, Math.min(Math.max(minimum, maximum), requested))
+}
 
 /** Responsive Design split leaves the inspector and a usable editor ahead of the canvas. */
 export function studioDesignPreviewSize(available: number, right: number): number {
@@ -418,6 +468,9 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
   const right = requiredElement(root, '.studio-pane-right')
   const preview = requiredElement(root, '.studio-preview')
   const bottom = requiredElement(root, '.studio-drawer')
+  const editorPane = requiredElement(root, '.studio-editor-pane')
+  const environmentPane = requiredElement(root, '.studio-environment-pane')
+  const visualPane = requiredElement(root, '.studio-visual-pane')
   /**
    * What the layout looked like before Design mode borrowed the width, so leaving can give it back.
    * `previewSized` records that the person moved the canvas divider themselves while in Design mode;
@@ -428,15 +481,21 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
     previewSized: false,
   }
   const apply = (): void => {
-    left.hidden = sizes.left === 0
-    right.hidden = sizes.right === 0
-    preview.hidden = sizes.preview === 0
-    bottom.hidden = sizes.bottom === 0
+    // The side panes take their width first: Design derives the canvas from the centre column they leave.
+    const sides = studioPaneVisibility(root.dataset['layoutPreset'], sizes)
+    left.hidden = sides.left
+    right.hidden = sides.right
     shell.style.setProperty('--studio-left-size', `${sizes.left}px`)
     shell.style.setProperty('--studio-right-size', `${sizes.right}px`)
     if (designLayout.active && !designLayout.previewSized) {
       sizes.preview = studioDesignPreviewSize(center.getBoundingClientRect().width, sizes.right)
     }
+    const hidden = studioPaneVisibility(root.dataset['layoutPreset'], sizes)
+    preview.hidden = hidden.preview
+    bottom.hidden = hidden.bottom
+    editorPane.hidden = hidden.editor
+    environmentPane.hidden = hidden.environment
+    visualPane.hidden = hidden.visual
     center.style.setProperty('--studio-preview-size', `${sizes.preview}px`)
     center.style.setProperty('--studio-bottom-size', `${sizes.bottom}px`)
     for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
@@ -485,6 +544,30 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
   })
   requiredButton(root, '.studio-collapse-right').addEventListener('click', () => toggle('right'))
   requiredButton(root, '.studio-collapse-bottom').addEventListener('click', () => toggle('bottom'))
+  /**
+   * Which way a horizontal divider grows its pane: +1 when dragging right grows it. The inspector sits
+   * left of its divider and the preview right of its own, except in Draw's workbench frame, where the
+   * inspector is on the right and the preview size is the code column on the left.
+   */
+  const horizontalSign = (pane: PaneName): number => {
+    if (pane === 'left') {
+      return 1
+    }
+    const mirrored = root.dataset['layoutPreset'] === 'draw'
+    return (pane === 'preview') === mirrored ? 1 : -1
+  }
+  /** The widest a pane may be dragged: whatever leaves the middle column of its preset at its floor. */
+  const paneMaximum = (pane: PaneName): number => {
+    if (pane === 'left') {
+      return shell.getBoundingClientRect().width - 48 - studioDefaultMiddleFloor
+    }
+    if (pane === 'bottom') {
+      return center.getBoundingClientRect().height - 240
+    }
+    const floor = studioMiddleFloor[root.dataset['layoutPreset'] ?? ''] ?? studioDefaultMiddleFloor
+    const other = pane === 'preview' ? sizes.right : sizes.preview
+    return center.getBoundingClientRect().width - other - dividerWidth * 2 - floor
+  }
   for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
     const pane = divider.dataset['divider'] as PaneName
     divider.addEventListener('dblclick', () => toggle(pane))
@@ -496,13 +579,7 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
       }
       const direction = pane === 'bottom'
         ? event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0
-        : pane === 'preview'
-        ? event.key === 'ArrowLeft' ? 1 : event.key === 'ArrowRight' ? -1 : 0
-        : event.key === 'ArrowRight'
-        ? 1
-        : event.key === 'ArrowLeft'
-        ? -1
-        : 0
+        : (event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0) * horizontalSign(pane)
       if (direction === 0) {
         return
       }
@@ -519,11 +596,8 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
       const move = (moveEvent: PointerEvent): void => {
         const delta = pane === 'bottom'
           ? start - moveEvent.clientY
-          : pane === 'preview'
-          ? start - moveEvent.clientX
-          : moveEvent.clientX - start
-        const minimum = StudioPaneMinimums[pane]
-        resize(pane, Math.max(minimum, initial + delta))
+          : (moveEvent.clientX - start) * horizontalSign(pane)
+        resize(pane, studioDraggedPaneSize(initial + delta, StudioPaneMinimums[pane], paneMaximum(pane)))
       }
       const finish = (): void => {
         divider.removeEventListener('pointermove', move)
@@ -541,21 +615,22 @@ function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): St
     /**
      * Design mode makes the canvas the hero: the file tree folds into the rail, which can bring it
      * straight back, and the preview takes half the window. Leaving Design restores what was there.
+     * Every preset change re-applies the collapse mapping, since Draw hides different elements.
      */
-    designLayout(active: boolean): void {
-      if (active === designLayout.active) {
-        return
-      }
-      designLayout.active = active
-      if (active) {
-        designLayout.left = sizes.left
-        designLayout.preview = sizes.preview
-        designLayout.previewSized = false
-        sizes.left = 0
-        // `apply` measures every time the host width or rail visibility changes.
-      } else {
-        sizes.left = designLayout.left ?? sizes.left
-        sizes.preview = designLayout.preview ?? sizes.preview
+    presetLayout(preset: string | undefined): void {
+      const active = preset === 'design'
+      if (active !== designLayout.active) {
+        designLayout.active = active
+        if (active) {
+          designLayout.left = sizes.left
+          designLayout.preview = sizes.preview
+          designLayout.previewSized = false
+          sizes.left = 0
+          // `apply` measures every time the host width or rail visibility changes.
+        } else {
+          sizes.left = designLayout.left ?? sizes.left
+          sizes.preview = designLayout.preview ?? sizes.preview
+        }
       }
       apply()
     },
@@ -579,7 +654,7 @@ function configurePresets(root: HTMLElement, panes: StudioPaneControls, storage?
       button.setAttribute('aria-current', 'true')
       root.dataset['layoutPreset'] = button.dataset['preset']
       const preset = button.dataset['preset'] as StudioLayoutPreset
-      panes.designLayout(preset === 'design')
+      panes.presetLayout(preset)
       root.dispatchEvent(new CustomEvent(studioLayoutPresetChangedEvent))
       if (preset === 'code' || preset === 'design' || preset === 'draw' || preset === 'run') {
         StudioWorkbenchState.saveLayoutPreset(store, preset)

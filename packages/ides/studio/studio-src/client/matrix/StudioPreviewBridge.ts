@@ -43,8 +43,12 @@ type StudioPreviewMessageActions = {
   canvasPanKey?: (message: StudioPreviewCanvasPanKeyMessage) => void
   canvasShortcut?: (message: StudioPreviewCanvasShortcutMessage) => void
   changed?: () => void
+  /** Whether a preview pick may move keyboard focus into the editor; Design and Draw keep it on the canvas. */
+  editorTakesFocus?: () => boolean
   feedDrop?: (message: StudioPreviewFeedDropMessage) => Promise<void>
-  inspect: (selection: StudioInspectorSelection) => void
+  /** Additive selections come from a shift-click and join the selection instead of replacing it. */
+  inspect: (selection: StudioInspectorSelection, additive?: boolean) => void
+  layoutMeasured?: () => void
   reveal?: () => void
 }
 
@@ -118,6 +122,26 @@ export function postCanvasGestureOwnership(
     owned,
     protocolVersion: studioProtocolVersion,
     type: 'set-canvas-gestures',
+  }, preview.origin)
+}
+
+/**
+ * Tells one cell to drop its selection outlines: a plain pick in another cell started a new selection,
+ * and each cell otherwise keeps outlining what was last picked in it.
+ */
+export function postClearSelection(preview: StudioPreviewConnection, handshake: StudioHandshake): void {
+  const target = preview.iframe.contentWindow
+  if (target === null) {
+    return
+  }
+  target.postMessage({
+    channel: studioProtocolChannel,
+    identity: {
+      ...(preview.cellIdentity ?? handshake.identity),
+      previewInstanceId: preview.previewInstanceId,
+    },
+    protocolVersion: studioProtocolVersion,
+    type: 'clear-selection',
   }, preview.origin)
 }
 
@@ -261,6 +285,7 @@ export async function handlePreviewMessage(
       const measurement = received(message, type)
       if (preview.cellIdentity === undefined || matchesExactPreviewCellIdentity(preview, measurement.identity)) {
         preview.layoutMeasurements = measurement
+        actions.layoutMeasured?.()
       }
       await StudioApiClient.previewLayoutMeasurements(measurement).catch(ignoreSupersededPreviewReport)
     },
@@ -533,6 +558,7 @@ async function receiveSelectSource(
 ): Promise<void> {
   actions.activate?.()
   const opened = await StudioSourceNavigation.openAndSelect({
+    focus: actions.editorTakesFocus?.() ?? true,
     identity: message.identity,
     openFile,
     project: handshake.identity.project,
@@ -542,13 +568,16 @@ async function receiveSelectSource(
     return
   }
   actions.reveal?.()
-  actions.inspect(StudioInspector.selection({
-    ...message,
-    identity: {
-      ...message.identity,
-      ...(preview.cell === undefined ? {} : { scenarioId: preview.cell.scenarioId }),
-    },
-  }))
+  actions.inspect(
+    StudioInspector.selection({
+      ...message,
+      identity: {
+        ...message.identity,
+        ...(preview.cell === undefined ? {} : { scenarioId: preview.cell.scenarioId }),
+      },
+    }),
+    message.additive === true,
+  )
 }
 
 export function requestRuntimeCapture(

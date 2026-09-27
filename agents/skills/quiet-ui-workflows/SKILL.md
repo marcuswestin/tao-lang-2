@@ -11,8 +11,7 @@ description: >-
 ## Choose the surface
 
 - Always use an available hidden or headless path when it can establish the required behavior.
-  Prefer a harness-provided in-app browser to an external browser, with its visibility disabled
-  where supported. Use connectors and non-UI tooling when they provide the needed evidence.
+  `browser-use` owns which browser; keep its visibility disabled where supported. Use connectors and non-UI tooling when they provide the needed evidence.
 - Starting a server or producing an app does not call for opening its UI. Leave a review artifact
   and its launch instructions; present it when the Developer requests review.
 - For browser automation, use the repository's existing headless runner or the available in-app

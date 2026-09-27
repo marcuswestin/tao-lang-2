@@ -42,6 +42,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   // operations and a hand-written placement step.
   'companion-host-build': { command: './dev', fixedArgs: ['companion-host-build'] },
   'setup-ios': { command: './dev', fixedArgs: ['setup-ios'] },
+  'setup-visionos': { command: './dev', fixedArgs: ['setup-visionos'] },
   'studio-companion-install': { command: './dev', fixedArgs: ['studio-companion-install'] },
   'clerk-review': { command: 'just', fixedArgs: ['clerk-review'], server: true },
   'standalone-cli-vm-setup': { command: 'just', fixedArgs: ['standalone-cli-vm-setup'], argsPolicy: 'none' },
@@ -59,6 +60,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'simulators run': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
   'simulators app-container': { command: 'xcrun', fixedArgs: ['simctl', 'get_app_container'] },
   'simulators install': { command: 'xcrun', fixedArgs: ['simctl', 'install'] },
+  'simulators launch': { command: 'xcrun', fixedArgs: ['simctl', 'launch'] },
   'simulators open-url': { command: 'xcrun', fixedArgs: ['simctl', 'openurl'] },
   'simulators uninstall': { command: 'xcrun', fixedArgs: ['simctl', 'uninstall'] },
   'simulators open': { command: 'open', fixedArgs: ['-a', 'Simulator'] },

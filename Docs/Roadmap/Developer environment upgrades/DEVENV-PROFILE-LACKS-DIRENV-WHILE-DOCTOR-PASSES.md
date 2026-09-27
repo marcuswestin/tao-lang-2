@@ -68,20 +68,8 @@ from Device Hub's application-access denial.
 
 The 22:17 UTC selected lane and a subsequent focused run reproduced the absent second
 loading/export messages. The focused runner tolerated its failure based on earlier outcome
-reversals; its successful wrapper exit was not a passing raw test. Direnv 2.37.1's
-[watch implementation](https://github.com/direnv/direnv/blob/v2.37.1/internal/cmd/file_times.go)
-stores and compares modification times with whole-second `Unix()` values. Its
-[export command](https://github.com/direnv/direnv/blob/v2.37.1/internal/cmd/cmd_export.go)
-can skip reloading when those watches have not changed. The exact timestamps of the failing
-run were not captured, so this establishes a mechanism consistent with the failures rather
-than measuring the collision in that instance.
-
-The real-direnv integration fixture now sets its initial configuration's modification time to
-2000-01-01 before the first activation. The script's existing overwrite produces a distinct
-whole-second timestamp without sleeping. All stderr, exported-value, exit-status, completion,
-and unload assertions remain unchanged; no production shell behavior changed. The focused
-post-edit run at 22:20 UTC passed all eight tests, including the real-direnv case, without skips
-or tolerated failures. Evidence:
-`.artifacts/logs/dev-test/2026-09-27T22-20-14-441Z-7787-bc881ef4/cli_dev-cli.log`.
-This verifies reload after an observable timestamp change; it does not add a promise of
-same-second content-only reloads. Doctor's missing-required-tool diagnostic remains unverified.
+reversals; its successful wrapper exit was not a passing raw test. The independent
+[timestamp-watch investigation](<Archive/DEVENV-DIRENV-RELOAD-TEST-SHARES-FILE-TIMESTAMPS.md>)
+then reproduced the cause with controlled equal and distinct timestamps and corrected the
+fixture without weakening its assertions. The remaining issue here is doctor's failure to
+diagnose an incomplete shared profile; the timestamp-watch defect has been resolved separately.

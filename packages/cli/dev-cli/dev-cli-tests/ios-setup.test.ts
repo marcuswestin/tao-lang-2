@@ -316,7 +316,10 @@ Describe('explicit iOS dependency setup', () => {
       '--strict',
       '--verbose=2',
       '-R',
-      '=anchor apple and identifier "com.apple.dt.Xcode"',
+      '=(anchor apple generic and certificate leaf[field.1.2.840.113635.100.6.1.9]'
+      + ' or anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6]'
+      + ' and certificate leaf[field.1.2.840.113635.100.6.1.13]'
+      + ' and certificate leaf[subject.OU] = "59GAB85EFG") and identifier "com.apple.dt.Xcode"',
       '/Applications/Xcode.app',
     ])
   })

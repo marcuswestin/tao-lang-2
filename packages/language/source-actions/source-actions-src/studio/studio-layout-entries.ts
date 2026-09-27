@@ -4,6 +4,7 @@ import { AST } from '@parser'
 import { Errors } from '@shared'
 import { assertNoSyntaxErrors } from '../source-actions-utils'
 import type {
+  StudioClearLayoutEntryPatchRequest,
   StudioLayoutAlignment,
   StudioLayoutContentTerm,
   StudioLayoutEntry,
@@ -28,6 +29,50 @@ export async function setLayoutEntry(
   }
   requireCompatibleLayoutEntry(render, layoutEntryHead(entry))
   return await Formatter.formatCode(setRenderLayoutEntrySource(document.textDocument.getText(), render, entry))
+}
+
+/**
+ * clearLayoutEntry removes every layout entry whose head is one of the request's heads, and the
+ * whole clause when nothing else is left in it.
+ */
+export async function clearLayoutEntry(
+  document: AST.Document,
+  request: StudioClearLayoutEntryPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireLocalRenderId(document, request.renderId, 'edit layout for renders')
+  if (request.heads.length === 0 || request.heads.some(head => !studioLayoutHeads.has(head))) {
+    Errors.throwUserInput(`Cannot clear layout heads ${JSON.stringify(request.heads)}.`)
+  }
+  const render = requireRenderById(document.parseResult.value, request.renderId)
+  const entries = render.layoutClause?.entries ?? []
+  const cleared = entries.filter(entry => request.heads.includes(String(ASTUtils.layoutEntryValues(entry)[0])))
+  if (cleared.length === 0) {
+    Errors.throwUserInput(`This element sets no ${request.heads.join(' or ')} to clear.`)
+  }
+  const source = document.textDocument.getText()
+  const kept = entries.filter(entry => !cleared.includes(entry))
+  const layoutClause = render.layoutClause!
+  const edit: SourceEdit = kept.length === 0
+    ? {
+      end: layoutClause.$cstNode!.end,
+      replacement: '',
+      start: leadingSpaceStart(source, layoutClause.$cstNode!.offset),
+    }
+    : {
+      end: entries.at(-1)!.$cstNode!.end,
+      replacement: kept.map(entry => entry.$cstNode!.text).join(', '),
+      start: entries[0]!.$cstNode!.offset,
+    }
+  return await Formatter.formatCode(applySourceEdits(source, [edit]))
+}
+
+function leadingSpaceStart(source: string, offset: number): number {
+  let start = offset
+  while (start > 0 && (source[start - 1] === ' ' || source[start - 1] === '\t')) {
+    start -= 1
+  }
+  return start
 }
 
 export function setRenderLayoutEntrySource(source: string, render: AST.Render, entry: string): string {
@@ -118,11 +163,11 @@ export function removeLayoutClauseEntryEdit(source: string, render: AST.Render, 
   const entries = layoutClause.entries
   const index = entries.indexOf(entry)
   if (entries.length === 1) {
-    let start = layoutClause.$cstNode!.offset
-    while (start > 0 && (source[start - 1] === ' ' || source[start - 1] === '\t')) {
-      start -= 1
+    return {
+      end: layoutClause.$cstNode!.end,
+      replacement: '',
+      start: leadingSpaceStart(source, layoutClause.$cstNode!.offset),
     }
-    return { end: layoutClause.$cstNode!.end, replacement: '', start }
   }
   if (index === entries.length - 1) {
     return { end: entry.$cstNode!.end, replacement: '', start: entries[index - 1]!.$cstNode!.end }

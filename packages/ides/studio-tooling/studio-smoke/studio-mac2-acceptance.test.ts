@@ -11,7 +11,6 @@ import { Expect, Test } from '@shared/test'
 import { StudioNative } from '../studio-tooling-src/StudioNative'
 
 const revision = { build: 'studio-mac2-acceptance-1', source: 'studio-mac2-smoke' }
-const studioBundleIdentifier = 'com.devtao.studio'
 
 /**
  * This opt-in smoke opens the actual Studio native shell through a private Appium Mac2 home. It
@@ -49,6 +48,8 @@ Test('Studio Mac2 acceptance observes the launched native application and preser
     })
     // Mac2 attaches only after the owned Electrobun renderer has published its ready transport.
     await native.hostControl()
+    // Each worktree builds its own development app, so Mac2 attaches to the identifier this run built.
+    const studioBundleIdentifier = native.bundleIdentifier
     const serverLogPath = FS.resolvePath('appium-mac2/server.log', artifactRoot)
     const factory = createStudioMac2AcceptanceFactory({
       capabilities: {

@@ -1516,6 +1516,18 @@ Grid [columns 7, gap sm] {                                // a generated collect
   per-item `span N`. The runtime bridge is Shopify's FlashList — virtualization, recycling, masonry,
   and spans are its; the min-width arithmetic and the collection-owned selection are Tao's, since
   the platform has neither.
+- **`Layer` is the one way to float content over a parent's flow** (decided 2026-09-27). It is an
+  ordinary `@tao/ui` view, not a clause, so no other view gains a position:
+  `Layer(InsetBottom: 20, InsetLeft: 10) { Col { … } }`. It takes no room in the parent's flow; each
+  of `InsetTop`, `InsetRight`, `InsetBottom`, and `InsetLeft` is an optional distance from that
+  edge of the parent's box, and an axis with neither inset sits at its start edge, top or left.
+  Its own children stack and hug like `Stack`, and it paints over earlier siblings in source
+  order, with no z-index. A parent never grows to hold a layer, so a layer inside a hugging parent
+  needs the parent's size stated. It replaces the positioned `Canvas` container and `at x y` child
+  offset that FS-D5 proposed, and it is not the host-owned floating layer of LANG-018 and KEY-D13:
+  a `Layer` is placed against its parent's box and stays in its parent's navigation. Studio's Draw
+  canvas is what forces it: free rectangles are to render as layers once the Freehand plan's
+  Slice 5 lands.
 - **Every element kind declares which clauses it accepts, and the validator rejects the rest** with
   a targeted diagnostic (`'cell min' applies to Grid`). Clauses are presentation, so they never
   move into the parentheses — parentheses carry data, brackets carry presentation.
@@ -1917,6 +1929,24 @@ let Me = Account                 // module-visible; every screen reads Me, tests
 
 The live root then gates on it as ordinary data: `view when Me { none -> WelcomeNav,
 otherwise -> SkilletShell(SkilletNavigator) }`. Nothing about identity is a keyword.
+
+- **Auth and data providers pair through declared proofs, not pairwise code** (amended 2026-09-27).
+  An auth provider type declares the sign-in proofs it `issues` (`IdentityToken`, `Session`,
+  `TestIdentity`); a datasource type declares what it `accepts`, optionally from named providers,
+  and the data features it `supports`. The datasource holding `Account` resolves the account from
+  those proofs. The compiler rejects an app whose Auth and Datasource cannot pair or whose data uses
+  a feature its datasource does not support. Email is not an identity rule of the language: each
+  auth provider decides whether verification is required, and a datasource may refuse unverified
+  proofs. [Plan — Auth and data pairing](<../Plan - Auth and data pairing.md>) owns the details.
+
+```swift
+type InstantDB is datasource with {
+   AppId text
+   accepts { IdentityToken from Clerk, Session from InstantAuth }
+   supports { Relations, UniqueFields, AccessRules, FieldUpdates, Migrations Additive }
+   provider InstantDBProvider from ./InstantDB.ts
+}
+```
 
 - **The datasource is a `Cloud { … }` value** carrying write behaviour, conflict model, delete
   retention, and an `Offline { … }` block:
