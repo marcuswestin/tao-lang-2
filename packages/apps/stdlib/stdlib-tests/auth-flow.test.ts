@@ -72,6 +72,35 @@ Describe('@tao/auth headless sign-in flow', () => {
     scope.dispose()
   })
 
+  Test('a flow without a method follows the provider once it connects', async () => {
+    const requests: TR.AuthInput[] = []
+    const provider: TR.AuthProvider = {
+      connect: () => ({
+        capabilities: { methods: ['EmailCode'] },
+        restore: async () => ({ state: 'SignedOut' }),
+        signIn: async request => {
+          requests.push(request)
+          return { outcome: { status: 'rejected', message: 'Stop here' } }
+        },
+        signOut: async () => ({ status: 'completed' }),
+        proof: async () => Promise.reject(new Errors.UserInputError('Sign in to access this resource.')),
+      }),
+    }
+    const scope = TR.Auth.CreateScope(TR.Auth.Configure(TR.Auth.Declaration('CodeOnly', provider), {}))
+    const early = SignInFlow(scope)
+    const named = SignInFlow(scope, 'Password')
+    await scope.restore()
+    Expect(early.Step).toBe('Email')
+    early.writeMember(['Email'], 'alice@example.com')
+    await early.SendCode.invoke()
+    Expect(requests.map(request => request.method)).toEqual(['EmailCode'])
+    Expect(named.Step).toBe('Password')
+    await named.Submit.invoke()
+    Expect(named.Problem).toBe('This sign-in method is not available.')
+    Expect(requests.length).toBe(1)
+    scope.dispose()
+  })
+
   Test('a writable member updates the library flow without replacing its subscriptions or actions', async () => {
     const scope = testAuthScope()
     await scope.restore()

@@ -100,7 +100,7 @@ Describe('compiler: app-scoped auth and account data', () => {
     Expect(contract!.code).toContain(
       'export type Session = (scope: TR.AuthScope, cases: Readonly<Record<string, TR.Evaluable>>) => TR.Evaluable',
     )
-    Expect(contract!.code).toContain('export type SignInFlow = (scope: TR.AuthScope, arg0: string) =>')
+    Expect(contract!.code).toContain('export type SignInFlow = (scope: TR.AuthScope, arg0: string | null) =>')
     Expect(contract!.code).toContain('export type SignIn = (scope: TR.AuthScope) => TR.Action<[]>')
     Expect(contract!.code).toContain('export type SignOut = (scope: TR.AuthScope) => TR.Action<[]>')
     Expect(contract!.code).toContain('Auth?: TR.AuthScope')

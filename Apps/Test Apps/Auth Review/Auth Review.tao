@@ -112,6 +112,7 @@ scene Authentication(Leave action()) {
             | otherwise -> Login()
 }  }  }
 
+// The default flow starts at the Email step when the provider offers no Password, as InstantAuth does.
 view Login() {
    state Flow = SignInFlow()
    state CodeFlow = SignInFlow(Method: "EmailCode")
@@ -153,10 +154,10 @@ view Login() {
          | otherwise -> { when Supplied
             | true -> SignInView(Flow)
             | otherwise -> {
-               if Flow.Step == "Code" or Flow.Step == "Cancelled" {
+               if Flow.Step == "Email" or Flow.Step == "Code" or Flow.Step == "Cancelled" {
                   CodeLogin(Flow, false)
                }
-               if Flow.Step != "Code" and Flow.Step != "Cancelled" {
+               if Flow.Step != "Email" and Flow.Step != "Code" and Flow.Step != "Cancelled" {
                   Row() [hug, gap 8, content left bottom] {
                      #email
                      TextInput(Value: Flow.Email, Label: "Account email") [claim 1] {
@@ -164,7 +165,7 @@ view Login() {
                      }
 
                      #fillEmail
-                     FormButton(Title: "Fill email") [hug] {
+                     FormButton(Title: "Fill email") {
                         on press -> { set Flow.Email = ReviewEmail }
                   }  }
                   Row() [hug, gap 8, content left bottom] {
@@ -174,7 +175,7 @@ view Login() {
                      }
 
                      #fillPassword
-                     FormButton(Title: "Fill password") [hug] {
+                     FormButton(Title: "Fill password") {
                         on press -> { set Flow.Password = ReviewPassword }
                   }  }
 
@@ -238,7 +239,7 @@ view CodeLogin(Flow LoginFlow, Supplied boolean) {
                   }
 
                   #fillCodeEmail
-                  FormButton(Title: "Fill email") [hug] {
+                  FormButton(Title: "Fill email") {
                      on press -> { set Flow.Email = ReviewEmail }
                }  }
 
