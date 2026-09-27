@@ -64,7 +64,30 @@ The entry script enters the pinned environment once, runs `./agent setup`, and o
 shell in that same environment. A failed setup stops entry. Running it again inside this checkout's
 active environment returns immediately without repeating setup or nesting another shell. A different
 checkout still enters its own environment. `./enter-tao-dev-env --setup-only` explicitly refreshes
-the pinned environment and runs setup without an interactive shell. Type `exit` to leave. Then:
+the pinned environment and runs setup without an interactive shell. Type `exit` to leave.
+
+At the end of successful setup, a developer terminal offers
+to install the pinned direnv and enable automatic environments for this repository and all its
+registered Git worktrees. After opting in, open a new terminal and enter a checkout to load its
+tools automatically. Without activation, run the entry script when you return to the checkout.
+
+The optional integration keeps developer settings and its installed shell helper under
+`~/.tao-dev`, adds one source line to your zsh startup file, and keeps direnv available through a
+Nix garbage-collection root. The opt-in trusts environment configuration in current and future
+registered worktrees of this repository, including changes to their root `.envrc`; unrelated
+repositories and nested `.envrc` files are not automatically trusted. Dependency setup remains
+explicit: entering a directory loads its environment without running `./agent setup`.
+Setup prepares checkout-local completions; worktrees that have not run setup use the copy installed
+under `~/.tao-dev`. Directory entry never invokes the dependency installer to obtain completions.
+
+For an older worktree with no root `.envrc`, the hook creates the standard loader as an untracked
+file. It never replaces an existing file or symlink, or restores a tracked file you deleted.
+
+Noninteractive setup never prompts or changes personal shell settings. Run `./agent shell-setup`
+to change your choice or refresh the installed integration, or `./agent setup --environment` to rebuild the pinned toolchain after its
+dependencies change. Automatic activation currently supports zsh; the manual entry script remains
+available for other shells. Turning off automatic trust preserves existing direnv authorizations;
+those remain under direnv's own control. Then:
 
 | Command      | What it does                                                                          |
 | ------------ | ------------------------------------------------------------------------------------- |

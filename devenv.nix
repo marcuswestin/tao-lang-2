@@ -50,6 +50,7 @@ in
     pkgs.cocoapods
     # GNU coreutils for `timeout`, which repository scripts and agents use to bound a run.
     pkgs.coreutils
+    pkgs.direnv
     pkgs.dprint
     # `./agent open-pr` and `companion-host-publish` drive GitHub through gh; pinning it here gives
     # every checkout the same version rather than whatever each machine installed, if any.
