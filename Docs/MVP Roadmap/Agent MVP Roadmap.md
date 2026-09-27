@@ -481,6 +481,17 @@ and distribution remain separate release checks.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`,
   `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`'s "InstantDB" section.
 
+### A19 — Configure an InstantDB backend through the Tao CLI
+
+- [ ] **Before MVP:** a Tao developer configures an app's InstantDB backend with the `tao` CLI alone:
+      store the app's InstantDB admin or platform token as a Tao CLI secret, register auth clients
+      such as Clerk, and push the compiler-emitted schema and permission rules as a migration.
+- The Tao CLI has no secrets command today; the encrypted store behind `./agent setup-clerk` is a
+  repository development tool, not something a Tao developer has. This item adds a user-facing
+  secret store to the CLI and keeps the token out of app source, generated output, and logs.
+- Developer decision: requested 2026-09-27. The first InstantDB-with-auth demo runs on the
+  Developer's existing Instant Cloud account and may be configured by hand before this lands.
+
 ## Project tracking
 
 ### A17 — In-repository issues with git-bug, synced to GitHub Issues
