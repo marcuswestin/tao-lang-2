@@ -1,6 +1,10 @@
 import { CLI, Errors, FS, HCI, Platform, Repo, SecretsFile } from '@shared'
 
 const APP_NAME = 'AuthReviewInstant'
+/** The variant signed in through Clerk, which InstantDB verifies with the app's registered Clerk client. */
+const CLERK_APP_NAME = 'AuthReviewInstantClerk'
+const PUBLISHABLE_KEY_SECRET = 'CLERK_PUBLISHABLE_KEY'
+const PUBLISHABLE_KEY_PLACEHOLDER = 'pk_test_REPLACE_WITH_YOUR_KEY'
 const APP_ID_SECRET = 'AUTH_REVIEW_INSTANT_APP_ID'
 const TOKEN_SECRET = 'AUTH_REVIEW_INSTANT_ADMIN_TOKEN'
 /** The variable `tao instantdb push` reads its admin token from. */
@@ -9,6 +13,7 @@ const PLACEHOLDER = 'REPLACE_WITH_INSTANT_APP_ID'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 type ReviewOptions = {
+  clerk?: boolean
   device?: string
   ios?: boolean
   web?: boolean
@@ -70,7 +75,8 @@ function liveEnvironment(): ReviewEnvironment {
 /**
  * Own a foreground Auth Review against the Developer's Instant Cloud app. The App ID is written only
  * into a disposable copy of the source, the admin token only into the push child's environment, and
- * output names the app by a short fingerprint of its ID.
+ * output names the app by a short fingerprint of its ID. `clerk` runs the variant signed in through
+ * Clerk, with the stored publishable key written into the same copy.
  */
 export async function runInstantReview(
   options: ReviewOptions = {},
@@ -93,7 +99,8 @@ export async function runInstantReview(
   if (options.dryRun === true && targets.length > 0) {
     Errors.throwUserInput('--dry-run only plans the push and starts no dev loop; drop --device, --ios, and --web.')
   }
-  const { appId, token } = await loadCredentials(environment)
+  const appName = options.clerk === true ? CLERK_APP_NAME : APP_NAME
+  const { appId, publishableKey, token } = await loadCredentials(environment, options.clerk === true)
   const fingerprint = appId.slice(0, 8)
   const source = await environment.source()
   const placeholders = source.split(PLACEHOLDER).length - 1
@@ -101,6 +108,9 @@ export async function runInstantReview(
     Errors.throwUnexpected(
       `Auth Review must name ${PLACEHOLDER} exactly twice (Auth and Datasource of ${APP_NAME}); found ${placeholders}.`,
     )
+  }
+  if (publishableKey !== undefined && !source.includes(PUBLISHABLE_KEY_PLACEHOLDER)) {
+    Errors.throwUnexpected(`Auth Review must name ${PUBLISHABLE_KEY_PLACEHOLDER} in ${CLERK_APP_NAME}.`)
   }
   const redact = (text: string) => text.replaceAll(token, '[admin token]').replaceAll(appId, `${fingerprint}…`)
 
@@ -146,12 +156,18 @@ export async function runInstantReview(
     }
     await environment.writeOwnership(ownershipPath, ownership)
     const entryPath = FS.resolvePath('Auth Review.tao', projectRoot)
-    await FS.writeText(entryPath, source.replaceAll(PLACEHOLDER, appId))
+    const substituted = source.replaceAll(PLACEHOLDER, appId)
+    await FS.writeText(
+      entryPath,
+      publishableKey === undefined
+        ? substituted
+        : substituted.replaceAll(PUBLISHABLE_KEY_PLACEHOLDER, publishableKey),
+    )
     await FS.writeText(
       FS.resolvePath('Project.tao', projectRoot),
       'project { id "tao-instant-review" name "Instant review" }\n',
     )
-    environment.write(`Instant review: ${APP_NAME} against Instant app ${fingerprint}…`)
+    environment.write(`Instant review: ${appName} against Instant app ${fingerprint}…`)
     if (options.skipPush !== true) {
       stage = options.dryRun === true ? 'plan InstantDB push' : 'push InstantDB schema and rules'
       const pushed = await run(
@@ -160,7 +176,7 @@ export async function runInstantReview(
           'push',
           entryPath,
           '--app',
-          APP_NAME,
+          appName,
           ...(options.dryRun === true ? ['--dry-run'] : []),
           ...(options.force === true ? ['--force'] : []),
         ],
@@ -182,7 +198,7 @@ export async function runInstantReview(
     }
     environment.write('Press Ctrl+C to stop the dev loop and remove this review project.')
     stage = 'run tao dev'
-    exitCode = (await run(['dev', entryPath, '--app', APP_NAME, ...targets], { captureOutput: false })).exitCode
+    exitCode = (await run(['dev', entryPath, '--app', appName, ...targets], { captureOutput: false })).exitCode
   } catch {
     if (signalCode === undefined) {
       // Child and filesystem failures can embed the App ID or token.
@@ -220,7 +236,10 @@ export async function runInstantReview(
   return signalCode ?? exitCode
 }
 
-async function loadCredentials(environment: ReviewEnvironment): Promise<{ appId: string; token: string }> {
+async function loadCredentials(
+  environment: ReviewEnvironment,
+  clerk: boolean,
+): Promise<{ appId: string; publishableKey: string | undefined; token: string }> {
   let stored: Record<string, string>
   try {
     stored = await environment.secrets()
@@ -229,11 +248,17 @@ async function loadCredentials(environment: ReviewEnvironment): Promise<{ appId:
   }
   const appId = stored[APP_ID_SECRET]?.trim() ?? ''
   const token = stored[TOKEN_SECRET]?.trim() ?? ''
-  const missing = [APP_ID_SECRET, TOKEN_SECRET].filter((_, index) => [appId, token][index] === '')
+  const publishableKey = clerk ? stored[PUBLISHABLE_KEY_SECRET]?.trim() ?? '' : undefined
+  const required: [string, string][] = [
+    [APP_ID_SECRET, appId],
+    [TOKEN_SECRET, token],
+    ...(publishableKey === undefined ? [] : [[PUBLISHABLE_KEY_SECRET, publishableKey] as [string, string]]),
+  ]
+  const missing = required.filter(([, value]) => value === '').map(([name]) => name)
   if (missing.length > 0) {
     Errors.throwUserInput(
       `Instant review needs ${
-        missing.join(' and ')
+        new Intl.ListFormat('en', { type: 'conjunction' }).format(missing)
       }. Store each with just secrets add <KEY>, then materialize them with just secrets.`,
     )
   }
@@ -242,5 +267,16 @@ async function loadCredentials(environment: ReviewEnvironment): Promise<{ appId:
       `${APP_ID_SECRET} is not an Instant App ID (a UUID). Store it again with just secrets add ${APP_ID_SECRET}, then run just secrets.`,
     )
   }
-  return { appId, token }
+  if (publishableKey !== undefined) {
+    // Auth Review runs against a development instance only, as the Clerk review does.
+    const decoded = publishableKey.startsWith('pk_test_')
+      ? Buffer.from(publishableKey.slice(8), 'base64').toString('utf8')
+      : ''
+    if (!/^[a-z0-9-]+\.clerk\.accounts\.dev\$$/.test(decoded)) {
+      Errors.throwUserInput(
+        `${PUBLISHABLE_KEY_SECRET} is not a development Clerk publishable key. Configure Clerk with just setup-clerk, then run just secrets.`,
+      )
+    }
+  }
+  return { appId, publishableKey, token }
 }

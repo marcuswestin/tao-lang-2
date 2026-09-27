@@ -44,11 +44,12 @@ type InstantSession = Readonly<{
  * `StorageKey` is still accepted, but namespaces are app-wide: two datasources on one app that
  * declare the same collection share its rows.
  *
- * It accepts InstantAuth's `Session` proof for the same InstantDB address. The account is the
- * InstantDB user: `authenticate` makes sure the shared client is signed in as that user and that
- * the user's `accounts` row exists, creating it on first sign-in, and resolves the account id to
- * the user id. The row starts with no fields, so a Tao account with required fields reads as
- * incomplete until the person completes it.
+ * It accepts InstantAuth's `Session` proof for the same InstantDB address, and Clerk's
+ * `IdentityToken`, which InstantDB verifies against the Clerk client registered with the app under
+ * `ClerkClientName`. The account is the InstantDB user: `authenticate` makes sure the shared client
+ * is signed in as that user and that the user's `accounts` row exists, creating it on first sign-in,
+ * and resolves the account id to the user id. The row starts with no fields, so a Tao account with
+ * required fields reads as incomplete until the person completes it.
  */
 export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.DataProvider {
   return {
@@ -60,16 +61,15 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
         mapping.entities[mapping.accountEntity] !== undefined,
         `${providerName} signs in to an ${mapping.accountEntity}; declare it in this datasource's data.`,
       )
-      const proof = await context.proof('Session', context.signal)
-      const session = sessionOf(proof.value)
-      if (
-        session.appId !== address.appId || session.apiURI !== address.apiURI
-        || session.websocketURI !== address.websocketURI
-      ) {
-        Errors.throwUserInput(
-          `Auth ${context.provider} and Datasource ${providerName} name different InstantDB apps. Give both the same AppId, ApiURI, and WebsocketURI.`,
-        )
+      const signIns: Readonly<Record<string, () => Promise<InstantSignIn>>> = {
+        Clerk: () => identityTokenSignIn(context),
+        InstantAuth: () => sessionSignIn(context, address),
       }
+      Assert.input(
+        Object.hasOwn(signIns, context.provider),
+        `${providerName} cannot sign in with ${context.provider}. Use InstantAuth or Clerk.`,
+      )
+      const signIn = await signIns[context.provider]!()
       throwIfCancelled(context.signal)
       let sdk: InstantSDK
       let lease: InstantClientLease
@@ -79,26 +79,38 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
       } catch (error) {
         throw instantFailure('initialization', error)
       }
+      const core = lease.db.core
+      let signedIn: InstantSignedIn
       try {
-        const core = lease.db.core
-        // With one address the auth provider signed this very client in; the token covers a client
-        // that has not caught up with it.
-        const user = await core.getAuth()
-        throwIfCancelled(context.signal)
-        if (user?.id !== proof.subject) {
-          await signInWithToken(core, session.refreshToken, proof.subject)
-          throwIfCancelled(context.signal)
-        }
-        await ensureAccount(sdk, core, proof.subject, context.signal)
-        throwIfCancelled(context.signal)
+        // A stale attempt still signing in would otherwise land on top of a newer one's user.
+        signedIn = await lease.exclusively(async () => {
+          const reached = await signIn.signIn(core)
+          try {
+            throwIfCancelled(context.signal)
+            await ensureAccount(sdk, core, reached.userId, context.signal)
+            throwIfCancelled(context.signal)
+          } catch (error) {
+            // Nothing will release this sign-in, so it ends here rather than outliving the attempt.
+            await endOwnedSession(core, reached).catch(() => undefined)
+            throw error
+          }
+          return reached
+        })
       } catch (error) {
         lease.release()
         throw error
       }
+      let released = false
       return {
-        accountId: proof.subject,
-        // Signing out of InstantDB is the auth provider's; this drops only the lease taken here.
+        accountId: signedIn.userId,
+        // InstantAuth's session is its own to end; a session this datasource made from a Clerk
+        // token ends here. A failed sign-out keeps the lease, so the runtime's retry can finish it.
         release: async () => {
+          if (released) {
+            return
+          }
+          await lease.exclusively(() => endOwnedSession(core, signedIn))
+          released = true
           lease.release()
         },
       }
@@ -309,6 +321,92 @@ function instantAddress(context: TR.DataProviderContext): InstantClientAddress {
     apiURI: optionalConfigurationText(providerName, context, 'ApiURI'),
     appId: requiredConfigurationText(providerName, context, 'AppId'),
     websocketURI: optionalConfigurationText(providerName, context, 'WebsocketURI'),
+  }
+}
+
+/** InstantSignIn signs the shared client in for one auth provider's proof. */
+type InstantSignIn = Readonly<{ signIn(core: InstantCore): Promise<InstantSignedIn> }>
+
+/**
+ * InstantSignedIn is the InstantDB user a sign-in reached. `ownedSession` is the refresh token of a
+ * session the datasource opened and so must end, because the auth provider that signed the person
+ * in knows nothing of InstantDB.
+ */
+type InstantSignedIn = Readonly<{ ownedSession?: string | undefined; userId: string }>
+
+/**
+ * endOwnedSession signs out a session the datasource opened, unless a later sign-in on the shared
+ * client has replaced it; that session is the later sign-in's to end.
+ */
+async function endOwnedSession(core: InstantCore, signedIn: InstantSignedIn): Promise<void> {
+  if (signedIn.ownedSession !== undefined && (await core.getAuth())?.refresh_token === signedIn.ownedSession) {
+    await core.auth.signOut()
+  }
+}
+
+/**
+ * sessionSignIn uses InstantAuth's session. With one address the auth provider signed this very
+ * client in; the refresh token covers a client that has not caught up with it.
+ */
+async function sessionSignIn(
+  context: TR.DataAuthenticationContext,
+  address: InstantClientAddress,
+): Promise<InstantSignIn> {
+  const proof = await context.proof('Session', context.signal)
+  const session = sessionOf(proof.value)
+  if (
+    session.appId !== address.appId || session.apiURI !== address.apiURI
+    || session.websocketURI !== address.websocketURI
+  ) {
+    Errors.throwUserInput(
+      `Auth ${context.provider} and Datasource ${providerName} name different InstantDB apps. Give both the same AppId, ApiURI, and WebsocketURI.`,
+    )
+  }
+  return {
+    signIn: async core => {
+      const user = await core.getAuth()
+      throwIfCancelled(context.signal)
+      if (user?.id !== proof.subject) {
+        await signInWithToken(core, session.refreshToken, proof.subject)
+      }
+      return { userId: proof.subject }
+    },
+  }
+}
+
+/**
+ * identityTokenSignIn hands Clerk's session token to InstantDB, which verifies it with the Clerk
+ * client registered under `ClerkClientName` and signs in the InstantDB user it maps to: matched by
+ * verified email or by the Clerk subject, and created on first sign-in. That user's id, not the
+ * Clerk subject, is the account.
+ */
+async function identityTokenSignIn(context: TR.DataAuthenticationContext): Promise<InstantSignIn> {
+  const clientName = optionalConfigurationText(
+    providerName,
+    { configuration: context.configuration, schema: context.schema, storageKey: '' },
+    'ClerkClientName',
+  )
+  Assert.input(
+    clientName !== undefined,
+    `Datasource ${providerName} signs in with Clerk through a Clerk client registered with the InstantDB app; set ClerkClientName to the name it was registered under.`,
+  )
+  const proof = await context.proof('IdentityToken', context.signal)
+  return {
+    signIn: async core => {
+      try {
+        const { user } = await core.auth.signInWithIdToken({ clientName, idToken: proof.token })
+        return { ownedSession: user.refresh_token, userId: user.id }
+      } catch (error) {
+        const status = typeof error === 'object' && error !== null ? (error as { status?: unknown }).status : undefined
+        if (typeof status === 'number' && status >= 400 && status < 500) {
+          Errors.throwUserInput(
+            `InstantDB refused the Clerk sign-in. Check that the InstantDB app has a Clerk client named '${clientName}' for this Clerk instance, then sign in again.`,
+            { cause: error },
+          )
+        }
+        throw instantFailure('sign-in', error)
+      }
+    },
   }
 }
 

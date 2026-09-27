@@ -722,9 +722,11 @@ await runWithCommands(commands => {
     .option('--dry-run', 'Print what the push would change, apply nothing, and start no dev loop.')
     .option('--skip-push', 'Start the dev loop without pushing the schema and rules.')
     .option('--force', 'Push a plan that is not purely additive, leaving undeclared attributes on the app.')
+    .option('--clerk', 'Run the variant signed in through Clerk, with the stored Clerk publishable key.')
     .action(
       async (
         options: {
+          clerk?: boolean
           device?: string
           ios?: boolean
           web?: boolean

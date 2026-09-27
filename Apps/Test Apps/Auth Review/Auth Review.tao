@@ -48,6 +48,16 @@ app AuthReviewInstant = AuthReview with {
       AppId "REPLACE_WITH_INSTANT_APP_ID"
 }  }
 
+// Register the Clerk instance with the Instant app as a Clerk client named "clerk", and add the
+// email and email_verified claims to Clerk's session token, before running this variant.
+app AuthReviewInstantClerk = AuthReviewInstant with {
+   Auth Clerk {
+      PublishableKey "pk_test_REPLACE_WITH_YOUR_KEY"
+   }
+   Datasource with {
+      ClerkClientName "clerk"
+}  }
+
 let Me = Account
 let ReviewEmail = "narcvs+tao-clerk-test@gmail.com"
 let ReviewPassword = "TaoReview!Violet-27-River"
