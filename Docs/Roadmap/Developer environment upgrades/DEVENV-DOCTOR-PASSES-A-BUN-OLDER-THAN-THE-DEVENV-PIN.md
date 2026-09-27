@@ -22,6 +22,13 @@
   Nix store. On 2026-09-25, after the branch's doctor repair, `./agent doctor` measured the same
   1.3.13 profile and correctly failed with a `direnv reload` instruction. The profile prerequisite
   remains external to this review branch.
+  On 2026-09-26, merging `b0f939bc` into `feat/clerk-review-device-launch` exposed the same
+  mid-session gap for a newly required tool: `devenv.nix` includes `pkgs.direnv`, but the existing
+  store-backed profile has no `bin/direnv`. Finalization failed in the real-direnv activation test
+  with `ENOENT` while doctor still reported a healthy pinned profile and usable checkout. Evidence:
+  `.artifacts/logs/agent/finalize/2026-09-27T00-54-35-996Z-73304.log` and
+  `.artifacts/logs/agent/doctor/2026-09-27T00-59-25-175Z-26007.log`. Rebuild that worktree's profile
+  from a regular terminal with `./enter-tao-dev-env --setup-only` before retrying finalization.
 - **Workaround:** Bring the primary checkout past the pin and reload its profile (`direnv reload`,
   unsandboxed), or give one worktree its own profile by running `direnv allow && direnv exec .
   ./agent setup` in it from an ordinary terminal. `standalone-build.ts` refuses a Bun older than
