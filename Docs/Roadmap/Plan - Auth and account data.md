@@ -398,7 +398,12 @@ The gateway defaults to requiring an `azp` origin claim. The approved native opt
 request has no Origin header; any present claim must still match the configured authorized parties.
 Browser requests, including null or empty Origin headers, retain the strict policy. This trusts a
 verified bearer session and does not attest a physical device. `just clerk-review` prepares a
-development gateway and local InstantDB behind Studio for manual Companion review.
+development gateway and local InstantDB behind Studio for manual Companion review. Pass
+`--device <name-or-udid>` to launch the installed Companion directly on a connected iPhone or iPad
+without opening a Mac browser. The terminal asks the person to compare and confirm the pairing
+code; noninteractive runs leave confirmation to Studio's Device panel. Ctrl+C stops the review,
+including while pairing. Device selection, launch cancellation, and terminal pairing have focused
+automated coverage; a real phone sign-in remains manual acceptance.
 The authored iPhone scenario has mounted on a connected phone. Manual review exposed an unmasked
 custom password input and truncated failure text; secure input and wrapped messages address those.
 Known Clerk configuration errors now have fixed messages distinct from rejected credentials.
