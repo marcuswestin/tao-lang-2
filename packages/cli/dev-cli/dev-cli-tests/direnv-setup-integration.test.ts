@@ -26,10 +26,10 @@ Describe('developer shell setup ordering', () => {
         const steps = (await FS.readText(log)).trim().split('\n')
         if (failure === undefined) {
           Expect(result.exitCode).toBe(0)
-          Expect(steps).toEqual([...prerequisites, 'shell-setup'])
+          Expect(steps).toEqual([...prerequisites, 'shell-setup --prepare'])
         } else {
           Expect(result.exitCode).not.toBe(0)
-          Expect(steps).not.toContain('shell-setup')
+          Expect(steps).not.toContain('shell-setup --prepare')
           Expect(steps.at(-1)).toBe(failure)
         }
       }
