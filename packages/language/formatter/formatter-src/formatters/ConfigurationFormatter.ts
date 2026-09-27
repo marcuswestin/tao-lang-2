@@ -1,5 +1,5 @@
 import { AST } from '@parser'
-import type { FormatHandlers } from '../formatting'
+import type { FormatHandlers, NodeFormat } from '../formatting'
 
 export const ConfigurationFormatter = {
   /** NavDeclaration formats one declaration-owned navigation configuration contract. */
@@ -49,4 +49,47 @@ export const ConfigurationFormatter = {
     f.oneSpaceAfter('nav', 'provider', 'from')
     f.oneSpaceBeforeProperty('path')
   },
+
+  /** ConfigurationIssues formats `issues { IdentityToken, Session }` on one line. */
+  ConfigurationIssues(f) {
+    pairingBlock(f, 'issues', f.node.proofs)
+  },
+
+  /** ConfigurationIssuedProof is one proof kind with no interior spacing. */
+  ConfigurationIssuedProof() {},
+
+  /** ConfigurationAccepts formats `accepts { IdentityToken from Clerk, Session }` on one line. */
+  ConfigurationAccepts(f) {
+    pairingBlock(f, 'accepts', f.node.proofs)
+  },
+
+  /** ConfigurationAcceptedProof formats `Kind from AuthType`. */
+  ConfigurationAcceptedProof(f) {
+    f.oneSpaceAround('from')
+  },
+
+  /** ConfigurationSupports formats `supports { Relations, Migrations Additive }` on one line. */
+  ConfigurationSupports(f) {
+    pairingBlock(f, 'supports', f.node.capabilities)
+  },
+
+  /** ConfigurationCapability keeps a capability adjacent to its level. */
+  ConfigurationCapability(f) {
+    f.oneSpaceBetweenProperties('capability', 'level')
+  },
 } satisfies Partial<FormatHandlers>
+
+/** pairingBlock keeps a pairing list on one line, and an empty one as `{ }`. */
+function pairingBlock(
+  f: NodeFormat<AST.ConfigurationIssues | AST.ConfigurationAccepts | AST.ConfigurationSupports>,
+  keyword: string,
+  items: readonly AST.Node[],
+): void {
+  f.oneSpaceAfter(keyword)
+  if (items.length === 0) {
+    f.oneSpaceAfter('{')
+    return
+  }
+  f.singleLineBraceBlock()
+  f.commaSpacedList()
+}

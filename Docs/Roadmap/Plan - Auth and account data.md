@@ -50,7 +50,7 @@ authority. Passing focused package tests alone does not establish end-to-end acc
 | Area             | Planned contract                                                                                |
 | ---------------- | ----------------------------------------------------------------------------------------------- |
 | App binding      | Typed `Auth` configuration, independently of `Datasource`; no auth keyword                      |
-| Account identity | Trusted `(issuer, subject)` mapping to opaque application Account ID; never email               |
+| Account identity | Trusted mapping to opaque application Account ID, resolved by the account datasource            |
 | Current account  | App-scoped reactive export; shared by views/actions without a process-global singleton          |
 | Authentication   | Restore, sign-in, required challenges, reauthentication, cancellation, sign-out                 |
 | UI               | Supplied sign-in/account UI plus headless flow actions for custom Tao UI                        |
@@ -197,7 +197,9 @@ Text conditions stay explicitly boolean; no truthiness change enters this slice.
 
 Implement a trusted provisioning operation mapping `(issuer, subject)` to an opaque Account.
 Make concurrent first logins idempotent. Keep verified contacts/provider records separate from
-editable profile data; linking requires verified control, never equal email addresses. Account
+editable profile data. (Amended 2026-09-27: email is no longer a language-level identity rule; each
+auth provider decides whether verification is required, and a datasource may refuse unverified
+proofs — see [Plan — Auth and data pairing](<Plan - Auth and data pairing.md>).) Account
 provisioning must allow incomplete application profiles without treating authentication as failed.
 
 Use a small local REST integration surface and a maintained self-hosted email/password auth

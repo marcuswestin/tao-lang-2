@@ -1140,9 +1140,20 @@ function resolveImports(
     addImportedName(bySource, imported.path, `${runtimeBindingName(imported.found)} as ${localBinding}`)
     scopeBindings.set(runtimeBindingName(declaration), localBinding)
   }
+  // An auth provider type named only by `accepts { Kind from Auth }` is compared by name at runtime,
+  // so its module — and the sign-in SDK its sidecar loads — stays out of this module's imports.
+  const pairingIssuers = new Set(
+    AST.streamAllContents(file).filter(AST.isConfigurationAcceptedProof).flatMap(proof =>
+      proof.issuer ? [proof.issuer.root] : []
+    ),
+  )
+  const runtimeNames = pairingIssuers.size > 0 ? ASTUtils.referencedNames(file, { runtimeOnly: true }) : referencedNames
   for (const useStatement of file.statements.filter(AST.isUseStatement)) {
     const targets = importTargets(useStatement.importPath)
     for (const importedName of useStatement.importedDeclarations.map(reference => reference.$refText)) {
+      if (pairingIssuers.has(importedName) && !runtimeNames.has(importedName)) {
+        continue
+      }
       // The first target that declares the name wins; a later one would bind the same name twice.
       const target = targets
         .map(candidate => ({ declarations: candidate.declarationsNamed(importedName), path: candidate.path }))

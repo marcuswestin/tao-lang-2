@@ -28,6 +28,7 @@ import { InteractionValidator } from './validators/interaction-validator'
 import { InvocationsValidator } from './validators/invocations-validator'
 import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
+import { pairingValidationChecks, validateAppPairing } from './validators/pairing-validator'
 import { PhrasesValidator } from './validators/phrases-validator'
 import { preludeValidationChecks, validatePreludeFile } from './validators/prelude-validator'
 import { projectValidationChecks, validateProjectFile } from './validators/project-validator'
@@ -70,6 +71,7 @@ const nodeValidationChecks = NodeValidation.compile(
     DesignValidator.checks,
     colorValueValidationChecks,
     configurationValidationChecks,
+    pairingValidationChecks,
     completenessValidationChecks,
     commandValidationChecks,
     declarationSlotValidationChecks,
@@ -99,6 +101,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AS
   AliasesValidator.validateFile(file, ctx)
   validateDataFile(file, ctx)
   validateDatasourceMembership(file, ctx)
+  validateAppPairing(file, ctx)
   validateScenarioFile(file, ctx)
   validatePreludeFile(file, ctx)
   const nodes = AST.streamAllContents(file)

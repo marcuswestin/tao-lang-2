@@ -1930,6 +1930,24 @@ let Me = Account                 // module-visible; every screen reads Me, tests
 The live root then gates on it as ordinary data: `view when Me { none -> WelcomeNav,
 otherwise -> SkilletShell(SkilletNavigator) }`. Nothing about identity is a keyword.
 
+- **Auth and data providers pair through declared proofs, not pairwise code** (amended 2026-09-27).
+  An auth provider type declares the sign-in proofs it `issues` (`IdentityToken`, `Session`,
+  `TestIdentity`); a datasource type declares what it `accepts`, optionally from named providers,
+  and the data features it `supports`. The datasource holding `Account` resolves the account from
+  those proofs. The compiler rejects an app whose Auth and Datasource cannot pair or whose data uses
+  a feature its datasource does not support. Email is not an identity rule of the language: each
+  auth provider decides whether verification is required, and a datasource may refuse unverified
+  proofs. [Plan — Auth and data pairing](<../Plan - Auth and data pairing.md>) owns the details.
+
+```swift
+type InstantDB is datasource with {
+   AppId text
+   accepts { IdentityToken from Clerk, Session from InstantAuth }
+   supports { Relations, UniqueFields, AccessRules, FieldUpdates, Migrations Additive }
+   provider InstantDBProvider from ./InstantDB.ts
+}
+```
+
 - **The datasource is a `Cloud { … }` value** carrying write behaviour, conflict model, delete
   retention, and an `Offline { … }` block:
 

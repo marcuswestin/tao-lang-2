@@ -10,6 +10,7 @@ public
 type Http is datasource with {
    Adapter item
    CacheFor duration is 0.ms
+   supports { Relations, UniqueFields, UniqueTogether }
 
    provider HttpProvider from ./Http.ts
 }

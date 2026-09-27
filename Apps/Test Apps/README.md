@@ -454,3 +454,10 @@ submitting; the email-code form offers the same email shortcut. The phone form s
 input rows compact. Password and registration challenges open the code form, and Sign in explicitly
 leaves registration mode. Tao journeys cover filling, code verification and cancellation/retry;
 real registration still requires manual acceptance.
+AuthReviewInstant signs in with InstantDB's own email codes and keeps the account and notes on
+InstantDB, with no server of ours. Replace both placeholder App IDs with an Instant Cloud app's and
+push that app's generated schema and rules first. The first sign-in creates the person's Account row
+with no name, so the app opens on "Complete your profile" rather than the missing-account guard. The
+paired flow (code sign-in, account row, owner-only notes, sign-out) is covered against a local
+InstantDB by `packages/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts`; the
+phone journey against Instant Cloud remains outstanding.

@@ -41,7 +41,7 @@ const connection = ReferenceProvider({
 }).connect({
   auth: {
     accountId: fixture.accountId,
-    credential: () => Promise.resolve({ audience: 'notes', value: 'unused-offline-credential' }),
+    credential: () => Promise.resolve('unused-offline-credential'),
     generation: 1,
     signal: new AbortController().signal,
   },

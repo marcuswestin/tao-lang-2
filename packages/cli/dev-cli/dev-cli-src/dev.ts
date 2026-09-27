@@ -682,6 +682,38 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('instant-review')
+    .description(
+      'Push Auth Review to the stored Instant Cloud app, then run it in tao dev from a disposable copy.',
+    )
+    .option('--device <name-or-id>', 'Open this physical device after Metro starts.')
+    .option('--ios', 'Open an iOS simulator after Metro starts.')
+    .option('--web', 'Open the web app after Metro starts.')
+    .option('--dry-run', 'Print what the push would change, apply nothing, and start no dev loop.')
+    .option('--skip-push', 'Start the dev loop without pushing the schema and rules.')
+    .option('--force', 'Push a plan that is not purely additive, leaving undeclared attributes on the app.')
+    .action(
+      async (
+        options: {
+          device?: string
+          ios?: boolean
+          web?: boolean
+          dryRun?: boolean
+          force?: boolean
+          skipPush?: boolean
+        },
+      ) => {
+        const { runInstantReview } = await import('./instantdb/InstantReviewCommand')
+        try {
+          Platform.runtimeProcess.exit(await runInstantReview(options))
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.exit(1)
+        }
+      },
+    )
+
+  commands
     .command('secrets')
     .description('Decrypt the repository secrets into .env.secrets, or add, list, or set up.')
     .argument('[action]', 'add <KEY> [note], list, or setup. Omit to decrypt everything.')
