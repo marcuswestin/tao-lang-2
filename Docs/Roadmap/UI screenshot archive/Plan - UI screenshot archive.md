@@ -95,9 +95,9 @@ it. So:
 
 1. **Proof of concept** (done): the submodule and store, WordFlower captured on web across the size
    × appearance matrix, and the timeline page. Two consecutive runs reproduced every image
-   byte for byte. Known noise: Studio's review capture occasionally reports "The preview changed
-   between two consecutive settled captures", most often for `states/novel`; the timeline shows such
-   a shot as a flagged failure.
+   byte for byte. Studio's review capture once flagged one shot in fifteen as changing between two
+   consecutive settled captures; it now captures in a window that holds every cell and repeats until
+   two consecutive captures agree, keeping `unstable-<name>` beside a shot that never does.
 2. The other Tao apps, then Studio on web.
 3. Milestone native captures: iOS for the reference apps and the companion app, and the native
    Studio shell.

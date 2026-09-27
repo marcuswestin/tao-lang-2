@@ -67,7 +67,8 @@ export function renderCellPreview(
   const cell = connection.cell!
   frame.style.width = `${Math.max(320, cell.environment.viewport.width)}px`
   const scenario = manifest.scenarios.find(candidate => candidate.scenarioId === cell.scenarioId)
-  connection.journeyReplayStatus = (scenario?.steps?.length ?? 0) > 0 ? 'pending' : undefined
+  const replayed = StudioReviewDom.retainedJourneyReplay(connection, manifest)
+  connection.journeyReplayStatus = (scenario?.steps?.length ?? 0) > 0 ? replayed?.status ?? 'pending' : undefined
   const subjectParameters = manifest.parametersBySubject[scenario?.subjectId ?? ''] ?? []
   const modeled = StudioScenarioControls.fromManifest({
     cell,
@@ -92,7 +93,13 @@ export function renderCellPreview(
     frame.dataset['taoReviewEnvironment'] = review.environment
     frame.dataset['taoReviewRenderInputs'] = review.renderInputs
   }
-  StudioReviewDom.status(frame, 'pending')
+  if (connection.journeyReplayStatus === 'settled') {
+    StudioReviewDom.status(frame, 'ready')
+  } else if (connection.journeyReplayStatus === 'failed') {
+    StudioReviewDom.status(frame, 'failed', replayed?.error)
+  } else {
+    StudioReviewDom.status(frame, 'pending')
+  }
   const label = document.createElement('header')
   label.className = 'studio-preview-cell-label'
   label.textContent = scenario?.label ?? cell.scenarioId

@@ -118,8 +118,21 @@ type StudioReviewDependencies = {
   }) => Promise<StartedStudioSmokeLaunch>
 }
 
+// Captures after the first before a cell that never repeats itself is reported unstable.
+const stableCaptureAttempts = 3
+
+// Headless Chrome's default window is smaller than most authored devices, and a cell captured beyond
+// the viewport is rastered afresh for each capture, antialiasing edges differently each time. This
+// window holds every device preset and authored sizes such as a 1024×1366 tablet, with room for the
+// page's scrollbars.
+const reviewCaptureViewport = { height: 1600, width: 2048 } as const
+
 const defaultDependencies: StudioReviewDependencies = {
-  launchBrowser: async artifactRoot => await StudioCdp.launchChrome({ artifactRoot }),
+  launchBrowser: async artifactRoot => {
+    const browser = await StudioCdp.launchChrome({ artifactRoot })
+    await browser.setViewport(reviewCaptureViewport.width, reviewCaptureViewport.height)
+    return browser
+  },
   now: () => new Date(),
   randomId: Platform.randomUUID,
   startStudio: startStudioSmokeLaunch,
@@ -257,20 +270,30 @@ async function captureReviewCell(
     const screenshotPath = FS.resolvePath(screenshot, artifactRoot)
     const stabilityPath = FS.resolvePath(`screenshots/.stability-${fileName}`, artifactRoot)
     const selector = `[data-tao-review-capture="${marker}"] > .studio-preview-cell-viewport`
+    // A cell can report settled a frame before its last paint, so capturing repeats until two
+    // consecutive captures agree. When none do, the capture before the last is kept beside the
+    // screenshot as `unstable-<name>`, the evidence of what changed.
+    const previousPath = FS.resolvePath(`screenshots/unstable-${fileName}`, artifactRoot)
     await browser.captureElementScreenshotAt(screenshotPath, selector)
-    let sha256: string
-    let stabilityHash: string
-    try {
+    let sha256 = hash(await FS.readFile(screenshotPath))
+    let unstable = true
+    for (let attempt = 0; attempt < stableCaptureAttempts && unstable; attempt += 1) {
       await browser.captureElementScreenshotAt(stabilityPath, selector)
-      sha256 = hash(await FS.readFile(screenshotPath))
-      stabilityHash = hash(await FS.readFile(stabilityPath))
-    } finally {
-      await FS.remove(stabilityPath)
+      const stabilityHash = hash(await FS.readFile(stabilityPath))
+      unstable = stabilityHash !== sha256
+      if (unstable) {
+        await FS.move(screenshotPath, previousPath)
+        await FS.move(stabilityPath, screenshotPath)
+        sha256 = stabilityHash
+      }
     }
-    const unstable = sha256 !== stabilityHash
+    await FS.remove(stabilityPath)
+    if (!unstable) {
+      await FS.remove(previousPath)
+    }
     const error = [
       current.error,
-      ...(unstable ? ['The preview changed between two consecutive settled captures.'] : []),
+      ...(unstable ? [`The preview kept changing across ${stableCaptureAttempts + 1} settled captures.`] : []),
     ].filter((message): message is string => message !== undefined).join(' ')
     return {
       environment: current.environment,

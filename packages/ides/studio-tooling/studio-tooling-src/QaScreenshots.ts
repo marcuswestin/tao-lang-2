@@ -1,4 +1,4 @@
-import { Assert, CLI, Errors, FS, HCI, Repo, Time } from '@shared'
+import { Assert, CLI, Errors, FS, HCI, Repo } from '@shared'
 import { StudioCdp, type StudioCdpRendererFingerprint } from './StudioCdp'
 import { type ReviewBrowser, StudioReview } from './StudioReview'
 import { type StartedStudioSmokeLaunch, startStudioSmokeLaunch } from './StudioSmokeLaunch'
@@ -21,6 +21,15 @@ const qaDevices = {
 
 type QaDevice = keyof typeof qaDevices
 type QaAppearance = 'dark' | 'light'
+
+// Headless Chrome's default window is smaller than a tablet or laptop cell, and a cell captured
+// beyond the viewport is rastered afresh for each shot, antialiasing edges differently between two
+// captures of the same settled frame. A window that holds every preset keeps each capture on screen;
+// the margin leaves room for the page's scrollbars.
+const qaCaptureViewport = {
+  height: Math.max(...Object.values(qaDevices).map(size => size.height)) + 64,
+  width: Math.max(...Object.values(qaDevices).map(size => size.width)) + 64,
+} as const
 
 const qaDeviceOrder: readonly QaDevice[] = ['phone', 'tablet', 'laptop']
 const qaAppearanceOrder: readonly QaAppearance[] = ['light', 'dark']
@@ -109,7 +118,7 @@ export async function runQaScreenshots(projectPath: string, options: QaScreensho
       repositoryRoot,
     })
     browser = await StudioCdp.launchChrome({ artifactRoot: workRoot })
-    await waitForStudioClient(launch.readiness.sessionUrl)
+    await browser.setViewport(qaCaptureViewport.width, qaCaptureViewport.height)
     await StudioReview.capture.open(browser, launch.readiness.sessionUrl)
     const scenarios = await readScenarios(browser, projectRoot)
     let project: QaRunManifest['project'] | undefined
@@ -195,34 +204,6 @@ function chosen<Value extends string>(
     Errors.throwUserInput(`Unknown ${label} ${unknown.join(', ')}; choose from ${known.join(', ')}.`)
   }
   return known.filter(value => requested.includes(value))
-}
-
-/**
- * waitForStudioClient returns once Studio has stopped republishing its browser client. Launching
- * Studio compiles its own Tao client into the sources its dev reload watches, so the page reloads
- * itself once shortly after startup, which would tear down a capture in progress.
- */
-async function waitForStudioClient(sessionUrl: string): Promise<void> {
-  const quietMs = 8_000
-  const deadline = Date.now() + 120_000
-  const url = new URL('/studio-dev/revision', sessionUrl)
-  let revision: unknown
-  let changedAt = Date.now()
-  while (Date.now() < deadline) {
-    const response = await fetch(url, { cache: 'no-store' })
-    if (!response.ok) {
-      return // This launch publishes no dev reloads.
-    }
-    const next = ((await response.json()) as { revision?: unknown }).revision
-    if (next !== revision) {
-      revision = next
-      changedAt = Date.now()
-    } else if (Date.now() - changedAt >= quietMs) {
-      return
-    }
-    await Time.sleep(250)
-  }
-  Errors.throwHostEnvironment('Tao Studio kept republishing its browser client for two minutes.')
 }
 
 /** readScenarios reads each scenario's source identity from the session's preview manifest. */

@@ -54,6 +54,8 @@ export type StudioPreviewConnection = {
   journeyRecording?: StudioJourneyRecordingDraft
   journeyRecordingTimeout?: ReturnType<typeof setTimeout>
   journeyReplayStatus?: 'failed' | 'pending' | 'settled'
+  /** The last replay outcome the frame reported, and the journey revision it reported it for. */
+  journeyReplayResult?: Readonly<{ error?: string; revision: string; status: 'failed' | 'settled' }>
   lensNotifyQueued?: boolean
   lensSamples?: readonly StudioLensRenderSample[]
   layoutMeasurements?: StudioPreviewLayoutMeasurementsMessage

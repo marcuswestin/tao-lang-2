@@ -1,4 +1,4 @@
-import type { StudioPreviewCell, StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
+import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
 import { projectRelativePath } from '../StudioEditor'
 import type { StudioPreviewConnection } from './StudioPreviewConnection'
 
@@ -61,6 +61,17 @@ export const StudioReviewDom = {
       renderInputs,
     }
   },
+  /**
+   * The revision a cell frame replays its scenario journey for, spelled as the frame's own replay gate
+   * spells it: the frame replays each revision once, so an outcome it reported still holds for as long
+   * as this is unchanged, and no second report will arrive for it.
+   */
+  journeyRevision(
+    identity: Pick<StudioCellIdentity, 'cellRevision' | 'compileRevision' | 'manifestRevision'>,
+    previewInstanceId: string,
+  ): string {
+    return [identity.compileRevision, identity.cellRevision, identity.manifestRevision, previewInstanceId].join(':')
+  },
   manifest(manifest: StudioPreviewManifestV2): string {
     const sourceVersions = Object.fromEntries(
       Object.entries(manifest.sourceVersions)
@@ -78,6 +89,30 @@ export const StudioReviewDom = {
       manifestRevision: manifest.manifestRevision,
       sourceVersions,
     })
+  },
+  /**
+   * The replay outcome that still describes a cell's frame when the cell is rendered again, if any.
+   * Rendering a cell again for the revision its frame has already replayed must keep that outcome: the
+   * frame will not report it a second time, so resetting to pending would leave the cell pending for
+   * good. The identity must also be the manifest's, so a newer manifest reads as pending until the
+   * frame has it.
+   */
+  retainedJourneyReplay(
+    connection: Pick<StudioPreviewConnection, 'cellIdentity' | 'journeyReplayResult' | 'previewInstanceId'>,
+    manifest: Pick<StudioPreviewManifestV2, 'compileRevision' | 'manifestRevision'>,
+  ): StudioPreviewConnection['journeyReplayResult'] {
+    const identity = connection.cellIdentity
+    const result = connection.journeyReplayResult
+    if (
+      identity === undefined
+      || result === undefined
+      || identity.compileRevision !== manifest.compileRevision
+      || identity.manifestRevision !== manifest.manifestRevision
+      || result.revision !== StudioReviewDom.journeyRevision(identity, connection.previewInstanceId)
+    ) {
+      return undefined
+    }
+    return result
   },
   status(frame: HTMLElement, status: 'failed' | 'pending' | 'ready', error?: string): void {
     frame.dataset['taoReviewStatus'] = status

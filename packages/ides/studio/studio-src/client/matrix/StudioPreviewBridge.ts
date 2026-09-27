@@ -348,10 +348,16 @@ function receiveJourneyReplay(
   preview: StudioPreviewConnection,
   message: StudioWindowMessageOf<'preview-journey-replay-failed' | 'preview-journey-replay-settled'>,
 ): void {
-  if (!matchesExactPreviewCellIdentity(preview, message.identity)) {
+  const cellIdentity = preview.cellIdentity
+  if (cellIdentity === undefined || !matchesExactPreviewCellIdentity(preview, message.identity)) {
     return
   }
   preview.journeyReplayStatus = message.type === 'preview-journey-replay-settled' ? 'settled' : 'failed'
+  preview.journeyReplayResult = {
+    ...(message.type === 'preview-journey-replay-failed' ? { error: message.error } : {}),
+    revision: StudioReviewDom.journeyRevision(cellIdentity, preview.previewInstanceId),
+    status: preview.journeyReplayStatus,
+  }
   if (preview.frame !== undefined) {
     if (message.type === 'preview-journey-replay-settled') {
       StudioReviewDom.status(preview.frame, 'ready')
