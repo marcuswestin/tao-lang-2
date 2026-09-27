@@ -559,8 +559,12 @@ export class StudioCdp {
     let previewFrameUrl: string | undefined
     // Raw `Error`: this expression executes in Chrome and cannot import Tao's error taxonomy.
     try {
+      // Chrome pauses animation frames in an iframe scrolled out of view, so the frame's settle wait
+      // below never ends unless the element is on screen first; content above it may have grown
+      // since the caller last scrolled it into view.
       previewFrameUrl = await this.evaluate<string | undefined>(`(() => {
         const element = document.querySelector(${JSON.stringify(selector)})
+        element?.scrollIntoView({ block: 'center', inline: 'center' })
         const frame = element?.querySelector('iframe')
         return frame instanceof HTMLIFrameElement ? frame.src : undefined
       })()`)
