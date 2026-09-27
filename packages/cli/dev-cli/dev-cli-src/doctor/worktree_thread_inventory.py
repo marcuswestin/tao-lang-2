@@ -1,6 +1,7 @@
 """Read local agent task indexes without changing their databases or transcripts.
 
 Input: {"paths": [absolute worktree paths], "home": optional fixture home} on stdin.
+Fixtures can also supply "platform" and "xdgConfigHome" instead of process defaults.
 Output: provider coverage and exact-path task matches as one JSON object on stdout.
 An unreadable installed provider is reported as unavailable, never as an empty task list.
 """
@@ -10,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import stat
 import sys
 from datetime import datetime, timezone
 
@@ -180,22 +182,41 @@ def claude_threads(home, wanted):
     return "ok", result
 
 
-def cursor_threads(home):
-    root = home / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage"
-    db_path = root / "state.vscdb"
-    if not root.exists():
-        return "not-installed", []
-    if not db_path.exists():
-        return "unavailable: no composer database", []
-    with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as db:
+def cursor_threads(home, platform, xdg_config_home):
+    # Covers the default profile only; arbitrary --user-data-dir profiles are not discovered.
+    if platform == "darwin":
+        app_root = home / "Library" / "Application Support" / "Cursor"
+    elif platform == "linux":
+        config_root = Path(xdg_config_home) if xdg_config_home else home / ".config"
+        if not config_root.is_absolute():
+            config_root = home / ".config"
+        app_root = config_root / "Cursor"
+    else:
+        return "unavailable: unsupported platform", []
+    # Walk parents too: a dangling symlink or inaccessible ancestor is not absence.
+    for directory in reversed((app_root, *app_root.parents)):
+        try:
+            directory.lstat()
+        except FileNotFoundError:
+            return "not-installed", []
+        if not stat.S_ISDIR(directory.stat().st_mode):
+            return "unavailable: user data path is not a directory", []
+    db_path = app_root / "User" / "globalStorage" / "state.vscdb"
+    if not stat.S_ISREG(db_path.stat().st_mode):
+        return "unavailable: composer database is not a file", []
+    with sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True) as db:
         rows = db.execute("SELECT composerId,createdAt,lastUpdatedAt,isArchived,value FROM composerHeaders")
         result = []
         for id, created, updated, archived, raw in rows:
-            try:
-                value = json.loads(raw)
-            except (TypeError, ValueError):
-                continue
-            path = value.get("workspaceIdentifier", {}).get("uri", {}).get("fsPath")
+            value = json.loads(raw)
+            if not isinstance(value, dict):
+                raise ValueError("invalid composer record")
+            workspace = value.get("workspaceIdentifier", {})
+            if not isinstance(workspace, dict) or not isinstance(workspace.get("uri", {}), dict):
+                raise ValueError("invalid composer workspace")
+            path = workspace.get("uri", {}).get("fsPath")
+            if path is not None and not isinstance(path, str):
+                raise ValueError("invalid composer path")
             if not path:
                 continue
             result.append(record(
@@ -215,14 +236,17 @@ def main():
     for app, reader in (
         ("codex", lambda: codex_threads(home, wanted)),
         ("claude", lambda: claude_threads(home, wanted)),
-        ("cursor", lambda: cursor_threads(home)),
+        ("cursor", lambda: cursor_threads(
+            home, request.get("platform", sys.platform),
+            request.get("xdgConfigHome", os.environ.get("XDG_CONFIG_HOME", "")),
+        )),
     ):
         try:
             providers[app], threads = reader()
             for thread in threads:
                 if thread["path"] in wanted:
                     by_path[thread["path"]].append(thread)
-        except (OSError, sqlite3.Error, ValueError, KeyError) as error:
+        except (OSError, sqlite3.Error, ValueError, KeyError, TypeError) as error:
             providers[app] = f"unavailable: {type(error).__name__}"
     for threads in by_path.values():
         threads.sort(key=lambda thread: (thread["lastActivityAt"] or "", thread["id"]), reverse=True)

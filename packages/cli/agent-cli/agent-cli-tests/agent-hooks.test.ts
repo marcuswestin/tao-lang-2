@@ -1,6 +1,7 @@
 import { CLI, FS, Repo, Text } from '@shared'
 import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import { branchWarnings, commitMessageWarnings } from '../agent-cli-src/agent-hooks/CommitChecks'
+import { installGitHooks as writeGitHooks } from '../agent-cli-src/agent-hooks/GitHooksInstaller'
 import { PIPE_WARNING, PREFIX_WARNING, shellHabitWarnings } from '../agent-cli-src/agent-hooks/ShellHabits'
 import { subagentBrief } from '../agent-cli-src/agent-hooks/SubagentBrief'
 
@@ -63,6 +64,68 @@ const COMMIT_MESSAGE_CASES: ReadonlyArray<readonly [string, string, number]> = [
 ]
 
 Describe('agent hooks', () => {
+  Test('advisory hooks start with POSIX sh and stay silent without Bun', async () => {
+    const root = await mkGitTestDir('tao-posix-advisory-hooks-')
+    await initGitTestRepository(root)
+    for (const script of [SHELL_HABITS, SUBAGENT_BRIEF]) {
+      Expect((await FS.readText(script)).split('\n')[0]).toBe('#!/bin/sh')
+      const result = await CLI.run('/bin/sh', {
+        args: [script],
+        cwd: root,
+        env: { PATH: '/usr/bin:/bin' },
+        stdin: '{}',
+      })
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toBe('')
+      Expect(result.stderr).toBe('')
+    }
+  })
+
+  Test('POSIX advisory hooks select the managed Bun and preserve their entrypoint', async () => {
+    const root = await mkGitTestDir('tao-posix-advisory-managed-')
+    await initGitTestRepository(root)
+    const bun = FS.resolvePath('.devenv/profile/bin/bun', root)
+    await FS.writeText(bun, '#!/bin/sh\nprintf "%s\\n" "$@"\n')
+    await FS.chmod(bun, 0o755)
+    for (
+      const [script, entry] of [
+        [SHELL_HABITS, 'ShellHabitsEntry.ts'],
+        [SUBAGENT_BRIEF, 'SubagentBriefEntry.ts'],
+      ] as const
+    ) {
+      const result = await CLI.run('/bin/sh', { args: [script], cwd: root, env: { PATH: '/usr/bin:/bin' } })
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stderr).toBe('')
+      Expect(result.stdout).toBe(`run\n${root}/packages/cli/agent-cli/agent-cli-src/agent-hooks/${entry}\n`)
+    }
+  })
+
+  Test('the Git hook starts with POSIX sh and selects the managed Bun', async () => {
+    const root = await mkGitTestDir('tao-posix-git-hook-')
+    try {
+      await initGitTestRepository(root)
+      const bun = FS.resolvePath('.devenv/profile/bin/bun', root)
+      await FS.writeText(bun, '#!/bin/sh\nprintf "managed-bun:%s\\n" "$*"\n')
+      await FS.chmod(bun, 0o755)
+      const result = await CLI.run('/bin/sh', { args: [GIT_HOOKS, 'install'], cwd: root })
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stderr).toBe('')
+      Expect(result.stdout).toContain('managed-bun:run ')
+      Expect(result.stdout).toContain('GitHooksEntry.ts install')
+      const shim = FS.resolvePath('packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh', root)
+      await FS.writeText(shim, await FS.readText(GIT_HOOKS))
+      await FS.chmod(shim, 0o755)
+      const hooks = FS.resolvePath('.git/hooks', root)
+      await writeGitHooks(hooks)
+      const installed = await CLI.run('/bin/sh', { args: [FS.resolvePath('pre-commit', hooks)], cwd: root })
+      Expect(installed.exitCode).toBe(0)
+      Expect(installed.stderr).toBe('')
+      Expect(installed.stdout).toContain('GitHooksEntry.ts pre-commit')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('reports the shell habits a command shows, and stays silent otherwise', () => {
     const reported = SHELL_CASES.map(([command]) => `${command}\t${shellHabitWarnings(command).join(',')}`)
 
@@ -261,7 +324,7 @@ Describe('agent hooks', () => {
     Expect(hooks.hooks['preToolUse']?.some(entry => entry.matcher === 'Bash')).toBe(true)
   })
 
-  Test('every shim that counts `:h` levels to the repository root actually lands there', async () => {
+  Test('every shim that walks from its script directory to the repository root actually lands there', async () => {
     const cliDir = Repo.resolvePath('packages/cli/agent-cli/agent-cli-src/cli')
     const repoRoot = Repo.getRoot()
     const shims = (await FS.listDir(cliDir)).filter(name => name.endsWith('.zsh'))
@@ -270,16 +333,16 @@ Describe('agent hooks', () => {
     for (const name of shims) {
       const path = FS.resolvePath(name, cliDir)
       const source = await FS.readText(path)
-      const expression = source.match(/REPO_ROOT="(\$\{SCRIPT_DIR(?::h)+\})"/)?.[1]
+      const expression = source.match(/^REPO_ROOT="(\$\(CDPATH= cd -- "\$SCRIPT_DIR\/[^\n]+\))"/m)?.[1]
       if (expression === undefined) {
         continue
       }
       counted++
-      // Evaluate the file's own expression rather than reimplementing dirname counting, against
+      // Evaluate the file's own expression rather than reimplementing parent counting, against
       // this shim's real location, so a future move of the file fails this test instead of
       // silently writing under `packages/` again.
-      const result = await CLI.run('zsh', {
-        args: ['-c', `SCRIPT_DIR="${FS.dirname(path)}"; print -r -- ${expression}`],
+      const result = await CLI.run('/bin/bash', {
+        args: ['-c', `SCRIPT_DIR="$1"; printf '%s\\n' "${expression}"`, 'root-probe', FS.dirname(path)],
       })
 
       Expect(result.exitCode).toBe(0)

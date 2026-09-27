@@ -224,7 +224,8 @@ Describe('cache process lifecycle', () => {
         runtimePackageRoot, generatedRoot: TestRunRoot.hostGeneratedRoot(runtimePackageRoot)
       });
       await FS.writeText(FS.resolvePath('output.ts', run), 'retained');
-      await FS.writeJson(${JSON.stringify(ready)}, { run });
+      await FS.writeJson(${JSON.stringify(`${ready}.pending`)}, { run });
+      await FS.move(${JSON.stringify(`${ready}.pending`)}, ${JSON.stringify(ready)});
       await new Promise(() => { setInterval(() => {}, 1000) });
     `,
     )

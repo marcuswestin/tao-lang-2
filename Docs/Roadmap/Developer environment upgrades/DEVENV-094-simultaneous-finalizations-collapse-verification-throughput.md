@@ -77,3 +77,5 @@
 - **Note:** Carried an earlier `DEVENV-076` number that another branch reused while this entry
   existed only as a body in the index; renumbered rather than renumbering the merged file.
 - **Source:** 2026-09-17 merge-finalization performance investigation.
+
+- **Subsequent integrated verification (2026-09-26):** After merging origin/main `47fa4dc9` into `feat/native-tooling-followup` at `bd66e272`, complete Verify passed in 213.8s (213.5s schedule makespan). Two Tao lanes overlapped and load peaked at 46.8 on 16 CPUs. Evidence: `.artifacts/logs/verify/2026-09-27T01-04-38-596Z-95890-5d89a101/summary.json`. This is warm-cache recovery evidence on a newer tree, not an uncontended benchmark or proof that the earlier failures shared one cause. A later main integration requires its own verification.

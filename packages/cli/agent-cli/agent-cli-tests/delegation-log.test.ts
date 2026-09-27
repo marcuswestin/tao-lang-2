@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { CLI, FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   DELEGATION_EVENTS_PATH,
@@ -15,6 +15,43 @@ const spawn = (profile: string, model?: string) => ({
 })
 
 Describe('delegation log', () => {
+  Test('the Bash hook writes separate complete events without Bun from a linked entrypoint', async () => {
+    const root = await mkTestDir('tao-bash-delegation-')
+    const script = 'packages/cli/agent-cli/agent-cli-src/cli/agent-delegation-log.zsh'
+    const copied = FS.resolvePath(script, root)
+    await FS.writeText(copied, await FS.readText(Repo.resolvePath(script)))
+    Expect((await FS.readText(copied)).split('\n')[0]).toBe('#!/bin/bash')
+    const link = FS.resolvePath('entry', root)
+    await FS.symlink(script, link)
+    const results = await Promise.all([0, 1, 2].map(index =>
+      CLI.run('/bin/bash', {
+        args: [link, 'spawn'],
+        cwd: FS.dirname(root),
+        env: { PATH: '/usr/bin:/bin' },
+        stdin: JSON.stringify({ index, text: 'preserve\\ninside strings' }, undefined, 2),
+      })
+    ))
+    const empty = await CLI.run('/bin/bash', { args: [link], env: { PATH: '/usr/bin:/bin' }, stdin: '' })
+    for (const result of [...results, empty]) {
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toBe('')
+      Expect(result.stderr).toBe('')
+    }
+    const directory = FS.resolvePath(DELEGATION_EVENTS_PATH, root)
+    const files = await FS.listDir(directory)
+    Expect(files).toHaveLength(4)
+    const events = await Promise.all(files.map(file =>
+      FS.readJson<{
+        event: string
+        payload: { index?: number; text?: string }
+      }>(FS.resolvePath(file, directory))
+    ))
+    Expect(events.filter(event => event.event === 'spawn').map(event => event.payload.index).sort()).toEqual([0, 1, 2])
+    Expect(events.filter(event => event.event === 'spawn').map(event => event.payload.text))
+      .toEqual(Array(3).fill('preserve\\ninside strings'))
+    Expect(events.find(event => event.event === 'unknown')?.payload).toEqual({})
+  })
+
   Test('counts one row per profile and keeps the models a caller named', () => {
     const summary = summarizeDelegationLog([
       logLine('spawn', '2026-09-17T10:00:00Z', spawn('scout', 'sonnet')),

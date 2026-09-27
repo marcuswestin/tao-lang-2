@@ -1,5 +1,13 @@
-import { FS, Platform, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
+import { CLI, FS, Platform, Repo } from '@shared'
+import {
+  Describe,
+  Expect,
+  initGitTestRepository,
+  mkGitTestDir,
+  mkTestDir,
+  Test,
+  withCapturedOutput,
+} from '@shared/test'
 import {
   type DoctorFacts,
   type DoctorReport,
@@ -407,43 +415,56 @@ Describe('repository doctor', () => {
     }
   })
 
-  Test('leaves existing checkout artifacts unchanged', async () => {
-    // Other lanes create artifacts and edit tracked files in the real checkout. Only this
-    // fixture belongs to the doctor invocation whose lasting writes we are checking.
-    const root = await mkTestDir('tao-doctor-artifacts-')
-    const artifactPaths = ['.artifacts/build', '.artifacts/cache', '.artifacts/logs', '.artifacts/tmp']
+  Test('reads an owned checkout without changing authored or ignored files', async () => {
+    // Other suites write to the real checkout. This Git repository owns every path whose
+    // preservation we assert, including ignored artifacts and empty directories.
+    const root = await mkGitTestDir('tao-doctor-built-checkout-')
     try {
-      for (const path of artifactPaths) {
-        await FS.writeText(FS.resolvePath(`${path}/existing.txt`, root), 'keep existing artifact\n')
+      await initGitTestRepository(root, {
+        commit: {
+          files: {
+            '.gitignore': '.artifacts/\n',
+            'tracked.txt': 'committed\n',
+            'staged.txt': 'committed\n',
+            'packages/language/parser/langium-config.json': '{"out":"_gen_tao-parser"}\n',
+            ...Object.fromEntries(['ast.ts', 'grammar.ts', 'module.ts'].map(name => [
+              `packages/language/parser/_gen_tao-parser/${name}`,
+              '// generated fixture\n',
+            ])),
+          },
+        },
+      })
+      await FS.writeText(FS.resolvePath('tracked.txt', root), 'unstaged edit\n')
+      await FS.writeText(FS.resolvePath('staged.txt', root), 'staged edit\n')
+      await CLI.mustRun('git', { args: ['add', 'staged.txt'], cwd: root })
+      await FS.writeText(FS.resolvePath('untracked.txt', root), 'untracked bytes\n')
+      for (const name of ['tmp', 'cache', 'build', 'logs']) {
+        await FS.writeText(FS.resolvePath(`.artifacts/${name}/retained.txt`, root), `${name} bytes\n`)
       }
-      const read = await readDoctorFacts(root)
+      await FS.mkdir(FS.resolvePath('.artifacts/tmp/empty', root))
+      const status = () => CLI.mustRun('git', { args: ['status', '--porcelain', '--untracked-files=all'], cwd: root })
+      const beforeStatus = await status()
+      const beforeContents = await checkoutContents(root)
+      Expect(beforeStatus.stdout).toContain(' M tracked.txt')
+      Expect(beforeStatus.stdout).toContain('M  staged.txt')
+      Expect(beforeStatus.stdout).toContain('?? untracked.txt')
 
-      Expect(read.artifactRoots.filter(artifact => artifact.present).map(artifact => artifact.path).toSorted())
-        .toEqual(artifactPaths)
-      const entries: string[] = []
-      for await (const path of FS.walk(root, { includeDirectories: true, includeHidden: true })) {
-        entries.push(FS.relativePath(root, path))
-      }
-      Expect(entries.toSorted()).toEqual([
-        '.artifacts',
-        '.artifacts/build',
-        '.artifacts/build/existing.txt',
-        '.artifacts/cache',
-        '.artifacts/cache/existing.txt',
-        '.artifacts/logs',
-        '.artifacts/logs/existing.txt',
-        '.artifacts/tmp',
-        '.artifacts/tmp/existing.txt',
-      ])
-      for (const path of artifactPaths) {
-        Expect(await FS.readText(FS.resolvePath(`${path}/existing.txt`, root))).toBe('keep existing artifact\n')
-      }
+      const report = doctorReport(
+        await readDoctorFacts(root, {
+          machineRegistryRoot: FS.resolvePath('.artifacts/lanes', root),
+        }),
+      )
+
+      Expect(await checkoutContents(root)).toEqual(beforeContents)
+      Expect((await status()).stdout).toBe(beforeStatus.stdout)
+      Expect(report.repositoryRoot).toBe(root)
+      Expect(check(report, 'parser artifacts')?.status).toBe('pass')
     } finally {
       await FS.remove(root)
     }
   })
 
-  Test('reads this checkout with the production defaults', async () => {
+  Test('reads this checkout dependency compatibility and generated parser artifacts', async () => {
     const report = doctorReport(await readDoctorFacts())
 
     Expect(report.repositoryRoot).toBe(Repo.getRoot())
@@ -462,3 +483,25 @@ Describe('repository doctor', () => {
     Expect(checks.find(candidate => candidate.name === 'worktree path')?.status).toBe('pass')
   })
 })
+
+async function checkoutContents(root: string): Promise<Record<string, unknown>> {
+  const entries: Record<string, unknown> = {}
+  // Git may refresh its own index while reading status. Working-tree bytes and Git's visible
+  // staged/unstaged state are the contract, so internal Git metadata is outside this snapshot.
+  for await (
+    const path of FS.walk(root, {
+      excludeDirectory: name => name === '.git',
+      includeDirectories: true,
+      includeHidden: true,
+    })
+  ) {
+    const { kind, linkTarget, mode } = await FS.entryMetadata(path)
+    entries[FS.relativePath(root, path)] = {
+      kind,
+      mode,
+      ...(kind === 'file' ? { content: await FS.readText(path) } : {}),
+      ...(linkTarget === undefined ? {} : { linkTarget }),
+    }
+  }
+  return entries
+}

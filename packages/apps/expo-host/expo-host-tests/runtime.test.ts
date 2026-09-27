@@ -1,6 +1,6 @@
 import Runtime, { type GeneratePreviewOptions, type ShipManifest } from '@expo-host'
 import TR from '@runtime/TR'
-import { Assert, CLI, Errors, FS, Repo } from '@shared'
+import { Assert, CLI, Errors, FS, Platform, Repo } from '@shared'
 import { AfterEach, Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 
 const wordFlowerDir = Repo.resolvePath('Apps/WordFlower/1 - Current')
@@ -44,6 +44,37 @@ function previewOptions(
     sourceVersions: { 'Main.tao': `text-v${revision}` },
     ...overrides,
   }
+}
+
+type PreviewRollbackProbe = {
+  initialGraph: Record<string, string>
+  failedGraph: Record<string, string>
+  recoveredGraph: Record<string, string>
+  failure: string
+  faults: string[]
+  cleanupInjection: string
+  cleanupPublication: string
+  recoveredRevision: number
+}
+
+async function previewRollbackProbe(
+  mode: 'cleanup' | 'stable-order' | 'migration-order',
+  runtimePackageRoot: string,
+  appPath: string,
+): Promise<PreviewRollbackProbe> {
+  // The child owns its filesystem mock and preview session, including recovery after disabling faults.
+  const result = await CLI.run(Platform.runtimeProcess.execPath, {
+    args: [
+      FS.resolvePath('fixtures/preview-rollback.ts', import.meta.dir),
+      mode,
+      runtimePackageRoot,
+      appPath,
+    ],
+    processPolicy: 'test',
+    timeoutMs: 20_000,
+  })
+  Expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: '' })
+  return JSON.parse(result.stdout) as PreviewRollbackProbe
 }
 
 AfterEach(async () => {
@@ -617,7 +648,6 @@ Describe('Tao runtime app generation', () => {
 
   Test('rolls a stable preview graph back when publication cleanup fails', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
-
     await withTaoFiles(
       'tao-runtime-preview-publication-rollback-',
       {
@@ -625,42 +655,23 @@ Describe('Tao runtime app generation', () => {
           'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
       },
       async paths => {
-        await Runtime.generateApp(paths['Main.tao'], {
-          preview: previewOptions(2),
-          runtimePackageRoot,
-        })
-        const blockedDirectory = generatedPreviewPath(runtimePackageRoot, 'obsolete')
-        await FS.writeText(FS.resolvePath('stale.ts', blockedDirectory), 'stale\n')
-        const lastGoodGraph = await generatedGraph(runtimePackageRoot)
-        await FS.chmod(blockedDirectory, 0o500)
-        try {
-          await FS.writeText(
-            paths['Main.tao'],
-            'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>After</RN.Text> ``` }',
-          )
-          await Expect(Runtime.generateApp(paths['Main.tao'], {
-            preview: previewOptions(3),
-            runtimePackageRoot,
-          })).rejects.toThrow()
-          Expect(await generatedGraph(runtimePackageRoot)).toEqual(lastGoodGraph)
-        } finally {
-          await FS.chmod(blockedDirectory, 0o700)
-        }
+        const probe = await previewRollbackProbe('cleanup', runtimePackageRoot, paths['Main.tao'])
 
-        const recovered = await Runtime.generateApp(paths['Main.tao'], {
-          preview: previewOptions(3),
-          runtimePackageRoot,
-        })
-        Expect(recovered.previewRevision).toBe(3)
-        Expect(await FS.exists(blockedDirectory)).toBe(false)
-        Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'App.injection-1.tsx'))).toContain('After')
+        Expect(probe.faults).toEqual(['cleanup'])
+        Expect(probe.failure).toContain('EACCES: injected preview cleanup failure')
+        Expect(probe.cleanupInjection).toContain('After')
+        Expect(probe.cleanupPublication).toContain('"compileRevision":3')
+        Expect(probe.failedGraph).toEqual(probe.initialGraph)
+        Expect(probe.recoveredRevision).toBe(3)
+        Expect(probe.recoveredGraph['App.injection-1.tsx']).toContain('After')
+        Expect(probe.recoveredGraph['TaoStudioPublication.ts']).toContain('"compileRevision":3')
+        Expect(await FS.exists(generatedPreviewPath(runtimePackageRoot, 'obsolete'))).toBe(false)
       },
     )
   })
 
   Test('does not restore the publication marker before a failing graph rollback', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
-
     await withTaoFiles(
       'tao-runtime-preview-publication-rollback-order-',
       {
@@ -668,47 +679,25 @@ Describe('Tao runtime app generation', () => {
           'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
       },
       async paths => {
-        await Runtime.generateApp(paths['Main.tao'], {
-          preview: previewOptions(2),
-          runtimePackageRoot,
-        })
-        const injectionPath = generatedPreviewPath(runtimePackageRoot, 'App.injection-1.tsx')
-        const blockedRollbackPath = `${injectionPath}.tao-rollback`
-        await FS.writeText(FS.resolvePath('stale.ts', blockedRollbackPath), 'stale\n')
-        await FS.chmod(blockedRollbackPath, 0o500)
-        try {
-          await FS.writeText(
-            paths['Main.tao'],
-            'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>After</RN.Text> ``` }',
-          )
-          await Expect(Runtime.generateApp(paths['Main.tao'], {
-            preview: previewOptions(3),
-            runtimePackageRoot,
-          })).rejects.toThrow()
+        const probe = await previewRollbackProbe('stable-order', runtimePackageRoot, paths['Main.tao'])
 
-          // Cleanup triggers rollback, and the blocked graph rollback then fails. The marker must
-          // still describe the new graph; restoring it first would expose revision 2 with "After".
-          Expect(await FS.readText(injectionPath)).toContain('After')
-          Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'TaoStudioPublication.ts'))).toContain(
-            '"compileRevision":3',
-          )
-        } finally {
-          await FS.chmod(blockedRollbackPath, 0o700)
-        }
-
-        const recovered = await Runtime.generateApp(paths['Main.tao'], {
-          preview: previewOptions(3),
-          runtimePackageRoot,
-        })
-        Expect(recovered.previewRevision).toBe(3)
-        Expect(await FS.exists(blockedRollbackPath)).toBe(false)
+        Expect(probe.faults).toEqual(['cleanup', 'graph rollback'])
+        Expect(probe.failure).toContain('EACCES: injected graph rollback failure')
+        Expect(probe.cleanupInjection).toContain('After')
+        Expect(probe.cleanupPublication).toContain('"compileRevision":3')
+        // A blocked graph rollback must leave the marker describing the new graph.
+        Expect(probe.failedGraph['App.injection-1.tsx']).toContain('After')
+        Expect(probe.failedGraph['TaoStudioPublication.ts']).toContain('"compileRevision":3')
+        Expect(probe.recoveredRevision).toBe(3)
+        Expect(probe.recoveredGraph['App.injection-1.tsx']).toContain('After')
+        Expect(probe.recoveredGraph['TaoStudioPublication.ts']).toContain('"compileRevision":3')
+        Expect(await FS.exists(generatedPreviewPath(runtimePackageRoot, 'obsolete'))).toBe(false)
       },
     )
   })
 
   Test('restores the retired preview root before a failing first-migration rollback', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
-
     await withTaoFiles(
       'tao-runtime-preview-migration-rollback-order-',
       {
@@ -716,37 +705,19 @@ Describe('Tao runtime app generation', () => {
           'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>Stable</RN.Text> ``` }',
       },
       async paths => {
-        const retiredRoot = "export { default } from './current/TaoApp'\n"
-        const stableRootPath = generatedAppPath(runtimePackageRoot)
-        const injectionPath = generatedPreviewPath(runtimePackageRoot, 'App.injection-1.tsx')
-        const blockedRollbackPath = `${injectionPath}.tao-rollback`
-        await FS.writeText(stableRootPath, retiredRoot)
-        await FS.writeText(generatedPreviewPath(runtimePackageRoot, 'current/TaoApp.tsx'), 'export default null\n')
-        await FS.writeText(injectionPath, 'export default null\n')
-        await FS.writeText(FS.resolvePath('stale.ts', blockedRollbackPath), 'stale\n')
-        await FS.chmod(blockedRollbackPath, 0o500)
-        try {
-          await Expect(Runtime.generateApp(paths['Main.tao'], {
-            preview: previewOptions(1),
-            runtimePackageRoot,
-          })).rejects.toThrow()
+        const probe = await previewRollbackProbe('migration-order', runtimePackageRoot, paths['Main.tao'])
 
-          // The graph rollback is deliberately blocked. The retired importer must already be live,
-          // so an interrupted migration still points at its untouched revision-addressed graph.
-          Expect(await FS.readText(stableRootPath)).toBe(retiredRoot)
-          Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'current/TaoApp.tsx')))
-            .toBe('export default null\n')
-        } finally {
-          await FS.chmod(blockedRollbackPath, 0o700)
-        }
-
-        const recovered = await Runtime.generateApp(paths['Main.tao'], {
-          preview: previewOptions(1),
-          runtimePackageRoot,
-        })
-        Expect(recovered.previewRevision).toBe(1)
-        Expect(await FS.readText(stableRootPath)).toContain("import TaoApp from './TaoAppRefresh'")
-        Expect(await FS.exists(blockedRollbackPath)).toBe(false)
+        Expect(probe.faults).toEqual(['cleanup', 'graph rollback'])
+        Expect(probe.failure).toContain('EACCES: injected graph rollback failure')
+        Expect(probe.cleanupInjection).toContain('Stable')
+        Expect(probe.cleanupPublication).toContain('"compileRevision":1')
+        // The retired importer must be live before rollback reaches the blocked graph file.
+        Expect(probe.failedGraph['App.tsx']).toBe("export { default } from './current/TaoApp'\n")
+        Expect(probe.failedGraph['current/TaoApp.tsx']).toBe('export default null\n')
+        Expect(probe.recoveredRevision).toBe(1)
+        Expect(probe.recoveredGraph['App.tsx']).toContain("import TaoApp from './TaoAppRefresh'")
+        Expect(probe.recoveredGraph['App.injection-1.tsx']).toContain('Stable')
+        Expect(await FS.exists(generatedPreviewPath(runtimePackageRoot, 'obsolete'))).toBe(false)
       },
     )
   })

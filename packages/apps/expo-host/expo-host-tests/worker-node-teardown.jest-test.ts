@@ -4,23 +4,53 @@ import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import { WorkerTesting } from '../expo-host-src/testing/test-compiler/Worker'
 
 Describe('Node compiler worker teardown', () => {
-  Test('reports an unavailable inspector instead of treating it as an empty process tree', () => {
-    const spawn = jest.spyOn(Platform, 'spawnSync').mockReturnValue({
-      output: [],
-      pid: 0,
-      signal: null,
-      status: 1,
-      stderr: Buffer.from('inspection denied'),
-      stdout: Buffer.alloc(0),
+  for (const platform of ['darwin', 'linux'] as const) {
+    Test(`reports an unavailable ${platform} inspector instead of treating it as an empty process tree`, () => {
+      // Linux captures its filesystem functions when ProcessTree is constructed. Isolate the
+      // module graph so both OS adapters see their failing boundary without replacing the subject.
+      jest.isolateModules(() => {
+        const files: typeof FS = require('../../../shared/shared-src/FS')
+        const host: typeof Platform = require('../../../shared/shared-src/Platform')
+        const hostPlatform = jest.replaceProperty(host, 'hostPlatform', platform)
+        const spawn = jest.spyOn(host, 'spawnSync').mockReturnValue({
+          output: [],
+          pid: 0,
+          signal: null,
+          status: 1,
+          stderr: Buffer.from('inspection denied'),
+          stdout: Buffer.alloc(0),
+        })
+        const readTextSync = files.readTextSync
+        const statPath = `/proc/${host.runtimeProcess.pid}/stat`
+        const read = jest.spyOn(files, 'readTextSync').mockImplementation(path => {
+          if (path === statPath) {
+            throw { code: 'EACCES' }
+          }
+          return readTextSync(path)
+        })
+        try {
+          const { ProcessTree: inspected }: { ProcessTree: typeof ProcessTree } = require(
+            '../../../shared/shared-src/ProcessTree',
+          )
+          Expect(() => inspected.identities([host.runtimeProcess.pid])).toThrow(
+            platform === 'darwin'
+              ? 'Could not read macOS process identities'
+              : `Could not read Linux process ${host.runtimeProcess.pid}`,
+          )
+          if (platform === 'darwin') {
+            Expect(spawn.mock.calls.map(([command]) => command)).toEqual(['bun'])
+          } else {
+            Expect(read).toHaveBeenCalledWith(statPath)
+            Expect(spawn).not.toHaveBeenCalled()
+          }
+        } finally {
+          read.mockRestore()
+          spawn.mockRestore()
+          hostPlatform.restore()
+        }
+      })
     })
-    try {
-      Expect(() => ProcessTree.identities([Platform.runtimeProcess.pid])).toThrow(
-        'Could not read macOS process identities',
-      )
-    } finally {
-      spawn.mockRestore()
-    }
-  })
+  }
 
   Test('stops a stubborn worker and its escaped descendant while leaving a sibling alive', async () => {
     Expect(Platform.runtimeBunVersion).toBeUndefined()

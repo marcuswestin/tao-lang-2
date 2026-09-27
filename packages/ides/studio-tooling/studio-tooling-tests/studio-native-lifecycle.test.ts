@@ -1,5 +1,5 @@
 import { startStudioProcessTree, type StudioProcessTree } from '@expo-host/dev-loop/StudioProcessTree'
-import { CLI, Errors, FS } from '@shared'
+import { CLI, Errors, FS, ProcessTree } from '@shared'
 import type { Platform } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import { StudioNative } from '../studio-tooling-src/StudioNative'
@@ -225,10 +225,10 @@ Describe('Studio native bounded lifecycle', () => {
       const descendantPid = Number((await FS.readText(descendantPath)).trim())
 
       await Expect(run).rejects.toThrow('timed out after 200ms')
-      await until(async () => !await processIsRunning(descendantPid), {
+      await until(() => !processIsRunning(descendantPid), {
         description: 'the complete Hutch process group to stop',
       })
-      Expect(await processIsRunning(descendantPid)).toBe(false)
+      Expect(processIsRunning(descendantPid)).toBe(false)
     } finally {
       await FS.remove(root)
     }
@@ -315,9 +315,8 @@ function commandResult(command: string, spec: CLI.CommandSpec, exitCode: number)
   }
 }
 
-async function processIsRunning(pid: number): Promise<boolean> {
-  const result = await CLI.run('/bin/kill', { args: ['-0', String(pid)] })
-  return result.exitCode === 0
+function processIsRunning(pid: number): boolean {
+  return ProcessTree.identities([pid]).has(pid)
 }
 
 async function rejectedError(promise: Promise<unknown>): Promise<Errors.TaoError> {
