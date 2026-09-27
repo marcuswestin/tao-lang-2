@@ -1,5 +1,6 @@
 import Runtime from '@expo-host'
-import { Assert, Errors, Switch } from '@shared'
+import { Assert, Errors, FS, Switch } from '@shared'
+import SourceActions from '@source-actions'
 import type {
   StudioParameterSchema,
   StudioPreviewManifestV2,
@@ -28,13 +29,20 @@ export async function openStudioPreviewSession(
     ...options,
     async compile(request) {
       Assert.defined(session, 'the Tao Studio project session to exist before its first compile')
+      const feedSources = session.feedSourceOverrides()
+      const sourceOverrides = feedSources === undefined ? undefined : Object.freeze({ ...feedSources })
       const files = await session.files()
+      const sourceVersions = Object.fromEntries(files.map(file => [file.path, file.sourceVersion]))
+      for (const [path, source] of Object.entries(sourceOverrides ?? {})) {
+        sourceVersions[FS.relativePath(request.project, path)] = SourceActions.studioSourceVersion(source)
+      }
       const generated = await Runtime.generateApp(session.entryPath, {
         appName: request.appName,
         preview: {
           project: request.project,
           revision: request.compileRevision,
-          sourceVersions: Object.fromEntries(files.map(file => [file.path, file.sourceVersion])),
+          sourceOverrides,
+          sourceVersions,
         },
         runtimePackageRoot: options.previewRuntimeRoot,
         validationMode: options.validationMode,

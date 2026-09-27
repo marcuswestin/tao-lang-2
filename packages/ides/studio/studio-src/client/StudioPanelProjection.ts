@@ -31,6 +31,7 @@ type StudioPanelActionName =
   | 'debug-step-into'
   | 'debug-step-out'
   | 'debug-step-over'
+  | 'feed-action'
   | 'open-diagnostic'
   | 'open-search-result'
   | 'open-test-failure'
@@ -112,6 +113,57 @@ export type StudioSearchPanelRow = Readonly<{
   Start: number
 }>
 
+export type StudioFeedPanelInput = Readonly<{
+  entities: readonly string[]
+  entity: string
+  source: 'Fixture' | 'Generated' | 'Live' | 'Library'
+  seed: string
+  rows: readonly Readonly<{
+    rowId: string
+    label: string
+    fields: readonly Readonly<{
+      path: readonly string[]
+      label: string
+      value: string
+      presentation: 'text' | 'image' | 'loop'
+    }>[]
+  }>[]
+  notice?: string
+  selectedRowId?: string
+  loading: boolean
+  pending: boolean
+  error?: string
+  canUndo?: boolean
+  canKeep: boolean
+  canDiscard: boolean
+}>
+
+type StudioFeedPanelModel = Readonly<{
+  Notice: string
+  Entities: readonly string[]
+  Entity: string
+  Source: string
+  Sources: readonly string[]
+  Seed: string
+  Rows: readonly Readonly<{
+    RowId: string
+    Label: string
+    Selected: boolean
+    SelectAction: StudioPanelAction
+    DragPayload: string
+    Fields: readonly Readonly<{ Label: string; Value: string; DragPayload: string }>[]
+  }>[]
+  Loading: boolean
+  Pending: boolean
+  Error: string
+  CanUndo: boolean
+  UndoAction: StudioPanelAction
+  CanKeep: boolean
+  CanDiscard: boolean
+  KeepAction: StudioPanelAction
+  DiscardAction: StudioPanelAction
+}>
+
 export type StudioTestsPanelModel = Readonly<{
   Available: boolean
   Error: string
@@ -136,6 +188,7 @@ export type StudioDrawerPanelModel = Readonly<{
   }>
   Data: Readonly<{
     CaptureAction: StudioPanelAction
+    Feed: StudioFeedPanelModel
     Error: string
     Loading: boolean
     RefreshAction: StudioPanelAction
@@ -182,6 +235,7 @@ export type StudioPanelProjectionInput = Readonly<{
   dataLoading: boolean
   dataSource?: StudioPanelCellIdentity
   debug?: StudioDebugState
+  feed?: StudioFeedPanelInput
   logs: readonly StudioRuntimeLog[]
   logSource?: StudioPanelCellIdentity
   search: readonly StudioSearchResult[]
@@ -261,6 +315,7 @@ export const StudioPanelProjection = {
         }),
         Data: Object.freeze({
           CaptureAction: action('capture-fixture'),
+          Feed: feedModel(input.feed),
           Error: input.dataError ?? '',
           Loading: input.dataLoading,
           RefreshAction: action('refresh-data'),
@@ -283,6 +338,56 @@ export const StudioPanelProjection = {
     })
   },
 } as const
+
+function feedModel(input: StudioFeedPanelInput | undefined): StudioFeedPanelModel {
+  const pending = input?.pending ?? false
+  const loading = input?.loading ?? false
+  return Object.freeze({
+    Notice: input?.notice ?? '',
+    Entities: Object.freeze([...(input?.entities ?? [])]),
+    Entity: input?.entity ?? '',
+    Source: input?.source ?? 'Fixture',
+    Sources: Object.freeze(['Fixture', 'Generated', 'Live', 'Library']),
+    Seed: input?.seed ?? '',
+    Rows: Object.freeze(
+      (input?.rows ?? []).slice(0, StudioPanelBounds.dataRowsPerTable).map(row =>
+        Object.freeze({
+          RowId: row.rowId,
+          Label: row.label,
+          Selected: row.rowId === input?.selectedRowId,
+          SelectAction: action('feed-action', JSON.stringify({ type: 'select-row', rowId: row.rowId })),
+          DragPayload: JSON.stringify({ kind: 'entity', entity: input?.entity, rowId: row.rowId }),
+          Fields: Object.freeze(row.fields.map(field =>
+            Object.freeze({
+              Label: field.label,
+              Value: field.value,
+              DragPayload: JSON.stringify(
+                field.presentation === 'loop'
+                  ? { kind: 'collection', entity: input?.entity, rowId: row.rowId, path: field.path }
+                  : {
+                    kind: 'field',
+                    entity: input?.entity,
+                    rowId: row.rowId,
+                    path: field.path,
+                    presentation: field.presentation,
+                  },
+              ),
+            })
+          )),
+        })
+      ),
+    ),
+    Loading: loading,
+    Pending: pending,
+    Error: input?.error ?? '',
+    CanUndo: (input?.canUndo ?? false) && !pending && !loading,
+    UndoAction: action('feed-action', JSON.stringify({ type: 'undo' })),
+    CanKeep: (input?.canKeep ?? false) && !pending && !loading,
+    CanDiscard: (input?.canDiscard ?? false) && !pending,
+    KeepAction: action('feed-action', JSON.stringify({ type: 'keep' })),
+    DiscardAction: action('feed-action', JSON.stringify({ type: 'discard' })),
+  })
+}
 
 function cellSource(identity: StudioPanelCellIdentity | undefined, label: string): string {
   if (identity === undefined) {

@@ -13,7 +13,7 @@ import {
   type StudioRuntimeDataTable,
   type StudioRuntimeLog,
 } from '../StudioMatrixView'
-import { StudioPanelProjection } from '../StudioPanelProjection'
+import { type StudioFeedPanelInput, StudioPanelProjection } from '../StudioPanelProjection'
 import type { StudioDrawerTab } from '../StudioProductPanels'
 import type { StudioSearchResult } from '../StudioRailPanels'
 import { coveringJourneys, projectStudioLensLines } from './StudioLensProjection'
@@ -39,6 +39,7 @@ export type StudioHostSnapshot = Readonly<{
   data: StudioDataPanelSnapshot
   deviceLensSamples: NonNullable<StudioDeviceStatus['lensSamples']>
   deviceLogs: readonly StudioDeviceLog[]
+  feed?: StudioFeedPanelInput
   drawerTab: StudioDrawerTab
   editor: EditorView | undefined
   inspected: StudioInspectorSelection | undefined
@@ -152,6 +153,7 @@ export function publishStudioHostSnapshot(snapshot: StudioHostSnapshot): void {
     panels: StudioPanelProjection.project({
       compile: snapshot.compile,
       data: snapshot.data.result,
+      feed: snapshot.feed,
       dataError: snapshot.data.error,
       dataLoading: snapshot.data.loading,
       dataSource: cellSource,

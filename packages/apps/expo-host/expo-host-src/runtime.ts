@@ -17,6 +17,7 @@ export {
 export { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
 export type GeneratePreviewOptions = {
+  sourceOverrides?: Readonly<Record<string, string>>
   project: string
   revision: number
   sourceVersions: Readonly<Record<string, string>>
@@ -182,9 +183,13 @@ async function compileStudioPreview(
     .filter(path => /^@\/studio\/.*\.tao$/u.test(path))
     .map(path => FS.resolvePath(path, preview.project))
   if (!await FS.isDirectory(preview.project)) {
+    Assert.input(
+      Object.keys(preview.sourceOverrides ?? {}).length === 0,
+      'Preview source overrides require an existing project directory.',
+    )
     return await Workspace.compile(sourcePath, options)
   }
-  const workspace = await Workspace.open(preview.project)
+  const workspace = await Workspace.open(preview.project, { sourceOverrides: preview.sourceOverrides })
   return await workspace.compileFiles([sourcePath, ...generatedEntries], options)
 }
 
@@ -566,12 +571,8 @@ function StudioBrowserApp() {
         manifest: TaoStudioManifest,
         publication: TaoStudioPublication,
       }
-      // A new cell object here rebuilds the provider overlay below (studioCellRuntime, then
-      // TR.Studio.Environment.Host) and clears its committed data and handles, so it can only be
-      // safe together with a subtree remount. The ErrorBoundary below remounts on exactly these four
-      // values, so an update whose tuple repeats what is already applied must not replace the
-      // previous object: keeping the previous reference is what keeps the memoized cell — and so the
-      // provider overlay — from rebuilding without a remount to justify it.
+      // Avoid repeating publication/bridge effects for an already applied identity. The cell's
+      // provider lifetime below is separate: source-only publications preserve its runtime state.
       setAppliedRuntime((previous: any) => sameRuntimeIdentity(previous, next) ? previous : next)
     }
     window.addEventListener('message', receiveRuntime)
@@ -625,21 +626,32 @@ function StudioPreviewContent({ cell, config, manifest }: any) {
       version: 1,
     })
   }, [cell])
-  // Memoized because everything below reads it as a prop: rebuilding it every render hands each of
-  // them a new object every render, and an effect keyed on one of those restarts forever. The native
-  // device host memoizes the same call for the same reason.
-  const TaoStudioCell = React.useMemo(
-    () => cell === undefined ? undefined : studioCellRuntime(cell, manifest),
-    [cell, manifest],
-  )
+  if (cell === undefined) {
+    return <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
+  }
+  // This resolved contract is plain wire data. A changed fixture, environment, replay, subject,
+  // or explicit cell revision remounts providers and fixture owners together. Authored journey
+  // prefixes replay per publication, so those cells must also start from their fixture again;
+  // cells without a prefix retain interactive state across source-only publications.
+  const resolvedCell = studioCellRuntime(cell, manifest)
+  const cellContract = JSON.stringify(resolvedCell)
+  const replayPublication = resolvedCell.scenario.steps?.length
+    ? [config.compileRevision, config.manifestRevision, config.previewInstanceId]
+    : undefined
+  const cellKey = JSON.stringify([cell.identity.cellId, cell.identity.cellRevision, cellContract, replayPublication])
+  return <StudioPreviewCellContent key={cellKey} cellContract={cellContract} config={config} />
+}
+
+function StudioPreviewCellContent({ cellContract, config }: any) {
+  // State survives Fast Refresh; useMemo may recompute even with unchanged dependencies. The key
+  // above owns replacement, so this provider contract keeps one object for its mounted lifetime.
+  const [TaoStudioCell] = React.useState(() => JSON.parse(cellContract))
   return (
-    TaoStudioCell === undefined
-      ? <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
-      : <TR.Studio.ReplayHost replay={TaoStudioCell.replay}>
-          <TR.Studio.Environment.Host cell={TaoStudioCell}>
-            <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
-          </TR.Studio.Environment.Host>
-        </TR.Studio.ReplayHost>
+    <TR.Studio.ReplayHost replay={TaoStudioCell.replay}>
+      <TR.Studio.Environment.Host cell={TaoStudioCell}>
+        <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
+      </TR.Studio.Environment.Host>
+    </TR.Studio.ReplayHost>
   )
 }
 
@@ -705,7 +717,7 @@ function isRuntimeUpdate(value: any, bootstrap: any, publication: any) {
 }
 
 /**
- * sameRuntimeIdentity compares the same values \`TR.Studio.ErrorBoundary resetKey\` remounts on:
+ * sameRuntimeIdentity compares the publication values \`TR.Studio.ErrorBoundary resetKey\` observes:
  * compileRevision, cellRevision, and manifestRevision. previewInstanceId is the fourth resetKey
  * value but is not part of either side here — \`isRuntimeUpdate\` already requires it to equal this
  * tab's fixed bootstrap value before a message reaches this comparison, so it cannot discriminate.

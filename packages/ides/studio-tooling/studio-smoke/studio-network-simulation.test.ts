@@ -363,6 +363,10 @@ async function clickPreviewButton(browser: StudioCdp, label: string, src: string
     const scale = iframe.clientWidth === 0 ? 1 : rect.width / iframe.clientWidth
     return { x: rect.left + (${inFrame.x}) * scale, y: rect.top + (${inFrame.y}) * scale }
   })()`)
+  if (!await browser.evaluate<boolean>(`(${cellFrameExpr(label)})?.dataset.previewInteractive === 'true'`)) {
+    await browser.clickAt(point)
+    await browser.waitFor(`(${cellFrameExpr(label)})?.dataset.previewInteractive === 'true'`)
+  }
   await browser.clickAt(point)
 }
 

@@ -64,7 +64,7 @@ function exampleValue(
       return undefined
     }
     if (variant === 'empty' && field.optional) {
-      return ''
+      return undefined
     }
     const index = variant === 'empty' ? 0 : variant === 'edge' ? field.type.cases.length - 1 : selected
     return field.type.cases[index % field.type.cases.length]!

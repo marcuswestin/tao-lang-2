@@ -422,11 +422,35 @@ rectangle without disturbing geometry, total order, or its Snap target. Paramete
 `insert-project-view` derives exact-type arguments from declarations visible at its insertion gap,
 including the nearest loop row and owning-view parameters; unresolved or ambiguous required values
 fail before mutation, and an explicit structured binding can disambiguate.
+The project-view palette identifies the exact declaration file, including generated views. Inserting
+a public view from another file adds a validated ordinary import before applying the scoped arguments.
 
-These are server-side and source-action foundations, not yet the complete Feed gesture. The current
-Studio client does not yet expose the four-source row browser, drag entity/field chips, Keep as one
-multi-file transaction, or Move-to-package scenario-group relocation. Until those land, callers must
-not present Slice 3 as an end-to-end Studio workflow.
+The Data panel exposes Fixture, Generated, Live, and Library sources with a visible generation seed.
+Fixture uses the active scenario's fixture; Library uses other project fixtures. Live uses the active
+preview's captured entity tables. Private fields are excluded, invalid rows carry an explanation,
+and each source is bounded to 250 rows per entity. Entity drops prepare a required sketch parameter;
+field drops prepare a typed free-rectangle binding or rewrite a tagged snapped leaf. Text fields offer
+explicit text and image presentations. Collection drops propose a loop with a typed row view.
+Entity drops check declaration visibility before generating the shared fixture. An entity unavailable
+to `@/studio` reports its source and visibility restriction instead of a fixture-handle error; binding
+it requires an importable model declaration under the existing package rules.
+
+Pending examples compile through immutable session source overrides, including a virtual shared
+fixture. They do not write project source or the catalog. Keep writes the view, shared fixture, and
+binding catalog as one rollback-capable operation. Undo Keep restores that operation as a unit and
+refuses newer edits; Discard abandons the pending example. Source versions, draft revisions, catalog
+revisions, and server-issued row IDs guard gestures against stale state. Other source and geometry
+edits require keeping or discarding a pending example first.
+Drops onto a preview cell select that cell's scenario; existing scenarios keep their own example
+arguments. Discard remains available while browsing or when another editor has an unsaved buffer.
+
+Move to package offers scenario relocation to the app's `Scenarios.tao`, enabled by default, and
+preserves scenario arguments, fixture imports, and journey tags. The move retains ordinary package
+visibility and import-boundary validation; it cannot make an authored package depend on app-private
+source. Unsupported fixture expressions, cyclic creation dependencies, unresolved live relation IDs,
+and exact time values that cannot be represented by fixture syntax are refused rather than converted
+to different values. Optional field bindings require a source fallback; `now` fixture values remain
+supported.
 
 The catalog is intended to be recovered through version control. A malformed or unsupported catalog
 blocks publication instead of discarding geometry. Restore a known-good committed copy or repair it
@@ -577,13 +601,18 @@ while preserving an explicitly saved layout preference. The toolbar Browser acti
 session's standalone app URL in Chrome; Device launches the companion. Browser
 launch accepts no caller-provided URL and reports an unavailable preview or opener failure in Studio.
 
-In Design, hold Space while dragging or scrolling to pan the canvas over either empty background or preview apps.
-Without Space, scrolling belongs to the embedded app and neither left- nor middle-button dragging pans.
-Pinch and modifier-wheel zoom remain available without Space.
+In Design, dragging empty canvas or an inactive preview pans without Space; ordinary wheel and
+trackpad scrolling over those surfaces also pans. In Draw, ordinary dragging draws or edits rectangles,
+while Space-drag pans the Draw canvas. Pinch and modifier-wheel zoom remain available without Space.
+Previews start inactive and accept no mouse input. The first click selects a preview without forwarding
+that click to its app; subsequent input reaches it. Only one preview can be active, shown by its accent
+outline. Clicking outside deselects it, and clicking another preview transfers activation. In Design,
+ordinary scrolling inside the selected preview belongs to the app. A canvas drag does not select a
+preview, and selection for input is separate from the inspector's retained editing context.
 For the entire time Space is held, a transparent canvas shield makes previews neutral pan surfaces:
 hover, clicks, dragging, and wheel input cannot interact with the embedded apps, including between drags.
 A focused preview suppresses mouse input immediately and forwards Space to the host. Text inputs keep
-normal Space typing, and Run keeps app interaction when the canvas does not own the gesture.
+normal Space typing, and Run keeps selected-app interaction when the canvas does not own the gesture.
 Releasing Space or the pointer, or losing window focus, ends a pan; losing focus also clears held Space.
 Canvas shortcuts (⌘/Ctrl+0 fit, 1 reset, +/− zoom) also work from focused previews outside text entry.
 The zoom menu offers Fit all, 100%, Zoom to selection, and Zoom to focused frame; unavailable targets
