@@ -92,6 +92,11 @@ export async function runCatalystBuild(
     const manifestPath = FS.resolvePath('package.json', build.root)
     const manifest = await FS.readText(FS.resolvePath('package.json', sourceRoot))
     await FS.writeText(manifestPath, manifest)
+    // Only the isolated Mac trial opts into native appearance changes.
+    const appConfigPath = FS.resolvePath('app.json', build.root)
+    const appConfig = await FS.readJson<{ expo: Record<string, unknown> }>(appConfigPath)
+    appConfig.expo['userInterfaceStyle'] = 'automatic'
+    await FS.writeJson(appConfigPath, appConfig)
     await addRuntimeReceipt(build.root)
     try {
       await recordedCommand('prebuild', FS.resolvePath('node_modules/.bin/expo', build.root), {
@@ -347,16 +352,27 @@ async function addRuntimeReceipt(root: string): Promise<void> {
     'Installed React Native does not expose the required Catalyst runtime constants.',
   )
   const path = FS.resolvePath('index.ts', root)
+  let entry = await FS.readText(path)
+  entry = replaceOnce(entry, 'SafeAreaView as View, Text', 'SafeAreaView as View, Text, useColorScheme')
+  entry = replaceOnce(
+    entry,
+    'const HostApp: ComponentType = () => {',
+    `const HostApp: ComponentType = () => {
+  const nativeScheme = useColorScheme() ?? 'light'
+  const receiptStyle = { color: nativeScheme === 'dark' ? '#ffffff' : '#000000' }`,
+  )
+  entry = entry.replaceAll('createElement(Text, {', 'createElement(Text, { style: receiptStyle,')
   await FS.writeText(
     path,
     replaceOnce(
-      await FS.readText(path),
+      entry,
       'registerRootComponent(HostApp)',
       `const CatalystHostApp: ComponentType = () => {
   const constants = Platform.constants as { isMacCatalyst?: boolean; interfaceIdiom?: string }
-  const receipt = \`Catalyst: \${String(constants.isMacCatalyst)} · Interface: \${constants.interfaceIdiom ?? 'unknown'}\`
-  return createElement(View, { style: { flex: 1 } },
-    createElement(Text, { testID: 'tao-catalyst-platform', accessibilityLabel: receipt }, receipt),
+  const nativeScheme = useColorScheme() ?? 'light'
+  const receipt = \`Catalyst: \${String(constants.isMacCatalyst)} · Interface: \${constants.interfaceIdiom ?? 'unknown'} · Native appearance: \${nativeScheme}\`
+  return createElement(View, { style: { flex: 1, backgroundColor: nativeScheme === 'dark' ? '#000000' : '#ffffff' } },
+    createElement(Text, { style: { color: nativeScheme === 'dark' ? '#ffffff' : '#000000' }, testID: 'tao-catalyst-platform', accessibilityLabel: receipt }, receipt),
     createElement(HostApp))
 }
 registerRootComponent(CatalystHostApp)`,

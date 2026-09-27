@@ -13,7 +13,12 @@ import { expect, test } from '@playwright/test'
 import { Errors, FS, Repo } from '@shared'
 import type { HostJourney } from '../../journey/HostJourney'
 import { appiumAndroidJourneyAdapter } from '../appium-android/AppiumAndroidHostProof'
-import { appiumIosJourneyAdapter, classifyAppiumIosFault, runAppiumIosHostProof } from './AppiumIosHostProof'
+import {
+  type AppiumIosHostProofStep,
+  appiumIosJourneyAdapter,
+  classifyAppiumIosFault,
+  runAppiumIosHostProof,
+} from './AppiumIosHostProof'
 
 const revision: HostRevision = { build: 'build-a', source: 'source-a' }
 
@@ -129,6 +134,36 @@ test('writes a target-retention receipt when opening a session leaves a live dri
   } finally {
     await FS.remove(artifactRoot)
   }
+})
+
+test('records navigation diagnostics separately from authored assertions and retains capture failures', async () => {
+  const captures: string[] = []
+  const session = Object.assign(new RecordingSession(), {
+    captureNavigationDiagnostics: async (name: string) => {
+      captures.push(name)
+      if (captures.length > 1) {
+        Errors.throwHostEnvironment('native diagnostic transport failed')
+      }
+      return { artifactPath: 'navigation/root.json' }
+    },
+  })
+  const timeline: AppiumIosHostProofStep[] = []
+  const adapter = appiumIosJourneyAdapter(session, { advance: async () => {} }, 'run-a', timeline)
+  await adapter.execute({
+    kind: 'run',
+    appName: 'NativeNavigation',
+    appSourcePath: 'Native Navigation.tao',
+    source: source(),
+  })
+  await adapter.execute({
+    kind: 'run',
+    appName: 'NativeNavigation',
+    appSourcePath: 'Native Navigation.tao',
+    source: source(),
+  })
+  expect(captures).toEqual(['navigation-1-run', 'navigation-2-run'])
+  expect(timeline[0]).toMatchObject({ outcome: 'passed', nativeDiagnostics: { artifactPath: 'navigation/root.json' } })
+  expect(timeline[1]).toMatchObject({ outcome: 'passed', diagnosticFailure: 'native diagnostic transport failed' })
 })
 
 test('treats only a typed Appium absent-element response as a passing missing-text assertion', async () => {

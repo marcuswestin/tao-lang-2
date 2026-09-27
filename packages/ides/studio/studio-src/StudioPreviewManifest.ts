@@ -84,7 +84,7 @@ export type StudioNetworkSimulation = {
 }
 
 export type StudioSchemeEnvironment = {
-  capability: 'fixed-light-native' | 'reactive-browser'
+  capability: 'fixed-light-native' | 'pinned-native' | 'reactive-browser' | 'reactive-catalyst'
   requested: 'dark' | 'light' | 'system'
   resolved: 'dark' | 'light'
   source: 'native-fixed' | 'preference' | 'scenario' | 'system'
@@ -392,13 +392,14 @@ function validateScheme(scheme: StudioSchemeEnvironment): void {
   if (
     !['dark', 'light', 'system'].includes(scheme.requested)
     || !['dark', 'light'].includes(scheme.resolved)
-    || !['fixed-light-native', 'reactive-browser'].includes(scheme.capability)
+    || !['fixed-light-native', 'pinned-native', 'reactive-browser', 'reactive-catalyst'].includes(scheme.capability)
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(scheme.source)
     || (scheme.source === 'system' && scheme.requested !== 'system')
     || (scheme.source === 'preference' && scheme.requested === 'system')
     || (scheme.source === 'scenario' && scheme.requested === 'system')
     || (scheme.source === 'native-fixed' && scheme.capability !== 'fixed-light-native')
     || (scheme.capability === 'fixed-light-native' && (scheme.resolved !== 'light' || scheme.source !== 'native-fixed'))
+    || (scheme.capability === 'pinned-native' && (scheme.source !== 'scenario' || scheme.resolved !== scheme.requested))
   ) {
     Errors.throwUserInput('Studio Scheme must record a valid request, resolution, source, and capability.')
   }

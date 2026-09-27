@@ -1,5 +1,6 @@
 import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { studioReplayConfiguration } from '../studio-src/client/matrix/StudioRuntimeCapture'
 import {
   StudioPreviewManifest,
   type StudioPreviewManifestV2,
@@ -51,6 +52,43 @@ Describe('Studio preview manifest', () => {
     const missingGroup = fixture()
     ;(missingGroup.scenarios[0] as { group: string }).group = ''
     Expect(() => StudioPreviewManifest.define(missingGroup)).toThrow('scenario group')
+  })
+
+  Test('preserves Catalyst and native scenario Scheme captures without accepting invalid native pins', () => {
+    for (
+      const scheme of [
+        { capability: 'reactive-catalyst', requested: 'system', resolved: 'dark', source: 'system' },
+        { capability: 'pinned-native', requested: 'dark', resolved: 'dark', source: 'scenario' },
+      ] as const
+    ) {
+      const manifest = fixture()
+      const environment = manifest.cells[0]!.environment
+      environment.scheme = scheme
+      Expect(StudioPreviewManifest.define(manifest).cells[0]!.environment.scheme).toEqual(scheme)
+      const currentEnvironment = { ...environment, scheme: systemLightScheme() }
+      const replay = studioReplayConfiguration({
+        capturedAt: 1,
+        domains: [{ domain: 'scheme', value: scheme, version: 1 }],
+        version: 1,
+      }, currentEnvironment)
+      Expect(replay.environment.scheme).toEqual(scheme)
+    }
+    const invalid = fixture()
+    invalid.cells[0]!.environment.scheme = {
+      capability: 'pinned-native',
+      requested: 'dark',
+      resolved: 'light',
+      source: 'scenario',
+    }
+    Expect(() => StudioPreviewManifest.define(invalid)).toThrow('valid request, resolution, source')
+    const currentEnvironment = { ...invalid.cells[0]!.environment, scheme: systemLightScheme() }
+    Expect(
+      studioReplayConfiguration({
+        capturedAt: 1,
+        domains: [{ domain: 'scheme', value: invalid.cells[0]!.environment.scheme, version: 1 }],
+        version: 1,
+      }, currentEnvironment).environment.scheme,
+    ).toEqual(systemLightScheme())
   })
 
   Test('rejects unknown state layers and invalid deterministic network simulation', () => {

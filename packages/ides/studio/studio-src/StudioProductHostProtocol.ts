@@ -57,7 +57,7 @@ export type StudioProductHostState = Readonly<{
     journeyRecording: string
     scenarioModel: string
     scenarioId: string
-    schemeCapability: 'fixed-light-native' | 'reactive-browser'
+    schemeCapability: 'fixed-light-native' | 'pinned-native' | 'reactive-browser' | 'reactive-catalyst'
     schemeRequested: 'dark' | 'light' | 'system'
     schemeResolved: 'dark' | 'light'
     schemeSource: 'native-fixed' | 'preference' | 'scenario' | 'system'

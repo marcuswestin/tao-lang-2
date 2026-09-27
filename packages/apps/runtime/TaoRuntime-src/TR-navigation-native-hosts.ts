@@ -12,6 +12,7 @@ export type NativeNavigationModule = {
   Tabs?: { Host: React.ComponentType<NativeTabsHostProps>; Screen: React.ComponentType<NativeTabsScreenProps> }
   ScreenStack?: React.ComponentType<any>
   ScreenStackHeaderConfig?: React.ComponentType<any>
+  ScreenStackHeaderCenterView?: React.ComponentType<any>
   ScreenStackHeaderRightView?: React.ComponentType<any>
   ScreenStackItem?: React.ComponentType<any>
 }
