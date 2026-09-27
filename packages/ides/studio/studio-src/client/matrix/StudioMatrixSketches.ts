@@ -7,7 +7,7 @@ import type {
   StudioSketchUnsnapRequest,
 } from '../../StudioProjectSession'
 import type { StudioPreviewFeedDropMessage } from '../../StudioProtocol'
-import type { StudioSketchCatalogAction, StudioSketchCatalogSnapshot } from '../../StudioSketchCatalog'
+import type { StudioSketch, StudioSketchCatalogAction, StudioSketchCatalogSnapshot } from '../../StudioSketchCatalog'
 import { StudioMountSignal } from '../app/StudioMountSignal'
 import { StudioApiClient } from '../StudioApiClient'
 import { StudioDialog } from '../StudioDialog'
@@ -19,6 +19,7 @@ import {
   StudioSketchView,
   type StudioSketchViewFlowActionRequest,
 } from '../StudioSketchView'
+import { type StudioSketchGeometry, StudioSketchUndo } from './StudioSketchUndo'
 
 const mountedSketches = new WeakMap<HTMLElement, MountedMatrixSketches>()
 
@@ -29,9 +30,23 @@ type MountedMatrixSketches = {
   mount?: MountedStudioSketchView
   mutationLane: StudioSketchMutationLane
   project: string
+  recordEdit?: (edit: StudioSketchEdit) => void
   renderableViews: readonly string[]
   sourceVersions: Record<string, string>
 }
+
+/**
+ * One Draw edit the shared undo stack can walk back. `undo` answers false, changing nothing, when the
+ * sketch no longer holds what the edit left, because something else has changed it since.
+ */
+export type StudioSketchEdit = Readonly<{
+  label: string
+  /** The sketch's name, which the edit log shows as the edit's place. */
+  path: string
+  /** The sketch the edit changed: once one of its edits goes stale, every earlier one has too. */
+  scope: string
+  undo: () => Promise<boolean>
+}>
 
 export type StudioSketchSnapMutationState = {
   catalog: StudioSketchCatalogSnapshot
@@ -159,6 +174,15 @@ export const StudioMatrixSketches = {
     state.feedDrop = drop
     return () => {
       state.feedDrop = undefined
+    }
+  },
+  /** connectEdits hands each covered Draw edit to the shared undo stack until the returned disconnect. */
+  connectEdits(parent: HTMLElement, record: (edit: StudioSketchEdit) => void): () => void {
+    const state = mountedSketches.get(parent)
+    Assert.defined(state, 'mounted Studio sketches before connecting undo')
+    state.recordEdit = record
+    return () => {
+      state.recordEdit = undefined
     }
   },
   async runFeed<Result extends StudioFeedState>(
@@ -307,20 +331,24 @@ function renderMatrixSketches(
       },
       onFlowAction: async request => await applySketchFlowAction(state, request),
       onRectChange: async change => {
-        const result = await applySketchAction(state, sketchAction(change))
+        const sketches = await applyRecordedSketchActions(parent, state, change.sketchId, [sketchAction(change)])
         delete host.dataset['taoStudioSketchError']
-        return result.catalog.sketches
+        return sketches
       },
       onMove: async move => {
-        const result = await applySketchAction(state, { id: move.sketchId, kind: 'move-sketch', x: move.x, y: move.y })
+        const sketches = await applyRecordedSketchActions(parent, state, move.sketchId, [
+          { id: move.sketchId, kind: 'move-sketch', x: move.x, y: move.y },
+        ])
         delete host.dataset['taoStudioSketchError']
-        return result.catalog.sketches
+        return sketches
       },
       onDeleteRects: async (sketchId, rectIds) => {
-        let sketches = state.catalog.sketches
-        for (const rectId of rectIds) {
-          sketches = (await applySketchAction(state, { kind: 'delete-rect', rectId, sketchId })).catalog.sketches
-        }
+        const sketches = await applyRecordedSketchActions(
+          parent,
+          state,
+          sketchId,
+          rectIds.map(rectId => ({ kind: 'delete-rect', rectId, sketchId })),
+        )
         delete host.dataset['taoStudioSketchError']
         return sketches
       },
@@ -455,6 +483,68 @@ async function applySketchAction(
     state.catalog = result.catalog
     return result
   })
+}
+
+/**
+ * Applies one Draw gesture's catalog actions in a single turn of the mutation lane, then hands the
+ * gesture to the undo stack with the sketch's geometry before and after it.
+ */
+async function applyRecordedSketchActions(
+  parent: HTMLElement,
+  state: MountedMatrixSketches,
+  sketchId: string,
+  actions: readonly StudioSketchCatalogAction[],
+): Promise<readonly StudioSketch[]> {
+  return await state.mutationLane.run(async () => {
+    const before = state.catalog.sketches.find(sketch => sketch.id === sketchId)
+    for (const action of actions) {
+      const result = await StudioApiClient.sketchAction({
+        action,
+        expectedRevision: state.catalog.revision,
+        requestId: crypto.randomUUID(),
+      })
+      state.catalog = result.catalog
+    }
+    const after = state.catalog.sketches.find(sketch => sketch.id === sketchId)
+    const label = before === undefined ? undefined : StudioSketchUndo.label(actions, before)
+    if (before !== undefined && after !== undefined && label !== undefined) {
+      state.recordEdit?.({
+        label,
+        path: before.name,
+        scope: sketchId,
+        undo: () =>
+          undoSketchEdit(parent, state, sketchId, StudioSketchUndo.geometry(before), StudioSketchUndo.geometry(after)),
+      })
+    }
+    return state.catalog.sketches
+  })
+}
+
+async function undoSketchEdit(
+  parent: HTMLElement,
+  state: MountedMatrixSketches,
+  sketchId: string,
+  before: StudioSketchGeometry,
+  after: StudioSketchGeometry,
+): Promise<boolean> {
+  const restored = await state.mutationLane.run(async () => {
+    const current = state.catalog.sketches.find(sketch => sketch.id === sketchId)
+    if (current === undefined || !StudioSketchUndo.same(StudioSketchUndo.geometry(current), after)) {
+      return undefined
+    }
+    const result = await StudioApiClient.sketchAction({
+      action: StudioSketchUndo.restore(sketchId, before),
+      expectedRevision: state.catalog.revision,
+      requestId: crypto.randomUUID(),
+    })
+    state.catalog = result.catalog
+    return result.catalog
+  })
+  if (restored === undefined) {
+    return false
+  }
+  renderMatrixSketches(parent, state.project, restored)
+  return true
 }
 
 function sketchAction(change: StudioSketchRectChange): StudioSketchCatalogAction {

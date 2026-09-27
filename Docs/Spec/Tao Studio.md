@@ -351,8 +351,10 @@ catalog returns to its prior snapshot, and the refusal names the file that uses 
 compile's diagnostics or a search of the project files for the view name find one. A drawn sketch whose
 file is already gone leaves the catalog alone. Deleting a render or detached definition is catalog-only.
 `move-sketch { id, x, y }` places a root rectangle at a new nonnegative canvas origin and changes
-nothing else. Moving a sketch, and rectangle creation, update, duplication, and deletion, are
-catalog-only and do not compile or rewrite the generated Tao file.
+nothing else. `restore-sketch { sketchId, x, y, rects, rectOrder }` puts back a sketch's origin, free
+rectangles, and order, which is how undo walks back a Draw edit; the resulting order must still name
+every free and snapped rectangle once. Moving a sketch, restoring one, and rectangle creation, update,
+duplication, and deletion, are catalog-only and do not compile or rewrite the generated Tao file.
 
 Creating a sketch allocates `ViewN`, atomically replaces the catalog through a sibling temporary file,
 and creates `@/studio/ViewN.tao`. The generated file contains one public view whose flowed render tree
@@ -482,6 +484,16 @@ its file, whatever was edited elsewhere since. Saving a file from the code edito
 because the file changed underneath it, retires that file's rows. Visual edits, their rollback, and
 their undo reach `@/studio` files through the generated-source gate, which lifts
 owner-write for that write alone and keeps the ownership header.
+
+Draw edits join the same log and the same ⌘Z in time order: drawing, moving, resizing, retyping,
+editing the text of, duplicating, or deleting rectangles (one row per gesture, so "Delete 2
+rectangles" walks back together), and moving a frame. They are catalog-only, so ⌘Z walks the newest
+of them back whichever file is open and without a saved draft; it names the sketch as its place.
+Undo sends `restore-sketch`, which puts back the sketch's origin, free rectangles, and order under
+the catalog revision check and leaves its name, view, source, and snapped rectangles alone. It
+applies only while the sketch still holds what the edit left; otherwise that edit and every earlier
+edit of the same sketch stay as history. Snap, Unsnap, and creating or removing a sketch write source
+and keep their own undo paths. Redo (⇧⌘Z) is not implemented.
 
 ### Feed source contracts
 

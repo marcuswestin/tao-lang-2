@@ -8,6 +8,7 @@ import type {
   StudioSourceActionEnvelope,
   StudioSourceActionIdentity,
 } from '../../StudioProtocol'
+import type { StudioSketchEdit } from '../matrix/StudioMatrixSketches'
 import { StudioApiClient, StudioApiError } from '../StudioApiClient'
 import { StudioDialog } from '../StudioDialog'
 import { projectRelativePath, StudioEditorInsertion } from '../StudioEditor'
@@ -20,11 +21,17 @@ type StudioUndoCheckpoint = Readonly<{
   at: number
   id: string
   identity: StudioSourceActionIdentity
+  kind: 'source'
   label: string
   path: string
   /** False once its file changed outside a visual edit: the log keeps the edit but ⌘Z passes over it. */
   undoable: boolean
 }>
+
+/** A Draw edit on the same stack: it can walk back whichever file is open, while its sketch is unchanged. */
+type StudioSketchUndoCheckpoint =
+  & Readonly<{ at: number; id: string; kind: 'sketch'; undoable: boolean }>
+  & StudioSketchEdit
 
 export type StudioSourceMutationsDeps = Readonly<{
   activeFile: () => StudioDraftFile | undefined
@@ -51,7 +58,7 @@ export type StudioSourceMutationsDeps = Readonly<{
  * checkpoints it commits form the undo stack for the file they landed in.
  */
 export class StudioSourceMutations {
-  #checkpoints: StudioUndoCheckpoint[] = []
+  #checkpoints: (StudioUndoCheckpoint | StudioSketchUndoCheckpoint)[] = []
   readonly #deps: StudioSourceMutationsDeps
   #busy = false
 
@@ -67,7 +74,7 @@ export class StudioSourceMutations {
     return this.#undoTarget() !== undefined
   }
 
-  /** The undo stack as the edit log shows it: newest first, and only the next undoable edit in the open file walks back. */
+  /** The undo stack as the edit log shows it: newest first, and only the next edit ⌘Z can walk back offers Undo. */
   edits(): readonly StudioEditLogEntry[] {
     const target = this.canUndo() ? this.#undoTarget() : undefined
     return this.#checkpoints.toReversed().map(checkpoint => ({
@@ -85,8 +92,22 @@ export class StudioSourceMutations {
    */
   retirePath(path: string): void {
     this.#checkpoints = this.#checkpoints.map(checkpoint =>
-      checkpoint.path === path && checkpoint.undoable ? { ...checkpoint, undoable: false } : checkpoint
+      checkpoint.kind === 'source' && checkpoint.path === path && checkpoint.undoable
+        ? { ...checkpoint, undoable: false }
+        : checkpoint
     )
+  }
+
+  /** A Draw edit joins the stack in time order with the visual source edits. */
+  recordSketchEdit(edit: StudioSketchEdit): void {
+    this.#checkpoints.push({
+      ...edit,
+      at: Date.now(),
+      id: `sketch:${crypto.randomUUID()}`,
+      kind: 'sketch',
+      undoable: true,
+    })
+    this.#deps.publish()
   }
 
   /** Whether a mutation may start now; when it may not, the status line already says why. */
@@ -104,6 +125,7 @@ export class StudioSourceMutations {
             at: Date.now(),
             id: result.checkpoint.id,
             identity: envelope.identity,
+            kind: 'source',
             label: studioEditLabel(envelope.action),
             path: result.path,
             undoable: true,
@@ -173,6 +195,10 @@ export class StudioSourceMutations {
 
   async undoLatest(): Promise<void> {
     const checkpoint = this.#undoTarget()
+    if (checkpoint?.kind === 'sketch') {
+      await this.#undoSketchEdit(checkpoint)
+      return
+    }
     if (checkpoint === undefined || checkpoint.path !== this.#deps.activePath() || !this.canMutate()) {
       return
     }
@@ -207,10 +233,49 @@ export class StudioSourceMutations {
     })
   }
 
-  /** The open file's newest edit ⌘Z can still walk back; edits in other files wait for their file to open. */
-  #undoTarget(): StudioUndoCheckpoint | undefined {
+  /**
+   * The newest edit ⌘Z can still walk back: a Draw edit, or a source edit in the open file. Source
+   * edits in other files wait for their file to open.
+   */
+  #undoTarget(): StudioUndoCheckpoint | StudioSketchUndoCheckpoint | undefined {
     const activePath = this.#deps.activePath()
-    return this.#checkpoints.findLast(checkpoint => checkpoint.undoable && checkpoint.path === activePath)
+    return this.#checkpoints.findLast(checkpoint =>
+      checkpoint.undoable && (checkpoint.kind === 'sketch' || checkpoint.path === activePath)
+    )
+  }
+
+  /**
+   * A Draw edit walks back through the sketch catalog, not a source file, so it needs no saved draft.
+   * When its sketch changed since, it and every earlier edit of that sketch stay in the log as history.
+   */
+  async #undoSketchEdit(checkpoint: StudioSketchUndoCheckpoint): Promise<void> {
+    if (this.#busy) {
+      return
+    }
+    const { status } = this.#deps
+    this.#setBusy(true)
+    status.dataset['state'] = 'compiling'
+    status.textContent = `Undoing ${checkpoint.label}…`
+    try {
+      if (await checkpoint.undo()) {
+        this.#checkpoints = this.#checkpoints.filter(candidate => candidate.id !== checkpoint.id)
+        status.dataset['state'] = 'idle'
+        status.textContent = `Undid ${checkpoint.label}.`
+        return
+      }
+      this.#checkpoints = this.#checkpoints.map(candidate =>
+        candidate.kind === 'sketch' && candidate.scope === checkpoint.scope
+          ? { ...candidate, undoable: false }
+          : candidate
+      )
+      status.dataset['state'] = 'error'
+      status.textContent =
+        `${checkpoint.path} changed after “${checkpoint.label}”, so its drawing edits can no longer be undone.`
+    } catch (error) {
+      showSourceActionError(status, error)
+    } finally {
+      this.#setBusy(false)
+    }
   }
 
   insertComponent(component: (typeof studioPaletteComponents)[number]): void {

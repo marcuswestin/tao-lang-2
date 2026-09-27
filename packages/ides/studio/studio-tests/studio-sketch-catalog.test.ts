@@ -273,6 +273,59 @@ Test('Studio move-sketch places a view at a new canvas origin and refuses anythi
   })
 })
 
+Test('Studio restore-sketch puts back drawn geometry and leaves the view and its snapped rows alone', async () => {
+  await withTaoFiles('tao-studio-sketch-restore-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    const provider = new StudioSketchCatalog(root)
+    const created = await provider.apply(createSketchRequest(0))
+    const before = created.catalog.sketches[0]!
+    const title: StudioSketchRect = { ...cover, id: 'rect-title', kind: 'Text', x: 80 }
+    const added = await provider.apply({
+      action: { kind: 'add-rect', rect: title, sketchId: 'sketch-row' },
+      expectedRevision: created.catalog.revision,
+      requestId: 'add-title',
+    })
+    const moved = await provider.apply({
+      action: { id: 'sketch-row', kind: 'move-sketch', x: 300, y: 120 },
+      expectedRevision: added.catalog.revision,
+      requestId: 'move-row',
+    })
+    const restore = (action: Record<string, unknown>, requestId: string) =>
+      provider.apply(
+        { action, expectedRevision: moved.catalog.revision, requestId } as unknown as StudioSketchCatalogRequest,
+      )
+
+    await Expect(restore({
+      kind: 'restore-sketch',
+      rectOrder: ['rect-cover'],
+      rects: [cover],
+      sketchId: 'sketch-row',
+      view: 'View9',
+      x: 0,
+      y: 0,
+    }, 'rename')).rejects.toThrow('Studio sketch restore-sketch action has unsupported fields: view')
+    await Expect(restore({
+      kind: 'restore-sketch',
+      rectOrder: ['rect-cover', 'rect-title'],
+      rects: [cover],
+      sketchId: 'sketch-row',
+      x: 0,
+      y: 0,
+    }, 'orphan')).rejects.toThrow('rectOrder must contain every free and snapped rectangle exactly once')
+    Expect(await provider.read()).toEqual(moved.catalog)
+
+    const restored = await restore({
+      kind: 'restore-sketch',
+      rectOrder: before.rectOrder,
+      rects: before.rects,
+      sketchId: 'sketch-row',
+      x: before.x,
+      y: before.y,
+    }, 'restore')
+    Expect(restored.catalog.revision).toBe(moved.catalog.revision + 1)
+    Expect(restored.catalog.sketches[0]).toEqual(before)
+  })
+})
+
 Test('Studio sketch actions atomically move selected free rows into strict associations and back', async () => {
   await withTaoFiles('tao-studio-sketch-associations-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)

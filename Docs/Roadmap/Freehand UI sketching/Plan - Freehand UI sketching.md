@@ -6,7 +6,8 @@ record first; this plan cites the decisions rather than reopening their alternat
 tooling, Slice 1 (Draw), and Slice 2 (Snap) have landed; Slice 3 (Feed) is implemented on
 `feat/studio-feed-client` and awaits visual acceptance and landing. "Figma-at-home strides" and "Canvas-first design mode" below are two additional, currently
 active bodies of work that polish the landed slices and the Studio canvas UI without reopening
-FS-D1–FS-D20 or reordering the FS-D20 sequence.
+FS-D1–FS-D20. Decision H below moves the canvas strides ahead of L2; the rest of the FS-D20 order is
+unchanged.
 
 ## Ground rules
 
@@ -566,13 +567,16 @@ of it stays catalog-only, so no language change and no compile per keystroke.
 - **b. Tool model.** V is select: dragging empty sketch space draws a marquee, Shift adds to it. R
   is draw: dragging creates a rectangle as today. T draws a `Text` rectangle. Dragging empty canvas
   outside any sketch still creates a sketch. A three-button strip above the sketch shows the active
-  tool. Ruled by decision B.
+  tool. Ruled by decision B, refined by decision G: the strip is one canvas-wide strip, and R draws a
+  frame on empty canvas and a rectangle inside a sketch.
 - **c. Constraints.** Shift keeps a square while drawing or corner-resizing and locks the axis while
   moving; Option resizes from the centre.
 - **d. Undo.** ⌘Z and ⇧⌘Z walk one client-held, time-ordered stack over catalog gestures and source
   checkpoints. A catalog entry stores its inverse action and replays it through the versioned
   endpoint with the expected revision; a source entry reuses the existing checkpoint undo. Ruled by
-  decision C.
+  decisions C and F. **⌘Z implemented 2026-09-27:** each rectangle gesture and frame move is one edit
+  log row whose inverse is a `restore-sketch` of the sketch's prior geometry, applied only while the
+  sketch still holds what the gesture left. ⇧⌘Z redo remains open.
 - **e. Numbers.** X, Y, W, and H fields that accept arithmetic (`100+20`), a sketch size badge with
   the `phone`, `tablet`, and `laptop` presets, and edge handles on the sketch itself. Resizing the
   sketch is one transaction: the catalog size plus the generated `Placeholder` size and `device`
@@ -690,8 +694,10 @@ Every edit lands in that one definition and shows in every occurrence.
 
 ### After these strides
 
-FS-D20's order continues unchanged: L2, Slice 4 Variants, L3, Slice 5 Tao-rendered canvas, Slice 6
-Focus-in, Slice 7 Companion. Stride 2d's flow gestures serve variant cells later, and stride 1's
+Decision H puts the canvas work ahead of L2, headed by the live-preview composition slice: a drawn
+definition renders as a live cell under its Draw board, so drawing composes real rendered views, and a
+drawn group dropped into a preview inserts its code there. FS-D20's order then continues: L2, Slice 4
+Variants, L3, Slice 5 Tao-rendered canvas, Slice 6 Focus-in, Slice 7 Companion. Stride 2d's flow gestures serve variant cells later, and stride 1's
 undo stack is what Slice 4's cell edits will join.
 
 ### Decisions
@@ -708,6 +714,15 @@ Settled by the Developer on 2026-09-04, taking the recommendations.
   on the real-screen corpus. Keeping FS-D11's rule set unchanged was declined.
 - **E. Stride order.** 0, 1, 2, 3, 4. Taking Feed first was declined; every later gesture reuses
   selection, keys, and undo.
+
+Settled by the Developer on 2026-09-27, taking the recommendations.
+
+- **F. Draw edits on the one stack.** ⌘Z covers Draw's catalog-only sketch edits in the same stack
+  and edit log as visual source edits, rather than a separate Draw-only undo.
+- **G. One tool strip.** A single canvas-wide strip; R draws a frame on empty canvas and a rectangle
+  inside a sketch, rather than separate frame and rectangle tools.
+- **H. Canvas before L2.** The canvas strides go before the L2 language tranche, headed by the
+  live-preview composition slice.
 
 A decision discovered during implementation joins the next round with the Developer; it is not decided silently.
 

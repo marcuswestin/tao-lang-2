@@ -362,6 +362,10 @@ selected it, and asks before any removal that deletes a file. Delete with free r
 deletes those rectangles instead, and Escape clears the selection. Dragging a header row moves the
 rectangle and commits one catalog-only `move-sketch` when released.
 
+Draw edits share the Design edit log and ⌘Z: each drawing, moving, resizing, retyping, text, duplicate,
+delete, or frame-move gesture is one row, and undo sends a catalog-only `restore-sketch` with the
+sketch's geometry from before the gesture, only while the sketch still holds what the gesture left.
+
 Feed foundations preserve entity parameter identity in the preview manifest and accept imported
 `public fixture` declarations, including cross-file scenario row handles. The deterministic generator
 and inventory normalize fixture, generated, live, and library rows without writing source. The

@@ -106,6 +106,19 @@ export type StudioSketchCatalogAction =
   | Readonly<{ id: string; kind: 'delete-sketch' }>
   /** move-sketch places a root rectangle at a new canvas origin; nothing else about it changes. */
   | Readonly<{ id: string; kind: 'move-sketch'; x: number; y: number }>
+  /**
+   * restore-sketch puts back a sketch's drawn geometry as an earlier edit found it: its origin, free
+   * rectangles, and order. Its name, view, source, and snapped rectangles stay as they are, which is
+   * what lets undo walk back a drawing edit without touching anything a source transaction owns.
+   */
+  | Readonly<{
+    kind: 'restore-sketch'
+    rectOrder: readonly string[]
+    rects: readonly StudioSketchRect[]
+    sketchId: string
+    x: number
+    y: number
+  }>
   | Readonly<{
     afterRectId?: string
     kind: 'add-rect'
@@ -526,6 +539,14 @@ function applyAction(
     'move-sketch': moved => editSketch(catalog, moved.id, sketch => ({ ...sketch, x: moved.x, y: moved.y })),
     'refresh-snap-targets': refreshed =>
       editSketch(catalog, refreshed.sketchId, sketch => refreshSnapTargets(sketch, refreshed.targets)),
+    'restore-sketch': restored =>
+      editSketch(catalog, restored.sketchId, sketch => ({
+        ...sketch,
+        rectOrder: restored.rectOrder,
+        rects: restored.rects,
+        x: restored.x,
+        y: restored.y,
+      })),
     'set-sketch-source': changed => editSketch(catalog, changed.sketchId, sketch => setSketchSource(sketch, changed)),
     'snap-rects': snapped => editSketch(catalog, snapped.sketchId, sketch => snapRects(sketch, snapped.targets)),
     'unsnap-rects': unsnapped => editSketch(catalog, unsnapped.sketchId, sketch => unsnapRects(sketch, unsnapped)),
@@ -764,6 +785,17 @@ function validateAction(action: Record<string, unknown>): void {
     requireNonEmptyString(action['id'], 'move-sketch.id')
     requireNonNegativeFinite(action['x'], 'move-sketch.x')
     requireNonNegativeFinite(action['y'], 'move-sketch.y')
+    return
+  }
+  if (action['kind'] === 'restore-sketch') {
+    requireOnlyKeys(action, ['kind', 'rectOrder', 'rects', 'sketchId', 'x', 'y'], 'restore-sketch action')
+    requireNonEmptyString(action['sketchId'], 'restore-sketch.sketchId')
+    requireNonNegativeFinite(action['x'], 'restore-sketch.x')
+    requireNonNegativeFinite(action['y'], 'restore-sketch.y')
+    Assert.input(Array.isArray(action['rects']), 'Studio sketch restore-sketch.rects must be an array.')
+    action['rects'].forEach((rect, index) => validateRect(rect, `restore-sketch.rects[${index}]`))
+    Assert.input(Array.isArray(action['rectOrder']), 'Studio sketch restore-sketch.rectOrder must be an array.')
+    action['rectOrder'].forEach((id, index) => requireNonEmptyString(id, `restore-sketch.rectOrder[${index}]`))
     return
   }
   if (action['kind'] === 'add-rect') {

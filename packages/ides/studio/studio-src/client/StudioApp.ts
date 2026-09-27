@@ -338,6 +338,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       (payload, sketchId, rectId) => feed.drop(payload, sketchId, rectId),
     )
     lifetime.add(disconnectFeed)
+    lifetime.add(StudioMatrixSketches.connectEdits(view.preview, edit => mutations.recordSketchEdit(edit)))
     const scenarios = new StudioScenarioActions({
       activePreview,
       apply: envelope => mutations.apply(envelope),
