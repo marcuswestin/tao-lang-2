@@ -555,3 +555,9 @@ bootstrap-lock fixture: its fixed 0.2-second holder could exit before the conten
 producing exit 9. A deliberate 0.3-second contender delay reproduced that failure. The fixture
 now retains the lock until an explicit release handshake, with bounded failure cleanup; the
 contender timeout is unchanged. This repairs the test schedule rather than altering lock behavior.
+
+## September 27 recurring-pass regression
+
+The native ARM run `20260927T165256Z-51943` tested committed `206858d2a7a344473417840b0254f275f36ea492` and failed both cold and cached setup: `_shell-completion` still used `#!/bin/zsh`, bypassing the available managed Zsh. Cold bootstrap failed after 41 seconds; cached bootstrap failed after 18 seconds. Parser, checks, tests and verification did not start. The complete command took 137 seconds; tools-only profile provisioning succeeded independently in 24 seconds.
+
+The recipe now uses `#!/usr/bin/env zsh`. A directly executed direnv fixture had the same system-path assumption and also hid the managed shell from child PATH; its launcher and isolated PATH are corrected. Existing explicitly Zsh-invoked helper scripts are unchanged. The correction still needs fresh committed-source cold/cached acceptance. Run-specific containers and the disposable base image were removed; the reusable tools image remains. Native amd64 and actual hosted setup remain separate unproved requirements, so this ledger item stays open.

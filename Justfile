@@ -650,7 +650,7 @@ _deps:
 
 # Generate completion during explicit setup so entering a directory never bootstraps dependencies.
 _shell-completion: _deps
-    #!/bin/zsh
+    #!/usr/bin/env zsh
     set -e
     cache=.artifacts/cache/dev-shell
     mkdir -p "$cache"

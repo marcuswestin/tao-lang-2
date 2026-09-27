@@ -11,7 +11,7 @@ exit 99
 `
 
 // Exercise the sourceable hook with real Git identities; only direnv's export protocol is faked.
-const DIRENV = `#!/bin/zsh -f
+const DIRENV = `#!/usr/bin/env -S zsh -f
 case "$1" in
   hook)
     cat <<'HOOK'
@@ -89,14 +89,14 @@ async function runShell(
 ) {
   const startup = FS.resolvePath('probe.zsh', test.base)
   await FS.writeText(startup, script)
-  const result = await CLI.run('/bin/zsh', {
+  const result = await CLI.run('zsh', {
     args: ['-f', ...(interactive ? ['-i'] : []), startup],
     cwd: test.root,
     env: {
       ...Platform.runtimeProcess.env,
       HOME: test.home,
       ZDOTDIR: test.home,
-      PATH: '/usr/bin:/bin:/usr/sbin:/sbin',
+      PATH: `${Repo.resolvePath('.devenv/profile/bin')}:/usr/bin:/bin:/usr/sbin:/sbin`,
       DIRENV_DIR: undefined,
       DIRENV_FILE: undefined,
       DIRENV_DIFF: undefined,
