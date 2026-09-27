@@ -110,6 +110,10 @@ compiled JavaScript in a visionOS WKWebView and checks the same counter interact
 test covers bundled resource loading and web runtime behavior; it does not prove spatial input,
 window appearance, or physical-device behavior.
 
+Physical-headset acceptance is deferred to the
+[pre-MVP device acceptance task](../../Docs/MVP%20Roadmap/Developer%20MVP%20Roadmap.md#pre-mvp-device-acceptance)
+by the 2026-09-27 decision. Landing this prototype does not claim that acceptance is complete.
+
 ## Scope
 
 This is a windowed web UI hosted by a native visionOS application. Tao syntax is unchanged.
