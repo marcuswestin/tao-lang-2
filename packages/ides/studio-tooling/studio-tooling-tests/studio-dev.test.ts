@@ -705,6 +705,19 @@ Describe('Studio smoke resource isolation', () => {
     Expect(isStudioServerSource('packages/ides/studio/studio-src/code-editor/CodeEditor.tsx')).toBe(false)
   })
 
+  Test('does not rebuild the client for the bridge metadata its own compile writes', () => {
+    // Compiling the client writes `.tao.ts` beside its Tao sources; watching them made a fresh
+    // checkout's first page load republish the client and reload the page under a driving browser.
+    const { isStudioClientSource } = StudioClientDevReload.testing
+
+    Expect(isStudioClientSource('/repo/Apps/Tao Studio/TaoStudioClient.tao.ts')).toBe(false)
+    Expect(isStudioClientSource('/repo/Apps/Tao Studio/@code-editor/CodeEditor.tao.ts')).toBe(false)
+    Expect(isStudioClientSource('/repo/Apps/Tao Studio/.tao/bridge-check.tsconfig.json')).toBe(false)
+    Expect(isStudioClientSource('/repo/Apps/Tao Studio/TaoStudioClient.tao')).toBe(true)
+    Expect(isStudioClientSource('/repo/Apps/Tao Studio/StudioServerDataProvider.ts')).toBe(true)
+    Expect(isStudioClientSource('/repo/packages/ides/studio/studio-src/code-editor/CodeEditor.tsx')).toBe(true)
+  })
+
   Test('publishes only complete rebuilt Studio browser clients', async () => {
     let changed: ((change: { serverSourcesChanged: boolean }) => Promise<void>) | undefined
     let closed = 0

@@ -3,6 +3,7 @@ import { createElement } from './TR-create-element'
 import type { TaoAppDefinition, TaoNavigationArguments } from './TR-navigation'
 import { RuntimeAppDefinition } from './TR-navigation-app'
 import { NavigationAppHost } from './TR-navigation-app-host'
+import type { TaoProps } from './TR-TaoProps'
 
 /** Creates an inert synthetic app; only a committed host activates it in process-wide registries. */
 export function createStudioSubjectApp(
@@ -34,6 +35,7 @@ export function createStudioSubjectApp(
 export function StudioSubjectHost(props: {
   arguments: TaoNavigationArguments
   definition: (arguments_: TaoNavigationArguments) => TaoAppDefinition
+  __tao?: TaoProps
 }): React.JSX.Element {
   // Lazy initial state rather than a memo: a cell remounts whenever its scenario or revision
   // changes, so "once per mount" is exactly the lifetime this host wants, and there is no
@@ -55,5 +57,7 @@ export function StudioSubjectHost(props: {
       })
     }
   }, [app])
-  return createElement(NavigationAppHost, { app })
+  // AppShell stamps the resolved scheme into the root's Tao props; without forwarding them the
+  // focused view's design resolved every `when Scheme is Dark` entry as light.
+  return createElement(NavigationAppHost, { app, __tao: props.__tao })
 }

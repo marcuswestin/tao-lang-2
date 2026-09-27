@@ -125,7 +125,7 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     React.Fragment,
     { key: 'main' },
     props.app.canGoBack && (focusedAuxiliary !== undefined || !navigator.ownsBackAffordance())
-      ? createElement(AppBackAffordance, { inset: ownsWindow, target: props.app })
+      ? createElement(AppBackAffordance, { inset: ownsWindow, target: props.app, taoProps: appTaoProps })
       : null,
     navigator.render(navigatorTaoProps),
   )
@@ -254,10 +254,12 @@ function useWebInteractionKeyboard(listener: ((event: TaoAppHostKeyEvent) => voi
  * it and the system takes its taps. Every other navigator renders inside `AppSurfaceFrame`, which
  * already insets this along with the content.
  */
-function AppBackAffordance(props: { inset: boolean; target: RuntimeAppDefinition }): React.JSX.Element {
+function AppBackAffordance(
+  props: { inset: boolean; target: RuntimeAppDefinition; taoProps: TaoProps },
+): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
   const insets = requireSafeAreaContext().useSafeAreaInsets()
-  const affordance = createElement(NavigationBackAffordance, { target: props.target })
+  const affordance = createElement(NavigationBackAffordance, { target: props.target, taoProps: props.taoProps })
   return props.inset
     ? createElement(runtime.View, {
       children: affordance,

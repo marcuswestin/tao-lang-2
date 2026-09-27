@@ -15,7 +15,13 @@ export type DesignColors = {
   onAccent: string
 }
 
+/** SchemeColors is the token set for each scheme a generated design follows. */
+export type SchemeColors = { light: DesignColors; dark: DesignColors }
+
 type Rgb = { r: number; g: number; b: number }
+
+const BLACK: Rgb = { r: 0, g: 0, b: 0 }
+const WHITE: Rgb = { r: 255, g: 255, b: 255 }
 
 /** MIN_TEXT_CONTRAST is WCAG AA's minimum contrast ratio for body-size text. */
 const MIN_TEXT_CONTRAST = 4.5
@@ -29,20 +35,63 @@ export function deriveDesignColors(palette: CreationPalette): DesignColors {
   const ink = parseHex(palette.ink)
   const accent = parseHex(palette.accent)
   const lightCanvas = luminance(canvas) > 0.5
-  const surface = lightCanvas ? { r: 255, g: 255, b: 255 } : mix(canvas, { r: 255, g: 255, b: 255 }, 0.08)
+  const surface = lightCanvas ? WHITE : mix(canvas, WHITE, 0.08)
+  // On a dark canvas the strong accent is lighter than the accent, so as text it stands out more and
+  // as a button it carries the canvas as its label.
+  const accentStrong = rounded(lightCanvas ? mix(accent, ink, 0.25) : mix(accent, WHITE, 0.25))
   return {
     canvas: formatHex(canvas),
     surface: formatHex(surface),
     ink: formatHex(ink),
     inkMuted: formatHex(mutedInk(ink, canvas, [canvas, surface])),
     accent: formatHex(accent),
-    accentStrong: formatHex(lightCanvas ? mix(accent, ink, 0.25) : mix(accent, surface, 0.25)),
+    accentStrong: formatHex(accentStrong),
     accentSoft: formatHex(mix(accent, surface, 0.82)),
     line: formatHex(mix(ink, canvas, 0.85)),
-    danger: '#a43d3d',
+    danger: lightCanvas ? '#a43d3d' : '#ef9189',
     dangerSoft: lightCanvas ? '#f8e6e3' : formatHex(mix({ r: 164, g: 61, b: 61 }, canvas, 0.7)),
-    onAccent: luminance(accent) > 0.45 ? formatHex(ink) : '#ffffff',
+    onAccent: lightCanvas
+      ? luminance(accent) > 0.45 ? formatHex(ink) : '#ffffff'
+      : contrastRatio(canvas, accentStrong) >= MIN_TEXT_CONTRAST
+      ? formatHex(canvas)
+      : '#ffffff',
   }
+}
+
+/**
+ * deriveSchemeColors expands the palette for the scheme it was chosen in and derives its counterpart
+ * for the other, so a generated app follows the person's light or dark setting. The counterpart swaps
+ * the palette's canvas and ink, deepening or lifting the new canvas away from the old ink, and moves
+ * the accent the same way so it keeps its contrast on the new canvas.
+ */
+export function deriveSchemeColors(palette: CreationPalette): SchemeColors {
+  const canvas = parseHex(palette.canvas)
+  const ink = parseHex(palette.ink)
+  const accent = parseHex(palette.accent)
+  const lightCanvas = luminance(canvas) > 0.5
+  const counterpart = deriveDesignColors({
+    canvas: formatHex(counterpartCanvas(ink, lightCanvas)),
+    ink: formatHex(canvas),
+    accent: formatHex(mix(accent, lightCanvas ? WHITE : BLACK, 0.3)),
+  })
+  const authored = deriveDesignColors(palette)
+  return lightCanvas ? { light: authored, dark: counterpart } : { light: counterpart, dark: authored }
+}
+
+/**
+ * counterpartCanvas moves the palette's ink at least 30% toward black for a dark canvas, or toward
+ * white for a light one, and further until it is as deep or as pale as a canvas needs to be for text
+ * and danger to read at WCAG AA, so a pale ink cannot leave a grey dark scheme.
+ */
+function counterpartCanvas(ink: Rgb, towardDark: boolean): Rgb {
+  const target = towardDark ? BLACK : WHITE
+  for (let amount = 0.3; amount < 1; amount += 0.05) {
+    const candidate = rounded(mix(ink, target, amount))
+    if (towardDark ? luminance(candidate) <= 0.02 : luminance(candidate) >= 0.85) {
+      return candidate
+    }
+  }
+  return target
 }
 
 /**

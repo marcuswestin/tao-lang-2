@@ -559,8 +559,12 @@ export class StudioCdp {
     let previewFrameUrl: string | undefined
     // Raw `Error`: this expression executes in Chrome and cannot import Tao's error taxonomy.
     try {
+      // Chrome pauses animation frames in an iframe scrolled out of view, so the frame's settle wait
+      // below never ends unless the element is on screen first; content above it may have grown
+      // since the caller last scrolled it into view.
       previewFrameUrl = await this.evaluate<string | undefined>(`(() => {
         const element = document.querySelector(${JSON.stringify(selector)})
+        element?.scrollIntoView({ block: 'center', inline: 'center' })
         const frame = element?.querySelector('iframe')
         return frame instanceof HTMLIFrameElement ? frame.src : undefined
       })()`)
@@ -571,10 +575,17 @@ export class StudioCdp {
           const captureToken = ${JSON.stringify(captureToken)}
           const freeze = document.createElement('style')
           freeze.dataset.taoCdpFrameFreeze = captureToken
+          // The runtime's floating dev menu (TR-dev-menu.tsx) is tooling, not the app, so no capture shows it.
           freeze.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}'
+            + '[aria-label="Tao dev menu"]{visibility:hidden!important}'
           document.head.append(freeze)
           if (document.fonts?.ready !== undefined) await document.fonts.ready
-          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+          // Bounded: a frame the page scrolled back out of view gets no animation frames, and this
+          // evaluation has no timeout of its own. The element is pinned on screen below regardless.
+          await Promise.race([
+            new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+            new Promise(resolve => setTimeout(resolve, 2000)),
+          ])
           return true
         })()`,
         )
@@ -606,6 +617,10 @@ export class StudioCdp {
         if (current !== element) current.style.setProperty('transform', 'none', 'important')
       }
       element.dataset.taoCdpCapture = captureToken
+      // The page's own floating chrome (panels, zoom controls, launchers) can sit in a stacking
+      // context above the element, so everything else is hidden rather than out-stacked.
+      const captured = '[data-tao-cdp-capture="' + captureToken + '"]'
+      freeze.textContent += 'body *{visibility:hidden!important}' + captured + ',' + captured + ' *{visibility:visible!important}'
       element.style.setProperty('position', 'fixed', 'important')
       element.style.setProperty('inset', '0 auto auto 0', 'important')
       element.style.setProperty('margin', '0', 'important')
@@ -712,7 +727,7 @@ export class StudioCdp {
       }
     })()`)
     const tree = await this.client.send<{ frameTree: FrameTree }>('Page.getFrameTree')
-    const frameFingerprints: Array<readonly [string, string]> = []
+    const frameFingerprints: string[] = []
     for (const frame of childFrames(tree.frameTree)) {
       const world = await this.client.send<{ executionContextId: number }>('Page.createIsolatedWorld', {
         frameId: frame.id,
@@ -741,14 +756,13 @@ export class StudioCdp {
       })()`,
         world.executionContextId,
       )
-      frameFingerprints.push([frame.url, fingerprint])
+      frameFingerprints.push(fingerprint)
     }
+    // Frames are identified by what they render, not their URLs: every launch serves its previews
+    // from a fresh port and instance id, which would make no two launches' renderers comparable.
     const fontFingerprint = frameFingerprints.length === 0
       ? page.fontFingerprint
-      : Platform.sha256Hex(JSON.stringify([
-        page.fontFingerprint,
-        ...frameFingerprints.sort(([left], [right]) => left.localeCompare(right)),
-      ]))
+      : Platform.sha256Hex(JSON.stringify([page.fontFingerprint, ...[...new Set(frameFingerprints)].sort()]))
     return {
       colorGamut: page.colorGamut,
       deviceScaleFactor: page.deviceScaleFactor,

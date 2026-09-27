@@ -213,6 +213,63 @@ Describe('Tao Studio scenario runtime', () => {
     Expect(screen.getByText('Right detail')).toBeDefined()
   })
 
+  Test("resolves a focused view's design in the scheme the app shell stamps", () => {
+    const byScheme = { environment: 'Scheme', expected: 'dark', kind: 'conditional' } as const
+    const design = TR.Design.Declaration({
+      bundles: {
+        NavigationChromeButton: TR.Design.Spec([['fg', 'chrome']]),
+        NavigationHost: TR.Design.Spec([['bg', 'canvas']]),
+      },
+      colors: {
+        canvas: { ...byScheme, negative: '#fafafa', positive: '#101010' },
+        chrome: { ...byScheme, negative: '#202020', positive: '#e0e0e0' },
+      },
+      name: 'Scheme design',
+      tokens: {},
+    })
+    const detail = TR.Navigation.View({ name: 'Scheme detail', render: () => createElement(RN.Text, null, 'Detail') })
+    const focused = TR.Navigation.View({
+      name: 'Scheme root',
+      render: (_arguments, taoProps) =>
+        createElement(RN.Pressable, {
+          accessibilityLabel: 'Open detail',
+          accessibilityRole: 'button',
+          children: createElement(RN.Text, null, 'Root'),
+          onPress: () => TR.Navigation.PresentIn(taoProps, undefined, detail, {}),
+        }),
+    })
+    const definition = (): TR.AppDefinition => ({
+      auxiliaries: () => ({}),
+      design: () => design,
+      name: 'Scheme app',
+      navigator: () =>
+        TR.Navigation.Configure(TR.Navigation.Declaration('Scheme slot', TR.NavKind.Slot()), { Initial: focused }),
+      restoration: { exclusions: [], mode: 'fresh', variant: 'Scheme app' },
+    })
+    const environment = { platform: 'web', system: 'light' } as const
+    const tree = (appearance: TR.Scheme) =>
+      createElement(
+        TR.Scheme.Provider,
+        { appearance, environment },
+        createElement(TR.AppShell, null, createElement(TR.Studio.SubjectHost, { arguments: {}, definition })),
+      )
+    const screen = render(tree('dark'))
+    const backgrounds = () =>
+      screen.UNSAFE_getAllByType(RN.View).map(view => RN.StyleSheet.flatten(view.props.style)?.backgroundColor)
+
+    // The shell stamps the resolved scheme on its root child; a subject host that dropped it left
+    // every focused view's `when Scheme is Dark` colors resolving light.
+    Expect(backgrounds()).toContain('#101010')
+    Expect(backgrounds()).not.toContain('#fafafa')
+    // The app's own Back control, shown once the focused view presents, is chrome the design styles.
+    fireEvent.press(screen.getByLabelText('Open detail'))
+    const backInk = () => RN.StyleSheet.flatten(screen.getByText('Back').props.style)?.color
+    Expect(backInk()).toBe('#e0e0e0')
+    screen.rerender(tree('light'))
+    Expect(backgrounds()).toContain('#fafafa')
+    Expect(backInk()).toBe('#202020')
+  })
+
   Test('mounts an imported focused view with its fixture entity', async () => {
     const runtimePackageRoot = await createScenarioRuntimeRoot('tao-studio-scenario-runtime-')
     await withTaoFiles('tao-studio-scenario-source-', {
