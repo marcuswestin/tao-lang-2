@@ -398,7 +398,12 @@ The gateway defaults to requiring an `azp` origin claim. The approved native opt
 request has no Origin header; any present claim must still match the configured authorized parties.
 Browser requests, including null or empty Origin headers, retain the strict policy. This trusts a
 verified bearer session and does not attest a physical device. `just clerk-review` prepares a
-development gateway and local InstantDB behind Studio for manual Companion review.
+development gateway and local InstantDB behind Studio for manual Companion review. Pass
+`--device <name-or-udid>` to launch the installed Companion directly on a connected iPhone or iPad
+without opening a Mac browser. The terminal asks the person to compare and confirm the pairing
+code; noninteractive runs leave confirmation to Studio's Device panel. Ctrl+C stops the review,
+including while pairing. Device selection, launch cancellation, and terminal pairing have focused
+automated coverage; a real phone sign-in remains manual acceptance.
 The authored iPhone scenario has mounted on a connected phone. Manual review exposed an unmasked
 custom password input and truncated failure text; secure input and wrapped messages address those.
 Known Clerk configuration errors now have fixed messages distinct from rejected credentials.
@@ -421,8 +426,20 @@ proved physical-device account persistence. The automated iOS simulator journey 
 email-code sign-in, profile and note writes against real InstantDB, process relaunch restoration,
 and sign-out isolation after relaunch on 2026-09-26. Its explicit pre-MVP lane is tracked in
 [initial release QA](<../MVP Roadmap/Plan - Initial release QA.md#live-native-authentication-acceptance>).
-Physical registration, profile, note persistence, email-code login, and logout isolation remain
-separate acceptance work.
+A separate simulator regression runs the real `clerk-review` command with stored configuration,
+its LAN account gateway, and the unchanged authored Fill values. Password sign-in and sign-out
+passed on 2026-09-26 without provisioning a substitute account or changing profile/note data.
+Physical review on 2026-09-27 used the installed Companion on an iPhone 16 Pro Max, controlled
+through iPhone Mirroring, and a fresh `clerk-review --device roPhone` session from `b7056b6e`
+(the feature tree landed as `76fda72b`). The unchanged **Fill email / Fill password / Sign in**
+sequence reached **Signed in**. Terminating and relaunching Companion restored that session;
+signing out, terminating, and relaunching again retained the signed-out state. The fresh gateway
+used the Mac's `192.168.50.107` LAN address. The earlier `169.254.168.204` gateway remains a
+possible explanation for the prior failure, not a demonstrated cause: that session had already
+stopped, and no controlled comparison was made. No authentication code, account passwords, profiles,
+or notes were changed. The temporary review services stopped and their source/database directory was removed.
+Physical registration, profile and note persistence, email-code login, cross-account data isolation,
+and the distributed TestFlight build remain separate acceptance work.
 
 ## Original implementation seams
 

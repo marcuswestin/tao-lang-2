@@ -518,7 +518,7 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:80',
   'packages/cli/agent-cli/agent-cli-tests/agent-config-generation.test.ts:103',
   'packages/cli/agent-cli/agent-cli-tests/claude-profiles-generation.test.ts:87',
-  'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:591',
+  'packages/ides/studio-tooling/studio-tooling-tests/studio-companion-device.test.ts:614',
   'packages/apps/expo-host/expo-host-tests/studio-device-host-e2e.jest-test.tsx:344',
   'packages/apps/runtime/TR-tests/TR-async.test.ts:43',
   'packages/apps/runtime/TR-tests/TR-async.test.ts:57',

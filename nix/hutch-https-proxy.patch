@@ -1,0 +1,89 @@
+--- a/lib/std/http/Client.zig
++++ b/lib/std/http/Client.zig
+@@ -1545,10 +1545,11 @@
+             .proxied_host = proxied_host,
+             .proxied_port = proxied_port,
+         });
+-        errdefer {
++        var tunnel_established = false;
++        defer if (!tunnel_established) {
+             connection.closing = true;
+             client.connection_pool.release(connection, io);
+-        }
++        };
+
+         var req = client.request(.CONNECT, .{
+             .scheme = "http",
+@@ -1560,7 +1561,11 @@
+         }) catch |err| {
+             break :tunnel err;
+         };
+-        defer req.deinit();
++        defer {
++            // The tunnel scope owns the connection on both success and failure.
++            req.connection = null;
++            req.deinit();
++        }
+
+         req.sendBodiless() catch |err| break :tunnel err;
+         const response = req.receiveHead(&.{}) catch |err| break :tunnel err;
+@@ -1572,12 +1577,9 @@
+
+         if (response.head.status != .ok) break :tunnel error.ConnectionRefused;
+
+-        // this connection is now a tunnel, so we can't use it for anything
+-        // else, it will only be released when the client is de-initialized.
+-        req.connection = null;
+-
++        // Transfer the acquired tunnel to the caller.
+         connection.closing = false;
+-
++        tunnel_established = true;
+         return connection;
+     }) catch {
+         // something went wrong with the tunnel
+@@ -1609,6 +1611,44 @@
+     // Prevent proxying through itself.
+     if (proxy.host.eql(host) and proxy.port == port and proxy.protocol == protocol) {
+         return client.connectTcp(host, port, protocol);
++    }
++
++    if (protocol == .tls) {
++        if (disable_tls) return error.TlsInitializationFailed;
++        // TLS over a TLS proxy requires a separate nested transport. Never send
++        // an HTTPS request as plaintext or validate only the proxy certificate.
++        if (proxy.protocol != .plain) return error.TlsInitializationFailed;
++        if (client.connection_pool.findConnection(client.io, .{
++            .host = host,
++            .port = port,
++            .protocol = .tls,
++        })) |connection| return connection;
++
++        const connection = connectProxied(client, proxy, host, port) catch
++            return error.TlsInitializationFailed;
++        errdefer {
++            connection.closing = true;
++            client.connection_pool.release(connection, client.io);
++        }
++        // A TLS peer cannot send its handshake before our ClientHello. Refuse
++        // unsolicited tunnel bytes rather than discard buffered proxy data.
++        if (connection.reader().bufferedLen() != 0) return error.TlsInitializationFailed;
++        const tc = Connection.Tls.create(client, host, port, connection.getStream()) catch |err| switch (err) {
++            error.OutOfMemory => |e| return e,
++            error.Unexpected => |e| return e,
++            error.Canceled => |e| return e,
++            else => return error.TlsInitializationFailed,
++        };
++
++        // The TLS connection now owns the same socket. Replace the pool node
++        // and free only the old plain allocation, without closing the socket.
++        client.connection_pool.mutex.lockUncancelable(client.io);
++        client.connection_pool.used.remove(&connection.pool_node);
++        client.connection_pool.used.append(&tc.connection.pool_node);
++        client.connection_pool.mutex.unlock(client.io);
++        const plain: *Connection.Plain = @alignCast(@fieldParentPtr("connection", connection));
++        plain.destroy();
++        return &tc.connection;
+     }
+
+     if (proxy.supports_connect) tunnel: {

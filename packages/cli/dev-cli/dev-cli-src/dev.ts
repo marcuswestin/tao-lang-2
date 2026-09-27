@@ -91,7 +91,8 @@ await runWithCommands(commands => {
     .command('shell-setup')
     .description('Offer automatic development environments for this repository and its worktrees.')
     .option('--configure', 'Ask again even when this repository already has a saved choice.')
-    .action(async (options: { configure?: boolean }) => {
+    .option('--prepare', 'Warm this checkout’s environment when automatic activation is already enabled.')
+    .action(async (options: { configure?: boolean; prepare?: boolean }) => {
       const { runDirenvSetup } = await import('./shell/DirenvSetup')
       await runDirenvSetup(options)
     })
@@ -653,10 +654,14 @@ await runWithCommands(commands => {
   commands
     .command('clerk-review')
     .description('Run Clerk and local InstantDB in Studio for a connected iPhone review.')
+    .option(
+      '--device <name-or-udid>',
+      'Launch on this connected iPhone or iPad and pair in Terminal without opening a browser.',
+    )
     .option('--host <ipv4>', 'The Mac LAN IPv4 address reachable from the phone; detected when omitted.')
     .option('--instant-url <origin>', 'Local InstantDB API origin.', 'http://127.0.0.1:9020')
     .option('--no-browser', 'Start Studio without opening the Mac browser.')
-    .action(async (options: { host?: string; instantUrl?: string; browser?: boolean }) => {
+    .action(async (options: { host?: string; instantUrl?: string; browser?: boolean; device?: string }) => {
       const { runClerkReview } = await import('./clerk/ClerkReviewCommand')
       try {
         Platform.runtimeProcess.exit(await runClerkReview(options))

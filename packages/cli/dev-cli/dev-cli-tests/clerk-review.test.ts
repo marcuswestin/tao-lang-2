@@ -1,5 +1,6 @@
 import { Errors, FS } from '@shared'
 import { Deferred, Expect, mkTestDir, Test } from '@shared/test'
+import type { StudioDevOptions } from '@studio-tooling/StudioDev'
 import { runClerkReview } from '../dev-cli-src/clerk/ClerkReviewCommand'
 
 async function fixture() {
@@ -9,6 +10,7 @@ async function fixture() {
   const handlers = new Map<string, () => void>()
   let gatewayOptions: Parameters<NonNullable<Parameters<typeof runClerkReview>[1]>['gateway']>[0] | undefined
   let source = ''
+  let studioOptions: StudioDevOptions | undefined
   const environment: NonNullable<Parameters<typeof runClerkReview>[1]> = {
     secrets: async () => ({
       CLERK_PUBLISHABLE_KEY: 'pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk',
@@ -38,6 +40,7 @@ async function fixture() {
       }
     },
     loadStudio: async () => async options => {
+      studioOptions = options
       events.push('studio')
       Expect(options.appName).toBe('AuthReviewClerk')
       Expect(options.projectRoot).toBe(root)
@@ -55,8 +58,32 @@ async function fixture() {
       }
     },
   }
-  return { root, events, output, handlers, environment, options: () => gatewayOptions, source: () => source }
+  return {
+    root,
+    events,
+    output,
+    handlers,
+    environment,
+    options: () => gatewayOptions,
+    source: () => source,
+    studioOptions: () => studioOptions,
+  }
 }
+
+Test('device flag forwards the exact selection and suppresses the Mac browser', async () => {
+  const f = await fixture()
+  Expect(await runClerkReview({ device: 'roPhone', browser: true }, f.environment)).toBe(0)
+  Expect(f.studioOptions()?.device).toBe('roPhone')
+  Expect(f.studioOptions()?.browser).toBe(false)
+  Expect(await FS.exists(f.root)).toBe(false)
+})
+
+Test('manual review preserves the browser option without a device selection', async () => {
+  const f = await fixture()
+  Expect(await runClerkReview({ browser: true }, f.environment)).toBe(0)
+  Expect(f.studioOptions()?.device).toBeUndefined()
+  Expect(f.studioOptions()?.browser).toBe(true)
+})
 
 Test('phone review uses a private ephemeral gateway and removes its source after Studio exits', async () => {
   const f = await fixture()
@@ -158,6 +185,7 @@ Test('nonlocal Instant endpoints and loopback phone hosts fail before loading cr
       'localhost HTTP',
     )
     await Expect(runClerkReview({ host: '127.0.0.1' }, f.environment)).rejects.toThrow('reachable LAN IPv4')
+    await Expect(runClerkReview({ device: ' ' }, f.environment)).rejects.toThrow('physical device name or UDID')
     Expect(f.events).toEqual([])
   } finally {
     await FS.remove(f.root)
