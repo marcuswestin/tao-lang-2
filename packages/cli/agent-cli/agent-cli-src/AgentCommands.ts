@@ -50,6 +50,7 @@ export const JUST_COMMANDS = [
   'report-test-stats',
   'setup',
   'setup-clerk',
+  'shell-setup',
   'simplify-audit',
   // The browser and native UI lanes are final validation like any other gate, and AGENTS.md
   // requires them before a branch that touches Studio is called ready. They stayed reachable only

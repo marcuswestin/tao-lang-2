@@ -45,6 +45,7 @@ in
 
   packages = toolchain.packages ++ [
     pkgs.cocoapods
+    pkgs.direnv
     hutchPkg
   ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ pkgs.age-plugin-se ];
 
