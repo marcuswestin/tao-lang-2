@@ -5,7 +5,11 @@ import { Deferred, Expect, Test, testOverrideSlot, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
 import { mountStudioCanvasFocus, StudioCanvasFocusLane } from '../studio-src/client/app/StudioCanvasFocus'
 import { studioInspectionRequest } from '../studio-src/client/app/StudioInspection'
-import { mountStudioPreviewReload, StudioPreviewNotice } from '../studio-src/client/app/StudioPreviewStatus'
+import {
+  mountStudioBrowserLaunch,
+  mountStudioPreviewReload,
+  StudioPreviewNotice,
+} from '../studio-src/client/app/StudioPreviewStatus'
 import {
   forwardPreviewCanvasGesture,
   studioPreviewMessageListener,
@@ -370,65 +374,142 @@ Test('Studio events dispatch checkpoint, data-invalidation, cell, and write-rece
   ])
 })
 
-Test('Studio API client addresses every loopback device route with the contract bodies', async () => {
-  const previousFetch = globalThis.fetch
-  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
-  const requests: Array<{ body: unknown; method: string; url: string }> = []
-  Object.defineProperty(globalThis, 'window', {
-    configurable: true,
-    value: { location: { pathname: '/sessions/window-7' } },
-    writable: true,
+Test('Studio Browser launch coalesces clicks, reports failures, and retries', async () => {
+  const button = Object.assign(new EventTarget(), { disabled: false, title: '' }) as HTMLButtonElement
+  const status = { textContent: '' } as HTMLElement
+  const pending = Deferred<void>()
+  let calls = 0
+  let failure: unknown
+  const dispose = mountStudioBrowserLaunch({
+    available: true,
+    button,
+    onError: error => {
+      failure = error
+    },
+    open: async () => {
+      calls += 1
+      if (calls === 1) {
+        await pending.promise
+        Errors.throwHostEnvironment('Browser could not open')
+      }
+    },
+    status,
   })
-  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-    requests.push({
-      body: init?.body === undefined ? undefined : JSON.parse(String(init.body)),
-      method: init?.method ?? 'GET',
-      url,
-    })
-    if (url.endsWith('/api/device/launch')) {
-      return new Response(JSON.stringify({ error: 'Device launch tooling is not injected.' }), { status: 501 })
-    }
-    return new Response(JSON.stringify({ ok: true }), { status: 200 })
-  }) as typeof fetch
-  try {
-    await StudioApiClient.deviceStatus()
-    await StudioApiClient.deviceOpenPairing()
-    await StudioApiClient.deviceConfirmPairing('key-1')
-    await StudioApiClient.deviceDeclinePairing('key-2')
-    await StudioApiClient.deviceRevoke('key-3')
-    await StudioApiClient.deviceReconnect()
-    await StudioApiClient.deviceSelectCell('cell-home')
-    await StudioApiClient.deviceLaunchOpen('host-1', 'cable')
-    let launchFailure: unknown
-    try {
-      await StudioApiClient.deviceLaunch()
-    } catch (error) {
-      launchFailure = error
-    }
-    Expect(launchFailure).toBeInstanceOf(StudioApiError)
-    Expect((launchFailure as StudioApiError).status).toBe(501)
-    Expect((launchFailure as StudioApiError).message).toBe('Device launch tooling is not injected.')
-    Expect(requests).toEqual([
-      { body: undefined, method: 'GET', url: '/sessions/window-7/api/device/status' },
-      { body: {}, method: 'POST', url: '/sessions/window-7/api/device/pairing/open' },
-      { body: { devicePublicKey: 'key-1' }, method: 'POST', url: '/sessions/window-7/api/device/pairing/confirm' },
-      { body: { devicePublicKey: 'key-2' }, method: 'POST', url: '/sessions/window-7/api/device/pairing/decline' },
-      { body: { devicePublicKey: 'key-3' }, method: 'POST', url: '/sessions/window-7/api/device/revoke' },
-      { body: {}, method: 'POST', url: '/sessions/window-7/api/device/reconnect' },
-      { body: { cellId: 'cell-home' }, method: 'POST', url: '/sessions/window-7/api/device/select-cell' },
-      { body: { hostId: 'host-1', route: 'cable' }, method: 'POST', url: '/sessions/window-7/api/device/launch/open' },
-      { body: undefined, method: 'GET', url: '/sessions/window-7/api/device/launch' },
-    ])
-  } finally {
-    globalThis.fetch = previousFetch
-    if (previousWindow === undefined) {
-      delete (globalThis as { window?: unknown }).window
-    } else {
-      Object.defineProperty(globalThis, 'window', previousWindow)
-    }
-  }
+  button.dispatchEvent(new Event('click'))
+  button.dispatchEvent(new Event('click'))
+  Expect(calls).toBe(1)
+  Expect(button.disabled).toBe(true)
+  pending.resolve()
+  await until(() => !button.disabled)
+  Expect((failure as Error).message).toBe('Browser could not open')
+  button.dispatchEvent(new Event('click'))
+  await until(() => !button.disabled)
+  Expect(calls).toBe(2)
+  Expect(status.textContent).toBe('Opened app in browser')
+  dispose()
+  button.dispatchEvent(new Event('click'))
+  Expect(calls).toBe(2)
 })
+
+Test('Studio Browser launch disables absent previews and ignores completion after disposal', async () => {
+  const button = Object.assign(new EventTarget(), { disabled: false, title: '' }) as HTMLButtonElement
+  const status = { textContent: '' } as HTMLElement
+  const pending = Deferred<void>()
+  let calls = 0
+  const options = {
+    button,
+    onError: () => {
+      Errors.throwUnexpected('Disposed launch reported an error')
+    },
+    open: async () => {
+      calls += 1
+      await pending.promise
+    },
+    status,
+  }
+  const unavailable = mountStudioBrowserLaunch({ ...options, available: false })
+  Expect(button.disabled).toBe(true)
+  button.dispatchEvent(new Event('click'))
+  Expect(calls).toBe(0)
+  unavailable()
+  const dispose = mountStudioBrowserLaunch({ ...options, available: true })
+  button.dispatchEvent(new Event('click'))
+  Expect(calls).toBe(1)
+  dispose()
+  pending.resolve()
+  await pending.promise
+  await Promise.resolve()
+  Expect(status.textContent).toBe('Opening app in browser…')
+})
+
+Test(
+  'Studio API client addresses browser launch and every loopback device route with the contract bodies',
+  async () => {
+    const previousFetch = globalThis.fetch
+    const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+    const requests: Array<{ body: unknown; method: string; url: string }> = []
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { location: { pathname: '/sessions/window-7' } },
+      writable: true,
+    })
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      requests.push({
+        body: init?.body === undefined ? undefined : JSON.parse(String(init.body)),
+        method: init?.method ?? 'GET',
+        url,
+      })
+      if (url.endsWith('/api/device/launch')) {
+        return new Response(JSON.stringify({ error: 'Device launch tooling is not injected.' }), { status: 501 })
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 })
+    }) as typeof fetch
+    try {
+      await StudioApiClient.browserOpen()
+      await StudioApiClient.deviceStatus()
+      await StudioApiClient.deviceOpenPairing()
+      await StudioApiClient.deviceConfirmPairing('key-1')
+      await StudioApiClient.deviceDeclinePairing('key-2')
+      await StudioApiClient.deviceRevoke('key-3')
+      await StudioApiClient.deviceReconnect()
+      await StudioApiClient.deviceSelectCell('cell-home')
+      await StudioApiClient.deviceLaunchOpen('host-1', 'cable')
+      let launchFailure: unknown
+      try {
+        await StudioApiClient.deviceLaunch()
+      } catch (error) {
+        launchFailure = error
+      }
+      Expect(launchFailure).toBeInstanceOf(StudioApiError)
+      Expect((launchFailure as StudioApiError).status).toBe(501)
+      Expect((launchFailure as StudioApiError).message).toBe('Device launch tooling is not injected.')
+      Expect(requests).toEqual([
+        { body: {}, method: 'POST', url: '/sessions/window-7/api/browser/open' },
+        { body: undefined, method: 'GET', url: '/sessions/window-7/api/device/status' },
+        { body: {}, method: 'POST', url: '/sessions/window-7/api/device/pairing/open' },
+        { body: { devicePublicKey: 'key-1' }, method: 'POST', url: '/sessions/window-7/api/device/pairing/confirm' },
+        { body: { devicePublicKey: 'key-2' }, method: 'POST', url: '/sessions/window-7/api/device/pairing/decline' },
+        { body: { devicePublicKey: 'key-3' }, method: 'POST', url: '/sessions/window-7/api/device/revoke' },
+        { body: {}, method: 'POST', url: '/sessions/window-7/api/device/reconnect' },
+        { body: { cellId: 'cell-home' }, method: 'POST', url: '/sessions/window-7/api/device/select-cell' },
+        {
+          body: { hostId: 'host-1', route: 'cable' },
+          method: 'POST',
+          url: '/sessions/window-7/api/device/launch/open',
+        },
+        { body: undefined, method: 'GET', url: '/sessions/window-7/api/device/launch' },
+      ])
+    } finally {
+      globalThis.fetch = previousFetch
+      if (previousWindow === undefined) {
+        delete (globalThis as { window?: unknown }).window
+      } else {
+        Object.defineProperty(globalThis, 'window', previousWindow)
+      }
+    }
+  },
+)
 
 Test('Studio generated fixture proposals use the captured-fixture source-action flow', () => {
   const identity = {
@@ -894,7 +975,7 @@ Test('Studio preview teardown releases observers and pending capture work', () =
   Expect(preview.journeyRecording?.status).toBe('invalidated')
 })
 
-Test('Studio invalidates a browser-local recording when its iframe reloads', () => {
+Test('Studio starts interactive, toggles editing, and retains the selected mode on iframe reload', () => {
   const iframe = new EventTarget() as HTMLIFrameElement
   const messages: unknown[] = []
   Object.defineProperty(iframe, 'contentWindow', {
@@ -921,10 +1002,19 @@ Test('Studio invalidates a browser-local recording when its iframe reloads', () 
     [preview],
     { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake,
   )
+  Expect(button.dataset['mode']).toBe('run')
+  Expect(button.textContent).toBe('Mode: Run')
+  Expect(preview.interactionMode).toBe('run')
+  Expect(messages.at(-1)).toMatchObject({ mode: 'run', type: 'set-interaction-mode' })
+  button.dispatchEvent(new Event('click'))
+  Expect(preview.interactionMode).toBe('edit')
+  Expect(button.textContent).toBe('Mode: Edit')
   iframe.dispatchEvent(new Event('load'))
 
   Expect(preview.journeyRecording.status).toBe('invalidated')
-  Expect(messages.at(-1)).toMatchObject({ type: 'set-interaction-mode' })
+  Expect(messages.at(-1)).toMatchObject({ mode: 'edit', type: 'set-interaction-mode' })
+  button.dispatchEvent(new Event('click'))
+  Expect(preview.interactionMode).toBe('run')
 })
 
 Test('Studio advertises canvas gesture ownership explicitly per preview', () => {
@@ -1329,15 +1419,17 @@ Test('Studio workbench state loads safe defaults and persists layout presets, ra
     },
   }
 
-  Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('design')
+  Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('run')
   StudioWorkbenchState.saveLayoutPreset(storage, 'code')
   Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('code')
   StudioWorkbenchState.saveLayoutPreset(storage, 'run')
   Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('run')
   StudioWorkbenchState.saveLayoutPreset(storage, 'draw')
   Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('draw')
-  store.set('tao-studio:layout-preset:v1', 'invalid')
+  StudioWorkbenchState.saveLayoutPreset(storage, 'design')
   Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('design')
+  store.set('tao-studio:layout-preset:v1', 'invalid')
+  Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('run')
 
   Expect(StudioWorkbenchState.loadRailPanel(storage)).toBe('files')
   StudioWorkbenchState.saveRailPanel(storage, 'data')

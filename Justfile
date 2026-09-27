@@ -20,7 +20,7 @@ help:
 # The private setup recipe is what every harness reaches through `./agent setup`: Worktrunk's pre-start hook
 # (.config/wt.toml), the harness SessionStart hooks (.rulesync/hooks.jsonc), and
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
-_setup: _deps _agent-config _git-hooks
+_setup: _deps _agent-config _git-hooks _initial-dev-branch
 
 # Configure this checkout and GitHub CLI for HTTPS Git authentication
 [group('Setup')]
@@ -44,6 +44,11 @@ github-setup:
 [group('Setup')]
 secrets *ARGS:
     ./dev secrets {{ ARGS }}
+
+# Guide Clerk development setup and store its credentials encrypted; --instructions prints the steps
+[group('Setup')]
+setup-clerk *ARGS:
+    ./dev setup-clerk {{ ARGS }}
 
 # Launch the agent harness with the Bash sandbox off; switch a running session with /sandbox
 [group('Sessions')]
@@ -86,6 +91,11 @@ stop-local-instantdb:
 [group('Run')]
 auth-review-server *ARGS:
     bun run packages/services/account-server/account-server-src/serve.ts {{ ARGS }}
+
+# Review Clerk sign-in and local InstantDB data in Tao Companion; requires saved development credentials
+[group('Run')]
+clerk-review *ARGS: _parser-gen
+    ./dev clerk-review {{ ARGS }}
 
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
@@ -561,6 +571,9 @@ clean-all: clean-scratch
 #
 # `--complete` remains accepted on `verify` as the explicit spelling of what bare `verify` already
 # does, because the merge command and the repository's instructions name it that way.
+# Full verification lanes lower their CLI process to below-normal scheduling priority before
+# launching gates; children inherit it. This leaves job counts and admission unchanged.
+# A host or sandbox refusal prints a warning and verification continues at inherited priority.
 # Verify everything: fix, check, and every test suite. --no-cache ignores a recorded green tree
 [arg('complete', long='complete', value='true')]
 [arg('no_cache', long='no-cache', value='true')]
@@ -620,6 +633,10 @@ _deps:
 
 _git-hooks:
     ./packages/cli/agent-cli/agent-cli-src/cli/agent-git-hooks.zsh install
+
+# Keep main free for landing without redirecting existing work or linked checkouts.
+_initial-dev-branch:
+    zsh packages/cli/dev-cli/dev-cli-src/cli/initial-dev-branch.zsh
 
 _dependency-health:
     "{{ BUN }}" run packages/testing/verification/verification-src/DependencyHealth.ts

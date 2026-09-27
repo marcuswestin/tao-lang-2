@@ -192,7 +192,7 @@ export function configureInteractionMode(
     })
   }
   button.addEventListener('click', () => setMode(button.dataset['mode'] === 'edit' ? 'run' : 'edit'))
-  setMode('edit')
+  setMode('run')
 }
 
 function matchesExactPreviewCellIdentity(

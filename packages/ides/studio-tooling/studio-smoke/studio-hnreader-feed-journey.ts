@@ -82,6 +82,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     const beforeCatalogText = await FS.readText(catalogPath)
     Expect(await FS.exists(fixturePath)).toBe(false)
     await driver.click('[data-preset="design"]')
+    await driver.click('.studio-interaction-mode[data-mode="run"]')
     await driver.waitFor(
       `(() => {
       const status = document.querySelector('.studio-status')

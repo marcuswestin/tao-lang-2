@@ -51,7 +51,17 @@ runs and directories without trustworthy ownership receipts are preserved.
 ./agent test-host ios --app clockwork --device <simulator-UDID>
 ./agent test-host android --app hnreader --device <emulator-serial>
 ./agent test-host device --app hnreader --device <physical-device-ID>
+./agent unsandboxed test-host catalyst --app native-navigation
+./agent unsandboxed test-host catalyst --app hnreader
 ```
+
+`catalyst` builds an isolated local Release app with the Mac interface idiom and retains it under
+`.artifacts/catalyst/<run-id>/`. It accepts only NativeNavigation and HNReader, without `--device`
+or `--fault`. The trial copies and hash-guards its slider and screens compatibility patches, preserves source
+manifests, and verifies the bundle's Mac device family and Mach-O Catalyst platform. Build success
+does not establish mounted native hosts, usable menus, restoration or visual acceptance. See
+[Mac Catalyst proof of concept](../../../Docs/Roadmap/Add%20navigation%20and%20routing%20MVP/Mac%20Catalyst%20proof%20of%20concept.md)
+for configuration, patch ownership and the separate acceptance record.
 
 Both browser `--fault` commands are intentionally red; inspect the failed assertion before calling
 that meaningful fault detection. A compile, browser-launch, or unrelated assertion failure does not

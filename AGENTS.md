@@ -1,6 +1,6 @@
 # Tao Agent Guide
 
-Tao is a UI-app programming language that compiles to TSX for Expo and React Native. This repository is a clean, stepwise reimplementation of `~/code/tao-lang`; use the old repository as reference, not source to copy.
+Tao compiles UI apps to Expo/React Native TSX. This reimplements `~/code/tao-lang`; use that repository as reference, not source to copy.
 
 The Developer is Tao's author, project lead, and language designer, and decides language semantics, roadmap priority, and product behavior.
 
@@ -26,7 +26,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 
 - Lead with the outcome. Keep expected results to a sentence; surface decisions to confirm, surprises, and anything needing the Developer's judgment. Let other detail wait until asked.
 - Whenever asking the Developer to run commands, print the exact copyable commands in a shell code block, including required arguments and the working directory. Do this in the request itself, including status updates and handoffs.
-- Shape a response as a numbered list, bulleted sub-items where needed, at most three levels deep, lettered so "elaborate 2.b" lands. One point per item. Error text and command output go verbatim in code blocks.
+- Use numbered lists and lettered sub-items, up to three levels ("elaborate 2.b"). Requested summaries use executive-summary bullets, 1–2 sentences each. One point per item; quote errors and output verbatim in code blocks.
 - Depart from this when a root-cause walkthrough or a design argument serves the Developer better. This section governs what they read and nothing else: subagent and agent-to-agent text is exempt from the shape, and the `delegation` skill owns what a subagent's report must contain instead.
 - After a meaningful chunk, recommend the next slice. Harness settings compact context automatically; at a natural break before an unrelated slice, refresh `.artifacts/checkpoint/<branch>.md` and offer `/compact` or a fresh session.
 
@@ -41,6 +41,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 ## Permissions
 
 - Research the open web, run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack, all without asking.
+- Keep the desktop undisturbed whenever hidden or headless execution suffices; `quiet-ui-workflows` owns UI launches and control.
 - Bash uses an OS sandbox. The harness grants one host exception per named `./agent unsandboxed X` operation; its editable wrapper admits only named argv prefixes from `.rulesync/permissions.jsonc`, then runs repository code and children on the host. Deeper subcommands are checked by the wrapper, not separately granted by the harness. Use named simulator, device, build, remote, and process operations from `./agent help`, never raw host-tool names after `unsandboxed`. For an unlisted host operation, diagnose read-only, name it, and pause for the Developer's explicit approval; `environment-recovery` owns the details.
 - Before intentionally changing what any `./agent unsandboxed` operation can run, accept, or reach—including its permission rules, wrapper, dispatch, target, or called implementation—obtain the Developer's approval for that change, unless the current request already authorizes it as necessary to achieve its stated goal. Approval for one behavior change does not cover later ones. After an authorized pass that intentionally changes unsandboxed behavior, clearly tell the Developer what changed.
 - Land only with the Developer's authorization for this slice, lasting through retries. Use `./agent unsandboxed land`. On a host or queued-merge failure, stop and surface the intervention (`verification-lanes`).

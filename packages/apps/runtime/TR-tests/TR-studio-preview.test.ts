@@ -114,6 +114,7 @@ Describe('Studio preview runtime bridge', () => {
       cellRevision: 2,
       manifestRevision: 'manifest-1',
     }, fake.host)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
     let appEvents = 0
     let cancelled = 0
     fake.host.document.addEventListener('drop', () => {
@@ -171,6 +172,7 @@ Describe('Studio preview runtime bridge', () => {
     const stale = renderElement('/project/Removed.tao', 10, 20, { height: 20, left: 0, top: 0, width: 80 })
     const fake = previewHost([leaf, stale])
     const cleanup = mountStudioPreviewBridge(config, fake.host)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
     const payload = { entity: 'Playlist', kind: 'collection', path: ['Tracks'], rowId: 'opaque-row' }
     const event = { target: leaf, dataTransfer: { getData: () => JSON.stringify(payload), types: [taoStudioFeedMime] } }
     for (
@@ -214,6 +216,7 @@ Describe('Studio preview runtime bridge', () => {
     })
     const cell = { cellId: 'cell-1', cellRevision: 2, compileRevision: 7, manifestRevision: 'manifest-1' }
     const cleanup = mountStudioPreviewBridge({ ...config, ...cell }, fake.host)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
     const message = {
       ...interactionModeMessage('edit', fake.parent),
       data: {
@@ -423,6 +426,7 @@ Describe('Studio preview runtime bridge', () => {
       getBoundingClientRect: () => rootRect,
     }
     const cleanup = mountStudioPreviewBridge(config, fake.host)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
     const layoutMessages = () =>
       fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-layout-measurements')
     await Promise.resolve()
@@ -621,6 +625,7 @@ Describe('Studio preview runtime bridge', () => {
     const target = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
     const fake = previewHost([target])
     const cleanup = mountStudioPreviewBridge(config, fake.host)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
     fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
     fake.dispatchDocument('mouseover', { target })
     Expect(fake.messages.at(-1)?.message).toMatchObject({ type: 'preview-hover-source' })
@@ -689,6 +694,7 @@ Describe('Studio preview runtime bridge', () => {
     const third = renderElement('/project/Main.tao', 50, 60, { height: 20, left: 10, top: 90, width: 100 })
     const fake = previewHost([first, second, third])
     const cleanup = mountStudioPreviewBridge(config, fake.host)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
     fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
     fake.dispatchDocument('mousedown', { clientX: 40, clientY: 100, target: third })
     fake.dispatchDocument('mousemove', { clientX: 40, clientY: 40, target: second })
@@ -1085,10 +1091,14 @@ Describe('Studio preview runtime bridge', () => {
     Debug.Reset()
   })
 
-  Test('separates normal app interaction from selecting and visual editing', () => {
+  Test('runs the app before any mode message and enables visual editing only after choosing Edit', () => {
     const render = renderElement('/project/Main.tao', 12, 28, { height: 30, left: 20, top: 10, width: 80 })
     const fake = previewHost([render])
     const cleanup = mountStudioPreviewBridge(config, fake.host)
+    const appEvents: string[] = []
+    for (const type of ['mouseover', 'click', 'mousedown', 'mousemove', 'mouseup'] as const) {
+      fake.host.document.addEventListener(type, () => appEvents.push(type))
+    }
     let blocked = 0
     const pointer = {
       preventDefault: () => {
@@ -1103,20 +1113,34 @@ Describe('Studio preview runtime bridge', () => {
       target: render,
     }
 
-    fake.dispatchWindow('message', interactionModeMessage('run', fake.parent))
     fake.dispatchDocument('mouseover', pointer)
     fake.dispatchDocument('click', pointer)
+    fake.dispatchDocument('mousedown', { ...pointer, clientX: 30, clientY: 20 })
+    fake.dispatchDocument('mousemove', { ...pointer, clientX: 30, clientY: 70 })
+    fake.dispatchDocument('mouseup', { ...pointer, clientX: 30, clientY: 70 })
     Expect(blocked).toBe(0)
+    Expect(appEvents).toEqual(['mouseover', 'click', 'mousedown', 'mousemove', 'mouseup'])
     Expect(fake.messages).toHaveLength(1)
     Expect(fake.overlays).toHaveLength(0)
 
     fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    appEvents.length = 0
     fake.dispatchDocument('mouseover', pointer)
     fake.dispatchDocument('click', pointer)
     Expect(blocked).toBe(3)
     Expect(fake.messages[1]?.message).toMatchObject({ type: 'preview-hover-source' })
     Expect(fake.messages[2]?.message).toMatchObject({ type: 'preview-select-source' })
     Expect(fake.overlays[0]?.attributes['data-tao-studio-overlay']).toBe('selection')
+    Expect(appEvents).toEqual(['mouseover'])
+
+    fake.dispatchWindow('message', interactionModeMessage('run', fake.parent))
+    appEvents.length = 0
+    fake.dispatchDocument('mouseover', pointer)
+    fake.dispatchDocument('click', pointer)
+    Expect(blocked).toBe(3)
+    Expect(appEvents).toEqual(['mouseover', 'click'])
+    Expect(fake.messages).toHaveLength(3)
+    Expect(fake.overlays.filter(overlay => !overlay.removed)).toHaveLength(0)
     cleanup()
   })
 
@@ -1373,6 +1397,7 @@ Describe('Studio preview runtime bridge', () => {
     const render = renderElement('/project/Main.tao', 12, 28, { height: 30, left: 20, top: 10, width: 80 })
     const fake = previewHost([render])
     const cleanup = mountStudioPreviewBridge(config, fake.host)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
 
     Expect(fake.messages).toEqual([{
       message: {
@@ -1502,6 +1527,7 @@ Describe('Studio preview runtime bridge', () => {
     const third = renderElement('/project/Main.tao', 50, 60, { height: 20, left: 10, top: 90, width: 100 })
     const fake = previewHost([first, second, third])
     const cleanup = mountStudioPreviewBridge(config, fake.host)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
 
     fake.dispatchDocument('mousedown', { clientX: 40, clientY: 100, target: third })
     fake.dispatchDocument('mousemove', { clientX: 40, clientY: 40, target: second })
@@ -1544,6 +1570,7 @@ Describe('Studio preview runtime bridge', () => {
     const third = renderElement('/project/Main.tao', 50, 60, { height: 20, left: 10, top: 90, width: 100 })
     const fake = previewHost([first, second, third])
     const cleanup = mountStudioPreviewBridge(config, fake.host)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
 
     fake.dispatchDocument('mousedown', { clientX: 40, clientY: 100, target: third })
     fake.dispatchDocument('mousemove', { clientX: 40, clientY: 40, target: second })
@@ -1561,6 +1588,7 @@ Describe('Studio preview runtime bridge', () => {
 
     const beforeFake = previewHost([first, second])
     const cleanupBefore = mountStudioPreviewBridge(config, beforeFake.host)
+    beforeFake.dispatchWindow('message', interactionModeMessage('edit', beforeFake.parent))
     beforeFake.dispatchDocument('mousedown', { clientX: 40, clientY: 60, target: second })
     beforeFake.dispatchDocument('mousemove', { clientX: 40, clientY: 0, target: first })
     beforeFake.dispatchDocument('mouseup', { clientX: 40, clientY: 0, preventDefault() {}, target: first })
@@ -1578,6 +1606,7 @@ Describe('Studio preview runtime bridge', () => {
 
     const afterFake = previewHost([first, second])
     const cleanupAfter = mountStudioPreviewBridge(config, afterFake.host)
+    afterFake.dispatchWindow('message', interactionModeMessage('edit', afterFake.parent))
     afterFake.dispatchDocument('mousedown', { clientX: 40, clientY: 20, target: first })
     afterFake.dispatchDocument('mousemove', { clientX: 40, clientY: 100, target: second })
     afterFake.dispatchDocument('mouseup', { clientX: 40, clientY: 100, preventDefault() {}, target: second })

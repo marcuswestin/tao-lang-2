@@ -583,6 +583,11 @@ project views, grouped scenarios, commands, and component/view insertions. The c
 stdlib catalog plus compiler-manifest project views; drag to canvas emits position-aware source actions,
 and drag to editor inserts formatted snippets with required-parameter placeholders selected for editing.
 
+New preview connections begin in Run interaction mode. The workbench initially uses the Run layout,
+while preserving an explicitly saved layout preference. The toolbar Browser action opens the
+session's standalone app URL in Chrome; Device launches the companion. Browser
+launch accepts no caller-provided URL and reports an unavailable preview or opener failure in Studio.
+
 In Design, dragging empty canvas or an inactive preview pans without Space; ordinary wheel and
 trackpad scrolling over those surfaces also pans. In Draw, ordinary dragging draws or edits rectangles,
 while Space-drag pans the Draw canvas. Pinch and modifier-wheel zoom remain available without Space.

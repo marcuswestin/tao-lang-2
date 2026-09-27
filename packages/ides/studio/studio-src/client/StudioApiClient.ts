@@ -262,6 +262,7 @@ export const StudioApiClient = {
     await request(routes.devicePairingDecline, { devicePublicKey }),
   deviceCapture: async (): Promise<{ capture?: StudioRuntimeCaptureArtifact; error?: string }> =>
     await request(routes.deviceCapture, {}),
+  browserOpen: async (): Promise<{ opened: true; url: string }> => await request(routes.browserOpen, {}),
   deviceLaunch: async (): Promise<StudioDeviceLaunchInfo> => await get(routes.deviceLaunch),
   deviceLaunchOpen: async (hostId: string, route: 'auto' | 'cable' = 'auto'): Promise<StudioDeviceLaunchOpenResult> =>
     await request(routes.deviceLaunchOpen, { hostId, route }),

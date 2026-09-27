@@ -29,9 +29,6 @@ async function prepare(options: PrepareStudioHutchHomeOptions): Promise<string> 
       `Tao Studio's isolated Hutch home must differ from the source Hutch home: ${sourceHome}.`,
     )
   }
-  if (!await FS.isDirectory(sourceHome)) {
-    Errors.throwHostEnvironment(`The Hutch home to isolate does not exist: ${sourceHome}.`)
-  }
 
   const metadata = await readMetadata(targetHome)
   if (metadata?.version === metadataVersion && metadata.sourceHome === sourceHome) {
@@ -44,7 +41,13 @@ async function prepare(options: PrepareStudioHutchHomeOptions): Promise<string> 
   try {
     await FS.remove(temporaryHome)
     await FS.mkdir(FS.dirname(temporaryHome))
-    await (options.copyHome ?? cloneHome)(sourceHome, temporaryHome)
+    if (await FS.isDirectory(sourceHome)) {
+      await (options.copyHome ?? cloneHome)(sourceHome, temporaryHome)
+    } else {
+      // A Nix-provided launcher has no global installation cache on its first invocation.
+      // Its immutable engine stays in the store; native assets populate this writable home.
+      await FS.mkdir(temporaryHome)
+    }
     await resetMutableProjectState(temporaryHome)
     await FS.writeJson(FS.resolvePath('state/store.json', temporaryHome), {
       canonicalRoot: targetHome,
