@@ -6,7 +6,7 @@
 - **Impact:** Device Hub inspection remains unproven through computer use. A fresh task can obtain an approval prompt, but app selection times out after approval, leaving visual navigation acceptance dependent on manual review.
 - **Evidence:** On 2026-09-26, requesting `com.apple.dt.Devices` through the computer-use app selector immediately returned `Computer Use was not approved to use Device Hub`. The Developer's screenshot showed Any App enabled and an empty Always-allowed apps list. The active task reported approval policy `never`, while the generated repository configuration and the system configuration both specified `on-request` with automatic review. The repository generator emits those same values. No computer-use policy override appeared in the inspected repository, user or system configuration; the two inspected local requirements-file locations were absent. These observations identify a session/configuration mismatch, not its source or a proven cause of the missing prompt. Managed remote policy and desktop session overrides remain unexamined.
 - **Workaround:** Use the existing named device install/launch workflows and manual visual review. Installation and successful launch are not UI acceptance.
-- **Proposed change:** First establish whether Device Hub has a responsive visible window, then make one supported inspection attempt after that state change. If the timeout persists, inspect the desktop computer-use diagnostics and the existing macOS Screen Recording and Accessibility grants read-only before proposing a targeted intervention. Separately investigate which layer selected `never` in the earlier task; it did not recur in this fresh task. No repository configuration change is supported by these results. Do not change the sandbox, forge saved approvals, or hand-edit generated configuration. The [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) distinguishes app access policy from normal approval and persistence; an `allow` rule alone grants neither. [Computer-use guidance](https://learn.chatgpt.com/docs/computer-use#permissions-and-approvals) distinguishes application approval from macOS permissions.
+- **Proposed change:** First establish whether Device Hub has a responsive visible window, then make one supported inspection attempt after that state change. If the timeout persists, inspect the desktop computer-use diagnostics and the remaining macOS Device Control and Data Access grant read-only (the former Accessibility permission) before proposing a targeted intervention. Separately investigate which layer selected `never` in the earlier task; it did not recur in this fresh task. No repository configuration change is supported by these results. Do not change the sandbox, forge saved approvals, or hand-edit generated configuration. The [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) distinguishes app access policy from normal approval and persistence; an `allow` rule alone grants neither. [Computer-use guidance](https://learn.chatgpt.com/docs/computer-use#permissions-and-approvals) distinguishes application approval from macOS permissions.
 - **Dependencies:** Desktop session permission controls and user approval; inspect applicable managed policy if the mismatch persists. No configuration changes authorized by this research-only follow-up.
 - **Acceptance:** Establish which layer selected `never`; reproduce an actual app approval prompt with interactive approval enabled; confirm approved Device Hub inspection succeeds; verify a future task can reuse saved approval when selected. Document the smallest required change and its owner, preserving repository sandbox protections.
 - **Source:** Native navigation physical-review follow-up on `feat/native-navigation-implementation`, 2026-09-26.
@@ -31,10 +31,17 @@ at `.artifacts/investigation/device-hub-effective-policy.json`.
    Inventory visibility is not evidence of access to the app's window or its contents.
 5. On the Developer's explicit request to try again, a further `getApp` attempt returned the same
    timeout after 9.676 seconds, with no accessibility state or screenshot. The next proposed check
-   is System Settings → Privacy & Security → Accessibility and Screen Recording for the desktop
-   computer-use helper named in the official guidance. If either permission is disabled, the
-   Developer can enable that specific grant through the normal UI; if both are enabled, leave them
-   unchanged and investigate the timeout. Their current state and the cause remain unverified.
+   was to inspect the two macOS permissions for the desktop computer-use helper. The follow-up
+   screenshot confirms Screen & System Audio Recording is enabled. The remaining check is
+   System Settings → Privacy & Security → Device Control and Data Access. If that grant is disabled,
+   the Developer can enable it through the normal UI; otherwise leave it unchanged and investigate
+   the timeout. The cause remains unverified.
+6. The Developer’s screenshot at 15:24:21 on 2026-09-26 shows the computer-use helper’s screen
+   recording switch enabled. The prior screenshot shows Device Control and Data Access in Privacy
+   & Security; [current macOS 27 guidance](https://learn.microsoft.com/en-us/purview/endpoint-dlp-macos-27-changes#permission-changes-in-macos-27)
+   confirms this replaces the former Accessibility privacy entry. Its grant was not shown.
+   Restarting the desktop app was proposed as the smallest restart experiment, followed by Device
+   Hub if needed; no restart or post-restart access result was observed in this investigation.
 
 ```text
 Computer Use server error -10005: timeoutReached
@@ -47,7 +54,7 @@ Computer Use server error -10005: timeoutReached
 | Machine/user configuration | `/etc/codex/config.toml:6-8` selects `:workspace`, `on-request`, and `auto_review`. Neither it nor the inspected user configuration contains computer-use policy keys; the user configuration contains no approval-policy or reviewer override.                           |
 | Managed policy             | `/etc/codex/requirements.toml`, `~/.codex/requirements.toml`, and `/etc/codex/managed_config.toml` were absent. Cloud requirements and macOS MDM were not inspected; absence of local files does not exclude them. No managed-policy denial was reported by this attempt. |
 | Saved app approval         | The Developer confirmed approval through the normal prompt. Whether Always allow was selected and whether a later task can reuse approval were not established. Consent records were not edited.                                                                          |
-| macOS permissions          | Screen Recording and Accessibility grants were not independently inspected. The timeout does not identify either as its cause, and successful app inventory does not prove either grant.                                                                                  |
+| macOS permissions          | The Developer’s screenshot shows Screen & System Audio Recording enabled for the computer-use helper. Device Control and Data Access remains unverified. A visible enabled switch does not prove successful capture or identify the timeout’s cause.                      |
 
 The [configuration layering documentation](https://learn.chatgpt.com/docs/config-file/config-basic#configuration-precedence)
 explains why file defaults alone cannot establish the active task policy. The
