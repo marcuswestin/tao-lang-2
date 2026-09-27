@@ -1,8 +1,10 @@
+use Clerk from @tao/auth/clerk
 use InstantAuth from @tao/auth/instantdb
 
 // InstantDB stores each entity as an InstantDB namespace, one InstantDB row per row. Push the app's
 // generated schema and permission rules before running it. Signed in with InstantAuth at the same
-// address, the account is the InstantDB user, and the first sign-in creates its Account row.
+// address, or with Clerk through the Clerk client registered with the InstantDB app under
+// ClerkClientName, the account is the InstantDB user, and the first sign-in creates its Account row.
 public
 type InstantDB is datasource with {
    // Accepted for compatibility; namespaces are app-wide, so it does not separate stored rows.
@@ -10,7 +12,8 @@ type InstantDB is datasource with {
    AppId text
    ApiURI text?
    WebsocketURI text?
-   accepts { Session from InstantAuth }
+   ClerkClientName text?
+   accepts { IdentityToken from Clerk, Session from InstantAuth }
    supports { Relations, UniqueFields, AccessRules, FieldUpdates, Migrations Additive }
 
    provider InstantDBProvider from ./InstantDB.ts

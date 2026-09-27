@@ -51,8 +51,8 @@ test('selects the one HNReader lifecycle journey with authored source locations'
   expect(journey.version).toBe(1)
   expect(journey.check.name).toBe('keeps reading history across a relaunch in most-recent order')
   expect(journey.check.source.filePath).toMatch(/Apps\/HNReader\/HNReader\.test\.tao$/u)
-  expect(journey.check.source.range?.start.line).toBe(95)
-  expect(journey.check.run.source.range?.start.line).toBe(96)
+  expect(journey.check.source.range?.start.line).toBe(96)
+  expect(journey.check.run.source.range?.start.line).toBe(97)
   expect(journey.check.steps.map(step => step.kind)).toEqual([
     'press',
     'press',
@@ -89,7 +89,7 @@ test('preflights missing row selection before it sends any host input and report
   const unsupported = failure as HostJourneyUnsupportedCapabilityError
   expect(unsupported.capability).toBe('select')
   expect(unsupported.source.filePath).toMatch(/Apps\/HNReader\/HNReader\.test\.tao$/u)
-  expect(unsupported.source.range?.start.line).toBe(104)
+  expect(unsupported.source.range?.start.line).toBe(105)
   expect(operations).toEqual([])
 })
 

@@ -3,6 +3,7 @@ import { AST, codeProjectRoot, type ParsedFile } from '@parser'
 import { Assert, Errors, FS } from '@shared'
 import type { ValidationResult } from '@validator'
 import { authPolicy } from '../../auth-policy'
+import { storedDataSchemaFile, storedDataSchemas } from '../../stored-data-schema'
 import { BridgeMetadata } from '../../bridge-metadata'
 import {
   compileStudioPreviewManifest,
@@ -171,6 +172,15 @@ function compileReactNative(
       relativePath: 'TaoDataPolicy.json',
       sourcePath: entryPath,
       code: JSON.stringify(authPolicy(dataCatalog.entities, dataCatalog.access), null, 2),
+    })
+  }
+
+  const storedSchemas = dataCatalog === undefined ? undefined : storedDataSchemas(dataCatalog.stores)
+  if (storedSchemas !== undefined && Object.keys(storedSchemas.stores).length > 0) {
+    compiledFiles.push({
+      relativePath: storedDataSchemaFile,
+      sourcePath: entryPath,
+      code: JSON.stringify(storedSchemas, null, 2),
     })
   }
 

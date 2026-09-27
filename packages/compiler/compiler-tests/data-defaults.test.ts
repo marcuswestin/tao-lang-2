@@ -38,10 +38,10 @@ Describe('compiler: data defaults', () => {
     const code = compiled.code.replace(/\s+/g, ' ')
 
     Expect(code).toMatch(
-      /\["Role"\]: \{ kind: 'enum', cases: \["Reader","Editor"\], enumValues: .*?defaultValue: "Reader",/,
+      /\["Role"\]: \{ kind: "enum", cases: \["Reader","Editor"\], enumValues: .*?defaultValue: "Reader",/,
     )
     Expect(code).toMatch(
-      /\["OptionalRole"\]: \{ kind: 'enum', cases: \["Reader","Editor"\], enumValues: .*?optional: true, \}/,
+      /\["OptionalRole"\]: \{ kind: "enum", cases: \["Reader","Editor"\], optional: true, enumValues: \(\) => _Scope\.Role, \}/,
     )
     Expect(code).toMatch(/\["Public"\]: \{ kind: "boolean", defaultValue: true,/)
     Expect(code).toMatch(/\["Pinned"\]: \{ kind: "boolean", defaultValue: false,/)

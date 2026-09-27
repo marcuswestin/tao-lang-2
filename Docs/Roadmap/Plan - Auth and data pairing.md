@@ -1,6 +1,7 @@
 # Plan — Auth and data pairing
 
-Status: decided 2026-09-27; implementation started. The first target is the InstantDB datasource
+Status: decided 2026-09-27; steps 1–4 implemented, step 5 except a Clerk journey, and step 6 run
+by the Developer on a phone. The first target is the InstantDB datasource
 signed in through Clerk and through InstantDB's own email-code auth, with no Tao-hosted server.
 [Plan — Auth and account data](<Plan - Auth and account data.md>) remains the owner of the account
 semantics this plan builds on; this plan owns how an auth provider and a datasource pair.
@@ -127,6 +128,27 @@ trimmed by the language slice:
 6. **Hosted demo**: the Developer's Instant Cloud app with the Clerk client registered and rules
    pushed; browser and phone acceptance.
 
+## Progress
+
+- Steps 1–4 are implemented, and both sign-ins reach InstantDB: `Session from InstantAuth` and
+  `IdentityToken from Clerk`, the second through the app's registered Clerk client.
+- The compiler emits each synced store's stored schema as `TaoDataSchema.json`, and `tao instantdb
+  push` reads it instead of rebuilding the schema from the data catalogue.
+- `AuthReviewInstant` runs as a Tao journey against local InstantDB
+  (`instantdb-tests/auth-review-live.test.ts`): email-code sign-in, profile, an owned note that
+  syncs, and sign-out. Owner isolation, restoration, and concurrent first sign-in are the provider
+  live tests' (`instantdb-live`, `InstantAuth-live`, `InstantDB-sign-in-live`).
+- `AuthReviewInstantClerk` has no local journey: a local InstantDB cannot verify a Clerk token
+  without a real Clerk instance, so its pairing is covered by unit tests and the hosted run.
+- Hosted: on 2026-09-27 the Developer ran both variants against the Instant Cloud app on a physical
+  iPhone and reported both working. No hosted run is recorded beyond that report, and the admin-query
+  checks of the local acceptance have not been repeated there.
+- WordFlower binds the per-row adapter. Its hosted Instant app still holds the old snapshot schema;
+  pushing WordFlower's schema there, and abandoning the snapshot data, is a Developer action below.
+- What remains was deferred on 2026-09-27 to finish before MVP: the work is `A20` in
+  `Docs/MVP Roadmap/Agent MVP Roadmap.md`, and the open questions are `R15` in
+  `Docs/MVP Roadmap/Developer MVP Roadmap.md`.
+
 ## Acceptance
 
 - Existing Auth Review journeys pass unchanged on TestAuth/Memory, LocalAuth/Reference, and
@@ -143,7 +165,13 @@ trimmed by the language slice:
 - Choose or create the Instant Cloud app and store its app ID and admin token in the repository
   secret store.
 - In Clerk, add `email` and `email_verified` claims to the session token (InstantDB reads
-  `email_verified` as a boolean); register the Clerk publishable key as an InstantDB auth client.
+  `email_verified` as a boolean).
+- In the Instant app's Auth settings, add a Clerk client named `clerk` with the development
+  publishable key. `AuthReviewInstantClerk` signs in through that name (`ClerkClientName`), and
+  `just instant-review --clerk` runs it with the publishable key from the secret store.
+- Push WordFlower's schema and rules to its Instant app (`tao instantdb push` on
+  `Apps/WordFlower/1 - Current/WordFlower.tao` with `--app WordFlowerInstantDB` and that app's admin
+  token in `INSTANT_APP_ADMIN_TOKEN`); the rows the snapshot adapter stored there are not migrated.
 
 ## InstantDB facts this plan rests on
 

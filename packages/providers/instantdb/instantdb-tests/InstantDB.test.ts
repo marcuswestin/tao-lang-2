@@ -388,7 +388,7 @@ Describe('InstantDB sign-in', () => {
       // Release drops the lease authenticate took and never signs InstantDB out.
       await authentication.release!(new AbortController().signal)
       Expect(sdk.core().shutdowns).toBe(1)
-      Expect(await sdk.core().getAuth()).toEqual({ id: subject })
+      Expect(await sdk.core().getAuth()).toMatchObject({ id: subject })
     },
   )
 
@@ -468,6 +468,182 @@ Describe('InstantDB sign-in', () => {
   })
 })
 
+Describe('InstantDB sign-in with Clerk', () => {
+  const clerkSubject = 'user_2clerk'
+  const instantUser = uuid(70)
+  const accountQuery = { accounts: { $: { fields: ['id'], where: { id: instantUser } } } }
+
+  /** signIn authenticates with a Clerk IdentityToken proof, as the runtime passes it. */
+  function signIn(
+    sdk: ReturnType<typeof fakeInstantSDK>,
+    appId: string,
+    options: {
+      configuration?: Record<string, unknown>
+      provider?: string
+      signal?: AbortSignal
+      token?: string
+    } = {},
+  ) {
+    const proofs: string[] = []
+    const context: TR.DataAuthenticationContext = {
+      configuration: options.configuration ?? { AppId: appId, ClerkClientName: 'clerk' },
+      schema: notesSchema,
+      principal: { issuer: 'https://clerk.example.test', subject: clerkSubject },
+      provider: options.provider ?? 'Clerk',
+      proof: (async (kind: string) => {
+        proofs.push(kind)
+        return {
+          issuer: 'https://clerk.example.test',
+          kind: 'IdentityToken',
+          provider: 'Clerk',
+          subject: clerkSubject,
+          token: options.token ?? 'clerk-session-token',
+        }
+      }) as TR.DataAuthenticationContext['proof'],
+      signal: options.signal ?? new AbortController().signal,
+    }
+    return { proofs, resolving: InstantDBProvider(() => sdk.instantSDK as never).authenticate!(context) }
+  }
+
+  async function answerAccountLookup(sdk: ReturnType<typeof fakeInstantSDK>, rows: readonly object[]) {
+    await until(() => sdk.cores.length > 0 && sdk.core().queries.length > 0, { description: 'the account lookup' })
+    Expect(sdk.core().queries).toEqual([accountQuery])
+    sdk.latestSubscription()({ data: { accounts: rows } })
+  }
+
+  Test(
+    'signs in through the registered Clerk client, resolves to the InstantDB user, and signs out on release',
+    async () => {
+      const sdk = fakeInstantSDK({ idTokenUser: instantUser })
+      const { proofs, resolving } = signIn(sdk, nextAppId())
+      await answerAccountLookup(sdk, [])
+      const authentication = await resolving
+      Expect(proofs).toEqual(['IdentityToken'])
+      Expect(sdk.core().idTokenSignIns).toEqual([{ clientName: 'clerk', idToken: 'clerk-session-token' }])
+      // The account is the InstantDB user, not the Clerk subject.
+      Expect(authentication.accountId).toBe(instantUser)
+      Expect(sdk.core().transactions).toEqual([[
+        { args: {}, id: instantUser, namespace: 'accounts', op: 'create' },
+        { args: { $user: instantUser }, id: instantUser, namespace: 'accounts', op: 'link' },
+      ]])
+
+      // Clerk knows nothing of InstantDB, so the session this datasource made ends with its release.
+      await authentication.release!(new AbortController().signal)
+      Expect(sdk.core().signOuts).toBe(1)
+      Expect(sdk.core().shutdowns).toBe(1)
+      Expect(await sdk.core().getAuth()).toBeNull()
+      await authentication.release!(new AbortController().signal)
+      Expect(sdk.core().signOuts).toBe(1)
+    },
+  )
+
+  Test('keeps the lease through a failed sign-out, so a retried release can finish it', async () => {
+    const sdk = fakeInstantSDK({ idTokenUser: instantUser })
+    const { resolving } = signIn(sdk, nextAppId())
+    await answerAccountLookup(sdk, [{ id: instantUser }])
+    const authentication = await resolving
+    sdk.core().failNextSignOutWith(new Errors.HostEnvironmentError('storage unavailable'))
+    await Expect(authentication.release!(new AbortController().signal)).rejects.toThrow('storage unavailable')
+    Expect(sdk.core().shutdowns).toBe(0)
+    await authentication.release!(new AbortController().signal)
+    Expect(sdk.core().signOuts).toBe(2)
+    Expect(sdk.core().shutdowns).toBe(1)
+  })
+
+  Test('refuses a missing client name or an unknown auth provider before touching the client', async () => {
+    const sdk = fakeInstantSDK()
+    const appId = nextAppId()
+    const unnamed = signIn(sdk, appId, { configuration: { AppId: appId } })
+    await Expect(unnamed.resolving).rejects.toThrow(
+      'Datasource InstantDB signs in with Clerk through a Clerk client registered with the InstantDB app; set ClerkClientName to the name it was registered under.',
+    )
+    Expect(unnamed.proofs).toEqual([])
+    await Expect(signIn(sdk, appId, { provider: 'LocalAuth' }).resolving).rejects.toThrow(
+      'InstantDB cannot sign in with LocalAuth. Use InstantAuth or Clerk.',
+    )
+    Expect(sdk.inits).toEqual([])
+  })
+
+  Test('names a refused token as a client problem and a network failure as a failed sign-in', async () => {
+    const refused = fakeInstantSDK({ idTokenRefusal: { body: { message: 'secret' }, status: 400 } })
+    const rejecting = signIn(refused, nextAppId()).resolving
+    await Expect(rejecting).rejects.toThrow(
+      "InstantDB refused the Clerk sign-in. Check that the InstantDB app has a Clerk client named 'clerk' for this Clerk instance, then sign in again.",
+    )
+    await Expect(rejecting).rejects.toBeInstanceOf(Errors.UserInputError)
+    // Nothing signed in, so there is nothing to sign out; the lease is still returned.
+    Expect(refused.core().signOuts).toBe(0)
+    Expect(refused.core().shutdowns).toBe(1)
+
+    const offline = fakeInstantSDK({ idTokenRefusal: new TypeError('Network request failed') })
+    const failing = signIn(offline, nextAppId()).resolving
+    await Expect(failing).rejects.toThrow(/^InstantDB sign-in failed\.$/)
+    await Expect(failing).rejects.toBeInstanceOf(Errors.HostEnvironmentError)
+  })
+
+  Test('signs out a Clerk sign-in whose account setup failed or was cancelled', async () => {
+    const refused = fakeInstantSDK({ idTokenUser: instantUser })
+    const losing = signIn(refused, nextAppId()).resolving
+    await until(() => refused.cores.length > 0, { description: 'the shared client' })
+    refused.core().failTransactionsWith({ body: { type: 'permission-denied' }, status: 400 })
+    await answerAccountLookup(refused, [])
+    await Expect(losing).rejects.toThrow(/^InstantDB account setup failed \(permission-denied\)\.$/)
+    Expect(refused.core().signOuts).toBe(1)
+    Expect(refused.core().shutdowns).toBe(1)
+
+    const cancelled = fakeInstantSDK({ idTokenUser: instantUser })
+    const lifetime = new AbortController()
+    const resolving = signIn(cancelled, nextAppId(), { signal: lifetime.signal }).resolving
+    await until(() => cancelled.cores.length > 0 && cancelled.core().queries.length > 0, {
+      description: 'the account lookup',
+    })
+    lifetime.abort()
+    await Expect(resolving).rejects.toThrow('The authentication request was cancelled.')
+    Expect(cancelled.core().signOuts).toBe(1)
+    Expect(cancelled.core().shutdowns).toBe(1)
+  })
+
+  Test('signs in one at a time on a shared client and ends only the session each one opened', async () => {
+    let answerSignIns!: () => void
+    const sdk = fakeInstantSDK({ idTokenGate: new Promise<void>(resolve => (answerSignIns = resolve)) })
+    const appId = nextAppId()
+    const account = (userId: string) => ({ data: { accounts: [{ id: userId }] } })
+    const released = new AbortController().signal
+
+    // A newer sign-in waits for a stale one still in flight, whose answer would otherwise land on
+    // top of its own; the stale one, cancelled, ends only the session it opened.
+    const lifetime = new AbortController()
+    const stale = signIn(sdk, appId, { signal: lifetime.signal, token: 'stale-token' })
+    await until(() => sdk.cores.length > 0 && sdk.core().idTokenSignIns.length > 0, {
+      description: 'the stale sign-in',
+    })
+    const current = signIn(sdk, appId, { token: 'current-token' })
+    await until(() => sdk.inits.length === 2, { description: 'the current lease' })
+    Expect(sdk.core().idTokenSignIns).toHaveLength(1)
+    lifetime.abort()
+    answerSignIns()
+    await Expect(stale.resolving).rejects.toThrow('The authentication request was cancelled.')
+    await until(() => sdk.core().queries.length > 0, { description: 'the current account lookup' })
+    sdk.latestSubscription()(account('user-of-current-token'))
+    const authentication = await current.resolving
+    Expect(sdk.core().idTokenSignIns.map(params => params.idToken)).toEqual(['stale-token', 'current-token'])
+    Expect(authentication.accountId).toBe('user-of-current-token')
+    Expect(sdk.core().signOuts).toBe(1)
+
+    // A later sign-in replaces the session; releasing the replaced one leaves the later one alone.
+    const later = signIn(sdk, appId, { token: 'later-token' })
+    await until(() => sdk.core().queries.length > 1, { description: 'the later account lookup' })
+    sdk.latestSubscription()(account('user-of-later-token'))
+    const replacing = await later.resolving
+    await authentication.release!(released)
+    Expect(sdk.core().signOuts).toBe(1)
+    Expect(await sdk.core().getAuth()).toMatchObject({ id: 'user-of-later-token' })
+    await replacing.release!(released)
+    Expect(sdk.core().signOuts).toBe(2)
+    Expect(sdk.core().shutdowns).toBe(1)
+  })
+})
+
 Describe('InstantDB client registry', () => {
   Test('keys clients by app and endpoints, counts leases, and releases once', () => {
     const sdk = fakeInstantSDK()
@@ -496,8 +672,19 @@ function uuid(n: number): string {
 
 type FakeCore = ReturnType<typeof fakeCore>
 
-/** FakeClientOptions set who a new client is signed in as and what signing in with a refresh token does. */
-type FakeClientOptions = Readonly<{ signedIn?: string; tokenRefusal?: unknown; tokenUser?: string }>
+/**
+ * FakeClientOptions set who a new client is signed in as and what signing in with a refresh token or
+ * an external id token does.
+ */
+type FakeClientOptions = Readonly<{
+  /** idTokenGate holds every id-token sign-in's answer until it settles. */
+  idTokenGate?: Promise<void>
+  idTokenRefusal?: unknown
+  idTokenUser?: string
+  signedIn?: string
+  tokenRefusal?: unknown
+  tokenUser?: string
+}>
 
 function fakeCore(options: FakeClientOptions = {}) {
   const state = {
@@ -508,14 +695,20 @@ function fakeCore(options: FakeClientOptions = {}) {
     signInFailure: (options.tokenRefusal === undefined ? undefined : { error: options.tokenRefusal }) as
       | { error: unknown }
       | undefined,
+    idTokenSignIns: [] as Readonly<{ clientName: string; idToken: string }>[],
+    signOutFailure: undefined as { error: unknown } | undefined,
+    signOuts: 0,
     subscriptions: [] as ((result: unknown) => void)[],
     tokenSignIns: [] as string[],
     transactionFailure: undefined as { error: unknown } | undefined,
     transactions: [] as Chunk[][],
     unsubscribeFailure: undefined as { error: unknown } | undefined,
     unsubscribes: 0,
-    user: (options.signedIn === undefined ? null : { id: options.signedIn }) as { id: string } | null,
+    user: (options.signedIn === undefined ? null : { id: options.signedIn, refresh_token: 'restored' }) as
+      | Readonly<{ id: string; refresh_token: string }>
+      | null,
   }
+  let issued = 0
   return {
     auth: {
       signInWithToken: async (token: string) => {
@@ -523,9 +716,36 @@ function fakeCore(options: FakeClientOptions = {}) {
         if (state.signInFailure !== undefined) {
           throw state.signInFailure.error
         }
-        state.user = { id: options.tokenUser ?? `user-of-${token}` }
+        state.user = { id: options.tokenUser ?? `user-of-${token}`, refresh_token: token }
         return { user: state.user }
       },
+      signInWithIdToken: async (params: Readonly<{ clientName: string; idToken: string }>) => {
+        state.idTokenSignIns.push(params)
+        await options.idTokenGate
+        if (options.idTokenRefusal !== undefined) {
+          throw options.idTokenRefusal
+        }
+        state.user = { id: options.idTokenUser ?? `user-of-${params.idToken}`, refresh_token: `issued-${++issued}` }
+        return { user: state.user }
+      },
+      signOut: async () => {
+        state.signOuts += 1
+        const failure = state.signOutFailure
+        state.signOutFailure = undefined
+        if (failure !== undefined) {
+          throw failure.error
+        }
+        state.user = null
+      },
+    },
+    failNextSignOutWith: (error: unknown) => {
+      state.signOutFailure = { error }
+    },
+    get idTokenSignIns() {
+      return state.idTokenSignIns
+    },
+    get signOuts() {
+      return state.signOuts
     },
     getAuth: async () => state.user,
     queryOnce: async () => ({ data: state.queryOnceResult }),

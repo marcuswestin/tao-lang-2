@@ -7,7 +7,15 @@ import {
 } from './PhysicalIosInstall'
 
 type LeaseInput = Readonly<{ command: string; name: string; repositoryRoot: string }>
-type CommandInput = Readonly<{ args: readonly string[]; command: string; cwd: string | undefined; timeoutMs: number }>
+type CommandInput = Readonly<
+  {
+    args: readonly string[]
+    command: string
+    cwd: string | undefined
+    environment: Platform.ProcessEnv
+    timeoutMs: number
+  }
+>
 
 test('rejects incomplete physical-install requests before device discovery or app build', () => {
   expect(physicalIosInstallInputFailure('', 12345)).toEqual({
@@ -144,6 +152,7 @@ function physicalInstallHarness(
 ) {
   const receipts: unknown[] = []
   const commands: Array<readonly [string, readonly string[], string | undefined]> = []
+  const environments: Platform.ProcessEnv[] = []
   const leases: string[] = []
   const json = new Map<string, unknown>()
   const build = {
@@ -176,6 +185,7 @@ function physicalInstallHarness(
   return {
     build,
     commands,
+    environments,
     leases,
     options: {
       artifactRoot: 'artifacts',
@@ -190,6 +200,7 @@ function physicalInstallHarness(
         },
         command: async (input: CommandInput) => {
           commands.push([input.command, input.args, input.cwd])
+          environments.push(input.environment)
           const exitCode = input.command === 'xcrun' ? options.discoveryExitCode ?? 0 : options.installExitCode ?? 0
           return { args: input.args, command: input.command, exitCode, signal: null, stderr: '', stdout: '' }
         },
@@ -203,6 +214,16 @@ function physicalInstallHarness(
     receipts,
   }
 }
+
+test('passes task-scoped Xcode to both physical discovery and the Expo build without changing process state', async () => {
+  const harness = physicalInstallHarness()
+  const original = Platform.runtimeProcess.env['DEVELOPER_DIR']
+  const environment = { DEVELOPER_DIR: '/Applications/Xcode-beta.app/Contents/Developer' }
+  const receipt = await runPhysicalIosInstall({ ...harness.options, environment, build: async () => harness.build })
+  expect(receipt.status).toBe('installed')
+  expect(harness.environments).toEqual([environment, environment])
+  expect(Platform.runtimeProcess.env['DEVELOPER_DIR']).toBe(original)
+})
 
 test('installs native navigation only on the explicitly discovered physical target and reports installation alone', async () => {
   const harness = physicalInstallHarness({ subject: 'native-navigation' })

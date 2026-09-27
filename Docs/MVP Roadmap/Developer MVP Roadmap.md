@@ -302,3 +302,34 @@ The apps follow §1 and use only `file` and `public`. The other one this pass re
   them.
 - **Decided 2026-09-25:** §1 now names the five visibility modifiers the implementation carries.
   The nine spellings wait until a tranche forces one.
+
+### R15 — What the InstantDB auth pairing still has to decide
+
+The pairing landed with defaults an agent chose on five points; the Developer deferred them on
+2026-09-27, to settle before MVP. `A20` implements the answers.
+
+- [ ] **Before MVP — a project with no `access` rules.** `tao instantdb push` then makes every
+      namespace readable and writable by anyone, and says so (`instantdb-push-command.ts:61`);
+      WordFlower is such a project. Options: keep pushing with the warning, or refuse unless the
+      command is told the data is public. **Recommended:** refuse without an explicit flag, since
+      data made public by mistake cannot be taken back.
+- [ ] **Before MVP — whether an email-code sign-in verifies the email.** InstantAuth's principal
+      carries the InstantDB user's `email` but leaves `emailVerified` unset (`InstantAuth.ts:52`),
+      although the code proves the person reads that inbox. The Clerk pairing ignores an unverified
+      email and keys the InstantDB user by Clerk's subject. Options: set `emailVerified` for code
+      sign-ins, or leave it unset. **Recommended:** set it; the code is the verification.
+- [ ] **Before MVP — guests.** InstantAuth offers email codes only; the guest sign-in in the
+      pairing plan's step 4 is not built. A launch restores whatever user the InstantDB client
+      persisted as signed in, guest or not. Options: build guest sign-in and restore a guest as a
+      signed-in guest that an email sign-in later upgrades, or restore only users with an email.
+      **Recommended:** restore only users with an email until guest sign-in is designed.
+- [ ] **Before MVP — offline launch with Clerk.** Every Clerk authentication exchanges a fresh Clerk
+      token with InstantDB, so a relaunch signed in through Clerk cannot open its account data
+      offline, while InstantAuth restores from its persisted session. Options: accept that a
+      Clerk-paired app needs a connection at launch, or reuse the persisted InstantDB session while
+      the Clerk session that made it is still signed in. **Recommended:** reuse it; the same check
+      closes `A20`'s outliving-session gap.
+- [ ] **Before MVP — accounts without a datasource.** An app whose data is all device-local takes
+      the auth principal's subject as its account id (`TR-auth.ts:932`); each local store's custody
+      key also names the issuer. Options: keep the subject, or qualify it by issuer.
+      **Recommended:** keep it; an app has one auth provider, and custody already names the issuer.
