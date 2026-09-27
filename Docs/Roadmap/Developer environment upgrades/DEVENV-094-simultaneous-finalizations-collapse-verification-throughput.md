@@ -28,6 +28,19 @@
   retries are `.artifacts/logs/dev-test/2026-09-26T22-23-47-694Z-43035-99bd2067/summary.json`
   and `.artifacts/logs/dev-test/2026-09-26T22-23-48-592Z-43200-845f1769/summary.json`.
   These are observations under contention, not a measured causal explanation or an admission benchmark.
+  A 2026-09-27 UTC (2026-09-26 local) `verify-changed` in `feat/native-tooling-followup`
+  failed after 812.9s wrapper / 800.6s lane time, with three overlapping lanes and peak load 273.2
+  on 16 CPUs. An earlier run of the repair passed in 74.9s; this later run also included its updated
+  evidence document. Logs: `.artifacts/logs/verify-changed/2026-09-27T00-07-24-205Z-38997-da30868d/summary.json`.
+  Failures included the cache-process lifecycle test's outer 120s deadline, an Expo launcher
+  argument probe returning an empty string, and a Clerk exchange returning 401 instead of 200.
+  The Clerk fixture freezes its clock at creation (`clerk-account.test.ts:305–310`) and issues the
+  late exchange's token with only ten seconds beyond that frozen time (`:73`); the provider verifies
+  against the real clock with zero skew. Expiration is a plausible separate fixture defect, not
+  a captured verifier diagnosis. No cache-retention assertion failed before the lifecycle timeout.
+  Checkout doctor remained usable but itself took 82.0s and observed another lane plus load 224.4.
+  These failures do not establish a Hutch regression or an uncontended scheduling result; their
+  retry disposition must remain separate from the failed run.
 - **Workaround:** Verify when the machine is quiet, or read the `contention` block in
   `summary.json` before treating a slow lane as a regression.
 - **Proposed change:** Admit whole heavy lanes machine-wide in arrival order rather than splitting

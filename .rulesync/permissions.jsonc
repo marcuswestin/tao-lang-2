@@ -168,6 +168,8 @@
           // Pinned native Studio launcher, engine, and runtime release artifacts.
           "hutch.blackboard.sh",
           "electrobun-artifacts.blackboard.sh",
+          // Compiler used to rebuild the pinned native engine with its reviewed transport patch.
+          "ziglang.org",
           "expo.dev",
           "*.expo.dev",
           "*.expo.io",

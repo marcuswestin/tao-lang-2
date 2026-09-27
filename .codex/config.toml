@@ -83,6 +83,7 @@ enabled = true
 "repo1.maven.org" = "allow"
 "swcdn.apple.com" = "allow"
 "swdist.apple.com" = "allow"
+"ziglang.org" = "allow"
 
 [permissions.tao-workspace]
 extends = ":workspace"
@@ -138,6 +139,7 @@ allow_local_binding = true
 "repo1.maven.org" = "allow"
 "swcdn.apple.com" = "allow"
 "swdist.apple.com" = "allow"
+"ziglang.org" = "allow"
 
 [permissions.tao-native]
 extends = "tao-workspace"

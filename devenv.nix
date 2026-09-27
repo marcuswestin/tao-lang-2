@@ -6,7 +6,7 @@ let
   # Bun 1.4.2 fixes the compiled-binary signature failure on macOS 27. Keep the
   # rest of the toolchain on its existing nixpkgs pin.
   bunPkg = (import inputs.bun-nixpkgs { system = pkgs.stdenv.system; }).bun;
-  hutchPkg = pkgs.callPackage ./nix/hutch.nix { };
+  hutchPkg = pkgs.callPackage ./nix/hutch.nix { nodejs = nodePkg; };
 in
 {
   name = "tao-lang";
