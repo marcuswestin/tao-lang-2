@@ -24,26 +24,49 @@ folder
 design WordFlowerDesign {
    colors {
       // A warm paper palette keeps the writing surface quiet while the green accent gives actions and
-      // selection a recognizable WordFlower voice.
-      canvas #f4f2ec
-      surface #fffdf8
-      surfaceRaised #ffffff
-      ink #172019
-      inkMuted #647067
-      accent #3f7657
-      accentStrong #28563d
-      accentSoft #e1ede4
-      line #d9e0da
-      danger #a43d3d
-      dangerSoft #f8e6e3
-      onAccent #ffffff
+      // selection a recognizable WordFlower voice. Its night twin keeps the same roles on a deep green.
+      canvasLight #f4f2ec
+      surfaceLight #fffdf8
+      surfaceRaisedLight #ffffff
+      inkLight #172019
+      inkMutedLight #647067
+      accentLight #3f7657
+      accentStrongLight #28563d
+      accentSoftLight #e1ede4
+      lineLight #d9e0da
+      dangerLight #a43d3d
+      dangerSoftLight #f8e6e3
+      onAccentLight #ffffff
       canvasDark #101612
+      surfaceDark #18201a
       surfaceRaisedDark #202a22
       inkDark #edf3ee
+      inkMutedDark #a7b4aa
+      accentDark #8fbea0
+      accentStrongDark #b2d6bd
+      accentSoftDark #26382c
       lineDark #34453a
+      dangerDark #ef9189
+      dangerSoftDark #412724
+      onAccentDark #102016
 
-      // A family and derived colors: `schemeAccent.20` is a shade, and the scheme entries resolve
-      // per frame from the person's light or dark setting.
+      // The semantic names every bundle spells resolve per frame from the person's light or dark
+      // setting, so no bundle needs its own dark entry.
+      canvas when Scheme is Dark canvasDark / not canvasLight
+      surface when Scheme is Dark surfaceDark / not surfaceLight
+      surfaceRaised when Scheme is Dark surfaceRaisedDark / not surfaceRaisedLight
+      ink when Scheme is Dark inkDark / not inkLight
+      inkMuted when Scheme is Dark inkMutedDark / not inkMutedLight
+      accent when Scheme is Dark accentDark / not accentLight
+      accentStrong when Scheme is Dark accentStrongDark / not accentStrongLight
+      accentSoft when Scheme is Dark accentSoftDark / not accentSoftLight
+      line when Scheme is Dark lineDark / not lineLight
+      danger when Scheme is Dark dangerDark / not dangerLight
+      dangerSoft when Scheme is Dark dangerSoftDark / not dangerSoftLight
+      onAccent when Scheme is Dark onAccentDark / not onAccentLight
+
+      // A family and derived colors: `schemeAccent.20` is a shade, and the scheme entries spell the
+      // same per-frame choice out explicitly.
       schemeAccent accent {
          20 accentSoft,
          60 accentStrong
