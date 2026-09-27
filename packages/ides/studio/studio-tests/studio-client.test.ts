@@ -2469,6 +2469,23 @@ Test('Studio review keeps a replay outcome across a render for the revision the 
   }, manifest)).toBeUndefined()
 })
 
+Test('Studio review keeps a cell ready across a render for the revision its frame already applied', () => {
+  // A cell without a journey is ready once its frame acknowledges applying it, which the frame does
+  // once per revision; a render that reset it to pending left review waiting on it for good.
+  const preview = previewConnection('preview-applied', 'novel', { postMessage() {} })
+  const identity = preview.cellIdentity!
+  const manifest = { compileRevision: identity.compileRevision, manifestRevision: identity.manifestRevision }
+  Expect(StudioReviewDom.retainedApplied(preview, manifest)).toBe(false)
+  preview.appliedIdentity = { identity, previewInstanceId: preview.previewInstanceId }
+  Expect(StudioReviewDom.retainedApplied(preview, manifest)).toBe(true)
+  Expect(StudioReviewDom.retainedApplied(preview, { ...manifest, manifestRevision: 'newer' })).toBe(false)
+  Expect(StudioReviewDom.retainedApplied({ ...preview, previewInstanceId: 'remounted' }, manifest)).toBe(false)
+  Expect(StudioReviewDom.retainedApplied({
+    ...preview,
+    cellIdentity: { ...identity, cellRevision: identity.cellRevision + 1 },
+  }, manifest)).toBe(false)
+})
+
 Test('Studio command palette indexes files, views, grouped scenarios, commands, and insertions', () => {
   const manifest = {
     project: { appName: 'Garden', entryPath: 'Garden.tao', root: '/workspace' },

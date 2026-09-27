@@ -114,6 +114,27 @@ export const StudioReviewDom = {
     }
     return result
   },
+  /**
+   * Whether a cell rendered again still shows what its frame last acknowledged applying. The frame
+   * acknowledges each cell revision once, so a render that reset such a cell to pending would leave it
+   * pending for good; a newer revision, manifest, or frame instance reads as pending until acknowledged.
+   */
+  retainedApplied(
+    connection: Pick<StudioPreviewConnection, 'appliedIdentity' | 'cellIdentity' | 'previewInstanceId'>,
+    manifest: Pick<StudioPreviewManifestV2, 'compileRevision' | 'manifestRevision'>,
+  ): boolean {
+    const identity = connection.cellIdentity
+    const applied = connection.appliedIdentity
+    return identity !== undefined
+      && applied !== undefined
+      && applied.previewInstanceId === connection.previewInstanceId
+      && applied.identity.cellId === identity.cellId
+      && applied.identity.cellRevision === identity.cellRevision
+      && applied.identity.compileRevision === identity.compileRevision
+      && applied.identity.manifestRevision === identity.manifestRevision
+      && identity.compileRevision === manifest.compileRevision
+      && identity.manifestRevision === manifest.manifestRevision
+  },
   status(frame: HTMLElement, status: 'failed' | 'pending' | 'ready', error?: string): void {
     frame.dataset['taoReviewStatus'] = status
     if (error === undefined) {

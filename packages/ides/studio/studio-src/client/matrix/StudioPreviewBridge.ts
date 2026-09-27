@@ -436,6 +436,7 @@ async function receivePreviewApplied(
   }
   if (identity !== undefined) {
     preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)
+    preview.appliedIdentity = { identity, previewInstanceId: preview.previewInstanceId }
   }
   if (preview.frame !== undefined && StudioReviewDom.appliedReady(preview.journeyReplayStatus)) {
     StudioReviewDom.status(preview.frame, 'ready')

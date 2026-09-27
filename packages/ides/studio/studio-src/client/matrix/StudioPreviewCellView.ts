@@ -93,7 +93,10 @@ export function renderCellPreview(
     frame.dataset['taoReviewEnvironment'] = review.environment
     frame.dataset['taoReviewRenderInputs'] = review.renderInputs
   }
-  if (connection.journeyReplayStatus === 'settled') {
+  if (
+    connection.journeyReplayStatus === 'settled'
+    || (connection.journeyReplayStatus === undefined && StudioReviewDom.retainedApplied(connection, manifest))
+  ) {
     StudioReviewDom.status(frame, 'ready')
   } else if (connection.journeyReplayStatus === 'failed') {
     StudioReviewDom.status(frame, 'failed', replayed?.error)
