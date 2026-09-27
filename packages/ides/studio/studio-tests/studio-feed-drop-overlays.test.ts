@@ -1,4 +1,5 @@
 import { Expect, Test } from '@shared/test'
+import { type StudioPreviewWiringDeps, wireStudioPreviews } from '../studio-src/client/app/StudioPreviewWiring'
 import { mountFeedDropOverlay } from '../studio-src/client/matrix/StudioFeedDropOverlays'
 import type { StudioPreviewConnection } from '../studio-src/client/matrix/StudioPreviewConnection'
 
@@ -6,7 +7,7 @@ const payload = { kind: 'field', entity: 'Story', rowId: 'typical', path: ['Titl
 const transfer = {
   types: ['application/x-tao-studio-feed'],
   dropEffect: 'none',
-  getData: () => JSON.stringify(payload),
+  getData: (mime: string) => mime === 'application/x-tao-studio-feed' ? JSON.stringify(payload) : '',
 }
 
 function fixture() {
@@ -129,6 +130,37 @@ Test('Feed overlay releases hit testing on cancellation, external drop and dispo
     Expect(f.host.dataset['feedDragging']).toBeUndefined()
     Expect(f.emit(f.host, 'drop').defaultPrevented).toBe(false)
     Expect(f.messages).toEqual([])
+  } finally {
+    f.dispose()
+  }
+})
+
+Test('Feed and palette listeners on the same canvas route only their own drop MIME', () => {
+  const f = fixture()
+  const status = { dataset: { state: 'compiled' }, textContent: 'Ready' }
+  let mutations = 0
+  wireStudioPreviews({
+    activePreview: { subscribe() {}, reconcile() {}, current: () => undefined },
+    session: { activeFile: () => undefined },
+    preview: f.host,
+    status,
+    mutations: { submitLocal: () => mutations++ },
+  } as unknown as StudioPreviewWiringDeps)
+  try {
+    f.emit(f.document, 'dragstart')
+    f.emit(f.host, 'drop')
+    Expect(f.messages).toHaveLength(1)
+    Expect(status).toEqual({ dataset: { state: 'compiled' }, textContent: 'Ready' })
+    f.emit(f.host, 'drop', { dataTransfer: { types: ['text/plain'], getData: () => 'external text' } })
+    Expect(status.textContent).toBe('Ready')
+    f.emit(f.host, 'drop', {
+      dataTransfer: { types: ['application/x-tao-studio-palette'], getData: () => '{invalid' },
+    })
+    Expect(status).toEqual({
+      dataset: { state: 'error' },
+      textContent: 'Studio could not read the dropped palette item.',
+    })
+    Expect(mutations).toBe(0)
   } finally {
     f.dispose()
   }

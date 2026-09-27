@@ -52,7 +52,7 @@ export async function referenceTest(instant?: AccountServerOptions['instant']) {
     storageFailed: false,
     storageLimit: 16 * 1024 * 1024,
     failDataRead: false,
-    beforePost: undefined as (() => Promise<void>) | undefined,
+    beforePost: undefined as ((transaction: AccountProtocol.Transaction) => Promise<void>) | undefined,
     beforeStorage: undefined as (() => Promise<void>) | undefined,
     acquireCheckpoint: undefined as ReferenceHost['acquireCheckpoint'],
     vault: new Map<string, string>(),
@@ -138,7 +138,7 @@ export async function referenceTest(instant?: AccountServerOptions['instant']) {
             Errors.throwHostEnvironment('Test initial fill is offline.')
           }
           if (options?.method === 'POST') {
-            await test.beforePost?.()
+            await test.beforePost?.(JSON.parse(String(options.body)) as AccountProtocol.Transaction)
           }
           return await fetch(input, options)
         },

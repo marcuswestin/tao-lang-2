@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { Errors, FS } from '@shared'
 import { act } from '@testing-library/react-native'
 import { renderCompiledApp } from './render-app'
 import type { RuntimeApp } from './RuntimeApp'
@@ -14,16 +14,42 @@ let testRunRoot: Promise<string> | undefined
 /** compileAndRenderApp compiles a selected Tao app path, renders it, and returns the test screen. */
 export async function compileAndRenderApp(
   appPath: string,
-  options: { appName?: string } = {},
+  options: { appName?: string; signal?: AbortSignal } = {},
 ): Promise<RuntimeApp.Screen> {
-  const screen = renderCompiledApp(await compileAppForTest(appPath, options))
-  // Navigation restoration intentionally gates the first painted tree on its host-storage read.
-  await act(async () => {
-    await Promise.resolve()
-    await Promise.resolve()
-    await new Promise<void>(resolve => queueMicrotask(resolve))
-  })
-  return screen
+  const assertActive = () => {
+    if (options.signal?.aborted) {
+      throw Errors.abortError('The runtime test ended before its app was ready.')
+    }
+  }
+  assertActive()
+  const compiled = await compileAppForTest(appPath, options)
+  assertActive()
+  const screen = renderCompiledApp(compiled)
+  const unmount = screen.unmount
+  let disposed = false
+  const abort = () => screen.unmount()
+  screen.unmount = () => {
+    options.signal?.removeEventListener('abort', abort)
+    if (!disposed) {
+      disposed = true
+      unmount()
+    }
+  }
+  options.signal?.addEventListener('abort', abort, { once: true })
+  try {
+    assertActive()
+    // Navigation restoration intentionally gates the first painted tree on its host-storage read.
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+      await new Promise<void>(resolve => queueMicrotask(resolve))
+    })
+    assertActive()
+    return screen
+  } catch (error) {
+    screen.unmount()
+    throw error
+  }
 }
 
 async function compileAppForTest(

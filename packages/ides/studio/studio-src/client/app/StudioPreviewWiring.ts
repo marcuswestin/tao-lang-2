@@ -103,6 +103,9 @@ export function wireStudioPreviews(deps: StudioPreviewWiringDeps): (preview: Stu
     }
   })
   deps.preview.addEventListener('drop', event => {
+    if (!event.dataTransfer?.types.includes(studioPaletteMime)) {
+      return
+    }
     const item = StudioPaletteTransfer.parse(event.dataTransfer?.getData(studioPaletteMime) ?? '')
     const identity = currentSourceIdentity(handshake, activePreview.current(), session.activeFile())
     if (item === undefined) {

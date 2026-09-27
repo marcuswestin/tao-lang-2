@@ -474,6 +474,13 @@ data Groceries / Grocery {
   becoming something to sync. A stored `relation` may not cross the boundary: the two stores are
   separate, so a relation between them could not resolve, and it is diagnosed where it is written;
   `reference` is the link that may cross.
+- **Authenticated `local only` data belongs to the signed-in account** (Developer decision,
+  2026-09-27). Device-local describes where it is stored, not who shares it. Each app/account
+  has its own durable local store; switching accounts or signing out removes access to the old
+  account's rows, and signing back into that same account restores its local data. In-flight
+  work retains its original account ownership and must not appear in another account's store.
+  Apps without authentication retain their existing device-local behavior. This does not grant
+  ordinary Local datasources authenticated server authority.
 - **`unique`, `index`, `search`, and `order by` are declarative storage facts** stated on the entity,
   not preflight checks written in UI code:
 

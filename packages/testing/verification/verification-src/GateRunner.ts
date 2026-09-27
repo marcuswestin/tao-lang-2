@@ -302,13 +302,28 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   let verifiedGenerated: GeneratedEvidenceRecord | undefined
   let snapshot: Promise<TreeFingerprint | undefined> = Promise.resolve(startingTree)
   let generatedSnapshot: Promise<GeneratedEvidenceRecord | undefined> = Promise.resolve(undefined)
+  let prepareRelease: Promise<void> | undefined
+  let guiRelease: Promise<void> | undefined
+  const releasePrepare = () => {
+    prepareRelease ??= Promise.all([snapshot, generatedSnapshot]).catch(() => undefined).then(async () =>
+      await prepareLease?.release()
+    )
+    // Observe early rejection immediately; final cleanup still awaits and propagates it.
+    void prepareRelease.catch(() => undefined)
+    return prepareRelease
+  }
+  const releaseGui = () => {
+    guiRelease ??= guiLease?.release() ?? Promise.resolve()
+    void guiRelease.catch(() => undefined)
+    return guiRelease
+  }
 
   const { contention, result } = await runUnderLane(async () => {
     const finishedPrepare = new Set<string>()
     const finishedGui = new Set<string>()
     const onPrepareFinished = () => {
       if (options.greenTree === undefined) {
-        void prepareLease?.release()
+        void releasePrepare()
         return
       }
       // Mutators intentionally rewrite the tree. Snapshot only once they have all settled, so a
@@ -321,9 +336,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       // Not `void snapshot.finally(...)`: that chain rejects with the snapshot and nothing is
       // listening on it, which is an unhandled rejection rather than a release. The rejection
       // itself is answered where the snapshot is awaited, below.
-      void Promise.all([snapshot, generatedSnapshot]).catch(() => undefined).then(async () =>
-        await prepareLease?.release()
-      )
+      void releasePrepare()
     }
     const graphResult = await WorkGraph.run(states, {
       env: graphEnvironment(machineLane.id, options.greenTree?.noCache === true),
@@ -343,7 +356,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
           if (finishedGui.size === guiLeaseNames.size) {
             // Released the moment this run's own gui nodes are done, not when the whole lane is —
             // the CPU-bound work packed around them may run for a long time after.
-            void guiLease?.release()
+            void releaseGui()
           }
         }
       },
@@ -377,7 +390,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     if (guiLeaseNames.size > 0 && finishedGui.size < guiLeaseNames.size) {
       // Same case as the prepare phase above: an interrupted or dependency-skipped run never emitted
       // every gui node's completion, so nothing else would release the lease.
-      void guiLease?.release()
+      void releaseGui()
     }
     await liveArtifacts.finish()
     await reporter.finish()
@@ -398,12 +411,15 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     // without waiting hands a peer the prepare lock mid-hash, and its fixers then rewrite the tree
     // into a hash describing a state that never existed. The early release above is what keeps the
     // lock from being held for the whole read-only phase; this one is only the backstop.
-    await Promise.all([snapshot, generatedSnapshot]).catch(() => undefined)
-    await prepareLease?.release()
+    const releases = await Promise.allSettled([releasePrepare(), releaseGui()])
     // Backstop for the same reason as the prepare lock's: a throw between acquiring the gui lease
     // and either release above running must not leave a crashed lane holding the window server
     // against every other worktree and standalone recipe sharing it.
-    await guiLease?.release()
+    for (const release of releases) {
+      if (release.status === 'rejected') {
+        throw release.reason
+      }
+    }
   })
 
   verifiedTree = await snapshot

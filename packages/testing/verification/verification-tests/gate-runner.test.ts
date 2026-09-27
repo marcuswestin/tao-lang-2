@@ -1,5 +1,5 @@
-import { FS } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, Test, until } from '@shared/test'
+import { Errors, FS } from '@shared'
+import { Deferred, Describe, Expect, mkTestDir, settle, Test, testOverrideSlot, until } from '@shared/test'
 import { runGates } from '../verification-src/GateRunner'
 import type { GeneratedEvidence, GeneratedOutput } from '../verification-src/GeneratedEvidence'
 import { GreenTree } from '../verification-src/GreenTree'
@@ -9,6 +9,86 @@ import { classifyFailure, formatGateSummary, gateExitCode } from '../verificatio
 import { WorkGraph } from '../verification-src/WorkGraph'
 
 type GateScript = Record<string, { exitCode: number; output: string }>
+
+const resourceAcquisition = testOverrideSlot<typeof MachineLanes.acquireResource>({
+  read: () => MachineLanes.acquireResource,
+  write: value => Object.defineProperty(MachineLanes, 'acquireResource', { value }),
+})
+
+Describe('gate release lifetime', () => {
+  Test('observes early release failure and waits for both owned cleanups before returning it', async () => {
+    const root = await mkTestDir('tao-gate-release-')
+    const completeRead = Deferred()
+    const completeGui = Deferred()
+    const completePrepare = Deferred()
+    const started: string[] = []
+    const released: string[] = []
+    const original = MachineLanes.acquireResource
+    const failure = new Errors.HostEnvironmentError('controlled prepare release failure')
+    const restore = resourceAcquisition.install(async options => {
+      const lease = await original(options)
+      if (options.repositoryRoot !== root) {
+        return lease
+      }
+      return {
+        ...lease,
+        release: async () => {
+          started.push(options.name)
+          await (options.name === 'gui' ? completeGui.promise : completePrepare.promise)
+          await lease.release()
+          released.push(options.name)
+          if (options.name !== 'gui') {
+            throw failure
+          }
+        },
+      }
+    })
+    let finished = false
+    const run = runGates({
+      gates: ['_fix-dprint', 'studio-canary', '_typecheck'],
+      jobs: 8,
+      machineCpuCount: 8,
+      machineLoadAverage: IDLE_MACHINE,
+      repositoryRoot: root,
+      registryRoot: FS.resolvePath('registry', root),
+      logRoot: FS.resolvePath('logs', root),
+      runGate: async name => {
+        if (name === '_typecheck') {
+          await completeRead.promise
+        }
+        return { exitCode: 0, output: '' }
+      },
+    }).then(() => {
+      finished = true
+      return undefined
+    }, error => {
+      finished = true
+      return error
+    })
+    try {
+      await until(() => started.length >= 2)
+      completePrepare.resolve()
+      await until(() => released.includes('verify-prepare'))
+      // Leave the graph open through rejection delivery, proving early failure is observed.
+      await settle()
+      Expect(finished).toBe(false)
+      completeRead.resolve()
+      await settle()
+      Expect(finished).toBe(false)
+      completeGui.resolve()
+      Expect(await run).toBe(failure)
+      Expect(started.toSorted()).toEqual(['gui', 'verify-prepare'])
+      Expect(released.toSorted()).toEqual(['gui', 'verify-prepare'])
+    } finally {
+      completeRead.resolve()
+      completePrepare.resolve()
+      completeGui.resolve()
+      await run
+      restore()
+      await FS.remove(root)
+    }
+  })
+})
 
 /**
  * IDLE_MACHINE is the precondition these tests have always meant. A run's contention verdict turns

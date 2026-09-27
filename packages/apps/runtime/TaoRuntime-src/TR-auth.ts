@@ -480,7 +480,7 @@ export class RuntimeAuthScope {
       }
       return cleaned
         ? outcome
-        : { status: 'error', message: 'Signed out. Some local account data could not be removed.' }
+        : { status: 'error', message: 'Signed out. Local account data cleanup could not be completed.' }
     } catch {
       await cleanup
       return this.isCurrent(operation.generation)
@@ -1185,10 +1185,28 @@ export class RuntimeAuthScope {
             },
           }
           : undefined
+        const auth = this.dataAuth ?? fixtureAuth
+        const identity = this.current.identity
+        const local = binding.localOnly && auth
+          ? {
+            storageKey: JSON.stringify([
+              'tao.auth.local',
+              1,
+              binding.localOnly,
+              store.name,
+              identity?.issuer ?? '@fixture',
+              identity?.subject ?? '@fixture',
+              auth.accountId,
+            ]),
+            signal: auth.signal,
+            ...(auth.testing ? { fixtureAccountId: auth.accountId } : {}),
+          }
+          : undefined
         store.bindConfigured(
           this.fixtureSource(store, binding.source),
           binding.storageName,
-          this.dataAuth ?? fixtureAuth,
+          local ? undefined : auth,
+          local,
         )
       }
     }
