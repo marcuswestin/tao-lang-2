@@ -7,19 +7,30 @@ JavaScript runtime, web view, Expo server, or companion iPhone app.
 From the repository root:
 
 ```sh
-./agent tao build Apps/WatchHello --watchos
+./agent unsandboxed setup-watchos Apps/WatchHello --xcode-version 27.0 --runtime-version 27.0 --apply
 ```
 
-The command prints the retained `TaoWatch.xcodeproj` path and a build record. Open that project in
-Xcode, choose the **TaoWatch** scheme and a watch simulator, then Run. Install a watchOS simulator
-runtime in **Xcode → Settings → Components** if none is available. `--compile-only` retains only
-the generated Swift sources. Rebuild after editing Tao; each export is a frozen source snapshot.
+The setup command inspects Xcode, installs the exact watchOS simulator runtime from Apple's
+command-line tools when needed, exports `TaoWatch.xcodeproj`, and builds, installs, and launches
+the app on an available Apple Watch simulator. It rechecks the runtime after installation and
+the simulator after any prompt. If no simulator exists, create one in **Xcode → Open Developer
+Tool → Device Hub**, then rerun the command. The global Xcode selection is preserved. Omit
+`--apply` to inspect prerequisites without changing them. The runtime installer can request
+Apple sign-in, license acceptance, or administrator access in Xcode; complete the requested step
+and rerun the same command.
 
-For a physical watch, enable Developer Mode on the watch, pair it with the development iPhone and
-make it available to Xcode, then choose your signing team and a unique bundle identifier in the
-generated target's Signing & Capabilities tab. The bundle identifier comes from that target
-setting; the displayed app name comes from Tao's `Name` property. Select the watch as the
-destination and Run.
+To export a project without running setup, use `./agent tao build Apps/WatchHello --watchos`.
+Open the retained project in Xcode, choose the **TaoWatch** scheme and a watch simulator, then
+Run. `--compile-only` retains only generated Swift sources. Rebuild after editing Tao; each export
+is a frozen source snapshot.
+
+For a physical watch, run
+`./agent unsandboxed setup-watchos Apps/WatchHello --xcode-version 27.0 --physical --apply`.
+It exports the project and prints the remaining person-led steps. Pair the companion iPhone with
+the Mac in Device Hub and enable Developer Mode on both iPhone and watch. Choose your signing team
+and a unique bundle identifier in the generated target's Signing & Capabilities tab. The bundle
+identifier comes from that target setting; the displayed app name comes from Tao's `Name` property.
+Select the watch as the destination and Run.
 Physical-watch signing, installation, and visual acceptance are separate from simulator evidence.
 
 ## Behavior and tests

@@ -605,6 +605,21 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('setup-watchos [project]')
+    .description('Guide Apple Watch setup; install the simulator runtime, export, build and run a Tao app.')
+    .requiredOption('--xcode-version <version>', 'The Xcode version to reuse or install, such as 27.0.')
+    .option('--runtime-version <version>', 'Exact watchOS Simulator runtime; required for simulator setup.')
+    .option('--archive <path>', 'Select a local Xcode .xip when the requested version is not installed.')
+    .option('--physical', 'Guide physical-watch pairing and signing instead of simulator setup.')
+    .option('--device <identifier>', 'Choose an Apple Watch simulator by UUID.')
+    .option('--apply', 'Install missing components, export the project, and run it on an available simulator.')
+    .option('--json', 'Print a structured report without interactive prompts.')
+    .action(async (project: string | undefined, options) => {
+      const { WatchosSetupCommand } = await import('./watchos-setup/WatchosSetupCommand')
+      await runExitCommand(() => WatchosSetupCommand.run({ ...options, project: project ?? 'Apps/WatchHello' }))
+    })
+
+  commands
     .command('setup-visionos [project]')
     .description('Guide Vision Pro setup, pairing, signing, build, installation and launch; inspect by default.')
     .requiredOption('--xcode-version <version>', 'The explicit Xcode version to reuse or install, such as 27.0.')

@@ -56,6 +56,14 @@ export const AppleSetupPlatforms = {
     runtimePrefix: 'com.apple.CoreSimulator.SimRuntime.xrOS-',
     deviceSdk: 'xros',
   },
+  watchos: {
+    command: 'setup-watchos',
+    label: 'watchOS',
+    directory: 'watchos-setup',
+    simulatorSdk: 'watchsimulator',
+    runtimePrefix: 'com.apple.CoreSimulator.SimRuntime.watchOS-',
+    deviceSdk: 'watchos',
+  },
 } satisfies Record<string, AppleSetupPlatform>
 
 const APPLE_DOWNLOADS = 'https://developer.apple.com/download/applications/'

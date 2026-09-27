@@ -143,6 +143,11 @@ setup-ios *ARGS:
 setup-visionos *ARGS:
     ./dev setup-visionos {{ ARGS }}
 
+# Guide Apple Watch toolchain and simulator runtime setup, then export and run a Tao watch app
+[group('Setup')]
+setup-watchos *ARGS:
+    ./dev setup-watchos {{ ARGS }}
+
 # Publish the built Companion hosts to their GitHub release, where tao dev downloads them; needs gh
 [group('Run')]
 companion-host-publish:
