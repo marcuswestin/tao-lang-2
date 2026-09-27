@@ -90,6 +90,7 @@ enabled = true
 "security.ubuntu.com" = "allow"
 "swcdn.apple.com" = "allow"
 "swdist.apple.com" = "allow"
+"ziglang.org" = "allow"
 
 [permissions.tao-workspace]
 extends = ":workspace"
@@ -152,6 +153,7 @@ allow_local_binding = true
 "security.ubuntu.com" = "allow"
 "swcdn.apple.com" = "allow"
 "swdist.apple.com" = "allow"
+"ziglang.org" = "allow"
 
 [permissions.tao-native]
 extends = "tao-workspace"

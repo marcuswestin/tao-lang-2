@@ -22,7 +22,8 @@ Root `AGENTS.md` owns the hard constraints on branches and the Git index; the wa
   `references/reclaim-task-associations.md` for agent task ownership that local metadata cannot prove.
 - Git operations that replace protected paths can half-succeed inside the sandbox: HEAD and most
   files move, but protected paths stay dirty. To bring `main` into a feature branch, run
-  `./agent merge-main`; when it refuses because `main` writes a protected path, run
+  `./agent merge-main`, which attempts to fetch `origin/main` before selecting the merge tip;
+  when it refuses because `main` writes a protected path, run
   `./agent unsandboxed merge-main`, which makes the same merge on the host. Resolve any conflict it
   leaves and commit the merge. If a direct `git merge` already left `MERGE_HEAD`, use
   `./agent unsandboxed merge-recover` to abort it on the host. If Git left no `MERGE_HEAD`, inspect
@@ -62,7 +63,11 @@ the SHA. It preserves Git's squash appendix on `main` — summary, bullets, a bl
 Require a clean feature branch with its merge message reviewed; `verification-lanes` owns the
 landing command's mechanics, evidence, and message format. After the Developer authorizes landing this slice,
 run `./agent unsandboxed land`: it fetches and integrates current `main`, verifies, and pushes while holding
-one lock. Do not fetch and merge `main` beforehand merely to satisfy a stale precondition. If the
+one lock. Every integration must attempt to fetch `origin/main` first and use the fetched tip when
+available, never prefer stale local `main`. If preparation falls back to local `main` because fetching
+failed, report that as offline preparation, not current remote integration. Landing requires a successful
+fetch inside its lock before merging and verifying; an earlier fetch or merge does not replace it.
+Do not fetch and merge `main` beforehand merely to satisfy a stale precondition. If the
 landing reports a conflict, resolve it outside the lock; after any merge of `main` into a branch,
 skim what arrived: `references/after-merging-main.md`.
 
