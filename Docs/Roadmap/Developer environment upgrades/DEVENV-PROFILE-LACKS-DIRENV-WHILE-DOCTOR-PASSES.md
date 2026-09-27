@@ -69,7 +69,7 @@ from Device Hub's application-access denial.
 The 22:17 UTC selected lane and a subsequent focused run reproduced the absent second
 loading/export messages. The focused runner tolerated its failure based on earlier outcome
 reversals; its successful wrapper exit was not a passing raw test. The independent
-[timestamp-watch investigation](<Archive/DEVENV-DIRENV-RELOAD-TEST-SHARES-FILE-TIMESTAMPS.md>)
+[timestamp-watch investigation](Archive/DEVENV-DIRENV-RELOAD-TEST-SHARES-FILE-TIMESTAMPS.md)
 then reproduced the cause with controlled equal and distinct timestamps and corrected the
 fixture without weakening its assertions. The remaining issue here is doctor's failure to
 diagnose an incomplete shared profile; the timestamp-watch defect has been resolved separately.
