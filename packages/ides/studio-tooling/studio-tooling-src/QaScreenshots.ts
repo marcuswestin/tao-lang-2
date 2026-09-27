@@ -577,7 +577,9 @@ async function sourceRevision(repositoryRoot: string): Promise<QaRunManifest['so
     branch: await git(['rev-parse', '--abbrev-ref', 'HEAD']),
     commit: await git(['rev-parse', 'HEAD']),
     dirty: (await git(['status', '--porcelain', '--untracked-files=no'])).length > 0,
-    subject: await git(['log', '-1', '--format=%s']),
+    // `%s` joins the whole first paragraph, and this repository's commits list their bullets
+    // directly under the summary, so only the first line is the subject.
+    subject: (await git(['log', '-1', '--format=%B'])).split('\n')[0] ?? '',
   }
 }
 
