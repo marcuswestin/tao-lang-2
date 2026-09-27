@@ -41,7 +41,11 @@ async function fixture() {
     run: async (command, spec = {}) => {
       calls.push({ command, spec })
       const stdout = command === 'git'
-        ? spec.args?.[0] === 'rev-parse' ? `${common}\n` : `${identity}\n`
+        ? spec.args?.[0] === 'rev-parse'
+          ? `${common}\n`
+          : spec.args?.[0] === 'worktree'
+          ? `worktree ${root}\0HEAD ${identity}\0\0`
+          : `${identity}\n`
         : ''
       if (command === 'nix-store') {
         await FS.replaceSymlink(spec.args![1]!, spec.args![3]!)
@@ -55,6 +59,100 @@ async function fixture() {
 type HCIConfirm = NonNullable<Parameters<typeof runDirenvSetup>[1]>['confirm']
 
 Describe('optional developer shell setup', () => {
+  Test('automated setup warms only an already enabled repository without changing personal settings', async () => {
+    const f = await fixture()
+    try {
+      f.environment.interactive = () => false
+      f.environment.env = { ...f.environment.env, TAO_DEV_SHELL_SETUP: '0' }
+      await FS.writeText(FS.resolvePath('devenv.nix', f.root), '{}')
+      const record = FS.resolvePath(`repositories/${identity}`, f.shell)
+      for (const choice of ['', 'pending\n', 'disabled\n', 'enabled\n']) {
+        await FS.writeText(f.choice, choice)
+        await FS.writeText(FS.resolvePath('common-dir', record), `${f.common}\n`)
+        f.calls.length = 0
+        await runDirenvSetup({ prepare: true }, f.environment)
+        const preparations = f.calls.filter(call => call.command === 'devenv')
+        Expect(preparations.map(call => call.spec.args)).toEqual(
+          choice === 'enabled\n' ? [['shell', '--no-tui', '--', 'true']] : [],
+        )
+        if (preparations[0]) {
+          Expect(preparations[0].spec.cwd).toBe(f.root)
+          Expect(preparations[0].spec.env?.['DEVENV_TUI']).toBe('false')
+        }
+        Expect(await FS.readText(f.choice)).toBe(choice)
+        Expect(await FS.readText(f.zshrc)).toBe('# personal settings\nexport EDITOR=vim')
+        Expect(await FS.exists(FS.resolvePath('activation.zsh', f.shell))).toBe(false)
+        Expect(f.prompts).toEqual([])
+      }
+      await FS.writeText(FS.resolvePath('common-dir', record), '/different/repository\n')
+      f.calls.length = 0
+      await runDirenvSetup({ prepare: true }, f.environment)
+      Expect(f.calls.some(call => call.command === 'devenv')).toBe(false)
+      await FS.writeText(FS.resolvePath('common-dir', record), `${f.common}\n`)
+      const run = f.environment.run
+      f.environment.run = async (command, spec) => {
+        const result = await run(command, spec)
+        return spec?.args?.[0] === 'worktree' ? { ...result, stdout: `worktree ${f.common}\0\0` } : result
+      }
+      f.calls.length = 0
+      await runDirenvSetup({ prepare: true }, f.environment)
+      Expect(f.calls.some(call => call.command === 'devenv')).toBe(false)
+    } finally {
+      await FS.remove(f.root)
+    }
+  })
+
+  Test('preparation avoids work in an active checkout but does not reuse another checkout’s environment', async () => {
+    const f = await fixture()
+    try {
+      f.environment.interactive = () => false
+      await FS.writeText(FS.resolvePath('devenv.nix', f.root), '{}')
+      await FS.writeText(f.choice, 'enabled\n')
+      await FS.writeText(FS.resolvePath(`repositories/${identity}/common-dir`, f.shell), `${f.common}\n`)
+      for (const active of [f.root, f.common]) {
+        f.environment.env = { ...f.environment.env, TAO_DEVENV: '1', DEVENV_ROOT: active }
+        f.calls.length = 0
+        await runDirenvSetup({ prepare: true }, f.environment)
+        Expect(f.calls.filter(call => call.command === 'devenv')).toHaveLength(active === f.root ? 0 : 1)
+      }
+    } finally {
+      await FS.remove(f.root)
+    }
+  })
+
+  Test('failed preparation is visible, leaves consent alone, and can be retried', async () => {
+    const f = await fixture()
+    try {
+      f.environment.interactive = () => false
+      await FS.writeText(FS.resolvePath('devenv.nix', f.root), '{}')
+      await FS.writeText(f.choice, 'enabled\n')
+      await FS.writeText(FS.resolvePath(`repositories/${identity}/common-dir`, f.shell), `${f.common}\n`)
+      const run = f.environment.run
+      f.environment.run = async (command, spec) => {
+        const result = await run(command, spec)
+        return command === 'devenv' ? { ...result, exitCode: 1, stderr: 'Nix daemon unavailable' } : result
+      }
+      Expect(await runDirenvSetup({ prepare: true }, f.environment)).toBe(0)
+      Expect(f.output.join('\n')).toContain('directory entry will retry normally.\nNix daemon unavailable')
+      Expect(await FS.readText(f.choice)).toBe('enabled\n')
+      f.environment.run = async (command, spec) => {
+        const result = await run(command, spec)
+        if (command === 'devenv') {
+          Errors.throwHostEnvironment('devenv executable is missing')
+        }
+        return result
+      }
+      Expect(await runDirenvSetup({ prepare: true }, f.environment)).toBe(0)
+      Expect(f.output.join('\n')).toContain('directory entry will retry normally.\ndevenv executable is missing')
+      f.environment.run = run
+      Expect(await runDirenvSetup({ prepare: true }, f.environment)).toBe(0)
+      Expect(f.calls.filter(call => call.command === 'devenv')).toHaveLength(3)
+      Expect(f.prompts).toEqual([])
+    } finally {
+      await FS.remove(f.root)
+    }
+  })
+
   Test('noninteractive setup neither prompts nor reads or writes host state, even with configure', async () => {
     const f = await fixture()
     try {

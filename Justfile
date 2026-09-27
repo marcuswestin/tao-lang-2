@@ -21,7 +21,7 @@ help:
 # (.config/wt.toml), the harness SessionStart hooks (.rulesync/hooks.jsonc), and
 # Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
 _setup: _deps _agent-config _git-hooks _initial-dev-branch _shell-completion
-    ./dev shell-setup
+    ./dev shell-setup --prepare
 
 # Configure optional automatic development environments for this repository and its worktrees
 [group('Setup')]

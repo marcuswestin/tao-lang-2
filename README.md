@@ -79,6 +79,11 @@ repositories and nested `.envrc` files are not automatically trusted. Dependency
 explicit: entering a directory loads its environment without running `./agent setup`.
 Setup prepares checkout-local completions; worktrees that have not run setup use the copy installed
 under `~/.tao-dev`. Directory entry never invokes the dependency installer to obtain completions.
+For an already enabled repository, setup also warms this checkout's own devenv cache, so its first
+directory entry can use the cached evaluation. This moves cold Nix work into setup rather than
+eliminating it; a checkout entered before setup still evaluates normally. Branch-specific toolchain
+changes remain subject to devenv's normal invalidation. Preparation is bounded and optional: a
+missing or inaccessible Nix installation leaves setup usable and directory entry retries normally.
 
 For an older worktree with no root `.envrc`, the hook creates the standard loader as an untracked
 file. It never replaces an existing file or symlink, or restores a tracked file you deleted.
