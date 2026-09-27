@@ -1,4 +1,6 @@
+import { jest } from '@jest/globals'
 import TR from '@runtime/TR'
+import * as TaoReactNative from '@runtime/TR-react-native'
 import { Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { fireEvent, render } from '@testing-library/react-native'
@@ -79,6 +81,60 @@ Describe('Expo runtime', () => {
       Expect(scrollView.props.keyboardShouldPersistTaps).toBe('handled')
       Expect(keyboardView.props.style).toBeDefined()
     } finally {
+      safeAreaMock.setSafeAreaInsetsForTests({ bottom: 0, left: 0, right: 0, top: 0 })
+    }
+  })
+
+  Test('adjusts every native iPad inset while preserving other platforms and manual safe-area padding', () => {
+    const safeAreaMock = safeAreaContextTestMock()
+    safeAreaMock.setSafeAreaInsetsForTests({ bottom: 5, left: 240, right: 3, top: 7 })
+    const runtime = {
+      ActivityIndicator: RN.ActivityIndicator,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      Pressable: RN.Pressable,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      Text: RN.Text,
+      TextInput: RN.TextInput,
+      View: RN.View,
+    }
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime')
+    try {
+      for (
+        const scenario of [
+          { isPad: true, isMacCatalyst: false, nativeInsets: true, adjustment: 'always' },
+          { isPad: false, isMacCatalyst: false, nativeInsets: true, adjustment: 'automatic' },
+          { isPad: true, isMacCatalyst: true, nativeInsets: true, adjustment: 'automatic' },
+          { isPad: true, isMacCatalyst: false, nativeInsets: false, adjustment: undefined },
+        ]
+      ) {
+        const platform = { OS: 'ios', isPad: scenario.isPad, isMacCatalyst: scenario.isMacCatalyst }
+        restoreRuntime.mockReturnValue({ ...runtime, Platform: platform })
+        const screen = render(createElement(
+          TR.AppShell,
+          null,
+          createElement(
+            TR.AppSurfaceFrame,
+            { nativeInsets: scenario.nativeInsets },
+            createElement(RN.Text, null, 'Inset content'),
+          ),
+        ))
+        try {
+          const scrollView = screen.UNSAFE_getByType(RN.ScrollView)
+          ExpectScreen(screen).toHaveText('Inset content')
+          Expect(scrollView.props.contentInsetAdjustmentBehavior).toBe(scenario.adjustment)
+          Expect(RN.StyleSheet.flatten(scrollView.props.contentContainerStyle)).toMatchObject(
+            scenario.nativeInsets
+              ? { paddingBottom: 12, paddingLeft: 12, paddingRight: 12, paddingTop: 12 }
+              : { paddingBottom: 17, paddingLeft: 252, paddingRight: 15, paddingTop: 19 },
+          )
+        } finally {
+          screen.unmount()
+        }
+      }
+    } finally {
+      restoreRuntime.mockRestore()
       safeAreaMock.setSafeAreaInsetsForTests({ bottom: 0, left: 0, right: 0, top: 0 })
     }
   })

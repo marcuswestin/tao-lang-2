@@ -8,6 +8,7 @@ import {
   type AppiumLease,
   type AppiumLeaseManager,
   type AppiumLocator,
+  type AppiumNavigationDiagnosticsSession,
   type AppiumReceiptSink,
   type AppiumRevisionPublisher,
   type AppiumSessionReceipt,
@@ -103,6 +104,66 @@ test('retains target and derived-port leases when an escaped session cannot be d
     .toThrow(
       "Machine resource 'ios-simulator:SIM-ESCAPED-OPEN' is busy",
     )
+})
+
+test('captures hidden navigation descendants and refuses capture after session close', async () => {
+  const artifactRoot = await Repo.mkScratchDir('tao-native-navigation-diagnostics-')
+  const client = new FakeClient('diagnostics')
+  const driver = client.sessions[0]!
+  driver.visible = false
+  const bar = new FakeElement(driver, 'bar', 'Library workspace')
+  const title = Object.assign(
+    new FakeElement(driver, 'title', 'Library workspace', { x: 0, y: 0, width: 0, height: 0 }),
+    {
+      getAttribute: async (name: string) =>
+        ({ label: 'Library workspace', name: 'Library workspace', type: 'XCUIElementTypeStaticText' })[
+          name as 'label' | 'name' | 'type'
+        ],
+    },
+  )
+  driver.findElements = async locator => {
+    if (locator.using === '-ios predicate string') {
+      expect(locator.value).toBe('label == "Library workspace" OR name == "Library workspace"')
+      return [title]
+    }
+    expect(locator).toEqual({ using: '-ios class chain', value: '**/XCUIElementTypeNavigationBar' })
+    return [bar]
+  }
+  Object.assign(driver, {
+    findElementsFrom: async (scope: AppiumElement, locator: AppiumLocator) => {
+      expect(scope.id).toBe('bar')
+      expect(locator.value).toBe('**/*')
+      return [title]
+    },
+  })
+  const session = await open(
+    appiumController(client, new FakeLeases(), simulator('SIM-DIAGNOSTICS')),
+    'acceptance',
+    artifactRoot,
+  ) as AppiumNavigationDiagnosticsSession
+  try {
+    const capture = await session.captureNavigationDiagnostics('root', ['Library workspace'])
+    expect(await FS.readJson(capture.artifactPath)).toMatchObject({
+      matchingTitles: [{ title: 'Library workspace', elements: [{ id: 'title', visible: false }] }],
+      navigationBars: [{
+        id: 'bar',
+        visible: false,
+        children: [{
+          id: 'title',
+          label: 'Library workspace',
+          type: 'XCUIElementTypeStaticText',
+          text: 'Library workspace',
+          visible: false,
+          rect: { width: 0, height: 0 },
+        }],
+      }],
+    })
+    await session.close(session.descriptor().lease)
+    await expect(session.captureNavigationDiagnostics('closed')).rejects.toThrow('closed')
+  } finally {
+    await session.close(session.descriptor().lease)
+    await FS.remove(artifactRoot)
+  }
 })
 
 test('writes immutable screenshot evidence for repeated captures across two sessions', async () => {

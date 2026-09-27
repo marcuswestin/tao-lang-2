@@ -15,6 +15,7 @@ import type { PresentableEntry } from './TR-navigation-state'
 import { NavigationLevel, presentedOccurrenceRegion } from './TR-navigation-surfaces'
 import { isNavigation, renderPresentable } from './TR-navigation-values'
 import { requireReactNativeRuntime } from './TR-react-native'
+import { catalystPalette } from './TR-scheme'
 import type { TaoProps } from './TR-TaoProps'
 import { Views } from './TR-views'
 
@@ -99,7 +100,10 @@ function BasicStackLevel(props: {
               accessibilityRole: 'header',
               children: slots.title ?? '',
               key: 'title',
-              style: mountedDesignStyle(props.taoProps, 'NavigationTitle'),
+              style: [
+                { color: catalystPalette(props.taoProps?.scheme)?.color },
+                mountedDesignStyle(props.taoProps, 'NavigationTitle'),
+              ],
               testID: observable ? navigationTitleTestId : undefined,
             }),
             createElement(BasicToolbar, {
@@ -110,7 +114,11 @@ function BasicStackLevel(props: {
             }),
           ],
           key: 'header',
-          style: [headerStyle, mountedDesignStyle(props.taoProps, 'NavigationHeader', 'row')],
+          style: [
+            headerStyle,
+            catalystPalette(props.taoProps?.scheme),
+            mountedDesignStyle(props.taoProps, 'NavigationHeader', 'row'),
+          ],
         }),
         contentOwnsWindow
           ? createElement(runtime.View, { children: content, key: 'content', style: stackStyle })
@@ -208,7 +216,11 @@ function BasicOverflowMenu(props: {
       })
     ),
     onAccessibilityEscape: props.onClose,
-    style: [overflowStyle, mountedDesignStyle(props.taoProps, 'NavigationHeader')],
+    style: [
+      overflowStyle,
+      catalystPalette(props.taoProps?.scheme),
+      mountedDesignStyle(props.taoProps, 'NavigationHeader'),
+    ],
   })
   if (!runtime.Modal) {
     return content

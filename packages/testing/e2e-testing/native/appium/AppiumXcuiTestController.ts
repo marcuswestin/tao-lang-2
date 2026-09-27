@@ -66,6 +66,13 @@ export type AppiumWebDriverSession = Readonly<{
   terminateApp?: (appId: string) => Promise<void>
 }>
 
+/** Optional evidence capture; observations describe native chrome without asserting acceptance. */
+export type AppiumNavigationDiagnosticsSession =
+  & HostSession
+  & Readonly<{
+    captureNavigationDiagnostics: (name: string, titles?: readonly string[]) => Promise<{ artifactPath: string }>
+  }>
+
 /** AppiumXcuiTestDeepLinkSession is the narrow driver capability used only by the native test-control bridge. */
 export type AppiumXcuiTestDeepLinkSession =
   & HostSession
@@ -403,6 +410,63 @@ class AppiumXcuiTestSession implements HostSession {
         sessionId: this.#descriptor.id,
         version: 1,
       }
+    })
+  }
+
+  async captureNavigationDiagnostics(name: string, titles: readonly string[] = []): Promise<{ artifactPath: string }> {
+    return await this.#serialize(async () => {
+      await this.#assertUsable()
+      if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(name)) {
+        Errors.throwUserInput('Appium diagnostic names must use only letters, numbers, dots, underscores, or dashes.')
+      }
+      const findChildren = this.#session.findElementsFrom
+      if (findChildren === undefined) {
+        return unsupported('inspect', 'The injected Appium client does not expose subtree queries.')
+      }
+      const describe = async (element: AppiumElement) => ({
+        id: element.id,
+        label: await element.getAttribute?.('label'),
+        name: await element.getAttribute?.('name'),
+        type: await element.getAttribute?.('type'),
+        text: await element.getText?.(),
+        visible: await element.isDisplayed(),
+        rect: await element.getRect?.(),
+      })
+      const bars = await this.#session.findElements({
+        using: '-ios class chain',
+        value: '**/XCUIElementTypeNavigationBar',
+      })
+      const navigationBars = []
+      for (const bar of bars) {
+        const children = await findChildren.call(this.#session, bar, {
+          using: '-ios class chain',
+          value: '**/*',
+        })
+        navigationBars.push({ ...await describe(bar), children: await Promise.all(children.map(describe)) })
+      }
+      const matchingTitles = []
+      for (const title of titles) {
+        const matches = await this.#session.findElements({
+          using: '-ios predicate string',
+          value: `label == ${JSON.stringify(title)} OR name == ${JSON.stringify(title)}`,
+        })
+        matchingTitles.push({ title, elements: await Promise.all(matches.map(describe)) })
+      }
+      await this.#assertUsable()
+      const identity = [this.#target.kind, this.#target.udid, this.#descriptor.lease.generation]
+        .map(safeSegment).join('-')
+      const artifactPath = FS.resolvePath(
+        `appium/navigation/${identity}-${++this.#screenshotSequence}-${name}.json`,
+        this.#artifactRoot,
+      )
+      await FS.writeJson(artifactPath, {
+        version: 1,
+        sessionId: this.#descriptor.id,
+        revision: this.#revision,
+        navigationBars,
+        matchingTitles,
+      })
+      return { artifactPath }
     })
   }
 

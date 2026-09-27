@@ -170,6 +170,24 @@ async function copyProductionHostFiles(runtimeToolchainRoot: string, root: strin
   for (const file of ['app-config.cjs', 'metro.config.cjs', 'package.json'] as const) {
     await FS.copyFile(FS.resolvePath(file, runtimeToolchainRoot), FS.resolvePath(file, root))
   }
+  const manifestPath = FS.resolvePath('package.json', root)
+  const manifest = await FS.readJson<{
+    expo?: { autolinking?: { exclude?: string[]; ios?: { exclude?: string[] } } }
+  }>(manifestPath)
+  const autolinking = manifest.expo?.autolinking
+  // These fixtures do not use auth. Keep Clerk's Swift packages out of their iOS builds,
+  // using Expo's project-local autolinking configuration rather than changing dependencies.
+  manifest.expo = {
+    ...manifest.expo,
+    autolinking: {
+      ...autolinking,
+      ios: {
+        ...autolinking?.ios,
+        exclude: [...new Set([...(autolinking?.exclude ?? []), ...(autolinking?.ios?.exclude ?? []), '@clerk/expo'])],
+      },
+    },
+  }
+  await FS.writeJson(manifestPath, manifest)
 }
 export function hostEntrypoint(repositoryRoot: string): string {
   const nativeControl = FS.resolvePath(

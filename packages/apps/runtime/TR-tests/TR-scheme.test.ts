@@ -84,6 +84,33 @@ Describe('TR Scheme environment', () => {
     Expect(TR.Scheme.appearancePin(replayed)).toBe('dark')
   })
 
+  Test('Catalyst follows System while preserving preference, scenario, and replay precedence', () => {
+    const environment = { platform: 'catalyst', system: 'dark' } as const
+    const captured = TR.Scheme.resolve({}, environment)
+    Expect(captured).toEqual({
+      capability: 'reactive-catalyst',
+      requested: 'system',
+      resolved: 'dark',
+      source: 'system',
+    })
+    Expect(TR.Scheme.resolve({ appearance: 'light' }, environment)).toEqual({
+      capability: 'reactive-catalyst',
+      requested: 'light',
+      resolved: 'light',
+      source: 'preference',
+    })
+    Expect(TR.Scheme.resolve({ appearance: 'dark', scenario: 'light' }, environment)).toEqual({
+      capability: 'reactive-catalyst',
+      requested: 'light',
+      resolved: 'light',
+      source: 'scenario',
+    })
+    Expect(TR.Scheme.resolve({ replay: captured, scenario: 'light' }, {
+      platform: 'catalyst',
+      system: 'light',
+    })).toBe(captured)
+  })
+
   Test('rejects replay snapshots that claim an impossible native resolution', () => {
     Expect(() =>
       TR.Scheme.resolve({

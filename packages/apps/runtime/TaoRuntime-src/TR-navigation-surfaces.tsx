@@ -13,6 +13,7 @@ import type { TaoNavigationValue } from './TR-navigation'
 import { backNavigation } from './TR-navigation-registry'
 import type { OverlayEntry, PresentableEntry, ResponseOccurrenceState } from './TR-navigation-state'
 import { requireReactNativeRuntime } from './TR-react-native'
+import { catalystPalette } from './TR-scheme'
 import type { TaoProps } from './TR-TaoProps'
 import { Views } from './TR-views'
 import { WindowLayer, WindowLayerPortal, WindowLayerProvider, WindowLayerRegistry } from './TR-window-layer'
@@ -249,6 +250,7 @@ function modalSheet(
           ...modalAccessibilityProps(navigation, taoProps, visible),
           style: [
             sheetInlineSurfaceBaseStyle,
+            catalystPalette(taoProps?.scheme),
             sheetInlineSurfaceInsetStyle(inlineInsets),
             mountedDesignStyle(taoProps, 'ModalSurface'),
           ],
@@ -386,6 +388,7 @@ function ModalSheetContent(props: {
           importantForAccessibility: hostedModal ? 'no-hide-descendants' : 'auto',
           style: [
             sheetModalSurfaceBaseStyle,
+            catalystPalette(props.taoProps?.scheme),
             sheetModalSurfaceInsetStyle(insets),
             mountedDesignStyle(props.taoProps, 'ModalSurface'),
           ],
@@ -559,7 +562,7 @@ function modalAsk(
       runtime.View,
       {
         ...modalAccessibilityProps(navigation, taoProps, visible),
-        style: [askSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')],
+        style: [askSurfaceStyle, catalystPalette(taoProps?.scheme), mountedDesignStyle(taoProps, 'ModalSurface')],
       },
       content,
     ),

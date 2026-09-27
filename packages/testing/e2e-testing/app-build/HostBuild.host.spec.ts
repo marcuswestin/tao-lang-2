@@ -1,7 +1,29 @@
 import { expect, test } from '@playwright/test'
-import { Repo } from '@shared'
+import { FS, Repo } from '@shared'
 import ts from 'typescript'
-import { hostEntrypoint } from './HostBuild'
+import { hostEntrypoint, prepareHostApp } from './HostBuild'
+
+test(
+  'non-auth fixtures exclude Clerk from iOS autolinking without changing production dependencies',
+  async ({}, testInfo) => {
+    const productionManifestPath = Repo.resolvePath('packages/apps/expo-host/package.json')
+    const productionManifestText = await FS.readText(productionManifestPath)
+    const productionManifest = JSON.parse(productionManifestText)
+    expect(productionManifest.dependencies['@clerk/expo']).toBeDefined()
+    const build = await prepareHostApp({
+      artifactRoot: testInfo.outputPath('fixture'),
+      runId: 'ios-autolinking',
+      seed: 12345,
+      subject: 'native-navigation',
+    })
+    const fixtureManifest = await FS.readJson<Record<string, unknown>>(FS.resolvePath('package.json', build.root))
+    expect(fixtureManifest).toEqual({
+      ...productionManifest,
+      expo: { autolinking: { ios: { exclude: ['@clerk/expo'] } } },
+    })
+    expect(await FS.readText(productionManifestPath)).toBe(productionManifestText)
+  },
+)
 
 test('the HNReader host wrapper publishes a native control receipt after an accepted advance', () => {
   const execution = executeHostEntrypoint(compileEntrypoint(), 'hnreader')

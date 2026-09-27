@@ -16,7 +16,11 @@ import {
   runHostJourney,
 } from '../../journey/HostJourney'
 import { assertNativeInputValue, enterNativeInput } from '../AppiumNativeInputs'
-import type { AppiumXcuiTestDeepLinkSession, AppiumXcuiTestRevealSession } from './AppiumXcuiTestController'
+import type {
+  AppiumNavigationDiagnosticsSession,
+  AppiumXcuiTestDeepLinkSession,
+  AppiumXcuiTestRevealSession,
+} from './AppiumXcuiTestController'
 
 export type AppiumIosHostFault = Readonly<{
   expectedAssertion: Readonly<{
@@ -59,6 +63,8 @@ export type AppiumIosHostProofReceipt = Readonly<{
 }>
 
 export type AppiumIosHostProofStep = Readonly<{
+  nativeDiagnostics?: Readonly<{ artifactPath: string; screenshot: string }>
+  diagnosticFailure?: string
   assertion?: Readonly<
     | { kind: 'navigationTitle'; title: string }
     | { kind: 'text'; text: string }
@@ -228,7 +234,36 @@ export function appiumIosJourneyAdapter(
           },
           submit: unsupportedJourneyOperation,
         })
-        timeline.push({ ...step, outcome: 'passed' })
+        const diagnosticSession = session as Partial<AppiumNavigationDiagnosticsSession>
+        if (
+          appName === 'NativeNavigation' && ['run', 'back', 'press', 'relaunch'].includes(operation.kind)
+          && diagnosticSession.captureNavigationDiagnostics !== undefined
+        ) {
+          const name = `navigation-${timeline.length + 1}-${operation.kind}`
+          try {
+            const capture = await diagnosticSession.captureNavigationDiagnostics(name, [
+              'Notes workspace',
+              'Note detail',
+              'Library workspace',
+              'Library detail',
+              'Settings workspace',
+              'Settings detail',
+            ])
+            const screenshot = await session.captureScreenshot(name)
+            timeline.push({
+              ...step,
+              outcome: 'passed',
+              nativeDiagnostics: {
+                artifactPath: capture.artifactPath,
+                screenshot: screenshot.artifactPath,
+              },
+            })
+          } catch (error) {
+            timeline.push({ ...step, outcome: 'passed', diagnosticFailure: Errors.messageOf(error) })
+          }
+        } else {
+          timeline.push({ ...step, outcome: 'passed' })
+        }
       } catch (error) {
         timeline.push({ ...step, outcome: 'failed' })
         throw error
