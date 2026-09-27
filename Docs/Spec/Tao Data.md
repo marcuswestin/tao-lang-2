@@ -917,9 +917,10 @@ through transaction commit and sync, including values equal to the earlier local
 
 `create Note with Input` creates one row from a projected input item. The projection must be of
 that entity, may not select a to-many relationship, and must cover every field a `create { }` block
-would have to supply — every stored field without a default. Omitted defaulted fields receive their
-declared values. A projected input carries the `required` sentences of its fields, so a form reads
-`Input.Incomplete` and `Input.Problems` before any row exists:
+would have to supply — every nonoptional stored field without a default. Omitted defaulted fields
+receive their declared values; omitted optional stored fields without a default contain `none`. Optional fields also accept
+explicit `none` in create and update blocks. A projected input carries the `required` sentences of
+its fields, so a form reads `Input.Incomplete` and `Input.Problems` before any row exists:
 
 ```tao
 type NoteInput is Note { Title, Topic }

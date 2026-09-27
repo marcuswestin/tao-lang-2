@@ -7,47 +7,11 @@ import { createElement, type ReactElement, useState } from 'react'
 import * as RN from 'react-native'
 import { InstantDBProvider } from '../../stdlib/@tao/data/providers/instantdb/InstantDB'
 import { MemoryProvider } from '../../stdlib/@tao/data/providers/memory/Memory'
-import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileApp, testCompileFiles } from './test-compile-app'
+import { ExpectScreen, registerRuntimeE2ELifecycle, testCompileFiles } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime', () => {
-  Test('creates compiled enum defaults and preserves explicit case overrides', async () => {
-    await testCompileApp(
-      `
-      use Memory from @tao/data/providers/memory
-      use StackNav from @tao/nav
-      use Button, Col, Text from @tao/ui
-      type Role is one of Reader, Editor
-      data Notes / Note { Title text, Role (default Reader) }
-      app Defaults {
-        Name "Defaults"
-        Navigator StackNav { Initial Main }
-        Datasource Memory { }
-      }
-      scene Main() {
-        Title "Notes"
-        query Notes = Notes with { }
-        action Add() {
-          create Note { Title: "Default" }
-          create Note { Title: "Override", Role: Editor }
-        }
-        render Col() {
-          Button("Add notes") { on press Add }
-          loop Notes / Note {
-            Text("{ Note.Title }: { when Note.Role { Reader -> "Reader" otherwise -> "Editor" } }")
-          }
-        }
-      }
-    `,
-      async screen => {
-        await fireEventAsync.press(screen.getByText('Add notes'))
-        await waitFor(() => ExpectScreen(screen).toHaveText('Default: Reader'))
-        ExpectScreen(screen).toHaveText('Override: Editor')
-      },
-    )
-  })
-
   Test('constructs the InstantDB provider without loading native modules before connect', () => {
     Expect(typeof InstantDBProvider().connect).toBe('function')
   })

@@ -1,6 +1,6 @@
 # DEVENV-VM-ACCEPTANCE-RECEIPT-REMAINS-NONTERMINAL — VM acceptance receipt remains nonterminal
 
-- **Status:** In progress
+- **Status:** Resolved
 - **Section:** External
 - **Area:** Standalone VM evidence collection and base qualification.
 - **Impact:** The collected scenario receipt can disagree with the successful driver output, preventing reliable acceptance attribution after guest shutdown.
@@ -10,3 +10,6 @@
 - **Dependencies:** Existing guest RPC and stopped-disk collection workflow.
 - **Acceptance:** Focused regression rejects a running, absent or failed scenario despite successful driver exit. Fresh vanilla and prepared-Xcode runs collect complete receipts matching their exact run and do not qualify on incomplete evidence.
 - **Source:** September 27 repository health pass on `feat/repository-health-2026-09-27`.
+
+- **Resolution:** Added guest sync before stopped-disk collection and fail-closed qualification of every collected scenario status. Mutation control proves an incomplete receipt cannot qualify a base. Fresh vanilla and prepared-Xcode runs on 84e7da1b94ac6ddc95f19f5a13013b7e621ece84 each collected every scenario as terminal passed. This establishes repaired collection behavior; it does not claim the original durability race was exhaustively isolated.
+- **Archived:** 2026-09-27.
