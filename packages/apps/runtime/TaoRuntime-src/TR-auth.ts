@@ -16,6 +16,7 @@ import { runtimeRevisionStore } from './TR-listeners'
 import { NativeModules } from './TR-native-modules'
 import type { RuntimeAppDefinition } from './TR-navigation-app'
 import type { Evaluable } from './TR-navigation-presentables'
+import type { TaoAuthPairing } from './TR-pairing'
 import { withReadAvailability } from './TR-read-availability'
 
 export type TaoAuthIdentity = Readonly<{ issuer: string; subject: string; accountId: string }>
@@ -77,7 +78,12 @@ export type TaoAuthProvider = {
   }>
   connect(context: Readonly<{ configuration: Readonly<Record<string, unknown>> }>): TaoAuthConnection
 }
-export type TaoAuthDeclaration = Readonly<{ name: string; identity: symbol; provider: TaoAuthProvider }>
+export type TaoAuthDeclaration = Readonly<{
+  name: string
+  identity: symbol
+  pairing?: TaoAuthPairing
+  provider: TaoAuthProvider
+}>
 export type TaoConfiguredAuth = Readonly<{
   declaration: TaoAuthDeclaration
   config: Readonly<Record<string, unknown>>
@@ -715,8 +721,8 @@ const AuthContext = React.createContext<RuntimeAuthScope | undefined>(undefined)
 /** AuthControls is the explicit context API emitted by the compiler for named auth exports. */
 export const AuthControls = {
   ...AuthSecrets,
-  Declaration(name: string, provider: TaoAuthProvider): TaoAuthDeclaration {
-    return Object.freeze({ name, provider, identity: Symbol(name) })
+  Declaration(name: string, provider: TaoAuthProvider, pairing?: TaoAuthPairing): TaoAuthDeclaration {
+    return Object.freeze({ name, provider, identity: Symbol(name), ...(pairing ? { pairing } : {}) })
   },
   Configure(declaration: TaoAuthDeclaration, config: Record<string, unknown>): TaoConfiguredAuth {
     const value: TaoConfiguredAuth = Object.freeze({

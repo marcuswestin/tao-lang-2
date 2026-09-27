@@ -135,6 +135,13 @@ import {
   testNavKind as testNavigationKind,
 } from './TR-navigation'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
+import type {
+  TaoAuthPairing,
+  TaoAuthProofKind,
+  TaoDataAcceptance,
+  TaoDataCapability,
+  TaoDataPairing,
+} from './TR-pairing'
 import {
   beginPersistedStateLaunch,
   beginPersistedStateTest,
@@ -1396,6 +1403,11 @@ namespace TR {
   export type AuthCredentialRequest = TaoAuthCredentialRequest
   export type AuthSecretStorage = TaoAuthSecretStorage
   export type AuthDeclaration = TaoAuthDeclaration
+  export type AuthPairing = TaoAuthPairing
+  export type AuthProofKind = TaoAuthProofKind
+  export type DataAcceptance = TaoDataAcceptance
+  export type DataCapability = TaoDataCapability
+  export type DataPairing = TaoDataPairing
   export type ConfiguredAuth = TaoConfiguredAuth
   export type DataAuthBinding = TaoDataAuthBinding
   export type AppDatasourceBinding = import('./TR-data').TaoAppDatasourceBinding

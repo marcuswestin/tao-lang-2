@@ -24,6 +24,7 @@ import type { TaoSyncWriteRecovery } from './TR-data-sync'
 import { type Evaluable, evaluatedFields } from './TR-data-values'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { canonicalDescriptor } from './TR-navigation-identity'
+import type { TaoDataPairing } from './TR-pairing'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import { StudioEnvironmentControls } from './TR-studio-environment'
 import { useStudioLensScope } from './TR-studio-lens'
@@ -250,6 +251,7 @@ export type TaoDatasourceDeclaration = Readonly<{
   canonicalIdentity?: TaoDeclarationIdentity
   identity: symbol
   name: string
+  pairing?: TaoDataPairing
   provider: TaoDataProvider
 }>
 
@@ -363,11 +365,13 @@ export const DataControls = {
     name: string,
     provider: TaoDataProvider,
     canonicalIdentity?: TaoDeclarationIdentity,
+    pairing?: TaoDataPairing,
   ): TaoDatasourceDeclaration {
     return Object.freeze({
       ...(canonicalIdentity ? { canonicalIdentity } : {}),
       identity: Symbol(name),
       name,
+      ...(pairing ? { pairing } : {}),
       provider,
     })
   },
