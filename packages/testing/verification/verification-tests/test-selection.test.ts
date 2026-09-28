@@ -218,7 +218,7 @@ Describe('changed suite plan', () => {
         'enter-tao-dev-env',
         '.rulesync/permissions.jsonc',
         'agents/skills/git-workflow/SKILL.md',
-        'config/dprint.jsonc',
+        '.config/dprint.jsonc',
       ]
     ) {
       const result = plan([path])

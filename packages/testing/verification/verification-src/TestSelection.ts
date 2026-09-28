@@ -120,7 +120,6 @@ const WORKFLOW_PREFIXES = [
   '.config/',
   '.agents/',
   'agents/',
-  'config/',
 ]
 /** Paths no suite executes; the lint and format gates own them. */
 const DOCUMENTATION_PATTERN = /(^|\/)(LICENSE|\.gitignore|\.gitattributes|\.editorconfig)$|\.md$|^Docs\//

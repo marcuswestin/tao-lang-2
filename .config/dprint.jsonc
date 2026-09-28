@@ -1,5 +1,5 @@
-// The repo root .dprint.jsonc symlinks to this file so editor plugins can discover
-// the formatter config while repo automation can keep using the explicit path.
+// The repo root .dprint.jsonc symlinks here so editor plugins can discover the
+// formatter config. dprint itself follows that symlink; this file is the one to edit.
 {
   "useTabs": false,
   "indentWidth": 2,

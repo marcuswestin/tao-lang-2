@@ -23,7 +23,7 @@ import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from '
  *
  * Every recipe-backed node implicitly reads `just`, because it starts by parsing the Justfile, which
  * `_fix-just-fmt` rewrites. That is why `_fix-just-fmt` is first in the prepare phase and depends on
- * nothing: dprint owns TypeScript, JSON, and Markdown (`config/dprint.jsonc`) and never touches the
+ * nothing: dprint owns TypeScript, JSON, and Markdown (`.config/dprint.jsonc`) and never touches the
  * Justfile, so there is nothing for it to wait for, and running it first costs 15ms and frees every
  * other node from it.
  *

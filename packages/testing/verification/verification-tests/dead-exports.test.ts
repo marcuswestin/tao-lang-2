@@ -503,7 +503,7 @@ Describe('recorded kept exports', () => {
    */
   Test('names every entry point by a path that resolves in some package it covers', async () => {
     const config = await FS.readJson<{ workspaces: Record<string, { entry?: readonly string[] }> }>(
-      Repo.resolvePath('config/knip.json'),
+      Repo.resolvePath('.config/knip.json'),
     )
 
     const packages = await FS.listDir(Repo.resolvePath('packages'))
@@ -543,7 +543,7 @@ Describe('recorded kept exports', () => {
 
   Test('declares the one carve-out record this repository keeps', async () => {
     const config = await FS.readJson<{ workspaces: Record<string, { entry?: readonly string[] }> }>(
-      Repo.resolvePath('config/knip.json'),
+      Repo.resolvePath('.config/knip.json'),
     )
 
     Expect(config.workspaces['packages/*/*']?.entry).toContain('cli-src/subprocess-test-api.ts')
@@ -582,7 +582,7 @@ Describe('dead export run', () => {
       Expect(captured.result).toBe(1)
       Expect(captured.stderr).toContain('packages/studio/studio-src/Host.tsx:1 SyncDraft')
       Expect(captured.stderr).not.toContain('Actions.ts:1 SyncDraft')
-      Expect(captured.stderr).toContain('config/knip.json')
+      Expect(captured.stderr).toContain('.config/knip.json')
       Expect(captured.stdout).toContain('1 unused, 1 bound from .tao sources')
     } finally {
       await FS.remove(root)
