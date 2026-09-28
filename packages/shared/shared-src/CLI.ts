@@ -1,4 +1,4 @@
-import { CommandExecutionError, throwUnexpected } from './core/Errors'
+import { asError, CommandExecutionError, throwUnexpected } from './core/Errors'
 import type { FileHandle } from './FS'
 import * as HCI from './HCI'
 import * as Platform from './Platform'
@@ -347,7 +347,12 @@ function startCommand(
   restartIdleBound()
 
   if (spec.stdin !== undefined) {
-    child.stdin?.end(spec.stdin)
+    try {
+      child.stdin?.end(spec.stdin)
+    } catch (error) {
+      // Bun can throw synchronously when a short-lived child closes its pipe first.
+      spawnError ??= asError(error)
+    }
   }
 
   /** closeResultFor reports the bound that stopped the tree, so a caller never reads a clean exit. */
