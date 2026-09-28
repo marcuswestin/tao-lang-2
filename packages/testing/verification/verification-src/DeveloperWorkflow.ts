@@ -25,7 +25,8 @@ const defaultDependencies: DeveloperWorkflowDependencies = {
 /**
  * These are the human's half of the same rules the landing enforces for agents: work on a branch of
  * your own, never on `main`, and keep `main` a ref that only a landing moves. `dev/<name>` is the
- * human counterpart of `feat/<name>`; both land the same way.
+ * human counterpart of `feat/<name>`; both use the same landing, and a personal branch is created
+ * again from `main` afterwards.
  */
 export const DeveloperBranchCommand = {
   /** Switch this checkout to the developer's own branch, creating it from `main` the first time. */
