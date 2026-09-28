@@ -141,4 +141,16 @@ test "Account data" with AliceNotes {
       expect missing text "Alice private note"
       expect text "Sign in to your notes"
    }
+   test "updates and deletes only the visible account note" {
+      run AuthReview
+
+      expect text "Alice private note"
+      expect missing text "Bob private note"
+      press #updateNote
+      expect text "Updated note"
+      expect missing text "Alice private note"
+      press #deleteNote
+      expect missing text "Updated note"
+      expect missing text "Bob private note"
+   }
 }

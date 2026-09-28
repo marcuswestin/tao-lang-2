@@ -446,6 +446,12 @@ credentials, starts its local InstantDB gateway, and opens Studio for manual iPh
 Tao Companion with `just studio-companion-install roPhone`, keep the phone and Mac on the same
 network, then choose the phone in Studio and open the app. Select the "Clerk and InstantDB / iPhone"
 scenario to send the app to Companion. Clerk sign-in requires Internet access.
+
+The Convex/Clerk and Pylon/PylonAuth variants select hosted-provider pilots with placeholder project
+configuration. The Jazz/Clerk Auth Review variant is pending provider capability conformance; its
+current datasource declaration cannot bind the app's relations and field update rules. The existing
+Tao journeys check the provider-neutral UI; hosted policy, native transport, and Jazz/Pylon offline
+behavior require separate live acceptance.
 The custom password input is masked and authentication problems wrap on a phone. Known Clerk
 configuration failures, including disabled native API access, are distinguished from rejected
 credentials without exposing provider response text.

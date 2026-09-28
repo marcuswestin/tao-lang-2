@@ -2,9 +2,12 @@ use Account, AccountView, LoginFlow, Session, SignIn, SignInFlow, SignInView, Si
 use Clerk from @tao/auth/clerk
 use InstantAuth from @tao/auth/instantdb
 use LocalAuth from @tao/auth/local
+use PylonAuth from @tao/auth/pylon
 use TestAuth from @tao/auth/testing
+use Convex from @tao/data/providers/convex
 use InstantDB from @tao/data/providers/instantdb
 use Memory from @tao/data/providers/memory
+use Pylon from @tao/data/providers/pylon
 use Reference from @tao/data/providers/reference
 use StackNav from @tao/nav
 use Col, FormButton, Row, ScrollView, Text, TextInput, TextMultiline from @tao/ui
@@ -58,11 +61,45 @@ app AuthReviewInstantClerk = AuthReviewInstant with {
       ClerkClientName "clerk"
 }  }
 
+// Activate Clerk's Convex integration so its ordinary session token has aud "convex".
+app AuthReviewConvexClerk = AuthReview with {
+   Auth Clerk {
+      PublishableKey "pk_test_REPLACE_WITH_YOUR_KEY"
+   }
+   Datasource Convex {
+      DeploymentURL "https://REPLACE_WITH_CONVEX_DEPLOYMENT.convex.cloud"
+}  }
+
+// Use the same hosted Pylon URL for native magic-code auth and row data.
+app AuthReviewPylon = AuthReview with {
+   Auth PylonAuth {
+      BaseURL "https://REPLACE_WITH_PYLON_HOST"
+   }
+   Datasource Pylon {
+      BaseURL "https://REPLACE_WITH_PYLON_HOST"
+}  }
+
 let Me = Account
 let ReviewEmail = "narcvs+tao-clerk-test@gmail.com"
 let ReviewPassword = "TaoReview!Violet-27-River"
 
 scenarios AuthReviewClerk "Clerk and InstantDB" {
+   scenario "iPhone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+}  }
+
+scenarios AuthReviewConvexClerk "Clerk and Convex" {
+   scenario "iPhone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+}  }
+
+scenarios AuthReviewPylon "Pylon auth and data" {
    scenario "iPhone" {
       device phone
       appearance light
@@ -296,5 +333,17 @@ view NotesHome() {
          on press Add
       }
       loop Mine / Note {
-         Text(Note.Body)
-}  }  }
+         Col() {
+            Text(Note.Body)
+
+            #updateNote
+            FormButton(Title: "Update note") {
+               on press -> { update Note {
+                  Body: "Updated note"
+               } }
+            }
+
+            #deleteNote
+            FormButton(Title: "Delete note") {
+               on press -> { delete Note }
+}  }  }  }  }

@@ -9,26 +9,27 @@ pairing](<Plan - Auth and data pairing.md>)), so Tao needs hosted providers besi
 
 ## Evaluation — 2026-09-27
 
-The Developer selected Jazz and Convex for the first implementation round on 2026-09-28. The other
-tiers remain recommendations. Primary documentation was checked on 2026-09-27, with Pylon's new
-release rechecked on 2026-09-28; no Tao adapter or conformance run has proved the candidate
-capabilities. `supports` must hold for every writer, including hostile clients and offline replay.
+The Developer selected Jazz, Convex, and Pylon for the first implementation round on 2026-09-28.
+The other tiers remain recommendations. Primary documentation was checked on 2026-09-27, with Pylon's new
+release rechecked on 2026-09-28. Local pilot tests cover parts of the adapters; no hosted/native
+conformance run has proved the candidate capabilities. `supports` must hold for every writer,
+including hostile clients and offline replay.
 The Developer confirmed that a managed provider may execute Tao-generated policy and write code;
 Tao or the app author must not have to host an application server. Prices are dated snapshots, not
 cost estimates for a Tao app.
 
-| Candidate | Proposed tier         | Decisive point                                                                                                         |
-| --------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Jazz      | Tier 1 pilot          | Selected for first round; hosted sync, external JWT and server policy fit, while native client and Jazz 2 are alpha.   |
-| Pylon     | Tier 1 pilot proposed | Current v0.20.0 appears to fit; recommend a later pilot gated by policy, session and device proof.                     |
-| Zero      | Not now               | Production requires an app query/mutate API server.                                                                    |
-| PowerSync | Not now               | Strong offline subset fit, but queued writes require an app backend.                                                   |
-| Convex    | Tier 1                | Selected for first round; managed backend and native client fit online data with Clerk pairing.                        |
-| LiveStore | Not now               | Auth, authorization and sync authority require authored infrastructure.                                                |
-| Electric  | Not now               | Read replication needs a separate authorized write path.                                                               |
-| Ditto     | Not now               | Per-user auth requires an authored webhook; policy is narrower than Tao's.                                             |
-| Automerge | Not now               | A CRDT engine without hosted account or policy authority.                                                              |
-| RxDB      | Not now; revisit      | Direct Supabase sync may avoid an app server, but native production storage is paid and policy/schema fit needs proof. |
+| Candidate | Proposed tier    | Decisive point                                                                                                         |
+| --------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Jazz      | Tier 1 pilot     | Selected for first round; hosted sync, external JWT and server policy fit, while native client and Jazz 2 are alpha.   |
+| Pylon     | Tier 1 pilot     | Selected for first round with PylonAuth; policy, session, offline and device proof gate landing.                       |
+| Zero      | Not now          | Production requires an app query/mutate API server.                                                                    |
+| PowerSync | Not now          | Strong offline subset fit, but queued writes require an app backend.                                                   |
+| Convex    | Tier 1           | Selected for first round; managed backend and native client fit online data with Clerk pairing.                        |
+| LiveStore | Not now          | Auth, authorization and sync authority require authored infrastructure.                                                |
+| Electric  | Not now          | Read replication needs a separate authorized write path.                                                               |
+| Ditto     | Not now          | Per-user auth requires an authored webhook; policy is narrower than Tao's.                                             |
+| Automerge | Not now          | A CRDT engine without hosted account or policy authority.                                                              |
+| RxDB      | Not now; revisit | Direct Supabase sync may avoid an app server, but native production storage is paid and policy/schema fit needs proof. |
 
 ### Jazz
 
@@ -51,8 +52,9 @@ is MIT, and production Cloud pricing was not confirmed. Start with a bounded Cle
 
 Pylon could supply both datasource and auth: its own revocable session suggests
 `issues { Session }` and `accepts { Session from PylonAuth }`; external `IdentityToken` acceptance
-needs proof. Stack0 Cloud hosts its backend. Its Expo client keeps a replica and mutation queue in
-AsyncStorage. The documented policy DSL includes relation membership, field ownership, uniqueness,
+needs proof. Pylon Cloud hosts its backend. Its Expo client documents a replica in AsyncStorage,
+but the installed 0.20.0 native client keeps pending mutations in memory across a forced restart;
+durable offline replay needs an adapter-owned outbox or an upstream fix. The documented policy DSL includes relation membership, field ownership, uniqueness,
 and pre/post update checks on raw write routes. These are stronger foundations for Tao conformance
 than the initial evaluation credited, though Tao account isolation, native reliability, and every
 declared guarantee remain unproved. Dependencies include `@pylonsync/sdk`, `@pylonsync/react`,
@@ -69,8 +71,8 @@ working release. [v0.20.0](https://github.com/pylonsync/pylon/releases/tag/v0.20
 in-memory sessions by default, per-process rate limits, and an experimental Workers deployment;
 [recent fixes](https://github.com/pylonsync/pylon/compare/v0.19.0...v0.20.0) include policy scope
 and cross-tenant write repairs. Server functions bypass raw row policies, so Tao-generated functions
-would need equivalent authorization checks. Recommend a later Tier 1 **evaluation pilot**, after
-Jazz and Convex: test hosted Expo/device sign-in, owner spoofing, membership, unique constraints,
+would need equivalent authorization checks. The Developer selected Pylon for the first **evaluation
+pilot**, paired with PylonAuth: test hosted Expo/device sign-in, owner spoofing, membership, unique constraints,
 offline replay, migration, restoration and sign-out before committing to shipping it.
 
 ### Zero
@@ -205,21 +207,50 @@ SQLite Premium starts at $99/month billed annually. Dependencies would include `
 Tier 1 means a great fit worth implementing now. Not now keeps the candidate listed with the reason,
 so a later pass can revisit it.
 
+## Pilot findings — 2026-09-28
+
+- **Jazz/Clerk Auth Review is blocked.** Jazz alpha.57 update policies see old and new row values,
+  but not the fields submitted by a direct writer. A same-value patch to a protected `Owner` or
+  `CreatedAt` field can pass a value-comparison rule, violating Tao's explicit write-intent and
+  `FieldUpdates` contract. Its relation mapping also cannot guarantee `(owned)` cascade when a
+  parent is deletable. Keep `supports { }` and the Jazz transport experiment; restore the Auth
+  Review variant only after a server-enforced field/relationship design passes hostile direct
+  requests. The [Jazz permission documentation](https://jazz.tools/docs/auth/permissions)
+  describes the old/new value checks. This unresolved required gate blocks landing the three-provider
+  slice. The generated Expo host and JazzRn module compiled for iOS Simulator, but no Jazz Cloud
+  deployment, app launch, sign-in, two-device journey or offline journey ran.
+- **Convex/Clerk remains an online pilot.** Local generated-function tests cover per-field writes
+  and owner policy, including direct hostile relation links and required-field writes. Auth Review
+  backend source was generated; Convex code generation and deployment require a disposable Convex
+  project. Hosted direct requests, two-device native journey and account lifecycle are still
+  required. No Tao `Offline` capability is declared.
+- **Pylon/PylonAuth remains an online pilot.** Its generated managed functions enforce submitted
+  fields while generated raw policies deny direct writes. Generated Auth Review backend source
+  compiles in a workspace with `@pylonsync/functions` and `tao-pylon`; a Pylon Cloud project must
+  include those dependencies and configure a trusted origin before deployment. The native 0.20.0
+  mutation queue is not durable through app restart. An encrypted account-scoped outbox has local
+  simulated-restart coverage, while hosted offline working-set completeness, account switching and
+  queued replay remain unproved. Do not declare Tao `Offline` or land until those gates pass.
+
 ## Sequence
 
-1. Implement Jazz and Convex in the first work round, with a separate reviewable provider slice for
-   each. Include pairing declarations, conformance checks for every declared capability, and an
-   Auth Review journey. Start with Clerk's existing `IdentityToken` path.
-2. Obtain approval for the named SDK dependencies before changing manifests or the lockfile:
-   `jazz-tools@alpha`/`jazz-rn@alpha` for Jazz and `convex` for Convex. The native `jazz-rn` package
-   must be a direct Expo app dependency for autolinking. Inspect compatibility and request approval
-   for any additional direct dependency that becomes necessary.
+1. Implement Jazz, Convex, and Pylon in the first work round, with a separate reviewable provider
+   slice for each. Include pairing declarations, conformance checks for every declared capability,
+   and an Auth Review journey. Start Jazz and Convex with Clerk's existing `IdentityToken` path;
+   start Pylon with PylonAuth's `Session` path. Complete hosted online paths first, then prove Jazz
+   and Pylon's declared offline scopes before proposing a landing.
+2. The Developer approved the named SDK dependencies on 2026-09-28: `jazz-tools@alpha`,
+   `jazz-rn@alpha`, `convex`, `@pylonsync/sdk`, `@pylonsync/react`, and
+   `@pylonsync/react-native`, plus dependencies required by their installation. The Pylon generated
+   functions require `@pylonsync/functions@0.20.0`, now a direct provider dependency. The native `jazz-rn`
+   package must be a direct Expo app dependency for autolinking. Use `./agent setup
+   --refresh-lockfile` after manifest edits.
 3. **Auth follow-up:** investigate Jazz's local-first account/session and
    [Convex Auth's beta mobile password/OTP flows](https://docs.convex.dev/auth/convex-auth) against
    Tao's `issues`/`accepts`, Account resolution, restoration,
    renewal and logout interface. If each fits, implement its provider-native Auth provider with
-   pairing declarations and an Auth Review journey. A separate approval is required before adding
-   `@convex-dev/auth` or any other new SDK dependency. Jazz's local-first account must not be
+   pairing declarations and an Auth Review journey. `@convex-dev/auth` belongs to that later
+   conditional auth follow-up. Jazz's local-first account must not be
    assumed to be a Tao sign-in proof until this is proven.
-4. Revisit a Pylon pilot after the first slice. The current release appears capable, but its
-   policy, session, offline and native behavior need Tao conformance and hosted-device evidence.
+4. Pylon–Clerk pairing is a later follow-up. Pylon's policy, session, offline and native behavior
+   need Tao conformance and hosted-device evidence before landing this pilot.
