@@ -397,7 +397,7 @@ Describe('agent worktree profile bootstrap', () => {
 
       Expect(result.exitCode).not.toBe(0)
       Expect(result.stderr).toContain('pinned devenv profile is unavailable')
-      Expect(result.stderr).toContain('./bootstrap-tao-dev-env')
+      Expect(result.stderr).toContain('./.config/bootstrap-tao-dev-env')
     } finally {
       await FS.remove(testRoot)
     }

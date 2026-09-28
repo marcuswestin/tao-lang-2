@@ -9,7 +9,7 @@ for argument in "$@"; do
     --tools-only) tools_only=true ;;
     --install-nix) install_nix=true ;;
     --help)
-      printf 'Usage: ./bootstrap-tao-dev-env [--install-nix] [--tools-only]\n'
+      printf 'Usage: ./.config/bootstrap-tao-dev-env [--install-nix] [--tools-only]\n'
       printf 'Build the locked portable Linux profile, then run ./agent setup.\n'
       printf 'Use --tools-only to prepare a reusable tools image without repository dependencies.\n'
       exit 0 ;;
@@ -17,7 +17,7 @@ for argument in "$@"; do
   esac
 done
 
-repository=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 cd "$repository"
 if [ "$(uname -s)" != Linux ]; then
   printf 'Portable bootstrap supports Linux. On macOS use ./enter-tao-dev-env.\n' >&2
@@ -45,7 +45,7 @@ if ! command -v nix-build >/dev/null 2>&1; then
   done
 fi
 if ! command -v nix-build >/dev/null 2>&1; then
-  printf 'Nix is missing. In a disposable Linux environment run ./bootstrap-tao-dev-env --install-nix.\n' >&2
+  printf 'Nix is missing. In a disposable Linux environment run ./.config/bootstrap-tao-dev-env --install-nix.\n' >&2
   exit 1
 fi
 
