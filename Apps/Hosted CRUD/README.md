@@ -9,7 +9,7 @@ Both paths offer account creation, sign-in, a list of notes, create, text edit, 
 
 ## Configure
 
-Run the guided `tao connect` flow from the repository root for each stack. It points to each provider console, collects public client identifiers, and optionally saves a server credential in this project's ignored, owner-only `.tao` directory. The app does not need a server credential, and this command does not create or verify cloud resources. Follow the provider-specific [Firebase](src/firebase/README.md) and [Appwrite](src/appwrite/README.md) setup notes for the remaining database, auth, and policy steps. Public identifiers are written to [tao.connections.json](tao.connections.json); never put service-account credentials, admin API keys, or test passwords there. The two backends have separate accounts, so use the same test email and password for both when comparing the flows.
+Run the guided `tao connect` flow from the repository root for each stack. Firebase currently collects public client identifiers and leaves cloud setup in the console; Appwrite uses a project API key to configure its platform, auth, and Notes table. Follow the provider-specific [Firebase](src/firebase/README.md) and [Appwrite](src/appwrite/README.md) setup notes. Public identifiers are written to [tao.connections.json](tao.connections.json); the Appwrite setup key is saved separately under the ignored `.tao/` directory and never bundled into the app. Never put service-account credentials, admin API keys, or test passwords in the public config. The two backends have separate accounts, so use the same test email and password for both when comparing the flows.
 
 From the repository root, run:
 

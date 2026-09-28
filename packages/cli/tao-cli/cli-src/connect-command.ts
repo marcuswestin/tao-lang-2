@@ -1,10 +1,12 @@
 import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
+import { provisionAppwrite } from './appwrite-provision'
 
 export type ConnectProvider = 'firebase' | 'appwrite'
 
 type ConnectPrompts = {
   text: (message: string) => Promise<string>
+  paste: (message: string) => Promise<string>
   secret: (message: string) => Promise<string>
 }
 
@@ -14,9 +16,11 @@ type ConnectOptions = {
   output?: Writable
   /** Replaces terminal input for focused command tests. */
   prompts?: ConnectPrompts
+  /** Replaces network requests for focused command tests. */
+  fetch?: (url: string, init?: RequestInit) => Promise<Response>
 }
 
-/** Collects settings for the Hosted CRUD pilot. It does not create or verify cloud resources. */
+/** Connects the Hosted CRUD pilot to a provider project. */
 export async function runTaoConnect(
   provider: ConnectProvider,
   path = '.',
@@ -37,11 +41,13 @@ export async function runTaoConnect(
   }
   const prompts = options.prompts ?? {
     text: (message: string) => HCI.askText({ ...terminal, message }),
+    paste: async (message: string) => (await HCI.askSecret({ ...terminal, message })).value,
     secret: async (message: string) => (await HCI.askSecret({ ...terminal, message })).value,
   }
   const out = { output: options.output }
   const publicPath = FS.resolvePath('tao.connections.json', project)
-  const secretPath = FS.resolvePath('.tao/connect-secrets.json', project)
+  const privateDirectory = FS.resolvePath('.tao', project)
+  const privatePath = FS.resolvePath('connect-secrets.json', privateDirectory)
 
   HCI.writeLine(
     'This pilot records setup details for Apps/Hosted CRUD. Ordinary Tao app declarations do not consume these settings yet.',
@@ -53,131 +59,178 @@ export async function runTaoConnect(
     HCI.writeLine('   (or Add app), then choose the Web app icon (</>).', out)
     HCI.writeLine('2. Enter an app nickname, such as Tao Hosted CRUD Demo. Leave', out)
     HCI.writeLine('   "Also set up Firebase Hosting for this app" unchecked, then click Register app.', out)
-    HCI.writeLine('3. On Add Firebase SDK, leave Use npm selected. The app already has Firebase installed;', out)
-    HCI.writeLine('   skip npm install and the sample initialization code. Copy projectId, apiKey, appId,', out)
-    HCI.writeLine('   and authDomain from the firebaseConfig snippet, then click Continue to console.', out)
-    HCI.writeLine('4. If you did not copy them, open Project settings > General > Your apps, select the', out)
-    HCI.writeLine('   Web app, then SDK setup and configuration > Config. Copy those same four values.', out)
+    HCI.writeLine('3. On Add Firebase SDK, leave Use npm selected. Skip npm install; Firebase is already', out)
+    HCI.writeLine('   installed. Copy the entire code snippet, or just its firebaseConfig object, and paste', out)
+    HCI.writeLine('   it at the next prompt. Both work. Then click Continue to console.', out)
+    HCI.writeLine('4. If you already left that screen, open Project settings > General > Your apps, select', out)
+    HCI.writeLine('   the Web app, then SDK setup and configuration > Config. Copy its firebaseConfig object.', out)
+    HCI.writeLine('   Paste it at the next prompt. The paste is hidden; press Return instead to enter the', out)
+    HCI.writeLine('   four needed values individually.', out)
     HCI.writeLine(
       '   The web API key identifies the client project; it is public config, not an admin credential.',
       out,
     )
-    HCI.writeLine('5. The app needs no service account. Press Return at that prompt unless you already', out)
-    HCI.writeLine(
-      '   need backend tooling. A service account comes from Project settings > Service accounts',
-      out,
-    )
-    HCI.writeLine(
-      '   > Generate new private key, and cannot create the project it belongs to. Never put it in a client app.',
-      out,
-    )
+    HCI.writeLine('   No service-account JSON is needed for this app; do not generate one.', out)
   } else {
-    HCI.writeLine(
-      '1. At https://cloud.appwrite.io create a project and add an Apple or Android platform for your app ID.',
-      out,
-    )
-    HCI.writeLine(
-      '2. In Console, create a free serverless TablesDB database and a table; find the endpoint and project ID in project Settings.',
-      out,
-    )
-    HCI.writeLine('3. The app needs no server API key. Create one in the project API keys area only if you', out)
-    HCI.writeLine('   want to save it for future backend tooling. Keep it off the client.', out)
+    HCI.writeLine('1. At https://cloud.appwrite.io create a project, such as Tao Hosted CRUD Demo.', out)
+    HCI.writeLine('   Choose the free serverless option and a region.', out)
+    HCI.writeLine('2. In project Settings, copy Project ID and the regional API endpoint ending in /v1.', out)
+    HCI.writeLine('3. Open API Keys in the project sidebar, click Create API key, and name it Tao CLI setup.', out)
+    HCI.writeLine('   Grant project.read, project.write, platforms.read, platforms.write,', out)
+    HCI.writeLine('   databases.read, databases.write, tables.read, and tables.write.', out)
+    HCI.writeLine('   Grant columns.write and indexes.write if those scopes are listed.', out)
+    HCI.writeLine('   Copy the key once and paste it at the hidden prompt below. Do not put it in app config.', out)
+    HCI.writeLine('4. Tao will register the iPhone platform, enable email/password auth, and create', out)
+    HCI.writeLine('   a serverless TablesDB Notes table with row security and creator permissions.', out)
   }
 
-  const publicFields: Record<string, string> = {}
+  let publicFields: Record<string, string> = {}
+  if (provider === 'firebase') {
+    const pasted =
+      (await prompts.paste('Paste Firebase code snippet or firebaseConfig object (Return for individual fields):'))
+        .trim()
+    if (pasted !== '') {
+      publicFields = parseFirebaseConfigSnippet(pasted)
+    }
+  }
   const fields = provider === 'firebase'
     ? (['projectId', 'apiKey', 'appId', 'authDomain'] as const)
-    : (['endpoint', 'projectId', 'platform', 'databaseId', 'tableId'] as const)
-  for (const field of fields) {
-    const value = (await prompts.text(`${provider} ${field}:`)).trim()
-    if (value === '' || /[\u0000-\u001f\u007f]/u.test(value)) {
-      Errors.throwUserInput(
-        `${provider} ${field} must be non-empty text without control characters; nothing was stored.`,
-      )
+    : (['endpoint', 'projectId'] as const)
+  if (Object.keys(publicFields).length === 0) {
+    for (const field of fields) {
+      const value = (await prompts.text(`${provider} ${field}:`)).trim()
+      if (value === '' || /[\u0000-\u001f\u007f]/u.test(value)) {
+        Errors.throwUserInput(
+          `${provider} ${field} must be non-empty text without control characters; nothing was stored.`,
+        )
+      }
+      publicFields[field] = value
     }
-    publicFields[field] = value
   }
   if (provider === 'appwrite') {
     try {
       const endpoint = new URL(publicFields['endpoint']!)
-      if (endpoint.protocol !== 'https:' || !endpoint.pathname.endsWith('/v1')) {
-        Errors.throwUserInput('Appwrite endpoint must be an HTTPS URL ending in /v1; nothing was stored.')
+      if (
+        endpoint.protocol !== 'https:' || endpoint.pathname !== '/v1'
+        || !(endpoint.hostname === 'cloud.appwrite.io' || endpoint.hostname.endsWith('.cloud.appwrite.io'))
+        || endpoint.username || endpoint.password || endpoint.search || endpoint.hash
+      ) {
+        Errors.throwUserInput(
+          'Appwrite endpoint must be an Appwrite Cloud HTTPS URL ending in /v1; nothing was stored.',
+        )
       }
     } catch (error) {
       if (error instanceof Errors.UserInputError) {
         throw error
       }
-      Errors.throwUserInput('Appwrite endpoint must be an HTTPS URL ending in /v1; nothing was stored.')
+      Errors.throwUserInput('Appwrite endpoint must be an Appwrite Cloud HTTPS URL ending in /v1; nothing was stored.')
     }
-  }
-
-  let secret: unknown
-  if (provider === 'firebase') {
-    const pasted = (await prompts.secret('Firebase service-account JSON (optional; press Return to skip):')).trim()
-    if (pasted !== '') {
-      try {
-        secret = JSON.parse(pasted)
-      } catch {
-        Errors.throwUserInput('Firebase service-account JSON is invalid; nothing was stored.')
-      }
-      if (
-        !isObject(secret) || secret['type'] !== 'service_account'
-        || secret['project_id'] !== publicFields['projectId']
-        || typeof secret['private_key'] !== 'string' || typeof secret['client_email'] !== 'string'
-      ) {
-        Errors.throwUserInput(
-          'Firebase service-account JSON must match the project ID and contain a private key and client email; nothing was stored.',
-        )
-      }
-    }
-  } else {
-    secret = (await prompts.secret('Appwrite server API key (optional; press Return to skip):')).trim()
+    publicFields['platform'] = 'dev.tao.hostedcrudspike'
+    publicFields['databaseId'] = 'tao_notes'
+    publicFields['tableId'] = 'notes'
   }
 
   if (
-    await FS.isSymbolicLink(publicPath) || await FS.isSymbolicLink(secretPath)
-    || await FS.isSymbolicLink(FS.dirname(secretPath))
+    await FS.isSymbolicLink(publicPath) || await FS.isSymbolicLink(privateDirectory)
+    || await FS.isSymbolicLink(privatePath)
   ) {
-    Errors.throwUserInput('Connection file path is a symbolic link; nothing was stored.')
+    Errors.throwUserInput('A connection file or directory is a symbolic link; nothing was stored.')
   }
   const publicConfig = await readObject(publicPath)
-  const oldSecrets = await readObject(secretPath)
-  if (secret !== undefined && secret !== '') {
-    if (await FS.exists(secretPath)) {
-      await FS.chmod(secretPath, 0o600)
+  if (provider === 'appwrite') {
+    const privateConfig = await readObject(privatePath)
+    const savedAppwrite = privateConfig['appwrite']
+    const savedKey = isObject(savedAppwrite)
+        && savedAppwrite['endpoint'] === publicFields['endpoint']
+        && savedAppwrite['projectId'] === publicFields['projectId']
+        && typeof savedAppwrite['apiKey'] === 'string'
+      ? savedAppwrite['apiKey']
+      : ''
+    const enteredKey = (await prompts.secret(
+      savedKey ? 'Paste Appwrite project API key (Return to reuse saved key):' : 'Paste Appwrite project API key:',
+    )).trim()
+    const apiKey = enteredKey || savedKey
+    if (apiKey === '' || /[\u0000-\u001f\u007f]/u.test(apiKey)) {
+      Errors.throwUserInput('Appwrite API key must be non-empty text; nothing was stored.')
     }
-    await FS.writeJson(secretPath, {
-      ...oldSecrets,
-      [provider]: provider === 'firebase' ? { serviceAccount: secret } : { apiKey: secret },
+    await provisionAppwrite(
+      {
+        endpoint: publicFields['endpoint']!,
+        projectId: publicFields['projectId']!,
+        platform: publicFields['platform']!,
+        databaseId: publicFields['databaseId']!,
+        tableId: publicFields['tableId']!,
+      },
+      apiKey,
+      options.fetch,
+    )
+    if (await FS.isFile(privatePath)) {
+      await FS.chmod(privatePath, 0o600)
+    }
+    await FS.writeJson(privatePath, {
+      ...privateConfig,
+      appwrite: { endpoint: publicFields['endpoint'], projectId: publicFields['projectId'], apiKey },
     }, { mode: 0o600 })
-    await FS.chmod(secretPath, 0o600)
-  } else if (await FS.exists(secretPath)) {
-    // Retained credentials may have been written with a permissive mode by an older tool.
-    await FS.chmod(secretPath, 0o600)
+    await FS.chmod(privatePath, 0o600)
+    HCI.writeLine(`Saved Appwrite API key to ${FS.displayPath(privatePath)} (owner-only, ignored by Git).`, out)
   }
   await FS.writeJson(publicPath, { ...publicConfig, [provider]: publicFields })
 
   HCI.writeLine(`Saved public ${provider} config to ${FS.displayPath(publicPath)}.`, out)
-  HCI.writeLine(
-    secret !== undefined && secret !== ''
-      ? `Saved ${provider} server credential to ${FS.displayPath(secretPath)} (owner only).`
-      : `No ${provider} server credential entered; an existing one, if present, was retained.`,
-    out,
-  )
-  HCI.writeLine(
-    provider === 'firebase'
-      ? 'Next in Firebase Console: Security > Authentication > Sign-in method: enable Email/Password; Databases & Storage > Firestore: create the database, then publish the app firestore.rules.'
-      : 'Next in Appwrite Console: add table columns and an ownerId index, enable row security, grant authenticated users table create only, enable email/password sign-in, and confirm the platform ID.',
-    out,
-  )
-  HCI.writeLine(
-    'This command stores local settings only; it has not provisioned resources or checked the connection.',
-    out,
-  )
+  if (provider === 'firebase') {
+    HCI.writeLine('Next in Firebase Console:', out)
+    HCI.writeLine('1. Security > Authentication > Sign-in method: enable Email/Password and Save.', out)
+    HCI.writeLine('2. Databases & Storage > Firestore: create a database in a chosen location.', out)
+    HCI.writeLine('   Choose production mode initially, then open Firestore > Rules.', out)
+    HCI.writeLine('3. Paste Apps/Hosted CRUD/src/firebase/firestore.rules and click Publish.', out)
+    HCI.writeLine('4. From the repository root run just hosted-crud, scan the QR code in Expo Go,', out)
+    HCI.writeLine('   and choose Firebase on the first screen.', out)
+  } else {
+    HCI.writeLine('Appwrite project configuration applied. Next:', out)
+    HCI.writeLine('1. From the repository root run just hosted-crud, scan the QR code in Expo Go,', out)
+    HCI.writeLine('   and choose Appwrite on the first screen.', out)
+  }
+  if (provider === 'firebase') {
+    HCI.writeLine('Firebase settings were saved, but cloud resources were not provisioned or checked.', out)
+  }
   HCI.writeLine(
     'Only Apps/Hosted CRUD currently reads the public settings. A normal Tao app still needs a provider bridge.',
     out,
   )
+}
+
+function parseFirebaseConfigSnippet(snippet: string): Record<string, string> {
+  const declaration = /\b(?:const|let|var)\s+firebaseConfig\s*=\s*\{/u.exec(snippet)
+  const open = declaration
+    ? declaration.index + declaration[0].lastIndexOf('{')
+    : snippet.trimStart().startsWith('{')
+    ? snippet.indexOf('{')
+    : -1
+  const close = open < 0 ? -1 : snippet.indexOf('}', open + 1)
+  if (close < 0) {
+    Errors.throwUserInput('Paste the Firebase code snippet or firebaseConfig object; nothing was stored.')
+  }
+  const objectText = snippet.slice(open, close + 1)
+    .replace(/([,{]\s*)([A-Za-z_$][\w$]*)(\s*:)/gu, '$1"$2"$3')
+    .replace(/,\s*\}/gu, '}')
+  let config: unknown
+  try {
+    config = JSON.parse(objectText)
+  } catch {
+    Errors.throwUserInput('Firebase config must contain a valid firebaseConfig object; nothing was stored.')
+  }
+  if (!isObject(config)) {
+    Errors.throwUserInput('Firebase config must contain a firebaseConfig object; nothing was stored.')
+  }
+  const fields: Record<string, string> = {}
+  for (const key of ['projectId', 'apiKey', 'appId', 'authDomain']) {
+    const value = config[key]
+    if (typeof value !== 'string' || value.trim() === '' || /[\u0000-\u001f\u007f]/u.test(value)) {
+      Errors.throwUserInput(`Firebase config needs a non-empty ${key} string; nothing was stored.`)
+    }
+    fields[key] = value
+  }
+  return fields
 }
 
 async function readObject(path: string): Promise<Record<string, unknown>> {
