@@ -1,0 +1,29 @@
+{
+  "name": "tao-hosted-crud-spike",
+  "private": true,
+  "version": "0.1.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start --go",
+    "test": "bun test src",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@basepurpose/rxdb-sqlite": "0.1.0",
+    "@legendapp/state": "3.0.0-beta.48",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "57.0.23",
+    "expo-sqlite": "~57.0.3",
+    "firebase": "12.19.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-appwrite": "1.1.0",
+    "react-native-url-polyfill": "4.0.0",
+    "rxdb": "17.5.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "@types/react": "~19.2.0",
+    "typescript": "5.9.3"
+  }
+}

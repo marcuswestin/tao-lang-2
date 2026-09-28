@@ -1,0 +1,33 @@
+# Hosted CRUD first-experience spike
+
+This is one Expo Go notes app with two selectable hosted stacks:
+
+1. Firebase email/password auth, RxDB with the MIT `@basepurpose/rxdb-sqlite` Expo storage, and RxDB's Firestore replication.
+2. Appwrite email/password auth, Legend-State v3 generic CRUD sync, and AsyncStorage persistence.
+
+Both paths offer account creation, sign-in, a list of notes, create, text edit, completion toggle, delete, and sign-out through the same screen. This standalone app checks library and setup fit before either path becomes a Tao datasource. Its source is a spike, not a declaration of Tao `supports` capabilities.
+
+## Configure
+
+Run the guided `tao connect` flow from the repository root for each stack. It points to each provider console, collects public client identifiers, and optionally saves a server credential in this project's ignored, owner-only `.tao` directory. The app does not need a server credential, and this command does not create or verify cloud resources. Follow the provider-specific [Firebase](src/firebase/README.md) and [Appwrite](src/appwrite/README.md) setup notes for the remaining database, auth, and policy steps. Public identifiers are written to [tao.connections.json](tao.connections.json); never put service-account credentials, admin API keys, or test passwords there. The two backends have separate accounts, so use the same test email and password for both when comparing the flows.
+
+From the repository root, run:
+
+```sh
+./tao connect firebase 'Apps/Hosted CRUD'
+./tao connect appwrite 'Apps/Hosted CRUD'
+just hosted-crud
+```
+
+Scan Metro's QR code in Expo Go on an iPhone. The phone and development machine must be able to reach the Metro server. No Apple Developer account is needed for this path. Choose a provider on the first screen, then create an account and perform the same CRUD steps. Provider selection is disabled while signed in; sign out before switching.
+
+## Comparison protocol
+
+Record elapsed time and distinct setup actions from a fresh provider account to the first synced note. Then test each stack in this order:
+
+1. Create and edit a note on one device; observe the change on a second signed-in device.
+2. Disconnect one device, create/edit/delete notes, kill and relaunch Expo Go, and reconnect. Verify the final state on both devices.
+3. Sign out and sign in as a different account. Verify no prior account notes appear, including while offline.
+4. Attempt direct SDK reads and writes as a second account. Verify the backend rejects cross-account access.
+
+Record any native module failure, partial sync, duplicate row, conflict, data leak, or setup step requiring privileged credentials. Local typechecks or simulator runs alone do not establish the iPhone, offline restart, or hostile-client results.

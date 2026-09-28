@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "workspaces": [
+    "Apps/Hosted CRUD",
     "packages/*",
     "packages/*/*",
     "packages/apps/providers/*"

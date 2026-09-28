@@ -115,6 +115,24 @@ function createCommands(): Command {
     })
 
   commands
+    .command('connect')
+    .argument('<provider>', 'Hosted service to connect: firebase or appwrite.')
+    .argument('[path]', 'Project directory to configure.', '.')
+    .description('Guide Firebase or Appwrite setup for the Hosted CRUD pilot.')
+    .action(async (provider: string, path: string) => {
+      try {
+        if (provider !== 'firebase' && provider !== 'appwrite') {
+          Errors.throwUserInput(`Unknown provider '${provider}'. Choose firebase or appwrite.`)
+        }
+        const { runTaoConnect } = await import('./connect-command')
+        await runTaoConnect(provider, path)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
     .command('dev')
     .argument('[path]', 'Tao file or directory whose runnable apps should be discovered.', '.')
     .option('--app <name>', 'Select a uniquely named app without prompting.')

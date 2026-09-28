@@ -9,7 +9,9 @@ pairing](<Plan - Auth and data pairing.md>)), so Tao needs hosted providers besi
 
 ## Evaluation — 2026-09-27
 
-The Developer selected Jazz, Convex, and Pylon for the first implementation round on 2026-09-28.
+The Developer selected Jazz, Convex, and Pylon for the first implementation round on 2026-09-28,
+then placed an Expo Go first-experience spike for Firebase/RxDB and Appwrite/Legend ahead of further
+provider work. The spike compares the same generic CRUD app with each hosted service's own auth.
 The other tiers remain recommendations. Primary documentation was checked on 2026-09-27, with Pylon's new
 release rechecked on 2026-09-28. Local pilot tests cover parts of the adapters; no hosted/native
 conformance run has proved the candidate capabilities. `supports` must hold for every writer,
@@ -18,18 +20,20 @@ The Developer confirmed that a managed provider may execute Tao-generated policy
 Tao or the app author must not have to host an application server. Prices are dated snapshots, not
 cost estimates for a Tao app.
 
-| Candidate | Proposed tier    | Decisive point                                                                                                         |
-| --------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Jazz      | Tier 1 pilot     | Selected for first round; hosted sync, external JWT and server policy fit, while native client and Jazz 2 are alpha.   |
-| Pylon     | Tier 1 pilot     | Selected for first round with PylonAuth; policy, session, offline and device proof gate landing.                       |
-| Zero      | Not now          | Production requires an app query/mutate API server.                                                                    |
-| PowerSync | Not now          | Strong offline subset fit, but queued writes require an app backend.                                                   |
-| Convex    | Tier 1           | Selected for first round; managed backend and native client fit online data with Clerk pairing.                        |
-| LiveStore | Not now          | Auth, authorization and sync authority require authored infrastructure.                                                |
-| Electric  | Not now          | Read replication needs a separate authorized write path.                                                               |
-| Ditto     | Not now          | Per-user auth requires an authored webhook; policy is narrower than Tao's.                                             |
-| Automerge | Not now          | A CRDT engine without hosted account or policy authority.                                                              |
-| RxDB      | Not now; revisit | Direct Supabase sync may avoid an app server, but native production storage is paid and policy/schema fit needs proof. |
+| Candidate         | Proposed tier    | Decisive point                                                                                                       |
+| ----------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Jazz              | Tier 1 pilot     | Selected for first round; hosted sync, external JWT and server policy fit, while native client and Jazz 2 are alpha. |
+| Pylon             | Tier 1 pilot     | Selected for first round with PylonAuth; policy, session, offline and device proof gate landing.                     |
+| Zero              | Not now          | Production requires an app query/mutate API server.                                                                  |
+| PowerSync         | Not now          | Strong offline subset fit, but queued writes require an app backend.                                                 |
+| Convex            | Tier 1           | Selected for first round; managed backend and native client fit online data with Clerk pairing.                      |
+| Firebase + RxDB   | Expo Go spike    | Firebase Auth and RxDB Firestore replication may give one-service hosted auth plus offline notes.                    |
+| Appwrite + Legend | Expo Go spike    | Appwrite Auth plus Legend-State generic CRUD may offer a simpler first setup; sync details need proof.               |
+| LiveStore         | Not now          | Auth, authorization and sync authority require authored infrastructure.                                              |
+| Electric          | Not now          | Read replication needs a separate authorized write path.                                                             |
+| Ditto             | Not now          | Per-user auth requires an authored webhook; policy is narrower than Tao's.                                           |
+| Automerge         | Not now          | A CRDT engine without hosted account or policy authority.                                                            |
+| RxDB              | Not now; revisit | Tao provider conformance is unproved; a free community Expo SQLite adapter now merits an iPhone storage spike.       |
 
 ### Jazz
 
@@ -185,12 +189,37 @@ provider-specific `Session`, but the pairing and Supabase RLS rules need design.
 plugin documents two-way mobile sync without an app server, realtime and RLS; it requires string
 primary keys, simple top-level fields, modification timestamps and soft deletes. `Offline` is
 plausible, while Tao relations, global uniqueness, field/membership rules and additive migrations
-need Supabase-backed conformance. React Native SQLite storage exists, but bundled trial storage is
-capped at 500 live documents and is unsuitable for production. Core is Apache-2.0; production
-SQLite Premium starts at $99/month billed annually. Dependencies would include `rxdb`,
-`@supabase/supabase-js` and a production storage license. [Supabase](https://rxdb.info/replication-supabase.html),
+need Supabase-backed conformance. React Native SQLite storage exists. The official premium SQLite
+path carries a license cost, but the MIT [BasePurpose Expo adapter](https://github.com/basepurpose/rxdb-sqlite)
+offers a free route; its status lists Android device verification and iOS tests without device
+verification. The [RxDB Firestore plugin](https://rxdb.info/replication-firestore.html) supplies
+push/pull replication with soft deletes and a server timestamp convention. Those two libraries are
+being spiked together with Firebase Auth; compatibility, durable replay, security rules, and Tao
+capability fit remain unproved. Core is Apache-2.0. [Supabase](https://rxdb.info/replication-supabase.html),
 [sync](https://rxdb.info/replication.html), [SQLite](https://rxdb.info/rx-storage-sqlite.html),
-[Premium](https://rxdb.info/premium/), [source](https://github.com/pubkey/rxdb).
+[source](https://github.com/pubkey/rxdb).
+
+## Expo Go first-experience spike — 2026-09-28
+
+The Developer approved `firebase`, `rxdb`, `@basepurpose/rxdb-sqlite`, `expo-sqlite`,
+`@legendapp/state`, `react-native-appwrite`, `react-native-url-polyfill`, and AsyncStorage, plus
+installation dependencies. [Hosted CRUD](../../Apps/Hosted%20CRUD/README.md) gives the two stacks
+one notes UI and a common comparison protocol. This standalone Expo Go app isolates first-run
+library and project setup; it does not yet constitute Tao auth or datasource declarations and does
+not claim `Relations`, `AccessRules`, `FieldUpdates`, or `Offline` support.
+
+`tao connect firebase|appwrite` currently guides console setup and records the pilot app's public
+client settings, with optional project-local credentials for later backend tooling. It does not
+provision a cloud project or wire an ordinary Tao data declaration to either provider. Firebase's
+web API key is public client configuration; the optional service account is a server secret.
+Appwrite's installed React Native SDK Realtime path is unsuitable for this native spike, so the
+Legend adapter polls for changes. Its `ownerId` field is client-controlled; provider-enforced
+document permissions and direct hostile requests still need hosted proof.
+
+The decision needs a physical iPhone run against disposable projects: account creation and restore,
+two-device CRUD, queued offline create/update/delete across an app restart, reconciliation,
+cross-account cache isolation, and direct hostile backend requests. Measure project creation and
+configuration steps and time to first synced note. A green typecheck or bundle is a narrower result.
 
 ## What the evaluation decides for each candidate
 

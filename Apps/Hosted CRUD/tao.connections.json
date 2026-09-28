@@ -1,0 +1,15 @@
+{
+  "firebase": {
+    "apiKey": "REPLACE_WITH_FIREBASE_API_KEY",
+    "appId": "REPLACE_WITH_FIREBASE_APP_ID",
+    "authDomain": "REPLACE_WITH_FIREBASE_AUTH_DOMAIN",
+    "projectId": "REPLACE_WITH_FIREBASE_PROJECT_ID"
+  },
+  "appwrite": {
+    "endpoint": "https://REPLACE_WITH_REGION.cloud.appwrite.io/v1",
+    "projectId": "REPLACE_WITH_APPWRITE_PROJECT_ID",
+    "platform": "dev.tao.hostedcrudspike",
+    "databaseId": "REPLACE_WITH_APPWRITE_DATABASE_ID",
+    "collectionId": "REPLACE_WITH_APPWRITE_COLLECTION_ID"
+  }
+}
