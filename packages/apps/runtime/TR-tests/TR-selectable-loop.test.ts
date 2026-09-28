@@ -30,7 +30,7 @@ const { InteractionScrollContext } = await import('../TaoRuntime-src/TR-interact
 type RuntimeElement = React.ReactElement<Record<string, unknown>>
 
 Describe('TR.ForEach selectable rows', () => {
-  Test('long-press and right-click open mounted row verbs without selecting the row', () => {
+  Test('long-press and right-click open mounted row verbs without selecting the row', async () => {
     const unregisterRegion = InteractionControls.Outline.register({
       identity: 'documents',
       kind: 'region',
@@ -57,9 +57,11 @@ Describe('TR.ForEach selectable rows', () => {
       identity: 'Draft actions',
     }, 'draft')
     const useContext = React.useContext
+    const useEffect = React.useEffect
     const useRef = React.useRef
     const useSyncExternalStore = React.useSyncExternalStore
     React.useContext = (() => undefined) as typeof React.useContext
+    React.useEffect = (() => undefined) as typeof React.useEffect
     React.useRef = (value => ({ current: value })) as typeof React.useRef
     React.useSyncExternalStore = (() => 0) as typeof React.useSyncExternalStore
     let selections = 0
@@ -97,6 +99,19 @@ Describe('TR.ForEach selectable rows', () => {
       Expect(selections).toBe(0)
 
       InteractionControls.PressKey('Escape')
+      ;(web.props['onPointerDown'] as (event: { button: number; clientX: number; clientY: number }) => void)({
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+      })
+      await new Promise(resolve => setTimeout(resolve, 550))
+      Expect(InteractionControls.Attention.read().mode).toBe('verbs')
+      ;(web.props['onPointerLeave'] as () => void)()
+      ;(web.props['onPointerUp'] as () => void)()
+      ;(web.props['onClick'] as (event: { button: number }) => void)({ button: 0 })
+      Expect(selections).toBe(0)
+
+      InteractionControls.PressKey('Escape')
       InteractionControls.PressKey('d')
       const narrowingLayer = InteractionLayersHost({})
       const help = findByTestID(narrowingLayer, 'tao-contextual-help')
@@ -106,9 +121,18 @@ Describe('TR.ForEach selectable rows', () => {
       Expect(findByTestID(helpRow, 'tao-interaction-row:draft')).toBeDefined()
       InteractionControls.PressKey('Escape')
       Expect(findByTestID(InteractionLayersHost({}), 'tao-contextual-help')).toBeUndefined()
+      ;(web.props['onPointerDown'] as (event: { button: number; clientX: number; clientY: number }) => void)({
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+      })
+      ;(web.props['onPointerUp'] as () => void)()
+      ;(web.props['onClick'] as (event: { button: number }) => void)({ button: 0 })
+      Expect(selections).toBe(1)
     } finally {
       reactNativeRuntime.Platform.OS = 'ios'
       React.useContext = useContext
+      React.useEffect = useEffect
       React.useRef = useRef
       React.useSyncExternalStore = useSyncExternalStore
       unregisterSurface()

@@ -3,7 +3,7 @@ import { accessibilityVerbProps, focusAccessibilityHost, type TaoAccessibilityHo
 import { createElement } from './TR-create-element'
 import { InteractionControls, useAccessibilityVerbs } from './TR-interaction-catalog'
 import { interactionMeasurements, type TaoOutlineLiveEntry } from './TR-interaction-outline'
-import { InteractionScrollContext, type Measurable } from './TR-interaction-scroll'
+import { InteractionScrollContext, type Measurable, revealMountedTarget } from './TR-interaction-scroll'
 import { requireReactNativeRuntime } from './TR-react-native'
 
 /**
@@ -22,9 +22,16 @@ export function SelectableRow(props: {
   const host = React.useRef<(TaoAccessibilityHost & Measurable) | null>(null)
   const reveal = React.useContext(InteractionScrollContext)
   const longPressed = React.useRef(false)
+  const webLongPressTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const webPressOrigin = React.useRef<{ x: number; y: number } | undefined>(undefined)
+  React.useEffect(() => () => {
+    if (webLongPressTimer.current !== undefined) {
+      clearTimeout(webLongPressTimer.current)
+    }
+  }, [])
   if (props.capabilities) {
     props.capabilities.focus = () => focusAccessibilityHost(runtime, host.current)
-    props.capabilities.scrollIntoView = () => reveal?.(host.current)
+    props.capabilities.scrollIntoView = () => revealMountedTarget(host.current, reveal)
   }
   const verbs = useAccessibilityVerbs(props.identity)
   const activate = InteractionControls.ActivateIdentity(props.identity, props.onSelect)
@@ -63,7 +70,14 @@ export function SelectableRow(props: {
   if (runtime.Platform?.OS === 'web') {
     const { accessibilityRole: _accessibilityRole, accessible: _accessible, onPress: _onPress, ...webProps } =
       actionProps
-    const selectableProps = webSelectableRowProps(webProps, activate, openVerbs)
+    const selectableProps = webSelectableRowProps(
+      webProps,
+      activate,
+      openVerbs,
+      longPressed,
+      webLongPressTimer,
+      webPressOrigin,
+    )
     return createElement(
       runtime.View,
       props.identity === undefined ? selectableProps : interactionMeasurements.bind(props.identity, selectableProps),
@@ -79,11 +93,16 @@ export function SelectableRow(props: {
 
 type TaoWebClickEvent = Readonly<{
   button?: number
+  clientX?: number
+  clientY?: number
   currentTarget?: unknown
   preventDefault?(): void
   stopPropagation?(): void
   target?: Readonly<{ closest?(selector: string): unknown }>
 }>
+
+const webLongPressDelayMs = 500
+const webDragThreshold = 8
 
 /** A native focus event carries neither field, so the row keeps taking attention off the platform. */
 type TaoRowFocusEvent = Readonly<{
@@ -96,27 +115,83 @@ function webSelectableRowProps(
   nativeProps: Record<string, unknown>,
   activate: () => unknown,
   openVerbs: () => void,
+  longPressed: { current: boolean },
+  timer: { current: ReturnType<typeof setTimeout> | undefined },
+  origin: { current: { x: number; y: number } | undefined },
 ): Record<string, unknown> {
+  const cancelTimer = () => {
+    if (timer.current !== undefined) {
+      clearTimeout(timer.current)
+      timer.current = undefined
+    }
+  }
   return {
     ...nativeProps,
     onClick: (event: TaoWebClickEvent) => {
+      if (longPressed.current) {
+        longPressed.current = false
+        event.preventDefault?.()
+        event.stopPropagation?.()
+        return
+      }
       if (event.button !== undefined && event.button !== 0) {
         return
       }
-      const nestedControl = event.target?.closest?.(
-        'button, a, input, select, textarea, [contenteditable]:not([contenteditable="false"]), '
-          + '[role="button"], [role="checkbox"], [role="link"], [role="menuitem"], [role="switch"]',
-      )
-      if (nestedControl === undefined || nestedControl === null || nestedControl === event.currentTarget) {
+      if (!webNestedControl(event)) {
         activate()
       }
     },
     onContextMenu: (event: TaoWebClickEvent) => {
+      cancelTimer()
       event.preventDefault?.()
       event.stopPropagation?.()
       openVerbs()
     },
+    onPointerCancel: () => {
+      cancelTimer()
+      origin.current = undefined
+      longPressed.current = false
+    },
+    onPointerDown: (event: TaoWebClickEvent) => {
+      if ((event.button !== undefined && event.button !== 0) || webNestedControl(event)) {
+        return
+      }
+      cancelTimer()
+      longPressed.current = false
+      origin.current = { x: event.clientX ?? 0, y: event.clientY ?? 0 }
+      timer.current = setTimeout(() => {
+        timer.current = undefined
+        longPressed.current = true
+        openVerbs()
+      }, webLongPressDelayMs)
+    },
+    onPointerLeave: () => {
+      cancelTimer()
+      origin.current = undefined
+    },
+    onPointerMove: (event: TaoWebClickEvent) => {
+      if (
+        origin.current
+        && (Math.abs((event.clientX ?? 0) - origin.current.x) > webDragThreshold
+          || Math.abs((event.clientY ?? 0) - origin.current.y) > webDragThreshold)
+      ) {
+        cancelTimer()
+        origin.current = undefined
+      }
+    },
+    onPointerUp: () => {
+      cancelTimer()
+      origin.current = undefined
+    },
     role: 'group',
     tabIndex: -1,
   }
+}
+
+function webNestedControl(event: TaoWebClickEvent): boolean {
+  const nestedControl = event.target?.closest?.(
+    'button, a, input, select, textarea, [contenteditable]:not([contenteditable="false"]), '
+      + '[role="button"], [role="checkbox"], [role="link"], [role="menuitem"], [role="switch"]',
+  )
+  return nestedControl !== undefined && nestedControl !== null && nestedControl !== event.currentTarget
 }

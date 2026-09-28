@@ -200,7 +200,9 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     choices. Controls derive names from Title, Label, or visible text; Description supplies a hint,
     and missing or uncertain names receive a diagnostic with a source fix. Selectable rows and
     suitable action controls expose directly invokable verbs as accessibility actions. Focused
-    runtime coverage does not establish native screen-reader acceptance. The keyboard plan's
+    runtime coverage and a rendered WordFlower web pass establish web interaction, including
+    creation, rename, deletion, pinned-first order, Help, pointer menus, and mounted-row reveal;
+    they do not establish native screen-reader acceptance. The keyboard plan's
     **Remaining decided implementation** ledger owns subdued nonmatches, empty-region click,
     drag/drop, unmounted virtualized targeting, and native assistive-technology validation.
 

@@ -4,12 +4,22 @@ type Bounds = Readonly<{ x: number; y: number; width: number; height: number }>
 export type Measurable = {
   measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void
   getBoundingClientRect?(): Bounds
+  scrollIntoView?(options?: { block: 'nearest'; inline: 'nearest' }): void
 }
 
 /** The closest mounted ScrollView owns revealing a selected descendant. */
 export const InteractionScrollContext = React.createContext<((target: Measurable | null) => void) | undefined>(
   undefined,
 )
+
+/** Web rows can be inside unconstrained ScrollViews whose actual scroller is an outer DOM ancestor. */
+export function revealMountedTarget(target: Measurable | null, reveal?: (target: Measurable | null) => void): void {
+  if (target?.scrollIntoView) {
+    target.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  } else {
+    reveal?.(target)
+  }
+}
 
 export function measuredBounds(node: Measurable | null, receive: (bounds: Bounds) => void): void {
   if (node?.measureInWindow) {

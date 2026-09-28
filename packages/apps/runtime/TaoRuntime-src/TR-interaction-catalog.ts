@@ -19,7 +19,7 @@ import {
   useOutlineOccurrence,
   useOutlineParentIdentity,
 } from './TR-interaction-outline'
-import { InteractionScrollContext, type Measurable } from './TR-interaction-scroll'
+import { InteractionScrollContext, type Measurable, revealMountedTarget } from './TR-interaction-scroll'
 import { runtimeRevisionStore } from './TR-listeners'
 import type { Evaluable } from './TR-navigation-presentables'
 import { requireReactNativeRuntime } from './TR-react-native'
@@ -520,7 +520,7 @@ function useNativeRowRoot(layout: TaoVisualLayout | undefined, tag?: string): Re
   if (!row) {
     return nativeProps
   }
-  row.capabilities.scrollIntoView = () => reveal?.(host.current)
+  row.capabilities.scrollIntoView = () => revealMountedTarget(host.current, reveal)
   return interactionMeasurements.bind(row.identity, { ...nativeProps, ref: host })
 }
 
