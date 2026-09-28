@@ -30,7 +30,7 @@ host probes rather than an inherited sandbox environment marker, because an appr
 retain that marker after the harness has given the process host access.
 Pause and ask the Developer for the exact needed intervention; do not retry with alternate commands or skip
 the host gates. Unlocked, it then settles what might need an author: this is a clean `feat/*` or
-`dev/*` branch checked out only here, no worktree has `main`, the archive branch is free, and
+`dev/*` branch checked out only here, no worktree has `main`, the archive ref is free, and
 `.artifacts/merge/<branch>.msg` exists and validates. On the first call it drafts a missing message
 and refuses, having taken no lock; read and edit the draft, then rerun `./agent unsandboxed land`. A small
 review record ties that edit to this HEAD. A new commit makes the record stale and requires review
@@ -94,8 +94,11 @@ reclaims a lock on a timer; forcing one is still the Developer's call, and `boar
 Ask `./agent unsandboxed landed [branch]` whether a branch landed; never infer it. The landing runs for minutes
 behind a wrapper, and every other signal is ambiguous: a stopped wrapper, a task reported failed
 because the shell it was piped into exited non-zero, a `summary.json` read while the lane was still
-writing it. `merge-with-main` pushes `merged/<name>` on success and at no other time, so that ref is
-the fact. The command queries the remote directly. A failed remote query reports an error,
+writing it. `merge-with-main` pushes the archive on success and at no other time, so that ref is
+the fact. A feature branch archives once, at `merged/<name>`. A personal branch archives each
+landing at `merged/<name>/<utc>` (`2026-09-28T15-12-03-789Z`; colons cannot appear in a ref), which
+is what lets `dev/<name>` be recreated from main and landed again. Any dated ref means that
+personal branch has landed. The command queries the remote directly. A failed remote query reports an error,
 never "not landed." Guessing costs more than asking: one branch was re-landed twice in a session
 because a successful landing read as a failure.
 

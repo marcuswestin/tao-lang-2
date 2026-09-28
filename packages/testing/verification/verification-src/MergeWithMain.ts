@@ -34,7 +34,11 @@ const MAX_STABILIZATION_PASSES = 2
 const LAND_BARRIER_LANE = 'land-barrier'
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
-/** Branches a landing accepts: `feat/` is an agent's, `dev/` a person's, and they land identically. */
+/**
+ * Branches a landing accepts: `feat/` is an agent's, `dev/` a person's. They land the same way,
+ * except a personal branch archives once per landing (`merged/<name>/<utc>`) so the name can be
+ * recreated from main and landed again. A feature branch archives once, at `merged/<name>`.
+ */
 const LANDABLE_PREFIXES = ['feat/', 'dev/'] as const
 const MERGE_PHASES: readonly MergePhase[] = [
   'prepared',
@@ -111,6 +115,8 @@ export type MergeSnapshot = {
   remoteMainHead: string
   remoteTransport?: RemoteTransport
   snapshotPath: string
+  /** The archive ref chosen at preflight. Push uses this rather than naming one again later. */
+  archive?: string
   version: typeof SNAPSHOT_VERSION
 }
 
@@ -142,6 +148,8 @@ export type MergePreflight = {
   remoteMainHead: string
   remoteMergedHead?: string
   remoteTransport: RemoteTransport
+  /** The remote ref this landing will create. Dated for `dev/*`, a single name for `feat/*`. */
+  archive: string
   warnings: string[]
 }
 
@@ -228,10 +236,29 @@ const defaultDependencies: MergeWithMainDependencies = {
   writeText: FS.writeText,
 }
 
-/** archiveName is where a landed branch is preserved on the remote: `merged/<name>` without its prefix. */
-function archiveName(branch: string): string {
+/**
+ * archiveStem is the undated archive name: `merged/<name>` with the `feat/` or `dev/` prefix removed.
+ * A feature branch publishes exactly this ref. A personal branch publishes children under it.
+ */
+function archiveStem(branch: string): string {
   const prefix = LANDABLE_PREFIXES.find(candidate => branch.startsWith(candidate)) ?? ''
   return `merged/${branch.slice(prefix.length)}`
+}
+
+/**
+ * archiveStamp is a UTC time a Git ref can hold. `2026-09-28T15:12:03.789Z` becomes
+ * `2026-09-28T15-12-03-789Z`, because a ref cannot contain a colon.
+ */
+function archiveStamp(at: Date): string {
+  const [date, fraction] = at.toISOString().split('.')
+  const millis = (fraction ?? '000Z').slice(0, 3)
+  return `${date!.replaceAll(':', '-')}-${millis}Z`
+}
+
+/** archiveName is the ref this landing publishes. Personal branches include the preflight time. */
+function archiveName(branch: string, at: Date): string {
+  const stem = archiveStem(branch)
+  return branch.startsWith('dev/') ? `${stem}/${archiveStamp(at)}` : stem
 }
 
 /**
@@ -243,9 +270,10 @@ function archiveName(branch: string): string {
  * it. An agent that guesses re-lands work already on `main`, which is how one branch was re-landed
  * twice in a single session.
  *
- * The archive ref is the fact. `merge-with-main` pushes `merged/<name>` as part of a successful
- * landing and at no other time, so the ref exists if and only if the branch landed. Query the
- * remote directly; a failed query must not look like an absent archive.
+ * The archive ref is the fact. `merge-with-main` pushes it as part of a successful landing and at
+ * no other time. A feature branch has one ref, `merged/<name>`. A personal branch has one ref per
+ * landing, `merged/<name>/<utc>`, and any of them means the branch has landed. Query the remote
+ * directly; a failed query must not look like an absent archive.
  */
 export async function landedReport(
   branch?: string,
@@ -259,9 +287,15 @@ export async function landedReport(
       'This worktree is on a detached HEAD, so there is no branch to ask about. Name one: `./agent landed feat/<name>`.',
     )
   }
-  const archive = archiveName(named)
-  const remote = await remoteHeads(dependencies, root, [archive])
-  return { archive, branch: named, landed: remote.refs.has(archive) }
+  const stem = archiveStem(named)
+  if (named.startsWith('dev/')) {
+    const remote = await remoteHeads(dependencies, root, [`${stem}/*`])
+    const archives = [...remote.refs.keys()].filter(name => name.startsWith(`${stem}/`)).sort()
+    const archive = archives.at(-1) ?? `${stem}/`
+    return { archive, branch: named, landed: archives.length > 0 }
+  }
+  const remote = await remoteHeads(dependencies, root, [stem])
+  return { archive: stem, branch: named, landed: remote.refs.has(stem) }
 }
 
 /** currentBranch names this worktree's branch, or undefined on a detached HEAD. */
@@ -407,7 +441,13 @@ export async function inspectMergePreflight(
   const mainHead = localMain.stdout.trim()
   const mirrorRoots = await readMirrorRoots(dependencies, worktrees, mainHead)
 
-  const remote = await remoteHeads(dependencies, featureRoot, [MAIN_BRANCH, branch, archiveName(branch)])
+  const archive = archiveName(branch, dependencies.now())
+  const stem = archiveStem(branch)
+  const remote = await remoteHeads(
+    dependencies,
+    featureRoot,
+    branch.startsWith('dev/') ? [MAIN_BRANCH, branch, archive, stem] : [MAIN_BRANCH, branch, archive],
+  )
   const remoteRefs = remote.refs
   const remoteMainHead = remoteRefs.get(MAIN_BRANCH)
   if (!remoteMainHead) {
@@ -435,9 +475,17 @@ export async function inspectMergePreflight(
     }
     remoteFeatureBehind = true
   }
-  const remoteMergedHead = remoteRefs.get(archiveName(branch))
+  const remoteMergedHead = remoteRefs.get(archive)
   if (remoteMergedHead !== undefined) {
-    Errors.throwUserInput(`Remote archive branch 'merged/${branch.slice(5)}' already exists.`)
+    Errors.throwUserInput(`Remote archive branch '${archive}' already exists.`)
+  }
+  // `refs/heads/merged/ro` and `refs/heads/merged/ro/<time>` cannot exist together: Git stores the
+  // first as a file and the second needs that path to be a directory.
+  if (branch.startsWith('dev/') && remoteRefs.get(stem) !== undefined) {
+    Errors.throwUserInput(
+      `Remote archive '${stem}' is one ref, so a dated archive under '${stem}/' cannot be created beside it. `
+        + `Move '${stem}' to '${stem}/<date-time>' first.`,
+    )
   }
 
   const ancestor = await dependencies.run('git', {
@@ -457,6 +505,7 @@ export async function inspectMergePreflight(
   const warnings = await fullRunWarnings(dependencies, featureRoot)
 
   return {
+    archive,
     branch,
     branchHead,
     featureRoot,
@@ -564,7 +613,7 @@ export const MergeWithMainCommand = {
       await pushArchiveAndPreserve(snapshot, dependencies)
 
       const completed = [
-        `PASS  Merged '${lockedPreflight.branch}' into main and archived it as ${archiveName(lockedPreflight.branch)}.`,
+        `PASS  Merged '${lockedPreflight.branch}' into main and archived it as ${lockedPreflight.archive}.`,
         `PASS  Preserved the clean invoking worktree at ${lockedPreflight.featureRoot} on detached HEAD; `
         + 'run `./agent start-branch feat/<name>` for the next slice, or archive its owning task.',
       ]
@@ -888,6 +937,7 @@ async function createSnapshot(
     git(dependencies, preflight.featureRoot, ['write-tree']).then(result => result.stdout.trim()),
   ])
   const snapshot: MergeSnapshot = {
+    archive: preflight.archive,
     branch: preflight.branch,
     createdAt,
     currentFeatureDiff: '',
@@ -1313,7 +1363,7 @@ async function pushRemoteRefs(
   if (landedHead === undefined) {
     Errors.throwUnexpected('The landing snapshot has no squash commit to push.')
   }
-  const archive = archiveName(snapshot.branch)
+  const archive = snapshot.archive ?? archiveName(snapshot.branch, new Date(snapshot.createdAt))
   const args = [
     'push',
     '--porcelain',
@@ -1456,9 +1506,11 @@ async function readSnapshot(path: string, dependencies: MergeWithMainDependencie
     || typeof value.remoteMainHead !== 'string'
     || value.remoteTransport !== undefined && value.remoteTransport !== 'broker' && value.remoteTransport !== 'direct'
     || typeof value.snapshotPath !== 'string'
+    || value.archive !== undefined && typeof value.archive !== 'string'
   ) {
     Errors.throwUserInput(`Merge snapshot has an unsupported shape: ${path}`)
   }
+  value.archive ??= archiveName(value.branch, new Date(value.createdAt))
   return value
 }
 
