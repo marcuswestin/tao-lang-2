@@ -21,6 +21,7 @@ import {
   nextStop,
 } from '../studio-src/client/matrix/StudioCanvasViewport'
 import { expectPreviewRevision } from '../studio-src/client/matrix/StudioPreviewConnection'
+import { watchCellPreviewLoad } from '../studio-src/client/matrix/StudioPreviewMatrix'
 import {
   StudioApiClient,
   StudioApiError,
@@ -72,6 +73,7 @@ import {
   studioPreviewCaptureError,
   type StudioPreviewConnection,
   StudioPreviewFrameUrl,
+  StudioPreviewPublication,
   StudioPreviewSourceSync,
   StudioPreviewSuspension,
   studioReplayConfiguration,
@@ -79,6 +81,7 @@ import {
   StudioReviewDom,
   StudioRuntimeData,
 } from '../studio-src/client/StudioMatrixView'
+import { protectSketchToolbarPress } from '../studio-src/client/StudioSketchView'
 
 import {
   StudioCommandPalette,
@@ -1055,6 +1058,181 @@ Test('Studio expects a new preview revision without automatically reloading its 
   Expect(preview.expectedRevision).toBe(2)
   Expect('revisionTimeout' in preview).toBe(false)
   Expect(iframe.src).toBe('http://127.0.0.1:56102/')
+})
+
+Test('Studio releases a toolbar render lock on blur, cancellation, timeout, unmount, and completed click', async () => {
+  const toolbar = new EventTarget() as HTMLElement
+  const document = new EventTarget() as Document
+  const view = new EventTarget()
+  Object.defineProperty(document, 'defaultView', { value: view })
+  const lifetime = new AbortController()
+  let held = 0
+  protectSketchToolbarPress(
+    toolbar,
+    document,
+    {
+      begin: () => {
+        held += 1
+      },
+      end: () => {
+        held -= 1
+      },
+    },
+    lifetime.signal,
+    10,
+  )
+  const pointer = (type: string) => Object.assign(new Event(type), { button: 0, isPrimary: true, pointerId: 1 })
+
+  toolbar.dispatchEvent(pointer('pointerdown'))
+  Expect(held).toBe(1)
+  view.dispatchEvent(new Event('blur'))
+  Expect(held).toBe(0)
+  toolbar.dispatchEvent(pointer('pointerdown'))
+  document.dispatchEvent(Object.assign(new Event('pointercancel'), { pointerId: 2 }))
+  Expect(held).toBe(1)
+  document.dispatchEvent(pointer('pointercancel'))
+  Expect(held).toBe(0)
+  toolbar.dispatchEvent(pointer('pointerdown'))
+  document.dispatchEvent(pointer('pointerup'))
+  Expect(held).toBe(1)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  Expect(held).toBe(0)
+  toolbar.dispatchEvent(pointer('pointerdown'))
+  lifetime.abort()
+  Expect(held).toBe(0)
+  const active = new AbortController()
+  protectSketchToolbarPress(
+    toolbar,
+    document,
+    {
+      begin: () => {
+        held += 1
+      },
+      end: () => {
+        held -= 1
+      },
+    },
+    active.signal,
+    10,
+  )
+  toolbar.dispatchEvent(pointer('pointerdown'))
+  Expect(held).toBe(1)
+  await new Promise(resolve => setTimeout(resolve, 20))
+  Expect(held).toBe(0)
+  active.abort()
+})
+
+Test(
+  'Studio recovers a retained preview that misses publication and stops after an accepted acknowledgement',
+  async () => {
+    const iframe = {} as HTMLIFrameElement
+    let reloads = 0
+    Object.defineProperty(iframe, 'src', {
+      get: () => 'http://127.0.0.1:56102/',
+      set: () => {
+        reloads += 1
+        StudioPreviewPublication.loaded(preview)
+      },
+    })
+    const preview = { ...previewConnection('preview-stalled', 'novel', {}), iframe }
+    const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
+
+    StudioPreviewPublication.expect(preview, identity, 10)
+    await new Promise(resolve => setTimeout(resolve, 15))
+    Expect(reloads).toBe(1)
+    StudioPreviewPublication.acknowledged(preview, identity, preview.previewInstanceId)
+    await new Promise(resolve => setTimeout(resolve, 15))
+    Expect(reloads).toBe(1)
+    Expect(preview.pendingPublication).toBeUndefined()
+  },
+)
+
+Test('Studio lets an intentional slow iframe navigation finish before retrying publication', async () => {
+  const iframe = {} as HTMLIFrameElement
+  let reloads = 0
+  Object.defineProperty(iframe, 'src', {
+    get: () => 'http://127.0.0.1:56102/',
+    set: () => {
+      reloads += 1
+    },
+  })
+  const preview = { ...previewConnection('preview-navigating', 'novel', {}), iframe }
+  const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
+  StudioPreviewPublication.navigating(preview, 40)
+  StudioPreviewPublication.expect(preview, identity, 10)
+  await new Promise(resolve => setTimeout(resolve, 18))
+  Expect(reloads).toBe(0)
+  StudioPreviewPublication.loaded(preview)
+  await new Promise(resolve => setTimeout(resolve, 18))
+  Expect(reloads).toBe(1)
+  StudioPreviewPublication.acknowledged(preview, identity, preview.previewInstanceId)
+  Expect(preview.pendingPublication).toBeUndefined()
+})
+
+Test('Studio initial cell load restores the normal publication retry budget', () => {
+  const iframe = new EventTarget() as HTMLIFrameElement
+  Object.defineProperty(iframe, 'contentWindow', { value: null })
+  const preview = { ...previewConnection('preview-initial-load', 'novel', {}), iframe, navigationPending: true }
+  const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
+  watchCellPreviewLoad(preview, {} as StudioHandshake)
+  StudioPreviewPublication.expect(preview, identity, 10)
+  Expect(preview.pendingPublication?.waitMs).toBe(30_000)
+  iframe.dispatchEvent(new Event('load'))
+  Expect(preview.navigationPending).toBe(false)
+  Expect(preview.pendingPublication?.waitMs).toBe(10)
+  StudioPreviewPublication.cancel(preview)
+})
+
+Test('Studio ignores stale acknowledgements and bounds preview publication recovery', async () => {
+  const iframe = {} as HTMLIFrameElement
+  let reloads = 0
+  Object.defineProperty(iframe, 'src', {
+    get: () => 'http://127.0.0.1:56102/',
+    set: () => {
+      reloads += 1
+      StudioPreviewPublication.loaded(preview)
+    },
+  })
+  const frame = { dataset: {} } as HTMLElement
+  const preview = { ...previewConnection('preview-stale', 'novel', {}), iframe, frame }
+  const identity = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
+  StudioPreviewPublication.expect(preview, identity, 10)
+  StudioPreviewPublication.acknowledged(preview, preview.cellIdentity!, preview.previewInstanceId)
+  await until(() => frame.dataset['taoReviewStatus'] === 'failed', {
+    description: 'the bounded preview publication recovery failure',
+    intervalMs: 0,
+  })
+
+  Expect(reloads).toBe(2)
+  Expect(frame.dataset['taoReviewStatus']).toBe('failed')
+  Expect(preview.pendingPublication).toBeUndefined()
+})
+
+Test('Studio pauses publication recovery while a preview is suspended and supersedes old revisions', async () => {
+  const iframe = {} as HTMLIFrameElement
+  let reloads = 0
+  Object.defineProperty(iframe, 'src', {
+    get: () => 'http://127.0.0.1:56102/',
+    set: () => {
+      reloads += 1
+      StudioPreviewPublication.loaded(preview)
+    },
+  })
+  const preview = { ...previewConnection('preview-suspended', 'novel', {}), iframe }
+  const older = { ...preview.cellIdentity!, compileRevision: 2, manifestRevision: 'manifest-2' }
+  const newer = { ...older, compileRevision: 3, manifestRevision: 'manifest-3' }
+  StudioPreviewPublication.expect(preview, older, 10)
+  StudioPreviewPublication.pause(preview)
+  preview.suspended = true
+  await new Promise(resolve => setTimeout(resolve, 15))
+  Expect(reloads).toBe(0)
+  StudioPreviewPublication.expect(preview, newer, 10)
+  StudioPreviewPublication.acknowledged(preview, older, preview.previewInstanceId)
+  preview.suspended = false
+  StudioPreviewPublication.resume(preview)
+  await new Promise(resolve => setTimeout(resolve, 15))
+  Expect(reloads).toBe(1)
+  StudioPreviewPublication.cancel(preview)
 })
 
 Test('Studio reloads previews only through the explicit toolbar action', () => {

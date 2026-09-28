@@ -52,15 +52,30 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await driver.waitFor(`document.querySelector(${JSON.stringify(board)}) !== null`)
     await drawRect(driver, board, { x: 225, y: 60 }, { x: 110, y: 30 })
     await until(async () => (await catalog()).sketches[0]?.rects.length === 1)
+    await waitForCompiledPreview(driver)
     const freeId = (await catalog()).sketches[0]!.rects[0]!.id
     await drawRect(driver, board, { x: 15, y: 15 }, { x: 180, y: 32 })
     await until(async () => (await catalog()).sketches[0]?.rects.length === 2)
+    await waitForCompiledPreview(driver)
     const snappedId = (await catalog()).sketches[0]!.rects[1]!.id
     // The second gesture selects the rectangle it just drew; Snap leaves the first one free.
     await driver.waitFor(`document.querySelector('[data-tao-studio-sketch-rect="${snappedId}"]') !== null`)
     await driver.click(`[data-tao-studio-sketch-rect="${snappedId}"]`)
+    await driver.waitFor(
+      `document.querySelector(${JSON.stringify(board)})?.dataset.taoStudioSketchGesture === undefined`,
+    )
+    Expect(
+      await driver.evaluate<string[]>(
+        `[...document.querySelectorAll('${board} [data-tao-studio-sketch-rect][data-selected="true"]')].map(rect => rect.dataset.taoStudioSketchRect)`,
+      ),
+    ).toEqual([snappedId])
     const snap = `[data-tao-studio-sketch-snap="${sketchId}"]`
     await driver.waitFor(`document.querySelector(${JSON.stringify(snap)})?.disabled === false`)
+    Expect(
+      await driver.evaluate<string[]>(
+        `[...document.querySelectorAll('${board} [data-tao-studio-sketch-rect][data-selected="true"]')].map(rect => rect.dataset.taoStudioSketchRect)`,
+      ),
+    ).toEqual([snappedId])
     await driver.click(snap)
     await until(async () => (await catalog()).sketches[0]?.snapped.length === 1)
     const beforePanCatalog = await FS.readText(catalogPath)
@@ -84,14 +99,12 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     Expect(await FS.exists(fixturePath)).toBe(false)
     await driver.click('[data-preset="design"]')
     await driver.click('.studio-interaction-mode[data-mode="run"]')
-    await driver.waitFor(
-      `(() => {
-      const status = document.querySelector('.studio-status')
-      const revisions = /^compiled (\\d+) · applied (\\d+) —/.exec(status?.textContent ?? '')
-      return status?.dataset.state === 'compiled' && revisions !== null && revisions[1] === revisions[2]
-    })()`,
-      { timeoutMs: 30_000 },
-    )
+    const currentFrame = await sketchFrame(driver, 'View1')
+    await driver.evaluate(`document.querySelector(${JSON.stringify(currentFrame)}).scrollIntoView({block:'center'})`)
+    previewUrl = await driver.evaluate<string>(`document.querySelector(${JSON.stringify(currentFrame)}).src`)
+    const livePreviewUrl = previewUrl
+    await driver.waitForInFrame(livePreviewUrl, `Boolean(${renderedRect(snappedId)})`, { timeoutMs: 30_000 })
+    await waitForCompiledPreview(driver)
     HCI.logProcessInfo('HNReader Feed', 'Generated Story and Title drops')
     await driver.click('.studio-agent-collapse')
     await driver.click('.studio-rail-button[data-panel="data"]')
@@ -100,10 +113,22 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await clickText(driver, `${feedPanel} [aria-label="Feed source"] button`, 'Generated')
     const bind = async () => {
       await driver.click('[data-preset="draw"]')
+      await driver.waitFor(`document.querySelector('.tao-studio-product-host')?.dataset.layoutPreset === 'draw'`)
+      await driver.waitFor(`document.querySelector(${JSON.stringify(board)}) !== null`)
+      await driver.evaluate(
+        `document.querySelector(${JSON.stringify(board)}).scrollIntoView({block:'center',inline:'center'})`,
+      )
+      await waitForVisibleTarget(driver, board)
       const typical = await markText(driver, `${feedPanel} .studio-feed-row`, 'StoryTypical', 'row')
       await driver.drag(typical, board)
       await waitForKeep(driver)
-      await driver.drag(await titleChip(driver), `[data-tao-studio-sketch-rect="${freeId}"]`)
+      const freeRect = `[data-tao-studio-sketch-rect="${freeId}"]`
+      await driver.waitFor(`document.querySelector(${JSON.stringify(freeRect)}) !== null`)
+      await driver.evaluate(
+        `document.querySelector(${JSON.stringify(freeRect)}).scrollIntoView({block:'center',inline:'center'})`,
+      )
+      await waitForVisibleTarget(driver, freeRect)
+      await driver.drag(await titleChip(driver), freeRect)
       await waitForKeep(driver)
       await driver.waitFor(
         `document.querySelector('[data-tao-studio-sketch-rect="${freeId}"]')?.textContent.includes('Example item') === true`,
@@ -111,11 +136,10 @@ export async function exerciseHnreaderFeed(): Promise<void> {
       await driver.click('[data-preset="design"]')
       await driver.click('.studio-rail-button[data-panel="data"]')
       await driver.pressShortcut('0')
-      const currentFrame = await sketchFrame(driver, 'View1')
-      previewUrl = await driver.evaluate<string>(`document.querySelector(${JSON.stringify(currentFrame)}).src`)
-      await dropTitleInFrame(driver, await titleChip(driver), currentFrame, previewUrl, snappedId)
+      await waitForCompiledPreview(driver)
+      await dropTitleInFrame(driver, await titleChip(driver), currentFrame, livePreviewUrl, snappedId)
       await waitForKeep(driver)
-      await waitForRenderedTitle(driver, previewUrl, snappedId)
+      await waitForRenderedTitle(driver, livePreviewUrl, snappedId)
     }
     await bind()
     Expect(await FS.readText(viewPath)).toBe(beforeView)
@@ -188,11 +212,52 @@ export async function exerciseHnreaderFeed(): Promise<void> {
       const preview = previewUrl === undefined
         ? undefined
         : await browser.evaluateInFrame<string>(previewUrl, 'document.body.innerText').catch(Errors.messageOf)
+      const previewDiagnostics = previewUrl === undefined
+        ? undefined
+        : await browser.evaluateInFrame(previewUrl, 'window.__taoStudioPreviewDiagnostics', { world: 'page' })
+          .catch(Errors.messageOf)
+      const manifest = await browser.evaluate(
+        `fetch(location.pathname + '/api/preview/manifest').then(response => response.json())`,
+      ).catch(Errors.messageOf)
+      const frames = await browser.evaluate(
+        `(() => [...document.querySelectorAll('.studio-preview-cell')].map(cell => ({
+        cellId: cell.dataset.taoStudioCell,
+        status: cell.dataset.status,
+        iframe: cell.querySelector('iframe')?.src,
+      })))()`,
+      ).catch(Errors.messageOf)
       await FS.writeJson(FS.resolvePath('hnreader-feed-failure.json', studio.readiness.artifactRoot), {
         body,
         browserEvents: browser.browserEvents(),
+        documentState: await browser.evaluate(
+          `({
+            url: location.href,
+            readyState: document.readyState,
+            html: document.documentElement.outerHTML.slice(0, 400),
+            scripts: [...document.scripts].map(script => ({ src: script.src, type: script.type })),
+            resources: performance.getEntriesByType('resource').map(entry => ({
+              name: entry.name,
+              duration: entry.duration,
+              responseEnd: entry.responseEnd,
+            })),
+            hasConfig: Boolean(window.TaoStudioConfig),
+            rootChildren: document.getElementById('tao-studio-root')?.childElementCount,
+          })`,
+        ).catch(Errors.messageOf),
+        catalog: await FS.readJson(FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)).catch(
+          Errors.messageOf,
+        ),
         error: Errors.messageOf(error),
+        frames,
+        manifest,
         preview,
+        previewDiagnostics,
+        titleDrop: previewUrl === undefined
+          ? undefined
+          : await browser.evaluateInFrame(previewUrl, 'window.__hnFeedTitleDrop', { world: 'page' })
+            .catch(Errors.messageOf),
+        view: await FS.readText(FS.resolvePath('@/studio/View1.tao', projectRoot)).catch(Errors.messageOf),
+        fixtureExists: await FS.exists(FS.resolvePath('@/studio/Sketches.tao', projectRoot)),
         launch: studio.output(),
       })
     }
@@ -212,6 +277,17 @@ const feedButtons = `${feedPanel} button`
 /** The Draw strip's R tool; drawing hands back to V, so every draw picks it again. */
 const rectangleTool = '[data-tao-studio-draw-tool="rect"]'
 
+async function waitForCompiledPreview(browser: StudioCdp): Promise<void> {
+  await browser.waitFor(
+    `(() => {
+      const status = document.querySelector('.studio-status')
+      const revisions = /^compiled (\\d+) · applied (\\d+) —/.exec(status?.textContent ?? '')
+      return status?.dataset.state === 'compiled' && revisions !== null && revisions[1] === revisions[2]
+    })()`,
+    { timeoutMs: 30_000 },
+  )
+}
+
 async function drawRect(
   browser: StudioCdp,
   board: string,
@@ -219,10 +295,14 @@ async function drawRect(
   delta: { x: number; y: number },
 ): Promise<void> {
   await browser.waitFor(`document.querySelector(${JSON.stringify(board)}) !== null`)
-  await browser.evaluate(`document.querySelector(${JSON.stringify(board)}).dataset.feedDrawProbe = 'before'`)
   await browser.click(rectangleTool)
+  await browser.waitFor(
+    `document.querySelector('[data-tao-studio-sketch-workspace]')?.dataset.taoStudioSketchTool === 'rect'`,
+  )
   await browser.dragBy(board, delta, { offset, steps: 8 })
-  await browser.waitFor(`document.querySelector(${JSON.stringify(board)})?.dataset.feedDrawProbe !== 'before'`)
+  await browser.waitFor(
+    `document.querySelector(${JSON.stringify(board)})?.dataset.taoStudioSketchGesture === undefined`,
+  )
 }
 
 async function markText(browser: StudioCdp, selector: string, text: string, marker: string): Promise<string> {
@@ -240,19 +320,28 @@ async function markText(browser: StudioCdp, selector: string, text: string, mark
   return `[data-hn-feed-target="${marker}"]`
 }
 
+async function waitForVisibleTarget(browser: StudioCdp, selector: string): Promise<void> {
+  const visible = `(() => {
+    const rect = document.querySelector(${JSON.stringify(selector)})?.getBoundingClientRect()
+    return rect && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight
+  })()`
+  await browser.waitFor(visible)
+  await browser.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+  await browser.waitFor(visible)
+}
+
 async function clickText(browser: StudioCdp, selector: string, text: string): Promise<void> {
   const target = await markText(browser, selector, text, 'command')
-  // Sidebar scrolling can move the button between mouse-down and React's press handler.
-  // Wait for the scroll/layout frames, then aim at the current visible button.
   await browser.evaluate(`document.querySelector(${JSON.stringify(target)}).scrollIntoView({block:'center'})`)
-  await browser.evaluate(`new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))`)
+  await browser.evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
   await markText(browser, selector, text, 'command')
-  await browser.waitFor(`(() => {
-    const button = document.querySelector(${JSON.stringify(target)})
-    const rect = button?.getBoundingClientRect()
-    return rect && button.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))
+  await browser.evaluate(`(() => {
+    window.__hnFeedClick = false
+    document.querySelector(${JSON.stringify(target)})
+      .addEventListener('click', () => { window.__hnFeedClick = true }, {once:true})
   })()`)
   await browser.click(target)
+  await browser.waitFor('window.__hnFeedClick === true', { timeoutMs: 10_000 })
 }
 
 async function titleChip(browser: StudioCdp): Promise<string> {
@@ -328,6 +417,16 @@ async function dropTitleInFrame(
     const scale = rect.width / frame.clientWidth
     return { x: rect.left + ${local.x} * scale, y: rect.top + ${local.y} * scale }
   })()`)
+  await browser.evaluateInFrame(
+    url,
+    `(() => {
+    window.__hnFeedTitleDrop = 'none'
+    document.addEventListener('drop', event => {
+      window.__hnFeedTitleDrop = event.target?.outerHTML?.slice(0, 300) ?? 'unknown'
+    }, {capture:true, once:true})
+  })()`,
+    { world: 'page' },
+  )
   await browser.dragToPoint(title, point)
 }
 

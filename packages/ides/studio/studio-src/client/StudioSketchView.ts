@@ -659,6 +659,7 @@ export const StudioSketchView = {
       | undefined
     let outerGesture: StudioSketchOuterGesture | undefined
     let disposed = false
+    const lifetime = new AbortController()
     let inlineEdit: {
       cancel(): void
       invalidated: boolean
@@ -962,7 +963,11 @@ export const StudioSketchView = {
       })
       const cardBody = frame.querySelector<HTMLElement>(':scope > [data-tao-studio-sketch-card-body]')
       cardBody?.addEventListener('pointerdown', event => {
-        if (!disposed && primaryPointer(event) && !event.ctrlKey) {
+        const target = event.target as Element | null
+        if (
+          !disposed && primaryPointer(event) && !event.ctrlKey
+          && target?.closest('button, select, input, textarea, [contenteditable="true"]') === null
+        ) {
           selectFrame(sketch.id)
         }
       })
@@ -1163,6 +1168,7 @@ export const StudioSketchView = {
             receive(authoritative)
           },
           gestureLock,
+          lifetime.signal,
           editText,
           () => inlineEdit !== undefined || disposed,
           options.onError,
@@ -1289,6 +1295,7 @@ export const StudioSketchView = {
     return {
       dispose() {
         disposed = true
+        lifetime.abort()
         inlineEdit?.cancel()
         document.removeEventListener('pointerdown', onDocumentPointerDown, true)
         document.removeEventListener('keydown', onDocumentKeyDown, true)
@@ -1304,6 +1311,61 @@ type StudioSketchGestureLock = Readonly<{
   begin(): void
   end(): void
 }>
+
+/** Keep a toolbar press attached through click, and release the render gate if the press is interrupted. */
+export function protectSketchToolbarPress(
+  toolbar: HTMLElement,
+  document: Document,
+  gestureLock: StudioSketchGestureLock,
+  signal: AbortSignal,
+  maxPressMs = 30_000,
+): void {
+  let pointerId: number | undefined
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const cleanup = (): void => {
+    pointerId = undefined
+    if (timeout !== undefined) {
+      clearTimeout(timeout)
+    }
+    timeout = undefined
+    document.removeEventListener('pointerup', finish, true)
+    document.removeEventListener('pointercancel', cancelPointer, true)
+    document.defaultView?.removeEventListener('blur', cancel)
+    signal.removeEventListener('abort', cancel)
+  }
+  const cancel = (): void => {
+    if (pointerId === undefined) {
+      return
+    }
+    cleanup()
+    gestureLock.end()
+  }
+  const cancelPointer = (event: PointerEvent): void => {
+    if (event.pointerId === pointerId) {
+      cancel()
+    }
+  }
+  const finish = (event: PointerEvent): void => {
+    if (event.pointerId !== pointerId) {
+      return
+    }
+    cleanup()
+    // Click follows pointerup synchronously; flushing here would replace its target before click.
+    setTimeout(() => gestureLock.end(), 0)
+  }
+  toolbar.addEventListener('pointerdown', event => {
+    if (signal.aborted || !primaryPointer(event) || pointerId !== undefined) {
+      return
+    }
+    pointerId = event.pointerId
+    gestureLock.begin()
+    timeout = setTimeout(cancel, maxPressMs)
+    document.addEventListener('pointerup', finish, true)
+    document.addEventListener('pointercancel', cancelPointer, true)
+    document.defaultView?.addEventListener('blur', cancel)
+    signal.addEventListener('abort', cancel)
+  })
+}
 
 /** The canvas's active tool as a board reads it, the hand-back when a draw is released, and its settled commit. */
 type StudioSketchBoardTools = Readonly<{
@@ -1325,6 +1387,7 @@ function renderSketch(
   onUndoSnap: StudioSketchViewOptions['onUndoSnap'],
   renderAuthoritative: (sketches: readonly StudioSketch[], sourceVersion: string) => void,
   gestureLock: StudioSketchGestureLock,
+  lifetime: AbortSignal,
   editText: (sketchId: string, rect: StudioSketchRect, element: HTMLElement) => void,
   editingText: () => boolean,
   onError: StudioSketchViewOptions['onError'],
@@ -1458,6 +1521,7 @@ function renderSketch(
   }
   const toolbar = document.createElement('nav')
   toolbar.dataset['taoStudioSketchSnapControls'] = sketch.id
+  protectSketchToolbarPress(toolbar, document, gestureLock, lifetime)
   toolbar.style.alignItems = 'center'
   toolbar.style.display = 'flex'
   toolbar.style.flexWrap = 'wrap'
@@ -1654,7 +1718,7 @@ function renderSketch(
     const selectedIds = selection()?.sketchId === sketch.id
       ? selection()?.rectIds ?? new Set<string>()
       : new Set<string>()
-    void requestSnap(StudioSketchSelection.rectIds(sketch, selectedIds))
+    void requestSnap(StudioSketchSelection.rectIds({ ...sketch, rects: state.rects }, selectedIds))
   })
   undo.addEventListener('click', () => {
     if (

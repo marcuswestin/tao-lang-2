@@ -156,19 +156,20 @@ statement that "Login is not required for development builds" is the argument fo
   test keeps it equal to the host package's `expo` dependency. The beta-distribution plan and lane
   research carry a dated correction of the SDK-54 claim.
 
-### A20 — Re-enable the Studio HNReader Feed proof
+### A20 — Re-enable the Studio HNReader Feed proof (complete)
 
 The `verify-full` proof that drags generated HNReader Stories into a drawn view, keeps, discards and
-undoes them (`studio-real-app.test.ts`, driven by `studio-hnreader-feed-journey.ts`) is skipped since
-2026-09-27. It failed about half its runs under load on `main`, and Draw's live previews added a
-failure where a Title dropped into View1's running cell in Design never renders. Studio's Feed
-drops are what a visitor tries first, so the release must not ship with them unproven.
+undoes them (`studio-real-app.test.ts`, driven by `studio-hnreader-feed-journey.ts`) is enabled.
+The Draw and Design sequence now waits for the relevant canvas and applied preview revision, and
+the retained preview recovers a missing publication acknowledgement with bounded reloads.
 
-- Context: `DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD` in the developer-environment
-  ledger holds the run-by-run evidence; the Draw live-previews commits changed how the preview grid
-  shares Draw's pan and zoom, the leading suspect for the added failure.
-- Done: the skip is removed, the Design Title drop into a running cell works after Draw every time,
-  and ten consecutive `./agent unsandboxed studio-proof-real-app` runs pass under a concurrent lane.
+- Acceptance (2026-09-28): ten consecutive `./agent unsandboxed studio-proof-real-app` runs passed
+  from 07:23 through 07:35 UTC after merging current `main`, each overlapping a passing
+  `./agent check --no-cache` lane. Every run covered physical Feed clicks and drags, the Design Title
+  drop after Draw, Keep/Discard/Undo, and a persisted reopen. Studio now prepares its browser bundle
+  before reporting server readiness.
+  `DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD` retains its stricter concurrent
+  `verify` acceptance.
 
 ## First-hour quality
 

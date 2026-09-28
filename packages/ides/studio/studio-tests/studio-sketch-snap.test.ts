@@ -67,6 +67,28 @@ Describe('Studio sketch Snap source projection', () => {
     })
   })
 
+  Test('omits zero padding sides from a Snap layout entry', () => {
+    const prepared = StudioSketchSnap.prepare({
+      expectedCatalogRevision: 0,
+      mergeDirection: 'Row',
+      projection: {
+        needsOverlay: false,
+        tree: {
+          children: [{ height: 24, id: 'edge', type: 'element', width: 64 }],
+          direction: 'Row',
+          gap: 0,
+          pad: { bottom: 52, left: 288, right: 8, top: 0 },
+          type: 'container',
+        },
+      },
+      rects: [{ height: 24, id: 'edge', kind: 'Placeholder', width: 64, x: 288, y: 0 }],
+      sketchId: 'edge-sketch',
+      viewName: 'View1',
+    })
+
+    Expect(prepared.action.tree).toMatchObject({ layout: [['pad', 'right', 8, 'bottom', 52, 'left', 288]] })
+  })
+
   Test('uses Placeholder for open or incomplete element kinds without trusting raw Tao source', () => {
     const prepared = StudioSketchSnap.prepare({
       expectedCatalogRevision: 0,

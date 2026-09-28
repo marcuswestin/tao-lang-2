@@ -29,7 +29,11 @@ import { absoluteSourcePath, StudioSourceNavigation } from '../StudioEditor'
 import { revealCanvasNode } from './StudioCanvasViewport'
 import { StudioDebugEvents } from './StudioDebugEvents'
 import { invalidatePreviewJourneyRecording, StudioJourneyRecorder } from './StudioJourneyRecording'
-import type { StudioInteractionMode, StudioPreviewConnection } from './StudioPreviewConnection'
+import {
+  type StudioInteractionMode,
+  type StudioPreviewConnection,
+  StudioPreviewPublication,
+} from './StudioPreviewConnection'
 import { StudioReviewDom } from './StudioReviewDom'
 import { runtimeCaptureWithEnvironment } from './StudioRuntimeCapture'
 import { openRuntimeFailureSource, showRuntimeFailure, type StudioOpenFile } from './StudioRuntimeFailurePanel'
@@ -468,7 +472,14 @@ async function receivePreviewApplied(
   }
   // A frame can acknowledge its previous revision while Studio publishes the next manifest.
   // The server correctly rejects that stale report; it does not indicate a broken preview.
-  await StudioApiClient.previewApplied(message).catch(ignoreSupersededPreviewReport)
+  try {
+    await StudioApiClient.previewApplied(message)
+    if (identity !== undefined) {
+      StudioPreviewPublication.acknowledged(preview, identity, message.identity.previewInstanceId)
+    }
+  } catch (error) {
+    ignoreSupersededPreviewReport(error)
+  }
 }
 
 async function receiveSourceAction(
