@@ -5,6 +5,7 @@ import { ShellStartupFileTest } from './fixtures/shell-startup-files'
 
 const packageOutput = '/nix/store/0123456789abcdfghijklmnpqrsvwxyz-direnv-2.37.1'
 const identity = 'a'.repeat(40)
+const sourceLine = '[[ ! -r "$HOME/.tao-dev/shell/activation.zsh" ]] || source "$HOME/.tao-dev/shell/activation.zsh"'
 
 async function fixture() {
   const root = await mkTestDir('direnv-setup-')
@@ -230,7 +231,10 @@ Describe('optional developer shell setup', () => {
         const managed = FS.resolvePath('machine/dotfiles/zshrc', f.root)
         const dotdir = FS.resolvePath('zsh settings', f.home)
         const link = FS.resolvePath('.zshrc', dotdir)
-        await FS.writeText(managed, '# managed personal settings\nexport EDITOR=vim')
+        await FS.writeText(
+          managed,
+          `# managed personal settings\nexport EDITOR=vim\n[[ ! -r '${f.shell}/activation.zsh' ]] || source '${f.shell}/activation.zsh'\n`,
+        )
         await FS.symlink(managed, link)
         f.environment.env = { ...f.environment.env, ZDOTDIR: dotdir }
         f.environment.confirm = async options => {
@@ -258,8 +262,9 @@ Describe('optional developer shell setup', () => {
         Expect(await FS.isSymbolicLink(link)).toBe(true)
         Expect(await FS.realPath(link)).toBe(managed)
         Expect(await FS.readText(managed)).toBe(
-          `# managed personal settings\nexport EDITOR=vim\n[[ ! -r '${f.shell}/activation.zsh' ]] || source '${f.shell}/activation.zsh'\n`,
+          `# managed personal settings\nexport EDITOR=vim\n${sourceLine}\n`,
         )
+        Expect(f.output.join('\n')).toContain(sourceLine)
         await FS.remove(f.source)
         Expect(await FS.readText(FS.resolvePath('activation.zsh', f.shell))).toBe('# runtime fixture\n')
         Expect(await FS.readText(FS.resolvePath('envrc', f.shell))).toBe('# envrc fixture\n')
@@ -300,7 +305,7 @@ Describe('optional developer shell setup', () => {
             failure === 'profile'
               ? `cd '${f.root}'\n./agent setup --environment`
               : failure === 'zshrc'
-              ? `[[ ! -r '${f.shell}/activation.zsh' ]] || source '${f.shell}/activation.zsh'`
+              ? sourceLine
               : failure === 'devenv'
               ? 'devenv version failed (exit 1):\nunavailable'
               : 'Nix GC root',
@@ -426,7 +431,7 @@ Describe('optional developer shell setup', () => {
         Expect(roots).toBe(2)
         Expect(await FS.readText(f.choice)).toBe('enabled\n')
         Expect(await FS.readText(FS.resolvePath(`repositories/${secondIdentity}/choice`, f.shell))).toBe('enabled\n')
-        Expect((await FS.readText(f.zshrc)).split('\n').filter(line => line.includes('source '))).toHaveLength(1)
+        Expect((await FS.readText(f.zshrc)).split('\n').filter(line => line === sourceLine)).toHaveLength(1)
       } finally {
         release.resolve()
         await Promise.allSettled([first, second])

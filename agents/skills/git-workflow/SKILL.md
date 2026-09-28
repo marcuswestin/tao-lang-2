@@ -1,7 +1,7 @@
 ---
 name: git-workflow
 description: >-
-  Work with Git in this repository: create or clean up worktrees, branch, commit, squash, merge a feature branch into main, rewrite history, or inspect branch state. Use when the Developer asks to commit, merge, squash, rebase, push, branch, resolve a dirty worktree, or move a branch ref, and whenever `main` is merged into a branch, to skim what arrived (`references/after-merging-main.md`); also covers committing every outstanding change in small chunks (`references/commit-all-chunks.md`) and landing the finished part of a long task mid-flight (`references/merge-progress.md`, or `/merge-progress`).
+  Work with Git in this repository: create or clean up worktrees, branch, commit, squash, merge a feature branch into main, rewrite history, or inspect branch state. Use when the Developer asks to commit, merge, squash, rebase, push, branch, resolve a dirty worktree, or move a branch ref, and whenever `main` is merged into a branch, to skim what arrived (`references/after-merging-main.md`); also covers committing every outstanding change in small chunks (`references/commit-all-chunks.md`), landing the finished part of a long task mid-flight (`references/merge-progress.md`, or `/merge-progress`), and a personal `dev/<name>` branch that lands, is deleted, and is created again from `main` (`references/personal-dev-branch.md`).
 ---
 
 # Git Workflow
@@ -71,9 +71,10 @@ Do not fetch and merge `main` beforehand merely to satisfy a stale precondition.
 landing reports a conflict, resolve it outside the lock; after any merge of `main` into a branch,
 skim what arrived: `references/after-merging-main.md`.
 
-A person's branch is `dev/<name>` and lands exactly as `feat/<name>` does, through the `Mine`
-`Justfile` recipes. Pushing is irreversible: confirm with the Developer before pushing anything the Developer did not ask
-to be pushed.
+A person's branch is `dev/<name>`. It lands through the same `./agent unsandboxed land` as
+`feat/<name>`, then the same name is created again from `main` (`references/personal-dev-branch.md`).
+A `feat/<name>` branch lands once and is not recreated for more commits. Pushing is irreversible:
+confirm with the Developer before pushing anything the Developer did not ask to be pushed.
 
 ## Rebuilding history
 

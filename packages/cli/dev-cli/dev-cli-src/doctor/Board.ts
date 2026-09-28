@@ -62,7 +62,7 @@ type BoardFinalizeSummary =
 
 /** BoardWorktree is one row of `git worktree list`, enriched with what an agent needs to know
  * before treating that checkout's slowness or state as a surprise. */
-type BoardWorktree = {
+export type BoardWorktree = {
   aheadOfMain?: number
   behindMain?: number
   branch?: string
@@ -130,6 +130,26 @@ export async function board(dependencies: BoardDependencies = {}): Promise<Board
     version: 1,
     worktrees: rows,
   }
+}
+
+/** Read the current checkout without inspecting other worktrees or machine-wide lanes. */
+export async function readCurrentWorktreeStatus(
+  path: string = Repo.getRoot(),
+  run: typeof CLI.run = CLI.run,
+): Promise<BoardWorktree> {
+  const [head, branch] = await Promise.all([
+    run('git', { args: ['rev-parse', 'HEAD'], cwd: path, stdio: 'pipe' }),
+    run('git', { args: ['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd: path, stdio: 'pipe' }),
+  ])
+  if (head.exitCode !== 0 || head.error !== undefined) {
+    throw new Errors.CommandExecutionError(head)
+  }
+  return await readBoardWorktree({
+    branch: branch.exitCode === 0 ? branch.stdout.trim() : undefined,
+    detached: branch.exitCode !== 0,
+    head: head.stdout.trim(),
+    path,
+  }, run)
 }
 
 /** formatBoardReport renders the report as the screen `board` prints without `--json`. */
