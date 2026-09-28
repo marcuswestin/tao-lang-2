@@ -300,7 +300,7 @@ class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
 }
 
 class TaoWorkspaceManager extends Langium.DefaultWorkspaceManager {
-  override shouldIncludeEntry(entry: Parameters<Langium.DefaultWorkspaceManager['shouldIncludeEntry']>[0]): boolean {
+  override shouldIncludeEntry(entry: Langium.FileSystemNode): boolean {
     if (!workspaceUriIsIndexed(entry.uri, this.workspaceFolders)) {
       return false
     }
@@ -309,9 +309,7 @@ class TaoWorkspaceManager extends Langium.DefaultWorkspaceManager {
 }
 
 class TaoDocumentUpdateHandler extends Langium.DefaultDocumentUpdateHandler {
-  override didChangeWatchedFiles(
-    params: Parameters<Langium.DefaultDocumentUpdateHandler['didChangeWatchedFiles']>[0],
-  ): void {
+  override didChangeWatchedFiles(params: Langium.DidChangeWatchedFilesParams): void {
     const changes = params.changes.filter(change =>
       workspaceUriIsIndexed(URI.parse(change.uri), this.workspaceManager.workspaceFolders)
     )
