@@ -29,6 +29,12 @@ Describe('Tao IDE extension smoke', () => {
     Expect(packageJson.main).toBe('_gen_ide-extension/extension/main.cjs')
     Expect(packageJson.contributes.languages[0]?.configuration).toBe('./language-configuration.json')
     Expect(await FS.isFile(FS.resolvePath('../language-configuration.json', import.meta.dir))).toBe(true)
+    const icon = packageJson.contributes.languages[0]?.icon
+    Expect(icon).toEqual({ light: './icons/tao-light.svg', dark: './icons/tao-dark.svg' })
+    for (const iconPath of Object.values(icon ?? {})) {
+      Expect(await FS.isFile(FS.resolvePath(`../${iconPath}`, import.meta.dir))).toBe(true)
+    }
+    Expect(packageJson.files).toContain('icons/')
     Expect(await FS.readText(FS.resolvePath('../LICENSE', import.meta.dir)))
       .toBe(await FS.readText(FS.resolvePath('../../../../LICENSE', import.meta.dir)))
   })
@@ -456,6 +462,7 @@ async function persistentOutputIdentity(roots: readonly string[]): Promise<strin
 
 type IdeExtensionPackageJson = {
   main: string
+  files: string[]
   contributes: {
     commands: {
       command: string
@@ -466,6 +473,7 @@ type IdeExtensionPackageJson = {
     }[]
     languages: {
       configuration: string
+      icon?: { light: string; dark: string }
     }[]
   }
 }
