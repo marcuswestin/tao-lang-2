@@ -2,7 +2,9 @@ import { type CLI } from '@shared'
 import { Describe, Expect, Test, withCapturedOutput } from '@shared/test'
 import { WatchosSetupCommand } from '../dev-cli-src/watchos-setup/WatchosSetupCommand'
 
-function harness(settings: { device?: boolean; booted?: boolean; failure?: string; runtimeReady?: boolean } = {}) {
+function harness(
+  settings: { device?: boolean | 'multiple'; booted?: boolean; failure?: string; runtimeReady?: boolean } = {},
+) {
   const calls: { command: string; args: string[]; env?: Record<string, string | undefined> }[] = []
   const files = new Map<string, unknown>()
   const reports: string[] = []
@@ -40,13 +42,24 @@ function harness(settings: { device?: boolean; booted?: boolean; failure?: strin
       if (args.includes('devices')) {
         stdout = JSON.stringify({
           devices: {
-            'com.apple.CoreSimulator.SimRuntime.watchOS-27-1': settings.device === false ? [] : [{
-              udid: 'watch-uuid',
-              name: 'Apple Watch',
-              state: settings.booted ? 'Booted' : 'Shutdown',
-              deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-11',
-              isAvailable: true,
-            }],
+            'com.apple.CoreSimulator.SimRuntime.watchOS-27-1': settings.device === false ? [] : [
+              {
+                udid: 'watch-uuid',
+                name: 'Apple Watch',
+                state: settings.booted ? 'Booted' : 'Shutdown',
+                deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Series-11',
+                isAvailable: true,
+              },
+              ...(settings.device === 'multiple'
+                ? [{
+                  udid: 'watch-uuid-2',
+                  name: 'Apple Watch Ultra',
+                  state: 'Booted',
+                  deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.Apple-Watch-Ultra',
+                  isAvailable: true,
+                }]
+                : []),
+            ],
           },
         })
       }
@@ -144,6 +157,38 @@ Describe('guided watchOS setup', () => {
     Expect(prompts).toHaveLength(2)
     Expect(h.calls.filter(call => call.args.includes('devices'))).toHaveLength(2)
     Expect(h.calls.some(call => call.command === '/usr/bin/xcodebuild')).toBe(false)
+  })
+
+  Test('lists simulators by number and rechecks the selected device after valid input', async () => {
+    const h = harness({ device: 'multiple', booted: true })
+    const prompts: string[] = []
+    const answers = ['0', '2']
+    Expect(
+      await WatchosSetupCommand.run({
+        ...h.options,
+        apply: true,
+        json: false,
+        terminal: {
+          isInteractive: () => true,
+          askText: async ({ message }) => {
+            prompts.push(message)
+            return answers.shift()!
+          },
+        },
+      }, h.dependencies),
+    ).toBe(0)
+    Expect(
+      h.reports.some(message => message.includes('1. Apple Watch (watch-uuid)\n2. Apple Watch Ultra (watch-uuid-2)')),
+    )
+      .toBe(true)
+    Expect(prompts).toEqual([
+      'Enter a number (1-2) to continue, or q to stop',
+      'Enter a number (1-2) to continue, or q to stop',
+    ])
+    Expect(h.reports).toContain('Enter a number from 1 to 2, or q to stop.')
+    Expect(h.calls.filter(call => call.args.includes('devices'))).toHaveLength(3)
+    Expect(h.calls.find(call => call.command === '/usr/bin/xcodebuild')?.args)
+      .toContain('platform=watchOS Simulator,id=watch-uuid-2')
   })
 
   Test('builds, installs, verifies the app container, and launches on a selected simulator', async () => {

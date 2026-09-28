@@ -210,10 +210,10 @@ class SetupSession {
         this.notice(`Selected ${selected.name} (${selected.udid}), watchOS ${this.options.runtimeVersion}.`)
         return { udid: selected.udid, state: selected.state }
       }
-      const available = candidates.map(item => `${item.name}: ${item.udid}`).join(', ')
+      const available = candidates.map((item, index) => `${index + 1}. ${item.name} (${item.udid})`).join('\n')
       const guidance = candidates.length === 0
         ? `No Apple Watch simulator is available for watchOS ${this.options.runtimeVersion}. In Xcode > Open Developer Tool > Device Hub, create an Apple Watch simulator with that runtime, then return here.`
-        : `Select an Apple Watch simulator with --device <UUID>. Available: ${available}.`
+        : `Choose an Apple Watch simulator:\n${available}\nFor non-interactive runs, use --device <UUID>.`
       this.receipt.remaining.push(guidance)
       if (!this.options.apply || this.options.json || !this.terminal.isInteractive()) {
         return undefined
@@ -221,14 +221,22 @@ class SetupSession {
       this.notice(guidance)
       const answer = await this.terminal.askText({
         message: candidates.length > 1
-          ? 'Enter one listed simulator UUID to continue, or q to stop'
+          ? `Enter a number (1-${candidates.length}) to continue, or q to stop`
           : 'After creating the simulator, press Enter to recheck, or q to stop',
       })
-      if (['q', 'quit'].includes(answer.trim().toLowerCase())) {
+      const response = answer.trim()
+      if (['q', 'quit'].includes(response.toLowerCase())) {
         return undefined
       }
-      if (candidates.length > 1 && answer.trim()) {
-        this.options.device = answer.trim()
+      if (candidates.length > 1) {
+        const index = /^\d+$/.test(response) ? Number(response) - 1 : -1
+        const choice = candidates[index]
+        if (!choice?.udid) {
+          this.receipt.remaining.pop()
+          this.notice(`Enter a number from 1 to ${candidates.length}, or q to stop.`)
+          continue
+        }
+        this.options.device = choice.udid
       }
       this.receipt.remaining.pop()
       // A prompt response only triggers discovery; it never establishes simulator readiness.

@@ -77,7 +77,6 @@ function infoPlist(): string {
   <key>MinimumOSVersion</key><string>10.0</string>
   <key>WKApplication</key><true/>
   <key>WKWatchOnly</key><true/>
-  <key>WKRunsIndependentlyOfCompanionApp</key><true/>
 </dict></plist>
 `
 }

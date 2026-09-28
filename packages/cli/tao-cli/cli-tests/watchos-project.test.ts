@@ -50,7 +50,7 @@ Describe('watchOS project export', () => {
       Expect(plist).toContain('<key>WKApplication</key><true/>')
       Expect(plist).toContain('<key>MinimumOSVersion</key><string>10.0</string>')
       Expect(plist).toContain('<key>WKWatchOnly</key><true/>')
-      Expect(plist).toContain('<key>WKRunsIndependentlyOfCompanionApp</key><true/>')
+      Expect(plist).not.toContain('WKRunsIndependentlyOfCompanionApp')
       const scheme = await FS.readText(FS.resolvePath('xcshareddata/xcschemes/TaoWatch.xcscheme', project))
       Expect(scheme).toContain('BuildableName="TaoWatch.app" BlueprintName="TaoWatch"')
       Expect(scheme).not.toContain('<TestAction')

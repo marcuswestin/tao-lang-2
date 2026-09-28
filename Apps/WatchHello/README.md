@@ -12,8 +12,9 @@ From the repository root:
 
 The setup command inspects Xcode, installs the exact watchOS simulator runtime from Apple's
 command-line tools when needed, exports `TaoWatch.xcodeproj`, and builds, installs, and launches
-the app on an available Apple Watch simulator. It rechecks the runtime after installation and
-the simulator after any prompt. If no simulator exists, create one in **Xcode → Open Developer
+the app on an available Apple Watch simulator. When several are available, enter the number shown
+beside the one you want; scripts can pass `--device <UUID>`. Setup rechecks the runtime after
+installation and the simulator after any prompt. If no simulator exists, create one in **Xcode → Open Developer
 Tool → Device Hub**, then rerun the command. The global Xcode selection is preserved. Omit
 `--apply` to inspect prerequisites without changing them. The runtime installer can request
 Apple sign-in, license acceptance, or administrator access in Xcode; complete the requested step
