@@ -74,6 +74,7 @@ export async function runTaoConnect(
   } else {
     HCI.writeLine('1. At https://cloud.appwrite.io create a project, such as Tao Hosted CRUD Demo.', out)
     HCI.writeLine('   Choose the free serverless option and a region.', out)
+    HCI.writeLine('   This is the one manual creation step: a project API key cannot create its project.', out)
     HCI.writeLine('2. In project Settings, copy Project ID and the regional API endpoint ending in /v1.', out)
     HCI.writeLine('3. Open API Keys in the project sidebar, click Create API key, and name it Tao CLI setup.', out)
     HCI.writeLine('   Grant project.read, project.write, platforms.read, platforms.write,', out)
