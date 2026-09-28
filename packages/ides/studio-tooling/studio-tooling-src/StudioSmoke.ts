@@ -1,5 +1,6 @@
 import { type PortReservation, Ports } from '@expo-host/dev-loop/expo-runner/Ports'
-import { CLI, Errors, FS, Repo } from '@shared'
+import { CLI, Errors, FS, Platform, Repo } from '@shared'
+import { GateCatalog } from '@verification/GateCatalog'
 import { MachineLanes, type MachineResourceLease } from '@verification/MachineLanes'
 
 const basePort = 42_000
@@ -18,6 +19,10 @@ type StudioSmokeResources = {
 type StudioSmokeOptions = {
   files: readonly string[]
   native?: boolean
+  /** Test registry; production shares the machine-wide resource registry. */
+  registryRoot?: string
+  /** Test port probe; production checks the actual host ports. */
+  portsAvailable?: (ports: readonly number[]) => Promise<boolean>
   runId: string
   shardIndex?: number
   workerIndex?: number
@@ -29,12 +34,7 @@ type StudioSmokeReservation = {
   release: () => Promise<void>
 }
 
-type ReservationOptions = Omit<StudioSmokeOptions, 'files'> & {
-  /** Injected by focused tests; production uses the machine-wide cache registry. */
-  registryRoot?: string
-  /** Injected by focused tests so they do not depend on host port availability. */
-  portsAvailable?: (ports: readonly number[]) => Promise<boolean>
-}
+type ReservationOptions = Omit<StudioSmokeOptions, 'files'>
 
 /** StudioSmoke owns explicit, slow Studio smoke execution outside ordinary package discovery. */
 export const StudioSmoke = {
@@ -85,25 +85,38 @@ async function run(options: StudioSmokeOptions): Promise<number> {
     Errors.throwUserInput('Studio smoke requires at least one explicit test file.')
   }
   await requireGeneratedParser()
-  const reservation = await reserveResources(options)
-  const allocation = reservation.allocation
-  try {
-    await FS.mkdir(allocation.artifactRoot)
-    const result = await CLI.run('bun', {
-      args: ['test', ...options.files.map(path => FS.resolvePath(path)), '--timeout=180000'],
-      env: {
-        TAO_STUDIO_SMOKE_ARTIFACT_ROOT: allocation.artifactRoot,
-        TAO_STUDIO_SMOKE_NATIVE: options.native === true ? 'true' : 'false',
-        TAO_STUDIO_SMOKE_PREVIEW_PORT: String(allocation.previewPort),
-        TAO_STUDIO_SMOKE_SERVER_PORT: String(allocation.serverPort),
-        TAO_STUDIO_TEST_SHARD_INDEX: String(allocation.shardIndex),
-        TAO_STUDIO_TEST_WORKER_INDEX: String(allocation.workerIndex),
-      },
-      stdio: 'inherit',
+  const guiLease = options.native === true && Platform.runtimeProcess.env[GateCatalog.GUI_LEASE_HELD_ENV_KEY] !== 'true'
+    ? await MachineLanes.acquireResource({
+      command: 'studio-smoke-native',
+      name: GateCatalog.GUI_RESOURCE,
+      registryRoot: options.registryRoot,
+      repositoryRoot: Repo.getRoot(),
+      waitTimeoutMs: 10 * 60_000,
     })
-    return result.error === undefined ? result.exitCode ?? 1 : 1
+    : undefined
+  try {
+    const reservation = await reserveResources(options)
+    const allocation = reservation.allocation
+    try {
+      await FS.mkdir(allocation.artifactRoot)
+      const result = await CLI.run('bun', {
+        args: ['test', ...options.files.map(path => FS.resolvePath(path)), '--timeout=180000'],
+        env: {
+          TAO_STUDIO_SMOKE_ARTIFACT_ROOT: allocation.artifactRoot,
+          TAO_STUDIO_SMOKE_NATIVE: options.native === true ? 'true' : 'false',
+          TAO_STUDIO_SMOKE_PREVIEW_PORT: String(allocation.previewPort),
+          TAO_STUDIO_SMOKE_SERVER_PORT: String(allocation.serverPort),
+          TAO_STUDIO_TEST_SHARD_INDEX: String(allocation.shardIndex),
+          TAO_STUDIO_TEST_WORKER_INDEX: String(allocation.workerIndex),
+        },
+        stdio: 'inherit',
+      })
+      return result.error === undefined ? result.exitCode ?? 1 : 1
+    } finally {
+      await reservation.release()
+    }
   } finally {
-    await reservation.release()
+    await guiLease?.release()
   }
 }
 

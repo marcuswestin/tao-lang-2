@@ -278,9 +278,11 @@ datasource supports, and `access` rules require `Auth`. Each error names the use
 `AccessRules`, `FieldUpdates`, `MembershipRules`, and `Migrations` with a level of `Additive`,
 `Renames`, or `Destructive`; `Migrations` is a deployment fact the compiler cannot detect.
 
-`Reference` accepts Clerk tokens and LocalAuth sessions; `Memory` accepts only `TestIdentity`. Local,
-Dev, Http, iCloud, CloudKit, and the current InstantDB adapter accept nothing, so an app with `Auth`
-cannot bind them: client-side filtering is not remote authorization. The runtime repeats the pairing
+`Reference` accepts Clerk tokens and LocalAuth sessions; `Memory` accepts only `TestIdentity`.
+`InstantDB` accepts an InstantAuth session or a Clerk identity token exchanged through the client
+registered with that InstantDB app. Local, Dev, Http, iCloud, and CloudKit accept nothing, so an app
+with `Auth` cannot bind them as its authenticated datasource: client-side filtering is not remote
+authorization. The runtime repeats the pairing
 check whenever it chooses the datasource that resolves the signed-in Account. After the auth provider
 signs in, the datasource holding `Account` turns its proof into the application Account; the public
 session reports signed in only once that resolves, and a failed resolution is an error. Sign-out
@@ -582,10 +584,11 @@ provider marks itself `fills: true` so Tao checks bind it.
 boundaries, ordered replacement, and rejection behavior. Instances must be isolated or share one
 coherent stateless storage boundary. The shipped implementations pass that suite. Memory is
 process-local and instance-isolated; Local delegates its storage boundary to AsyncStorage;
-InstantDB syncs each storage key's snapshot through one deterministic keyed row in an InstantDB
-app, resolves its startup load from the SDK's own subscription (so an offline launch serves the
-local cache), and publishes remote replacement snapshots through `subscribe`; Dev keeps each
-storage key's snapshot on the Tao dev server and publishes every peer's write through `subscribe`
+InstantDB stores each Tao entity row as an InstantDB entity with attributes and relation links.
+Its subscription projects rows into the runtime snapshot, and a save commits the difference from
+that snapshot as one InstantDB transaction. `StorageKey` remains accepted for compatibility but
+does not partition its app-wide namespaces. Dev keeps each storage key's snapshot on the Tao dev
+server and publishes every peer's write through `subscribe`
 (see _The Dev datasource_ below).
 
 ICloud is the platform-sync member of the family: it keeps each storage key's snapshot as one
@@ -594,21 +597,21 @@ signed-in iCloud account sees one store across its devices with no account, serv
 Tao's own. `Container text?` names the container; omitted, the app's first entitled container is
 used. Its optional `subscribe` publishes the document as a replacement snapshot whenever another
 device rewrites it, and iCloud's conflict versions collapse to the newest one, so concurrent writers
-are last-snapshot-wins exactly as with InstantDB. iCloud keeps a local copy, so an offline launch
-loads the last synced document and an offline save uploads on reconnect. Like InstantDB it grants no
-`reset`, because the document is shared with the account's other devices. The provider is native
+are last-snapshot-wins. iCloud keeps a local copy, so an offline launch loads the last synced
+document and an offline save uploads on reconnect. It grants no `reset`, because the document is
+shared with the account's other devices. The provider is native
 code (`tao-icloud`, an Expo module with its own entitlement config plugin, which the ship
 pipeline applies from the manifest's `icloud` section), so it needs a development or release build
 rather than Expo Go, runs only on Apple platforms, and fails a mount elsewhere with a
 host-environment error; an app that also targets Android or the web binds another datasource in a
 variant for those targets.
 
-Authentication, permissions, migrations, transactions, aggregation, and provider-specific query
-features remain deferred. They require new provider families rather than leaking incremental or
-remote semantics into this full-snapshot protocol. The first such family has landed: the query-fill
-half layers remote reads over the snapshot contract without changing it, and last-snapshot-wins
-sync arrives through `subscribe` on the same terms. The second, the granular-write family, is
-described next.
+For snapshot-only providers, authentication, permissions, migrations, transactions, aggregation,
+and provider-specific query features remain outside that protocol. The query-fill half layers
+remote reads over the snapshot contract without changing it; snapshot sync through `subscribe`
+remains last-snapshot-wins. InstantDB adds authenticated, permission-checked row storage, additive
+schema migration, and transactions through its own provider and backend. The separate
+granular-write family is described next.
 
 ## The granular-write family and the CloudKit datasource
 
@@ -676,7 +679,7 @@ by the dev server:
   `reset` and declares `automaticReset`, so the first client whose new schema cannot parse the
   stored snapshot wipes that app's stream and every peer receives the empty snapshot. Nothing asks;
   development data is disposable by definition.
-- **Sync is last-snapshot-wins over the full-snapshot protocol**, the same terms as InstantDB. A
+- **Sync is last-snapshot-wins over the full-snapshot protocol.** A
   write is acknowledged by the server after it has landed and been published to every peer.
 - **A lost server is a recoverable sync failure, never a fallback.** While the dev server is away,
   the app keeps its last snapshot, writes fail visibly, and the client reconnects with backoff; the

@@ -1,5 +1,7 @@
 import { Errors, FS } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { GateCatalog } from '@verification/GateCatalog'
+import { MachineLanes } from '@verification/MachineLanes'
 import {
   canaryExitCode,
   evaluateCanary,
@@ -244,6 +246,7 @@ Describe('Studio native canary', () => {
 
   Test('writes a classified report when Studio startup and its cleanup both fail', async () => {
     const artifactRoot = await mkTestDir('tao-studio-canary-startup-failure-')
+    const registryRoot = FS.resolvePath('registry', artifactRoot)
     const startupFailure = new Errors.HostEnvironmentError('The device trust store is read-only.')
     try {
       const exitCode = await StudioCanaryCommand.testing.runStudioCanary({
@@ -253,6 +256,7 @@ Describe('Studio native canary', () => {
         blockedReason: async () => undefined,
         readLaunches: async () => [],
         readProbeResult: async () => undefined,
+        registryRoot,
         runStudioDev: async options => {
           options.onFailure?.(startupFailure)
           Errors.throwHostEnvironment('Studio cleanup failed.')
@@ -268,19 +272,23 @@ Describe('Studio native canary', () => {
         exitCode: 1,
         status: 'blocked',
       })
+      const after = await MachineLanes.tryAcquireResource({ name: GateCatalog.GUI_RESOURCE, registryRoot })
+      Expect(after).toBeDefined()
+      await after?.release()
     } finally {
       await FS.remove(artifactRoot)
     }
   })
 
-  Test('isolates overlapping probe and report artifacts by invocation', async () => {
+  Test('serializes standalone probes and isolates their reports by invocation', async () => {
     const artifactRoot = await mkTestDir('tao-studio-canary-overlap-')
-    const bothStarted = Deferred()
+    const firstStarted = Deferred()
     const release = Deferred()
     const nativeRoots: string[] = []
     let starts = 0
     const dependencies = {
       blockedReason: async () => undefined,
+      registryRoot: FS.resolvePath('registry', artifactRoot),
       readLaunches: async () => [],
       readProbeResult: async (path: string) => await FS.readJson<typeof passingProbe>(path),
       runStudioDev: async (options: StudioDevOptions) => {
@@ -288,8 +296,8 @@ Describe('Studio native canary', () => {
         nativeRoots.push(nativeRoot)
         options.onLaunch?.(`launch-${starts}`)
         starts += 1
-        if (starts === 2) {
-          bothStarted.resolve()
+        if (starts === 1) {
+          firstStarted.resolve()
         }
         await release.promise
         await FS.writeJson(FS.resolvePath('artifacts/runtime-result.json', nativeRoot), passingProbe)
@@ -302,10 +310,16 @@ Describe('Studio native canary', () => {
         StudioCanaryCommand.testing.runStudioCanary({ artifactRoot, projectRoot: '/tmp/one' }, dependencies),
         StudioCanaryCommand.testing.runStudioCanary({ artifactRoot, projectRoot: '/tmp/two' }, dependencies),
       ]
-      await bothStarted.promise
-      Expect(new Set(nativeRoots).size).toBe(2)
+      await firstStarted.promise
+      Expect(starts).toBe(1)
+      const blocked = await MachineLanes.tryAcquireResource({
+        name: GateCatalog.GUI_RESOURCE,
+        registryRoot: dependencies.registryRoot,
+      })
+      Expect(blocked).toBeUndefined()
       release.resolve()
       Expect(await Promise.all(runs)).toEqual([0, 0])
+      Expect(new Set(nativeRoots).size).toBe(2)
 
       const invocationNames = await FS.listDir(FS.resolvePath('invocations', artifactRoot))
       Expect(invocationNames).toHaveLength(2)

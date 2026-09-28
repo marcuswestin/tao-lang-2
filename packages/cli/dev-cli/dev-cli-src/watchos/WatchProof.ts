@@ -5,7 +5,9 @@ import { compileHostJourney } from '../../../../testing/e2e-testing/journey/Host
 import { prepareWatchJourney } from '../../../../testing/e2e-testing/native/watchos/WatchJourneyRunner'
 
 /** Build the native watch example, optionally exercising its authored journey on an explicit simulator. */
-export async function runWatchProof(options: { app: string; device?: string; fault?: boolean }): Promise<void> {
+export async function runWatchProof(
+  options: { app: string; device?: string; developerDir?: string; fault?: boolean },
+): Promise<void> {
   if (options.app !== 'watchhello' || options.fault) {
     Errors.throwUserInput('The watchOS proof requires --app watchhello and does not support --fault.')
   }
@@ -33,13 +35,47 @@ export async function runWatchProof(options: { app: string; device?: string; fau
     tests,
   })
   HCI.writeLine(`watchOS proof: ${root}`)
+  await runWatchProofBuild({ project, root, device: options.device, developerDir: options.developerDir })
+  HCI.writeLine(
+    options.device === undefined
+      ? 'Native watch app and UI-test bundle compiled. Pass --device <watch-simulator-UUID> to run the Tao journey.'
+      : 'Native watch Tao journey completed. Physical watch signing and visual acceptance remain unverified.',
+  )
+}
+
+/** Run the native build with a task-scoped Xcode selection when one was requested. */
+export async function runWatchProofBuild(
+  options: { project: string; root: string; device?: string; developerDir?: string },
+  dependencies: {
+    files?: Pick<typeof FS, 'isDirectory' | 'isFile' | 'realPath'>
+    run?: (command: string, spec: CLI.CommandSpec) => Promise<void>
+  } = {},
+): Promise<void> {
+  let env: CLI.CommandSpec['env']
+  if (options.developerDir !== undefined) {
+    const directory = options.developerDir
+    if (
+      !FS.isAbsolute(directory) || /[\x00-\x1f]/u.test(directory)
+      || !FS.resolvePath(directory).endsWith('.app/Contents/Developer')
+    ) {
+      Errors.throwUserInput('--developer-dir must be an absolute Xcode .app/Contents/Developer directory.')
+    }
+    const files = dependencies.files ?? FS
+    if (!await files.isDirectory(directory) || !await files.isFile(`${directory}/usr/bin/xcodebuild`)) {
+      Errors.throwHostEnvironment(`The selected Xcode Developer directory is missing or incomplete: ${directory}`)
+    }
+    env = { DEVELOPER_DIR: await files.realPath(directory) }
+  }
   const destination = options.device === undefined
     ? 'generic/platform=watchOS Simulator'
     : `platform=watchOS Simulator,id=${options.device}`
-  await CLI.mustRun('xcodebuild', {
+  const run = dependencies.run ?? (async (command: string, spec: CLI.CommandSpec) => {
+    await CLI.mustRun(command, spec)
+  })
+  await run('xcodebuild', {
     args: [
       '-project',
-      project,
+      options.project,
       '-scheme',
       'TaoWatch',
       '-sdk',
@@ -47,21 +83,17 @@ export async function runWatchProof(options: { app: string; device?: string; fau
       '-destination',
       destination,
       '-derivedDataPath',
-      FS.resolvePath('DerivedData', root),
+      FS.resolvePath('DerivedData', options.root),
       '-resultBundlePath',
-      FS.resolvePath('Results.xcresult', root),
+      FS.resolvePath('Results.xcresult', options.root),
       'CODE_SIGNING_ALLOWED=NO',
       '-quiet',
       options.device === undefined ? 'build-for-testing' : 'test',
     ],
     cwd: Repo.getRoot(),
+    ...(env === undefined ? {} : { env }),
     stdio: 'inherit',
     processPolicy: 'test',
     timeoutMs: 900_000,
   })
-  HCI.writeLine(
-    options.device === undefined
-      ? 'Native watch app and UI-test bundle compiled. Pass --device <watch-simulator-UUID> to run the Tao journey.'
-      : 'Native watch Tao journey completed. Physical watch signing and visual acceptance remain unverified.',
-  )
 }
