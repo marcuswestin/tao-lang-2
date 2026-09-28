@@ -373,7 +373,10 @@ function createCommands(): Command {
       .command('qa')
       .argument('[path]', 'Tao project directory to capture in Studio.', '.')
       .option('--screenshot', "Capture the project's scenarios across the device and appearance matrix.")
-      .option('--dest <directory>', 'Screenshot store to append this run to, as runs/<UTC time>/.')
+      .option(
+        '--dest <directory>',
+        'Screenshot store to append this run to, as runs/<UTC second>Z-<milliseconds>-<UUID>/.',
+      )
       .option('--app <names>', 'Capture only these apps (default: every app in the project).', list)
       .option(
         '--scenario <selector>',

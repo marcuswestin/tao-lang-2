@@ -291,6 +291,8 @@ const GUI_PRIORITY = 6
  * edge is free and in-process; the lease is what reaches outside this one lane.
  */
 const GUI_RESOURCE = 'gui'
+/** Graph GUI children inherit the lease held by GateRunner instead of taking it again. */
+const GUI_LEASE_HELD_ENV_KEY = 'TAO_GUI_LEASE_HELD'
 /** Both gates open the checked-in HNReader project, which permits one dev-session owner. */
 const HNREADER_PROJECT_RESOURCE = 'studio-hnreader-project'
 
@@ -577,7 +579,13 @@ function node(name: string, repositoryRoot: string): WorkNode {
     writes: _writes,
     ...scheduling
   } = metadata(name)
-  const inRepository = (command: GateCommand): WorkCommand => ({ ...command, cwd: repositoryRoot })
+  const inRepository = (command: GateCommand): WorkCommand => ({
+    ...command,
+    cwd: repositoryRoot,
+    ...((scheduling.resources ?? []).includes(GUI_RESOURCE)
+      ? { env: { [GUI_LEASE_HELD_ENV_KEY]: 'true' } }
+      : {}),
+  })
   return {
     ...scheduling,
     needs: dependenciesOf(name),
@@ -638,6 +646,7 @@ export const GateCatalog = {
   DEFAULT_METADATA,
   DEFAULT_SUITE_READS,
   GUI_PRIORITY,
+  GUI_LEASE_HELD_ENV_KEY,
   GUI_RESOURCE,
   PREPARE_PRIORITY,
   STUDIO_LANE_COST,

@@ -43,6 +43,7 @@ the upper bound, another press at that bound, and reset.
 ```sh
 ./agent tao test Apps/WatchHello
 ./agent unsandboxed test-host watchos --app watchhello
+./agent unsandboxed test-host watchos --app watchhello --developer-dir /Applications/Xcode.app/Contents/Developer
 ./agent unsandboxed simulators list available
 ./agent unsandboxed test-host watchos --app watchhello --device <watch-simulator-UUID>
 ```
@@ -52,6 +53,8 @@ watch app and UI-test bundle with the simulator SDK; it does not run the UI. Sup
 the Tao journey through the repository's reusable XCUI interpreter. Swift test code lives under
 `packages/testing/e2e-testing/native/watchos`, not in this app. The generated test plan retains
 Tao source locations. Results and the generated test project live under `.artifacts/watchos-proof`.
+Pass `--developer-dir` to build against a specific Xcode installation for this command without
+changing the global Xcode selection.
 
 ## Proof-of-concept boundary
 

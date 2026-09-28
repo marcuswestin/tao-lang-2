@@ -46,6 +46,7 @@ export {
   StudioActivePreview,
   type StudioPreviewConnection,
   StudioPreviewFrameUrl,
+  StudioPreviewPublication,
   StudioPreviewSourceSync,
   StudioPreviewSuspension,
   StudioRetainedPreview,

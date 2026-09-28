@@ -18,6 +18,7 @@ import { StudioApiError, StudioApiRoutes } from '../StudioApiClient'
 import type { StudioScenarioControlModel } from '../StudioScenarioControls'
 import type { StudioDebugState } from './StudioDebugEvents'
 import { invalidatePreviewJourneyRecording, type StudioJourneyRecordingDraft } from './StudioJourneyRecording'
+import { StudioReviewDom } from './StudioReviewDom'
 import type { StudioRuntimeLog } from './StudioRuntimeCapture'
 
 export type StudioInteractionMode = 'edit' | 'run'
@@ -28,6 +29,7 @@ export type StudioPreviewConnection = {
   applySourceAction?: (envelope: StudioSourceActionEnvelope) => Promise<void>
   /** The cell identity the frame last acknowledged applying, and the frame instance that applied it. */
   appliedIdentity?: Readonly<{ identity: StudioCellIdentity; previewInstanceId: string }>
+  acknowledgedPublication?: Readonly<{ identity: StudioCellIdentity; previewInstanceId: string }>
   appliedRevision?: number
   capture?: {
     fixtureName: string
@@ -48,6 +50,16 @@ export type StudioPreviewConnection = {
   interactionMode: StudioInteractionMode
   manifestCompatibilitySignature?: string
   expectedRevision?: number
+  navigationPending?: boolean
+  navigationWaitMs?: number
+  pendingPublication?: {
+    identity: StudioCellIdentity
+    previewInstanceId: string
+    retries: number
+    normalWaitMs: number
+    waitMs: number
+    timeout?: ReturnType<typeof setTimeout>
+  }
   origin: string
   previewInstanceId: string
   reconfigureEnvironment?: (environment: StudioCellEnvironment) => Promise<void>
@@ -141,6 +153,8 @@ export function disconnectPreviews(
   reason = 'The Tao Studio preview was disconnected.',
 ): void {
   for (const preview of previews) {
+    StudioPreviewPublication.cancel(preview)
+    preview.navigationPending = false
     invalidatePreviewJourneyRecording(preview)
     if (preview.capture !== undefined) {
       clearTimeout(preview.capture.timeout)
@@ -278,6 +292,7 @@ export function observePreviewVisibility(frame: HTMLElement, connection: StudioP
     )
     const transition = StudioPreviewSuspension.transition(connection.suspended === true, visible)
     if (transition === 'suspend') {
+      StudioPreviewPublication.pause(connection)
       invalidatePreviewJourneyRecording(connection)
       connection.appliedIdentity = undefined
       connection.suspendedSource = connection.iframe.src
@@ -288,8 +303,10 @@ export function observePreviewVisibility(frame: HTMLElement, connection: StudioP
       const source = connection.suspendedSource
       connection.suspendedSource = undefined
       if (source !== undefined) {
+        StudioPreviewPublication.navigating(connection)
         connection.iframe.src = source
       }
+      StudioPreviewPublication.resume(connection)
     }
   }, { root: frame.closest<HTMLElement>('.studio-preview-grid'), rootMargin: '600px' })
   observer.observe(frame)
@@ -302,6 +319,7 @@ export function setPreviewSource(connection: StudioPreviewConnection, source: st
   if (connection.suspended === true) {
     connection.suspendedSource = source
   } else {
+    StudioPreviewPublication.navigating(connection)
     connection.iframe.src = source
   }
 }
@@ -309,3 +327,116 @@ export function setPreviewSource(connection: StudioPreviewConnection, source: st
 export function expectPreviewRevision(connection: StudioPreviewConnection, compileRevision: number): void {
   connection.expectedRevision = compileRevision
 }
+
+/** A retained frame can miss Metro's file update while its old publication ignores the new runtime. */
+export const StudioPreviewPublication = {
+  maxReloads: 2,
+  navigating(connection: StudioPreviewConnection, waitMs = 30_000): void {
+    connection.navigationPending = true
+    connection.navigationWaitMs = waitMs
+    connection.acknowledgedPublication = undefined
+    const pending = connection.pendingPublication
+    if (pending !== undefined) {
+      this.pause(connection)
+      pending.waitMs = waitMs
+      this.resume(connection)
+    }
+  },
+  loaded(connection: StudioPreviewConnection): void {
+    connection.navigationPending = false
+    const pending = connection.pendingPublication
+    if (pending !== undefined) {
+      this.pause(connection)
+      pending.waitMs = pending.normalWaitMs
+      this.resume(connection)
+    }
+  },
+  cancel(connection: StudioPreviewConnection): void {
+    const pending = connection.pendingPublication
+    if (pending?.timeout !== undefined) {
+      clearTimeout(pending.timeout)
+    }
+    connection.pendingPublication = undefined
+  },
+  expect(connection: StudioPreviewConnection, identity: StudioCellIdentity, waitMs = 6_000): void {
+    const applied = connection.acknowledgedPublication
+    if (
+      connection.navigationPending !== true && applied?.previewInstanceId === connection.previewInstanceId
+      && applied.identity.cellId === identity.cellId
+      && applied.identity.cellRevision === identity.cellRevision
+      && applied.identity.compileRevision === identity.compileRevision
+      && applied.identity.manifestRevision === identity.manifestRevision
+    ) {
+      this.cancel(connection)
+      return
+    }
+    const pending = connection.pendingPublication
+    if (
+      pending?.previewInstanceId === connection.previewInstanceId
+      && pending.identity.cellId === identity.cellId
+      && pending.identity.cellRevision === identity.cellRevision
+      && pending.identity.compileRevision === identity.compileRevision
+      && pending.identity.manifestRevision === identity.manifestRevision
+    ) {
+      return
+    }
+    this.cancel(connection)
+    connection.pendingPublication = {
+      identity,
+      previewInstanceId: connection.previewInstanceId,
+      retries: 0,
+      normalWaitMs: waitMs,
+      waitMs: connection.navigationPending === true ? connection.navigationWaitMs ?? 30_000 : waitMs,
+    }
+    this.resume(connection)
+  },
+  acknowledged(connection: StudioPreviewConnection, identity: StudioCellIdentity, previewInstanceId: string): void {
+    connection.acknowledgedPublication = { identity, previewInstanceId }
+    const pending = connection.pendingPublication
+    if (
+      pending !== undefined && pending.previewInstanceId === previewInstanceId
+      && pending.identity.cellId === identity.cellId
+      && pending.identity.cellRevision === identity.cellRevision
+      && pending.identity.compileRevision === identity.compileRevision
+      && pending.identity.manifestRevision === identity.manifestRevision
+    ) {
+      this.cancel(connection)
+    }
+  },
+  pause(connection: StudioPreviewConnection): void {
+    const pending = connection.pendingPublication
+    if (pending?.timeout !== undefined) {
+      clearTimeout(pending.timeout)
+      pending.timeout = undefined
+    }
+  },
+  resume(connection: StudioPreviewConnection): void {
+    const pending = connection.pendingPublication
+    if (pending === undefined || pending.timeout !== undefined || connection.suspended === true) {
+      return
+    }
+    pending.timeout = setTimeout(() => {
+      if (connection.pendingPublication !== pending) {
+        return
+      }
+      pending.timeout = undefined
+      if (connection.suspended === true) {
+        return
+      }
+      if (pending.retries === this.maxReloads) {
+        this.cancel(connection)
+        if (connection.frame !== undefined) {
+          StudioReviewDom.status(
+            connection.frame,
+            'failed',
+            'The preview did not apply the latest publication after retrying.',
+          )
+        }
+        return
+      }
+      pending.retries += 1
+      this.navigating(connection)
+      connection.iframe.src = connection.iframe.src
+    }, pending.waitMs)
+  },
+} as const

@@ -13,6 +13,7 @@ import {
   startStudioFileWatcher,
   startStudioSessionServer,
   StudioCanvasViewportStore,
+  StudioClientAssets,
   StudioDeviceGateway,
   StudioDeviceTrustStore,
   type StudioPreviewSession,
@@ -217,10 +218,12 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       )
     }
     const deviceLauncher = createStudioDeviceLauncher()
+    const clientAssets = studioClientReload?.clientAssets ?? StudioClientAssets
+    await clientAssets.bundle()
     server = await startStudioSessionServer(manager, {
       canvasViewportStore,
       agentSecrets,
-      clientAssets: studioClientReload?.clientAssets,
+      clientAssets,
       clientReloadRevision: studioClientReload?.revision,
       compileOnStart: false,
       deviceGateway,

@@ -118,7 +118,7 @@ Describe('dev data server', () => {
       const foreignReceived = collect(foreign)
       const otherKeyReceived = collect(otherKey)
       await first.save('{"snapshot":1}')
-      await received.next()
+      await waitForObserved(() => received.snapshots.includes('{"snapshot":1}'))
       Expect(received.snapshots).toEqual(['{"snapshot":1}'])
       Expect(foreignReceived.snapshots).toEqual([])
       Expect(otherKeyReceived.snapshots).toEqual([])
@@ -168,11 +168,11 @@ Describe('dev data server', () => {
       // stale revision. The other authority observes the accepted write without reconnecting.
       const firstEvents = collect(first)
       await second.save('{"writer":2,"retry":true}')
-      await firstEvents.next()
+      await waitForObserved(() => firstEvents.snapshots.includes('{"writer":2,"retry":true}'))
       Expect(firstEvents.snapshots.at(-1)).toBe('{"writer":2,"retry":true}')
 
       await second.reset?.()
-      await firstEvents.next()
+      await waitForObserved(() => firstEvents.snapshots.length >= 2 && firstEvents.snapshots.at(-1) === undefined)
       Expect(firstEvents.snapshots.at(-1)).toBeUndefined()
       Expect(await FS.readJson(FS.resolvePath('Notes-a1b2c3d4/Notes.json', rootDir))).toEqual({
         format: 'tao-dev-data-state-v1',
@@ -230,7 +230,7 @@ Describe('dev data server', () => {
 
       const observed = collect(parent)
       await remote.reset?.()
-      await observed.next()
+      await waitForObserved(() => observed.snapshots.length > 0 && observed.snapshots.at(-1) === undefined)
       Expect(observed.snapshots.at(-1)).toBeUndefined()
     } finally {
       parent?.close?.()
@@ -262,7 +262,7 @@ Describe('dev data server', () => {
 
       const received = collect(second)
       await first.reset?.()
-      await received.next()
+      await waitForObserved(() => received.snapshots.length > 0 && received.snapshots.at(-1) === undefined)
       Expect(received.snapshots).toEqual([undefined])
       Expect(await FS.readJson(FS.resolvePath('Notes-a1b2c3d4/Notes.json', rootDir))).toEqual({
         format: 'tao-dev-data-state-v1',
@@ -339,7 +339,7 @@ Describe('dev data server', () => {
     const received = collect(connection)
 
     await server.stop()
-    await received.next()
+    await waitForObserved(() => received.errors.length > 0)
     Expect(received.errors).toHaveLength(1)
     Expect(String((received.errors[0] as Error).message)).toContain('disconnected')
     // A write while the server is away tries once more, right now, and fails honestly.
@@ -348,7 +348,7 @@ Describe('dev data server', () => {
     const replacement = await DevDataServer.start({ capability: server.capability, port, rootDir })
     try {
       timers.fire()
-      await received.next()
+      await waitForObserved(() => received.snapshots.length > 0 && received.snapshots.at(-1) === undefined)
       Expect(received.snapshots).toEqual([undefined])
       await connection.save('{"found":true}')
       Expect(await FS.readJson(FS.resolvePath('Notes-a1b2c3d4/Notes.json', rootDir))).toEqual({
@@ -483,37 +483,26 @@ async function waitForFile(path: string): Promise<void> {
   }
 }
 
-/** collect subscribes and lets a test await the next event the connection publishes. */
+async function waitForObserved(predicate: () => boolean): Promise<void> {
+  if (!await Time.pollUntil(predicate, { intervalMs: 10, timeoutMs: 30_000 })) {
+    Errors.throwHostEnvironment('No expected dev data event arrived within 30s.')
+  }
+}
+
+/** collect subscribes before a test action and retains all later snapshots and errors. */
 function collect(connection: TR.DataConnection): {
   errors: unknown[]
-  next(): Promise<void>
   snapshots: Array<string | undefined>
 } {
   const errors: unknown[] = []
   const snapshots: Array<string | undefined> = []
-  let waiting: (() => void) | undefined
-  const arrived = () => {
-    const resolve = waiting
-    waiting = undefined
-    resolve?.()
-  }
   connection.subscribe!({
     error: error => {
       errors.push(error)
-      arrived()
     },
     snapshot: snapshot => {
       snapshots.push(snapshot)
-      arrived()
     },
   })
-  return {
-    errors,
-    next: () =>
-      new Promise<void>((resolve, reject) => {
-        waiting = resolve
-        setTimeout(() => reject(new Errors.HostEnvironmentError('No dev data event arrived within 30s.')), 30_000)
-      }),
-    snapshots,
-  }
+  return { errors, snapshots }
 }

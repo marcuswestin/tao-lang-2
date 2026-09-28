@@ -1,4 +1,4 @@
-import { CommandExecutionError, throwUnexpected } from './core/Errors'
+import { asError, CommandExecutionError, throwUnexpected } from './core/Errors'
 import type { FileHandle } from './FS'
 import * as HCI from './HCI'
 import * as Platform from './Platform'
@@ -212,6 +212,13 @@ function startCommand(
     env: spec.env,
     stdio: stdio.stdio,
   })
+  let spawnError: Error | undefined
+  child.on('error', error => {
+    spawnError ??= error
+  })
+  child.stdin?.on('error', error => {
+    spawnError ??= error
+  })
 
   if (spec.unref) {
     child.unref()
@@ -340,7 +347,12 @@ function startCommand(
   restartIdleBound()
 
   if (spec.stdin !== undefined) {
-    child.stdin?.end(spec.stdin)
+    try {
+      child.stdin?.end(spec.stdin)
+    } catch (error) {
+      // Bun can throw synchronously when a short-lived child closes its pipe first.
+      spawnError ??= asError(error)
+    }
   }
 
   /** closeResultFor reports the bound that stopped the tree, so a caller never reads a clean exit. */
@@ -352,7 +364,6 @@ function startCommand(
     signal: boundFailure === undefined ? signal : signal ?? 'SIGTERM',
   })
 
-  let spawnError: Error | undefined
   let releaseCompletion = () => {}
   const closePromise = new Promise<CommandCloseResult>(resolve => {
     releaseCompletion = Platform.onChildProcessClose(child, (exitCode, signal) => {
@@ -364,10 +375,6 @@ function startCommand(
       }
       resolve(closeResultFor(exitCode, signal))
     })
-  })
-
-  child.on('error', error => {
-    spawnError = error
   })
 
   return {

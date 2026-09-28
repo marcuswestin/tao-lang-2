@@ -15,6 +15,7 @@ import {
   expectPreviewRevision,
   type StudioPreviewConnection,
   StudioPreviewFrameUrl,
+  StudioPreviewPublication,
   StudioRetainedPreview,
 } from './StudioPreviewConnection'
 import { StudioReviewDom } from './StudioReviewDom'
@@ -196,11 +197,22 @@ async function connectCellPreview(
     cellIdentity,
     expectedRevision: manifest.compileRevision,
     iframe,
+    navigationPending: true,
     interactionMode: 'run',
     origin,
     previewInstanceId,
   }
+  watchCellPreviewLoad(connection, handshake)
   return connection
+}
+
+/** Every cell, including those created for the first manifest, returns to the normal retry budget on load. */
+export function watchCellPreviewLoad(connection: StudioPreviewConnection, handshake: StudioHandshake): void {
+  connection.iframe.addEventListener('load', () => {
+    StudioPreviewPublication.loaded(connection)
+    invalidatePreviewJourneyRecording(connection)
+    postInteractionMode(connection, handshake)
+  })
 }
 
 export async function refreshCellPreviews(
@@ -250,10 +262,6 @@ export async function refreshCellPreviews(
     const connection = await connectCellPreview(previewUrl, origin, handshake, manifest, cell)
     connection.interactionMode = interactionMode
     connection.setInteractionMode = setInteractionMode
-    connection.iframe.addEventListener('load', () => {
-      invalidatePreviewJourneyRecording(connection)
-      postInteractionMode(connection, handshake)
-    })
     return connection
   }))
   const nextIds = new Set(manifest.cells.map(cell => cell.cellId))
@@ -309,6 +317,7 @@ export async function refreshCellPreviews(
       preview.iframe.title = `${runtime.cell.scenarioId} live preview`
       expectPreviewRevision(preview, runtime.identity.compileRevision)
       postPreviewRuntimeUpdate(preview, runtime)
+      StudioPreviewPublication.expect(preview, runtime.identity)
       postInteractionMode(preview, handshake)
       if (preview.frame !== undefined) {
         renderCellPreview(preview.frame, preview, previewUrl, manifest)
@@ -322,6 +331,7 @@ export async function refreshCellPreviews(
     // compatible refresh keeps the iframe realm; only this structural change reloads it.
     for (const preview of nextConnections) {
       if (previousByCell.has(preview.cell!.cellId)) {
+        StudioPreviewPublication.navigating(preview)
         preview.iframe.src = preview.iframe.src
       }
     }

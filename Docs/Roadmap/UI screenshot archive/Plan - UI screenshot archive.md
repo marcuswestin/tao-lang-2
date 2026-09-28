@@ -89,7 +89,7 @@ the window chrome.
   or a subject and group, three subject, group, and entry, and the file prefix narrows any of them.
   Names match exactly, and a selector that matches nothing fails the run. `--device` and
   `--appearance` narrow the matrix; each flag repeats, or takes a comma-separated list.
-- **Store**: `storage/qa/`. Each run writes only its own directory, `runs/<UTC time>/`, holding
+- **Store**: `storage/qa/`. Each run writes only its own directory, `runs/<UTC time>-<milliseconds>-<UUID>/`, holding
   `qa-run.json` (scenario identities, hashes, change since the previous capture of each name,
   renderer fingerprint, source commit and subject, optional note) and `screenshots/`, so two
   concurrent runs never edit the same file. A screenshot is named
@@ -100,7 +100,10 @@ the window chrome.
   `QA WordFlower, WordFlowerDark, Studio: 2 changed, 1 failed of 14 screenshots`, then bullets for
   each run and its selection, the source commit, the changed, new, and failed names, and the note.
   A Studio shot is named `Studio_<App>_<state>_laptop-<appearance>.png` after the app Studio opened.
-- **Timeline**: a generated, ignored `index.html` with one filmstrip per screenshot name, showing
+- **Timeline**: a generated, ignored `index.html` shared by captures and timeline commands. Its
+  regeneration reads all run manifests under a file mutation lock and publishes by atomic rename,
+  so concurrent captures do not leave an older index. The store ignores the index, transient output,
+  and lock. It has one filmstrip per screenshot name, showing
   only the runs where the pixels changed or the capture failed, each labelled with its commit
   subject and note. A renderer-fingerprint change is labelled as such rather than as a design
   change. Every capture and `storage sync` regenerate it; `tao _preview qa --timeline --dest <store>`
