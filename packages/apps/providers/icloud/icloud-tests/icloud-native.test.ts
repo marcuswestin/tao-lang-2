@@ -156,7 +156,7 @@ Describe('tao-icloud CloudKit zones', () => {
   })
 
   Test('replays and derives non-aliasing state identities in independent processes', async () => {
-    const modulePath = Repo.resolvePath('packages/providers/icloud/icloud-src/cloudkit-native.ts')
+    const modulePath = Repo.resolvePath('packages/apps/providers/icloud/icloud-src/cloudkit-native.ts')
     const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
     const run = async (container: string, zoneName: string) => {
       const script = `
@@ -204,8 +204,8 @@ Describe('tao-icloud CloudKit zones', () => {
 
 Describe('tao-icloud config plugin', () => {
   Test('resolves the conventional app.plugin subpath through Expo’s actual resolver', async () => {
-    const packageRoot = Repo.resolvePath('packages/providers/icloud')
-    const expoPackage = Repo.resolvePath('packages/providers/icloud/node_modules/expo/package.json')
+    const packageRoot = Repo.resolvePath('packages/apps/providers/icloud')
+    const expoPackage = Repo.resolvePath('packages/apps/providers/icloud/node_modules/expo/package.json')
     const script = `
       const { createRequire } = require('node:module')
       const expoRequire = createRequire(require.resolve(${JSON.stringify(expoPackage)}))

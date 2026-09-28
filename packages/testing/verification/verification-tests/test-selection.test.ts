@@ -373,4 +373,10 @@ Describe('package test suite name', () => {
     Expect(TestSelection.packageTestSuite('packages/shared/shared-tests/FS.test.ts')).toBe('shared')
     Expect(TestSelection.packageTestSuite('packages/apps/runtime/TR-tests/TR.test.ts')).toBe('apps/runtime')
   })
+
+  Test('a test file inside a package nested two groups deep names all three segments', () => {
+    Expect(TestSelection.packageTestSuite(
+      'packages/apps/providers/icloud/icloud-tests/icloud-native.test.ts',
+    )).toBe('apps/providers/icloud')
+  })
 })

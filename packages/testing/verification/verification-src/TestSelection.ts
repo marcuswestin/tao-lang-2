@@ -110,7 +110,6 @@ const WORKFLOW_PATHS = [
   'dev',
   'tao',
   'enter-tao-dev-env',
-  'bootstrap-tao-dev-env',
 ]
 const WORKFLOW_PREFIXES = [
   '.rulesync/',
@@ -136,36 +135,44 @@ const EVERYTHING_PATHS = new Set([
 
 /**
  * packageNameAndRest splits a `packages/...` path into its owning package name and the path
- * beneath it. A group's package nests one level deeper (`packages/<group>/<package>/...`); the
- * known package list disambiguates a one-segment name from a two-segment one.
+ * beneath it. A group's package nests one or two levels deeper
+ * (`packages/<group>/<package>/...`, `packages/<group>/<group>/<package>/...`); the known package
+ * list picks the longest prefix that names one.
  */
 function packageNameAndRest(path: string, packages: readonly string[]): { name: string; rest: string } | undefined {
   if (!path.startsWith('packages/')) {
     return undefined
   }
   const segments = path.slice('packages/'.length).split('/')
-  const oneLevel = segments[0]
-  const twoLevel = segments.slice(0, 2).join('/')
-  const name = oneLevel !== undefined && !packages.includes(oneLevel) && packages.includes(twoLevel)
-    ? twoLevel
-    : oneLevel
+  let name = segments[0]
+  for (let length = Math.min(3, segments.length); length > 0; length -= 1) {
+    const candidate = segments.slice(0, length).join('/')
+    if (packages.includes(candidate)) {
+      name = candidate
+      break
+    }
+  }
   const rest = segments.slice(name?.split('/').length ?? 1).join('/')
   return name === undefined || rest.length === 0 ? undefined : { name, rest }
 }
 
 /**
  * packageTestSuite mirrors the package-suite registry's exact test-file shape. A group's package
- * nests one level deeper (`packages/<group>/<package>/...`), which the optional inner segment
- * matches only when it is immediately followed by that package's own `-tests` directory. The test
- * file itself may nest further inside that `-tests` directory (`studio-tests/code-editor/*.test.ts`,
- * `compiler-tests/workspace/*.test.ts`), so the tail after it is any path ending in `.test.ts`.
+ * nests one or two levels deeper (`packages/<group>/<package>/...`,
+ * `packages/<group>/<group>/<package>/...`). Each optional segment matches only when what follows
+ * is that package's own `-tests` directory. The test file itself may nest further inside that
+ * `-tests` directory (`studio-tests/code-editor/*.test.ts`, `compiler-tests/workspace/*.test.ts`),
+ * so the tail after it is any path ending in `.test.ts`.
  */
 function packageTestSuite(path: string): string | undefined {
-  const match = /^packages\/([^/]+)\/(?:([^/]+)\/)?[^/]+-tests\/.+\.test\.ts$/.exec(path)
+  const match = /^packages\/([^/]+)\/(?:([^/]+)\/(?:([^/]+)\/)?)?[^/]+-tests\/.+\.test\.ts$/.exec(path)
   if (match === null) {
     return undefined
   }
-  const [, first, second] = match
+  const [, first, second, third] = match
+  if (third !== undefined) {
+    return `${first}/${second}/${third}`
+  }
   return second === undefined ? first : `${first}/${second}`
 }
 

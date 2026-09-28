@@ -234,7 +234,7 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // Verified by search; a suite that starts reading one belongs off this list.
   ['ai/generation', { reads: ['ts'] }],
   ['testing/host-control', { reads: ['ts'] }],
-  ['providers/icloud', { reads: ['ts'] }],
+  ['apps/providers/icloud', { reads: ['ts'] }],
   ['performance-checks', { reads: ['gen-parser', 'ts'] }],
   ['apps/runtime', { reads: ['ts'] }],
   ['shared', { reads: ['ts'] }],

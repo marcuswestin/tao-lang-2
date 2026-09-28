@@ -8,6 +8,6 @@ module.exports = {
   ...base,
   moduleNameMapper: {
     ...base.moduleNameMapper,
-    '^@native-bindings$': '<rootDir>/../../native-bindings/native-bindings-src/native-bindings.ts',
+    '^@native-bindings$': '<rootDir>/../native-bindings/native-bindings-src/native-bindings.ts',
   },
 }

@@ -42,6 +42,16 @@
         "*-tests/**/*.{ts,tsx}"
       ]
     },
+    "packages/apps/providers/*": {
+      "entry": [
+        "*-tests/**/*.{test,jest,live}.{ts,tsx}",
+        "*-tests/**/*-fixture.{ts,tsx}"
+      ],
+      "project": [
+        "*-src/**/*.{ts,tsx}",
+        "*-tests/**/*.{ts,tsx}"
+      ]
+    },
     "packages/cli/agent-cli": {
       "entry": [
         "agent-cli-src/agent-dev.ts",

@@ -32,7 +32,7 @@ existing Studio/dev session for that project first: project ownership remains ex
 
 `tao bridge` imports the public declarations of an already installed package. Expo and React Native
 have separate source adapters feeding the same catalog and Tao/TypeScript emitter in
-[`@native-bindings`](../../native-bindings/README.md). The CLI only handles arguments and reporting.
+[`@native-bindings`](../../apps/native-bindings/README.md). The CLI only handles arguments and reporting.
 From this repository:
 
 ```sh

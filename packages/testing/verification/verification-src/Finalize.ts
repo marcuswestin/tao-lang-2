@@ -61,7 +61,7 @@ const HUMAN_VERIFICATION_PREFIXES: readonly string[] = [
   'Apps/',
   'packages/ides/studio/',
   'packages/ides/studio-tooling/',
-  'packages/providers/icloud/',
+  'packages/apps/providers/icloud/',
   'packages/ides/studio-companion-app/',
   'packages/apps/expo-host/',
   'packages/language/parser/',

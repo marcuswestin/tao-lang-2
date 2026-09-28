@@ -575,7 +575,7 @@ snapshots.
 - Configuration readers shared by InstantDB and ICloud live in
   `@tao/data/providers/provider-configuration.ts`, copied with each sidecar's relative import graph.
 
-**The native module.** `packages/providers/icloud` (`tao-icloud`) is the repository's first
+**The native module.** `packages/apps/providers/icloud` (`tao-icloud`) is the repository's first
 native code: an Expo module in Swift, autolinked into the runtime host through the existing
 `autolinkingModuleResolution` setting because the package is a dependency of `tao-expo-host`.
 
@@ -617,7 +617,7 @@ Trigger iCloud Sync_ to push changes between simulators.
 - Delivery latency is iCloud's. A metadata query reports a remote write when the daemon has
   downloaded it, which in practice is seconds on a live device and manual on the simulator.
 
-**Validation.** Focused coverage: `packages/providers/icloud/icloud-tests` proves the document
+**Validation.** Focused coverage: `packages/apps/providers/icloud/icloud-tests` proves the document
 boundary over a fake native module (absent documents, container pass-through, watch routing by
 identifier, stop-once, start failures) and the config plugin's container derivation and entitlement
 merging. `packages/apps/stdlib/stdlib-tests/data-providers.test.ts` runs `ICloud` through `TR.testProvider`
@@ -778,7 +778,7 @@ saves, and the fold is projected back into the snapshot the store already loads.
   conformance suite over the fake zone; records carry stamped fields, encoded booleans, relation
   identities, and a tombstone on delete; a server conflict merges fieldwise, both devices converge,
   and every fetched batch is acknowledged; configuration is validated before the native side loads.
-- `packages/providers/icloud/icloud-tests`: the zone boundary starts one session per zone,
+- `packages/apps/providers/icloud/icloud-tests`: the zone boundary starts one session per zone,
   routes fetched, sent, zone-reset, account-change, and failure events by session, acknowledges a
   batch, classifies native rejections, and the plugin grants CloudKit without the Documents-only
   ubiquity container.

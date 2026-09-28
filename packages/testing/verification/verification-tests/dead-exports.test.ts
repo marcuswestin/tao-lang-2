@@ -518,6 +518,17 @@ Describe('recorded kept exports', () => {
         }
       }
     }
+    const deepPackages: string[] = []
+    for (const name of nestedPackages) {
+      if (
+        !await FS.isFile(Repo.resolvePath(`packages/${name}/package.json`))
+        && await FS.isDirectory(Repo.resolvePath(`packages/${name}`))
+      ) {
+        for (const nested of await FS.listDir(Repo.resolvePath(`packages/${name}`))) {
+          deepPackages.push(`${name}/${nested}`)
+        }
+      }
+    }
     const unresolved: string[] = []
     for (const [workspace, { entry = [] }] of Object.entries(config.workspaces)) {
       if (!workspace.startsWith('packages/')) {
@@ -527,6 +538,8 @@ Describe('recorded kept exports', () => {
         ? packages
         : workspace === 'packages/*/*'
         ? nestedPackages
+        : workspace === 'packages/*/*/*'
+        ? deepPackages
         : [workspace.slice('packages/'.length)]
       for (const pattern of entry) {
         if (/[*?{}[\]]/.test(pattern)) {

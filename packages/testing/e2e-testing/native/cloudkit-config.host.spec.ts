@@ -3,7 +3,7 @@ import { FS, Repo } from '@shared'
 import withTaoICloud, {
   cloudKitContainersInfoKey,
   type TaoICloudPluginProps,
-} from '../../../providers/icloud/plugins/with-tao-icloud.cjs'
+} from '../../../../apps/providers/icloud/plugins/with-tao-icloud.cjs'
 
 const { default: expoConfigPlugins } = await import(
   Repo.resolvePath('packages/apps/expo-host/node_modules/expo/config-plugins.js')
@@ -88,7 +88,7 @@ test('CloudKit plugin and native guard agree on the handoff key and protect the 
     [cloudKitContainersInfoKey]: ['iCloud.lang.tao.notes'],
   })
 
-  const nativeSource = await FS.readText(Repo.resolvePath('packages/providers/icloud/ios/TaoCloudKitModule.swift'))
+  const nativeSource = await FS.readText(Repo.resolvePath('packages/apps/providers/icloud/ios/TaoCloudKitModule.swift'))
   const nativeKey = nativeSource.match(/cloudKitContainersInfoKey = "([^"]+)"/u)?.[1]
   expect(nativeKey).toBe(cloudKitContainersInfoKey)
   expect(nativeSource).toContain('let defaultContainer = "iCloud.\\(bundleIdentifier)"')

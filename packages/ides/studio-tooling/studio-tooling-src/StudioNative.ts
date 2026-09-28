@@ -826,9 +826,10 @@ type StudioServicePackageRoots = {
 
 /**
  * discoverStudioServicePackageRoots finds every workspace package's directory relative to
- * `packages/`, preserving a grouped package's `<group>/<package>` segment: `packages/<group>` has
- * no `package.json` of its own, only the package one level deeper does, so a depth-one walk would
- * find only the repository's few ungrouped packages. Exported for testing.
+ * `packages/`, preserving a grouped package's path (`<group>/<package>`, or
+ * `<group>/<group>/<package>` when a group nests). A group folder has no `package.json` of its
+ * own, so a depth-one walk would find only the repository's few ungrouped packages. Exported for
+ * testing.
  */
 async function discoverStudioServicePackageRoots(packagesRoot: string): Promise<StudioServicePackageRoots> {
   const packageRoots = new Map<string, string>()

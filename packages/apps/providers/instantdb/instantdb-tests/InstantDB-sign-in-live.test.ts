@@ -24,7 +24,7 @@ MockModule('@react-native-community/netinfo', () => ({
 }))
 
 // Run explicitly against the machine's local InstantDB (`./agent unsandboxed local-instantdb start`):
-// TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent test-file packages/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts
+// TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent test-file packages/apps/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts
 // A self-hosted InstantDB sends no email, so the test mints each code through the admin API.
 const apiURI = Platform.runtimeProcess.env['TAO_INSTANT_LIVE_API_URL']
 const liveTest = apiURI === undefined ? Test['skip'] : Test

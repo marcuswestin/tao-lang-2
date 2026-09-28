@@ -1,7 +1,7 @@
 import { FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 
-const nativeSourcePath = Repo.resolvePath('packages/providers/icloud/ios/TaoCloudKitModule.swift')
+const nativeSourcePath = Repo.resolvePath('packages/apps/providers/icloud/ios/TaoCloudKitModule.swift')
 
 Describe('tao-icloud durable CloudKit inbox', () => {
   Test('fails before restoring an advanced checkpoint when an existing inbox cannot be read exactly', async () => {

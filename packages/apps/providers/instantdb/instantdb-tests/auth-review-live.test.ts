@@ -3,7 +3,7 @@ import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { ephemeralApp } from './fixtures'
 
 // Run explicitly against the machine's local InstantDB (`./agent unsandboxed local-instantdb start`):
-// TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent test-file packages/providers/instantdb/instantdb-tests/auth-review-live.test.ts
+// TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent test-file packages/apps/providers/instantdb/instantdb-tests/auth-review-live.test.ts
 // The review app's own source is pushed and run under `tao test`, signed in through InstantAuth. A
 // self-hosted InstantDB sends no email, so the code is minted through the admin API beforehand; the
 // server keeps it valid when the app asks for one.

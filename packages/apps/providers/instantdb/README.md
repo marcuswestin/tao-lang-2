@@ -45,5 +45,5 @@ InstantAuth variant under
 
 ```sh
 ./agent unsandboxed local-instantdb start
-TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent test-file packages/providers/instantdb/instantdb-tests/instantdb-live.test.ts
+TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent test-file packages/apps/providers/instantdb/instantdb-tests/instantdb-live.test.ts
 ```

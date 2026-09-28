@@ -544,7 +544,7 @@ Deferred that day, to finish before MVP:
   reloads with the InstantDB websocket open is
   `DEVENV-DEV-CLIENT-CRASHES-RELOADING-WITH-AN-OPEN-WEBSOCKET`.
 - Context: `Docs/Roadmap/Plan - Auth and data pairing.md` (progress, Developer actions, InstantDB
-  facts), `Apps/Test Apps/README.md` (Auth Review), `packages/providers/instantdb/README.md` (live
+  facts), `Apps/Test Apps/README.md` (Auth Review), `packages/apps/providers/instantdb/README.md` (live
   tests), and `DEVENV-TAO-TEST-WAITS-FOREVER-ON-A-JEST-WORKER-LEFT-OPEN` for why `tao test` cancels a
   journey file's leftover timers.
 - Done: every box above is checked on `main`.

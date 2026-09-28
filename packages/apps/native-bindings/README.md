@@ -63,9 +63,9 @@ unrelated nonempty directories and symlinks are refused. Publication uses the sh
 synchronizer with rollback, not an atomic directory swap. Empty stale directories may remain.
 
 Never manually edit generated files. Optional custom wrappers belong outside that output directory.
-See the [CLI examples](../cli/tao-cli/README.md#generated-native-bindings-proof-of-concept).
+See the [CLI examples](../../cli/tao-cli/README.md#generated-native-bindings-proof-of-concept).
 
-The maintained [Native Bridge device demo](<../../Apps/Test Apps/Native Bridge/README.md>) combines
+The maintained [Native Bridge device demo](<../../../Apps/Test Apps/Native Bridge/README.md>) combines
 Haptics, React Native Vibration, and Clipboard in one app, with generation and phone-launch commands.
 Conversion helpers are emitted only in the directions operations use, so generated files also pass
 projects that enable TypeScript's unused-local checks.
@@ -114,5 +114,5 @@ alone cannot infer ownership. No Clipboard-specific sidecar code is handwritten.
 Generated-binding tests compile the untouched output and exercise it in a mounted Tao app against a
 mock native module. Host/device acceptance remains outstanding. No dependencies were added.
 
-The [PoC findings](<../../Docs/Roadmap/Bridge React Native and Expo APIs into Tao/Findings - Generated native bindings.md>)
+The [PoC findings](<../../../Docs/Roadmap/Bridge React Native and Expo APIs into Tao/Findings - Generated native bindings.md>)
 record measurements, current limitations, and the broader research.

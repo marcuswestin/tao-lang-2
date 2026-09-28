@@ -48,6 +48,28 @@ Describe('workspace package graph', () => {
     }
   })
 
+  Test('names a package nested two groups deep and follows its alias import', async () => {
+    const root = await mkTestDir('tao-package-graph-')
+    try {
+      await writeWorkspace(root, {
+        'packages/tsconfig.base.json': JSON.stringify({
+          compilerOptions: { paths: { '@shared': ['./shared/shared-src/shared.ts'] } },
+        }),
+        'packages/shared/package.json': '{ "name": "tao-shared" }',
+        'packages/shared/shared-src/shared.ts': 'export const shared = 1\n',
+        'packages/apps/providers/icloud/package.json': '{ "name": "tao-icloud" }',
+        'packages/apps/providers/icloud/icloud-src/icloud.ts': "import { shared } from '@shared'\nexport const icloud = shared\n",
+      })
+
+      const graph = await PackageGraph.load(root)
+
+      Expect(graph.packages).toEqual(['apps/providers/icloud', 'shared'])
+      Expect([...graph.imports.get('apps/providers/icloud')!]).toEqual(['shared'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('affected packages are the changed ones and their importers, nearest first', () => {
     const graph = {
       imports: new Map<string, ReadonlySet<string>>([
@@ -91,7 +113,7 @@ Describe('workspace package graph', () => {
     ])
     // `code-editor` merged into `studio`; the edge it carried is now studio's own.
     Expect(graph.imports.get('ides/studio')!.has('apps/runtime')).toBe(true)
-    Expect(graph.imports.get('apps/stdlib')!.has('providers/icloud')).toBe(true)
+    Expect(graph.imports.get('apps/stdlib')!.has('apps/providers/icloud')).toBe(true)
     // Shared re-exports the shipped, host-neutral Effects core instead of copying it.
     Expect([...graph.imports.get('shared')!]).toEqual(['apps/runtime'])
     const fromShared = PackageGraph.affected(graph, ['shared']).map(entry => entry.package)

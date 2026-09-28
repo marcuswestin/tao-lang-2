@@ -23,7 +23,7 @@ MockModule('@react-native-community/netinfo', () => ({
 }))
 
 // Run explicitly against the machine's local InstantDB (`./agent unsandboxed local-instantdb start`):
-// TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent test-file packages/providers/instantdb/instantdb-tests/instantdb-live.test.ts
+// TAO_INSTANT_LIVE_API_URL=http://localhost:9020 ./agent test-file packages/apps/providers/instantdb/instantdb-tests/instantdb-live.test.ts
 // Each test makes its own ephemeral app, which the local service expires on its own.
 const apiURI = Platform.runtimeProcess.env['TAO_INSTANT_LIVE_API_URL']
 const liveTest = apiURI === undefined ? Test['skip'] : Test
