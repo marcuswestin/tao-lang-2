@@ -153,4 +153,26 @@ test "Account data" with AliceNotes {
       expect missing text "Updated note"
       expect missing text "Bob private note"
    }
+   test "deletes a note's owned detail while the account stays available" {
+      run AuthReview
+      press #addNoteDetail
+      expect text "Owned note detail"
+      press #deleteNote
+      expect missing text "Owned note detail"
+      expect text "Hello Alice"
+   }
+   test "deletes the current account and its owned notes" {
+      run AuthReview
+
+      expect text "Alice private note"
+      expect missing text "Bob private note"
+      press #deleteAccount
+      expect text "Confirm delete account and notes"
+      expect text "Alice private note"
+      press #confirmDeleteAccount
+      expect text "Account data is missing"
+      expect missing text "Alice private note"
+      press #signOut
+      expect text "Sign in to your notes"
+   }
 }

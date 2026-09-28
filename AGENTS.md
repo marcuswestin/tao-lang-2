@@ -6,7 +6,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 
 ## Commands
 
-- `./agent` is the front door for setup, fixing, testing, verifying, diagnosing, and landing; `./agent setup` is the routine dependency-install command. Run `./agent help` first each session and use what it lists rather than assembling your own invocation. When something in that domain is missing from `./agent`, tell the Developer so it can be added instead of working around it.
+- Use `./agent` for setup, fixes, tests, verification, diagnosis, and landing; run `./agent help` first each session. `./agent setup` installs dependencies. If a needed operation is missing, tell the Developer.
 - Ask the Developer before adding a dependency, changing a package version, or updating a lockfile. After approval for that named change, edit the manifest and run `./agent setup --refresh-lockfile` to resolve and install it; use `./agent setup` for ordinary frozen installs. Approval for one change does not cover later dependency changes.
 - Run Tao CLI commands as `./agent tao [args…]`. Run development loops through `./agent unsandboxed app-dev [path] [options]`, `studio [project]`, or `local-instantdb start|stop`. Shell inspection and Git stay direct when permitted. `Justfile` is the human menu. Search with tools that honour `.gitignore`; the output-discipline hook rejects scans of generated trees.
 - Run commands from the worktree root with paths relative to it. The shell shapes that mislead or bloat are refused as you type them rather than listed here: the output-discipline hook names the flag, pipe, redirect, or tool that makes each command acceptable, and `# hook-ok: <reason>` runs one a rule wrongly caught, recording the reason in `.artifacts/logs/hook-overrides.jsonl` so the rule can be tuned. A refusal is the rule; prose that repeated it would be a second owner, free to drift.
@@ -25,7 +25,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 ## Response format
 
 - Lead with the outcome. Keep expected results to a sentence; surface decisions to confirm, surprises, and anything needing the Developer's judgment. Let other detail wait until asked.
-- Whenever asking the Developer to run commands, print the exact copyable commands in a shell code block, including required arguments and the working directory. Do this in the request itself, including status updates and handoffs.
+- Whenever asking the Developer to run commands, print exact copyable commands with arguments and working directory in a shell block, including in status updates and handoffs. Use human entry points (`just`, `./dev`, `./tao`), never `./agent`; add a missing human command to `./dev`.
 - Use numbered lists and lettered sub-items, up to three levels ("elaborate 2.b"). Requested summaries use executive-summary bullets, 1–2 sentences each. One point per item; quote errors and output verbatim in code blocks.
 - Depart from this when a root-cause walkthrough or a design argument serves the Developer better. This section governs what they read and nothing else: subagent and agent-to-agent text is exempt from the shape, and the `delegation` skill owns what a subagent's report must contain instead.
 - After a meaningful chunk, recommend the next slice. Harness settings compact context automatically; at a natural break before an unrelated slice, refresh `.artifacts/checkpoint/<branch>.md` and offer `/compact` or a fresh session.

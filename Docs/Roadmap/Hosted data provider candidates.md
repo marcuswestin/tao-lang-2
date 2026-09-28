@@ -212,8 +212,10 @@ so a later pass can revisit it.
 - **Jazz/Clerk Auth Review is blocked.** Jazz alpha.57 update policies see old and new row values,
   but not the fields submitted by a direct writer. A same-value patch to a protected `Owner` or
   `CreatedAt` field can pass a value-comparison rule, violating Tao's explicit write-intent and
-  `FieldUpdates` contract. Its relation mapping also cannot guarantee `(owned)` cascade when a
-  parent is deletable. Keep `supports { }` and the Jazz transport experiment; restore the Auth
+  `FieldUpdates` contract. Auth Review now permits deleting the current Account, which makes its
+  `(owned)` Notes and Note-owned details cascade another required server-enforced behavior Jazz
+  cannot yet guarantee.
+  Keep `supports { }` and the Jazz transport experiment; restore the Auth
   Review variant only after a server-enforced field/relationship design passes hostile direct
   requests. The [Jazz permission documentation](https://jazz.tools/docs/auth/permissions)
   describes the old/new value checks. This unresolved required gate blocks landing the three-provider

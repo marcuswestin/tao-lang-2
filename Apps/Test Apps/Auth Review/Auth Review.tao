@@ -117,25 +117,39 @@ folder
 data Accounts / Account {
    DisplayName text (required "Enter your name"),
    Notes (owned),
+   NoteDetails (owned),
 }
 
 folder
 data Notes / Note {
    Owner Account,
+   NoteDetails (owned),
    Body text (required "Write something"),
    CreatedAt time (default now),
 
    index CreatedAt,
 }
 
+folder
+data NoteDetails / NoteDetail {
+   Owner Account,
+   Parent Note,
+   Body text,
+}
+
 access Account {
    Account can read
    Account can update DisplayName
+   Account can delete
 }
 
 access Note {
    Owner can read, create, delete
    Owner can update Body
+}
+
+access NoteDetail {
+   Owner can read, create, delete
 }
 
 // Authenticated does not imply that the application profile has finished loading.
@@ -311,9 +325,11 @@ view CodeLogin(Flow LoginFlow, Supplied boolean) {
 
 view NotesHome() {
    state Body = ""
+   state ConfirmDeleteAccount = false
    query Mine = Me.Notes with {
       order by CreatedAt desc
    }
+   query VisibleDetails = NoteDetails with { }
    action Add() {
       check Body is not empty
       create Note {
@@ -321,6 +337,9 @@ view NotesHome() {
          Body: Body
       }
       set Body = ""
+   }
+   action RemoveAccount() {
+      delete Me
    }
    render Col() {
       Text("Hello { Me.DisplayName }")
@@ -342,6 +361,15 @@ view NotesHome() {
          Col() {
             Text(Note.Body)
 
+            #addNoteDetail
+            FormButton(Title: "Add note detail") {
+               on press -> { create NoteDetail {
+                  Owner: Me,
+                  Parent: Note,
+                  Body: "Owned note detail"
+               } }
+            }
+
             #updateNote
             FormButton(Title: "Update note") {
                on press -> { update Note {
@@ -352,4 +380,17 @@ view NotesHome() {
             #deleteNote
             FormButton(Title: "Delete note") {
                on press -> { delete Note }
-}  }  }  }  }
+      }  }  }
+      loop VisibleDetails / NoteDetail {
+         Text(NoteDetail.Body)
+      }
+      if ConfirmDeleteAccount {
+         #confirmDeleteAccount
+         FormButton(Title: "Confirm delete account and notes") {
+            on press RemoveAccount
+      }  }
+      if not ConfirmDeleteAccount {
+         #deleteAccount
+         FormButton(Title: "Delete account and notes") {
+            on press -> { set ConfirmDeleteAccount = true }
+}  }  }  }
