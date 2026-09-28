@@ -1,14 +1,17 @@
-import { Repo } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
-import { QaScreenshotsTesting } from '../studio-tooling-src/QaScreenshots'
+import { CLI, FS, Repo } from '@shared'
+import { Deferred, Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, settle, Test } from '@shared/test'
+import { QaScreenshotsTesting, writeQaTimeline } from '../studio-tooling-src/QaScreenshots'
 
 const {
   appsWithOwnScenarios,
   changeSince,
   latestCaptures,
+  newRunId,
   parseSelector,
+  readRuns,
   selectorMatches,
   shotName,
+  sourceRevision,
   studioShotName,
   studioStates,
   timelineEntries,
@@ -168,7 +171,116 @@ Describe('QA change detection', () => {
   })
 })
 
+Describe('QA run identity and source revision', () => {
+  Test('give captures in the same millisecond distinct paths while reading runs in timestamp order', async () => {
+    const earlier = newRunId('2026-09-01T00:00:00.123Z')
+    const concurrent = newRunId('2026-09-01T00:00:00.123Z')
+    const later = newRunId('2026-09-01T00:00:00.124Z')
+    Expect(new Set([earlier, concurrent, later]).size).toBe(3)
+    Expect(earlier).toMatch(/^2026-09-01T00-00-00Z-123-[0-9a-f-]{36}$/u)
+    Expect([later, earlier, concurrent].sort().at(-1)).toBe(later)
+
+    const store = await mkTestDir('qa-run-identity-')
+    try {
+      const legacy = '2026-09-01T00-00-00Z'
+      for (const runId of [later, earlier, concurrent, legacy]) {
+        await FS.writeJson(FS.resolvePath(`runs/${runId}/qa-run.json`, store), run(runId, [shot('a.png')]))
+      }
+      Expect((await readRuns(store)).map(item => item.runId)).toEqual([legacy, ...[earlier, concurrent].sort(), later])
+    } finally {
+      await FS.remove(store)
+    }
+  })
+
+  Test('mark untracked Tao source dirty, while ignoring generated artifacts', async () => {
+    const root = await mkGitTestDir('qa-source-revision-')
+    await initGitTestRepository(root, {
+      commit: { files: { '.gitignore': '.artifacts/\n', 'Apps/Demo/Existing.tao': 'app Existing {}\n' } },
+    })
+    Expect((await sourceRevision(root)).dirty).toBe(false)
+    await FS.writeText(FS.resolvePath('Apps/Demo/New.tao', root), 'app New {}\n')
+    Expect((await sourceRevision(root)).dirty).toBe(true)
+    await FS.remove(FS.resolvePath('Apps/Demo/New.tao', root))
+    await FS.writeText(FS.resolvePath('.artifacts/generated.txt', root), 'ignored\n')
+    Expect((await sourceRevision(root)).dirty).toBe(false)
+
+    const storage = FS.resolvePath('storage', root)
+    await initGitTestRepository(storage, { commit: { files: { 'README.md': 'archive\n' } } })
+    const git = (args: readonly string[]) => CLI.mustRun('git', { args, cwd: root, stdio: 'pipe' })
+    await git(['add', 'storage'])
+    await git([
+      '-c',
+      'user.name=Tao Test',
+      '-c',
+      'user.email=tao@example.test',
+      'commit',
+      '--quiet',
+      '-m',
+      'Add archive',
+    ])
+    await FS.writeText(FS.resolvePath('untracked.txt', storage), 'archive-only\n')
+    Expect((await sourceRevision(root)).dirty).toBe(false)
+  })
+})
+
 Describe('QA timeline', () => {
+  Test('serialize concurrent regenerations before reading runs and preserve the newest index', async () => {
+    const store = await mkTestDir('qa-timeline-overlap-')
+    const firstRun = '2026-09-01T00-00-00Z'
+    const secondRun = '2026-09-02T00-00-00Z'
+    const index = FS.resolvePath('index.html', store)
+    const release = Deferred()
+    const entered = Deferred()
+    try {
+      await FS.writeText(FS.resolvePath('.gitignore', store), '/index.html\n/keep\n')
+      await FS.writeJson(FS.resolvePath(`runs/${firstRun}/qa-run.json`, store), run(firstRun, [shot('first.png')]))
+      await writeQaTimeline(store)
+      const holding = FS.withFileMutationLock(index, store, async () => {
+        entered.resolve()
+        await release.promise
+      })
+      await entered.promise
+      let completed = 0
+      const pending = [
+        writeQaTimeline(store).then(() => {
+          completed += 1
+        }),
+        writeQaTimeline(store).then(() => {
+          completed += 1
+        }),
+      ]
+      try {
+        await settle(10)
+        Expect(completed).toBe(0)
+        await FS.writeJson(FS.resolvePath(`runs/${secondRun}/qa-run.json`, store), run(secondRun, [shot('second.png')]))
+      } finally {
+        release.resolve()
+        await holding
+        await Promise.all(pending)
+      }
+      const html = await FS.readText(index)
+      Expect(html).toContain(`runs/${firstRun}/screenshots/first.png`)
+      Expect(html).toContain(`runs/${secondRun}/screenshots/second.png`)
+      Expect(await FS.readText(FS.resolvePath('.gitignore', store))).toBe('/index.html\n/keep\n/index.html*\n')
+      Expect((await FS.listDir(store)).filter(name => name.startsWith('index.html.'))).toEqual([])
+    } finally {
+      release.resolve()
+      await FS.remove(store)
+    }
+  })
+
+  Test('remove temporary output and release the lock when publishing fails', async () => {
+    const store = await mkTestDir('qa-timeline-publish-failure-')
+    try {
+      await FS.writeText(FS.resolvePath('index.html/sentinel', store), 'keep')
+      await Expect(writeQaTimeline(store)).rejects.toThrow()
+      Expect((await FS.listDir(store)).filter(name => name.startsWith('index.html.'))).toEqual([])
+      Expect(await FS.readText(FS.resolvePath('index.html/sentinel', store))).toBe('keep')
+    } finally {
+      await FS.remove(store)
+    }
+  })
+
   Test('keep only the runs where a screen changed or failed, and flag a new renderer', () => {
     const [entry] = timelineEntries([
       run('2026-09-01T00-00-00Z', [shot('a.png', { sha256: 'one' })]),

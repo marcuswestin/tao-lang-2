@@ -578,3 +578,24 @@ The rerun passed cold bootstrap, setup, parser and checks, then exposed a real-d
 Final recurring-pass run `20260927T173238Z-38672` on `0f5f6ba7465fc4ee1ac6267dbe9909da7618a68f` completed native ARM64 cold and cached acceptance in 1,152 seconds. Cold wall time was 588 seconds (bootstrap 44, setup 2, parser 3, check 34, test 198, verify 297); cached wall time was 563 seconds (16, 2, 2, 36, 201, 298 respectively). Every command succeeded, with runtime suites passing directly in both the initial tests and later verification. Both minimal-profile runs explicitly skipped the unsupported real-direnv integration while retaining its protocol tests. Cached means toolchain reuse, not repository/Jest-cache reuse: each mode starts a fresh container and source checkout.
 
 The timed-out runtime fixture lifecycle and redundant TypeScript transformation repair is recorded in [its resolved entry](Archive/DEVENV-TIMED-OUT-RUNTIME-FIXTURES-MOUNT-LATE.md). Both disposable containers and the run-specific base image were removed; inspection `20260927T175200Z-53149` confirms absence. The shared tools image remains workflow-owned reusable cache. Isolation ownership is released. This entry stays open for native amd64 and actual hosted execution; no new architecture, updated Nix input or full dependency-closure security proof is implied.
+
+## September 28 runner interruption
+
+Recurring-pass run `20260928T042401Z-16239` archived committed `39aac77c` for native ARM64
+Ubuntu. The cold guest started and reached repository checks, then the execution tool killed its
+host runner after denying Docker Desktop telemetry to `sessions.bugsnag.com`. The shell EXIT trap
+did not execute, leaving the exact run-labelled cold container and run-specific base image in
+Docker. Read-only `--inspect-run` later found the exact guest exited 0 and captured its workflow
+logs, including a passing verification verdict after an isolated contention retry; the cached
+guest never started. The runner's terminal receipt was not collected, so this is an execution-host
+interruption rather than a completed cold acceptance. The separate vanilla and prepared-Xcode Tart checks passed on the same committed
+source and cleaned up their own run resources.
+
+The runner now has an ownership-checked `--recover-run <run-id>` mode on its existing named host
+operation. It requires an original run record, refuses a live or ambiguous guest, collects
+terminal logs and guest artifacts before removal, then removes only exact stopped run containers
+and the recorded run-specific base image. Focused mock-Docker tests cover live and foreign guests,
+daemon and collection failures, changing identity, idempotence, and the success path. Real recovery
+of this run remains pending Developer approval for the expanded host-command argument. Shared
+tool images and builder caches are preserved. Terminal cold collection and fresh cached acceptance,
+native amd64, and hosted-cloud proof remain open at this point.

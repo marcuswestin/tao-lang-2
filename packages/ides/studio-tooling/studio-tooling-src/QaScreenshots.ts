@@ -7,7 +7,7 @@ import { type StartedStudioSmokeLaunch, startStudioSmokeLaunch } from './StudioS
 
 /**
  * QaScreenshots captures every Studio scenario of every app in a project across a device × appearance
- * matrix into an append-only store: one directory per run, `runs/<UTC time>/`, holding `qa-run.json`
+ * matrix into an append-only store: one directory per run, `runs/<UTC time>-<unique id>/`, holding `qa-run.json`
  * and a `screenshots/` directory of PNGs named `<App>_<Subject>_<group>-<entry>_<device>-<appearance>.png`,
  * plus a generated, ignored `index.html` timeline. Two runs never write the same tracked file, so
  * stores kept in Git merge without conflicts, and Git keeps a screenshot that reproduces earlier
@@ -157,10 +157,10 @@ export async function runQaScreenshots(projectPath: string, options: QaScreensho
   const repositoryRoot = Repo.getRoot(projectRoot)
   const store = FS.resolvePath(options.dest)
   const createdAt = new Date().toISOString()
-  const runId = createdAt.replace(/\.\d{3}Z$/u, 'Z').replaceAll(':', '-')
+  const runId = newRunId(createdAt)
   const runRoot = FS.resolvePath(`runs/${runId}`, store)
   if (await FS.exists(runRoot)) {
-    Errors.throwUserInput(`The store already holds a run started at ${runId}; start the next one a second later.`)
+    Errors.throwUserInput(`The store already holds run ${runId}; start another capture.`)
   }
   const workRoot = FS.resolvePath(`.artifacts/qa-screenshots/${runId}`, repositoryRoot)
   await FS.mkdir(workRoot)
@@ -775,13 +775,18 @@ function appliedEnvironment(environment: unknown): { scheme: string; width: numb
     : undefined
 }
 
+/** newRunId keeps directory order chronological, with a random suffix for independent captures. */
+function newRunId(createdAt: string): string {
+  return `${createdAt.replace(/\.(\d{3})Z$/u, 'Z-$1').replaceAll(':', '-')}-${Platform.randomUUID()}`
+}
+
 async function sourceRevision(repositoryRoot: string): Promise<QaRunManifest['source']> {
   const git = async (args: readonly string[]): Promise<string> =>
     (await CLI.mustRun('git', { args, cwd: repositoryRoot })).stdout.trim()
   return {
     branch: await git(['rev-parse', '--abbrev-ref', 'HEAD']),
     commit: await git(['rev-parse', 'HEAD']),
-    dirty: (await git(['status', '--porcelain', '--untracked-files=no'])).length > 0,
+    dirty: (await git(['status', '--porcelain', '--untracked-files=normal', '--ignore-submodules=all'])).length > 0,
     // `%s` joins the whole first paragraph, and this repository's commits list their bullets
     // directly under the summary, so only the first line is the subject.
     subject: (await git(['log', '-1', '--format=%B'])).split('\n')[0] ?? '',
@@ -846,18 +851,29 @@ export async function writeQaTimeline(dest: string): Promise<string> {
 
 /**
  * writeTimeline regenerates the store's index from every run manifest it holds. The index is derived
- * and would conflict whenever two runs land concurrently, so the store ignores it and every reader
- * regenerates it.
+ * and would conflict whenever two runs land concurrently, so the store ignores it. A file mutation
+ * lock keeps each regeneration's read and publish together across capture and timeline commands.
  */
 async function writeTimeline(store: string): Promise<string> {
-  const ignore = FS.resolvePath('.gitignore', store)
-  if (!await FS.exists(ignore)) {
-    await FS.writeText(ignore, '/index.html\n')
-  }
-  const runs = await readRuns(store)
+  await FS.mkdir(store)
   const path = FS.resolvePath('index.html', store)
-  await FS.writeText(path, renderTimeline(timelineEntries(runs), runs.length))
-  return path
+  return await FS.withFileMutationLock(path, store, async () => {
+    const ignore = FS.resolvePath('.gitignore', store)
+    const currentIgnore = await FS.exists(ignore) ? await FS.readText(ignore) : ''
+    if (!currentIgnore.split('\n').includes('/index.html*')) {
+      const separator = currentIgnore !== '' && !currentIgnore.endsWith('\n') ? '\n' : ''
+      await FS.writeText(ignore, `${currentIgnore}${separator}/index.html*\n`)
+    }
+    const runs = await readRuns(store)
+    const temporaryPath = `${path}.${Platform.randomUUID()}.tmp`
+    try {
+      await FS.writeText(temporaryPath, renderTimeline(timelineEntries(runs), runs.length))
+      await FS.move(temporaryPath, path)
+    } finally {
+      await FS.remove(temporaryPath)
+    }
+    return path
+  })
 }
 
 /** timelineEntries keeps, per screenshot name, only the runs where its pixels changed or its capture failed. */
@@ -967,9 +983,12 @@ export const QaScreenshotsTesting = {
   appsWithOwnScenarios,
   changeSince,
   latestCaptures,
+  newRunId,
   parseSelector,
+  readRuns,
   selectorMatches,
   shotName,
+  sourceRevision,
   studioShotName,
   studioStates,
   timelineEntries,

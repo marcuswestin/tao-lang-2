@@ -21,6 +21,8 @@ scene Workout() {
    render ScrollView() {
       Col() [gap 8, pad 8] {
          Text("{ Reps } of { Goal }")
+         Text("{ 100000000000000000000 }")
+         Text("{ 0.000001 }")
          FormButton("Rep", Disabled: Reps >= Goal) {
             on press RecordRep
          }

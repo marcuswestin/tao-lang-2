@@ -9,11 +9,11 @@ records the stale-link reproduction and repair.
 
 ## Open advisory register
 
-| Item                                                                                                  | Disposition                                                                                                                                                                                    | Owner                          | Review by  |
-| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ---------- |
-| [`uuid` advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq)                                  | Audit record remains; no affected call found in the installed `xcode` parent. Recheck callers and upstream releases.                                                                           | the Developer, until delegated | 2026-09-28 |
-| [`stream-json` advisory](https://github.com/uhop/stream-json/security/advisories/GHSA-528h-pc64-c93x) | Audit record remains; installed `jayson` uses `StreamValues`, which the advisory excludes, rather than affected path filters. Recheck the dependency path and compatible upstream remediation. | the Developer, until delegated | 2026-09-28 |
-| Nixpkgs glibc input                                                                                   | Lock update and Linux closure checks remain unproved. Arrange a network-enabled Linux host and compare the pinned patch with current notices.                                                  | the Developer, until delegated | 2026-09-28 |
+| Item                                                                                                  | Disposition                                                                                                                                                                                          | Owner                          | Review by  |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ---------- |
+| [`uuid` advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq)                                  | Locked `xcode@3.0.1 → uuid@7.0.3` remains; no affected call found in the last installed-parent review. Recheck callers and upstream releases.                                                        | the Developer, until delegated | 2026-10-05 |
+| [`stream-json` advisory](https://github.com/uhop/stream-json/security/advisories/GHSA-528h-pc64-c93x) | Locked `jayson@4.3.0 → stream-json@1.9.1` remains; the last installed-parent review found only excluded `StreamValues` use. Recheck compatible upstream remediation.                                 | the Developer, until delegated | 2026-10-05 |
+| Nixpkgs glibc input                                                                                   | The pinned patch lacks newer CVE markers; a realized Linux closure and updated-input acceptance remain unproved. Resolve the interrupted Linux run, then arrange the input update and closure proof. | the Developer, until delegated | 2026-09-30 |
 
 At each review, record the new evidence and either close the item or set a new review date and
 owner. A review date schedules reassessment; it does not claim the advisory is fixed.
@@ -60,6 +60,29 @@ seven newer CVE markers absent from the pinned patch, including `CVE-2026-5435` 
 the previous comparison. This is patch evidence, not a realized Linux closure or a demonstrated
 vulnerable Tao execution path. All three advisory follow-ups retain the Developer as owner
 until delegated and September 28 as the review date. No dependency or lockfile changed.
+
+### 2026-09-28 review
+
+The current `bun.lock` still contains `xcode@3.0.1 → uuid@7.0.3` and
+`@solana/web3.js@1.99.0 → jayson@4.3.0 → stream-json@1.9.1`. The upstream
+[`uuid` advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq) still describes
+caller-owned buffers for `v3`/`v5`/`v6`; the
+[`stream-json` advisory](https://github.com/uhop/stream-json/security/advisories/GHSA-528h-pc64-c93x)
+still names path filters rather than `StreamValues`. This pass did not reinstall packages or
+repeat an installed-caller or `bun audit` trace, so the September 27 reachability assessment is
+the latest such evidence. No compatible lockfile-only remediation was established. Keep both
+records open with the Developer as owner until delegated and October 5 as the next review date.
+
+`devenv.lock` still pins `73c703c22422b8951895a960959dbbaca7296492`. Comparison of its
+[pinned glibc patch](https://raw.githubusercontent.com/NixOS/nixpkgs/73c703c22422b8951895a960959dbbaca7296492/pkgs/development/libraries/glibc/2.42-master.patch)
+with the [later patch](https://raw.githubusercontent.com/NixOS/nixpkgs/79b35bf0bda5cd110f856aa5b5b2c5ba4460dbf5/pkgs/development/libraries/glibc/2.42-master.patch)
+still finds seven newer CVE markers absent from the pinned file. The ARM64 contributor run
+started from committed `39aac77c`, then its host runner stopped. Read-only inspection later found
+the cold guest exited 0 with a passing verification log, but its terminal receipt was not
+collected; the cached guest did not start. Its transfer log names two glibc paths, which does
+not identify the realized runtime closure. Retain the Developer as owner until delegated, review
+by September 30, and require the updated-input Linux closure proof described below before
+closing. No package or lockfile changed in this review.
 
 ## Bun/npm graph
 

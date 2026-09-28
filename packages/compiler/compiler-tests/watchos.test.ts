@@ -1,5 +1,5 @@
 import { Workspace } from '@compiler/workspace'
-import { type Diagnostic, FS } from '@shared'
+import { CLI, type Diagnostic, FS, Platform } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { FunctionalCoreValidator } from '@validator/validators/FunctionalCoreValidator'
 import { TargetCapabilitiesValidator } from '@validator/validators/target-capabilities-validator'
@@ -83,6 +83,32 @@ Describe('compiler: watchOS SwiftUI', () => {
     Expect(helper).toContain('if value.isNaN { return "NaN" }')
     Expect(helper).toContain('if value == .infinity { return "Infinity" }')
     Expect(helper).toContain('if value == -.infinity { return "-Infinity" }')
+  })
+
+  Test('routes fixed-notation boundary values through native scalar text', async () => {
+    const boundarySource = source.replace(
+      'Text("{ Reps } of { Goal }")',
+      'Text("{ 100000000000000000000 }") Text("{ 0.000001 }")',
+    )
+    const result = await Compiler.compileCode(boundarySource, { target: 'watchos' })
+    const scene = result.files.find(file => file.relativePath === 'TaoScene_Workout.swift')!.code
+    Expect(scene).toContain('TaoValues.text(100000000000000000000.0)')
+    Expect(scene).toContain('TaoValues.text(0.000001)')
+  })
+
+  Test('formats numeric text at ECMAScript notation boundaries in Swift', async () => {
+    if (Platform.hostPlatform !== 'darwin') {
+      return
+    }
+    const result = await Compiler.compileCode(source, { target: 'watchos' })
+    const helper = result.files.find(file => file.relativePath === 'TaoValues.swift')!.code
+    const script = `${helper}
+let values: [Double] = [1e20, 1e-6, 1e21, 1e-7, -0.0, .nan, .infinity]
+print(values.map { TaoValues.text($0) }.joined(separator: "|"))
+`
+    const run = await CLI.run('swift', { args: ['-e', script], processPolicy: 'test', timeoutMs: 30_000 })
+    Expect(run.exitCode).toBe(0)
+    Expect(run.stdout.trim()).toBe('100000000000000000000|0.000001|1e+21|1e-7|0|NaN|Infinity')
   })
 
   Test('compares text by UTF-16 identity and boolean values natively', async () => {

@@ -1,4 +1,6 @@
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { GateCatalog } from '@verification/GateCatalog'
+import { MachineLanes } from '@verification/MachineLanes'
 import {
   canaryExitCode,
   evaluateCanary,
@@ -35,6 +37,8 @@ type CanaryCommandDependencies = {
   readProbeResult: typeof readProbeResult
   runStudioDev: typeof runStudioDev
   survivingOwnedPids: typeof survivingOwnedPids
+  /** Test registry; production shares the machine-wide resource registry. */
+  registryRoot?: string
 }
 
 const canaryCommandDependencies: CanaryCommandDependencies = {
@@ -53,6 +57,26 @@ const canaryCommandDependencies: CanaryCommandDependencies = {
 async function runStudioCanary(
   options: CanaryOptions = {},
   dependencies: CanaryCommandDependencies = canaryCommandDependencies,
+): Promise<number> {
+  const guiLease = Platform.runtimeProcess.env[GateCatalog.GUI_LEASE_HELD_ENV_KEY] === 'true'
+    ? undefined
+    : await MachineLanes.acquireResource({
+      command: 'studio-canary',
+      name: GateCatalog.GUI_RESOURCE,
+      registryRoot: dependencies.registryRoot,
+      repositoryRoot: Repo.getRoot(),
+      waitTimeoutMs: 10 * 60_000,
+    })
+  try {
+    return await runStudioCanaryWithLease(options, dependencies)
+  } finally {
+    await guiLease?.release()
+  }
+}
+
+async function runStudioCanaryWithLease(
+  options: CanaryOptions,
+  dependencies: CanaryCommandDependencies,
 ): Promise<number> {
   const repositoryRoot = Repo.getRoot()
   const artifactBase = FS.resolvePath(

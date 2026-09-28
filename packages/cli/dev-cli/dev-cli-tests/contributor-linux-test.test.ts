@@ -119,6 +119,91 @@ Describe('contributor Linux container runner', () => {
     })
   })
 
+  Test('recovers only an exited owned run after collecting its complete guest evidence', async () => {
+    await withFixture(async fixture => {
+      const id = '20260928T042401Z-16239'
+      await seedRecovery(fixture, id, 'exited')
+      const result = await run(fixture, ['--recover-run', id])
+      Expect(result.stderr).toBe('')
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toContain('recovery complete')
+      const calls = (await FS.readText(fixture.log)).trim().split('\n')
+      Expect(calls.filter(call => call.startsWith('rm aaaaaaaaa'))).toHaveLength(1)
+      Expect(calls.filter(call => call === `image rm tao-contributor-linux-base:${id}`)).toHaveLength(1)
+      Expect(calls.some(call => /^(stop|start|exec|build|commit|rm --force) /u.test(call))).toBe(false)
+      Expect(calls.filter(call => call.startsWith('logs aaaaaaaaa'))).toHaveLength(1)
+      Expect(calls.filter(call => call.startsWith('cp aaaaaaaaa') && call.includes(':/workspace/.artifacts/')))
+        .toHaveLength(2)
+      Expect(await FS.exists(fixture.container)).toBe(false)
+      const attempt = recoveryAttempt(result.stdout)
+      Expect(await FS.readText(`${attempt}/cold/guest-console.txt`)).toContain('complete guest console')
+      Expect(await FS.readText(`${attempt}/cold/guest/steps.tsv`)).toContain('check')
+      Expect(await FS.readText(`${attempt}/cold/workflow-logs/complete.log`)).toContain('complete workflow log')
+      Expect(await FS.readText(`${attempt}/result.txt`)).toContain('state=complete')
+      const again = await run(fixture, ['--recover-run', id])
+      Expect(again.exitCode).toBe(0)
+      const repeated = (await FS.readText(fixture.log)).trim().split('\n')
+      Expect(repeated.filter(call => call.startsWith('rm aaaaaaaaa'))).toHaveLength(1)
+      Expect(repeated.filter(call => call === `image rm tao-contributor-linux-base:${id}`)).toHaveLength(1)
+    })
+  })
+
+  Test('refuses a live, foreign, or ambiguous guest without removing any resource', async () => {
+    for (const [state, failure] of [['running', ''], ['exited', 'foreign'], ['exited', 'disconnected']] as const) {
+      await withFixture(async fixture => {
+        const id = '20260928T042401Z-16239'
+        await seedRecovery(fixture, id, state)
+        const result = await run(fixture, ['--recover-run', id], failure)
+        Expect(result.exitCode).not.toBe(0)
+        const calls = (await FS.readText(fixture.log)).trim().split('\n')
+        Expect(calls.some(call => /^(rm |image rm |cp |logs )/u.test(call))).toBe(false)
+        Expect(await FS.exists(fixture.container)).toBe(true)
+      })
+    }
+  })
+
+  Test('leaves an exited guest and its base in place when complete logs cannot be copied', async () => {
+    await withFixture(async fixture => {
+      const id = '20260928T042401Z-16239'
+      await seedRecovery(fixture, id, 'exited')
+      const result = await run(fixture, ['--recover-run', id], 'collect')
+      Expect(result.exitCode).not.toBe(0)
+      const calls = (await FS.readText(fixture.log)).trim().split('\n')
+      Expect(calls.some(call => /^(rm |image rm )/u.test(call))).toBe(false)
+      Expect(await FS.exists(fixture.container)).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('.artifacts/base-image.txt', fixture.root))).toBe(true)
+    })
+  })
+
+  Test('refuses a base tag with a different image ID and a guest that changes state', async () => {
+    await withFixture(async fixture => {
+      const id = '20260928T042401Z-16239'
+      await seedRecovery(fixture, id, 'exited')
+      const changedBase = await run({
+        ...fixture,
+        env: { ...fixture.env, TAO_TEST_DOCKER_BASE_ID: 'sha256:another-image' },
+      }, ['--recover-run', id])
+      Expect(changedBase.exitCode).toBe(1)
+      Expect(changedBase.stderr).toContain('no longer matches this run')
+      const stateChanged = await run(fixture, ['--recover-run', id], 'state-change')
+      Expect(stateChanged.exitCode).toBe(1)
+      Expect(stateChanged.stderr).toContain('changed state during recovery')
+      const calls = (await FS.readText(fixture.log)).trim().split('\n')
+      Expect(calls.some(call => /^(rm |image rm )/u.test(call))).toBe(false)
+      Expect(await FS.exists(fixture.container)).toBe(true)
+    })
+  })
+
+  Test('rejects recovery without an exact existing run record before consulting Docker', async () => {
+    await withFixture(async fixture => {
+      for (const id of ['../run', '*', '20260928T042401Z-', '20260928T042401Z-16239/']) {
+        Expect((await run(fixture, ['--recover-run', id])).exitCode).toBe(2)
+      }
+      Expect((await run(fixture, ['--recover-run', '20260928T042401Z-16239'])).exitCode).toBe(1)
+      Expect(await FS.exists(fixture.log)).toBe(false)
+    })
+  })
+
   Test('uses committed sources and bounded independent cold, tools, and cached containers', async () => {
     await withFixture(async fixture => {
       await FS.writeText(FS.resolvePath('untracked-secret.txt', fixture.root), 'private')
@@ -460,6 +545,26 @@ Describe('contributor Linux container runner', () => {
 
 type Fixture = { root: string; log: string; container: string; env: Platform.ProcessEnv }
 
+function recoveryAttempt(stdout: string): string {
+  const match = stdout.match(/Contributor Linux recovery evidence: (.+)/u)
+  Expect(match).not.toBeNull()
+  return match?.[1] ?? ''
+}
+
+async function seedRecovery(fixture: Fixture, id: string, state: string): Promise<void> {
+  const output = FS.resolvePath(`.artifacts/contributor-linux/${id}`, fixture.root)
+  await FS.writeText(`${output}/resources.txt`, 'platform=linux/amd64\n')
+  await FS.writeText(`${output}/source-commit.txt`, 'fixture\n')
+  await FS.writeText(`${output}/base-identity.txt`, 'sha256:fixture-base\n')
+  await FS.writeText(
+    fixture.container,
+    `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa tao-contributor-linux-${id}-cold\n`,
+  )
+  await FS.writeText(`${fixture.container}.labels`, `contributor-linux-test ${id}\n`)
+  await FS.writeText(`${fixture.container}.state`, state)
+  await FS.writeText(FS.resolvePath('.artifacts/base-image.txt', fixture.root), `tao-contributor-linux-base:${id}\n`)
+}
+
 async function writeVersionTools(root: string): Promise<void> {
   for (const tool of ['bun', 'node', 'zsh', 'just', 'python3', 'nix']) {
     const executable = FS.resolvePath(`.devenv/profile/bin/${tool}`, root)
@@ -512,16 +617,32 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
         '    if [ "$2" = --format ]; then',
         '      [ "$TAO_TEST_DOCKER_FAILURE" != disconnected ] || exit 5',
         '      [ -f "$TAO_TEST_DOCKER_CONTAINER" ] || exit 1',
-        '      cat "$TAO_TEST_DOCKER_CONTAINER.labels"',
+        '      case "$3" in',
+        '        *State.Status*)',
+        '          read -r owner run < "$TAO_TEST_DOCKER_CONTAINER.labels"',
+        '          [ "$TAO_TEST_DOCKER_FAILURE" != foreign ] || owner=foreign-owner',
+        '          read -r ignored name < "$TAO_TEST_DOCKER_CONTAINER"',
+        '          read -r state < "$TAO_TEST_DOCKER_CONTAINER.state"',
+        '          printf "/%s|%s|%s|%s|1\\n" "$name" "$owner" "$run" "$state"',
+        '          [ "$TAO_TEST_DOCKER_FAILURE" != state-change ] || printf "running\\n" > "$TAO_TEST_DOCKER_CONTAINER.state" ;;',
+        '        *) cat "$TAO_TEST_DOCKER_CONTAINER.labels" ;;',
+        '      esac',
         '    fi ;;',
         '  container)',
         '    [ "$TAO_TEST_DOCKER_FAILURE" != disconnected ] || exit 5',
-        '    [ ! -f "$TAO_TEST_DOCKER_CONTAINER" ] || cat "$TAO_TEST_DOCKER_CONTAINER" ;;',
+        '    if [ -f "$TAO_TEST_DOCKER_CONTAINER" ]; then',
+        '      read -r ignored name < "$TAO_TEST_DOCKER_CONTAINER"',
+        '      case "$*" in *"-(cold|tools|cached)$"*|*"name=^/$name$"*) cat "$TAO_TEST_DOCKER_CONTAINER" ;; esac',
+        '    fi ;;',
         '  rm)',
         '    [ "$TAO_TEST_DOCKER_FAILURE" != remove ] || exit 8',
-        '    rm -f "$TAO_TEST_DOCKER_CONTAINER" "$TAO_TEST_DOCKER_CONTAINER.labels" ;;',
+        '    rm -f "$TAO_TEST_DOCKER_CONTAINER" "$TAO_TEST_DOCKER_CONTAINER.labels" "$TAO_TEST_DOCKER_CONTAINER.state" ;;',
         '  image)',
-        '    if [ "$2" = inspect ]; then',
+        '    if [ "$2" = ls ]; then',
+        '      [ ! -f "$TAO_TEST_DOCKER_BASE_IMAGE" ] || cat "$TAO_TEST_DOCKER_BASE_IMAGE"',
+        '    elif [ "$2" = rm ]; then',
+        '      rm -f "$TAO_TEST_DOCKER_BASE_IMAGE"',
+        '    elif [ "$2" = inspect ]; then',
         '      case "$3" in',
         '        tao-contributor-linux-tools:*) [ -f "$TAO_TEST_DOCKER_CACHE" ] && [ "$(cat "$TAO_TEST_DOCKER_CACHE")" = "$3" ] || exit 1 ;;',
         '      esac',
@@ -535,7 +656,11 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
         '      fi',
         '    fi ;;',
         '  start) printf "guest output before failure\\n"; case "$3" in *-"$TAO_TEST_DOCKER_FAILURE") exit 7 ;; esac ;;',
-        '  cp) case "$2" in *:/workspace/*) mkdir -p "$3" ;; esac ;;',
+        '  logs) printf "complete guest console\\n" ;;',
+        '  cp) case "$3" in */recovery-*/*/workflow-logs) [ "$TAO_TEST_DOCKER_FAILURE" != collect ] || exit 7 ;; esac',
+        '    case "$2" in *:/workspace/*) mkdir -p "$3" ;; esac',
+        '    case "$3" in */recovery-*/*/guest) printf "check\\n" > "$3/steps.tsv" ;;',
+        '      */recovery-*/*/workflow-logs) printf "complete workflow log\\n" > "$3/complete.log" ;; esac ;;',
         '  commit)',
         '    [ "$TAO_TEST_DOCKER_FAILURE" != commit ] || exit 7',
         '    printf "%s\\n" "$3" > "$TAO_TEST_DOCKER_CACHE" ;;',
@@ -553,6 +678,7 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
         ...Platform.runtimeProcess.env,
         PATH: `${bin}:/usr/bin:/bin`,
         TAO_TEST_DOCKER_CACHE: cache,
+        TAO_TEST_DOCKER_BASE_IMAGE: FS.resolvePath('.artifacts/base-image.txt', root),
         TAO_TEST_DOCKER_CONTAINER: container,
         TAO_TEST_DOCKER_LOG: log,
       },

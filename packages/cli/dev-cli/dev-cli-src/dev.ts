@@ -123,7 +123,10 @@ await runWithCommands(commands => {
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
-    .option('--developer-dir <path>', 'Task-scoped Xcode Contents/Developer directory for ios, device, or catalyst.')
+    .option(
+      '--developer-dir <path>',
+      'Task-scoped Xcode Contents/Developer directory for ios, device, watchos, or catalyst.',
+    )
     .option('--output <path>', 'For ios: retain the built app and provenance in a new directory for manual review.')
     .option('--build-only', 'For ios: build and install for manual review without running or claiming an Appium proof.')
     .option('--seed <seed>', 'Unsigned 32-bit deterministic application seed.', '12345')
