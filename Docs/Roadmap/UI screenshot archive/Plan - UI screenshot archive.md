@@ -140,7 +140,10 @@ it. So:
    paused frames left it waiting forever. Studio's own four layouts are captured with `--studio`,
    the agent panel minimized. Capturing dark exposed that a focused view scenario always resolved its
    design light, because Studio's subject host dropped the scheme the app shell stamps; it now
-   forwards it.
+   forwards it. The first archived run, 152 shots, is pinned. It left these open: the tablet dark
+   pseudolocale and right-to-left shots, WordFlower's second pane clipped at tablet width, its
+   library card wider than the hero at laptop width, and the capture sharing the canvas position
+   Studio stores for the Developer. The `storage-archive` skill owns the capture round.
 3. Milestone native captures: iOS for the reference apps and the companion app, and the native
    Studio shell.
 4. Android, and the websites once their source or URL is named.
