@@ -92,7 +92,16 @@ export function parseStore(text: string): SecretStore {
     Errors.throwUserInput('The secret store must be a JSON object.')
   }
   const record = parsed as { recipients?: unknown; secrets?: unknown; storeKey?: unknown }
-  const recipients = Array.isArray(record.recipients) ? record.recipients.map(String) : []
+  if (
+    record.recipients !== undefined
+    && (!Array.isArray(record.recipients) || record.recipients.some(recipient => typeof recipient !== 'string'))
+  ) {
+    Errors.throwUserInput("The secret store's recipients must be an array of strings.")
+  }
+  if (record.secrets !== undefined && !Json.isRecord(record.secrets)) {
+    Errors.throwUserInput("The secret store's secrets must be an object.")
+  }
+  const recipients = record.recipients === undefined ? [] : record.recipients as string[]
   const storeKey = record.storeKey === undefined ? undefined : parseStoreKey(record.storeKey)
   const secrets: Record<string, SecretEntry> = {}
   const rawSecrets = Json.isRecord(record.secrets) ? record.secrets : {}
@@ -150,7 +159,7 @@ export function isStoreKeyArmor(armor: string): boolean {
  * The body is ordinary two-space JSON because dprint formats this file too, and a formatter of our own with
  * different taste would rewrite the file on every `add` and dprint would rewrite it back.
  */
-export function formatStore(store: SecretStore): string {
+export function formatStore(store: SecretStore, options: { header?: string } = {}): string {
   const ordered: Record<string, SecretEntry> = {}
   for (const name of Object.keys(store.secrets).sort()) {
     const entry = store.secrets[name]!
@@ -168,7 +177,9 @@ export function formatStore(store: SecretStore): string {
       wrappedKey: store.storeKey.wrappedKey,
     },
   }
-  return `${HEADER}${JSON.stringify({ recipients: store.recipients, ...storeKey, secrets: ordered }, undefined, 2)}\n`
+  return `${options.header ?? HEADER}${
+    JSON.stringify({ recipients: store.recipients, ...storeKey, secrets: ordered }, undefined, 2)
+  }\n`
 }
 
 /** withSecret returns a store with one secret added or replaced, keeping the date it was first added. */

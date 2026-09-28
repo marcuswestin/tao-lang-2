@@ -3,13 +3,14 @@ import type { Readable, Writable } from 'node:stream'
 import type { InstantPushReport } from 'tao-instantdb/push'
 import { chooseTaoApp } from './dev-app-selection'
 import { readInstantPushInputs } from './instantdb-push-inputs'
+import { projectSecretIfStored } from './project-secrets-command'
 
 /**
  * `tao instantdb push` prepares an InstantDB app for a Tao app: it compiles the app, generates the
  * InstantDB schema and permission rules from the store its InstantDB datasource fills, and pushes
  * both. Only additive schema changes are applied; anything else is refused before the server
  * changes, unless the push is forced. The token authorizes the push and is never printed, logged,
- * or stored.
+ * or exposed in generated output. A project secret may supply it when no environment override exists.
  */
 
 /** instantTokenVariable names the environment variable the push token is read from. */
@@ -30,6 +31,7 @@ type InstantDBPushOptions = {
   input?: Readable
   interactive?: boolean
   output?: Writable
+  projectSecret?: (name: string, projectRoot: string) => Promise<string | undefined>
 }
 
 /** runInstantDBPush pushes one app's generated InstantDB schema and rules, or plans them. */
@@ -39,7 +41,7 @@ export async function runInstantDBPush(path: string, options: InstantDBPushOptio
   const provider: InstantPushModule = await import('tao-instantdb/push')
   const mapping = provider.instantMapping(inputs.definition, inputs.policy?.accountEntity)
   const rules = provider.instantRules(mapping, inputs.policy)
-  const token = await pushToken(options)
+  const token = await pushToken(app.projectRoot, options)
   const out = { output: options.output }
   HCI.writeLine(
     `InstantDB app ${inputs.appId} at ${inputs.apiURI} (${app.appName}, ${FS.displayPath(app.appPath)})`,
@@ -92,18 +94,25 @@ function writeSchemaChanges(report: InstantPushReport, dryRun: boolean, out: { o
 }
 
 /**
- * pushToken reads the token from the environment, or asks for it without echo at a terminal. The
+ * pushToken reads the environment override or the project store, then asks without echo. The
  * label says where the token came from, which is all a refusal ever reports about it.
  */
-async function pushToken(options: InstantDBPushOptions): Promise<{ label: string; value: string }> {
+async function pushToken(
+  projectRoot: string,
+  options: InstantDBPushOptions,
+): Promise<{ label: string; value: string }> {
   const fromEnvironment = (options.env ?? Platform.runtimeProcess.env)[instantTokenVariable]?.trim()
   if (fromEnvironment !== undefined && fromEnvironment !== '') {
     return { label: `token from ${instantTokenVariable}`, value: fromEnvironment }
   }
+  const fromProject = await (options.projectSecret ?? projectSecretIfStored)(instantTokenVariable, projectRoot)
+  if (fromProject !== undefined) {
+    return { label: 'token from Tao project secrets', value: fromProject }
+  }
   const terminal = { input: options.input, interactive: options.interactive, output: options.output }
   if (!HCI.isInteractive(terminal)) {
     Errors.throwUserInput(
-      `Set ${instantTokenVariable} to the InstantDB app's admin token, or run this command in a terminal to enter it.`,
+      `Store ${instantTokenVariable} with \`tao secrets set\`, set the environment variable, or run this command in a terminal to enter it.`,
     )
   }
   const entered = (await HCI.askSecret({ ...terminal, message: 'InstantDB app admin token:' })).value.trim()

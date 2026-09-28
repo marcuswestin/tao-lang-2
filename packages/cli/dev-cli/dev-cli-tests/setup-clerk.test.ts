@@ -1,8 +1,8 @@
 import { Errors } from '@shared'
 import { Deferred, Describe, Expect, settle, Test } from '@shared/test'
+import { type Cipher, type SecretStore } from 'tao-cli-kit/secrets'
 import { runSetupClerk } from '../dev-cli-src/clerk/SetupClerkCommand'
 import { prepareSecretBatch } from '../dev-cli-src/secrets/SecretsCommand'
-import { type Cipher, type SecretStore } from '../dev-cli-src/secrets/SecretStore'
 
 const publishableKey = 'pk_test_ZXhhbXBsZS5jbGVyay5hY2NvdW50cy5kZXYk'
 

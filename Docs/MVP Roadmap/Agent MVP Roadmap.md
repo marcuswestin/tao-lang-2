@@ -520,9 +520,10 @@ and distribution remain separate release checks.
 - [ ] **Before MVP:** a Tao developer configures an app's InstantDB backend with the `tao` CLI alone:
       store the app's InstantDB admin or platform token as a Tao CLI secret, register auth clients
       such as Clerk, and push the compiler-emitted schema and permission rules as a migration.
-- The Tao CLI has no secrets command today; the encrypted store behind `./agent setup-clerk` is a
-  repository development tool, not something a Tao developer has. This item adds a user-facing
-  secret store to the CLI and keeps the token out of app source, generated output, and logs.
+- The Tao CLI has a project-scoped encrypted secret store, separate from the repository development
+  store behind `./agent setup-clerk`. `tao instantdb push` can read its admin token from that store.
+  The remaining work in this item is backend configuration and migration flow through the CLI;
+  tokens stay out of app source, generated output, and logs.
 - Developer decision: requested 2026-09-27. The first InstantDB-with-auth demo runs on the
   Developer's existing Instant Cloud account and may be configured by hand before this lands.
 
