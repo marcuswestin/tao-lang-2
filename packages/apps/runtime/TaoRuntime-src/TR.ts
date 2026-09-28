@@ -66,6 +66,7 @@ import {
   type TaoHttpMatch,
   type TaoHttpShape,
 } from './TR-data-http'
+import { DataRows, type TaoDataRowOperation } from './TR-data-rows'
 import {
   SyncControls,
   type TaoChangeSet,
@@ -939,6 +940,9 @@ class TR {
   /** Data exposes provider-neutral reactive schemas, queries, and mutations. */
   static readonly Data = DataControls
 
+  /** DataRows translates snapshot commits into provider-neutral row writes. */
+  static readonly DataRows = DataRows
+
   /** Http is the adapter-authoring surface for Http datasources: `TR.Http.adapter`, `TR.Http.on`. */
   static readonly Http = HttpAdapterControls
 
@@ -1418,6 +1422,8 @@ namespace TR {
   export type DataAuthBinding = TaoDataAuthBinding
   export type AppDatasourceBinding = import('./TR-data').TaoAppDatasourceBinding
   export type DataWriteIntent = import('./TR-data').TaoDataWriteIntent
+  /** DataRowOperation is a row write using Tao entity and field names. */
+  export type DataRowOperation = TaoDataRowOperation
   export type DataWriteContext = import('./TR-data').TaoDataWriteContext
   /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
   export type TaoProps = TRTaoProps.TaoProps
