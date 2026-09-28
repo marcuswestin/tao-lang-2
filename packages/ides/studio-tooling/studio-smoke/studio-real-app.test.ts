@@ -8,7 +8,7 @@ import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
 import { exerciseHnreaderFeed } from './studio-hnreader-feed-journey'
 
-Test['skip']( // Fails intermittently; re-enabling it is release blocker A20 in the Agent MVP Roadmap.
+Test(
   'Studio feeds, keeps, discards, and undoes generated HNReader Stories through real browser drags',
   exerciseHnreaderFeed,
   300_000,

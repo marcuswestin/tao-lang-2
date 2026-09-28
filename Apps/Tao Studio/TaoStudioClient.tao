@@ -1246,13 +1246,16 @@ view StudioFeedPanelView(Feed StudioFeedPanel, Dispatch action(text, text)) {
    render Col() {
       Text("Feed")
       Text("Transient examples and proposals · Keep applies; Discard cancels.")
+      StudioChoice(Value: Feed.Entity, Change: ChangeEntity, Options: Feed.Entities, Label: "Feed entity")
+      StudioSegmented(Value: Feed.Source, Change: ChangeSource, Options: Feed.Sources, Label: "Feed source")
+      TextInput(Value: Feed.Seed, Change: ChangeSeed, Submit: SubmitSeed, Label: "Feed seed")
+      StudioPanelCommand(Label: "Keep", Command: Feed.KeepAction, Dispatch: Dispatch, Disabled: not Feed.CanKeep)
+      StudioPanelCommand(Label: "Discard", Command: Feed.DiscardAction, Dispatch: Dispatch, Disabled: not Feed.CanDiscard)
+      StudioPanelCommand(Label: "Undo Keep", Command: Feed.UndoAction, Dispatch: Dispatch, Disabled: not Feed.CanUndo)
       when Feed.Notice {
          empty -> { }
          otherwise -> { Text(Feed.Notice) }
       }
-      StudioChoice(Value: Feed.Entity, Change: ChangeEntity, Options: Feed.Entities, Label: "Feed entity")
-      StudioSegmented(Value: Feed.Source, Change: ChangeSource, Options: Feed.Sources, Label: "Feed source")
-      TextInput(Value: Feed.Seed, Change: ChangeSeed, Submit: SubmitSeed, Label: "Feed seed")
       when Feed.Loading {
          true -> { Text("Loading feed…") }
          otherwise -> { }
@@ -1270,11 +1273,7 @@ view StudioFeedPanelView(Feed StudioFeedPanel, Dispatch action(text, text)) {
          otherwise -> { loop Feed.Rows / Row {
             StudioFeedRowView(Row: Row, Dispatch: Dispatch, Disabled: Feed.Pending or Feed.Loading)
          } }
-      }
-      StudioPanelCommand(Label: "Keep", Command: Feed.KeepAction, Dispatch: Dispatch, Disabled: not Feed.CanKeep)
-      StudioPanelCommand(Label: "Discard", Command: Feed.DiscardAction, Dispatch: Dispatch, Disabled: not Feed.CanDiscard)
-      StudioPanelCommand(Label: "Undo Keep", Command: Feed.UndoAction, Dispatch: Dispatch, Disabled: not Feed.CanUndo)
-}  }
+}  }  }
 
 view StudioFeedRowView(Row StudioFeedRow, Dispatch action(text, text), Disabled boolean) {
    action Select() {
