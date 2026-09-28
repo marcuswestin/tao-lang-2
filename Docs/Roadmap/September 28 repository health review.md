@@ -101,4 +101,7 @@ Focused controls accompany each accepted code repair. Integration review found t
 screenshot timeline race and stale CLI help; both were repaired and the concurrency regression
 failed when the lock was deliberately removed. `./agent check`, `verify-changed`, and `verify`
 passed after those changes; the full gate reused exact-tree green evidence from `verify-changed`.
-Commit and feature-branch finalization remain pending. Landing requires a separate decision.
+The repair commit is `cab43391`. Finalization integrated later main commit `2e2c2cf9` (the Tao
+file lotus icon, outside this pass's review boundary) as merge `6e706364`, then verified the whole
+merged tree. Its merge message was reviewed and recorded, and the worktree was clean. Landing
+requires a separate decision.
