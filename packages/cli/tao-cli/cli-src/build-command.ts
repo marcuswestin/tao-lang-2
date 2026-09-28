@@ -334,6 +334,7 @@ async function exportWeb(
     }
     await FS.copyFile(source, FS.resolvePath(file, runtimeRoot))
   }
+  await FS.copyDirectory(FS.resolvePath('plugins', toolchainRoot), FS.resolvePath('plugins', runtimeRoot))
   // An installed Tao resolves its host's packages on first use; inside a checkout this does nothing.
   await HostDependencies.ensure()
   const modules = RuntimeToolchainPaths.dependencyRoot()

@@ -24,7 +24,7 @@ function sameValue(left: unknown, right: unknown): boolean {
 }
 
 /** Diff two runtime snapshots; authored same-value fields remain explicit writes. */
-export function rowOperations(
+function rowOperations(
   definition: TaoDataSchemaDefinition,
   previous: string | undefined,
   next: string,

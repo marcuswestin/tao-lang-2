@@ -217,8 +217,8 @@ so a later pass can revisit it.
   Review variant only after a server-enforced field/relationship design passes hostile direct
   requests. The [Jazz permission documentation](https://jazz.tools/docs/auth/permissions)
   describes the old/new value checks. This unresolved required gate blocks landing the three-provider
-  slice. The generated Expo host and JazzRn module compiled for iOS Simulator, but no Jazz Cloud
-  deployment, app launch, sign-in, two-device journey or offline journey ran.
+  slice. The generated Expo host, JazzRn module and Tao Companion compiled for iOS Simulator, but no
+  Jazz Cloud deployment, app launch, sign-in, two-device journey or offline journey ran.
 - **Convex/Clerk remains an online pilot.** Local generated-function tests cover per-field writes
   and owner policy, including direct hostile relation links and required-field writes. Auth Review
   backend source was generated; Convex code generation and deployment require a disposable Convex
