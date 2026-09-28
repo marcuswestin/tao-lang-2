@@ -28,6 +28,12 @@
   retries are `.artifacts/logs/dev-test/2026-09-26T22-23-47-694Z-43035-99bd2067/summary.json`
   and `.artifacts/logs/dev-test/2026-09-26T22-23-48-592Z-43200-845f1769/summary.json`.
   These are observations under contention, not a measured causal explanation or an admission benchmark.
+  A 2026-09-27 UTC `verify-changed` in `feat/visionos-development-setup` stopped after 506.5s
+  with `Timed out waiting for the machine-lane registry lock.` The board sampled two concurrent
+  lanes, each reporting 16/16 slots, and load 220.7 on 16 CPUs. Type checking took 230.6s;
+  several suites timed out or were interrupted. The command log is
+  `.artifacts/logs/agent/verify-changed/2026-09-27T00-07-22-109Z-38825.log`.
+  This is another contention observation; no scheduler settings or foreign processes were changed.
   A 2026-09-27 UTC (2026-09-26 local) `verify-changed` in `feat/native-tooling-followup`
   failed after 812.9s wrapper / 800.6s lane time, with three overlapping lanes and peak load 273.2
   on 16 CPUs. An earlier run of the repair passed in 74.9s; this later run also included its updated
@@ -48,6 +54,16 @@
   established, and nothing about that interruption settles the cause of the original failures.
 - **Workaround:** Verify when the machine is quiet, or read the `contention` block in
   `summary.json` before treating a slow lane as a regression.
+- **2026-09-26 recurrence:** An iOS development checkout's `verify-changed` recorded three
+  overlapping lanes and peak load 594.2 on 16 CPUs while native builds were also active. Its
+  `2026-09-27T00-17-48-563Z-55333-cc5dc1c4` summary and CLI shard logs record 120-second
+  test timeouts and terminated child commands with null exit codes. The same run also exposed a
+  stale Companion configuration assertion, so contention does not explain every failure. After
+  fixing that assertion and finishing this checkout's native build, `test-retry` recovered the
+  original failures, including the static-web timeout on an isolated retry. One shipping test's
+  cross-process clock comparison still failed in that run, then passed as an exact-file run
+  (`2026-09-27T01-00-16-919Z-93006-8f6771e1`). Other machine activity continued; these retries
+  establish recovery, not a controlled quiet-machine comparison or a proven root cause.
 - **Proposed change:** Admit whole heavy lanes machine-wide in arrival order rather than splitting
   the machine between all of them at once, so two or three lanes run at full width and the rest
   queue with a printed position; reconcile admitted slots with real CPU use, since 13 lanes holding

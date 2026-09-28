@@ -76,6 +76,7 @@ Describe('compiler: files and packages', () => {
           public nav CustomStack = CustomStack { Initial PackageHome }
           public type SnapshotStore is datasource with {
             StorageKey text
+            supports { }
             provider TestProviderImpl from ./TestProviderImpl.ts
           }
           view PackageHome() { render inject ${tsFence} return null ${fence} }
@@ -242,6 +243,7 @@ Describe('compiler: files and packages', () => {
           }
           public type SidecarStore is datasource with {
             StorageKey text
+            supports { }
             provider MemoryProvider from ./Providers.ts
           }
         `,

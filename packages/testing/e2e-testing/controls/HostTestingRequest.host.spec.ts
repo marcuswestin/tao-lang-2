@@ -1,7 +1,145 @@
 import { expect, test } from '@playwright/test'
+import { type CLI, Errors, Platform } from '@shared'
+import { createHostTestingContext } from '../HostTestingCommand'
 import { parseHostTestingRequest } from '../HostTestingRequest'
 
 const base = { app: 'clockwork', seed: '12345' }
+const developerDir = '/Applications/Xcode-beta.app/Contents/Developer'
+
+test('accepts scoped Xcode only for Apple native modes and retained output only for iOS simulators', () => {
+  for (const mode of ['ios', 'device', 'catalyst']) {
+    const request = parseHostTestingRequest(mode, {
+      ...base,
+      app: 'hnreader',
+      developerDir,
+      ...(mode === 'catalyst' ? {} : { device: 'target' }),
+    })
+    expect(request).toMatchObject({ developerDir })
+  }
+  for (const mode of ['android', 'browser', 'prepare', 'export', 'driver', 'setup', 'check']) {
+    expect(() => parseHostTestingRequest(mode, { ...base, developerDir, device: 'target' })).toThrow(
+      '--developer-dir is supported only',
+    )
+  }
+  for (
+    const path of [
+      'Xcode.app/Contents/Developer',
+      '/Library/Developer/CommandLineTools',
+      '/Applications/Xcode.app',
+      `${developerDir}\n`,
+    ]
+  ) {
+    expect(() => parseHostTestingRequest('ios', { ...base, developerDir: path, device: 'target' })).toThrow(
+      'absolute Xcode',
+    )
+  }
+  expect(parseHostTestingRequest('ios', { ...base, device: 'target', output: '/retained/app.app' })).toMatchObject({
+    output: '/retained/app.app',
+  })
+  expect(parseHostTestingRequest('ios', { ...base, device: 'target', buildOnly: true })).toMatchObject({
+    buildOnly: true,
+  })
+  for (const mode of ['device', 'android', 'catalyst', 'browser']) {
+    expect(() => parseHostTestingRequest(mode, { ...base, device: 'target', output: '/retained/app.app' })).toThrow(
+      '--output is supported only for ios',
+    )
+    expect(() => parseHostTestingRequest(mode, { ...base, device: 'target', buildOnly: true })).toThrow(
+      '--build-only is supported only for ios',
+    )
+  }
+})
+
+test('Apple builds normalize missing and ASCII locales without changing other modes or caller state', async () => {
+  for (const locale of [undefined, 'C']) {
+    const environment = { LANG: locale, LC_ALL: locale, PATH: '/tools' }
+    for (const mode of ['ios', 'device', 'catalyst', 'android', 'check']) {
+      const request = parseHostTestingRequest(mode, {
+        ...base,
+        app: 'hnreader',
+        ...(['ios', 'device', 'android'].includes(mode) ? { device: 'target' } : {}),
+      })
+      const context = await createHostTestingContext(request, { environment })
+      const expectedLocale = ['ios', 'device', 'catalyst'].includes(mode) ? 'en_US.UTF-8' : locale
+      expect(context.environment['LANG']).toBe(expectedLocale)
+      expect(context.environment['LC_ALL']).toBe(expectedLocale)
+      expect(context.environment['PATH']).toBe('/tools')
+      expect(environment).toEqual({ LANG: locale, LC_ALL: locale, PATH: '/tools' })
+    }
+  }
+})
+
+test('validates scoped Xcode and propagates its environment without changing caller or process state', async () => {
+  const environment = { DEVELOPER_DIR: '/original', PATH: '/tools' }
+  const processSelection = Platform.runtimeProcess.env['DEVELOPER_DIR']
+  const calls: CLI.CommandSpec[] = []
+  const request = parseHostTestingRequest('ios', { ...base, developerDir, device: 'target' })
+  const context = await createHostTestingContext(request, {
+    environment,
+    hostPlatform: 'darwin',
+    files: { isDirectory: async () => true, isFile: async () => true, realPath: async path => path },
+    run: async (command, spec = {}) => {
+      calls.push(spec)
+      return {
+        command,
+        args: [...spec.args ?? []],
+        exitCode: 0,
+        signal: null,
+        stderr: '',
+        stdout: command.endsWith('xcrun') ? `${developerDir}/usr/bin/xcodebuild\n` : 'Xcode 27.1\nBuild version 18B',
+      }
+    },
+  })
+  expect(context.environment['DEVELOPER_DIR']).toBe(developerDir)
+  expect(context.environment['PATH']).toBe('/tools')
+  expect(calls.map(call => call.args)).toEqual([['-version'], ['-checkFirstLaunchStatus'], ['--find', 'xcodebuild']])
+  expect(calls.every(call => call.env?.['DEVELOPER_DIR'] === developerDir)).toBe(true)
+  expect(environment.DEVELOPER_DIR).toBe('/original')
+  expect(Platform.runtimeProcess.env['DEVELOPER_DIR']).toBe(processSelection)
+})
+
+test('rejects missing or unready scoped Xcode before a host context can reach build or device operations', async () => {
+  const request = parseHostTestingRequest('ios', { ...base, developerDir, device: 'target' })
+  let probes = 0
+  await expect(createHostTestingContext(request, {
+    hostPlatform: 'darwin',
+    files: { isDirectory: async () => false, isFile: async () => false, realPath: async path => path },
+    run: async () => {
+      probes++
+      return Errors.throwUnexpected('unreachable probe')
+    },
+  })).rejects.toThrow('missing or incomplete')
+  expect(probes).toBe(0)
+  await expect(createHostTestingContext(request, {
+    hostPlatform: 'darwin',
+    files: { isDirectory: async () => true, isFile: async () => true, realPath: async path => path },
+    run: async (command, spec = {}) => ({
+      command,
+      args: [...spec.args ?? []],
+      exitCode: 1,
+      signal: null,
+      stderr: 'license requires attention',
+      stdout: '',
+    }),
+  })).rejects.toThrow('license requires attention')
+  for (const failure of ['first-launch', 'resolution']) {
+    await expect(createHostTestingContext(request, {
+      hostPlatform: 'darwin',
+      files: { isDirectory: async () => true, isFile: async () => true, realPath: async path => path },
+      run: async (command, spec = {}) => ({
+        command,
+        args: [...spec.args ?? []],
+        signal: null,
+        exitCode: failure === 'first-launch' && spec.args?.[0] === '-checkFirstLaunchStatus' ? 1 : 0,
+        stderr: failure === 'first-launch' && spec.args?.[0] === '-checkFirstLaunchStatus'
+          ? 'components incomplete'
+          : '',
+        stdout: command.endsWith('xcrun')
+          ? '/Applications/Other.app/Contents/Developer/usr/bin/xcodebuild'
+          : 'Xcode 27.1',
+      }),
+    })).rejects.toThrow(failure === 'first-launch' ? 'components incomplete' : 'did not resolve xcodebuild')
+  }
+})
 
 test('Catalyst is a local build for the two review apps with no mobile target or injected fault', () => {
   for (const app of ['native-navigation', 'hnreader']) {

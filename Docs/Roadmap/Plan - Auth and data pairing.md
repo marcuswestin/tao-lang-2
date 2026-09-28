@@ -1,0 +1,188 @@
+# Plan — Auth and data pairing
+
+Status: decided 2026-09-27; steps 1–4 implemented, step 5 except a Clerk journey, and step 6 run
+by the Developer on a phone. The first target is the InstantDB datasource
+signed in through Clerk and through InstantDB's own email-code auth, with no Tao-hosted server.
+[Plan — Auth and account data](<Plan - Auth and account data.md>) remains the owner of the account
+semantics this plan builds on; this plan owns how an auth provider and a datasource pair.
+
+"Pairing" names the exchange between an auth provider and a datasource. The repository's word
+"bridge" already means binding Tao code to a TypeScript value (`packages/AGENTS.md`), so it is not
+used for this.
+
+## Decisions
+
+Settled with the Developer on 2026-09-27:
+
+1. **Proof kinds.** An auth provider _issues_ sign-in proofs of three runtime-owned kinds, and a
+   datasource _accepts_ kinds. A pairing works when they overlap. A datasource may restrict a kind
+   to named providers with `from`.
+   - a. `IdentityToken`: a signed token naming its issuer and subject (Clerk's session token).
+   - b. `Session`: a provider's own session, usable only by a partner that names the provider
+     (InstantAuth to InstantDB, LocalAuth to Reference).
+   - c. `TestIdentity`: TestAuth fixtures, accepted only where test authority is declared.
+2. **The data side resolves the Account.** After the auth provider signs in, the datasource that
+   holds `Account` turns proofs into the application Account ID and owns any backend session the
+   exchange creates. Auth providers no longer return account IDs or know datasource endpoints.
+3. **Declarations live in `.tao`.** Provider types gain `issues { … }`, `accepts { … }`, and
+   `supports { … }` blocks beside `provider … from`, so the compiler checks pairings and data
+   features without running TypeScript.
+4. **No email identity rule in the language.** Each auth provider decides whether email
+   verification is required; unverified accounts allow guest and temporary accounts that work at
+   once. A datasource may still refuse unverified proofs where its identity depends on email. The
+   InstantDB datasource does not need to: InstantDB matches a Clerk user by verified email _or_ by
+   the Clerk subject, and drops an unverified email rather than refusing the token, so an unverified
+   Clerk account becomes an InstantDB user keyed by its subject alone.
+5. **The snapshot InstantDB adapter is replaced** by a per-row adapter, and WordFlower moves to it.
+   The hosted demo's snapshot-shaped data is abandoned.
+
+Defaults taken for the remaining inventory (vetoable):
+
+- The datasource whose store holds `Account` owns it; other authenticated datasources receive its ID.
+- The data side pulls fresh proofs when it needs them. Sign-out releases the datasource's session
+  before the auth provider's, and retries a revocation it could not confirm.
+- A datasource type without `supports` is an error; nothing is implied. The same blocks apply to
+  app-authored datasources.
+- Each app variant is checked separately; unsupported use is an error at the use and at the
+  `Datasource` line. `access` rules without an `Auth` provider are a compile error.
+- Every declared capability runs its own check in the provider conformance suite.
+- Capabilities may take a level, starting with `Migrations Additive`.
+- InstantDB's Account is an `accounts` row whose ID equals the InstantDB user ID, linked one-to-one
+  to `$users`, so concurrent first logins write the same row.
+- `AppId` appears on both the InstantAuth and InstantDB slots, and the pairing refuses a mismatch.
+- An unauthenticated InstantDB app without `access` rules gets public permission rules and a
+  compile warning that anyone with the app ID can read and write its data.
+- Schema and permission rules are pushed through InstantDB's HTTP APIs with no new dependency.
+  Generated schema and rule files are build output. This slice supports additive changes; renames
+  and destructive changes are refused with an explanation.
+- The demo runs on the Developer's existing Instant Cloud account, configured by hand until
+  [`A19`](<../MVP Roadmap/Agent MVP Roadmap.md>) adds Tao CLI secrets and configuration.
+
+## Declarations
+
+```tao
+type Clerk is AuthProvider with {
+   PublishableKey text
+   issues { IdentityToken }
+   provider ClerkAuthProvider from ./Clerk.ts
+}
+
+type InstantAuth is AuthProvider with {
+   AppId text
+   issues { Session }
+   provider InstantAuthProvider from ./InstantAuth.ts
+}
+
+type InstantDB is datasource with {
+   AppId text
+   accepts { IdentityToken from Clerk, Session from InstantAuth }
+   supports { Relations, UniqueFields, AccessRules, FieldUpdates, Migrations Additive }
+   provider InstantDBProvider from ./InstantDB.ts
+}
+```
+
+The capability vocabulary is closed and owned by the compiler. Every name has one detector over app
+source; a name without a detector is not in the vocabulary. A capability means the datasource
+guarantees the feature for every writer, not only on one device. The initial list, confirmed or
+trimmed by the language slice:
+
+| Capability         | Detected from                                                   |
+| ------------------ | --------------------------------------------------------------- |
+| `Relations`        | relation fields and `(owned)` collections                       |
+| `UniqueFields`     | `unique A`                                                      |
+| `UniqueTogether`   | `unique A + B`                                                  |
+| `AccessRules`      | any `access` block for data the datasource stores               |
+| `FieldUpdates`     | `can update Field`                                              |
+| `MembershipRules`  | access through a relation path (`Workspace.Memberships.Person`) |
+| `Offline`          | an `Offline { … }` working set                                  |
+| `Migrations Level` | a schema change against the last push (checked at push time)    |
+
+## Runtime protocol
+
+- `TaoAuthConnection` reports `SignedIn` with a principal (`issuer`, `subject`, optional `email` and
+  `emailVerified`) and implements `proof(kind, signal)`. It no longer returns an account ID.
+- The runtime stamps each proof with the auth declaration's name and refuses expired proofs or kinds
+  the declaration does not issue.
+- `TaoDataProvider.authenticate(context)` receives the principal and a proof source, and returns
+  the account ID, a credential source for its own transport, and `release(signal)`.
+- The public session stays `Authenticating` until the account datasource resolves the Account, so
+  `SignedIn` still means the app can read account data. A failed resolution is `Error`.
+- The pairing metadata the compiler emits replaces `authenticatedAuthority`.
+
+## Sequence
+
+1. **Runtime protocol**, moving TestAuth/Memory, LocalAuth/Reference, and Clerk/Reference onto it
+   without behaviour change. The Clerk gateway exchange moves from the Clerk provider into Reference.
+2. **Language**: grammar, validation, formatting, and emission of `issues`, `accepts`, and `supports`;
+   capability detectors; pairing and `access`-without-`Auth` diagnostics; declarations on every
+   standard provider.
+3. **Per-row InstantDB datasource**: one InstantDB entity per row, links for relations, schema and
+   permission generation from the compiled data catalogue and policy, and an HTTP push client, all
+   inside `tao-instantdb` where Authority.md places the diffing layer. Proven unauthenticated first.
+4. **InstantAuth** (email code, then guest) and InstantDB's `authenticate` for
+   `Session from InstantAuth` and `IdentityToken from Clerk`, over one shared InstantDB client per
+   app ID.
+5. **Push command and apps**: a `tao` command pushing schema and rules to local InstantDB for tests;
+   `AuthReviewInstant` and `AuthReviewInstantClerk` variants with Tao journeys against local
+   InstantDB; WordFlower moved to the per-row adapter.
+6. **Hosted demo**: the Developer's Instant Cloud app with the Clerk client registered and rules
+   pushed; browser and phone acceptance.
+
+## Progress
+
+- Steps 1–4 are implemented, and both sign-ins reach InstantDB: `Session from InstantAuth` and
+  `IdentityToken from Clerk`, the second through the app's registered Clerk client.
+- The compiler emits each synced store's stored schema as `TaoDataSchema.json`, and `tao instantdb
+  push` reads it instead of rebuilding the schema from the data catalogue.
+- `AuthReviewInstant` runs as a Tao journey against local InstantDB
+  (`instantdb-tests/auth-review-live.test.ts`): email-code sign-in, profile, an owned note that
+  syncs, and sign-out. Owner isolation, restoration, and concurrent first sign-in are the provider
+  live tests' (`instantdb-live`, `InstantAuth-live`, `InstantDB-sign-in-live`).
+- `AuthReviewInstantClerk` has no local journey: a local InstantDB cannot verify a Clerk token
+  without a real Clerk instance, so its pairing is covered by unit tests and the hosted run.
+- Hosted: on 2026-09-27 the Developer ran both variants against the Instant Cloud app on a physical
+  iPhone and reported both working. No hosted run is recorded beyond that report, and the admin-query
+  checks of the local acceptance have not been repeated there.
+- WordFlower binds the per-row adapter. Its hosted Instant app still holds the old snapshot schema;
+  pushing WordFlower's schema there, and abandoning the snapshot data, is a Developer action below.
+- What remains was deferred on 2026-09-27 to finish before MVP: the work is `A20` in
+  `Docs/MVP Roadmap/Agent MVP Roadmap.md`, and the open questions are `R15` in
+  `Docs/MVP Roadmap/Developer MVP Roadmap.md`.
+
+## Acceptance
+
+- Existing Auth Review journeys pass unchanged on TestAuth/Memory, LocalAuth/Reference, and
+  Clerk/Reference after step 1.
+- Compile errors for an unpaired Auth/Datasource, a capability the datasource lacks, and `access`
+  without `Auth`, each naming the use and the `Datasource` line.
+- Against local InstantDB: registration, owned-note persistence, relaunch restoration, sign-out
+  isolation, and denied cross-account reads and writes checked through admin queries, for both
+  InstantAuth and Clerk.
+- Hosted: the same journey on the Developer's Instant Cloud app, then on a phone.
+
+## Developer actions for the hosted demo
+
+- Choose or create the Instant Cloud app and store its app ID and admin token in the repository
+  secret store.
+- In Clerk, add `email` and `email_verified` claims to the session token (InstantDB reads
+  `email_verified` as a boolean).
+- In the Instant app's Auth settings, add a Clerk client named `clerk` with the development
+  publishable key. `AuthReviewInstantClerk` signs in through that name (`ClerkClientName`), and
+  `just instant-review --clerk` runs it with the publishable key from the secret store.
+- Push WordFlower's schema and rules to its Instant app (`tao instantdb push` on
+  `Apps/WordFlower/1 - Current/WordFlower.tao` with `--app WordFlowerInstantDB` and that app's admin
+  token in `INSTANT_APP_ADMIN_TOKEN`); the rows the snapshot adapter stored there are not migrated.
+
+## InstantDB facts this plan rests on
+
+Checked against `@instantdb/react-native` 1.0.22 and the InstantDB server source on 2026-09-27.
+
+- InstantDB keeps its session independently of Clerk; the app must sign out of InstantDB itself.
+  The data side's `release` does this before the auth provider signs out.
+- InstantDB persists its session in AsyncStorage, not secure storage.
+- `signInAsGuest()` takes no arguments in 1.0.22. Signing a guest in by email keeps the guest's
+  user ID when the email is new and links the guest to the existing user when it is not.
+- Tests obtain a magic code from local InstantDB with `POST /admin/magic_code`, and act as a user
+  with the `as-email`, `as-token`, or `as-guest` admin headers.
+- Instant Cloud closed new signups and shuts down on 2027-08-31. Whether an existing account can
+  still create apps is unconfirmed.

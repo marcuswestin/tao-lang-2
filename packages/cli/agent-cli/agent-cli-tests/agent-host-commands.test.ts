@@ -39,6 +39,8 @@ const expected = [
   'local-instantdb start',
   'local-instantdb stop',
   'companion-host-build',
+  'setup-ios',
+  'setup-visionos',
   'studio-companion-install',
   'clerk-review',
   'standalone-cli-vm-setup',
@@ -49,6 +51,7 @@ const expected = [
   'simulators run',
   'simulators app-container',
   'simulators install',
+  'simulators launch',
   'simulators open-url',
   'simulators uninstall',
   'simulators open',
@@ -75,6 +78,9 @@ const expected = [
   'processes list',
   'processes started',
   'start-branch',
+  'storage sync',
+  'storage qa',
+  'storage push',
 ]
 
 Describe('agent host command permissions', () => {
@@ -129,7 +135,13 @@ Describe('agent host command permissions', () => {
       command: 'xcrun',
       fixedArgs: ['simctl', 'list', 'devices'],
     })
+    Expect(hostCommandTarget(['simulators', 'launch'])).toEqual({
+      command: 'xcrun',
+      fixedArgs: ['simctl', 'launch'],
+    })
     Expect(hostCommandTarget(['start-branch'])).toEqual({ command: './dev', fixedArgs: ['start-branch'] })
+    Expect(hostCommandTarget(['setup-ios'])).toEqual({ command: './dev', fixedArgs: ['setup-ios'] })
+    Expect(hostCommandTarget(['setup-visionos'])).toEqual({ command: './dev', fixedArgs: ['setup-visionos'] })
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 42] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun simctl list devices'] })).toThrow()

@@ -1,5 +1,11 @@
 import type { StudioPreviewConnection } from './StudioPreviewConnection'
 
+/**
+ * Panels floating over the canvas (the edit log, the selection HUD) are Studio chrome: pressing one
+ * neither pans the canvas nor lets go of the preview being edited.
+ */
+const studioCanvasChromeSelector = '[data-tao-studio-canvas-chrome]'
+
 /** Input selection is separate from the preview used for inspection and source actions. */
 export function mountPreviewActivation(host: HTMLElement, previews: readonly StudioPreviewConnection[]): {
   reconcile: () => void
@@ -129,6 +135,7 @@ export function mountPreviewActivation(host: HTMLElement, previews: readonly Stu
     if (
       entry !== undefined && target instanceof Element && !entry.iframe.contains(target)
       && !(entry.viewport !== host && entry.viewport.contains(target))
+      && target.closest(studioCanvasChromeSelector) === null
     ) {
       clear()
     }
@@ -158,7 +165,7 @@ export function mountPreviewActivation(host: HTMLElement, previews: readonly Stu
       }
       return event.target.closest(
         'button, input, select, textarea, a, canvas, [contenteditable], [role="button"], [role="menu"], '
-          + '[role="menuitem"], [role="slider"], .studio-preview-cell, .studio-draw-canvas',
+          + `[role="menuitem"], [role="slider"], .studio-preview-cell, .studio-draw-canvas, ${studioCanvasChromeSelector}`,
       ) === null
     },
     dispose: () => {

@@ -30,6 +30,7 @@ module.exports = {
   },
   setupFilesAfterEnv: [
     '<rootDir>/expo-host-src/testing/device-module-mocks/tao-device-modules.setup.ts',
+    '<rootDir>/expo-host-src/testing/journey-lifetime.setup.ts',
   ],
   // Jest prints the per-case tree on its own only while a run has exactly one test file. Splitting a
   // run across entrypoints must not cost that tree: it is what `tao test` shows a reader, and what

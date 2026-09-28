@@ -36,6 +36,8 @@ export class StudioInspection {
   #inspection: StudioRenderInspection | undefined
   #requestRevision = 0
   #selected: StudioInspectorSelection | undefined
+  /** Every selected element, in the order they were added; the selection is always the last. */
+  #group: StudioInspectorSelection[] = []
 
   constructor(deps: StudioInspectionDeps) {
     this.#deps = deps
@@ -61,12 +63,37 @@ export class StudioInspection {
     return selected === undefined || name === undefined ? undefined : { id: `${selected.identity.path}#${name}`, name }
   }
 
-  select(selection: StudioInspectorSelection): void {
-    this.#selected = selection
+  /** The selected elements, which the preview keeps to one file; a single selection is a group of one. */
+  selectedGroup(): readonly StudioInspectorSelection[] {
+    return this.#group
+  }
+
+  /**
+   * An additive selection toggles membership: a new element joins, a member leaves unless it is the
+   * last one. The preview applies the same rule to its outlines. A plain selection starts over, and so
+   * does a shift-click in another file or another cell, since each cell outlines only its own picks.
+   * Answers whether the pick joined the existing selection rather than starting a new one.
+   */
+  select(selection: StudioInspectorSelection, additive = false): boolean {
+    const current = this.#selected
+    const joins = additive && current !== undefined && current.identity.path === selection.identity.path
+      && current.identity.previewInstanceId === selection.identity.previewInstanceId
+    if (!joins) {
+      this.#group = [selection]
+    } else if (this.#group.some(member => member.renderId === selection.renderId)) {
+      if (this.#group.length > 1) {
+        this.#group = this.#group.filter(member => member.renderId !== selection.renderId)
+      }
+    } else {
+      this.#group = [...this.#group, selection]
+    }
+    this.#selected = this.#group.at(-1)
+    return joins
   }
 
   /** A source mutation invalidates the selection: render ids do not survive a recompile. */
   clear(): void {
+    this.#group = []
     this.#selected = undefined
     this.#inspection = undefined
   }

@@ -1,6 +1,7 @@
 import TR from '@runtime/TR'
 import type { AccountProtocol } from '@shared/auth/AuthProtocol'
 import { Assert, Errors, Time } from '@shared/core'
+import { referenceAuthentication } from './ReferenceAuth'
 import { acquireBrowserCheckpoint, joinReferenceCheckpoint } from './ReferenceCoordinator'
 import {
   parseReferenceEnvelope,
@@ -16,6 +17,8 @@ import {
 /** ReferenceHost injects platform storage, transport, and scheduling; server authority stays real. */
 export type ReferenceHost = {
   acquireCheckpoint?(identity: string): Promise<() => void>
+  /** now is the clock gateway session expiry is measured against; it defaults to `Date.now`. */
+  now?(): number
   request(input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]): ReturnType<typeof fetch>
   operationId(): string
   schedule(callback: () => void, milliseconds: number): () => void
@@ -32,7 +35,11 @@ type WriteContext = { previousSnapshot: string }
 /** ReferenceProvider durably records explicit authenticated operations before offering them online. */
 export function ReferenceProvider(host: ReferenceHost = nativeHost()): TR.DataProvider {
   return {
-    authenticatedAuthority: 'server',
+    authenticate: context =>
+      referenceAuthentication(host, context, {
+        resource: textConfiguration(context.configuration, 'Resource'),
+        serverURL: textConfiguration(context.configuration, 'ServerURL').replace(/\/$/, ''),
+      }),
     testNetwork: 'remote',
     testWriteRecovery: true,
     connect: context => {
@@ -146,14 +153,13 @@ export function ReferenceProvider(host: ReferenceHost = nativeHost()): TR.DataPr
 
       const request = async <T>(path: string, transaction?: AccountProtocol.Transaction): Promise<T> => {
         assertOpen()
-        const credential = await auth.credential(resource)
+        const credential = await auth.credential(abort.signal)
         assertOpen()
-        Assert.input(credential.audience === resource, 'The auth provider returned a credential for another resource.')
         let response: Response
         try {
           response = await host.request(`${serverURL}/v1${path}`, {
             body: transaction === undefined ? undefined : JSON.stringify(transaction),
-            headers: { Authorization: `Bearer ${credential.value}`, 'Content-Type': 'application/json' },
+            headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
             method: transaction === undefined ? 'GET' : 'POST',
             // React Native declares a narrower ambient AbortSignal; fetch accepts the same host signal.
             signal: abort.signal as NonNullable<Parameters<typeof fetch>[1]>['signal'],
@@ -307,14 +313,17 @@ export function ReferenceProvider(host: ReferenceHost = nativeHost()): TR.DataPr
           await persist(next)
         })
       }
-      const upload = (): Promise<void> => {
+      const upload = (operationId?: string): Promise<void> => {
         if (uploading !== undefined) {
-          return uploading
+          return operationId === undefined ? uploading : uploading.then(() => upload(operationId))
         }
         uploading = (async () => {
           while (!closed) {
             const pending = await enqueue(async () =>
-              state.checkpoint?.pending.find(item => item.failure?.permanent !== true)
+              state.checkpoint?.pending.find(item =>
+                item.failure?.permanent !== true
+                && (operationId === undefined || item.transaction.operationId === operationId)
+              )
             )
             if (pending === undefined) {
               return
@@ -343,6 +352,9 @@ export function ReferenceProvider(host: ReferenceHost = nativeHost()): TR.DataPr
                 }
                 await persist(next)
               })
+              if (operationId !== undefined) {
+                return
+              }
             } catch (error) {
               if (closed) {
                 return
@@ -476,13 +488,17 @@ export function ReferenceProvider(host: ReferenceHost = nativeHost()): TR.DataPr
             void enqueue(async () => {
               Assert.defined(state.checkpoint, 'reference checkpoint has loaded')
               const next = structuredClone(state.checkpoint)
-              for (const item of next.pending) {
-                if (item.transaction.operations.some(operation => operation.entity === entity && operation.id === id)) {
-                  delete item.failure
-                }
+              const item = next.pending.find(item =>
+                item.failure !== undefined
+                && item.transaction.operations.some(operation => operation.entity === entity && operation.id === id)
+              )
+              if (item === undefined) {
+                return undefined
               }
+              delete item.failure
               await persist(next)
-            }).then(upload).catch(report)
+              return item.transaction.operationId
+            }).then(operationId => operationId === undefined ? undefined : upload(operationId)).catch(report)
           },
           status: (entity, id) => {
             if (closed) {

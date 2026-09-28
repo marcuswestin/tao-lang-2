@@ -825,12 +825,13 @@ ${stubView('Text', 'Value text')}`,
     Test(
       `requires a singular entity import for access declarations with ${imported} imported`,
       checksFiles({
-        'Main.tao': importingApp(
-          `use ${imported} from ./Schema.tao`,
-          'render Text("Ready")',
-          `access Account { Account can read }
+        // Access rules need an Auth to enforce them, so the app binds one.
+        'Main.tao': `use ${imported} from ./Schema.tao
+use TestAuth from @tao/auth/testing
+app MyApp { Auth TestAuth { } view MainView }
+view MainView() { render Text("Ready") }
+access Account { Account can read }
 ${stubView('Text', 'Value text')}`,
-        ),
         'Schema.tao': 'workspace data Accounts / Account { DisplayName text }',
       }, result => {
         if (imported === 'Account') {

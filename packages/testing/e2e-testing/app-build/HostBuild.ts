@@ -304,7 +304,8 @@ function hostAppConfig(appId: string, runId: string, subject: HostSubject): stri
           name: appId,
           platforms: ['ios', 'android', 'web'],
           plugins: [
-            ['expo-build-properties', { ios: { enableSceneSupport: true } }],
+            // Keep the fixture deployment floor aligned with the Companion host.
+            ['expo-build-properties', { ios: { deploymentTarget: '17.0', enableSceneSupport: true } }],
           ],
           scheme: `taohostpoc-${runId}`,
           slug: appId.replaceAll('.', '-'),

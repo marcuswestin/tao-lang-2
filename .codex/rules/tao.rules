@@ -25,6 +25,8 @@ prefix_rule(pattern=["./agent","unsandboxed","docker-desktop"], decision="allow"
 prefix_rule(pattern=["./agent","unsandboxed","watchman"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","local-instantdb"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","companion-host-build"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
+prefix_rule(pattern=["./agent","unsandboxed","setup-ios"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
+prefix_rule(pattern=["./agent","unsandboxed","setup-visionos"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","studio-companion-install"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","clerk-review"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","standalone-cli-vm-setup"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
@@ -38,3 +40,4 @@ prefix_rule(pattern=["./agent","unsandboxed","android"], decision="allow", justi
 prefix_rule(pattern=["./agent","unsandboxed","remote"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","processes"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
 prefix_rule(pattern=["./agent","unsandboxed","start-branch"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")
+prefix_rule(pattern=["./agent","unsandboxed","storage"], decision="allow", justification="Repository host wrapper validates subcommands and arguments.")

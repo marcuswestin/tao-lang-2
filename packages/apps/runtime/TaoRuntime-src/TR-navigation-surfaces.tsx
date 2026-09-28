@@ -100,9 +100,12 @@ export function presentedOccurrenceRegion(
 /** NavigationBackAffordance exposes the same root-safe reducer through an accessible control. */
 export function NavigationBackAffordance(props: {
   target: { back(): boolean }
+  taoProps?: TaoProps
 }): React.JSX.Element | null {
   return Views.Pressable(
     {
+      // Styled as the stack header's Back is, so the app's design and scheme reach its label.
+      __tao: { ...props.taoProps, designDefault: 'NavigationChromeButton' },
       action: {
         invoke: () => {
           backNavigation(props.target)

@@ -41,6 +41,8 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   // sequence; naming the whole build keeps an agent from stitching it together from lower-level
   // operations and a hand-written placement step.
   'companion-host-build': { command: './dev', fixedArgs: ['companion-host-build'] },
+  'setup-ios': { command: './dev', fixedArgs: ['setup-ios'] },
+  'setup-visionos': { command: './dev', fixedArgs: ['setup-visionos'] },
   'studio-companion-install': { command: './dev', fixedArgs: ['studio-companion-install'] },
   'clerk-review': { command: 'just', fixedArgs: ['clerk-review'], server: true },
   'standalone-cli-vm-setup': { command: 'just', fixedArgs: ['standalone-cli-vm-setup'], argsPolicy: 'none' },
@@ -58,6 +60,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'simulators run': { command: 'xcrun', fixedArgs: ['simctl', 'boot'] },
   'simulators app-container': { command: 'xcrun', fixedArgs: ['simctl', 'get_app_container'] },
   'simulators install': { command: 'xcrun', fixedArgs: ['simctl', 'install'] },
+  'simulators launch': { command: 'xcrun', fixedArgs: ['simctl', 'launch'] },
   'simulators open-url': { command: 'xcrun', fixedArgs: ['simctl', 'openurl'] },
   'simulators uninstall': { command: 'xcrun', fixedArgs: ['simctl', 'uninstall'] },
   'simulators open': { command: 'open', fixedArgs: ['-a', 'Simulator'] },
@@ -84,6 +87,11 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'processes list': { command: 'ps', fixedArgs: ['-axo', 'pid=,ppid=,lstart=,command='], argsPolicy: 'none' },
   'processes started': { command: 'ps', fixedArgs: ['-o', 'lstart=', '-p'], argsPolicy: 'pid' },
   'start-branch': { command: './dev', fixedArgs: ['start-branch'] },
+  // The `storage` submodule archives development evidence: syncing and pushing reach its GitHub
+  // remote, and a QA run drives Studio, which needs the host's Watchman.
+  'storage sync': { command: './dev', fixedArgs: ['storage', 'sync'], argsPolicy: 'none' },
+  'storage qa': { command: './dev', fixedArgs: ['storage', 'qa'] },
+  'storage push': { command: './dev', fixedArgs: ['storage', 'push'], argsPolicy: 'none' },
 }
 
 /** A named operation has a fixed implementation; suffix argv passes through without a shell. */

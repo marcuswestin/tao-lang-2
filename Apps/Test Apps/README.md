@@ -172,6 +172,8 @@ Exercise `required` completeness and the writes that consume it through an ordin
 
 Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.
 
+The Enum Fields app also proves declared enum defaults, explicit overrides, and omitted or absent optional values through creates, copies, updates, and clearing.
+
 **Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, stored rows surviving a `relaunch`, and Memory saving while the test network is offline. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
 
 **Does not belong here:** remote providers, credentials, auth, permissions, sync, pagination, or aggregation; navigation or WordFlower product behavior; schema, query, and write diagnostics.
@@ -263,7 +265,7 @@ stdlib's own native components, which `@tao/ui` and its conformance suite own.
 
 Exercise runtime-backed `@tao/ui` imports and the first stdlib primitives.
 
-**Belongs here:** `use … from @tao/ui`; rendering for `Text`, `Number`, `Button`, `Box`, `Stack`, `Col`, `Row`, `WrappingRow`, `TextFrame`, `TextMultiline`, `Image`, `Spinner`, and `Progress`; informative and decorative image accessibility, bounded progress, a no-op `on press` binding required by `Button`, and basic nested stdlib composition.
+**Belongs here:** `use … from @tao/ui`; rendering for `Text`, `Number`, `Button`, `Box`, `Stack`, `Col`, `Row`, `WrappingRow`, `Layer`, `TextFrame`, `TextMultiline`, `Image`, `Spinner`, and `Progress`; informative and decorative image accessibility, bounded progress, a no-op `on press` binding required by `Button`, and basic nested stdlib composition.
 
 **Does not belong here:** type-system cases owned by Type System Tests; import-visibility errors; design and styling behavior; stateful interaction beyond the no-op binding.
 
@@ -452,3 +454,20 @@ submitting; the email-code form offers the same email shortcut. The phone form s
 input rows compact. Password and registration challenges open the code form, and Sign in explicitly
 leaves registration mode. Tao journeys cover filling, code verification and cancellation/retry;
 real registration still requires manual acceptance.
+AuthReviewInstant signs in with InstantDB's own email codes and keeps the account and notes on
+InstantDB, with no server of ours. Replace both placeholder App IDs with an Instant Cloud app's and
+push that app's generated schema and rules first. The first sign-in creates the person's Account row
+with no name, so the app opens on "Complete your profile" rather than the missing-account guard. The
+paired flow (code sign-in, account row, owner-only notes, sign-out) is covered against a local
+InstantDB by `packages/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts`, and
+`auth-review-live.test.ts` beside it pushes this source and runs a journey it writes for the variant under
+`tao test`. On 2026-09-27 the Developer ran it against Instant Cloud on a physical iPhone and
+reported it working.
+AuthReviewInstantClerk keeps the same InstantDB data but signs in with Clerk: InstantDB verifies the
+Clerk session token through the Clerk client registered with the Instant app under `ClerkClientName`
+("clerk" here), and the account is the InstantDB user that token resolves to. Register that client
+and add the `email` and `email_verified` claims to Clerk's session token first. `just instant-review`
+runs the InstantAuth variant against the stored Instant app; `--clerk` runs this one with the stored
+Clerk publishable key. The Clerk pairing has no local journey, only provider unit tests; on
+2026-09-27 the Developer ran it against Clerk and Instant Cloud on a physical iPhone and reported it
+working.

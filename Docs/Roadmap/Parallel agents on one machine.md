@@ -58,8 +58,9 @@ anyway:
    registry unusable as a quiet-machine gate on its own, and it is why the acceptance measurements
    below are still unobtained.
 3. **Few scarce resources are named.** The pattern exists and works — the machine-wide
-   `studio-native-host` lease means a second worktree's native Studio lane fails immediately with
-   `native-host-busy`, naming the holder, instead of timing out. What is missing is coverage: each
+   `studio-native-probe` lease means a second worktree's probing native Studio lane fails
+   immediately with `native-host-busy`, naming the holder, instead of timing out. (Interactive
+   native Studio no longer needs a machine-wide lease: each worktree builds its own app identity.) What is missing is coverage: each
    simulator UDID, the Android emulator, the window server across worktrees, the local InstantDB
    stack. `packages/cli/dev-cli/README.md` lists those as "not arbitrated across worktrees", which is
    accurate and is the gap.

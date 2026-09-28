@@ -9,10 +9,11 @@ records the stale-link reproduction and repair.
 
 ## Open advisory register
 
-| Item                                                                 | Disposition                                                                                                                                   | Owner                          | Review by  |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ---------- |
-| [`uuid` advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq) | Audit record remains; no affected call found in the installed `xcode` parent. Recheck callers and upstream releases.                          | the Developer, until delegated | 2026-09-28 |
-| Nixpkgs glibc input                                                  | Lock update and Linux closure checks remain unproved. Arrange a network-enabled Linux host and compare the pinned patch with current notices. | the Developer, until delegated | 2026-09-28 |
+| Item                                                                                                  | Disposition                                                                                                                                                                                    | Owner                          | Review by  |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ---------- |
+| [`uuid` advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq)                                  | Audit record remains; no affected call found in the installed `xcode` parent. Recheck callers and upstream releases.                                                                           | the Developer, until delegated | 2026-09-28 |
+| [`stream-json` advisory](https://github.com/uhop/stream-json/security/advisories/GHSA-528h-pc64-c93x) | Audit record remains; installed `jayson` uses `StreamValues`, which the advisory excludes, rather than affected path filters. Recheck the dependency path and compatible upstream remediation. | the Developer, until delegated | 2026-09-28 |
+| Nixpkgs glibc input                                                                                   | Lock update and Linux closure checks remain unproved. Arrange a network-enabled Linux host and compare the pinned patch with current notices.                                                  | the Developer, until delegated | 2026-09-28 |
 
 At each review, record the new evidence and either close the item or set a new review date and
 owner. A review date schedules reassessment; it does not claim the advisory is fixed.
@@ -40,6 +41,26 @@ its glibc patch lacks six CVE-tagged fixes present in a later Nixpkgs patch, but
 cannot establish exposure or a passing Linux closure. Both entries remain open with the Developer
 as owner until delegated and September 28 as the review date. No dependency or lockfile changed.
 
+### 2026-09-27 review
+
+At `0e3f6a9b`, `bun audit --json` reports two moderate records: the existing `uuid` record
+and `stream-json@1.9.1` ([GHSA-528h-pc64-c93x](https://github.com/uhop/stream-json/security/advisories/GHSA-528h-pc64-c93x)).
+The latter enters through the Clerk/Solana dependency graph, `@solana/web3.js@1.99.0`, and
+`jayson@4.3.0`. The installed `jayson/lib/utils.js` imports `StreamValues` and `Verifier` and
+calls `StreamValues.withParser()`. The upstream advisory concerns the `pick`, `ignore`, `filter`,
+and `replace` path filters and explicitly excludes `streamValues`; no affected caller was found
+in this parent or direct Tao imports. The published repair is `3.5.0`, outside the parent's
+`^1.9.1` range. Keep the record open without forcing an incompatible major override.
+
+The installed `xcode` parent still calls `uuid@7.0.3` through argument-free `v4`, as does
+`jayson` with its separate `uuid@8.3.2`; no
+affected `v3`/`v5`/`v6` call was demonstrated. The Appium pins add no further audit records.
+The Nixpkgs input is unchanged. Fetching the two immutable patch sources linked below found
+seven newer CVE markers absent from the pinned patch, including `CVE-2026-5435` omitted from
+the previous comparison. This is patch evidence, not a realized Linux closure or a demonstrated
+vulnerable Tao execution path. All three advisory follow-ups retain the Developer as owner
+until delegated and September 28 as the review date. No dependency or lockfile changed.
+
 ## Bun/npm graph
 
 - **Remaining: `uuid@7.0.3` through `@expo/config-plugins → xcode@3.0.1`.**
@@ -64,14 +85,15 @@ as owner until delegated and September 28 as the review date. No dependency or l
 [glibc definition](https://raw.githubusercontent.com/NixOS/nixpkgs/73c703c22422b8951895a960959dbbaca7296492/pkgs/development/libraries/glibc/common.nix)
 builds `2.42-61` with backported fixes. A later
 [Nixpkgs glibc patch](https://raw.githubusercontent.com/NixOS/nixpkgs/79b35bf0bda5cd110f856aa5b5b2c5ba4460dbf5/pkgs/development/libraries/glibc/2.42-master.patch)
-contains subsequent fixes for CVE-2026-4046, CVE-2026-5450, CVE-2026-5928, CVE-2026-6238,
+contains subsequent fixes for CVE-2026-4046, CVE-2026-5435, CVE-2026-5450, CVE-2026-5928, CVE-2026-6238,
 CVE-2026-6368, and CVE-2026-6791. A tracker match on the bare glibc version alone is not proof
 that a backported CVE is still present; compare the pinned patch with upstream fixes and the
 [Nixpkgs tracker](https://tracker.security.nixos.org/).
 
-`devenv update nixpkgs --no-tui` could not resolve `github.com` on this host, including outside
-the managed shell, so no lock update or Linux acceptance is claimed. On a network-enabled Linux
+The earlier `devenv update nixpkgs --no-tui` attempt could not resolve `github.com` on this host,
+including outside the managed shell, so no lock update or updated-input Linux closure acceptance
+is claimed. Contributor verification of the unchanged input does not establish its glibc patch exposure. On a network-enabled Linux
 host, update the input, inspect its glibc patches against current upstream notices, build and
 activate a fresh `x86_64-linux` profile, inspect the realized closure and glibc version, and run
 the complete repository gate and relevant Android/Node smoke checks. Record the new lock revision
-and output before closing this item. Review both live items at the next dependency-security pass.
+and output before closing this item. Review all live items at the next dependency-security pass.

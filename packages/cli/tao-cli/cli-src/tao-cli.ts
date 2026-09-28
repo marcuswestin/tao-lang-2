@@ -154,6 +154,7 @@ function createCommands(): Command {
     .option('--app <name>', 'Select a named app.')
     .option('--web', 'Export a static web artifact.')
     .option('--desktop', 'Build a locally runnable macOS app.')
+    .option('--visionos', 'Export an experimental visionOS Xcode project with bundled web UI.')
     .option('--agents', 'Build a background app service and bundled client executable (defaults to desktop).')
     .option('--output <directory>', 'Retain builds in this directory instead of the project’s .tao/builds.')
     .option('--ios', 'Show the status of local iOS builds.')
@@ -169,6 +170,7 @@ function createCommands(): Command {
           output?: string
           web?: boolean
           desktop?: boolean
+          visionos?: boolean
           ios?: boolean
           android?: boolean
           compileOnly?: boolean
@@ -176,7 +178,9 @@ function createCommands(): Command {
       ) => {
         try {
           const { runTaoBuild } = await import('./build-command')
-          const targets = (['web', 'desktop', 'ios', 'android'] as const).filter(target => options[target] === true)
+          const targets = (['web', 'desktop', 'ios', 'android', 'visionos'] as const).filter(target =>
+            options[target] === true
+          )
           if (options.agents && targets.length === 0) {
             targets.push('desktop')
           }
@@ -246,6 +250,31 @@ function createCommands(): Command {
     })
 
   commands
+    .command('instantdb')
+    .description('Prepare the InstantDB app a Tao app syncs with.')
+    .command('push')
+    .argument('[path]', 'Tao file or directory whose app should be pushed.', '.')
+    .option('--app <name>', 'Select a named app.')
+    .option('--dry-run', 'Generate and plan, print what would change, and apply nothing.')
+    .option(
+      '--force',
+      'Apply a plan that is not purely additive; attributes the Tao schema does not declare stay on the server.',
+    )
+    .description(
+      "Push the app's generated InstantDB schema (additive changes only, unless forced) and permission rules."
+        + ' Reads the token from INSTANT_APP_ADMIN_TOKEN, or asks for it at a terminal.',
+    )
+    .action(async (path: string, options: { app?: string; dryRun?: boolean; force?: boolean }) => {
+      try {
+        const { runInstantDBPush } = await import('./instantdb-push-command')
+        await runInstantDBPush(path, { appName: options.app, dryRun: options.dryRun, force: options.force })
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
     .command('clean')
     .argument('[path]', 'Tao project file or directory whose retained local builds should be listed.', '.')
     .description('Interactively select retained local builds to remove.')
@@ -296,6 +325,82 @@ function createCommands(): Command {
             .map(([status, count]) => `${count} ${status}`)
             .join(', ')
           HCI.writeSuccess(`Captured Tao visual review: ${FS.displayPath(result.reportPath)} (${counts})\n`)
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      })
+
+    // `_preview` holds commands under development: unlisted in help and free to change until one
+    // graduates to a released name.
+    const preview = commands
+      .command('_preview', { hidden: true })
+      .description('Unreleased commands under development; their interface may change.')
+    // Repeatable; `list` also splits commas, which no app, device, or appearance name contains.
+    const repeated = (value: string, previous: string[] = []): string[] => [...previous, value]
+    const list = (value: string, previous: string[] = []): string[] => [
+      ...previous,
+      ...value.split(',').map(item => item.trim()).filter(Boolean),
+    ]
+    preview
+      .command('qa')
+      .argument('[path]', 'Tao project directory to capture in Studio.', '.')
+      .option('--screenshot', "Capture the project's scenarios across the device and appearance matrix.")
+      .option('--dest <directory>', 'Screenshot store to append this run to, as runs/<UTC time>/.')
+      .option('--app <names>', 'Capture only these apps (default: every app in the project).', list)
+      .option(
+        '--scenario <selector>',
+        'Capture only matching scenarios, as [<file>.tao:]<subject or group>[/<group or entry>[/<entry>]]; repeatable.',
+        repeated,
+      )
+      .option('--device <names>', 'Devices: phone, tablet, laptop (default: all).', list)
+      .option('--appearance <names>', 'Appearances: light, dark (default: both).', list)
+      .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
+      .option('--studio', "Also capture Studio's own layouts, at laptop size, with this project open.")
+      .option('--timeline', "Only regenerate the store's index.html from the runs it already holds.")
+      .description('Capture QA evidence for a Tao project.')
+      .action(async (
+        path: string,
+        options: {
+          app?: string[]
+          appearance?: string[]
+          dest?: string
+          device?: string[]
+          note?: string
+          scenario?: string[]
+          screenshot?: boolean
+          studio?: boolean
+          timeline?: boolean
+        },
+      ) => {
+        try {
+          if (options.dest === undefined || (options.screenshot === true) === (options.timeline === true)) {
+            Errors.throwUserInput(
+              'Choose what to do and where: tao _preview qa --screenshot --dest <directory>, or --timeline --dest <directory>.',
+            )
+          }
+          const { runQaScreenshots, writeQaTimeline } = await import('tao-studio-tooling/qa-screenshots')
+          if (options.timeline === true) {
+            HCI.writeSuccess(`Timeline: ${FS.displayPath(await writeQaTimeline(options.dest))}\n`)
+            return
+          }
+          const result = await runQaScreenshots(path, {
+            ...(options.app === undefined ? {} : { apps: options.app }),
+            ...(options.appearance === undefined ? {} : { appearances: options.appearance }),
+            dest: options.dest,
+            ...(options.device === undefined ? {} : { devices: options.device }),
+            ...(options.note === undefined ? {} : { note: options.note }),
+            ...(options.scenario === undefined ? {} : { scenarios: options.scenario }),
+            ...(options.studio === true ? { studio: true } : {}),
+          })
+          HCI.writeSuccess(
+            `Captured ${result.captured} screenshots (${result.changed} changed, ${result.new} new, ${result.failed} failed): ${
+              FS.displayPath(result.runPath)
+            }\nTimeline: ${FS.displayPath(result.timelinePath)}\n`,
+          )
+          if (result.failed > 0) {
+            Platform.runtimeProcess.setExitCode(1)
+          }
         } catch (error) {
           HCI.writeErrorLine(Errors.formatForUser(error))
           Platform.runtimeProcess.setExitCode(1)

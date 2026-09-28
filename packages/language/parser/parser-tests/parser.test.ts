@@ -890,6 +890,43 @@ Describe('parser: core language syntax', () => {
     Expect(keyedEntry.block?.entries.map(entry => entry.name)).toEqual(['Label', 'Content'])
   })
 
+  Test('parses provider pairing blocks without reserving proof kinds or capabilities', async () => {
+    const parseResult = await testParseCode(`
+      public type Door is AuthProvider with {
+        issues { IdentityToken, Session }
+        provider Door from ./Door.ts
+      }
+      public type Store is datasource with {
+        accepts { IdentityToken from Door, TestIdentity }
+        supports { Relations, Migrations Additive }
+        provider Store from ./Store.ts
+      }
+      public type Empty is datasource with { accepts { } supports { } provider Empty from ./Empty.ts }
+      let Relations = "an ordinary name"
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const [door, store, empty] = parseResult.entry.ast.statements
+    Expect.Is(door, AST.isTypeDeclaration)
+    Expect.Is(store, AST.isTypeDeclaration)
+    Expect.Is(empty, AST.isTypeDeclaration)
+    Expect.Is(door.type, AST.isDerivedTypeExpression)
+    Expect.Is(store.type, AST.isDerivedTypeExpression)
+    Expect.Is(empty.type, AST.isDerivedTypeExpression)
+    Expect(door.type.slots.issues[0]?.proofs.map(proof => proof.kind)).toEqual(['IdentityToken', 'Session'])
+    const accepted = store.type.slots.accepts[0]?.proofs ?? []
+    Expect(accepted.map(proof => [proof.kind, proof.issuer?.root])).toEqual([
+      ['IdentityToken', 'Door'],
+      ['TestIdentity', undefined],
+    ])
+    Expect(store.type.slots.supports[0]?.capabilities.map(entry => [entry.capability, entry.level])).toEqual([
+      ['Relations', undefined],
+      ['Migrations', 'Additive'],
+    ])
+    Expect(empty.type.slots.accepts[0]?.proofs).toEqual([])
+    Expect(empty.type.slots.supports[0]?.capabilities).toEqual([])
+  })
+
   Test('parses labeled, unlabeled, nested, and comma-separated declaration constructor entries', async () => {
     const parseResult = await testParseCode(`
       type PromptTags is list of text

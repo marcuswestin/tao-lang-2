@@ -303,24 +303,38 @@ kbd {
 .tao-studio-product-host[data-layout-preset="code"] .studio-divider-preview,
 .tao-studio-product-host[data-layout-preset="code"] .studio-inspector,
 .tao-studio-product-host[data-layout-preset="code"] .studio-divider-right { display: none; }
-.tao-studio-product-host[data-layout-preset="run"] .studio-center,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-center { grid-template-columns: 0 0 0 0 minmax(420px, 1fr); grid-template-rows: minmax(0, 1fr); }
+.tao-studio-product-host[data-layout-preset="run"] .studio-center { grid-template-columns: 0 0 0 0 minmax(420px, 1fr); grid-template-rows: minmax(0, 1fr); }
 .tao-studio-product-host[data-layout-preset="run"] .studio-editor-pane,
 .tao-studio-product-host[data-layout-preset="run"] .studio-inspector,
 .tao-studio-product-host[data-layout-preset="run"] .studio-divider-right,
 .tao-studio-product-host[data-layout-preset="run"] .studio-divider-preview,
 .tao-studio-product-host[data-layout-preset="run"] .studio-divider-bottom,
 .tao-studio-product-host[data-layout-preset="run"] .studio-drawer,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-editor-pane,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-inspector,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-divider-right,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-divider-preview,
 .tao-studio-product-host[data-layout-preset="draw"] .studio-divider-bottom,
 .tao-studio-product-host[data-layout-preset="draw"] .studio-drawer { display: none; }
-.tao-studio-product-host[data-layout-preset="run"] .studio-preview,
-.tao-studio-product-host[data-layout-preset="draw"] .studio-preview { grid-column: 1 / 6; grid-row: 1; }
+.tao-studio-product-host[data-layout-preset="run"] .studio-preview { grid-column: 1 / 6; grid-row: 1; }
+/* Draw is the workbench frame: code on the left with the view's inputs pinned under it, the canvas in
+   the middle, and the whole inspector on the right. The inspector's two panes are placed apart by
+   letting the aside dissolve into the grid, so no mounted pane moves in the DOM. The preview size
+   is the code column here and both side dividers are mirrored (StudioShell). The percentage caps only
+   guard a shrinking window; a drag is clamped in StudioShell so the canvas keeps its floor. */
+.tao-studio-product-host[data-layout-preset="draw"] .studio-center {
+  grid-template-columns:
+    min(var(--studio-preview-size), 55%) 4px minmax(320px, 1fr) 4px min(var(--studio-right-size), 45%);
+  grid-template-rows: minmax(160px, 1fr) minmax(0, auto);
+}
+.tao-studio-product-host[data-layout-preset="draw"] .studio-inspector { display: contents; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-editor-pane { grid-column: 1; grid-row: 1; min-width: 0; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-environment-pane {
+  border-top: 1px solid var(--studio-divider); grid-column: 1; grid-row: 2; max-height: 45vh; min-width: 0; overflow: auto;
+}
+.tao-studio-product-host[data-layout-preset="draw"] .studio-environment-pane .studio-collapse-right { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-visual-pane { grid-column: 5; grid-row: 1 / 3; min-width: 0; overflow: auto; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-divider-preview { grid-column: 2; grid-row: 1 / 3; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview { grid-column: 3; grid-row: 1 / 3; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-divider-right { grid-column: 4; grid-row: 1 / 3; }
 .studio-draw-canvas { display: none; height: 100%; min-height: 0; overflow: auto; }
-.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu) { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-preview-grid):not(.studio-draw-tools):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu):not(.studio-edit-log):not(.studio-selection-hud) { display: none; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-draw-canvas { display: block; }
 .tao-studio-product-host[data-layout-preset="run"] .studio-draw-canvas,
 .tao-studio-product-host[data-layout-preset="run"] [data-tao-studio-sketch-host] { display: none; }
@@ -539,16 +553,46 @@ kbd {
 }
 .studio-canvas-bar span { color: var(--studio-text-muted); font-size: 12px; }
 .studio-canvas-focus[data-state="focused"] { background: #343a35; color: #f0f2ef; }
-[data-tao-studio-sketch-workspace] { align-items: flex-start; border: 1px dashed var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); box-sizing: border-box; cursor: crosshair; min-height: 140px; min-width: 400px; position: relative; }
+[data-tao-studio-sketch-workspace] { align-items: flex-start; border: 1px dashed var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); box-sizing: border-box; cursor: default; min-height: 140px; min-width: 400px; position: relative; }
+[data-tao-studio-sketch-workspace]:is([data-tao-studio-sketch-tool="rect"], [data-tao-studio-sketch-tool="text"]),
+[data-tao-studio-sketch-workspace]:is([data-tao-studio-sketch-tool="rect"], [data-tao-studio-sketch-tool="text"]) [data-tao-studio-sketch-rect] { cursor: crosshair; }
 .studio-draw-canvas [data-tao-studio-sketch-workspace] { min-height: 100%; min-width: 100%; }
-[data-tao-studio-sketch-create-surface] [data-tao-studio-sketch-workspace]::before { color: var(--studio-text-dim); content: "Drag empty space to draw a view"; font-size: 11px; left: 10px; pointer-events: none; position: absolute; top: 6px; }
+[data-tao-studio-sketch-create-surface] [data-tao-studio-sketch-workspace]::before { color: var(--studio-text-dim); content: "Press R and drag empty space to draw a view"; font-size: 11px; left: 10px; pointer-events: none; position: absolute; top: 6px; }
 [data-tao-studio-sketch-outer-preview] { background: rgba(255, 106, 31, .08); border: 1px dashed var(--studio-accent); box-sizing: border-box; pointer-events: none; position: absolute; }
+[data-tao-studio-sketch-marquee] { background: rgba(255, 106, 31, .08); border: calc(1px * var(--studio-canvas-counter-scale, 1)) solid var(--studio-accent); box-sizing: border-box; }
+/* The one Draw tool strip: V selects, R draws a view or a rectangle, T draws text. It sits on the
+   canvas's top edge beside the zoomed surface, so it keeps one size and place at any zoom. */
+.studio-draw-tools {
+  background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px; box-shadow: 0 8px 24px #0004;
+  display: none; gap: 2px; left: 50%; padding: 3px; position: absolute; top: 12px; transform: translateX(-50%); z-index: 5;
+}
+.tao-studio-product-host[data-layout-preset="draw"] .studio-draw-tools { display: flex; }
+.studio-draw-tools button {
+  background: transparent; border: 0; border-radius: 5px; color: var(--studio-text-muted); cursor: pointer;
+  font: 600 12px var(--studio-mono); height: 26px; width: 28px;
+}
+.studio-draw-tools button:hover { color: var(--studio-text); }
+.studio-draw-tools button[aria-pressed="true"] { background: var(--studio-accent-surface); color: var(--studio-accent); }
 [data-tao-studio-sketch] { background: #f4f1ea; border: 1px solid #c4b8a5; border-radius: 8px; box-shadow: 0 8px 20px rgba(0, 0, 0, .28); color: #242a33; }
-[data-tao-studio-sketch-name] { color: var(--studio-text); font-size: 12px; font-weight: 600; line-height: 16px; pointer-events: none; white-space: nowrap; }
+[data-tao-studio-sketch-name] { align-items: center; color: var(--studio-text); display: flex; font-size: 12px; font-weight: 600; gap: 6px; line-height: 16px; pointer-events: none; white-space: nowrap; }
+.studio-sketch-badge { cursor: default; order: -1; pointer-events: auto; position: relative; }
+[data-tao-studio-sketch-badge] { background: var(--studio-accent-surface); border: 1px solid var(--studio-accent); border-radius: 999px; color: var(--studio-accent); cursor: pointer; font: inherit; font-size: 10px; font-weight: 600; line-height: 14px; padding: 0 7px; }
+[data-tao-studio-sketch-badge][data-role="render"] { background: rgba(90, 169, 255, .12); border-color: var(--studio-info); color: var(--studio-info); }
+[data-tao-studio-sketch-badge-menu] { background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); box-shadow: 0 8px 24px rgba(0, 0, 0, .35); display: grid; gap: 2px; left: 0; max-width: 280px; min-width: 180px; padding: 4px; position: absolute; top: calc(100% + 4px); white-space: normal; z-index: 20; }
+[data-tao-studio-sketch-badge-menu] button { background: none; border: 0; border-radius: var(--studio-radius); color: var(--studio-text); cursor: pointer; font: inherit; font-weight: 500; padding: 5px 8px; text-align: left; }
+[data-tao-studio-sketch-badge-menu] button:hover, [data-tao-studio-sketch-badge-menu] button:focus-visible { background: var(--studio-bg-deep); }
+[data-tao-studio-sketch-badge-menu] p { color: var(--studio-text-dim); font-weight: 400; margin: 0; padding: 5px 8px; }
+.studio-sketch-card { border: 1px dashed var(--studio-info); border-radius: 8px; box-sizing: border-box; color: var(--studio-text); cursor: default; display: grid; gap: 6px; align-content: start; overflow: hidden; padding: 10px; }
+[data-tao-studio-sketch-card="definition"] .studio-sketch-card { border-color: var(--studio-accent); }
+[data-tao-studio-sketch-broken] .studio-sketch-card { border-color: var(--studio-stroke-strong); color: var(--studio-text-dim); opacity: .7; }
+[data-tao-studio-sketch-badge][data-broken] { background: none; border-color: var(--studio-stroke-strong); color: var(--studio-text-dim); }
+.studio-sketch-card code { font-family: var(--studio-mono); font-size: 11px; }
+.studio-sketch-card small { color: var(--studio-text-dim); font-size: 11px; line-height: 1.45; }
 [data-tao-studio-sketch-rect] { background: #dce6f5; border: 1px solid #7693bc; box-sizing: border-box; cursor: move; overflow: visible; }
 [data-tao-studio-sketch-rect-kind="Text"] { background: transparent; border-color: #9ca8b8; }
-[data-tao-studio-sketch-rect][data-selected="true"] { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
-[data-tao-studio-sketch-handle] { background: #fff; border: 1px solid var(--studio-accent); border-radius: 50%; height: 8px; padding: 0; position: absolute; width: 8px; }
+/* The canvas writes the inverse of its zoom, so selection strokes and handles keep one on-screen size. */
+[data-tao-studio-sketch-rect][data-selected="true"] { outline: calc(2px * var(--studio-canvas-counter-scale, 1)) solid var(--studio-accent); outline-offset: calc(1px * var(--studio-canvas-counter-scale, 1)); }
+[data-tao-studio-sketch-handle] { background: #fff; border: 1px solid var(--studio-accent); border-radius: 50%; height: 8px; padding: 0; position: absolute; transform: scale(var(--studio-canvas-counter-scale, 1)); width: 8px; }
 [data-tao-studio-sketch-handle="north-west"] { cursor: nwse-resize; left: -5px; top: -5px; }
 [data-tao-studio-sketch-handle="north"] { cursor: ns-resize; left: calc(50% - 4px); top: -5px; }
 [data-tao-studio-sketch-handle="north-east"] { cursor: nesw-resize; right: -5px; top: -5px; }
@@ -560,6 +604,15 @@ kbd {
 [data-tao-studio-sketch-inspector] { background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); cursor: default; display: grid; gap: 6px; padding: 8px; }
 [data-tao-studio-sketch-inspector][hidden] { display: none; }
 [data-tao-studio-sketch-inspector] input, [data-tao-studio-sketch-inspector] select { background: var(--studio-bg-deep); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius); color: var(--studio-text); min-width: 0; padding: 5px 6px; }
+/* A root rectangle is selected, dragged, and removed as a whole from its header row. */
+[data-tao-studio-sketch-name] { cursor: grab; pointer-events: auto; user-select: none; }
+[data-tao-studio-sketch-frame][data-tao-studio-sketch-moving] { opacity: .85; z-index: 10; }
+[data-tao-studio-sketch-frame][data-tao-studio-sketch-moving] [data-tao-studio-sketch-name] { cursor: grabbing; }
+[data-tao-studio-sketch-frame][data-selected="true"] > [data-tao-studio-sketch],
+[data-tao-studio-sketch-frame][data-selected="true"] > .studio-sketch-card { outline: calc(2px * var(--studio-canvas-counter-scale, 1)) solid var(--studio-accent); outline-offset: calc(2px * var(--studio-canvas-counter-scale, 1)); }
+[data-tao-studio-sketch-context-menu] { background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); box-shadow: 0 8px 24px rgba(0, 0, 0, .35); cursor: default; display: grid; min-width: 120px; padding: 4px; position: absolute; z-index: 20; }
+[data-tao-studio-sketch-context-menu] button { background: none; border: 0; border-radius: var(--studio-radius); color: var(--studio-text); cursor: pointer; font: inherit; font-weight: 500; padding: 5px 8px; text-align: left; }
+[data-tao-studio-sketch-context-menu] button:hover, [data-tao-studio-sketch-context-menu] button:focus-visible { background: var(--studio-bg-deep); }
 
 /* ---------- preview canvas ---------- */
 .studio-preview { background: var(--studio-canvas); border-left: 1px solid var(--studio-stroke); min-height: 0; position: relative; }
@@ -586,6 +639,32 @@ kbd {
 .studio-preview[data-canvas-surface="on"] > .studio-preview-grid > .studio-preview-group > .studio-preview-group-cells {
   overflow: visible;
 }
+/* Draw lays the grid beneath its transparent canvas under the same transform and shows only the rows
+   it moved under a drawn view's slot, so each view runs under its drawing without its iframe
+   reloading. Other boards paint over the running views, and the drawing keeps every pointer. */
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > .studio-preview-grid { pointer-events: none; visibility: hidden; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview-grid > [data-tao-studio-draw-live] {
+  display: block; position: absolute; visibility: visible; width: max-content;
+}
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] > .studio-preview-group-label,
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell-controls { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] > .studio-preview-group-cells { padding: 6px; }
+/* A running view takes its frame's size rather than its scenario's device, so it lays out in the space
+   it was drawn in and the frame stays the size it was drawn. Placement supplies both lengths. */
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell { width: auto !important; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell-details { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell-viewport {
+  height: var(--studio-draw-frame-height) !important; width: var(--studio-draw-frame-width) !important;
+}
+/* A running view makes its frame tall; the frame's empty box and its filled slot let pointers through
+   to the boards and frames around them. */
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-sketch-frame] { pointer-events: none; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-sketch-frame] > * { pointer-events: auto; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-sketch-frame] > [data-tao-studio-draw-live-filled] { color: transparent; pointer-events: none; }
+[data-tao-studio-sketch-frame][data-tao-studio-sketch-drop-into] > [data-tao-studio-sketch-name] { color: var(--studio-accent); }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell[data-tao-studio-drop-into-target] .studio-preview-cell-viewport {
+  box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 8px var(--studio-accent);
+}
 .studio-preview[data-canvas-pan-ready="true"] { cursor: grab; }
 .studio-preview[data-canvas-panning="true"] { cursor: grabbing; }
 /* Keep one transparent surface above every preview for the entire held-Space gesture, including
@@ -607,6 +686,40 @@ kbd {
   position: absolute; right: 12px; z-index: 5;
 }
 .studio-canvas-zoom-menu[hidden] { display: none; }
+/* The edit log shares the canvas's bottom edge with the zoom pill: left corner, Design and Draw only. */
+.studio-edit-log {
+  background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px; bottom: 12px;
+  box-shadow: 0 8px 24px #0004; display: none; font-size: 12px; left: 12px; max-width: min(280px, 45%);
+  padding: 6px 4px 4px; position: absolute; z-index: 5;
+}
+.tao-studio-product-host:is([data-layout-preset="design"], [data-layout-preset="draw"]) .studio-edit-log:not([hidden]) { display: block; }
+.studio-edit-log header { align-items: baseline; display: flex; gap: 8px; justify-content: space-between; padding: 0 6px 4px; }
+.studio-edit-log header span { color: var(--studio-text-muted); font-size: 11px; white-space: nowrap; }
+.studio-edit-log ol { display: grid; list-style: none; margin: 0; padding: 0; }
+.studio-edit-log li { align-items: center; border-radius: 4px; display: flex; gap: 8px; min-height: 24px; padding: 0 6px; }
+.studio-edit-log li:first-child { background: var(--studio-stroke); }
+.studio-edit-log-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.studio-edit-log time { color: var(--studio-text-muted); font: 11px var(--studio-mono); }
+.studio-edit-log button {
+  background: transparent; border: 1px solid var(--studio-stroke); border-radius: 4px; color: var(--studio-text);
+  cursor: pointer; font: 11px var(--studio-sans); padding: 1px 6px;
+}
+/* The selection HUD sits just under the selected element and moves with pan, zoom and layout. */
+.studio-selection-hud {
+  align-items: center; background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px;
+  box-shadow: 0 8px 24px #0004; display: none; flex-wrap: wrap; font-size: 11px; gap: 6px; left: 0;
+  max-width: calc(100% - 16px); padding: 4px 6px; position: absolute; top: 0; white-space: nowrap; z-index: 6;
+}
+.tao-studio-product-host:is([data-layout-preset="design"], [data-layout-preset="draw"]) .studio-selection-hud:not([hidden]) { display: flex; }
+.studio-selection-hud-name { color: var(--studio-text-muted); font: 11px var(--studio-mono); padding-right: 2px; }
+.studio-selection-hud label { align-items: center; color: var(--studio-text-muted); display: flex; gap: 4px; }
+.studio-selection-hud :is(button, input, select) {
+  background: transparent; border: 1px solid var(--studio-stroke); border-radius: 4px; color: var(--studio-text);
+  font: 11px var(--studio-sans); padding: 2px 5px;
+}
+.studio-selection-hud button { cursor: pointer; }
+.studio-selection-hud input { width: 5ch; }
+.studio-selection-hud :is(button, input, select):disabled { cursor: default; opacity: .5; }
 .studio-canvas-zoom-menu button {
   background: transparent; border: 0; border-radius: 4px; color: var(--studio-text); cursor: pointer;
   font: 12px var(--studio-sans); padding: 8px 10px; text-align: left;
@@ -892,6 +1005,12 @@ kbd {
   .tao-studio-product-host[data-layout-preset="run"] .studio-center,
   .tao-studio-product-host[data-layout-preset="draw"] .studio-center {
     grid-template-columns: 0 0 0 0 minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
+  .tao-studio-product-host[data-layout-preset="draw"] .studio-editor-pane,
+  .tao-studio-product-host[data-layout-preset="draw"] .studio-inspector-pane,
+  .tao-studio-product-host[data-layout-preset="draw"] .studio-divider-preview,
+  .tao-studio-product-host[data-layout-preset="draw"] .studio-divider-right { display: none; }
+  .tao-studio-product-host[data-layout-preset="draw"] .studio-preview { grid-column: 1 / 6; grid-row: 1; }
 }
 `

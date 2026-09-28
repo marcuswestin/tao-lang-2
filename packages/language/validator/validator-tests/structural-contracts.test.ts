@@ -47,6 +47,7 @@ Describe('validator: declaration contracts', () => {
       }
       public type Datasource is datasource with {
         StorageKey text
+        supports { }
         ${implementation('provider')}
       }
       app Demo {
@@ -121,6 +122,7 @@ Describe('validator: declaration contracts', () => {
       }
       public type SnapshotStore is datasource with {
         StorageKey text
+        supports { }
         ${implementation('provider')}
       }
       view Home() { render Empty() }

@@ -26,6 +26,8 @@ which native modules exist and which entitlements are granted. Two consequences 
 before a Tao app is run here.
 
 Its dependencies must cover every native module a Tao app can require.
+The iOS host requires iOS 17 or later, matching its Clerk native dependency. Its deployment target
+is explicit so CocoaPods installs that dependency before attaching its Swift packages.
 `packages/testing/verification/verification-tests/companion-native-parity.test.ts` fails when a
 dependency of `packages/apps/expo-host/package.json` that ships native code is missing here or
 pinned to a different version, because the alternative is a crash at require time rather than a
@@ -90,6 +92,13 @@ just companion-host-publish                         # needs gh signed in
 
 CocoaPods, `xcodebuild`, and Gradle all need the host, so an agent runs the build as the named host
 operation `./agent unsandboxed companion-host-build [--platform ios-simulator] [--abi <abi>]`.
+
+For a side-by-side Xcode, add `--developer-dir /Applications/Xcode-27.1.app/Contents/Developer`
+to the iOS simulator build. This selects Xcode only for that command and its children; it does not
+change the machine-wide selection. Then `tao dev Apps/HNReader --app HNReaderStub --ios` installs
+the built Companion and starts the live app. Repository development Studio can subsequently open
+that installed Companion using the selected simulator's **Open this app in simulator** action in its
+Device panel. The packaged Studio app does not yet connect that panel to the simulator launcher.
 
 For Android, Expo prebuilds the `android/` project here and Gradle assembles a debug APK. For the
 iOS Simulator, CocoaPods and `xcodebuild` build a debug app for both simulator architectures, signed
