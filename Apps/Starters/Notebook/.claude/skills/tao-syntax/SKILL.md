@@ -7,7 +7,7 @@ description: Write implemented Tao declarations, render trees, slots, expression
 
 ## Declarations
 
-- `project { ... }` supplies checked-in id, name, version, default app, remote, and license metadata.
+- `project { ... }` supplies checked-in id, name, version, `app Name`, remote, and license metadata.
 - `app Name { ... }` configures a launchable app.
 - `data Plural / Singular { ... }` declares stored entity shape.
 - `nav Name = NavType { ... }` configures a navigation value.
