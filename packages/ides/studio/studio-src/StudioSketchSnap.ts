@@ -278,8 +278,19 @@ function padEntries(
   if (pad.top === pad.right && pad.top === pad.bottom && pad.top === pad.left) {
     return [['pad', pad.top]]
   }
-  if (pad.top === pad.bottom && pad.left === pad.right) {
+  if (pad.top > 0 && pad.left > 0 && pad.top === pad.bottom && pad.left === pad.right) {
     return [['pad', 'horizontal', pad.left, 'vertical', pad.top]]
   }
-  return [['pad', 'top', pad.top, 'right', pad.right, 'bottom', pad.bottom, 'left', pad.left]]
+  let entry: ['pad', 'top' | 'right' | 'bottom' | 'left', number, ...Array<'top' | 'right' | 'bottom' | 'left' | number>]
+    | undefined
+  for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+    if (pad[side] > 0) {
+      if (entry === undefined) {
+        entry = ['pad', side, pad[side]]
+      } else {
+        entry.push(side, pad[side])
+      }
+    }
+  }
+  return entry === undefined ? [] : [entry]
 }
