@@ -4,7 +4,7 @@
 - **Section:** External
 - **Area:** Expo dev-loop tests, TCP port reservation
 - **Impact:** A broad verification run can fail an unchanged port reuse assertion after the listener is released.
-- **Evidence:** On 2026-09-26, `expo-dev-loop.test.ts:463` expected released port53213 but received53216 in `feat/clerk-follow-through`. The run reported six concurrent lanes and peak load120.6 on18CPUs. The exact test file passed unchanged in isolation afterward. Concurrent acquisition is a plausible cause, not a demonstrated one; listener cleanup has not been ruled out.
+- **Evidence:** On 2026-09-26, `expo-dev-loop.test.ts:463` expected released port53213 but received53216 in `feat/clerk-follow-through`. The run reported six concurrent lanes and peak load120.6 on18CPUs. On 2026-09-28, `feat/studio-feed-proof` finalize expected released port56448 but received56451 in the `::1` case, with peak load56.8 on18CPUs. The exact test file passed unchanged in isolation afterward. Concurrent acquisition is a plausible cause, not a demonstrated one; listener cleanup has not been ruled out.
 - **Workaround:** Rerun the exact file in isolation and keep that evidence distinct from a green broad gate.
 - **Proposed change:** Capture listener ownership around release/reacquisition and distinguish a leaked reservation from an external process acquiring the port before changing the assertion.
 - **Dependencies:** None.
