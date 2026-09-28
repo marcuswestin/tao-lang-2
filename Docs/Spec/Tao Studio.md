@@ -482,8 +482,24 @@ gap, padding, and sizing one edit away, and with several elements selected offer
 Choosing "—" in its alignment or sizing picker, or emptying its gap or padding field, removes that
 entry from the element's layout clause, and the clause itself once nothing is left in it.
 The edited element stays selected across its recompile, found again by where it starts or where it
-sits. Draw hides the preview cells, so selection, the HUD, and the grouping keys belong to Design; a
-view drawn on the canvas is grouped there once it renders.
+sits. Selection, the HUD, and the grouping keys belong to Design; a view drawn on the canvas is
+grouped there once it renders.
+
+Draw shows each drawn view running under its drawing, and no other preview cell. The cells stay
+the preview grid's, so their iframes never reload: in Draw the grid lies beneath the transparent Draw
+canvas under the same pan and zoom, each row of a drawn view's `sketch` scenarios moves under its
+frame's drop area, and that area grows to the row's height and hides its hint, keeping the frame's
+controls below the running view. The running view takes its frame's drawn width and height rather
+than its scenario's device, so it lays out in the space it was drawn in; Design and Run keep the
+scenario's device. Rows follow a frame while it is dragged. Other frames' boards paint
+over a running view, and the drawing keeps every pointer, so in Draw a running view is seen but not
+used. Dragging a drawn frame or definition card by its header over
+another drawn view's running cell highlights that cell and names it on the frame; releasing there
+sends `insert-project-view` for the dragged view against the file and source version that cell
+compiled, which renders it at the end of the target view's first render block, importing it and
+filling its required arguments as the palette insertion does. The dragged frame returns to where it
+was, and nothing moves in the catalog. A drop before the target cell has compiled a single file
+asks to wait. Render cards and source-backed views that are not drawn stay out of both.
 
 An edit log in the canvas corner lists this session's visual edits newest first, named the way each
 was made ("Gap 16", "Wrap in Row", or "Make view", followed by the name when one was typed) with its

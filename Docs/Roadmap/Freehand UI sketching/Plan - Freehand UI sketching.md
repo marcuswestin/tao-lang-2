@@ -701,7 +701,12 @@ Every edit lands in that one definition and shows in every occurrence.
 
 Decision H puts the canvas work ahead of L2, headed by the live-preview composition slice: a drawn
 definition renders as a live cell under its Draw board, so drawing composes real rendered views, and a
-drawn group dropped into a preview inserts its code there. FS-D20's order then continues: L2, Slice 4
+drawn group dropped into a preview inserts its code there. Its first cut is implemented: each drawn
+view runs under its frame in Draw, reusing the grid's cells so nothing reloads, and a drawn frame
+dragged by its header onto another drawn view's running cell renders into that view at the end of its
+first render block (`Docs/Spec/Tao Studio.md`, "Selection, grouping, and the edit log"). Still open in
+the slice: dropping at a chosen gap using the palette's gap indicators, dropping into source-backed
+views that are not drawn, and live cells inside render cards. FS-D20's order then continues: L2, Slice 4
 Variants, L3, Slice 5 Tao-rendered canvas, Slice 6 Focus-in, Slice 7 Companion. Stride 2d's flow gestures serve variant cells later, and stride 1's
 undo stack is what Slice 4's cell edits will join.
 

@@ -58,6 +58,13 @@ class CanvasElement extends EventTarget {
       ? this.children[0]!
       : this.children[1] ?? null
   }
+  /** The host's surfaces: the grid first, then the Draw canvas when one is mounted. */
+  querySelectorAll(): CanvasElement[] {
+    return [
+      this.children[0],
+      this.children.find(child => child.dataset['taoStudioDrawCanvas'] === 'true'),
+    ].filter((child): child is CanvasElement => child !== undefined)
+  }
   setPointerCapture(id: number): void {
     this.captures.add(id)
   }
@@ -421,6 +428,8 @@ Test('Studio Draw Space panning transforms Draw and returns geometry ownership o
     }
     Expect(controls.state()).toEqual({ x: 90, y: 37.5, z: 1 })
     Expect(draw.style['transform']).toBe('translate(90px, 37.5px) scale(1)')
-    Expect(host.children[0]!.style['transform']).toBe('translate(0px, 0px) scale(1)')
+    // The grid moves with Draw, so the running views laid over drawn frames stay under them.
+    Expect(host.children[0]!.style['transform']).toBe('translate(90px, 37.5px) scale(1)')
+    Expect(host.children[0]!.properties['--studio-canvas-counter-scale']).toBe('1')
   })
 })

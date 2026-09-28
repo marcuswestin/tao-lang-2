@@ -45,26 +45,36 @@ function grid(host: HTMLElement): HTMLElement | null {
   )
 }
 
+/**
+ * Both planes the host holds share its pan and zoom: Draw lays the preview grid's running cells over
+ * its own canvas, so the two must move as one.
+ */
+function surfaces(host: HTMLElement): readonly HTMLElement[] {
+  return [
+    ...host.querySelectorAll<HTMLElement>(':scope > .studio-preview-grid, :scope > [data-tao-studio-draw-canvas]'),
+  ]
+}
+
 /** canvasScale reports the zoom a node is rendered under, so a pointer gesture can undo it. */
 export function canvasScale(node: Element | null | undefined): number {
   const host = node?.closest<HTMLElement>('[data-canvas-surface="on"]') ?? null
-  const surface = host === null ? null : grid(host)
-  return host === null || surface === null || node === undefined || !surface.contains(node)
+  return host === null || node === undefined || !surfaces(host).some(surface => surface.contains(node))
     ? 1
     : states.get(host)?.z ?? 1
 }
 
-/** applyCanvasViewport writes the current pan and zoom onto the grid; the matrix calls it after each reconcile. */
+/** applyCanvasViewport writes the current pan and zoom onto the surfaces; the matrix calls it after each reconcile. */
 export function applyCanvasViewport(host: HTMLElement): void {
-  const surface = grid(host)
-  if (surface === null) {
+  if (grid(host) === null) {
     return
   }
   const current = state(host)
   host.dataset['canvasSurface'] = 'on'
-  surface.style.transform = `translate(${current.x}px, ${current.y}px) scale(${current.z})`
-  // Handles and selection strokes scale by the inverse, so they keep one on-screen width at any zoom.
-  surface.style.setProperty('--studio-canvas-counter-scale', String(1 / current.z))
+  for (const surface of surfaces(host)) {
+    surface.style.transform = `translate(${current.x}px, ${current.y}px) scale(${current.z})`
+    // Handles and selection strokes scale by the inverse, so they keep one on-screen width at any zoom.
+    surface.style.setProperty('--studio-canvas-counter-scale', String(1 / current.z))
+  }
   const pill = host.querySelector<HTMLElement>(':scope > .studio-canvas-zoom')
   if (pill !== null) {
     pill.textContent = `${Math.round(current.z * 100)}%`
@@ -93,8 +103,9 @@ export function canvasRevealDelta(
 /** revealCanvasNode pans the transformed preview plane; `scrollIntoView` would move the clipped host itself. */
 export function revealCanvasNode(node: Element | null | undefined): boolean {
   const host = node?.closest<HTMLElement>('[data-canvas-surface="on"]') ?? null
-  const surface = host === null ? null : grid(host)
-  if (host === null || surface === null || node === undefined || node === null || !surface.contains(node)) {
+  if (
+    host === null || node === undefined || node === null || !surfaces(host).some(surface => surface.contains(node))
+  ) {
     return false
   }
   const delta = canvasRevealDelta(host.getBoundingClientRect(), node.getBoundingClientRect())
