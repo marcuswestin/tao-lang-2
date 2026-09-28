@@ -94,6 +94,17 @@ export const SyncMainCommand = {
         'This checkout is on a detached HEAD; switch to your own branch first with `just my-branch`.',
       )
     }
+    const pending = (await runChecked(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all']))
+      .stdout.trimEnd()
+    if (pending !== '') {
+      const changes = pending.split('\n')
+      const shown = changes.slice(0, 10).map(line => `  ${line}`).join('\n')
+      const more = changes.length > 10 ? `\n  ... and ${changes.length - 10} more` : ''
+      Errors.throwUserInput(
+        `This checkout has uncommitted changes; my-sync has not fetched or moved refs:\n${shown}${more}\n`
+          + 'Commit your work and coordinate with others editing this checkout, then run `just my-sync` again.',
+      )
+    }
     const lines: string[] = []
     await runChecked(dependencies, root, ['fetch', '--prune', REMOTE])
     const mainBefore = await readRef(root, `refs/heads/${MAIN_BRANCH}`, dependencies)
@@ -264,7 +275,7 @@ async function readRef(
 }
 
 async function status(root: string, dependencies: DeveloperWorkflowDependencies): Promise<string> {
-  return (await run(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout.trim()
+  return (await run(dependencies, root, ['status', '--porcelain=v1', '--untracked-files=all'])).stdout.trimEnd()
 }
 
 async function run(

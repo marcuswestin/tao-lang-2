@@ -376,16 +376,21 @@ merge-main *args:
 my-branch name='':
     ./dev my-branch {{ quote(name) }}
 
+# Show this checkout's branch, changed files, verification, and next step without changing anything
+[group('Mine')]
+my-status:
+    ./dev my-status
+
 # Fast-forward main, move the mirrors that follow it, and merge it into your branch
 [group('Mine')]
 my-sync:
     ./dev sync-main
 
-# Hand the merge conflicts in this checkout to an agent (claude or codex), which resolves them, verifies, and commits
+# Hand merge conflicts in this checkout to an agent for best-effort focused checks and a merge commit
 [group('Mine')]
 my-resolve agent='claude' *ARGS:
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then printf 'No conflicted files: there is nothing to resolve.\n'; exit 1; fi
-    {{ if agent == "claude" { "claude" } else if agent == "codex" { "codex" } else { error("my-resolve takes claude or codex") } }} {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
+    {{ if agent == "claude" { "claude" } else if agent == "codex" { "codex" } else { error("my-resolve takes claude or codex") } }} {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Run available focused checks on the resolved files, report checks that concurrent work prevents, and commit the merge with \`git commit --no-edit\`. Leave full verification to landing. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what checks ran."
 
 # Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
 [group('Mine')]
