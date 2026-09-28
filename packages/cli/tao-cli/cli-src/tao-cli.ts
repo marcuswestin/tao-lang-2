@@ -274,6 +274,31 @@ function createCommands(): Command {
       }
     })
 
+  for (const provider of ['jazz', 'convex', 'pylon'] as const) {
+    commands
+      .command(provider)
+      .description(`Generate deployable ${provider} backend source for a Tao app.`)
+      .command('generate')
+      .argument('[path]', 'Tao file or directory whose app should be generated.', '.')
+      .option('--app <name>', 'Select a named app.')
+      .requiredOption('--output <directory>', 'Directory for generated backend source files.')
+      .option('--force', 'Replace generated files whose content differs.')
+      .description(`Generate ${provider} backend source from the app's compiled schema and access policy.`)
+      .action(async (path: string, options: { app?: string; force?: boolean; output: string }) => {
+        try {
+          const { runHostedProviderGenerate } = await import('./hosted-provider-generate')
+          await runHostedProviderGenerate(provider, path, {
+            appName: options.app,
+            force: options.force,
+            output: options.output,
+          })
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      })
+  }
+
   commands
     .command('clean')
     .argument('[path]', 'Tao project file or directory whose retained local builds should be listed.', '.')

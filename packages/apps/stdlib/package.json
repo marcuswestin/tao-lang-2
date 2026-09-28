@@ -10,8 +10,11 @@
   "dependencies": {
     "@clerk/expo": "4.7.1",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "tao-convex": "workspace:*",
     "tao-icloud": "workspace:*",
     "tao-instantdb": "workspace:*",
+    "tao-jazz": "workspace:*",
+    "tao-pylon": "workspace:*",
     "tao-shared": "workspace:*"
   },
   "peerDependencies": {
