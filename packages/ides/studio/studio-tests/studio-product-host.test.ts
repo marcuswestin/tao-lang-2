@@ -1,5 +1,6 @@
 import type TR from '@runtime/TR'
 import { Assert, FS, Repo } from '@shared'
+import { TaoFileIcon } from '@shared/core'
 import { Expect, Test } from '@shared/test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -392,6 +393,19 @@ Test('Tao Studio foreign file views render compact tree rows with contextual edi
     .toBe('Folder/Roadmap.tao')
   Expect(elementWith(deleting, 'role', 'alert')).toBeDefined()
   Expect(textContent(deleting)).toContain('Delete Roadmap.tao?')
+})
+
+Test('Tao Studio file rows mark Tao files with the lotus glyph the IDE extension ships', () => {
+  const tao = renderToStaticMarkup(React.createElement(TreeFileRow, fileRowProps({})))
+  const other = renderToStaticMarkup(
+    React.createElement(TreeFileRow, fileRowProps({ Name: 'notes.md', Path: 'Folder/notes.md' })),
+  )
+
+  Expect(tao).toContain('class="studio-file-icon"')
+  Expect(tao).toContain(`d="${TaoFileIcon.path}"`)
+  Expect(tao).not.toContain('studio-file-kind')
+  Expect(other).toContain('<span aria-hidden="true" class="studio-file-kind" data-kind="md">md</span>')
+  Expect(other).not.toContain('studio-file-icon')
 })
 
 Test('Design token rows group under a kind heading and swatch parseable colors', () => {
