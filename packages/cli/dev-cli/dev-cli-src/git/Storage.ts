@@ -1,4 +1,5 @@
 import { CLI, Errors, FS, HCI, Repo, Switch } from '@shared'
+import { recordMergeMessage, StartBranchCommand } from '@verification/Finalize'
 
 /**
  * Storage keeps the `storage` submodule, where development evidence such as QA screenshots is
@@ -11,6 +12,13 @@ import { CLI, Errors, FS, HCI, Repo, Switch } from '@shared'
 const submodulePath = 'storage'
 const qaStore = 'qa'
 const pushAttempts = 3
+/** The projects a bare `storage qa` captures, with Studio's own layouts riding on the first. */
+const defaultProjects = [
+  'Apps/WordFlower/1 - Current',
+  'Apps/HNReader',
+  'Apps/Starters/Pantry',
+  'Apps/Starters/Notebook',
+] as const
 const listedNames = 10
 
 const storageActions = ['sync', 'qa', 'push', 'pin'] as const
@@ -63,12 +71,10 @@ export const Storage = {
         await push(root)
         return 0
       },
-      qa: async () => {
-        if (paths.length === 0) {
-          Errors.throwUserInput('storage qa requires the Tao project directories to capture.')
-        }
-        return await qa(root, paths, options)
-      },
+      qa: async () =>
+        paths.length === 0
+          ? await qa(root, defaultProjects, { ...options, studio: true })
+          : await qa(root, paths, options),
       sync: async () => {
         await sync(root)
         return await timeline(root)
@@ -251,21 +257,13 @@ async function push(root: string): Promise<void> {
 
 /**
  * pin records the archive's published head as the commit this repository points `storage` at, in a
- * commit of its own on the current feature branch, and drafts the branch's merge message when it has
- * none, so landing is the one step left. It refuses a head that is not on the archive's `main`,
- * since a pointer to an unpublished commit breaks every fresh checkout's `submodule update`.
+ * commit of its own, so `./agent unsandboxed land` is the one step left. Off a feature branch it
+ * starts one from `origin/main`; when the pin is the branch's whole change it records the merge
+ * message against it, so the landing needs no confirmation. It refuses a head that is not on the
+ * archive's `main`, since a pointer to an unpublished commit breaks every fresh checkout's
+ * `submodule update`.
  */
 async function pin(root: string): Promise<void> {
-  const branch = (await git(root, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout.trim()
-  if (!branch.startsWith('feat/')) {
-    Errors.throwUserInput(
-      `Pin from a feat/ branch, not ${branch || 'a detached HEAD'}; run \`./agent start-branch feat/<name>\`.`,
-    )
-  }
-  const staged = (await gitOrThrow(root, ['diff', '--cached', '--name-only'])).stdout.trim()
-  if (staged !== '') {
-    Errors.throwUserInput(`Commit or unstage what is already staged before pinning ${submodulePath}:\n${staged}`)
-  }
   const storage = FS.resolvePath(submodulePath, root)
   if (!await FS.exists(FS.resolvePath('.git', storage))) {
     Errors.throwUserInput(`${submodulePath} is not initialised; run \`./agent unsandboxed storage sync\`.`)
@@ -274,31 +272,43 @@ async function pin(root: string): Promise<void> {
     Errors.throwUserInput(`${submodulePath} has uncommitted changes; commit or remove them first.`)
   }
   const head = (await gitOrThrow(storage, ['rev-parse', 'HEAD'])).stdout.trim()
-  const published = await git(storage, ['merge-base', '--is-ancestor', head, 'refs/remotes/origin/main'])
-  if (published.exitCode !== 0) {
+  const short = head.slice(0, 8)
+  if ((await git(storage, ['merge-base', '--is-ancestor', head, 'refs/remotes/origin/main'])).exitCode !== 0) {
     Errors.throwUserInput(
-      `${submodulePath} ${
-        head.slice(0, 8)
-      } is not on the archive's main; run \`./agent unsandboxed storage push\` first.`,
+      `${submodulePath} ${short} is not on the archive's main; run \`./agent unsandboxed storage push\` first.`,
     )
   }
-  const recorded = (await gitOrThrow(root, ['ls-tree', 'HEAD', submodulePath])).stdout.split(/\s+/u)[2] ?? ''
-  if (recorded === head) {
-    HCI.writeLine(`${submodulePath} already points at ${head.slice(0, 8)}.`)
+  const onFeature = (await git(root, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout.trim().startsWith('feat/')
+  if (!onFeature) {
+    await gitOrThrow(root, ['fetch', '--quiet', 'origin', 'main'])
+  }
+  if (await recordedCommit(root, onFeature ? 'HEAD' : 'origin/main') === head) {
+    HCI.writeLine(`${submodulePath} already points at ${short}.`)
     return
+  }
+  if (!onFeature) {
+    await StartBranchCommand.run(`feat/storage-pin-${short}`, { repositoryRoot: root })
+  }
+  const staged = (await gitOrThrow(root, ['diff', '--cached', '--name-only'])).stdout.trim()
+  if (staged !== '') {
+    Errors.throwUserInput(`Commit or unstage what is already staged before pinning ${submodulePath}:\n${staged}`)
   }
   const subject = (await gitOrThrow(storage, ['log', '-1', '--format=%s', head])).stdout.trim()
   const message = pinMessage(head, subject)
   // `ignore = all` makes `git add` skip the submodule, so the pointer is written to the index directly.
   await gitOrThrow(root, ['update-index', '--cacheinfo', `160000,${head},${submodulePath}`])
   await gitOrThrow(root, ['commit', '--quiet', '-m', message])
-  const messageFile = FS.resolvePath(`.artifacts/merge/${branch}.msg`, root)
-  if (await FS.exists(messageFile)) {
-    HCI.writeLine(`Kept ${FS.displayPath(messageFile)}; check it still describes the branch before landing.`)
+  const ownCommits = (await gitOrThrow(root, ['rev-list', '--count', 'origin/main..HEAD'])).stdout.trim()
+  if (ownCommits === '1') {
+    await recordMergeMessage(message, { repositoryRoot: root })
   } else {
-    await FS.writeText(messageFile, `${message}\n`)
+    HCI.writeLine('The branch holds other work too, so the landing asks you to confirm its merge message.')
   }
-  HCI.writeLine(`Pointed ${submodulePath} at ${head.slice(0, 8)}; land with \`./agent unsandboxed land\`.`)
+  HCI.writeLine(`Pointed ${submodulePath} at ${short}; land with \`./agent unsandboxed land\`.`)
+}
+
+async function recordedCommit(root: string, commit: string): Promise<string> {
+  return (await gitOrThrow(root, ['ls-tree', commit, submodulePath])).stdout.split(/\s+/u)[2] ?? ''
 }
 
 /** pinMessage names the archive commit being pointed at by what it recorded. */

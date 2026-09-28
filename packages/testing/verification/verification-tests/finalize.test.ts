@@ -7,6 +7,7 @@ import {
   LandCommand,
   MergeMainCommand,
   prepareForLanding,
+  recordMergeMessage,
   StartBranchCommand,
 } from '../verification-src/Finalize'
 import {
@@ -1116,6 +1117,26 @@ Describe('landing preparation', () => {
     })
     const changedHead = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
     Expect(changedHead.ok).toBe(false)
+  })
+
+  Test('keeps a message a command recorded for this HEAD, and asks again once the branch moves', async () => {
+    const fake = fakeDependencies()
+    const path = await recordMergeMessage(
+      'Pin storage\n\n- Point storage at abc12345',
+      { repositoryRoot: '/repo' },
+      fake.dependencies,
+    )
+    Expect(fake.files.get(path)).toBe('Pin storage\n\n- Point storage at abc12345\n')
+
+    const recorded = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(recorded.ok).toBe(true)
+
+    fake.states.set('/repo/.artifacts/merge/feat/example.state.json', {
+      ...fake.states.get('/repo/.artifacts/merge/feat/example.state.json') as FinalizeState,
+      messageHeadSha: 'oldhead0000000000000000000000000000000000',
+    })
+    const moved = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(moved.ok).toBe(false)
   })
 
   Test('does not turn an untouched generated draft into author review on a later landing', async () => {
