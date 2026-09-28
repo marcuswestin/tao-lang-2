@@ -28,6 +28,8 @@ const expected = [
   'prepare-release studio',
   'prepare-release ide-extension',
   'app-dev',
+  'test-watch',
+  'standalone-cli-acceptance',
   'studio',
   'studio-native',
   'studio-ps',

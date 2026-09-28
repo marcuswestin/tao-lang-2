@@ -77,7 +77,7 @@ async function accept(release: string): Promise<void> {
     const home = FS.resolvePath('home', root)
     const userBin = FS.resolvePath('.tao/bin', home)
     await FS.mkdir(userBin)
-    const environment = await newcomerEnvironment(root, home, userBin, `file://${releases}`, `file://${listing}`)
+    const environment = newcomerEnvironment(home, userBin, `file://${releases}`, `file://${listing}`)
     const shell = newcomerShell(environment)
 
     const project = FS.resolvePath('a-tally-counter', home)
@@ -465,38 +465,20 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
  * newcomerEnvironment is the environment a person who just installed Tao would have: a fresh login's
  * variables, plus whatever proxy their network needs.
  *
- * Inside an agent sandbox, which refuses FSEvents, Metro can watch files only through Watchman, and
- * this throwaway `$HOME` has no Watchman server of its own. `TAO_ACCEPTANCE_WATCHMAN` names a
- * `watchman` binary for that case: only it joins `PATH`, and it talks to the real server's socket.
- * A person's terminal needs neither.
+ * The acceptance runs on the host so Metro can use native filesystem events with this throwaway
+ * `$HOME`; its PATH contains only the installed Tao command and system tools.
  */
-async function newcomerEnvironment(
-  root: string,
+function newcomerEnvironment(
   home: string,
   userBin: string,
   releases: string,
   listing: string,
-): Promise<Platform.ProcessEnv> {
+): Platform.ProcessEnv {
   const proxies = Object.fromEntries(PROXY_ENV.map(name => [name, Platform.runtimeProcess.env[name]]))
-  const watchman = Platform.runtimeProcess.env['TAO_ACCEPTANCE_WATCHMAN']
-  let path = `${userBin}:${SYSTEM_PATH}`
-  let watchmanSocket: Record<string, string> = {}
-  if (watchman !== undefined && watchman.length > 0) {
-    const watchmanBin = FS.resolvePath('watchman-bin', root)
-    await FS.symlink(watchman, FS.resolvePath('watchman', watchmanBin))
-    path = `${watchmanBin}:${path}`
-    const sockname = await CLI.mustRun(watchman, {
-      args: ['get-sockname'],
-      processPolicy: 'test',
-      timeoutMs: 30_000,
-    })
-    watchmanSocket = { WATCHMAN_SOCK: (JSON.parse(sockname.stdout) as { sockname: string }).sockname }
-  }
   return {
     ...proxies,
-    ...watchmanSocket,
     HOME: home,
-    PATH: path,
+    PATH: `${userBin}:${SYSTEM_PATH}`,
     TAO_RELEASES: releases,
     TAO_RELEASE_INDEX_URL: listing,
     TMPDIR: Platform.runtimeProcess.env['TMPDIR'],

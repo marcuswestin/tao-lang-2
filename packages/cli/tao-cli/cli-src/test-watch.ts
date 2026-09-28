@@ -86,7 +86,7 @@ export async function runTestWatchLoop(deps: TestWatchDeps): Promise<void> {
 /** TestWatchCommandDeps overrides one piece of `runTestWatchCommand`'s real wiring, for a test. */
 export type TestWatchCommandDeps = {
   runOnce?: () => Promise<TestRunOutcome>
-  startWatcher?: (onChange: () => void) => DebouncedWatcher
+  startWatcher?: (onChange: () => void, watchRoots: readonly string[]) => DebouncedWatcher
   signal?: AbortSignal
   reportError?: (error: unknown) => void
 }
@@ -133,8 +133,9 @@ export async function runTestWatchCommand(
       reportWaiting: () => HCI.logProcessInfo('test', describeWatch),
       runOnce: overrides.runOnce ?? (() => runTestCommandOnce(paths, options)),
       signal,
-      startWatcher: overrides.startWatcher
-        ?? (onChange => startDebouncedWatcher(watchRoots, onChange, { debounceMs: WATCH_DEBOUNCE_MS })),
+      startWatcher: onChange =>
+        overrides.startWatcher?.(onChange, watchRoots)
+          ?? startDebouncedWatcher(watchRoots, onChange, { debounceMs: WATCH_DEBOUNCE_MS }),
     })
   } finally {
     removeSigint?.()
