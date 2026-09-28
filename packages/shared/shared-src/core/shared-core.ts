@@ -5,6 +5,7 @@ import * as Errors from './Errors'
 import * as Http from './Http'
 import * as Json from './Json'
 import Switch from './Switch_TypeSafe'
+import { TaoFileIcon } from './TaoFileIcon'
 import * as Text from './Text'
 import * as Time from './Time'
 
@@ -24,6 +25,7 @@ export {
   Http,
   Json,
   Switch,
+  TaoFileIcon,
   Text,
   Time,
 }

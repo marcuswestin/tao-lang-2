@@ -1,4 +1,5 @@
 import { Errors, FS } from '@shared'
+import { TaoFileIcon } from '@shared/core'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { LSPWorkspace } from 'tao-compiler/workspace'
 import { TaoFormatter } from 'tao-formatter'
@@ -31,8 +32,9 @@ Describe('Tao IDE extension smoke', () => {
     Expect(await FS.isFile(FS.resolvePath('../language-configuration.json', import.meta.dir))).toBe(true)
     const icon = packageJson.contributes.languages[0]?.icon
     Expect(icon).toEqual({ light: './icons/tao-light.svg', dark: './icons/tao-dark.svg' })
-    for (const iconPath of Object.values(icon ?? {})) {
-      Expect(await FS.isFile(FS.resolvePath(`../${iconPath}`, import.meta.dir))).toBe(true)
+    for (const theme of ['light', 'dark'] as const) {
+      Expect(await FS.readText(FS.resolvePath(`../${icon?.[theme]}`, import.meta.dir)))
+        .toBe(TaoFileIcon.svg(TaoFileIcon.colors[theme]))
     }
     Expect(packageJson.files).toContain('icons/')
     Expect(await FS.readText(FS.resolvePath('../LICENSE', import.meta.dir)))
