@@ -114,7 +114,8 @@ it. So:
 
 - The gitlink is set once and bumped only deliberately: `./dev storage pin` points it at the
   archive's published head in a commit of its own, starting a `feat/storage-pin-<commit>` branch when
-  run off one, and records the merge message, so `./agent unsandboxed land` is the one step left. `.gitmodules` sets `ignore = all`, so captured
+  run off one, and records the merge message, so `./agent unsandboxed land` is the one step left.
+  `.gitmodules` sets `ignore = all`, so captured
   commits inside the archive never make a worktree look dirty to `finalize` or `land`.
 - The submodule, at `storage`, is not initialised by default. `storage sync` initialises it in
   the worktree that captures as a blobless partial clone (`--filter=blob:none`): every commit and

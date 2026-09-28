@@ -22,8 +22,16 @@ Describe('Apple setup command help', () => {
     Expect(result.stdout).toContain('--archive')
   })
 
+  Test('exposes watch simulator runtime installation and physical-watch guidance', async () => {
+    const result = await CLI.run('./dev', { args: ['setup-watchos', '--help'], cwd: Repo.getRoot() })
+    Expect(result.exitCode).toBe(0)
+    for (const option of ['--xcode-version', '--runtime-version', '--physical', '--device', '--apply']) {
+      Expect(result.stdout).toContain(option)
+    }
+  })
+
   Test('rejects an omitted Xcode version before loading either installer', async () => {
-    for (const command of ['setup-ios', 'setup-visionos']) {
+    for (const command of ['setup-ios', 'setup-visionos', 'setup-watchos']) {
       const result = await CLI.run('./dev', { args: [command], cwd: Repo.getRoot() })
       Expect(result.exitCode).toBe(1)
       Expect(result.stderr).toContain('--xcode-version')

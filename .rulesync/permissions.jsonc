@@ -108,7 +108,7 @@
     "watchman start", "watchman status", "watchman stop",
     "local-instantdb start", "local-instantdb stop",
     "companion-host-build",
-    "setup-ios", "setup-visionos",
+    "setup-ios", "setup-visionos", "setup-watchos",
     "studio-companion-install", "clerk-review",
     "standalone-cli-vm-setup", "standalone-cli-clean-machine", "contributor-linux-test",
     "simulators list", "simulators boot", "simulators run", "simulators app-container",

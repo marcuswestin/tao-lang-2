@@ -44,6 +44,9 @@
       "@e2e-testing": [
         "./testing/e2e-testing/HostTestingCommand.ts"
       ],
+      "@tao-cli/watchos-project": [
+        "./cli/tao-cli/cli-src/watchos-project.ts"
+      ],
       "@shared": [
         "./shared/shared-src/shared.ts"
       ],

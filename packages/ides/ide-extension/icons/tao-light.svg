@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="16" height="16">
+  <mask id="tao">
+    <g fill="#fff" stroke="#000" stroke-width="1.6" stroke-linejoin="round" paint-order="stroke">
+      <path d="M16 21Q9.5 12 16 3Q22.5 12 16 21Z"/>
+      <path d="M15 24Q14.3 12.45 3 10Q3.7 21.55 15 24Z"/>
+      <path d="M17 24Q17.7 12.45 29 10Q28.3 21.55 17 24Z"/>
+      <path d="M16 28Q11.7 18.2 1 18.5Q5.3 28.3 16 28Z"/>
+      <path d="M16 28Q20.3 18.2 31 18.5Q26.7 28.3 16 28Z"/>
+    </g>
+    <path d="M20.5 10.5C14 12.5 13.5 15 17 17.5S17.5 23 13 29" fill="none" stroke="#000" stroke-width="1.8" stroke-linecap="round"/>
+  </mask>
+  <rect width="32" height="32" fill="#1f7a90" mask="url(#tao)"/>
+</svg>

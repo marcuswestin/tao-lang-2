@@ -56,6 +56,9 @@ Describe('Tao app TypeScript modules', () => {
         await FS.readText(FS.resolvePath('TaoRuntime-src/TR.ts', runtimeSource)),
       )
       Expect(await FS.isFile(FS.resolvePath('TaoRuntime-src/TR-data.ts', carried))).toBe(true)
+      Expect(await FS.readText(FS.resolvePath('swiftui/TaoValues.swift', carried))).toBe(
+        await FS.readText(FS.resolvePath('swiftui/TaoValues.swift', runtimeSource)),
+      )
 
       const project = FS.resolvePath('created', root)
       await FS.writeText(FS.resolvePath('tsconfig.json', project), PROJECT_TSCONFIG)
