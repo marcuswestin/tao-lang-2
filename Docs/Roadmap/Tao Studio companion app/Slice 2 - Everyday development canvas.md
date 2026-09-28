@@ -261,6 +261,10 @@ scenario's appearance is part of the scenario. A pin now resolves to itself on n
 `pinned-native` capability; only a preview cell ever pins, so a shipped app resolves exactly as
 before.
 
+September 2026 MVP appearance follow-up: the native runtime now subscribes to system appearance,
+so an unpinned shipped app resolves Light or Dark with `reactive-native`. The scenario pin still wins;
+the fixed-light account above describes the earlier implementation.
+
 The phone says what it dropped. A cell whose declared frame does not fit on this screen raises a
 dismissible notice naming both sizes, once per cell, and the scenario sheet carries the same line
 permanently for when the notice is long gone. It stays quiet when the frame does fit: no device is

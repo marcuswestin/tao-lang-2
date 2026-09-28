@@ -21,4 +21,6 @@ description: >-
 - Generate tool-specific subagent adapters with `./agent setup`. Do not edit or commit generated `.codex/agents/`, `.claude/agents/`, or `.cursor/agents/` files. A profile reaches a harness only when its `targets:` list names that harness; rulesync skips an untargeted profile silently rather than failing.
 - Keep shared permission rules in `.rulesync/permissions.jsonc`, agent hooks in `.rulesync/hooks.jsonc`, and the opt-in profiles in `.rulesync/profiles.jsonc`; `./agent setup` renders each into the harness-specific generated files, and the agent-config freshness gate in `repo-lint` keeps them in sync. Cursor's `.cursor/worktrees.json`, `.cursor/worktree-setup.sh`, and `.cursor/permissions.json` stay hand-maintained — rulesync has no translator for their shape — so update them by hand in the same change. Never edit a generated file directly; change the source and run `./agent setup`.
 - After edits, search active code and docs for removed names, paths, commands, and duplicated ownership. Keep `Docs/Archive/` frozen after merge unless the Developer explicitly asks; other `Docs/Roadmap/` documents remain live.
-- Run `./agent verify --complete` after instruction or automation changes.
+- Validate instruction or automation changes under the checkout's `AGENTS.md` policy. In a
+  Developer-directed primary `dev/<name>` checkout, use focused checks and defer full verification
+  until authorized landing.

@@ -2,15 +2,15 @@
 name: progress-report
 description: >-
   Plan and report progress on multi-step work. Use when the Developer asks for a progress report, status
-  update, percentage done or remaining, ETA, or how much longer — and whenever starting a
-  multi-step task, to record the step weights a later report reads.
+  update, percentage done or remaining, ETA, or how much longer — and when a lengthy task is ready
+  for execution, to record its step weights and report progress during the work.
 ---
 
 # Progress Report
 
 The Developer asks this to decide whether to wait, redirect, or walk away, so the first answer has to arrive
-immediately and be roughly right. Accuracy comes second, and arrives second. Reporting never pauses
-the work: resume the task in the same turn unless the Developer says to stop.
+immediately and be roughly right. Accuracy comes second, and arrives second. A progress request is a
+status interruption, not a stopping point.
 
 ## The ledger
 
@@ -35,11 +35,13 @@ Recalculated: 2026-09-21T15:41Z — held at 45%
 Basis: 1-3 are code and tests; 4 is one landing, ~6 min of machine time, measured.
 ```
 
-## Write the plan before the first step
+## Write the plan when execution is ready
 
-When a task runs to more than about three steps, write the ledger before starting rather than when
-the Developer first asks. Weights are rough on purpose: multiples of five, summing to 100, decided in under a
-minute.
+When a lengthy task is ready for execution and its required information and decisions are settled,
+write the initial ledger before the first execution step, rather than waiting for the Developer to ask.
+Use this for work expected to take more than about three steps or to run long enough for interim
+reports to matter. Weights are rough on purpose: multiples of five, summing to 100, decided in under
+a minute.
 
 - **Weight by expected wall clock**, not by step count, difficulty, or how interesting the step is.
   The Developer is asking how long, not how much.
@@ -48,6 +50,14 @@ minute.
   `.artifacts/logs/<lane>/latest/summary.json` holds the last real run.
 - Give the unknown step a weight and mark it unknown rather than leaving it out. A plan that omits
   the risky part reports 90% and then runs for another hour.
+
+## Report during the work
+
+If the Developer has not requested a progress report recently, give a brief report whenever the
+ledger shows roughly another 20 percentage points completed. Include percent complete, estimated
+time remaining, and what is in flight; then continue the work. Count from the last report, whether
+requested or unsolicited, and avoid repeating a milestone. Update the ledger before reporting, using
+the evidence already available; do not start a gate or interrupt a running one merely to report.
 
 ## When the Developer asks
 
@@ -65,6 +75,11 @@ Three phases, in this order, in one turn.
    points or more, when the time estimate changed by half or by more than ten minutes, or when the
    recalculation found a step that cannot be done at all. Otherwise say nothing — the ledger is
    updated, and the next report starts from the better number.
+4. **Resume execution.** Return to the task that was active before the progress request and carry it
+   to its original stopping point. Do not send a final answer just because the report is complete.
+   Stop only when the underlying task is complete, the Developer explicitly stops it, or a concrete
+   blocker requires their action; in that case, finish all independent work and give the exact action
+   needed. A report does not narrow the scope or authorize an early handoff.
 
 ## What the numbers have to mean
 

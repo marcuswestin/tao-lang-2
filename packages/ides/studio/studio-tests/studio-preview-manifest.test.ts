@@ -54,10 +54,11 @@ Describe('Studio preview manifest', () => {
     Expect(() => StudioPreviewManifest.define(missingGroup)).toThrow('scenario group')
   })
 
-  Test('preserves Catalyst and native scenario Scheme captures without accepting invalid native pins', () => {
+  Test('preserves reactive and pinned native Scheme captures without accepting invalid native pins', () => {
     for (
       const scheme of [
         { capability: 'reactive-catalyst', requested: 'system', resolved: 'dark', source: 'system' },
+        { capability: 'reactive-native', requested: 'system', resolved: 'dark', source: 'system' },
         { capability: 'pinned-native', requested: 'dark', resolved: 'dark', source: 'scenario' },
       ] as const
     ) {

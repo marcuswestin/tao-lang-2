@@ -46,6 +46,24 @@ function createCommands(): Command {
     .version(TaoVersion.current(), '-v, --version', 'Print the Tao release this is, or `development` from source.')
 
   commands
+    .command('doctor')
+    .option('--json', 'Print the environment fingerprint as JSON.')
+    .option('--fingerprint', 'Print only the pasteable environment fingerprint.')
+    .description('Show a privacy-filtered environment fingerprint for a feedback report.')
+    .action(async (options: { fingerprint?: boolean; json?: boolean }) => {
+      const { runVisitorDoctor } = await import('./feedback-command')
+      await runVisitorDoctor(options)
+    })
+
+  commands
+    .command('bug-report')
+    .description('Prepare a feedback report with links and a pasteable environment fingerprint.')
+    .action(async () => {
+      const { runBugReport } = await import('./feedback-command')
+      await runBugReport()
+    })
+
+  commands
     .command('bridge')
     .argument('<package>', 'Installed package whose public API should be imported.')
     .requiredOption('--source <source>', 'Source adapter: expo or react-native.')

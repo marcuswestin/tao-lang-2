@@ -241,6 +241,14 @@ Describe('developer workflow', () => {
     Expect(diverged.calls.some(call => call.args[0] === 'update-ref')).toBe(false)
   })
 
+  Test('reports dirty shared work before fetching or moving refs', async () => {
+    const dirty = fake({ status: ' M in-progress.tao\n?? scratch.md\n', remoteMainHead: 'new-main' })
+    await Expect(SyncMainCommand.run(dirty.dependencies)).rejects.toThrow(
+      'This checkout has uncommitted changes; my-sync has not fetched or moved refs:\n   M in-progress.tao\n  ?? scratch.md',
+    )
+    Expect(dirty.calls.some(call => ['fetch', 'update-ref', 'merge', 'checkout'].includes(call.args[0]!))).toBe(false)
+  })
+
   Test('names the conflicted files and the command that finishes the merge', async () => {
     const conflicted = fake({ conflicts: ['AGENTS.md', 'packages/dev/README.md'], mergeExitCode: 1 })
     const outcome = await SyncMainCommand.run(conflicted.dependencies)
