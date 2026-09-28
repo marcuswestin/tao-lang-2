@@ -10,15 +10,16 @@ and host acceptance. The pass branch is `feat/repository-pass-2026-09-28`; landi
 
 ## Findings and disposition
 
-| ID | Finding                                                                                                                                                            | Disposition                                                                                                                                                                                      |
-| -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| D1 | The data specification still described InstantDB as unauthenticated and snapshot-row based.                                                                        | Corrected the implemented Clerk/InstantAuth pairing, per-row storage and snapshot projection, without changing runtime behavior.                                                                 |
-| N1 | SwiftUI numeric interpolation used Swift `String(Double)`, which differs from Tao's JavaScript text for `1e-6` and `1e20`.                                         | Fixed the finite-number formatting range and added a WatchHello journey plus compiler and executable Swift controls. Shortest-digit parity across all binary doubles remains unproved.           |
-| N2 | The watchOS proof parsed `--developer-dir` but did not pass it to `xcodebuild`.                                                                                    | Scoped `DEVELOPER_DIR` to the build child; tested explicit, default and invalid paths. No native watch/device run was made.                                                                      |
-| Q1 | Screenshot capture could report clean source provenance with an untracked Tao source file.                                                                         | Include untracked source in the dirty-state check; tests distinguish ignored artifacts and submodule changes.                                                                                    |
-| Q2 | Same-second screenshot runs could choose the same archive directory; concurrent captures could also overwrite the shared timeline with stale content.              | Preserve milliseconds and add a UUID while retaining chronological directory order. Serialize timeline regeneration and publish it atomically; collision, ordering, and concurrency tests added. |
-| V1 | A failed or skipped GUI graph node released the machine-wide lease before its isolated retry, while standalone native Studio smoke/canary did not hold that lease. | Keep the lease through GUI retry and make standalone native entry points use the same resource. Controlled concurrency and cleanup tests pass; abrupt process-kill behavior remains untested.    |
-| H1 | An execution-tool sandbox denial killed the Linux runner after starting a guest, bypassing its shell cleanup trap.                                                 | The exact labelled guest later exited 0. An ownership-checked recovery mode has focused mock evidence; real collection and removal await approval. Cached Linux acceptance is unproved.          |
+| ID | Finding                                                                                                                                                            | Disposition                                                                                                                                                                                                            |
+| -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1 | The data specification still described InstantDB as unauthenticated and snapshot-row based.                                                                        | Corrected the implemented Clerk/InstantAuth pairing, per-row storage and snapshot projection, without changing runtime behavior.                                                                                       |
+| N1 | SwiftUI numeric interpolation used Swift `String(Double)`, which differs from Tao's JavaScript text for `1e-6` and `1e20`.                                         | Fixed the finite-number formatting range and added a WatchHello journey plus compiler and executable Swift controls. Shortest-digit parity across all binary doubles remains unproved.                                 |
+| N2 | The watchOS proof parsed `--developer-dir` but did not pass it to `xcodebuild`.                                                                                    | Scoped `DEVELOPER_DIR` to the build child; tested explicit, default and invalid paths. No native watch/device run was made.                                                                                            |
+| Q1 | Screenshot capture could report clean source provenance with an untracked Tao source file.                                                                         | Include untracked source in the dirty-state check; tests distinguish ignored artifacts and submodule changes.                                                                                                          |
+| Q2 | Same-second screenshot runs could choose the same archive directory; concurrent captures could also overwrite the shared timeline with stale content.              | Preserve milliseconds and add a UUID while retaining chronological directory order. Serialize timeline regeneration and publish it atomically; collision, ordering, and concurrency tests added.                       |
+| V1 | A failed or skipped GUI graph node released the machine-wide lease before its isolated retry, while standalone native Studio smoke/canary did not hold that lease. | Keep the lease through GUI retry and make standalone native entry points use the same resource. Controlled concurrency and cleanup tests pass; abrupt process-kill behavior remains untested.                          |
+| H1 | Execution-tool sandbox denials repeatedly killed the Linux host runner after starting a guest, bypassing its shell cleanup trap.                                   | Exact recovery collected interrupted guest evidence and removed run-specific resources. The runner gained an ARM64 cached-only mode; a later full cold/cached run finished normally with exact cleanup.                |
+| H2 | The shared CLI left piped stdin errors unobserved. An early-exiting hook child caused an unhandled `EPIPE` in both cached Linux test and verification stages.      | Observe stream errors before writing input and catch an immediate throw from `stdin.end`. The closed-pipe control exposed both paths; corrected `eaea244f` passed native ARM64 cold and cached tests and verification. |
 
 ## Landing dispositions
 
@@ -71,11 +72,47 @@ installed CLI, not native app builds or device acceptance.
 
 The ARM64 Ubuntu run archived the same commit. Its cold guest started and installed Nix 2.35.2,
 but the host execution sandbox then denied Docker Desktop telemetry to `sessions.bugsnag.com` and
-killed the runner. Later read-only inspection found the exact labelled guest exited 0 and its
-workflow logs showed a passing full verification verdict after an isolated contention retry.
-The runner never collected the guest's terminal receipt, and the run-specific base image remains;
-the cached guest was not started. The transfer log names `glibc-2.42-61` and `glibc-2.42-84`, not a unique realized runtime
-closure. No native amd64, QEMU, hosted cloud, device, signing or publication acceptance is claimed.
+killed the runner. Later read-only inspection found the exact labelled guest exited 0. The approved
+ownership-checked recovery collected complete guest logs before removing only that run's cold
+container and base image; a subsequent inspection confirmed both absent. Recovered steps show
+bootstrap, setup, parser, check, test, and verify all exited 0, with full verification passing
+after an isolated contention retry. The original host runner did not collect its normal terminal
+receipt, and the cached guest did not start. A fresh run archived committed `e639461c`; its cold
+guest completed in 1,080 seconds, with all requested stages passing. A Reading List journey timed
+out after 30 seconds under machine contention during verification, then passed on an isolated
+retry. The host runner was interrupted again, this time by the execution tool blocking Docker
+Desktop's `ai-backend-service.docker.com` request while the cached guest was active. Exact recovery
+collected the guest logs and removed its run-specific container and base image. The cached guest
+passed bootstrap, setup, parser and check, but both test and verify failed when an early-exiting
+hook child triggered an unhandled `EPIPE` in the shared CLI stdin stream. The 226 agent CLI test
+assertions themselves passed. The same failure in both stages makes cached acceptance red. The
+shared CLI now observes stdin errors before supplying input, and a focused closed-pipe regression
+failed before the fix and passed afterward. Committed `160c05bd` passed all cold ARM64 stages:
+bootstrap 63 seconds, setup 4, parser 7, check 96, test 336, and verify 638. The execution tool
+again stopped its host runner during cold verification, but the guest finished successfully.
+Approved recovery collected its complete logs and removed the remaining run-specific base image;
+exact inspection found no container or base. The runner could not start cached mode. Its supported
+arguments were extended to run native ARM64 cached mode alone after a completed cold guest.
+An incidental no-flag invocation selected default amd64 emulation and failed during Nix bootstrap;
+it cleaned its own resources and does not count toward native acceptance.
+A new native ARM64 run on `47a6b80e` exercised the cached-only argument's committed source.
+Its cold `test-all` failed only the new closed-pipe regression: Linux Bun 1.4.2 threw `EPIPE`
+synchronously from `stdin.end(input)` even with a stream error listener. Cold `verify` passed,
+but the earlier test failure makes cold acceptance red. The same run provisioned reusable ARM64
+tools, then its cached `test-all` failed only the same shared regression. Both cold and cached
+`verify` passed. The host runner finished in 2,260 seconds with exit 1, normally removed all
+run-specific containers and the base image, and exact inspection confirmed absence. The shared
+CLI now also catches the immediate throw and records it as the command error; focused shared and
+hook tests pass locally. Committed `eaea244f` then passed a full native ARM64 cold-and-cached run
+`20260928T071634Z-92200` with normal host exit 0 in 1,971 seconds. Both guests passed bootstrap,
+setup, parser, check, full test, and full verification. Cold took 909 seconds and cached took 1,061;
+neither reported a retry or timeout. The previously failing shared stdin and agent CLI suites
+passed in both modes. The runner reused its ARM64 tools image and normally removed the exact cold
+and cached containers and run-specific base; read-only inspection confirmed their absence. Shared
+caches remain for reuse.
+The earlier transfer log names `glibc-2.42-61` and
+`glibc-2.42-84`, not a unique realized runtime closure. No native amd64, QEMU, hosted cloud,
+device, signing or publication acceptance is claimed.
 Run IDs, image identities, paths, limitations and cleanup conditions are in the task-local
 isolation resource accounting note.
 
@@ -104,4 +141,8 @@ passed after those changes; the full gate reused exact-tree green evidence from 
 The repair commit is `cab43391`. Finalization integrated later main commit `2e2c2cf9` (the Tao
 file lotus icon, outside this pass's review boundary) as merge `6e706364`, then verified the whole
 merged tree. Its merge message was reviewed and recorded, and the worktree was clean. Landing
-requires a separate decision.
+was later authorized. The Linux H2 stream listener was committed as `160c05bd`, and the native
+ARM64 cached-only argument as `47a6b80e`, each after the changed-tree gate. The subsequent Linux
+run exposed a synchronous `EPIPE` path; its catch was committed as `eaea244f` after focused and
+changed-tree verification. The full cold/cached acceptance above exercised that exact commit.
+Landing is separately authorized.

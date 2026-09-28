@@ -588,14 +588,60 @@ did not execute, leaving the exact run-labelled cold container and run-specific 
 Docker. Read-only `--inspect-run` later found the exact guest exited 0 and captured its workflow
 logs, including a passing verification verdict after an isolated contention retry; the cached
 guest never started. The runner's terminal receipt was not collected, so this is an execution-host
-interruption rather than a completed cold acceptance. The separate vanilla and prepared-Xcode Tart checks passed on the same committed
+interruption rather than a completed cold and cached host workflow. The separate vanilla and prepared-Xcode Tart checks passed on the same committed
 source and cleaned up their own run resources.
 
 The runner now has an ownership-checked `--recover-run <run-id>` mode on its existing named host
 operation. It requires an original run record, refuses a live or ambiguous guest, collects
 terminal logs and guest artifacts before removal, then removes only exact stopped run containers
 and the recorded run-specific base image. Focused mock-Docker tests cover live and foreign guests,
-daemon and collection failures, changing identity, idempotence, and the success path. Real recovery
-of this run remains pending Developer approval for the expanded host-command argument. Shared
-tool images and builder caches are preserved. Terminal cold collection and fresh cached acceptance,
-native amd64, and hosted-cloud proof remain open at this point.
+daemon and collection failures, changing identity, idempotence, and the success path. After Developer
+approval, the named recovery collected complete logs from the exact exited guest and removed only
+its run-specific cold container and base image. Recovered steps show bootstrap, setup, parser,
+check, test, and verify all exited 0; the original host runner still lacks its normal terminal
+receipt. Exact inspection confirmed both run-specific resources absent. Shared tool images and
+builder caches were preserved. A fresh run `20260928T045950Z-95877` on committed branch `e639461c`
+completed its cold guest in 1,080 seconds; bootstrap, setup, parser, check, test and verify passed.
+The Reading List journey exceeded its 30-second Jest timeout under machine contention during
+verification, then passed on an isolated retry. During the cached guest, the execution tool again
+interrupted the host runner after blocking a Docker Desktop request to
+`ai-backend-service.docker.com`. An exact read-only inspection found the cached guest still running
+with matching run labels. After it exited, approved recovery collected its logs and removed the
+exact cached container and run-specific base image; a subsequent inspection confirmed absence.
+The cached guest passed bootstrap, setup, parser and check, then test and verify both failed on
+an unhandled `EPIPE` when a short-lived hook child closed stdin before the shared CLI flushed its
+input. The same agent CLI assertions passed in the cold guest and in the cached guest before Bun
+reported the uncaught error. A focused closed-pipe regression failed before the shared CLI began
+observing stdin errors and passed afterward. The fix was committed as `160c05bd`, then a fresh
+native ARM64 cold guest passed bootstrap (63 seconds), setup (4), parser (7), check (96), test
+(336), and verify (638). The execution tool stopped the host runner during verification; the guest
+finished successfully but the runner could not launch cached mode. Approved exact recovery
+collected the cold logs and removed the remaining run-specific base image. Inspection confirmed no
+run-specific container or base remained. A separate no-flag invocation accidentally selected the
+default amd64 emulation path, failed during Nix bootstrap, and cleaned up normally; it is
+incidental evidence only. The runner gained one fixed `--native-arm64 --mode cached` form to
+finish native acceptance after interruption. Native amd64 and hosted-cloud proof
+remain open.
+
+Native ARM64 run `20260928T063338Z-7379` archived committed `47a6b80e` after adding that fixed
+argument shape. Its cold guest passed bootstrap, setup, parser, and check, but `test-all` failed
+only the new shared closed-pipe regression; `verify` passed. Its tools provisioning passed, then
+the cached guest's `test-all` failed the same shared regression while cached `verify` passed.
+The Linux Bun 1.4.2 log shows
+`sink.write` throwing `EPIPE` synchronously through `stdin.end(input)`, so observing the stream's
+later error event was insufficient. The shared CLI now catches the immediate throw as a command
+error. Focused shared and hook tests passed locally. The runner exited 1 after 2,260 seconds, normally removed
+its cold, tools, and cached containers and run-specific base image, and an exact inspection
+confirmed absence. The reusable ARM64 tools image and shared builder caches remain.
+
+Run `20260928T071634Z-92200` archived the immediate-throw correction at committed `eaea244f`.
+It finished normally with host exit 0 in 1,971 seconds. Native ARM64 cold and cached guests both
+passed bootstrap, setup, parser, check, full test, and full verify, with no retry or timeout
+reported. Cold took 909 seconds (38, 2, 3, 63, 256, and 537 seconds by stage); cached took 1,061
+seconds (21, 3, 5, 67, 349, and 607 seconds). Both full verification summaries recorded 39
+passed, 0 failed, and 4 skipped; the previously failing shared stdin and agent CLI suites passed
+in both full test stages. The runner reused its locked ARM64 tools image. Normal cleanup removed
+the exact cold and cached containers and run-specific Ubuntu base image; read-only inspection
+`20260928T074946Z-21148` confirmed absence. Shared tools and builder caches remain for reuse.
+This closes local native ARM64 cold/cached contributor acceptance at `eaea244f`. It does not prove
+native amd64, hosted-cloud execution, host-only native/UI lanes, or the slow Studio smoke lane.
