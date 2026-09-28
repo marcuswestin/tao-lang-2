@@ -28,8 +28,12 @@ export namespace Langium {
   export type DefaultSharedCoreModuleContext = langium.DefaultSharedCoreModuleContext
   /** DefaultSharedModuleContext declares the host services needed to create Langium LSP shared services. */
   export type DefaultSharedModuleContext = langiumLsp.DefaultSharedModuleContext
+  /** DidChangeWatchedFilesParams declares an LSP watched-file change notification. */
+  export type DidChangeWatchedFilesParams = vscodeLanguageserver.DidChangeWatchedFilesParams
   /** DocumentFormattingParams declares an LSP document formatting request. */
   export type DocumentFormattingParams = vscodeLanguageserver.DocumentFormattingParams
+  /** FileSystemNode declares one file or directory a workspace scan can see. */
+  export type FileSystemNode = langium.FileSystemNode
   /** FindReferencesOptions declares options for finding references. */
   export type FindReferencesOptions = langium.FindReferencesOptions
   /** Formatter declares the Langium LSP document formatting service. */

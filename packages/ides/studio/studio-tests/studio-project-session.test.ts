@@ -641,12 +641,12 @@ Test('Studio project session publishes every project app variant with a safe rel
   })
 })
 
-Test('Studio project session opens the project DefaultApp when the command line named none', async () => {
+Test('Studio project session opens the project app when the command line named none', async () => {
   await withTaoFiles('tao-studio-default-app-', {
-    'Project.tao': 'project { id "reader" name "Reader" DefaultApp Second }\n',
+    'Project.tao': 'project { id "reader" name "Reader" app Second }\n',
     'Reader.tao': 'app First { view Main }\napp Second { view Main }\nview Main() { }\n',
   }, async (_paths, root) => {
-    // A project that names its DefaultApp has already answered "which app"; Studio used to refuse
+    // A project that names its app has already answered "which app"; Studio used to refuse
     // every multi-app project until someone repeated that answer as --app.
     const session = await StudioProjectSession.open({ async compile() {}, projectRoot: root })
     Expect(session.appName).toBe('Second')
@@ -656,9 +656,9 @@ Test('Studio project session opens the project DefaultApp when the command line 
   })
 })
 
-Test('Studio project session lets an explicit entry override the project DefaultApp', async () => {
+Test('Studio project session lets an explicit entry override the project app', async () => {
   await withTaoFiles('tao-studio-explicit-entry-', {
-    'Project.tao': 'project { id "reader" name "Reader" DefaultApp Second }\n',
+    'Project.tao': 'project { id "reader" name "Reader" app Second }\n',
     'First.tao': 'app First { view FirstMain }\nview FirstMain() { }\n',
     'Second.tao': 'app Second { view SecondMain }\nview SecondMain() { }\n',
   }, async (_paths, root) => {

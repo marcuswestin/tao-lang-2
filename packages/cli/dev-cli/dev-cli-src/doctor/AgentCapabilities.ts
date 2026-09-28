@@ -148,7 +148,7 @@ export async function readAgentCapabilities(
 ): Promise<CapabilityReport> {
   const runProbe = dependencies.runProbe
     ?? (async (probe: CapabilityProbe) => await CLI.run(probe.command, { args: [...probe.args], stdio: 'pipe' }))
-  const hutchRelease = await FS.readJson<{ version: string }>(Repo.resolvePath('nix/hutch-release.json'))
+  const hutchRelease = await FS.readJson<{ version: string }>(Repo.resolvePath('.config/nix/hutch-release.json'))
   const probes: readonly CapabilityProbe[] = [...PROBES, {
     // The development environment supplies the pinned launcher on PATH; never install during a probe.
     args: ['--version'],

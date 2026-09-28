@@ -19,7 +19,7 @@ PROFILE_BIN="$REPO_ROOT/.devenv/profile/bin"
 
 setup_repository() {
   if [ "${CLAUDE_CODE_REMOTE:-}" = true ] && [ "$(uname -s)" = Linux ]; then
-    TAO_DEV_SHELL_SETUP=0 "$REPO_ROOT/bootstrap-tao-dev-env" --install-nix
+    TAO_DEV_SHELL_SETUP=0 "$REPO_ROOT/.config/bootstrap-tao-dev-env" --install-nix
   else
     TAO_DEV_SHELL_SETUP=0 "$REPO_ROOT/agent" setup
   fi

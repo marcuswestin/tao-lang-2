@@ -1,11 +1,13 @@
+import { Workspace } from '@compiler/workspace'
 import Runtime, { HostDependencies, RuntimeToolchainPaths } from '@expo-host'
-import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Assert, CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { AgentClientBuild } from './agent-client-build'
 import { buildDesktopApp } from './desktop-build'
 import { chooseTaoApp } from './dev-app-selection'
 import { exportVisionOSProject } from './visionos-project'
+import { exportWatchOSProject } from './watchos-project'
 
-export type BuildTarget = 'web' | 'desktop' | 'ios' | 'android' | 'visionos'
+export type BuildTarget = 'web' | 'desktop' | 'ios' | 'android' | 'visionos' | 'watchos'
 export type BuildRecord = {
   appName: string
   createdAt: string
@@ -27,7 +29,7 @@ type BuildOptions = {
   agents?: boolean
   output?: string
 }
-const targets = ['web', 'desktop', 'ios', 'android', 'visionos'] as const
+const targets = ['web', 'desktop', 'ios', 'android', 'visionos', 'watchos'] as const
 const runtimeFiles = [
   'index.ts',
   'app.json',
@@ -84,6 +86,24 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
     await FS.writeJson(FS.resolvePath('build.json', artifactRoot), record)
     progress.snapshotComplete()
     record.results = await executeBuildTargets(selectedTargets, async target => {
+      if (target === 'watchos') {
+        const compiled = await Workspace.compile(snapshotApp, { appName: app.appName, target: 'watchos' })
+        const outputRoot = FS.resolvePath(options.compileOnly ? 'compiled/watchos' : 'watchos', artifactRoot)
+        if (options.compileOnly) {
+          for (const file of compiled.files) {
+            await FS.writeText(FS.resolvePath(file.relativePath, outputRoot), file.code)
+          }
+          return outputRoot
+        }
+        Assert.defined(compiled.entryArtifact, 'watch compilation provides an entry artifact')
+        return await exportWatchOSProject({
+          appName: app.appName,
+          displayName: compiled.displayName,
+          outputRoot,
+          files: compiled.files,
+          entryArtifact: compiled.entryArtifact,
+        })
+      }
       if (options.compileOnly === true) {
         const compileRoot = FS.resolvePath(`compiled/${target}`, artifactRoot)
         const generated = await Runtime.generateApp(snapshotApp, {
@@ -104,12 +124,11 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
         return await finishWebArtifact(site)
       }
       if (target === 'visionos') {
-        const tests = FS.resolvePath('visionos/Tests.swift', snapshotRoot)
         return await exportVisionOSProject({
           appName: app.appName,
           outputRoot: FS.resolvePath('visionos', artifactRoot),
           siteRoot: site,
-          testSource: await FS.isFile(tests) ? await FS.readText(tests) : undefined,
+          testSource: await visionosNativeTestSource(app.appName),
         })
       }
       const desktop = await buildDesktopApp({
@@ -241,23 +260,23 @@ async function chooseTargets(requested: readonly BuildTarget[]): Promise<BuildTa
   }
   if (!HCI.isInteractive()) {
     Errors.throwUserInput(
-      'Choose build targets with --web, --desktop, --ios, --android, and/or --visionos in a non-interactive terminal.',
+      'Choose build targets with --web, --desktop, --ios, --android, --visionos, and/or --watchos in a non-interactive terminal.',
     )
   }
   HCI.writeLine(
-    'Build targets: 1. web  2. desktop  3. iOS (not yet implemented)  4. Android (not yet implemented)  5. visionOS (Xcode project)',
+    'Build targets: 1. web  2. desktop  3. iOS (not yet implemented)  4. Android (not yet implemented)  5. visionOS (Xcode project)  6. watchOS (SwiftUI Xcode project)',
   )
   const answer = await HCI.askText({
     message: 'Select target numbers (comma-separated)',
     validate: value =>
-      parseTargetSelection(value) === undefined ? 'Choose one or more numbers from 1 to 5.' : undefined,
+      parseTargetSelection(value) === undefined ? `Choose one or more numbers from 1 to ${targets.length}.` : undefined,
   })
   return parseTargetSelection(answer)!
 }
 
 function parseTargetSelection(value: string): BuildTarget[] | undefined {
   const parts = value.split(',').map(part => part.trim())
-  if (parts.some(part => !/^[1-5]$/.test(part))) {
+  if (parts.some(part => !/^\d+$/.test(part) || Number(part) < 1 || Number(part) > targets.length)) {
     return undefined
   }
   return targets.filter((_, index) => parts.includes(String(index + 1)))
@@ -429,4 +448,13 @@ async function finishWebArtifact(siteRoot: string): Promise<string> {
   )
   await FS.chmod(FS.resolvePath('run', parent), 0o755)
   return parent
+}
+
+/** visionosNativeTestSource loads XCTest sources owned by the testing package for known sample apps. */
+async function visionosNativeTestSource(appName: string): Promise<string | undefined> {
+  if (appName !== 'VisionHello') {
+    return undefined
+  }
+  const path = Repo.resolvePath('packages/testing/e2e-testing/native/visionos/VisionHelloTests.swift')
+  return await FS.isFile(path) ? await FS.readText(path) : undefined
 }

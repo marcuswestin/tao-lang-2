@@ -7,7 +7,7 @@ project {
   id "notes"
   name "Notes"
   version "1.2.3"
-  DefaultApp NotesBeta
+  app NotesBeta
 }
 app Notes { view Main }
 app NotesBeta = Notes with { Name "Notes Beta" }
@@ -15,7 +15,7 @@ view Main() { }
 `
 
 Describe('tao ship project discovery', () => {
-  Test('climbs to metadata and resolves DefaultApp', async () => {
+  Test('climbs to metadata and resolves app', async () => {
     await withTaoFiles('tao-ship-project-', {
       'App.tao': projectSource,
       'nested/deeper/Other.tao': 'view Other() { }',
@@ -53,7 +53,7 @@ Describe('tao ship project discovery', () => {
           id "split-notes"
           name "Split notes"
           version "1.2.3"
-          DefaultApp NotesBeta
+          app NotesBeta
         }
       `,
       'Apps/Notes.tao': `
@@ -81,7 +81,7 @@ Describe('tao ship project discovery', () => {
           id "metadata-graph"
           name "Metadata graph"
           version "1.2.3"
-          DefaultApp TargetInstantDBBeta
+          app TargetInstantDBBeta
         }
       `,
       'Apps/Target.tao': `

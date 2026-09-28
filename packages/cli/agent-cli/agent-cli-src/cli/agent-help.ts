@@ -104,6 +104,7 @@ Examples:
   ./agent unsandboxed capabilities
   ./agent unsandboxed setup-ios --xcode-version 27.1 --runtime-version 27.1
   ./agent unsandboxed setup-visionos Apps/VisionHello --xcode-version 27.0
+  ./agent unsandboxed setup-watchos Apps/WatchHello --xcode-version 27.0 --runtime-version 27.0 --apply
   ./agent unsandboxed watchman status
   ./agent unsandboxed watchman start
   ./agent unsandboxed land --dry-run

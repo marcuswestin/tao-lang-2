@@ -33,4 +33,4 @@ Implement language features as vertical slices. Use the same focused feature nam
 ## Vocabulary
 
 - provider: configurable contract implementation. bridge: binds Tao code to a TypeScript value. adapter: fits an external system to a Tao contract. test driver: operates Appium/Playwright for `host-control`. service: long-running process answering requests. TypeScript implementation: a stdlib `.tao` declaration's TypeScript file.
-- A top-level `packages/` folder is a package or a group; found by its `package.json`, at depth one or two.
+- A top-level `packages/` folder is a package or a group; found by its `package.json`, at depth one, two, or three. The root workspace globs are `packages/*`, `packages/*/*`, and `packages/apps/providers/*`. A new third-level group needs its own glob: `packages/*/*/*` also matches installed dependencies under `node_modules`.

@@ -14,10 +14,6 @@ export async function runAuthReviewJourney(
     FS.resolvePath('Auth Review.tao', project),
     source.replaceAll('http://127.0.0.1:4738', server.url),
   )
-  await FS.writeText(
-    FS.resolvePath('Project.tao', project),
-    await FS.readText(Repo.resolvePath('Apps/Test Apps/Auth Review/Project.tao')),
-  )
   await FS.writeText(FS.resolvePath('Local.test.tao', project), localJourney)
   const result = await CLI.run(Repo.resolvePath('agent'), {
     args: ['tao', 'test', project],

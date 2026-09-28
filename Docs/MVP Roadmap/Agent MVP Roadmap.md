@@ -156,6 +156,20 @@ statement that "Login is not required for development builds" is the argument fo
   test keeps it equal to the host package's `expo` dependency. The beta-distribution plan and lane
   research carry a dated correction of the SDK-54 claim.
 
+### A20 — Re-enable the Studio HNReader Feed proof
+
+The `verify-full` proof that drags generated HNReader Stories into a drawn view, keeps, discards and
+undoes them (`studio-real-app.test.ts`, driven by `studio-hnreader-feed-journey.ts`) is skipped since
+2026-09-27. It failed about half its runs under load on `main`, and Draw's live previews added a
+failure where a Title dropped into View1's running cell in Design never renders. Studio's Feed
+drops are what a visitor tries first, so the release must not ship with them unproven.
+
+- Context: `DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD` in the developer-environment
+  ledger holds the run-by-run evidence; the Draw live-previews commits changed how the preview grid
+  shares Draw's pan and zoom, the leading suspect for the added failure.
+- Done: the skip is removed, the Design Title drop into a running cell works after Draw every time,
+  and ten consecutive `./agent unsandboxed studio-proof-real-app` runs pass under a concurrent lane.
+
 ## First-hour quality
 
 These decide whether the people who do install Tao enjoy the first hour.
@@ -165,8 +179,7 @@ These decide whether the people who do install Tao enjoy the first hour.
 The tutorial half has landed: `packages/cli/tao-cli/cli-tests/tutorials.test.ts` replays
 `Docs/Tutorials/Your First Tao App.md` snippet by snippet, formats and validates the file after every
 step, reproduces the finished file from the steps, and runs its behavior test through the real
-`tao test` runner. `Tao now - two-week walkthrough.md` stays a dated record whose repository paths,
-`just` recipes, `--app` names, and `tao` subcommands the same suite checks still exist.
+`tao test` runner. The dated two-week walkthrough is gone; this suite covers Your First Tao App.
 
 What remains is the example set. The starters are proven byte-for-byte by their lowering test, but
 nothing says which examples a visitor is pointed at, and the apps under `Apps/` mix public examples
@@ -530,7 +543,7 @@ Deferred that day, to finish before MVP:
   reloads with the InstantDB websocket open is
   `DEVENV-DEV-CLIENT-CRASHES-RELOADING-WITH-AN-OPEN-WEBSOCKET`.
 - Context: `Docs/Roadmap/Plan - Auth and data pairing.md` (progress, Developer actions, InstantDB
-  facts), `Apps/Test Apps/README.md` (Auth Review), `packages/providers/instantdb/README.md` (live
+  facts), `Apps/Test Apps/README.md` (Auth Review), `packages/apps/providers/instantdb/README.md` (live
   tests), and `DEVENV-TAO-TEST-WAITS-FOREVER-ON-A-JEST-WORKER-LEFT-OPEN` for why `tao test` cancels a
   journey file's leftover timers.
 - Done: every box above is checked on `main`.

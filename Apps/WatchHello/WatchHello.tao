@@ -1,0 +1,37 @@
+use StackNav from @tao/nav
+use Col, FormButton, ScrollView, Text from @tao/ui
+
+project {
+   id "watch-hello"
+   name "Rep Counter"
+   version "0.1.0"
+   app WatchHello
+   remote none
+}
+
+app WatchHello {
+   Name "Rep Counter"
+   Navigator StackNav {
+      Initial Workout
+}  }
+
+scene Workout() {
+   Title "One set"
+   let Goal = 12
+   state Reps = 0
+   action RecordRep() {
+      check Reps < Goal
+      set Reps += 1
+   }
+   action Reset() {
+      set Reps = 0
+   }
+   render ScrollView() {
+      Col() [gap 8, pad 8] {
+         Text("{ Reps } of { Goal }")
+         FormButton("Rep", Disabled: Reps >= Goal) {
+            on press RecordRep
+         }
+         FormButton("Reset") {
+            on press Reset
+}  }  }  }

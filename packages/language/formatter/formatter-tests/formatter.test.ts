@@ -947,13 +947,13 @@ Describe('Tao formatter project metadata', () => {
   Test(
     'formats project metadata blocks',
     formats(
-      `project{id "package-access" name "Package Access" version  "1.2.3" DefaultApp   PackageAccess remote   none license   MIT}\napp PackageAccess {}`,
+      `project{id "package-access" name "Package Access" version  "1.2.3" app   PackageAccess remote   none license   MIT}\napp PackageAccess {}`,
       `
         project {
            id "package-access"
            name "Package Access"
            version "1.2.3"
-           DefaultApp PackageAccess
+           app PackageAccess
            remote none
            license MIT
         }

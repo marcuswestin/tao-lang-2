@@ -182,7 +182,7 @@ identity. The editor has always linked on the union, so the first of these is a 
 between the editor and `tao check` today, not one a union build would introduce.
 
 A third constraint was a language question before it was an engineering one. Three of the grammar's
-cross-references — `ProjectDefaultApp.app` (`DefaultApp X` in a project declaration),
+cross-references — `ProjectDefaultApp.app` (`app X` in a project declaration),
 `ViewDeclaration.response` (a responding view's type), and `TestDeclaration.dependencies` (what a
 test says it exercises) — fell through to Langium's default scope, which offers every top-level
 declaration of every document the workspace holds, imports and visibility ignored. What they resolved
@@ -191,7 +191,7 @@ happened to load, and differed between the CLI and the editor; a union build wou
 those answers. A textual audit of the grammar found the first two, and logging the fall-through
 during a whole-repository check found the third, which is the method to trust.
 
-**Scoped since.** `DefaultApp` follows the rule `Decisions.md` already states — one app declaration
+**Scoped since.** `app` inside project metadata follows the rule `Decisions.md` already states — one app declaration
 from this project, wherever in the project it is declared, test sidecars excluded because they are
 loaded only when they are the file being checked. A response type and a test's dependencies follow
 ordinary visibility, declared in the file or reached by `use`, as every other reference does. The

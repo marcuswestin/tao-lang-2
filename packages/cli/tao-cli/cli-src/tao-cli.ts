@@ -155,6 +155,7 @@ function createCommands(): Command {
     .option('--web', 'Export a static web artifact.')
     .option('--desktop', 'Build a locally runnable macOS app.')
     .option('--visionos', 'Export an experimental visionOS Xcode project with bundled web UI.')
+    .option('--watchos', 'Export an experimental native SwiftUI watchOS Xcode project.')
     .option('--agents', 'Build a background app service and bundled client executable (defaults to desktop).')
     .option('--output <directory>', 'Retain builds in this directory instead of the project’s .tao/builds.')
     .option('--ios', 'Show the status of local iOS builds.')
@@ -171,6 +172,7 @@ function createCommands(): Command {
           web?: boolean
           desktop?: boolean
           visionos?: boolean
+          watchos?: boolean
           ios?: boolean
           android?: boolean
           compileOnly?: boolean
@@ -178,7 +180,7 @@ function createCommands(): Command {
       ) => {
         try {
           const { runTaoBuild } = await import('./build-command')
-          const targets = (['web', 'desktop', 'ios', 'android', 'visionos'] as const).filter(target =>
+          const targets = (['web', 'desktop', 'ios', 'android', 'visionos', 'watchos'] as const).filter(target =>
             options[target] === true
           )
           if (options.agents && targets.length === 0) {
@@ -485,7 +487,7 @@ function createCommands(): Command {
   commands
     .command('ship')
     .argument('[path]', 'Tao project file or directory to discover.', '.')
-    .option('--app <name>', 'Select a named app instead of the project DefaultApp.')
+    .option('--app <name>', 'Select a named app instead of the one named in project metadata.')
     .option('--patch', 'Force a patch version bump.')
     .option('--minor', 'Force a minor version bump.')
     .option('--major', 'Force a major version bump.')

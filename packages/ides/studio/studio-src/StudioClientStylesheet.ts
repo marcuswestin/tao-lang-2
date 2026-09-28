@@ -113,7 +113,7 @@ kbd {
   background: var(--studio-panel-raised); border-radius: 3px; color: var(--studio-text-dim); flex: none;
   font: 600 9px/1 var(--studio-mono); letter-spacing: .02em; padding: 3px 4px; text-transform: lowercase;
 }
-.studio-file-kind[data-kind="tao"] { background: var(--studio-accent-soft); color: var(--studio-accent-strong); }
+.studio-file-icon { color: var(--studio-accent-strong); flex: none; height: 16px; width: 16px; }
 .studio-section { border-top: 1px solid var(--studio-stroke); }
 .studio-section > summary {
   align-items: center; color: var(--studio-text); cursor: pointer; display: flex; font-size: 11.5px; font-weight: 600; gap: 6px;
@@ -334,7 +334,7 @@ kbd {
 .tao-studio-product-host[data-layout-preset="draw"] .studio-preview { grid-column: 3; grid-row: 1 / 3; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-divider-right { grid-column: 4; grid-row: 1 / 3; }
 .studio-draw-canvas { display: none; height: 100%; min-height: 0; overflow: auto; }
-.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-draw-tools):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu):not(.studio-edit-log):not(.studio-selection-hud) { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > :not(.studio-draw-canvas):not(.studio-preview-grid):not(.studio-draw-tools):not(.studio-canvas-zoom):not(.studio-canvas-zoom-menu):not(.studio-edit-log):not(.studio-selection-hud) { display: none; }
 .tao-studio-product-host[data-layout-preset="draw"] .studio-draw-canvas { display: block; }
 .tao-studio-product-host[data-layout-preset="run"] .studio-draw-canvas,
 .tao-studio-product-host[data-layout-preset="run"] [data-tao-studio-sketch-host] { display: none; }
@@ -638,6 +638,32 @@ kbd {
 .studio-preview[data-canvas-surface="on"] > .studio-draw-canvas { height: 100%; width: 100%; }
 .studio-preview[data-canvas-surface="on"] > .studio-preview-grid > .studio-preview-group > .studio-preview-group-cells {
   overflow: visible;
+}
+/* Draw lays the grid beneath its transparent canvas under the same transform and shows only the rows
+   it moved under a drawn view's slot, so each view runs under its drawing without its iframe
+   reloading. Other boards paint over the running views, and the drawing keeps every pointer. */
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview > .studio-preview-grid { pointer-events: none; visibility: hidden; }
+.tao-studio-product-host[data-layout-preset="draw"] .studio-preview-grid > [data-tao-studio-draw-live] {
+  display: block; position: absolute; visibility: visible; width: max-content;
+}
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] > .studio-preview-group-label,
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell-controls { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] > .studio-preview-group-cells { padding: 6px; }
+/* A running view takes its frame's size rather than its scenario's device, so it lays out in the space
+   it was drawn in and the frame stays the size it was drawn. Placement supplies both lengths. */
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell { width: auto !important; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell-details { display: none; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell-viewport {
+  height: var(--studio-draw-frame-height) !important; width: var(--studio-draw-frame-width) !important;
+}
+/* A running view makes its frame tall; the frame's empty box and its filled slot let pointers through
+   to the boards and frames around them. */
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-sketch-frame] { pointer-events: none; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-sketch-frame] > * { pointer-events: auto; }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-sketch-frame] > [data-tao-studio-draw-live-filled] { color: transparent; pointer-events: none; }
+[data-tao-studio-sketch-frame][data-tao-studio-sketch-drop-into] > [data-tao-studio-sketch-name] { color: var(--studio-accent); }
+.tao-studio-product-host[data-layout-preset="draw"] [data-tao-studio-draw-live] .studio-preview-cell[data-tao-studio-drop-into-target] .studio-preview-cell-viewport {
+  box-shadow: 0 0 0 5px var(--studio-bezel), 0 0 0 8px var(--studio-accent);
 }
 .studio-preview[data-canvas-pan-ready="true"] { cursor: grab; }
 .studio-preview[data-canvas-panning="true"] { cursor: grabbing; }

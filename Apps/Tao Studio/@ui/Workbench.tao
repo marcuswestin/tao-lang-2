@@ -1,0 +1,66 @@
+use StudioCodeEditor from @code-editor
+
+type StudioActionFailure is one of Conflict
+
+action SyncDraft(Path text, SourceVersion text, Content text) runs latest from ../../../packages/ides/studio/studio-src/TaoStudioServerActions.ts
+
+action ApplySourceAction(Envelope text) fails Conflict "This file changed under this edit." from ../../../packages/ides/studio/studio-src/TaoStudioServerActions.ts
+
+action UndoSourceAction(Envelope text) fails Conflict "This file changed under this edit." from ../../../packages/ides/studio/studio-src/TaoStudioServerActions.ts
+
+folder
+action CreateFile(Path text) fails Conflict "This file changed under this edit." from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+action RenameFile(Path text, SourceVersion text, TargetPath text) fails Conflict "This file changed under this edit." from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+action MoveGeneratedSource(Path text, SourceVersion text, TargetPackage text, RelocateScenarios boolean) fails Conflict "This file changed under this edit." from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+action DeleteFile(Path text, SourceVersion text) fails Conflict "This file changed under this edit." from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+action OpenFile(Path text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+action OpenSource(Path text, SourceVersion text, Start number) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+action InsertComponent(Name text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+action InsertProjectView(Name text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+action OpenScreen(StableId text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+action ApplyInspectorAction(Action text, Proposed boolean) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+action UndoInspectorAction() from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+action ProductPanelAction(Name text, Payload text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+action ApplyActiveCellEnvironment(CellId text, CellRevision number, Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number) fails Conflict "This preview changed while its environment was being edited." from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+workspace
+view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
+   render ProductHostBoundary() {
+      @files FilesPanel(CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
+      @components ComponentsPanel()
+      @projectViews ProjectViewsPanel()
+      @screens ScreensPanel()
+      @tokens DesignTokensPanel()
+      @data StudioDataRailPanel(InitialDataPanel)
+      @search StudioSearchPanel([])
+      @drawer StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Debug: InitialDebugPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
+      @scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")
+      @environment StudioEnvironmentPanel(ActiveCellId: "", CellRevision: 0, ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser")
+      @editor StudioCodeEditor()
+      @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportWidth: 0, ViewportHeight: 0, InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null", LensLines: [], LensJourneyPath: "")
+}  }
+
+view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx

@@ -40,25 +40,39 @@ async function load(repositoryRoot = Repo.getRoot()): Promise<PackageGraph> {
   return { imports, packages }
 }
 
-/** A top-level `packages/*` entry is either a package (has its own `package.json`) or a group of
- * packages one level deeper; a moved package's name is then `<group>/<package>`. */
+/** How deep under `packages/` a workspace package may sit: a package, a group, or a group inside
+ * a group (`apps/providers/icloud`). */
+const MAX_PACKAGE_DEPTH = 3
+
+/** A top-level `packages/*` entry is either a package (has its own `package.json`) or a group.
+ * A group holds packages, or another group, up to `MAX_PACKAGE_DEPTH` segments. A directory with
+ * its own `package.json` is a package and is not walked further; a moved package's name is the
+ * relative path, such as `<group>/<package>` or `<group>/<group>/<package>`. */
 async function packageDirectories(packagesRoot: string): Promise<string[]> {
   const names: string[] = []
-  for (const name of await FS.listDir(packagesRoot)) {
-    const groupRoot = FS.resolvePath(name, packagesRoot)
-    if (await FS.isFile(FS.resolvePath(`${name}/package.json`, packagesRoot))) {
-      names.push(name)
-      continue
+  async function walk(relative: string, depth: number): Promise<void> {
+    const root = relative.length === 0 ? packagesRoot : FS.resolvePath(relative, packagesRoot)
+    if (!(await FS.isDirectory(root))) {
+      return
     }
-    if (!(await FS.isDirectory(groupRoot))) {
-      continue
+    if (relative.length > 0 && await FS.isFile(FS.resolvePath('package.json', root))) {
+      names.push(relative)
+      return
     }
-    for (const nested of await FS.listDir(groupRoot)) {
-      if (await FS.isFile(FS.resolvePath(`${nested}/package.json`, groupRoot))) {
-        names.push(`${name}/${nested}`)
+    if (depth >= MAX_PACKAGE_DEPTH) {
+      return
+    }
+    for (const nested of await FS.listDir(root)) {
+      // An installed dependency is not a workspace package. At depth three,
+      // `packages/<group>/node_modules/<name>` would otherwise look like one.
+      if (nested === 'node_modules') {
+        continue
       }
+      const child = relative.length === 0 ? nested : `${relative}/${nested}`
+      await walk(child, depth + 1)
     }
   }
+  await walk('', 0)
   return names.sort()
 }
 
@@ -120,16 +134,17 @@ function relativeOwner(
   return ownerFromRelativePath(FS.relativePath(packagesRoot, target), packages)
 }
 
-/** A package name is one or two path segments (a group's package nests one level deeper); resolve
- * the longest prefix of `relative` that names a known package. */
+/** A package name is one, two, or three path segments; resolve the longest prefix of `relative`
+ * that names a known package. */
 function ownerFromRelativePath(relative: string, packages: readonly string[]): string | undefined {
   const segments = relative.split('/')
-  const oneLevel = segments[0]
-  if (oneLevel !== undefined && packages.includes(oneLevel)) {
-    return oneLevel
+  for (let length = Math.min(MAX_PACKAGE_DEPTH, segments.length); length > 0; length -= 1) {
+    const candidate = segments.slice(0, length).join('/')
+    if (packages.includes(candidate)) {
+      return candidate
+    }
   }
-  const twoLevel = segments.slice(0, 2).join('/')
-  return packages.includes(twoLevel) ? twoLevel : undefined
+  return undefined
 }
 
 /** ownerOf resolves a specifier to its alias owner, trying the longest alias first. */

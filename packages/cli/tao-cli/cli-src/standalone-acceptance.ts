@@ -337,7 +337,7 @@ project {
    id "a-tally-counter"
    name "Browser Click"
    version "0.1.0"
-   DefaultApp ATallyCounter
+   app ATallyCounter
    remote none
 }
 

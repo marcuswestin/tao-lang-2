@@ -1,5 +1,0 @@
-project {
-   id "native-components"
-   name "Native Components"
-   version "0.1.0"
-}

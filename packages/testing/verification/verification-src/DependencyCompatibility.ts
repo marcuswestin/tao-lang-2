@@ -295,9 +295,10 @@ export async function readDependencyFacts(repoRoot = Repo.getRoot()): Promise<De
 async function readWorkspaceManifests(repoRoot: string): Promise<PackageManifest[]> {
   const packagesRoot = FS.resolvePath('packages', repoRoot)
   const manifests: PackageManifest[] = []
-  // A grouped package nests one level deeper than its group folder (`packages/<group>/<package>`),
-  // which is what `PackageGraph.packageDirectories` already resolves; a depth-one directory listing
-  // here would silently find none of them, because a group folder has no `package.json` of its own.
+  // A grouped package nests one or two levels deeper than `packages/`
+  // (`packages/<group>/<package>`, `packages/<group>/<group>/<package>`), which is what
+  // `PackageGraph.packageDirectories` already resolves; a depth-one directory listing here would
+  // silently find none of them, because a group folder has no `package.json` of its own.
   for (const name of await PackageGraph.packageDirectories(packagesRoot)) {
     const path = `packages/${name}/package.json`
     const absolutePath = FS.resolvePath(path, repoRoot)

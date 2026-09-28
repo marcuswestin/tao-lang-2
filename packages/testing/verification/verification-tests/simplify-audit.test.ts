@@ -69,17 +69,17 @@ Describe('simplify audit', () => {
   Test('measures source, constants, instructions, and docs from the files it is given', () => {
     const report = simplifyAudit([
       { path: chainPath, source: `const LIMIT = 200\n${chain}` },
-      { path: 'packages/runtime/TaoRuntime-src/TR-new.ts', source: 'const LIMIT = 200\n' },
+      { path: 'packages/apps/runtime/TaoRuntime-src/TR-new.ts', source: 'const LIMIT = 200\n' },
       { path: 'packages/studio/studio-tests/new.test.ts', source: chain },
       { path: 'AGENTS.md', source: 'rule\n'.repeat(61) },
       { path: 'Docs/Roadmap/Topic/Plan.md', source: 'one\ntwo\n' },
     ])
     Expect(report.packages.map(entry => [entry.name, entry.lines, entry.kindChains])).toEqual([
       ['studio', 10, 1],
-      ['runtime', 1, 0],
+      ['apps/runtime', 1, 0],
     ])
     Expect(report.duplicatedConstants).toEqual([
-      { name: 'LIMIT', paths: ['packages/runtime/TaoRuntime-src/TR-new.ts', chainPath], value: '200' },
+      { name: 'LIMIT', paths: ['packages/apps/runtime/TaoRuntime-src/TR-new.ts', chainPath], value: '200' },
     ])
     Expect(report.instructions).toEqual([{ budget: 12_760, characters: 304, lines: 61, path: 'AGENTS.md' }])
     Expect(report.docs).toEqual([{ files: 1, lines: 2, subtree: 'Docs/Roadmap/Topic' }])

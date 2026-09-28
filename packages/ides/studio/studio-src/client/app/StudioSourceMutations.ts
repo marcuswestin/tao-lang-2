@@ -193,6 +193,11 @@ export class StudioSourceMutations {
     await this.apply(envelope)
   }
 
+  /** A preview-built action whose identity names its own file and version, such as a frame dropped into a view. */
+  async submitPreviewAction(action: StudioCanonicalSourceAction, identity: StudioSourceActionIdentity): Promise<void> {
+    await this.submitPreview(this.#localEnvelope(action, identity))
+  }
+
   async undoLatest(): Promise<void> {
     const checkpoint = this.#undoTarget()
     if (checkpoint?.kind === 'sketch') {

@@ -8,7 +8,7 @@
 - Bring the Developer the exact before-and-after package list, with what moves where, before executing.
 - Rename import aliases to match the new packages (`@language/parser`) in the same mechanical
   commit. Boundary lints that named a package become folder rules.
-- Consolidation is the last wave: it rewrites `tsconfig.base.json`, `config/knip.json`, and
+- Consolidation is the last wave: it rewrites `tsconfig.base.json`, `.config/knip.json`, and
   `bun.lock`, which every concurrent branch also touches. Merge `main` first.
 
 ## Groups vs. merges

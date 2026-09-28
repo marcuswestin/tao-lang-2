@@ -1,0 +1,40 @@
+// The repo root .dprint.jsonc symlinks here so editor plugins can discover the
+// formatter config. dprint itself follows that symlink; this file is the one to edit.
+{
+  "useTabs": false,
+  "indentWidth": 2,
+  "lineWidth": 120,
+  "excludes": [
+    "**/node_modules",
+    "**/*-lock.json",
+    "**/_gen_*/**",
+    ".*",
+    "Docs/Archive/**",
+    // The storage submodule holds generated capture records owned by another repository.
+    "storage/**",
+    "packages/old-*",
+    "packages/old-*/**",
+  ],
+  "typescript": {
+    "semiColons": "asi",
+    "quoteStyle": "preferSingle",
+    "trailingCommas": "onlyMultiLine",
+    "preferHanging": false,
+    "importDeclaration.sortTypeOnlyImports": "none", // "first"?
+    "exportDeclaration.sortTypeOnlyExports": "none", // "first"?
+    "memberExpression.linePerExpression": false, // true?
+    "preferSingleLine": false, // true? "very experimental"
+    "arguments.preferHanging": "never", // onlySingleItem?
+    "arrayExpression.preferHanging": "never", // onlySingleItem?
+    "singleBodyPosition": "nextLine", // maintain?
+    "jsx.quoteStyle": "preferDouble", // preferSingle?
+    "bracePosition": "sameLineUnlessHanging", // maintain? or sameLine?
+  },
+  "json": {},
+  "markdown": {},
+  "plugins": [
+    "../node_modules/@dprint/typescript/plugin.wasm",
+    "../node_modules/@dprint/json/plugin.wasm",
+    "../node_modules/@dprint/markdown/plugin.wasm",
+  ],
+}

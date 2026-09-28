@@ -65,14 +65,14 @@ Describe('compiler: language lowering', () => {
         id "release-metadata"
         name "Release metadata"
         version "1.2.3"
-        DefaultApp ReleaseApp
+        app ReleaseApp
       }
       app ReleaseApp { view Home }
       ${stubView('Home')}
     `)
 
     Expect(compiled.code).toContain(
-      '// project { id "release-metadata" name "Release metadata" version "1.2.3" DefaultApp ReleaseApp }',
+      '// project { id "release-metadata" name "Release metadata" version "1.2.3" app ReleaseApp }',
     )
   })
 

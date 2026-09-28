@@ -1,4 +1,4 @@
-import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics, FS } from '@shared'
+import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics, FS, TaoFiles } from '@shared'
 import { Langium } from './langium-exports'
 import { bridgesToATypeScriptExport, unresolvedReferenceMessage } from './linker-diagnostics'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
@@ -230,6 +230,7 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
     Langium.createDefaultSharedModule(options.langiumContext ?? Langium.NodeFileSystem),
     AST.GeneratedSharedModule,
     taoSharedModule(),
+    taoLspSharedModule(),
   )
   const language = Langium.inject(
     Langium.createDefaultModule({ shared }),
@@ -255,12 +256,129 @@ class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
       && AST.isDesignColor(node.target.ref)
     )
   }
+
+  // A watch event can name a file that is gone by the time the build reads it. Langium does not
+  // catch that rejection, and Node treats the unhandled rejection as a process crash.
+  override async update(
+    changed: URI[],
+    deleted: URI[],
+    cancelToken = Langium.CancellationToken.None,
+  ): Promise<void> {
+    try {
+      await super.update(changed, deleted, cancelToken)
+    } catch (error) {
+      if (!isMissingFileError(error)) {
+        throw error
+      }
+      this.forgetMissingDocuments(changed, error.path)
+      const remaining = changed.filter(uri => this.fileSystemProvider.existsSync(uri))
+      try {
+        await super.update(remaining, [], cancelToken)
+      } catch (retryError) {
+        if (!isMissingFileError(retryError)) {
+          throw retryError
+        }
+        this.forgetMissingDocuments(remaining, retryError.path)
+      }
+    }
+  }
+
+  private forgetMissingDocuments(changed: readonly URI[], missingPath: unknown): void {
+    const uris = [...changed]
+    if (typeof missingPath === 'string') {
+      uris.push(URI.file(missingPath))
+    }
+    for (const uri of uris) {
+      if (this.fileSystemProvider.existsSync(uri)) {
+        continue
+      }
+      for (const document of this.langiumDocuments.deleteDocuments(uri)) {
+        this.cleanUpDeleted(document)
+      }
+    }
+  }
+}
+
+class TaoWorkspaceManager extends Langium.DefaultWorkspaceManager {
+  override shouldIncludeEntry(entry: Langium.FileSystemNode): boolean {
+    if (!workspaceUriIsIndexed(entry.uri, this.workspaceFolders)) {
+      return false
+    }
+    return super.shouldIncludeEntry(entry)
+  }
+}
+
+class TaoDocumentUpdateHandler extends Langium.DefaultDocumentUpdateHandler {
+  override didChangeWatchedFiles(params: Langium.DidChangeWatchedFilesParams): void {
+    const changes = params.changes.filter(change =>
+      workspaceUriIsIndexed(URI.parse(change.uri), this.workspaceManager.workspaceFolders)
+    )
+    if (changes.length === 0) {
+      return
+    }
+    super.didChangeWatchedFiles({ ...params, changes })
+  }
+}
+
+function workspaceUriIsIndexed(
+  uri: URI,
+  folders: readonly { readonly uri: string }[] | undefined,
+): boolean {
+  const relative = relativeWorkspacePath(uri, folders)
+  if (folders !== undefined && folders.length > 0 && relative === undefined) {
+    return false
+  }
+  return !skippedWorkspacePath(relative ?? uri.path)
+}
+
+function relativeWorkspacePath(
+  uri: URI,
+  folders: readonly { readonly uri: string }[] | undefined,
+): string | undefined {
+  if (folders === undefined || folders.length === 0) {
+    return undefined
+  }
+  const path = uri.path
+  for (const folder of folders) {
+    const root = URI.parse(folder.uri).path.replace(/\/$/, '')
+    if (path === root) {
+      return ''
+    }
+    const prefix = `${root}/`
+    if (path.startsWith(prefix)) {
+      return path.slice(prefix.length)
+    }
+  }
+  return undefined
+}
+
+function skippedWorkspacePath(path: string): boolean {
+  return path.split('/').some(segment => segment.startsWith('.') || isGeneratedWorkspaceDirectory(segment))
+}
+
+function isGeneratedWorkspaceDirectory(segment: string): boolean {
+  const name = segment.toLowerCase()
+  // `out` matches Langium's own directory skip so a file event inside it is not indexed either.
+  return name === 'out' || TaoFiles.discoveryExcludeDirectoryNames.some(excluded => excluded.toLowerCase() === name)
+}
+
+function isMissingFileError(error: unknown): error is { path?: unknown } {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT'
 }
 
 function taoSharedModule() {
   return {
     workspace: {
       DocumentBuilder: (services: Langium.LangiumSharedCoreServices) => new TaoDocumentBuilder(services),
+      WorkspaceManager: (services: Langium.LangiumSharedCoreServices) => new TaoWorkspaceManager(services),
+    },
+  }
+}
+
+function taoLspSharedModule() {
+  return {
+    lsp: {
+      DocumentUpdateHandler: (services: Langium.LangiumSharedServices) => new TaoDocumentUpdateHandler(services),
     },
   }
 }

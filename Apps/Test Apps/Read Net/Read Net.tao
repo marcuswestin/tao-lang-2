@@ -2,6 +2,12 @@ use Memory from @tao/data/providers/memory
 use StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
+project {
+   id "read-net"
+   name "Read Net"
+   version "0.1.0"
+}
+
 app ReadNetApp {
    Name "Read Net"
    Navigator StackNav {

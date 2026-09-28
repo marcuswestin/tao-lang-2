@@ -1,4 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
+import { validateMergeMessage } from '@verification/MergeWithMain'
 import { StorageTesting } from '../dev-cli-src/git/Storage'
 
 type Run = Parameters<typeof StorageTesting.qaCommitMessage>[0][number]
@@ -84,5 +85,18 @@ Describe('storage QA commit messages', () => {
       '- Source: feat/x 01234567 Tighten the toast',
       '- New: WordFlower_a, Studio_run',
     ])
+  })
+})
+
+Describe('storage pin messages', () => {
+  Test('name the archive commit and carry its subject, in a shape the landing accepts', () => {
+    const message = StorageTesting.pinMessage(
+      '50f593b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7',
+      'QA WordFlower, Studio: 152 new of 152 screenshots',
+    )
+    Expect(message).toBe(
+      'Point the storage submodule at archive commit 50f593b1\n\n- QA WordFlower, Studio: 152 new of 152 screenshots',
+    )
+    Expect(validateMergeMessage(message)).toBe(message)
   })
 })

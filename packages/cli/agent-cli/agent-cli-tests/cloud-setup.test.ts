@@ -15,10 +15,10 @@ async function withCloudFixture(run: (root: string, env: Record<string, string>)
     )
     await FS.chmod(FS.resolvePath('agent', root), 0o755)
     await FS.writeText(
-      FS.resolvePath('bootstrap-tao-dev-env', root),
+      FS.resolvePath('.config/bootstrap-tao-dev-env', root),
       '#!/bin/sh\nprintf "bootstrap %s\\n" "$*" >> "$TAO_TEST_CALLS"\necho "bootstrap detail" >&2\nexit "${TAO_TEST_BOOTSTRAP_STATUS:-0}"\n',
     )
-    await FS.chmod(FS.resolvePath('bootstrap-tao-dev-env', root), 0o755)
+    await FS.chmod(FS.resolvePath('.config/bootstrap-tao-dev-env', root), 0o755)
     await FS.writeText(FS.resolvePath('bin/uname', root), '#!/bin/sh\nprintf "%s\\n" "$TAO_TEST_OS"\n')
     await FS.chmod(FS.resolvePath('bin/uname', root), 0o755)
     await run(root, {
@@ -141,7 +141,7 @@ Describe('cloud setup lifecycle', () => {
           'install' | 'start',
           string
         >
-        Expect(config[phase]).toBe('./bootstrap-tao-dev-env --install-nix')
+        Expect(config[phase]).toBe('./.config/bootstrap-tao-dev-env --install-nix')
         const result = await CLI.run('sh', {
           args: ['-c', config[phase]],
           cwd: root,

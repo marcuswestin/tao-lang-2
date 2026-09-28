@@ -78,6 +78,10 @@ _tao_dev_direnv_hook() {
 
 # Replace any earlier installation (including the user's own direnv hook) with one
 # ordered hook. Sourcing this file repeatedly retains the per-shell caches.
+# Direnv warns, and suggests cancelling, when `direnv export` exceeds 5s. A cold
+# devenv evaluation takes about that long and then finishes; zero disables the
+# watchdog. A timeout already chosen in the shell is left alone.
+[[ -n ${DIRENV_WARN_TIMEOUT-} ]] || export DIRENV_WARN_TIMEOUT=0s
 eval "$("$_tao_dev_direnv" hook zsh)"
 precmd_functions=(${precmd_functions:#_direnv_hook})
 precmd_functions=(${precmd_functions:#_tao_dev_direnv_hook} _tao_dev_direnv_hook)
