@@ -37,7 +37,12 @@ case "$#" in
          recover_run=$2 ;;
        *) exit 2 ;;
      esac ;;
-  *) printf 'Usage: contributor-linux-test [--probe | --native-arm64 | --qemu-guest-base | --qemu-compat | --mode cold|cached|both | --inspect-run YYYYMMDDTHHMMSSZ-PID | --recover-run YYYYMMDDTHHMMSSZ-PID]\n' >&2; exit 2 ;;
+  3) if [ "$1" = --native-arm64 ] && [ "$2" = --mode ] && [ "$3" = cached ]; then
+       platform=linux/arm64; image_arch=arm64; mode=cached
+     else
+       printf 'Expected --native-arm64 --mode cached.\n' >&2; exit 2
+     fi ;;
+  *) printf 'Usage: contributor-linux-test [--probe | --native-arm64 | --native-arm64 --mode cached | --qemu-guest-base | --qemu-compat | --mode cold|cached|both | --inspect-run YYYYMMDDTHHMMSSZ-PID | --recover-run YYYYMMDDTHHMMSSZ-PID]\n' >&2; exit 2 ;;
 esac
 
 root=$(git rev-parse --show-toplevel)

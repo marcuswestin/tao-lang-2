@@ -8,10 +8,23 @@ Describe('contributor Linux container runner', () => {
   Test('rejects extra arguments before consulting Docker', async () => {
     await withFixture(async fixture => {
       for (
-        const args of [['--mode', 'host'], ['--probe', '--privileged'], ['--mode'], ['--mount', '/'], [
-          '--native-arm64',
-          '--qemu-compat',
-        ]]
+        const args of [
+          ['--mode', 'host'],
+          ['--probe', '--privileged'],
+          ['--mode'],
+          ['--mount', '/'],
+          [
+            '--native-arm64',
+            '--qemu-compat',
+          ],
+          ['--native-arm64', '--mode', 'both'],
+          ['--mode', 'cached', '--native-arm64'],
+          [
+            '--qemu-compat',
+            '--mode',
+            'cached',
+          ],
+        ]
       ) {
         const result = await run(fixture, args)
         Expect(result.exitCode).toBe(2)
@@ -324,6 +337,32 @@ Describe('contributor Linux container runner', () => {
         (await run({ ...native, env: { ...native.env, TAO_TEST_DOCKER_BASE_CONTENTS: 'invalid' } }, ['--native-arm64']))
           .exitCode,
       ).toBe(1)
+    })
+  })
+
+  Test('runs only native ARM cached acceptance when cold already completed', async () => {
+    await withFixture(async fixture => {
+      const native = {
+        ...fixture,
+        env: {
+          ...fixture.env,
+          TAO_TEST_DOCKER_IMAGE_FORMAT:
+            '{{if and (eq .Os "linux") (eq .Architecture "arm64") .RootFS.Layers .Config}}linux/arm64 {{json .RootFS.Layers}} {{json .Config}}{{else}}invalid{{end}}',
+          TAO_TEST_DOCKER_BASE_CONTENTS: 'linux/arm64 ["sha256:layer"] {"WorkingDir":"/workspace"}',
+        },
+      }
+      const result = await run(native, ['--native-arm64', '--mode', 'cached'])
+      Expect(result.exitCode).toBe(0)
+      const output = await latestOutput(fixture)
+      Expect(await FS.readText(`${output}/resources.txt`)).toContain('platform=linux/arm64')
+      Expect(await FS.exists(`${output}/cold`)).toBe(false)
+      Expect(await FS.exists(`${output}/tools/guest`)).toBe(true)
+      Expect(await FS.exists(`${output}/cached/guest`)).toBe(true)
+      const calls = (await FS.readText(fixture.log)).trim().split('\n')
+      const creates = calls.filter(call => call.startsWith('create ') && call.includes('--platform linux/arm64 '))
+      Expect(creates).toHaveLength(2)
+      Expect(creates[0]).toContain('contributor-linux tools')
+      Expect(creates[1]).toContain('contributor-linux cached')
     })
   })
 
