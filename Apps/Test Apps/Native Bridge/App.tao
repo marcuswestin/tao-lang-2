@@ -5,6 +5,13 @@ use NativeBridgeDesign from ./Design.tao
 use HapticsDemo from ./Haptics/Haptics.tao
 use VibrationDemo from ./Vibration/Vibration.tao
 
+project {
+   id "native-bridge-device-demo"
+   name "Native Bridge"
+   version "0.1.0"
+   app NativeBridge
+}
+
 app NativeBridge {
    Name "Native Bridge"
    Design NativeBridgeDesign

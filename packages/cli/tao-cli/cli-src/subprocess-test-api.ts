@@ -3,14 +3,14 @@
  * a separate `bun` process. An import written inside a string is not an import any TypeScript tool
  * can follow, so `dead-exports` sees these symbols as unimported and would fail the lane on them.
  *
- * `config/knip.json` declares this file an entry point, which is knip's own documented answer to an
+ * `.config/knip.json` declares this file an entry point, which is knip's own documented answer to an
  * export whose consumer it cannot see. The alternative it offers is a per-symbol `@public` JSDoc
  * tag, which this repository does not use: a tag scatters the record across the tree and records
  * only that a symbol is spared, never who reaches it.
  *
  * A file like this one is named for the one reason its exports are here, and a package that needs
  * to spare an export for a different reason gets its own named file and its own entry line in
- * `config/knip.json` rather than a second line in this one. That is what keeps a carve-out from
+ * `.config/knip.json` rather than a second line in this one. That is what keeps a carve-out from
  * decaying into a list of exports nobody can account for. The record belongs to the package that
  * declares the symbol: the `crossPackageSourceImportIssues` repo lint forbids reaching into another
  * package's source, and each package's `tsconfig.json` compiles only its own directories.

@@ -370,7 +370,7 @@ Describe('contributor Linux container runner', () => {
       await FS.writeText(guest, await FS.readText(Repo.resolvePath(`${ENVIRONMENT}/guest-smoke.sh`)))
       await FS.writeText(FS.resolvePath('.gitignore', root), '.artifacts/\ncalls.log\n')
       await writeVersionTools(root)
-      for (const name of ['bootstrap-tao-dev-env', 'agent']) {
+      for (const name of ['.config/bootstrap-tao-dev-env', 'agent']) {
         const path = FS.resolvePath(name, root)
         await FS.writeText(
           path,
@@ -419,7 +419,7 @@ Describe('contributor Linux container runner', () => {
       const guest = FS.resolvePath(`${ENVIRONMENT}/guest-smoke.sh`, root)
       await FS.writeText(guest, await FS.readText(Repo.resolvePath(`${ENVIRONMENT}/guest-smoke.sh`)))
       await writeVersionTools(root)
-      const bootstrap = FS.resolvePath('bootstrap-tao-dev-env', root)
+      const bootstrap = FS.resolvePath('.config/bootstrap-tao-dev-env', root)
       await FS.writeText(
         bootstrap,
         '#!/bin/sh\nprintf "%s|%s|%s\\n" "$*" "${QEMU_GUEST_BASE-unset}" "${NIX_CONFIG-unset}"\n',
@@ -477,7 +477,7 @@ async function withFixture(test: (fixture: Fixture) => Promise<void>): Promise<v
   try {
     const files: Record<string, string> = {
       '.gitignore': '.artifacts/\n',
-      'bootstrap-tao-dev-env': '#!/bin/sh\nexit 0\n',
+      '.config/bootstrap-tao-dev-env': '#!/bin/sh\nexit 0\n',
       'devenv.lock': '{}\n',
       'tracked.txt': 'committed',
     }

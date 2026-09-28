@@ -46,13 +46,13 @@ Describe('what a workspace reference may resolve to', () => {
     )
   })
 
-  Test('lets DefaultApp name an app anywhere in its own project and nowhere else', async () => {
+  Test('lets app name an app anywhere in its own project and nowhere else', async () => {
     await withTaoFiles(
       'tao-workspace-default-app-scope-',
       {
-        // Two DefaultApp lines are a validation error of their own; linking still resolves each,
+        // Two app lines are a validation error of their own; linking still resolves each,
         // which is what lets one project declaration ask both questions.
-        'Main.tao': 'project { id "outer" name "Outer" DefaultApp Elsewhere DefaultApp NestedApp }',
+        'Main.tao': 'project { id "outer" name "Outer" app Elsewhere app NestedApp }',
         'Apps.tao': `
           app Elsewhere { view Shown }
           view Shown() { render inject ${tsFence} return null ${fence} }

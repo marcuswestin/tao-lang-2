@@ -25,7 +25,7 @@ export async function requireStudioProjectRoot(input: string): Promise<string> {
 /**
  * discoverStudioApp inventories every app declared across the project's Tao files and picks the one
  * the session opens as: the requested app or entry when the command line named one, else the project's
- * DefaultApp, else the only app there is.
+ * named app, else the only app there is.
  */
 export async function discoverStudioApp(
   projectRoot: string,
@@ -72,10 +72,10 @@ async function discoverAppVariants(
 /**
  * Which app a project opens as, when the command line did not say.
  *
- * A project that declares `DefaultApp` has already answered this question for its own tooling —
+ * A project that declares `app Name` has already answered this question for its own tooling —
  * `tao ship` reads it — so Studio reads it too rather than refusing every multi-app project until
- * someone repeats the answer as `--app`. An explicit request still wins, and a project without a
- * DefaultApp still has to be told which of several apps to open.
+ * someone repeats the answer as `--app`. An explicit request still wins, and a project without an
+ * `app` clause still has to be told which of several apps to open.
  */
 function resolveAppSelection(
   projectRoot: string,

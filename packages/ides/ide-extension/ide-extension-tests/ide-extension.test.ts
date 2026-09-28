@@ -44,8 +44,8 @@ Describe('Tao IDE extension smoke', () => {
   for (const errorCode of ['EPERM', 'EFAULT'] as const) {
     Test(`restores both persistent IDE output roots after an injected ${errorCode} failure`, async () => {
       const root = await mkTestDir(`tao-ide-publication-${errorCode.toLowerCase()}-`)
-      const stagingPackageRoot = FS.resolvePath('staging/packages/ide-extension', root)
-      const packageRoot = FS.resolvePath('persistent/packages/ide-extension', root)
+      const stagingPackageRoot = FS.resolvePath('staging/packages/ides/ide-extension', root)
+      const packageRoot = FS.resolvePath('persistent/packages/ides/ide-extension', root)
       const generatedRoot = FS.resolvePath('_gen_ide-extension', packageRoot)
       const syntaxRoot = FS.resolvePath('ide-extension-syntaxes/_gen_syntaxes', packageRoot)
       await FS.writeText(

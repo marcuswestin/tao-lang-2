@@ -431,7 +431,7 @@ Describe('minimal Tao parser', () => {
         id "package-access"
         name "Package Access"
         version "1.2.3"
-        DefaultApp PackageAccess
+        app PackageAccess
         remote none
         license MIT
       }
@@ -454,7 +454,7 @@ Describe('minimal Tao parser', () => {
 
   Test('keeps DefaultApp available as an ordinary declaration name', async () => {
     const parseResult = await testParseCode(`
-      project { id "default-app-name" name "Default app name" DefaultApp DefaultApp }
+      project { id "default-app-name" name "Default app name" app DefaultApp }
       app DefaultApp { view DefaultApp }
       view DefaultApp() { }
     `)

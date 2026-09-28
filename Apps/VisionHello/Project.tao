@@ -1,9 +1,0 @@
-use VisionHello from ./
-
-project {
-   id "vision-hello"
-   name "Hello Tao"
-   version "0.1.0"
-   DefaultApp VisionHello
-   remote none
-}

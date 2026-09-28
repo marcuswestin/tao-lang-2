@@ -61,7 +61,7 @@ const HUMAN_VERIFICATION_PREFIXES: readonly string[] = [
   'Apps/',
   'packages/ides/studio/',
   'packages/ides/studio-tooling/',
-  'packages/providers/icloud/',
+  'packages/apps/providers/icloud/',
   'packages/ides/studio-companion-app/',
   'packages/apps/expo-host/',
   'packages/language/parser/',
@@ -788,8 +788,10 @@ async function assertOnFeatureBranch(
     assertCommandSucceeded(branchResult)
   }
   const branch = branchResult.exitCode === 0 ? branchResult.stdout.trim() : ''
-  if (!branch.startsWith('feat/')) {
-    Errors.throwUserInput(`${command} requires a feat/* branch; this worktree is on '${branch || 'detached HEAD'}'.`)
+  if (!branch.startsWith('feat/') && !branch.startsWith('dev/')) {
+    Errors.throwUserInput(
+      `${command} requires a feat/* or dev/* branch; this worktree is on '${branch || 'detached HEAD'}'.`,
+    )
   }
   return branch
 }

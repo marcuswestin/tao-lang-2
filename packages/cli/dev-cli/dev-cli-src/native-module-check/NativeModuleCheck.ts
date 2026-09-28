@@ -241,25 +241,35 @@ async function discoverPodspecs(repositoryRoot: string): Promise<readonly string
   return paths.toSorted()
 }
 
-/** packageRoots finds both standalone packages and one-level package groups. */
+/** How deep under `packages/` a workspace package may sit. Mirrors `PackageGraph`. */
+const MAX_PACKAGE_DEPTH = 3
+
+/** packageRoots finds standalone packages and packages nested in groups, up to three segments. */
 async function packageRoots(packagesRoot: string): Promise<readonly string[]> {
   const roots: string[] = []
-  for (const name of await FS.listDir(packagesRoot)) {
-    const groupRoot = FS.resolvePath(name, packagesRoot)
-    if (!await FS.isDirectory(groupRoot)) {
-      continue
+  async function walk(relative: string, depth: number): Promise<void> {
+    const root = relative.length === 0 ? packagesRoot : FS.resolvePath(relative, packagesRoot)
+    if (!(await FS.isDirectory(root))) {
+      return
     }
-    if (await FS.isFile(FS.resolvePath('package.json', groupRoot))) {
-      roots.push(groupRoot)
-      continue
+    if (relative.length > 0 && await FS.isFile(FS.resolvePath('package.json', root))) {
+      roots.push(root)
+      return
     }
-    for (const nested of await FS.listDir(groupRoot)) {
-      const packageRoot = FS.resolvePath(nested, groupRoot)
-      if (await FS.isFile(FS.resolvePath('package.json', packageRoot))) {
-        roots.push(packageRoot)
+    if (depth >= MAX_PACKAGE_DEPTH) {
+      return
+    }
+    for (const nested of await FS.listDir(root)) {
+      // An installed dependency is not a workspace package. At depth three,
+      // `packages/<group>/node_modules/<name>` would otherwise look like one.
+      if (nested === 'node_modules') {
+        continue
       }
+      const child = relative.length === 0 ? nested : `${relative}/${nested}`
+      await walk(child, depth + 1)
     }
   }
+  await walk('', 0)
   return roots
 }
 

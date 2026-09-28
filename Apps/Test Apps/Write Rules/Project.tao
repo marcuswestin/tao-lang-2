@@ -1,5 +1,0 @@
-project {
-   id "write-rules"
-   name "Write Rules"
-   version "0.1.0"
-}

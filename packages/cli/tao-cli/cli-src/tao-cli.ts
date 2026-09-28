@@ -462,7 +462,7 @@ function createCommands(): Command {
   commands
     .command('ship')
     .argument('[path]', 'Tao project file or directory to discover.', '.')
-    .option('--app <name>', 'Select a named app instead of the project DefaultApp.')
+    .option('--app <name>', 'Select a named app instead of the one named in project metadata.')
     .option('--patch', 'Force a patch version bump.')
     .option('--minor', 'Force a minor version bump.')
     .option('--major', 'Force a major version bump.')

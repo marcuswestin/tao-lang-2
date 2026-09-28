@@ -1,6 +1,12 @@
 use SelectionNav, StackNav from @tao/nav
 use Button, Col, ScrollView, Text, TextInput from @tao/ui
 
+project {
+   id "navigation"
+   name "Navigation"
+   version "0.1.0"
+}
+
 app NativeNavigation {
    Name "Native Navigation"
    Navigator NativeTabs

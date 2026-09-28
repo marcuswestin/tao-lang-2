@@ -21,7 +21,7 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  * `CreateFile` this repository removed lived one file away from the live `CreateFile` a `.tao` view
  * binds.
  *
- * What is configuration rather than analysis lives in `config/knip.json`: which directories are
+ * What is configuration rather than analysis lives in `.config/knip.json`: which directories are
  * workspaces, and which files are entry points. Entry points are the modules something outside the
  * import graph starts — a test file, a spawned process, or a bundle's `entrypoints`
  * (`StudioPackagedService.ts`, `StudioPackagedService.ts`, `TaoStudioBrowser.tsx`). Their own exports
@@ -35,7 +35,7 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  * consumer of `@tao/runtime`, of the published `tao` CLI, or of `@tao/*`, or a module loaded as
  * text rather than imported. Each of those is recorded in the declaring package, in a file named
  * for the one reason its exports are there — `packages/cli/tao-cli/cli-src/subprocess-test-api.ts` is
- * the only such record today — which `config/knip.json` declares an entry point by path so the
+ * the only such record today — which `.config/knip.json` declares an entry point by path so the
  * record does not itself read as dead. That is knip's own documented answer — re-export from an
  * entry file — rather than the per-symbol `@public` JSDoc tag knip also offers and its own guide
  * discourages. One file per reason, not one per package: a second reason earns a second named file,
@@ -47,7 +47,7 @@ import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
  * findings, and that must never pass silently.
  */
 
-/** Where the repository's TypeScript lives, matching the workspaces `config/knip.json` declares. */
+/** Where the repository's TypeScript lives, matching the workspaces `.config/knip.json` declares. */
 const PROJECT_ROOTS = ['Apps', 'packages']
 
 /** The `.tao` source extensions, including the Revolution tranches that carry future syntax. */
@@ -647,7 +647,7 @@ export async function runDeadExports(options: DeadExportsOptions = {}): Promise<
       'Remove each symbol, or drop its `export` where its own module is the only user. An export '
         + 'something outside the TypeScript import graph really reaches is re-exported instead from '
         + 'a file in the declaring package named for which consumer reaches it, added to that '
-        + "package's entry points in config/knip.json.",
+        + "package's entry points in .config/knip.json.",
     )
   }
 
@@ -738,7 +738,7 @@ async function runKnip(repositoryRoot: string): Promise<unknown> {
     args: [
       'node_modules/knip/bin/knip.js',
       '--config',
-      'config/knip.json',
+      '.config/knip.json',
       '--no-progress',
       '--reporter',
       'json',
@@ -753,7 +753,7 @@ async function runKnip(repositoryRoot: string): Promise<unknown> {
   }
 }
 
-/** readSourceFiles reads the authored files under the roots config/knip.json declares as workspaces. */
+/** readSourceFiles reads the authored files under the roots .config/knip.json declares as workspaces. */
 async function readSourceFiles(repositoryRoot: string, extensions: readonly string[]): Promise<SourceFile[]> {
   const files: SourceFile[] = []
   for (const root of PROJECT_ROOTS) {

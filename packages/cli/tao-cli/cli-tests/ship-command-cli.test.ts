@@ -7,7 +7,7 @@ Test('tao ship --no-wait reaches the ship command as noWait', async () => {
   id "notes"
   name "Notes"
   version "1.2.3"
-  DefaultApp Notes
+  app Notes
 }
 app Notes { view Main }
 view Main() { }

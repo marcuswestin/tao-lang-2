@@ -1,5 +1,5 @@
 import { Langium } from '@parser'
-import { Assert, Repo, TaoFiles } from '@shared'
+import { Assert, FS, Repo, TaoFiles, TaoStdlib } from '@shared'
 import {
   createWorkspaceLspServices,
   type WorkspaceLspContributions,
@@ -30,6 +30,8 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
       await createProjectContext(
         directoryPath,
         packagesContext => createWorkspaceLspServices(packagesContext, langiumContext, contributions),
+        undefined,
+        await checkoutStdlibRoot(directoryPath),
       ),
     )
     await workspace.loadWorkspaceDocuments()
@@ -71,4 +73,17 @@ export class LSPWorkspace extends Workspace<WorkspaceLspServices> {
       documents.addDocument(await factory.fromUri(uri))
     }
   }
+}
+
+/**
+ * checkoutStdlibRoot is the stdlib inside a Tao checkout. A packaged language server otherwise pins
+ * the copy it shipped with, and the checkout's own prelude then fails that pin.
+ * `TAO_STDLIB_ROOT` still wins, because that variable is an explicit redirect.
+ */
+async function checkoutStdlibRoot(workspaceRoot: string): Promise<string | undefined> {
+  if (TaoStdlib.declaredRoot() !== undefined) {
+    return undefined
+  }
+  const root = FS.resolvePath('packages/apps/stdlib', workspaceRoot)
+  return await FS.isFile(FS.resolvePath('@tao/Prelude.tao', root)) ? root : undefined
 }

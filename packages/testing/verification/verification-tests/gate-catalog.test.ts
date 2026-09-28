@@ -296,7 +296,7 @@ Describe('gate catalog metadata', () => {
       const suite of [
         'ai/generation',
         'testing/host-control',
-        'providers/icloud',
+        'apps/providers/icloud',
         'apps/runtime',
         'shared',
         'apps/stdlib',

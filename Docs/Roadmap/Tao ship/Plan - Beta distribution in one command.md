@@ -130,7 +130,7 @@ tao ship [path] ... --update [--rollback]                                       
 - **Project discovery.** `path` defaults to the current directory; `tao ship` climbs from there
   until it finds the Tao project root.
 - **App selection.** `--app NAME` names the app declaration. Without it, the project's new
-  `DefaultApp` field selects the app. Without either, the command prints every candidate app and
+  `app` field selects the app. Without either, the command prints every candidate app and
   asks the developer to choose.
 - **Version.** The project declaration carries the project's semver, the version under
   development, and Apple sees it as the marketing version. A version is _consumed_ once a build
@@ -373,7 +373,7 @@ walkthrough for it is preserved in `Research - Beta distribution lanes.md`.
 ### Slice 1 — `tao ship` to the App Store and `--beta` to TestFlight
 
 Scope: the command as _Command surface_ settles it — project discovery, app selection through
-`--app`, `DefaultApp`, or a prompt, the filesystem-only semver/lock transaction, precursors with their
+`--app`, the project `app` clause, or a prompt, the filesystem-only semver/lock transaction, precursors with their
 automation and keypress waits, `--dry-run`, the action list and the Y/n gate — plus preflight,
 the lock, derived host configuration, release compile, the bundle proof, the local pipeline of
 _Build lane_, the App Store Connect client for review submission and TestFlight groups and

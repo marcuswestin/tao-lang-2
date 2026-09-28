@@ -371,13 +371,13 @@
         "tao-shared": "workspace:*",
       },
     },
-    "packages/native-bindings": {
+    "packages/apps/native-bindings": {
       "name": "tao-native-bindings",
       "dependencies": {
         "tao-shared": "workspace:*",
       },
     },
-    "packages/providers/icloud": {
+    "packages/apps/providers/icloud": {
       "name": "tao-icloud",
       "version": "1.0.0",
       "dependencies": {
@@ -385,7 +385,7 @@
         "tao-shared": "workspace:*",
       },
     },
-    "packages/providers/instantdb": {
+    "packages/apps/providers/instantdb": {
       "name": "tao-instantdb",
       "version": "1.0.0",
       "dependencies": {
@@ -3103,11 +3103,11 @@
 
     "tao-host-control": ["tao-host-control@workspace:packages/testing/host-control"],
 
-    "tao-icloud": ["tao-icloud@workspace:packages/providers/icloud"],
+    "tao-icloud": ["tao-icloud@workspace:packages/apps/providers/icloud"],
 
-    "tao-instantdb": ["tao-instantdb@workspace:packages/providers/instantdb"],
+    "tao-instantdb": ["tao-instantdb@workspace:packages/apps/providers/instantdb"],
 
-    "tao-native-bindings": ["tao-native-bindings@workspace:packages/native-bindings"],
+    "tao-native-bindings": ["tao-native-bindings@workspace:packages/apps/native-bindings"],
 
     "tao-parser": ["tao-parser@workspace:packages/language/parser"],
 

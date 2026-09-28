@@ -199,7 +199,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   }
 
   /**
-   * `DefaultApp Name` names one app declaration from this project, wherever in the project it is
+   * `app Name` inside project metadata names one app declaration from this project, wherever it is
    * declared; a project declaration imports nothing. The declaring file goes first so that its own
    * app wins over a same-named one elsewhere in the project.
    */

@@ -93,7 +93,7 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 // This tranche decides:
 // - `version` is the version currently under development, written as numeric SemVer core only:
 //   exactly `major.minor.patch`, with no leading zeroes, prerelease, or build suffix
-// - `DefaultApp` names one app declaration from this project. Command-line `--app` selection still
+// - `app` names one app declaration from this project. Command-line `--app` selection still
 //   overrides it, and projects may omit it when interactive selection is preferable
 //
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
@@ -582,7 +582,7 @@ project {
    id "wordflower"
    name "WordFlower"
    version "1.0.0"
-   DefaultApp WordFlower
+   app WordFlower
    remote none
    license MIT
 }

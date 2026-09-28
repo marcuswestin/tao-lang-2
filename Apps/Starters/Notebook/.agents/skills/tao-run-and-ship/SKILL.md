@@ -24,7 +24,7 @@ use `--app`, `--output`, or `--against <review.json>` when needed.
 ## Project metadata
 
 Shipping requires one `project` block with an opaque `id`, display `name`, numeric SemVer `version`,
-and a complete app. `DefaultApp Name` selects the ordinary default; otherwise pass `--app Name`.
+and a complete app. `app Name` selects the ordinary default; otherwise pass `--app Name`.
 `remote none` is currently the only implemented project-remote behavior.
 
 ## Ship
