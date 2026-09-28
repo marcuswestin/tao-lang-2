@@ -23,13 +23,14 @@ import {
   openPhysicalDevice,
   runDevicectlJson,
 } from '@expo-host/dev-loop/expo-runner/physical-device'
+import { Ports } from '@expo-host/dev-loop/expo-runner/Ports'
 import { simulatorOpenFailure } from '@expo-host/dev-loop/expo-runner/run-targets'
 import { createExpoTargets } from '@expo-host/dev-loop/expo-runner/run-targets'
 import { presentIosSimulator } from '@expo-host/dev-loop/IosSimulatorPresentation'
 import { handleCommandKey } from '@expo-host/dev-loop/keyboard-input/CommandKeys'
 import Commands from '@expo-host/dev-loop/keyboard-input/Commands'
 import Run from '@expo-host/dev-loop/Run'
-import { CLI, Errors, FS, ProcessTree, Repo, Time, type TrackedProcess } from '@shared'
+import { CLI, Errors, FS, Platform, ProcessTree, Repo, Time, type TrackedProcess } from '@shared'
 import { Deferred, Describe, Expect, mkTestDir, Test, until, withCapturedOutput } from '@shared/test'
 import { connect, createServer, type Server } from 'node:net'
 
@@ -509,18 +510,98 @@ Describe('Expo dev-loop port helpers', () => {
           blocker.close(error => error ? reject(error) : resolve())
         })
       }
-      // A collision on a later address must release every earlier partial reservation.
-      const reused = await createDevLoopExpoSession(blockedPort)
-      try {
-        Expect(reused.config.EXPO_PORT).toBe(blockedPort)
-      } finally {
-        await reused.releasePortReservation()
-      }
     })
   }
 
+  Test('releases every partial reservation before trying another port', async () => {
+    const hosts = Platform.hostPlatform === 'darwin'
+      ? ['0.0.0.0', '127.0.0.1', '::', '::1']
+      : ['0.0.0.0', '::']
+    const released: string[] = []
+    const reserved = await Ports.reserveAvailable(49_152, async (port, host) => {
+      if (port === 49_152 && host === hosts.at(-1)) {
+        return undefined
+      }
+      return {
+        port: port === 0 ? 53_100 : port,
+        release: async () => {
+          released.push(host)
+        },
+      }
+    })
+
+    Expect(released).toEqual(hosts.slice(0, -1))
+    Expect(reserved.port).toBe(53_100)
+    await reserved.release()
+    await reserved.release()
+    Expect(released).toEqual([...hosts.slice(0, -1), ...hosts])
+  })
+
+  Test('releases partial reservations when a later address probe fails', async () => {
+    const released: string[] = []
+    await Expect(Ports.reserveAvailable(49_152, async (port, host) => {
+      if (host === '::') {
+        Errors.throwHostEnvironment('Injected address probe failure.')
+      }
+      return {
+        port,
+        release: async () => {
+          released.push(host)
+        },
+      }
+    })).rejects.toThrow('Injected address probe failure.')
+
+    Expect(released).toEqual(
+      Platform.hostPlatform === 'darwin'
+        ? ['0.0.0.0', '127.0.0.1']
+        : ['0.0.0.0'],
+    )
+  })
+
+  Test('selects another port when a second listener owns the preferred port after release', async () => {
+    const blocker = createServer()
+    blocker.unref()
+    if (!await listenIfSupported(blocker, '::1')) {
+      return
+    }
+    const address = blocker.address()
+    const preferredPort = typeof address === 'object' && address !== null ? address.port : undefined
+    const otherOwner = createServer()
+    otherOwner.unref()
+    try {
+      if (preferredPort === undefined) {
+        Errors.throwHostEnvironment('Expected the test listener to have a TCP port.')
+      }
+      await new Promise<void>((resolve, reject) => {
+        otherOwner.once('error', reject)
+        otherOwner.listen({ host: '127.0.0.1', ipv6Only: true, port: preferredPort }, resolve)
+      })
+      await new Promise<void>((resolve, reject) => {
+        blocker.close(error => error ? reject(error) : resolve())
+      })
+      const ownerAddress = otherOwner.address()
+      Expect(otherOwner.listening).toBe(true)
+      Expect(typeof ownerAddress === 'object' && ownerAddress !== null ? ownerAddress.port : undefined)
+        .toBe(preferredPort)
+
+      const session = await createDevLoopExpoSession(preferredPort)
+      try {
+        Expect(session.config.EXPO_PORT).not.toBe(preferredPort)
+      } finally {
+        await session.releasePortReservation()
+      }
+    } finally {
+      if (blocker.listening) {
+        await new Promise<void>((resolve, reject) => blocker.close(error => error ? reject(error) : resolve()))
+      }
+      if (otherOwner.listening) {
+        await new Promise<void>((resolve, reject) => otherOwner.close(error => error ? reject(error) : resolve()))
+      }
+    }
+  })
+
   // A dev client that retries Metro's port connects to the reservation long before Expo starts.
-  Test('drops clients in both address families and releases every reserved listener', async () => {
+  Test('drops clients in both address families and completes reservation release', async () => {
     const ipv6Probe = createServer()
     const ipv6Supported = await listenIfSupported(ipv6Probe, '::1')
     if (ipv6Supported) {
@@ -553,12 +634,6 @@ Describe('Expo dev-loop port helpers', () => {
         await session.releasePortReservation()
         return true
       }, { description: 'both port reservation families to close' })
-    }
-    const reused = await createDevLoopExpoSession(session.config.EXPO_PORT)
-    try {
-      Expect(reused.config.EXPO_PORT).toBe(session.config.EXPO_PORT)
-    } finally {
-      await reused.releasePortReservation()
     }
   })
 
