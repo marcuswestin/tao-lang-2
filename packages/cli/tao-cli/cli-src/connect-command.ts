@@ -50,6 +50,7 @@ export async function runTaoConnect(
 
   if (provider === 'firebase') {
     HCI.writeLine('1. At https://console.firebase.google.com create a project, then register a Web app.', out)
+    HCI.writeLine('   Leave "Also set up Firebase Hosting for this app" unchecked; Expo Go does not use it.', out)
     HCI.writeLine('2. Open Project settings > General > Your apps and copy the Firebase web config fields below.', out)
     HCI.writeLine(
       '   The web API key identifies the client project; it is public config, not an admin credential.',

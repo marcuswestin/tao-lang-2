@@ -2,7 +2,7 @@
 
 This adapter uses Firebase email/password Auth, an RxDB database in Expo SQLite per Firebase project and UID, and live bidirectional replication with Firestore. Notes are stored at `users/{uid}/notes/{noteId}`. The RxDB plugin stores the local `id` as the Firestore document ID, not a field. CRUD writes go to SQLite first; RxDB replays them when replication can reach Firestore. Firestore's own persistence is not enabled in React Native.
 
-1. Create a disposable Firebase project. Enable Email/Password sign-in and Cloud Firestore.
+1. Create a disposable Firebase project and register a Web app to obtain its client configuration. Leave **Also set up Firebase Hosting for this app** unchecked; this Expo Go app does not deploy web content. Enable Email/Password sign-in and Cloud Firestore.
 2. Run `./tao connect firebase 'Apps/Hosted CRUD'` from the repository root. It writes public web config to `tao.connections.json`; service-account credentials stay out of the app bundle.
 3. Deploy `firestore.rules` as the project's Cloud Firestore rules. These rules give each authenticated UID access only to its notes subcollection and require RxDB tombstones and server timestamps. Do not merge them blindly into a project with other collections; compose and test the full ruleset first.
 4. Run the Expo Go app, register two accounts, create/update/delete notes, force-stop while offline after a write, restart, reconnect, and verify both accounts on separate devices. Also try direct Firestore writes into the other UID's path to test the rules.
