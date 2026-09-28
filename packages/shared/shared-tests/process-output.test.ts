@@ -43,6 +43,16 @@ Describe('process output ownership', () => {
     Expect(result.stderr).toBe('tail')
   })
 
+  Test('handles a closed stdin pipe without crashing the parent', async () => {
+    const result = await CLI.run('/bin/sh', {
+      args: ['-c', "exec 0<&-; sleep 0.1; printf 'closed'"],
+      stdin: Buffer.alloc(8 * 1024 * 1024),
+    })
+    Expect(result.exitCode).toBe(0)
+    Expect(result.stdout).toBe('closed')
+    Expect(result.error === undefined || (result.error as NodeJS.ErrnoException).code === 'EPIPE').toBe(true)
+  })
+
   Test('reports a missing executable without losing the spawn error', async () => {
     const result = await CLI.run('/definitely-missing-tao-output-fixture')
     Expect(result.exitCode).not.toBe(0)

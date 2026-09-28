@@ -212,6 +212,13 @@ function startCommand(
     env: spec.env,
     stdio: stdio.stdio,
   })
+  let spawnError: Error | undefined
+  child.on('error', error => {
+    spawnError ??= error
+  })
+  child.stdin?.on('error', error => {
+    spawnError ??= error
+  })
 
   if (spec.unref) {
     child.unref()
@@ -352,7 +359,6 @@ function startCommand(
     signal: boundFailure === undefined ? signal : signal ?? 'SIGTERM',
   })
 
-  let spawnError: Error | undefined
   let releaseCompletion = () => {}
   const closePromise = new Promise<CommandCloseResult>(resolve => {
     releaseCompletion = Platform.onChildProcessClose(child, (exitCode, signal) => {
@@ -364,10 +370,6 @@ function startCommand(
       }
       resolve(closeResultFor(exitCode, signal))
     })
-  })
-
-  child.on('error', error => {
-    spawnError = error
   })
 
   return {
