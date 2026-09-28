@@ -5,7 +5,8 @@
 `tao build <project> --visionos` retains a native Xcode project that embeds the compiled Tao web UI
 in a SwiftUI window. It exports the project and bundled site; Xcode builds and signs the native
 application separately. It does not add spatial language syntax or a native React Native backend.
-An optional project-relative `visionos/Tests.swift` supplies app-hosted XCTest coverage in the
+For VisionHello, app-hosted XCTest coverage comes from
+`packages/testing/e2e-testing/native/visionos/VisionHelloTests.swift` and is copied into the
 exported project. See [Hello Tao on visionOS](../../../Apps/VisionHello/README.md) for the sample,
 simulator prerequisites, build steps, and prototype limitations.
 
