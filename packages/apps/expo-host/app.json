@@ -3,6 +3,7 @@
     "name": "Tao Runtime",
     "slug": "tao-runtime",
     "version": "1.0.0",
+    "newArchEnabled": true,
     "platforms": [
       "ios",
       "android",
@@ -12,7 +13,8 @@
       "softwareKeyboardLayoutMode": "pan"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "deploymentTarget": "17.0"
     },
     "web": {
       "bundler": "metro"
@@ -25,7 +27,9 @@
             "enableSceneSupport": true
           }
         }
-      ]
+      ],
+      "jazz-rn",
+      "./plugins/with-jazz-podfile-properties.cjs"
     ],
     "experiments": {
       "autolinkingModuleResolution": true

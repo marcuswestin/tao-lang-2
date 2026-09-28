@@ -1,0 +1,16 @@
+{
+  "name": "tao-jazz",
+  "private": true,
+  "version": "1.0.0",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "module": "jazz-src/Jazz.ts",
+  "exports": {
+    ".": "./jazz-src/Jazz.ts",
+    "./deployment": "./jazz-src/jazz-deployment.ts"
+  },
+  "dependencies": {
+    "jazz-tools": "2.0.0-alpha.57",
+    "tao-shared": "workspace:*"
+  }
+}
