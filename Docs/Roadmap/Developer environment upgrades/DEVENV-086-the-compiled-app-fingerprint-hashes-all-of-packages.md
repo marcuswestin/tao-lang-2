@@ -33,7 +33,7 @@
   `packages/apps/runtime` by filesystem test, `TAO_STDLIB_ROOT`, the workspace manifests,
   `packages/tsconfig.base.json`. The denylist does not need those edges to be safe, because it
   excludes only groups nothing reaches; a closure narrow enough to exclude `packages/ai` or
-  `packages/providers` still would, and both are reached by real manifest edges today
+  `packages/apps/providers` still would, and both are reached by real manifest edges today
   (`packages/compiler` depends on `tao-generation`, `packages/apps/stdlib` on `tao-icloud`).
 - **Measured impact (2026-09-21):** on a quiet machine, the lane cost of one invalidation is 34.4s.
   A single comment added to `packages/dev/dev-src/performance/admission-experiment.ts` — a file no

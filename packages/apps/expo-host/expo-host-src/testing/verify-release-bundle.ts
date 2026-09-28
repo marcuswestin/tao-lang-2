@@ -16,7 +16,7 @@ async function verifyReleaseBundle(): Promise<void> {
          id "bundle-proof"
          name "Tao Bundle Proof"
          version "1.0.0"
-         DefaultApp BundleProof
+         app BundleProof
          remote none
          license MIT
        }

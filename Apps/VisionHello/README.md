@@ -104,11 +104,12 @@ the pairing and visual checks yourself in Device Hub.
 ./agent tao test Apps/VisionHello
 ```
 
-The Tao journey checks two increments and reset. The optional `visionos/Tests.swift` file is copied
-into the exported Xcode project's app-hosted `TaoAppTests` target. Xcode's Product > Test runs the
-compiled JavaScript in a visionOS WKWebView and checks the same counter interactions. This native
-test covers bundled resource loading and web runtime behavior; it does not prove spatial input,
-window appearance, or physical-device behavior.
+The Tao journey checks two increments and reset. Native XCTest coverage lives under
+`packages/testing/e2e-testing/native/visionos`, next to the watchOS journey sources, and
+`tao build --visionos` copies it into the exported Xcode project's app-hosted `TaoAppTests`
+target. Xcode's Product > Test runs the compiled JavaScript in a visionOS WKWebView and checks
+the same counter interactions. This native test covers bundled resource loading and web runtime
+behavior; it does not prove spatial input, window appearance, or physical-device behavior.
 
 Physical-headset acceptance is deferred to the
 [pre-MVP device acceptance task](../../Docs/MVP%20Roadmap/Developer%20MVP%20Roadmap.md#pre-mvp-device-acceptance)

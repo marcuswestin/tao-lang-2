@@ -14,7 +14,7 @@
 ## Local reproduction and cloud proof
 
 Current implementation separates the portable tools from Android/CocoaPods while sharing their
-existing lockfile pins. `bootstrap-tao-dev-env` is the explicit noninteractive entry; it publishes
+existing lockfile pins. `.config/bootstrap-tao-dev-env` is the explicit noninteractive entry; it publishes
 a profile and calls the existing `./agent setup`. Root launchers select the profile's zsh through
 POSIX shell. The dedicated `./agent unsandboxed contributor-linux-test` command snapshots committed
 source into cold and cached Ubuntu guests. Its focused tests do not constitute a Linux run.
@@ -421,7 +421,7 @@ No Watchman lifecycle or permission behavior changed. Failure evidence is retain
 `.artifacts/contributor-linux/20260926T224544Z-85379/` in the cold workflow log snapshot.
 
 Incoming `./agent setup --environment` uses the full devenv environment and requires its
-launcher prerequisites. Fresh Linux continues to enter through `bootstrap-tao-dev-env`;
+launcher prerequisites. Fresh Linux continues to enter through `.config/bootstrap-tao-dev-env`;
 that entry installs the pinned tools before invoking setup. The incoming full environment's
 Hutch package is separate from the portable contributor profile.
 

@@ -1,4 +1,5 @@
 import { Errors, FS } from '@shared'
+import { TaoFileIcon } from '@shared/core'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { LSPWorkspace } from 'tao-compiler/workspace'
 import { TaoFormatter } from 'tao-formatter'
@@ -29,6 +30,13 @@ Describe('Tao IDE extension smoke', () => {
     Expect(packageJson.main).toBe('_gen_ide-extension/extension/main.cjs')
     Expect(packageJson.contributes.languages[0]?.configuration).toBe('./language-configuration.json')
     Expect(await FS.isFile(FS.resolvePath('../language-configuration.json', import.meta.dir))).toBe(true)
+    const icon = packageJson.contributes.languages[0]?.icon
+    Expect(icon).toEqual({ light: './icons/tao-light.svg', dark: './icons/tao-dark.svg' })
+    for (const theme of ['light', 'dark'] as const) {
+      Expect(await FS.readText(FS.resolvePath(`../${icon?.[theme]}`, import.meta.dir)))
+        .toBe(TaoFileIcon.svg(TaoFileIcon.colors[theme]))
+    }
+    Expect(packageJson.files).toContain('icons/')
     Expect(await FS.readText(FS.resolvePath('../LICENSE', import.meta.dir)))
       .toBe(await FS.readText(FS.resolvePath('../../../../LICENSE', import.meta.dir)))
   })
@@ -36,8 +44,8 @@ Describe('Tao IDE extension smoke', () => {
   for (const errorCode of ['EPERM', 'EFAULT'] as const) {
     Test(`restores both persistent IDE output roots after an injected ${errorCode} failure`, async () => {
       const root = await mkTestDir(`tao-ide-publication-${errorCode.toLowerCase()}-`)
-      const stagingPackageRoot = FS.resolvePath('staging/packages/ide-extension', root)
-      const packageRoot = FS.resolvePath('persistent/packages/ide-extension', root)
+      const stagingPackageRoot = FS.resolvePath('staging/packages/ides/ide-extension', root)
+      const packageRoot = FS.resolvePath('persistent/packages/ides/ide-extension', root)
       const generatedRoot = FS.resolvePath('_gen_ide-extension', packageRoot)
       const syntaxRoot = FS.resolvePath('ide-extension-syntaxes/_gen_syntaxes', packageRoot)
       await FS.writeText(
@@ -456,6 +464,7 @@ async function persistentOutputIdentity(roots: readonly string[]): Promise<strin
 
 type IdeExtensionPackageJson = {
   main: string
+  files: string[]
   contributes: {
     commands: {
       command: string
@@ -466,6 +475,7 @@ type IdeExtensionPackageJson = {
     }[]
     languages: {
       configuration: string
+      icon?: { light: string; dark: string }
     }[]
   }
 }

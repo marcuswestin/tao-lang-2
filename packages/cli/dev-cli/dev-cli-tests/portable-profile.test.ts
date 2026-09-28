@@ -104,7 +104,7 @@ Describe('portable profile shell dispatch', () => {
       Expect(result.exitCode).toBe(1)
       Expect(result.stdout).toBe('')
       Expect(result.stderr).toContain("Tao's pinned profile or zsh is unavailable.")
-      Expect(result.stderr).toContain('./bootstrap-tao-dev-env')
+      Expect(result.stderr).toContain('./.config/bootstrap-tao-dev-env')
       Expect(await FS.exists(FS.resolvePath('.devenv', fixture.root))).toBe(false)
     } finally {
       await FS.remove(fixture.root)

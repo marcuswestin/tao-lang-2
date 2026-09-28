@@ -4,7 +4,7 @@ project {
    id "pantry"
    name "Pantry"
    version "0.1.0"
-   DefaultApp Pantry
+   app Pantry
    remote none
 }
 

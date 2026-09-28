@@ -23,7 +23,7 @@
     // bin directory onto the PATH of every later Bash tool command. Setup stays quiet; after it
     // completes, the model-routing notice reaches the agent only when the routing table looks
     // behind the models this machine runs. Every verified Claude Code cloud Linux session first
-    // enters bootstrap-tao-dev-env --install-nix, which checks the locked tool identity even for
+    // enters .config/bootstrap-tao-dev-env --install-nix, which checks the locked tool identity even for
     // cached profiles and calls the same setup entry. Hosted Codex uses explicit environment
     // setup/maintenance, and Cursor cloud uses .cursor/environment.json;
     // .claude/cloud-setup.md documents all three.

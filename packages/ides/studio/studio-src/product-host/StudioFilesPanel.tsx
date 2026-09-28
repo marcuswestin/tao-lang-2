@@ -1,4 +1,5 @@
 import TR from '@runtime/TR'
+import { TaoFileIcon } from '@shared/core'
 import React from 'react'
 import { type StudioIconName, studioIconPaths } from '../client/StudioShell'
 import type { TaoStudioHostAction, TaoStudioHostTextAction, TaoStudioHostVisualProps } from './StudioHostProps'
@@ -15,6 +16,38 @@ function HostIcon(props: Readonly<{ name: StudioIconName; size?: 'small' }>): Re
 function fileKind(name: string): string {
   const dot = name.lastIndexOf('.')
   return dot < 0 ? '' : name.slice(dot + 1).toLowerCase()
+}
+
+/** FileKindMark shows the lotus for a Tao file, as the IDE extension does, and a text badge otherwise. */
+function FileKindMark(props: Readonly<{ name: string }>): React.ReactElement {
+  const kind = fileKind(props.name)
+  const maskId = `tao-file-icon-${React.useId().replace(/[^\w-]/g, '')}`
+  if (kind !== 'tao') {
+    return <span aria-hidden="true" className="studio-file-kind" data-kind={kind}>{kind}</span>
+  }
+  return (
+    <svg aria-hidden="true" className="studio-file-icon" data-kind="tao" viewBox={TaoFileIcon.viewBox}>
+      <mask id={maskId}>
+        <g
+          fill="#fff"
+          paintOrder="stroke"
+          stroke="#000"
+          strokeLinejoin="round"
+          strokeWidth={TaoFileIcon.petalGap}
+        >
+          {TaoFileIcon.petals.map(petal => <path d={petal} key={petal} />)}
+        </g>
+        <path
+          d={TaoFileIcon.path}
+          fill="none"
+          stroke="#000"
+          strokeLinecap="round"
+          strokeWidth={TaoFileIcon.pathWidth}
+        />
+      </mask>
+      <rect fill="currentColor" height="32" mask={`url(#${maskId})`} width="32" />
+    </svg>
+  )
 }
 
 /** FilesPanelSurface keeps Tao's query-owned tree inside the shell's existing Files destination. */
@@ -152,9 +185,7 @@ export function TreeFileRow(props: TreeFileRowProps): React.ReactElement {
           title={props.Path}
           type="button"
         >
-          <span aria-hidden="true" className="studio-file-kind" data-kind={fileKind(props.Name)}>
-            {fileKind(props.Name)}
-          </span>
+          <FileKindMark name={props.Name} />
           <span className="studio-tree-label">{props.Name}</span>
           {props.Dirty ? <span aria-label="Unsaved draft" className="studio-tree-dirty" role="img"></span> : undefined}
           {props.DiagnosticCount > 0

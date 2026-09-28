@@ -1,5 +1,5 @@
 # Sourced by the POSIX entrypoint before any zsh syntax is evaluated. Provisioning
-# belongs to bootstrap-tao-dev-env; ordinary commands only reuse installed tools.
+# belongs to .config/bootstrap-tao-dev-env; ordinary commands only reuse installed tools.
 tao_exec_repo_zsh() {
   tao_shell_root=$1
   shift
@@ -17,6 +17,6 @@ tao_exec_repo_zsh() {
   fi
 
   printf '%s\n' "Tao's pinned profile or zsh is unavailable." >&2
-  printf '%s\n' 'On macOS run ./enter-tao-dev-env; on Linux run ./bootstrap-tao-dev-env --install-nix.' >&2
+  printf '%s\n' 'On macOS run ./enter-tao-dev-env; on Linux run ./.config/bootstrap-tao-dev-env --install-nix.' >&2
   exit 1
 }

@@ -1,0 +1,187 @@
+use Col, Text, TextInput from @tao/ui
+
+folder
+view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, ActiveCellId text, CellRevision number, ActiveScenarioId text, ViewportWidth number, ViewportHeight number, InspectorBusy boolean, InspectorCanUndo boolean, InspectorInspection text, InspectorSelection text, LensLines list of text, LensJourneyPath text) {
+   action ApplyInspector(Action text, Proposed boolean) {
+      do ApplyInspectorAction(Action, Proposed)
+   }
+   action UndoInspector() {
+      do UndoInspectorAction()
+   }
+   render StudioContextPanelSurface() {
+      StudioContextSummary(FilePath: ActiveFilePath, ScenarioId: ActiveScenarioId, CellId: ActiveCellId, RenderId: SelectedRenderId, ViewportWidth: ViewportWidth, ViewportHeight: ViewportHeight)
+      StudioInspectorSummary(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Content: ActiveFileContent, Path: ActiveFilePath)
+      StudioLensPanel(Lines: LensLines, JourneyPath: LensJourneyPath)
+      StudioInspectorLayout(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, CanUndo: InspectorCanUndo, Apply: ApplyInspector, Undo: UndoInspector)
+      StudioInspectorStyle(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
+      StudioInspectorData(Inspection: InspectorInspection, Selection: InspectorSelection, ActiveCellId: ActiveCellId, ActiveCellRevision: CellRevision, ActiveScenarioId: ActiveScenarioId)
+      StudioInspectorText(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
+      StudioInspectorActions(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
+}  }
+
+view StudioLensPanel(Lines list of text, JourneyPath text) {
+   action OpenJourney() {
+      do OpenFile(JourneyPath)
+   }
+   render StudioInspectorSection("Tao Lens") {
+      loop Lines / Line {
+         Text(Line)
+      }
+      when JourneyPath {
+         empty -> { }
+         otherwise -> { StudioButton(Label: "Open covering journey", Press: OpenJourney, Disabled: false, Variant: "secondary") }
+}  }  }
+
+// The active cell's environment is edited in one place, the Scenario pane, and this view owns the drafts.
+folder
+view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPresetId text, ViewportWidth number, ViewportHeight number, NetworkOutcome text, NetworkLatencyMs number, NetworkErrorMessage text, NetworkErrorStatus number, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text) {
+   state Preset = ViewportPresetId
+   state Width = ViewportWidth
+   state Height = ViewportHeight
+   state Network = NetworkOutcome
+   state Latency = NetworkLatencyMs
+   state ErrorMessage = NetworkErrorMessage
+   state ErrorStatus = NetworkErrorStatus
+   state WidthValid = true
+   state HeightValid = true
+   state LatencyValid = true
+   state ErrorStatusValid = true
+   action ChangePreset(Value text) {
+      set Preset = Value
+      set Width = StudioViewportPresetWidth(Preset: Value, Fallback: Width)
+      set Height = StudioViewportPresetHeight(Preset: Value, Fallback: Height)
+      set WidthValid = true
+      set HeightValid = true
+   }
+   action ChangeWidth(Value number) {
+      set Preset = "custom"
+      set Width = Value
+   }
+   action ChangeHeight(Value number) {
+      set Preset = "custom"
+      set Height = Value
+   }
+   action ChangeNetwork(Value text) {
+      set Network = Value
+   }
+   action ChangeLatency(Value number) {
+      set Latency = Value
+   }
+   action ChangeErrorMessage(Value text) {
+      set ErrorMessage = Value
+   }
+   action ChangeErrorStatus(Value number) {
+      set ErrorStatus = Value
+   }
+   action ChangeWidthValid(Value boolean) {
+      set WidthValid = Value
+   }
+   action ChangeHeightValid(Value boolean) {
+      set HeightValid = Value
+   }
+   action ChangeLatencyValid(Value boolean) {
+      set LatencyValid = Value
+   }
+   action ChangeErrorStatusValid(Value boolean) {
+      set ErrorStatusValid = Value
+   }
+   action ApplyEnvironment() {
+      do ApplyActiveCellEnvironment(CellId: ActiveCellId, CellRevision: CellRevision, Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus)
+   }
+   render Col() {
+      when ActiveCellId {
+         empty -> { }
+         otherwise -> { StudioScenarioEnvironment(Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus, WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, SchemeRequested: SchemeRequested, SchemeResolved: SchemeResolved, SchemeSource: SchemeSource, SchemeCapability: SchemeCapability, ChangePreset: ChangePreset, ChangeWidth: ChangeWidth, ChangeHeight: ChangeHeight, ChangeNetwork: ChangeNetwork, ChangeLatency: ChangeLatency, ChangeErrorMessage: ChangeErrorMessage, ChangeErrorStatus: ChangeErrorStatus, ChangeWidthValid: ChangeWidthValid, ChangeHeightValid: ChangeHeightValid, ChangeLatencyValid: ChangeLatencyValid, ChangeErrorStatusValid: ChangeErrorStatusValid, Apply: ApplyEnvironment) }
+}  }  }
+
+view StudioContextPanelSurface() accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view StudioContextSummary(FilePath text, ScenarioId text, CellId text, RenderId text, ViewportWidth number, ViewportHeight number) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+function StudioViewportPresetWidth(Preset text, Fallback number) returns number {
+   return StudioViewportPresetWidth(Preset, Fallback) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioViewportPresetHeight(Preset text, Fallback number) returns number {
+   return StudioViewportPresetHeight(Preset, Fallback) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioEnvironmentValid(WidthValid boolean, HeightValid boolean, LatencyValid boolean, ErrorStatusValid boolean, Network text, ErrorMessage text) returns boolean {
+   return StudioEnvironmentValid(WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, Network: Network, ErrorMessage: ErrorMessage) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioNetworkShowsError(Network text) returns boolean {
+   return StudioNetworkShowsError(Network) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+view StudioScenarioEnvironment(Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number, WidthValid boolean, HeightValid boolean, LatencyValid boolean, ErrorStatusValid boolean, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text, ChangePreset action(text), ChangeWidth action(number), ChangeHeight action(number), ChangeNetwork action(text), ChangeLatency action(number), ChangeErrorMessage action(text), ChangeErrorStatus action(number), ChangeWidthValid action(boolean), ChangeHeightValid action(boolean), ChangeLatencyValid action(boolean), ChangeErrorStatusValid action(boolean), Apply action()) {
+   action SubmitErrorMessage() { }
+   render StudioScenarioControlGroup("Environment") {
+      StudioInspectorField("Device") {
+         StudioSegmented(Value: Preset, Change: ChangePreset, Options: ["phone", "tablet", "laptop", "custom"], Label: "Device")
+      }
+      StudioInspectorRow("Size") {
+         StudioNumericInput(Label: "Width", Value: Width, Minimum: 1, Maximum: 0, Integer: false, Change: ChangeWidth, ChangeValid: ChangeWidthValid)
+         StudioNumericInput(Label: "Height", Value: Height, Minimum: 1, Maximum: 0, Integer: false, Change: ChangeHeight, ChangeValid: ChangeHeightValid)
+      }
+      StudioInspectorField("Network") {
+         StudioSegmented(Value: Network, Change: ChangeNetwork, Options: ["normal", "offline", "error"], Label: "Network")
+      }
+      StudioNumericInput(Label: "Latency ms", Value: Latency, Minimum: 0, Maximum: 0, Integer: false, Change: ChangeLatency, ChangeValid: ChangeLatencyValid)
+      when StudioNetworkShowsError(Network) {
+         true -> {
+            StudioInspectorField("Error") {
+               TextInput(Value: ErrorMessage, Change: ChangeErrorMessage, Submit: SubmitErrorMessage, Label: "Error")
+            }
+            StudioNumericInput(Label: "Status", Value: ErrorStatus, Minimum: 100, Maximum: 599, Integer: true, Change: ChangeErrorStatus, ChangeValid: ChangeErrorStatusValid)
+         }
+         otherwise -> { }
+      }
+      StudioSchemeNote(Requested: SchemeRequested, Resolved: SchemeResolved, Source: SchemeSource, Capability: SchemeCapability)
+      StudioActions() {
+         StudioButton(Label: "Apply & remount", Press: Apply, Disabled: not StudioEnvironmentValid(WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, Network: Network, ErrorMessage: ErrorMessage), Variant: "primary")
+}  }  }
+
+folder
+view StudioScenarioControlGroup(Title text) accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+view StudioScenarioInspectorLabel(Label text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view StudioNumericInput(Label text, Value number, Minimum number, Maximum number, Integer boolean, Change action(number), ChangeValid action(boolean)) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+// The workbench controls. Tao owns every value, action, and enabled state; the host renders them on the
+// shared Studio sheet so the Tao-rendered panels and the shell share one vocabulary.
+folder
+view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+view StudioChoice(Value text, Change action(text), Options list of text, Label text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view StudioInspectorRow(Label text) accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+view StudioActions() accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view StudioSchemeNote(Requested text, Resolved text, Source text, Capability text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+view StudioScenarioIdentity() accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+view StudioScenarioSource(Group text, Subject text, Cell text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+view StudioInspectorSection(Title text) accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+view StudioInspectorSummarySurface() accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+view StudioInspectorField(Label text) accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+view StudioInspectorUndoMarker() accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx

@@ -84,7 +84,7 @@ project {
    id ${taoString(plan.id)}
    name ${taoString(plan.name)}
    version "0.1.0"
-   DefaultApp ${names.app}
+   app ${names.app}
    remote none
 }
 

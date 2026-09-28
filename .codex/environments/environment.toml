@@ -1,0 +1,5 @@
+version = 1
+name = "tao-lang-2"
+
+[setup]
+script = "./agent setup"

@@ -545,7 +545,10 @@ await runWithCommands(commands => {
       'Sync the storage submodule, record a QA screenshot run into it, push it, or pin the commit this repository records.',
     )
     .argument('<action>', 'sync, qa, push, or pin')
-    .argument('[paths...]', 'Tao project directories to capture, archived together as one commit.')
+    .argument(
+      '[paths...]',
+      'Tao project directories to capture as one commit (default: the reference apps and starters, with --studio).',
+    )
     .option('--app <names>', 'Capture only these apps (default: every app in the project).', repeatedOption)
     .option('--scenario <selector>', 'Capture only matching scenarios; see `tao _preview qa --help`.', repeatedOption)
     .option('--device <names>', 'Devices: phone, tablet, laptop (default: all).', repeatedOption)

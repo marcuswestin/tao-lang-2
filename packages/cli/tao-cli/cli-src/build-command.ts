@@ -124,12 +124,11 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
         return await finishWebArtifact(site)
       }
       if (target === 'visionos') {
-        const tests = FS.resolvePath('visionos/Tests.swift', snapshotRoot)
         return await exportVisionOSProject({
           appName: app.appName,
           outputRoot: FS.resolvePath('visionos', artifactRoot),
           siteRoot: site,
-          testSource: await FS.isFile(tests) ? await FS.readText(tests) : undefined,
+          testSource: await visionosNativeTestSource(app.appName),
         })
       }
       const desktop = await buildDesktopApp({
@@ -448,4 +447,13 @@ async function finishWebArtifact(siteRoot: string): Promise<string> {
   )
   await FS.chmod(FS.resolvePath('run', parent), 0o755)
   return parent
+}
+
+/** visionosNativeTestSource loads XCTest sources owned by the testing package for known sample apps. */
+async function visionosNativeTestSource(appName: string): Promise<string | undefined> {
+  if (appName !== 'VisionHello') {
+    return undefined
+  }
+  const path = Repo.resolvePath('packages/testing/e2e-testing/native/visionos/VisionHelloTests.swift')
+  return await FS.isFile(path) ? await FS.readText(path) : undefined
 }

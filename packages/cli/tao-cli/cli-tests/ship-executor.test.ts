@@ -201,7 +201,7 @@ Describe('tao ship filesystem-only execution', () => {
       await git(root, 'config', 'user.name', 'Tao Test')
       const sourcePath = FS.resolvePath('App.tao', root)
       const lockPath = FS.resolvePath('.tao-project/lock.jsonc', root)
-      await FS.writeText(sourcePath, 'project { id "notes" name "Notes" version "1.2.2" DefaultApp Notes }\n')
+      await FS.writeText(sourcePath, 'project { id "notes" name "Notes" version "1.2.2" app Notes }\n')
       await git(root, 'add', '.')
       await git(root, 'commit', '-qm', 'Previous release')
       const previousCommit = await git(root, 'rev-parse', 'HEAD')
