@@ -83,7 +83,8 @@ export async function runDirenvSetup(
   }
   const activation = FS.resolvePath('activation.zsh', shellRoot)
   const zshrc = FS.resolvePath('.zshrc', env['ZDOTDIR'] || home)
-  const sourceLine = `[[ ! -r ${quote(activation)} ]] || source ${quote(activation)}`
+  const sourceLine = '[[ ! -r "$HOME/.tao-dev/shell/activation.zsh" ]] || source "$HOME/.tao-dev/shell/activation.zsh"'
+  const legacySourceLine = `[[ ! -r ${quote(activation)} ]] || source ${quote(activation)}`
   const accepted = await environment.confirm({
     defaultValue: false,
     message:
@@ -151,8 +152,14 @@ export async function runDirenvSetup(
           target = await fs.realPath(zshrc)
         }
         const existing = await readOptional(fs, target)
-        if (!existing.split('\n').some(line => line.trim() === sourceLine)) {
-          await fs.writeText(target, `${existing}${existing && !existing.endsWith('\n') ? '\n' : ''}${sourceLine}\n`)
+        const normalized = existing.split('\n').map(line => line.trim() === legacySourceLine ? sourceLine : line).join(
+          '\n',
+        )
+        const updated = normalized.split('\n').some(line => line.trim() === sourceLine)
+          ? normalized
+          : `${normalized}${normalized && !normalized.endsWith('\n') ? '\n' : ''}${sourceLine}\n`
+        if (updated !== existing) {
+          await fs.writeText(target, updated)
         }
       } catch (cause) {
         Errors.throwHostEnvironment(
