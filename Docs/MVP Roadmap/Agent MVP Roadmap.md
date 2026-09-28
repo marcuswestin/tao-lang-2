@@ -179,8 +179,7 @@ These decide whether the people who do install Tao enjoy the first hour.
 The tutorial half has landed: `packages/cli/tao-cli/cli-tests/tutorials.test.ts` replays
 `Docs/Tutorials/Your First Tao App.md` snippet by snippet, formats and validates the file after every
 step, reproduces the finished file from the steps, and runs its behavior test through the real
-`tao test` runner. `Tao now - two-week walkthrough.md` stays a dated record whose repository paths,
-`just` recipes, `--app` names, and `tao` subcommands the same suite checks still exist.
+`tao test` runner. The dated two-week walkthrough is gone; this suite covers Your First Tao App.
 
 What remains is the example set. The starters are proven byte-for-byte by their lowering test, but
 nothing says which examples a visitor is pointed at, and the apps under `Apps/` mix public examples
