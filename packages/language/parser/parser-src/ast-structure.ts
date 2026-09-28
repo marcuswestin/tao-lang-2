@@ -20,7 +20,10 @@ export function isTestSidecarPath(path: string): boolean {
   return path.endsWith('.test.tao')
 }
 
-/** rememberVisibleWorkspaceFiles binds every parsed root to the complete workspace loaded with it. */
+/**
+ * rememberVisibleWorkspaceFiles binds every parsed root to the workspace loaded with it.
+ * Folder visibility reads this binding, because a `folder` name is not a cross-reference.
+ */
 export function rememberVisibleWorkspaceFiles(files: readonly AST.TaoFile[]): void {
   for (const file of files) {
     visibleWorkspaceFiles.set(file, files)

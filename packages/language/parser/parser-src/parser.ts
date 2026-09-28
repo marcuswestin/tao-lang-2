@@ -243,6 +243,21 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
 
 /** Relink color reads when an app edit changes which design supplies them. */
 class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
+  constructor(services: Langium.LangiumSharedCoreServices) {
+    super(services)
+    // A `folder` name is not a Langium reference — a type name is a plain identifier — so folder
+    // visibility reads the workspace set recorded on each syntax tree. The checker records that set
+    // before it builds. The editor builds through this class, and records every loaded Tao file once
+    // the batch has finished parsing, before any document in it is linked or validated.
+    this.onBuildPhase(Langium.DocumentState.Parsed, () => {
+      AST.rememberVisibleWorkspaceFiles(
+        Array.from(this.langiumDocuments.all)
+          .map(document => document.parseResult.value)
+          .filter(AST.isTaoFile),
+      )
+    })
+  }
+
   protected override shouldRelink(document: Langium.LangiumDocument, changedUris: Set<string>): boolean {
     if (super.shouldRelink(document, changedUris)) {
       return true

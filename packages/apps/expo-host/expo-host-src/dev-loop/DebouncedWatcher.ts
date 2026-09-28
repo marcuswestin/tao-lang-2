@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { FS } from '@shared'
 import chokidar from 'chokidar'
 
 /** WATCH_DEBOUNCE_MS is the quiet period every dev-loop-style watcher settles on before it fires. */
@@ -23,9 +23,8 @@ export type DebouncedWatcherOptions = {
    */
   shouldDrop?: () => boolean
   /**
-   * Forces chokidar's polling backend instead of native filesystem events. Unset everywhere this
-   * package uses it — native events are what a real dev machine wants — but a test running inside a
-   * sandbox whose native events do not reliably report a brand-new file can ask for it explicitly.
+   * Forces chokidar's polling backend instead of native filesystem events for a test fixture
+   * running where native file events are unavailable.
    */
   usePolling?: boolean
 }
@@ -78,11 +77,10 @@ export function startDebouncedWatcher(
   options: DebouncedWatcherOptions,
 ): DebouncedWatcher {
   const debouncer = createEventDebouncer(onChange, options)
-  const usePolling = options.usePolling ?? defaultsToPolling(Platform.hostPlatform, Platform.runtimeBunVersion)
   const watcher = chokidar.watch([...paths], {
     ignoreInitial: true,
     ignored: shouldIgnoreWatchPath,
-    usePolling,
+    usePolling: options.usePolling ?? false,
   })
   watcher.on('all', debouncer.handle)
   return {
@@ -91,29 +89,6 @@ export function startDebouncedWatcher(
       await watcher.close()
     },
   }
-}
-
-/**
- * FIRST_BUN_WATCHING_ONLY_THROUGH_FSEVENTS is the Bun whose macOS `fs.watch` watches single files
- * through FSEvents too, where earlier ones used kqueue. An agent sandbox refuses FSEvents, so from
- * this release on a sandboxed watcher receives no native events at all; outside a sandbox they
- * arrive as before.
- */
-const FIRST_BUN_WATCHING_ONLY_THROUGH_FSEVENTS = '1.3.14'
-
-/**
- * defaultsToPolling reports whether a watcher on this platform and runtime polls when its caller does
- * not choose. The events are lost only inside an agent sandbox, which refuses the FSEvents service,
- * but nothing here can tell a sandbox apart reliably, so every macOS Bun that depends on FSEvents
- * polls. That costs an ordinary Mac some CPU; the alternative is missing edits without a word inside
- * a sandbox. Letting the sandbox reach FSEvents removes the reason, which
- * `DEVENV-FILE-WATCHING-DEPENDS-ON-A-WATCHMAN-NO-AGENT-CAN-START` tracks. Under Node there is no Bun
- * version, and the sandbox's refusal surfaces as an `EMFILE` error rather than silence.
- */
-export function defaultsToPolling(platform: string, bunVersion: string | undefined): boolean {
-  return platform === 'darwin'
-    && bunVersion !== undefined
-    && Platform.semverSatisfies(bunVersion, `>=${FIRST_BUN_WATCHING_ONLY_THROUGH_FSEVENTS}`)
 }
 
 /** shouldIgnoreWatchPath excludes noisy, generated, or vendored paths every dev-loop watcher skips. */

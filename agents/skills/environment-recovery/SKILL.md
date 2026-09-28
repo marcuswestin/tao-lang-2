@@ -63,7 +63,7 @@ behind it.
 - No agent sandbox reaches Watchman's socket, and only the opt-in `tao-local-services` profile
   reaches Docker's, by design: both sockets live under a developer's home directory, which a tracked
   config cannot name. Run file-watching dev loops with
-  `./agent unsandboxed app-dev`, `studio`, or `studio-native`, and the local InstantDB stack with
+  `./agent unsandboxed app-dev`, `test-watch`, `studio`, or `studio-native`, and the local InstantDB stack with
   `./agent unsandboxed local-instantdb start` or `stop`. A denied Watchman socket in a sandbox is
   expected; sandboxed tests and builds crawl the tree without it.
 - The browser and native UI lanes cannot run inside the managed Bash sandbox. Use
