@@ -312,7 +312,7 @@ export type StudioSessionHandshake = {
     }
     matrix: {
       concurrentCells: true
-      scheme: 'reactive-browser-fixed-light-native'
+      scheme: 'reactive-browser-native'
       version: 2
     }
     sketches: {
@@ -695,7 +695,12 @@ type StudioPreviewSchemeMessage = {
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   scheme: Readonly<{
-    capability: 'fixed-light-native' | 'pinned-native' | 'reactive-catalyst' | typeof reactiveBrowserSchemeCapability
+    capability:
+      | 'fixed-light-native'
+      | 'pinned-native'
+      | 'reactive-catalyst'
+      | 'reactive-native'
+      | typeof reactiveBrowserSchemeCapability
     requested: 'dark' | 'light' | 'system'
     resolved: 'dark' | 'light'
     source: 'native-fixed' | 'preference' | 'scenario' | 'system'
@@ -1253,9 +1258,10 @@ function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage
   if (
     identity === undefined
     || !isObject(scheme)
-    || !['fixed-light-native', 'pinned-native', 'reactive-catalyst', reactiveBrowserSchemeCapability].includes(
-      String(scheme['capability']),
-    )
+    || !['fixed-light-native', 'pinned-native', 'reactive-catalyst', 'reactive-native', reactiveBrowserSchemeCapability]
+      .includes(
+        String(scheme['capability']),
+      )
     || !['dark', 'light', 'system'].includes(String(scheme['requested']))
     || !['dark', 'light'].includes(String(scheme['resolved']))
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(String(scheme['source']))

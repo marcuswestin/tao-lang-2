@@ -1,5 +1,15 @@
 # Tao CLI
 
+## Report a problem
+
+From an installed CLI, `tao doctor --json` prints a privacy-filtered environment fingerprint with
+the Tao release, OS and architecture, available tool versions, Xcode on macOS, and the installed
+resource bundle hash. `tao doctor` presents the same facts for a person to read.
+
+Run `tao bug-report` for a short report draft, links to the two feedback issue forms, and an optional
+fingerprint to paste into the Environment field. The command reads the local environment but sends
+nothing; review the draft before submitting it. Neither command requires a source checkout.
+
 ## Experimental visionOS project export
 
 `tao build <project> --visionos` retains a native Xcode project that embeds the compiled Tao web UI

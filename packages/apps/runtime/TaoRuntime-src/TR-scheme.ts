@@ -8,7 +8,12 @@ const schemeCaptureVersion = 1 as const
 
 export type TaoAppearance = 'dark' | 'light' | 'system'
 export type TaoScheme = 'dark' | 'light'
-export type TaoSchemeCapability = 'fixed-light-native' | 'pinned-native' | 'reactive-browser' | 'reactive-catalyst'
+export type TaoSchemeCapability =
+  | 'fixed-light-native'
+  | 'pinned-native'
+  | 'reactive-browser'
+  | 'reactive-catalyst'
+  | 'reactive-native'
 
 /** The capability a browser cell reports: it follows the page's color scheme as it changes. */
 const reactiveBrowserSchemeCapability = 'reactive-browser' satisfies TaoSchemeCapability
@@ -67,10 +72,8 @@ function resolveScheme(
     ? 'preference'
     : 'system'
   if (environment.platform === 'native') {
-    // A scenario's appearance is part of the scenario, so it travels to a device. `fixed-light-native`
-    // says this runtime cannot follow the device's own appearance; it never said the runtime cannot
-    // render dark, and a Studio cell asking for dark is asking for exactly that. Only a preview cell
-    // ever sets `scenario`, so a shipped app resolves the way it always has.
+    // A scenario's appearance is part of the scenario, so it travels to a device and stays pinned
+    // even when the device's appearance changes.
     if (request.scenario !== undefined) {
       return Object.freeze({
         capability: 'pinned-native',
@@ -79,15 +82,13 @@ function resolveScheme(
         source: 'scenario',
       })
     }
-    return Object.freeze({
-      capability: 'fixed-light-native',
-      requested,
-      resolved: 'light',
-      source: 'native-fixed',
-    })
   }
   return Object.freeze({
-    capability: environment.platform === 'catalyst' ? 'reactive-catalyst' : reactiveBrowserSchemeCapability,
+    capability: environment.platform === 'catalyst'
+      ? 'reactive-catalyst'
+      : environment.platform === 'native'
+      ? 'reactive-native'
+      : reactiveBrowserSchemeCapability,
     requested,
     resolved: requested === 'system' ? environment.system : requested,
     source: requestSource,
@@ -130,7 +131,7 @@ function useSchemeEnvironment(): TaoSchemeResolutionEnvironment {
 }
 
 function subscribeSystemScheme(changed: () => void): () => void {
-  if (isCatalyst()) {
+  if (requireReactNativeRuntime().Platform?.OS !== 'web') {
     const subscription = requireReactNativeRuntime().Appearance?.addChangeListener(changed)
     return () => subscription?.remove()
   }
@@ -149,7 +150,7 @@ function subscribeSystemScheme(changed: () => void): () => void {
 }
 
 function readSystemScheme(): TaoScheme {
-  if (isCatalyst()) {
+  if (requireReactNativeRuntime().Platform?.OS !== 'web') {
     return requireReactNativeRuntime().Appearance?.getColorScheme() === 'dark' ? 'dark' : 'light'
   }
   return browserSchemeMedia()?.matches === true ? 'dark' : 'light'
@@ -174,7 +175,7 @@ function decodeSnapshot(value: TaoRuntimeJson): TaoSchemeSnapshot {
     typeof value !== 'object'
     || value === null
     || Array.isArray(value)
-    || !['fixed-light-native', 'pinned-native', 'reactive-browser', 'reactive-catalyst'].includes(
+    || !['fixed-light-native', 'pinned-native', 'reactive-browser', 'reactive-catalyst', 'reactive-native'].includes(
       String(record['capability']),
     )
     || (record['requested'] !== 'dark' && record['requested'] !== 'light' && record['requested'] !== 'system')
@@ -190,7 +191,9 @@ function decodeSnapshot(value: TaoRuntimeJson): TaoSchemeSnapshot {
 
 function validateSnapshot(snapshot: TaoSchemeSnapshot): void {
   if (
-    !['fixed-light-native', 'pinned-native', 'reactive-browser', 'reactive-catalyst'].includes(snapshot.capability)
+    !['fixed-light-native', 'pinned-native', 'reactive-browser', 'reactive-catalyst', 'reactive-native'].includes(
+      snapshot.capability,
+    )
     || (snapshot.requested !== 'dark' && snapshot.requested !== 'light' && snapshot.requested !== 'system')
     || (snapshot.resolved !== 'dark' && snapshot.resolved !== 'light')
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(snapshot.source)

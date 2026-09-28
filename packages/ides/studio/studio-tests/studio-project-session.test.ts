@@ -2121,7 +2121,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     Expect(events.some(event => event.type === 'preview-manifest-changed')).toBe(true)
     Expect(handshake.capabilities.matrix).toEqual({
       concurrentCells: true,
-      scheme: 'reactive-browser-fixed-light-native',
+      scheme: 'reactive-browser-native',
       version: 2,
     })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/preview/cell/reconfigure' })

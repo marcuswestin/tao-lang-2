@@ -628,7 +628,7 @@ export class StudioProjectSession {
         },
         matrix: {
           concurrentCells: true,
-          scheme: 'reactive-browser-fixed-light-native',
+          scheme: 'reactive-browser-native',
           version: 2,
         },
         sketches: { catalogVersion: studioSketchCatalogFormatVersion, freeGeometry: true },
