@@ -1,7 +1,8 @@
 import { Packages } from '@ast-utils'
+import { LSPWorkspace } from '@compiler/workspace'
 import { AST, codeProjectRoot, Langium, Parser } from '@parser'
-import { Diagnostics } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Diagnostics, FS } from '@shared'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { Validation } from '../validator-src/validation'
 import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { preludeValidationMessages } from '../validator-src/validators/prelude-validator'
@@ -11,6 +12,7 @@ import { useValidationMessages, validateVisibleDeclarations } from '../validator
 import {
   accepts,
   acceptsFiles,
+  acceptsFilesFrom,
   app,
   checksFiles,
   rejects,
@@ -104,6 +106,50 @@ Describe('validator: workspace structure', () => {
   Test(
     'rejects primitive declarations outside the pinned prelude',
     rejects('primitive text', preludeValidationMessages.location),
+  )
+
+  Test(
+    'allows primitive declarations in the IDE extension generated prelude',
+    acceptsFilesFrom('_gen_ide-extension/@tao/Prelude.tao', {
+      '_gen_ide-extension/@tao/Prelude.tao': 'primitive item',
+    }),
+  )
+
+  Test(
+    'allows primitive declarations in the checkout prelude',
+    acceptsFilesFrom('packages/apps/stdlib/@tao/Prelude.tao', {
+      'packages/apps/stdlib/@tao/Prelude.tao': 'primitive item',
+    }),
+  )
+
+  Test('pins the language server to a checkout prelude', async () => {
+    const root = await mkTestDir('tao-prelude-pin-')
+    try {
+      const prelude = FS.resolvePath('packages/apps/stdlib/@tao/Prelude.tao', root)
+      const app = FS.resolvePath('App.tao', root)
+      await FS.writeText(prelude, 'primitive item\n')
+      await FS.writeText(app, 'primitive text\n')
+      const workspace = await LSPWorkspace.open(root)
+      const preludeMessages = (await workspace.validate(prelude)).diagnostics
+        .filter(diagnostic => diagnostic.filePath === prelude)
+        .map(diagnostic => diagnostic.message)
+      const appMessages = (await workspace.validate(app)).diagnostics
+        .filter(diagnostic => diagnostic.filePath === app)
+        .map(diagnostic => diagnostic.message)
+
+      Expect(preludeMessages).not.toContain(preludeValidationMessages.location)
+      Expect(preludeMessages).toContain(preludeValidationMessages.missing('number'))
+      Expect(appMessages).toContain(preludeValidationMessages.location)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test(
+    'rejects primitive declarations in other generated Tao files',
+    rejectsFilesFrom('_gen_ide-extension/App.tao', {
+      '_gen_ide-extension/App.tao': 'primitive item',
+    }, preludeValidationMessages.location),
   )
 
   Test(

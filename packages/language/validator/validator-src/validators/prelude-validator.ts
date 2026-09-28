@@ -33,7 +33,7 @@ export const preludeValidationMessages = {
 
 export const preludeValidationChecks = {
   [AST.PrimitiveDeclaration.$type]: (declaration, ctx) => {
-    if (AST.getDocument(declaration).uri.path !== preludePath(ctx)) {
+    if (!isPreludeDocument(AST.getDocument(declaration).uri.path, ctx)) {
       ctx.error(declaration, preludeValidationMessages.location)
     }
   },
@@ -65,4 +65,18 @@ export function validatePreludeFile(file: AST.TaoFile, ctx: ValidationContext): 
 
 function preludePath(ctx: ValidationContext): string {
   return FS.resolvePath('@tao/Prelude.tao', ctx.packagesContext.stdlibRoot)
+}
+
+/**
+ * A primitive is allowed in the active stdlib prelude, the checkout that owns that contract, and the
+ * copy the IDE extension publishes beside the language server. Those are one contract on disk more
+ * than once; an app file is none of them.
+ */
+const preludeDocumentSuffixes = [
+  '/packages/apps/stdlib/@tao/Prelude.tao',
+  '/_gen_ide-extension/@tao/Prelude.tao',
+] as const
+
+function isPreludeDocument(path: string, ctx: ValidationContext): boolean {
+  return path === preludePath(ctx) || preludeDocumentSuffixes.some(suffix => path.endsWith(suffix))
 }
