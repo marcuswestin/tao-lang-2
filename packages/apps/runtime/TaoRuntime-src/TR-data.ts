@@ -549,6 +549,16 @@ export const DataControls = {
     metadataOf(handle).schema.update(handle, evaluatedFields(fields))
   },
 
+  /** Toggle reads the transaction's current row once and records one concrete field update. */
+  Toggle(row: Evaluable, field: string): void {
+    const handle = entityHandle(row.evaluate().jsValue)
+    RuntimeAssert.input(handle, 'Data toggle expects an entity handle.')
+    const schema = metadataOf(handle).schema
+    const current = schema.read(handle, field)
+    RuntimeAssert.input(typeof current === 'boolean', `Data toggle expects a yes/no field '${field}'.`)
+    schema.update(handle, { [field]: !current })
+  },
+
   /** UpdateWith submits every own supplied input field and preserves omitted fields. */
   UpdateWith(row: Evaluable, input: Evaluable): void {
     const handle = entityHandle(row.evaluate().jsValue)

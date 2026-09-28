@@ -49,10 +49,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   /** getScope returns Tao values visible to a value reference. */
   override getScope(context: Langium.ReferenceInfo): Langium.Scope {
     const container = context.container
-    const isStateTargetReference = context.property === 'target'
-      && (AST.isSetStatement(container) || AST.isToggleStatement(container))
+    const isStateTargetReference = context.property === 'target' && AST.isSetStatement(container)
     if (isStateTargetReference) {
       return this.createMutableScope(container)
+    }
+    if (context.property === 'target' && AST.isToggleStatement(container)) {
+      return this.createValueScope(container)
     }
     if (context.property === 'target' && AST.isValueReference(context.container)) {
       if (AST.isDataWriteField(context.container.$container)) {

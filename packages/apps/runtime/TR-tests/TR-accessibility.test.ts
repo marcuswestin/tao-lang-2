@@ -1,5 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
-import { focusAccessibilityHost } from '../TaoRuntime-src/TR-accessibility'
+import { accessibilityVerbProps, focusAccessibilityHost } from '../TaoRuntime-src/TR-accessibility'
 import type { ReactNativeRuntime } from '../TaoRuntime-src/TR-react-native'
 
 function runtime(
@@ -23,6 +23,30 @@ function runtime(
 }
 
 Describe('TR accessibility projection', () => {
+  Test('generated verb actions preserve existing host actions and dispatch through one semantic identity', () => {
+    const invoked: string[] = []
+    const forwarded: string[] = []
+    const props = accessibilityVerbProps(
+      {
+        accessibilityActions: [{ label: 'Adjust', name: 'adjust' }],
+        onAccessibilityAction: (event: { nativeEvent?: { actionName?: string } }) =>
+          forwarded.push(event.nativeEvent?.actionName ?? ''),
+      },
+      [{ identity: 'Pin', label: 'Pin workspace' }],
+      identity => invoked.push(identity),
+    )
+
+    Expect(props['accessibilityActions']).toEqual([
+      { label: 'Adjust', name: 'adjust' },
+      { label: 'Pin workspace', name: 'tao:Pin' },
+    ])
+    const dispatch = props['onAccessibilityAction'] as (event: { nativeEvent: { actionName: string } }) => void
+    dispatch({ nativeEvent: { actionName: 'tao:Pin' } })
+    dispatch({ nativeEvent: { actionName: 'adjust' } })
+    Expect(invoked).toEqual(['Pin'])
+    Expect(forwarded).toEqual(['adjust'])
+  })
+
   Test('moves DOM focus when Tao attention targets a web host', () => {
     let focuses = 0
     let accessibilityEvents = 0

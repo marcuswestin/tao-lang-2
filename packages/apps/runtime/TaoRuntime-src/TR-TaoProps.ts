@@ -177,6 +177,7 @@ export const TaoPropsControls = {
   schemeInChain,
   setInteractionOccurrence,
   visualNativeProps,
+  visualRowRoot,
   visualInteractionOccurrence,
   visualLayout,
   visualTag,
@@ -404,6 +405,10 @@ function visualNativeProps(layout: TaoVisualLayout | undefined, tag?: string): R
   const metadata = privateMetadataForVisualLayout(layout)
   const nativeProps = nativePropsWithStudioIdentity({}, metadata?.studio)
   return tag ? { ...nativeProps, testID: tag } : nativeProps
+}
+
+function visualRowRoot(layout: TaoVisualLayout | undefined): TaoOutlineRowRoot | undefined {
+  return privateMetadataForVisualLayout(layout)?.interaction?.row
 }
 
 function nativePropsWithStyle(merged: MergedTaoViewProps): Record<string, unknown> {

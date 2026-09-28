@@ -56,7 +56,14 @@ Describe('TR.Interaction.Outline', () => {
     const table = describeOutlineTable({
       module: '@ui/Workspaces',
       nodes: {
-        'Main#12': { declaration: 'Main', kind: 'control', label: 'Save', role: 'action', view: 'FormButton' },
+        'Main#12': {
+          declaration: 'Main',
+          kind: 'control',
+          label: 'Save',
+          nameStatus: 'known',
+          role: 'action',
+          view: 'FormButton',
+        },
         'Main#40': {
           declaration: 'Main',
           kind: 'collection',
