@@ -114,12 +114,12 @@ await runWithCommands(commands => {
     .description('Run the opt-in real-host testing prototype, independently of existing suites.')
     .argument(
       '[mode]',
-      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, catalyst, agents, or setup.',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, watchos, catalyst, agents, or setup.',
       'check',
     )
     .option(
       '--app <subject>',
-      'Explicit subject: hnreader, clockwork, native-navigation, or native-bridge (iOS Clipboard acceptance).',
+      'Explicit subject: hnreader, clockwork, native-navigation, native-bridge, or watchhello (watchos only).',
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
@@ -131,6 +131,11 @@ await runWithCommands(commands => {
     .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
     .option('--demo', 'For agents: build the example, print discovery, invoke one command, then stop.')
     .action(async (mode, options) => {
+      if (mode === 'watchos') {
+        const { runWatchProof } = await import('./watchos/WatchProof')
+        await runWatchProof(options)
+        return
+      }
       if (mode === 'agents') {
         if (options.demo) {
           await CLI.mustRun('just', { args: ['agents-demo'], cwd: Repo.getRoot(), stdio: 'inherit' })
@@ -629,6 +634,21 @@ await runWithCommands(commands => {
     .action(async (options) => {
       const { IosSetupCommand } = await import('./ios-setup/IosSetupCommand')
       await runExitCommand(() => IosSetupCommand.run(options))
+    })
+
+  commands
+    .command('setup-watchos [project]')
+    .description('Guide Apple Watch setup; install the simulator runtime, export, build and run a Tao app.')
+    .requiredOption('--xcode-version <version>', 'The Xcode version to reuse or install, such as 27.0.')
+    .option('--runtime-version <version>', 'Exact watchOS Simulator runtime; required for simulator setup.')
+    .option('--archive <path>', 'Select a local Xcode .xip when the requested version is not installed.')
+    .option('--physical', 'Guide physical-watch pairing and signing instead of simulator setup.')
+    .option('--device <identifier>', 'Choose an Apple Watch simulator by UUID.')
+    .option('--apply', 'Install missing components, export the project, and run it on an available simulator.')
+    .option('--json', 'Print a structured report without interactive prompts.')
+    .action(async (project: string | undefined, options) => {
+      const { WatchosSetupCommand } = await import('./watchos-setup/WatchosSetupCommand')
+      await runExitCommand(() => WatchosSetupCommand.run({ ...options, project: project ?? 'Apps/WatchHello' }))
     })
 
   commands
