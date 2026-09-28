@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { Assert, FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runCheck } from '../cli-src/source-commands'
 import { checkedProjectFile, withTaoFixture } from './test-cli-files'
@@ -29,7 +29,15 @@ export function MemoryProvider(): TR.DataProvider {
       const good = await runCheck(root)
       Expect(good.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
-      const metadata = await FS.readText(FS.resolvePath('Main.tao.ts', root))
+      const metadataPath = FS.resolvePath('Main.tao.ts', root)
+      const metadata = await FS.readText(metadataPath)
+      const runtimeImport = metadata.split('\n').find(line => line.startsWith('import type TR from '))
+      Expect(runtimeImport).toMatch(/^import type TR from "\.\.?\/.*"$/)
+      const specifier = runtimeImport?.match(/from "(.*)"/)?.[1]
+      Assert.defined(specifier, 'generated runtime import names a specifier')
+      Expect(await FS.realPath(FS.resolvePath(`${specifier}.ts`, FS.dirname(metadataPath)))).toBe(
+        await FS.realPath(FS.resolvePath('../../../apps/runtime/TaoRuntime-src/TR.ts', import.meta.dir)),
+      )
       Expect(metadata).toContain('Sidecar2.MemoryProvider satisfies MemoryProvider')
       Expect(metadata).toContain('export type MemoryConfig =')
       Expect(metadata).toContain('export type CustomMemoryConfig =')

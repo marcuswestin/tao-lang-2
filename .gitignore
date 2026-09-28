@@ -1,17 +1,17 @@
 .DS_Store
-node_modules
+node_modules/
 *.tsbuildinfo
 *.tao.ts
 
-.devenv
-.direnv
+.devenv/
+.direnv/
 .claude/settings.local.json
 .claude/agents/
 .claude/worktrees/
 .codex/agents/
 .cursor/agents/
 
-.android
+.android/
 local.properties
 
 # Every lane writes its logs, merge messages, and scratch state here, and a shell redirect into a
@@ -21,7 +21,7 @@ local.properties
 # have run first. Keep the negation: collapsing this back to a bare `.artifacts` reintroduces that.
 .artifacts/*
 !.artifacts/.gitkeep
-_gen_*
+_gen_*/
 **/.tao-project/studio/sketches.jsonc.*.tmp
 Apps/WordFlower/1 - Current/.tao-project/lock.jsonc
 # Project-local development sessions and generated runtime state.
@@ -31,16 +31,14 @@ Apps/WordFlower/1 - Current/.tao-project/lock.jsonc
 packages/*/.scratch/
 packages/*/*/.scratch/
 
-.expo
-packages/apps/expo-host/ios
-packages/apps/expo-host/android
+.expo/
+packages/apps/expo-host/ios/
+packages/apps/expo-host/android/
 
-packages/ides/studio-companion-app/ios
-packages/ides/studio-companion-app/android
+packages/ides/studio-companion-app/ios/
+packages/ides/studio-companion-app/android/
 
 # Decrypted secrets, written by `just secrets`. The encrypted originals live in secrets/secrets.jsonc.
 .env.secrets
 # Local overrides kept by hand. Nothing generates this, so nothing can overwrite it.
 .env.local
-
-# Landing smoke test, 2026-09-22. This comment has no ignore-rule effect.

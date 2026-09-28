@@ -41,15 +41,23 @@ function matchCount(source: string, pattern: RegExp): number {
   return [...source.matchAll(pattern)].length
 }
 
-// A top-level `packages/*` entry is either a package or a group of packages one level deeper; a
-// moved package's name is then `<group>/<package>`, matching PackageGraph's own depth-two rule.
-const PACKAGE_GROUPS = new Set(['ai', 'apps', 'cli', 'ides', 'language', 'providers', 'services', 'testing'])
+// A top-level `packages/*` entry is either a package or a group. A group holds packages one level
+// deeper, or — for the names in `NESTED_GROUPS` — another group whose packages sit one level
+// further down. A moved package's name matches PackageGraph (`<group>/<package>` or
+// `<group>/<group>/<package>`).
+const PACKAGE_GROUPS = new Set(['ai', 'apps', 'cli', 'ides', 'language', 'services', 'testing'])
+const NESTED_GROUPS = new Set(['apps/providers'])
 
 function packageOf(path: string): string {
   const segments = path.split('/')
   const first = segments[1] ?? ''
   const second = segments[2]
-  return PACKAGE_GROUPS.has(first) && second !== undefined ? `${first}/${second}` : first
+  const third = segments[3]
+  if (!PACKAGE_GROUPS.has(first) || second === undefined) {
+    return first
+  }
+  const grouped = `${first}/${second}`
+  return NESTED_GROUPS.has(grouped) && third !== undefined ? `${grouped}/${third}` : grouped
 }
 
 function packageAudits(sources: readonly AuditFile[]): PackageAudit[] {

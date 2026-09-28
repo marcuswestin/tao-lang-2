@@ -5,12 +5,12 @@ Describe('portable contributor bootstrap', () => {
   Test('reuses a locked generation and preserves it when a changed lock cannot build', async () => {
     const root = await mkTestDir('portable-bootstrap-')
     try {
-      const script = FS.resolvePath('bootstrap-tao-dev-env', root)
+      const script = FS.resolvePath('.config/bootstrap-tao-dev-env', root)
       const bin = FS.resolvePath('fixture-bin', root)
       const environment = FS.resolvePath('packages/cli/dev-cli/dev-cli-src/environment', root)
       const calls = FS.resolvePath('calls', root)
       const configLog = FS.resolvePath('nix-config', root)
-      await FS.writeText(script, await FS.readText(Repo.resolvePath('bootstrap-tao-dev-env')))
+      await FS.writeText(script, await FS.readText(Repo.resolvePath('.config/bootstrap-tao-dev-env')))
       await FS.writeText(FS.resolvePath('devenv.lock', root), 'first lock')
       await FS.writeText(FS.resolvePath('toolchain-packages.nix', environment), 'tool definition')
       await FS.writeText(FS.resolvePath('portable-profile.nix', environment), 'profile definition')

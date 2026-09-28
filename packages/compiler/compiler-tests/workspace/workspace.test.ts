@@ -278,8 +278,8 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           app Sketching { view MainView }
           view MainView() { render inject ${tsFence} return null ${fence} }
         `,
-        // Drawn in Studio and not imported by the app yet, so its own entry graph reaches no
-        // project metadata at all.
+        // Drawn in Studio and not imported by the app. Project metadata is still visible, because
+        // a validate reads the workspace rather than only the file's own entry graph.
         '@/studio/View1.tao': `
           use Text from @tao/ui
           public view View1() { render Text("View1") }
@@ -290,10 +290,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const alone = await workspace.validate(paths['@/studio/View1.tao']!)
         const batched = await workspace.validateFiles([paths['Main.tao'], paths['@/studio/View1.tao']])
 
-        Expect(errorMessages(alone)).toEqual([
-          'Project identity is missing. '
-          + "Run 'tao project id <id> [path]' to create checked-in project metadata.",
-        ])
+        Expect(errorMessages(alone)).toEqual([])
         Expect(errorMessages(batched)).toEqual([])
         Expect(batched.entry.path).toBe(paths['Main.tao'])
         Expect(batched.files.map(file => file.path)).toEqual(
@@ -303,9 +300,8 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
-  // The app selects the design, so a package file that imports no app used to see every tagged
-  // render as one with no design mounted at all. `tao check` surfaced 321 of these on this
-  // repository's own sources the moment validation errors started reaching the command.
+  // The app selects the design. A package file that imports no app still sees that selection,
+  // because validation reads the workspace rather than only the file's own entry graph.
   Test('reads the selected design across the batch so an unimported package file keeps its tags', async () => {
     await withTaoFiles(
       'tao-workspace-batch-design-',
@@ -326,7 +322,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const alone = await workspace.validate(paths['@ui/Panel.tao']!)
         const batched = await workspace.validateFiles([paths['Main.tao'], paths['@ui/Panel.tao']])
 
-        Expect(errorMessages(alone)).toContain("Design entry 'panel' requires an app Design selection.")
+        Expect(errorMessages(alone)).toEqual([])
         Expect(errorMessages(batched)).toEqual([])
       },
     )
@@ -359,8 +355,8 @@ Describe('directory-rooted Tao workspace pipeline', () => {
              view ShellView(ShellNav)
           }
         `,
-        // The bar states its own focus condition, but the shell that renders it into a region is a
-        // sibling this file does not import.
+        // The bar states its own focus condition. The shell that renders it into a region is a
+        // sibling this file does not import, and validation still sees that shell.
         '@ui/Bar.tao': `
           use Row from @tao/ui
           public view BarView() { render Row() [border accent when BarView is active] { } }
@@ -371,10 +367,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const alone = await workspace.validate(paths['@ui/Bar.tao']!)
         const batched = await workspace.validateFiles([paths['Main.tao'], paths['@ui/Bar.tao']])
 
-        Expect(errorMessages(alone)).toContain(
-          "'when BarView is active' names no visible view in a generated interaction region; "
-            + 'the condition can never become true.',
-        )
+        Expect(errorMessages(alone)).toEqual([])
         Expect(errorMessages(batched)).toEqual([])
       },
     )

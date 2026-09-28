@@ -93,7 +93,7 @@ It only renders returned data and invokes no native APIs.
 
 For the next supported API, add `<Surface>/<Surface>.tao` beside `<Surface>/Generated/`, generate its
 bindings, and add a home-screen button. Keep platform-specific controls labeled. Android can use the
-same app; future source/target adapters belong in `packages/native-bindings`, not in this demo.
+same app; future source/target adapters belong in `packages/apps/native-bindings`, not in this demo.
 
 The Tao journey checks navigation and initial UI without calling native operations. The
 `native-bridge-demo.jest-test.tsx` suite compiles this maintained app and operates its controls with

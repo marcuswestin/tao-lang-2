@@ -316,7 +316,7 @@ git archive --format=tar HEAD > "$output/checkout.tar"
 mkdir "$output/context"
 # Extract only Dockerfile for the base build. No working-tree content or credentials enter it.
 git show "HEAD:$environment/Dockerfile" > "$output/context/Dockerfile"
-git archive --format=tar HEAD bootstrap-tao-dev-env devenv.lock "$environment" > "$output/tools.tar"
+git archive --format=tar HEAD .config/bootstrap-tao-dev-env devenv.lock "$environment" > "$output/tools.tar"
 printf '%s\n' \
   "platform=$platform" 'guest_cpus=4' 'guest_memory_bytes=17179869184' \
   'guest_memory_swap_bytes=17179869184' 'guest_timeout_seconds=7200' \
@@ -343,7 +343,7 @@ case "$base_cache_identity" in
   *) printf 'Cannot establish the base image filesystem/configuration identity.\n' >&2; exit 1 ;;
 esac
 # Hash exact tool inputs and the base identity; never retain a dependency install or host profile.
-git ls-tree HEAD bootstrap-tao-dev-env devenv.lock "$environment" > "$output/cache-inputs"
+git ls-tree HEAD .config/bootstrap-tao-dev-env devenv.lock "$environment" > "$output/cache-inputs"
 cat "$output/base-cache-identity.txt" >> "$output/cache-inputs"
 printf 'qemu_guest_base_experiment=%s\n' "$qemu_guest_base" >> "$output/cache-inputs"
 printf 'qemu_nix_filter_disabled=%s\n' "$qemu_nix_filter" >> "$output/cache-inputs"

@@ -26,7 +26,7 @@ source "$SCRIPT_DIR/packages/cli/dev-cli/dev-cli-src/cli/agent-worktree-profile.
 
 if ! tao_activate_devenv_profile "$SCRIPT_DIR" "$DEVENV_PROFILE"; then
   echo "Tao's pinned devenv profile is unavailable." >&2
-  echo "On macOS run ./enter-tao-dev-env; on Linux run ./bootstrap-tao-dev-env --install-nix." >&2
+  echo "On macOS run ./enter-tao-dev-env; on Linux run ./.config/bootstrap-tao-dev-env --install-nix." >&2
   exit 1
 fi
 

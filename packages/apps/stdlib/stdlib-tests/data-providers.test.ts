@@ -30,7 +30,7 @@ Describe('@tao/data providers', () => {
     )
   })
 
-  // InstantDBProvider's own behavior is covered in `packages/providers/instantdb`, where the
+  // InstantDBProvider's own behavior is covered in `packages/apps/providers/instantdb`, where the
   // implementation now lives; this only proves the sibling sidecar re-exports it correctly.
   Test('re-exports InstantDBProvider from tao-instantdb through the stdlib sidecar', () => {
     Expect(typeof InstantDBProvider().connect).toBe('function')

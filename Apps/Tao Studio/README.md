@@ -7,10 +7,20 @@ it. `Docs/Spec/Tao Studio.md` owns what Studio _is_ as an implemented product co
 
 ```text
 Apps/Tao Studio/
-  TaoStudioClient.tao          the workbench view tree, panels, and state
+  TaoStudioClient.tao          app, design, and datasource configuration
   Project.tao                  this app's own project identity
   StudioServerDataProvider.ts  sibling stub the StudioServer datasource requires; re-exports the
                                 implementation from packages/ides/studio, which stays there
+  @data/
+    Catalog.tao                file, diagnostic, screen, view, scenario, checkpoint, and token entities
+  @ui/
+    Workbench.tao              host actions and workbench slot composition
+    Explorer.tao               files, components, project views, screens, and design tokens
+    Context.tao                context, lens, environment, and shared controls
+    Inspector.tao              inspector sections and helpers
+    PanelState.tao             drawer panel contracts and initial values
+    Drawer.tao                 drawer, data, debug, tests, logs, and search
+    Scenario.tao               scenario and journey controls
   @code-editor/                the code editor as an app-local package
     CodeEditor.tao             the foreign view declaration, naming TaoStudioProductHost.tsx
 ```

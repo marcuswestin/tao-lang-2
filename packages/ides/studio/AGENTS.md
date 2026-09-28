@@ -1,10 +1,10 @@
 # Studio Hybrid Client
 
-The Tao client itself — `TaoStudioClient.tao`, its `Project.tao`, and the provider sidecar the
-`StudioServer` datasource declares — lives at `Apps/Tao Studio/` like any other app, not in this
-package; its foreign views still resolve into `studio-src/` by relative hop, since the TypeScript
-they name stays here. The editor is an app-local Tao package at `Apps/Tao Studio/@code-editor/`,
-whose `.tsx` binding is a plain re-export of `product-host/StudioEditorSurface.tsx` — the CodeMirror
+The Tao client itself — its entry app, including the project block, the provider sidecar, and the
+`@data`, `@ui`, and `@code-editor` packages — lives at `Apps/Tao Studio/` like any other app, not in
+this package. Its foreign views still resolve into `studio-src/` by relative hop, since the TypeScript
+they name stays here. The editor's `.tsx` binding is a plain re-export of
+`product-host/StudioEditorSurface.tsx` — the CodeMirror
 component and the state wiring around it both stay in this package; only the export point moved, so
 `react`, `@shared`, and `@runtime` keep resolving through this package's own `node_modules`, which
 `Apps/` has none of.

@@ -1,5 +1,0 @@
-project {
-   id "read-net"
-   name "Read Net"
-   version "0.1.0"
-}

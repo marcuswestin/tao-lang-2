@@ -1856,23 +1856,22 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   meet locally and at publish time. Public alias chains flatten to the target's canonical identity
   while retaining one-hop lexical navigation; cycles are invalid, and a wrapper creates new identity.
 - **Release metadata is source-owned.** `project` carries a numeric three-component SemVer as
-  `version "<major>.<minor>.<patch>"` and may name `DefaultApp <AppName>`. An explicit CLI
-  `--app` selection wins over `DefaultApp`; without either, tooling presents the available apps.
-  `DefaultApp` deliberately remains source-compatible spelling but is parsed as a capitalized
-  identifier and validated in the project slot rather than becoming a grammar keyword.
+  `version "<major>.<minor>.<patch>"` and may name `app <AppName>`. An explicit CLI
+  `--app` selection wins over that clause; without either, tooling presents the available apps.
+  `app` inside the project block is the same keyword as an app declaration.
 
 ---
 
 ## 11. App composition and providers
 
-- **`project { id, name, version, DefaultApp, targets, languages, license }` declares the product envelope**:
+- **`project { id, name, version, app, targets, languages, license }` declares the product envelope**:
 
 ```swift
 project {
    id "skillet"
    name "Skillet"
    version "1.0.0"
-   DefaultApp Skillet
+   app Skillet
    targets phone, tablet, laptop
    languages "en-US", "es"
 }

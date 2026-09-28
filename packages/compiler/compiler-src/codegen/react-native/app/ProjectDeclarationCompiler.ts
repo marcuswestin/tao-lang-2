@@ -12,7 +12,7 @@ export const ProjectDeclarationCompiler = {
 
 function formatProjectStatement(statement: AST.ProjectStatement): string {
   return Switch.type(statement, {
-    ProjectDefaultApp: projectDefaultApp => `DefaultApp ${projectDefaultApp.app.$refText}`,
+    ProjectDefaultApp: projectDefaultApp => `app ${projectDefaultApp.app.$refText}`,
     ProjectId: projectId => `id ${gen.jsLiteral(projectId.value)}`,
     ProjectLicense: projectLicense => `license ${projectLicense.value}`,
     ProjectName: projectName => `name ${gen.jsLiteral(projectName.value)}`,

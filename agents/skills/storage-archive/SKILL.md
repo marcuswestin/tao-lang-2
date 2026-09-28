@@ -12,26 +12,22 @@ This skill owns the order of operations and what an agent must not do to the arc
 
 ## The round, in order
 
-1. **Iterate outside the archive.** Capture into scratch until the shots are right:
-   `./agent tao _preview qa <project> --screenshot --dest .artifacts/qa-dev`, narrowed with
-   `--scenario`, `--device`, `--appearance`, or `--studio`. A finished run lands in
-   `.artifacts/qa-dev/runs/<stamp>/screenshots/`. Studio needs the host's Watchman, so run it
-   unsandboxed as `storage qa` is.
-2. **Show the Developer the scratch shots** before anything touches `storage`, and say where they
-   are. Nothing is written to the archive until they are satisfied.
-3. **Capture once into the archive**: `./agent unsandboxed storage qa <project>… [--studio] [--note …]`.
-   It syncs `storage` to the archive's `main` first and commits every project's run as one archive
-   commit. Check its summary line for failures before going on.
-4. **Publish**: `./agent unsandboxed storage push`. Pushing is irreversible and the archive is
+1. **Capture**: `./agent unsandboxed storage qa`. With no paths it captures the reference apps and
+   starters plus Studio's own layouts, and commits them as one archive commit; name project paths,
+   `--studio`, or `--note` to change that. Check its summary line for failures.
+2. **Show the Developer the shots**, in `storage/qa/runs/<stamp>/screenshots/`, and wait until they
+   are satisfied. A run they reject is reset away before it is pushed (below).
+3. **Publish**: `./agent unsandboxed storage push`. Pushing is irreversible and the archive is
    append-only, so push only a run the Developer asked to keep.
-5. **Point this repository at it**, on a fresh branch: `./agent start-branch feat/<name>`, then
-   `./dev storage pin`, which commits only the pointer, refuses an unpublished or dirty archive head
-   and anything already staged, and drafts the merge message when the branch has none.
-6. **Land** with `./agent unsandboxed land`, under the Developer's landing authorization as for any
+4. **Pin**, from any clean checkout: `./dev storage pin`. Off a feature branch it starts
+   `feat/storage-pin-<commit>` from `origin/main`, commits only the pointer, and records the merge
+   message so the landing asks nothing more.
+5. **Land**: `./agent unsandboxed land`, under the Developer's landing authorization as for any
    slice.
 
-`pin` is a plain `./dev` command because it writes only this worktree's Git data; the other three are
-named `./agent unsandboxed` operations. Pinning is occasional — a routine capture ends at step 4.
+Pinning is occasional; a routine capture can stop after step 3. When changing the capture tooling
+itself, iterate with `./agent tao _preview qa <project> --screenshot --dest .artifacts/qa-dev`
+(unsandboxed, since Studio needs the host's Watchman) so trial runs never reach `storage`.
 
 ## The archive's history
 

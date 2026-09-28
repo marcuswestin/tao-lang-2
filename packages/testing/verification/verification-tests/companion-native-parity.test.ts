@@ -197,8 +197,8 @@ Describe('companion native module parity', () => {
     try {
       await writePackage(root, HOST_PACKAGE_PATH, { dependencies: { 'tao-test-native': 'workspace:*' } })
       await writePackage(root, COMPANION_PACKAGE_PATH, { dependencies: {} })
-      await writePackage(root, 'packages/providers/test-native/package.json', { name: 'tao-test-native' })
-      await writeNativeMarker(root, 'packages/providers/test-native')
+      await writePackage(root, 'packages/apps/providers/test-native/package.json', { name: 'tao-test-native' })
+      await writeNativeMarker(root, 'packages/apps/providers/test-native')
 
       Expect(await companionNativeParityIssues(root)).toEqual([
         `${COMPANION_PACKAGE_PATH} is missing "tao-test-native": "workspace:*", which ${HOST_PACKAGE_PATH} depends `

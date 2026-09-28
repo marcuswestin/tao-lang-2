@@ -459,7 +459,7 @@ InstantDB, with no server of ours. Replace both placeholder App IDs with an Inst
 push that app's generated schema and rules first. The first sign-in creates the person's Account row
 with no name, so the app opens on "Complete your profile" rather than the missing-account guard. The
 paired flow (code sign-in, account row, owner-only notes, sign-out) is covered against a local
-InstantDB by `packages/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts`, and
+InstantDB by `packages/apps/providers/instantdb/instantdb-tests/InstantDB-sign-in-live.test.ts`, and
 `auth-review-live.test.ts` beside it pushes this source and runs a journey it writes for the variant under
 `tao test`. On 2026-09-27 the Developer ran it against Instant Cloud on a physical iPhone and
 reported it working.

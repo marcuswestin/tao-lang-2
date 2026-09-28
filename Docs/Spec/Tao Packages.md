@@ -1,7 +1,7 @@
 # Tao Project and Packages
 
 Status: partially implemented design draft. The current implementation supports local
-`project { id "..." name "..." version "..." DefaultApp AppName remote none license ... }` metadata,
+`project { id "..." name "..." version "..." app AppName remote none license ... }` metadata,
 `tao create` and project-ID migration, `file`/`package`/`workspace`/`public`
 declaration visibility, `use ... from ...` imports for relative Tao source paths and `@tao/...`
 stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports, the reserved root
@@ -87,7 +87,7 @@ project {
    id "chat"
    name "Chat"
    version "0.1.0"
-   DefaultApp ChatApp
+   app ChatApp
    remote none
    license MIT
 }

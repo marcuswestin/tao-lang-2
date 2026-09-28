@@ -59,7 +59,7 @@ async function runFormat(context: HostTestingContext): Promise<void> {
       'packages/testing/e2e-testing/**',
       'packages/apps/runtime/TaoRuntime-src/host-testing/**',
       'packages/apps/runtime/TaoRuntime-src/core/**',
-      'packages/providers/icloud/plugins/with-tao-icloud.cjs',
+      'packages/apps/providers/icloud/plugins/with-tao-icloud.cjs',
     ],
   }, context.artifactRoot)
 }

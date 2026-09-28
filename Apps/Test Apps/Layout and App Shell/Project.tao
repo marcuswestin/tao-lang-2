@@ -1,5 +1,0 @@
-project {
-   id "layout-app-shell"
-   name "Layout and App Shell"
-   version "0.1.0"
-}

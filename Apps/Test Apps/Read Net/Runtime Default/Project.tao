@@ -1,5 +1,0 @@
-project {
-   id "read-net-runtime-default"
-   name "Read Net Runtime Default"
-   version "0.1.0"
-}

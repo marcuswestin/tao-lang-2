@@ -1,0 +1,68 @@
+workspace
+data Files / File {
+   StableId text (unique),
+   Path text,
+   Name text,
+   ParentPath text,
+   Version text,
+   Dirty boolean,
+   Folder boolean,
+   DiagnosticCount number,
+   Diagnostics (owned),
+
+   order by Path,
+}
+
+workspace
+data Diagnostics / Diagnostic {
+   Message text,
+   Source text,
+   File,
+}
+
+workspace
+data Screens / Screen {
+   StableId text (unique),
+   Name text,
+   SourcePath text,
+}
+
+workspace
+data Views / View {
+   StableId text (unique),
+   Name text,
+   SourcePath text,
+}
+
+workspace
+data Scenarios / Scenario {
+   StableId text (unique),
+   Group text,
+   Name text,
+   SourcePath text,
+   SubjectId text,
+}
+
+workspace
+data Checkpoints / Checkpoint {
+   StableId text (unique),
+   Path text,
+   BeforeVersion text,
+   AfterVersion text,
+   Status text,
+}
+
+workspace
+data DesignTokens / DesignToken {
+   StableId text (unique),
+   DesignName text,
+   Kind text,
+   Name text,
+   SourcePath text,
+   SourceVersion text,
+   Start number,
+   End number,
+   Value text,
+
+   order by SourcePath,
+}
