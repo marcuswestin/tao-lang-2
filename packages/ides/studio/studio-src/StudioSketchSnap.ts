@@ -281,7 +281,8 @@ function padEntries(
   if (pad.top > 0 && pad.left > 0 && pad.top === pad.bottom && pad.left === pad.right) {
     return [['pad', 'horizontal', pad.left, 'vertical', pad.top]]
   }
-  let entry: ['pad', 'top' | 'right' | 'bottom' | 'left', number, ...Array<'top' | 'right' | 'bottom' | 'left' | number>]
+  let entry:
+    | ['pad', 'top' | 'right' | 'bottom' | 'left', number, ...Array<'top' | 'right' | 'bottom' | 'left' | number>]
     | undefined
   for (const side of ['top', 'right', 'bottom', 'left'] as const) {
     if (pad[side] > 0) {
