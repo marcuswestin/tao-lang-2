@@ -246,11 +246,11 @@ Describe('finalize', () => {
   Test('refuses a branch that is not feat/* or is detached', async () => {
     const fake = fakeDependencies({ branch: '' })
     await Expect(FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies))
-      .rejects.toThrow('requires a feat/* branch')
+      .rejects.toThrow('requires a feat/* or dev/* branch')
 
     const other = fakeDependencies({ branch: 'chore/something' })
     await Expect(FinalizeCommand.run({ repositoryRoot: '/repo' }, other.dependencies))
-      .rejects.toThrow('requires a feat/* branch')
+      .rejects.toThrow('requires a feat/* or dev/* branch')
   })
 
   Test('reports exactly what is dirty and stops rather than fixing it', async () => {
@@ -1228,7 +1228,7 @@ Describe('landing preparation', () => {
   Test('refuses a branch that is not feat/* or a dirty worktree, before anything else', async () => {
     const detached = fakeDependencies({ branch: '' })
     await Expect(prepareForLanding({ repositoryRoot: '/repo' }, detached.dependencies))
-      .rejects.toThrow('requires a feat/* branch')
+      .rejects.toThrow('requires a feat/* or dev/* branch')
 
     const dirty = fakeDependencies({ status: '?? stray.ts\n' })
     await Expect(prepareForLanding({ repositoryRoot: '/repo' }, dirty.dependencies))
@@ -1284,7 +1284,7 @@ Describe('merge-main', () => {
   Test('refuses a detached HEAD or a dirty worktree in its own name', async () => {
     const detached = fakeDependencies({ branch: '' })
     await Expect(MergeMainCommand.run({ repositoryRoot: '/repo' }, detached.dependencies))
-      .rejects.toThrow('merge-main requires a feat/* branch')
+      .rejects.toThrow('merge-main requires a feat/* or dev/* branch')
 
     const dirty = fakeDependencies({ status: ' M tracked.ts\n' })
     await Expect(MergeMainCommand.run({ repositoryRoot: '/repo' }, dirty.dependencies))
