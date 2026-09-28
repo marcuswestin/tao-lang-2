@@ -1,4 +1,0 @@
-project {
-   id "local-data"
-   name "Local Data"
-}

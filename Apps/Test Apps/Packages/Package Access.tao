@@ -1,6 +1,14 @@
 use MainView from @cards/screens
 use StackNav from @tao/nav
 
+project {
+   id "packages"
+   name "Packages"
+   version "0.1.0"
+   remote none
+   license MIT
+}
+
 app PackageAccess {
    Name "Package Access"
    Navigator StackNav {

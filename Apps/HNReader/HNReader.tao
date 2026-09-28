@@ -10,7 +10,7 @@ project {
    id "hnreader"
    name "HNReader"
    version "0.1.0"
-   DefaultApp HNReader
+   app HNReader
    remote none
    license MIT
 }

@@ -1,6 +1,6 @@
 # Studio Hybrid Client
 
-The Tao client itself — `TaoStudioClient.tao`, its `Project.tao`, and the provider sidecar the
+The Tao client itself — `TaoStudioClient.tao`, including its project block, and the provider sidecar the
 `StudioServer` datasource declares — lives at `Apps/Tao Studio/` like any other app, not in this
 package; its foreign views still resolve into `studio-src/` by relative hop, since the TypeScript
 they name stays here. The editor is an app-local Tao package at `Apps/Tao Studio/@code-editor/`,

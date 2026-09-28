@@ -573,13 +573,8 @@ Describe('validator: workspace structure', () => {
       },
       {
         title: 'rejects duplicate default apps',
-        source: `project { id "one" name "One" DefaultApp First DefaultApp Second }\napp First { }\napp Second { }`,
+        source: `project { id "one" name "One" app First app Second }\napp First { }\napp Second { }`,
         message: projectValidationMessages.duplicateDefaultApp(),
-      },
-      {
-        title: 'rejects misspelled default app metadata through the identifier seam',
-        source: `project { id "one" name "One" PrimaryApp First }\napp First { }`,
-        message: projectValidationMessages.defaultAppSpelling('PrimaryApp'),
       },
       {
         title: 'rejects duplicate project remotes',
@@ -614,7 +609,7 @@ Describe('validator: workspace structure', () => {
   Test(
     'accepts numeric SemVer core and a default app declared beside project metadata',
     accepts(`
-      project { id "one" name "One" version "0.12.3" DefaultApp MyApp }
+      project { id "one" name "One" version "0.12.3" app MyApp }
       ${stubApp()}
     `),
   )
@@ -622,7 +617,7 @@ Describe('validator: workspace structure', () => {
   Test(
     'resolves a default app from a root project metadata file',
     acceptsFiles({
-      'Project.tao': 'project { id "one" name "One" version "1.2.3" DefaultApp MyApp }',
+      'Project.tao': 'project { id "one" name "One" version "1.2.3" app MyApp }',
       'Main.tao': stubApp(),
     }),
   )

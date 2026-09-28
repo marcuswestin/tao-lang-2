@@ -30,10 +30,6 @@ Describe('Auth Review against local InstantDB (requires TAO_INSTANT_LIVE_API_URL
           }/runtime/session"`,
         ),
       )
-      await FS.writeText(
-        FS.resolvePath('Project.tao', project),
-        await FS.readText(Repo.resolvePath('Apps/Test Apps/Auth Review/Project.tao')),
-      )
       await agent(['tao', 'instantdb', 'push', entry, '--app', 'AuthReviewInstant'], {
         INSTANT_APP_ADMIN_TOKEN: app.target.token,
       })

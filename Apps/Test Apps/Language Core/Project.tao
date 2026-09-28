@@ -1,5 +1,0 @@
-project {
-   id "language-core"
-   name "Language Core"
-   version "0.1.0"
-}

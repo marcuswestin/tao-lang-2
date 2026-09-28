@@ -1,9 +1,0 @@
-use WatchHello from ./
-
-project {
-   id "watch-hello"
-   name "Rep Counter"
-   version "0.1.0"
-   DefaultApp WatchHello
-   remote none
-}

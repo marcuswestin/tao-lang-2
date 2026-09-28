@@ -15,7 +15,7 @@ const source = `project {
   id "notes"
   name "Notes"
   version "1.2.3"
-  DefaultApp Notes
+  app Notes
 }
 app Notes { view Main }
 view Main() { }
@@ -38,12 +38,12 @@ Describe('tao ship command', () => {
     })
   })
 
-  Test('requires an explicit app when neither --app nor DefaultApp selects one', async () => {
+  Test('requires an explicit app when neither --app nor project metadata selects one', async () => {
     await withTaoFiles('tao-ship-command-', {
-      'App.tao': source.replace('  DefaultApp Notes\n', '').replace('app Notes', 'app Other'),
+      'App.tao': source.replace('  app Notes\n', '').replace('app Notes', 'app Other'),
     }, async paths => {
       await Expect(runShipCommand(paths['App.tao']!, { dryRun: true, interactive: false })).rejects.toThrow(
-        'has no DefaultApp',
+        'does not name an app',
       )
     })
   })

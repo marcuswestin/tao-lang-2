@@ -1,6 +1,12 @@
 use StackNav from @tao/nav
 use Button, Col, DatePicker, Picker, SegmentedControl, Slider, Spinner, Switch, Text from @tao/ui
 
+project {
+   id "native-components"
+   name "Native Components"
+   version "0.1.0"
+}
+
 app NativeComponents {
    Name "Native Components"
    Navigator StackNav {

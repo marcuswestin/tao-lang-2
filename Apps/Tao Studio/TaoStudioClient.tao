@@ -5,6 +5,12 @@ use StudioCodeEditor from @code-editor
 use SlotNav from @tao/nav
 use Checkbox, Col, Text, TextInput from @tao/ui
 
+project {
+   id "tao-studio-client"
+   name "Tao Studio Client"
+   version "0.1.0"
+}
+
 // File contents remain editor buffers and never appear in Files or any related entity.
 app TaoStudioFiles {
    Name "Tao Studio Files"

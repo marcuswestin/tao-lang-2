@@ -81,7 +81,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Rendered nav, root view with arguments; frame retired (§10) | WordFlower · shell with persistent focus bar; Test Apps · Shell               | MVP      | in Current                |
 | Device-local entities (§2, §11)                             | **WordFlower · focus session as data** (journey smoke)                        | **MVP**  | compiler-proven           |
 | Restoration policy (§10)                                    | WordFlower · relaunch                                                         | MVP      | in Current                |
-| Project identity and release metadata (§10)                 | WordFlower · a checked-in project id; Skillet · `version`, `DefaultApp`       | MVP      | partially in Current      |
+| Project identity and release metadata (§10)                 | WordFlower · a checked-in project id; Skillet · `version`, `app`              | MVP      | partially in Current      |
 | App composition, variants, providers (§11)                  | WordFlower · app root + test variants                                         | MVP      | partially in Current      |
 | InstantDB datasource (§11)                                  | WordFlower · sync                                                             | MVP      | experimental              |
 | Datasource membership, bound sets (§6)                      | HNReader · a feed store beside the reader's own bookmarks                     | MVP      | in Current[^14]           |

@@ -4,7 +4,7 @@ project {
    id "notebook"
    name "Notebook"
    version "0.1.0"
-   DefaultApp Notebook
+   app Notebook
    remote none
 }
 
