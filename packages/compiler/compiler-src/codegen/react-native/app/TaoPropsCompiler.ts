@@ -1,7 +1,7 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { renderSourceIdentity, studioRectMarkerPrefix, studioRenderIdentity } from '../../studio-render-identity'
+import { renderSourceIdentity, studioRectMarkerPrefix, studioRenderIdentity } from '../../../studio-render-identity'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 

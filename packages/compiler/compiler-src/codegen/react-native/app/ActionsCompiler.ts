@@ -1,8 +1,8 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { BridgeMetadata } from '../../bridge-metadata'
-import { foreignActionTestStubKey } from '../../foreign-action-test-stubs'
+import { BridgeMetadata } from '../../../bridge-metadata'
+import { foreignActionTestStubKey } from '../../../foreign-action-test-stubs'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import {

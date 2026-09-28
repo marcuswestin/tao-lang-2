@@ -84,6 +84,10 @@ export const TaoAppModules = {
     const temporary = `${destination}.tmp-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
     try {
       await FS.copyDirectory(FS.resolvePath('TaoRuntime-src', source), FS.resolvePath('TaoRuntime-src', temporary))
+      const swiftRuntime = FS.resolvePath('swiftui', source)
+      if (await FS.isDirectory(swiftRuntime)) {
+        await FS.copyDirectory(swiftRuntime, FS.resolvePath('swiftui', temporary))
+      }
       const packageJson = FS.resolvePath('package.json', source)
       if (await FS.isFile(packageJson)) {
         await FS.copyFile(packageJson, FS.resolvePath('package.json', temporary))

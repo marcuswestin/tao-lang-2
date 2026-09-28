@@ -41,6 +41,7 @@ const expected = [
   'companion-host-build',
   'setup-ios',
   'setup-visionos',
+  'setup-watchos',
   'studio-companion-install',
   'clerk-review',
   'standalone-cli-vm-setup',
@@ -142,6 +143,7 @@ Describe('agent host command permissions', () => {
     Expect(hostCommandTarget(['start-branch'])).toEqual({ command: './dev', fixedArgs: ['start-branch'] })
     Expect(hostCommandTarget(['setup-ios'])).toEqual({ command: './dev', fixedArgs: ['setup-ios'] })
     Expect(hostCommandTarget(['setup-visionos'])).toEqual({ command: './dev', fixedArgs: ['setup-visionos'] })
+    Expect(hostCommandTarget(['setup-watchos'])).toEqual({ command: './dev', fixedArgs: ['setup-watchos'] })
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 'land'] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['land', 42] })).toThrow()
     Expect(() => agentHostCommands({ agentHostCommands: ['xcrun simctl list devices'] })).toThrow()

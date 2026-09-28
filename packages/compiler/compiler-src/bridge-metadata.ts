@@ -1,8 +1,11 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST, Langium, type ParsedFile } from '@parser'
 import { Assert, FS, Switch } from '@shared'
-import { authLibraryExport } from './codegen/app/auth-context'
-import { ConfigurationCompiler, isRuntimeConfigurableDeclaration } from './codegen/app/ConfigurationCompiler'
+import { authLibraryExport } from './codegen/react-native/app/auth-context'
+import {
+  ConfigurationCompiler,
+  isRuntimeConfigurableDeclaration,
+} from './codegen/react-native/app/ConfigurationCompiler'
 
 type BridgeContract = { arity?: string; exportName: string; path: string; result?: string; type: string }
 
