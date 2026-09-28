@@ -58,11 +58,10 @@ body:
     attributes:
       label: Environment
       description: >
-        Optional, and only if you are working in a checkout of this repository. Run
-        `./agent doctor --fingerprint` and paste the JSON. It reports your OS, architecture, Tao
-        commit, toolchain versions and lockfile hashes, and Xcode version if you have one. It
-        contains no file paths, no account or machine names, and nothing else about you — read it
-        before you paste it if you like.
+        Optional. Run `tao doctor --fingerprint` from an installed Tao CLI and paste the JSON. It
+        reports your OS, architecture, Tao release, available tool versions, installed resource
+        bundle hash, and Xcode version if present. It contains no file paths, account names, or
+        machine names. Review it before pasting.
       render: json
     validations:
       required: false

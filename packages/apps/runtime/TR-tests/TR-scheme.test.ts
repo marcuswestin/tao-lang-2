@@ -32,7 +32,7 @@ Describe('TR Scheme environment', () => {
     })
   })
 
-  Test('keeps cells independent, and takes a scenario pin on native while still not following the device', () => {
+  Test('keeps cells independent, pins native scenarios, and follows device appearance in shipped apps', () => {
     const first = TR.Scheme.resolve({ scenario: 'dark' }, { platform: 'web', system: 'light' })
     const second = TR.Scheme.resolve({ appearance: 'system' }, { platform: 'web', system: 'light' })
 
@@ -48,19 +48,17 @@ Describe('TR Scheme environment', () => {
       source: 'scenario',
     })
 
-    // What native still cannot do is follow the device's own appearance, which is what the fixed
-    // boundary was always about. A shipped app never pins, so nothing about it changes.
     Expect(TR.Scheme.resolve({ appearance: 'system' }, { platform: 'native', system: 'dark' })).toEqual({
-      capability: 'fixed-light-native',
+      capability: 'reactive-native',
       requested: 'system',
-      resolved: 'light',
-      source: 'native-fixed',
+      resolved: 'dark',
+      source: 'system',
     })
-    Expect(TR.Scheme.resolve({ appearance: 'dark' }, { platform: 'native', system: 'dark' })).toEqual({
-      capability: 'fixed-light-native',
+    Expect(TR.Scheme.resolve({ appearance: 'dark' }, { platform: 'native', system: 'light' })).toEqual({
+      capability: 'reactive-native',
       requested: 'dark',
-      resolved: 'light',
-      source: 'native-fixed',
+      resolved: 'dark',
+      source: 'preference',
     })
   })
 

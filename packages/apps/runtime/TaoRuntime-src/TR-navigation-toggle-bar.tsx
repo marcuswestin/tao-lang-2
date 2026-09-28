@@ -60,7 +60,8 @@ export function SelectionToggleBar(props: {
   const insets = requireSafeAreaContext().useSafeAreaInsets()
   const slots = useHostSlotSnapshot(props.chrome)
   const dark = props.taoProps?.scheme === 'dark'
-  const glass = props.native ? liquidGlass() : undefined
+  const reduceTransparency = useReduceTransparency(props.native)
+  const glass = props.native && !reduceTransparency ? liquidGlass() : undefined
   const title = slots.header ? slots.title ?? props.fallbackTitle : props.fallbackTitle
   const toolbar = slots.header ? slots.toolbar : []
   const back: TaoNavigationCommand = {
@@ -76,7 +77,7 @@ export function SelectionToggleBar(props: {
     children: [
       createElement(
         BarMaterial,
-        { dark, glass, key: 'back', shape: circleShape },
+        { dark, glass, key: 'back', opaque: reduceTransparency, shape: circleShape },
         createElement(NavigationCommandButton, {
           command: back,
           iconOnly: true,
@@ -86,7 +87,7 @@ export function SelectionToggleBar(props: {
       ),
       createElement(
         BarMaterial,
-        { dark, glass, key: 'title', shape: pillShape },
+        { dark, glass, key: 'title', opaque: reduceTransparency, shape: pillShape },
         createElement(runtime.Text, {
           accessibilityRole: 'header',
           children: title,
@@ -104,7 +105,7 @@ export function SelectionToggleBar(props: {
       ),
       next === undefined ? null : createElement(
         BarMaterial,
-        { dark, glass, key: 'toggle', shape: togglePillShape },
+        { dark, glass, key: 'toggle', opaque: reduceTransparency, shape: togglePillShape },
         createElement(NavigationCommandButton, {
           command: {
             enabled: props.observable,
@@ -241,6 +242,7 @@ function BarMaterial(props: {
   children?: React.ReactNode
   dark: boolean
   glass?: LiquidGlassModule
+  opaque: boolean
   shape: Readonly<Record<string, unknown>>
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
@@ -255,8 +257,42 @@ function BarMaterial(props: {
   }
   return createElement(runtime.View, {
     children: props.children,
-    style: [props.shape, props.dark ? darkMaterialStyle : lightMaterialStyle],
+    style: [
+      props.shape,
+      props.dark ? darkMaterialStyle : lightMaterialStyle,
+      props.opaque ? props.dark ? darkOpaqueMaterialStyle : lightOpaqueMaterialStyle : undefined,
+    ],
   })
+}
+
+/** Keep custom chrome legible when the person changes Reduce Transparency while the app is open. */
+function useReduceTransparency(native: boolean): boolean {
+  const [enabled, setEnabled] = React.useState(false)
+  React.useEffect(() => {
+    if (!native) {
+      return
+    }
+    const info = requireReactNativeRuntime().AccessibilityInfo
+    let mounted = true
+    let observedChange = false
+    const query = info?.isReduceTransparencyEnabled?.()
+    if (query) {
+      void query.then(value => {
+        if (mounted && !observedChange) {
+          setEnabled(value)
+        }
+      }).catch(error => warnContainedFailure('Could not read Reduce Transparency for the toggle bar.', error))
+    }
+    const subscription = info?.addEventListener?.('reduceTransparencyChanged', value => {
+      observedChange = true
+      setEnabled(value)
+    })
+    return () => {
+      mounted = false
+      subscription?.remove()
+    }
+  }, [native])
+  return enabled
 }
 
 /** LiquidGlassModule is the supported subset of `expo-glass-effect`; no vendor type escapes this file. */
@@ -352,6 +388,8 @@ const darkMaterialStyle = {
   backgroundColor: 'rgba(44, 44, 46, 0.92)',
   borderColor: 'rgba(255, 255, 255, 0.12)',
 } as const
+const lightOpaqueMaterialStyle = { backgroundColor: '#fafafc' } as const
+const darkOpaqueMaterialStyle = { backgroundColor: '#2c2c2e' } as const
 const titleStyle = { flex: 1, fontSize: 15, fontWeight: '600', textAlign: 'center' } as const
 const toolbarStyle = { alignItems: 'center', flexDirection: 'row', gap: 4 } as const
 const fillStyle = { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 } as const

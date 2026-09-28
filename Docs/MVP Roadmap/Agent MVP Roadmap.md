@@ -234,11 +234,15 @@ The point of the release is to learn what people want. Nothing collects that tod
   present, and `doctor --fingerprint` prints it alone. Nothing personal can reach it: each value is
   parsed out of a tool's output and kept only when it already reads as a version, a hash, or a plain
   word, which `environment-fingerprint.test.ts` proves on hostile probe output and on the real host.
-- Remaining: the fingerprint is reachable only from a checkout of this repository, because `tao`
-  has no `doctor`; `tao bug-report` is deliberately not built, so a visitor who installed a released
-  binary has a form to fill but no fingerprint to attach. Revisit once `A2` gives the CLI a shape
-  worth adding a command to. The discussion links currently point at the default `ideas` and `q-a`
-  categories.
+- Earlier limit: the fingerprint was reachable only from a checkout, while an installed CLI had no
+  report command. The discussion links currently point at the default `ideas` and `q-a` categories.
+- Implemented in the installed CLI: `tao doctor`, `tao doctor --json` / `--fingerprint`, and
+  `tao bug-report` expose a privacy-filtered fingerprint and a pasteable report draft with direct
+  links to the existing issue forms. The fingerprint includes the release version, OS, architecture,
+  available tool versions, Xcode where present, and a hash of the installed resource bundle. The
+  commands run without a checkout and send nothing. The bundled CLI passed disposable-home
+  acceptance without Bun, Node, or a checkout on `PATH`; a separate public release install remains
+  part of release QA.
 
 ### A18 — Liquid Glass by default
 
@@ -246,6 +250,14 @@ The point of the release is to learn what people want. Nothing collects that tod
       use it without opting in.
 - Developer decision: requested 2026-09-26. Define platform fallbacks and accessibility behavior
   in the implementation plan, and verify the default in a newly created app before closing this item.
+- Implementation plan: [Liquid Glass default](<Plan - Liquid Glass default.md>). The native runtime
+  now follows system light/dark appearance and the iOS host requests automatic appearance;
+  compatible system tabs, headers and controls supply Liquid Glass. Tao's custom toggle bar uses
+  regular glass when available and an opaque surface under Reduce Transparency. The fresh-app
+  creation test verifies the native imports and automatic tabs in one- and two-feature projects; the
+  packaged CLI acceptance also created and checked a fresh starter outside a checkout.
+  Remaining acceptance: observe the created app on a compatible iOS build with light/dark, Reduce
+  Transparency, Increase Contrast, Reduce Motion, large text and VoiceOver before closing this item.
 
 ## Environment reach
 

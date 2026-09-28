@@ -9,6 +9,7 @@ type ExpoAppConfig = {
     buildNumber?: string
     bundleIdentifier?: string
     config?: { usesNonExemptEncryption?: boolean }
+    userInterfaceStyle?: 'automatic' | 'dark' | 'light'
   }
   name: string
   plugins?: Array<string | [string, unknown]>
@@ -61,6 +62,14 @@ const shipManifest: ShipManifest = {
 }
 
 Describe('Expo ship host configuration', () => {
+  Test('keeps automatic iOS appearance for development and shipped apps', async () => {
+    const checkedIn = await FS.readJson(Repo.resolvePath('packages/apps/expo-host/app.json')) as { expo: ExpoAppConfig }
+    const projectRoot = await mkTestDir('tao-app-config-appearance-')
+    Expect(createExpoAppConfig(checkedIn.expo, projectRoot, {}).ios?.userInterfaceStyle).toBe('automatic')
+    await FS.writeJson(FS.resolvePath('_gen_tao-app/ship.json', projectRoot), shipManifest)
+    Expect(createExpoAppConfig(checkedIn.expo, projectRoot, {}).ios?.userInterfaceStyle).toBe('automatic')
+  })
+
   Test('preserves the checked-in development configuration when no ship manifest exists', async () => {
     const projectRoot = await mkTestDir('tao-app-config-fallback-')
 
