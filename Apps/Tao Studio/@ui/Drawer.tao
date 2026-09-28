@@ -145,8 +145,7 @@ view StudioFeedPanelView(Feed StudioFeedPanel, Dispatch action(text, text)) {
          otherwise -> { loop Feed.Rows / Row {
             StudioFeedRowView(Row: Row, Dispatch: Dispatch, Disabled: Feed.Pending or Feed.Loading)
          } }
-      }
-}  }
+}  }  }
 
 view StudioFeedRowView(Row StudioFeedRow, Dispatch action(text, text), Disabled boolean) {
    action Select() {

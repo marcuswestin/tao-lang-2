@@ -164,9 +164,10 @@ The Draw and Design sequence now waits for the relevant canvas and applied previ
 the retained preview recovers a missing publication acknowledgement with bounded reloads.
 
 - Acceptance (2026-09-28): ten consecutive `./agent unsandboxed studio-proof-real-app` runs passed
-  from 06:54 through 07:08 UTC, each overlapping a passing `./agent check --no-cache` lane. Every
-  run covered physical Feed clicks and drags, the Design Title drop after Draw, Keep/Discard/Undo,
-  and a persisted reopen. Studio now prepares its browser bundle before reporting server readiness.
+  from 07:23 through 07:35 UTC after merging current `main`, each overlapping a passing
+  `./agent check --no-cache` lane. Every run covered physical Feed clicks and drags, the Design Title
+  drop after Draw, Keep/Discard/Undo, and a persisted reopen. Studio now prepares its browser bundle
+  before reporting server readiness.
   `DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD` retains its stricter concurrent
   `verify` acceptance.
 
