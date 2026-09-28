@@ -3,6 +3,7 @@ import WebKit
 import UIKit
 @testable import TaoApp
 
+// Copied into the exported visionOS app-hosted test target by `tao build --visionos`.
 final class VisionHelloTests: XCTestCase {
     @MainActor
     func testCounterInBundledWebKit() async throws {
