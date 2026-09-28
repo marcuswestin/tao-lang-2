@@ -106,8 +106,43 @@ async function accept(release: string): Promise<void> {
         },
       },
       {
+        name: 'installed feedback commands outside a checkout',
+        run: async () => {
+          const json = await shell(home, 'tao doctor --json')
+          const fingerprint = JSON.parse(json) as {
+            tao?: { version?: string }
+            toolchain?: Array<{ hash?: string; name: string; present: boolean }>
+          }
+          const resources = fingerprint.toolchain?.find(component => component.name === 'tao-resources')
+          const hash = resources?.hash
+          if (
+            fingerprint.tao?.version !== version || !resources?.present || hash === undefined
+            || !/^[0-9a-f]{64}$/.test(hash)
+          ) {
+            Errors.throwUnexpected('The installed doctor did not report this release and its resource hash.')
+          }
+          if (json.includes(home)) {
+            Errors.throwUnexpected('The installed doctor exposed the visitor home directory.')
+          }
+          const report = await shell(home, 'tao bug-report')
+          if (!report.includes(hash) || !report.includes('template=could-not-build-it.yml')) {
+            Errors.throwUnexpected('The installed bug report omitted its fingerprint or feedback route.')
+          }
+        },
+      },
+      {
         name: 'create a deterministic starter outside a checkout',
         run: () => shell(home, 'tao create "A tally counter" --ai none --yes --skip-tests'),
+      },
+      {
+        name: 'newly created app selects native appearance defaults',
+        run: async () => {
+          const chrome = await FS.readText(FS.resolvePath('Chrome.tao', project))
+          const content = await FS.readText(FS.resolvePath('Items/Items.tao', project))
+          if (!chrome.includes('use StackNav from @tao/nav') || !content.includes('from @tao/ui')) {
+            Errors.throwUnexpected('The installed starter omitted the native navigation or UI default.')
+          }
+        },
       },
       {
         name: 'project pin, version overrides, missing version, and updates',

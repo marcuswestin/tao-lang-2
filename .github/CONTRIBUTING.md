@@ -28,27 +28,22 @@ not a mistake.
 
 ## The environment fingerprint
 
-Every form has an optional **Environment** field. If you are working in a checkout of this
-repository, fill it in with:
+Every form has an optional **Environment** field. From an installed Tao CLI, fill it in with:
 
 ```bash
-./agent doctor --fingerprint
+tao doctor --fingerprint
 ```
 
-That prints a JSON block reporting your OS and architecture, the Tao commit you are on and whether
-your tree is modified, the versions of `bun`, `node`, `git`, `just`, `dprint` and `watchman`, the
-hash of the pinned toolchain profile and of the `bun.lock` and `devenv.lock` you built against, and
-your Xcode version if you have one.
+That prints a JSON block reporting your OS and architecture, Tao release version, available `bun`
+and `node` versions, the installed resource bundle hash, and Xcode if present. `tao bug-report`
+prepares a short draft and links to the issue forms with the same fingerprint ready to paste.
 
-It contains no file paths, no home directory, no account name, no machine name, and no branch
-name — by construction, not by scrubbing: every value is parsed out of a tool's output and kept
-only if it already reads as a version, a hash, or a plain word, and anything else is dropped.
-`packages/cli/dev-cli/dev-cli-tests/environment-fingerprint.test.ts` holds that to it. Read it before you paste
-it if you would rather check for yourself.
+It contains no file paths, home directory, account name, or machine name. Host tool output is
+accepted only in known version, platform, and hash shapes; anything else is dropped. Read it before
+you paste it if you would rather check for yourself.
 
-Running `./agent doctor` on its own prints the full diagnosis of your checkout, which *does* name
-your paths and branch — that one is for you, not for a report. The fingerprint is the part meant to
-travel.
+For repository contributors, `./agent doctor` still prints a fuller checkout diagnosis that names
+paths and branch. Use only its `--fingerprint` output in a public report.
 
 ## Looking around first
 

@@ -223,7 +223,7 @@ The preview-manifest environment has three parts:
 - `viewport`: positive width and height plus an optional preset name;
 - `network`: non-negative latency and normal, offline, or explicit-error outcome;
 - `scheme`: requested System, Light, or Dark appearance plus resolved Light/Dark, resolution source, and
-  the host's reactive-browser, reactive-catalyst, pinned-native, or fixed-light-native capability.
+  the host's reactive-browser, reactive-catalyst, reactive-native, or pinned-native capability.
 
 The runtime provider overlay isolates seeded load/persist snapshots from the configured durable
 provider. It never calls that provider's durable `load` or `persist`; it delegates only remote `fill`,
@@ -238,14 +238,14 @@ binding, so cell-local seed, persistence, latency, offline, and injected-fill be
 `TR.Data` path as the app rather than a parallel store.
 
 Scheme is resolved by the ordinary Tao runtime, never by Studio CSS. A scenario pin wins over the
-Appearance preference, whose System value follows the browser environment or native Catalyst appearance. The resolved value flows
+Appearance preference, whose System value follows the browser or native system appearance. The resolved value flows
 through mounted design conditions independently per preview cell. Runtime capture records requested,
 resolved, source, and capability; replay freezes that record, and authored scenario save writes the
-resolved Light or Dark pin. Native hosts without reactive appearance report `fixed-light-native` and
-resolve to Light rather than implying unsupported parity. Native scenario pins report `pinned-native`;
-they do not imply that an ordinary mobile host follows system appearance. Catalyst's local trial
-opts into native appearance changes and reports `reactive-catalyst`. These capture capabilities do
-not add a Studio deployment target or establish physical appearance acceptance.
+resolved Light or Dark pin. Mobile hosts follow system appearance and report `reactive-native`;
+native scenario pins report `pinned-native`. Catalyst reports `reactive-catalyst`. Older
+`fixed-light-native` captures remain replayable, but new native frames do not claim that capability.
+These capture capabilities do not add a Studio deployment target or establish physical appearance
+acceptance.
 
 ## Editing, identity, and trust
 
