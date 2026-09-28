@@ -6,6 +6,7 @@ const RELEASE_TIMEOUT_MS = 5_000
 const RELEASE_POLL_MS = 250
 
 type PortProbe = (port: number) => Promise<number | undefined>
+type PortReservationProbe = (port: number, host: string) => Promise<PortReservation | undefined>
 
 export type PortReservation = {
   port: number
@@ -37,11 +38,14 @@ async function selectAvailable(preferredPort: number, probe: PortProbe): Promise
 }
 
 /** reserveAvailable holds the selected port until its caller is ready to start the owning server. */
-async function reserveAvailable(preferredPort: number): Promise<PortReservation> {
-  return await reservePort(preferredPort) ?? await requireEphemeralReservation()
+async function reserveAvailable(
+  preferredPort: number,
+  reserve: PortReservationProbe = reserveAddress,
+): Promise<PortReservation> {
+  return await reservePort(preferredPort, reserve) ?? await requireEphemeralReservation(reserve)
 }
 
-async function reservePort(port: number): Promise<PortReservation | undefined> {
+async function reservePort(port: number, reserve: PortReservationProbe): Promise<PortReservation | undefined> {
   // Darwin permits a wildcard and a loopback listener to coexist on the same port, even
   // within one address family. Hold both there; elsewhere the wildcard owns loopback too.
   const hosts = Platform.hostPlatform === 'darwin'
@@ -55,7 +59,7 @@ async function reservePort(port: number): Promise<PortReservation | undefined> {
     for (const host of hosts) {
       let reservation: PortReservation | undefined
       try {
-        reservation = await reserveAddress(selectedPort, host)
+        reservation = await reserve(selectedPort, host)
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code
         if (host.includes(':') && (code === 'EAFNOSUPPORT' || code === 'EADDRNOTAVAIL')) {
@@ -123,11 +127,11 @@ function normalizeReservationError(error: Error): Error {
   return error
 }
 
-async function requireEphemeralReservation(): Promise<PortReservation> {
+async function requireEphemeralReservation(reserve: PortReservationProbe): Promise<PortReservation> {
   // A port chosen by IPv4 can still be occupied in IPv6. Release the partial reservation
   // and ask the OS for another, with a bound for hosts that cannot provide a shared port.
   for (let attempt = 0; attempt < 16; attempt++) {
-    const reservation = await reservePort(0)
+    const reservation = await reservePort(0, reserve)
     if (reservation !== undefined) {
       return reservation
     }
