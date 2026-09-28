@@ -898,7 +898,7 @@ Describe('Studio smoke resource isolation', () => {
           ? '{"sockname":"/repo/.watchman.sock"}'
           : '{"version":"2026.01.19.00","capabilities":["field-content.sha1hex","relative_root","suffix-set","wildmatch"]}',
       }),
-    })).rejects.toThrow('ordinary host shell')
+    })).rejects.toThrow('Check Watchman access to ~/Library/LaunchAgents')
   })
 
   Test("stops before Metro when Watchman cannot pass Metro's no-spawn capability check", async () => {

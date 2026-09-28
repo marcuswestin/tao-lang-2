@@ -1,4 +1,4 @@
-import { createEventDebouncer, defaultsToPolling, shouldIgnoreWatchPath } from '@expo-host/dev-loop/DebouncedWatcher'
+import { createEventDebouncer, shouldIgnoreWatchPath } from '@expo-host/dev-loop/DebouncedWatcher'
 import { Time } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 
@@ -64,22 +64,6 @@ Describe('createEventDebouncer', () => {
     await Time.sleep(120)
 
     Expect(changeCount).toBe(0)
-  })
-})
-
-Describe('defaultsToPolling', () => {
-  // A later Bun must keep polling until someone measures that native events work again: an exact
-  // match on 1.4.2 would silently drop the fallback at the next patch release.
-  Test('polls on macOS under the Bun that lost native events and every later one', () => {
-    Expect(defaultsToPolling('darwin', '1.4.2')).toBe(true)
-    Expect(defaultsToPolling('darwin', '1.4.3')).toBe(true)
-    Expect(defaultsToPolling('darwin', '1.5.0')).toBe(true)
-  })
-
-  Test('keeps native events on an earlier Bun, off macOS, and under Node', () => {
-    Expect(defaultsToPolling('darwin', '1.3.13')).toBe(false)
-    Expect(defaultsToPolling('linux', '1.4.2')).toBe(false)
-    Expect(defaultsToPolling('darwin', undefined)).toBe(false)
   })
 })
 
