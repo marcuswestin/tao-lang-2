@@ -10,14 +10,14 @@ import {
 } from './model'
 
 describe('hosted CRUD Appwrite model', () => {
-  test('accepts only the signed-in account’s documents', () => {
+  test('accepts only the signed-in account’s rows', () => {
     const document = { $id: 'note-1', ownerId: 'user-1', text: 'hello', done: false, updatedAt: 42 }
     expect(toNote(document, 'user-1')).toEqual({ id: 'note-1', text: 'hello', done: false, updatedAt: 42 })
     expect(() => toNote(document, 'user-2')).toThrow('Appwrite returned a note owned by another account')
     expect(() => toNote({ ...document, done: 'false' }, 'user-1')).toThrow('Appwrite returned an invalid note')
   })
 
-  test('separates persisted queues by project, collection, and account', () => {
+  test('separates persisted queues by project, table, and account', () => {
     expect(storageName('https://one/v1', 'project', 'db', 'notes', 'alice'))
       .toBe('hosted-crud-appwrite:https://one/v1:project:db:notes:alice')
     expect(storageName('https://one/v1', 'project', 'db', 'notes', 'alice'))

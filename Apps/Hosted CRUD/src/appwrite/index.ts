@@ -4,7 +4,7 @@ import { observable, observe, syncState, when } from '@legendapp/state'
 import { observablePersistAsyncStorage } from '@legendapp/state/persist-plugins/async-storage'
 import { syncedCrud } from '@legendapp/state/sync-plugins/crud'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { Account, Client, Databases, ID, Query } from 'react-native-appwrite'
+import { Account, Client, ID, Query, TablesDB } from 'react-native-appwrite'
 import type { CrudAdapter, CrudConnection, CrudNote, CrudUser } from '../contract'
 import { AppwriteNotesError, restoreAccount, storageName, syncStatus, toNote } from './model'
 
@@ -13,7 +13,7 @@ export type AppwriteConfig = Readonly<{
   projectId: string
   platform: string
   databaseId: string
-  collectionId: string
+  tableId: string
 }>
 
 const pageSize = 100
@@ -25,7 +25,7 @@ export function createAppwriteAdapter(config: AppwriteConfig): CrudAdapter {
     .setProject(config.projectId)
     .setPlatform(config.platform)
   const account = new Account(client)
-  const database = new Databases(client)
+  const database = new TablesDB(client)
   const connections = new Set<CrudConnection>()
   const userCacheKey = `hosted-crud-appwrite-user:${config.endpoint}:${config.projectId}:${config.platform}`
 
@@ -46,20 +46,20 @@ export function createAppwriteAdapter(config: AppwriteConfig): CrudAdapter {
     const notes: CrudNote[] = []
     let cursor: string | undefined
     do {
-      const documents = await database.listDocuments({
+      const rows = await database.listRows({
         databaseId: config.databaseId,
-        collectionId: config.collectionId,
+        tableId: config.tableId,
         queries: [
           Query.equal('ownerId', userId),
           Query.limit(pageSize),
           ...(cursor ? [Query.cursorAfter(cursor)] : []),
         ],
       })
-      notes.push(...documents.documents.map(document => toNote(document, userId)))
-      if (documents.documents.length < pageSize) {
+      notes.push(...rows.rows.map(row => toNote(row, userId)))
+      if (rows.rows.length < pageSize) {
         break
       }
-      cursor = documents.documents[documents.documents.length - 1]?.$id
+      cursor = rows.rows[rows.rows.length - 1]?.$id
     } while (cursor)
     return notes
   }
@@ -101,31 +101,31 @@ export function createAppwriteAdapter(config: AppwriteConfig): CrudAdapter {
       const notes$ = observable(syncedCrud<CrudNote>({
         list: () => listNotes(user.id),
         create: async note => {
-          const document = await database.createDocument({
+          const row = await database.createRow({
             databaseId: config.databaseId,
-            collectionId: config.collectionId,
-            documentId: note.id,
+            tableId: config.tableId,
+            rowId: note.id,
             data: { ownerId: user.id, text: note.text, done: note.done, updatedAt: note.updatedAt },
           })
-          return toNote(document, user.id)
+          return toNote(row, user.id)
         },
         update: async note => {
           if (!note.id) {
             throw new AppwriteNotesError('Cannot update a note without an ID')
           }
-          const document = await database.updateDocument({
+          const row = await database.updateRow({
             databaseId: config.databaseId,
-            collectionId: config.collectionId,
-            documentId: note.id,
+            tableId: config.tableId,
+            rowId: note.id,
             data: { text: note.text, done: note.done, updatedAt: note.updatedAt },
           })
-          return toNote(document, user.id)
+          return toNote(row, user.id)
         },
         delete: async note => {
-          await database.deleteDocument({
+          await database.deleteRow({
             databaseId: config.databaseId,
-            collectionId: config.collectionId,
-            documentId: note.id,
+            tableId: config.tableId,
+            rowId: note.id,
           })
         },
         generateId: () => ID.unique(),
@@ -138,7 +138,7 @@ export function createAppwriteAdapter(config: AppwriteConfig): CrudAdapter {
           return () => clearInterval(timer)
         },
         persist: {
-          name: storageName(config.endpoint, config.projectId, config.databaseId, config.collectionId, user.id),
+          name: storageName(config.endpoint, config.projectId, config.databaseId, config.tableId, user.id),
           plugin: observablePersistAsyncStorage({ AsyncStorage }),
           retrySync: true,
         },

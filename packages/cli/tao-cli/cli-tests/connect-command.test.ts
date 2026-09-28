@@ -67,7 +67,7 @@ Describe('tao connect', () => {
     const root = await mkTestDir('tao-connect-appwrite-')
     try {
       const { terminal, options } = scripted(
-        ['https://fra.cloud.appwrite.io/v1', 'appwrite-project', 'dev.tao.app', 'database', 'collection'],
+        ['https://fra.cloud.appwrite.io/v1', 'appwrite-project', 'dev.tao.app', 'database', 'table'],
         'appwrite-server-key-canary',
       )
       await runTaoConnect('appwrite', root, options)
@@ -77,7 +77,7 @@ Describe('tao connect', () => {
         projectId: 'appwrite-project',
         platform: 'dev.tao.app',
         databaseId: 'database',
-        collectionId: 'collection',
+        tableId: 'table',
       })
       Expect(await FS.readJson(FS.resolvePath('.tao/connect-secrets.json', root))).toEqual({
         appwrite: { apiKey: 'appwrite-server-key-canary' },
@@ -138,7 +138,7 @@ Describe('tao connect', () => {
         'appwrite',
         root,
         scripted(
-          ['http://localhost/v1', 'project', 'dev.tao.app', 'database', 'collection'],
+          ['http://localhost/v1', 'project', 'dev.tao.app', 'database', 'table'],
           'secret',
         ).options,
       )).rejects.toThrow('HTTPS URL')

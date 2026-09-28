@@ -10,6 +10,6 @@
     "projectId": "REPLACE_WITH_APPWRITE_PROJECT_ID",
     "platform": "dev.tao.hostedcrudspike",
     "databaseId": "REPLACE_WITH_APPWRITE_DATABASE_ID",
-    "collectionId": "REPLACE_WITH_APPWRITE_COLLECTION_ID"
+    "tableId": "REPLACE_WITH_APPWRITE_TABLE_ID"
   }
 }

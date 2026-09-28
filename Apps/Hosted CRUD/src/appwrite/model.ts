@@ -91,10 +91,10 @@ export function storageName(
   endpoint: string,
   projectId: string,
   databaseId: string,
-  collectionId: string,
+  tableId: string,
   userId: string,
 ): string {
-  return `hosted-crud-appwrite:${endpoint}:${projectId}:${databaseId}:${collectionId}:${userId}`
+  return `hosted-crud-appwrite:${endpoint}:${projectId}:${databaseId}:${tableId}:${userId}`
 }
 
 export function syncStatus(state: {

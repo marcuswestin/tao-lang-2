@@ -214,7 +214,11 @@ provision a cloud project or wire an ordinary Tao data declaration to either pro
 web API key is public client configuration; the optional service account is a server secret.
 Appwrite's installed React Native SDK Realtime path is unsuitable for this native spike, so the
 Legend adapter polls for changes. Its `ownerId` field is client-controlled; provider-enforced
-document permissions and direct hostile requests still need hosted proof.
+row permissions and direct hostile requests still need hosted proof.
+
+The free-tier Appwrite comparison uses serverless TablesDB and its typed rows. DocumentsDB requires
+dedicated compute on the current pricing page, so the pilot's initial DocumentsDB setup was replaced
+before hosted testing. The installed React Native SDK exposes the TablesDB row API.
 
 The decision needs a physical iPhone run against disposable projects: account creation and restore,
 two-device CRUD, queued offline create/update/delete across an app restart, reconciliation,

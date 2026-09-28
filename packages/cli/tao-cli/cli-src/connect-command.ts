@@ -66,7 +66,7 @@ export async function runTaoConnect(
       out,
     )
     HCI.writeLine(
-      '2. In Console, create a database and collection; find the endpoint and project ID in project Settings.',
+      '2. In Console, create a free serverless TablesDB database and a table; find the endpoint and project ID in project Settings.',
       out,
     )
     HCI.writeLine('3. The app needs no server API key. Create one in the project API keys area only if you', out)
@@ -76,7 +76,7 @@ export async function runTaoConnect(
   const publicFields: Record<string, string> = {}
   const fields = provider === 'firebase'
     ? (['projectId', 'apiKey', 'appId', 'authDomain'] as const)
-    : (['endpoint', 'projectId', 'platform', 'databaseId', 'collectionId'] as const)
+    : (['endpoint', 'projectId', 'platform', 'databaseId', 'tableId'] as const)
   for (const field of fields) {
     const value = (await prompts.text(`${provider} ${field}:`)).trim()
     if (value === '' || /[\u0000-\u001f\u007f]/u.test(value)) {
@@ -156,7 +156,7 @@ export async function runTaoConnect(
   HCI.writeLine(
     provider === 'firebase'
       ? 'Next in Firebase Console: create a Firestore database, enable the sign-in method, and set Firestore Security Rules.'
-      : 'Next in Appwrite Console: add the collection attributes and permissions, enable the sign-in method, and confirm the platform ID.',
+      : 'Next in Appwrite Console: add table columns and an ownerId index, enable row security, grant authenticated users table create only, enable email/password sign-in, and confirm the platform ID.',
     out,
   )
   HCI.writeLine(

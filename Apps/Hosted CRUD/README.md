@@ -3,7 +3,7 @@
 This is one Expo Go notes app with two selectable hosted stacks:
 
 1. Firebase email/password auth, RxDB with the MIT `@basepurpose/rxdb-sqlite` Expo storage, and RxDB's Firestore replication.
-2. Appwrite email/password auth, Legend-State v3 generic CRUD sync, and AsyncStorage persistence.
+2. Appwrite email/password auth, free serverless TablesDB, Legend-State v3 generic CRUD sync, and AsyncStorage persistence.
 
 Both paths offer account creation, sign-in, a list of notes, create, text edit, completion toggle, delete, and sign-out through the same screen. This standalone app checks library and setup fit before either path becomes a Tao datasource. Its source is a spike, not a declaration of Tao `supports` capabilities.
 
