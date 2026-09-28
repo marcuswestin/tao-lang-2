@@ -58,7 +58,8 @@ Describe('workspace package graph', () => {
         'packages/shared/package.json': '{ "name": "tao-shared" }',
         'packages/shared/shared-src/shared.ts': 'export const shared = 1\n',
         'packages/apps/providers/icloud/package.json': '{ "name": "tao-icloud" }',
-        'packages/apps/providers/icloud/icloud-src/icloud.ts': "import { shared } from '@shared'\nexport const icloud = shared\n",
+        'packages/apps/providers/icloud/icloud-src/icloud.ts':
+          "import { shared } from '@shared'\nexport const icloud = shared\n",
       })
 
       const graph = await PackageGraph.load(root)

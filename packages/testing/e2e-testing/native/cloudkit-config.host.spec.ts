@@ -3,7 +3,7 @@ import { FS, Repo } from '@shared'
 import withTaoICloud, {
   cloudKitContainersInfoKey,
   type TaoICloudPluginProps,
-} from '../../../../apps/providers/icloud/plugins/with-tao-icloud.cjs'
+} from '../../../apps/providers/icloud/plugins/with-tao-icloud.cjs'
 
 const { default: expoConfigPlugins } = await import(
   Repo.resolvePath('packages/apps/expo-host/node_modules/expo/config-plugins.js')
