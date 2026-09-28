@@ -1,9 +1,14 @@
 import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
-import { accessibilityStateProps, focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
+import {
+  accessibilityStateProps,
+  accessibilityVerbProps,
+  focusAccessibilityHost,
+  type TaoAccessibilityHost,
+} from './TR-accessibility'
 import { RuntimeAssert } from './TR-assert'
 import { createElement } from './TR-create-element'
-import { InteractionControls } from './TR-interaction-catalog'
+import { InteractionControls, useAccessibilityVerbs } from './TR-interaction-catalog'
 import {
   interactionMeasurements,
   OutlineScope,
@@ -11,6 +16,7 @@ import {
   type TaoOutlineLiveEntry,
   useOutlineNode,
 } from './TR-interaction-outline'
+import { InteractionScrollContext, type Measurable, measuredBounds, revealMountedRow } from './TR-interaction-scroll'
 import { LayoutControls, type TaoLayoutEntry, type TaoResolvedLayoutStyle } from './TR-layout'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
@@ -31,6 +37,7 @@ type TaoButtonProps = TaoViewProps & {
 }
 
 type TaoCheckboxProps = TaoViewProps & {
+  description?: string
   disabled?: boolean
   label: string
   onChange?: (value: boolean) => unknown
@@ -60,6 +67,7 @@ type TaoSpinnerProps = TaoViewProps & {
 }
 
 type TaoTextInputProps = TaoViewProps & {
+  description?: string
   disabled?: boolean
   id?: string
   label: string
@@ -121,6 +129,7 @@ export const Views = {
       defaultStyle: props.defaultStyle,
       kind: 'Pressable',
       nativePropOverrides: {
+        disabled: props.disabled === true,
         onPress: props.disabled === true ? undefined : () => props.action?.invoke(),
       },
       pressableTitle: props.title,
@@ -287,6 +296,7 @@ function renderTaoCheckbox(
     {
       ...wrapperProps,
       accessibilityLabel: props.label,
+      ...(props.description === undefined ? {} : { accessibilityHint: props.description }),
       accessibilityRole: 'checkbox',
       ...accessibilityStateProps({ checked: props.value, disabled }),
       disabled,
@@ -310,6 +320,26 @@ function TaoScrollView({ props, runtimeProps }: {
   runtimeProps: TaoViewRuntimeProps
 }): React.ReactElement {
   const runtime = requireReactNativeRuntime()
+  const revealParent = React.useContext(InteractionScrollContext)
+  const scrollHost = React.useRef<
+    {
+      measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void
+      getBoundingClientRect?(): { x: number; y: number; width: number; height: number }
+      scrollTo?(offset: { animated: boolean; x: number; y: number }): void
+    } | null
+  >(null)
+  const scrollOffset = React.useRef({ x: 0, y: 0 })
+  const reveal = React.useCallback((target: Measurable | null) => {
+    measuredBounds(scrollHost.current, viewport => {
+      measuredBounds(target, row => {
+        const destination = revealMountedRow(viewport, row, scrollOffset.current)
+        if (destination !== undefined) {
+          scrollHost.current?.scrollTo?.({ ...destination, animated: false })
+        }
+        revealParent?.(scrollHost.current)
+      })
+    })
+  }, [revealParent])
   const parentDirection = ParentDirectionContext.use()
   const contentDirection = runtimeProps.direction ?? 'column'
   const merged = TaoPropsControls.mergeViewProps(
@@ -336,10 +366,21 @@ function TaoScrollView({ props, runtimeProps }: {
       keyboardDismissMode: runtime.Platform?.OS === 'ios' ? 'interactive' : 'on-drag',
       keyboardShouldPersistTaps: 'handled',
       ...scrollViewProps,
+      onScroll: (event: { nativeEvent?: { contentOffset?: { x?: number; y?: number } } }) => {
+        if (typeof scrollViewProps['onScroll'] === 'function') {
+          scrollViewProps['onScroll'](event)
+        }
+        scrollOffset.current = {
+          x: event.nativeEvent?.contentOffset?.x ?? 0,
+          y: event.nativeEvent?.contentOffset?.y ?? 0,
+        }
+      },
+      ref: scrollHost,
+      scrollEventThrottle: scrollViewProps['scrollEventThrottle'] ?? 16,
       contentContainerStyle: mergedContentContainerStyle,
       style: scrollViewportStyle(style),
     },
-    outlinedChildren,
+    createElement(InteractionScrollContext.Provider, { value: reveal }, outlinedChildren),
   )
 }
 
@@ -577,6 +618,7 @@ function renderTaoTextInput(
     : InteractionControls.Activate(occurrence, props.onSubmit)
   const inputNativeProps = {
     accessibilityLabel: props.label,
+    ...(props.description === undefined ? {} : { accessibilityHint: props.description }),
     ...accessibilityStateProps({ disabled: props.disabled === true }),
     editable: !props.disabled,
     onBlur: () => InteractionControls.Disengage(occurrence),
@@ -655,22 +697,32 @@ function renderPrimitiveWithInteraction(
     return createElement(TaoSemanticPrimitiveElement, { merged, props, runtime })
   }
   const occurrence = interactionOccurrence(props.viewProps, props.runtimeProps)
-  return occurrence === undefined
+  return occurrence === undefined && merged.interaction?.row === undefined
     ? renderTaoPrimitiveElement(props, runtime, merged)
     : createElement(TaoInteractivePrimitiveElement, { merged, occurrence, props, runtime })
 }
 
 function TaoInteractivePrimitiveElement({ merged, occurrence, props, runtime }: {
   merged: MergedTaoViewProps
-  occurrence: TaoInteractionOccurrence
+  occurrence?: TaoInteractionOccurrence
   props: TaoPrimitiveElementProps
   runtime: ReactNativeRuntime
 }): React.ReactElement {
-  const host = React.useRef<TaoAccessibilityHost | null>(null)
-  if (occurrence.control) {
-    occurrence.capabilities.label = () => props.pressableTitle
+  const host = React.useRef<(TaoAccessibilityHost & Measurable) | null>(null)
+  const reveal = React.useContext(InteractionScrollContext)
+  const row = merged.interaction?.row
+  if (row) {
+    row.capabilities.scrollIntoView = () => reveal?.(host.current)
   }
-  return renderTaoPrimitiveElement(props, runtime, merged, occurrence, host)
+  if (occurrence?.control) {
+    occurrence.capabilities.label = () => props.pressableTitle
+    if (props.kind === 'Pressable') {
+      const disabled = props.nativePropOverrides?.['disabled'] === true || merged.nativeProps['disabled'] === true
+      occurrence.capabilities.enabled = () => !disabled
+    }
+  }
+  const verbs = useAccessibilityVerbs(props.kind === 'Pressable' ? occurrence?.control : undefined)
+  return renderTaoPrimitiveElement(props, runtime, merged, occurrence, host, verbs)
 }
 
 function TaoSemanticPrimitiveElement({ merged, props, runtime }: {
@@ -706,6 +758,7 @@ function renderTaoPrimitiveElement(
   merged: MergedTaoViewProps,
   occurrence?: TaoInteractionOccurrence,
   host?: React.RefObject<TaoAccessibilityHost | null>,
+  verbs: readonly { identity: string; label: string }[] = [],
 ): React.ReactElement {
   if (props.kind === 'Pressable' && occurrence?.control && host) {
     occurrence.capabilities.focus = () => focusAccessibilityHost(runtime, host.current)
@@ -713,21 +766,34 @@ function renderTaoPrimitiveElement(
   const unmeasuredElementProps: Record<string, unknown> = {
     ...TaoPropsControls.nativePropsWithStyle(merged),
     ...props.nativePropOverrides,
-    ...(props.kind === 'Pressable' && host ? { ref: host } : {}),
+    ...(host ? { ref: host } : {}),
   }
-  const rawElementProps = occurrence?.control === undefined
+  const rowIdentity = merged.interaction?.row?.identity
+  const rowProps = rowIdentity === undefined || rowIdentity === occurrence?.control
     ? unmeasuredElementProps
-    : interactionMeasurements.bind(occurrence.control, unmeasuredElementProps)
+    : interactionMeasurements.bind(rowIdentity, unmeasuredElementProps)
+  const rawElementProps = occurrence?.control === undefined
+    ? rowProps
+    : interactionMeasurements.bind(occurrence.control, rowProps)
   const elementProps = props.kind === 'Pressable'
-    ? {
-      ...accessiblePressableProps(rawElementProps, props.pressableTitle),
-      ...semanticPressableProps(
-        occurrence,
-        rawElementProps['disabled'] === true,
-        typeof rawElementProps['onPress'] === 'function' ? rawElementProps['onPress'] as () => unknown : undefined,
-        rawElementProps,
-      ),
-    }
+    ? accessibilityVerbProps(
+      {
+        ...accessiblePressableProps(rawElementProps, props.pressableTitle),
+        ...semanticPressableProps(
+          occurrence,
+          rawElementProps['disabled'] === true,
+          typeof rawElementProps['onPress'] === 'function' ? rawElementProps['onPress'] as () => unknown : undefined,
+          rawElementProps,
+        ),
+        accessibilityHint: rawElementProps['accessibilityHint'] ?? occurrence?.description,
+      },
+      verbs,
+      identity => {
+        if (occurrence?.control) {
+          InteractionControls.InvokeVerb(occurrence.control, identity)
+        }
+      },
+    )
     : rawElementProps
   if (props.defaultStyle !== undefined) {
     elementProps['style'] = [props.defaultStyle, elementProps['style']]

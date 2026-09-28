@@ -44,6 +44,23 @@ const documentDefinition: TaoDataSchemaDefinition = {
 }
 
 Describe('TR.Data provider foundation', () => {
+  Test('toggles a stored field once per call and reads pending writes within an action', async () => {
+    const schema = TR.Data.Schema(noteDefinition, { load: () => undefined, save: () => {} })
+    await TR.Data.Settle(schema)
+    TR.Data.Create(schema, 'Note', { Title: TR.Value('A') })
+    const note = schema.query({ entity: 'Note', filters: [] })[0]!
+    const flipTwice = TR.Action(() => {
+      TR.Data.Toggle(TR.Value(note), 'Done')
+      TR.Data.Toggle(TR.Value(note), 'Done')
+    }, { name: 'FlipTwice' })
+    await flipTwice.jsValue.invoke()
+    Expect(TR.Data.Read(note, 'Done')).toBe(false)
+
+    const flipOnce = TR.Action(() => TR.Data.Toggle(TR.Value(note), 'Done'), { name: 'FlipOnce' })
+    await flipOnce.jsValue.invoke()
+    Expect(TR.Data.Read(note, 'Done')).toBe(true)
+  })
+
   Test('submits supplied same-value update fields as transient write intent', async () => {
     const saves: Array<{ intents: readonly { entity: string; fields: readonly string[]; id: string }[] | undefined }> =
       []
@@ -122,8 +139,11 @@ Describe('TR.Data provider foundation', () => {
     Expect(TR.Data.Read(note, 'WritesFailed')).toBe(1)
     Expect(TR.Data.Read(note, 'WriteError')).toBe('Connection lost.')
     Expect(TR.Data.Read(note, 'CanRetryWrites')).toBe(true)
+    TR.Data.Toggle(TR.Value(note), 'Done')
+    Expect(TR.Data.Read(note, 'Done')).toBe(true)
     TR.Data.Retry(TR.Value(note))
     Expect(retries).toEqual([['Note', 'Note-1']])
+    Expect(TR.Data.Read(note, 'Done')).toBe(true)
 
     const before = schema.snapshot()
     statusListener!()

@@ -99,7 +99,7 @@ export const ActionsFormatter = {
   /** AsyncActionStatement delegates keyword-to-block spacing to ActionBlock. */
   AsyncActionStatement() {},
 
-  /** ToggleStatement formats boolean state inversion. */
+  /** ToggleStatement formats state or stored yes/no field inversion. */
   ToggleStatement(f) {
     f.oneSpaceAfter('toggle')
   },

@@ -9,7 +9,7 @@ const messages = EffectOutcomesValidator.messages
 const declarations = `
   ${stubContainer('Stack')}
   ${stubView('Text', 'Value text')}
-  view Button(Press action()) { render Text("Press") }
+  view Button(Title text, Press action()) { render Text(Title) }
   type ExportFailure is one of Offline, TooLarge
   type SaveFailure is one of Full
   action ExportDocument(Format text)
@@ -54,7 +54,7 @@ Describe('validator: effect outcomes', () => {
   Test('accepts saved, a declared case, rejected, and error with their payloads', async () => {
     const found = await validated(outcomesApp(`
       render Stack() {
-        Button() {
+        Button(Title: "Press") {
           on press -> {
             when do ExportDocument(Format: "pdf") {
               saved -> { set Failure = "" }
@@ -127,7 +127,7 @@ Describe('validator: effect outcomes', () => {
   Test('accepts a case the verb reaches through a plain do', async () => {
     const found = await validated(outcomesApp(`
       render Stack() {
-        Button() {
+        Button(Title: "Press") {
           on press -> {
             when do SaveAndExport() {
               Full -> { }
@@ -144,8 +144,8 @@ Describe('validator: effect outcomes', () => {
   Test('warns at an unhandled root invocation and names every case', async () => {
     const found = await warnings(outcomesApp(`
       render Stack() {
-        Button() { on press -> { do ExportDocument(Format: "pdf") } }
-        Button() { on press SaveAndExport }
+        Button(Title: "Press") { on press -> { do ExportDocument(Format: "pdf") } }
+        Button(Title: "Press") { on press SaveAndExport }
       }
     `))
     Expect(found).toEqual([
@@ -157,9 +157,9 @@ Describe('validator: effect outcomes', () => {
   Test('subtracts the cases a when do inside the verb handles', async () => {
     const found = await warnings(outcomesApp(`
       render Stack() {
-        Button() { on press ExportOrQueue }
-        Button() { on press ExportQuietly }
-        Button() { on press Quiet }
+        Button(Title: "Press") { on press ExportOrQueue }
+        Button(Title: "Press") { on press ExportQuietly }
+        Button(Title: "Press") { on press Quiet }
       }
     `))
     Expect(found).toEqual([messages.unhandledFailure('`ExportOrQueue`', ['TooLarge'])])
@@ -168,7 +168,7 @@ Describe('validator: effect outcomes', () => {
   Test('warns at a root when do for the cases it leaves unhandled', async () => {
     const found = await warnings(outcomesApp(`
       render Stack() {
-        Button() {
+        Button(Title: "Press") {
           on press -> {
             when do ExportDocument(Format: "pdf") { Offline -> { } }
           }
@@ -212,7 +212,7 @@ Describe('validator: effect outcomes', () => {
     const found = await warnings(outcomesApp(
       `
         render Stack() {
-          Button() { on press Deferred }
+          Button(Title: "Press") { on press Deferred }
         }
       `,
       'action Deferred() { async { when do ExportDocument(Format: "pdf") { rejected -> { } } } }',

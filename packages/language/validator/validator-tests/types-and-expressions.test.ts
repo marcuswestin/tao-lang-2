@@ -747,7 +747,7 @@ Describe('validator: types and expressions', () => {
       view Target() { action Flip() { toggle Ready } render Empty() }
       ${stubView('Empty')}
     `,
-      "No state or parameter named 'Ready' is in scope.",
+      "No value named 'Ready' is in scope.",
     ),
   )
 
