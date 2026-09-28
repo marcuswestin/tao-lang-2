@@ -118,7 +118,7 @@ function createCommands(): Command {
     .command('connect')
     .argument('<provider>', 'Hosted service to connect: firebase or appwrite.')
     .argument('[path]', 'Project directory to configure.', '.')
-    .description('Guide Firebase or Appwrite setup for the Hosted CRUD pilot.')
+    .description('Provision Firebase or configure an Appwrite project for the Hosted CRUD pilot.')
     .action(async (provider: string, path: string) => {
       try {
         if (provider !== 'firebase' && provider !== 'appwrite') {

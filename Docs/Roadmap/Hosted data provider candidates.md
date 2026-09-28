@@ -208,10 +208,16 @@ one notes UI and a common comparison protocol. This standalone Expo Go app isola
 library and project setup; it does not yet constitute Tao auth or datasource declarations and does
 not claim `Relations`, `AccessRules`, `FieldUpdates`, or `Offline` support.
 
-`tao connect firebase|appwrite` currently guides console setup and records the pilot app's public
-client settings, with optional project-local credentials for later backend tooling. It does not
-provision a cloud project or wire an ordinary Tao data declaration to either provider. Firebase's
-web API key is public client configuration; the optional service account is a server secret.
+`tao connect firebase` now uses the official Firebase CLI's Google sign-in to create or reuse a
+project and web app, create the default Firestore database if absent, enable Email/Password auth,
+and deploy the pilot rules. It asks before replacing existing Firestore rules. The Developer
+approved `firebase-tools` and its installation dependencies for this automation. `tao connect
+appwrite` configures an existing project from a project API key; that key cannot create projects,
+and an organization Partners key cannot configure their inner resources without another key.
+The two commands record public client settings, but neither wires an ordinary Tao data declaration
+to these providers. Firebase's web API key is public client configuration, and Firebase CLI's
+Google login stays in its local user configuration outside the project. The Appwrite project key
+is saved in an ignored, owner-only local file; it is not encrypted.
 Appwrite's installed React Native SDK Realtime path is unsuitable for this native spike, so the
 Legend adapter polls for changes. Its `ownerId` field is client-controlled; provider-enforced
 row permissions and direct hostile requests still need hosted proof.

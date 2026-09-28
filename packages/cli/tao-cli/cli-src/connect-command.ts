@@ -1,6 +1,7 @@
 import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { provisionAppwrite } from './appwrite-provision'
+import { type FirebaseRunner, provisionFirebase } from './firebase-provision'
 
 export type ConnectProvider = 'firebase' | 'appwrite'
 
@@ -18,6 +19,8 @@ type ConnectOptions = {
   prompts?: ConnectPrompts
   /** Replaces network requests for focused command tests. */
   fetch?: (url: string, init?: RequestInit) => Promise<Response>
+  /** Replaces Firebase CLI calls for focused command tests. */
+  firebaseRunner?: FirebaseRunner
 }
 
 /** Connects the Hosted CRUD pilot to a provider project. */
@@ -48,6 +51,13 @@ export async function runTaoConnect(
   const publicPath = FS.resolvePath('tao.connections.json', project)
   const privateDirectory = FS.resolvePath('.tao', project)
   const privatePath = FS.resolvePath('connect-secrets.json', privateDirectory)
+  if (
+    await FS.isSymbolicLink(publicPath) || await FS.isSymbolicLink(privateDirectory)
+    || await FS.isSymbolicLink(privatePath)
+  ) {
+    Errors.throwUserInput('A connection file or directory is a symbolic link; nothing was stored.')
+  }
+  const publicConfig = await readObject(publicPath)
 
   HCI.writeLine(
     'This pilot records setup details for Apps/Hosted CRUD. Ordinary Tao app declarations do not consume these settings yet.',
@@ -55,22 +65,9 @@ export async function runTaoConnect(
   )
 
   if (provider === 'firebase') {
-    HCI.writeLine('1. At https://console.firebase.google.com create or open a project. Press Create app', out)
-    HCI.writeLine('   (or Add app), then choose the Web app icon (</>).', out)
-    HCI.writeLine('2. Enter an app nickname, such as Tao Hosted CRUD Demo. Leave', out)
-    HCI.writeLine('   "Also set up Firebase Hosting for this app" unchecked, then click Register app.', out)
-    HCI.writeLine('3. On Add Firebase SDK, leave Use npm selected. Skip npm install; Firebase is already', out)
-    HCI.writeLine('   installed. Copy the entire code snippet, or just its firebaseConfig object, and paste', out)
-    HCI.writeLine('   it at the next prompt. Both work. Then click Continue to console.', out)
-    HCI.writeLine('4. If you already left that screen, open Project settings > General > Your apps, select', out)
-    HCI.writeLine('   the Web app, then SDK setup and configuration > Config. Copy its firebaseConfig object.', out)
-    HCI.writeLine('   Paste it at the next prompt. The paste is hidden; press Return instead to enter the', out)
-    HCI.writeLine('   four needed values individually.', out)
-    HCI.writeLine(
-      '   The web API key identifies the client project; it is public config, not an admin credential.',
-      out,
-    )
-    HCI.writeLine('   No service-account JSON is needed for this app; do not generate one.', out)
+    HCI.writeLine('Firebase setup uses the official CLI and your Google sign-in; no token paste is needed.', out)
+    HCI.writeLine('Press Return at the next prompt to automate setup, paste a firebaseConfig snippet', out)
+    HCI.writeLine('from an already configured project, or type manual to enter its four public fields.', out)
   } else {
     HCI.writeLine('1. At https://cloud.appwrite.io create a project, such as Tao Hosted CRUD Demo.', out)
     HCI.writeLine('   Choose the free serverless option and a region.', out)
@@ -86,11 +83,30 @@ export async function runTaoConnect(
   }
 
   let publicFields: Record<string, string> = {}
+  let firebaseAutomated = false
   if (provider === 'firebase') {
-    const pasted =
-      (await prompts.paste('Paste Firebase code snippet or firebaseConfig object (Return for individual fields):'))
-        .trim()
-    if (pasted !== '') {
+    const pasted = (await prompts.paste('Firebase config (Return to automate; type manual for individual fields):'))
+      .trim()
+    if (pasted === '') {
+      const existing = publicConfig['firebase']
+      publicFields = await provisionFirebase({
+        project,
+        currentProjectId: isObject(existing) && typeof existing['projectId'] === 'string'
+          ? existing['projectId']
+          : undefined,
+        prompts,
+        output: options.output,
+        runner: options.firebaseRunner,
+      })
+      firebaseAutomated = true
+    } else if (pasted === 'manual') {
+      HCI.writeLine('In Firebase Console, press Create app (or Add app) and select the Web app icon (</>).', out)
+      HCI.writeLine('Name it Tao Hosted CRUD Demo; leave Firebase Hosting unchecked; click Register app.', out)
+      HCI.writeLine('On Add Firebase SDK, leave Use npm selected. Firebase is already installed here.', out)
+      HCI.writeLine('Click Continue to console after copying config. Later find it in Project settings >', out)
+      HCI.writeLine('General > Your apps > Web app > SDK setup and configuration > Config.', out)
+      HCI.writeLine('No service-account JSON is needed for this app; do not generate one.', out)
+    } else {
       publicFields = parseFirebaseConfigSnippet(pasted)
     }
   }
@@ -131,13 +147,6 @@ export async function runTaoConnect(
     publicFields['tableId'] = 'notes'
   }
 
-  if (
-    await FS.isSymbolicLink(publicPath) || await FS.isSymbolicLink(privateDirectory)
-    || await FS.isSymbolicLink(privatePath)
-  ) {
-    Errors.throwUserInput('A connection file or directory is a symbolic link; nothing was stored.')
-  }
-  const publicConfig = await readObject(publicPath)
   if (provider === 'appwrite') {
     const privateConfig = await readObject(privatePath)
     const savedAppwrite = privateConfig['appwrite']
@@ -178,7 +187,7 @@ export async function runTaoConnect(
   await FS.writeJson(publicPath, { ...publicConfig, [provider]: publicFields })
 
   HCI.writeLine(`Saved public ${provider} config to ${FS.displayPath(publicPath)}.`, out)
-  if (provider === 'firebase') {
+  if (provider === 'firebase' && !firebaseAutomated) {
     HCI.writeLine('Next in Firebase Console:', out)
     HCI.writeLine('1. Security > Authentication > Sign-in method: enable Email/Password and Save.', out)
     HCI.writeLine('2. Databases & Storage > Firestore: create a database in a chosen location.', out)
@@ -191,7 +200,7 @@ export async function runTaoConnect(
     HCI.writeLine('1. From the repository root run just hosted-crud, scan the QR code in Expo Go,', out)
     HCI.writeLine('   and choose Appwrite on the first screen.', out)
   }
-  if (provider === 'firebase') {
+  if (provider === 'firebase' && !firebaseAutomated) {
     HCI.writeLine('Firebase settings were saved, but cloud resources were not provisioned or checked.', out)
   }
   HCI.writeLine(
