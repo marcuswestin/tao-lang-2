@@ -57,6 +57,11 @@ Describe('tao connect', () => {
       Expect(publicText).not.toContain('private-key-canary')
       Expect(terminal.outputText()).not.toContain('private-key-canary')
       Expect(terminal.outputText()).not.toContain('keep-secret')
+      Expect(terminal.outputText()).toContain('Press Create app')
+      Expect(terminal.outputText()).toContain('Tao Hosted CRUD Demo')
+      Expect(terminal.outputText()).toContain('Use npm selected')
+      Expect(terminal.outputText()).toContain('Continue to console')
+      Expect(terminal.outputText()).toContain('SDK setup and configuration > Config')
       Expect(terminal.outputText()).toContain('has not provisioned resources or checked the connection')
     } finally {
       await FS.remove(root)

@@ -49,16 +49,26 @@ export async function runTaoConnect(
   )
 
   if (provider === 'firebase') {
-    HCI.writeLine('1. At https://console.firebase.google.com create a project, then register a Web app.', out)
-    HCI.writeLine('   Leave "Also set up Firebase Hosting for this app" unchecked; Expo Go does not use it.', out)
-    HCI.writeLine('2. Open Project settings > General > Your apps and copy the Firebase web config fields below.', out)
+    HCI.writeLine('1. At https://console.firebase.google.com create or open a project. Press Create app', out)
+    HCI.writeLine('   (or Add app), then choose the Web app icon (</>).', out)
+    HCI.writeLine('2. Enter an app nickname, such as Tao Hosted CRUD Demo. Leave', out)
+    HCI.writeLine('   "Also set up Firebase Hosting for this app" unchecked, then click Register app.', out)
+    HCI.writeLine('3. On Add Firebase SDK, leave Use npm selected. The app already has Firebase installed;', out)
+    HCI.writeLine('   skip npm install and the sample initialization code. Copy projectId, apiKey, appId,', out)
+    HCI.writeLine('   and authDomain from the firebaseConfig snippet, then click Continue to console.', out)
+    HCI.writeLine('4. If you did not copy them, open Project settings > General > Your apps, select the', out)
+    HCI.writeLine('   Web app, then SDK setup and configuration > Config. Copy those same four values.', out)
     HCI.writeLine(
       '   The web API key identifies the client project; it is public config, not an admin credential.',
       out,
     )
-    HCI.writeLine('3. The app needs no service account. If you want to save one for future backend tooling,', out)
+    HCI.writeLine('5. The app needs no service account. Press Return at that prompt unless you already', out)
     HCI.writeLine(
-      '   open Project settings > Service accounts > Generate new private key. Never put it in a client app.',
+      '   need backend tooling. A service account comes from Project settings > Service accounts',
+      out,
+    )
+    HCI.writeLine(
+      '   > Generate new private key, and cannot create the project it belongs to. Never put it in a client app.',
       out,
     )
   } else {
@@ -156,7 +166,7 @@ export async function runTaoConnect(
   )
   HCI.writeLine(
     provider === 'firebase'
-      ? 'Next in Firebase Console: create a Firestore database, enable the sign-in method, and set Firestore Security Rules.'
+      ? 'Next in Firebase Console: Security > Authentication > Sign-in method: enable Email/Password; Databases & Storage > Firestore: create the database, then publish the app firestore.rules.'
       : 'Next in Appwrite Console: add table columns and an ownerId index, enable row security, grant authenticated users table create only, enable email/password sign-in, and confirm the platform ID.',
     out,
   )
