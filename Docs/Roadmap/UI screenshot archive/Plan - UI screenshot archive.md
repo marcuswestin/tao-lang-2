@@ -111,8 +111,10 @@ The archive is a submodule for discoverability, but this repository runs many wo
 branches at once, and a submodule's gitlink would conflict on nearly every merge if captures bumped
 it. So:
 
-- The gitlink is set once and bumped only deliberately. `.gitmodules` sets `ignore = all`, so
-  captured commits inside the archive never make a worktree look dirty to `finalize` or `land`.
+- The gitlink is set once and bumped only deliberately: `./dev storage pin`, on a feature branch,
+  points it at the archive's published head in a commit of its own and drafts the merge message, so
+  `./agent unsandboxed land` is the one step left. `.gitmodules` sets `ignore = all`, so captured
+  commits inside the archive never make a worktree look dirty to `finalize` or `land`.
 - The submodule, at `storage`, is not initialised by default. `storage sync` initialises it in
   the worktree that captures as a blobless partial clone (`--filter=blob:none`): every commit and
   tree arrives, and a screenshot downloads only when checked out. A shallow clone would save less,
@@ -138,7 +140,10 @@ it. So:
    paused frames left it waiting forever. Studio's own four layouts are captured with `--studio`,
    the agent panel minimized. Capturing dark exposed that a focused view scenario always resolved its
    design light, because Studio's subject host dropped the scheme the app shell stamps; it now
-   forwards it.
+   forwards it. The first archived run, 152 shots, is pinned. It left these open: the tablet dark
+   pseudolocale and right-to-left shots, WordFlower's second pane clipped at tablet width, its
+   library card wider than the hero at laptop width, and the capture sharing the canvas position
+   Studio stores for the Developer. The `storage-archive` skill owns the capture round.
 3. Milestone native captures: iOS for the reference apps and the companion app, and the native
    Studio shell.
 4. Android, and the websites once their source or URL is named.
