@@ -2,6 +2,7 @@ import { CLI, Errors, FS } from '@shared'
 import { Describe, Expect, initGitTestRepository, mkGitTestDir, Test } from '@shared/test'
 import type { MachineResourceOwner } from '../verification-src/MachineLanes'
 import {
+  inspectMergePreflight,
   landedReport,
   LandingIntegrationConflictError,
   type MergeCommandRunner,
@@ -43,6 +44,8 @@ type FakeRepository = {
   builtTree?: string
   remoteFeatureHead?: string
   remoteArchiveHead?: string
+  /** Full `refs/heads/...` name the fake reports when `remoteArchiveHead` is set. */
+  remoteArchiveRef?: string
   remoteMainHead: string
   remoteMainSequence?: string[]
   tree: string
@@ -241,7 +244,11 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
             : `${repository.remoteFeatureHead}\trefs/heads/${repository.branch}`,
           repository.remoteArchiveHead === undefined
             ? ''
-            : `${repository.remoteArchiveHead}\trefs/heads/merged/example`,
+            : `${repository.remoteArchiveHead}\t${
+              repository.remoteArchiveRef
+                ?? args.find(arg => arg.startsWith('refs/heads/merged/'))
+                ?? 'refs/heads/merged/example'
+            }`,
         ].filter(Boolean).join('\n'),
       )
     }
@@ -483,6 +490,63 @@ Describe('merge-with-main', () => {
 
     fake.repository.remoteArchiveHead = undefined
     Expect((await landedReport('feat/example', fake.dependencies, fake.repository.featureRoot)).landed).toBe(false)
+  })
+
+  Test('a personal branch archives each landing under merged/<name>/<utc>', async () => {
+    const fake = fakeDependencies({ branch: 'dev/ro' })
+    fake.files.set(
+      '/repo-feature/.artifacts/merge/dev/ro.msg',
+      'Land the personal branch\n\n- Keep each archive dated.\n',
+    )
+
+    const preflight = await inspectMergePreflight(
+      { repositoryRoot: fake.repository.featureRoot },
+      fake.dependencies,
+    )
+
+    Expect(preflight.archive).toBe('merged/ro/2026-09-03T14-15-16-789Z')
+  })
+
+  Test('a personal branch refuses a dated archive that already exists', async () => {
+    const fake = fakeDependencies({
+      branch: 'dev/ro',
+      remoteArchiveHead: 'feature00000000000000000000000000000000000',
+      remoteArchiveRef: 'refs/heads/merged/ro/2026-09-03T14-15-16-789Z',
+    })
+
+    await Expect(inspectMergePreflight({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies))
+      .rejects.toThrow("Remote archive branch 'merged/ro/2026-09-03T14-15-16-789Z' already exists.")
+  })
+
+  Test('a single merged/<name> ref blocks dated archives under that name', async () => {
+    const fake = fakeDependencies({
+      branch: 'dev/ro',
+      remoteArchiveHead: 'feature00000000000000000000000000000000000',
+      remoteArchiveRef: 'refs/heads/merged/ro',
+    })
+
+    await Expect(inspectMergePreflight({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies))
+      .rejects.toThrow("Remote archive 'merged/ro' is one ref")
+  })
+
+  Test('landed report treats any dated personal archive as a landing', async () => {
+    const fake = fakeDependencies({
+      branch: 'dev/ro',
+      remoteArchiveHead: 'feature00000000000000000000000000000000000',
+      remoteArchiveRef: 'refs/heads/merged/ro/2026-09-03T14-15-16-789Z',
+    })
+
+    Expect(await landedReport('dev/ro', fake.dependencies, fake.repository.featureRoot)).toEqual({
+      archive: 'merged/ro/2026-09-03T14-15-16-789Z',
+      branch: 'dev/ro',
+      landed: true,
+    })
+    Expect(fake.calls.map(call => call.args)).toEqual([[
+      'ls-remote',
+      '--heads',
+      'origin',
+      'refs/heads/merged/ro/*',
+    ]])
   })
 
   Test('landed report does not mistake an unavailable remote for an absent archive', async () => {

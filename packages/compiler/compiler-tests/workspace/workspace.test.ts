@@ -607,6 +607,41 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
+  // `tao check` records the loaded workspace before it builds, and folder visibility reads that
+  // record. The editor used to build without recording it, so a `folder` type in a sibling file
+  // was an unknown type there while the checker accepted it.
+  Test('resolves a folder-visible sibling type in the editor the same way the checker does', async () => {
+    await withTaoFiles(
+      'tao-workspace-lsp-folder-type-',
+      {
+        'Types.tao': `
+          folder
+          type SharedPanel is { Status text }
+          type SecretPanel is { Status text }
+        `,
+        'Main.tao': `
+          view Open(Shared SharedPanel, Secret SecretPanel) {
+            render Text(Shared.Status)
+          }
+          view Text(Value text) {
+            render inject ${tsFence}
+              return null
+            ${fence}
+          }
+        `,
+      },
+      async (paths, rootDir) => {
+        const entryPath = paths['Main.tao']!
+        const standalone = (await (await Workspace.open(rootDir)).validate(entryPath)).diagnostics
+          .filter(diagnostic => diagnostic.filePath === entryPath)
+          .map(diagnostic => diagnostic.message)
+
+        Expect(standalone).toEqual(["Unknown type 'SecretPanel'."])
+        Expect(await lspDiagnosticMessages(rootDir, entryPath)).toEqual(standalone)
+      },
+    )
+  })
+
   // The invalid source here is deliberately one the compiler can still lower: step order is a
   // semantic rule, not a shape the plan compiler asserts on, so skipping validation yields a real
   // plan rather than trading one refusal for another.
