@@ -1,3 +1,4 @@
+import { startDebouncedWatcher, WATCH_DEBOUNCE_MS } from '@expo-host/dev-loop/DebouncedWatcher'
 import { Errors, FS, Platform, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { runTestCommandOnce } from '../cli-src/test-command'
@@ -80,6 +81,10 @@ Describe('tao test --watch (real compile)', () => {
 
           const captured = await withCapturedOutput(async () => {
             const loop = runTestWatchCommand([rootDir], { output: 'quiet' }, {
+              // The verification shell cannot receive native macOS file events; the product's
+              // named host watch command uses native events instead.
+              startWatcher: (onChange, roots) =>
+                startDebouncedWatcher(roots, onChange, { debounceMs: WATCH_DEBOUNCE_MS, usePolling: true }),
               runOnce: async () => {
                 const outcome = await runTestCommandOnce([rootDir], { output: 'quiet' })
                 calls += 1

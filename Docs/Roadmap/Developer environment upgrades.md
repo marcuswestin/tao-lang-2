@@ -40,7 +40,6 @@ change that addressed it.
 - [DEVENV-059 — Xcode 27 runtime installation can strand Apple device services](<Developer environment upgrades/DEVENV-059-xcode-27-runtime-installation-can-strand-apple-device-servic.md>) — In progress
 - [DEVENV-061 — `bun test` from the repository root loses subprocess output](<Developer environment upgrades/DEVENV-061-bun-test-from-the-repository-root-loses-subprocess-output.md>) — Candidate
 - [DEVENV-062 — The documented setup command cannot refresh generated harness configuration](<Developer environment upgrades/DEVENV-062-the-documented-setup-command-cannot-refresh-generated-harn.md>) — Candidate
-- [DEVENV-063 — Studio preview needs the materialized Watchman profile in managed task shells](<Developer environment upgrades/DEVENV-063-studio-preview-needs-the-materialized-watchman-profile-in-ma.md>) — Candidate
 - [DEVENV-065 — The raw-`Error` allowlist is line-precise with no way to re-derive it](<Developer environment upgrades/DEVENV-065-the-raw-error-allowlist-is-line-precise-with-no-way-to-re-de.md>) — Candidate
 - [DEVENV-066 — Browser-harness gestures silently miss an occluded target](<Developer environment upgrades/DEVENV-066-browser-harness-gestures-silently-miss-an-occluded-target.md>) — Mitigated for offset gestures
 - [DEVENV-067 — A failing deep-equality assertion on AST nodes can exhaust the machine's memory](<Developer environment upgrades/DEVENV-067-a-failing-deep-equality-assertion-on-ast-nodes-can-exhaust-t.md>) — In progress
@@ -104,7 +103,6 @@ change that addressed it.
 - [DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS — Secret materialization is missing from agent commands](<Developer environment upgrades/DEVENV-SECRET-MATERIALIZATION-MISSING-FROM-AGENT-COMMANDS.md>) — Candidate
 - [DEVENV-START-BRANCH-CANNOT-FETCH-FROM-THE-SANDBOX — start-branch cannot fetch from the sandbox, and the manual fallback half-applies](<Developer environment upgrades/DEVENV-START-BRANCH-CANNOT-FETCH-FROM-THE-SANDBOX.md>) — Candidate
 - [DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD — The Studio real-app proof fails intermittently under load](<Developer environment upgrades/DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD.md>) — In progress
-- [DEVENV-SUBAGENT-SHELL-CANNOT-START-A-STUDIO-SMOKE-LANE — A subagent's unsandboxed shell fails the Watchman preflight the orchestrator's shell passes](<Developer environment upgrades/DEVENV-SUBAGENT-SHELL-CANNOT-START-A-STUDIO-SMOKE-LANE.md>) — Candidate
 - [DEVENV-TAO-BUILD-SNAPSHOT-LOSES-PROJECT-PACKAGES — Tao build snapshot loses project packages](<Developer environment upgrades/DEVENV-TAO-BUILD-SNAPSHOT-LOSES-PROJECT-PACKAGES.md>) — Candidate
 - [DEVENV-TAO-DEV-IGNORES-PROVIDER-PACKAGE-EDITS — A running `tao dev` ignores provider package edits](<Developer environment upgrades/DEVENV-TAO-DEV-IGNORES-PROVIDER-PACKAGE-EDITS.md>) — Candidate
 - [DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO — Tao fix never reuses the check memo, so every verify lane refixes the whole repository](<Developer environment upgrades/DEVENV-TAO-FIX-NEVER-REUSES-THE-CHECK-MEMO.md>) — Candidate
