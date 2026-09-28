@@ -4,7 +4,7 @@ import { Assert, Diagnostics } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
 import { Backends } from './codegen/Backend'
-import type { StudioPreviewManifest } from './studio-preview-manifest'
+import { compileStudioPreviewManifest, type StudioPreviewManifest } from './studio-preview-manifest'
 import { compileTestPlan, type TaoTestPlan } from './test-plan-compiler'
 
 /** CompiledFile declares one generated output file. */
