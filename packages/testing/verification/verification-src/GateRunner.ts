@@ -353,9 +353,12 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
         }
         if (event.kind === 'complete' && guiLeaseNames.has(event.state.name)) {
           finishedGui.add(event.state.name)
-          if (finishedGui.size === guiLeaseNames.size) {
-            // Released the moment this run's own gui nodes are done, not when the whole lane is —
-            // the CPU-bound work packed around them may run for a long time after.
+          if (
+            finishedGui.size === guiLeaseNames.size
+            && states.every(state => !guiLeaseNames.has(state.name) || state.status === 'passed')
+          ) {
+            // Only a complete pass can release early. Failed GUI work can run again under isolated
+            // confirmation, and a recovered dependency can resume a skipped GUI node.
             void releaseGui()
           }
         }
@@ -387,11 +390,6 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       // An interrupted or dependency-skipped prepare phase never emitted its last completion.
       onPrepareFinished()
     }
-    if (guiLeaseNames.size > 0 && finishedGui.size < guiLeaseNames.size) {
-      // Same case as the prepare phase above: an interrupted or dependency-skipped run never emitted
-      // every gui node's completion, so nothing else would release the lease.
-      void releaseGui()
-    }
     await liveArtifacts.finish()
     await reporter.finish()
     if (!graphResult.interrupted) {
@@ -403,6 +401,11 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
         runNode,
         states,
       })
+      if (
+        guiLeaseNames.size > 0 && states.every(state => !guiLeaseNames.has(state.name) || state.status === 'passed')
+      ) {
+        void releaseGui()
+      }
     }
     return graphResult
   }, machineLane).finally(async () => {

@@ -404,4 +404,49 @@ Describe('the machine-wide gui lease', () => {
       await FS.remove(holderRoot)
     }
   })
+
+  Test('holds gui through an isolated retry and releases it after recovery', async () => {
+    const root = await mkTestDir('tao-verify-gui-retry-')
+    const peerRoot = await mkTestDir('tao-verify-gui-retry-peer-')
+    const registryRoot = FS.resolvePath('registry', root)
+    const finishRetry = Deferred()
+    const peer = await MachineLanes.acquire({ lane: 'peer', registryRoot, repositoryRoot: peerRoot })
+    let attempts = 0
+    try {
+      const pending = runGates({
+        gates: ['studio-canary'],
+        lane: 'verify-full',
+        machineLoadAverage: () => 0,
+        registryRoot,
+        repositoryRoot: root,
+        runGate: async (_name, _logPath, environment) => {
+          attempts += 1
+          Expect(environment[GateCatalog.GUI_LEASE_HELD_ENV_KEY]).toBe('true')
+          if (attempts === 1) {
+            await peer.release()
+            return { exitCode: 1, output: 'timed out after 1000ms' }
+          }
+          await finishRetry.promise
+          return { exitCode: 0, output: '' }
+        },
+      })
+      await until(() => attempts === 2, {
+        description: 'the isolated GUI retry to start',
+        timeoutMs: LANE_WAIT_MS,
+      })
+      Expect(await MachineLanes.tryAcquireResource({ name: GateCatalog.GUI_RESOURCE, registryRoot })).toBeUndefined()
+      finishRetry.resolve()
+      const summary = await pending
+      Expect(summary.status).toBe('passed')
+      Expect(attempts).toBe(2)
+      const after = await MachineLanes.tryAcquireResource({ name: GateCatalog.GUI_RESOURCE, registryRoot })
+      Expect(after).toBeDefined()
+      await after?.release()
+    } finally {
+      finishRetry.resolve()
+      await peer.release()
+      await FS.remove(root)
+      await FS.remove(peerRoot)
+    }
+  })
 })

@@ -1,8 +1,74 @@
 import { CLI, Errors, FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
+import { GateCatalog } from '@verification/GateCatalog'
+import { MachineLanes } from '@verification/MachineLanes'
 import { StudioSmoke } from '../studio-tooling-src/StudioSmoke'
 
 Describe('Studio smoke port leases', () => {
+  Test('releases standalone gui when port setup fails before the child starts', async () => {
+    const registryRoot = await mkTestDir('tao-studio-native-gui-setup-')
+    try {
+      await Expect(StudioSmoke.run({
+        files: ['unused.test.ts'],
+        native: true,
+        portsAvailable: async () => Errors.throwHostEnvironment('port probe interrupted'),
+        registryRoot,
+        runId: 'native-gui-setup-test',
+        shardIndex: 5,
+      })).rejects.toThrow('port probe interrupted')
+      const after = await MachineLanes.tryAcquireResource({ name: GateCatalog.GUI_RESOURCE, registryRoot })
+      Expect(after).toBeDefined()
+      await after?.release()
+    } finally {
+      await FS.remove(registryRoot)
+    }
+  })
+
+  Test('standalone native smoke holds gui before its child starts and releases it after exit', async () => {
+    const root = await mkTestDir('tao-studio-native-gui-')
+    const registryRoot = FS.resolvePath('registry', root)
+    const readyPath = FS.resolvePath('ready', root)
+    const releasePath = FS.resolvePath('release', root)
+    const testPath = FS.resolvePath('gui-child.test.ts', root)
+    const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+    const testSupportPath = Repo.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts')
+    const runId = 'native-gui-lease-test'
+    await FS.writeText(
+      testPath,
+      `
+      import { FS, Time } from ${JSON.stringify(sharedPath)}
+      import { Test } from ${JSON.stringify(testSupportPath)}
+      Test('waits until the parent releases it', async () => {
+        await FS.writeText(${JSON.stringify(readyPath)}, '')
+        while (!await FS.exists(${JSON.stringify(releasePath)})) await Time.sleep(5)
+      })
+    `,
+    )
+    const pending = StudioSmoke.run({
+      files: [testPath],
+      native: true,
+      portsAvailable: async () => true,
+      registryRoot,
+      runId,
+      shardIndex: 5,
+      workerIndex: 3,
+    })
+    try {
+      await until(async () => await FS.exists(readyPath), { description: 'standalone native smoke child to start' })
+      Expect(await MachineLanes.tryAcquireResource({ name: GateCatalog.GUI_RESOURCE, registryRoot })).toBeUndefined()
+      await FS.writeText(releasePath, '')
+      Expect(await pending).toBe(0)
+      const after = await MachineLanes.tryAcquireResource({ name: GateCatalog.GUI_RESOURCE, registryRoot })
+      Expect(after).toBeDefined()
+      await after?.release()
+    } finally {
+      await FS.writeText(releasePath, '').catch(() => {})
+      await pending.catch(() => undefined)
+      await FS.remove(StudioSmoke.resources({ runId, shardIndex: 5, workerIndex: 3 }).artifactRoot)
+      await FS.remove(root)
+    }
+  })
+
   Test('holds an explicit port block across worktrees until the complete smoke run releases it', async () => {
     const registryRoot = await mkTestDir('tao-studio-port-leases-')
     const options = {
