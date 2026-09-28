@@ -113,7 +113,7 @@ kbd {
   background: var(--studio-panel-raised); border-radius: 3px; color: var(--studio-text-dim); flex: none;
   font: 600 9px/1 var(--studio-mono); letter-spacing: .02em; padding: 3px 4px; text-transform: lowercase;
 }
-.studio-file-kind[data-kind="tao"] { background: var(--studio-accent-soft); color: var(--studio-accent-strong); }
+.studio-file-icon { color: var(--studio-accent-strong); flex: none; height: 16px; width: 16px; }
 .studio-section { border-top: 1px solid var(--studio-stroke); }
 .studio-section > summary {
   align-items: center; color: var(--studio-text); cursor: pointer; display: flex; font-size: 11.5px; font-weight: 600; gap: 6px;

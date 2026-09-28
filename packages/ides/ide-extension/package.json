@@ -20,6 +20,7 @@
     "LICENSE",
     "README.md",
     "_gen_ide-extension/",
+    "icons/",
     "ide-extension-syntaxes/_gen_syntaxes/tao.tmLanguage.json",
     "language-configuration.json",
     "package.json"
@@ -52,7 +53,11 @@
         "extensions": [
           ".tao"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/tao-light.svg",
+          "dark": "./icons/tao-dark.svg"
+        }
       }
     ],
     "commands": [
