@@ -38,6 +38,8 @@ export type GenerateAppOptions = {
   cwd?: string
   datasourceConfiguration?: Readonly<Record<string, string>>
   preview?: GeneratePreviewOptions
+  /** A Studio session may reuse its isolated parser services across preview revisions. */
+  previewWorkspace?: Workspace
   /** publicationHooks exposes file-operation failure seams for transactional publication tests. */
   publicationHooks?: Pick<FS.SynchronizeDirectoryFileSetsOptions, 'beforeMove' | 'beforeRemove'>
   /** journeyObservations emits test-harness-only render source locators without enabling Studio preview behavior. */
@@ -131,7 +133,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     }
     const compiled = opts.preview === undefined
       ? await Workspace.compile(sourcePath, compileOptions)
-      : await compileStudioPreview(sourcePath, opts.preview, compileOptions)
+      : await compileStudioPreview(sourcePath, opts.preview, compileOptions, opts.previewWorkspace)
     const preview = opts.preview === undefined
       ? undefined
       : previewPublication(compiled.appNames, opts.appName, opts.preview)
@@ -178,6 +180,7 @@ async function compileStudioPreview(
   sourcePath: string,
   preview: GeneratePreviewOptions,
   options: Parameters<Workspace['compile']>[1],
+  previewWorkspace?: Workspace,
 ): Promise<Awaited<ReturnType<Workspace['compile']>>> {
   const generatedEntries = Object.keys(preview.sourceVersions)
     .filter(path => /^@\/studio\/.*\.tao$/u.test(path))
@@ -189,7 +192,10 @@ async function compileStudioPreview(
     )
     return await Workspace.compile(sourcePath, options)
   }
-  const workspace = await Workspace.open(preview.project, { sourceOverrides: preview.sourceOverrides })
+  const workspace = preview.sourceOverrides === undefined && previewWorkspace !== undefined
+    ? previewWorkspace
+    : await Workspace.open(preview.project, { sourceOverrides: preview.sourceOverrides })
+  Assert(workspace.root === FS.resolvePath(preview.project), 'preview workspace matches its project')
   return await workspace.compileFiles([sourcePath, ...generatedEntries], options)
 }
 

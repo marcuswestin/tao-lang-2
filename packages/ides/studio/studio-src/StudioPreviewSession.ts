@@ -1,3 +1,4 @@
+import { Workspace } from '@compiler/workspace'
 import Runtime from '@expo-host'
 import { Assert, Errors, FS, Switch } from '@shared'
 import SourceActions from '@source-actions'
@@ -25,6 +26,7 @@ export async function openStudioPreviewSession(
   options: OpenStudioPreviewSessionOptions,
 ): Promise<StudioPreviewSession> {
   let session: StudioProjectSession | undefined
+  let previewWorkspace: Workspace | undefined
   session = await StudioProjectSession.open({
     ...options,
     async compile(request) {
@@ -36,6 +38,9 @@ export async function openStudioPreviewSession(
       for (const [path, source] of Object.entries(sourceOverrides ?? {})) {
         sourceVersions[FS.relativePath(request.project, path)] = SourceActions.studioSourceVersion(source)
       }
+      if (sourceOverrides === undefined) {
+        previewWorkspace ??= await Workspace.open(request.project)
+      }
       const generated = await Runtime.generateApp(session.entryPath, {
         appName: request.appName,
         preview: {
@@ -46,6 +51,7 @@ export async function openStudioPreviewSession(
         },
         runtimePackageRoot: options.previewRuntimeRoot,
         validationMode: options.validationMode,
+        previewWorkspace,
       })
       if (generated.studioManifest !== undefined && generated.preview !== undefined) {
         session.setMatrixManifest(matrixManifest(session, generated, request.compileRevision))

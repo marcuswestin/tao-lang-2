@@ -1,5 +1,5 @@
 import type { Workspace } from '@compiler/workspace'
-import { AST, Langium } from '@parser'
+import { AST, Langium, Parser } from '@parser'
 import { Assert, Diagnostics, Errors, FS } from '@shared'
 import SourceActions from '@source-actions'
 import type { StudioCompileCoordinator } from '../StudioCompileCoordinator'
@@ -137,11 +137,13 @@ export class StudioFileOperations {
   }
 
   async syncDraft(request: StudioDraftWriteRequest): Promise<StudioDraftWriteResult> {
-    const { coordinator, files, workspace } = this.#context
+    const { coordinator, files } = this.#context
     const current = await files.readFile(request.path)
     requireSourceVersion(current, request.sourceVersion)
     const resolved = await files.resolveTaoFile(request.path)
-    const parsed = await workspace.parseSource(request.content, Langium.URI.file(resolved))
+    // The full preview compile validates the saved graph. Draft admission needs only syntax errors
+    // in the edited file, so avoid reading and linking the whole graph before that compile.
+    const parsed = Parser.parseSyntax(request.content)
     const diagnostics = Diagnostics.errorMessages(parsed.diagnostics, 'lexer', 'parser')
     if (diagnostics.length > 0) {
       files.setDraft(current.path, diagnostics)

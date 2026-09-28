@@ -98,6 +98,7 @@ export type ParseResult = {
 export type SyntaxParse = {
   ast: AST.TaoFile
   comments: readonly AST.SyntaxRange[]
+  diagnostics: readonly Diagnostic[]
   errors: number
 }
 
@@ -169,6 +170,10 @@ export const Parser = {
     return {
       ast: result.value,
       comments: AST.commentRanges(result.value),
+      diagnostics: [
+        ...result.lexerErrors.map(error => lexerDiagnostic(error)),
+        ...result.parserErrors.map(error => parserDiagnostic(error)),
+      ],
       errors: result.lexerErrors.length + result.parserErrors.length,
     }
   },
