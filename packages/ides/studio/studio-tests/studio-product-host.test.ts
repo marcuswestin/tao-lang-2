@@ -260,22 +260,31 @@ Test('Tao Studio product host retains viewport ownership over generated Tao layo
 })
 
 Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in Tao', async () => {
-  const source = await FS.readText(Repo.resolvePath('Apps/Tao Studio/TaoStudioClient.tao'))
+  const source = (await Promise.all([
+    'TaoStudioClient.tao',
+    '@ui/Workbench.tao',
+    '@ui/Explorer.tao',
+    '@ui/Context.tao',
+    '@ui/Inspector.tao',
+    '@ui/PanelState.tao',
+    '@ui/Drawer.tao',
+    '@ui/Scenario.tao',
+  ].map(path => FS.readText(Repo.resolvePath(`Apps/Tao Studio/${path}`))))).join('\n')
 
   Expect(source).toContain('Navigator SlotNav')
   Expect(source).not.toContain('StackNav')
   Expect(source).not.toContain('Title "Tao Studio"')
   Expect(source).not.toContain('FormButton(')
-  Expect(source).toContain('use Checkbox, Col, Text, TextInput from @tao/ui')
+  Expect(source).toContain('use Col, Text from @tao/ui')
   Expect(source).not.toMatch(/\bButton\(/)
   Expect(source).not.toMatch(/\bPicker\(/)
   Expect(source).toContain(
     'view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from '
-      + '../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
+      + '../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
   )
   Expect(source).toContain(
     'view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from '
-      + '../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
+      + '../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
   )
   Expect(source).toContain('@environment StudioEnvironmentPanel(')
   Expect(source).toContain('view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPresetId text')
@@ -475,7 +484,7 @@ Test('Tao-owned component rows preserve canonical drag snippets at the native bo
 })
 
 Test('Tao-owned component inventory stays aligned with the canonical Studio palette', async () => {
-  const source = await FS.readText(Repo.resolvePath('Apps/Tao Studio/TaoStudioClient.tao'))
+  const source = await FS.readText(Repo.resolvePath('Apps/Tao Studio/@ui/Explorer.tao'))
   const taoComponents = [...source.matchAll(/ComponentPaletteItem\(Name: "([^"]+)"/g)].map(match => match[1])
 
   Expect(taoComponents).toEqual(studioPaletteComponents.map(component => component.component))

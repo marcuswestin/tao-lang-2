@@ -1,0 +1,294 @@
+folder
+type StudioPanelAction is {
+   Name text,
+   Payload text,
+}
+
+folder
+type StudioProblemPanelRow is {
+   Action StudioPanelAction,
+   Actionable boolean,
+   Column number,
+   Detail text,
+   HasPosition boolean,
+   Label text,
+   Line number,
+   Path text,
+   SourceVersion text,
+}
+
+folder
+type StudioCompilePanel is {
+   AppliedRevision number,
+   CompileRevision number,
+   DiagnosticCount number,
+   Diagnostics list of StudioProblemPanelRow,
+   Message text,
+   Status text,
+}
+
+folder
+type StudioProblemsPanel is {
+   Rows list of StudioProblemPanelRow,
+}
+
+folder
+type StudioDataPanelTable is {
+   Datasource text,
+   Entity text,
+   RetainedRowCount number,
+   Rows list of text,
+   TotalRowCount number,
+}
+
+type StudioFeedField is {
+   Label text,
+   Value text,
+   DragPayload text,
+}
+
+folder
+type StudioFeedRow is {
+   RowId text,
+   Label text,
+   Selected boolean,
+   SelectAction StudioPanelAction,
+   DragPayload text,
+   Fields list of StudioFeedField,
+}
+
+folder
+type StudioFeedPanel is {
+   Notice text,
+   Entities list of text,
+   Entity text,
+   Source text,
+   Sources list of text,
+   Seed text,
+   Rows list of StudioFeedRow,
+   Loading boolean,
+   Pending boolean,
+   Error text,
+   CanUndo boolean,
+   UndoAction StudioPanelAction,
+   CanKeep boolean,
+   CanDiscard boolean,
+   KeepAction StudioPanelAction,
+   DiscardAction StudioPanelAction,
+}
+
+folder
+type StudioDataPanel is {
+   CaptureAction StudioPanelAction,
+   Feed StudioFeedPanel,
+   Error text,
+   Loading boolean,
+   RefreshAction StudioPanelAction,
+   Source text,
+   Tables list of StudioDataPanelTable,
+}
+
+type StudioTestFailure is {
+   Action StudioPanelAction,
+   Column number,
+   Detail text,
+   HasPosition boolean,
+   Label text,
+   Line number,
+   Path text,
+}
+
+folder
+type StudioTestsPanel is {
+   Available boolean,
+   Error text,
+   Failures list of StudioTestFailure,
+   Output text,
+   Reason text,
+   RunAction StudioPanelAction,
+   Running boolean,
+   Summary text,
+   Watch boolean,
+   WatchAction StudioPanelAction,
+}
+
+type StudioLogPanelRow is {
+   Level text,
+   Message text,
+   Timestamp number,
+}
+
+folder
+type StudioLogsPanel is {
+   ClearAction StudioPanelAction,
+   RetainedCount number,
+   Rows list of StudioLogPanelRow,
+   Source text,
+   TotalCount number,
+}
+
+type StudioDebugJournalRow is {
+   Action text,
+   Detail text,
+   Outcome text,
+}
+
+type StudioDebugBinding is {
+   Name text,
+   Value text,
+}
+
+type StudioDebugPendingWrite is {
+   Committed text,
+   Kind text,
+   Pending text,
+   Target text,
+}
+
+folder
+type StudioDebugPanel is {
+   BreakAction StudioPanelAction,
+   ClearAction StudioPanelAction,
+   ContinueAction StudioPanelAction,
+   Frames list of text,
+   Journal list of StudioDebugJournalRow,
+   Paused boolean,
+   PausedAt text,
+   PendingWrites list of StudioDebugPendingWrite,
+   Scope list of StudioDebugBinding,
+   Source text,
+   StepIntoAction StudioPanelAction,
+   StepOutAction StudioPanelAction,
+   StepOverAction StudioPanelAction,
+}
+
+folder
+type StudioSearchPanelRow is {
+   Action StudioPanelAction,
+   Column number,
+   Detail text,
+   End number,
+   Kind text,
+   Label text,
+   Line number,
+   Path text,
+   SourceVersion text,
+   Start number,
+}
+
+let InitialPanelAction = StudioPanelAction {
+   Name: "refresh-data",
+   Payload: "null"
+}
+
+folder
+let InitialCompilePanel = StudioCompilePanel {
+   AppliedRevision: 0,
+   CompileRevision: 0,
+   DiagnosticCount: 0,
+   Diagnostics: [],
+   Message: "Waiting for the first compile.",
+   Status: "idle"
+}
+
+folder
+let InitialProblemsPanel = StudioProblemsPanel {
+   Rows: []
+}
+let InitialFeedPanel = StudioFeedPanel {
+   Notice: "",
+   Entities: [],
+   Entity: "",
+   Source: "Fixture",
+   Sources: ["Fixture", "Generated", "Live", "Library"],
+   Seed: "",
+   Rows: [],
+   Loading: false,
+   Pending: false,
+   Error: "",
+   CanUndo: false,
+   UndoAction: InitialPanelAction,
+   CanKeep: false,
+   CanDiscard: false,
+   KeepAction: InitialPanelAction,
+   DiscardAction: InitialPanelAction
+}
+
+folder
+let InitialDataPanel = StudioDataPanel {
+   Feed: InitialFeedPanel,
+   CaptureAction: StudioPanelAction {
+      Name: "capture-fixture",
+      Payload: "null"
+   },
+   Error: "",
+   Loading: false,
+   RefreshAction: InitialPanelAction,
+   Source: "",
+   Tables: []
+}
+
+folder
+let InitialTestsPanel = StudioTestsPanel {
+   Available: false,
+   Error: "",
+   Failures: [],
+   Output: "",
+   Reason: "Waiting for the test runner.",
+   RunAction: StudioPanelAction {
+      Name: "run-tests",
+      Payload: "null"
+   },
+   Running: false,
+   Summary: "",
+   Watch: false,
+   WatchAction: StudioPanelAction {
+      Name: "test-watch",
+      Payload: "true"
+}  }
+
+folder
+let InitialLogsPanel = StudioLogsPanel {
+   ClearAction: StudioPanelAction {
+      Name: "clear-logs",
+      Payload: "null"
+   },
+   RetainedCount: 0,
+   Rows: [],
+   Source: "",
+   TotalCount: 0
+}
+
+folder
+let InitialDebugPanel = StudioDebugPanel {
+   BreakAction: StudioPanelAction {
+      Name: "debug-break",
+      Payload: "null"
+   },
+   ClearAction: StudioPanelAction {
+      Name: "debug-clear",
+      Payload: "null"
+   },
+   ContinueAction: StudioPanelAction {
+      Name: "debug-continue",
+      Payload: "null"
+   },
+   Frames: [],
+   Journal: [],
+   Paused: false,
+   PausedAt: "",
+   PendingWrites: [],
+   Scope: [],
+   Source: "",
+   StepIntoAction: StudioPanelAction {
+      Name: "debug-step-into",
+      Payload: "null"
+   },
+   StepOutAction: StudioPanelAction {
+      Name: "debug-step-out",
+      Payload: "null"
+   },
+   StepOverAction: StudioPanelAction {
+      Name: "debug-step-over",
+      Payload: "null"
+}  }
