@@ -9,8 +9,8 @@ description: >-
 # Progress Report
 
 The Developer asks this to decide whether to wait, redirect, or walk away, so the first answer has to arrive
-immediately and be roughly right. Accuracy comes second, and arrives second. Reporting never pauses
-the work: resume the task in the same turn unless the Developer says to stop.
+immediately and be roughly right. Accuracy comes second, and arrives second. A progress request is a
+status interruption, not a stopping point.
 
 ## The ledger
 
@@ -75,6 +75,11 @@ Three phases, in this order, in one turn.
    points or more, when the time estimate changed by half or by more than ten minutes, or when the
    recalculation found a step that cannot be done at all. Otherwise say nothing — the ledger is
    updated, and the next report starts from the better number.
+4. **Resume execution.** Return to the task that was active before the progress request and carry it
+   to its original stopping point. Do not send a final answer just because the report is complete.
+   Stop only when the underlying task is complete, the Developer explicitly stops it, or a concrete
+   blocker requires their action; in that case, finish all independent work and give the exact action
+   needed. A report does not narrow the scope or authorize an early handoff.
 
 ## What the numbers have to mean
 

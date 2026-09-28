@@ -258,6 +258,8 @@ The point of the release is to learn what people want. Nothing collects that tod
   packaged CLI acceptance also created and checked a fresh starter outside a checkout.
   Remaining acceptance: observe the created app on a compatible iOS build with light/dark, Reduce
   Transparency, Increase Contrast, Reduce Motion, large text and VoiceOver before closing this item.
+  The Developer accepted simulator observation in place of a physical device for A18 on 2026-09-28;
+  build and launch evidence alone does not close the visual and accessibility checks.
 
 ## Environment reach
 
