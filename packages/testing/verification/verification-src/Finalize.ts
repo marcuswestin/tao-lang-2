@@ -536,6 +536,42 @@ export const StartBranchCommand = {
 } as const
 
 /**
+ * recordMergeMessage writes the merge message for a branch whose whole change a command authored
+ * itself, such as `storage pin`, and records it against HEAD, so the landing keeps it without asking
+ * an author to confirm what the command already knows. A later commit makes the record stale, and the
+ * landing asks again as for any message.
+ */
+export async function recordMergeMessage(
+  message: string,
+  options: Pick<FinalizeOptions, 'repositoryRoot'> = {},
+  dependencies: FinalizeDependencies = defaultDependencies,
+): Promise<string> {
+  const root = FS.resolvePath(options.repositoryRoot ?? Repo.getRoot())
+  const branch = await assertOnFeatureBranch(dependencies, root, 'land')
+  const text = validateMergeMessage(message)
+  const headSha = (await git(dependencies, root, ['rev-parse', 'HEAD'])).stdout.trim()
+  const statePath = FS.resolvePath(`.artifacts/merge/${branch}.state.json`, root)
+  const prior = await loadState(dependencies, statePath)
+  const messageFile = FS.resolvePath(`.artifacts/merge/${branch}.msg`, root)
+  await dependencies.writeText(messageFile, `${text}\n`)
+  await dependencies.writeJson(
+    statePath,
+    {
+      headSha,
+      mainIntegratedSha: prior?.mainIntegratedSha ?? '',
+      messageHeadSha: headSha,
+      updatedAt: dependencies.now().toISOString(),
+      verifiedAt: prior?.verifiedAt ?? '',
+      verifiedLane: prior?.verifiedLane ?? '',
+      verifiedToolchain: prior?.verifiedToolchain ?? '',
+      verifiedTreeHash: prior?.verifiedTreeHash ?? '',
+      version: STATE_VERSION,
+    } satisfies FinalizeState,
+  )
+  return messageFile
+}
+
+/**
  * The agent landing runs with host access, so its unlocked message preparation is restricted to the
  * one repository-owned artifact for this branch. The lower-level merge command keeps its explicit
  * override for a person, while this path rejects both lexical escapes and symlink components before
