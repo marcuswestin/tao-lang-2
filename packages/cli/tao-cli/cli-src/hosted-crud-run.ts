@@ -1,5 +1,7 @@
+import type { ExpoFetch } from '@expo-host/dev-loop/expo-runner/metro'
 import { CLI, Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
+import { type MetroStarter, runMetroSession } from './hosted-crud-metro'
 
 type ExpoResult = { exitCode: number | null; stdout: string; stderr: string }
 type ExpoRunner = (
@@ -15,6 +17,10 @@ type HostedCrudRunOptions = {
   output?: Writable
   /** Replaces Expo CLI calls for focused command tests. */
   expoRunner?: ExpoRunner
+  /** Replace the headless Metro process and its HTTP calls for focused command tests. */
+  metro?: MetroStarter
+  fetch?: ExpoFetch
+  pollMs?: number
 }
 
 const EXPO_GO_INSTALL_URL = 'https://expo.dev/go'
@@ -62,15 +68,17 @@ export async function runHostedCrud(path = '.', options: HostedCrudRunOptions = 
   )
   HCI.writeLine('', out)
   const onIPhone = await askIPhoneSignedIn(account, options)
-  if (onIPhone) {
-    HCI.writeLine('Starting Metro; scan the QR code with the iPhone camera.', out)
-  } else {
-    HCI.writeLine('Starting Metro and opening Expo Go in the iOS Simulator.', out)
-  }
-  const started = await run(expo, onIPhone ? ['start', '--go'] : ['start', '--go', '--ios'], project, true)
-  if (started.exitCode !== 0 && started.exitCode !== null) {
-    Errors.throwHostEnvironment(`Expo exited with code ${started.exitCode}.`)
-  }
+  await runMetroSession({
+    expo,
+    fetch: options.fetch,
+    input: options.input,
+    interactive: options.interactive,
+    metro: options.metro,
+    openSimulator: !onIPhone,
+    output: options.output,
+    pollMs: options.pollMs,
+    project,
+  })
 }
 
 /** hostedCrudRunCommand is the command a person types to start the pilot, spelled for where they are. */

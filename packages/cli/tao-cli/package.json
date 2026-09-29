@@ -36,9 +36,11 @@
     "tao-source-actions": "workspace:*",
     "tao-studio-tooling": "workspace:*",
     "tao-update-server": "workspace:*",
-    "tao-compiler": "workspace:*"
+    "tao-compiler": "workspace:*",
+    "qrcode": "1.5.4"
   },
   "devDependencies": {
-    "@types/react": "^19.2.18"
+    "@types/react": "^19.2.18",
+    "@types/qrcode": "^1.5.6"
   }
 }
