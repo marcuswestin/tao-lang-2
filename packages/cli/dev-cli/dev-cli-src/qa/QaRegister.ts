@@ -48,6 +48,8 @@ type Finding = {
   location: string
   affectedPhases: number[]
   evidence: string[]
+  /** evidenceHashes pins what the finding saw, so a closing recheck cannot cite the same bytes. */
+  evidenceHashes?: { path: string; sha256: string }[]
   expected: string
   recheck: string
   status: 'open' | 'triaged' | 'fixed-awaiting-qa' | 'verified-closed' | 'accepted-limitation' | 'duplicate'
@@ -161,7 +163,10 @@ export class QaRegister {
       for (
         const surface of current.surfaces.filter(surface => typeof surface.phase === 'number' && surface.phase <= phase)
       ) {
-        if (scope === 'all' || findingSurfaces.has(surface.id) || !await this.fullyReviewed(surface, observations)) {
+        if (
+          scope === 'all' || findingSurfaces.has(surface.id)
+          || !await this.fullyReviewed(surface, observations, phase)
+        ) {
           selected.push(surface)
         }
       }
@@ -246,12 +251,8 @@ export class QaRegister {
     const evidence = await Promise.all(
       evidencePaths.map(async path => ({ path, sha256: await this.evidenceHash(path) })),
     )
-    if (
-      dimension === 'visual' && outcome === 'pass' && !evidencePaths.some(path => /\.(png|jpe?g|webp)$/iu.test(path))
-    ) {
-      Errors.throwUserInput(
-        'A visual pass requires an inspected image, not capture success or unchanged digests alone.',
-      )
+    if (dimension === 'visual' && outcome === 'pass') {
+      await this.requireInspectedCapture(evidence, reviewer)
     }
     if (input['historical'] !== undefined && typeof input['historical'] !== 'boolean') {
       Errors.throwUserInput('historical must be a boolean.')
@@ -285,6 +286,11 @@ export class QaRegister {
       }
       if (!/^[a-f0-9]{64}$/u.test(artifact.digest) || artifact.sourceCommit !== run.inventory.commit) {
         Errors.throwUserInput('Artifact must name its SHA-256 digest and the frozen candidate commit.')
+      }
+      if (run.inventory.dirty) {
+        Errors.throwUserInput(
+          'This run inventoried uncommitted inputs, so no artifact can be built from its candidate commit. Commit, then start a new run.',
+        )
       }
     }
     if (
@@ -372,7 +378,9 @@ export class QaRegister {
     if (!evidence.length) {
       Errors.throwUserInput('Findings require evidence.')
     }
-    await Promise.all(evidence.map(path => this.evidenceHash(path)))
+    const evidenceHashes = await Promise.all(
+      evidence.map(async path => ({ path, sha256: await this.evidenceHash(path) })),
+    )
     const finding: Finding = {
       id,
       status,
@@ -389,6 +397,7 @@ export class QaRegister {
       expected: this.string(input, 'expected'),
       recheck: this.string(input, 'recheck'),
       evidence,
+      evidenceHashes,
       createdAt: previous?.createdAt ?? new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       confidence: this.choice(input, 'confidence', ['confirmed', 'suspected', 'design-judgment'] as const),
@@ -434,12 +443,20 @@ export class QaRegister {
       if (
         !previous || previous.status === 'verified-closed' || !result || result.outcome !== 'pass'
         || result.surfaceId !== surfaceId || result.dimension !== dimension || result.channel !== channel
-        || result.createdAt <= previous.updatedAt
+        || result.createdAt <= previous.updatedAt || result.recordedAt <= previous.updatedAt
         || result.reviewer !== (previous.requiredReviewer ?? 'agent')
-        || !sameSnapshot(surface, result) || !await this.evidenceCurrent(result)
+        || !await this.proofCurrent(result, surface)
       ) {
         Errors.throwUserInput(
           'Closing a finding requires a new, current passing observation linked to the same surface and dimension.',
+        )
+      }
+      const seen = new Set(
+        (await this.findingHistory(id)).flatMap(event => (event.evidenceHashes ?? []).map(item => item.sha256)),
+      )
+      if (result.evidence.some(item => seen.has(item.sha256))) {
+        Errors.throwUserInput(
+          "A closing recheck cannot cite the finding's own evidence; record what the recheck observed.",
         )
       }
       finding.passingResultId = passingResultId
@@ -468,7 +485,7 @@ export class QaRegister {
               for (const reviewer of surface.requirements) {
                 total += 1
                 const result = observations.findLast(item =>
-                  item.surfaceId === surface.id && item.dimension === dimension
+                  item.phase === phase && item.surfaceId === surface.id && item.dimension === dimension
                   && item.channel === channel && item.reviewer === reviewer
                 )
                 const current = result && sameSnapshot(surface, result) && await this.evidenceCurrent(result)
@@ -532,7 +549,11 @@ export class QaRegister {
       ? 'not-ready'
       : 'review-required'
     const header =
-      `# QA release ${phase} packet\n\nVerdict: **${verdict}**. ${releaseGaps.length} applicable release acceptance cells are incomplete.\n\nCandidate source: \`${inventory.commit}\`. Working-tree content hashes are stored per observation.\n\n`
+      `# QA release ${phase} packet\n\nVerdict: **${verdict}**. ${releaseGaps.length} applicable release acceptance cells are incomplete.\n\nCandidate source: \`${inventory.commit}\`${
+        inventory.dirty
+          ? ' with **uncommitted inputs**; this packet describes the working tree, not that commit'
+          : ''
+      }. Tree digest \`${inventory.treeDigest.slice(0, 16)}\`; content hashes are stored per observation.\n\n`
       + 'Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.\n\n'
       + '[Pilot and annotated findings](pilot.md) · [Finding records](findings.json) · [Capability availability](capabilities.md)\n\n'
     const tableHeader =
@@ -582,9 +603,14 @@ export class QaRegister {
       `\n\n## Recorded assessments\n\nThese are scoped observations; supplementary source checks do not fill public-artifact or human acceptance cells.\n\n${
         assessed.join('\n') || 'None recorded.'
       }`
+    const deferred = `\n\n## Deferred beyond release 5\n\n${
+      inventory.surfaces.filter(surface => surface.phase === 'deferred').map(surface =>
+        `- ${surface.id}: ${surface.title} — ${surface.scopeNote}`
+      ).join('\n') || 'None.'
+    }`
     const text = `${header}${table}${assessedText}${findingsText}\n\n## Applicable gaps\n\n${
       gaps.join('\n') || 'No recorded gaps.'
-    }${exclusions}\n`
+    }${deferred}${exclusions}\n`
     const packet = `Docs/QA/release-${phase}.md`
     await this.atomic(packet, text)
     await this.atomic(
@@ -636,16 +662,63 @@ export class QaRegister {
     }
     const proof = observations.find(item => item.id === finding.passingResultId)
     const surface = surfaces.find(item => item.id === finding.surfaceId)
-    return !proof || !surface || !sameSnapshot(proof, surface) || !await this.evidenceCurrent(proof)
+    return !proof || !surface || !await this.proofCurrent(proof, surface)
   }
 
-  private async fullyReviewed(surface: QaSurface, observations: Observation[]): Promise<boolean> {
+  /** proofCurrent judges a proof against its own phase's policy, so closure survives a report for another phase. */
+  private async proofCurrent(proof: Observation, surface: QaSurface): Promise<boolean> {
+    return proof.sourceHash === surface.sourceHash && proof.rendererHash === surface.rendererHash
+      && proof.profileHash === QaInventory.profileHash(proof.phase) && await this.evidenceCurrent(proof)
+  }
+
+  /**
+   * requireInspectedCapture accepts a visual pass only for an image a capture attests as captured. An agent
+   * must cite the review manifest; a person may cite a screenshot alone, but never a failed or partial capture.
+   */
+  private async requireInspectedCapture(evidence: Observation['evidence'], reviewer: QaReviewer): Promise<void> {
+    const images = evidence.filter(item => /\.(png|jpe?g|webp)$/iu.test(item.path))
+    if (!images.length) {
+      Errors.throwUserInput(
+        'A visual pass requires an inspected image, not capture success or unchanged digests alone.',
+      )
+    }
+    const captured = new Set<string>()
+    let manifests = 0
+    for (const item of evidence.filter(entry => entry.path.endsWith('.json'))) {
+      const value = await FS.readJson<unknown>(this.path(item.path)).catch(() => undefined)
+      if (!value || typeof value !== 'object') {
+        continue
+      }
+      const record = value as { owner?: unknown; status?: unknown; cells?: unknown }
+      if (record.owner === 'qa-capture' && record.status !== 'complete') {
+        Errors.throwUserInput(
+          `A visual pass cannot cite an incomplete capture: ${item.path} is ${String(record.status)}.`,
+        )
+      }
+      if (record.owner !== 'qa-capture' && Array.isArray(record.cells)) {
+        manifests += 1
+        for (const cell of record.cells as { status?: unknown; sha256?: unknown }[]) {
+          if (cell.status === 'captured' && typeof cell.sha256 === 'string') {
+            captured.add(cell.sha256)
+          }
+        }
+      }
+    }
+    if (reviewer === 'agent' && !manifests) {
+      Errors.throwUserInput('An agent visual pass must cite the review manifest that captured its images.')
+    }
+    if (manifests && images.some(image => !captured.has(image.sha256))) {
+      Errors.throwUserInput('Every cited image must match a captured cell in the cited review manifest.')
+    }
+  }
+
+  private async fullyReviewed(surface: QaSurface, observations: Observation[], phase: number): Promise<boolean> {
     for (const dimension of surface.dimensions) {
       for (const channel of surface.dimensionChannels[dimension] ?? []) {
         for (const reviewer of surface.requirements) {
           const result = observations.findLast(item =>
-            item.surfaceId === surface.id && item.dimension === dimension && item.channel === channel
-            && item.reviewer === reviewer
+            item.phase === phase && item.surfaceId === surface.id && item.dimension === dimension
+            && item.channel === channel && item.reviewer === reviewer
           )
           if (
             !result || result.outcome !== 'pass' || !sameSnapshot(surface, result)
@@ -667,6 +740,15 @@ export class QaRegister {
     const files = (await FS.listDir(dir)).filter(name => name.endsWith('.json'))
     return (await Promise.all(files.map(name => FS.readJson<Observation>(FS.resolvePath(name, dir)))))
       .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+  }
+
+  private async findingHistory(id: string): Promise<Finding[]> {
+    const dir = this.path(`Docs/QA/findings/${id}`)
+    if (!await FS.isDirectory(dir)) {
+      return []
+    }
+    const names = (await FS.listDir(dir)).filter(name => name.endsWith('.json'))
+    return await Promise.all(names.map(name => FS.readJson<Finding>(FS.resolvePath(name, dir))))
   }
 
   private async findings(): Promise<Finding[]> {

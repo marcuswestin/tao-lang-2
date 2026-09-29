@@ -1,6 +1,7 @@
 import { CLI, Errors, FS, Platform, ReleaseCapabilities } from '@shared'
 
 const storyPlan = 'Docs/MVP Roadmap/Plan - Initial release QA.md'
+const internalDocument = /^(?:Docs\/(?:QA|Roadmap|MVP Roadmap)\/|agents\/|\.rulesync\/)|(?:^|\/)(?:AGENTS|CLAUDE)\.md$/u
 
 export type QaDimension = 'functional' | 'visual' | 'text'
 export type QaReviewer = 'agent' | 'human' | 'developer'
@@ -25,6 +26,9 @@ export type QaInventoryData = {
   version: 1
   phase: number
   commit: string
+  /** dirty is true when an inventoried input differs from `commit`; hashes then describe the working tree. */
+  dirty: boolean
+  treeDigest: string
   dependencies: { path: string; sha256: string }[]
   surfaces: QaSurface[]
   exclusions: { path: string; reason: string; canonicalSources?: string[]; presentationReview?: string }[]
@@ -74,8 +78,8 @@ export class QaInventory {
     }
     const dependencies = paths.filter(path =>
       !this.exclusion(path)
-      && (/^(?:packages|stdlib|Apps)\//u.test(path)
-        || /^(?:bun.lock|package.json|Justfile|tsconfig.*\.json)$/u.test(path))
+      && (/^(?:packages|stdlib|Apps|\.config)\//u.test(path)
+        || /^(?:bun.lock|package.json|Justfile|tsconfig.*\.json|devenv\.(?:nix|lock|yaml)|tao|agent|dev)$/u.test(path))
       && !path.startsWith('packages/cli/dev-cli/dev-cli-src/qa/')
     )
     const dependencyHashes: string[] = []
@@ -90,10 +94,7 @@ export class QaInventory {
       }
     }
     const rendererHash = Platform.sha256Hex(dependencyHashes.join('\n'))
-    const profileHash = Platform.sha256Hex(JSON.stringify({
-      profile: ReleaseCapabilities.fingerprint(ReleaseCapabilities.profile(phase as 1 | 2 | 3 | 4 | 5)),
-      catalog: ReleaseCapabilities.catalog,
-    }))
+    const profileHash = QaInventory.profileHash(phase)
     const surfaces: QaSurface[] = []
     for (const path of included) {
       surfaces.push({
@@ -114,9 +115,10 @@ export class QaInventory {
       })
     }
     const plan = await FS.readText(FS.resolvePath(storyPlan, this.root))
+    // Plans and agent instructions change constantly without changing what a newcomer reads.
     const sourceHash = Platform.sha256Hex(
       `${rendererHash}\n${
-        surfaces.filter(surface => !surface.source.startsWith('Docs/QA/')).map(surface =>
+        surfaces.filter(surface => !internalDocument.test(surface.source)).map(surface =>
           `${surface.source}:${surface.sourceHash}`
         ).join('\n')
       }`,
@@ -267,12 +269,45 @@ export class QaInventory {
       })
     }
     const commit = await CLI.mustRun('git', { args: ['rev-parse', 'HEAD'], cwd: this.root })
-    return { version: 1, phase, commit: commit.stdout.trim(), surfaces, dependencies: dependencyInputs, exclusions }
+    const status = await CLI.mustRun('git', {
+      args: ['status', '--porcelain', '-z', '--untracked-files=all'],
+      cwd: this.root,
+    })
+    const dirty = status.stdout.split('\0').filter(Boolean).some(entry => !this.exclusion(entry.slice(3)))
+    const treeDigest = Platform.sha256Hex(
+      `${rendererHash}\n${
+        surfaces.filter(surface => surface.kind === 'document').map(surface =>
+          `${surface.source}:${surface.sourceHash}`
+        ).join('\n')
+      }`,
+    )
+    return {
+      version: 1,
+      phase,
+      commit: commit.stdout.trim(),
+      dirty,
+      treeDigest,
+      surfaces,
+      dependencies: dependencyInputs,
+      exclusions,
+    }
+  }
+
+  /** profileHash identifies a phase's capability policy, so evidence from one phase never passes another. */
+  static profileHash(phase: number): string {
+    return Platform.sha256Hex(JSON.stringify({
+      profile: ReleaseCapabilities.fingerprint(ReleaseCapabilities.profile(phase as 1 | 2 | 3 | 4 | 5)),
+      catalog: ReleaseCapabilities.catalog,
+    }))
   }
 
   private canonicalSources(path: string, paths: string[]): string[] {
     if (path === '.claude/CLAUDE.md') {
       return ['AGENTS.md']
+    }
+    const starterSkill = path.match(/^Apps\/Starters\/[^/]+\/\.(?:agents|codex|claude|cursor)\/skills\/(.+)$/u)
+    if (starterSkill) {
+      return [`packages/ai/tao-skills/skills/${starterSkill[1]}`].filter(source => paths.includes(source))
     }
     const skill = path.match(/^\.(?:agents|codex|claude|cursor)\/skills\/(.+)$/u)
     if (skill) {
@@ -292,8 +327,11 @@ export class QaInventory {
     if (/(?:^|\/)archives?(?:\/|$)/iu.test(path)) {
       return 'Frozen archive; outside active-document review.'
     }
-    if (/^(?:\.codex|\.claude|\.cursor)\//u.test(path)) {
+    if (/^(?:\.agents|\.codex|\.claude|\.cursor)\//u.test(path)) {
       return 'Generated harness copy; canonical .rulesync or agents source is inventoried.'
+    }
+    if (/^Apps\/Starters\/[^/]+\/\.(?:agents|codex|claude|cursor)\/skills\//u.test(path)) {
+      return 'Starter copy of the packaged Tao skills; the canonical packages/ai/tao-skills source is inventoried.'
     }
     if (/(?:^|\/)(?:node_modules|vendor|dist|build|\.artifacts|_gen_[^/]+|\.git)(?:\/|$)/u.test(path)) {
       return 'Generated, vendor, or task artifact; not an authored repository document.'
@@ -374,9 +412,21 @@ function storyScope(id: string): Pick<QaSurface, 'phase' | 'channels' | 'scopeNo
       scopeNote: 'Public instructions and promoted examples; repository-only execution is supplementary.',
     }
   }
-  return {
-    phase: 1,
-    channels: ['public-docs'],
-    scopeNote: 'Public front door and applicable phase claims; later product routes remain separately scoped.',
+  if (id === 'DOC2' || id === 'DOC5') {
+    return {
+      phase: 1,
+      channels: ['installed-cli', 'public-docs'],
+      scopeNote:
+        'Published lessons and diagnostics checked against the shipped CLI; a source checkout is supplementary.',
+    }
   }
+  if (/^(?:WEB[1-5]|DOC4|COMT[1-5])$/u.test(id)) {
+    return {
+      phase: 1,
+      channels: ['public-site'],
+      scopeNote:
+        'The published front door, listings and public repository as a newcomer meets them; repository files are supplementary.',
+    }
+  }
+  return Errors.throwUserInput(`Release story ${id} has no QA channel mapping. Map it explicitly in QaInventory.`)
 }

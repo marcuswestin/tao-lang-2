@@ -21,7 +21,8 @@ Run from the repository root:
 Use phases 1 through 5 to generate each release packet. `inventory.json` inventories active authored
 documents from tracked and unignored files, including hidden canonical instructions, Markdown, MDX,
 RST, text, AsciiDoc, and named extensionless documents. It records reasons for archive, generated,
-vendor, alias and evidence exclusions. Generated harness copies defer to their canonical sources.
+vendor, alias and evidence exclusions. Generated harness copies (`.agents`, `.claude`, `.codex`,
+`.cursor`) and the starters' copies of the packaged Tao skills defer to their canonical sources.
 Missing tracked documents are explicit exclusions. Secret namespaces are never read.
 
 The generated [capability table](capabilities.md) maps each shared capability to its release
@@ -42,8 +43,9 @@ produce editorial, visual, installed-artifact or human acceptance. External link
 reference links remain explicit review work. Every other declared journey is dispatched as a
 selected surface for observation; none silently passes. Capture through
 `./agent unsandboxed qa-capture PROJECT --app APP --output .artifacts/qa/CAPTURE-ID` produces images
-for later inspection. A capture failure blocks that visual assessment, and capture success alone
-does not judge a picture.
+for later inspection. Its `source-snapshot.json` copies every cell's status from the review
+manifest and is `complete` only when every cell was captured; otherwise it is `partial`. A capture
+failure blocks that visual assessment, and capture success alone does not judge a picture.
 
 Interrupted runs resume only with their original phase, scope and unchanged inputs. Completed
 checks remain immutable; an interrupted individual check can execute again. Unique run/result IDs
@@ -75,7 +77,9 @@ An observation names exactly one surface, dimension, channel and reviewer. Examp
 Outcomes are `not-run`, `pass`, `friction`, `fail`, or `blocked`, independently from freshness.
 Reviewers are `agent`, `human`, and `developer`; record the actual reviewer. Every reviewed outcome
 requires existing, nonempty repository-relative evidence and notes. A visual pass additionally
-requires an image. Recording rejects source changes since the frozen run. `historical: true` with original `observedAt` and `commit`
+requires an image. An agent's visual pass must also cite the review manifest, and every cited image
+must match a `captured` cell there by SHA-256; a person may cite a screenshot alone. No visual pass
+may cite a `partial` or `blocked` capture snapshot. Recording rejects source changes since the frozen run. `historical: true` with original `observedAt` and `commit`
 imports earlier observations honestly: they always need recheck against the current candidate.
 
 Dedicated `source:hnreader-browser`, `source:tutorial-replay`, `visual:reading-list`, and
@@ -90,9 +94,12 @@ requested phase, execution profile, host/runtime descriptor, source hashes, and 
 snapshot under `inputs/`. Historical records explicitly label those snapshot fields as import-time,
 mark original dependencies unknown, and link original capture/run metadata through evidence. Release story passes outside documentation require `executionProfile`
 to match the requested phase and an `artifact` containing `version`, `digest`, and `sourceCommit`.
-Development profiles cannot satisfy installed public-artifact acceptance. Reports re-hash evidence and compare source, shared
+A run that inventoried uncommitted inputs cannot record an artifact, because nothing was built from
+its candidate commit. Development profiles cannot satisfy installed public-artifact acceptance. Reports re-hash evidence and compare source, shared
 dependencies, renderer and profile. A missing or changed evidence file is `needs-recheck`.
-Changes to app/compiler/runtime dependencies conservatively invalidate app evidence. Register
+Changes to app/compiler/runtime dependencies, the devenv toolchain, `.config/`, and the root
+`tao`, `agent` and `dev` scripts conservatively invalidate app evidence. Story hashes include
+public-facing documents but not roadmaps, QA outputs or agent instructions. Register
 outputs and evidence are excluded from their own source hashes. `changed` selects unfinished,
 failed, blocked and stale cells as well as modified sources; it does not discard open findings.
 
@@ -127,8 +134,9 @@ time is retained and each event records its own updatedAt. Later events append u
 
 To close, submit the same finding with `status: "verified-closed"` and `passingResultId`. The linked result
 must be newer than the open finding, pass the same surface and dimension, and still have current
-source/profile/evidence. A fix, a missing screenshot, an unchanged digest, or an unrelated passing
-test cannot close it. Reopening appends a new open event under the same stable ID.
+source/profile/evidence judged against its own phase. Findings pin their evidence hashes, and the
+proof may not cite any bytes an earlier event of that finding cited. A fix, a missing screenshot, an
+unchanged digest, or an unrelated passing test cannot close it. Reopening appends a new open event under the same stable ID.
 
 ## Release packets
 
@@ -138,6 +146,15 @@ and dimension. Packets list every applicable gap, open finding and document excl
 rows stay visible without being called phase-1 failures. Candidate identity, outside-user and
 Developer gaps, publication prerequisites and channel evidence remain part of the release call.
 The Developer decides readiness; an empty finding list or a passing source command cannot do so.
+Each phase reads only observations recorded for that phase. The header names the candidate commit,
+states when the inventory saw uncommitted inputs, and prints a tree digest; stories deferred beyond
+release 5 are listed so they cannot vanish from the packet.
+
+**Known limitation:** the register checks evidence bytes, not who produced them. `reviewer`,
+`executionProfile` and an `artifact` digest are declared by whoever records the observation; the
+register cannot tell an agent from a person or verify a digest against a published release. Treat
+human and Developer cells as trustworthy only when that person recorded or confirmed them, and
+compare artifact digests with the release receipt before a publication decision.
 
 Closed findings remain historical events. If their linked proof becomes stale, reports show
 `closure-needs-recheck`; changed runs include those surfaces and every unresolved finding.

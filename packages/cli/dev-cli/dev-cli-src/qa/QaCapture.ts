@@ -86,6 +86,7 @@ export class QaCapture {
       status: 'staging',
       files: [] as { path: string; sha256: string }[],
       excluded: [] as string[],
+      cells: [] as { key: string; label: string; status: string; sha256?: string }[],
       error: undefined as string | undefined,
     }
     await FS.writeJson(receiptPath, manifest)
@@ -113,7 +114,11 @@ export class QaCapture {
       manifest.status = 'capturing'
       await FS.writeJson(receiptPath, manifest)
       const result = await this.capture(stagedRoot, { appName: options.app, artifactRoot })
-      manifest.status = 'complete'
+      manifest.cells = await this.cells(result)
+      // Capture finishing is not capture succeeding: only a manifest whose every cell was captured completes.
+      manifest.status = manifest.cells.length && manifest.cells.every(cell => cell.status === 'captured')
+        ? 'complete'
+        : 'partial'
       await FS.writeJson(receiptPath, manifest)
       await FS.writeJson(FS.resolvePath('source-snapshot.json', artifactRoot), manifest)
       return { result, snapshot: receiptPath, stagedProject: stagedRoot }
@@ -129,6 +134,22 @@ export class QaCapture {
         { cause: error },
       )
     }
+  }
+
+  private async cells(result: unknown): Promise<{ key: string; label: string; status: string; sha256?: string }[]> {
+    const manifestPath = (result as { manifestPath?: unknown } | undefined)?.manifestPath
+    if (typeof manifestPath !== 'string' || !await FS.isFile(manifestPath)) {
+      return []
+    }
+    const manifest = await FS.readJson<{ cells?: { key: string; label: string; status: string; sha256?: string }[] }>(
+      manifestPath,
+    )
+    return (manifest.cells ?? []).map(({ key, label, status, sha256 }) => ({
+      key,
+      label,
+      status,
+      ...(sha256 ? { sha256 } : {}),
+    }))
   }
 
   private async sources(root: string): Promise<{ files: string[]; excluded: string[] }> {

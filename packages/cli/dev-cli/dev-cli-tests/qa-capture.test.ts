@@ -2,6 +2,14 @@ import { Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { QaCapture } from '../dev-cli-src/qa/QaCapture'
 
+async function review(artifactRoot: string, statuses: string[]): Promise<{ manifestPath: string }> {
+  const manifestPath = FS.resolvePath('manifest.json', artifactRoot)
+  await FS.writeJson(manifestPath, {
+    cells: statuses.map((status, index) => ({ key: `cell-${index}`, label: `cell ${index}`, status })),
+  })
+  return { manifestPath }
+}
+
 Describe('isolated QA capture', () => {
   Test(
     'captures an owned snapshot with source hashes and never creates runtime state in the original project',
@@ -22,8 +30,7 @@ Describe('isolated QA capture', () => {
         Expect(await FS.exists(FS.resolvePath('credentials', staged))).toBe(false)
         Expect(await FS.readText(FS.resolvePath('Nested/View.tao', staged))).toBe('use App from ..\n')
         await FS.writeText(FS.resolvePath('.tao/sessions/capture.json', staged), 'capture side effect')
-        await FS.writeText(FS.resolvePath('review.json', options.artifactRoot), '{}')
-        return { captured: true }
+        return await review(options.artifactRoot, ['captured'])
       })
       await capture.run('app', { app: 'App', output: '.artifacts/capture' })
       Expect(await FS.readText(FS.resolvePath('App.tao', original))).toBe('use Text from @tao/ui\n')
@@ -35,6 +42,26 @@ Describe('isolated QA capture', () => {
       Expect(receipt.status).toBe('complete')
       Expect(receipt.files.map(file => file.path)).toEqual(['App.tao', 'Nested/View.tao'])
       Expect(receipt.files[0]!.sha256).toMatch(/^[a-f0-9]{64}$/u)
+    },
+  )
+
+  Test(
+    'a capture that finishes with a failed cell, or without a manifest, is partial rather than complete',
+    async () => {
+      const root = await mkTestDir('qa-capture-partial-')
+      await FS.writeText(FS.resolvePath('app/App.tao', root), 'use Text from @tao/ui\n')
+      await new QaCapture(root, async (_, options) => await review(options.artifactRoot, ['captured', 'failed']))
+        .run('app', { app: 'App', output: '.artifacts/partial' })
+      const receipt = await FS.readJson<{ status: string; cells: { status: string }[] }>(
+        FS.resolvePath('.artifacts/partial/source-snapshot.json', root),
+      )
+      Expect(receipt.status).toBe('partial')
+      Expect(receipt.cells.map(cell => cell.status)).toEqual(['captured', 'failed'])
+      await new QaCapture(root, async () => ({})).run('app', { app: 'App', output: '.artifacts/unattested' })
+      Expect(
+        (await FS.readJson<{ status: string }>(FS.resolvePath('.artifacts/unattested/source-snapshot.json', root)))
+          .status,
+      ).toBe('partial')
     },
   )
 

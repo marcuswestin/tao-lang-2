@@ -70,8 +70,16 @@ const catalog = {
     prerequisite: 'A separately approved future release phase',
     label: 'External distribution',
   },
-  visionos: { phase: 'development', prerequisite: 'A separately approved future release phase', label: 'visionOS builds' },
-  watchos: { phase: 'development', prerequisite: 'A separately approved future release phase', label: 'watchOS builds' },
+  visionos: {
+    phase: 'development',
+    prerequisite: 'A separately approved future release phase',
+    label: 'visionOS builds',
+  },
+  watchos: {
+    phase: 'development',
+    prerequisite: 'A separately approved future release phase',
+    label: 'watchOS builds',
+  },
   'native-bindings': {
     phase: 'development',
     prerequisite: 'A pre-MVP availability decision and public acceptance',
