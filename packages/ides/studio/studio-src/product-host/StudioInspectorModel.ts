@@ -85,6 +85,8 @@ export function studioInspectorInspection(value: string): StudioRenderInspection
       && Array.isArray(parsed.layoutEntries)
       && Array.isArray(parsed.styleEntries)
       && Array.isArray(parsed.styleProvenance)
+      && typeof parsed.moves === 'object'
+      && parsed.moves !== null
       && typeof parsed.renderId === 'string'
     ? parsed
     : undefined

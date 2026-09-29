@@ -41,7 +41,7 @@ export function requireLocalRenderId(document: AST.Document, value: string, oper
   return renderId
 }
 
-function renderIdFor(render: AST.Render): string {
+export function renderIdFor(render: AST.Render): string {
   const document = AST.getDocument(render)
   const cstNode = render.$cstNode
   return `${document.uri.fsPath}:${cstNode?.offset ?? 0}:${cstNode?.end ?? 0}`

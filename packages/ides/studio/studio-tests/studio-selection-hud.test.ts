@@ -30,6 +30,7 @@ function inspection(elementName: string, layoutEntries: readonly StudioLayoutEnt
     elementName,
     explorations: [],
     layoutEntries,
+    moves: {},
     renderId: `${path}:10:40`,
     styleEntries: [],
     styleProvenance: [],

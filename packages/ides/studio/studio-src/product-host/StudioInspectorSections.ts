@@ -1,3 +1,4 @@
+import type { StudioMoveRenderRequest } from '@source-actions'
 import { Errors } from '@shared/core'
 import { StudioInspectorLayoutDrafts } from './StudioInspectorLayout'
 import {
@@ -55,6 +56,8 @@ export function StudioInspectorDataLines(
 
 /** Inspector actions that act on the selected render as a whole; each lowers to one source action. */
 const studioInspectorActions: Readonly<Record<string, Readonly<{ action: Record<string, unknown>; label: string }>>> = {
+  'move-down': { action: { kind: 'move-render' }, label: 'Move down' },
+  'move-up': { action: { kind: 'move-render' }, label: 'Move up' },
   'make-view': { action: { kind: 'extract-view' }, label: 'Make view' },
   'remove-element': { action: { kind: 'remove-render' }, label: 'Remove element' },
   'wrap-col': { action: { kind: 'wrap-render', wrapper: 'Col' }, label: 'Wrap in Col' },
@@ -64,7 +67,7 @@ const studioInspectorActions: Readonly<Record<string, Readonly<{ action: Record<
 
 export function StudioInspectorActionIds(inspection: string, selection: string): string[] {
   return StudioInspectorReady(inspection, selection)
-    ? ['wrap-row', 'wrap-col', 'wrap-stack', 'make-view', 'remove-element']
+    ? ['move-up', 'move-down', 'wrap-row', 'wrap-col', 'wrap-stack', 'make-view', 'remove-element']
     : []
 }
 
@@ -85,13 +88,30 @@ export function StudioInspectorActionValid(
     && StudioInspectorReady(inspection, selection)
     && selected !== undefined
     && selected.identity.sourceVersion === currentSourceVersion
+    && (!(actionId in studioInspectorMoves) || inspectorMove(inspection, actionId) !== undefined)
 }
 
-export function StudioInspectorAction(selection: string, actionId: string): string {
+/** Move up and Move down step among the element's siblings, as the companion's menu does. */
+const studioInspectorMoves: Readonly<Record<string, 'down' | 'up'>> = { 'move-down': 'down', 'move-up': 'up' }
+
+/** The move the server offered for this direction; absent where the element is already at that end. */
+function inspectorMove(inspection: string, actionId: string): StudioMoveRenderRequest | undefined {
+  const direction = studioInspectorMoves[actionId]
+  return direction === undefined ? undefined : studioInspectorInspection(inspection)?.moves[direction]
+}
+
+export function StudioInspectorAction(inspection: string, selection: string, actionId: string): string {
   const selected = studioInspectorSelection(selection)
   const definition = studioInspectorActions[actionId]
   if (selected === undefined || definition === undefined) {
     Errors.throwUserInput('The selected element does not expose that Studio action.')
+  }
+  if (actionId in studioInspectorMoves) {
+    const move = inspectorMove(inspection, actionId)
+    if (move === undefined || move.draggedId !== selected.renderId) {
+      Errors.throwUserInput(`The selected element has nowhere to ${StudioInspectorActionLabel(actionId).toLowerCase()}.`)
+    }
+    return JSON.stringify({ ...definition.action, ...move })
   }
   // Selection-wide actions take a list of renders; the inspector offers them for its one selection.
   return JSON.stringify(

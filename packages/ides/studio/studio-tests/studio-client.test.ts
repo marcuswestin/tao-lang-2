@@ -3673,6 +3673,7 @@ Test('Studio inspector derives canonical render identity, manifest views, and on
 Test('Studio inspector models the complete parsed layout vocabulary without inventing defaults', () => {
   const inspection = {
     explorations: [],
+    moves: {},
     layoutEntries: [
       ['gap', 8],
       ['pad', 'horizontal', 12, 'vertical', 6],

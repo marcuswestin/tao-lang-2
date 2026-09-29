@@ -693,31 +693,42 @@ Test('Tao-owned inspector Data and Actions expose only the published active sele
   Expect(lines).toContain('Datasource context: cell cell-phone revision 4.')
   Expect(lines).toContain('Entity tables are available in the Data panel.')
   Expect(StudioInspectorActionIds(inspection, selection)).toEqual([
+    'move-up',
+    'move-down',
     'wrap-row',
     'wrap-col',
     'wrap-stack',
     'make-view',
     'remove-element',
   ])
-  Expect(JSON.parse(StudioInspectorAction(selection, 'make-view'))).toEqual({
+  Expect(JSON.parse(StudioInspectorAction(inspection, selection, 'make-view'))).toEqual({
     kind: 'extract-view',
     renderIds: ['/workspace/Garden.tao:20:42'],
   })
   Expect(StudioInspectorActionLabel('wrap-col')).toBe('Wrap in Col')
-  Expect(JSON.parse(StudioInspectorAction(selection, 'wrap-row'))).toEqual({
+  Expect(JSON.parse(StudioInspectorAction(inspection, selection, 'wrap-row'))).toEqual({
     kind: 'wrap-render',
     renderId: '/workspace/Garden.tao:20:42',
     wrapper: 'Row',
   })
-  Expect(JSON.parse(StudioInspectorAction(selection, 'remove-element'))).toEqual({
+  Expect(JSON.parse(StudioInspectorAction(inspection, selection, 'remove-element'))).toEqual({
     kind: 'remove-render',
     renderId: '/workspace/Garden.tao:20:42',
   })
   Expect(StudioInspectorActionValid('source-1', inspection, selection, false, 'remove-element')).toBe(true)
   Expect(StudioInspectorActionValid('source-1', inspection, selection, false, 'unknown')).toBe(false)
+  Expect(StudioInspectorActionLabel('move-up')).toBe('Move up')
+  Expect(StudioInspectorActionValid('source-1', inspection, selection, false, 'move-up')).toBe(true)
+  Expect(StudioInspectorActionValid('source-1', inspection, selection, false, 'move-down')).toBe(false)
+  Expect(JSON.parse(StudioInspectorAction(inspection, selection, 'move-up'))).toEqual({
+    beforeId: '/workspace/Garden.tao:8:18',
+    draggedId: '/workspace/Garden.tao:20:42',
+    kind: 'move-render',
+  })
+  Expect(() => StudioInspectorAction(inspection, selection, 'move-down')).toThrow('nowhere to move down')
   Expect(StudioInspectorTextAvailable(inspection, selection)).toBe(false)
   Expect(StudioInspectorTextStatus(inspection, selection)).toContain('not a Text leaf')
-  Expect(JSON.parse(StudioInspectorAction(selection, 'wrap-stack'))).toEqual({
+  Expect(JSON.parse(StudioInspectorAction(inspection, selection, 'wrap-stack'))).toEqual({
     kind: 'wrap-render',
     renderId: '/workspace/Garden.tao:20:42',
     wrapper: 'Stack',
@@ -858,6 +869,8 @@ function inspectorInspection(): string {
       ['aligned', 'left'],
       ['content', 'spread', 'stretch'],
     ],
+    // The last of its siblings: it can step up, before the one above it, but not down.
+    moves: { up: { beforeId: '/workspace/Garden.tao:8:18', draggedId: '/workspace/Garden.tao:20:42' } },
     renderId: '/workspace/Garden.tao:20:42',
     styleEntries: [['background', 'canvas']],
     styleProvenance: [{
