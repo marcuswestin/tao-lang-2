@@ -1,5 +1,5 @@
-import type { StudioMoveRenderRequest } from '@source-actions'
 import { Errors } from '@shared/core'
+import type { StudioMoveRenderRequest } from '@source-actions'
 import { StudioInspectorLayoutDrafts } from './StudioInspectorLayout'
 import {
   draftOwnerKey,
@@ -109,7 +109,9 @@ export function StudioInspectorAction(inspection: string, selection: string, act
   if (actionId in studioInspectorMoves) {
     const move = inspectorMove(inspection, actionId)
     if (move === undefined || move.draggedId !== selected.renderId) {
-      Errors.throwUserInput(`The selected element has nowhere to ${StudioInspectorActionLabel(actionId).toLowerCase()}.`)
+      Errors.throwUserInput(
+        `The selected element has nowhere to ${StudioInspectorActionLabel(actionId).toLowerCase()}.`,
+      )
     }
     return JSON.stringify({ ...definition.action, ...move })
   }

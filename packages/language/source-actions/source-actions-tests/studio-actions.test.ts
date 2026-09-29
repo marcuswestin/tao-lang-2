@@ -1391,7 +1391,7 @@ Describe('Studio source-action patch bus', () => {
     })).rejects.toThrow('must be the first render expression')
   })
 
-  Test('inspection offers one-step moves among a render\'s siblings, and each applies', async () => {
+  Test("inspection offers one-step moves among a render's siblings, and each applies", async () => {
     const document = await parseDocument(`
       view MainView() {
          render Stack() {
@@ -1403,7 +1403,9 @@ Describe('Studio source-action patch bus', () => {
     const ids = renderIdsByText(document)
     const moves = (text: string) => SourceActions.inspectStudioRender(document, ids[text]!).moves
 
-    Expect(moves('First')).toEqual({ down: { afterId: ids['Second'], beforeId: ids['Third'], draggedId: ids['First'] } })
+    Expect(moves('First')).toEqual({
+      down: { afterId: ids['Second'], beforeId: ids['Third'], draggedId: ids['First'] },
+    })
     Expect(moves('Second')).toEqual({
       down: { afterId: ids['Third'], draggedId: ids['Second'] },
       up: { beforeId: ids['First'], draggedId: ids['Second'] },
@@ -1430,8 +1432,10 @@ Describe('Studio source-action patch bus', () => {
     `))
   })
 
-  Test('moves count only the statements that render, and a declaration in the gap stays on the side it was', async () => {
-    const document = await parseDocument(`
+  Test(
+    'moves count only the statements that render, and a declaration in the gap stays on the side it was',
+    async () => {
+      const document = await parseDocument(`
       view MainView() {
          render Stack() {
             state Greeting = "Hello"
@@ -1442,13 +1446,13 @@ Describe('Studio source-action patch bus', () => {
             Text(Farewell)
       }  }
     `)
-    const ids = renderIdsByText(document, ['First', 'Second', 'Third', 'Farewell'])
-    const moves = (text: string) => SourceActions.inspectStudioRender(document, ids[text]!).moves
-    const moved = async (text: string, direction: 'down' | 'up') =>
-      (await SourceActions.applyStudioPatch(document, { ...moves(text)[direction]!, kind: 'move-render' })).content
+      const ids = renderIdsByText(document, ['First', 'Second', 'Third', 'Farewell'])
+      const moves = (text: string) => SourceActions.inspectStudioRender(document, ids[text]!).moves
+      const moved = async (text: string, direction: 'down' | 'up') =>
+        (await SourceActions.applyStudioPatch(document, { ...moves(text)[direction]!, kind: 'move-render' })).content
 
-    // First is the first render though not the first statement, so a before-only anchor reaches it.
-    Expect(await moved('Second', 'up')).toBe(source(`
+      // First is the first render though not the first statement, so a before-only anchor reaches it.
+      Expect(await moved('Second', 'up')).toBe(source(`
       view MainView() {
          render Stack() {
             state Greeting = "Hello"
@@ -1459,8 +1463,8 @@ Describe('Studio source-action patch bus', () => {
             Text(Farewell)
       }  }
     `))
-    // Stepping down past Second, First stops above the state that sits in the gap it enters.
-    Expect(await moved('First', 'down')).toBe(source(`
+      // Stepping down past Second, First stops above the state that sits in the gap it enters.
+      Expect(await moved('First', 'down')).toBe(source(`
       view MainView() {
          render Stack() {
             state Greeting = "Hello"
@@ -1471,8 +1475,8 @@ Describe('Studio source-action patch bus', () => {
             Text(Farewell)
       }  }
     `))
-    // Stepping up past Third, the render that reads Farewell stays below its declaration.
-    Expect(await moved('Farewell', 'up')).toBe(source(`
+      // Stepping up past Third, the render that reads Farewell stays below its declaration.
+      Expect(await moved('Farewell', 'up')).toBe(source(`
       view MainView() {
          render Stack() {
             state Greeting = "Hello"
@@ -1483,9 +1487,10 @@ Describe('Studio source-action patch bus', () => {
             Text("Third")
       }  }
     `))
-    Expect(moves('First').up).toBeUndefined()
-    Expect(moves('Farewell').down).toBeUndefined()
-  })
+      Expect(moves('First').up).toBeUndefined()
+      Expect(moves('Farewell').down).toBeUndefined()
+    },
+  )
 
   Test('rejects cross-container moves whose source edits overlap', async () => {
     const document = await parseDocument(`
