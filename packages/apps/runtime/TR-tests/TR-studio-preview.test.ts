@@ -1544,6 +1544,47 @@ Describe('Studio preview runtime bridge', () => {
     Expect(fake.messages.at(-1)?.message).toMatchObject({ event: { kind: 'reset' }, type: 'preview-debug' })
   })
 
+  Test('a click on a repeated row keeps that row, not the first, through measurement and the source echo', () => {
+    const list = renderElement('/project/Main.tao', 0, 100, { height: 200, left: 0, top: 0, width: 100 })
+    const row = (top: number) => {
+      const card = renderElement('/project/Main.tao', 20, 60, { height: 50, left: 0, top, width: 100 })
+      const title = renderElement('/project/Main.tao', 30, 40, { height: 20, left: 10, top: top + 10, width: 80 }, {
+        elementName: 'Text',
+      })
+      Object.assign(card, { parentElement: list })
+      Object.assign(title, { parentElement: card })
+      return title
+    }
+    const [firstTitle, secondTitle, thirdTitle] = [row(0), row(60), row(120)]
+    const fake = previewHost([list, firstTitle!, secondTitle!, thirdTitle!])
+    fake.host.document.body = {
+      appendChild: overlay => fake.overlays.push(overlay as FakeOverlay),
+      getBoundingClientRect: () => ({ height: 200, left: 0, top: 0, width: 100 }),
+    }
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    fake.dispatchDocument('click', { target: secondTitle })
+
+    const measured = fake.messages.filter(post =>
+      (post.message as { type?: string }).type === 'preview-layout-measurements'
+    )
+      .at(-1)?.message as { measurements: Array<{ renderId: string; viewportRect: { y: number } }> }
+    const titles = measured.measurements.filter(item => item.renderId === '/project/Main.tao:30:40')
+    Expect(titles).toHaveLength(1)
+    Expect(titles[0]).toMatchObject({ viewportRect: { height: 20, width: 80, x: 10, y: 70 } })
+
+    // Studio reveals the clicked title in the editor and echoes its range back as a highlight.
+    fake.dispatchWindow('message', {
+      data: highlightMessage('version-1'),
+      origin: config.parentOrigin,
+      source: fake.parent,
+    })
+    const outline = fake.overlays.find(overlay => !overlay.removed)
+    Expect(outline?.attributes['data-tao-studio-overlay']).toBe('source')
+    Expect(outline?.style).toMatchObject({ top: '70px' })
+    cleanup()
+  })
+
   Test('accepts source highlights only from the configured parent and current source version', () => {
     const broad = renderElement('/project/Main.tao', 0, 100, { height: 90, left: 5, top: 6, width: 120 })
     const precise = renderElement('/project/Main.tao', 30, 40, { height: 20, left: 25, top: 36, width: 50 })

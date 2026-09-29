@@ -873,6 +873,7 @@ export function mountStudioPreviewBridge(
       measurements: collectStudioPreviewLayoutMeasurements(
         host.document.querySelectorAll(studioRenderSelector),
         host.document.body.getBoundingClientRect(),
+        selectedTarget?.element,
       ),
     })
   }
@@ -1357,7 +1358,7 @@ export function mountStudioPreviewBridge(
       }
       sourceTarget = selection.range === undefined
         ? undefined
-        : sourceHighlightTarget(host, selection.path, selection.range)
+        : sourceHighlightTarget(host, selection.path, selection.range, selectedTarget?.element)
       redrawOverlay()
     },
     // A plain pick in another cell started a new selection there, so this cell stops outlining its own.
@@ -1506,16 +1507,29 @@ export function mountStudioPreviewBridge(
   }
 }
 
-/** Collect root-relative geometry for source layout and viewport geometry for canvas selection. */
+/**
+ * Collect root-relative geometry for source layout and viewport geometry for canvas selection. A
+ * render repeated by a loop is measured once; `selected` names the row that stands for it, so
+ * Studio's toolbar floats beside the story that was clicked rather than the first one.
+ */
 export function collectStudioPreviewLayoutMeasurements(
   elements: ArrayLike<StudioPreviewElement>,
   rootRect: StudioPreviewRect,
+  selected?: StudioPreviewElement,
 ): readonly StudioPreviewLayoutMeasurement[] {
   const measurements: StudioPreviewLayoutMeasurement[] = []
   const renderIds = new Set<string>()
-  for (const element of Array.from(elements)) {
+  const all = Array.from(elements)
+  const selectedIdentity = selected !== undefined && all.includes(selected)
+    ? renderTargetFromElement(selected)?.identity
+    : undefined
+  const selectedId = selectedIdentity === undefined ? undefined : renderId(selectedIdentity)
+  for (const element of all) {
     const target = renderTargetFromElement(element)
     if (target === undefined || target.identity.elementName === undefined) {
+      continue
+    }
+    if (element !== selected && renderId(target.identity) === selectedId) {
       continue
     }
     const rect = element.getBoundingClientRect()
@@ -2021,18 +2035,47 @@ function highlightSelection(
   return message['range'] !== undefined && range === undefined ? undefined : { path: identity['path'], range }
 }
 
+/**
+ * The element a source range outlines: the tightest render that covers it. A render repeated by a
+ * loop matches once per row, so the row nearest the canvas selection wins — clicking the third
+ * story's title echoes its range back here, and the outline must stay on the third story.
+ */
 function sourceHighlightTarget(
   host: StudioPreviewHost,
   sourcePath: string,
   range: StudioSourceRange,
+  selected?: StudioPreviewElement,
 ): StudioRenderTarget | undefined {
-  return Arrays.sorted(
+  const matches = Arrays.sorted(
     Array.from(host.document.querySelectorAll(studioRenderSelector))
       .map(renderTargetFromElement)
       .filter((target): target is StudioRenderTarget => target !== undefined)
       .filter(target => sourceRangeMatches(sourcePath, range, target.identity)),
     (left, right) => sourceSpan(left.identity) - sourceSpan(right.identity),
-  )[0]
+  )
+  const tightest = matches.filter(target => sourceSpan(target.identity) === sourceSpan(matches[0]!.identity))
+  return selected === undefined || tightest.length < 2
+    ? tightest[0]
+    : Arrays.sorted(
+      tightest,
+      (left, right) => elementDistance(selected, left.element) - elementDistance(selected, right.element),
+    )[0]
+}
+
+/** Steps through the tree between two elements, by way of their nearest common ancestor. */
+function elementDistance(from: StudioPreviewElement, to: StudioPreviewElement): number {
+  const ancestors = new Map<StudioPreviewElement, number>()
+  for (let node: StudioPreviewElement | null | undefined = from, depth = 0; node; node = node.parentElement) {
+    ancestors.set(node, depth++)
+  }
+  for (let node: StudioPreviewElement | null | undefined = to, depth = 0; node; node = node.parentElement) {
+    const shared = ancestors.get(node)
+    if (shared !== undefined) {
+      return shared + depth
+    }
+    depth++
+  }
+  return Number.POSITIVE_INFINITY
 }
 
 function renderTargetFromEvent(event: StudioPreviewPointerEvent): StudioRenderTarget | undefined {
