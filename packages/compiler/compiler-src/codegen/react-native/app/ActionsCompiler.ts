@@ -325,10 +325,15 @@ export const ActionsCompiler = {
     })
   },
 
-  /** ToggleStatement inverts a validated boolean state through the runtime. */
+  /** ToggleStatement inverts a state or one validated stored yes/no field. */
   ToggleStatement(statement: AST.ToggleStatement): Compiled {
     const state = statement.target.ref
-    Assert.defined(state, 'validated toggle targets a state')
+    Assert.defined(state, 'validated toggle resolves its target')
+    if (Type.ofValueDeclaration(state).kind === 'entity') {
+      Assert(statement.members.length === 1, 'validated row toggle names one field')
+      return gen`TR.Data.Toggle(${Compile.ValueDeclarationReference(state)}, ${gen.jsLiteral(statement.members[0]!)})`
+    }
+    Assert(AST.isMutableDeclaration(state), 'validated non-row toggle targets a writable state')
     return gen`${AST.isParameterDeclaration(state) ? gen`await ` : gen``}TR.Toggle(${
       compileWritableTarget(state, statement.members)
     })`

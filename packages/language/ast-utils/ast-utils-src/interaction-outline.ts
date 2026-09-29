@@ -31,8 +31,12 @@ export type OutlineLoopDescriptor = {
 export type OutlineControlDescriptor = {
   /** label is the literal text the call site hands the control as its title or label. */
   label?: string
+  /** description supplements the name; it never substitutes for one. */
+  description?: string
+  /** A dynamic name may be valid at runtime, but cannot be proven from this render site. */
+  nameStatus: 'known' | 'uncertain' | 'missing'
   role: 'action' | 'input'
-  /** view is the rendered view's name, the label of last resort for a control the site left unnamed. */
+  /** view identifies the rendered declaration, not a name shown to assistive technology. */
   view: string
 }
 
@@ -101,13 +105,32 @@ export function outlineControlDescriptor(render: AST.Render): OutlineControlDesc
     }),
   ])
   const valueBound = invocation.pairs.some(pair => Type.parameterName(pair.parameter) === 'Value')
-  const label = literalLabel(invocation)
+  const visible = visibleTextName(render, new Set(), new Map())
+  const label = literalLabel(invocation) ?? visible.label
+  const description = literalParameter(invocation, 'Description')
+  const dynamicName = controlLabelParameters.some(name => {
+    const value = invocation.pairs.find(pair => Type.parameterName(pair.parameter) === name)?.argument.value
+    return value !== undefined && !AST.isStringLiteral(value)
+  }) || visible.dynamic
+  const nameStatus = label ? 'known' : dynamicName ? 'uncertain' : 'missing'
   const view = invocation.view.name
   if (valueBound && (invocation.implicitChange !== undefined || actionBindings.has('Change'))) {
-    return { ...(label === undefined ? {} : { label }), role: 'input', view }
+    return {
+      ...(label === undefined ? {} : { label }),
+      ...(description ? { description } : {}),
+      nameStatus,
+      role: 'input',
+      view,
+    }
   }
   if (actionBindings.has('Press') || actionBindings.has('Submit')) {
-    return { ...(label === undefined ? {} : { label }), role: 'action', view }
+    return {
+      ...(label === undefined ? {} : { label }),
+      ...(description ? { description } : {}),
+      nameStatus,
+      role: 'action',
+      view,
+    }
   }
   return undefined
 }
@@ -237,13 +260,77 @@ function collectionName(expression: AST.Expression): string | undefined {
 
 function literalLabel(invocation: ResolvedRenderInvocation): string | undefined {
   for (const name of controlLabelParameters) {
-    const pair = invocation.pairs.find(candidate => Type.parameterName(candidate.parameter) === name)
-    const value = pair?.argument.value
-    if (value && AST.isStringLiteral(value)) {
-      return value.value
+    const label = literalParameter(invocation, name)
+    if (label) {
+      return label
     }
   }
   return undefined
+}
+
+function literalParameter(invocation: ResolvedRenderInvocation, name: string): string | undefined {
+  const value = invocation.pairs.find(candidate => Type.parameterName(candidate.parameter) === name)?.argument.value
+  return value && AST.isStringLiteral(value) && value.value.trim() ? value.value : undefined
+}
+
+/** Read only unconditional visible text; conditional content cannot guarantee a control name. */
+function visibleTextName(
+  render: AST.Render,
+  seen: Set<AST.ViewDeclaration>,
+  bindings: ReadonlyMap<AST.ParameterDeclaration, AST.Expression>,
+): { label?: string; dynamic: boolean } {
+  const invocation = resolveRenderInvocation(render)
+  const element = design.standardElementName(render)
+  if (element && textElements.has(element)) {
+    const value = invocation.pairs.find(pair => Type.parameterName(pair.parameter) === 'Value')?.argument.value
+    const literal = value ? boundLiteral(value, bindings) : undefined
+    if (literal !== undefined) {
+      return literal.trim() ? { label: literal, dynamic: false } : { dynamic: false }
+    }
+    return { dynamic: value !== undefined }
+  }
+  let dynamic = false
+  for (const child of AST.statementsOf(render.block).filter(AST.isRender)) {
+    const found = visibleTextName(child, seen, bindings)
+    if (found.label) {
+      return found
+    }
+    dynamic ||= found.dynamic
+  }
+  const view = invocation.view
+  if (view && !seen.has(view)) {
+    seen.add(view)
+    const viewBindings = new Map(bindings)
+    for (const pair of invocation.pairs) {
+      viewBindings.set(pair.parameter, pair.argument.value)
+    }
+    for (const child of AST.statementsOf(view.block).filter(AST.isRender)) {
+      const found = visibleTextName(child, seen, viewBindings)
+      if (found.label) {
+        return found
+      }
+      dynamic ||= found.dynamic
+    }
+  }
+  return { dynamic }
+}
+
+function boundLiteral(
+  expression: AST.Expression,
+  bindings: ReadonlyMap<AST.ParameterDeclaration, AST.Expression>,
+  seen = new Set<AST.Expression>(),
+): string | undefined {
+  if (AST.isStringLiteral(expression)) {
+    return expression.value
+  }
+  if (!AST.isValueReference(expression) || seen.has(expression)) {
+    return undefined
+  }
+  seen.add(expression)
+  const target = expression.target.ref
+  return AST.isParameterDeclaration(target) && bindings.has(target)
+    ? boundLiteral(bindings.get(target)!, bindings, seen)
+    : undefined
 }
 
 /** A rendered `(title)` field outranks whatever text the row happens to render first. */

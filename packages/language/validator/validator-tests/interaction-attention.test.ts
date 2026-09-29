@@ -214,4 +214,29 @@ Describe('validator: interaction attention', () => {
     const warnings = result.diagnostics.filter(diagnostic => diagnostic.severity === 'warning')
     Expect(Diagnostics.messages(warnings)).toContain(messages.editingShortcut('Copy', 'primary+c'))
   })
+
+  Test('warns about unnamed and dynamically named controls with a source suggestion', async () => {
+    const result = await testValidateCode(`
+      use Col, Text from @tao/ui
+      ${leaf}
+      view Missing(Press action()) { render Leaf() }
+      view Dynamic(Title text, Press action()) { render Text(Title) }
+      view Visible(Press action()) { render Text("Launch") }
+      view Described(Description text, Press action()) { render Leaf() }
+      view Main() {
+        state Title = ""
+        render Col() {
+          Missing() { on press -> { } }
+          Dynamic(Title) { on press -> { } }
+          Visible() { on press -> { } }
+          Described("Helpful hint") { on press -> { } }
+        }
+      }
+    `)
+    const warnings = Diagnostics.messages(result.diagnostics.filter(diagnostic => diagnostic.severity === 'warning'))
+    Expect(warnings).toContain(messages.unnamedControl('Missing'))
+    Expect(warnings).toContain(messages.uncertainControlName('Dynamic'))
+    Expect(warnings).toContain(messages.unnamedControl('Described'))
+    Expect(warnings).not.toContain(messages.unnamedControl('Visible'))
+  })
 })

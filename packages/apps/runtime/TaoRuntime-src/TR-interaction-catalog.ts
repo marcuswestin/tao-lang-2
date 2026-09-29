@@ -1,6 +1,6 @@
 import React from 'react'
 import { Arrays } from './core/RuntimeCore'
-import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
+import { accessibilityVerbProps, focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { AuthControls } from './TR-auth'
 import type { TaoDesign, TaoDesignSpec } from './TR-design'
 import { CommandControls, type RuntimeCommand } from './TR-interaction'
@@ -8,6 +8,7 @@ import { InteractionAttention, runtimeInteractionValue, type TaoAttentionKey } f
 import { interactionKeyboardPresence, normalizeInteractionKey } from './TR-interaction-keys'
 import {
   describeOutlineTable,
+  interactionMeasurements,
   interactionOutline,
   rowRootOf,
   type TaoInteractionOccurrence,
@@ -18,6 +19,7 @@ import {
   useOutlineOccurrence,
   useOutlineParentIdentity,
 } from './TR-interaction-outline'
+import { InteractionScrollContext, type Measurable, revealMountedTarget } from './TR-interaction-scroll'
 import { runtimeRevisionStore } from './TR-listeners'
 import type { Evaluable } from './TR-navigation-presentables'
 import { requireReactNativeRuntime } from './TR-react-native'
@@ -66,6 +68,7 @@ type MountedCommandTable = TaoCommandTable & Readonly<{ parent?: string; sequenc
 
 export type TaoInteractionVerb = Readonly<{
   command?: RuntimeCommand
+  description?: string
   enabled: boolean
   identity: string
   key?: string
@@ -353,6 +356,7 @@ export class CommandCatalog {
       enabled: snapshot.enabled,
       command,
       identity: entry?.identity ?? command.name,
+      ...(entry?.static.description === undefined ? {} : { description: entry.static.description }),
       ...(snapshot.key === undefined ? {} : { key: snapshot.key }),
       label: snapshot.label,
       invoke: snapshot.invoke,
@@ -380,6 +384,7 @@ export class CommandCatalog {
       enabled: snapshot.enabled,
       command,
       identity: entry.identity,
+      ...(entry.static.description === undefined ? {} : { description: entry.static.description }),
       ...(key === undefined ? {} : { key }),
       label: snapshot.label || staticLabel(entry),
       invoke: snapshot.invoke,
@@ -487,6 +492,37 @@ function isWithinNavigationSiblingRegion(
 
 export const commandCatalog = new CommandCatalog()
 export const interactionAttention = new InteractionAttention(interactionOutline, commandCatalog)
+
+/** Enabled commands that a screen reader can invoke without asking for another argument. */
+export function useAccessibilityVerbs(identity: string | undefined): readonly TaoInteractionVerb[] {
+  React.useSyncExternalStore(commandCatalog.subscribe, commandCatalog.snapshot, commandCatalog.snapshot)
+  React.useSyncExternalStore(interactionOutline.subscribe, interactionOutline.snapshot, interactionOutline.snapshot)
+  if (identity === undefined) {
+    return []
+  }
+  const nodes = interactionOutline.liveNodes()
+  const target = nodes.find(node => node.identity === identity)
+  return commandCatalog.verbsFor(target, interactionOutline, nodes).filter(verb => {
+    if (!verb.enabled) {
+      return false
+    }
+    const unfilled = new Set(verb.command?.unfilledSlots() ?? [])
+    return !verb.slots?.some(slot => slot.required && unfilled.has(slot.name))
+  })
+}
+
+/** Bind an injected native root to its nonselectable loop row, when it is one. */
+function useNativeRowRoot(layout: TaoVisualLayout | undefined, tag?: string): Record<string, unknown> {
+  const reveal = React.useContext(InteractionScrollContext)
+  const host = React.useRef<Measurable | null>(null)
+  const nativeProps = TaoPropsControls.visualNativeProps(layout, tag)
+  const row = TaoPropsControls.visualRowRoot(layout)
+  if (!row) {
+    return nativeProps
+  }
+  row.capabilities.scrollIntoView = () => revealMountedTarget(host.current, reveal)
+  return interactionMeasurements.bind(row.identity, { ...nativeProps, ref: host })
+}
 
 registerRuntimeCaptureDomain({
   capture: () =>
@@ -639,6 +675,17 @@ export function resetInteractionRuntime(): void {
 
 /** InteractionControls is the handwritten generated-code and semantic-operation facade. */
 export const InteractionControls = {
+  AccessibilityVerbProps(
+    occurrence: TaoInteractionOccurrence | undefined,
+    nativeProps: Record<string, unknown>,
+    verbs: readonly TaoInteractionVerb[],
+  ): Record<string, unknown> {
+    return accessibilityVerbProps(nativeProps, verbs, identity => {
+      if (occurrence?.control) {
+        interactionAttention.invokeVerb(occurrence.control, identity)
+      }
+    })
+  },
   AccessibilityRef(
     occurrence: TaoInteractionOccurrence | undefined,
     label: string | undefined,
@@ -715,6 +762,9 @@ export const InteractionControls = {
   OpenVerbs(): void {
     interactionAttention.openVerbs()
   },
+  OpenVerbsForIdentity(identity: string | undefined): void {
+    interactionAttention.targetAndOpenVerbs(identity)
+  },
   OutlineTable<TableT extends TaoOutlineTable>(table: TableT): TaoOutlineDescribedTable<TableT> {
     return describeOutlineTable(table)
   },
@@ -748,5 +798,7 @@ export const InteractionControls = {
   },
   UseCommands: useRegisteredCommands,
   UseCommandSurface: useCommandSurface,
+  UseAccessibilityVerbs: useAccessibilityVerbs,
+  UseNativeRowRoot: useNativeRowRoot,
   UseOccurrence: useOccurrence,
 } as const
