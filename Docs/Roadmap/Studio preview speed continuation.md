@@ -104,6 +104,48 @@ language and tooling measurements. Do not treat older CLI benchmarks as edit-to-
    The successor may propose landing only after the Developer has tried the visible behavior and
    explicitly authorizes landing. `./agent unsandboxed land` is the landing command.
 
+## Results from `feat/studio-preview-latency-next`
+
+Measured on 2026-09-29 on the Developer's machine under ordinary load; warm figures exclude the
+first edit after launch. Run the harness with
+`./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/studio-preview-latency.test.ts <run-id>`.
+
+1. **Edit-to-paint, real Metro, 8 edits per case, 0 iframe loads in every passing case.**
+
+   | Case                              | Save→source | Source→published | Published→HMR | HMR→DOM | DOM→paint | Total p50 / p95 |
+   | --------------------------------- | ----------- | ---------------- | ------------- | ------- | --------- | --------------- |
+   | One-file app, editor save, on     | 2           | 36               | 90            | 50      | 35        | 204 / 277       |
+   | One-file app, editor save, off    | 2           | 38               | 83            | 48      | 42        | 221 / 282       |
+   | HNReader + Studio view, disk, on  | 1           | 218              | 113           | 61      | 35        | 423 / 462       |
+   | HNReader + Studio view, disk, off | 1           | 194              | 93            | 65      | 14        | 415 / 449       |
+
+   Publication `off` is not measurably faster than `on`: the difference is inside run-to-run noise
+   (one-file totals ranged 190–242ms p50 across five runs). For a real app, Tao's compile inside
+   source→published is the largest slice; Metro's published→HMR is the second, and Metro batches file
+   changes for a fixed 30ms before it starts.
+2. **In-process HNReader compile phases** (warm median ms, reused workspace, Studio-view edit):
+   parse 35, validate 45, bridge metadata 2 (was 10), emit 50 (was 54), publish 10; total 141 (was
+   154, same result across two A/B runs each). The removed bridge work re-read and re-parsed every
+   root `.tao` file per compile to rediscover a project root the package index already held
+   (HNReader 15ms median, WordFlower 3.5ms, Data MVP 2.6ms measured alone). Studio render identities
+   also stopped hashing the whole file once per render.
+3. **Code-then-Draw is fixed.** Only publication `off` failed. The Code save's runtime update applied
+   fresh source versions; Metro's Fast Refresh then re-ran the frame's bootstrap effect, which paired
+   the byte-stable marker's first-compile versions with the new revision, so the next Draw action was
+   correctly rejected as stale. The bootstrap response now carries its own revision's versions and
+   never replaces a newer applied revision. The real-app smoke performs Draw after Code.
+4. **Observed but not fixed.** Editing `HNReader.tao` itself blanks the preview in both modes: Fast
+   Refresh reconfigures the datasource declaration, which clears store handles, while the fixture
+   hook's applied guard skips re-seeding. The harness edits a Studio view beside it instead. In two of
+   seven HNReader measurement cases one edit never painted: once Metro sent `update-start` with nothing
+   after it for 30s, once the frame's document was replaced without an iframe `load` event. Neither
+   reproduced in the next runs; the harness now records Metro's non-update messages for the next one.
+5. **Next speed step.** Every compile still reads, parses, and links every file in the graph (parse
+   35ms), then validates and emits all of it. Reusing unchanged documents' parses is the largest
+   remaining Tao-owned slice, but compiler and validator caches keyed by AST nodes (for example
+   resolved imports and inferred types) would need invalidation for dependents of the changed file,
+   so it needs its own design rather than a shortcut.
+
 ## Completion bar
 
 The successor can report completion when it has a committed, clean, independently runnable branch;
