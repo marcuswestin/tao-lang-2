@@ -1,4 +1,6 @@
 import { getRxStorageSQLite } from '@basepurpose/rxdb-sqlite/react-native'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { type FirebaseOptions, getApps, initializeApp } from 'firebase/app'
 import * as authSdk from 'firebase/auth'
@@ -39,6 +41,26 @@ const noteSchema: RxJsonSchema<NoteRow> = {
   additionalProperties: false,
 }
 
+const AUTH_MESSAGES: Readonly<Record<string, string>> = {
+  'auth/email-already-in-use': 'An account with this email already exists. Sign in instead.',
+  'auth/invalid-email': 'Enter a valid email address.',
+  'auth/weak-password': 'Use a password of at least 6 characters.',
+  'auth/invalid-credential': 'The email or password is incorrect.',
+  'auth/too-many-requests': 'Too many attempts. Wait a moment, then try again.',
+  'auth/network-request-failed': 'Firebase could not be reached. Check the connection, then try again.',
+}
+
+/** authFailure replaces a Firebase Auth error's raw `Firebase: Error (auth/…)` text with a sentence a person can act on. */
+async function authFailure<T>(request: Promise<T>): Promise<T> {
+  try {
+    return await request
+  } catch (error) {
+    const code = (error as { code?: unknown }).code
+    const text = typeof code === 'string' ? AUTH_MESSAGES[code] : undefined
+    throw text ? new FirebaseNotesError(text) : error
+  }
+}
+
 function crudUser(user: User): CrudUser {
   return { id: user.uid, email: user.email ?? '' }
 }
@@ -69,12 +91,12 @@ export function createFirebaseAdapter(config: FirebaseAdapterConfig): CrudAdapte
     },
     async register(email, password) {
       await activeConnection?.close()
-      const credential = await createUserWithEmailAndPassword(auth, email, password)
+      const credential = await authFailure(createUserWithEmailAndPassword(auth, email, password))
       return crudUser(credential.user)
     },
     async signIn(email, password) {
       await activeConnection?.close()
-      const credential = await signInWithEmailAndPassword(auth, email, password)
+      const credential = await authFailure(signInWithEmailAndPassword(auth, email, password))
       return crudUser(credential.user)
     },
     async signOut() {
@@ -95,6 +117,13 @@ export function createFirebaseAdapter(config: FirebaseAdapterConfig): CrudAdapte
         name: accountDatabaseName(config.projectId, user.id),
         storage: getRxStorageSQLite(),
         multiInstance: false,
+        // Hermes has no Web Crypto, and RxDB's default hash calls crypto.subtle.digest.
+        hashFunction: async input =>
+          bytesToHex(sha256(
+            typeof input === 'string'
+              ? utf8ToBytes(input)
+              : new Uint8Array(input instanceof ArrayBuffer ? input : await input.arrayBuffer()),
+          )),
       })
       try {
         await database.addCollections({ notes: { schema: noteSchema } })

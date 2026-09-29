@@ -79,6 +79,24 @@ claiming setup success. Do not silently replace an existing project's rules or t
    native sign-in, direct-request proof, and full offline working-set/replay/account-switch proof.
    The [pilot findings](<Hosted data provider candidates.md#pilot-findings--2026-09-28>) have details.
 
+## Later: move the winning stack into Tao and the CLI flow
+
+The spike app still holds provider code a Tao app must never write itself. Before either stack
+becomes a Tao datasource:
+
+1. Move the adapter into a `packages/apps/providers/` package, so an app created by the CLI
+   carries no custom provider code. That includes runtime workarounds the spike found. For
+   example, RxDB's default hash calls `crypto.subtle.digest`, which Hermes in Expo Go lacks. The
+   spike passes a `@noble/hashes` SHA-256 as `hashFunction`, and the provider must own that choice.
+2. Make `tao connect <provider>` and `tao connect run` work on an app the CLI created,
+   end to end, with no hand edits to its `package.json`, `app.json`, or source.
+3. Install provider dependencies only when they are used, not in every app. The proposed
+   default: the compiler already knows which providers an app declares, and the provider package
+   pins its own dependency versions. Setup then adds exactly those dependencies. Always
+   installing every provider would add install time, conflicting peer and native-module version
+   constraints, and larger Expo Go compatibility checks. Metro's bundle would not shrink either
+   way. Confirm this choice with the Developer before implementing it.
+
 ## Repository checks and completion
 
 After fixing any observed issue, run the **focused changed test** while editing, then the required
