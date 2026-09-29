@@ -141,6 +141,14 @@ export class StudioFileOperations {
     const current = await files.readFile(request.path)
     requireSourceVersion(current, request.sourceVersion)
     const resolved = await files.resolveTaoFile(request.path)
+    if (request.content === current.content) {
+      // The editor went back to the saved text after a refused save. Nothing is written, which also
+      // leaves a read-only generated view untouched; only the refused draft is dropped.
+      files.clearDraft(current.path)
+      const file = { ...current, ...files.projectFile(current.path, current.sourceVersion) }
+      this.#context.onFileChanged(file)
+      return { diagnostics: [], file, saved: true }
+    }
     // The full preview compile validates the saved graph. Draft admission needs only syntax errors
     // in the edited file, so avoid reading and linking the whole graph before that compile.
     const parsed = Parser.parseSyntax(request.content)

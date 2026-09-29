@@ -1079,6 +1079,23 @@ Test('Studio draft writes keep invalid source off disk and acknowledge their exa
     Expect(invalid.diagnostics.length).toBeGreaterThan(0)
     Expect(await FS.readText(paths['Garden.tao'])).toBe(initial.content)
     Expect(compileRevisions).toEqual([])
+    Expect(session.fileDraftState(initial.path).dirty).toBe(true)
+
+    // Going back to the saved text drops the refused draft without writing, so a read-only file
+    // (a generated Studio view) is never touched and the preview does not recompile.
+    await FS.chmod(paths['Garden.tao'], 0o444)
+    const reverted = await session.syncDraft({
+      content: initial.content,
+      path: initial.path,
+      sourceVersion: initial.sourceVersion,
+      writeId: 'draft-reverted',
+    })
+    await FS.chmod(paths['Garden.tao'], 0o644)
+    Expect(reverted.saved).toBe(true)
+    Expect(reverted.file.dirty).toBe(false)
+    Expect(reverted.file.sourceVersion).toBe(initial.sourceVersion)
+    Expect(session.fileDraftState(initial.path).dirty).toBe(false)
+    Expect(compileRevisions).toEqual([])
 
     const content = initial.content.replace('Before', 'After')
     const saved = await session.syncDraft({

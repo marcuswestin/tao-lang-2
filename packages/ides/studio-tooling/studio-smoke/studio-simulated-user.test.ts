@@ -315,6 +315,17 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
         .toContain('Text("First typed")')
 
+      // An edit typed back out leaves nothing unsaved: the tab drops its dot, so it can close again.
+      const activeTabLabel =
+        `document.querySelector('.studio-editor-tab-item[aria-current="page"] .studio-editor-tab')?.textContent ?? ''`
+      await browser.insertText('x')
+      await browser.waitFor(`(${activeTabLabel}).startsWith('● ')`)
+      await browser.pressKey('Backspace')
+      await browser.waitFor(`!(${activeTabLabel}).startsWith('● ')`)
+      Expect(await browser.evaluate<string>(`document.querySelector('.studio-status')?.textContent ?? ''`))
+        .toBe('No unsaved changes.')
+      Expect(await FS.readText(sourcePath)).toBe(typedSource)
+
       // The outline lens folds every declaration to its head. Both ways of reaching hidden syntax
       // reveal the one region involved and leave every other fold alone, and neither changes the
       // file: an edit beside a folded region is cancelled in favour of showing it, and a caret that
