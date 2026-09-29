@@ -261,9 +261,11 @@ proves, so a public build must hide later surfaces and a reviewer must be able t
 - Context: `Docs/QA/README.md`, `packages/cli/dev-cli/dev-cli-src/qa/`, `Plan - Initial release QA.md`.
 - Progress: the first recheck at `0aa8ebcf` reviewed the release-1 front door, tutorial, starters,
   starter skills, and editor readme, and recaptured the reading-list, Notebook, and HNReader
-  scenarios. The findings it records are report-only; product fixes are separately scoped.
+  scenarios. The findings it records are report-only; product fixes are separately scoped. Phase-1
+  cells were re-recorded at `442e6416` after the catalog began classifying subcommands by full path.
 - Remaining: human DOC1 and install passes, installed-artifact and marketplace evidence, the
-  unreviewed starter skills, CLI help text, and Spec documents.
+  unreviewed starter skills, CLI help text, and Spec documents; recapturing HNReader's phase-2
+  cells; declaring capture cells for story visual channels, which agents cannot pass until then.
 - Done: every release packet reports current evidence for each applicable cell, and every open
   finding has an owner or a recorded decision.
 
