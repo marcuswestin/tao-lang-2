@@ -201,6 +201,9 @@ capability fit remain unproved. Core is Apache-2.0. [Supabase](https://rxdb.info
 
 ## Expo Go first-experience spike — 2026-09-28
 
+For the next branch's setup, hosted acceptance, repository checks, and completion criteria, use
+the [continuation handoff](<Hosted provider continuation.md>).
+
 The Developer approved `firebase`, `rxdb`, `@basepurpose/rxdb-sqlite`, `expo-sqlite`,
 `@legendapp/state`, `react-native-appwrite`, `react-native-url-polyfill`, and AsyncStorage, plus
 installation dependencies. [Hosted CRUD](../../Apps/Hosted%20CRUD/README.md) gives the two stacks
