@@ -250,6 +250,23 @@ The point of the release is to learn what people want. Nothing collects that tod
   acceptance without Bun, Node, or a checkout on `PATH`; a separate public release install remains
   part of release QA.
 
+### A21 — Staged-release gates and on-demand QA
+
+The [staged plan](<Plan - Staged public releases.md>) promises each release only what its evidence
+proves, so a public build must hide later surfaces and a reviewer must be able to say what is proved.
+
+- Shape: a release-capability catalog that classifies every CLI command, target, and option by phase
+  and fails closed on anything unclassified; a QA register with an inventory of every surface, pinned
+  runs, immutable observations, finding lifecycles, and per-release packets under `Docs/QA/`.
+- Context: `Docs/QA/README.md`, `packages/cli/dev-cli/dev-cli-src/qa/`, `Plan - Initial release QA.md`.
+- Progress: the first recheck at `0aa8ebcf` reviewed the release-1 front door, tutorial, starters,
+  starter skills, and editor readme, and recaptured the reading-list, Notebook, and HNReader
+  scenarios. The findings it records are report-only; product fixes are separately scoped.
+- Remaining: human DOC1 and install passes, installed-artifact and marketplace evidence, the
+  unreviewed starter skills, CLI help text, and Spec documents.
+- Done: every release packet reports current evidence for each applicable cell, and every open
+  finding has an owner or a recorded decision.
+
 ### A18 — Liquid Glass by default
 
 - [ ] **Before MVP:** implement Liquid Glass as Tao's default appearance, so newly created apps

@@ -23,6 +23,11 @@
   The compact Notebook evidence is retained in [the pilot captures](../../QA/evidence/pilot/captures.json),
   with the run context in [the pilot report](../../QA/pilot.md). Root cause and repeatability
   remain unproved; the top-level and per-cell timeouts may have different causes.
+  On 2026-09-29 a recheck at `0aa8ebcf` did not reproduce either timeout: one isolated capture each
+  of Notebook and HNReaderStub (the latter after QA capture learned to stage project packages in
+  `e3ed6940`) completed every cell, including `devices / tabletDark` and `rows / wrapping`, with the
+  snapshots under `Docs/QA/evidence/recheck-0aa8ebcf/`. One clean run each on a lightly loaded host
+  shows the failure is intermittent at most; it does not show the cause is gone.
 - **Workaround:** Inspect every manifest cell status and keep the affected visual dimension blocked.
   A fresh HNReader capture reached the manifest but still missed one cell, so retry is not a proven
   recovery. Preserve the original failure and any partial bundle when conducting a bounded recheck.

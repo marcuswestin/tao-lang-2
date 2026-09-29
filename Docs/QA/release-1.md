@@ -10,51 +10,51 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 
 ## Original release story acceptance
 
-| Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | functional | 72 | 0 | 0 | 0 | 72 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 1 | visual | 72 | 0 | 0 | 0 | 72 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 1 | text | 53 | 2 | 0 | 0 | 51 | 0 | 0 | 2 | 3.8% | 0.0% |
-| 2 | functional | 4 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 2 | visual | 4 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 2 | text | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 3 | functional | 36 | 0 | 0 | 0 | 36 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 3 | visual | 36 | 0 | 0 | 0 | 36 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 3 | text | 18 | 0 | 0 | 0 | 18 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 4 | functional | 24 | 0 | 0 | 0 | 24 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 4 | visual | 24 | 0 | 0 | 0 | 24 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 4 | text | 12 | 0 | 0 | 0 | 12 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 5 | functional | 4 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 5 | visual | 4 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 5 | text | 4 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0.0% | 0.0% |
+| Introduced phase | Dimension  | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
+| ---------------- | ---------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
+| 1                | functional | 72             | 0        | 0            | 0             | 72      | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 1                | visual     | 72             | 0        | 0            | 0             | 72      | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 1                | text       | 53             | 2        | 0            | 0             | 51      | 0       | 0        | 2    | 3.8%       | 0.0%     |
+| 2                | functional | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 2                | visual     | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 2                | text       | 2              | 0        | 0            | 0             | 2       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 3                | functional | 36             | 0        | 0            | 0             | 36      | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 3                | visual     | 36             | 0        | 0            | 0             | 36      | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 3                | text       | 18             | 0        | 0            | 0             | 18      | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 4                | functional | 24             | 0        | 0            | 0             | 24      | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 4                | visual     | 24             | 0        | 0            | 0             | 24      | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 4                | text       | 12             | 0        | 0            | 0             | 12      | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 5                | functional | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 5                | visual     | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 5                | text       | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
 
 ## Additional staged release acceptance
 
-| Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2 | functional | 4 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 2 | visual | 4 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 2 | text | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 3 | functional | 4 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 3 | visual | 4 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 3 | text | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 4 | functional | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 4 | visual | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0.0% | 0.0% |
-| 4 | text | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0.0% | 0.0% |
+| Introduced phase | Dimension  | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
+| ---------------- | ---------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
+| 2                | functional | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 2                | visual     | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 2                | text       | 2              | 0        | 0            | 0             | 2       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 3                | functional | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 3                | visual     | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 3                | text       | 2              | 0        | 0            | 0             | 2       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 4                | functional | 2              | 0        | 0            | 0             | 2       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 4                | visual     | 2              | 0        | 0            | 0             | 2       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 4                | text       | 2              | 0        | 0            | 0             | 2       | 0       | 0        | 0    | 0.0%       | 0.0%     |
 
 ## All-document editorial progress
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | text | 281 | 10 | 0 | 0 | 271 | 0 | 2 | 8 | 3.6% | 0.0% |
+| ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
+| 1                | text      | 281            | 10       | 0            | 0             | 271     | 0       | 2        | 8    | 3.6%       | 0.0%     |
 
 ## Scoped development probes
 
-| Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | functional | 2 | 2 | 0 | 2 | 0 | 0 | 0 | 0 | 100.0% | 0.0% |
-| 1 | visual | 7 | 7 | 0 | 0 | 0 | 0 | 7 | 0 | 100.0% | 0.0% |
-| 2 | visual | 4 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0.0% | 0.0% |
+| Introduced phase | Dimension  | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
+| ---------------- | ---------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
+| 1                | functional | 2              | 2        | 0            | 2             | 0       | 0       | 0        | 0    | 100.0%     | 0.0%     |
+| 1                | visual     | 7              | 7        | 0            | 0             | 0       | 0       | 7        | 0    | 100.0%     | 0.0%     |
+| 2                | visual     | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
 
 ## Recorded assessments
 
