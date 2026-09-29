@@ -1,4 +1,4 @@
-import { Assert, FS, type ReleaseProfile, Switch } from '@shared'
+import { Assert, FS, ReleaseCapabilities, type ReleaseProfile, Switch } from '@shared'
 import { PROJECT_TSCONFIG } from '../app-modules'
 import { deriveSchemeColors, type DesignColors } from './creation-colors'
 import {
@@ -38,7 +38,7 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
     'App.tao': appFile(plan, names, options.description),
     'Data.tao': dataFile(plan, names),
     'Chrome.tao': chromeFile(plan, names),
-    'Design.tao': designFile(plan, names),
+    'Design.tao': designFile(plan, names, options.releaseProfile),
     'Scenarios.tao': scenariosFile(plan, names),
     [`${names.app}.test.tao`]: testFile(plan, names),
     'tsconfig.json': PROJECT_TSCONFIG,
@@ -185,21 +185,26 @@ ${tabs}
 
 // -- Design.tao ------------------------------------------------------------------------------------
 
-function designFile(plan: CreationPlan, names: ProjectNames): string {
+function designFile(plan: CreationPlan, names: ProjectNames, releaseProfile?: ReleaseProfile): string {
   const colors = deriveSchemeColors(plan.palette)
   const tokens = Object.keys(colors.light) as (keyof DesignColors)[]
   const raw = (scheme: 'light' | 'dark', suffix: string) =>
     tokens.map(token => `      ${token}${suffix} ${colors[scheme][token]}`).join('\n')
   const semantic = tokens.map(token => `      ${token} when Scheme is Dark ${token}Dark / not ${token}Light`).join('\n')
+  // Scheme-conditional colors and value paths are advanced design, so an early release names one palette.
+  const palette = ReleaseCapabilities.allows('advanced-design', releaseProfile)
+    ? `${raw('light', 'Light')}
+${raw('dark', 'Dark')}
+
+      // Every bundle spells these names, which follow the person's light or dark setting.
+${semantic}`
+    : `      // Every bundle spells these names.
+${raw('light', '')}`
   return `// The design: a palette, element defaults, and the bundles the scenes apply at render sites.
 folder
 design ${names.design} {
    colors {
-${raw('light', 'Light')}
-${raw('dark', 'Dark')}
-
-      // Every bundle spells these names, which follow the person's light or dark setting.
-${semantic}
+${palette}
    }
 
    styles {

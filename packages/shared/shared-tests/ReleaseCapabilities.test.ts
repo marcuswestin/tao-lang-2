@@ -36,4 +36,23 @@ Describe('release capability catalog', () => {
       'Android is unavailable',
     )
   })
+
+  Test('experimental entry points and auth pairing syntax stay deferred in every public phase', () => {
+    const phase5 = ReleaseCapabilities.profile(5)
+    for (
+      const capability of [
+        ReleaseCapabilities.commandCapability('bridge'),
+        ReleaseCapabilities.commandCapability('secrets'),
+        ReleaseCapabilities.commandCapability('instantdb'),
+        ReleaseCapabilities.targetCapability('visionos'),
+        ReleaseCapabilities.targetCapability('watchos'),
+        ReleaseCapabilities.syntaxCapability('ConfigurationAccepts'),
+        ReleaseCapabilities.keywordCapability('ConfigurationIssues', 'issues'),
+      ]
+    ) {
+      Expect(ReleaseCapabilities.allows(capability, phase5)).toBe(false)
+    }
+    Expect(ReleaseCapabilities.optionCapability('dev', '--device')).toBe('companion')
+    Expect(ReleaseCapabilities.optionCapability('_preview qa', '--device')).toBe('studio')
+  })
 })

@@ -791,27 +791,14 @@ export function createCommands(): Command {
     )
 
   // Remove unavailable surfaces before completion registration so discovery and parsing agree.
+  // Unclassified commands and options are deferred, so a new surface stays out of public builds.
   const registeredCommands = commands.commands as Array<(typeof commands.commands)[number]>
   for (const command of [...registeredCommands]) {
     if (!ReleaseCapabilities.allows(ReleaseCapabilities.commandCapability(command.name()))) {
       registeredCommands.splice(registeredCommands.indexOf(command), 1)
       continue
     }
-    const registeredOptions = command.options as Array<(typeof command.options)[number]>
-    for (const option of [...registeredOptions]) {
-      const capability = option.long === '--device'
-        ? 'companion'
-        : option.long === '--agents'
-        ? 'app-commands'
-        : option.long === '--update' || option.long === '--rollback'
-        ? 'ota'
-        : ['--ios', '--android', '--desktop', '--web'].includes(option.long ?? '')
-        ? ReleaseCapabilities.targetCapability(option.long!.slice(2))
-        : 'core'
-      if (!ReleaseCapabilities.allows(capability)) {
-        registeredOptions.splice(registeredOptions.indexOf(option), 1)
-      }
-    }
+    pruneReleaseOptions(command as unknown as BaseCommand, command.name())
   }
 
   // Registers `tao complete <shell>` to print a completion script, and the hidden request protocol it calls.
@@ -819,6 +806,19 @@ export function createCommands(): Command {
   tab(commands as unknown as BaseCommand)
 
   return commands
+}
+
+/** pruneReleaseOptions removes options this release profile does not ship, through every subcommand. */
+function pruneReleaseOptions(command: BaseCommand, path: string): void {
+  const registeredOptions = command.options as BaseCommand['options'][number][]
+  for (const option of [...registeredOptions]) {
+    if (!ReleaseCapabilities.allows(ReleaseCapabilities.optionCapability(path, option.long ?? option.flags))) {
+      registeredOptions.splice(registeredOptions.indexOf(option), 1)
+    }
+  }
+  for (const child of command.commands) {
+    pruneReleaseOptions(child, `${path} ${child.name()}`)
+  }
 }
 
 function parseBetaRecipients(value: boolean | string | undefined): string[] | undefined {

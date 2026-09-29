@@ -349,3 +349,18 @@ The pairing landed with defaults an agent chose on five points; the Developer de
       the auth principal's subject as its account id (`TR-auth.ts:932`); each local store's custody
       key also names the issuer. Options: keep the subject, or qualify it by issuer.
       **Recommended:** keep it; an app has one auth provider, and custody already names the issuer.
+
+### R16 — Public phases for `tao bridge` and `tao secrets`
+
+Both commands arrived after the staged release plan. Until they have a phase, the release catalog
+(`packages/shared/shared-src/ReleaseCapabilities.ts`) defers them from every public build.
+
+- [ ] **Before MVP — `tao bridge`.** It generates experimental Tao bindings for native API actions
+      from installed Expo and React Native packages, distinct from release 2's typed data adapters.
+      Options: keep it deferred, or give it a phase together with the acceptance that proves
+      generated bindings on that phase's execution surfaces. **Recommended:** keep it deferred until
+      that acceptance is defined.
+- [ ] **Before MVP — `tao secrets`.** Its current consumer is `tao instantdb push`, which follows the
+      deferred hosted-data scope. Options: keep it deferred with hosted data, or ship it as a general
+      project tool from a named phase with its own install and collaborator-grant acceptance.
+      **Recommended:** keep it deferred until a public-phase feature needs a committed secret.
