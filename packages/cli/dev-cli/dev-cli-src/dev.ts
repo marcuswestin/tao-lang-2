@@ -855,9 +855,13 @@ await runWithCommands(commands => {
     .option('--app <name>', 'App declaration within the selected project.')
     .option('--host <hostname>', 'Studio server hostname.', '127.0.0.1')
     .option('--port <port>', 'Studio server port; defaults to an available port.')
+    .option('--preview-publication <mode>', 'Preview publication checks: on or off (browser speed experiment).', 'on')
     .option('--no-browser', 'Do not open Studio in a browser.')
     .option('--json', 'Print a machine-readable readiness payload once Studio answers.')
     .action(async (project, options) => {
+      if (options.previewPublication !== 'on' && options.previewPublication !== 'off') {
+        Errors.throwUserInput('Expected --preview-publication on or off.')
+      }
       const { runStudioDev } = await import('@studio-tooling/StudioDev')
       Platform.runtimeProcess.exit(
         await runStudioDev({
@@ -867,6 +871,7 @@ await runWithCommands(commands => {
           hostname: options.host,
           json: options.json === true,
           port: parseOptionalPositiveInteger(options.port, '--port'),
+          previewPublication: options.previewPublication,
           projectRoot: project,
         }),
       )

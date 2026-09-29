@@ -17,6 +17,8 @@ export {
 export { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
 export type GeneratePreviewOptions = {
+  /** Disable revision marker updates and their exact publication checks for a browser speed experiment. */
+  publicationChecks?: boolean
   sourceOverrides?: Readonly<Record<string, string>>
   project: string
   revision: number
@@ -142,7 +144,12 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     }
     const compiledFiles = preview === undefined
       ? compiled.files
-      : filesWithStablePreviewRoot(compiled.files, preview)
+      : filesWithStablePreviewRoot(
+        compiled.files,
+        preview,
+        opts.preview?.publicationChecks !== false,
+        previewPublications.get(generatedAppRoot),
+      )
     const generatedFiles = opts.ship === undefined
       ? compiledFiles
       : [...compiledFiles, { relativePath: 'ship.json', code: `${JSON.stringify(opts.ship, null, 2)}\n` }]
@@ -404,17 +411,22 @@ async function readStaleGeneratedFiles(
 function filesWithStablePreviewRoot(
   files: Array<{ relativePath: string; code: string }>,
   preview: StudioPreviewPublication,
+  publicationChecks: boolean,
+  previousPublication?: StudioPreviewPublication,
 ): Array<{ relativePath: string; code: string }> {
+  // In the experiment, keep the initial marker (including its source versions) byte-for-byte
+  // stable. The current identity and source versions travel in Studio's runtime update instead.
+  const marker = publicationChecks ? preview : previousPublication ?? preview
   const publication = {
-    appName: preview.appName,
-    compileRevision: preview.revision,
-    project: preview.project,
-    sourceVersions: preview.sourceVersions,
+    appName: marker.appName,
+    compileRevision: marker.revision,
+    project: marker.project,
+    sourceVersions: marker.sourceVersions,
   }
   return [
     {
       relativePath: 'App.tsx',
-      code: stablePreviewRootSource(),
+      code: stablePreviewRootSource(publicationChecks),
     },
     ...files.map(stablePreviewFile),
     {
@@ -460,12 +472,14 @@ function relativeModuleImport(fromOutputPath: string, toOutputPath: string): str
  * a manifest missing the scenario or fixture the accepted cell names is an invariant the publication
  * revision check upstream should already have ruled out.
  */
-function stablePreviewRootSource(): string {
+function stablePreviewRootSource(publicationChecks: boolean): string {
   return `import React from 'react'
 import TR from '@runtime/TR'
 import TaoApp from './TaoAppRefresh'
 import TaoStudioManifest from './TaoStudioManifest'
 import TaoStudioPublication from './TaoStudioPublication'
+
+const TaoStudioPublicationChecks = ${publicationChecks}
 
 // React Native aliases \`window\` to its global, so only the platform says whether this is a browser.
 const TaoStudioNativeDevice = require('react-native').Platform?.OS !== 'web'
@@ -495,10 +509,17 @@ function StudioBrowserApp() {
   // the last accepted environment until its matching runtime arrives.
   const [appliedRuntime, setAppliedRuntime] = React.useState<any>()
   const [bootstrapError, setBootstrapError] = React.useState<unknown>()
+  const [wholeAppPublication, setWholeAppPublication] = React.useState<any>()
   const wholeApp = React.useMemo(
-    () => ({ cell: undefined, manifest: TaoStudioManifest, publication: TaoStudioPublication }),
-    [TaoStudioPublication.compileRevision],
+    () => ({ cell: undefined, manifest: TaoStudioManifest, publication: wholeAppPublication ?? TaoStudioPublication }),
+    [TaoStudioPublication.compileRevision, wholeAppPublication],
   )
+  React.useEffect(() => {
+    if (TaoStudioPublicationChecks) return
+    setAppliedRuntime((previous: any) => previous === undefined || previous.manifest === TaoStudioManifest
+      ? previous
+      : { ...previous, manifest: TaoStudioManifest })
+  }, [TaoStudioManifest])
   React.useEffect(() => {
     if (TaoStudioPreviewBootstrap?.cell !== true) return
     let cancelled = false
@@ -517,6 +538,17 @@ function StudioBrowserApp() {
       if (!response.ok) TR.Errors.failHost('Tao Studio cell bootstrap was rejected (' + response.status + ').')
       const nextCell = await response.json()
       if (cancelled) return
+      if (!TaoStudioPublicationChecks) {
+        setAppliedRuntime({
+          cell: nextCell,
+          manifest: TaoStudioManifest,
+          publication: {
+            ...TaoStudioPublication,
+            compileRevision: nextCell.identity.compileRevision,
+          },
+        })
+        return
+      }
       const outcome = TR.Studio.Bootstrap.reconcile(nextCell, TaoStudioPublication, newerRevision => {
         const retry = TR.Studio.Bootstrap.nextPublicationReload(window.location.href, newerRevision)
         if (retry === undefined) {
@@ -562,8 +594,22 @@ function StudioBrowserApp() {
     }
   }, [TaoStudioPublication.compileRevision])
   React.useEffect(() => {
-    if (TaoStudioPreviewBootstrap?.cell !== true || typeof window === 'undefined') return
+    if (TaoStudioPreviewBootstrap === undefined || typeof window === 'undefined') return
     const receiveRuntime = (event: MessageEvent) => {
+      if (
+        !TaoStudioPublicationChecks
+        && event.origin === TaoStudioPreviewBootstrap.parentOrigin
+        && event.source === window.parent
+        && isWholeAppPublicationUpdate(event.data, TaoStudioPreviewBootstrap, TaoStudioPublication)
+      ) {
+        setWholeAppPublication({
+          ...TaoStudioPublication,
+          compileRevision: event.data.compileRevision,
+          sourceVersions: event.data.sourceVersions,
+        })
+        return
+      }
+      if (TaoStudioPreviewBootstrap.cell !== true) return
       if (
         event.origin !== TaoStudioPreviewBootstrap.parentOrigin
         || event.source !== window.parent
@@ -575,7 +621,11 @@ function StudioBrowserApp() {
       const next = {
         cell: event.data.runtime,
         manifest: TaoStudioManifest,
-        publication: TaoStudioPublication,
+        publication: TaoStudioPublicationChecks ? TaoStudioPublication : {
+          ...TaoStudioPublication,
+          compileRevision: event.data.runtime.identity.compileRevision,
+          sourceVersions: event.data.sourceVersions,
+        },
       }
       // Avoid repeating publication/bridge effects for an already applied identity. The cell's
       // provider lifetime below is separate: source-only publications preserve its runtime state.
@@ -595,6 +645,7 @@ function StudioBrowserApp() {
         ...TaoStudioPreviewBootstrap,
         ...(active.cell?.identity ?? {}),
         ...active.publication,
+        publicationChecks: TaoStudioPublicationChecks,
       },
     [active],
   )
@@ -717,14 +768,33 @@ function isRuntimeUpdate(value: any, bootstrap: any, publication: any) {
     && value?.type === 'preview-runtime-update'
     && identity?.previewInstanceId === bootstrap.previewInstanceId
     && identity?.appName === publication.appName
-    && identity?.compileRevision === publication.compileRevision
+    && (!TaoStudioPublicationChecks || identity?.compileRevision === publication.compileRevision)
     && identity?.project === publication.project
+    && (TaoStudioPublicationChecks || validSourceVersions(value?.sourceVersions))
     && runtimeIdentity?.appName === identity.appName
     && runtimeIdentity?.cellId === identity.cellId
     && runtimeIdentity?.cellRevision === identity.cellRevision
     && runtimeIdentity?.compileRevision === identity.compileRevision
     && runtimeIdentity?.manifestRevision === identity.manifestRevision
     && runtimeIdentity?.project === identity.project
+}
+
+function isWholeAppPublicationUpdate(value: any, bootstrap: any, publication: any) {
+  return value?.channel === TaoStudioProtocolChannel
+    && value?.protocolVersion === TaoStudioProtocolVersion
+    && value?.type === 'preview-publication-update'
+    && value?.previewInstanceId === bootstrap.previewInstanceId
+    && value?.appName === publication.appName
+    && value?.project === publication.project
+    && Number.isSafeInteger(value?.compileRevision)
+    && value.compileRevision >= 0
+    && validSourceVersions(value?.sourceVersions)
+}
+
+function validSourceVersions(value: any) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    && Object.entries(value).every(([path, version]) => path.length > 0 && typeof version === 'string'
+      && version.length > 0)
 }
 
 /**

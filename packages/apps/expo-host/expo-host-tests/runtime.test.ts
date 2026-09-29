@@ -428,6 +428,50 @@ Describe('Tao runtime app generation', () => {
     )
   })
 
+  Test('keeps the publication marker untouched while the experimental preview graph changes', async () => {
+    const runtimePackageRoot = await createExecutableRuntimePackageRoot('preview-publication-off-tests')
+    await withTaoFiles(
+      'tao-runtime-preview-publication-off-',
+      {
+        'Main.tao':
+          'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>Before</RN.Text> ``` }',
+      },
+      async paths => {
+        const first = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(1, { publicationChecks: false }),
+          runtimePackageRoot,
+        })
+        const publicationPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioPublication.ts')
+        const generatedViewPath = generatedPreviewPath(runtimePackageRoot, 'App.injection-1.tsx')
+        const publication = await FS.readText(publicationPath)
+        const markerWrite = await FS.modifiedTimeMs(publicationPath)
+        const stableRootWrite = await FS.modifiedTimeMs(first.outputPath)
+        Expect(first.code).toContain('const TaoStudioPublicationChecks = false')
+        Expect(publication).toContain('"compileRevision":1')
+        Expect(await FS.readText(generatedViewPath)).toContain('Before')
+
+        await FS.writeText(
+          paths['Main.tao'],
+          'app Preview { view Main }\nview Main() { render inject ```ts return <RN.Text>After</RN.Text> ``` }',
+        )
+        const second = await Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(2, { publicationChecks: false }),
+          runtimePackageRoot,
+        })
+        Expect(second.previewRevision).toBe(2)
+        Expect(await FS.readText(generatedViewPath)).toContain('After')
+        Expect(await FS.readText(publicationPath)).toBe(publication)
+        Expect(await FS.modifiedTimeMs(publicationPath)).toBe(markerWrite)
+        Expect(await FS.modifiedTimeMs(first.outputPath)).toBe(stableRootWrite)
+        const typecheck = await typecheckGeneratedApp(runtimePackageRoot)
+        Assert(typecheck.exitCode === 0, 'experimental Studio preview bridge type-checks', {
+          stderr: typecheck.stderr,
+          stdout: typecheck.stdout,
+        })
+      },
+    )
+  })
+
   Test('preserves multi-app selection for stable previews', async () => {
     const runtimePackageRoot = await createRuntimePackageRoot()
 

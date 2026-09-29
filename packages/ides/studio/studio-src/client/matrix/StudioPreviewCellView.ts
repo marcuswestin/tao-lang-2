@@ -112,7 +112,7 @@ export function renderCellPreview(
   details.className = 'studio-preview-cell-details'
   details.textContent = `${cell.environment.viewport.width}×${cell.environment.viewport.height} · ${
     StudioCellControls.networkLabel(cell.environment)
-  }`
+  }${new URL(previewUrl).searchParams.get('taoStudioPublication') === 'off' ? ' · publication checks off' : ''}`
   label.append(details)
 
   const form = document.createElement('form')

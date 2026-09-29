@@ -8,7 +8,7 @@ import { invalidatePreviewJourneyRecording } from './StudioJourneyRecording'
 import { StudioMatrixGrid } from './StudioMatrixGrid'
 import { previewMatrixPlan, type StudioMatrixGroup, StudioMatrixLayout } from './StudioMatrixLayout'
 import { StudioDrawCanvas, StudioMatrixSketches } from './StudioMatrixSketches'
-import { postInteractionMode, postPreviewRuntimeUpdate } from './StudioPreviewBridge'
+import { postInteractionMode, postPreviewRuntimeUpdate, postWholeAppPublicationUpdate } from './StudioPreviewBridge'
 import { renderCellPreview } from './StudioPreviewCellView'
 import {
   disconnectPreviews,
@@ -224,6 +224,7 @@ export async function refreshCellPreviews(
 ): Promise<void> {
   const origin = StudioProtocol.messageOrigin(previewUrl)
   Assert.input(origin, 'Tao Studio preview URL must be an absolute HTTP or HTTPS URL.')
+  const publicationChecks = new URL(previewUrl).searchParams.get('taoStudioPublication') !== 'off'
   const compatibilitySignature = previewCompatibilitySignature(manifest)
   const resetRetained = previews[0]?.manifestCompatibilitySignature !== undefined
     && previews[0].manifestCompatibilitySignature !== compatibilitySignature
@@ -237,7 +238,14 @@ export async function refreshCellPreviews(
     if (wholeApp !== undefined) {
       wholeApp.manifestCompatibilitySignature = compatibilitySignature
       if (resetRetained) {
+        if (!publicationChecks) {
+          wholeApp.iframe.addEventListener('load', () => postWholeAppPublicationUpdate(wholeApp, manifest, handshake), {
+            once: true,
+          })
+        }
         wholeApp.iframe.src = wholeApp.iframe.src
+      } else if (!publicationChecks) {
+        postWholeAppPublicationUpdate(wholeApp, manifest, handshake)
       }
     }
     return
@@ -316,8 +324,17 @@ export async function refreshCellPreviews(
       preview.cellIdentity = runtime.identity
       preview.iframe.title = `${runtime.cell.scenarioId} live preview`
       expectPreviewRevision(preview, runtime.identity.compileRevision)
-      postPreviewRuntimeUpdate(preview, runtime)
-      StudioPreviewPublication.expect(preview, runtime.identity)
+      postPreviewRuntimeUpdate(preview, runtime, publicationChecks ? undefined : manifest.sourceVersions)
+      if (!publicationChecks && resetRetained) {
+        preview.iframe.addEventListener(
+          'load',
+          () => postPreviewRuntimeUpdate(preview, runtime, manifest.sourceVersions),
+          { once: true },
+        )
+      }
+      if (publicationChecks) {
+        StudioPreviewPublication.expect(preview, runtime.identity)
+      }
       postInteractionMode(preview, handshake)
       if (preview.frame !== undefined) {
         renderCellPreview(preview.frame, preview, previewUrl, manifest)

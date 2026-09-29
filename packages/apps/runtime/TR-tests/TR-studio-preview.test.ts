@@ -1983,3 +1983,12 @@ function dispatch(listeners: Map<string, Set<Listener>>, type: string, event: un
 function listenerCount(listeners: Map<string, Set<Listener>>): number {
   return Array.from(listeners.values()).reduce((count, group) => count + group.size, 0)
 }
+
+Test('keeps the editing bridge active without an applied-publication claim in the speed experiment', () => {
+  const fake = previewHost([])
+  const cleanup = mountStudioPreviewBridge({ ...config, publicationChecks: false }, fake.host)
+  Expect(fake.listenerCount()).not.toBe(0)
+  Expect(fake.messages.some(post => (post.message as { type?: string }).type === 'preview-applied')).toBe(false)
+  Expect(fake.messages.some(post => (post.message as { type?: string }).type === 'preview-mounted')).toBe(true)
+  cleanup()
+})

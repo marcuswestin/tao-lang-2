@@ -12,6 +12,7 @@ import { StudioProjectSession, type StudioProjectSessionOptions } from './Studio
 import { reactiveBrowserSchemeCapability, type StudioJsonObject, type StudioJsonValue } from './StudioProtocol'
 
 export type OpenStudioPreviewSessionOptions = Omit<StudioProjectSessionOptions, 'compile'> & {
+  previewPublication?: 'on' | 'off'
   previewRuntimeRoot: string
   validationMode?: 'development' | 'release'
 }
@@ -44,6 +45,7 @@ export async function openStudioPreviewSession(
       const generated = await Runtime.generateApp(session.entryPath, {
         appName: request.appName,
         preview: {
+          publicationChecks: options.previewPublication !== 'off',
           project: request.project,
           revision: request.compileRevision,
           sourceOverrides,

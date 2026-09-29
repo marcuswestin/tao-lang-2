@@ -2,6 +2,7 @@ import { Assert, Errors, Switch } from '@shared/core'
 import type { EditorView } from 'codemirror'
 import type { StudioDraftFile } from '../../StudioDraftSync'
 import { StudioInspector, type StudioInspectorSelection } from '../../StudioInspector'
+import type { StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
 import {
   type StudioDebugCommandMessage,
   type StudioPreviewCanvasGestureMessage,
@@ -178,19 +179,40 @@ export function postDebugCommand(
 export function postPreviewRuntimeUpdate(
   preview: StudioPreviewConnection,
   runtime: StudioCellRuntimeResponse,
+  sourceVersions?: Readonly<Record<string, string>>,
 ): void {
   const target = preview.iframe.contentWindow
   if (target === null) {
     return
   }
-  const message: StudioPreviewRuntimeUpdateMessage<StudioCellRuntimeResponse> = {
+  const message: StudioPreviewRuntimeUpdateMessage<StudioCellRuntimeResponse> & {
+    sourceVersions?: Readonly<Record<string, string>>
+  } = {
     channel: studioProtocolChannel,
     identity: { ...runtime.identity, previewInstanceId: preview.previewInstanceId },
     protocolVersion: studioProtocolVersion,
     runtime,
+    ...(sourceVersions === undefined ? {} : { sourceVersions }),
     type: 'preview-runtime-update',
   }
   target.postMessage(message, preview.origin)
+}
+
+export function postWholeAppPublicationUpdate(
+  preview: StudioPreviewConnection,
+  manifest: StudioPreviewManifestV2,
+  handshake: StudioHandshake,
+): void {
+  preview.iframe.contentWindow?.postMessage({
+    appName: handshake.identity.appName,
+    channel: studioProtocolChannel,
+    compileRevision: manifest.compileRevision,
+    previewInstanceId: preview.previewInstanceId,
+    project: handshake.identity.project,
+    protocolVersion: studioProtocolVersion,
+    sourceVersions: manifest.sourceVersions,
+    type: 'preview-publication-update',
+  }, preview.origin)
 }
 
 export function configureInteractionMode(
@@ -262,6 +284,8 @@ export async function handlePreviewMessage(
     'highlight-source': ignored,
     'preview-applied': type =>
       receivePreviewApplied(preview, received(message, type), handshake, actions.canvasGesturesOwned?.()),
+    'preview-mounted': type =>
+      receivePreviewMounted(preview, received(message, type), handshake, actions.canvasGesturesOwned?.()),
     'preview-console': type => receiveConsole(preview, received(message, type), actions),
     'preview-canvas-gesture': type => actions.canvasGesture?.(received(message, type)),
     'preview-canvas-pan-key': type => actions.canvasPanKey?.(received(message, type)),
@@ -479,6 +503,29 @@ async function receivePreviewApplied(
     }
   } catch (error) {
     ignoreSupersededPreviewReport(error)
+  }
+}
+
+function receivePreviewMounted(
+  preview: StudioPreviewConnection,
+  message: StudioWindowMessageOf<'preview-mounted'>,
+  handshake: StudioHandshake,
+  canvasGesturesOwned?: boolean,
+): void {
+  const current = preview.cellIdentity
+  if (
+    current !== undefined && (
+      message.identity.cellId !== current.cellId
+      || message.identity.cellRevision !== current.cellRevision
+      || message.identity.compileRevision !== current.compileRevision
+      || message.identity.manifestRevision !== current.manifestRevision
+    )
+  ) {
+    return
+  }
+  postInteractionMode(preview, handshake)
+  if (canvasGesturesOwned !== undefined) {
+    postCanvasGestureOwnership(preview, handshake, canvasGesturesOwned)
   }
 }
 

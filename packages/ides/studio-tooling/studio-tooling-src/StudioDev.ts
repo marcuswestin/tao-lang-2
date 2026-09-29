@@ -62,6 +62,7 @@ export type StudioDevOptions = {
   /** Receives this invocation's exact launch id once its durable record exists. */
   onLaunch?: (launchId: string) => void
   port?: number
+  previewPublication?: 'on' | 'off'
   projectRoot: string
   /** Where the dev data server persists app snapshots; defaults to the repository's user artifacts. */
   devDataRoot?: string
@@ -119,6 +120,15 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   let primaryFailure: unknown
 
   try {
+    if (options.previewPublication === 'off' && (options.native === true || options.device !== undefined)) {
+      Errors.throwUserInput('Preview publication checks can be disabled only for browser Studio previews.')
+    }
+    if (options.previewPublication === 'off') {
+      HCI.logProcessInfo(
+        'studio',
+        'Preview publication checks: OFF (speed experiment; applied revisions are unverified).',
+      )
+    }
     launch = await openLaunchRecord({
       appName: options.appName,
       artifactRoot,
@@ -174,6 +184,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
           entryPath,
           isStopping: () => requestedStop,
           preferredExpoPort: preferredExpoPort(),
+          previewPublication: options.previewPublication,
           stop,
           // Studio scrapes the whole stream for failures and PASS/FAIL lines; a piped `tao test`
           // would otherwise select its quiet mode and truncate that stream to a failure tail.
@@ -507,6 +518,7 @@ export async function openStudioProjectResource(
     logRoot?: string
     previewArtifactRoot?: string
     preferredExpoPort?: number
+    previewPublication?: 'on' | 'off'
     runtimeToolchainRoot?: string
     stop: (exitCode: number) => void
     testCommandArgs?: (projectRoot: string) => readonly string[]
@@ -559,6 +571,7 @@ export async function openStudioProjectResource(
       appName: request.appName,
       entryPath: request.entryPath ?? options.entryPath,
       previewRuntimeRoot: previewRuntime.root,
+      previewPublication: options.previewPublication,
       projectRoot: project.projectRoot,
       validationMode: options.validationMode,
     })
@@ -582,10 +595,16 @@ export async function openStudioProjectResource(
       startBundler: () => bundler.start(),
       waitForBundler: () => expo.waitForMetro(options.isStopping),
     })
+    const previewUrl = new URL(expo.config.EXPO_ORIGIN)
+    if (options.previewPublication === 'off') {
+      previewUrl.searchParams.set('taoStudioPublication', 'off')
+    }
     return withCleanup({
       session,
       tests,
-      previewUrl: expo.config.EXPO_ORIGIN,
+      previewUrl: options.previewPublication === 'off'
+        ? previewUrl.href
+        : expo.config.EXPO_ORIGIN,
     }, [
       () => tests?.close(),
       () => watcher?.close(),

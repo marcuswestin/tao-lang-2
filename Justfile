@@ -110,8 +110,8 @@ instant-review *ARGS: _parser-gen
 
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
-studio project="Apps/HNReader": _parser-gen
-    ./dev studio "{{ project }}"
+studio project="Apps/HNReader" *ARGS: _parser-gen
+    ./dev studio "{{ project }}" {{ ARGS }}
 
 # Launch this worktree's Tao Studio in its local Electrobun shell; offers to stop another session of it in this worktree
 [group('Run')]

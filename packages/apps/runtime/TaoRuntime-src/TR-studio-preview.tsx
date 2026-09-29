@@ -56,6 +56,8 @@ function recordStudioPreviewStage(stage: string, detail?: string): void {
 /** StudioPreviewConfig is the explicit trusted context for one generated preview instance. */
 export type StudioPreviewConfig = {
   appName: string
+  /** The speed experiment keeps Studio interaction active without claiming a Metro publication was applied. */
+  publicationChecks?: boolean
   cellId?: string
   cellRevision?: number
   compileRevision: number
@@ -1458,10 +1460,15 @@ export function mountStudioPreviewBridge(
   for (const [type, listener] of windowListeners) {
     host.window.addEventListener(type, listener)
   }
-  postToStudio(host, config, 'preview-applied', {
-    appliedRevision: config.compileRevision,
-    compileRevision: config.compileRevision,
-  })
+  if (config.publicationChecks !== false) {
+    postToStudio(host, config, 'preview-applied', {
+      appliedRevision: config.compileRevision,
+      compileRevision: config.compileRevision,
+    })
+  } else {
+    // A fresh bridge still needs the current editing and canvas mode after Fast Refresh.
+    postToStudio(host, config, 'preview-mounted')
+  }
   scheduleLayoutMeasurements()
   const stopFailures = onRuntimeFailure(capture => postToStudio(host, config, 'preview-runtime-failure', { capture }))
   const restoreConsole = forwardPreviewConsole(host, config)

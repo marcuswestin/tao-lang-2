@@ -777,3 +777,111 @@ async function exercisePreviewFocusRelease(browser: StudioCdp, previewUrl: strin
   await activateFirstPreview(browser)
   await browser.clickAtOffset('.studio-preview-cell iframe', { x: 100, y: 250 })
 }
+
+Test('Studio publication-off preview renders edits without reloading its frame', async () => {
+  const repositoryRoot = Repo.getRoot()
+  const projectRoot = await mkTestDir('tao-studio-publication-off-')
+  const sourcePath = FS.resolvePath('RefreshSmoke.tao', projectRoot)
+  let browser: StudioCdp | undefined
+  let studio: Awaited<ReturnType<typeof startStudioSmokeLaunch>> | undefined
+  try {
+    await FS.writeText(sourcePath, fastRefreshSource)
+    await FS.writeText(
+      FS.resolvePath('Project.tao', projectRoot),
+      'project { id "tao-studio-publication-off-smoke" name "Publication off smoke" }\n',
+    )
+    studio = await startStudioSmokeLaunch({
+      appName: 'RefreshSmoke',
+      previewPublication: 'off',
+      projectRoot,
+      repositoryRoot,
+    })
+    const previewUrl = studio.readiness.previewUrl
+    if (previewUrl === undefined) {
+      Errors.throwUnexpected('The browser Studio launch did not advertise its Metro preview URL.')
+    }
+    Expect(new URL(previewUrl).searchParams.get('taoStudioPublication')).toBe('off')
+    browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
+    await browser.setViewport(1_440, 900)
+    await browser.goto(studio.readiness.sessionUrl)
+    await browser.waitFor(`document.querySelector('.studio-preview-cell iframe') instanceof HTMLIFrameElement`)
+    await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('First') === true`)
+    await browser.click('[data-preset="design"]')
+    await browser.evaluate(`(() => {
+      const frame = document.querySelector('.studio-preview-cell iframe')
+      window.__taoPublicationOffLoads = 0
+      frame.addEventListener('load', () => { window.__taoPublicationOffLoads += 1 })
+      return true
+    })()`)
+    await browser.evaluateInFrame(
+      previewUrl,
+      `(() => {
+      window.__taoPublicationOffMode = 'pending'
+      window.addEventListener('message', event => {
+        if (event.data?.type === 'set-interaction-mode') window.__taoPublicationOffMode = event.data.mode
+      })
+      return true
+    })()`,
+    )
+    await setInteractionMode(browser, 'edit')
+    await browser.waitForInFrame(previewUrl, `window.__taoPublicationOffMode === 'edit'`)
+    await activateFirstPreview(browser)
+    await browser.evaluate(`(() => {
+      window.__taoPublicationOffActions = []
+      window.addEventListener('message', event => {
+        if (event.data?.type === 'source-action') window.__taoPublicationOffActions.push(event.data)
+      })
+      return true
+    })()`)
+    await dragThirdBetweenFirstAndSecond(browser, previewUrl)
+    const sent = await Time.pollUntil(
+      async () => await browser!.evaluate<number>('window.__taoPublicationOffActions.length') > 0,
+      {
+        intervalMs: 100,
+        timeoutMs: 10_000,
+      },
+    )
+    if (!sent) {
+      const diagnostics = await browser.evaluateInFrame(previewUrl, 'window.__taoStudioPreviewDiagnostics', {
+        world: 'page',
+      })
+      Errors.throwHostEnvironment(
+        `The publication-off preview emitted no Draw source action: ${JSON.stringify(diagnostics)}`,
+      )
+    }
+    try {
+      await waitForSourceOrder(sourcePath, ['Text("First")', 'Text("Third")', 'Text("Second")'])
+    } catch (error) {
+      const actions = await browser.evaluate('window.__taoPublicationOffActions')
+      const status = await browser.evaluate(`document.querySelector('.studio-status')?.textContent`)
+      Errors.throwHostEnvironment(`Draw action was not saved: ${JSON.stringify({ actions, status })}`, { cause: error })
+    }
+    await waitForPreview(
+      browser,
+      studio,
+      previewUrl,
+      `document.body?.innerText.indexOf('First') < document.body?.innerText.indexOf('Third')
+        && document.body?.innerText.indexOf('Third') < document.body?.innerText.indexOf('Second')`,
+    )
+    const initialRevision = await waitForCompileAfter(browser, -1)
+    const movedSource = await FS.readText(sourcePath)
+    await replaceEditorSource(
+      browser,
+      movedSource.replace('Text("Third")', 'Text("Third")\n      Text("Updated")'),
+    )
+    const saved = await Time.pollUntil(async () => (await FS.readText(sourcePath)).includes('Text("Updated")'), {
+      intervalMs: 100,
+      timeoutMs: 10_000,
+    })
+    Expect(saved).toBe(true)
+    await browser.waitFor(`fetch(location.pathname + '/api/preview/manifest')
+      .then(response => response.json())
+      .then(manifest => manifest.compileRevision > ${initialRevision})`)
+    await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('Updated') === true`)
+    Expect(await browser.evaluate<number>('window.__taoPublicationOffLoads')).toBe(0)
+  } finally {
+    await browser?.close()
+    await studio?.stop()
+    await FS.remove(projectRoot)
+  }
+}, 180_000)
