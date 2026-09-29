@@ -447,6 +447,12 @@ Describe('Tao runtime app generation', () => {
         const markerWrite = await FS.modifiedTimeMs(publicationPath)
         const stableRootWrite = await FS.modifiedTimeMs(first.outputPath)
         Expect(first.code).toContain('const TaoStudioPublicationChecks = false')
+        // The marker's versions belong to its first compile; a bootstrap at a later revision carries
+        // its own, and never replaces a newer runtime update that Fast Refresh raced it against.
+        Expect(first.code).toContain('sourceVersions: nextCell.sourceVersions,')
+        Expect(first.code).toContain(
+          'previous?.cell?.identity?.compileRevision > nextCell.identity.compileRevision ? previous : next',
+        )
         Expect(publication).toContain('"compileRevision":1')
         Expect(await FS.readText(generatedViewPath)).toContain('Before')
 

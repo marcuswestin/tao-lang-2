@@ -539,14 +539,24 @@ function StudioBrowserApp() {
       const nextCell = await response.json()
       if (cancelled) return
       if (!TaoStudioPublicationChecks) {
-        setAppliedRuntime({
+        // The byte-stable marker keeps its first compile's source versions, so they travel with the
+        // bootstrap's own revision. Fast Refresh re-runs this effect after a runtime update already
+        // applied a revision, and an older response must not replace it.
+        if (!validSourceVersions(nextCell.sourceVersions)) {
+          TR.Errors.failHost('Tao Studio cell bootstrap did not carry its source versions.')
+        }
+        const next = {
           cell: nextCell,
           manifest: TaoStudioManifest,
           publication: {
             ...TaoStudioPublication,
             compileRevision: nextCell.identity.compileRevision,
+            sourceVersions: nextCell.sourceVersions,
           },
-        })
+        }
+        setAppliedRuntime((previous: any) =>
+          previous?.cell?.identity?.compileRevision > nextCell.identity.compileRevision ? previous : next
+        )
         return
       }
       const outcome = TR.Studio.Bootstrap.reconcile(nextCell, TaoStudioPublication, newerRevision => {

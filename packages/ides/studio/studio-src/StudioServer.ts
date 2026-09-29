@@ -801,7 +801,7 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
     jsonReply(session.previewCell(requiredQuery(url, 'cellId', 'Missing Studio cell id.'))),
   previewCellBootstrap: ({ session, url }) =>
     jsonReply(
-      session.previewCellInstance(requiredQuery(url, 'previewInstanceId', 'Missing Studio preview instance id.')),
+      session.previewCellBootstrap(requiredQuery(url, 'previewInstanceId', 'Missing Studio preview instance id.')),
     ),
   previewCellInstance: bodyTo((session, body) => session.registerCellPreview(body)),
   previewCellReconfigure: bodyTo((session, body) => session.reconfigureCell(body)),

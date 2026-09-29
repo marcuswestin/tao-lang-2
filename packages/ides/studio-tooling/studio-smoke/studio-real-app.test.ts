@@ -613,6 +613,17 @@ async function waitForSourceOrder(path: string, ordered: readonly string[]): Pro
 }
 
 async function dragThirdBetweenFirstAndSecond(browser: StudioCdp, previewUrl: string): Promise<void> {
+  await dragRenderBetween(browser, previewUrl, 'Third', 'First', 'Second')
+}
+
+/** Drops the render reading `moved` midway between the renders reading `before` and `after`. */
+async function dragRenderBetween(
+  browser: StudioCdp,
+  previewUrl: string,
+  moved: string,
+  before: string,
+  after: string,
+): Promise<void> {
   await browser.evaluateInFrame(
     previewUrl,
     `(() => {
@@ -620,9 +631,9 @@ async function dragThirdBetweenFirstAndSecond(browser: StudioCdp, previewUrl: st
       .filter(element => element.textContent?.trim() === text)
       .toSorted((left, right) => left.querySelectorAll('[data-tao-studio]').length
         - right.querySelectorAll('[data-tao-studio]').length)[0]
-    const first = exactRender('First')
-    const second = exactRender('Second')
-    const third = exactRender('Third')
+    const first = exactRender(${JSON.stringify(before)})
+    const second = exactRender(${JSON.stringify(after)})
+    const third = exactRender(${JSON.stringify(moved)})
     if (!(first instanceof HTMLElement) || !(second instanceof HTMLElement) || !(third instanceof HTMLElement)) {
       throw new Error('Missing draggable Studio render targets')
     }
@@ -878,6 +889,19 @@ Test('Studio publication-off preview renders edits without reloading its frame',
       .then(response => response.json())
       .then(manifest => manifest.compileRevision > ${initialRevision})`)
     await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('Updated') === true`)
+    // Draw after Code: the Code save's Metro refresh re-bootstraps the cell, which must keep the
+    // saved source's version rather than the byte-stable marker's first one.
+    await Time.sleep(500)
+    await dragRenderBetween(browser, previewUrl, 'Updated', 'First', 'Third')
+    try {
+      await waitForSourceOrder(sourcePath, ['Text("First")', 'Text("Updated")', 'Text("Third")'])
+    } catch (error) {
+      const actions = await browser.evaluate('window.__taoPublicationOffActions')
+      const status = await browser.evaluate(`document.querySelector('.studio-status')?.textContent`)
+      Errors.throwHostEnvironment(`Draw after Code was not saved: ${JSON.stringify({ actions, status })}`, {
+        cause: error,
+      })
+    }
     Expect(await browser.evaluate<number>('window.__taoPublicationOffLoads')).toBe(0)
   } finally {
     await browser?.close()

@@ -33,7 +33,7 @@ import {
 import type { StudioFeedBrowseResult, StudioFeedState } from './StudioFeedProtocol'
 import { StudioFeedSession } from './StudioFeedSession'
 import { studioGeneratedSourceHeader, StudioGeneratedSources } from './StudioGeneratedSources'
-import { type StudioCellRuntime, StudioMatrixSession } from './StudioMatrixSession'
+import { type StudioCellBootstrap, type StudioCellRuntime, StudioMatrixSession } from './StudioMatrixSession'
 import type { StudioCellInstanceIdentity, StudioPreviewManifestV2 } from './StudioPreviewManifest'
 import {
   type StudioAppVariant,
@@ -525,6 +525,10 @@ export class StudioProjectSession {
 
   previewCellInstance(previewInstanceId: string): StudioCellRuntime {
     return this.#requireMatrix().instance(previewInstanceId)
+  }
+
+  previewCellBootstrap(previewInstanceId: string): StudioCellBootstrap {
+    return this.#requireMatrix().bootstrap(previewInstanceId)
   }
 
   registerCellPreview(input: unknown): StudioCellRuntime {
