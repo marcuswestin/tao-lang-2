@@ -119,7 +119,6 @@ export function SelectionToggleBar(props: {
         }),
       ),
     ],
-    pointerEvents: 'box-none',
     style: [barStyle, { bottom: insets.bottom + barGap }],
   })
 }
@@ -345,6 +344,7 @@ const barStyle = {
   gap: barGap,
   height: barHeight,
   left: barMargin,
+  pointerEvents: 'box-none',
   position: 'absolute',
   right: barMargin,
 } as const
@@ -377,11 +377,8 @@ const lightMaterialStyle = {
   backgroundColor: 'rgba(250, 250, 252, 0.92)',
   borderColor: 'rgba(0, 0, 0, 0.08)',
   borderWidth: 0.5,
-  elevation: 6,
-  shadowColor: '#000000',
-  shadowOffset: { height: 6, width: 0 },
-  shadowOpacity: 0.12,
-  shadowRadius: 14,
+  // One shadow for every platform; the shadow* props and Android's elevation drew it per platform.
+  boxShadow: '0px 6px 14px rgba(0, 0, 0, 0.12)',
 } as const
 const darkMaterialStyle = {
   ...lightMaterialStyle,

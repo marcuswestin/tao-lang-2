@@ -48,6 +48,10 @@ Describe('navigation accessibility', () => {
       Expect(surfaces).toHaveLength(3)
       Expect(surfaces.map(surface => surface.props.glassEffectStyle)).toEqual(['regular', 'regular', 'regular'])
       Expect(surfaces.every(surface => surface.props.isInteractive === true)).toBe(true)
+      // The web renderer deprecates the pointerEvents prop; the bar passes touches through by style.
+      const views = screen.UNSAFE_getAllByType(RN.View)
+      Expect(views.filter(view => view.props.pointerEvents !== undefined)).toHaveLength(0)
+      Expect(views.some(view => RN.StyleSheet.flatten(view.props.style)?.pointerEvents === 'box-none')).toBe(true)
     } finally {
       restoreGlass()
       restoreInsets.mockRestore()
