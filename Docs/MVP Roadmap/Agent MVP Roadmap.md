@@ -580,6 +580,25 @@ Metro's own UI took over the terminal.
       hitting them.
 - [ ] **Before MVP:** failures say what was already done, what was not, and the one command that
       resumes. Provider CLI errors are translated rather than passed through.
+- [ ] **Before MVP:** replace Expo's terminal screen in `tao connect run` with Tao's own
+      interactive screen: a QR code, per-platform bundling progress, readable build errors, device
+      logs, and Tao's own keys.
+- Spike (2026-09-29, Expo CLI 57.0.27, Hosted CRUD): Tao's own screen is feasible.
+  - Expo's `/events` WebSocket never delivers events; it registers clients on one server and
+    serves another. Expo also replaces any `reporter` set in `metro.config`.
+  - Starting Expo as `node --require <preload> node_modules/expo/bin/cli start --go`, with stdout
+    piped and stdin closed, avoids Expo's screen and keeps file watching. The preload wraps
+    `MetroTerminalReporter.prototype.update` and writes each Metro event as a JSON line.
+  - That captured `bundle_build_started` (platform, entry), `bundle_transform_progressed_throttled`
+    (transformed and total files), `bundle_build_done`, and `bundling_error`. The error carries
+    message, filename, line, column, and type. `client_log` needs a connected device and was not
+    exercised.
+  - For the address, the same preload calls Expo's own `getNativeRuntimeUrl()` after
+    `startDevSessionAsync`. It returned the `exp://<LAN IP>:<port>` URL Expo's QR code encodes;
+    Tao does not work out the address itself.
+  - `CI=1` is unusable: it turns off watching and reloads, and prints only a localhost URL.
+  - Both hooks use Expo internals, so pin Expo exactly, and keep a test that starts Metro and
+    checks the event and URL shapes, so an upgrade fails loudly.
 - Context: `packages/cli/tao-cli/cli-src/connect-command.ts`, `firebase-provision.ts`,
   `appwrite-provision.ts`, `hosted-crud-run.ts`, and `A21`.
 
