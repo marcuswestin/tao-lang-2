@@ -2,6 +2,7 @@ import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { provisionAppwrite } from './appwrite-provision'
 import { type FirebaseRunner, provisionFirebase } from './firebase-provision'
+import { hostedCrudRunCommand } from './hosted-crud-run'
 
 export type ConnectProvider = 'firebase' | 'appwrite'
 
@@ -201,12 +202,9 @@ export async function runTaoConnect(
   } else {
     HCI.writeLine(`${service} connect completed.`, out)
   }
-  HCI.writeLine(
-    `To open Hosted CRUD in Expo Go and choose ${service} on its first screen, run from the repository root:`,
-    out,
-  )
+  HCI.writeLine(`To open Hosted CRUD in Expo Go and choose ${service} on its first screen, run:`, out)
   HCI.writeLine('', out)
-  HCI.writeLine('    just hosted-crud', out)
+  HCI.writeLine(`    ${await hostedCrudRunCommand(project)}`, out)
   HCI.writeLine('', out)
   HCI.writeLine('', out)
 }

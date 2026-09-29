@@ -40,7 +40,7 @@ the following with `<NEW_WORKTREE>` replaced by the path supplied by the new age
 cd '<NEW_WORKTREE>'
 ./tao connect firebase 'Apps/Hosted CRUD'
 ./tao connect appwrite 'Apps/Hosted CRUD'
-just hosted-crud
+./tao connect run 'Apps/Hosted CRUD'
 ```
 
 For Firebase, press Return at the config prompt to use automation, complete the browser sign-in
@@ -49,8 +49,9 @@ default `nam5` Firestore region. If reusing an existing project, approve replaci
 pilot rules are appropriate. Do not select Firebase Hosting. For Appwrite, first create a free
 serverless Cloud project and a scoped project API key using the steps in
 [its guide](../../Apps/Hosted%20CRUD/src/appwrite/README.md); paste the key only into the CLI's
-hidden local prompt. `just hosted-crud` launches Metro; scan the QR code with Expo Go on an iPhone
-on a reachable network. No Apple Developer account is required for this Expo Go path.
+hidden local prompt. `./tao connect run` signs Expo CLI in to an Expo account if needed and launches
+Metro; sign in to Expo Go on the iPhone with the same account, then scan the QR code on a reachable
+network. No Apple Developer account is required for this Expo Go path.
 
 The next agent should collect the exact command output and cloud resource IDs with secrets
 redacted. If a command fails, fix the repository-owned defect and rerun the focused command before

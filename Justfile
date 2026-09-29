@@ -106,7 +106,7 @@ clerk-review *ARGS: _parser-gen
 # Run the Firebase/RxDB and Appwrite/Legend generic CRUD comparison in Expo Go
 [group('Run')]
 hosted-crud:
-    "{{ BUN }}" run --cwd "{{ justfile_directory() }}/Apps/Hosted CRUD" start
+    ./tao connect run 'Apps/Hosted CRUD'
 
 # Typecheck the Expo Go hosted CRUD comparison app
 [group('Dev')]

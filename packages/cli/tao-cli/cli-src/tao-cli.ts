@@ -116,13 +116,18 @@ function createCommands(): Command {
 
   commands
     .command('connect')
-    .argument('<provider>', 'Hosted service to connect: firebase or appwrite.')
-    .argument('[path]', 'Project directory to configure.', '.')
-    .description('Provision Firebase or configure an Appwrite project for the Hosted CRUD pilot.')
+    .argument('<provider>', 'Hosted service to connect (firebase or appwrite), or run to start the pilot in Expo Go.')
+    .argument('[path]', 'Project directory to configure or run.', '.')
+    .description('Provision Firebase or configure Appwrite for the Hosted CRUD pilot, or run it in Expo Go.')
     .action(async (provider: string, path: string) => {
       try {
+        if (provider === 'run') {
+          const { runHostedCrud } = await import('./hosted-crud-run')
+          await runHostedCrud(path)
+          return
+        }
         if (provider !== 'firebase' && provider !== 'appwrite') {
-          Errors.throwUserInput(`Unknown provider '${provider}'. Choose firebase or appwrite.`)
+          Errors.throwUserInput(`Unknown provider '${provider}'. Choose firebase, appwrite, or run.`)
         }
         const { runTaoConnect } = await import('./connect-command')
         await runTaoConnect(provider, path)

@@ -16,10 +16,10 @@ From the repository root, run:
 ```sh
 ./tao connect firebase 'Apps/Hosted CRUD'
 ./tao connect appwrite 'Apps/Hosted CRUD'
-just hosted-crud
+./tao connect run 'Apps/Hosted CRUD'
 ```
 
-Scan Metro's QR code in Expo Go on an iPhone. The phone and development machine must be able to reach the Metro server. No Apple Developer account is needed for this path. Choose a provider on the first screen, then create an account and perform the same CRUD steps. Provider selection is disabled while signed in; sign out before switching.
+Scan Metro's QR code in Expo Go on an iPhone. The phone and development machine must be able to reach the Metro server. No Apple Developer account is needed for this path, but Expo Go on a physical iPhone opens a development server only when Expo CLI and the Expo Go app are signed in to the same free Expo account; `tao connect run` signs Expo CLI in when needed and names the account to use in Expo Go. The iOS Simulator does not need the account. Choose a provider on the first screen, then create an account and perform the same CRUD steps. Provider selection is disabled while signed in; sign out before switching.
 
 ## Comparison protocol
 
