@@ -549,6 +549,20 @@ Deferred that day, to finish before MVP:
   journey file's leftover timers.
 - Done: every box above is checked on `main`.
 
+### A21 — Keep a developer's hosted project IDs out of shared source
+
+- [ ] **Before MVP:** decide where `tao connect` records a developer's hosted project identifiers,
+      and move them there. Today `Apps/Hosted CRUD/tao.connections.json` is tracked, and it commits
+      the Developer's own Firebase project `tao-hosted-crud-79c429` and its public web config. The
+      Developer chose this on 2026-09-29 so the pilot runs from a clean checkout. A shared or
+      published app instead needs a placeholder template in Git, a per-developer untracked file or
+      one per environment, and a clear first-run message when the IDs are missing.
+- The Firebase web API key and app ID are public client identifiers, not secrets. Appwrite's setup
+  key already lives in the ignored `.tao/connect-secrets.json`. The concern is that every clone
+  points at one person's project and its quotas, and the IDs churn in unrelated diffs.
+- Context: `Docs/Roadmap/Hosted provider continuation.md`, `Apps/Hosted CRUD/README.md`, and `A19`
+  for the CLI secret store.
+
 ## Project tracking
 
 ### A17 — In-repository issues with git-bug, synced to GitHub Issues
