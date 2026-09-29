@@ -185,9 +185,10 @@ export default function App() {
           <Pressable
             key={name}
             accessibilityRole="button"
-            disabled={busy || restoring || !!user}
+            // Each provider keeps its own session, so switching needs no sign-out; the effect closes the old connection.
+            disabled={busy || restoring}
             onPress={() => setProvider(name)}
-            style={[styles.provider, provider === name && styles.selected]}
+            style={[styles.provider, provider === name && styles.selected, (busy || restoring) && styles.disabled]}
           >
             <Text style={styles.providerText}>{name}</Text>
           </Pressable>
