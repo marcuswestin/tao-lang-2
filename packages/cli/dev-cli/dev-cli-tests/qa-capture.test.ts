@@ -164,6 +164,26 @@ Describe('isolated QA capture', () => {
     },
   )
 
+  Test('admits Tao package references only to package directories staged with the project', async () => {
+    const root = await mkTestDir('qa-capture-packages-')
+    await FS.writeText(FS.resolvePath('app/@model/Data.tao', root), 'workspace\ndata Item {}\n')
+    await FS.writeText(FS.resolvePath('app/App.tao', root), 'use Item from @model\n')
+    let staged = ''
+    const capture = new QaCapture(root, async project => {
+      staged = project
+    })
+    await capture.run('app', { app: 'App', output: '.artifacts/packaged' })
+    Expect(await FS.readText(FS.resolvePath('@model/Data.tao', staged))).toBe('workspace\ndata Item {}\n')
+    await FS.writeText(FS.resolvePath('app/App.tao', root), 'use Item from @elsewhere\n')
+    await Expect(capture.run('app', { app: 'App', output: '.artifacts/unstaged' })).rejects.toThrow(
+      'QA capture was blocked',
+    )
+    await FS.writeText(FS.resolvePath('app/App.tao', root), 'inject ```ts\nimport value from "@model"\n```')
+    await Expect(capture.run('app', { app: 'App', output: '.artifacts/script' })).rejects.toThrow(
+      'QA capture was blocked',
+    )
+  })
+
   Test('rejects scratch ancestors before making any output or staging directories', async () => {
     const root = await mkTestDir('qa-capture-overlap-')
     await FS.writeText(FS.resolvePath('.artifacts/scratch/App.tao', root), 'use Text from @tao/ui\n')

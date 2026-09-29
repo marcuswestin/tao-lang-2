@@ -100,11 +100,17 @@ export class QaCapture {
     try {
       const sources = await this.sources(sourceRoot)
       manifest.excluded = sources.excluded
+      // Tao resolves `@name` against package directories inside the project, so only those staged here pass.
+      const packages = new Set(
+        sources.files.flatMap(source =>
+          FS.relativePath(sourceRoot, source).split('/').slice(0, -1).filter(name => name.startsWith('@'))
+        ),
+      )
       for (const source of sources.files) {
         const relative = FS.relativePath(sourceRoot, source)
         const content = await FS.readFile(source)
         if (/\.(?:tao|[cm]?[jt]sx?|jsonc?)$/iu.test(source)) {
-          await this.checkReferences(new TextDecoder().decode(content), source, sourceRoot)
+          await this.checkReferences(new TextDecoder().decode(content), source, sourceRoot, packages)
         }
         manifest.files.push({ path: relative, sha256: Platform.sha256Hex(content) })
         await FS.writeFile(FS.resolvePath(relative, stagedRoot), content)
@@ -207,8 +213,9 @@ export class QaCapture {
     return { files: files.sort(), excluded: excluded.sort() }
   }
 
-  private async checkReferences(text: string, path: string, root: string): Promise<void> {
+  private async checkReferences(text: string, path: string, root: string, packages: Set<string>): Promise<void> {
     const references: string[] = []
+    const taoReferences = new Set<string>()
     const scripts: string[] = []
     if (path.endsWith('.tao')) {
       const { Parser } = await import('@parser')
@@ -223,12 +230,14 @@ export class QaCapture {
           const reference = lexed.tokens[index + 1]?.image
           if (reference) {
             references.push(reference)
+            taoReferences.add(reference)
           }
         }
         if (token.image === 'use' && lexed.tokens[index + 1]?.image === 'package') {
           const reference = lexed.tokens[index + 2]?.image
           if (reference) {
             references.push(reference)
+            taoReferences.add(reference)
           }
         }
         if (token.tokenType.name === 'TS_CODE_BLOCK') {
@@ -276,7 +285,8 @@ export class QaCapture {
         reference.includes('\\') || reference.startsWith('file:') || FS.isAbsolute(reference)
         || (reference.startsWith('.') && !FS.pathIsWithin(FS.resolvePath(reference, FS.dirname(path)), root))
         || (!/\.jsonc?$/iu.test(path) && !reference.startsWith('.') && !reference.startsWith('@tao/')
-          && !reference.startsWith('@/'))
+          && !reference.startsWith('@/')
+          && !(taoReferences.has(reference) && packages.has(reference.split('/')[0]!)))
       ) {
         Errors.throwUserInput(
           `QA capture cannot isolate ${
