@@ -28,6 +28,7 @@ export async function openStudioPreviewSession(
 ): Promise<StudioPreviewSession> {
   let session: StudioProjectSession | undefined
   let previewWorkspace: Workspace | undefined
+  let previewWorkspaceFiles: string | undefined
   session = await StudioProjectSession.open({
     ...options,
     async compile(request) {
@@ -40,7 +41,13 @@ export async function openStudioPreviewSession(
         sourceVersions[FS.relativePath(request.project, path)] = SourceActions.studioSourceVersion(source)
       }
       if (sourceOverrides === undefined) {
-        previewWorkspace ??= await Workspace.open(request.project)
+        // A workspace indexes the project's `@` packages when it opens, so a Tao file added, removed,
+        // or renamed (a new package above all) needs a fresh one. Edits to known files reuse it.
+        const filePaths = files.map(file => file.path).toSorted().join('\n')
+        if (previewWorkspace === undefined || filePaths !== previewWorkspaceFiles) {
+          previewWorkspace = await Workspace.open(request.project)
+          previewWorkspaceFiles = filePaths
+        }
       }
       const generated = await Runtime.generateApp(session.entryPath, {
         appName: request.appName,

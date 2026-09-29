@@ -31,7 +31,9 @@ export async function exerciseStudioFeed(
     writeId: 'feed-smoke-seed',
   })
   Expect(seeded.saved).toBe(true)
-  Expect(seeded.compile?.status).toBe('compiled')
+  if (seeded.compile?.status !== 'compiled') {
+    Errors.throwUnexpected(`Feed seed did not compile: ${JSON.stringify(seeded.compile?.diagnostics)}`)
+  }
   Expect(session.previewManifest()?.generationDeclarations.some(declaration => declaration.name === 'Playlist')).toBe(
     true,
   )

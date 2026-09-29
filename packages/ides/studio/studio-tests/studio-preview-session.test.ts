@@ -101,6 +101,56 @@ Test(
   },
 )
 
+Test('Studio preview session resolves a package created after its first compile', async () => {
+  const previewRuntimeRoot = await mkTestDir('tao-studio-new-package-runtime-')
+  try {
+    await withTaoFiles(
+      'tao-studio-new-package-project-',
+      {
+        'Garden.tao': `
+          use Text from @tao/ui
+          app Garden { view Main }
+          view Main() { render Text("Garden") }
+        `,
+      },
+      async (paths, root) => {
+        const preview = await openStudioPreviewSession({
+          entryPath: paths['Garden.tao'],
+          previewRuntimeRoot,
+          projectRoot: root,
+        })
+        try {
+          const initial = await preview.session.compileInitial()
+          if (initial.status !== 'compiled') {
+            Errors.throwUnexpected(initial.message)
+          }
+          // The preview reuses its workspace between compiles, and a workspace indexes `@` packages
+          // when it opens; one created later must still resolve.
+          const dataPath = FS.resolvePath('@model/Data.tao', root)
+          await FS.mkdir(FS.dirname(dataPath))
+          await FS.writeText(dataPath, 'public data Plants / Plant { Name text }\n')
+          await preview.session.noteWatchChanges([{ path: dataPath }])
+          const file = await preview.session.readFile('Garden.tao')
+          const saved = await preview.session.syncDraft({
+            content: `use Plant from @model\n${file.content}\nfixture Seed { Fern = create Plant { Name: "Fern" } }\n`,
+            path: file.path,
+            sourceVersion: file.sourceVersion,
+            writeId: 'use-new-package',
+          })
+          if (saved.compile?.status !== 'compiled') {
+            Errors.throwUnexpected(`Draft using the new package did not compile: ${saved.compile?.message}`)
+          }
+          Expect(saved.compile.status).toBe('compiled')
+        } finally {
+          await preview.close()
+        }
+      },
+    )
+  } finally {
+    await FS.remove(previewRuntimeRoot)
+  }
+})
+
 Test('Studio preview session publishes a generated sketch scenario after creation', async () => {
   const previewRuntimeRoot = await mkTestDir('tao-studio-sketch-preview-runtime-')
   try {
