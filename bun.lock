@@ -270,6 +270,7 @@
       "dependencies": {
         "@bomb.sh/tab": "^0.0.22",
         "@commander-js/extra-typings": "^15.0.0",
+        "appwrite-cli": "28.1.0",
         "commander": "^15.0.0",
         "firebase-tools": "^15.32.0",
         "ink": "^7.1.1",
@@ -1915,6 +1916,20 @@
     "appium-xcode": ["appium-xcode@7.1.1", "", { "dependencies": { "@appium/support": "^7.2.6", "asyncbox": "^6.4.3", "semver": "^7.0.0", "teen_process": "^4.2.0" } }, "sha512-Q0lPJYQw5QOBWE5aPA4mCh8bjHW3kd6jc1JKXONV6ZdlKION1NxmKX8jbL9BeF6nM1kY2f6kP8JRXU5vM54BKQ=="],
 
     "appium-xcuitest-driver": ["appium-xcuitest-driver@12.13.1", "", { "dependencies": { "@appium/css-locator-to-native": "1.0.7", "@appium/strongbox": "2.0.0", "@colors/colors": "1.6.1", "appium-ios-device": "3.1.23", "appium-ios-simulator": "10.1.0", "appium-remote-debugger": "17.4.2", "appium-webdriveragent": "16.12.9", "appium-xcode": "7.1.1", "async-lock": "1.4.1", "asyncbox": "6.4.3", "axios": "1.20.0", "commander": "14.0.3", "dayjs": "1.11.23", "js2xmlparser2": "0.2.0", "lru-cache": "11.5.3", "node-devicectl": "2.1.0", "portscanner": "2.2.0", "semver": "7.8.5", "teen_process": "4.2.1", "winston": "3.19.0", "ws": "8.21.3" }, "optionalDependencies": { "appium-ios-remotexpc": "5.20.3", "sharp": "0.35.4" }, "peerDependencies": { "appium": "^3.0.0-rc.2" } }, "sha512-kzAOzFu4uHPzhrCbAqhsoyxD1OXsWkl2MBmq7vatBA5fAnZKzrfsf3XByBvPuA596gulDJ6sop03CwUrJUMjmA=="],
+
+    "appwrite-cli": ["appwrite-cli@28.1.0", "", { "optionalDependencies": { "appwrite-cli-darwin-arm64": "28.1.0", "appwrite-cli-darwin-x64": "28.1.0", "appwrite-cli-linux-arm64": "28.1.0", "appwrite-cli-linux-x64": "28.1.0", "appwrite-cli-win-arm64": "28.1.0", "appwrite-cli-win-x64": "28.1.0" }, "bin": { "appwrite": "run.js" } }, "sha512-94d8kf/x0Ga+aD0OI62kzetYI8obgZfKBj2/qWQKiJmmXokTk7IUkCaUTqGb7jBH9INzh/0VA7XchgI0nmQNfw=="],
+
+    "appwrite-cli-darwin-arm64": ["appwrite-cli-darwin-arm64@28.1.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-vwnOYaORJ1Jlr7WgDMlqlrNd3CpR0nffJfQRo92yiIniaamXAoc8bKFqwKZL0xO/AqkJpphyo1QzP2+ARiRwiQ=="],
+
+    "appwrite-cli-darwin-x64": ["appwrite-cli-darwin-x64@28.1.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-5cmf63mh0Nk2xHFWUBU+sX7/I4i+qrrBhNfa+4NCmpp4zTRuT0s81dCxQUuE8dgN98ynHMeCoFpOikSEW3sbVg=="],
+
+    "appwrite-cli-linux-arm64": ["appwrite-cli-linux-arm64@28.1.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-E8I8raAaWJYvzEW8U/plAOUzKraw57hgdgKTTrGekA+qU3JjhF1gX5UULssZkP/us5QXqqcfogSJkZz22sczPA=="],
+
+    "appwrite-cli-linux-x64": ["appwrite-cli-linux-x64@28.1.0", "", { "os": "linux", "cpu": "x64" }, "sha512-gVsrgxMtSF3Kj2lUmdE4ZxBzY3/mvB2VubkEjm9bLn8JqNWM6/Bo0sz2DUb+FLd1m9W5v+GI6kg6vE9Y+0EeOw=="],
+
+    "appwrite-cli-win-arm64": ["appwrite-cli-win-arm64@28.1.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-D3rWbmi1i2KMfoaLPYKWKrZoLRunH0fUfqzGrr3uCRPrNfgA+p38J0Ut2P3wKn+A6vWi0SFmFDpfk/eZviMr8A=="],
+
+    "appwrite-cli-win-x64": ["appwrite-cli-win-x64@28.1.0", "", { "os": "win32", "cpu": "x64" }, "sha512-0o74CKKFhBbX1DQikKrIhpc6bCrmfHCj7cLuRnNbSk4DFxMxS/El+nIaPzg58jhCRTRxeX8TgaHAnQbZPnk2ZQ=="],
 
     "archiver": ["archiver@7.0.1", "", { "dependencies": { "archiver-utils": "^5.0.2", "async": "^3.2.4", "buffer-crc32": "^1.0.0", "readable-stream": "^4.0.0", "readdir-glob": "^1.1.2", "tar-stream": "^3.0.0", "zip-stream": "^6.0.1" } }, "sha512-ZcbTaIqJOfCc03QwD468Unz/5Ir8ATtvAHsK+FdXbDIbGfihqh9mrvdcYunQzqn4HrvWWaFyaxJhGZagaJJpPQ=="],
 

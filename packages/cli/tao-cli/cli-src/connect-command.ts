@@ -1,6 +1,6 @@
 import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
-import { provisionAppwrite } from './appwrite-provision'
+import { type AppwriteRunner, provisionAppwrite, provisionAppwriteProject } from './appwrite-provision'
 import { type FirebaseRunner, provisionFirebase } from './firebase-provision'
 import { hostedCrudRunCommand } from './hosted-crud-run'
 
@@ -24,6 +24,10 @@ type ConnectOptions = {
   firebaseRunner?: FirebaseRunner
   /** Replaces the pause between Firebase deploy attempts for focused command tests. */
   firebaseSleep?: (milliseconds: number) => Promise<void>
+  /** Replaces Appwrite CLI calls for focused command tests. */
+  appwriteRunner?: AppwriteRunner
+  /** Replaces the pause between Appwrite setup attempts for focused command tests. */
+  appwriteSleep?: (milliseconds: number) => Promise<void>
 }
 
 /** Connects the Hosted CRUD pilot to a provider project. */
@@ -72,6 +76,39 @@ export async function runTaoConnect(
     HCI.writeLine('Press Return at the next prompt to automate setup, paste a firebaseConfig snippet', out)
     HCI.writeLine('from an already configured project, or type manual to enter its four public fields.', out)
   } else {
+    HCI.writeLine('Appwrite setup uses the official CLI and your browser sign-in; no key paste is needed.', out)
+    HCI.writeLine('Press Return at the next prompt to automate setup, or type manual to use a project API key', out)
+    HCI.writeLine('from a project you created in the Appwrite Console.', out)
+  }
+
+  let publicFields: Record<string, string> = {}
+  let firebaseAutomated = false
+  let appwriteAutomated = false
+  const appwriteResources = { platform: 'dev.tao.hostedcrudspike', databaseId: 'tao_notes', tableId: 'notes' }
+  if (provider === 'appwrite') {
+    const choice = (await prompts.text('Appwrite setup (Return to automate; type manual to paste a project API key)'))
+      .trim()
+    if (choice === '') {
+      const existing = publicConfig['appwrite']
+      const created = await provisionAppwriteProject({
+        project,
+        currentProjectId: isObject(existing) && typeof existing['projectId'] === 'string'
+          ? existing['projectId']
+          : undefined,
+        resources: appwriteResources,
+        prompts,
+        output: options.output,
+        runner: options.appwriteRunner,
+        fetch: options.fetch,
+        sleep: options.appwriteSleep,
+      })
+      publicFields = { ...created, ...appwriteResources }
+      appwriteAutomated = true
+    } else if (choice !== 'manual') {
+      Errors.throwUserInput('Press Return to automate Appwrite setup, or type manual; nothing was stored.')
+    }
+  }
+  if (provider === 'appwrite' && !appwriteAutomated) {
     HCI.writeLine('1. At https://cloud.appwrite.io create a project, such as Tao Hosted CRUD Demo.', out)
     HCI.writeLine('   Choose the free serverless option and a region.', out)
     HCI.writeLine('   This is the one manual creation step: a project API key cannot create its project.', out)
@@ -85,8 +122,6 @@ export async function runTaoConnect(
     HCI.writeLine('   a serverless TablesDB Notes table with row security and creator permissions.', out)
   }
 
-  let publicFields: Record<string, string> = {}
-  let firebaseAutomated = false
   if (provider === 'firebase') {
     const pasted = (await prompts.paste('Firebase config (Return to automate; type manual for individual fields):'))
       .trim()
@@ -128,7 +163,7 @@ export async function runTaoConnect(
       publicFields[field] = value
     }
   }
-  if (provider === 'appwrite') {
+  if (provider === 'appwrite' && !appwriteAutomated) {
     try {
       const endpoint = new URL(publicFields['endpoint']!)
       if (
@@ -146,12 +181,10 @@ export async function runTaoConnect(
       }
       Errors.throwUserInput('Appwrite endpoint must be an Appwrite Cloud HTTPS URL ending in /v1; nothing was stored.')
     }
-    publicFields['platform'] = 'dev.tao.hostedcrudspike'
-    publicFields['databaseId'] = 'tao_notes'
-    publicFields['tableId'] = 'notes'
+    publicFields = { ...publicFields, ...appwriteResources }
   }
 
-  if (provider === 'appwrite') {
+  if (provider === 'appwrite' && !appwriteAutomated) {
     const privateConfig = await readObject(privatePath)
     const savedAppwrite = privateConfig['appwrite']
     const savedKey = isObject(savedAppwrite)

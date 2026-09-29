@@ -20,6 +20,8 @@ and the [Hosted CRUD guide](../../Apps/Hosted%20CRUD/README.md) before changing 
   cannot create the project. A Partners organization key could create a project but would still
   require a separate project credential to configure resources. The guide describes the one manual
   project creation and key issuance step. There is no local Appwrite key file in the source checkout.
+  _Superseded on this branch:_ the bundled Appwrite CLI's browser sign-in now creates or reuses
+  the project and issues a 15-minute organization-issued project key, matching Firebase's flow.
 - The source checkout has one unrelated dirty tracked file, `Apps/Hosted CRUD/tao.connections.json`,
   owned by the Developer. It was never staged, reset, stashed, or inspected for this handoff.
   `./agent unsandboxed finalize` refused that dirty worktree. Do not carry its contents into the
@@ -46,10 +48,10 @@ cd '<NEW_WORKTREE>'
 For Firebase, press Return at the config prompt to use automation, complete the browser sign-in
 if needed, and press Return to create a new disposable project under a generated ID and again for the
 default `nam5` Firestore region. If reusing an existing project, approve replacing its rules only after checking that the
-pilot rules are appropriate. Do not select Firebase Hosting. For Appwrite, first create a free
-serverless Cloud project and a scoped project API key using the steps in
-[its guide](../../Apps/Hosted%20CRUD/src/appwrite/README.md); paste the key only into the CLI's
-hidden local prompt. `./tao connect run` signs Expo CLI in to an Expo account if needed and launches
+pilot rules are appropriate. Do not select Firebase Hosting. For Appwrite, press Return to automate
+with the bundled Appwrite CLI 28.1.0: complete its browser sign-in, then press Return to create a
+project and again for the `fra` region ([its guide](../../Apps/Hosted%20CRUD/src/appwrite/README.md)).
+Setup uses a 15-minute key it never stores; `manual` keeps the older pasted-key path. `./tao connect run` signs Expo CLI in to an Expo account if needed and launches
 Metro; sign in to Expo Go on the iPhone with the same account, then scan the QR code on a reachable
 network. No Apple Developer account is required for this Expo Go path.
 

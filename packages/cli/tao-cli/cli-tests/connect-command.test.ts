@@ -19,7 +19,212 @@ function scripted(text: string[], paste = '', secret = '') {
   }
 }
 
+/** An Appwrite Cloud project that starts empty and records every REST request made to it. */
+function fakeAppwriteCloud(projectId: string) {
+  const requests: { method: string; path: string; headers: Headers }[] = []
+  let platformCreated = false
+  let databaseCreated = false
+  let tableCreated = false
+  let authEnabled = false
+  const cloud = {
+    requests,
+    tableMalformed: false,
+    /** Answers a project request with this status instead, for a project Appwrite has not finished creating. */
+    projectStatus: 200,
+    fetchImpl: async (input: string, init?: RequestInit): Promise<Response> => {
+      const path = new URL(String(input)).pathname
+      const method = init?.method ?? 'GET'
+      requests.push({ method, path, headers: new Headers(init?.headers) })
+      const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status })
+      if (path === '/v1/project' && method === 'GET') {
+        if (cloud.projectStatus !== 200) {
+          return json({ message: 'Project not found' }, cloud.projectStatus)
+        }
+        return json({ $id: projectId, authMethods: [{ $id: 'email-password', enabled: authEnabled }] })
+      }
+      if (path === '/v1/project/platforms' && method === 'GET') {
+        return json({
+          platforms: platformCreated
+            ? [{ type: 'apple', bundleIdentifier: 'dev.tao.hostedcrudspike' }]
+            : [],
+        })
+      }
+      if (path === '/v1/project/platforms/apple' && method === 'POST') {
+        platformCreated = true
+        return json({ $id: 'tao_hosted_crud_apple' }, 201)
+      }
+      if (path === '/v1/project/auth-methods/email-password' && method === 'PATCH') {
+        authEnabled = true
+        return json({ $id: 'email-password', enabled: true })
+      }
+      if (path === '/v1/tablesdb/tao_notes' && method === 'GET') {
+        return json(
+          databaseCreated ? { $id: 'tao_notes', type: 'tablesdb', specification: null } : {},
+          databaseCreated ? 200 : 404,
+        )
+      }
+      if (path === '/v1/tablesdb' && method === 'POST') {
+        databaseCreated = true
+        return json({ $id: 'tao_notes' }, 201)
+      }
+      if (path === '/v1/tablesdb/tao_notes/tables/notes' && method === 'GET') {
+        return json(
+          tableCreated
+            ? {
+              rowSecurity: !cloud.tableMalformed,
+              $permissions: ['create("users")'],
+              columns: [
+                { key: 'ownerId', type: 'varchar', size: 255, required: true },
+                { key: 'text', type: 'text', required: true },
+                { key: 'done', type: 'boolean', required: true },
+                { key: 'updatedAt', type: 'bigint', required: true },
+              ],
+              indexes: [{ type: 'key', columns: ['ownerId'] }],
+            }
+            : {},
+          tableCreated ? 200 : 404,
+        )
+      }
+      if (path === '/v1/tablesdb/tao_notes/tables' && method === 'POST') {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+        Expect(body).toMatchObject({ rowSecurity: true, permissions: ['create("users")'] })
+        Expect(body['columns']).toHaveLength(4)
+        Expect(body['indexes']).toEqual([{ key: 'ownerId', type: 'key', columns: ['ownerId'] }])
+        tableCreated = true
+        return json({ $id: 'notes' }, 201)
+      }
+      return json({ message: 'unexpected request' }, 500)
+    },
+  }
+  return cloud
+}
+
+/** An Appwrite CLI whose account starts signed out and whose organization holds the given projects. */
+function fakeAppwriteCli(projects: { $id: string; region: string }[]) {
+  const calls: { args: readonly string[]; interactive: boolean }[] = []
+  let signedIn = false
+  const ok = (value: unknown) => ({ exitCode: 0, stdout: JSON.stringify(value), stderr: '' })
+  const runner = async (args: readonly string[], _cwd: string, interactive: boolean) => {
+    calls.push({ args, interactive })
+    const [command, subcommand] = args
+    if (command === 'whoami') {
+      return signedIn ? ok({ $id: 'account' }) : { exitCode: 1, stdout: '', stderr: '✗ Error: no active session' }
+    }
+    if (command === 'login') {
+      signedIn = true
+      return { exitCode: 0, stdout: '', stderr: '' }
+    }
+    if (command === 'list-organizations') {
+      return ok({ total: 1, teams: [{ $id: 'org-1', name: 'Personal' }] })
+    }
+    if (command === 'list-projects') {
+      return ok({ total: projects.length, projects })
+    }
+    if (command === 'organization' && subcommand === 'create-project') {
+      const flag = (name: string) => args[args.indexOf(name) + 1]
+      const project = { $id: flag('--project-id')!, region: flag('--region')! }
+      projects.push(project)
+      return ok(project)
+    }
+    if (command === 'organization' && subcommand === 'create-ephemeral-project-key') {
+      return ok({ $id: 'key', secret: 'ephemeral-secret-canary' })
+    }
+    return { exitCode: 1, stdout: '', stderr: `unexpected ${args.join(' ')}` }
+  }
+  return { calls, runner }
+}
+
 Describe('tao connect', () => {
+  Test('automates Appwrite: browser sign-in, new project, short-lived key, nothing stored', async () => {
+    const root = await mkTestDir('tao-connect-appwrite-cli-')
+    try {
+      const cli = fakeAppwriteCli([])
+      const cloud = fakeAppwriteCloud('tao-hosted-demo')
+      cloud.projectStatus = 401
+      const sleeps: number[] = []
+      const { terminal, options } = scripted(['', 'tao-hosted-demo', 'yes', 'nyc'])
+      await runTaoConnect('appwrite', root, {
+        ...options,
+        appwriteRunner: cli.runner,
+        fetch: cloud.fetchImpl,
+        appwriteSleep: async milliseconds => {
+          sleeps.push(milliseconds)
+          cloud.projectStatus = 200
+        },
+      })
+      Expect(await FS.readJson(FS.resolvePath('tao.connections.json', root))).toEqual({
+        appwrite: {
+          endpoint: 'https://nyc.cloud.appwrite.io/v1',
+          projectId: 'tao-hosted-demo',
+          platform: 'dev.tao.hostedcrudspike',
+          databaseId: 'tao_notes',
+          tableId: 'notes',
+        },
+      })
+      Expect(await FS.exists(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(false)
+      Expect(cli.calls.filter(call => call.interactive).map(call => call.args)).toEqual([['login']])
+      const create = cli.calls.find(call => call.args[1] === 'create-project')!.args
+      Expect(create).toContain('--region')
+      Expect(create[create.indexOf('--region') + 1]).toBe('nyc')
+      const key = cli.calls.filter(call => call.args[1] === 'create-ephemeral-project-key')
+      Expect(key).toHaveLength(2)
+      Expect(key[0]!.args).toContain('--show-secrets')
+      Expect(sleeps).toEqual([5_000])
+      Expect(cloud.requests.every(request => request.headers.get('X-Appwrite-Key') === 'ephemeral-secret-canary'))
+        .toBe(true)
+      Expect(cloud.requests.some(request => request.path === '/v1/tablesdb/tao_notes/tables')).toBe(true)
+      Expect(terminal.outputText()).toContain('A browser will open')
+      Expect(terminal.outputText()).toContain('Created Appwrite project tao-hosted-demo.')
+      Expect(terminal.outputText()).not.toContain('ephemeral-secret-canary')
+      Expect(terminal.outputText()).not.toContain('Create API key')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('reuses the Appwrite project already in tao.connections.json without creating one', async () => {
+    const root = await mkTestDir('tao-connect-appwrite-reuse-')
+    try {
+      await FS.writeJson(FS.resolvePath('tao.connections.json', root), {
+        firebase: { projectId: 'keep' },
+        appwrite: { projectId: 'tao-hosted-kept' },
+      })
+      const cli = fakeAppwriteCli([{ $id: 'tao-hosted-kept', region: 'fra' }])
+      await cli.runner(['login'], root, true)
+      cli.calls.length = 0
+      const cloud = fakeAppwriteCloud('tao-hosted-kept')
+      await runTaoConnect('appwrite', root, {
+        ...scripted(['', '']).options,
+        appwriteRunner: cli.runner,
+        fetch: cloud.fetchImpl,
+      })
+      Expect(await FS.readJson(FS.resolvePath('tao.connections.json', root))).toMatchObject({
+        firebase: { projectId: 'keep' },
+        appwrite: { endpoint: 'https://fra.cloud.appwrite.io/v1', projectId: 'tao-hosted-kept' },
+      })
+      Expect(cli.calls.map(call => call.args[0])).not.toContain('login')
+      Expect(cli.calls.some(call => call.args[1] === 'create-project')).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('declining a typed Appwrite project ID creates nothing', async () => {
+    const root = await mkTestDir('tao-connect-appwrite-decline-')
+    try {
+      const cli = fakeAppwriteCli([])
+      await Expect(runTaoConnect('appwrite', root, {
+        ...scripted(['', 'tao-hosted-typo', 'no']).options,
+        appwriteRunner: cli.runner,
+        fetch: fakeAppwriteCloud('tao-hosted-typo').fetchImpl,
+      })).rejects.toThrow('cancelled')
+      Expect(cli.calls.some(call => call.args[0] === 'organization')).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('tao.connections.json', root))).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('stores Firebase web config without disturbing existing private credentials', async () => {
     const root = await mkTestDir('tao-connect-firebase-')
     try {
@@ -321,75 +526,10 @@ Describe('tao connect', () => {
   Test('provisions Appwrite from a scoped API key and stores that key outside client config', async () => {
     const root = await mkTestDir('tao-connect-appwrite-')
     try {
-      const requests: { method: string; path: string; headers: Headers }[] = []
-      let platformCreated = false
-      let databaseCreated = false
-      let tableCreated = false
-      let authEnabled = false
-      let tableMalformed = false
-      const fetchImpl = async (input: string, init?: RequestInit): Promise<Response> => {
-        const path = new URL(String(input)).pathname
-        const method = init?.method ?? 'GET'
-        requests.push({ method, path, headers: new Headers(init?.headers) })
-        const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status })
-        if (path === '/v1/project' && method === 'GET') {
-          return json({ $id: 'appwrite-project', authMethods: [{ $id: 'email-password', enabled: authEnabled }] })
-        }
-        if (path === '/v1/project/platforms' && method === 'GET') {
-          return json({
-            platforms: platformCreated
-              ? [{ type: 'apple', bundleIdentifier: 'dev.tao.hostedcrudspike' }]
-              : [],
-          })
-        }
-        if (path === '/v1/project/platforms/apple' && method === 'POST') {
-          platformCreated = true
-          return json({ $id: 'tao_hosted_crud_apple' }, 201)
-        }
-        if (path === '/v1/project/auth-methods/email-password' && method === 'PATCH') {
-          authEnabled = true
-          return json({ $id: 'email-password', enabled: true })
-        }
-        if (path === '/v1/tablesdb/tao_notes' && method === 'GET') {
-          return json(
-            databaseCreated ? { $id: 'tao_notes', type: 'tablesdb', specification: null } : {},
-            databaseCreated ? 200 : 404,
-          )
-        }
-        if (path === '/v1/tablesdb' && method === 'POST') {
-          databaseCreated = true
-          return json({ $id: 'tao_notes' }, 201)
-        }
-        if (path === '/v1/tablesdb/tao_notes/tables/notes' && method === 'GET') {
-          return json(
-            tableCreated
-              ? {
-                rowSecurity: !tableMalformed,
-                $permissions: ['create("users")'],
-                columns: [
-                  { key: 'ownerId', type: 'varchar', size: 255, required: true },
-                  { key: 'text', type: 'text', required: true },
-                  { key: 'done', type: 'boolean', required: true },
-                  { key: 'updatedAt', type: 'bigint', required: true },
-                ],
-                indexes: [{ type: 'key', columns: ['ownerId'] }],
-              }
-              : {},
-            tableCreated ? 200 : 404,
-          )
-        }
-        if (path === '/v1/tablesdb/tao_notes/tables' && method === 'POST') {
-          const body = JSON.parse(String(init?.body)) as Record<string, unknown>
-          Expect(body).toMatchObject({ rowSecurity: true, permissions: ['create("users")'] })
-          Expect(body['columns']).toHaveLength(4)
-          Expect(body['indexes']).toEqual([{ key: 'ownerId', type: 'key', columns: ['ownerId'] }])
-          tableCreated = true
-          return json({ $id: 'notes' }, 201)
-        }
-        return json({ message: 'unexpected request' }, 500)
-      }
+      const cloud = fakeAppwriteCloud('appwrite-project')
+      const { requests, fetchImpl } = cloud
       const { terminal, options } = scripted(
-        ['https://fra.cloud.appwrite.io/v1', 'appwrite-project'],
+        ['manual', 'https://fra.cloud.appwrite.io/v1', 'appwrite-project'],
         '',
         'appwrite-secret-canary',
       )
@@ -419,13 +559,14 @@ Describe('tao connect', () => {
       Expect(terminal.outputText()).toContain('Create API key')
       const writes = requests.filter(request => request.method !== 'GET').length
       await runTaoConnect('appwrite', root, {
-        ...scripted(['https://fra.cloud.appwrite.io/v1', 'appwrite-project']).options,
+        ...scripted(['manual', 'https://fra.cloud.appwrite.io/v1', 'appwrite-project']).options,
         fetch: fetchImpl,
       })
       Expect(requests.filter(request => request.method !== 'GET')).toHaveLength(writes)
-      tableMalformed = true
+      cloud.tableMalformed = true
       await Expect(runTaoConnect('appwrite', root, {
-        ...scripted(['https://fra.cloud.appwrite.io/v1', 'appwrite-project'], '', 'appwrite-secret-canary').options,
+        ...scripted(['manual', 'https://fra.cloud.appwrite.io/v1', 'appwrite-project'], '', 'appwrite-secret-canary')
+          .options,
         fetch: fetchImpl,
       })).rejects.toThrow('Row security')
       Expect(requests.filter(request => request.method !== 'GET')).toHaveLength(writes)
@@ -479,7 +620,7 @@ Describe('tao connect', () => {
         'appwrite',
         root,
         scripted(
-          ['http://localhost/v1', 'project'],
+          ['manual', 'http://localhost/v1', 'project'],
         ).options,
       )).rejects.toThrow('HTTPS URL')
       Expect(await FS.readText(publicPath)).toBe(beforePublic)
@@ -495,7 +636,7 @@ Describe('tao connect', () => {
       const publicPath = FS.resolvePath('tao.connections.json', root)
       await FS.writeJson(publicPath, { existing: true })
       const { terminal, options } = scripted(
-        ['https://fra.cloud.appwrite.io/v1', 'appwrite-project'],
+        ['manual', 'https://fra.cloud.appwrite.io/v1', 'appwrite-project'],
         '',
         'rejected-key-canary',
       )

@@ -14,6 +14,7 @@
   "dependencies": {
     "@bomb.sh/tab": "^0.0.22",
     "@commander-js/extra-typings": "^15.0.0",
+    "appwrite-cli": "28.1.0",
     "commander": "^15.0.0",
     "firebase-tools": "^15.32.0",
     "ink": "^7.1.1",
