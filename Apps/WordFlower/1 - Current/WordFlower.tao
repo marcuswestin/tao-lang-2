@@ -60,6 +60,9 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 // Input` writes it, and the stdlib `Problems(Input.Problems)` lists what is still missing, in the
 // order the entity states its rules and nothing once the input is complete. `validate` and `refuse
 // when` are Post-MVP.
+// DIRECT WRITES. `create`, `update`, and `delete` affect one row. `toggle Workspace.Pinned`
+// inverts one nonoptional yes/no field as a stored update; a recorded retry replays that update
+// without evaluating the toggle again. Workspace library queries use Pinned descending by default.
 //
 // CHECK. `check <boolean>` is an action's early exit: when the expression is false, the rest of that
 // action is skipped. Nothing fails, nothing is reported, and a caller that reached it through `do`

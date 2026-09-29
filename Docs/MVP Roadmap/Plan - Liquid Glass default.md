@@ -18,6 +18,6 @@ New apps import `@tao/nav` and `@tao/ui` without a style opt-in. Their native na
 
 ## Acceptance
 
-Create a fresh one-feature and two-feature app with the installed `tao create` path. Confirm both import native navigation and UI, the two-feature app requests automatic tabs, the iOS host follows system appearance, and the native runtime resolves system Dark as Dark. Exercise the glass and opaque custom-bar paths. A compatible iOS build and device observation must confirm the actual material before visual acceptance.
+Create a fresh one-feature and two-feature app with the installed `tao create` path. Confirm both import native navigation and UI, the two-feature app requests automatic tabs, the iOS host follows system appearance, and the native runtime resolves system Dark as Dark. Exercise the glass and opaque custom-bar paths. A compatible iOS build and direct simulator observation may confirm the actual material for MVP visual acceptance, as accepted by the Developer on 2026-09-28. The appearance and accessibility settings still need to be exercised in the simulator before closing A18.
 
 References: [Component kits](<../Roadmap/Component kits/Overview - Component kits.md>), [native navigation acceptance](<../Roadmap/Add navigation and routing MVP/Native navigation acceptance.md>), [Apple materials](https://developer.apple.com/design/human-interface-guidelines/materials), [Expo glass effect](https://docs.expo.dev/versions/v55.0.0/sdk/glass-effect/).
