@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Time } from '@shared'
 import type { Writable } from 'node:stream'
 
 type FirebaseResult = { exitCode: number | null; stdout: string; stderr: string }
@@ -13,7 +13,13 @@ type FirebaseProvisionOptions = {
   prompts: FirebasePrompts
   output?: Writable
   runner?: FirebaseRunner
+  /** Replaces the pause between deploy attempts for focused command tests. */
+  sleep?: (milliseconds: number) => Promise<void>
 }
+
+/** A project created seconds earlier answers 403 until Google propagates its permissions and APIs. */
+const DEPLOY_ATTEMPTS = 6
+const DEPLOY_RETRY_MILLISECONDS = 20_000
 
 /** Provisions the disposable Hosted CRUD Firebase backend through Google's supported CLI. */
 export async function provisionFirebase(options: FirebaseProvisionOptions): Promise<FirebaseConfig> {
@@ -34,7 +40,9 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
   let accounts = await firebaseJson(run, work, ['login:list'], 'check Firebase sign-in')
   if (!Array.isArray(accounts) || accounts.length === 0) {
     HCI.writeLine('A browser will open for one-time Google sign-in to the Firebase CLI.', out)
-    const login = await run(['login'], work, true)
+    HCI.writeLine('Gemini in Firebase and Firebase CLI usage reporting stay off.', out)
+    // --reauth skips firebase-tools' two opt-in consent prompts and leaves both settings unset, which it reads as off.
+    const login = await run(['login', '--reauth'], work, true)
     if (login.exitCode !== 0) {
       Errors.throwHostEnvironment('Firebase sign-in did not finish. Retry ./tao connect firebase after signing in.')
     }
@@ -44,6 +52,7 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
     }
   }
 
+  HCI.writeLine('Listing Firebase projects on this Google account…', out)
   const projects = await firebaseJson(run, work, ['projects:list'], 'list Firebase projects')
   if (!Array.isArray(projects)) {
     Errors.throwHostEnvironment('Firebase CLI returned an unexpected project list.')
@@ -54,9 +63,16 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
   if (known.length > 0) {
     HCI.writeLine(`Firebase projects on this Google account: ${known.join(', ')}`, out)
   }
-  const suggested = options.currentProjectId ? ` (Return for ${options.currentProjectId})` : ''
-  const entered = (await options.prompts.text(`Firebase project ID${suggested}:`)).trim()
-  const projectId = entered || options.currentProjectId || ''
+  // A placeholder left in the template connection file is not a project to reuse, so the default then
+  // creates a fresh project under a generated, globally unique ID.
+  const current = options.currentProjectId?.includes('REPLACE_WITH') ? undefined : options.currentProjectId
+  const generated = `tao-hosted-crud-${Platform.randomUUID().replaceAll('-', '').slice(0, 6)}`
+  const entered = (await options.prompts.text(
+    current
+      ? `Firebase project ID (Return to reuse ${current}, or type another ID)`
+      : `Firebase project ID (Return to create new project ${generated}, or type an existing ID)`,
+  )).trim()
+  const projectId = entered || current || generated
   if (!/^[a-z][a-z0-9-]{4,28}[a-z0-9]$/u.test(projectId)) {
     Errors.throwUserInput(
       'Firebase project ID must be 6–30 lowercase letters, digits, or hyphens, starting with a letter and ending with a letter or digit.',
@@ -64,11 +80,15 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
   }
   const existingProject = known.includes(projectId)
   if (!existingProject) {
-    const answer =
-      (await options.prompts.text(`Create Firebase project ${projectId} on this Google account? Type yes:`)).trim()
-    if (answer !== 'yes') {
-      Errors.throwUserInput('Firebase project creation was cancelled; no connection was saved.')
+    // Return on the generated default already chose creation; a typed or remembered ID may be a typo.
+    if (projectId !== generated) {
+      const answer =
+        (await options.prompts.text(`Create Firebase project ${projectId} on this Google account? Type yes`)).trim()
+      if (answer !== 'yes') {
+        Errors.throwUserInput('Firebase project creation was cancelled; no connection was saved.')
+      }
     }
+    HCI.writeLine(`Creating Firebase project ${projectId}… This usually takes about a minute.`, out)
     await firebaseJson(
       run,
       work,
@@ -89,7 +109,7 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
   }
   if (!app && webApps.length > 1) {
     HCI.writeLine(`Web app IDs: ${webApps.map(value => value['appId']).join(', ')}`, out)
-    const selected = (await options.prompts.text('Reuse a web app ID, or press Return to create Tao Hosted CRUD Demo:'))
+    const selected = (await options.prompts.text('Reuse a web app ID, or press Return to create Tao Hosted CRUD Demo'))
       .trim()
     if (selected) {
       app = webApps.find(value => value['appId'] === selected)
@@ -99,6 +119,7 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
     }
   }
   if (!app) {
+    HCI.writeLine('Registering the Firebase web app Tao Hosted CRUD Demo… This can take up to a minute.', out)
     const created = await firebaseJson(run, work, [
       'apps:create',
       'WEB',
@@ -129,40 +150,25 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
     Errors.throwHostEnvironment('Firebase returned web app configuration for a different project or app.')
   }
 
-  const databases = await firebaseJson(
-    run,
-    work,
-    ['firestore:databases:list', '--project', projectId],
-    'list Firestore databases',
-  )
-  if (!Array.isArray(databases)) {
-    Errors.throwHostEnvironment('Firebase CLI returned an unexpected Firestore database list.')
-  }
+  const databases = await listFirestoreDatabases(run, work, projectId)
   const defaultDatabase = databases.filter(isRecord).find(value =>
     typeof value['name'] === 'string' && value['name'].endsWith('/databases/(default)')
   )
   if (defaultDatabase && defaultDatabase['type'] !== undefined && defaultDatabase['type'] !== 'FIRESTORE_NATIVE') {
     Errors.throwUserInput('The default Firestore database is not in Native mode; this pilot cannot use it.')
   }
+  let location: string | undefined
   if (!defaultDatabase) {
-    const location = (await options.prompts.text('Firestore region (for example us-central1 or nam5; permanent):'))
-      .trim()
+    location = (await options.prompts.text(
+      'Firestore region (Return for nam5, the United States multi-region; permanent)',
+    )).trim() || 'nam5'
     if (!/^[a-z][a-z0-9-]+[a-z0-9]$/u.test(location)) {
       Errors.throwUserInput('Enter a Firestore location such as us-central1 or nam5.')
     }
-    await firebaseJson(run, work, [
-      'firestore:databases:create',
-      '(default)',
-      '--location',
-      location,
-      '--project',
-      projectId,
-    ], 'create the default Firestore database')
-    HCI.writeLine(`Created the default Firestore database in ${location}.`, out)
   } else {
     HCI.writeLine('This project already has a default Firestore database.', out)
     const answer = (await options.prompts.text(
-      'Replace its Firestore rules with the Hosted CRUD pilot rules and enable Email/Password auth? Type yes:',
+      'Replace its Firestore rules with the Hosted CRUD pilot rules and enable Email/Password auth? Type yes',
     )).trim()
     if (answer !== 'yes') {
       Errors.throwUserInput('Firebase rules deployment was cancelled; no connection was saved.')
@@ -170,20 +176,42 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
   }
 
   await FS.writeText(rulesPath, await FS.readText(sourceRules))
+  // Deploy enables the Firestore API and, given a location, creates the missing default database; a new project
+  // has the API disabled, so the standalone database commands would fail before either exists.
   await FS.writeJson(configPath, {
     auth: { providers: { emailPassword: true } },
-    firestore: { rules: 'firestore.rules' },
+    firestore: location ? { rules: 'firestore.rules', location } : { rules: 'firestore.rules' },
   })
-  await firebaseJson(run, work, [
-    'deploy',
-    '--only',
-    'auth,firestore:rules',
-    '--project',
-    projectId,
-    '--config',
-    configPath,
-  ], 'deploy Firebase Auth and Firestore rules')
-  HCI.writeLine('Enabled Email/Password auth and deployed the Hosted CRUD Firestore rules.', out)
+  HCI.writeLine(
+    location
+      ? `Enabling Firestore, creating its database in ${location}, enabling Email/Password auth, and deploying rules… This can take a few minutes.`
+      : 'Enabling Email/Password auth and deploying the Hosted CRUD Firestore rules… This can take a minute.',
+    out,
+  )
+  const deploy = ['deploy', '--only', 'auth,firestore:rules', '--project', projectId, '--config', configPath]
+  for (let attempt = 1;; attempt++) {
+    try {
+      await firebaseJson(run, work, deploy, 'deploy Firebase Auth and Firestore rules')
+      break
+    } catch (error) {
+      if (attempt === DEPLOY_ATTEMPTS || !(error instanceof Error) || !/HTTP Error: 403\b/u.test(error.message)) {
+        throw error
+      }
+      HCI.writeLine(
+        `Firebase is still granting access to the new project; retrying in ${
+          DEPLOY_RETRY_MILLISECONDS / 1000
+        } seconds (attempt ${attempt + 1} of ${DEPLOY_ATTEMPTS})…`,
+        out,
+      )
+      await (options.sleep ?? Time.sleep)(DEPLOY_RETRY_MILLISECONDS)
+    }
+  }
+  HCI.writeLine(
+    location
+      ? `Created the default Firestore database in ${location}, enabled Email/Password auth, and deployed the Hosted CRUD Firestore rules.`
+      : 'Enabled Email/Password auth and deployed the Hosted CRUD Firestore rules.',
+    out,
+  )
   return config
 }
 
@@ -216,12 +244,45 @@ async function firebaseJson(
     Errors.throwHostEnvironment(`Firebase CLI could not ${action}; it returned an unexpected result.`)
   }
   if (result.exitCode !== 0 || response['status'] !== 'success') {
-    const issue = isRecord(response['error']) && typeof response['error']['message'] === 'string'
-      ? response['error']['message']
-      : 'Check the selected Google account, project permissions, and Firebase CLI login.'
-    Errors.throwHostEnvironment(`Firebase CLI could not ${action}: ${issue}`)
+    Errors.throwHostEnvironment(`Firebase CLI could not ${action}: ${firebaseErrorMessage(response)}`)
   }
   return response['result']
+}
+
+/** firebaseErrorMessage names what Firebase reported; the CLI's JSON carries it as a string or an object. */
+function firebaseErrorMessage(response: Record<string, unknown>): string {
+  const error = response['error']
+  if (typeof error === 'string' && error.trim()) {
+    return error.trim()
+  }
+  if (isRecord(error) && typeof error['message'] === 'string') {
+    return error['message']
+  }
+  return 'Check the selected Google account, project permissions, and Firebase CLI login.'
+}
+
+/** listFirestoreDatabases reads a new project's disabled Firestore API as having no databases yet. */
+async function listFirestoreDatabases(run: FirebaseRunner, cwd: string, projectId: string): Promise<unknown[]> {
+  const args = ['firestore:databases:list', '--project', projectId, '--json']
+  const result = await run(args, cwd, false)
+  let response: unknown
+  try {
+    response = JSON.parse(result.stdout)
+  } catch {
+    Errors.throwHostEnvironment('Firebase CLI could not list Firestore databases; it returned no JSON result.')
+  }
+  if (isRecord(response) && response['status'] !== 'success') {
+    const message = firebaseErrorMessage(response)
+    if (/Cloud Firestore API has not been used in project|SERVICE_DISABLED/u.test(message)) {
+      return []
+    }
+    Errors.throwHostEnvironment(`Firebase CLI could not list Firestore databases: ${message}`)
+  }
+  const databases = isRecord(response) ? response['result'] : undefined
+  if (result.exitCode !== 0 || !Array.isArray(databases)) {
+    Errors.throwHostEnvironment('Firebase CLI returned an unexpected Firestore database list.')
+  }
+  return databases
 }
 
 async function runFirebaseCli(args: readonly string[], cwd: string, interactive: boolean): Promise<FirebaseResult> {

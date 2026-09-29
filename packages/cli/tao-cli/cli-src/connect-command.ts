@@ -21,6 +21,8 @@ type ConnectOptions = {
   fetch?: (url: string, init?: RequestInit) => Promise<Response>
   /** Replaces Firebase CLI calls for focused command tests. */
   firebaseRunner?: FirebaseRunner
+  /** Replaces the pause between Firebase deploy attempts for focused command tests. */
+  firebaseSleep?: (milliseconds: number) => Promise<void>
 }
 
 /** Connects the Hosted CRUD pilot to a provider project. */
@@ -97,6 +99,7 @@ export async function runTaoConnect(
         prompts,
         output: options.output,
         runner: options.firebaseRunner,
+        sleep: options.firebaseSleep,
       })
       firebaseAutomated = true
     } else if (pasted === 'manual') {
@@ -115,7 +118,7 @@ export async function runTaoConnect(
     : (['endpoint', 'projectId'] as const)
   if (Object.keys(publicFields).length === 0) {
     for (const field of fields) {
-      const value = (await prompts.text(`${provider} ${field}:`)).trim()
+      const value = (await prompts.text(`${provider} ${field}`)).trim()
       if (value === '' || /[\u0000-\u001f\u007f]/u.test(value)) {
         Errors.throwUserInput(
           `${provider} ${field} must be non-empty text without control characters; nothing was stored.`,

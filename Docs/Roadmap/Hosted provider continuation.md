@@ -44,8 +44,8 @@ just hosted-crud
 ```
 
 For Firebase, press Return at the config prompt to use automation, complete the browser sign-in
-if needed, enter a **disposable** project ID, confirm creation, and choose the permanent Firestore
-region. If reusing an existing project, approve replacing its rules only after checking that the
+if needed, and press Return to create a new disposable project under a generated ID and again for the
+default `nam5` Firestore region. If reusing an existing project, approve replacing its rules only after checking that the
 pilot rules are appropriate. Do not select Firebase Hosting. For Appwrite, first create a free
 serverless Cloud project and a scoped project API key using the steps in
 [its guide](../../Apps/Hosted%20CRUD/src/appwrite/README.md); paste the key only into the CLI's

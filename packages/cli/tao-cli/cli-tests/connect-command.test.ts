@@ -114,15 +114,19 @@ Describe('tao connect', () => {
     }
   })
 
-  Test('automates a new Firebase project, web app, database, auth and rules before saving client config', async () => {
+  Test('creates a fresh Firebase project, web app, database, auth and rules by default', async () => {
     const root = await mkTestDir('tao-connect-firebase-auto-')
     try {
       await FS.writeText(FS.resolvePath('src/firebase/firestore.rules', root), "rules_version = '2';\n")
+      await FS.writeJson(FS.resolvePath('tao.connections.json', root), {
+        firebase: { projectId: 'REPLACE_WITH_FIREBASE_PROJECT_ID' },
+      })
       const calls: string[][] = []
       let signedIn = false
       const runner = async (args: readonly string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
         calls.push([...args])
         const command = args[0]
+        const project = args[args.indexOf('--project') + 1]
         if (command === 'login') {
           signedIn = true
           return { exitCode: 0, stdout: '', stderr: '' }
@@ -130,36 +134,62 @@ Describe('tao connect', () => {
         let result: unknown
         if (command === 'login:list') {
           result = signedIn ? [{ user: { email: 'developer@example.test' } }] : []
-        } else if (command === 'projects:list' || command === 'apps:list' || command === 'firestore:databases:list') {
+        } else if (command === 'firestore:databases:list') {
+          // A project created seconds ago has the Firestore API disabled, and firebase-tools reports it as a string.
+          const error = `HTTP Error: 403, Cloud Firestore API has not been used in project ${project} before`
+          return { exitCode: 2, stdout: JSON.stringify({ status: 'error', error }), stderr: '' }
+        } else if (command === 'projects:list' || command === 'apps:list') {
           result = []
         } else if (command === 'projects:create') {
-          result = { projectId: 'tao-hosted-demo' }
+          result = { projectId: args[1] }
         } else if (command === 'apps:create') {
           result = { appId: '1:123:web:abc', displayName: 'Tao Hosted CRUD Demo' }
         } else if (command === 'apps:sdkconfig') {
           result = {
             sdkConfig: {
-              projectId: 'tao-hosted-demo',
+              projectId: project,
               appId: '1:123:web:abc',
               apiKey: 'public-web-key',
-              authDomain: 'tao-hosted-demo.firebaseapp.com',
+              authDomain: `${project}.firebaseapp.com`,
             },
           }
-        } else if (command === 'firestore:databases:create' || command === 'deploy') {
+        } else if (command === 'deploy') {
+          if (calls.filter(call => call[0] === 'deploy').length === 1) {
+            // Google answers 403 until a project created seconds earlier has propagated its permissions.
+            const error =
+              `Request to https://firebaserules.googleapis.com/v1/projects/${project}:test had HTTP Error: 403, The caller does not have permission`
+            return { exitCode: 2, stdout: JSON.stringify({ status: 'error', error }), stderr: '' }
+          }
           result = { name: 'done' }
         } else {
           return { exitCode: 1, stdout: '', stderr: 'unexpected command' }
         }
         return { exitCode: 0, stdout: JSON.stringify({ status: 'success', result }), stderr: '' }
       }
-      const { terminal, options } = scripted(['tao-hosted-demo', 'yes', 'us-central1'])
-      await runTaoConnect('firebase', root, { ...options, firebaseRunner: runner })
+      const questions: string[] = []
+      const { terminal, options } = scripted([])
+      const prompts = {
+        ...options.prompts,
+        text: async (message: string) => {
+          questions.push(message)
+          return ''
+        },
+      }
+      const pauses: number[] = []
+      const firebaseSleep = async (milliseconds: number) => {
+        pauses.push(milliseconds)
+      }
+      await runTaoConnect('firebase', root, { ...options, prompts, firebaseRunner: runner, firebaseSleep })
+      const created = calls.find(call => call[0] === 'projects:create')?.[1] ?? ''
+      Expect(created).toMatch(/^tao-hosted-crud-[0-9a-f]{6}$/u)
+      Expect(questions[0]).toContain(`Return to create new project ${created}`)
+      Expect(questions.some(question => question.includes('Type yes'))).toBe(false)
       Expect(await FS.readJson(FS.resolvePath('tao.connections.json', root))).toEqual({
         firebase: {
-          projectId: 'tao-hosted-demo',
+          projectId: created,
           appId: '1:123:web:abc',
           apiKey: 'public-web-key',
-          authDomain: 'tao-hosted-demo.firebaseapp.com',
+          authDomain: `${created}.firebaseapp.com`,
         },
       })
       Expect(calls.map(call => call[0])).toEqual([
@@ -172,18 +202,64 @@ Describe('tao connect', () => {
         'apps:create',
         'apps:sdkconfig',
         'firestore:databases:list',
-        'firestore:databases:create',
+        'deploy',
         'deploy',
       ])
+      Expect(pauses).toEqual([20_000])
+      Expect(terminal.outputText()).toContain('retrying in 20 seconds (attempt 2 of 6)')
+      Expect(calls.find(call => call[0] === 'login')).toEqual(['login', '--reauth'])
       Expect(calls.filter(call => call[0] === 'deploy')[0]).toContain('auth,firestore:rules')
       Expect(await FS.readJson(FS.resolvePath('.tao/firebase-connect/firebase.json', root))).toEqual({
         auth: { providers: { emailPassword: true } },
-        firestore: { rules: 'firestore.rules' },
+        firestore: { rules: 'firestore.rules', location: 'nam5' },
       })
       Expect(await FS.readText(FS.resolvePath('.tao/firebase-connect/firestore.rules', root)))
         .toBe("rules_version = '2';\n")
+      Expect(terminal.outputText()).toContain(
+        `Creating Firebase project ${created}… This usually takes about a minute.`,
+      )
+      Expect(terminal.outputText()).toContain('This can take a few minutes.')
       Expect(await FS.exists(FS.resolvePath('.tao/connect-secrets.json', root))).toBe(false)
       Expect(terminal.outputText()).toContain('Firebase Hosting was not configured')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('asks before creating a typed Firebase project ID that the account does not have', async () => {
+    const root = await mkTestDir('tao-connect-firebase-typed-')
+    try {
+      await FS.writeText(FS.resolvePath('src/firebase/firestore.rules', root), 'pilot rules\n')
+      const calls: string[] = []
+      const runner = async (args: readonly string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> => {
+        calls.push(args[0] ?? '')
+        const result = args[0] === 'login:list' ? [{ user: { email: 'developer@example.test' } }] : []
+        return { exitCode: 0, stdout: JSON.stringify({ status: 'success', result }), stderr: '' }
+      }
+      await Expect(runTaoConnect('firebase', root, {
+        ...scripted(['tao-hosted-typo', 'no']).options,
+        firebaseRunner: runner,
+      })).rejects.toThrow('project creation was cancelled')
+      Expect(calls).not.toContain('projects:create')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('reports the Firebase CLI error text instead of a generic hint', async () => {
+    const root = await mkTestDir('tao-connect-firebase-error-')
+    try {
+      await FS.writeText(FS.resolvePath('src/firebase/firestore.rules', root), 'pilot rules\n')
+      const runner = async (args: readonly string[]): Promise<{ exitCode: number; stdout: string; stderr: string }> =>
+        args[0] === 'login:list'
+          ? { exitCode: 0, stdout: JSON.stringify({ status: 'success', result: [{ user: {} }] }), stderr: '' }
+          : {
+            exitCode: 2,
+            stdout: JSON.stringify({ status: 'error', error: 'HTTP Error: 429, quota exceeded' }),
+            stderr: '',
+          }
+      await Expect(runTaoConnect('firebase', root, { ...scripted([]).options, firebaseRunner: runner }))
+        .rejects.toThrow('could not list Firebase projects: HTTP Error: 429, quota exceeded')
     } finally {
       await FS.remove(root)
     }
