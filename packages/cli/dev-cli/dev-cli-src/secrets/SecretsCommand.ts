@@ -8,6 +8,7 @@
 // nothing here ever sees or stores a passphrase.
 
 import { CLI, Errors, FS, HCI, Platform, Repo, SecretsFile } from '@shared'
+import { createAgeCipher } from 'tao-cli-kit/age-cipher'
 import {
   type Cipher,
   formatStore,
@@ -18,7 +19,7 @@ import {
   type SecretStore,
   type StoreKey,
   withSecret,
-} from './SecretStore'
+} from 'tao-cli-kit/secrets'
 
 /** Committed: readable keys, readable metadata, encrypted values. */
 const STORE_PATH = 'secrets/secrets.jsonc'
@@ -109,86 +110,13 @@ async function recipientOf(identity: string): Promise<string> {
   return derived.stdout.trim()
 }
 
-function failureOf(result: CLI.CommandResult): string {
-  return result.stderr.trim() || `exit code ${result.exitCode ?? 'unknown'}`
-}
-
 /**
  * ageCipher shells out to `age`. Only `decrypt` uses the machine identity, and the Secure Enclave plugin is
  * what turns that into a Touch ID or passcode prompt; everything else is software and silent. A test passes a
  * stand-in identity file; the command always reads the machine's.
  */
 function ageCipher(identityPath?: string): Cipher {
-  return {
-    decrypt: async armor => {
-      const identity = identityPath ?? identityFile()
-      if (!await FS.exists(identity)) {
-        Errors.throwHostEnvironment(
-          `No secrets identity at ${FS.displayPath(identity)}. Run \`just secrets setup\` once on this machine.`,
-        )
-      }
-      const result = await CLI.run('age', { args: ['--decrypt', '--identity', identity], stdin: armor })
-      if (result.exitCode !== 0) {
-        Errors.throwHostEnvironment(`age could not decrypt a secret: ${failureOf(result)}`)
-      }
-      return result.stdout
-    },
-    // The key reaches age on stdin (`--identity -`), never in argv, where any process listing would show it,
-    // and never in a file. That leaves the ciphertext, which is committed anyway, to go through a file.
-    decryptWithKey: async (armor, secretKey) => {
-      const directory = await FS.mkTmpDir('tao-secrets-')
-      try {
-        const input = FS.resolvePath('value.age', directory)
-        await FS.writeText(input, armor, { mode: 0o600 })
-        const result = await CLI.run('age', { args: ['--decrypt', '--identity', '-', input], stdin: secretKey })
-        if (result.exitCode !== 0) {
-          Errors.throwHostEnvironment(
-            `age could not decrypt a secret with the store key: ${
-              failureOf(result).replaceAll(secretKey, '<store key>')
-            }`,
-          )
-        }
-        return result.stdout
-      } finally {
-        await FS.remove(directory)
-      }
-    },
-    generateKey: async () => {
-      const result = await CLI.run('age-keygen', {})
-      const recipient = /^#\s*public key:\s*(age1\S+)\s*$/m.exec(result.stdout)?.[1]
-      const secretKey = /^AGE-SECRET-KEY-1\S+$/m.exec(result.stdout)?.[0]
-      if (result.exitCode !== 0 || recipient === undefined || secretKey === undefined) {
-        Errors.throwHostEnvironment(`age-keygen could not create the store key: ${failureOf(result)}`)
-      }
-      return { recipient, secretKey }
-    },
-    // The key reaches age-keygen on stdin, for the same reason as in `decryptWithKey`.
-    recipientOfKey: async secretKey => {
-      const result = await CLI.run('age-keygen', { args: ['-y'], stdin: secretKey })
-      const recipient = result.stdout.trim()
-      if (result.exitCode !== 0 || !recipient.startsWith('age1')) {
-        Errors.throwHostEnvironment(
-          `age-keygen could not read the store key's recipient: ${
-            failureOf(result).replaceAll(secretKey, '<store key>')
-          }`,
-        )
-      }
-      return recipient
-    },
-    encrypt: async (plaintext, recipients) => {
-      if (recipients.length === 0) {
-        Errors.throwUserInput('The secret store lists no recipients. Run `just secrets setup` first.')
-      }
-      const result = await CLI.run('age', {
-        args: ['--armor', ...recipients.flatMap(recipient => ['--recipient', recipient])],
-        stdin: plaintext,
-      })
-      if (result.exitCode !== 0) {
-        Errors.throwHostEnvironment(`age could not encrypt a secret: ${failureOf(result)}`)
-      }
-      return result.stdout
-    },
-  }
+  return createAgeCipher(identityPath ?? identityFile(), 'just secrets setup')
 }
 
 async function readStore(): Promise<SecretStore> {
