@@ -30,23 +30,30 @@ Describe('tao connect run', () => {
         { exitCode: 1, stdout: 'Not logged in\n' },
         { exitCode: 0, stdout: '\u001b[32mdev-user\u001b[39m\n' },
       ])
-      const terminal = fakeTerminal()
-      await runHostedCrud(project, { output: terminal.output, expoRunner: runner })
+      const terminal = fakeTerminal('yes\n')
+      await runHostedCrud(project, { ...terminal, expoRunner: runner })
       Expect(calls).toEqual(['whoami', 'login', 'whoami', 'start --go'])
       Expect(terminal.outputText()).toContain('Expo CLI is signed in as dev-user.')
-      Expect(terminal.outputText()).toContain('In Expo Go on your iPhone, sign in as dev-user too')
+      Expect(terminal.outputText()).toContain('Install or open Expo Go: https://expo.dev/go')
+      Expect(terminal.outputText()).toContain(
+        'open the Home tab, tap the account icon at the top right, and sign in as dev-user.',
+      )
+      Expect(terminal.outputText()).toContain('scan the QR code with the iPhone camera')
     } finally {
       await FS.remove(root)
     }
   })
 
-  Test('starts Metro directly when Expo CLI is already signed in', async () => {
-    const root = await mkTestDir('tao-connect-run-signed-in-')
+  Test('opens the iOS Simulator when Return skips the iPhone sign-in wait', async () => {
+    const root = await mkTestDir('tao-connect-run-simulator-')
     try {
       const project = await expoProject(root)
       const { calls, runner } = scriptedExpo([{ exitCode: 0, stdout: 'dev-user\n' }])
-      await runHostedCrud(project, { output: fakeTerminal().output, expoRunner: runner })
-      Expect(calls).toEqual(['whoami', 'start --go'])
+      const terminal = fakeTerminal('maybe\n\n')
+      await runHostedCrud(project, { ...terminal, expoRunner: runner })
+      Expect(calls).toEqual(['whoami', 'start --go --ios'])
+      Expect(terminal.outputText()).toContain('Type yes, or press Return.')
+      Expect(terminal.outputText()).toContain('opening Expo Go in the iOS Simulator')
     } finally {
       await FS.remove(root)
     }

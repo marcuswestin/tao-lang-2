@@ -1,5 +1,5 @@
 import { CLI, Errors, FS, HCI } from '@shared'
-import type { Writable } from 'node:stream'
+import type { Readable, Writable } from 'node:stream'
 
 type ExpoResult = { exitCode: number | null; stdout: string; stderr: string }
 type ExpoRunner = (
@@ -10,12 +10,19 @@ type ExpoRunner = (
 ) => Promise<ExpoResult>
 
 type HostedCrudRunOptions = {
+  input?: Readable
+  interactive?: boolean
   output?: Writable
   /** Replaces Expo CLI calls for focused command tests. */
   expoRunner?: ExpoRunner
 }
 
-/** Starts the Hosted CRUD pilot for Expo Go after the Expo account it needs is signed in. */
+const EXPO_GO_INSTALL_URL = 'https://expo.dev/go'
+
+/**
+ * Starts the Hosted CRUD pilot in Expo Go, on an iPhone once its Expo Go app is signed in to the Expo CLI
+ * account, or in the iOS Simulator.
+ */
 export async function runHostedCrud(path = '.', options: HostedCrudRunOptions = {}): Promise<void> {
   const project = FS.resolvePath(path)
   if (!await FS.isFile(FS.resolvePath('app.json', project))) {
@@ -46,12 +53,21 @@ export async function runHostedCrud(path = '.', options: HostedCrudRunOptions = 
     }
   }
   HCI.writeLine(`Expo CLI is signed in as ${account}.`, out)
+  HCI.writeLine('', out)
+  HCI.writeLine('To run on your iPhone:', out)
+  HCI.writeLine(`  1. Install or open Expo Go: ${EXPO_GO_INSTALL_URL}`, out)
   HCI.writeLine(
-    `In Expo Go on your iPhone, sign in as ${account} too (Home tab, account icon at the top right).`,
+    `  2. In Expo Go, open the Home tab, tap the account icon at the top right, and sign in as ${account}.`,
     out,
   )
-  HCI.writeLine('Starting Metro; scan the QR code with the iPhone camera.', out)
-  const started = await run(expo, ['start', '--go'], project, true)
+  HCI.writeLine('', out)
+  const onIPhone = await askIPhoneSignedIn(account, options)
+  if (onIPhone) {
+    HCI.writeLine('Starting Metro; scan the QR code with the iPhone camera.', out)
+  } else {
+    HCI.writeLine('Starting Metro and opening Expo Go in the iOS Simulator.', out)
+  }
+  const started = await run(expo, onIPhone ? ['start', '--go'] : ['start', '--go', '--ios'], project, true)
   if (started.exitCode !== 0 && started.exitCode !== null) {
     Errors.throwHostEnvironment(`Expo exited with code ${started.exitCode}.`)
   }
@@ -82,6 +98,20 @@ async function taoRepositoryRoot(path: string): Promise<string | undefined> {
 
 function shellQuote(value: string): string {
   return /^[\w./-]+$/u.test(value) ? value : `'${value.replaceAll("'", `'\\''`)}'`
+}
+
+/** askIPhoneSignedIn waits until Expo Go on the iPhone is signed in, or Return chooses the iOS Simulator. */
+async function askIPhoneSignedIn(account: string, options: HostedCrudRunOptions): Promise<boolean> {
+  const terminal = { input: options.input, interactive: options.interactive, output: options.output }
+  if (!HCI.isInteractive(terminal)) {
+    return false
+  }
+  const answer = await HCI.askText({
+    ...terminal,
+    message: `Type yes once Expo Go on your iPhone is signed in as ${account}, or press Return to use the iOS Simulator`,
+    validate: value => ['', 'y', 'yes'].includes(value.trim().toLowerCase()) ? undefined : 'Type yes, or press Return.',
+  })
+  return answer.trim() !== ''
 }
 
 async function findExpoBinary(project: string): Promise<string | undefined> {
