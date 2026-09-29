@@ -108,7 +108,9 @@ function fakeAppwriteCli(projects: { $id: string; region: string }[]) {
     calls.push({ args, interactive })
     const [command, subcommand] = args
     if (command === 'whoami') {
-      return signedIn ? ok({ Name: 'Developer', Email: 'dev@example.test', Endpoint: 'https://cloud.appwrite.io/v1' }) : { exitCode: 1, stdout: '', stderr: '✗ Error: no active session' }
+      return signedIn
+        ? ok({ Name: 'Developer', Email: 'dev@example.test', Endpoint: 'https://cloud.appwrite.io/v1' })
+        : { exitCode: 1, stdout: '', stderr: '✗ Error: no active session' }
     }
     if (command === 'login') {
       signedIn = true
