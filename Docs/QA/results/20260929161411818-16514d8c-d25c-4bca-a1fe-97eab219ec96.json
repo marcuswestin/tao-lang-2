@@ -1,0 +1,40 @@
+{
+  "id": "20260929161411818-16514d8c-d25c-4bca-a1fe-97eab219ec96",
+  "runId": "20260929161318907-772bb9ea-4c23-4e35-b1e5-f9d53f1c6e6a",
+  "createdAt": "2026-09-29T16:14:11.818Z",
+  "recordedAt": "2026-09-29T16:14:11.818Z",
+  "commit": "0aa8ebcfae088acc4c8b53cb1a122b7771370e15",
+  "phase": 1,
+  "executionProfile": "development",
+  "provenance": {
+    "snapshotBasis": "observation-time",
+    "originalDependencies": "recorded",
+    "observedMetadataEvidence": [
+      "packages/ai/tao-skills/skills/tao-testing/SKILL.md"
+    ]
+  },
+  "environment": {
+    "platform": "darwin",
+    "architecture": "arm64",
+    "runtime": "bun:1.4.2"
+  },
+  "inputs": {
+    "source": "packages/ai/tao-skills/skills/tao-testing/SKILL.md",
+    "dependencySnapshot": "Docs/QA/inputs/1b8ea0038e4a1018886700293ba031b97d41de1e474b00f5bb81e7db38f253b5.json"
+  },
+  "surfaceId": "doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md",
+  "dimension": "text",
+  "outcome": "fail",
+  "reviewer": "agent",
+  "channel": "source",
+  "evidence": [
+    {
+      "path": "packages/ai/tao-skills/skills/tao-testing/SKILL.md",
+      "sha256": "17741a8a803b7b0c4b5fad76c36c0acfe1670ef5d914630834c7e324d08354a9"
+    }
+  ],
+  "notes": "QA-SKILL-TESTING-REVIEW.",
+  "sourceHash": "17741a8a803b7b0c4b5fad76c36c0acfe1670ef5d914630834c7e324d08354a9",
+  "rendererHash": "not-applicable",
+  "profileHash": "c1bb9d6add2e225907faed5f0c6ca5736166bf2163ff04631811b56048eef38b"
+}

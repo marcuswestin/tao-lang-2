@@ -1,0 +1,39 @@
+{
+  "id": "QA-SKILL-TESTING-REVIEW",
+  "status": "open",
+  "phase": 1,
+  "surfaceId": "doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md",
+  "dimension": "text",
+  "channel": "source",
+  "severity": "major",
+  "title": "Testing skill sends users to tao review",
+  "observed": "The skill says \"Use `tao review` after scenario-visible changes\" and frames fixtures and scenarios as \"Studio metadata\"; `tao review` is release 3 and absent from a release-1 CLI.",
+  "impact": "An agent recommends an unavailable command after every visual change.",
+  "location": "packages/ai/tao-skills/skills/tao-testing/SKILL.md:52, 73",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "Release-1 guidance relies on `tao test` and the browser.",
+  "recheck": "Run the recommended loop with a release-1 CLI.",
+  "evidence": [
+    "packages/ai/tao-skills/skills/tao-testing/SKILL.md"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "packages/ai/tao-skills/skills/tao-testing/SKILL.md",
+      "sha256": "17741a8a803b7b0c4b5fad76c36c0acfe1670ef5d914630834c7e324d08354a9"
+    }
+  ],
+  "createdAt": "2026-09-29T16:13:49.434Z",
+  "updatedAt": "2026-09-29T16:13:49.434Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [
+    "CLI10",
+    "CLI6"
+  ]
+}

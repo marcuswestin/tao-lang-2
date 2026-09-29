@@ -1,0 +1,39 @@
+{
+  "id": "QA-TUTORIAL-ENTRY",
+  "status": "open",
+  "phase": 1,
+  "surfaceId": "doc:Docs/Tutorials/Your First Tao App.md",
+  "dimension": "text",
+  "channel": "source",
+  "severity": "major",
+  "title": "the tutorial omits the execution instructions",
+  "observed": "Rechecked at 4651560f: step 1 opens with a tao block without naming the file to create, the command that runs it (`tao dev --web`) or how to run the step-9 journey (`tao test`); later steps assume a browser reload and window narrowing without saying where the app runs.",
+  "impact": "An uncoached reader must guess how to reach the first screen and run its test.",
+  "location": "Docs/Tutorials/Your First Tao App.md:10-31, 321, 563",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "a reader knows the starting prerequisites, where to put the source, and how to see\n  and test the result before proceeding through the editing steps.",
+  "recheck": "an uncoached reader reaches the first screen and runs the final journey using the text.",
+  "evidence": [
+    "Docs/Tutorials/Your First Tao App.md"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "Docs/Tutorials/Your First Tao App.md",
+      "sha256": "7a4b7e1952404036618d0f2c89693d58e1afd2f311c6a24c050120649fd4d1c6"
+    }
+  ],
+  "createdAt": "2026-09-26T22:46:00.000Z",
+  "updatedAt": "2026-09-29T16:13:51.247Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "human",
+  "relatedStories": [
+    "DOC1"
+  ],
+  "existingIssue": "Docs/MVP Roadmap/Agent MVP Roadmap.md#A5"
+}
