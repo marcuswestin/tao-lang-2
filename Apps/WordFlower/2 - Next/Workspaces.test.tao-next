@@ -1,6 +1,20 @@
 use WordFlower from ./
 
 test "WordFlower workspaces" {
+   test "pins one workspace through its row verb" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      enter "Projects" into #workspaceName
+      press #addWorkspace
+      narrow "Projects"
+      expect target "Projects"
+      press key "."
+      press key "i"
+      select #workspaces[1] {
+         expect text "Projects"
+      }
+   }
    test "narrows, targets, and activates a workspace without Back disturbing attention" {
       run WordFlower
       enter "Home" into #workspaceName

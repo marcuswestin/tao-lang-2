@@ -26,6 +26,10 @@ forcing one is the Developer's call, so bring `./agent board` to the Developer r
 
 ## `./agent finalize`
 
+For a Developer-directed edit or commit in the primary `dev/<name>` checkout, do not run `finalize`.
+Use available focused checks, commit the exact reviewed paths when asked, and leave full verification
+to authorized landing. Other work may be in progress in that shared checkout.
+
 It is the iteration-time readiness command when landing is not yet authorized, not a step of an
 already authorized landing — `./agent unsandboxed land` does
 its own preparation, integration and verification in one process. It brings a branch to ready:

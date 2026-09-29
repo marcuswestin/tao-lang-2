@@ -114,6 +114,8 @@ Examples:
   ./agent unsandboxed simulators run <device-udid>
   ./agent unsandboxed simulators launch <device-udid> <bundle-id>
   ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios
+  ./agent unsandboxed test-watch Apps/HNReader
+  ./agent unsandboxed standalone-cli-acceptance
   ./agent unsandboxed studio Apps/HNReader
   ./agent unsandboxed studio-ps --json
   ./agent unsandboxed studio-stop --launch <launch-id>

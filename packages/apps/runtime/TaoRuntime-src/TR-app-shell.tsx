@@ -3,6 +3,7 @@ import { Dev } from './dev-runtime/TR-dev'
 import { DevMenu } from './dev-runtime/TR-dev-menu'
 import { createElement } from './TR-create-element'
 import { DataLoadRecoveryBoundary } from './TR-data-load-recovery'
+import { InteractionScrollContext, type Measurable, measuredBounds, revealMountedRow } from './TR-interaction-scroll'
 import { mountedDesignStyle } from './TR-mounted-design'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { requireReactNativeRuntime } from './TR-react-native'
@@ -173,6 +174,26 @@ export function AppSurfaceFrame(props: {
   taoProps?: TaoProps
 }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
+  const revealParent = React.useContext(InteractionScrollContext)
+  const scrollHost = React.useRef<
+    (Measurable & {
+      scrollTo?(offset: { animated: boolean; x: number; y: number }): void
+    }) | null
+  >(null)
+  const scrollOffset = React.useRef({ x: 0, y: 0 })
+  const reveal = React.useCallback((target: Measurable | null) => {
+    measuredBounds(scrollHost.current, viewport => {
+      measuredBounds(target, row => {
+        const destination = revealMountedRow(viewport, row, scrollOffset.current)
+        if (destination !== undefined) {
+          scrollHost.current?.scrollTo?.({ ...destination, animated: false })
+        }
+        if (typeof revealParent === 'function') {
+          revealParent(scrollHost.current)
+        }
+      })
+    })
+  }, [revealParent])
   const platformOS = RN.Platform?.OS ?? 'web'
   const insets = requireSafeAreaContext().useSafeAreaInsets()
   const alreadyInset = AppSurfaceInsetContext.use()
@@ -207,6 +228,14 @@ export function AppSurfaceFrame(props: {
       contentContainerStyle: [contentStyle, contentPadding],
       keyboardDismissMode: platformOS === 'ios' ? 'interactive' : 'on-drag',
       keyboardShouldPersistTaps: 'handled',
+      onScroll: (event: { nativeEvent?: { contentOffset?: { x?: number; y?: number } } }) => {
+        scrollOffset.current = {
+          x: event.nativeEvent?.contentOffset?.x ?? 0,
+          y: event.nativeEvent?.contentOffset?.y ?? 0,
+        }
+      },
+      ref: scrollHost,
+      scrollEventThrottle: 16,
       style: [
         rootStyle,
         catalystPalette(props.taoProps?.scheme ?? scheme.resolved),
@@ -214,12 +243,16 @@ export function AppSurfaceFrame(props: {
       ],
     },
     createElement(
-      AppSurfaceInsetContext.Provider,
-      null,
+      InteractionScrollContext.Provider,
+      { value: reveal },
       createElement(
-        ParentDirectionContext.Provider,
-        { direction: ParentDirectionContext.defaultProps.parentDirection },
-        props.children,
+        AppSurfaceInsetContext.Provider,
+        null,
+        createElement(
+          ParentDirectionContext.Provider,
+          { direction: ParentDirectionContext.defaultProps.parentDirection },
+          props.children,
+        ),
       ),
     ),
   )

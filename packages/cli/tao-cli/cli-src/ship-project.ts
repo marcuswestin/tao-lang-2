@@ -1,8 +1,9 @@
 import { ASTUtils } from '@ast-utils'
 import { Workspace } from '@compiler/workspace'
 import Formatter from '@formatter'
-import { AST, Langium, Parser } from '@parser'
+import { AST, Parser } from '@parser'
 import { Errors, FS, Platform, Repo } from '@shared'
+import { findTaoProjectSource } from './project-root'
 import type { ShipVersion } from './ship-model'
 
 export type ShipProjectApp = {
@@ -51,42 +52,8 @@ export type ShipProject = {
 
 /** discoverShipProject climbs from a file or directory until it finds one direct project declaration. */
 export async function discoverShipProject(targetPath: string): Promise<ShipProject> {
-  const target = FS.resolvePath(targetPath)
-  if (!await FS.exists(target)) {
-    Errors.throwUserInput(`No file or directory found at ${target}`)
-  }
-  let directory = await FS.isFile(target) ? FS.dirname(target) : target
-  // One parser context serves the whole climb; each parse would otherwise build the grammar again.
-  const parserContext = Parser.createContext()
-  while (true) {
-    const candidates = (await Repo.filesUnder(directory, { extensions: ['.tao'] }))
-      .filter(path => FS.dirname(path) === directory && !path.endsWith('.test.tao'))
-    const projectFiles: Array<{ path: string; project: AST.ProjectDeclaration }> = []
-    for (const path of candidates) {
-      const parsed = await Parser.parseSource(parserContext, await FS.readText(path), {
-        uri: Langium.URI.file(path),
-        validation: false,
-      })
-      for (const project of parsed.entry.ast.statements.filter(AST.isProjectDeclaration)) {
-        projectFiles.push({ path, project })
-      }
-    }
-    if (projectFiles.length > 1) {
-      Errors.throwUserInput(
-        `More than one Tao project declaration was found in ${directory}: ${
-          projectFiles.map(item => item.path).join(', ')
-        }.`,
-      )
-    }
-    if (projectFiles.length === 1) {
-      return await readShipProject(directory, projectFiles[0]!)
-    }
-    const parent = FS.dirname(directory)
-    if (parent === directory) {
-      Errors.throwUserInput(`No Tao project root was found from ${target}. Add a project block or pass its directory.`)
-    }
-    directory = parent
-  }
+  const found = await findTaoProjectSource(targetPath)
+  return await readShipProject(found.root, found)
 }
 
 async function readShipProject(

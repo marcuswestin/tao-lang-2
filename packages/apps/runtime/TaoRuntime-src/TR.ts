@@ -881,6 +881,9 @@ class TR {
 
   /** VisualNativeRoot preserves filtered native controls while making their Studio occurrence selectable. */
   static VisualNativeRoot(layout: TR.TaoVisualLayout | undefined, child: React.ReactNode): React.ReactNode {
+    if (TRTaoProps.TaoPropsControls.visualRowRoot(layout)) {
+      return createElement(NativeVisualRowRoot, { child, layout })
+    }
     const props = TRTaoProps.TaoPropsControls.visualNativeProps(layout)
     return Object.keys(props).length === 0
       ? child
@@ -1706,6 +1709,14 @@ function queryStatus(
     return { status: 'error', message: query.Error, rows: query, ...advisory }
   }
   return { status: 'ready', rows: query, ...advisory }
+}
+
+function NativeVisualRowRoot({ child, layout }: {
+  child: React.ReactNode
+  layout: TR.TaoVisualLayout | undefined
+}): React.ReactElement {
+  const props = InteractionControls.UseNativeRowRoot(layout)
+  return createElement(requireReactNativeRuntime().View, props, child)
 }
 
 export default TR

@@ -863,12 +863,17 @@ update Document {
 }
 
 delete Document
+toggle Workspace.Pinned
 ```
 
 `Name: Value` binds a declared field by owner label. An unlabeled value binds only when its nominal
 type identifies exactly one field. Unknown, duplicate, ambiguous, missing, and incorrectly typed
 fields are diagnostics; source order never disambiguates. Omitted defaulted fields receive their
 declared value. Updates and deletes require a live entity handle from the mounted catalog.
+Each direct write affects one row. `toggle Row.Field` requires a nonoptional yes/no entity field,
+reads its current value once, and submits the opposite value as one concrete update. State-variable
+`toggle` retains its existing behavior. A retry replays the recorded update value without
+re-evaluating the toggle. Bulk writes and named transactions are post-MVP.
 
 Iteration uses the same plural/singular order as data declarations:
 

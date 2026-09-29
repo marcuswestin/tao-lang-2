@@ -746,6 +746,12 @@ toggle Recipe.Favorite
 update each Grocery where Bought is no { Bought }   // a bulk form
 ```
 
+The MVP subset is single-row `create`, `update`, `delete`, and `toggle`. An entity-field `toggle`
+requires a nonoptional yes/no field, reads its current value once for that logical write, and
+persists the inverse through the ordinary single-row update path; retrying that write does not
+invert it a second time. A state-variable `toggle` keeps its existing local-state meaning. Bulk
+verbs and named transactions remain post-MVP.
+
 - **One structured outcome vocabulary for every effect.** It distinguishes `queued` (durably
   accepted on this device, offline) from `saved` (confirmed by the provider), alongside rejection,
   conflict, and error. Offline is never modelled as an error:
@@ -1120,6 +1126,8 @@ part has landed.
   descriptor whose mounted roots coalesce without introducing a wrapper or layout node. A target is
   selected eagerly but never activated implicitly; narrowing uses locale-aware, case-insensitive
   word-prefix subsequences across rendered text, and a sole candidate becomes the target.
+  Mounted rows outside the viewport remain candidates and are scrolled into view when targeted;
+  unmounted virtualized rows are a later capability.
 - **Keyboard and pointer input share semantic operations.** Enter activates or engages, and
   engaging clears the narrowing that selected the target so narrowing never outlives its
   engagement; Escape disengages without losing the target, clears narrowing, ascends, then opens
@@ -1132,6 +1140,7 @@ part has landed.
   movement may target an input without engaging it; Enter engages the already targeted input.
   Engaged input, modal occurrence, target, focused scene, app command, then reducer key is the
   dispatch order. Modifier chords invoke directly. Pointer activation first targets the same node.
+  Long-press and right-click target an item and open its existing verbs without activating it.
 - **Command policy folds from authored surfaces.** An entity orders defaults with
   `commands A, B` and withholds one with `commands hide C`; a view promotes commands using
   `Commands { … }` and excludes inherited defaults with `hide C`. The folded verb order is view
@@ -1151,7 +1160,10 @@ part has landed.
   and hidden layers are removed from accessibility traversal. Hints use cached app-relative bounds,
   overview lists mounted regions, the verb menu preserves the command tiers above, and the palette lists every
   titled command and entity while applying the same locale-aware word-prefix subsequence matcher as
-  attention. Help remains unimplemented.
+  attention. Contextual Help appears only while keyboard typing narrows choices, beside the
+  highlighted top choice. It explains the current region and target, available actions, short
+  descriptions, and invocation keys. It disappears when narrowing ends or text input takes the
+  typing; ordinary focus alone does not open it.
 - **Generated keys are deterministic runtime policy** (KEY-D13). Existing identities retain their keys across
   reorders; new identities are considered in canonical identity order and receive the first free
   label-derived letter, then another distinctive label letter, then a two-letter sequence. One

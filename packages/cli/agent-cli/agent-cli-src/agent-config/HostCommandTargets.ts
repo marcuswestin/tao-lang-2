@@ -21,6 +21,8 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
   'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
   'app-dev': { command: './tao', fixedArgs: ['dev'], server: true },
+  'test-watch': { command: './tao', fixedArgs: ['test', '--watch'], server: true },
+  'standalone-cli-acceptance': { command: 'just', fixedArgs: ['standalone-cli-acceptance'], argsPolicy: 'none' },
   // Dev loops that watch files run on the host, where Watchman and the OS file-event service are
   // reachable; no agent sandbox is given Watchman's per-login socket. The recipes generate the parser
   // first, since Studio's highlighter reads the generated grammar.

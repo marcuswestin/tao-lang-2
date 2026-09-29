@@ -46,6 +46,24 @@ function createCommands(): Command {
     .version(TaoVersion.current(), '-v, --version', 'Print the Tao release this is, or `development` from source.')
 
   commands
+    .command('doctor')
+    .option('--json', 'Print the environment fingerprint as JSON.')
+    .option('--fingerprint', 'Print only the pasteable environment fingerprint.')
+    .description('Show a privacy-filtered environment fingerprint for a feedback report.')
+    .action(async (options: { fingerprint?: boolean; json?: boolean }) => {
+      const { runVisitorDoctor } = await import('./feedback-command')
+      await runVisitorDoctor(options)
+    })
+
+  commands
+    .command('bug-report')
+    .description('Prepare a feedback report with links and a pasteable environment fingerprint.')
+    .action(async () => {
+      const { runBugReport } = await import('./feedback-command')
+      await runBugReport()
+    })
+
+  commands
     .command('bridge')
     .argument('<package>', 'Installed package whose public API should be imported.')
     .requiredOption('--source <source>', 'Source adapter: expo or react-native.')
@@ -113,6 +131,97 @@ function createCommands(): Command {
         Platform.runtimeProcess.exit(1)
       }
     })
+
+  const secrets = commands
+    .command('secrets')
+    .description('Manage age-encrypted secrets committed in a Tao project.')
+
+  secrets
+    .command('identity')
+    .description('Create or show this Mac’s public secrets recipient.')
+    .action(async () =>
+      await runSecretAction(async () => {
+        const { projectSecretsIdentity } = await import('./project-secrets-command')
+        HCI.writeLine(await projectSecretsIdentity())
+      })
+    )
+
+  secrets
+    .command('init')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Create a committed encrypted store for the nearest Tao project.')
+    .action(async (path: string) =>
+      await runSecretAction(async () => {
+        const { initProjectSecrets } = await import('./project-secrets-command')
+        HCI.writeSuccess(`Created ${FS.displayPath(await initProjectSecrets(path))}. Commit this file.\n`)
+      })
+    )
+
+  secrets
+    .command('grant')
+    .argument('<recipient>', 'Public recipient from another developer’s `tao secrets identity`.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Grant an enrolled collaborator access to every project secret.')
+    .action(async (recipient: string, path: string) =>
+      await runSecretAction(async () => {
+        const { grantProjectSecrets } = await import('./project-secrets-command')
+        const granted = await grantProjectSecrets(recipient, path)
+        HCI.writeLine(granted ? 'Recipient granted. Commit the updated secrets file.' : 'Recipient already has access.')
+      })
+    )
+
+  secrets
+    .command('set')
+    .argument('<name>', 'Environment-style secret name, such as INSTANT_APP_ADMIN_TOKEN.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Enter a hidden value and encrypt it into the project store.')
+    .action(async (name: string, path: string) =>
+      await runSecretAction(async () => {
+        const { setProjectSecret } = await import('./project-secrets-command')
+        const result = await setProjectSecret(name, path)
+        HCI.writeSuccess(
+          `${result.replaced ? 'Replaced' : 'Added'} ${name} in ${FS.displayPath(result.path)}. Commit the file.\n`,
+        )
+      })
+    )
+
+  secrets
+    .command('get')
+    .argument('<name>', 'Name of the value to decrypt and write to stdout.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Decrypt one value and write its exact bytes to stdout.')
+    .action(async (name: string, path: string) =>
+      await runSecretAction(async () => {
+        const { readProjectSecret } = await import('./project-secrets-command')
+        HCI.write(await readProjectSecret(name, path))
+      })
+    )
+
+  secrets
+    .command('list')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('List secret names without decrypting values.')
+    .action(async (path: string) =>
+      await runSecretAction(async () => {
+        const { listProjectSecrets } = await import('./project-secrets-command')
+        const entries = await listProjectSecrets(path)
+        for (const name of Object.keys(entries).sort()) {
+          HCI.writeLine(name)
+        }
+      })
+    )
+
+  secrets
+    .command('remove')
+    .argument('<name>', 'Name of the value to remove from the current store.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Remove current ciphertext; Git history and provider revocation remain separate.')
+    .action(async (name: string, path: string) =>
+      await runSecretAction(async () => {
+        const { removeProjectSecret } = await import('./project-secrets-command')
+        HCI.writeSuccess(`Removed ${name} from ${FS.displayPath(await removeProjectSecret(name, path))}.\n`)
+      })
+    )
 
   commands
     .command('dev')
@@ -264,7 +373,7 @@ function createCommands(): Command {
     )
     .description(
       "Push the app's generated InstantDB schema (additive changes only, unless forced) and permission rules."
-        + ' Reads the token from INSTANT_APP_ADMIN_TOKEN, or asks for it at a terminal.',
+        + ' Reads INSTANT_APP_ADMIN_TOKEN from the environment or project secrets, or asks at a terminal.',
     )
     .action(async (path: string, options: { app?: string; dryRun?: boolean; force?: boolean }) => {
       try {
@@ -689,6 +798,15 @@ function parseBetaRecipients(value: boolean | string | undefined): string[] | un
     Errors.throwUserInput(`TestFlight recipient '${invalid}' is not an email address.`)
   }
   return [...new Set(recipients)]
+}
+
+async function runSecretAction(work: () => Promise<void>): Promise<void> {
+  try {
+    await work()
+  } catch (error) {
+    HCI.writeErrorLine(Errors.formatForUser(error))
+    Platform.runtimeProcess.setExitCode(1)
+  }
 }
 
 function shipBump(

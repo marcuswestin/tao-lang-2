@@ -1,6 +1,6 @@
 # DEVENV-SUBAGENT-SHELL-CANNOT-START-A-STUDIO-SMOKE-LANE — A subagent's unsandboxed shell fails the Watchman preflight the orchestrator's shell passes
 
-- **Status:** Candidate
+- **Status:** Closed
 - **Section:** External
 - **Area:** Studio smoke lanes, delegation, sandbox
 - **Impact:** A subagent told to prove a Studio fix in the browser cannot, so the smoke loop falls
@@ -26,3 +26,8 @@
 - **Acceptance:** A subagent shell either starts a Studio smoke lane, or is refused by a message that
   names the cause and the session that can run it, and the `delegation` skill records which.
 - **Source:** 2026-09-21 feature-slice session, empty Studio preview cell fix.
+- **Closure:** The reported direct subagent shell launch is no longer a supported Studio smoke
+  path. Agents use the named `./agent unsandboxed studio-smoke` host operation. This entry retains
+  the observed shell discrepancy; it does not establish that the named operation was broken or
+  prove that a future host failure cannot occur. Diagnose a recurrence on the supported path anew.
+- **Archived:** 2026-09-28

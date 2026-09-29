@@ -7,7 +7,6 @@
 // counting its uses, because each use of the real one is a fingerprint prompt.
 import { Errors, FS, HCI, SecretsFile } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
-import { prepareSecretBatch, SecretsCommand } from '../dev-cli-src/secrets/SecretsCommand'
 import {
   type Cipher,
   formatStore,
@@ -16,7 +15,8 @@ import {
   requireSecretName,
   type SecretStore,
   withSecret,
-} from '../dev-cli-src/secrets/SecretStore'
+} from 'tao-cli-kit/secrets'
+import { prepareSecretBatch, SecretsCommand } from '../dev-cli-src/secrets/SecretsCommand'
 
 const ARMOR = '-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3Yx\n-----END AGE ENCRYPTED FILE-----'
 
@@ -93,6 +93,9 @@ Describe('Secret store', () => {
     Expect(() => parseStore('{ "secrets": ')).toThrow()
     // Losing a secret to a parse slip would be discovered only when something stopped working.
     Expect(() => parseStore('{ "secrets": { "A": { "value": "not an array" } } }')).toThrow()
+    Expect(() => parseStore('{ "secrets": [] }')).toThrow('secrets')
+    Expect(() => parseStore('{ "recipients": {} }')).toThrow('recipients')
+    Expect(() => parseStore('{ "recipients": [12] }')).toThrow('recipients')
   })
 
   Test('comments are part of the format, not something that breaks reading it', () => {

@@ -55,6 +55,66 @@ Describe('navigation accessibility', () => {
     }
   })
 
+  Test('uses opaque chrome when Reduce Transparency changes and restores glass when disabled', async () => {
+    let changed: ((enabled: boolean) => void) | undefined
+    let removed = false
+    const runtime = runtimeWithFocus([])
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ...runtime,
+      AccessibilityInfo: {
+        ...runtime.AccessibilityInfo!,
+        addEventListener: (_event, listener) => {
+          changed = listener
+          return {
+            remove: () => {
+              removed = true
+            },
+          }
+        },
+        isReduceTransparencyEnabled: async () => true,
+      },
+    })
+    const restoreInsets = jest.spyOn(TaoAppShell, 'requireSafeAreaContext').mockReturnValue({
+      SafeAreaProvider: RN.View,
+      useSafeAreaInsets: () => ({ bottom: 0, left: 0, right: 0, top: 0 }),
+    })
+    const restoreGlass = overrideLiquidGlassForTest({
+      GlassView: props => createElement(RN.View, { ...props, testID: 'liquid-glass-surface' }),
+    })
+    try {
+      const screen = render(createElement(SelectionToggleBar, {
+        back: () => undefined,
+        canGoBack: true,
+        chrome: new RuntimeHostReadChannel(),
+        fallbackTitle: 'Home',
+        name: 'Accessible selection',
+        native: true,
+        next: { key: 'settings', label: 'Settings' },
+        observable: true,
+        select: () => undefined,
+      }))
+      await act(async () => {
+        await Promise.resolve()
+      })
+      Expect(screen.queryAllByTestId('liquid-glass-surface')).toHaveLength(0)
+      Expect(
+        screen.UNSAFE_getAllByType(RN.View).filter(view =>
+          RN.StyleSheet.flatten(view.props.style)?.backgroundColor === '#fafafc'
+        ),
+      ).toHaveLength(3)
+      act(() => changed?.(false))
+      Expect(screen.getAllByTestId('liquid-glass-surface')).toHaveLength(3)
+      act(() => changed?.(true))
+      Expect(screen.queryAllByTestId('liquid-glass-surface')).toHaveLength(0)
+      screen.unmount()
+      Expect(removed).toBe(true)
+    } finally {
+      restoreGlass()
+      restoreInsets.mockRestore()
+      restoreRuntime.mockRestore()
+    }
+  })
+
   Test('exposes JS selection controls as one tablist with selected tab state', async () => {
     const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home content') })
     const settings = TR.Navigation.View({

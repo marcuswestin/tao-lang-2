@@ -572,6 +572,13 @@ Describe('Studio protocol v1', () => {
     })
     Expect(StudioProtocol.parseMessage({
       ...message,
+      scheme: { ...message.scheme, capability: 'reactive-native' },
+    })).toMatchObject({
+      scheme: { capability: 'reactive-native', requested: 'system', resolved: 'dark', source: 'system' },
+      type: 'preview-scheme-changed',
+    })
+    Expect(StudioProtocol.parseMessage({
+      ...message,
       scheme: { ...message.scheme, resolved: 'sepia' },
     })).toBe(undefined)
     Expect(StudioProtocol.parseMessage({

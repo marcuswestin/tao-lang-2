@@ -106,6 +106,9 @@ function reportToggleTarget(toggle: AST.ToggleStatement, ctx: ValidationContext)
     return
   }
   const targetType = mutationTargetType(target, toggle.members)
+  if (Type.ofValueDeclaration(target).kind === 'entity') {
+    return
+  }
   if (targetType.kind === 'unresolved') {
     return
   }

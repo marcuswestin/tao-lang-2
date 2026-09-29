@@ -3,19 +3,26 @@
 // `use Button from @tao/ui/basic`; the bare `@tao/ui` names pass through to the native set.
 // A tappable title, fully receptive to layout clauses and design bundles.
 public
-view Button(Title text, Press action(), Disabled boolean default false) {
-   render inject Title, Press, Disabled, Layout @@layout, Tag @@tag ```ts
+view Button(Title text, Press action(), Disabled boolean default false, Description text default "") {
+   render inject Title, Press, Disabled, Description, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Pressable(
         { title: Title, action: Press, layout: Layout, tag: Tag, disabled: Disabled },
-        { nativeProps: { accessibilityRole: 'button', accessibilityState: { disabled: Disabled } } },
+        {
+          nativeProps: {
+            accessibilityHint: Description || undefined,
+            accessibilityRole: 'button',
+            accessibilityState: { disabled: Disabled },
+            disabled: Disabled,
+          },
+        },
       )
    ```
 }
 
 // The form button with its busy state, honoring every clause a design or call site applies.
 public
-view FormButton(Title text, Press action(), Id text default "", Disabled boolean default false, Submitting boolean default false) {
-   render inject Title, Press, Id, Disabled, Submitting, Layout @@layout, Tag @@tag ```ts
+view FormButton(Title text, Press action(), Id text default "", Disabled boolean default false, Submitting boolean default false, Description text default "") {
+   render inject Title, Press, Id, Disabled, Submitting, Description, Layout @@layout, Tag @@tag ```ts
       const effectiveDisabled = Disabled || Submitting
       return TR.Views.Pressable(
         {
@@ -33,6 +40,7 @@ view FormButton(Title text, Press action(), Id text default "", Disabled boolean
         {
           nativeProps: {
             accessibilityLabel: Title,
+            accessibilityHint: Description || undefined,
             accessibilityRole: 'button',
             accessibilityState: { busy: Submitting, disabled: effectiveDisabled },
             disabled: effectiveDisabled,

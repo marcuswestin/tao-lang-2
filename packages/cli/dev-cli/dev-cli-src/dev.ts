@@ -15,6 +15,7 @@ import { devZshCompletion } from './completion/DevCompletion'
 import { readAgentCapabilities, unavailableLandingCapabilities } from './doctor/AgentCapabilities'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
+import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { MergeRecovery } from './git/MergeRecovery'
@@ -439,6 +440,13 @@ await runWithCommands(commands => {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
       }
+    })
+
+  commands
+    .command('my-status')
+    .description('Show this checkout’s branch, changes, verification, and next step without changing anything.')
+    .action(async () => {
+      Platform.runtimeProcess.exit(await MyStatusCommand.run())
     })
 
   commands

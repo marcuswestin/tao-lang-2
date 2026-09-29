@@ -518,6 +518,7 @@ Describe('TR.Interaction generated layers', () => {
               declaration: `@test/${name}`,
               identity: `@test#${name}`,
               kind: 'control',
+              nameStatus: 'missing',
               role: 'action',
               view: name,
             },

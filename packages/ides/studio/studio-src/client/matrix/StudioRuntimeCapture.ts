@@ -111,7 +111,7 @@ function isStudioSchemeEnvironment(value: unknown): value is StudioCellEnvironme
     && (resolved === 'dark' || resolved === 'light')
     && (source === 'native-fixed' || source === 'preference' || source === 'scenario' || source === 'system')
     && (capability === 'fixed-light-native' || capability === 'pinned-native'
-      || capability === 'reactive-browser' || capability === 'reactive-catalyst')
+      || capability === 'reactive-browser' || capability === 'reactive-catalyst' || capability === 'reactive-native')
     && !(source === 'system' && requested !== 'system')
     && !(source === 'preference' && requested === 'system')
     && !(source === 'scenario' && requested === 'system')

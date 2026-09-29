@@ -74,13 +74,13 @@
   worktrees, and background sessions, not for the desktop app's worktree sessions, which made most
   of the 19 nested worktrees measured here; an open harness issue (anthropics/claude-code#36205)
   reports subagent worktrees ignoring the hooks; and worktrees already nested stay where they are
-  until they are removed. Confirm the desktop case on one new session once this lands. Also open,
-  and chosen by the Developer on 2026-09-24 over polling: let sandboxed commands watch natively by
-  adding `"allowMachLookup": ["com.apple.FSEvents"]` to the Claude Code sandbox's `network` block in
-  `.rulesync/permissions.jsonc` (Claude Code's `sandbox.network.allowMachLookup`). Codex's sandbox
-  has no equivalent setting while openai/codex#15698 is open, so Codex agents keep running
-  file-watching loops on the host, or polling. Until this lands, `DebouncedWatcher` polls on macOS
-  under Bun 1.4.2 or later.
+  until they are removed. Confirm the desktop case on one new session once this lands. The
+  2026-09-24 proposal to allow sandboxed native file watching is withdrawn as of 2026-09-28:
+  file-watching development workflows and standalone CLI acceptance use named host operations, so
+  they no longer need a second sandboxed execution path. The Bun-version polling default in
+  `DebouncedWatcher` and the acceptance runner's Watchman socket injection have been removed;
+  focused watcher tests still request polling explicitly inside sandboxed verification. This does
+  not change sandbox-compatible tests and builds.
 - **Dependencies:** None.
 - **Acceptance:** A fresh worktree under a watched primary checkout gets its own watch without a
   person's intervention, and a stopped server is either restarted without a person or reported by

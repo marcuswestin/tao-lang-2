@@ -1,6 +1,6 @@
 # DEVENV-063 — Studio preview needs the materialized Watchman profile in managed task shells
 
-- **Status:** Candidate
+- **Status:** Closed
 - **Section:** External
 - **Area:** Studio preview host
 - **Impact:** Studio can reach Expo successfully and then fail before browser dispatch with
@@ -36,3 +36,9 @@
   dispatch or stops before Metro with an actionable profile diagnostic; it never ends in Node
   watcher's `EMFILE` fallback.
 - **Source:** 2026-09-16 September remediation acceptance.
+- **Closure:** The managed-shell Studio/Metro launch in this entry is no longer a supported
+  acceptance path. Agents run file-watching Studio proofs through the named `./agent unsandboxed`
+  host operations. The earlier failures and preflight evidence remain here for diagnosis if a
+  Watchman failure recurs on the supported host path; that would be a new issue to investigate.
+  The proposed managed-shell acceptance condition is withdrawn.
+- **Archived:** 2026-09-28

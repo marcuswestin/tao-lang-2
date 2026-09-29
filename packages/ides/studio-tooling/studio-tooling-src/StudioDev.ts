@@ -608,7 +608,7 @@ export async function openStudioProjectResource(
   }
 }
 
-/** studioWatchmanEnvironment makes Metro use the repository-pinned Watchman even when the task shell misses it. */
+/** studioWatchmanEnvironment makes Metro use the repository-pinned Watchman regardless of PATH. */
 async function studioWatchmanEnvironment(
   options: {
     environment?: Platform.ProcessEnv
@@ -676,7 +676,7 @@ async function studioWatchmanEnvironment(
     if (output.includes('/Library/LaunchAgents/') && output.includes('Operation not permitted')) {
       throwWatchmanPreflightError(
         'blocked from its macOS LaunchAgent by the current task',
-        'Run Studio from an ordinary host shell where Watchman can use ~/Library/LaunchAgents.',
+        'Check Watchman access to ~/Library/LaunchAgents, then retry Studio.',
       )
     }
     throwWatchmanPreflightError(
@@ -772,7 +772,7 @@ function watchmanSocketName(output: string): string | undefined {
 
 function throwWatchmanPreflightError(problem: string, remediation: string): never {
   Errors.throwHostEnvironment(
-    `Tao Studio cannot start Metro safely: pinned Watchman is ${problem}. Metro would fall back to OS file watching, which an agent sandbox refuses outright (Node reports it as EMFILE). ${remediation} From an agent shell, launch Studio with \`./agent unsandboxed studio\`, which runs it on the host; no agent sandbox is given Watchman's socket.`,
+    `Tao Studio cannot start Metro safely: pinned Watchman is ${problem}. Metro would fall back to OS file watching. ${remediation}`,
   )
 }
 
