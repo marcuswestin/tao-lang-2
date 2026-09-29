@@ -563,6 +563,26 @@ Deferred that day, to finish before MVP:
 - Context: `Docs/Roadmap/Hosted provider continuation.md`, `Apps/Hosted CRUD/README.md`, and `A19`
   for the CLI secret store.
 
+### A22 — Make the automated CLI setup flows consistent and pleasant
+
+`tao connect firebase`, `tao connect appwrite`, and `tao connect run` each grew their own prompts
+during the 2026-09-29 pilot, and running them showed rough edges. Examples: a prompt printed twice;
+Return meant "create another project" after a failed run had already created one; the Free plan's
+project limit surfaced only as a raw CLI error; the Expo Go account step read as a wall of text; and
+Metro's own UI took over the terminal.
+
+- [ ] **Before MVP:** one shared shape for every automated flow, so a developer can always tell
+      which steps are required, which are optional, and what happens next. That covers a numbered
+      step list up front, the same prompt wording and Return-default conventions, visible progress
+      per step, and one closing summary with the next command.
+- [ ] **Before MVP:** safe defaults that never spend a limited resource without an explicit
+      choice. Examples are reusing what an earlier run created and naming plan limits before
+      hitting them.
+- [ ] **Before MVP:** failures say what was already done, what was not, and the one command that
+      resumes. Provider CLI errors are translated rather than passed through.
+- Context: `packages/cli/tao-cli/cli-src/connect-command.ts`, `firebase-provision.ts`,
+  `appwrite-provision.ts`, `hosted-crud-run.ts`, and `A21`.
+
 ## Project tracking
 
 ### A17 — In-repository issues with git-bug, synced to GitHub Issues
