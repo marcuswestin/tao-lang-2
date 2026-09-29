@@ -6,10 +6,10 @@
     "authDomain": "tao-hosted-crud-79c429.firebaseapp.com"
   },
   "appwrite": {
-    "endpoint": "https://REPLACE_WITH_REGION.cloud.appwrite.io/v1",
-    "projectId": "REPLACE_WITH_APPWRITE_PROJECT_ID",
+    "endpoint": "https://fra.cloud.appwrite.io/v1",
+    "projectId": "tao-hosted-crud-160214",
     "platform": "dev.tao.hostedcrudspike",
-    "databaseId": "REPLACE_WITH_APPWRITE_DATABASE_ID",
-    "tableId": "REPLACE_WITH_APPWRITE_TABLE_ID"
+    "databaseId": "tao_notes",
+    "tableId": "notes"
   }
 }
