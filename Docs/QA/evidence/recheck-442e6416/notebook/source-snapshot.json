@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "id": "8e299ffd-a37a-4700-891b-67fbfebaa566",
+  "originalProject": "/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/Apps/Starters/Notebook",
+  "app": "Notebook",
+  "stagedProject": "/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/8e299ffd-a37a-4700-891b-67fbfebaa566/project",
+  "output": "/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/qa/captures/notebook-442e6416",
+  "createdAt": "2026-09-29T16:48:12.685Z",
+  "owner": "qa-capture",
+  "cleanup": "Retained for diagnosis. Remove this owned scratch directory only after its capture processes have stopped.",
+  "status": "complete",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "c45190d2742524dd1fe23787f1a0454b4848a209af33a05af931a480a82a4c0f"
+    },
+    {
+      "path": "App.tao",
+      "sha256": "f34cba0112a4ee3175505ab51bbdcea85ab1a0cf48fbf8536e70bc3b7124e467"
+    },
+    {
+      "path": "CLAUDE.md",
+      "sha256": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49"
+    },
+    {
+      "path": "Chrome.tao",
+      "sha256": "8ce01e70a0cf335d695739d71123e34261705659f31c682f9eb727ce8fe4ef84"
+    },
+    {
+      "path": "Data.tao",
+      "sha256": "fd6b6ebf09101aa1fe8e87ae6bd7aa7cdecbf425e241fcd0bc88de4fb7136c35"
+    },
+    {
+      "path": "Design.tao",
+      "sha256": "16a59433bd17667956f5ba21f5c812952b15fb4c7221067995d10461adc4a9a6"
+    },
+    {
+      "path": "Notebook.test.tao",
+      "sha256": "03dcb144492f512c6c1adfd735f465cbaca618d59bc6b3c681aa5a463980a224"
+    },
+    {
+      "path": "Notes/Notes.tao",
+      "sha256": "06fa7d7e6e7a94b77d0360086430b003339e4598092a2eae1040a3f1e3030afd"
+    },
+    {
+      "path": "Scenarios.tao",
+      "sha256": "33b8e44cf644380db3e67afb9a898bdeffb5f7706dc4abad96a5e5097e083d58"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "1c9253cad46e9190d4058a8ab59c0cbc886edc84ae60e659d40cead4d0c1014e"
+    }
+  ],
+  "excluded": [
+    ".gitignore",
+    ".tao-project/skills.version",
+    "@/.gitkeep"
+  ],
+  "cells": [
+    {
+      "key": "[\"Scenarios.tao\",\"devices\",\"phone\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":\\\"/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/8e299ffd-a37a-4700-891b-67fbfebaa566/project/Scenarios.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"light\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "group": "devices",
+      "label": "phone",
+      "status": "captured",
+      "screenshot": "screenshots/devices-phone-3f06159033d0.png",
+      "sha256": "745f6d297f3319144dc39ec73f5148f44b9d2daf358d1263019bf146597a11a8"
+    },
+    {
+      "key": "[\"Scenarios.tao\",\"devices\",\"tabletDark\",\"{\\\"arguments\\\":{},\\\"fixtureId\\\":\\\"/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/8e299ffd-a37a-4700-891b-67fbfebaa566/project/Scenarios.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"dark\\\",\\\"resolved\\\":\\\"dark\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":1366,\\\"presetId\\\":\\\"tablet\\\",\\\"width\\\":1024}}\"]",
+      "group": "devices",
+      "label": "tabletDark",
+      "status": "captured",
+      "screenshot": "screenshots/devices-tabletdark-f034b4802cbb.png",
+      "sha256": "a65695f65b5c2f331d1ce4fb16f98cde8009359c1108219350929614c2bbfa2c"
+    },
+    {
+      "key": "[\"Scenarios.tao\",\"notes states\",\"groceries\",\"{\\\"arguments\\\":{\\\"Note\\\":{\\\"handle\\\":\\\"Groceries\\\",\\\"kind\\\":\\\"fixture-reference\\\"}},\\\"fixtureId\\\":\\\"/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/8e299ffd-a37a-4700-891b-67fbfebaa566/project/Scenarios.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"light\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "group": "notes states",
+      "label": "groceries",
+      "status": "captured",
+      "screenshot": "screenshots/notes-states-groceries-998a67295ffb.png",
+      "sha256": "1ffac9375230847ecde968c5386e8609e7dff05d33c66bd8925fb52f0ade351f"
+    },
+    {
+      "key": "[\"Scenarios.tao\",\"notes states\",\"ideas\",\"{\\\"arguments\\\":{\\\"Note\\\":{\\\"handle\\\":\\\"Ideas\\\",\\\"kind\\\":\\\"fixture-reference\\\"}},\\\"fixtureId\\\":\\\"/Users/ro/code/tao-lang-2.worktrees/staged-release-qa-work-1831d4/.artifacts/scratch/qa-capture/8e299ffd-a37a-4700-891b-67fbfebaa566/project/Scenarios.tao#fixture:Sample\\\",\\\"prepare\\\":[],\\\"stateLayers\\\":[],\\\"steps\\\":[]}\",\"{\\\"network\\\":{\\\"latencyMs\\\":0,\\\"outcome\\\":\\\"normal\\\"},\\\"scheme\\\":{\\\"capability\\\":\\\"reactive-browser\\\",\\\"requested\\\":\\\"light\\\",\\\"resolved\\\":\\\"light\\\",\\\"source\\\":\\\"scenario\\\"},\\\"viewport\\\":{\\\"height\\\":844,\\\"presetId\\\":\\\"phone\\\",\\\"width\\\":390}}\"]",
+      "group": "notes states",
+      "label": "ideas",
+      "status": "captured",
+      "screenshot": "screenshots/notes-states-ideas-6bb99abba116.png",
+      "sha256": "ffc7032a4102a75c3f349c8690621df7bbd1b53fae3bbf762a52e08c77e15f55"
+    }
+  ]
+}

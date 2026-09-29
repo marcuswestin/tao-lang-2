@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 221 applicable release acceptance cells are incomplete.
 
-Candidate source: `e3ed6940c9a9ecdd4f9f150946e3591ae55e647c`. Tree digest `cda7bfd21638d920`; content hashes are stored per observation.
+Candidate source: `442e6416f4c705efb8f236021cf8220b4d02306e`. Tree digest `99fdc875cd6ae533`; content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -46,7 +46,7 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | text      | 281            | 0        | 0            | 0             | 281     | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 1                | text      | 282            | 0        | 0            | 0             | 282     | 0       | 0        | 0    | 0.0%       | 0.0%     |
 
 ## Scoped development probes
 
@@ -54,16 +54,16 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 | ---------------- | ---------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
 | 1                | functional | 2              | 0        | 0            | 0             | 2       | 0       | 0        | 0    | 0.0%       | 0.0%     |
 | 1                | visual     | 7              | 0        | 0            | 0             | 7       | 0       | 0        | 0    | 0.0%       | 0.0%     |
-| 2                | visual     | 4              | 4        | 0            | 0             | 0       | 0       | 4        | 0    | 100.0%     | 0.0%     |
+| 2                | visual     | 4              | 4        | 0            | 4             | 0       | 0       | 0        | 0    | 100.0%     | 0.0%     |
 
 ## Recorded assessments
 
 These are scoped observations; supplementary source checks do not fill public-artifact or human acceptance cells.
 
-- [visual:hnreader / visual / rows-leading / agent](results/20260929162233924-5cbba516-d064-4402-9138-9ba1381cb3df.json): **friction**, current; execution profile development.
-- [visual:hnreader / visual / rows-wrapping / agent](results/20260929162234510-ac269662-3353-4b89-a182-503e479553a0.json): **friction**, current; execution profile development.
-- [visual:hnreader / visual / sketch-draft-1 / agent](results/20260929162235094-1c3ebdcc-60b2-4204-ba01-49a9efca53c8.json): **friction**, current; execution profile development.
-- [visual:hnreader / visual / sketch-draft-2 / agent](results/20260929162235681-31d04a5b-7214-469a-99e3-bf6ba780c44e.json): **friction**, current; execution profile development.
+- [visual:hnreader / visual / rows-leading / agent](results/20260929162233924-5cbba516-d064-4402-9138-9ba1381cb3df.json): **friction**, needs-recheck; execution profile development.
+- [visual:hnreader / visual / rows-wrapping / agent](results/20260929162234510-ac269662-3353-4b89-a182-503e479553a0.json): **friction**, needs-recheck; execution profile development.
+- [visual:hnreader / visual / sketch-draft-1 / agent](results/20260929162235094-1c3ebdcc-60b2-4204-ba01-49a9efca53c8.json): **friction**, needs-recheck; execution profile development.
+- [visual:hnreader / visual / sketch-draft-2 / agent](results/20260929162235681-31d04a5b-7214-469a-99e3-bf6ba780c44e.json): **friction**, needs-recheck; execution profile development.
 
 ## Unresolved findings and accepted limitations
 
@@ -325,10 +325,10 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - visual:notebook / visual / tablet-dark / agent: not-run
 - visual:notebook / visual / notes-groceries / agent: not-run
 - visual:notebook / visual / notes-ideas / agent: not-run
-- visual:hnreader / visual / rows-leading / agent: friction
-- visual:hnreader / visual / rows-wrapping / agent: friction
-- visual:hnreader / visual / sketch-draft-1 / agent: friction
-- visual:hnreader / visual / sketch-draft-2 / agent: friction
+- visual:hnreader / visual / rows-leading / agent: needs-recheck
+- visual:hnreader / visual / rows-wrapping / agent: needs-recheck
+- visual:hnreader / visual / sketch-draft-1 / agent: needs-recheck
+- visual:hnreader / visual / sketch-draft-2 / agent: needs-recheck
 
 ## Deferred beyond release 5
 

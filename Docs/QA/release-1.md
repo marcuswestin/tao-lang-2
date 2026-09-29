@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 197 applicable release acceptance cells are incomplete.
 
-Candidate source: `e3ed6940c9a9ecdd4f9f150946e3591ae55e647c`. Tree digest `cda7bfd21638d920`; content hashes are stored per observation.
+Candidate source: `442e6416f4c705efb8f236021cf8220b4d02306e`. Tree digest `99fdc875cd6ae533`; content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -46,7 +46,7 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | text      | 281            | 10       | 0            | 0             | 271     | 0       | 2        | 8    | 3.6%       | 0.0%     |
+| 1                | text      | 282            | 10       | 0            | 0             | 272     | 0       | 2        | 8    | 3.5%       | 0.0%     |
 
 ## Scoped development probes
 
@@ -62,26 +62,26 @@ These are scoped observations; supplementary source checks do not fill public-ar
 
 - [source:hnreader-browser / functional / browser-preview / agent](results/20260926231617926-1968d386-8122-4163-986f-f35daa0834b5.json): **pass**, needs-recheck; execution profile development.
 - [story:IDE2 / functional / source-test / agent](results/20260926231619160-57cfe8d3-d8db-4bc2-ba6c-984277f401ba.json): **pass**, needs-recheck; execution profile development.
-- [visual:notebook / visual / phone / agent](results/20260929161844116-c3843b53-a285-4fc7-9cc8-90e50ea444a7.json): **friction**, current; execution profile development.
-- [visual:notebook / visual / notes-groceries / agent](results/20260929161845378-68807df6-f5ba-421c-bc3c-74b67e9020d2.json): **friction**, current; execution profile development.
-- [visual:notebook / visual / notes-ideas / agent](results/20260929161846008-db11e3dd-a7ea-4c53-9d7d-1bdf736910ab.json): **friction**, current; execution profile development.
-- [visual:notebook / visual / tablet-dark / agent](results/20260929161844756-7a4a3569-0862-4492-83d2-6b2b3b4c1ef6.json): **friction**, current; execution profile development.
-- [visual:reading-list / visual / phone-light / agent](results/20260929161548930-bd8958a1-922e-4881-9336-c9a87877b798.json): **friction**, current; execution profile development.
-- [visual:reading-list / visual / desktop / agent](results/20260929161550085-9f05f041-092b-4c27-8bd9-a88c6a0eac87.json): **friction**, current; execution profile development.
-- [visual:reading-list / visual / phone-dark / agent](results/20260929161549506-59ee8b51-0ea1-49dd-9893-d482c616d2b1.json): **friction**, current; execution profile development.
+- [visual:notebook / visual / phone / agent](results/20260929164853846-35b3b651-21e2-4c34-aeec-822dab32cd1b.json): **friction**, current; execution profile development.
+- [visual:notebook / visual / notes-groceries / agent](results/20260929164852965-3db7bcc2-f487-49e0-9d92-3727c99a9491.json): **friction**, current; execution profile development.
+- [visual:notebook / visual / notes-ideas / agent](results/20260929164853407-0fe04d5b-e3b5-4bf4-ae99-10855a9054c7.json): **friction**, current; execution profile development.
+- [visual:notebook / visual / tablet-dark / agent](results/20260929164854283-944942a7-47d8-429d-b924-e84a449c8be9.json): **friction**, current; execution profile development.
+- [visual:reading-list / visual / phone-light / agent](results/20260929164851646-a2d826fe-bdcc-44b5-9a95-a28ea4d89651.json): **friction**, current; execution profile development.
+- [visual:reading-list / visual / desktop / agent](results/20260929164852523-f39fe2e8-d1a6-44d1-af8c-d4b6c9bb7b3f.json): **friction**, current; execution profile development.
+- [visual:reading-list / visual / phone-dark / agent](results/20260929164852084-fd48299f-7e82-459c-a9e5-f9b906bfaa1d.json): **friction**, current; execution profile development.
 - [source:tutorial-replay / functional / source-test / agent](results/20260926234030950-0bffcf10-c348-45bf-a81d-17168b22b136.json): **pass**, needs-recheck; execution profile development.
-- [doc:README.md / text / source / agent](results/20260929161409378-28e3ae45-28fa-40ce-ad98-fac9cd61d0b4.json): **fail**, current; execution profile development.
-- [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20260929161409997-aaf74963-c7e3-4c2e-91e1-0b3122b8fd40.json): **fail**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-data/SKILL.md / text / source / agent](results/20260929161410589-dc64a91e-691a-4f79-91e1-af9d9c622c58.json): **fail**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-run-and-ship/SKILL.md / text / source / agent](results/20260929161411229-7e50a600-c344-4fc8-8b8c-68f127d41c87.json): **fail**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md / text / source / agent](results/20260929161411818-16514d8c-d25c-4bca-a1fe-97eab219ec96.json): **fail**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-design/SKILL.md / text / source / agent](results/20260929161412395-39fb0685-8bab-4d8c-adad-56bb14aaa527.json): **fail**, current; execution profile development.
-- [doc:packages/ai/tao-skills/skills/tao-visibility/SKILL.md / text / source / agent](results/20260929161412978-e7db5db4-1114-4316-869d-2a98998f5b5f.json): **friction**, current; execution profile development.
-- [doc:Apps/Starters/Notebook/AGENTS.md / text / source / agent](results/20260929161413557-792378f5-e746-41c9-933f-91393afe8f0e.json): **fail**, current; execution profile development.
-- [doc:Apps/Starters/Pantry/AGENTS.md / text / source / agent](results/20260929161414148-48c1f53a-91fd-4c2f-9d2e-331d2d9ed7cf.json): **fail**, current; execution profile development.
-- [doc:packages/ides/ide-extension/README.md / text / source / agent](results/20260929161414744-ceb5f369-9271-4bee-8dfe-680875147747.json): **friction**, current; execution profile development.
-- [story:DOC1 / text / public-docs / agent](results/20260929161415330-78a9a856-7068-4a24-adc3-6a0a915d9c1f.json): **fail**, current; execution profile development.
-- [story:CLI10 / text / public-docs / agent](results/20260929161415911-1a3a5ee6-4e26-488f-bcba-b840c1fc1d79.json): **fail**, current; execution profile development.
+- [doc:README.md / text / source / agent](results/20260929164741352-3fc11f52-ad4f-40e6-9f31-91467c9d7b93.json): **fail**, current; execution profile development.
+- [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20260929164741776-aaf386a7-5dda-4d3f-a3ca-245248438795.json): **fail**, current; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-data/SKILL.md / text / source / agent](results/20260929164742208-68e8765b-5b1b-4822-a9e4-b4f08b4cbb9e.json): **fail**, current; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-run-and-ship/SKILL.md / text / source / agent](results/20260929164742646-827a89a1-fc4d-4a3a-82cd-2f9a4f788175.json): **fail**, current; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md / text / source / agent](results/20260929164743067-7de3f67f-3430-412f-a481-b1c06d56ceef.json): **fail**, current; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-design/SKILL.md / text / source / agent](results/20260929164743524-f232946e-888f-4acd-9e6a-1c3986463953.json): **fail**, current; execution profile development.
+- [doc:packages/ai/tao-skills/skills/tao-visibility/SKILL.md / text / source / agent](results/20260929164743995-0a1f0ce6-2d70-4062-9984-9d34bd29b59f.json): **friction**, current; execution profile development.
+- [doc:Apps/Starters/Notebook/AGENTS.md / text / source / agent](results/20260929164744423-a07bcc2e-210b-4c1c-b43a-dcc4064f232d.json): **fail**, current; execution profile development.
+- [doc:Apps/Starters/Pantry/AGENTS.md / text / source / agent](results/20260929164744850-617cc84d-6a66-4d52-a365-389af46fe4ac.json): **fail**, current; execution profile development.
+- [doc:packages/ides/ide-extension/README.md / text / source / agent](results/20260929164745274-0d772a37-b040-4143-947d-7349fdcc31ad.json): **friction**, current; execution profile development.
+- [story:DOC1 / text / public-docs / agent](results/20260929164745704-ed103852-c9b5-4943-88e7-845ce08c5db6.json): **fail**, current; execution profile development.
+- [story:CLI10 / text / public-docs / agent](results/20260929164746126-3212fbd6-713d-476c-9933-d8fdf1c912c3.json): **fail**, current; execution profile development.
 
 ## Unresolved findings and accepted limitations
 
