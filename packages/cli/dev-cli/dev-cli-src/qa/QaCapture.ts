@@ -86,7 +86,14 @@ export class QaCapture {
       status: 'staging',
       files: [] as { path: string; sha256: string }[],
       excluded: [] as string[],
-      cells: [] as { key: string; label: string; status: string; sha256?: string }[],
+      cells: [] as {
+        key: string
+        group: string
+        label: string
+        status: string
+        screenshot?: string
+        sha256?: string
+      }[],
       error: undefined as string | undefined,
     }
     await FS.writeJson(receiptPath, manifest)
@@ -136,18 +143,24 @@ export class QaCapture {
     }
   }
 
-  private async cells(result: unknown): Promise<{ key: string; label: string; status: string; sha256?: string }[]> {
+  private async cells(
+    result: unknown,
+  ): Promise<{ key: string; group: string; label: string; status: string; screenshot?: string; sha256?: string }[]> {
     const manifestPath = (result as { manifestPath?: unknown } | undefined)?.manifestPath
     if (typeof manifestPath !== 'string' || !await FS.isFile(manifestPath)) {
       return []
     }
-    const manifest = await FS.readJson<{ cells?: { key: string; label: string; status: string; sha256?: string }[] }>(
+    const manifest = await FS.readJson<
+      { cells?: { key: string; group: string; label: string; status: string; screenshot?: string; sha256?: string }[] }
+    >(
       manifestPath,
     )
-    return (manifest.cells ?? []).map(({ key, label, status, sha256 }) => ({
+    return (manifest.cells ?? []).map(({ key, group, label, status, screenshot, sha256 }) => ({
       key,
+      group,
       label,
       status,
+      ...(screenshot ? { screenshot } : {}),
       ...(sha256 ? { sha256 } : {}),
     }))
   }

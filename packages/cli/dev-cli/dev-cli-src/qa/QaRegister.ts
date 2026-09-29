@@ -252,7 +252,7 @@ export class QaRegister {
       evidencePaths.map(async path => ({ path, sha256: await this.evidenceHash(path) })),
     )
     if (dimension === 'visual' && outcome === 'pass') {
-      await this.requireInspectedCapture(evidence, reviewer)
+      await this.requireInspectedCapture(evidence, reviewer, surface, channel)
     }
     if (input['historical'] !== undefined && typeof input['historical'] !== 'boolean') {
       Errors.throwUserInput('historical must be a boolean.')
@@ -287,7 +287,7 @@ export class QaRegister {
       if (!/^[a-f0-9]{64}$/u.test(artifact.digest) || artifact.sourceCommit !== run.inventory.commit) {
         Errors.throwUserInput('Artifact must name its SHA-256 digest and the frozen candidate commit.')
       }
-      if (run.inventory.dirty) {
+      if (run.inventory.dirty !== false) {
         Errors.throwUserInput(
           'This run inventoried uncommitted inputs, so no artifact can be built from its candidate commit. Commit, then start a new run.',
         )
@@ -295,7 +295,7 @@ export class QaRegister {
     }
     if (
       outcome === 'pass' && (surface.kind === 'story' || surface.kind === 'obligation') && dimension !== 'text'
-      && !['source-test', 'browser-preview', 'public-docs'].includes(channel)
+      && !['source-test', 'browser-preview', 'public-docs', 'public-site'].includes(channel)
       && (executionProfile !== run.phase || !artifact)
     ) {
       Errors.throwUserInput(
@@ -378,9 +378,11 @@ export class QaRegister {
     if (!evidence.length) {
       Errors.throwUserInput('Findings require evidence.')
     }
-    const evidenceHashes = await Promise.all(
+    const hashed = await Promise.all(
       evidence.map(async path => ({ path, sha256: await this.evidenceHash(path) })),
     )
+    // Only opening or reopening pins what the problem looked like; later events cite the fix itself.
+    const evidenceHashes = status === 'open' || !previous ? hashed : previous.evidenceHashes ?? []
     const finding: Finding = {
       id,
       status,
@@ -444,17 +446,18 @@ export class QaRegister {
         !previous || previous.status === 'verified-closed' || !result || result.outcome !== 'pass'
         || result.surfaceId !== surfaceId || result.dimension !== dimension || result.channel !== channel
         || result.createdAt <= previous.updatedAt || result.recordedAt <= previous.updatedAt
-        || result.reviewer !== (previous.requiredReviewer ?? 'agent')
+        || result.reviewer !== (previous.requiredReviewer ?? 'agent') || result.phase < previous.phase
         || !await this.proofCurrent(result, surface)
       ) {
         Errors.throwUserInput(
           'Closing a finding requires a new, current passing observation linked to the same surface and dimension.',
         )
       }
-      const seen = new Set(
-        (await this.findingHistory(id)).flatMap(event => (event.evidenceHashes ?? []).map(item => item.sha256)),
-      )
-      if (result.evidence.some(item => seen.has(item.sha256))) {
+      const history = await this.findingHistory(id)
+      const seen = new Set(history.flatMap(event => (event.evidenceHashes ?? []).map(item => item.sha256)))
+      // Seeded events predate hash pinning, so their evidence paths themselves are ruled out.
+      const seenPaths = new Set(history.filter(event => !event.evidenceHashes).flatMap(event => event.evidence))
+      if (result.evidence.some(item => seen.has(item.sha256) || seenPaths.has(item.path))) {
         Errors.throwUserInput(
           "A closing recheck cannot cite the finding's own evidence; record what the recheck observed.",
         )
@@ -583,7 +586,7 @@ export class QaRegister {
       [...exclusionCounts].map(([reason, count]) => `- ${count}: ${reason}`).join('\n') || 'None.'
     }\n\nEvery excluded path and reason: [inventory](inventory.json).`
     const latest = new Map<string, Observation>()
-    for (const observation of observations.filter(item => item.phase <= phase)) {
+    for (const observation of observations.filter(item => item.phase === phase)) {
       latest.set(
         JSON.stringify([observation.surfaceId, observation.dimension, observation.channel, observation.reviewer]),
         observation,
@@ -662,7 +665,7 @@ export class QaRegister {
     }
     const proof = observations.find(item => item.id === finding.passingResultId)
     const surface = surfaces.find(item => item.id === finding.surfaceId)
-    return !proof || !surface || !await this.proofCurrent(proof, surface)
+    return !proof || !surface || proof.phase < finding.phase || !await this.proofCurrent(proof, surface)
   }
 
   /** proofCurrent judges a proof against its own phase's policy, so closure survives a report for another phase. */
@@ -672,43 +675,61 @@ export class QaRegister {
   }
 
   /**
-   * requireInspectedCapture accepts a visual pass only for an image a capture attests as captured. An agent
-   * must cite the review manifest; a person may cite a screenshot alone, but never a failed or partial capture.
+   * requireInspectedCapture accepts a visual pass only for an image a complete capture attests. An agent must
+   * cite the capture's `source-snapshot.json`; each cited image must be the screenshot of a captured cell there,
+   * and a probe channel must be shown by its own named cell. A person may cite a screenshot alone.
    */
-  private async requireInspectedCapture(evidence: Observation['evidence'], reviewer: QaReviewer): Promise<void> {
+  private async requireInspectedCapture(
+    evidence: Observation['evidence'],
+    reviewer: QaReviewer,
+    surface: QaSurface,
+    channel: string,
+  ): Promise<void> {
     const images = evidence.filter(item => /\.(png|jpe?g|webp)$/iu.test(item.path))
     if (!images.length) {
       Errors.throwUserInput(
         'A visual pass requires an inspected image, not capture success or unchanged digests alone.',
       )
     }
-    const captured = new Set<string>()
-    let manifests = 0
+    type Cell = { group?: unknown; label?: unknown; status?: unknown; sha256?: unknown; screenshot?: unknown }
+    const cells: Cell[] = []
+    let snapshots = 0
     for (const item of evidence.filter(entry => entry.path.endsWith('.json'))) {
       const value = await FS.readJson<unknown>(this.path(item.path)).catch(() => undefined)
-      if (!value || typeof value !== 'object') {
+      const record = value && typeof value === 'object'
+        ? value as { owner?: unknown; status?: unknown; cells?: unknown }
+        : {}
+      if (record.owner !== 'qa-capture') {
         continue
       }
-      const record = value as { owner?: unknown; status?: unknown; cells?: unknown }
-      if (record.owner === 'qa-capture' && record.status !== 'complete') {
+      if (record.status !== 'complete') {
         Errors.throwUserInput(
           `A visual pass cannot cite an incomplete capture: ${item.path} is ${String(record.status)}.`,
         )
       }
-      if (record.owner !== 'qa-capture' && Array.isArray(record.cells)) {
-        manifests += 1
-        for (const cell of record.cells as { status?: unknown; sha256?: unknown }[]) {
-          if (cell.status === 'captured' && typeof cell.sha256 === 'string') {
-            captured.add(cell.sha256)
-          }
-        }
-      }
+      snapshots += 1
+      cells.push(...(Array.isArray(record.cells) ? record.cells as Cell[] : []))
     }
-    if (reviewer === 'agent' && !manifests) {
-      Errors.throwUserInput('An agent visual pass must cite the review manifest that captured its images.')
+    if (reviewer === 'agent' && !snapshots) {
+      Errors.throwUserInput("An agent visual pass must cite the capture's complete source-snapshot.json.")
     }
-    if (manifests && images.some(image => !captured.has(image.sha256))) {
-      Errors.throwUserInput('Every cited image must match a captured cell in the cited review manifest.')
+    if (!snapshots) {
+      return
+    }
+    const shown = images.map(image =>
+      cells.find(cell =>
+        cell.status === 'captured' && cell.sha256 === image.sha256
+        && typeof cell.screenshot === 'string' && FS.basename(cell.screenshot) === FS.basename(image.path)
+      )
+    )
+    if (shown.some(cell => !cell)) {
+      Errors.throwUserInput(
+        'Every cited image must be the screenshot of a captured cell in the cited capture snapshot.',
+      )
+    }
+    const expected = surface.captureCells?.[channel]
+    if (expected && !shown.some(cell => `${String(cell!.group)}/${String(cell!.label)}` === expected)) {
+      Errors.throwUserInput(`Channel ${channel} is shown by capture cell ${expected}; cite that cell's image.`)
     }
   }
 
@@ -743,12 +764,14 @@ export class QaRegister {
   }
 
   private async findingHistory(id: string): Promise<Finding[]> {
+    const seed = this.path('Docs/QA/findings.json')
+    const seeded = await FS.exists(seed) ? (await FS.readJson<Finding[]>(seed)).filter(item => item.id === id) : []
     const dir = this.path(`Docs/QA/findings/${id}`)
     if (!await FS.isDirectory(dir)) {
-      return []
+      return seeded
     }
     const names = (await FS.listDir(dir)).filter(name => name.endsWith('.json'))
-    return await Promise.all(names.map(name => FS.readJson<Finding>(FS.resolvePath(name, dir))))
+    return [...seeded, ...await Promise.all(names.map(name => FS.readJson<Finding>(FS.resolvePath(name, dir))))]
   }
 
   private async findings(): Promise<Finding[]> {

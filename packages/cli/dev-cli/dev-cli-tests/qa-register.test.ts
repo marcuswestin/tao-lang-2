@@ -18,6 +18,7 @@ async function fixture(exitCode = 0): Promise<{ root: string; qa: QaRegister }> 
         'Docs/ArChIvE/old.md': 'Frozen historical document',
         'LICENSE': 'Fixture license',
         'packages/example/source.ts': 'export const value = 1\n',
+        'Docs/MVP Roadmap/Plan - Staged public releases.md': '# Staged public releases\n',
         'Docs/MVP Roadmap/Plan - Initial release QA.md': await FS.readText(
           Repo.resolvePath('Docs/MVP Roadmap/Plan - Initial release QA.md'),
         ),
@@ -55,7 +56,10 @@ Describe('QA evidence register', () => {
         inventory.exclusions.find(item => item.path.startsWith('Apps/Starters/'))?.canonicalSources,
       ).toEqual(['packages/ai/tao-skills/skills/tao-data/SKILL.md'])
       Expect(inventory.dirty).toBe(false)
-      Expect(inventory.surfaces.find(surface => surface.id === 'story:WEB2')?.channels).toEqual(['public-site'])
+      Expect(inventory.surfaces.find(surface => surface.id === 'story:WEB2')?.channels).toEqual([
+        'public-site',
+        'installed-cli',
+      ])
       Expect(inventory.surfaces.find(surface => surface.id === 'story:COMT1')?.channels).toEqual(['public-site'])
       Expect(inventory.surfaces.find(surface => surface.id === 'story:APP3')?.phase).toBe('deferred')
       const story = inventory.surfaces.find(surface => surface.id === 'story:DOC1')!
@@ -74,10 +78,23 @@ Describe('QA evidence register', () => {
       Expect((await new QaInventory(root).build(4)).surfaces.find(surface => surface.id === 'story:APP2')?.channels)
         .toEqual(['browser', 'ios-simulator', 'physical-device'])
       const roadmapStory = inventory.surfaces.find(surface => surface.id === 'story:DOC1')!.sourceHash
+      const obligation = inventory.surfaces.find(surface => surface.id === 'acceptance:advanced-design')!.sourceHash
       await FS.writeText(FS.resolvePath('Docs/Roadmap/Plan.md', root), 'A plan edit.\n')
+      await FS.writeText(FS.resolvePath('.artifacts/scratch.md', root), 'Ignored scratch.\n')
       const edited = await new QaInventory(root).build(1)
       Expect(edited.dirty).toBe(true)
       Expect(edited.surfaces.find(surface => surface.id === 'story:DOC1')!.sourceHash).toBe(roadmapStory)
+      Expect(edited.surfaces.find(surface => surface.id === 'acceptance:advanced-design')!.sourceHash).toBe(
+        obligation,
+      )
+      await FS.writeText(
+        FS.resolvePath('Docs/MVP Roadmap/Plan - Staged public releases.md', root),
+        '# Staged public releases\n\nA changed obligation.\n',
+      )
+      Expect(
+        (await new QaInventory(root).build(1)).surfaces.find(surface => surface.id === 'acceptance:advanced-design')!
+          .sourceHash,
+      ).not.toBe(obligation)
       const planPath = FS.resolvePath('Docs/MVP Roadmap/Plan - Initial release QA.md', root)
       await FS.writeText(planPath, (await FS.readText(planPath)).replace('| WEB5 |', '| WEB6 |'))
       await Expect(new QaInventory(root).build(1)).rejects.toThrow('WEB6 has no QA channel mapping')
@@ -160,54 +177,66 @@ Describe('QA evidence register', () => {
         }),
       )).rejects.toThrow('requires an inspected image')
       const image = '.artifacts/capture/phone.png'
-      await FS.writeText(FS.resolvePath(image, root), 'image bytes')
-      const imageHash = (await qa.recordFile(
-        await input(root, 'visual-human', {
-          ...observation,
-          surfaceId: 'visual:notebook',
-          dimension: 'visual',
-          channel: 'phone',
-          reviewer: 'agent',
-          outcome: 'friction',
-          evidence: [image],
-        }),
-      )).evidence[0]!.sha256
+      const tablet = '.artifacts/capture/tablet.png'
+      await FS.writeText(FS.resolvePath(image, root), 'phone image bytes')
+      await FS.writeText(FS.resolvePath(tablet, root), 'tablet image bytes')
       const visual = { ...observation, surfaceId: 'visual:notebook', dimension: 'visual', channel: 'phone' }
-      await Expect(qa.recordFile(await input(root, 'visual-no-manifest', { ...visual, evidence: [image] })))
-        .rejects.toThrow('must cite the review manifest')
-      await FS.writeJson(FS.resolvePath('.artifacts/capture/failed.json', root), {
-        cells: [{ key: 'phone', label: 'phone', status: 'failed', sha256: imageHash }],
-      })
-      await Expect(
-        qa.recordFile(
-          await input(root, 'visual-failed-cell', { ...visual, evidence: [image, '.artifacts/capture/failed.json'] }),
-        ),
-      ).rejects.toThrow('match a captured cell')
-      await FS.writeJson(FS.resolvePath('.artifacts/capture/manifest.json', root), {
-        cells: [{ key: 'phone', label: 'phone', status: 'captured', sha256: imageHash }],
-      })
-      await FS.writeJson(FS.resolvePath('.artifacts/capture/source-snapshot.json', root), {
-        owner: 'qa-capture',
-        status: 'partial',
-      })
+      const hashes = (await qa.recordFile(
+        await input(root, 'visual-friction', { ...visual, outcome: 'friction', evidence: [image, tablet] }),
+      )).evidence.map(item => item.sha256)
+      const snapshot = async (name: string, status: string, tabletStatus: string): Promise<string> => {
+        const path = `.artifacts/capture/${name}.json`
+        await FS.writeJson(FS.resolvePath(path, root), {
+          owner: 'qa-capture',
+          status,
+          cells: [
+            { group: 'devices', label: 'phone', status: 'captured', screenshot: 'phone.png', sha256: hashes[0] },
+            {
+              group: 'devices',
+              label: 'tabletDark',
+              status: tabletStatus,
+              screenshot: 'tablet.png',
+              sha256: hashes[1],
+            },
+          ],
+        })
+        return path
+      }
+      const complete = await snapshot('complete', 'complete', 'captured')
+      await Expect(qa.recordFile(await input(root, 'visual-no-snapshot', { ...visual, evidence: [image] })))
+        .rejects.toThrow('complete source-snapshot.json')
       await Expect(
         qa.recordFile(
           await input(root, 'visual-partial', {
             ...visual,
-            evidence: [image, '.artifacts/capture/manifest.json', '.artifacts/capture/source-snapshot.json'],
+            evidence: [image, await snapshot('partial', 'partial', 'failed')],
           }),
         ),
       ).rejects.toThrow('incomplete capture')
+      const failedCell = await snapshot('failed-cell', 'complete', 'failed')
+      await Expect(
+        qa.recordFile(
+          await input(root, 'visual-failed-cell', {
+            ...visual,
+            channel: 'tablet-dark',
+            evidence: [tablet, failedCell],
+          }),
+        ),
+      ).rejects.toThrow('captured cell')
+      await Expect(
+        qa.recordFile(
+          await input(root, 'visual-other-cell', { ...visual, channel: 'tablet-dark', evidence: [image, failedCell] }),
+        ),
+      ).rejects.toThrow('shown by capture cell devices/tabletDark')
       Expect(
-        (await qa.recordFile(
-          await input(root, 'visual-pass', { ...visual, evidence: [image, '.artifacts/capture/manifest.json'] }),
-        )).outcome,
+        (await qa.recordFile(await input(root, 'visual-pass', { ...visual, evidence: [image, complete] }))).outcome,
       ).toBe('pass')
       Expect(
         (await qa.recordFile(
           await input(root, 'visual-person', { ...visual, reviewer: 'human', evidence: [image] }),
         )).reviewer,
       ).toBe('human')
+      Expect((await new QaInventory(root).build(1)).dirty).toBe(false)
       await FS.writeText(FS.resolvePath('packages/example/source.ts', root), 'export const value = 3\n')
       const dirtyRun = await qa.run(1, 'all')
       const dirtyManifest = await FS.readJson<{ inventory: { commit: string } }>(
@@ -247,6 +276,68 @@ Describe('QA evidence register', () => {
     )
     Expect(rerun.selected).not.toContain('doc:README.md')
   })
+
+  Test(
+    'seeded findings cannot close on their own evidence, and later phases cannot close on earlier proof',
+    async () => {
+      const { root, qa } = await fixture()
+      const seeded = {
+        id: 'QA-SEEDED',
+        surfaceId: 'doc:README.md',
+        dimension: 'text',
+        channel: 'source',
+        phase: 1,
+        severity: 'major',
+        confidence: 'confirmed',
+        title: 'Seeded problem',
+        observed: 'Seeded observation.',
+        impact: 'Seeded impact.',
+        location: 'README.md:1',
+        evidence: ['packages/example/source.ts'],
+        expected: 'Seeded expectation.',
+        recheck: 'Seeded recheck.',
+        status: 'open',
+        requiredReviewer: 'agent',
+        relatedStories: [],
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }
+      await FS.writeJson(FS.resolvePath('Docs/QA/findings.json', root), [seeded])
+      await FS.writeText(FS.resolvePath('.artifacts/recheck.md', root), 'Recheck notes.\n')
+      const run = await qa.run(1, 'all')
+      const pass = (evidence: string[]) => ({
+        runId: run.runId,
+        surfaceId: 'doc:README.md',
+        dimension: 'text',
+        channel: 'source',
+        reviewer: 'agent',
+        outcome: 'pass',
+        notes: 'Rechecked.',
+        evidence,
+      })
+      const reused = await qa.recordFile(await input(root, 'reused', pass(['packages/example/source.ts'])))
+      const close = { ...seeded, status: 'verified-closed' }
+      await Expect(qa.findingFile(await input(root, 'seed-self', { ...close, passingResultId: reused.id })))
+        .rejects.toThrow("cannot cite the finding's own evidence")
+      const fresh = await qa.recordFile(await input(root, 'fresh', pass(['.artifacts/recheck.md'])))
+      await qa.findingFile(
+        await input(root, 'later-phase', { ...seeded, id: 'QA-LATER', phase: 2, evidence: ['LICENSE'] }),
+      )
+      await Expect(
+        qa.findingFile(
+          await input(root, 'later-close', {
+            ...close,
+            id: 'QA-LATER',
+            phase: 2,
+            evidence: ['LICENSE'],
+            passingResultId: fresh.id,
+          }),
+        ),
+      ).rejects.toThrow('new, current passing observation')
+      Expect((await qa.findingFile(await input(root, 'seed-close', { ...close, passingResultId: fresh.id }))).status)
+        .toBe('verified-closed')
+    },
+  )
 
   Test(
     'closes only on a newer current linked recheck and retains creation time, event history, and stale evidence',
@@ -319,6 +410,7 @@ Describe('QA evidence register', () => {
         ),
       ).rejects.toThrow("cannot cite the finding's own evidence")
       await FS.writeText(FS.resolvePath('README.md', root), '# Fixture\n\nClear wording.\n')
+      await qa.findingFile(await input(root, 'finding-fixed', { ...finding, status: 'fixed-awaiting-qa' }))
       const fixedRun = await qa.run(1, 'changed')
       const result = await qa.recordFile(await input(root, 'passing', { ...recheck, runId: fixedRun.runId }))
       const closeInput = await input(root, 'finding-close', {
@@ -352,7 +444,7 @@ Describe('QA evidence register', () => {
         (await FS.listDir(FS.resolvePath('Docs/QA/findings/QA-FIXTURE-PROBLEM', root))).filter(name =>
           name.endsWith('.json')
         ),
-      ).toHaveLength(2)
+      ).toHaveLength(3)
       await qa.report(2)
       Expect(await FS.readText(FS.resolvePath('Docs/QA/release-2.md', root))).not.toContain(
         'QA-FIXTURE-PROBLEM (closure-needs-recheck;',

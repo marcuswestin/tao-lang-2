@@ -20,6 +20,8 @@ export type QaSurface = {
   rendererHash: string
   profileHash: string
   scopeNote: string
+  /** captureCells names the `group/label` review cell that shows each visual channel. */
+  captureCells?: Record<string, string>
 }
 
 export type QaInventoryData = {
@@ -81,6 +83,7 @@ export class QaInventory {
       && (/^(?:packages|stdlib|Apps|\.config)\//u.test(path)
         || /^(?:bun.lock|package.json|Justfile|tsconfig.*\.json|devenv\.(?:nix|lock|yaml)|tao|agent|dev)$/u.test(path))
       && !path.startsWith('packages/cli/dev-cli/dev-cli-src/qa/')
+      && !path.startsWith('packages/cli/dev-cli/dev-cli-tests/qa-')
     )
     const dependencyHashes: string[] = []
     const dependencyInputs: QaInventoryData['dependencies'] = []
@@ -115,6 +118,7 @@ export class QaInventory {
       })
     }
     const plan = await FS.readText(FS.resolvePath(storyPlan, this.root))
+    const planHash = Platform.sha256Hex(plan)
     // Plans and agent instructions change constantly without changing what a newcomer reads.
     const sourceHash = Platform.sha256Hex(
       `${rendererHash}\n${
@@ -122,6 +126,11 @@ export class QaInventory {
           `${surface.source}:${surface.sourceHash}`
         ).join('\n')
       }`,
+    )
+    // Obligations are defined by the staged release plan, which the shared hash leaves out as a roadmap.
+    const obligationSource = 'Docs/MVP Roadmap/Plan - Staged public releases.md'
+    const obligationHash = Platform.sha256Hex(
+      `${sourceHash}\n${Platform.sha256Hex(await FS.readFile(FS.resolvePath(obligationSource, this.root)))}`,
     )
     for (
       const match of plan.matchAll(
@@ -154,7 +163,7 @@ export class QaInventory {
           ...(tags.includes('P') && (!tags.includes('D') || id === 'DOC1') ? ['human' as const] : []),
           ...(tags.includes('D') ? ['developer' as const] : []),
         ],
-        sourceHash: Platform.sha256Hex(`${match[0]}\n${sourceHash}`),
+        sourceHash: Platform.sha256Hex(`${match[0]}\n${planHash}\n${sourceHash}`),
         rendererHash,
         profileHash,
       })
@@ -166,14 +175,14 @@ export class QaInventory {
       id: 'acceptance:cloudkit-private-sync',
       title: 'Private same-person CloudKit synchronization',
       kind: 'obligation',
-      source: 'Docs/MVP Roadmap/Plan - Staged public releases.md',
+      source: obligationSource,
       phase: ReleaseCapabilities.catalog.cloudkit.phase,
       tags: ['P'],
       channels: ['cloudkit-two-device', 'physical-device', 'public-docs'],
       dimensions: ['functional', 'visual', 'text'],
       dimensionChannels: { functional: ['cloudkit-two-device'], visual: ['physical-device'], text: ['public-docs'] },
       requirements: ['agent', 'human'],
-      sourceHash,
+      sourceHash: obligationHash,
       rendererHash,
       profileHash,
       scopeNote:
@@ -202,20 +211,27 @@ export class QaInventory {
         id: `acceptance:${entry.id}`,
         title: entry.title,
         kind: 'obligation',
-        source: 'Docs/MVP Roadmap/Plan - Staged public releases.md',
+        source: obligationSource,
         phase: entry.phase,
         tags: ['P'],
         channels: [...entry.channels, 'public-docs'],
         dimensions: ['functional', 'visual', 'text'],
         dimensionChannels: { functional: entry.channels, visual: entry.channels, text: ['public-docs'] },
         requirements: ['agent', 'human'],
-        sourceHash,
+        sourceHash: obligationHash,
         rendererHash,
         profileHash,
         scopeNote: entry.note,
       })
     }
-    const probes: { id: string; title: string; source: string; dimension: QaDimension; channels: string[] }[] = [
+    const probes: {
+      id: string
+      title: string
+      source: string
+      dimension: QaDimension
+      channels: string[]
+      captureCells?: Record<string, string>
+    }[] = [
       {
         id: 'source:hnreader-browser',
         title: 'HNReaderStub development browser journey',
@@ -236,6 +252,7 @@ export class QaInventory {
         source: 'Docs/Tutorials/Your First Tao App.md',
         dimension: 'visual',
         channels: ['phone-light', 'phone-dark', 'desktop'],
+        captureCells: { 'phone-light': 'QA views/phone', 'phone-dark': 'QA views/dark', desktop: 'QA views/desktop' },
       },
       {
         id: 'visual:notebook',
@@ -243,6 +260,12 @@ export class QaInventory {
         source: 'packages/cli/tao-cli',
         dimension: 'visual',
         channels: ['phone', 'tablet-dark', 'notes-groceries', 'notes-ideas'],
+        captureCells: {
+          phone: 'devices/phone',
+          'tablet-dark': 'devices/tabletDark',
+          'notes-groceries': 'notes states/groceries',
+          'notes-ideas': 'notes states/ideas',
+        },
       },
       {
         id: 'visual:hnreader',
@@ -250,6 +273,12 @@ export class QaInventory {
         source: 'Apps/HNReader',
         dimension: 'visual',
         channels: ['rows-leading', 'rows-wrapping', 'sketch-draft-1', 'sketch-draft-2'],
+        captureCells: {
+          'rows-leading': 'rows/leading',
+          'rows-wrapping': 'rows/wrapping',
+          'sketch-draft-1': 'sketch/draft',
+          'sketch-draft-2': 'sketch/draft',
+        },
       },
     ]
     for (const probe of probes) {
@@ -269,11 +298,8 @@ export class QaInventory {
       })
     }
     const commit = await CLI.mustRun('git', { args: ['rev-parse', 'HEAD'], cwd: this.root })
-    const status = await CLI.mustRun('git', {
-      args: ['status', '--porcelain', '-z', '--untracked-files=all'],
-      cwd: this.root,
-    })
-    const dirty = status.stdout.split('\0').filter(Boolean).some(entry => !this.exclusion(entry.slice(3)))
+    const inputs = new Set([...dependencies, ...documents.filter(path => !this.exclusion(path)), storyPlan])
+    const dirty = (await this.changedPaths()).some(path => inputs.has(path))
     const treeDigest = Platform.sha256Hex(
       `${rendererHash}\n${
         surfaces.filter(surface => surface.kind === 'document').map(surface =>
@@ -291,6 +317,25 @@ export class QaInventory {
       dependencies: dependencyInputs,
       exclusions,
     }
+  }
+
+  /** changedPaths lists every path Git reports as changed, including both sides of a rename or copy. */
+  private async changedPaths(): Promise<string[]> {
+    const status = await CLI.mustRun('git', {
+      args: ['status', '--porcelain', '-z', '--untracked-files=all'],
+      cwd: this.root,
+    })
+    const entries = status.stdout.split('\0').filter(Boolean)
+    const paths: string[] = []
+    for (let index = 0; index < entries.length; index += 1) {
+      const entry = entries[index]!
+      paths.push(entry.slice(3))
+      if (/[RC]/u.test(entry.slice(0, 2)) && entries[index + 1] !== undefined) {
+        index += 1
+        paths.push(entries[index]!)
+      }
+    }
+    return paths
   }
 
   /** profileHash identifies a phase's capability policy, so evidence from one phase never passes another. */
@@ -337,7 +382,7 @@ export class QaInventory {
       return 'Generated, vendor, or task artifact; not an authored repository document.'
     }
     if (
-      /^Docs\/QA\/(?:inventory\.json|dashboard\.md|capabilities\.md|release-\d\.md|results\/|runs\/|findings\/|evidence\/)/u
+      /^Docs\/QA\/(?:inventory\.json|dashboard\.md|capabilities\.md|release-\d\.md|results\/|runs\/|findings\/|evidence\/|inputs\/)/u
         .test(path)
     ) {
       return 'QA evidence or generated register output; excluded from its own freshness inputs.'
@@ -420,7 +465,14 @@ function storyScope(id: string): Pick<QaSurface, 'phase' | 'channels' | 'scopeNo
         'Published lessons and diagnostics checked against the shipped CLI; a source checkout is supplementary.',
     }
   }
-  if (/^(?:WEB[1-5]|DOC4|COMT[1-5])$/u.test(id)) {
+  if (id === 'WEB2') {
+    return {
+      phase: 1,
+      channels: ['public-site', 'installed-cli'],
+      scopeNote: 'The published front door leads to the signed CLI and both marketplace listings actually installed.',
+    }
+  }
+  if (/^(?:WEB[1345]|DOC4|COMT[1-5])$/u.test(id)) {
     return {
       phase: 1,
       channels: ['public-site'],

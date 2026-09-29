@@ -5,7 +5,14 @@ import { QaCapture } from '../dev-cli-src/qa/QaCapture'
 async function review(artifactRoot: string, statuses: string[]): Promise<{ manifestPath: string }> {
   const manifestPath = FS.resolvePath('manifest.json', artifactRoot)
   await FS.writeJson(manifestPath, {
-    cells: statuses.map((status, index) => ({ key: `cell-${index}`, label: `cell ${index}`, status })),
+    cells: statuses.map((status, index) => ({
+      key: `cell-${index}`,
+      group: 'views',
+      label: `cell ${index}`,
+      status,
+      screenshot: `cell-${index}.png`,
+      sha256: 'a'.repeat(64),
+    })),
   })
   return { manifestPath }
 }
@@ -52,10 +59,18 @@ Describe('isolated QA capture', () => {
       await FS.writeText(FS.resolvePath('app/App.tao', root), 'use Text from @tao/ui\n')
       await new QaCapture(root, async (_, options) => await review(options.artifactRoot, ['captured', 'failed']))
         .run('app', { app: 'App', output: '.artifacts/partial' })
-      const receipt = await FS.readJson<{ status: string; cells: { status: string }[] }>(
+      const receipt = await FS.readJson<{ status: string; cells: Record<string, string>[] }>(
         FS.resolvePath('.artifacts/partial/source-snapshot.json', root),
       )
       Expect(receipt.status).toBe('partial')
+      Expect(receipt.cells[0]).toEqual({
+        key: 'cell-0',
+        group: 'views',
+        label: 'cell 0',
+        status: 'captured',
+        screenshot: 'cell-0.png',
+        sha256: 'a'.repeat(64),
+      })
       Expect(receipt.cells.map(cell => cell.status)).toEqual(['captured', 'failed'])
       await new QaCapture(root, async () => ({})).run('app', { app: 'App', output: '.artifacts/unattested' })
       Expect(

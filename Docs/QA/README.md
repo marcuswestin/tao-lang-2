@@ -77,9 +77,11 @@ An observation names exactly one surface, dimension, channel and reviewer. Examp
 Outcomes are `not-run`, `pass`, `friction`, `fail`, or `blocked`, independently from freshness.
 Reviewers are `agent`, `human`, and `developer`; record the actual reviewer. Every reviewed outcome
 requires existing, nonempty repository-relative evidence and notes. A visual pass additionally
-requires an image. An agent's visual pass must also cite the review manifest, and every cited image
-must match a `captured` cell there by SHA-256; a person may cite a screenshot alone. No visual pass
-may cite a `partial` or `blocked` capture snapshot. Recording rejects source changes since the frozen run. `historical: true` with original `observedAt` and `commit`
+requires an image. An agent's visual pass must also cite the capture's `complete`
+`source-snapshot.json`; every cited image must be the screenshot of a `captured` cell there, by file
+name and SHA-256, and a probe channel must cite the cell the inventory names for it (for example
+`phone-dark` is `QA views/dark`). A person may cite a screenshot alone. No visual pass may cite a
+`partial` or `blocked` capture snapshot. Recording rejects source changes since the frozen run. `historical: true` with original `observedAt` and `commit`
 imports earlier observations honestly: they always need recheck against the current candidate.
 
 Dedicated `source:hnreader-browser`, `source:tutorial-replay`, `visual:reading-list`, and
@@ -93,7 +95,9 @@ Immutable observations live in `results/`, with source commit, observed and reco
 requested phase, execution profile, host/runtime descriptor, source hashes, and a durable dependency
 snapshot under `inputs/`. Historical records explicitly label those snapshot fields as import-time,
 mark original dependencies unknown, and link original capture/run metadata through evidence. Release story passes outside documentation require `executionProfile`
-to match the requested phase and an `artifact` containing `version`, `digest`, and `sourceCommit`.
+to match the requested phase and an `artifact` containing `version`, `digest`, and `sourceCommit`;
+`public-site` stories (the published front door and repository) are exempt, since nothing is built
+for them, while WEB2's download half stays on `installed-cli`.
 A run that inventoried uncommitted inputs cannot record an artifact, because nothing was built from
 its candidate commit. Development profiles cannot satisfy installed public-artifact acceptance. Reports re-hash evidence and compare source, shared
 dependencies, renderer and profile. A missing or changed evidence file is `needs-recheck`.
@@ -134,8 +138,10 @@ time is retained and each event records its own updatedAt. Later events append u
 
 To close, submit the same finding with `status: "verified-closed"` and `passingResultId`. The linked result
 must be newer than the open finding, pass the same surface and dimension, and still have current
-source/profile/evidence judged against its own phase. Findings pin their evidence hashes, and the
-proof may not cite any bytes an earlier event of that finding cited. A fix, a missing screenshot, an
+source/profile/evidence judged against its own phase, which may not be earlier than the finding's.
+Opening or reopening a finding pins its evidence hashes; later events carry those forward, so a
+`fixed-awaiting-qa` event may cite the fix. The proof may not cite pinned bytes, nor any evidence path
+of a seeded `findings.json` entry, which predates pinning. A fix, a missing screenshot, an
 unchanged digest, or an unrelated passing test cannot close it. Reopening appends a new open event under the same stable ID.
 
 ## Release packets
