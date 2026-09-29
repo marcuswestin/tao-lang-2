@@ -215,8 +215,9 @@ async function appwriteAccount(run: AppwriteRunner, cwd: string): Promise<Record
     return undefined
   }
   try {
+    // `whoami --raw` prints the CLI's own summary ({Name, Email, Endpoint}), not the Account model.
     const account: unknown = JSON.parse(result.stdout)
-    return isObject(account) && typeof account['$id'] === 'string' ? account : undefined
+    return isObject(account) && typeof account['Email'] === 'string' && account['Email'] !== '' ? account : undefined
   } catch {
     return undefined
   }
