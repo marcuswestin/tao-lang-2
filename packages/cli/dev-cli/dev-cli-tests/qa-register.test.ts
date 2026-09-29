@@ -184,13 +184,19 @@ Describe('QA evidence register', () => {
       const hashes = (await qa.recordFile(
         await input(root, 'visual-friction', { ...visual, outcome: 'friction', evidence: [image, tablet] }),
       )).evidence.map(item => item.sha256)
-      const snapshot = async (name: string, status: string, tabletStatus: string): Promise<string> => {
+      const snapshot = async (
+        name: string,
+        status: string,
+        tabletStatus: string,
+        { app = 'Notebook', phoneShot = 'phone.png' } = {},
+      ): Promise<string> => {
         const path = `.artifacts/capture/${name}.json`
         await FS.writeJson(FS.resolvePath(path, root), {
           owner: 'qa-capture',
           status,
+          app,
           cells: [
-            { group: 'devices', label: 'phone', status: 'captured', screenshot: 'phone.png', sha256: hashes[0] },
+            { group: 'devices', label: 'phone', status: 'captured', screenshot: phoneShot, sha256: hashes[0] },
             {
               group: 'devices',
               label: 'tabletDark',
@@ -228,6 +234,22 @@ Describe('QA evidence register', () => {
           await input(root, 'visual-other-cell', { ...visual, channel: 'tablet-dark', evidence: [image, failedCell] }),
         ),
       ).rejects.toThrow('shown by capture cell devices/tabletDark')
+      const otherApp = await snapshot('other-app', 'complete', 'captured', { app: 'Pantry' })
+      await Expect(qa.recordFile(await input(root, 'visual-other-app', { ...visual, evidence: [image, otherApp] })))
+        .rejects.toThrow('shown by captures of Notebook')
+      const renamed = await snapshot('renamed', 'complete', 'captured', { phoneShot: 'other.png' })
+      await Expect(qa.recordFile(await input(root, 'visual-renamed', { ...visual, evidence: [image, renamed] })))
+        .rejects.toThrow('captured cell')
+      await Expect(
+        qa.recordFile(
+          await input(root, 'visual-undeclared', {
+            ...visual,
+            surfaceId: 'story:WEB1',
+            channel: 'public-site',
+            evidence: [image, complete],
+          }),
+        ),
+      ).rejects.toThrow('declares no capture cell')
       Expect(
         (await qa.recordFile(await input(root, 'visual-pass', { ...visual, evidence: [image, complete] }))).outcome,
       ).toBe('pass')
@@ -338,6 +360,81 @@ Describe('QA evidence register', () => {
         .toBe('verified-closed')
     },
   )
+
+  Test('a duplicate stays unresolved until the original it names is proved', async () => {
+    const { root, qa } = await fixture()
+    const finding = {
+      surfaceId: 'doc:README.md',
+      dimension: 'text',
+      channel: 'source',
+      phase: 1,
+      severity: 'blocking',
+      confidence: 'confirmed',
+      observed: 'Observed.',
+      impact: 'Impact.',
+      location: 'README.md:1',
+      expected: 'Expected.',
+      recheck: 'Recheck.',
+      evidence: ['README.md'],
+      status: 'open',
+    }
+    await qa.findingFile(await input(root, 'original', { ...finding, id: 'QA-ORIGINAL', title: 'Original' }))
+    await qa.findingFile(await input(root, 'copy', { ...finding, id: 'QA-COPY', title: 'Copy' }))
+    await qa.findingFile(
+      await input(root, 'elsewhere', {
+        ...finding,
+        id: 'QA-ELSEWHERE',
+        title: 'Elsewhere',
+        surfaceId: 'doc:LICENSE',
+        location: 'LICENSE:1',
+        evidence: ['LICENSE'],
+      }),
+    )
+    const duplicate = { ...finding, id: 'QA-COPY', title: 'Copy', status: 'duplicate' }
+    await Expect(qa.findingFile(await input(root, 'dup-elsewhere', { ...duplicate, duplicateOf: 'QA-ELSEWHERE' })))
+      .rejects.toThrow('unresolved original on the same surface')
+    await Expect(qa.findingFile(await input(root, 'dup-self', { ...duplicate, duplicateOf: 'QA-COPY' })))
+      .rejects.toThrow('unresolved original on the same surface')
+    await qa.findingFile(await input(root, 'dup', { ...duplicate, duplicateOf: 'QA-ORIGINAL' }))
+    await Expect(
+      qa.findingFile(
+        await input(root, 'dup-cycle', {
+          ...finding,
+          id: 'QA-ORIGINAL',
+          title: 'Original',
+          status: 'duplicate',
+          duplicateOf: 'QA-COPY',
+        }),
+      ),
+    ).rejects.toThrow('unresolved original')
+    await qa.report(1)
+    Expect(await FS.readText(FS.resolvePath('Docs/QA/release-1.md', root))).toContain('- QA-COPY (duplicate;')
+    await FS.writeText(FS.resolvePath('.artifacts/recheck.md', root), 'Recheck notes.\n')
+    const run = await qa.run(1, 'all')
+    const pass = await qa.recordFile(
+      await input(root, 'pass', {
+        runId: run.runId,
+        surfaceId: 'doc:README.md',
+        dimension: 'text',
+        channel: 'source',
+        reviewer: 'agent',
+        outcome: 'pass',
+        notes: 'Rechecked.',
+        evidence: ['.artifacts/recheck.md'],
+      }),
+    )
+    await qa.findingFile(
+      await input(root, 'close', {
+        ...finding,
+        id: 'QA-ORIGINAL',
+        title: 'Original',
+        status: 'verified-closed',
+        passingResultId: pass.id,
+      }),
+    )
+    await qa.report(1)
+    Expect(await FS.readText(FS.resolvePath('Docs/QA/release-1.md', root))).not.toContain('- QA-COPY (')
+  })
 
   Test(
     'closes only on a newer current linked recheck and retains creation time, event history, and stale evidence',

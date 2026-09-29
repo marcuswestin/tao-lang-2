@@ -22,6 +22,8 @@ export type QaSurface = {
   scopeNote: string
   /** captureCells names the `group/label` review cell that shows each visual channel. */
   captureCells?: Record<string, string>
+  /** captureApp names the app a capture must have launched for its cells to show this surface. */
+  captureApp?: string
 }
 
 export type QaInventoryData = {
@@ -231,6 +233,7 @@ export class QaInventory {
       dimension: QaDimension
       channels: string[]
       captureCells?: Record<string, string>
+      captureApp?: string
     }[] = [
       {
         id: 'source:hnreader-browser',
@@ -253,6 +256,7 @@ export class QaInventory {
         dimension: 'visual',
         channels: ['phone-light', 'phone-dark', 'desktop'],
         captureCells: { 'phone-light': 'QA views/phone', 'phone-dark': 'QA views/dark', desktop: 'QA views/desktop' },
+        captureApp: 'ReadingList',
       },
       {
         id: 'visual:notebook',
@@ -266,6 +270,7 @@ export class QaInventory {
           'notes-groceries': 'notes states/groceries',
           'notes-ideas': 'notes states/ideas',
         },
+        captureApp: 'Notebook',
       },
       {
         id: 'visual:hnreader',
@@ -279,6 +284,7 @@ export class QaInventory {
           'sketch-draft-1': 'sketch/draft',
           'sketch-draft-2': 'sketch/draft',
         },
+        captureApp: 'HNReaderStub',
       },
     ]
     for (const probe of probes) {

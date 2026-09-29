@@ -50,7 +50,8 @@ async function reconcileLanguageClients(context: vscode.ExtensionContext): Promi
         throw error
       })
     })
-    await Promise.all(additions)
+    // One folder refusing its editor release must not strand the other folders' starts or the removals.
+    const started = await Promise.allSettled(additions)
     const removed = plan.remove.flatMap(root => {
       const client = clients.get(root)
       return client === undefined ? [] : [[root, client] as const]
@@ -58,6 +59,13 @@ async function reconcileLanguageClients(context: vscode.ExtensionContext): Promi
     await Promise.all(removed.map(([, client]) => client.stop()))
     for (const [root] of removed) {
       clients.delete(root)
+    }
+    const failures = started.flatMap(result => result.status === 'rejected' ? [result.reason as unknown] : [])
+    if (failures.length === 1) {
+      throw failures[0]
+    }
+    if (failures.length) {
+      throw new AggregateError(failures, failures.map(failure => Errors.formatForUser(failure)).join('\n'))
     }
   })
   return await clientReconciliation

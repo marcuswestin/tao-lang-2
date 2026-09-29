@@ -135,15 +135,9 @@ export class QaRegister {
     const current = await new QaInventory(this.root).build(phase)
     const observations = await this.observations()
     const findings = await this.findings()
-    const findingSurfaces = new Set<string>()
-    for (const finding of findings) {
-      if (
-        !['verified-closed', 'duplicate'].includes(finding.status)
-        || await this.closureStale(finding, current.surfaces, observations)
-      ) {
-        findingSurfaces.add(finding.surfaceId)
-      }
-    }
+    const findingSurfaces = new Set(
+      (await this.unresolved(findings, current.surfaces, observations)).owed.map(finding => finding.surfaceId),
+    )
     let run: Run
     if (resume) {
       this.validId(resume)
@@ -418,11 +412,20 @@ export class QaRegister {
     if (status === 'accepted-limitation' && !finding.notes) {
       Errors.throwUserInput('Accepted limitations require a written rationale in notes.')
     }
+    const original = findings.find(item => item.id === finding.duplicateOf)
     if (
       status === 'duplicate'
-      && (!finding.duplicateOf || finding.duplicateOf === id || !findings.some(item => item.id === finding.duplicateOf))
+      && (!original || original.id === id || ['duplicate', 'verified-closed'].includes(original.status)
+        || original.surfaceId !== surfaceId || original.dimension !== dimension || original.channel !== channel
+        || original.phase > phase || (original.requiredReviewer ?? 'agent') !== finding.requiredReviewer)
     ) {
-      Errors.throwUserInput('Duplicate findings must link an existing different finding through duplicateOf.')
+      // A duplicate is resolved only through its original's proof, so the original must owe the same proof.
+      Errors.throwUserInput(
+        'Duplicate findings must link, through duplicateOf, an unresolved original on the same surface, dimension, and channel, at the same or an earlier phase, with the same required reviewer.',
+      )
+    }
+    if (status === 'duplicate' && findings.some(item => item.status === 'duplicate' && item.duplicateOf === id)) {
+      Errors.throwUserInput(`${id} is the original of a duplicate; it cannot become a duplicate itself.`)
     }
     if (
       previous && (previous.surfaceId !== surfaceId || previous.dimension !== dimension || previous.channel !== channel)
@@ -536,15 +539,7 @@ export class QaRegister {
         }
       }
     }
-    const staleClosures: string[] = []
-    for (const finding of findings.filter(item => item.status === 'verified-closed')) {
-      if (await this.closureStale(finding, inventory.surfaces, observations)) {
-        staleClosures.push(finding.id)
-      }
-    }
-    const open = findings.filter(finding =>
-      !['verified-closed', 'duplicate'].includes(finding.status) || staleClosures.includes(finding.id)
-    )
+    const { owed: open, staleClosures } = await this.unresolved(findings, inventory.surfaces, observations)
     const verdict = releaseGaps.length
         || open.some(finding =>
           finding.phase <= phase && finding.severity === 'blocking' && finding.status !== 'accepted-limitation'
@@ -659,6 +654,35 @@ export class QaRegister {
     }
   }
 
+  /**
+   * unresolved lists the findings still owed a proof: every finding not closed, a closure its proof no longer
+   * supports, and a duplicate whose original is still owed.
+   */
+  private async unresolved(
+    findings: Finding[],
+    surfaces: QaSurface[],
+    observations: Observation[],
+  ): Promise<{ owed: Finding[]; staleClosures: string[] }> {
+    const staleClosures: string[] = []
+    for (const finding of findings.filter(item => item.status === 'verified-closed')) {
+      if (await this.closureStale(finding, surfaces, observations)) {
+        staleClosures.push(finding.id)
+      }
+    }
+    const byId = new Map(findings.map(finding => [finding.id, finding]))
+    const owed = (finding: Finding, seen: Set<string>): boolean => {
+      if (finding.status === 'verified-closed') {
+        return staleClosures.includes(finding.id)
+      }
+      if (finding.status !== 'duplicate') {
+        return true
+      }
+      const original = finding.duplicateOf ? byId.get(finding.duplicateOf) : undefined
+      return !original || seen.has(original.id) || owed(original, new Set([...seen, original.id]))
+    }
+    return { owed: findings.filter(finding => owed(finding, new Set([finding.id]))), staleClosures }
+  }
+
   private async closureStale(finding: Finding, surfaces: QaSurface[], observations: Observation[]): Promise<boolean> {
     if (finding.status !== 'verified-closed') {
       return false
@@ -697,10 +721,15 @@ export class QaRegister {
     for (const item of evidence.filter(entry => entry.path.endsWith('.json'))) {
       const value = await FS.readJson<unknown>(this.path(item.path)).catch(() => undefined)
       const record = value && typeof value === 'object'
-        ? value as { owner?: unknown; status?: unknown; cells?: unknown }
+        ? value as { owner?: unknown; status?: unknown; cells?: unknown; app?: unknown }
         : {}
       if (record.owner !== 'qa-capture') {
         continue
+      }
+      if (surface.captureApp && record.app !== surface.captureApp) {
+        Errors.throwUserInput(
+          `${surface.id} is shown by captures of ${surface.captureApp}; ${item.path} captured ${String(record.app)}.`,
+        )
       }
       if (record.status !== 'complete') {
         Errors.throwUserInput(
@@ -712,6 +741,13 @@ export class QaRegister {
     }
     if (reviewer === 'agent' && !snapshots) {
       Errors.throwUserInput("An agent visual pass must cite the capture's complete source-snapshot.json.")
+    }
+    const expected = surface.captureCells?.[channel]
+    if (reviewer === 'agent' && !expected) {
+      // Without a declared cell, any capture of any app would satisfy the check below.
+      Errors.throwUserInput(
+        `${surface.id} declares no capture cell for ${channel}, so no capture can prove an agent visual pass there.`,
+      )
     }
     if (!snapshots) {
       return
@@ -727,7 +763,6 @@ export class QaRegister {
         'Every cited image must be the screenshot of a captured cell in the cited capture snapshot.',
       )
     }
-    const expected = surface.captureCells?.[channel]
     if (expected && !shown.some(cell => `${String(cell!.group)}/${String(cell!.label)}` === expected)) {
       Errors.throwUserInput(`Channel ${channel} is shown by capture cell ${expected}; cite that cell's image.`)
     }

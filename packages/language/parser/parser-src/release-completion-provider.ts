@@ -29,7 +29,12 @@ export class ReleaseCompletionProvider extends Langium.DefaultCompletionProvider
     refInfo: Langium.ReferenceInfo,
     context: CompletionContext,
   ): Langium.Stream<AstNodeDescription> {
-    return super.getReferenceCandidates(refInfo, context).filter(candidate => {
+    const candidates = super.getReferenceCandidates(refInfo, context)
+    // Development builds allow every capability, so the declaration walk below could never filter.
+    if (this.profile.phase === 'development') {
+      return candidates
+    }
+    return candidates.filter(candidate => {
       if (
         !ReleaseCapabilities.allows(
           ReleaseCapabilities.symbolCapability(candidate.documentUri.path, candidate.name),

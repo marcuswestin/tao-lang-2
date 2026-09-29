@@ -7,6 +7,9 @@ Describe('Immutable public release surfaces', () => {
   Test('every command and option is classified, so none reaches a public build by default', () => {
     const unclassified: string[] = []
     const visit = (command: Command, path: string) => {
+      if (ReleaseCapabilities.commandCapability(path) === 'unclassified') {
+        unclassified.push(path)
+      }
       for (const option of command.options) {
         if (ReleaseCapabilities.optionCapability(path, option.long ?? option.flags) === 'unclassified') {
           unclassified.push(`${path} ${option.long ?? option.flags}`)
@@ -17,13 +20,12 @@ Describe('Immutable public release surfaces', () => {
       }
     }
     for (const command of (createCommands() as unknown as Command).commands) {
-      if (ReleaseCapabilities.commandCapability(command.name()) === 'unclassified') {
-        unclassified.push(command.name())
-      }
       visit(command, command.name())
     }
     Expect(unclassified).toEqual([])
     Expect(ReleaseCapabilities.commandCapability('future-command')).toBe('unclassified')
+    // A subcommand is classified by its own path; it never inherits its parent's phase.
+    Expect(ReleaseCapabilities.commandCapability('project future-subcommand')).toBe('unclassified')
     Expect(ReleaseCapabilities.allows('unclassified', ReleaseCapabilities.profile(5))).toBe(false)
   })
 

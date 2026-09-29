@@ -80,7 +80,10 @@ requires existing, nonempty repository-relative evidence and notes. A visual pas
 requires an image. An agent's visual pass must also cite the capture's `complete`
 `source-snapshot.json`; every cited image must be the screenshot of a `captured` cell there, by file
 name and SHA-256, and a probe channel must cite the cell the inventory names for it (for example
-`phone-dark` is `QA views/dark`). A person may cite a screenshot alone. No visual pass may cite a
+`phone-dark` is `QA views/dark`). The snapshot must record the app the surface names, so a capture of
+another project cannot stand in, and an agent cannot pass a channel for which the inventory declares
+no capture cell; today that leaves every story's visual channels to a person. A person may cite a
+screenshot alone. No visual pass may cite a
 `partial` or `blocked` capture snapshot. Recording rejects source changes since the frozen run. `historical: true` with original `observedAt` and `commit`
 imports earlier observations honestly: they always need recheck against the current candidate.
 
@@ -112,7 +115,10 @@ failed, blocked and stale cells as well as modified sources; it does not discard
 `findings.json` retains the pilot's open baseline findings. Lifecycle states are `open`, `triaged`, `fixed-awaiting-qa`, `verified-closed`,
 `accepted-limitation`, and `duplicate`. Confidence is `confirmed`, `suspected`, or
 `design-judgment`. Optional notes, repro, owner and existingIssue fields carry triage context.
-Accepted limitations require rationale in notes; duplicates require duplicateOf. Original creation
+Accepted limitations require rationale in notes. A duplicate's duplicateOf must name a different,
+unresolved finding on the same surface, dimension and channel, at the same or an earlier phase, with
+the same required reviewer; an original cannot itself become a duplicate. A duplicate stays in the
+report's open list until the original it names is proved closed. Original creation
 time is retained and each event records its own updatedAt. Later events append under
 `findings/QA-STABLE-SLUG/`; they never overwrite history. Supply these fields to `qa finding`:
 

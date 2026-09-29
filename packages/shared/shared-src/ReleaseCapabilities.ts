@@ -145,8 +145,8 @@ const packageRules = [
   [/(?:^|\/)@tao\/data\/providers\/reference(?:\/|$)/u, 'auth'],
   [/(?:^|\/)@tao\/data\/providers\/(?!(?:local|memory|dev)(?:\/|$))/u, 'hosted-data'],
 ] as const
-// Every top-level CLI command and option is classified explicitly; `release-surface` tests fail on
-// a new one, and public builds hide it until it is mapped.
+// Every CLI command, keyed by its full path, and option is classified explicitly; `release-surface`
+// tests fail on a new one, and public builds hide it until it is mapped.
 const commands = new Map<string, ReleaseCapability>([
   ...[
     'doctor',
@@ -167,15 +167,30 @@ const commands = new Map<string, ReleaseCapability>([
     'completion',
     'complete',
     'release-profile',
+    'project id',
+    'completion install',
   ].map(name => [name, 'core'] as const),
   ['review', 'studio'],
   ['studio', 'studio'],
   ['_preview', 'studio'],
-  ['agents', 'app-commands'],
+  ['_preview qa', 'studio'],
+  ...['agents', 'agents commands', 'agents run', 'agents start', 'agents stop', 'agents ping'].map(name =>
+    [name, 'app-commands'] as const
+  ),
   ['ship', 'ship'],
   ['bridge', 'native-bindings'],
-  ['secrets', 'project-secrets'],
-  ['instantdb', 'hosted-data'],
+  ...[
+    'secrets',
+    'secrets identity',
+    'secrets init',
+    'secrets grant',
+    'secrets set',
+    'secrets get',
+    'secrets list',
+    'secrets remove',
+  ]
+    .map(name => [name, 'project-secrets'] as const),
+  ...['instantdb', 'instantdb push'].map(name => [name, 'hosted-data'] as const),
 ])
 const targets = new Map<string, ReleaseCapability>([
   ['web', 'core'],
@@ -312,7 +327,8 @@ export const ReleaseCapabilities = {
   appSlotCapability: (name: string): ReleaseCapability => appSlots.get(name) ?? 'core',
   symbolCapability: (path: string, name: string): ReleaseCapability =>
     /(?:^|\/)@tao\/Prelude\.tao$/u.test(path) ? appSlots.get(name) ?? 'core' : packageCapability(path),
-  commandCapability: (name: string): ReleaseCapability => commands.get(name) ?? 'unclassified',
+  /** commandCapability classifies a CLI command by its full space-separated path, so a subcommand never inherits. */
+  commandCapability: (path: string): ReleaseCapability => commands.get(path) ?? 'unclassified',
   targetCapability: (name: string): ReleaseCapability => targets.get(name) ?? 'unclassified',
   /** optionCapability classifies a CLI flag, preferring a command-specific meaning. */
   optionCapability: (commandPath: string, long: string): ReleaseCapability =>

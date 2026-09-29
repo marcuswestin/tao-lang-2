@@ -148,6 +148,8 @@ Describe('isolated QA capture', () => {
         'inject ```ts\nconst value = require("./" + "../outside.js")\n```',
         'inject ```ts\nconst value = require /* note */ ("../outside.js")\n```',
         'inject ```ts\nconst value = import /* note */ ("../outside.js")\n```',
+        'inject ```ts\nimport value from "@tao/../../outside"\n```',
+        'inject ```ts\nimport value from "@/../outside"\n```',
       ]
       let launches = 0
       const capture = new QaCapture(root, async () => {
@@ -180,6 +182,11 @@ Describe('isolated QA capture', () => {
     )
     await FS.writeText(FS.resolvePath('app/App.tao', root), 'inject ```ts\nimport value from "@model"\n```')
     await Expect(capture.run('app', { app: 'App', output: '.artifacts/script' })).rejects.toThrow(
+      'QA capture was blocked',
+    )
+    await FS.writeText(FS.resolvePath('app/App.tao', root), 'use Item from @model\n')
+    await FS.writeText(FS.resolvePath('app/tsconfig.json', root), '{ "extends": "/tmp/base.json" }\n')
+    await Expect(capture.run('app', { app: 'App', output: '.artifacts/absolute-json' })).rejects.toThrow(
       'QA capture was blocked',
     )
   })

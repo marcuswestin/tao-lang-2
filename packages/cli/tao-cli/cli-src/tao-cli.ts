@@ -792,14 +792,7 @@ export function createCommands(): Command {
 
   // Remove unavailable surfaces before completion registration so discovery and parsing agree.
   // Unclassified commands and options are deferred, so a new surface stays out of public builds.
-  const registeredCommands = commands.commands as Array<(typeof commands.commands)[number]>
-  for (const command of [...registeredCommands]) {
-    if (!ReleaseCapabilities.allows(ReleaseCapabilities.commandCapability(command.name()))) {
-      registeredCommands.splice(registeredCommands.indexOf(command), 1)
-      continue
-    }
-    pruneReleaseOptions(command as unknown as BaseCommand, command.name())
-  }
+  pruneReleaseSurface(commands as unknown as BaseCommand, '')
 
   // Registers `tao complete <shell>` to print a completion script, and the hidden request protocol it calls.
   // The adapter types against plain Commander, which extra-typings' generic Command does not widen to.
@@ -808,16 +801,24 @@ export function createCommands(): Command {
   return commands
 }
 
-/** pruneReleaseOptions removes options this release profile does not ship, through every subcommand. */
-function pruneReleaseOptions(command: BaseCommand, path: string): void {
-  const registeredOptions = command.options as BaseCommand['options'][number][]
-  for (const option of [...registeredOptions]) {
-    if (!ReleaseCapabilities.allows(ReleaseCapabilities.optionCapability(path, option.long ?? option.flags))) {
-      registeredOptions.splice(registeredOptions.indexOf(option), 1)
+/** pruneReleaseSurface removes the subcommands and options this release profile does not ship, at every depth. */
+function pruneReleaseSurface(command: BaseCommand, path: string): void {
+  if (path) {
+    const registeredOptions = command.options as BaseCommand['options'][number][]
+    for (const option of [...registeredOptions]) {
+      if (!ReleaseCapabilities.allows(ReleaseCapabilities.optionCapability(path, option.long ?? option.flags))) {
+        registeredOptions.splice(registeredOptions.indexOf(option), 1)
+      }
     }
   }
-  for (const child of command.commands) {
-    pruneReleaseOptions(child, `${path} ${child.name()}`)
+  const registeredCommands = command.commands as BaseCommand[]
+  for (const child of [...registeredCommands]) {
+    const childPath = path ? `${path} ${child.name()}` : child.name()
+    if (!ReleaseCapabilities.allows(ReleaseCapabilities.commandCapability(childPath))) {
+      registeredCommands.splice(registeredCommands.indexOf(child), 1)
+      continue
+    }
+    pruneReleaseSurface(child, childPath)
   }
 }
 

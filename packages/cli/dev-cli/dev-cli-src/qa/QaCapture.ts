@@ -77,6 +77,7 @@ export class QaCapture {
       version: 1,
       id,
       originalProject: sourceRoot,
+      app: options.app,
       stagedProject: stagedRoot,
       output: artifactRoot,
       createdAt: new Date().toISOString(),
@@ -276,13 +277,15 @@ export class QaCapture {
       visit(source)
     }
     if (/\.jsonc?$/iu.test(path)) {
-      for (const match of text.matchAll(/"([^"\n]*(?:\.\.\/|file:|\/Users\/|\/private\/)[^"\n]*)"/gu)) {
+      for (const match of text.matchAll(/"(\/[^"\n]*|[^"\n]*(?:\.\.\/|file:|\/Users\/|\/private\/)[^"\n]*)"/gu)) {
         references.push(match[1]!)
       }
     }
     for (const reference of references) {
       if (
         reference.includes('\\') || reference.startsWith('file:') || FS.isAbsolute(reference)
+        // An alias such as `@tao/` or `@/` resolves inside the staged copy only while it never climbs out of it.
+        || (!reference.startsWith('.') && reference.split('/').includes('..'))
         || (reference.startsWith('.') && !FS.pathIsWithin(FS.resolvePath(reference, FS.dirname(path)), root))
         || (!/\.jsonc?$/iu.test(path) && !reference.startsWith('.') && !reference.startsWith('@tao/')
           && !reference.startsWith('@/')

@@ -185,7 +185,6 @@ studio-host-control-smoke run_id="local":
 studio-mac2-acceptance run_id="local":
     ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
 
-# Prove Studio compile/edit/undo against the real HNReader app
 # Capture a bounded headless QA review; capture alone is not a visual judgment
 [group('Host proofs')]
 qa-capture *ARGS: _parser-gen
