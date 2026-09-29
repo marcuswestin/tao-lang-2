@@ -377,6 +377,7 @@ await runWithCommands(commands => {
             greenTree: options.greenTree === undefined || options.greenTree.length === 0
               ? undefined
               : { lanes: options.greenTree, noCache: options.cache === false },
+            hostPlatform: Platform.hostPlatform,
             jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
             jsonPath: options.json,
             lane: options.lane,
