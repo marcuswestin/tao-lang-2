@@ -71,7 +71,8 @@ Test('Studio compiles, visually edits, and undoes the real HNReader app', async 
     if (initialCompile.status !== 'compiled') {
       Errors.throwUnexpected(`Initial HNReader compile failed: ${JSON.stringify(initialCompile.diagnostics)}`)
     }
-    const initial = await preview.session.readFile('HNReader.tao')
+    // HNReader.tao holds the app shell; the front page's views live beside it.
+    const initial = await preview.session.readFile('Feed.tao')
     const identity = {
       ...preview.session.identity(),
       path: initial.path,
@@ -99,11 +100,11 @@ Test('Studio compiles, visually edits, and undoes the real HNReader app', async 
     Expect(applied.content).toContain('Text("New text")')
     Expect(undone.compile.compileRevision).toBe(3)
     Expect(undone.content).toBe(initial.content)
-    Expect(await FS.readText(FS.resolvePath('HNReader.tao', projectRoot))).toBe(initial.content)
+    Expect(await FS.readText(FS.resolvePath('Feed.tao', projectRoot))).toBe(initial.content)
     Expect(stableRoot).toContain('TR.Studio.PreviewBridge')
     Expect(publication).toContain('"appName":"HNReaderStub"')
     Expect(publication).toContain('"compileRevision":3')
-    Expect(publication).toContain(FS.resolvePath('HNReader.tao', projectRoot))
+    Expect(publication).toContain(FS.resolvePath('Feed.tao', projectRoot))
     Expect(publication).toContain(initial.sourceVersion)
   } finally {
     await preview?.close()

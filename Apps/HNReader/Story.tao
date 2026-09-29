@@ -1,0 +1,82 @@
+use Bookmark, Bookmarks, Comment, Story from @model
+use OpenUrl from @tao/linking
+use Col, Row, ScrollView, Spinner, Text, TextMultiline from @tao/ui
+
+// One story and its comment thread.
+folder
+scene StoryScreen(Story) {
+   Title Story.Title
+   action OpenStoryLink() {
+      do OpenUrl(Story.Url)
+   }
+   command Open() {
+      Title "Open story"
+      Icon "safari"
+      Enabled Story.Url is not empty
+      do OpenStoryLink()
+   }
+   // The write lands in the other datasource, and the story it names stays where the feed put it. The
+   // query reads that other datasource by the story's own id, so a kept story cannot be kept twice.
+   query Kept = Bookmarks with {
+      where Story == Story
+   }
+   action KeepStory() {
+      create Bookmark {
+         Story
+   }  }
+   command Keep() {
+      Title "Bookmark story"
+      Icon "bookmark"
+      Enabled Kept is empty
+      do KeepStory()
+   }
+   Toolbar { Open, Keep }
+   query Thread = Story.Comments with { }
+   render Col() [screen] {
+      ScrollView() {
+         Row() [threadWrap] {
+            Col() [thread] {
+               Col() [storyCard, gap 4] {
+                  Text("{ Story.Score } points by { Story.Author } · { Story.CommentCount } comments") [meta]
+                  TextMultiline(Story.Title) [pageTitle]
+               }
+               guard Thread {
+                  loading -> { Col() [stateBox] {
+                     Spinner()
+                  } }
+                  error -> Message { Col() [stateBox, gap 6] {
+                     Text("Couldn't load comments") [problemTitle]
+                     Text(Message) [meta]
+                  } }
+               }
+               when Thread {
+                  empty -> { Col() [pad 10] {
+                     Text("No comments yet") [notice]
+                  } }
+                  otherwise -> {
+                     #comments
+                     loop Thread / Comment {
+                        CommentRow(Comment)
+}  }  }  }  }  }  }  }
+
+// The store keeps the thread flat with a Depth per row (the adapter flattens the tree). One rail
+// renders per ancestor level, so replies indent under their parents with the thread lines drawn;
+// nesting past four levels aligns at the fourth.
+view CommentRow(Comment) {
+   render Row() [fill, gap 8] {
+      if Comment.Depth >= 1 {
+         Col() [rail] { }
+      }
+      if Comment.Depth >= 2 {
+         Col() [rail] { }
+      }
+      if Comment.Depth >= 3 {
+         Col() [rail] { }
+      }
+      if Comment.Depth >= 4 {
+         Col() [rail] { }
+      }
+      Col() [commentCard, claim 1, compress] {
+         TextMultiline(Comment.Text) [commentText]
+         Text(Comment.Author) [author]
+}  }  }

@@ -7,7 +7,11 @@ datasources.md`). Both are specified in `Docs/Spec/Tao Data.md`.
 ```text
 Apps/HNReader/
   @model/Data.tao     shared entities, importable throughout this project
-  HNReader.tao        datasources, design, screens, and both app variants
+  HNReader.tao        the project, both app variants, datasources, navigation, and design
+  Feed.tao            the front page and its story rows
+  Reading.tao         the device-local reading history
+  Story.tao           one story and its comment thread
+  Bookmarks.tao       the bookmark list and its rows
   HNReader.test.tao   journeys, run against the stub variant
   HNAdapter.ts        the Algolia HN API adapter — every API-specific mapping
   StubAdapter.ts      a deterministic in-repo feed with the same declared shapes
