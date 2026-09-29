@@ -71,7 +71,7 @@ Describe('isolated QA capture', () => {
         screenshot: 'cell-0.png',
         sha256: 'a'.repeat(64),
       })
-      Expect(receipt.cells.map(cell => cell.status)).toEqual(['captured', 'failed'])
+      Expect(receipt.cells.map(cell => cell['status'])).toEqual(['captured', 'failed'])
       await new QaCapture(root, async () => ({})).run('app', { app: 'App', output: '.artifacts/unattested' })
       Expect(
         (await FS.readJson<{ status: string }>(FS.resolvePath('.artifacts/unattested/source-snapshot.json', root)))
