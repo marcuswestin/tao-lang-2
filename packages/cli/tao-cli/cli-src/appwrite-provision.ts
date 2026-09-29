@@ -289,7 +289,11 @@ export async function provisionAppwrite(
       const message = response.status === 401 || response.status === 403
         ? 'Check the project ID, API key, and its scopes.'
         : 'Check the project settings in Appwrite Console.'
-      Errors.throwUserInput(`Appwrite ${method} ${path} failed (${response.status}). ${message}`)
+      const reported = await response.json().then(
+        value => isObject(value) && typeof value['message'] === 'string' ? ` Appwrite said: ${value['message']}` : '',
+        () => '',
+      )
+      Errors.throwUserInput(`Appwrite ${method} ${path} failed (${response.status}). ${message}${reported}`)
     }
     try {
       return await response.json()
@@ -368,7 +372,8 @@ export async function provisionAppwrite(
         { key: 'done', type: 'boolean', required: true },
         { key: 'updatedAt', type: 'bigint', required: true },
       ],
-      indexes: [{ key: 'ownerId', type: 'key', columns: ['ownerId'] }],
+      // Appwrite 2.3 names an inline index's fields `attributes` here but reports them back as `columns`.
+      indexes: [{ key: 'ownerId', type: 'key', attributes: ['ownerId'] }],
     })
   }
 }

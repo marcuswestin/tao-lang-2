@@ -89,7 +89,7 @@ function fakeAppwriteCloud(projectId: string) {
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>
         Expect(body).toMatchObject({ rowSecurity: true, permissions: ['create("users")'] })
         Expect(body['columns']).toHaveLength(4)
-        Expect(body['indexes']).toEqual([{ key: 'ownerId', type: 'key', columns: ['ownerId'] }])
+        Expect(body['indexes']).toEqual([{ key: 'ownerId', type: 'key', attributes: ['ownerId'] }])
         tableCreated = true
         return json({ $id: 'notes' }, 201)
       }
