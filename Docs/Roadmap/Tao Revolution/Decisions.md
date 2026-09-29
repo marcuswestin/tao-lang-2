@@ -746,6 +746,12 @@ toggle Recipe.Favorite
 update each Grocery where Bought is no { Bought }   // a bulk form
 ```
 
+The MVP subset is single-row `create`, `update`, `delete`, and `toggle`. An entity-field `toggle`
+requires a nonoptional yes/no field, reads its current value once for that logical write, and
+persists the inverse through the ordinary single-row update path; retrying that write does not
+invert it a second time. A state-variable `toggle` keeps its existing local-state meaning. Bulk
+verbs and named transactions remain post-MVP.
+
 - **One structured outcome vocabulary for every effect.** It distinguishes `queued` (durably
   accepted on this device, offline) from `saved` (confirmed by the provider), alongside rejection,
   conflict, and error. Offline is never modelled as an error:
@@ -1120,6 +1126,8 @@ part has landed.
   descriptor whose mounted roots coalesce without introducing a wrapper or layout node. A target is
   selected eagerly but never activated implicitly; narrowing uses locale-aware, case-insensitive
   word-prefix subsequences across rendered text, and a sole candidate becomes the target.
+  Mounted rows outside the viewport remain candidates and are scrolled into view when targeted;
+  unmounted virtualized rows are a later capability.
 - **Keyboard and pointer input share semantic operations.** Enter activates or engages, and
   engaging clears the narrowing that selected the target so narrowing never outlives its
   engagement; Escape disengages without losing the target, clears narrowing, ascends, then opens
@@ -1132,6 +1140,7 @@ part has landed.
   movement may target an input without engaging it; Enter engages the already targeted input.
   Engaged input, modal occurrence, target, focused scene, app command, then reducer key is the
   dispatch order. Modifier chords invoke directly. Pointer activation first targets the same node.
+  Long-press and right-click target an item and open its existing verbs without activating it.
 - **Command policy folds from authored surfaces.** An entity orders defaults with
   `commands A, B` and withholds one with `commands hide C`; a view promotes commands using
   `Commands { … }` and excludes inherited defaults with `hide C`. The folded verb order is view
@@ -1151,7 +1160,10 @@ part has landed.
   and hidden layers are removed from accessibility traversal. Hints use cached app-relative bounds,
   overview lists mounted regions, the verb menu preserves the command tiers above, and the palette lists every
   titled command and entity while applying the same locale-aware word-prefix subsequence matcher as
-  attention. Help remains unimplemented.
+  attention. Contextual Help appears only while keyboard typing narrows choices, beside the
+  highlighted top choice. It explains the current region and target, available actions, short
+  descriptions, and invocation keys. It disappears when narrowing ends or text input takes the
+  typing; ordinary focus alone does not open it.
 - **Generated keys are deterministic runtime policy** (KEY-D13). Existing identities retain their keys across
   reorders; new identities are considered in canonical identity order and receive the first free
   label-derived letter, then another distinctive label letter, then a two-letter sequence. One
@@ -1516,6 +1528,18 @@ Grid [columns 7, gap sm] {                                // a generated collect
   per-item `span N`. The runtime bridge is Shopify's FlashList — virtualization, recycling, masonry,
   and spans are its; the min-width arithmetic and the collection-owned selection are Tao's, since
   the platform has neither.
+- **`Layer` is the one way to float content over a parent's flow** (decided 2026-09-27). It is an
+  ordinary `@tao/ui` view, not a clause, so no other view gains a position:
+  `Layer(InsetBottom: 20, InsetLeft: 10) { Col { … } }`. It takes no room in the parent's flow; each
+  of `InsetTop`, `InsetRight`, `InsetBottom`, and `InsetLeft` is an optional distance from that
+  edge of the parent's box, and an axis with neither inset sits at its start edge, top or left.
+  Its own children stack and hug like `Stack`, and it paints over earlier siblings in source
+  order, with no z-index. A parent never grows to hold a layer, so a layer inside a hugging parent
+  needs the parent's size stated. It replaces the positioned `Canvas` container and `at x y` child
+  offset that FS-D5 proposed, and it is not the host-owned floating layer of LANG-018 and KEY-D13:
+  a `Layer` is placed against its parent's box and stays in its parent's navigation. Studio's Draw
+  canvas is what forces it: free rectangles are to render as layers once the Freehand plan's
+  Slice 5 lands.
 - **Every element kind declares which clauses it accepts, and the validator rejects the rest** with
   a targeted diagnostic (`'cell min' applies to Grid`). Clauses are presentation, so they never
   move into the parentheses — parentheses carry data, brackets carry presentation.
@@ -1844,23 +1868,22 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   meet locally and at publish time. Public alias chains flatten to the target's canonical identity
   while retaining one-hop lexical navigation; cycles are invalid, and a wrapper creates new identity.
 - **Release metadata is source-owned.** `project` carries a numeric three-component SemVer as
-  `version "<major>.<minor>.<patch>"` and may name `DefaultApp <AppName>`. An explicit CLI
-  `--app` selection wins over `DefaultApp`; without either, tooling presents the available apps.
-  `DefaultApp` deliberately remains source-compatible spelling but is parsed as a capitalized
-  identifier and validated in the project slot rather than becoming a grammar keyword.
+  `version "<major>.<minor>.<patch>"` and may name `app <AppName>`. An explicit CLI
+  `--app` selection wins over that clause; without either, tooling presents the available apps.
+  `app` inside the project block is the same keyword as an app declaration.
 
 ---
 
 ## 11. App composition and providers
 
-- **`project { id, name, version, DefaultApp, targets, languages, license }` declares the product envelope**:
+- **`project { id, name, version, app, targets, languages, license }` declares the product envelope**:
 
 ```swift
 project {
    id "skillet"
    name "Skillet"
    version "1.0.0"
-   DefaultApp Skillet
+   app Skillet
    targets phone, tablet, laptop
    languages "en-US", "es"
 }
@@ -1917,6 +1940,24 @@ let Me = Account                 // module-visible; every screen reads Me, tests
 
 The live root then gates on it as ordinary data: `view when Me { none -> WelcomeNav,
 otherwise -> SkilletShell(SkilletNavigator) }`. Nothing about identity is a keyword.
+
+- **Auth and data providers pair through declared proofs, not pairwise code** (amended 2026-09-27).
+  An auth provider type declares the sign-in proofs it `issues` (`IdentityToken`, `Session`,
+  `TestIdentity`); a datasource type declares what it `accepts`, optionally from named providers,
+  and the data features it `supports`. The datasource holding `Account` resolves the account from
+  those proofs. The compiler rejects an app whose Auth and Datasource cannot pair or whose data uses
+  a feature its datasource does not support. Email is not an identity rule of the language: each
+  auth provider decides whether verification is required, and a datasource may refuse unverified
+  proofs. [Plan — Auth and data pairing](<../Plan - Auth and data pairing.md>) owns the details.
+
+```swift
+type InstantDB is datasource with {
+   AppId text
+   accepts { IdentityToken from Clerk, Session from InstantAuth }
+   supports { Relations, UniqueFields, AccessRules, FieldUpdates, Migrations Additive }
+   provider InstantDBProvider from ./InstantDB.ts
+}
+```
 
 - **The datasource is a `Cloud { … }` value** carrying write behaviour, conflict model, delete
   retention, and an `Offline { … }` block:

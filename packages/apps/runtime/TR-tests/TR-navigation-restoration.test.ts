@@ -26,6 +26,9 @@ function identity(kind: string, name: string) {
   ] as TaoDeclarationIdentityTuple)
 }
 
+const sessionIssuer: TR.AuthPairing = { issues: ['Session'] }
+const sessionAcceptor: TR.DataPairing = { accepts: [{ kind: 'Session' }], supports: [] }
+
 function runtimeApp(
   variant: string,
   options: {
@@ -86,6 +89,42 @@ Describe('navigation restoration', () => {
     declared.dispose()
   })
 
+  Test('an Auth scope waits for the app datasources, and fails only once an app binds none', async () => {
+    const signedIn = () =>
+      TR.Auth.CreateScope(TR.Auth.Configure(
+        TR.Auth.Declaration('Auth', {
+          connect: () => ({
+            capabilities: { methods: [] },
+            restore: async () => ({ state: 'SignedIn' as const, principal: { issuer: 'test', subject: 'alice' } }),
+            signIn: async () => ({ outcome: { status: 'cancelled' as const } }),
+            signOut: async () => ({ status: 'completed' as const }),
+            proof: async () => ({ kind: 'Session' as const, issuer: 'test', subject: 'alice', value: {} }),
+          }),
+        }, sessionIssuer),
+        {},
+      ))
+    const withDatasources = runtimeApp('awaits-bindings', { datasources: () => [] })
+    const waiting = signedIn()
+    await waiting.restore()
+    waiting.app(withDatasources.app)
+    // This app declares datasources, so the scope waits for its layout to bind them.
+    Expect(waiting.session).toEqual({ state: 'Restoring' })
+    waiting.dispose()
+    withDatasources.app.dispose()
+
+    const withoutDatasources = runtimeApp('no-bindings')
+    const failing = signedIn()
+    await failing.restore()
+    Expect(failing.session).toEqual({ state: 'Restoring' })
+    failing.app(withoutDatasources.app)
+    Expect(failing.session).toEqual({
+      state: 'Error',
+      message: 'Auth Auth needs a datasource to hold the signed-in Account.',
+    })
+    failing.dispose()
+    withoutDatasources.app.dispose()
+  })
+
   Test(
     'restores entity arguments in the destination mount when accounts and datasource declarations match',
     async () => {
@@ -93,20 +132,16 @@ Describe('navigation restoration', () => {
         TR.Auth.Declaration('Auth', {
           connect: () => ({
             capabilities: { methods: ['Password'] },
-            restore: async () => ({
-              state: 'SignedIn' as const,
-              identity: { accountId: 'same-account', issuer: 'test', subject: 'alice' },
-            }),
+            restore: async () => ({ state: 'SignedIn' as const, principal: { issuer: 'test', subject: 'alice' } }),
             signIn: async () => ({ outcome: { status: 'cancelled' as const } }),
             signOut: async () => ({ status: 'completed' as const }),
-            credential: async () => ({ audience: 'unused', value: 'unused' }),
+            proof: async () => ({ kind: 'Session' as const, issuer: 'test', subject: 'alice', value: {} }),
           }),
-        }),
+        }, sessionIssuer),
         {},
       )
       const firstScope = TR.Auth.CreateScope(source)
       const secondScope = TR.Auth.CreateScope(source)
-      await Promise.all([firstScope.restore(), secondScope.restore()])
       const schema = TR.Data.Schema({
         name: 'ScopedRestore',
         entities: {
@@ -117,23 +152,29 @@ Describe('navigation restoration', () => {
           },
         },
       })
-      const provider = TR.Data.Declaration('ScopedMemory', {
-        authenticatedAuthority: 'server',
-        connect: context => ({
-          load: () =>
-            JSON.stringify({
-              formatVersion: 1,
-              schemaVersion: 1,
-              nextId: 1,
-              rows: { Account: [{ Id: 'same-account', Name: context.configuration['Name'] }] },
-            }),
-          save: () => undefined,
-          referenceToken: reference => reference.id,
-          resolveReference: reference => reference.token,
-        }),
-      }, identity('datasource', 'ScopedMemory'))
+      const provider = TR.Data.Declaration(
+        'ScopedMemory',
+        {
+          authenticate: async () => ({ accountId: 'same-account' }),
+          connect: context => ({
+            load: () =>
+              JSON.stringify({
+                formatVersion: 1,
+                schemaVersion: 1,
+                nextId: 1,
+                rows: { Account: [{ Id: 'same-account', Name: context.configuration['Name'] }] },
+              }),
+            save: () => undefined,
+            referenceToken: reference => reference.id,
+            resolveReference: reference => reference.token,
+          }),
+        },
+        identity('datasource', 'ScopedMemory'),
+        sessionAcceptor,
+      )
       firstScope.bindDatasources([{ store: schema, source: TR.Data.Configure(provider, { Name: 'First mount' }) }])
       secondScope.bindDatasources([{ store: schema, source: TR.Data.Configure(provider, { Name: 'Second mount' }) }])
+      await Promise.all([firstScope.restore(), secondScope.restore()])
       const declared = runtimeApp('scoped-reference')
       const firstApp = firstScope.app(declared.app)
       const secondApp = secondScope.app(declared.app)
@@ -163,17 +204,30 @@ Describe('navigation restoration', () => {
         TR.Auth.Declaration('Auth', {
           connect: () => ({
             capabilities: { methods: [] },
-            restore: async () => ({
-              state: 'SignedIn' as const,
-              identity: { accountId, issuer: 'test', subject: accountId },
-            }),
+            restore: async () => ({ state: 'SignedIn' as const, principal: { issuer: 'test', subject: accountId } }),
             signIn: async () => ({ outcome: { status: 'cancelled' as const } }),
             signOut: async () => ({ status: 'completed' as const }),
-            credential: async () => ({ audience: 'unused', value: 'unused' }),
+            proof: async () => ({ kind: 'Session' as const, issuer: 'test', subject: accountId, value: {} }),
           }),
-        }),
+        }, sessionIssuer),
         {},
       ))
+      // Every signed-in account resolves through the datasource that holds it.
+      scope.bindDatasources([{
+        store: TR.Data.Schema({ name: 'PrivateScalar', entities: { Account: { collection: 'Accounts', fields: {} } } }),
+        source: TR.Data.Configure(
+          TR.Data.Declaration(
+            'PrivateScalarData',
+            {
+              authenticate: async context => ({ accountId: context.principal.subject }),
+              connect: () => ({ load: () => undefined, save: () => undefined }),
+            },
+            undefined,
+            sessionAcceptor,
+          ),
+          {},
+        ),
+      }])
       await scope.restore()
       return scope
     }

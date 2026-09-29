@@ -7,9 +7,10 @@ import type {
   StudioSketchUnsnapRequest,
 } from '../../StudioProjectSession'
 import type { StudioPreviewFeedDropMessage } from '../../StudioProtocol'
-import type { StudioSketchCatalogAction, StudioSketchCatalogSnapshot } from '../../StudioSketchCatalog'
+import type { StudioSketch, StudioSketchCatalogAction, StudioSketchCatalogSnapshot } from '../../StudioSketchCatalog'
 import { StudioMountSignal } from '../app/StudioMountSignal'
 import { StudioApiClient } from '../StudioApiClient'
+import { StudioDialog } from '../StudioDialog'
 import type { StudioFeedDrop } from '../StudioFeedController'
 import type { StudioFeedExampleValues } from '../StudioFeedSamples'
 import {
@@ -18,6 +19,9 @@ import {
   StudioSketchView,
   type StudioSketchViewFlowActionRequest,
 } from '../StudioSketchView'
+import { applyCanvasViewport } from './StudioCanvasViewport'
+import { StudioDrawLiveCells, type StudioDrawLiveTarget } from './StudioDrawLiveCells'
+import { type StudioSketchGeometry, StudioSketchUndo } from './StudioSketchUndo'
 
 const mountedSketches = new WeakMap<HTMLElement, MountedMatrixSketches>()
 
@@ -25,10 +29,49 @@ type MountedMatrixSketches = {
   catalog: StudioSketchCatalogSnapshot
   exampleValues?: StudioFeedExampleValues
   feedDrop?: (payload: StudioFeedDrop, sketchId: string, rectId?: string) => Promise<void>
+  insertView?: (request: StudioDrawViewInsert) => Promise<void>
   mount?: MountedStudioSketchView
   mutationLane: StudioSketchMutationLane
   project: string
+  recordEdit?: (edit: StudioSketchEdit) => void
+  renderableViews: readonly string[]
   sourceVersions: Record<string, string>
+}
+
+/**
+ * One Draw edit the shared undo stack can walk back. `undo` answers false, changing nothing, when the
+ * sketch no longer holds what the edit left, because something else has changed it since.
+ */
+export type StudioSketchEdit = Readonly<{
+  label: string
+  /** The sketch's name, which the edit log shows as the edit's place. */
+  path: string
+  /** The sketch the edit changed: once one of its edits goes stale, every earlier one has too. */
+  scope: string
+  undo: () => Promise<boolean>
+}>
+
+/** A frame dropped onto another view's running cell: render `viewName`, written in `viewSourcePath`, inside `targetView`. */
+export type StudioDrawViewInsert = Readonly<{
+  cellId: string
+  /** The target view's file and compiled version; missing while its cell has not compiled one file. */
+  source?: Readonly<{ path: string; version: string }>
+  targetView: string
+  viewName: string
+  viewSourcePath: string
+}>
+
+/**
+ * The view a whole frame stands for when it is dropped into another: a drawn view's generated file,
+ * or the file a detached definition is written in. A render card is one call of a view, not a view.
+ */
+function studioDrawnFrameView(
+  sketch: Pick<StudioSketch, 'definitionPath' | 'render' | 'view'>,
+): Readonly<{ viewName: string; viewSourcePath: string }> | undefined {
+  if (sketch.render !== undefined) {
+    return undefined
+  }
+  return { viewName: sketch.view, viewSourcePath: sketch.definitionPath ?? `@/studio/${sketch.view}.tao` }
 }
 
 export type StudioSketchSnapMutationState = {
@@ -105,6 +148,8 @@ export const StudioDrawCanvas = {
       host.dataset['taoStudioDrawCanvas'] = 'true'
       host.setAttribute('aria-label', 'Draw canvas')
       parent.append(host)
+      // A canvas mounted after the grid starts under the pan and zoom the grid already has.
+      applyCanvasViewport(parent)
     }
     for (const child of [...parent.children]) {
       if (child.classList.contains('studio-empty')) {
@@ -113,12 +158,17 @@ export const StudioDrawCanvas = {
     }
     return host
   },
-  /** retain keeps the Draw host across a preview parent replacement. */
+  /** retain keeps the Draw host, and the tool strip beside it, across a preview parent replacement. */
   retain(parent: HTMLElement, replace: () => void): void {
-    const host = parent.querySelector<HTMLElement>(':scope > [data-tao-studio-draw-canvas]')
+    const kept = [
+      parent.querySelector<HTMLElement>(':scope > [data-tao-studio-draw-canvas]'),
+      parent.querySelector<HTMLElement>(':scope > [data-tao-studio-draw-tools]'),
+    ]
     replace()
-    if (host !== null && !parent.contains(host)) {
-      parent.append(host)
+    for (const node of kept) {
+      if (node !== null && !parent.contains(node)) {
+        parent.append(node)
+      }
     }
   },
 } as const
@@ -138,6 +188,13 @@ export const StudioMatrixSketches = {
     state.exampleValues = values
     state.mount?.render(state.catalog.sketches, state.sourceVersions, values)
   },
+  /** renderable records which views a badge can switch a drawn rectangle to render. */
+  renderable(parent: HTMLElement, views: readonly string[]): void {
+    const state = mountedSketches.get(parent)
+    if (state !== undefined) {
+      state.renderableViews = views
+    }
+  },
   sketchForView(parent: HTMLElement, viewName: string): string | undefined {
     return mountedSketches.get(parent)?.catalog.sketches.find(sketch => sketch.view === viewName)?.id
   },
@@ -150,6 +207,24 @@ export const StudioMatrixSketches = {
     state.feedDrop = drop
     return () => {
       state.feedDrop = undefined
+    }
+  },
+  /** connectEdits hands each covered Draw edit to the shared undo stack until the returned disconnect. */
+  connectEdits(parent: HTMLElement, record: (edit: StudioSketchEdit) => void): () => void {
+    const state = mountedSketches.get(parent)
+    Assert.defined(state, 'mounted Studio sketches before connecting undo')
+    state.recordEdit = record
+    return () => {
+      state.recordEdit = undefined
+    }
+  },
+  /** connectInsert renders a frame dropped onto another view's running cell until the returned disconnect. */
+  connectInsert(parent: HTMLElement, insert: (request: StudioDrawViewInsert) => Promise<void>): () => void {
+    const state = mountedSketches.get(parent)
+    Assert.defined(state, 'mounted Studio sketches before connecting view drops')
+    state.insertView = insert
+    return () => {
+      state.insertView = undefined
     }
   },
   async runFeed<Result extends StudioFeedState>(
@@ -166,6 +241,21 @@ export const StudioMatrixSketches = {
       renderMatrixSketches(parent, state.project, result.catalog)
       return result
     })
+  },
+  /**
+   * refresh re-reads the catalog after a preview manifest update: the server marks a render card
+   * broken once its scenario entry leaves the manifest, and only a fresh read carries that mark.
+   * Runs in the mutation lane, so it never lands between a catalog edit and its answer.
+   */
+  async refresh(
+    parent: HTMLElement,
+    project: string,
+    read: () => Promise<StudioSketchCatalogSnapshot> = StudioApiClient.sketches,
+    render: typeof renderMatrixSketches = renderMatrixSketches,
+  ): Promise<void> {
+    const state = mountedSketches.get(parent)
+    const catalog = state === undefined ? await read() : await state.mutationLane.run(read)
+    render(parent, state?.project ?? project, catalog)
   },
   /** rerender re-lays the boards already mounted under `parent` after the grid reconciled its hosts. */
   rerender(parent: HTMLElement, sourceVersions?: Readonly<Record<string, string>>): void {
@@ -223,6 +313,7 @@ function renderMatrixSketches(
     catalog,
     mutationLane: new StudioSketchMutationLane(),
     project,
+    renderableViews: [],
     sourceVersions: {},
   }
   if (catalog.revision >= state.catalog.revision) {
@@ -267,15 +358,71 @@ function renderMatrixSketches(
       onFeedDrop: async (payload, sketchId, rectId) => {
         await state.feedDrop?.(payload, sketchId, rectId)
       },
+      onConvert: async intent => {
+        const result = await state.mutationLane.run(async () => {
+          const converted = await StudioApiClient.sketchConvert({
+            ...intent,
+            expectedCatalogRevision: state.catalog.revision,
+            requestId: crypto.randomUUID(),
+          })
+          state.catalog = converted.catalog
+          return converted
+        })
+        delete host.dataset['taoStudioSketchError']
+        return result.catalog.sketches
+      },
       onFlowAction: async request => await applySketchFlowAction(state, request),
       onRectChange: async change => {
-        const result = await applySketchAction(state, sketchAction(change))
+        const sketches = await applyRecordedSketchActions(parent, state, change.sketchId, [sketchAction(change)])
+        delete host.dataset['taoStudioSketchError']
+        return sketches
+      },
+      onMove: async move => {
+        const sketches = await applyRecordedSketchActions(parent, state, move.sketchId, [
+          { id: move.sketchId, kind: 'move-sketch', x: move.x, y: move.y },
+        ])
+        delete host.dataset['taoStudioSketchError']
+        return sketches
+      },
+      onDeleteRects: async (sketchId, rectIds) => {
+        const sketches = await applyRecordedSketchActions(
+          parent,
+          state,
+          sketchId,
+          rectIds.map(rectId => ({ kind: 'delete-rect', rectId, sketchId })),
+        )
+        delete host.dataset['taoStudioSketchError']
+        return sketches
+      },
+      confirmRemove: async question =>
+        await StudioDialog.confirm({ cancelLabel: 'Cancel', confirmLabel: 'OK', title: question }),
+      onRemove: async sketchId => {
+        // A source-backed card leaves the catalog only; the code it showed stays as it is. A drawn
+        // definition takes its generated `@/studio` file with it, which the server refuses while
+        // another file still uses the view.
+        const result = await applySketchAction(state, { id: sketchId, kind: 'delete-sketch' })
         delete host.dataset['taoStudioSketchError']
         return result.catalog.sketches
       },
       onSnap: async request => await applySketchSnap(state, request),
       onUnsnap: async request => await applySketchUnsnap(state, request),
       onUndoSnap: async request => await undoSketchSnap(state, request),
+      renderableViews: () => state.renderableViews,
+      dropInto: {
+        target: (point, sketch) => dropIntoTarget(parent, state, point, sketch)?.cellId,
+        drop: async (point, sketch) => {
+          const target = dropIntoTarget(parent, state, point, sketch)
+          const frameView = studioDrawnFrameView(sketch)
+          if (target !== undefined && frameView !== undefined) {
+            await state.insertView?.({
+              cellId: target.cellId,
+              ...(target.source === undefined ? {} : { source: target.source }),
+              targetView: target.view,
+              ...frameView,
+            })
+          }
+        },
+      },
       sketches: state.catalog.sketches,
       exampleValues: state.exampleValues,
       sourceVersions: state.sourceVersions,
@@ -283,6 +430,18 @@ function renderMatrixSketches(
   } else {
     state.mount.render(state.catalog.sketches, state.sourceVersions, state.exampleValues)
   }
+}
+
+/** The running view under a dragged frame that could take it, when a drop is connected and the frame is a view. */
+function dropIntoTarget(
+  parent: HTMLElement,
+  state: MountedMatrixSketches,
+  point: Readonly<{ x: number; y: number }>,
+  sketch: StudioSketch,
+): StudioDrawLiveTarget | undefined {
+  return state.insertView === undefined || studioDrawnFrameView(sketch) === undefined
+    ? undefined
+    : StudioDrawLiveCells.at(parent, point, sketch.view)
 }
 
 async function applySketchFlowAction(
@@ -393,6 +552,68 @@ async function applySketchAction(
     state.catalog = result.catalog
     return result
   })
+}
+
+/**
+ * Applies one Draw gesture's catalog actions in a single turn of the mutation lane, then hands the
+ * gesture to the undo stack with the sketch's geometry before and after it.
+ */
+async function applyRecordedSketchActions(
+  parent: HTMLElement,
+  state: MountedMatrixSketches,
+  sketchId: string,
+  actions: readonly StudioSketchCatalogAction[],
+): Promise<readonly StudioSketch[]> {
+  return await state.mutationLane.run(async () => {
+    const before = state.catalog.sketches.find(sketch => sketch.id === sketchId)
+    for (const action of actions) {
+      const result = await StudioApiClient.sketchAction({
+        action,
+        expectedRevision: state.catalog.revision,
+        requestId: crypto.randomUUID(),
+      })
+      state.catalog = result.catalog
+    }
+    const after = state.catalog.sketches.find(sketch => sketch.id === sketchId)
+    const label = before === undefined ? undefined : StudioSketchUndo.label(actions, before)
+    if (before !== undefined && after !== undefined && label !== undefined) {
+      state.recordEdit?.({
+        label,
+        path: before.name,
+        scope: sketchId,
+        undo: () =>
+          undoSketchEdit(parent, state, sketchId, StudioSketchUndo.geometry(before), StudioSketchUndo.geometry(after)),
+      })
+    }
+    return state.catalog.sketches
+  })
+}
+
+async function undoSketchEdit(
+  parent: HTMLElement,
+  state: MountedMatrixSketches,
+  sketchId: string,
+  before: StudioSketchGeometry,
+  after: StudioSketchGeometry,
+): Promise<boolean> {
+  const restored = await state.mutationLane.run(async () => {
+    const current = state.catalog.sketches.find(sketch => sketch.id === sketchId)
+    if (current === undefined || !StudioSketchUndo.same(StudioSketchUndo.geometry(current), after)) {
+      return undefined
+    }
+    const result = await StudioApiClient.sketchAction({
+      action: StudioSketchUndo.restore(sketchId, before),
+      expectedRevision: state.catalog.revision,
+      requestId: crypto.randomUUID(),
+    })
+    state.catalog = result.catalog
+    return result.catalog
+  })
+  if (restored === undefined) {
+    return false
+  }
+  renderMatrixSketches(parent, state.project, restored)
+  return true
 }
 
 function sketchAction(change: StudioSketchRectChange): StudioSketchCatalogAction {

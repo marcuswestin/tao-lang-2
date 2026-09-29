@@ -14,6 +14,7 @@ Describe('Tao local build and clean CLI', () => {
         '--app',
         'AgentCommandsProof',
         '--web',
+        '--visionos',
         '--compile-only',
         '--output',
         output,
@@ -23,6 +24,8 @@ Describe('Tao local build and clean CLI', () => {
       Expect(builds).toHaveLength(1)
       const record = await FS.readJson<BuildRecord>(FS.resolvePath(`${builds[0]}/build.json`, output))
       Expect(record.results.web?.status).toBe('succeeded')
+      Expect(record.results.visionos?.status).toBe('succeeded')
+      Expect(await FS.isFile(FS.resolvePath(`${builds[0]}/compiled/visionos/_gen_tao-app/App.tsx`, output))).toBe(true)
       Expect(record.projectRoot).toBe(Repo.resolvePath('Apps/Test Apps/Agent Commands'))
     } finally {
       await FS.remove(output)

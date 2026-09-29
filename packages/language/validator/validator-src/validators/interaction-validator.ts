@@ -23,6 +23,10 @@ const interactionValidationMessages = {
   editingShortcut: (command: string, shortcut: string) =>
     `Command '${command}' uses platform editing shortcut '${shortcut}'; editing controls take precedence while engaged.`,
   hidePlacement: '`hide <command>` is allowed only as a direct member of a view body.',
+  unnamedControl: (view: string) =>
+    `Control '${view}' has no accessible name. Supply a nonempty Title or Label at this render, or render visible text inside the control.`,
+  uncertainControlName: (view: string) =>
+    `Control '${view}' has a dynamic accessible name that may be empty. Give its Title or Label a nonempty fallback in source.`,
 } as const
 
 /** InteractionValidator owns static interaction vocabulary and command-surface diagnostics. */
@@ -32,9 +36,22 @@ export const InteractionValidator = {
     [AST.DeclarationSlotFill.$type]: validateCommandSurface,
     [AST.EntityCommandPolicy.$type]: validateEntityCommandPolicy,
     [AST.LayoutCondition.$type]: validateInteractionCondition,
+    [AST.Render.$type]: validateControlName,
     [AST.ViewCommandExclusion.$type]: validateViewCommandExclusion,
   } satisfies NodeValidationChecks,
   messages: interactionValidationMessages,
+}
+
+function validateControlName(render: AST.Render, ctx: ValidationContext): void {
+  const control = ASTUtils.outlineControlDescriptor(render)
+  if (!control) {
+    return
+  }
+  if (control.nameStatus === 'missing') {
+    ctx.warning(render, interactionValidationMessages.unnamedControl(control.view))
+  } else if (control.nameStatus === 'uncertain') {
+    ctx.warning(render, interactionValidationMessages.uncertainControlName(control.view))
+  }
 }
 
 function validateInteractionCondition(condition: AST.LayoutCondition, ctx: ValidationContext): void {

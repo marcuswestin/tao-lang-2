@@ -2,17 +2,41 @@
 folder
 design NotebookDesign {
    colors {
-      canvas #f6f4ee
-      surface #ffffff
-      ink #1f2421
-      inkMuted #6c6f6b
-      accent #3f6f9a
-      accentStrong #375c7c
-      accentSoft #dce5ed
-      line #d6d5cf
-      danger #a43d3d
-      dangerSoft #f8e6e3
-      onAccent #ffffff
+      canvasLight #f6f4ee
+      surfaceLight #ffffff
+      inkLight #1f2421
+      inkMutedLight #6c6f6b
+      accentLight #3f6f9a
+      accentStrongLight #375c7c
+      accentSoftLight #dce5ed
+      lineLight #d6d5cf
+      dangerLight #a43d3d
+      dangerSoftLight #f8e6e3
+      onAccentLight #ffffff
+      canvasDark #161917
+      surfaceDark #292b2a
+      inkDark #f6f4ee
+      inkMutedDark #93948f
+      accentDark #799ab8
+      accentStrongDark #9bb3ca
+      accentSoftDark #373f43
+      lineDark #383a37
+      dangerDark #ef9189
+      dangerSoftDark #412422
+      onAccentDark #161917
+
+      // Every bundle spells these names, which follow the person's light or dark setting.
+      canvas when Scheme is Dark canvasDark / not canvasLight
+      surface when Scheme is Dark surfaceDark / not surfaceLight
+      ink when Scheme is Dark inkDark / not inkLight
+      inkMuted when Scheme is Dark inkMutedDark / not inkMutedLight
+      accent when Scheme is Dark accentDark / not accentLight
+      accentStrong when Scheme is Dark accentStrongDark / not accentStrongLight
+      accentSoft when Scheme is Dark accentSoftDark / not accentSoftLight
+      line when Scheme is Dark lineDark / not lineLight
+      danger when Scheme is Dark dangerDark / not dangerLight
+      dangerSoft when Scheme is Dark dangerSoftDark / not dangerSoftLight
+      onAccent when Scheme is Dark onAccentDark / not onAccentLight
    }
 
    styles {
@@ -20,6 +44,7 @@ design NotebookDesign {
       TextInput [background surface, border line, ink ink, radius 12, size 16]
       FormButton [background accentStrong, background accent when pressed, ink onAccent, radius 12, weight 700]
       Checkbox [ink ink]
+      AppSurface [background canvas]
       NavigationHost [background canvas]
       NavigationContent [background canvas]
       NavigationHeader [background surface, border line]

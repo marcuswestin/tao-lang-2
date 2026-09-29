@@ -214,7 +214,7 @@ async function resolveApp(project: ShipProject, options: ShipCommandOptions): Pr
   }
   if (!HCI.isInteractive(options)) {
     Errors.throwUserInput(
-      `Project '${project.name}' has no DefaultApp. Select one with --app. Available apps: ${
+      `Project '${project.name}' does not name an app. Select one with --app. Available apps: ${
         project.apps.map(app => app.name).join(', ')
       }.`,
     )

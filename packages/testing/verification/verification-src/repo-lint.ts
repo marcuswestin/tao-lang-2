@@ -450,10 +450,10 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:358',
   'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:369',
   'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:410',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:590',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:618',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:787',
-  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:948',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:601',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:633',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:801',
+  'packages/ides/studio-tooling/studio-tooling-src/StudioCdp.ts:962',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobun.ts:102',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:208',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:211',
@@ -487,29 +487,29 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:359',
   'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:376',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:20',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:195',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:513',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:541',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:548',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:624',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:198',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:516',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:544',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:551',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:627',
   'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:207',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:959',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:964',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:969',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:994',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1233',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1254',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1437',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1479',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1505',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:961',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:966',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:971',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:996',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1235',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1256',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1443',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1487',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1513',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:306',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:328',
-  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:995',
+  'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:1083',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:708',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:3579',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:713',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:3932',
   // Expo config plugins execute as standalone CommonJS host scripts.
-  'packages/providers/icloud/plugins/with-tao-icloud.cjs:32',
+  'packages/apps/providers/icloud/plugins/with-tao-icloud.cjs:32',
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:14',
   // The shared leaf builds the Web-standard cancellation error itself.
   'packages/shared/shared-src/core/Errors.ts:160',
@@ -530,7 +530,6 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:510',
   'packages/apps/runtime/TR-tests/TR-studio-device-client.test.ts:511',
   'packages/shared/shared-tests/test-helpers.test.ts:45',
-  'packages/providers/instantdb/instantdb-tests/InstantDB.test.ts:60',
   'packages/ides/studio/studio-tests/studio-server-datasource.test.ts:204',
 ]
 
@@ -598,7 +597,7 @@ const NODE_IMPORT_ALLOWLIST = [
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:1',
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:2',
   // A test proves the packaged CommonJS entry can resolve its generated dependency.
-  'packages/providers/icloud/icloud-tests/icloud-native.test.ts:210',
+  'packages/apps/providers/icloud/icloud-tests/icloud-native.test.ts:210',
 ]
 
 const CONSOLE_CALL_ALLOWLIST = [
@@ -805,8 +804,8 @@ export function testScratchConventionIssues(files: readonly SourceFile[]): strin
  * helper, and an entry goes stale when its file no longer holds a chain.
  */
 const KIND_CHAIN_ALLOWLIST = [
-  'packages/compiler/compiler-src/codegen/app/ExpressionsCompiler.ts',
-  'packages/providers/icloud/icloud-src/cloudkit-native.ts',
+  'packages/compiler/compiler-src/codegen/react-native/app/ExpressionsCompiler.ts',
+  'packages/apps/providers/icloud/icloud-src/cloudkit-native.ts',
   'packages/language/validator/validator-src/validators/types-validator.ts',
 ]
 
@@ -1084,8 +1083,9 @@ function crossesPackages(fromPath: string, toPath: string, packages: readonly st
   return fromPackage !== undefined && toPackage !== undefined && fromPackage !== toPackage
 }
 
-/** packageName resolves a repository path to its package directory name, which nests one level
- * deeper for a grouped package (`packages/<group>/<package>/...`) than for a top-level one. */
+/** packageName resolves a repository path to its package directory name. A grouped package nests
+ * one or two levels deeper (`packages/<group>/<package>/...`,
+ * `packages/<group>/<group>/<package>/...`) than a top-level one. */
 function packageName(path: string, packages: readonly string[]): string | undefined {
   if (!path.startsWith('packages/')) {
     return undefined

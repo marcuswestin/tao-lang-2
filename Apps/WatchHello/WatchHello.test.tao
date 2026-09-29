@@ -1,0 +1,30 @@
+use WatchHello from ./
+
+test "WatchHello" {
+   test "records one set and resets" {
+      run WatchHello
+      expect navigation title "One set"
+      expect text "0 of 12"
+      expect text "100000000000000000000"
+      expect text "0.000001"
+      press "Rep"
+      expect text "1 of 12"
+      press "Rep"
+      expect text "2 of 12"
+      press "Rep"
+      press "Rep"
+      press "Rep"
+      press "Rep"
+      press "Rep"
+      press "Rep"
+      press "Rep"
+      press "Rep"
+      press "Rep"
+      press "Rep"
+      expect text "12 of 12"
+      press "Rep"
+      expect text "12 of 12"
+      press "Reset"
+      expect text "0 of 12"
+   }
+}

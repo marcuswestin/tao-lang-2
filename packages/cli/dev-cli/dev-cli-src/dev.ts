@@ -15,6 +15,7 @@ import { devZshCompletion } from './completion/DevCompletion'
 import { readAgentCapabilities, unavailableLandingCapabilities } from './doctor/AgentCapabilities'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { BoardCommand } from './doctor/BoardCommand'
+import { MyStatusCommand } from './doctor/MyStatusCommand'
 import { ReclaimCommand } from './doctor/ReclaimCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { MergeRecovery } from './git/MergeRecovery'
@@ -148,20 +149,31 @@ await runWithCommands(commands => {
     .description('Run the opt-in real-host testing prototype, independently of existing suites.')
     .argument(
       '[mode]',
-      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, catalyst, agents, or setup.',
+      'check, lint, typecheck, format, driver, prepare, export, browser, android, ios, device, watchos, catalyst, agents, or setup.',
       'check',
     )
     .option(
       '--app <subject>',
-      'Explicit subject: hnreader, clockwork, native-navigation, or native-bridge (iOS Clipboard acceptance).',
+      'Explicit subject: hnreader, clockwork, native-navigation, native-bridge, or watchhello (watchos only).',
       'hnreader',
     )
     .option('--device <id>', 'Explicit simulator or physical-device identifier.')
+    .option(
+      '--developer-dir <path>',
+      'Task-scoped Xcode Contents/Developer directory for ios, device, watchos, or catalyst.',
+    )
+    .option('--output <path>', 'For ios: retain the built app and provenance in a new directory for manual review.')
+    .option('--build-only', 'For ios: build and install for manual review without running or claiming an Appium proof.')
     .option('--seed <seed>', 'Unsigned 32-bit deterministic application seed.', '12345')
     .option('--browser-channel <name>', 'Installed browser channel (chrome), or chromium after setup.', 'chrome')
     .option('--fault', 'Inject a subject application fault for a compiled host journey; expected to exit nonzero.')
     .option('--demo', 'For agents: build the example, print discovery, invoke one command, then stop.')
     .action(async (mode, options) => {
+      if (mode === 'watchos') {
+        const { runWatchProof } = await import('./watchos/WatchProof')
+        await runWatchProof(options)
+        return
+      }
       if (mode === 'agents') {
         if (options.demo) {
           await CLI.mustRun('just', { args: ['agents-demo'], cwd: Repo.getRoot(), stdio: 'inherit' })
@@ -464,6 +476,13 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('my-status')
+    .description('Show this checkout’s branch, changes, verification, and next step without changing anything.')
+    .action(async () => {
+      Platform.runtimeProcess.exit(await MyStatusCommand.run())
+    })
+
+  commands
     .command('sync-main')
     .description('Fast-forward main, move the mirrors that follow it, and merge it into this branch.')
     .action(async () => {
@@ -566,6 +585,38 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('storage')
+    .description(
+      'Sync the storage submodule, record a QA screenshot run into it, push it, or pin the commit this repository records.',
+    )
+    .argument('<action>', 'sync, qa, push, or pin')
+    .argument(
+      '[paths...]',
+      'Tao project directories to capture as one commit (default: the reference apps and starters, with --studio).',
+    )
+    .option('--app <names>', 'Capture only these apps (default: every app in the project).', repeatedOption)
+    .option('--scenario <selector>', 'Capture only matching scenarios; see `tao _preview qa --help`.', repeatedOption)
+    .option('--device <names>', 'Devices: phone, tablet, laptop (default: all).', repeatedOption)
+    .option('--appearance <names>', 'Appearances: light, dark (default: both).', repeatedOption)
+    .option('--studio', "Also capture Studio's own layouts, once, on the first project.")
+    .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
+    .action(async (
+      action: string,
+      paths: string[],
+      options: {
+        app?: string[]
+        appearance?: string[]
+        device?: string[]
+        note?: string
+        scenario?: string[]
+        studio?: boolean
+      },
+    ) => {
+      const { Storage } = await import('./git/Storage')
+      await runExitCommand(() => Storage.run(action, paths, options))
+    })
+
+  commands
     .command('delegation-report')
     .description('Summarise which subagents this repository spawned, at which model, and for how long.')
     .option('--json', 'Print the structured summary instead of a table.')
@@ -618,6 +669,51 @@ await runWithCommands(commands => {
           json: options.json === true,
         }),
       )
+    })
+
+  commands
+    .command('setup-ios')
+    .description('Inspect or install a requested side-by-side Xcode and iOS Simulator runtime.')
+    .requiredOption('--xcode-version <version>', 'The explicit Xcode version to use, such as 27.1.')
+    .requiredOption('--runtime-version <version>', 'The explicit iOS Simulator runtime version, such as 27.1.')
+    .option('--archive <path>', 'Override automatic detection of the requested Xcode .xip in Downloads.')
+    .option('--apply', 'Install requested components; in a terminal, wait for missing Xcode downloads and resume.')
+    .option('--json', 'Print the structured setup report.')
+    .action(async (options) => {
+      const { IosSetupCommand } = await import('./ios-setup/IosSetupCommand')
+      await runExitCommand(() => IosSetupCommand.run(options))
+    })
+
+  commands
+    .command('setup-watchos [project]')
+    .description('Guide Apple Watch setup; install the simulator runtime, export, build and run a Tao app.')
+    .requiredOption('--xcode-version <version>', 'The Xcode version to reuse or install, such as 27.0.')
+    .option('--runtime-version <version>', 'Exact watchOS Simulator runtime; required for simulator setup.')
+    .option('--archive <path>', 'Select a local Xcode .xip when the requested version is not installed.')
+    .option('--physical', 'Guide physical-watch pairing and signing instead of simulator setup.')
+    .option('--device <identifier>', 'Choose an Apple Watch simulator by UUID.')
+    .option('--apply', 'Install missing components, export the project, and run it on an available simulator.')
+    .option('--json', 'Print a structured report without interactive prompts.')
+    .action(async (project: string | undefined, options) => {
+      const { WatchosSetupCommand } = await import('./watchos-setup/WatchosSetupCommand')
+      await runExitCommand(() => WatchosSetupCommand.run({ ...options, project: project ?? 'Apps/WatchHello' }))
+    })
+
+  commands
+    .command('setup-visionos [project]')
+    .description('Guide Vision Pro setup, pairing, signing, build, installation and launch; inspect by default.')
+    .requiredOption('--xcode-version <version>', 'The explicit Xcode version to reuse or install, such as 27.0.')
+    .option('--archive <path>', 'Override automatic detection of the requested Xcode .xip in Downloads.')
+    .option('--simulator', 'Set up an optional simulator instead of a physical headset; no signing team needed.')
+    .option('--runtime-version <version>', 'Exact visionOS Simulator runtime; required only with --simulator.')
+    .option('--device <identifier>', 'Choose a physical headset or simulator from the inspected inventory.')
+    .option('--team <identifier>', 'Your ten-character Apple development team ID for headset signing.')
+    .option('--bundle-id <identifier>', 'Your app bundle identifier; required for physical-device signing.')
+    .option('--apply', 'Install missing components, guide personal steps, then build, install and launch the app.')
+    .option('--json', 'Print a structured report without interactive prompts.')
+    .action(async (project: string | undefined, options) => {
+      const { VisionosSetupCommand } = await import('./visionos-setup/VisionosSetupCommand')
+      await runExitCommand(() => VisionosSetupCommand.run({ ...options, project: project ?? 'Apps/VisionHello' }))
     })
 
   commands
@@ -714,6 +810,40 @@ await runWithCommands(commands => {
         Platform.runtimeProcess.exit(1)
       }
     })
+
+  commands
+    .command('instant-review')
+    .description(
+      'Push Auth Review to the stored Instant Cloud app, then run it in tao dev from a disposable copy.',
+    )
+    .option('--device <name-or-id>', 'Open this physical device after Metro starts.')
+    .option('--ios', 'Open an iOS simulator after Metro starts.')
+    .option('--web', 'Open the web app after Metro starts.')
+    .option('--dry-run', 'Print what the push would change, apply nothing, and start no dev loop.')
+    .option('--skip-push', 'Start the dev loop without pushing the schema and rules.')
+    .option('--force', 'Push a plan that is not purely additive, leaving undeclared attributes on the app.')
+    .option('--clerk', 'Run the variant signed in through Clerk, with the stored Clerk publishable key.')
+    .action(
+      async (
+        options: {
+          clerk?: boolean
+          device?: string
+          ios?: boolean
+          web?: boolean
+          dryRun?: boolean
+          force?: boolean
+          skipPush?: boolean
+        },
+      ) => {
+        const { runInstantReview } = await import('./instantdb/InstantReviewCommand')
+        try {
+          Platform.runtimeProcess.exit(await runInstantReview(options))
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.exit(1)
+        }
+      },
+    )
 
   commands
     .command('secrets')
@@ -922,7 +1052,8 @@ await runWithCommands(commands => {
     )
     .option('--platform <platform>', 'android, or ios-simulator for an iOS Simulator host.', 'android')
     .option('--abi <abis>', 'Comma-separated Android ABIs to build; arm64-v8a,x86_64 by default.')
-    .action(async (options: { abi?: string; platform: string }) => {
+    .option('--developer-dir <path>', 'Task-scoped Xcode Contents/Developer directory for ios-simulator.')
+    .action(async (options: { abi?: string; developerDir?: string; platform: string }) => {
       try {
         if (options.platform !== 'android' && options.platform !== 'ios-simulator') {
           Errors.throwUserInput(`--platform takes android or ios-simulator, not ${options.platform}.`)
@@ -932,6 +1063,7 @@ await runWithCommands(commands => {
         Platform.runtimeProcess.exit(
           await runCompanionHostBuild({
             platform: options.platform,
+            ...(options.developerDir === undefined ? {} : { developerDir: options.developerDir }),
             ...(architectures === undefined ? {} : { architectures }),
           }),
         )
@@ -959,7 +1091,7 @@ await runWithCommands(commands => {
   commands
     .command('studio-native')
     .description(
-      'Launch Tao Studio in its local Electrobun shell. When another session holds the native host, offers to stop it and proceed.',
+      "Launch this worktree's Tao Studio in its local Electrobun shell. When another session in this worktree holds its native host, offers to stop it and proceed.",
     )
     .argument('[project]', 'Tao project folder.', '.')
     .option('--entry <path>', 'Entry Tao file within the selected project.')
@@ -1195,6 +1327,11 @@ async function runExitCommand(run: () => Promise<number>): Promise<void> {
     }
     Platform.runtimeProcess.exit(1)
   }
+}
+
+/** repeatedOption collects every occurrence of a repeatable option, in order. */
+function repeatedOption(value: string, previous: string[] = []): string[] {
+  return [...previous, value]
 }
 
 function parsePositiveInteger(value: string, label: string): number {

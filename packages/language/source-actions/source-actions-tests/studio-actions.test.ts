@@ -372,6 +372,51 @@ Describe('Studio source-action patch bus', () => {
     `))
   })
 
+  Test('clears one kind of layout entry, and the clause once it is empty', async () => {
+    const document = await parseDocument(`
+      view MainView() {
+         render Stack() [pad 4, aligned left, gap 8, centered] {
+            Text("First")
+      }  }
+    `)
+    const alignment = await SourceActions.applyStudioPatch(document, {
+      heads: ['aligned', 'centered', 'fill'],
+      kind: 'clear-layout-entry',
+      renderId: renderId(requireRenderByText(document, 'Stack()')),
+    })
+    Expect(alignment.content).toBe(source(`
+      view MainView() {
+         render Stack() [pad 4, gap 8] {
+            Text("First")
+      }  }
+    `))
+
+    const padded = await parseRawDocument(alignment.content)
+    const gapless = await parseRawDocument(
+      (await SourceActions.applyStudioPatch(padded, {
+        heads: ['gap'],
+        kind: 'clear-layout-entry',
+        renderId: renderId(requireRenderByText(padded, 'Stack()')),
+      })).content,
+    )
+    const bare = await SourceActions.applyStudioPatch(gapless, {
+      heads: ['pad'],
+      kind: 'clear-layout-entry',
+      renderId: renderId(requireRenderByText(gapless, 'Stack()')),
+    })
+    Expect(bare.content).toBe(source(`
+      view MainView() {
+         render Stack() {
+            Text("First")
+      }  }
+    `))
+    await Expect(SourceActions.applyStudioPatch(gapless, {
+      heads: ['hug'],
+      kind: 'clear-layout-entry',
+      renderId: renderId(requireRenderByText(gapless, 'Stack()')),
+    })).rejects.toThrow('sets no hug')
+  })
+
   Test('inspects parsed layout and style values and edits current-dialect inline style', async () => {
     const document = await parseDocument(`
       workspace design Theme { ink #111 body [fg ink, size 14] }
@@ -1702,6 +1747,26 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).toContain('Text("Outer")')
   })
 
+  Test('toggles a selected Row or Col itself rather than the flow around it', async () => {
+    const document = await parseDocument(`
+      use Col, Row, Text from @tao/ui
+      view MainView() {
+         render Row() {
+            Col() {
+               Text("Nested")
+            }
+            Text("Outer")
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'toggle-flow-direction',
+      renderId: renderId(requireRenderBySource(document, 'Col()')),
+    }, { occurrence: { nodeKind: 'render', renderOwner: 'MainView' } })
+
+    Expect(patch.content).toContain('render Row() {\n      Row() {\n         Text("Nested")')
+    Expect(patch.content).not.toContain('Col()')
+  })
+
   Test('inserts direction-aware separators after or between direct flow siblings', async () => {
     const row = await parseDocument(`
       use Row, Text from @tao/ui
@@ -2691,6 +2756,942 @@ Describe('Studio canvas-mode source actions', () => {
     Expect(patch.content.indexOf('Row()')).toBeLessThan(patch.content.indexOf('#studio_rect_00720031'))
   })
 })
+
+Describe('Studio make view and group', () => {
+  const header = `
+      use Col, Text from @tao/ui
+
+      view MainView(Title text, Count number) {
+         let Note = "Kept"
+         render Col() {
+            Text("Before")
+            Text(Title)
+            Text("{ Count } of { Note }")
+            Text("After")
+         }
+      }
+    `
+
+  Test('extract-view makes a view from one render and passes the values it reads', async () => {
+    const document = await parseDocument(header)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'extract-view',
+      name: 'Heading',
+      renderIds: [renderId(requireRenderBySource(document, 'Text(Title)'))],
+    })
+    Expect(patch.content).toBe(source(`
+      use Col, Text from @tao/ui
+
+      view MainView(Title text, Count number) {
+         let Note = "Kept"
+         render Col() {
+            Text("Before")
+            Heading(Title: Title)
+            Text("{ Count } of { Note }")
+            Text("After")
+      }  }
+
+      view Heading(Title text) {
+         render Text(Title)
+      }
+    `))
+    await expectCanonical(patch.content)
+  })
+
+  Test('extract-view groups adjacent renders under a Col and types a local from its value', async () => {
+    const document = await parseDocument(header)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'extract-view',
+      name: 'Summary',
+      renderIds: [
+        renderId(requireRenderBySource(document, 'Text("{ Count }')),
+        renderId(requireRenderBySource(document, 'Text(Title)')),
+      ],
+    })
+    Expect(patch.content).toContain('Summary(Title: Title, Count: Count, Note: Note)')
+    Expect(patch.content).toContain(source(`
+      view Summary(Title text, Count number, Note text) {
+         render Col() {
+            Text(Title)
+            Text("{ Count } of { Note }")
+      }  }
+    `))
+    Expect(patch.content).toContain('   render Col() {\n      Text("Before")\n      Summary(')
+    await expectCanonical(patch.content)
+  })
+
+  Test('extract-view copies a shorthand parameter and names a loop item by its entity', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+      data Playlists / Playlist { Title text }
+
+      view Shelf(Playlist, Others list of Playlist) {
+         render Col() {
+            Text(Playlist.Title)
+            loop Others / Other {
+               Text(Other.Title)
+            }
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'extract-view',
+      name: 'Pair',
+      renderIds: [renderId(requireRenderBySource(document, 'Text(Other.Title)'))],
+    })
+    Expect(patch.content).toContain('Pair(Other: Other)')
+    Expect(patch.content).toContain('view Pair(Other Playlist) {\n   render Text(Other.Title)\n}')
+    await expectCanonical(patch.content)
+
+    const lead = await SourceActions.applyStudioPatch(document, {
+      kind: 'extract-view',
+      name: 'Lead',
+      renderIds: [renderId(requireRenderBySource(document, 'Text(Playlist.Title)'))],
+    })
+    Expect(lead.content).toContain('view Lead(Playlist) {\n   render Text(Playlist.Title)\n}')
+    Expect(lead.content).toContain('Lead(Playlist: Playlist)')
+    await expectCanonical(lead.content)
+  })
+
+  Test('extract-view numbers an unnamed view after the views already visible', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view View1() { render Text("Taken") }
+      view MainView() {
+         render Col() {
+            Text("Loose")
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'extract-view',
+      renderIds: [renderId(requireRenderBySource(document, 'Text("Loose")'))],
+    })
+    Expect(patch.content).toContain('      View2()\n')
+    Expect(patch.content).toContain('view View2() {\n   render Text("Loose")\n}')
+  })
+
+  Test('extract-view refuses a selection it cannot move without changing meaning', async () => {
+    const document = await parseDocument(header)
+    const extract = (name: string, texts: readonly string[]) =>
+      SourceActions.applyStudioPatch(document, {
+        kind: 'extract-view',
+        name,
+        renderIds: texts.map(text => renderId(requireRenderBySource(document, text))),
+      })
+    await Expect(extract('Split', ['Text("Before")', 'Text("After")'])).rejects.toThrow('adjacent elements')
+    await Expect(extract('MainView', ['Text("Before")'])).rejects.toThrow('already visible here')
+    await Expect(extract('lower', ['Text("Before")'])).rejects.toThrow('capital letter')
+    await Expect(extract('Whole', ['Col()'])).rejects.toThrow("not a view's root render")
+
+    const stateful = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         state Taps = 0
+         render Col() {
+            Text("{ Taps } taps")
+         }
+      }
+    `)
+    await Expect(SourceActions.applyStudioPatch(stateful, {
+      kind: 'extract-view',
+      name: 'Tapper',
+      renderIds: [renderId(requireRenderBySource(stateful, 'taps")'))],
+    })).rejects.toThrow('cannot make a view that reads Taps')
+  })
+
+  Test('group-renders wraps adjacent renders in place and imports the wrapper', async () => {
+    const document = await parseDocument(header)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'group-renders',
+      renderIds: [
+        renderId(requireRenderBySource(document, 'Text(Title)')),
+        renderId(requireRenderBySource(document, 'Text("{ Count }')),
+      ],
+      wrapper: 'Row',
+    })
+    Expect(patch.content).toContain('use Col, Row, Text from @tao/ui')
+    Expect(patch.content).toContain(`      Text("Before")
+      Row() {
+         Text(Title)
+         Text("{ Count } of { Note }")
+      }
+      Text("After")`)
+    await expectCanonical(patch.content)
+  })
+
+  Test('extract-view passes a guard error message as a text parameter', async () => {
+    await withStudioProject(
+      {
+        'Main.tao': `
+        use Col, Text from @tao/ui
+
+        workspace
+        data Notes / Note {
+           Title text,
+        }
+        view MainView() {
+           query Notes = Notes with { }
+           render Col() {
+              guard Notes {
+                 loading -> { Text("Loading") }
+                 error -> Message {
+                    Text(Message)
+                    Text("Try again")
+              }  }
+              Text("After")
+        }  }
+      `,
+      },
+      'Main.tao',
+      async project => {
+        const content = await project.patch({
+          kind: 'extract-view',
+          name: 'Failure',
+          renderIds: [renderId(requireRenderBySource(project.document, 'Text(Message)'))],
+        })
+        Expect(content).toContain('Failure(Message: Message)')
+        Expect(content).toContain('view Failure(Message text) {\n   render Text(Message)\n}')
+      },
+    )
+  })
+
+  Test('extract-view refuses caller content, a bare render slot, and a query read', async () => {
+    const document = await parseDocument(`
+      use Col, Row, Text from @tao/ui
+
+      data Notes / Note { Title text }
+      view Frame() {
+         @header = empty
+         query Notes = Notes with { }
+         render Col() {
+            Row() {
+               @@content
+            }
+            Col() {
+               @header
+            }
+            Col() {
+               loop Notes / Note {
+                  Text(Note.Title)
+            }  }
+            Text("After")
+      }  }
+    `)
+    const extract = (text: string) =>
+      SourceActions.applyStudioPatch(document, {
+        kind: 'extract-view',
+        name: 'Inner',
+        renderIds: [renderId(requireRenderBySource(document, text))],
+      })
+    await Expect(extract('Row()')).rejects.toThrow('caller content and render slots stay in the view that owns them')
+    await Expect(extract('Col() {\n         @header')).rejects.toThrow(
+      'caller content and render slots stay in the view that owns them',
+    )
+    await Expect(extract('Col() {\n         loop')).rejects.toThrow(
+      'cannot make a view that reads Notes yet: queries, state, actions and commands stay in the view that owns them',
+    )
+
+    const later = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            Text(Later)
+            Text("After")
+         }
+         let Later = "Later"
+      }
+    `)
+    await Expect(SourceActions.applyStudioPatch(later, {
+      kind: 'extract-view',
+      name: 'Inner',
+      renderIds: [renderId(requireRenderBySource(later, 'Text(Later)'))],
+    })).rejects.toThrow('cannot make a view that reads Later: MainView binds it outside the selection')
+  })
+
+  Test('group-renders and extract-view keep a bare when arm and a one-line block valid', async () => {
+    const files = {
+      'Main.tao': `
+        use Col, Row, Text from @tao/ui
+
+        view MainView(Flag boolean, Name text) {
+           render Row() {
+              when Flag
+                 | true -> Text(Name)
+                 | otherwise -> Text("n")
+              Col() { Text("C") }
+        }  }
+      `,
+    }
+    const cases = [
+      { kind: 'extract-view', name: 'Arm', text: 'Text(Name)', written: '| true -> Arm(Name: Name)' },
+      {
+        kind: 'group-renders',
+        text: 'Text("n")',
+        written: '| otherwise -> Col() {\n            Text("n")\n         }',
+      },
+      { kind: 'extract-view', name: 'Inner', text: 'Text("C")', written: 'Col() {\n         Inner()' },
+      { kind: 'group-renders', text: 'Text("C")', written: 'Col() {\n         Col() {\n            Text("C")' },
+    ] as const
+    for (const testCase of cases) {
+      await withStudioProject(files, 'Main.tao', async project => {
+        const renderIds = [renderId(requireRenderBySource(project.document, testCase.text))]
+        const content = await project.patch(
+          testCase.kind === 'extract-view'
+            ? { kind: 'extract-view', name: testCase.name, renderIds }
+            : { kind: 'group-renders', renderIds, wrapper: 'Col' },
+        )
+        Expect(content).toContain(testCase.written)
+      })
+    }
+  })
+
+  Test("extract-view roots several siblings in their parent's direction", async () => {
+    await withStudioProject(
+      {
+        'Main.tao': `
+        use Col, Row, Text from @tao/ui
+
+        view MainView() {
+           render Col() {
+              Row() {
+                 Text("A")
+                 Text("B")
+              }
+              Text("C")
+        }  }
+      `,
+      },
+      'Main.tao',
+      async project => {
+        const content = await project.patch({
+          kind: 'extract-view',
+          name: 'Pair',
+          renderIds: ['Text("A")', 'Text("B")'].map(text => renderId(requireRenderBySource(project.document, text))),
+        })
+        Expect(content).toContain('view Pair() {\n   render Row() {\n      Text("A")\n      Text("B")\n}  }')
+      },
+    )
+  })
+
+  Test('extract-view refuses an entity name and the name of a value the view takes', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      data Notes / Note { Title text }
+      view MainView(Title text) {
+         render Col() {
+            Text(Title)
+            Text("After")
+      }  }
+    `)
+    const extract = (name: string) =>
+      SourceActions.applyStudioPatch(document, {
+        kind: 'extract-view',
+        name,
+        renderIds: [renderId(requireRenderBySource(document, 'Text(Title)'))],
+      })
+    await Expect(extract('Note')).rejects.toThrow('A declaration named Note is already visible here')
+    await Expect(extract('Title')).rejects.toThrow('The new view takes a value named Title')
+    await Expect(SourceActions.applyStudioPatch(document, { kind: 'copy-view', name: 'Note', view: 'MainView' }))
+      .rejects.toThrow('A declaration named Note is already visible here')
+  })
+})
+
+Describe('Studio copy-view', () => {
+  Test('copy-view duplicates a declared view right after the original, keeping its public modifier', async () => {
+    const document = await parseDocument(`
+      public view Card(Title text) {
+         render Text(Title)
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'CardCopy',
+      view: 'Card',
+    })
+
+    Expect(patch.content).toBe(source(`
+      public
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      public
+      view CardCopy(Title text) {
+         render Text(Title)
+      }
+    `))
+    await expectCanonical(patch.content)
+  })
+
+  Test('copy-view excludes the original doc comment from the copy', async () => {
+    const document = await parseDocument(`
+      // Renders one card.
+      view Card(Title text) {
+         render Text(Title)
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'CardCopy',
+      view: 'Card',
+    })
+
+    Expect(patch.content).toBe(source(`
+      // Renders one card.
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      view CardCopy(Title text) {
+         render Text(Title)
+      }
+    `))
+  })
+
+  Test('copy-view does not rewrite a recursive self-reference in the body', async () => {
+    const document = await parseDocument(`
+      view Item() {
+         render Stack() {
+            Item()
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'ItemCopy',
+      view: 'Item',
+    })
+
+    Expect(patch.content).toContain('view ItemCopy() {')
+    Expect(patch.content.match(/ItemCopy\(\)/g)).toHaveLength(1)
+    Expect(patch.content.match(/Item\(\)/g)).toHaveLength(3)
+  })
+
+  Test('copy-view refuses a view that is not declared here', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'CardCopy',
+      view: 'Missing',
+    })).rejects.toThrow('not uniquely declared')
+  })
+
+  Test('copy-view refuses an ambiguous view name', async () => {
+    const document = await parseRawDocument(`
+      view Card() { render Text("A") }
+      view Card() { render Text("B") }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'CardCopy',
+      view: 'Card',
+    })).rejects.toThrow('not uniquely declared')
+  })
+
+  Test('copy-view refuses a name already visible in the file', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      view Other() { render Text("Other") }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'copy-view',
+      name: 'Other',
+      view: 'Card',
+    })).rejects.toThrow('already visible here')
+  })
+})
+
+Describe('Studio add-render-scenario', () => {
+  Test("adds a new entry from another entry's own render clause and a chosen device size", async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         scenario "lead" {
+            device phone 390 x 844
+            render (Title: "Lead")
+         }
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: 'copy',
+      width: 400,
+    })
+    const updated = await parseRawDocument(patch.content)
+
+    Expect(patch.content).toBe(source(`
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      scenarios Card "states" {
+         scenario "lead" {
+            device phone 390 x 844
+            render (Title: "Lead")
+         }
+         scenario "copy" {
+            device phone 400 x 900
+            render (Title: "Lead")
+      }  }
+    `))
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
+  })
+
+  Test("writes only the device line when the from-entry inherits the group's render clause", async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         render (Title: "Default")
+         device phone
+         scenario "lead" { }
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: 'copy',
+      width: 400,
+    })
+    const updated = await parseRawDocument(patch.content)
+
+    Expect(patch.content).toBe(source(`
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      scenarios Card "states" {
+         render (Title: "Default")
+         device phone
+         scenario "lead" { }
+         scenario "copy" {
+            device phone 400 x 900
+      }  }
+    `))
+    const newScenario = updated.parseResult.value.statements
+      .filter(AST.isScenarioGroupDeclaration)
+      .flatMap(group => AST.scenarioDeclarations(group))
+      .find(scenario => scenario.name === 'copy')!
+    Expect(newScenario.block.entries.filter(AST.isScenarioRenderClause)).toEqual([])
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
+  })
+
+  Test('refuses ambiguous scenario identity', async () => {
+    const document = await parseDocument(`
+      view Card() { render Text("Card") }
+      scenarios Card "states" { scenario "lead" { } }
+      scenarios Card "states" { scenario "lead" { } }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: 'copy',
+      width: 400,
+    })).rejects.toThrow('not uniquely declared')
+  })
+
+  Test('refuses a from-entry whose effective subject is not a view', async () => {
+    const document = await parseDocument(`
+      app Preview { view Main }
+      view Main() { render Text("Main") }
+      scenarios Preview "flows" {
+         scenario "boot" { }
+      }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'boot',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'flows',
+      scenarioName: 'copy',
+      width: 400,
+    })).rejects.toThrow('can only add a render scenario from a focused render scenario')
+  })
+
+  Test('refuses a new scenario name that already exists in the group', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         scenario "lead" { device phone render (Title: "Lead") }
+         scenario "taken" { device phone render (Title: "Taken") }
+      }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: 'taken',
+      width: 400,
+    })).rejects.toThrow('already exists')
+  })
+
+  Test('refuses invalid scenario names', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         scenario "lead" { device phone render (Title: "Lead") }
+      }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: '',
+      width: 400,
+    })).rejects.toThrow('identity is invalid')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      fromScenarioName: 'lead',
+      height: 900,
+      kind: 'add-render-scenario',
+      scenarioGroupName: 'states',
+      scenarioName: 'bad\x01name',
+      width: 400,
+    })).rejects.toThrow('identity is invalid')
+  })
+
+  Test('refuses a non-positive or non-whole device size', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         scenario "lead" { device phone render (Title: "Lead") }
+      }
+    `)
+    const attempt = (width: number, height: number) =>
+      SourceActions.applyStudioPatch(document, {
+        fromScenarioName: 'lead',
+        height,
+        kind: 'add-render-scenario',
+        scenarioGroupName: 'states',
+        scenarioName: 'copy',
+        width,
+      })
+    await Expect(attempt(0, 900)).rejects.toThrow('positive whole number')
+    await Expect(attempt(400, -1)).rejects.toThrow('positive whole number')
+    await Expect(attempt(400.5, 900)).rejects.toThrow('positive whole number')
+  })
+
+  Test("copies the from-entry's own fixture and prepare clauses, which its render arguments read", async () => {
+    await withStudioProject(
+      { ...notebookFiles, 'Scenarios.tao': notebookScenarios(ownFixtureEntries) },
+      'Scenarios.tao',
+      async project => {
+        const content = await project.patch({
+          fromScenarioName: 'groceries',
+          height: 200,
+          kind: 'add-render-scenario',
+          scenarioGroupName: 'notes states',
+          scenarioName: 'drawn1',
+          width: 300,
+        })
+        Expect(content).toContain(
+          source(`
+           scenario "drawn1" {
+              device phone 300 x 200
+              fixture Sample
+              prepare {
+                 update Groceries {
+                    Title: "Milk"
+              }  }
+              render (Note: Groceries)
+        }  }
+      `).trimStart(),
+        )
+      },
+    )
+  })
+})
+
+Describe('Studio retarget-scenario-render', () => {
+  Test("retargets an entry's own render clause at a different view, keeping its arguments", async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      view OtherCard(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         scenario "lead" {
+            render (Title: "Lead")
+         }
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'retarget-scenario-render',
+      scenarioGroupName: 'states',
+      scenarioName: 'lead',
+      view: 'OtherCard',
+    })
+    const updated = await parseRawDocument(patch.content)
+
+    Expect(patch.content).toBe(source(`
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      view OtherCard(Title text) {
+         render Text(Title)
+      }
+
+      scenarios Card "states" {
+         scenario "lead" {
+            render OtherCard(Title: "Lead")
+      }  }
+    `))
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
+  })
+
+  Test("adds an inherited render clause as the entry's first line, retargeted at another view", async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      view OtherCard(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         render (Title: "Default")
+         device phone
+         scenario "lead" {
+            press #edit
+         }
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'retarget-scenario-render',
+      scenarioGroupName: 'states',
+      scenarioName: 'lead',
+      view: 'OtherCard',
+    })
+    const updated = await parseRawDocument(patch.content)
+
+    Expect(patch.content).toBe(source(`
+      view Card(Title text) {
+         render Text(Title)
+      }
+
+      view OtherCard(Title text) {
+         render Text(Title)
+      }
+
+      scenarios Card "states" {
+         render (Title: "Default")
+         device phone
+         scenario "lead" {
+            render OtherCard(Title: "Default")
+            press #edit
+      }  }
+    `))
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
+  })
+
+  Test('refuses ambiguous scenario identity', async () => {
+    const document = await parseDocument(`
+      view Card() { render Text("Card") }
+      scenarios Card "states" { scenario "lead" { } }
+      scenarios Card "states" { scenario "lead" { } }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'retarget-scenario-render',
+      scenarioGroupName: 'states',
+      scenarioName: 'lead',
+      view: 'Card',
+    })).rejects.toThrow('not uniquely declared')
+  })
+
+  Test('refuses an entry with no effective render clause', async () => {
+    const document = await parseDocument(`
+      app Preview { view Main }
+      view Main() { render Text("Main") }
+      scenarios Preview "flows" {
+         scenario "boot" { }
+      }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'retarget-scenario-render',
+      scenarioGroupName: 'flows',
+      scenarioName: 'boot',
+      view: 'Main',
+    })).rejects.toThrow('can only retarget a focused render scenario')
+  })
+
+  Test('adds the new view to the use statement that brought the original view in', async () => {
+    await withStudioProject(
+      { ...notebookFiles, 'Scenarios.tao': notebookScenarios(groupFixtureEntries) },
+      'Scenarios.tao',
+      async project => {
+        const content = await project.patch({
+          kind: 'retarget-scenario-render',
+          scenarioGroupName: 'notes states',
+          scenarioName: 'ideas',
+          view: 'View3',
+        })
+        Expect(content).toContain('use NoteRow, View3 from ./Notes\n')
+        Expect(content).toContain('render View3(Note: Ideas)')
+      },
+    )
+  })
+
+  Test(
+    'writes a render clause for an entry of a view group that has none, leaving a same-file view unimported',
+    async () => {
+      await withStudioProject(
+        {
+          'Main.tao': `
+        use Text from @tao/ui
+
+        view Badge() { render Text("Badge") }
+        view View2() { render Text("Badge") }
+        scenarios Badge "states" {
+           scenario "drawn2" {
+              device phone 100 x 100
+        }  }
+      `,
+        },
+        'Main.tao',
+        async project => {
+          const content = await project.patch({
+            kind: 'retarget-scenario-render',
+            scenarioGroupName: 'states',
+            scenarioName: 'drawn2',
+            view: 'View2',
+          })
+          Expect(content).toContain('   scenario "drawn2" {\n      render View2()\n      device phone 100 x 100\n')
+          Expect(content.startsWith('use Text from @tao/ui\n')).toBe(true)
+        },
+      )
+    },
+  )
+
+  Test('refuses a view name that is not a capitalized identifier', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" { scenario "lead" { render (Title: "Lead") } }
+    `)
+    for (const view of ['card', 'Card)', '']) {
+      await Expect(SourceActions.applyStudioPatch(document, {
+        kind: 'retarget-scenario-render',
+        scenarioGroupName: 'states',
+        scenarioName: 'lead',
+        view,
+      })).rejects.toThrow('Studio view name')
+    }
+  })
+})
+
+const notebookFiles = {
+  'Data.tao': `
+    package
+    data Notes / Note {
+       Title text,
+    }
+  `,
+  'Notes/Notes.tao': `
+    use Text from @tao/ui
+    use Note from ..
+
+    package
+    view NoteRow(Note) {
+       render Text(Note.Title)
+    }
+
+    package
+    view View3(Note) {
+       render Text(Note.Title)
+    }
+  `,
+}
+
+const ownFixtureEntries = `
+   device phone
+   scenario "groceries" {
+      fixture Sample
+      prepare {
+         update Groceries {
+            Title: "Milk"
+      }  }
+      render (Note: Groceries)
+   }
+   scenario "ideas" {
+      fixture Sample
+      render (Note: Ideas)
+   }`
+
+const groupFixtureEntries = `
+   fixture Sample
+   device phone
+   scenario "groceries" {
+      render (Note: Groceries)
+   }
+   scenario "ideas" {
+      render (Note: Ideas)
+   }`
+
+/** notebookScenarios mirrors the Notebook starter's scenarios file around the given group entries. */
+function notebookScenarios(entries: string): string {
+  return `use Note from ./
+use NoteRow from ./Notes
+
+fixture Sample {
+   Groceries = create Note {
+      Title: "Groceries"
+   }
+   Ideas = create Note {
+      Title: "Ideas"
+}  }
+
+scenarios NoteRow "notes states" {${entries}
+}
+`
+}
+
+type StudioProject = Readonly<{
+  document: AST.Document
+  /** patch applies one request to the entry and asserts the whole project still links and validates with it. */
+  patch: (request: StudioSourcePatchRequest) => Promise<string>
+}>
+
+/**
+ * withStudioProject writes a temporary project and parses its entry together with every other file, as
+ * Studio's server does, so a patch sees the same workspace context and its output is judged by the
+ * linker and validator rather than by its shape alone.
+ */
+async function withStudioProject(
+  files: Readonly<Record<string, string>>,
+  entry: string,
+  test: (project: StudioProject) => Promise<void>,
+): Promise<void> {
+  await withTaoFiles('tao-studio-validated-', files, async (paths, root) => {
+    const entryPath = paths[entry]
+    Assert.defined(entryPath, `the Studio project declares its entry file: ${entry}`)
+    const allPaths = [entryPath, ...Object.values(paths).filter(path => path !== entryPath)]
+    const parsed = await (await Workspace.open(root)).parseFiles(allPaths)
+    const document = parsed[0]!.entry.document
+    const context = { files: [...new Set(parsed.flatMap(result => result.files.map(file => file.ast)))] }
+    await test({
+      document,
+      patch: async request => {
+        const { content } = await SourceActions.applyStudioPatch(document, request, context)
+        const validated = await (await Workspace.open(root, { sourceOverrides: { [entryPath]: content } }))
+          .validateFiles(allPaths)
+        Expect(
+          validated.diagnostics.filter(diagnostic => diagnostic.severity === 'error').map(diagnostic =>
+            diagnostic.message
+          ),
+        ).toEqual([])
+        return content
+      },
+    })
+  })
+}
 
 /** expectCanonical asserts that `tao check` finds edited source canonical: every source fix leaves it unchanged. */
 async function expectCanonical(content: string): Promise<void> {

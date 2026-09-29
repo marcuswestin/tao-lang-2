@@ -163,6 +163,11 @@ export class StudioGeneratedSources {
     }
   }
 
+  /** owns says whether a path sits in the reserved @/studio tree, where every write goes through `rewrite`. */
+  owns(path: string): boolean {
+    return FS.pathIsWithin(path, this.#studioRoot)
+  }
+
   /** rewrite updates another generated import site without surrendering Studio ownership. */
   async rewrite(path: string, content: string, writer: StudioGeneratedSourceWriter = FS.writeText): Promise<void> {
     Assert.input(FS.pathIsWithin(path, this.#studioRoot), 'Generated Studio rewrite must remain under @/studio.')

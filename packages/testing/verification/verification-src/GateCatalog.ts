@@ -23,7 +23,7 @@ import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from '
  *
  * Every recipe-backed node implicitly reads `just`, because it starts by parsing the Justfile, which
  * `_fix-just-fmt` rewrites. That is why `_fix-just-fmt` is first in the prepare phase and depends on
- * nothing: dprint owns TypeScript, JSON, and Markdown (`config/dprint.jsonc`) and never touches the
+ * nothing: dprint owns TypeScript, JSON, and Markdown (`.config/dprint.jsonc`) and never touches the
  * Justfile, so there is nothing for it to wait for, and running it first costs 15ms and frees every
  * other node from it.
  *
@@ -234,7 +234,7 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // Verified by search; a suite that starts reading one belongs off this list.
   ['ai/generation', { reads: ['ts'] }],
   ['testing/host-control', { reads: ['ts'] }],
-  ['providers/icloud', { reads: ['ts'] }],
+  ['apps/providers/icloud', { reads: ['ts'] }],
   ['performance-checks', { reads: ['gen-parser', 'ts'] }],
   ['apps/runtime', { reads: ['ts'] }],
   ['shared', { reads: ['ts'] }],
@@ -291,6 +291,8 @@ const GUI_PRIORITY = 6
  * edge is free and in-process; the lease is what reaches outside this one lane.
  */
 const GUI_RESOURCE = 'gui'
+/** Graph GUI children inherit the lease held by GateRunner instead of taking it again. */
+const GUI_LEASE_HELD_ENV_KEY = 'TAO_GUI_LEASE_HELD'
 /** Both gates open the checked-in HNReader project, which permits one dev-session owner. */
 const HNREADER_PROJECT_RESOURCE = 'studio-hnreader-project'
 
@@ -577,7 +579,13 @@ function node(name: string, repositoryRoot: string): WorkNode {
     writes: _writes,
     ...scheduling
   } = metadata(name)
-  const inRepository = (command: GateCommand): WorkCommand => ({ ...command, cwd: repositoryRoot })
+  const inRepository = (command: GateCommand): WorkCommand => ({
+    ...command,
+    cwd: repositoryRoot,
+    ...((scheduling.resources ?? []).includes(GUI_RESOURCE)
+      ? { env: { [GUI_LEASE_HELD_ENV_KEY]: 'true' } }
+      : {}),
+  })
   return {
     ...scheduling,
     needs: dependenciesOf(name),
@@ -638,6 +646,7 @@ export const GateCatalog = {
   DEFAULT_METADATA,
   DEFAULT_SUITE_READS,
   GUI_PRIORITY,
+  GUI_LEASE_HELD_ENV_KEY,
   GUI_RESOURCE,
   PREPARE_PRIORITY,
   STUDIO_LANE_COST,

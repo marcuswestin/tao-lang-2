@@ -193,7 +193,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   /** compile compiles an entry Tao file and all reachable Tao documents. */
   async compile(entryFile: string, options: CompileOptions = {}): Promise<CompileResult> {
     const validationResult = await this.validate(entryFile)
-    if (!Diagnostics.hasError(validationResult.diagnostics)) {
+    if (options.target !== 'watchos' && !Diagnostics.hasError(validationResult.diagnostics)) {
       await this.writeBridgeMetadata(validationResult.files)
     }
     return Compiler.compileValidated(validationResult, this.compilerContext(), options)
@@ -202,7 +202,7 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   /** compileFiles compiles the union of several entry graphs while keeping the first as the app entry. */
   async compileFiles(entryFiles: readonly string[], options: CompileOptions = {}): Promise<CompileResult> {
     const validationResult = await this.validateFiles(entryFiles)
-    if (!Diagnostics.hasError(validationResult.diagnostics)) {
+    if (options.target !== 'watchos' && !Diagnostics.hasError(validationResult.diagnostics)) {
       await this.writeBridgeMetadata(validationResult.files)
     }
     return Compiler.compileValidated(validationResult, this.compilerContext(), options)

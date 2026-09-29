@@ -1,11 +1,13 @@
+import { Workspace } from '@compiler/workspace'
 import Runtime, { HostDependencies, RuntimeToolchainPaths } from '@expo-host'
-import { CLI, Errors, FS, HCI, Platform, ReleaseCapabilities, Repo } from '@shared'
+import { Assert, CLI, Errors, FS, HCI, Platform, ReleaseCapabilities, Repo } from '@shared'
 import { AgentClientBuild } from './agent-client-build'
 import { buildDesktopApp } from './desktop-build'
-import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
-import { selectTaoDevApp } from './dev-app-selection'
+import { chooseTaoApp } from './dev-app-selection'
+import { exportVisionOSProject } from './visionos-project'
+import { exportWatchOSProject } from './watchos-project'
 
-export type BuildTarget = 'web' | 'desktop' | 'ios' | 'android'
+export type BuildTarget = 'web' | 'desktop' | 'ios' | 'android' | 'visionos' | 'watchos'
 export type BuildRecord = {
   appName: string
   createdAt: string
@@ -28,7 +30,7 @@ type BuildOptions = {
   agents?: boolean
   output?: string
 }
-const targets = ['web', 'desktop', 'ios', 'android'] as const
+const targets = ['web', 'desktop', 'ios', 'android', 'visionos', 'watchos'] as const
 const runtimeFiles = [
   'index.ts',
   'app.json',
@@ -53,7 +55,7 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
   if (options.agents && (options.compileOnly || selectedTargets.some(target => target !== 'desktop'))) {
     Errors.throwUserInput('--agents requires a packaged desktop build.')
   }
-  const app = await chooseApp(path, options.appName)
+  const app = await chooseTaoApp(path, options.appName, 'Build')
   const buildsRoot = options.output ? FS.resolvePath(options.output) : FS.resolvePath('.tao/builds', app.projectRoot)
   if (
     FS.pathIsWithin(buildsRoot, app.projectRoot)
@@ -92,6 +94,24 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
     await FS.writeJson(FS.resolvePath('build.json', artifactRoot), record)
     progress.snapshotComplete()
     record.results = await executeBuildTargets(selectedTargets, async target => {
+      if (target === 'watchos') {
+        const compiled = await Workspace.compile(snapshotApp, { appName: app.appName, target: 'watchos' })
+        const outputRoot = FS.resolvePath(options.compileOnly ? 'compiled/watchos' : 'watchos', artifactRoot)
+        if (options.compileOnly) {
+          for (const file of compiled.files) {
+            await FS.writeText(FS.resolvePath(file.relativePath, outputRoot), file.code)
+          }
+          return outputRoot
+        }
+        Assert.defined(compiled.entryArtifact, 'watch compilation provides an entry artifact')
+        return await exportWatchOSProject({
+          appName: app.appName,
+          displayName: compiled.displayName,
+          outputRoot,
+          files: compiled.files,
+          entryArtifact: compiled.entryArtifact,
+        })
+      }
       if (options.compileOnly === true) {
         const compileRoot = FS.resolvePath(`compiled/${target}`, artifactRoot)
         const generated = await Runtime.generateApp(snapshotApp, {
@@ -103,10 +123,21 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
       if (target === 'ios' || target === 'android') {
         Errors.throwUserInput(`Local ${target} builds are not yet implemented.`)
       }
-      const site = FS.resolvePath('site', target === 'web' ? FS.resolvePath('web', artifactRoot) : workRoot)
+      const site = FS.resolvePath(
+        'site',
+        target === 'web' ? FS.resolvePath('web', artifactRoot) : FS.resolvePath(target, workRoot),
+      )
       await exportWeb(snapshotApp, app.appName, workRoot, site, target)
       if (target === 'web') {
         return await finishWebArtifact(site)
+      }
+      if (target === 'visionos') {
+        return await exportVisionOSProject({
+          appName: app.appName,
+          outputRoot: FS.resolvePath('visionos', artifactRoot),
+          siteRoot: site,
+          testSource: await visionosNativeTestSource(app.appName),
+        })
       }
       const desktop = await buildDesktopApp({
         appName: app.appName,
@@ -240,50 +271,26 @@ async function chooseTargets(requested: readonly BuildTarget[]): Promise<BuildTa
   }
   if (!HCI.isInteractive()) {
     Errors.throwUserInput(
-      'Choose build targets with --web, --desktop, --ios, and/or --android in a non-interactive terminal.',
+      'Choose build targets with --web, --desktop, --ios, --android, --visionos, and/or --watchos in a non-interactive terminal.',
     )
   }
-  HCI.writeLine('Build targets: 1. web  2. desktop  3. iOS (not yet implemented)  4. Android (not yet implemented)')
+  HCI.writeLine(
+    'Build targets: 1. web  2. desktop  3. iOS (not yet implemented)  4. Android (not yet implemented)  5. visionOS (Xcode project)  6. watchOS (SwiftUI Xcode project)',
+  )
   const answer = await HCI.askText({
     message: 'Select target numbers (comma-separated)',
     validate: value =>
-      parseTargetSelection(value) === undefined ? 'Choose one or more numbers from 1 to 4.' : undefined,
+      parseTargetSelection(value) === undefined ? `Choose one or more numbers from 1 to ${targets.length}.` : undefined,
   })
   return parseTargetSelection(answer)!
 }
 
 function parseTargetSelection(value: string): BuildTarget[] | undefined {
   const parts = value.split(',').map(part => part.trim())
-  if (parts.some(part => !/^[1-4]$/.test(part))) {
+  if (parts.some(part => !/^\d+$/.test(part) || Number(part) < 1 || Number(part) > targets.length)) {
     return undefined
   }
   return targets.filter((_, index) => parts.includes(String(index + 1)))
-}
-
-async function chooseApp(path: string, appName?: string): Promise<TaoDevApp> {
-  const projects = await discoverTaoDevProjects(path)
-  const apps = projects.flatMap(project => project.apps)
-  if (apps.length === 0) {
-    Errors.throwUserInput(`No runnable Tao apps found under ${FS.displayPath(FS.resolvePath(path))}.`)
-  }
-  if (appName !== undefined) {
-    const matches = apps.filter(app => app.appName === appName)
-    if (matches.length !== 1) {
-      Errors.throwUserInput(`--app '${appName}' must identify exactly one runnable app (${matches.length} found).`)
-    }
-    return matches[0]!
-  }
-  if (apps.length === 1) {
-    return apps[0]!
-  }
-  if (!HCI.isInteractive()) {
-    Errors.throwUserInput('Multiple Tao apps found; choose one with --app in a non-interactive terminal.')
-  }
-  const selected = await selectTaoDevApp(projects)
-  if (selected.kind !== 'selected') {
-    Errors.throwUserInput('Build app selection was cancelled.')
-  }
-  return selected.app
 }
 
 async function ensureBuildsIgnored(projectRoot: string): Promise<void> {
@@ -451,4 +458,13 @@ async function finishWebArtifact(siteRoot: string): Promise<string> {
   )
   await FS.chmod(FS.resolvePath('run', parent), 0o755)
   return parent
+}
+
+/** visionosNativeTestSource loads XCTest sources owned by the testing package for known sample apps. */
+async function visionosNativeTestSource(appName: string): Promise<string | undefined> {
+  if (appName !== 'VisionHello') {
+    return undefined
+  }
+  const path = Repo.resolvePath('packages/testing/e2e-testing/native/visionos/VisionHelloTests.swift')
+  return await FS.isFile(path) ? await FS.readText(path) : undefined
 }

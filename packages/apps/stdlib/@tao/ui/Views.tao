@@ -18,6 +18,31 @@ view Stack() {
    ```
 }
 
+// A layer floats over its parent's flow: it takes no room, and each inset is its distance from
+// that edge of the parent's box. An axis with no inset sits at its start edge, top or left. The
+// layer's own children stack and hug, and layers paint over earlier siblings in source order.
+// Presses on the layer's empty area reach what lies beneath it; its children still take theirs.
+public
+view Layer(InsetTop number? default none, InsetRight number? default none, InsetBottom number? default none, InsetLeft number? default none) {
+   render inject InsetTop, InsetRight, InsetBottom, InsetLeft, Content @@content, Layout @@layout, Tag @@tag ```ts
+      const inset = (value: number | null | undefined) => value == null ? undefined : value
+      const vertical = InsetTop == null && InsetBottom == null ? 0 : inset(InsetTop)
+      const horizontal = InsetLeft == null && InsetRight == null ? 0 : inset(InsetLeft)
+      return TR.Views.View({ children: Content, layout: Layout, tag: Tag }, {
+        direction: 'column',
+        layout: TR.Layout.create([['content', 'top', 'center'], ['hug']]),
+        style: {
+          position: 'absolute',
+          top: vertical,
+          right: inset(InsetRight),
+          bottom: inset(InsetBottom),
+          left: horizontal,
+          pointerEvents: 'box-none',
+        },
+      })
+   ```
+}
+
 public
 view Col() {
    render inject Content @@content, Layout @@layout, Tag @@tag ```ts
@@ -83,13 +108,14 @@ view Image(Source text, Decorative boolean default false, Label text default "")
 }
 
 public
-view Checkbox(Value boolean, Change action(boolean), Label text, Disabled boolean default false) {
-   render inject Value, Change, Label, Disabled, Layout @@layout, Tag @@tag ```ts
+view Checkbox(Value boolean, Change action(boolean), Label text, Disabled boolean default false, Description text default "") {
+   render inject Value, Change, Label, Disabled, Description, Layout @@layout, Tag @@tag ```ts
       return TR.Views.Checkbox({
         layout: Layout,
         tag: Tag,
         value: Value,
         label: Label,
+        description: Description || undefined,
         disabled: Disabled,
         onChange: value => Change.invoke(TR.Value(value)),
       })
@@ -156,14 +182,15 @@ view Number(Value number) {
 }
 
 public
-view TextInput(mutable Value text, Change action(text), Submit action(), Label text, Placeholder text default "", Id text default "", Disabled boolean default false, Secure boolean default false) {
-   render inject Value, Submit, Label, Placeholder, Id, Disabled, Secure, Layout @@layout, Tag @@tag ```ts
+view TextInput(mutable Value text, Change action(text), Submit action(), Label text, Placeholder text default "", Id text default "", Disabled boolean default false, Secure boolean default false, Description text default "") {
+   render inject Value, Submit, Label, Placeholder, Id, Disabled, Secure, Description, Layout @@layout, Tag @@tag ```ts
       return TR.Views.TextInput(
         {
           layout: Layout,
           tag: Tag,
           value: Value.value,
           label: Label,
+          description: Description || undefined,
           placeholder: Placeholder,
           id: Id,
           disabled: Disabled,

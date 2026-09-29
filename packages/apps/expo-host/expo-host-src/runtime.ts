@@ -665,6 +665,11 @@ function studioCellRuntime(runtime: any, manifest: any) {
   const dataState = runtime.resolvedState?.snapshot?.domains?.data?.value
   const replayScheme = runtime.replay?.domains?.find((domain: any) => domain?.domain === 'scheme')?.value
   const network = runtime.cell.environment.network
+  // A scenario's authored appearance outranks the cell's scheme, unless the cell was reconfigured to
+  // an explicit preference: Studio's own control is read-only for an authored scenario, so only a
+  // session-only override, such as a QA capture's appearance pass, sets one.
+  const cellScheme = runtime.cell.environment.scheme
+  const authored = cellScheme.source === 'preference' ? undefined : scenario.environment?.appearance
   return {
     replay: runtime.replay,
     environment: {
@@ -676,11 +681,11 @@ function studioCellRuntime(runtime: any, manifest: any) {
           : {}),
       },
       scheme: {
-        requested: scenario.environment?.appearance ?? runtime.cell.environment.scheme.requested,
+        requested: authored ?? cellScheme.requested,
         ...(replayScheme === undefined ? {} : { replay: replayScheme }),
-        source: scenario.environment?.appearance !== undefined
+        source: authored !== undefined
           ? 'scenario'
-          : runtime.cell.environment.scheme.requested === 'system'
+          : cellScheme.requested === 'system'
           ? 'system'
           : 'preference',
       },

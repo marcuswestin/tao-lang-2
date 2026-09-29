@@ -37,6 +37,7 @@ export async function runNativeHostProofCommand(
     artifactRoot: context.artifactRoot,
     build,
     device: request.device,
+    environment: context.environment,
     runId: context.runId,
     seed: request.seed,
     subject: request.subject,

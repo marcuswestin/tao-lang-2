@@ -1,5 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
-import { deriveDesignColors, luminance } from '../cli-src/create/creation-colors'
+import { deriveDesignColors, deriveSchemeColors, luminance } from '../cli-src/create/creation-colors'
 import { type CreationPalette, DEFAULT_PALETTE } from '../cli-src/create/creation-plan'
 
 const palettes: readonly (readonly [string, CreationPalette])[] = [
@@ -18,7 +18,29 @@ Describe('tao create colors', () => {
       Expect(contrast(colors.inkMuted, colors.surface)).toBeGreaterThanOrEqual(4.5)
       Expect(contrast(colors.inkMuted, colors.canvas)).toBeLessThan(contrast(colors.ink, colors.canvas))
     })
+
+    Test(`${name} gets a light and a dark scheme whose ink, muted ink, and danger read at WCAG AA`, () => {
+      const { dark, light } = deriveSchemeColors(palette)
+
+      Expect(luminance(rgb(light.canvas))).toBeGreaterThan(0.5)
+      Expect(luminance(rgb(dark.canvas))).toBeLessThan(0.5)
+      for (const colors of [light, dark]) {
+        for (const background of [colors.canvas, colors.surface]) {
+          Expect(contrast(colors.ink, background)).toBeGreaterThanOrEqual(4.5)
+          Expect(contrast(colors.inkMuted, background)).toBeGreaterThanOrEqual(4.5)
+          Expect(contrast(colors.danger, background)).toBeGreaterThanOrEqual(4.5)
+        }
+      }
+      Expect(contrast(dark.accentStrong, dark.canvas)).toBeGreaterThanOrEqual(4.5)
+      Expect(contrast(dark.onAccent, dark.accentStrong)).toBeGreaterThanOrEqual(4.5)
+    })
   }
+
+  Test('keep the authored palette as the scheme it was chosen in', () => {
+    Expect(deriveSchemeColors(DEFAULT_PALETTE).light).toEqual(deriveDesignColors(DEFAULT_PALETTE))
+    const night = { canvas: '#101612', ink: '#edf3ee', accent: '#8fbea0' }
+    Expect(deriveSchemeColors(night).dark).toEqual(deriveDesignColors(night))
+  })
 })
 
 /** contrast is the WCAG ratio between two #rrggbb colors, computed independently of the derivation. */

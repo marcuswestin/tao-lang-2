@@ -25,7 +25,7 @@ ProjectVersion:
     'version' value=STRING;
 
 ProjectDefaultApp:
-    word=ID app=[AppDeclaration:ID];
+    'app' app=[AppDeclaration:ID];
 
 ProjectRemote:
     'remote' remote=ProjectRemoteValue;

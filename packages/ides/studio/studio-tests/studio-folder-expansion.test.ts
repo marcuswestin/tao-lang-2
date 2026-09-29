@@ -7,7 +7,10 @@ import {
 
 Describe('Tao Studio persisted folder expansion', () => {
   Test('owns recursive folder expansion in persisted app state with an explicit root binding', async () => {
-    const source = await FS.readText(Repo.resolvePath('Apps/Tao Studio/TaoStudioClient.tao'))
+    const source = (await Promise.all([
+      'TaoStudioClient.tao',
+      '@ui/Explorer.tao',
+    ].map(path => FS.readText(Repo.resolvePath(`Apps/Tao Studio/${path}`))))).join('\n')
 
     Expect(source).toContain('state CollapsedFolders is list of text = [] (persist)')
     Expect(source).toContain('action ToggleFolder(FolderPath text)')

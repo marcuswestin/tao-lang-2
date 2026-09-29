@@ -57,7 +57,7 @@ function enter_devenv_if_needed() {
   tao_activate_devenv_profile "$SCRIPT_DIR" "$DEVENV_PROFILE" && return
 
   echo "Tao's pinned devenv profile is unavailable." >&2
-  echo "On macOS run ./enter-tao-dev-env; on Linux run ./bootstrap-tao-dev-env --install-nix." >&2
+  echo "On macOS run ./enter-tao-dev-env; on Linux run ./.config/bootstrap-tao-dev-env --install-nix." >&2
   exit 1
 }
 

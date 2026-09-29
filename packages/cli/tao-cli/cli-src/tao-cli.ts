@@ -46,6 +46,24 @@ export function createCommands(): Command {
     .version(TaoVersion.current(), '-v, --version', 'Print the Tao release this is, or `development` from source.')
 
   commands
+    .command('doctor')
+    .option('--json', 'Print the environment fingerprint as JSON.')
+    .option('--fingerprint', 'Print only the pasteable environment fingerprint.')
+    .description('Show a privacy-filtered environment fingerprint for a feedback report.')
+    .action(async (options: { fingerprint?: boolean; json?: boolean }) => {
+      const { runVisitorDoctor } = await import('./feedback-command')
+      await runVisitorDoctor(options)
+    })
+
+  commands
+    .command('bug-report')
+    .description('Prepare a feedback report with links and a pasteable environment fingerprint.')
+    .action(async () => {
+      const { runBugReport } = await import('./feedback-command')
+      await runBugReport()
+    })
+
+  commands
     .command('bridge')
     .argument('<package>', 'Installed package whose public API should be imported.')
     .requiredOption('--source <source>', 'Source adapter: expo or react-native.')
@@ -114,6 +132,97 @@ export function createCommands(): Command {
       }
     })
 
+  const secrets = commands
+    .command('secrets')
+    .description('Manage age-encrypted secrets committed in a Tao project.')
+
+  secrets
+    .command('identity')
+    .description('Create or show this Mac’s public secrets recipient.')
+    .action(async () =>
+      await runSecretAction(async () => {
+        const { projectSecretsIdentity } = await import('./project-secrets-command')
+        HCI.writeLine(await projectSecretsIdentity())
+      })
+    )
+
+  secrets
+    .command('init')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Create a committed encrypted store for the nearest Tao project.')
+    .action(async (path: string) =>
+      await runSecretAction(async () => {
+        const { initProjectSecrets } = await import('./project-secrets-command')
+        HCI.writeSuccess(`Created ${FS.displayPath(await initProjectSecrets(path))}. Commit this file.\n`)
+      })
+    )
+
+  secrets
+    .command('grant')
+    .argument('<recipient>', 'Public recipient from another developer’s `tao secrets identity`.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Grant an enrolled collaborator access to every project secret.')
+    .action(async (recipient: string, path: string) =>
+      await runSecretAction(async () => {
+        const { grantProjectSecrets } = await import('./project-secrets-command')
+        const granted = await grantProjectSecrets(recipient, path)
+        HCI.writeLine(granted ? 'Recipient granted. Commit the updated secrets file.' : 'Recipient already has access.')
+      })
+    )
+
+  secrets
+    .command('set')
+    .argument('<name>', 'Environment-style secret name, such as INSTANT_APP_ADMIN_TOKEN.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Enter a hidden value and encrypt it into the project store.')
+    .action(async (name: string, path: string) =>
+      await runSecretAction(async () => {
+        const { setProjectSecret } = await import('./project-secrets-command')
+        const result = await setProjectSecret(name, path)
+        HCI.writeSuccess(
+          `${result.replaced ? 'Replaced' : 'Added'} ${name} in ${FS.displayPath(result.path)}. Commit the file.\n`,
+        )
+      })
+    )
+
+  secrets
+    .command('get')
+    .argument('<name>', 'Name of the value to decrypt and write to stdout.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Decrypt one value and write its exact bytes to stdout.')
+    .action(async (name: string, path: string) =>
+      await runSecretAction(async () => {
+        const { readProjectSecret } = await import('./project-secrets-command')
+        HCI.write(await readProjectSecret(name, path))
+      })
+    )
+
+  secrets
+    .command('list')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('List secret names without decrypting values.')
+    .action(async (path: string) =>
+      await runSecretAction(async () => {
+        const { listProjectSecrets } = await import('./project-secrets-command')
+        const entries = await listProjectSecrets(path)
+        for (const name of Object.keys(entries).sort()) {
+          HCI.writeLine(name)
+        }
+      })
+    )
+
+  secrets
+    .command('remove')
+    .argument('<name>', 'Name of the value to remove from the current store.')
+    .argument('[path]', 'Project file or directory to search.', '.')
+    .description('Remove current ciphertext; Git history and provider revocation remain separate.')
+    .action(async (name: string, path: string) =>
+      await runSecretAction(async () => {
+        const { removeProjectSecret } = await import('./project-secrets-command')
+        HCI.writeSuccess(`Removed ${name} from ${FS.displayPath(await removeProjectSecret(name, path))}.\n`)
+      })
+    )
+
   commands
     .command('dev')
     .argument('[path]', 'Tao file or directory whose runnable apps should be discovered.', '.')
@@ -154,6 +263,8 @@ export function createCommands(): Command {
     .option('--app <name>', 'Select a named app.')
     .option('--web', 'Export a static web artifact.')
     .option('--desktop', 'Build a locally runnable macOS app.')
+    .option('--visionos', 'Export an experimental visionOS Xcode project with bundled web UI.')
+    .option('--watchos', 'Export an experimental native SwiftUI watchOS Xcode project.')
     .option('--agents', 'Build a background app service and bundled client executable (defaults to desktop).')
     .option('--output <directory>', 'Retain builds in this directory instead of the project’s .tao/builds.')
     .option('--ios', 'Show the status of local iOS builds.')
@@ -169,6 +280,8 @@ export function createCommands(): Command {
           output?: string
           web?: boolean
           desktop?: boolean
+          visionos?: boolean
+          watchos?: boolean
           ios?: boolean
           android?: boolean
           compileOnly?: boolean
@@ -176,7 +289,9 @@ export function createCommands(): Command {
       ) => {
         try {
           const { runTaoBuild } = await import('./build-command')
-          const targets = (['web', 'desktop', 'ios', 'android'] as const).filter(target => options[target] === true)
+          const targets = (['web', 'desktop', 'ios', 'android', 'visionos', 'watchos'] as const).filter(target =>
+            options[target] === true
+          )
           if (options.agents && targets.length === 0) {
             targets.push('desktop')
           }
@@ -246,6 +361,31 @@ export function createCommands(): Command {
     })
 
   commands
+    .command('instantdb')
+    .description('Prepare the InstantDB app a Tao app syncs with.')
+    .command('push')
+    .argument('[path]', 'Tao file or directory whose app should be pushed.', '.')
+    .option('--app <name>', 'Select a named app.')
+    .option('--dry-run', 'Generate and plan, print what would change, and apply nothing.')
+    .option(
+      '--force',
+      'Apply a plan that is not purely additive; attributes the Tao schema does not declare stay on the server.',
+    )
+    .description(
+      "Push the app's generated InstantDB schema (additive changes only, unless forced) and permission rules."
+        + ' Reads INSTANT_APP_ADMIN_TOKEN from the environment or project secrets, or asks at a terminal.',
+    )
+    .action(async (path: string, options: { app?: string; dryRun?: boolean; force?: boolean }) => {
+      try {
+        const { runInstantDBPush } = await import('./instantdb-push-command')
+        await runInstantDBPush(path, { appName: options.app, dryRun: options.dryRun, force: options.force })
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
     .command('clean')
     .argument('[path]', 'Tao project file or directory whose retained local builds should be listed.', '.')
     .description('Interactively select retained local builds to remove.')
@@ -296,6 +436,85 @@ export function createCommands(): Command {
             .map(([status, count]) => `${count} ${status}`)
             .join(', ')
           HCI.writeSuccess(`Captured Tao visual review: ${FS.displayPath(result.reportPath)} (${counts})\n`)
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.setExitCode(1)
+        }
+      })
+
+    // `_preview` holds commands under development: unlisted in help and free to change until one
+    // graduates to a released name.
+    const preview = commands
+      .command('_preview', { hidden: true })
+      .description('Unreleased commands under development; their interface may change.')
+    // Repeatable; `list` also splits commas, which no app, device, or appearance name contains.
+    const repeated = (value: string, previous: string[] = []): string[] => [...previous, value]
+    const list = (value: string, previous: string[] = []): string[] => [
+      ...previous,
+      ...value.split(',').map(item => item.trim()).filter(Boolean),
+    ]
+    preview
+      .command('qa')
+      .argument('[path]', 'Tao project directory to capture in Studio.', '.')
+      .option('--screenshot', "Capture the project's scenarios across the device and appearance matrix.")
+      .option(
+        '--dest <directory>',
+        'Screenshot store to append this run to, as runs/<UTC second>Z-<milliseconds>-<UUID>/.',
+      )
+      .option('--app <names>', 'Capture only these apps (default: every app in the project).', list)
+      .option(
+        '--scenario <selector>',
+        'Capture only matching scenarios, as [<file>.tao:]<subject or group>[/<group or entry>[/<entry>]]; repeatable.',
+        repeated,
+      )
+      .option('--device <names>', 'Devices: phone, tablet, laptop (default: all).', list)
+      .option('--appearance <names>', 'Appearances: light, dark (default: both).', list)
+      .option('--note <text>', 'Why this capture was taken; shown in the timeline.')
+      .option('--studio', "Also capture Studio's own layouts, at laptop size, with this project open.")
+      .option('--timeline', "Only regenerate the store's index.html from the runs it already holds.")
+      .description('Capture QA evidence for a Tao project.')
+      .action(async (
+        path: string,
+        options: {
+          app?: string[]
+          appearance?: string[]
+          dest?: string
+          device?: string[]
+          note?: string
+          scenario?: string[]
+          screenshot?: boolean
+          studio?: boolean
+          timeline?: boolean
+        },
+      ) => {
+        try {
+          if (options.dest === undefined || (options.screenshot === true) === (options.timeline === true)) {
+            Errors.throwUserInput(
+              'Choose what to do and where: tao _preview qa --screenshot --dest <directory>, or --timeline --dest <directory>.',
+            )
+          }
+          const { runQaScreenshots, writeQaTimeline } = await import('tao-studio-tooling/qa-screenshots')
+          if (options.timeline === true) {
+            HCI.writeSuccess(`Timeline: ${FS.displayPath(await writeQaTimeline(options.dest))}\n`)
+            return
+          }
+          const result = await runQaScreenshots(path, {
+            ...(options.app === undefined ? {} : { apps: options.app }),
+            ...(options.appearance === undefined ? {} : { appearances: options.appearance }),
+            dest: options.dest,
+            ...(options.device === undefined ? {} : { devices: options.device }),
+            ...(options.note === undefined ? {} : { note: options.note }),
+            ...(options.scenario === undefined ? {} : { scenarios: options.scenario }),
+            ...(options.studio === true ? { studio: true } : {}),
+          })
+          HCI.writeSuccess(
+            `Captured ${result.captured} screenshots (${result.changed} changed, ${result.new} new, ${result.failed} failed): ${
+              FS.displayPath(result.runPath)
+            }\nTimeline: ${FS.displayPath(result.timelinePath)}\n`,
+          )
+          if (result.failed > 0) {
+            Platform.runtimeProcess.setExitCode(1)
+          }
         } catch (error) {
           HCI.writeErrorLine(Errors.formatForUser(error))
           Platform.runtimeProcess.setExitCode(1)
@@ -355,7 +574,7 @@ export function createCommands(): Command {
   commands
     .command('ship')
     .argument('[path]', 'Tao project file or directory to discover.', '.')
-    .option('--app <name>', 'Select a named app instead of the project DefaultApp.')
+    .option('--app <name>', 'Select a named app instead of the one named in project metadata.')
     .option('--patch', 'Force a patch version bump.')
     .option('--minor', 'Force a minor version bump.')
     .option('--major', 'Force a major version bump.')
@@ -615,6 +834,15 @@ function parseBetaRecipients(value: boolean | string | undefined): string[] | un
     Errors.throwUserInput(`TestFlight recipient '${invalid}' is not an email address.`)
   }
   return [...new Set(recipients)]
+}
+
+async function runSecretAction(work: () => Promise<void>): Promise<void> {
+  try {
+    await work()
+  } catch (error) {
+    HCI.writeErrorLine(Errors.formatForUser(error))
+    Platform.runtimeProcess.setExitCode(1)
+  }
 }
 
 function shipBump(

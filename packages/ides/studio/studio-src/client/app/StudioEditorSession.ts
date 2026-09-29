@@ -30,6 +30,8 @@ export type StudioEditorSessionDeps = Readonly<{
   identity: Readonly<{ appName: string; project: string }>
   /** A document edit: the search panel re-runs when it has a query. */
   onDocumentChanged: () => void
+  /** A code-editor save wrote `path` outside any visual edit. */
+  onSaved: (path: string) => void
   openCompileDiagnostic: StudioOpenDiagnostic
   /** Tells the active preview which source the editor now shows or selects. */
   postSelection: (file: StudioDraftFile, editor: EditorView) => void
@@ -151,6 +153,7 @@ export class StudioEditorSession {
         if (result.saved) {
           current.file = result.file
           current.dirty = current.editor.state.doc.toString() !== result.file.content
+          this.#deps.onSaved(path)
           if (this.#activePath === path) {
             this.#deps.postSelection(result.file, current.editor)
             this.#deps.publish()

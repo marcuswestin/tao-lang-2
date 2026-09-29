@@ -3,10 +3,10 @@
 - **Status:** Candidate
 - **Section:** External
 - **Area:** Desktop computer use, effective session permissions, native acceptance
-- **Impact:** Device Hub inspection remains unproven through computer use. A fresh task can obtain an approval prompt, but app selection times out after approval, leaving visual navigation acceptance dependent on manual review.
+- **Impact:** Device Hub approval can be obtained and saved after selecting interactive approval in the existing task. App selection still times out after approval, leaving visual navigation acceptance blocked on successful inspection or manual review.
 - **Evidence:** On 2026-09-26, requesting `com.apple.dt.Devices` through the computer-use app selector immediately returned `Computer Use was not approved to use Device Hub`. The Developer's screenshot showed Any App enabled and an empty Always-allowed apps list. The active task reported approval policy `never`, while the generated repository configuration and the system configuration both specified `on-request` with automatic review. The repository generator emits those same values. No computer-use policy override appeared in the inspected repository, user or system configuration; the two inspected local requirements-file locations were absent. These observations identify a session/configuration mismatch, not its source or a proven cause of the missing prompt. Managed remote policy and desktop session overrides remain unexamined.
 - **Workaround:** Use the existing named device install/launch workflows and manual visual review. Installation and successful launch are not UI acceptance.
-- **Proposed change:** First establish whether Device Hub has a responsive visible window, then make one supported inspection attempt after that state change. If the timeout persists, inspect the desktop computer-use diagnostics and the remaining macOS Device Control and Data Access grant read-only (the former Accessibility permission) before proposing a targeted intervention. Separately investigate which layer selects `never`: it was absent in the September 26 follow-up but recurred in the September 27 continuation. No repository configuration change is supported by these results. Do not change the sandbox, forge saved approvals, or hand-edit generated configuration. The [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) distinguishes app access policy from normal approval and persistence; an `allow` rule alone grants neither. [Computer-use guidance](https://learn.chatgpt.com/docs/computer-use#permissions-and-approvals) distinguishes application approval from macOS permissions.
+- **Proposed change:** Diagnose why exact-path inspection of the responsive Device Hub window still times out after app approval and confirmed macOS Device Control and Data Access access. Separately investigate which layer selected `never`: it was absent in the September 26 follow-up but recurred in the September 27 continuation. No repository configuration change is supported by these results. Do not change the sandbox, forge saved approvals, or hand-edit generated configuration. The [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference) distinguishes app access policy from normal approval and persistence; an `allow` rule alone grants neither. [Computer-use guidance](https://learn.chatgpt.com/docs/computer-use#permissions-and-approvals) distinguishes application approval from macOS permissions.
 - **Dependencies:** Desktop session permission controls and user approval; inspect applicable managed policy if the mismatch persists. No configuration changes authorized by this research-only follow-up.
 - **Acceptance:** Establish which layer selected `never`; reproduce an actual app approval prompt with interactive approval enabled; confirm approved Device Hub inspection succeeds; verify a future task can reuse saved approval when selected. Document the smallest required change and its owner, preserving repository sandbox protections.
 - **Source:** Native navigation physical-review follow-up on `feat/native-navigation-implementation`, 2026-09-26.
@@ -94,3 +94,134 @@ remain unproven**. The September 26 approval and screenshot evidence remain vali
 stated limits. Device Control and Data Access is still unverified. Documentation landing is
 independent of Computer Use acceptance. No device app or configuration was changed by this
 continuation; no permission settings or saved consent records were manually edited.
+
+## Duo acceptance continuation — 2026-09-27 UTC
+
+The independent `feat/iphone-duo-acceptance` checkout started at `c21b2226eeba`. Its effective
+session instructions specify `workspace-write` and approval policy `never`. One supported
+app-selection attempt using `/Applications/Xcode-27.1.app/Contents/Applications/DeviceHub.app`
+returned `Computer Use was not approved to use Device Hub`. No app binding, accessibility tree,
+or screenshot was returned. The task did not retry through another control or capture route.
+Its named `./agent unsandboxed capabilities` command also refused before host dispatch because
+it detected the sandbox; that shell result is separate from the application-access denial.
+
+Neither HNReaderStub nor Native Navigation was visually accepted. The requested fold, rotation,
+Split View, keyboard, and active-presentation matrix remains unrun, with no manual results
+supplied. Evidence and resource ownership are retained in the task checkout's
+`.artifacts/duo-acceptance/disposition.md`. The source of the effective policy remains unknown;
+no saved permission, generated configuration, or global Xcode selection was changed.
+
+## Independent Duo completion check — 2026-09-27 UTC
+
+The clean `feat/iphone-duo-completion` checkout branched from the requested
+`a66fd77290f8ccb98706cdcb915e470304bba732`, leaving `feat/iphone-duo-acceptance` unchanged.
+Its effective session instructions again specify `workspace-write` and approval policy `never`.
+One supported app-selection request for
+`/Applications/Xcode-27.1.app/Contents/Applications/DeviceHub.app` returned exactly:
+
+```text
+Computer Use was not approved to use Device Hub
+```
+
+UI acceptance stopped at that denial; no alternate control or capture route was attempted.
+Neither HNReaderStub nor Native Navigation was observed rendering. Closed outer display, open
+inner portrait/landscape, book/tabletop folds, both Split View sides, keyboard, and active
+sheet/dialog continuity all remain unverified. No demonstrated visual defect justified a
+compatibility change.
+
+The separate named `./agent unsandboxed capabilities` operation succeeded and reported no
+sandbox detected, unlike the prior task. `setup-ios --xcode-version 27.1 --runtime-version 27.1`
+reported ready, and simulator inventory found Duo shutdown with its expected UDID. These shell
+results do not grant access to Device Hub. A later JSON setup probe with output redirection was
+refused before host dispatch as still sandboxed; it was not retried with another spelling.
+Current evidence and cleanup ownership live in this checkout's
+`.artifacts/duo-acceptance/disposition.md`.
+
+The merged Companion was rebuilt successfully in this checkout using scoped Xcode 27.1
+(`27A9269`) and `iphonesimulator27.1` (`24A94403`), for arm64 and x86_64. Its manifest and
+binary hashes are retained in `.artifacts/duo-acceptance/build-receipt.json`; the host is at
+`.artifacts/hosts/1.0.0-f05fbf78600c/ios-simulator`. It was not installed or visually accepted.
+The global developer selection remains `/Applications/Xcode.app/Contents/Developer`.
+No older host was found in the inspected local caches, and a release API request returned 404;
+an older compatible published host and old-SDK comparison remain unestablished.
+
+## Fresh Duo finish check — 2026-09-27 UTC
+
+`feat/iphone-duo-finish` started in its own clean checkout at
+`b2be40fe3584cc8481bff71dd7535e1354074f38`, preserving both preceding branches. Its effective
+session instructions specify `workspace-write` and approval policy `never`. One supported
+app-selection request for `/Applications/Xcode-27.1.app/Contents/Applications/DeviceHub.app`
+again returned `Computer Use was not approved to use Device Hub`, without an app binding,
+accessibility state, or screenshot. UI acceptance stopped; no alternate route or further
+fresh-task retry was attempted. Resuming requires approval for Device Hub through the desktop
+application's supported controls and a successful supported inspection. The layer causing the
+denial remains unknown; another checkout alone has not resolved it.
+
+The named host capability check succeeded and found Hutch. Inspection-only
+`setup-ios --xcode-version 27.1 --runtime-version 27.1 --json` reported ready, Xcode build
+`27A9269`, SDK `27.1`, and a healthy available runtime. Global developer selection remained
+`/Applications/Xcode.app/Contents/Developer`; Duo `E8F814CE-F94E-4035-97A9-359EA8CA2230` was
+shutdown. No new host was built, installed, or launched while UI acceptance was blocked.
+The earlier binary receipt remains historical and does not describe an installed binary in
+this checkout. Neither app nor any part of the display/fold/presentation matrix was accepted.
+Old-host/new-SDK comparison and broad verification remain outstanding; landing is held.
+
+Before resuming, account for `app-dev --ios` selecting the first booted iOS simulator.
+The documented Studio selected-simulator action provides explicit targeting for an installed
+Companion; booting Duo alone does not make the generic launch safe when another device is
+already booted. Current disposition and ownership are retained at
+`.artifacts/duo-acceptance/disposition.md` in the finish checkout.
+
+## Saved approval and installed Duo host — 2026-09-27 UTC
+
+The Developer selected Ask for approval in the existing finish task. Its live permission record
+changed from `never` with human review to `on-request` with human review while retaining
+`workspace-write`. Neither inspected live record showed an effective filesystem deny-read entry;
+the selecting override remains unidentified. The repository, user, and system defaults already
+requested `on-request`.
+Supported requirements locations do not include a project requirements file, so no local
+configuration was changed. A machine-configuration handoff was prepared separately.
+
+The first authorized access retry returned `Computer Use server error -10005: timeoutReached`
+after 12.8568 seconds. The Developer then supplied screenshots showing the Device Hub Duo Start
+window and DeviceHub under Always-allowed apps. This establishes successful app launch and saved
+approval despite the missing tool observation. On resumption, exact-path inspection timed out in
+5.1571 seconds. App inventory succeeded. After explicitly booting Duo, a bundle-ID request was
+rejected as ambiguous between the two Xcode installations; exact-path inspection again timed out
+in 5.0902 seconds. Process inspection confirmed the running app was the Xcode 27.1 copy.
+Desktop logs show the computer-use service and tool initialized, but no diagnostic identifies
+the timeout stage. The helper's macOS Device Control and Data Access grant remains unverified.
+
+A fresh Companion build from `3eae75a468847aaf211359a5d4d1692d8435bf08` succeeded using scoped
+Xcode `27A9269`, SDK `iphonesimulator27.1` build `24A94403`, with arm64 and x86_64 binaries.
+Global developer selection remained `/Applications/Xcode.app/Contents/Developer`. The host was
+installed explicitly on Duo `E8F814CE-F94E-4035-97A9-359EA8CA2230`; the installed executable and
+debug dylib SHA-256 hashes match the produced build. The receipt is retained at
+`.artifacts/duo-acceptance/build-receipt-current.json` in the finish checkout. No older compatible
+host was found in the inspected checkout and standard user caches; old-host comparison is unproven.
+
+Duo was confirmed to be the only booted simulator before using the generic iOS launch path.
+HNReaderStub and NativeNavigation each compiled and requested an iOS bundle from their sequential
+development servers. Their Metro logs are under the corresponding app's `.tao/dev/logs/expo.log`.
+This is startup evidence, not visual acceptance. Both development servers were stopped normally.
+The installed Companion and booted Duo are retained for the pending inspection; ownership and
+the simulator-managed app path are recorded in `.artifacts/duo-acceptance/external-ownership.md`.
+
+No screenshot or accessibility state of either rendered app was obtained. Outer/inner display,
+portrait/landscape, book/tabletop, Split View, keyboard, active sheet/dialog, and navigation/state
+continuity acceptance all remain outstanding. No compatibility fix is justified by this run.
+Landing remains held until the required visual acceptance can be completed.
+
+## macOS grant confirmed — 2026-09-27 UTC
+
+The Developer supplied a System Settings screenshot of Privacy & Security → Device Control and
+Data Access with the `Codex Computer Use` switch enabled. This confirms the visible macOS grant
+and rules out a disabled switch as the direct explanation for this retry; it does not prove the
+helper can inspect Device Hub. One further exact-path `getApp` request still returned
+`Computer Use server error -10005: timeoutReached` after 5.1702 seconds, without an accessibility
+state or screenshot. The app approval and window-launch observations remain valid separately.
+No settings were changed by this task. The cause of the inspection timeout remains unknown.
+
+The Developer then authorized landing the reviewed scoped setup/build and evidence slice despite
+the visual acceptance gap. Landing this slice must not be described as Duo display/fold or
+navigation acceptance. A separate visual follow-up remains necessary.

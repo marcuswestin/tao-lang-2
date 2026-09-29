@@ -207,6 +207,13 @@ writes against the resulting relationship state, and commits a multi-row submiss
 Its durable operation receipts make retrying the same accepted submission idempotent. A client
 query, filtered UI, or cached snapshot is not an authorization boundary.
 
+Beside the policy, the compiler emits `TaoDataSchema.json`: each synced store's stored shape, keyed
+by store name. It lists every entity's collection, stored fields (kind, enum cases, optionality,
+index, uniqueness, relation or reference target, and cascade), inverse fields, and unique
+constraints, and leaves out what only the client reads, such as defaults, titles, and required
+sentences. Device-only stores have none. Tools that provision a backend read it instead of lowering
+the source again; `tao instantdb push` does.
+
 ### Local reference integration
 
 `LocalAuth` in `@tao/auth/local` and `Reference` in `@tao/data/providers/reference` connect to the
@@ -249,10 +256,41 @@ This deployment requires deny-all direct-client rules and one gateway using its 
 database. Policy migration, copied databases running extra gateways, and distributed failover are
 unsupported. Live tests exercise the actual Tao app, transaction races, and process/offline recovery.
 
-An authenticated datasource must declare that it enforces authenticated authority. `Reference`
-declares server authority; `Memory` declares test authority and is usable with `TestAuth`.
-The runtime rejects unsupported pairings before calling the provider. The existing InstantDB
-snapshot and Local adapters do not opt in: client-side filtering is not remote authorization.
+Auth providers and datasources pair through declared sign-in proofs. An auth provider type declares
+the proofs it `issues` (`IdentityToken`, `Session`, or `TestIdentity`); a datasource type declares
+the proofs it `accepts`, optionally only `from` a named auth provider type, and the data capabilities
+it `supports`:
+
+```tao
+type Reference is datasource with {
+   ServerURL text
+   accepts { IdentityToken from Clerk, Session from LocalAuth }
+   supports { Relations, UniqueFields, UniqueTogether, AccessRules, FieldUpdates, MembershipRules }
+   provider ReferenceProvider from ./Reference.ts
+}
+```
+
+Every datasource type must declare `supports`, even as `supports { }`, and every auth provider type
+must declare `issues`. The compiler checks each app and variant: an app with `Auth` must bind only
+datasources that accept a proof its Auth issues, the app's data may use only capabilities its
+datasource supports, and `access` rules require `Auth`. Each error names the use and the `Auth` or
+`Datasource` line. The capabilities are `Relations`, `UniqueFields`, `UniqueTogether`,
+`AccessRules`, `FieldUpdates`, `MembershipRules`, and `Migrations` with a level of `Additive`,
+`Renames`, or `Destructive`; `Migrations` is a deployment fact the compiler cannot detect.
+
+`Reference` accepts Clerk tokens and LocalAuth sessions; `Memory` accepts only `TestIdentity`.
+`InstantDB` accepts an InstantAuth session or a Clerk identity token exchanged through the client
+registered with that InstantDB app. Local, Dev, Http, iCloud, and CloudKit accept nothing, so an app
+with `Auth` cannot bind them as its authenticated datasource: client-side filtering is not remote
+authorization. The runtime repeats the pairing
+check whenever it chooses the datasource that resolves the signed-in Account. After the auth provider
+signs in, the datasource holding `Account` turns its proof into the application Account; the public
+session reports signed in only once that resolves, and a failed resolution is an error. Sign-out
+shows signed out at once, then releases the datasource's session before the auth provider signs out,
+waiting at most five seconds; a release still running then is abandoned, reported as an unconfirmed
+remote sign-out, and retried on the next sign-out. A sign-in or restoration waits for the provider
+sign-out in flight before contacting the provider. An account resolution still in flight when
+sign-out begins is released when it finishes, which can be after the provider has signed out.
 
 `Offline` declares the working set persisted by `Reference`; it is not permission to fetch a row.
 The current compiler supports the current account and its direct inverse collections, such as
@@ -286,16 +324,15 @@ use Clerk from @tao/auth/clerk
 app ManagedNotes = NotesApp with {
    Auth Clerk {
       PublishableKey "pk_test_YOUR_INSTANCE_KEY"
-      Endpoint "http://localhost:4738"
-      Resource "notes"
    }
 }
 ```
 
-The endpoint is an application account gateway, not Clerk's API URL or a testing-only server.
-It verifies Clerk session proofs against a configured issuer, public key and allowed origins,
-then maps `(issuer, subject)` to the application's opaque Account. Resource credentials stay
-inside providers. The included gateway is a localhost, single-process reference implementation;
+Clerk issues its session token as an `IdentityToken`; it knows nothing about the datasource. The
+`Reference` datasource exchanges the token with its own server at `ServerURL`, an application
+account gateway rather than Clerk's API URL or a testing-only server. The gateway verifies Clerk
+session proofs against a configured issuer, public key and allowed origins, then maps
+`(issuer, subject)` to the application's opaque Account. Resource credentials stay inside providers. The included gateway is a localhost, single-process reference implementation;
 production hosting, distributed failover and identity migration remain deployment work.
 
 Password and email-code sign-in/registration use the supplied or custom Tao UI. Email verification
@@ -308,7 +345,8 @@ The runtime mounts the SDK through an optional provider `Host`, with the same ap
 configuration passed to `connect`. The Expo SDK currently permits one mounted native Clerk app;
 its lease lasts through outstanding authentication cleanup. Credentials are managed by the SDK
 and never authored as Tao fields. Cancellation revokes a newly created SDK session; logout clears
-local access immediately, then attempts both SDK and gateway revocation. Both paths suppress
+local access immediately; `Reference` revokes its gateway sessions, and then Clerk revokes the SDK
+session. A gateway revocation that cannot be confirmed is reported and retried on the next sign-out. Both paths suppress
 Clerk's default redirect: Tao retains ownership of navigation on logout and cancellation.
 Failed SDK revocations retain non-secret session-ID tombstones and retry on reconnection/restoration. Each session has
 its own durable marker, checked again before accepting a proof exchange; another browser tab
@@ -546,10 +584,11 @@ provider marks itself `fills: true` so Tao checks bind it.
 boundaries, ordered replacement, and rejection behavior. Instances must be isolated or share one
 coherent stateless storage boundary. The shipped implementations pass that suite. Memory is
 process-local and instance-isolated; Local delegates its storage boundary to AsyncStorage;
-InstantDB syncs each storage key's snapshot through one deterministic keyed row in an InstantDB
-app, resolves its startup load from the SDK's own subscription (so an offline launch serves the
-local cache), and publishes remote replacement snapshots through `subscribe`; Dev keeps each
-storage key's snapshot on the Tao dev server and publishes every peer's write through `subscribe`
+InstantDB stores each Tao entity row as an InstantDB entity with attributes and relation links.
+Its subscription projects rows into the runtime snapshot, and a save commits the difference from
+that snapshot as one InstantDB transaction. `StorageKey` remains accepted for compatibility but
+does not partition its app-wide namespaces. Dev keeps each storage key's snapshot on the Tao dev
+server and publishes every peer's write through `subscribe`
 (see _The Dev datasource_ below).
 
 ICloud is the platform-sync member of the family: it keeps each storage key's snapshot as one
@@ -558,21 +597,21 @@ signed-in iCloud account sees one store across its devices with no account, serv
 Tao's own. `Container text?` names the container; omitted, the app's first entitled container is
 used. Its optional `subscribe` publishes the document as a replacement snapshot whenever another
 device rewrites it, and iCloud's conflict versions collapse to the newest one, so concurrent writers
-are last-snapshot-wins exactly as with InstantDB. iCloud keeps a local copy, so an offline launch
-loads the last synced document and an offline save uploads on reconnect. Like InstantDB it grants no
-`reset`, because the document is shared with the account's other devices. The provider is native
+are last-snapshot-wins. iCloud keeps a local copy, so an offline launch loads the last synced
+document and an offline save uploads on reconnect. It grants no `reset`, because the document is
+shared with the account's other devices. The provider is native
 code (`tao-icloud`, an Expo module with its own entitlement config plugin, which the ship
 pipeline applies from the manifest's `icloud` section), so it needs a development or release build
 rather than Expo Go, runs only on Apple platforms, and fails a mount elsewhere with a
 host-environment error; an app that also targets Android or the web binds another datasource in a
 variant for those targets.
 
-Authentication, permissions, migrations, transactions, aggregation, and provider-specific query
-features remain deferred. They require new provider families rather than leaking incremental or
-remote semantics into this full-snapshot protocol. The first such family has landed: the query-fill
-half layers remote reads over the snapshot contract without changing it, and last-snapshot-wins
-sync arrives through `subscribe` on the same terms. The second, the granular-write family, is
-described next.
+For snapshot-only providers, authentication, permissions, migrations, transactions, aggregation,
+and provider-specific query features remain outside that protocol. The query-fill half layers
+remote reads over the snapshot contract without changing it; snapshot sync through `subscribe`
+remains last-snapshot-wins. InstantDB adds authenticated, permission-checked row storage, additive
+schema migration, and transactions through its own provider and backend. The separate
+granular-write family is described next.
 
 ## The granular-write family and the CloudKit datasource
 
@@ -640,7 +679,7 @@ by the dev server:
   `reset` and declares `automaticReset`, so the first client whose new schema cannot parse the
   stored snapshot wipes that app's stream and every peer receives the empty snapshot. Nothing asks;
   development data is disposable by definition.
-- **Sync is last-snapshot-wins over the full-snapshot protocol**, the same terms as InstantDB. A
+- **Sync is last-snapshot-wins over the full-snapshot protocol.** A
   write is acknowledged by the server after it has landed and been published to every peer.
 - **A lost server is a recoverable sync failure, never a fallback.** While the dev server is away,
   the app keeps its last snapshot, writes fail visibly, and the client reconnects with backoff; the
@@ -824,12 +863,17 @@ update Document {
 }
 
 delete Document
+toggle Workspace.Pinned
 ```
 
 `Name: Value` binds a declared field by owner label. An unlabeled value binds only when its nominal
 type identifies exactly one field. Unknown, duplicate, ambiguous, missing, and incorrectly typed
 fields are diagnostics; source order never disambiguates. Omitted defaulted fields receive their
 declared value. Updates and deletes require a live entity handle from the mounted catalog.
+Each direct write affects one row. `toggle Row.Field` requires a nonoptional yes/no entity field,
+reads its current value once, and submits the opposite value as one concrete update. State-variable
+`toggle` retains its existing behavior. A retry replays the recorded update value without
+re-evaluating the toggle. Bulk writes and named transactions are post-MVP.
 
 Iteration uses the same plural/singular order as data declarations:
 

@@ -1,6 +1,6 @@
 import { Assert, FS, type ReleaseProfile, Switch } from '@shared'
 import { PROJECT_TSCONFIG } from '../app-modules'
-import { deriveDesignColors } from './creation-colors'
+import { deriveSchemeColors, type DesignColors } from './creation-colors'
 import {
   appIdentifier,
   type CreationEntity,
@@ -87,7 +87,7 @@ project {
    id ${taoString(plan.id)}
    name ${taoString(plan.name)}
    version "0.1.0"
-   DefaultApp ${names.app}
+   app ${names.app}
    remote none
 }
 
@@ -186,22 +186,20 @@ ${tabs}
 // -- Design.tao ------------------------------------------------------------------------------------
 
 function designFile(plan: CreationPlan, names: ProjectNames): string {
-  const colors = deriveDesignColors(plan.palette)
+  const colors = deriveSchemeColors(plan.palette)
+  const tokens = Object.keys(colors.light) as (keyof DesignColors)[]
+  const raw = (scheme: 'light' | 'dark', suffix: string) =>
+    tokens.map(token => `      ${token}${suffix} ${colors[scheme][token]}`).join('\n')
+  const semantic = tokens.map(token => `      ${token} when Scheme is Dark ${token}Dark / not ${token}Light`).join('\n')
   return `// The design: a palette, element defaults, and the bundles the scenes apply at render sites.
 folder
 design ${names.design} {
    colors {
-      canvas ${colors.canvas}
-      surface ${colors.surface}
-      ink ${colors.ink}
-      inkMuted ${colors.inkMuted}
-      accent ${colors.accent}
-      accentStrong ${colors.accentStrong}
-      accentSoft ${colors.accentSoft}
-      line ${colors.line}
-      danger ${colors.danger}
-      dangerSoft ${colors.dangerSoft}
-      onAccent ${colors.onAccent}
+${raw('light', 'Light')}
+${raw('dark', 'Dark')}
+
+      // Every bundle spells these names, which follow the person's light or dark setting.
+${semantic}
    }
 
    styles {
@@ -209,6 +207,7 @@ design ${names.design} {
       TextInput [background surface, border line, ink ink, radius 12, size 16]
       FormButton [background accentStrong, background accent when pressed, ink onAccent, radius 12, weight 700]
       Checkbox [ink ink]
+      AppSurface [background canvas]
       NavigationHost [background canvas]
       NavigationContent [background canvas]
       NavigationHeader [background surface, border line]

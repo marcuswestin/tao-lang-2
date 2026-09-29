@@ -9,6 +9,7 @@ probe=0
 qemu_guest_base=0
 qemu_nix_filter=0
 inspect_run=
+recover_run=
 case "$#" in
   0) ;;
   1) case "$1" in
@@ -27,14 +28,148 @@ case "$#" in
          esac
          case "${2#*-}" in ''|*[!0-9]*) exit 2 ;; esac
          inspect_run=$2 ;;
+       --recover-run)
+         case "$2" in
+           [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z-*) ;;
+           *) printf 'Expected a contributor run ID: YYYYMMDDTHHMMSSZ-PID.\n' >&2; exit 2 ;;
+         esac
+         case "${2#*-}" in ''|*[!0-9]*) exit 2 ;; esac
+         recover_run=$2 ;;
        *) exit 2 ;;
      esac ;;
-  *) printf 'Usage: contributor-linux-test [--probe | --native-arm64 | --qemu-guest-base | --qemu-compat | --mode cold|cached|both | --inspect-run YYYYMMDDTHHMMSSZ-PID]\n' >&2; exit 2 ;;
+  3) if [ "$1" = --native-arm64 ] && [ "$2" = --mode ] && [ "$3" = cached ]; then
+       platform=linux/arm64; image_arch=arm64; mode=cached
+     else
+       printf 'Expected --native-arm64 --mode cached.\n' >&2; exit 2
+     fi ;;
+  *) printf 'Usage: contributor-linux-test [--probe | --native-arm64 | --native-arm64 --mode cached | --qemu-guest-base | --qemu-compat | --mode cold|cached|both | --inspect-run YYYYMMDDTHHMMSSZ-PID | --recover-run YYYYMMDDTHHMMSSZ-PID]\n' >&2; exit 2 ;;
 esac
 
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 environment=packages/cli/dev-cli/dev-cli-src/environment
+
+# Recover only an existing run's exact container names and base tag. A live or
+# ambiguous guest is left alone; rerun after it exits. Evidence is copied before
+# any Docker removal, and every mutation repeats the ownership/state check.
+if [ -n "$recover_run" ]; then
+  output="$root/.artifacts/contributor-linux/$recover_run"
+  if [ ! -f "$output/resources.txt" ] || [ ! -f "$output/source-commit.txt" ]; then
+    printf 'Refusing recovery without an existing contributor run record: %s\n' "$output" >&2
+    exit 1
+  fi
+  attempt="$output/recovery-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+  mkdir "$attempt"
+  printf 'Contributor Linux recovery evidence: %s\n' "$attempt"
+  printf 'run=%s\nstate=unknown\n' "$recover_run" > "$attempt/result.txt"
+  docker version > "$attempt/docker-version.txt" 2> "$attempt/docker-errors.log"
+  docker info > "$attempt/docker-info.txt" 2>> "$attempt/docker-errors.log"
+
+  base="tao-contributor-linux-base:$recover_run"
+  recorded_base_id=
+  image_listing=$(docker image ls --all --filter "reference=$base" --format '{{.Repository}}:{{.Tag}}' 2>> "$attempt/docker-errors.log")
+  case "$image_listing" in
+    ''|"$base") ;;
+    *) printf 'Ambiguous run-specific base image listing; no resources removed.\n' >&2; exit 1 ;;
+  esac
+  if [ -n "$image_listing" ]; then
+    if [ ! -s "$output/base-identity.txt" ]; then
+      printf 'Cannot verify the run-specific base image without its recorded ID.\n' >&2
+      exit 1
+    fi
+    read -r recorded_base_id < "$output/base-identity.txt"
+    current_base_id=$(docker image inspect --format '{{.Id}}' "$base" 2>> "$attempt/docker-errors.log")
+    if [ "$current_base_id" != "$recorded_base_id" ]; then
+      printf 'Base image tag no longer matches this run; leaving it in place.\n' >&2
+      exit 1
+    fi
+  fi
+
+  # Exact-name listing confirms absence. Inspect by immutable ID confirms name,
+  # labels, and state; an inspect failure never counts as absence.
+  for kind in cold tools cached; do
+    name="tao-contributor-linux-$recover_run-$kind"
+    listing=$(docker container ls --all --no-trunc --filter "name=^/$name$" --format '{{.ID}} {{.Names}}' 2>> "$attempt/docker-errors.log")
+    [ -n "$listing" ] || continue
+    case "$listing" in *'
+'*) printf 'Ambiguous container listing for %s.\n' "$name" >&2; exit 1 ;; esac
+    read -r id listed_name extra <<EOF
+$listing
+EOF
+    case "$id" in ''|*[!0-9a-f]*) printf 'Invalid container ID for %s.\n' "$name" >&2; exit 1 ;; esac
+    if [ "${#id}" -ne 64 ] || [ "$listed_name" != "$name" ] || [ -n "$extra" ]; then
+      printf 'Ambiguous container identity for %s.\n' "$name" >&2
+      exit 1
+    fi
+    identity=$(docker inspect --format '{{.Name}}|{{index .Config.Labels "tao.owner"}}|{{index .Config.Labels "tao.run"}}|{{.State.Status}}|{{.State.ExitCode}}' "$id" 2>> "$attempt/docker-errors.log")
+    exit_code=${identity##*|}
+    case "$exit_code" in ''|*[!0-9]*) printf 'Invalid guest exit code for %s.\n' "$name" >&2; exit 1 ;; esac
+    case "$identity" in
+      "/$name|contributor-linux-test|$recover_run|exited|$exit_code"|"/$name|contributor-linux-test|$recover_run|created|$exit_code") ;;
+      *) printf 'Refusing recovery of unowned, live, or ambiguous container %s: %s\n' "$name" "$identity" >&2; exit 1 ;;
+    esac
+    printf '%s\n' "$id" > "$attempt/$kind-container-id.txt"
+    printf '%s\n' "$identity" > "$attempt/$kind-identity.txt"
+  done
+
+  # Keep complete daemon logs, inspect data, guest output, and workflow logs.
+  # Missing guest artifacts leave the container for diagnosis rather than
+  # accepting an incomplete capture as recoverable evidence.
+  for kind in cold tools cached; do
+    [ -f "$attempt/$kind-container-id.txt" ] || continue
+    read -r id < "$attempt/$kind-container-id.txt"
+    mkdir "$attempt/$kind"
+    docker inspect --size "$id" > "$attempt/$kind/container.json" 2>> "$attempt/docker-errors.log"
+    case "$(cat "$attempt/$kind-identity.txt")" in
+      *'|created|'*) printf 'Guest was created but never started.\n' > "$attempt/$kind/unstarted.txt" ;;
+      *)
+        docker logs "$id" > "$attempt/$kind/guest-console.txt" 2>&1
+        docker cp "$id:/workspace/.artifacts/contributor-linux/guest-$kind" "$attempt/$kind/guest" >> "$attempt/collect.log" 2>&1
+        if [ "$kind" != tools ]; then
+          docker cp "$id:/workspace/.artifacts/logs" "$attempt/$kind/workflow-logs" >> "$attempt/collect.log" 2>&1
+        fi ;;
+    esac
+  done
+
+  for kind in cold tools cached; do
+    [ -f "$attempt/$kind-container-id.txt" ] || continue
+    read -r id < "$attempt/$kind-container-id.txt"
+    name="tao-contributor-linux-$recover_run-$kind"
+    identity=$(docker inspect --format '{{.Name}}|{{index .Config.Labels "tao.owner"}}|{{index .Config.Labels "tao.run"}}|{{.State.Status}}|{{.State.ExitCode}}' "$id" 2>> "$attempt/docker-errors.log")
+    if [ "$identity" != "$(cat "$attempt/$kind-identity.txt")" ]; then
+      printf 'Container %s changed state during recovery; no further resources removed.\n' "$name" >&2
+      exit 1
+    fi
+    docker rm "$id" >> "$attempt/cleanup.log" 2>&1
+    printf 'Recovered %s; container removed.\n' "$name"
+  done
+  # An unforced image remove refuses an image still used by another container.
+  image_listing=$(docker image ls --all --filter "reference=$base" --format '{{.Repository}}:{{.Tag}}' 2>> "$attempt/docker-errors.log")
+  case "$image_listing" in
+    '') ;;
+    "$base")
+      if [ -z "$recorded_base_id" ]; then
+        printf 'Base image appeared during recovery; leaving it in place.\n' >&2
+        exit 1
+      fi
+      current_base_id=$(docker image inspect --format '{{.Id}}' "$base" 2>> "$attempt/docker-errors.log")
+      if [ "$current_base_id" != "$recorded_base_id" ]; then
+        printf 'Base image tag changed during recovery; leaving it in place.\n' >&2
+        exit 1
+      fi
+      users=$(docker container ls --all --no-trunc --filter "ancestor=$base" --format '{{.ID}} {{.Names}}' 2>> "$attempt/docker-errors.log")
+      if [ -n "$users" ]; then
+        printf 'Base image is still used by a container; leaving its exact tag in place.\n' >&2
+        exit 1
+      fi
+      docker image rm "$base" >> "$attempt/cleanup.log" 2>&1 ;;
+    *) printf 'Ambiguous base image before removal; leaving it in place.\n' >&2; exit 1 ;;
+  esac
+  printf 'run=%s\nstate=complete\nshared_caches=untouched\n' "$recover_run" > "$attempt/result.txt"
+  printf 'Contributor Linux recovery complete; evidence: %s\n' "$attempt"
+  exit 0
+fi
+
 run="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 output="$root/.artifacts/contributor-linux/$run"
 mkdir -p "$output"
@@ -181,7 +316,7 @@ git archive --format=tar HEAD > "$output/checkout.tar"
 mkdir "$output/context"
 # Extract only Dockerfile for the base build. No working-tree content or credentials enter it.
 git show "HEAD:$environment/Dockerfile" > "$output/context/Dockerfile"
-git archive --format=tar HEAD bootstrap-tao-dev-env devenv.lock "$environment" > "$output/tools.tar"
+git archive --format=tar HEAD .config/bootstrap-tao-dev-env devenv.lock "$environment" > "$output/tools.tar"
 printf '%s\n' \
   "platform=$platform" 'guest_cpus=4' 'guest_memory_bytes=17179869184' \
   'guest_memory_swap_bytes=17179869184' 'guest_timeout_seconds=7200' \
@@ -208,7 +343,7 @@ case "$base_cache_identity" in
   *) printf 'Cannot establish the base image filesystem/configuration identity.\n' >&2; exit 1 ;;
 esac
 # Hash exact tool inputs and the base identity; never retain a dependency install or host profile.
-git ls-tree HEAD bootstrap-tao-dev-env devenv.lock "$environment" > "$output/cache-inputs"
+git ls-tree HEAD .config/bootstrap-tao-dev-env devenv.lock "$environment" > "$output/cache-inputs"
 cat "$output/base-cache-identity.txt" >> "$output/cache-inputs"
 printf 'qemu_guest_base_experiment=%s\n' "$qemu_guest_base" >> "$output/cache-inputs"
 printf 'qemu_nix_filter_disabled=%s\n' "$qemu_nix_filter" >> "$output/cache-inputs"

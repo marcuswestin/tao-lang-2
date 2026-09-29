@@ -280,9 +280,11 @@ function useDocumentTitle(title: string | undefined): void {
 export const navigationTitleTestId = '__tao_navigation_title'
 export const navigationCommandTestId = (label: string): string => `__tao_navigation_command:${label}`
 
+// The rule's color is `borderColor`, not `borderBottomColor`: a side-specific color outranks the
+// general one, so it kept the rule light grey under a design's or a dark scheme's `border`.
 const headerStyle = {
   alignItems: 'center',
-  borderBottomColor: '#d0d0d0',
+  borderColor: '#d0d0d0',
   borderBottomWidth: 1,
   flexDirection: 'row',
   justifyContent: 'space-between',

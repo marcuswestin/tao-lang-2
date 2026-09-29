@@ -162,6 +162,21 @@ statement that "Login is not required for development builds" is the argument fo
   test keeps it equal to the host package's `expo` dependency. The beta-distribution plan and lane
   research carry a dated correction of the SDK-54 claim.
 
+### A20 — Re-enable the Studio HNReader Feed proof (complete)
+
+The `verify-full` proof that drags generated HNReader Stories into a drawn view, keeps, discards and
+undoes them (`studio-real-app.test.ts`, driven by `studio-hnreader-feed-journey.ts`) is enabled.
+The Draw and Design sequence now waits for the relevant canvas and applied preview revision, and
+the retained preview recovers a missing publication acknowledgement with bounded reloads.
+
+- Acceptance (2026-09-28): ten consecutive `./agent unsandboxed studio-proof-real-app` runs passed
+  from 07:23 through 07:35 UTC after merging current `main`, each overlapping a passing
+  `./agent check --no-cache` lane. Every run covered physical Feed clicks and drags, the Design Title
+  drop after Draw, Keep/Discard/Undo, and a persisted reopen. Studio now prepares its browser bundle
+  before reporting server readiness.
+  `DEVENV-STUDIO-REAL-APP-PROOF-FAILS-INTERMITTENTLY-UNDER-LOAD` retains its stricter concurrent
+  `verify` acceptance.
+
 ## First-hour quality
 
 These decide whether the people who do install Tao enjoy the first hour.
@@ -171,8 +186,7 @@ These decide whether the people who do install Tao enjoy the first hour.
 The tutorial half has landed: `packages/cli/tao-cli/cli-tests/tutorials.test.ts` replays
 `Docs/Tutorials/Your First Tao App.md` snippet by snippet, formats and validates the file after every
 step, reproduces the finished file from the steps, and runs its behavior test through the real
-`tao test` runner. `Tao now - two-week walkthrough.md` stays a dated record whose repository paths,
-`just` recipes, `--app` names, and `tao` subcommands the same suite checks still exist.
+`tao test` runner. The dated two-week walkthrough is gone; this suite covers Your First Tao App.
 
 What remains is the example set. The starters are proven byte-for-byte by their lowering test, but
 nothing says which examples a visitor is pointed at, and the apps under `Apps/` mix public examples
@@ -226,11 +240,15 @@ The point of the release is to learn what people want. Nothing collects that tod
   present, and `doctor --fingerprint` prints it alone. Nothing personal can reach it: each value is
   parsed out of a tool's output and kept only when it already reads as a version, a hash, or a plain
   word, which `environment-fingerprint.test.ts` proves on hostile probe output and on the real host.
-- Remaining: the fingerprint is reachable only from a checkout of this repository, because `tao`
-  has no `doctor`; `tao bug-report` is deliberately not built, so a visitor who installed a released
-  binary has a form to fill but no fingerprint to attach. Revisit once `A2` gives the CLI a shape
-  worth adding a command to. The discussion links currently point at the default `ideas` and `q-a`
-  categories.
+- Earlier limit: the fingerprint was reachable only from a checkout, while an installed CLI had no
+  report command. The discussion links currently point at the default `ideas` and `q-a` categories.
+- Implemented in the installed CLI: `tao doctor`, `tao doctor --json` / `--fingerprint`, and
+  `tao bug-report` expose a privacy-filtered fingerprint and a pasteable report draft with direct
+  links to the existing issue forms. The fingerprint includes the release version, OS, architecture,
+  available tool versions, Xcode where present, and a hash of the installed resource bundle. The
+  commands run without a checkout and send nothing. The bundled CLI passed disposable-home
+  acceptance without Bun, Node, or a checkout on `PATH`; a separate public release install remains
+  part of release QA.
 
 ### A18 — Liquid Glass by default
 
@@ -238,6 +256,16 @@ The point of the release is to learn what people want. Nothing collects that tod
       use it without opting in.
 - Developer decision: requested 2026-09-26. Define platform fallbacks and accessibility behavior
   in the implementation plan, and verify the default in a newly created app before closing this item.
+- Implementation plan: [Liquid Glass default](<Plan - Liquid Glass default.md>). The native runtime
+  now follows system light/dark appearance and the iOS host requests automatic appearance;
+  compatible system tabs, headers and controls supply Liquid Glass. Tao's custom toggle bar uses
+  regular glass when available and an opaque surface under Reduce Transparency. The fresh-app
+  creation test verifies the native imports and automatic tabs in one- and two-feature projects; the
+  packaged CLI acceptance also created and checked a fresh starter outside a checkout.
+  Remaining acceptance: observe the created app on a compatible iOS build with light/dark, Reduce
+  Transparency, Increase Contrast, Reduce Motion, large text and VoiceOver before closing this item.
+  The Developer accepted simulator observation in place of a physical device for A18 on 2026-09-28;
+  build and launch evidence alone does not close the visual and accessibility checks.
 
 ## Environment reach
 
@@ -246,6 +274,14 @@ shared-companion decision.
 
 ### A8 — A managed toolchain and a requirements graph
 
+Repository iOS setup is the first bounded slice: `just setup-ios` / the named `setup-ios` host
+operation inspects explicit Xcode and simulator-runtime versions, supports a side-by-side local
+Xcode archive installation with automatic detection in Downloads and a download-and-resume prompt,
+Apple's runtime download/import, and hands off account, license,
+and administrator steps. The [developer workflow documentation](../../packages/cli/dev-cli/README.md#ios-simulator-setup)
+owns its commands and limits. Public CLI integration, a shared target requirements graph, Android
+installation, and complete clean-machine acceptance remain open.
+
 A build should never fail with a Gradle stack trace on a machine that was missing a JDK. Each target
 (web, iOS simulator, iOS device, Android emulator, Android device, ship) declares its requirements,
 each requirement knows how to detect, install, and verify itself, and the CLI shows one plan with
@@ -253,9 +289,9 @@ sizes and licenses before it downloads anything.
 
 - Shape: installs under a Tao-owned directory without administrator rights wherever possible — the
   Android command-line tools, SDK packages, emulator, system images, and a JDK are fully
-  automatable on every OS; Xcode is a guided walkthrough (App Store or Apple download, license
-  acceptance, `xcodebuild -runFirstLaunch`, simulator runtime download) because it cannot be
-  automated; every download is pinned per Tao version and checksum-verified; `tao doctor` reports
+  automatable on every OS; Xcode combines archive installation and simulator runtime downloads
+  with guided Apple account, license, and administrator steps; every download is pinned per Tao
+  version and checksum-verified; `tao doctor` reports
   the same graph without installing.
 - Context: `packages/cli/dev-cli` doctor, `packages/cli/tao-cli/cli-src/ship-*`, the environment discussion this
   roadmap came out of.
@@ -492,6 +528,53 @@ and distribution remain separate release checks.
   needs a migration before Instant Cloud shuts down on August 31, 2027.
 - Context: `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`,
   `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`'s "InstantDB" section.
+
+### A19 — Configure an InstantDB backend through the Tao CLI
+
+- [ ] **Before MVP:** a Tao developer configures an app's InstantDB backend with the `tao` CLI alone:
+      store the app's InstantDB admin or platform token as a Tao CLI secret, register auth clients
+      such as Clerk, and push the compiler-emitted schema and permission rules as a migration.
+- The Tao CLI has a project-scoped encrypted secret store, separate from the repository development
+  store behind `./agent setup-clerk`. `tao instantdb push` can read its admin token from that store.
+  The remaining work in this item is backend configuration and migration flow through the CLI;
+  tokens stay out of app source, generated output, and logs.
+- Developer decision: requested 2026-09-27. The first InstantDB-with-auth demo runs on the
+  Developer's existing Instant Cloud account and may be configured by hand before this lands.
+
+### A20 — Finish the InstantDB auth pairing
+
+Auth Review runs on Instant Cloud with InstantAuth and with Clerk and no server of ours (landed in
+`fd4c1012` and `f7ecb086`); the Developer ran both variants on a physical iPhone on 2026-09-27.
+Deferred that day, to finish before MVP:
+
+- [ ] **Before MVP:** implement the answers to `R15`'s five questions once the Developer settles
+      them.
+- [ ] **Before MVP:** a Clerk sign-in's InstantDB session must not outlive the Clerk session. The
+      datasource signs that session out on release, failure, and cancel, and only the session it
+      opened, but an app killed while signed in leaves it persisted in the InstantDB client, and
+      InstantDB refresh tokens do not expire. A launch whose Clerk session has ended can still find
+      the client signed in as that user until something signs it out. `R15`'s offline-launch
+      question decides whether a launch reuses that session or discards it.
+- [ ] **Before MVP:** hosted acceptance that checks stored data. The phone runs are the Developer's
+      report only. Repeat the local live test's admin-query checks (the account row keyed by the
+      InstantDB user, an owned note, another account denied) against the Instant Cloud app for both
+      variants.
+- [ ] **Before MVP:** an automated journey for `AuthReviewInstantClerk`. A local InstantDB cannot
+      verify a Clerk token without a real Clerk instance, so the Clerk pairing has only provider
+      unit tests.
+- [ ] **Before MVP:** WordFlower's hosted push. Store its Instant app's admin token as
+      `WORDFLOWER_INSTANT_ADMIN_TOKEN`, add a recipe like `instant-review` that pushes with it, and
+      push once the app is confirmed to be WordFlower's own. `Apps/WordFlower/README.md` holds the
+      token and shared-app hazards.
+- Instant Cloud shuts down on 2027-08-31 (`R11`, `A16`); `Docs/Roadmap/Hosted data provider
+  candidates.md` weighs the replacement and is the next slice. The dev client aborting when it
+  reloads with the InstantDB websocket open is
+  `DEVENV-DEV-CLIENT-CRASHES-RELOADING-WITH-AN-OPEN-WEBSOCKET`.
+- Context: `Docs/Roadmap/Plan - Auth and data pairing.md` (progress, Developer actions, InstantDB
+  facts), `Apps/Test Apps/README.md` (Auth Review), `packages/apps/providers/instantdb/README.md` (live
+  tests), and `DEVENV-TAO-TEST-WAITS-FOREVER-ON-A-JEST-WORKER-LEFT-OPEN` for why `tao test` cancels a
+  journey file's leftover timers.
+- Done: every box above is checked on `main`.
 
 ## Project tracking
 

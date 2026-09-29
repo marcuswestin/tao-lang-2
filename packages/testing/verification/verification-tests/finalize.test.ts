@@ -7,6 +7,7 @@ import {
   LandCommand,
   MergeMainCommand,
   prepareForLanding,
+  recordMergeMessage,
   StartBranchCommand,
 } from '../verification-src/Finalize'
 import {
@@ -246,11 +247,11 @@ Describe('finalize', () => {
   Test('refuses a branch that is not feat/* or is detached', async () => {
     const fake = fakeDependencies({ branch: '' })
     await Expect(FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies))
-      .rejects.toThrow('requires a feat/* branch')
+      .rejects.toThrow('requires a feat/* or dev/* branch')
 
     const other = fakeDependencies({ branch: 'chore/something' })
     await Expect(FinalizeCommand.run({ repositoryRoot: '/repo' }, other.dependencies))
-      .rejects.toThrow('requires a feat/* branch')
+      .rejects.toThrow('requires a feat/* or dev/* branch')
   })
 
   Test('reports exactly what is dirty and stops rather than fixing it', async () => {
@@ -1118,6 +1119,26 @@ Describe('landing preparation', () => {
     Expect(changedHead.ok).toBe(false)
   })
 
+  Test('keeps a message a command recorded for this HEAD, and asks again once the branch moves', async () => {
+    const fake = fakeDependencies()
+    const path = await recordMergeMessage(
+      'Pin storage\n\n- Point storage at abc12345',
+      { repositoryRoot: '/repo' },
+      fake.dependencies,
+    )
+    Expect(fake.files.get(path)).toBe('Pin storage\n\n- Point storage at abc12345\n')
+
+    const recorded = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(recorded.ok).toBe(true)
+
+    fake.states.set('/repo/.artifacts/merge/feat/example.state.json', {
+      ...fake.states.get('/repo/.artifacts/merge/feat/example.state.json') as FinalizeState,
+      messageHeadSha: 'oldhead0000000000000000000000000000000000',
+    })
+    const moved = await prepareForLanding({ repositoryRoot: '/repo' }, fake.dependencies)
+    Expect(moved.ok).toBe(false)
+  })
+
   Test('does not turn an untouched generated draft into author review on a later landing', async () => {
     const fake = fakeDependencies()
     await FinalizeCommand.run({ repositoryRoot: '/repo' }, fake.dependencies)
@@ -1228,7 +1249,7 @@ Describe('landing preparation', () => {
   Test('refuses a branch that is not feat/* or a dirty worktree, before anything else', async () => {
     const detached = fakeDependencies({ branch: '' })
     await Expect(prepareForLanding({ repositoryRoot: '/repo' }, detached.dependencies))
-      .rejects.toThrow('requires a feat/* branch')
+      .rejects.toThrow('requires a feat/* or dev/* branch')
 
     const dirty = fakeDependencies({ status: '?? stray.ts\n' })
     await Expect(prepareForLanding({ repositoryRoot: '/repo' }, dirty.dependencies))
@@ -1284,7 +1305,7 @@ Describe('merge-main', () => {
   Test('refuses a detached HEAD or a dirty worktree in its own name', async () => {
     const detached = fakeDependencies({ branch: '' })
     await Expect(MergeMainCommand.run({ repositoryRoot: '/repo' }, detached.dependencies))
-      .rejects.toThrow('merge-main requires a feat/* branch')
+      .rejects.toThrow('merge-main requires a feat/* or dev/* branch')
 
     const dirty = fakeDependencies({ status: ' M tracked.ts\n' })
     await Expect(MergeMainCommand.run({ repositoryRoot: '/repo' }, dirty.dependencies))

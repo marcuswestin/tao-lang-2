@@ -30,11 +30,16 @@ export const dataWriteValidationMessages = {
   createInputField: (entity: string, field: string) => `Create of '${entity}' cannot write projected field '${field}'.`,
   createInputMissing: (entity: string, field: string) =>
     `Create of '${entity}' needs field '${field}', which its input item does not project.`,
+  toggleTarget: () => '`toggle` expects a writable boolean state or a row field.',
+  toggleField: (entity: string) => `Toggle of '${entity}' expects one stored yes/no field.`,
+  toggleOptional: (entity: string, field: string) =>
+    `Toggle of '${entity}.${field}' requires a nonoptional yes/no field.`,
 } as const
 
 export const dataWriteValidationChecks = {
   [AST.CreateStatement.$type]: validateCreate,
   [AST.UpdateStatement.$type]: validateUpdate,
+  [AST.ToggleStatement.$type]: validateToggle,
   [AST.DeleteStatement.$type]: (deleteStatement, ctx) => {
     validateRowTarget(deleteStatement.target, 'delete', ctx)
   },
@@ -42,6 +47,36 @@ export const dataWriteValidationChecks = {
     validateRowTarget(retryStatement.target, 'retry', ctx)
   },
 } satisfies NodeValidationChecks
+
+function validateToggle(toggle: AST.ToggleStatement, ctx: ValidationContext): void {
+  const target = toggle.target.ref
+  if (!target) {
+    return
+  }
+  const type = Type.ofValueDeclaration(target)
+  if (AST.isStateDeclaration(target) && type.kind !== 'entity') {
+    return
+  }
+  if (AST.isParameterDeclaration(target) && type.kind !== 'entity') {
+    return
+  }
+  if (type.kind === 'unresolved') {
+    return
+  }
+  if (type.kind !== 'entity') {
+    ctx.error(toggle, dataWriteValidationMessages.toggleTarget())
+    return
+  }
+  const field = toggle.members.length === 1
+    ? Type.dataFields(type.entity).find(candidate => candidate.name === toggle.members[0])
+    : undefined
+  const entityName = Type.dataEntityName(type.entity)
+  if (!field || !field.boolean) {
+    ctx.error(toggle, dataWriteValidationMessages.toggleField(entityName))
+  } else if (field.optional) {
+    ctx.error(toggle, dataWriteValidationMessages.toggleOptional(entityName, field.name))
+  }
+}
 
 function validateCreate(create: AST.CreateStatement, ctx: ValidationContext): void {
   const entity = create.entity.ref

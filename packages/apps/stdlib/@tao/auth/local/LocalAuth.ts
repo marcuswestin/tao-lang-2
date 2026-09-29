@@ -40,7 +40,7 @@ export function LocalAuthProvider(host: LocalAuthHost = {}): TR.AuthProvider {
       let cancelExpiry: (() => void) | undefined
       let cancelRevalidation: (() => void) | undefined
       let revalidationDelay = 1_000
-      const listeners = new Set<(session: TR.AuthSession) => void>()
+      const listeners = new Set<(session: TR.AuthConnectionSession) => void>()
       const lifetime = new AbortController()
       function persist() {
         const record: SessionRecord = { ...(current ? { session: current } : {}), revocations: [...pending] }
@@ -113,7 +113,7 @@ export function LocalAuthProvider(host: LocalAuthHost = {}): TR.AuthProvider {
         })
         return retrying
       }
-      function notify(value: TR.AuthSession) {
+      function notify(value: TR.AuthConnectionSession) {
         for (const listener of listeners) {
           listener(value)
         }
@@ -213,11 +213,8 @@ export function LocalAuthProvider(host: LocalAuthHost = {}): TR.AuthProvider {
         await persist()
         void revokePending()
       }
-      function session(value: AccountProtocol.Session): TR.AuthSession {
-        return {
-          state: 'SignedIn',
-          identity: { issuer: value.issuer, subject: value.subject, accountId: value.accountId },
-        }
+      function session(value: AccountProtocol.Session): TR.AuthConnectionSession {
+        return { state: 'SignedIn', principal: { issuer: value.issuer, subject: value.subject } }
       }
       return {
         capabilities: { methods: ['Password'] },
@@ -333,13 +330,20 @@ export function LocalAuthProvider(host: LocalAuthHost = {}): TR.AuthProvider {
             ? { status: 'completed' }
             : { status: 'error', message: 'Signed out on this device. Server revocation will retry when connected.' }
         },
-        async credential({ audience, signal }) {
+        /** The Session proof is the server session itself; only a datasource naming LocalAuth accepts it. */
+        async proof({ kind, signal }) {
           if (signal.aborted) {
             throw Errors.abortError('The authentication request was cancelled.')
           }
+          Assert.input(kind === 'Session', `LocalAuth issues Session sign-in proofs, not ${kind}.`)
           Assert.input(current !== undefined && current.expiresAt > now(), 'Sign in again to access account data.')
-          Assert.input(audience === current.resource, 'This auth session does not authorize that datasource.')
-          return { audience, value: current.token, expiresAt: current.expiresAt }
+          return {
+            kind,
+            issuer: current.issuer,
+            subject: current.subject,
+            value: { ...current },
+            expiresAt: current.expiresAt,
+          }
         },
         subscribe(listener) {
           listeners.add(listener)

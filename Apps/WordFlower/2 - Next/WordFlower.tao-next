@@ -19,8 +19,8 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 //
 // TEST WORLD CONTROLS. The document journeys use a fresh StarterWorkspace fixture on a phone.
 // A test-only WordFlower variant binds CloudKit so offline edits, failed writes, retry, and
-// reconnect use that provider's per-row recovery contract. The hosted InstantDB variant saves
-// snapshots and does not claim queued per-row writes.
+// reconnect use that provider's per-row recovery contract. The InstantDB variants store one row per
+// Tao row but need a running InstantDB server, so no journey here runs them.
 //
 // DESIGN VALUES. The design language finishes its MVP surface: a clause list reads by case, the
 // active navigation tab is a condition, and a color travels as a value where a view tints something
@@ -60,6 +60,9 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 // Input` writes it, and the stdlib `Problems(Input.Problems)` lists what is still missing, in the
 // order the entity states its rules and nothing once the input is complete. `validate` and `refuse
 // when` are Post-MVP.
+// DIRECT WRITES. `create`, `update`, and `delete` affect one row. `toggle Workspace.Pinned`
+// inverts one nonoptional yes/no field as a stored update; a recorded retry replays that update
+// without evaluating the toggle again. Workspace library queries use Pinned descending by default.
 //
 // CHECK. `check <boolean>` is an action's early exit: when the expression is false, the rest of that
 // action is skipped. Nothing fails, nothing is reported, and a caller that reached it through `do`
@@ -93,7 +96,7 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 // This tranche decides:
 // - `version` is the version currently under development, written as numeric SemVer core only:
 //   exactly `major.minor.patch`, with no leading zeroes, prerelease, or build suffix
-// - `DefaultApp` names one app declaration from this project. Command-line `--app` selection still
+// - `app` names one app declaration from this project. Command-line `--app` selection still
 //   overrides it, and projects may omit it when interactive selection is preferable
 //
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
@@ -582,7 +585,7 @@ project {
    id "wordflower"
    name "WordFlower"
    version "1.0.0"
-   DefaultApp WordFlower
+   app WordFlower
    remote none
    license MIT
 }

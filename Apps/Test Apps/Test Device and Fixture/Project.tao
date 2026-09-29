@@ -1,5 +1,0 @@
-project {
-   id "test-device-and-fixture"
-   name "Test Device and Fixture"
-   version "0.1.0"
-}

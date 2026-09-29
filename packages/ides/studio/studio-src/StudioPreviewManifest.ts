@@ -84,7 +84,7 @@ export type StudioNetworkSimulation = {
 }
 
 export type StudioSchemeEnvironment = {
-  capability: 'fixed-light-native' | 'pinned-native' | 'reactive-browser' | 'reactive-catalyst'
+  capability: 'fixed-light-native' | 'pinned-native' | 'reactive-browser' | 'reactive-catalyst' | 'reactive-native'
   requested: 'dark' | 'light' | 'system'
   resolved: 'dark' | 'light'
   source: 'native-fixed' | 'preference' | 'scenario' | 'system'
@@ -392,7 +392,9 @@ function validateScheme(scheme: StudioSchemeEnvironment): void {
   if (
     !['dark', 'light', 'system'].includes(scheme.requested)
     || !['dark', 'light'].includes(scheme.resolved)
-    || !['fixed-light-native', 'pinned-native', 'reactive-browser', 'reactive-catalyst'].includes(scheme.capability)
+    || !['fixed-light-native', 'pinned-native', 'reactive-browser', 'reactive-catalyst', 'reactive-native'].includes(
+      scheme.capability,
+    )
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(scheme.source)
     || (scheme.source === 'system' && scheme.requested !== 'system')
     || (scheme.source === 'preference' && scheme.requested === 'system')

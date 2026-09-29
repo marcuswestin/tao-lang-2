@@ -746,10 +746,10 @@ keys (`c`, `f`, `t`, `v`, `e`). What remained for web, now done:
   Bun on Expo's script, with the three Metro locations in its environment. A checkout keeps `bunx`.
   `ExpoServer`'s launcher gained `namesExpoScript`, because the start arguments open with the
   package name `bunx` wants and Expo otherwise read `expo` as its project root.
-- `just standalone-cli-acceptance` now starts `tao dev` from the installed binary, waits for Metro,
-  fetches the web bundle, and checks it contains the app. Inside an agent sandbox, which refuses
-  FSEvents, Metro needs Watchman, so `TAO_ACCEPTANCE_WATCHMAN` names a `watchman` binary for that
-  run; a person's terminal needs neither.
+- `just standalone-cli-acceptance` starts `tao dev` from the installed binary, waits for Metro,
+  fetches the web bundle, and checks it contains the app. Agents run this file-watching acceptance
+  through `./agent unsandboxed standalone-cli-acceptance` on the host, where Metro receives native
+  file events without a Watchman socket injected into the throwaway home.
 - Outside a checkout the key list leaves out the five checkout-only keys rather than listing keys
   that only refuse.
 

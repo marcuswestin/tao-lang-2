@@ -1,5 +1,5 @@
 import Workspace from '@compiler/workspace'
-import { Assert, CLI, FS, Repo } from '@shared'
+import { Assert, FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { runFix } from '../cli-src/source-commands'
 import { runTaoCliForTest, withTaoHome } from './test-cli-files'
@@ -19,9 +19,6 @@ import { runTaoCliForTest, withTaoHome } from './test-cli-files'
  * - `final` is the finished file the tutorial ends with, and the replay has to reproduce it exactly.
  */
 const FIRST_APP_TUTORIAL = 'Docs/Tutorials/Your First Tao App.md'
-
-/** WALKTHROUGH is the dated tour whose commands and paths this suite keeps from going stale. */
-const WALKTHROUGH = 'Docs/Tutorials/Tao now - two-week walkthrough.md'
 
 /** TutorialBlock is one fenced Tao snippet: its directives, its source, and the step it sits under. */
 type TutorialBlock = {
@@ -65,11 +62,10 @@ Describe('Docs tutorials', () => {
     const blocks = tutorialBlocks(await FS.readText(Repo.resolvePath(FIRST_APP_TUTORIAL)))
     const root = await mkTestDir('tao-tutorial-steps-')
     try {
-      // Every step is written into one directory, so the replay opens one workspace instead of one
-      // per step. A parse loads only the documents its own entry reaches, so the steps stay
-      // invisible to each other and each file is still judged on its own.
+      // Declarations in one folder are visible to each other, and every step declares ReadingList,
+      // so each step gets its own folder. The parent is still one fix run and one workspace.
       const written = replayTutorial(blocks)
-        .map((step, index) => ({ ...step, file: FS.resolvePath(`step-${index + 1}.tao`, root) }))
+        .map((step, index) => ({ ...step, file: FS.resolvePath(`step-${index + 1}/ReadingList.tao`, root) }))
       for (const step of written) {
         await FS.writeText(step.file, step.source)
       }
@@ -123,36 +119,6 @@ Describe('Docs tutorials', () => {
       await FS.remove(root)
     }
   }, 120_000)
-
-  Test('the Tao now walkthrough names paths, recipes, apps, and tao commands that still exist', async () => {
-    const markdown = await FS.readText(Repo.resolvePath(WALKTHROUGH))
-
-    const paths = referencedRepositoryPaths(markdown)
-    const recipes = named(markdown, /\bjust ([a-z_][a-z0-9_-]*)/g)
-    const apps = named(markdown, /--app ([A-Za-z][A-Za-z0-9]*)/g)
-    const commands = named(markdown, /(?:^|[^\w/])\.?\/?tao ([a-z][a-z-]*)/gm)
-    const justfile = await FS.readText(Repo.resolvePath('Justfile'))
-    const declaredApps = await declaredAppNames()
-    const taoCommands = await taoCliCommandNames()
-
-    const missingPaths: string[] = []
-    for (const path of paths) {
-      if (!await FS.exists(Repo.resolvePath(path))) {
-        missingPaths.push(path)
-      }
-    }
-    Expect(missingPaths).toEqual([])
-    Expect(recipes.filter(recipe => !new RegExp(`^${recipe}[ :]`, 'm').test(justfile))).toEqual([])
-    Expect(apps.filter(app => !declaredApps.includes(app))).toEqual([])
-    Expect(commands.filter(command => !taoCommands.includes(command))).toEqual([])
-    // A reference this test never found is a reference it never checked, and the empty `missing`
-    // lists above would then read as proof of nothing. One known reference of each kind says the
-    // four patterns are still matching the document they are pointed at.
-    Expect(paths).toContain('Apps/HNReader')
-    Expect(recipes).toContain('_parser-gen')
-    Expect(apps).toContain('HNReaderStub')
-    Expect(commands).toContain('ship')
-  }, 30_000)
 })
 
 /** tutorialBlocks reads every fenced `tao` snippet in a tutorial, with the `##` heading above it. */
@@ -306,47 +272,4 @@ function declarationMatches(key: string, anchor: string): boolean {
 /** useModule is the module a use line imports from, which is the key a later snippet replaces it by. */
 function useModule(use: string): string {
   return use.split(' from ')[1]!.trim()
-}
-
-/** named collects the first capture of every match, deduplicated, in the order they appear. */
-function named(markdown: string, pattern: RegExp): string[] {
-  return [...new Set([...markdown.matchAll(pattern)].map(match => match[1]!))]
-}
-
-/**
- * referencedRepositoryPaths collects the repository paths a document names, quoted where the path
- * has a space in it and bare inside a shell command.
- */
-function referencedRepositoryPaths(markdown: string): string[] {
-  const quoted = named(markdown, /(?:"|`)((?:Apps|Docs|packages)\/[^"`\n]+?)(?:"|`)/g)
-  // Quoted spans are blanked before the bare pass, or a quoted path with a space in it would also
-  // read as a second, shorter bare path starting after that space.
-  const bare = named(markdown.replace(/"[^"\n]*"|`[^`\n]*`/g, ' '), /(?:^|\s)((?:Apps|Docs|packages)\/[^\s"`\n]+)/gm)
-  return [...new Set([...quoted, ...bare].map(path => path.replace(/[.,;:)]+$/, '')))]
-    .filter(path => !path.includes('*'))
-}
-
-/** declaredAppNames lists every `app` declared under `Apps/`, which is what `--app` has to name. */
-async function declaredAppNames(): Promise<string[]> {
-  const names = new Set<string>()
-  for await (const path of FS.walk(Repo.resolvePath('Apps'), { extensions: ['.tao'] })) {
-    for (const match of (await FS.readText(path)).matchAll(/^app ([A-Za-z][A-Za-z0-9]*)\b/gm)) {
-      names.add(match[1]!)
-    }
-  }
-  return [...names]
-}
-
-/** taoCliCommandNames reads the command names out of the Tao CLI's own help output. */
-async function taoCliCommandNames(): Promise<string[]> {
-  // Commander writes help straight to the host streams, so this asks the real executable instead of
-  // the in-process runner, which only captures what the CLI writes through the shared terminal.
-  const help = await CLI.run(Repo.resolvePath('tao'), { args: ['--help'], cwd: Repo.getRoot() })
-  const lines = `${help.stdout}${help.stderr}`.split('\n')
-  const start = lines.findIndex(line => line.trim() === 'Commands:')
-  Assert(start >= 0, 'the Tao CLI help to list its commands')
-  return lines
-    .slice(start + 1)
-    .map(line => /^ {2}(\S+)/.exec(line)?.[1])
-    .filter((name): name is string => name !== undefined)
 }

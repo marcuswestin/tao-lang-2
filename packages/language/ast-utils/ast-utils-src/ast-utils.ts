@@ -55,6 +55,16 @@ import {
 import { resolveItemPropertyBindings } from './item-property-bindings'
 import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
+import {
+  appAuthBinding,
+  authProofKinds,
+  concreteConfigurableDeclaration,
+  dataCapabilities,
+  dataCapabilityNamed,
+  datasourceTypeOfBinding,
+  isAuthProofKind,
+  pairingIssuerOf,
+} from './pairing'
 import { isPluralCategory, phraseIsPlural, phraseNumberParameters, pluralCategories } from './phrases'
 import { literalExpression, parameterRequiresWritable, writableExpression } from './reactive-parameters'
 import { referencedNames } from './references'
@@ -124,6 +134,14 @@ export const ASTUtils = {
   phraseIsPlural,
   phraseNumberParameters,
   pluralCategories,
+  appAuthBinding,
+  authProofKinds,
+  concreteConfigurableDeclaration,
+  dataCapabilities,
+  dataCapabilityNamed,
+  datasourceTypeOfBinding,
+  isAuthProofKind,
+  pairingIssuerOf,
 } as const
 
 export namespace ASTUtils {
@@ -154,6 +172,11 @@ export namespace ASTUtils {
   export type ItemShapeField = import('./Type').ItemShapeField
   export type ImplicitChangeBinding = import('./invocations').ImplicitChangeBinding
   export type LayoutTermValue = import('./layouts').LayoutTermValue
+  export type AppAuthBinding = import('./pairing').AppAuthBinding
+  export type AuthProofKind = import('./pairing').AuthProofKind
+  export type DataCapability = import('./pairing').DataCapability
+  export type DataCapabilityScope = import('./pairing').DataCapabilityScope
+  export type DataCapabilityUse = import('./pairing').DataCapabilityUse
   export type OutlineControlDescriptor = import('./interaction-outline').OutlineControlDescriptor
   export type OutlineLoopDescriptor = import('./interaction-outline').OutlineLoopDescriptor
   export type OutlineSiblingRegionDescriptor = import('./interaction-outline').OutlineSiblingRegionDescriptor

@@ -8,7 +8,8 @@
     "tao": "cli-src/tao-cli.ts"
   },
   "exports": {
-    ".": "./cli-src/tao-cli.ts"
+    ".": "./cli-src/tao-cli.ts",
+    "./watchos-project": "./cli-src/watchos-project.ts"
   },
   "dependencies": {
     "@bomb.sh/tab": "^0.0.22",
@@ -20,6 +21,7 @@
     "tao-cli-kit": "workspace:*",
     "tao-formatter": "workspace:*",
     "tao-generation": "workspace:*",
+    "tao-instantdb": "workspace:*",
     "tao-native-bindings": "workspace:*",
     "tao-parser": "workspace:*",
     "tao-expo-host": "workspace:*",

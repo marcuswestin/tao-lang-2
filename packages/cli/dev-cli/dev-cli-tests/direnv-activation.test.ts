@@ -117,6 +117,7 @@ async function runShell(
       DIRENV_WATCHES: undefined,
       DIRENV_CONFIG: FS.resolvePath('.tao-dev/test/config/direnv', test.home),
       DIRENV_LOG_FORMAT: '',
+      DIRENV_WARN_TIMEOUT: undefined,
       XDG_CONFIG_HOME: FS.resolvePath('.tao-dev/test/config', test.home),
       XDG_DATA_HOME: FS.resolvePath('.tao-dev/test/data', test.home),
       XDG_CACHE_HOME: FS.resolvePath('.tao-dev/test/cache', test.home),
@@ -223,11 +224,14 @@ print -r -- "created|$TAO_TEST_ACTIVE"
           await runShell(
             test,
             `
+# Give direnv's timestamp-based watch distinct past mtimes without waiting for the clock.
+command touch -t 202001010000.00 .envrc
 source "$TAO_TEST_HOOK"
 _tao_dev_preserve_status 9
 _tao_dev_direnv_hook
 print -r -- "real|$?|$TAO_TEST_ACTIVE|$TAO_TEST_COMPLETED"
 print 'export TAO_TEST_ACTIVE=changed_with_real_direnv' > .envrc
+command touch -t 202001010000.02 .envrc
 _tao_dev_direnv_hook
 print -r -- "changed|$TAO_TEST_ACTIVE"
 cd "$TAO_TEST_BASE"
@@ -410,6 +414,21 @@ print -r -- "mismatch|\${TAO_TEST_ACTIVE-unset}"
       Expect((await calls(test)).filter(line => line.startsWith('allow|') || line.startsWith('completion|'))).toEqual(
         [],
       )
+    } finally {
+      await FS.remove(test.base)
+    }
+  })
+
+  Test('disables the slow-command warning unless the shell already chose a timeout', async () => {
+    const test = await fixture()
+    try {
+      Expect(await runShell(test, 'source "$TAO_TEST_HOOK"\nprint -r -- "$DIRENV_WARN_TIMEOUT"')).toEqual(['0s'])
+      Expect(
+        await runShell(
+          test,
+          'export DIRENV_WARN_TIMEOUT=2m\nsource "$TAO_TEST_HOOK"\nprint -r -- "$DIRENV_WARN_TIMEOUT"',
+        ),
+      ).toEqual(['2m'])
     } finally {
       await FS.remove(test.base)
     }

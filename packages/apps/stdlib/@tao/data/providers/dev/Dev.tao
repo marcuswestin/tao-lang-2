@@ -7,6 +7,7 @@ public
 type Dev is datasource with {
    // Defaults to the mounted Tao data schema name when omitted.
    StorageKey text?
+   supports { Relations, UniqueFields, UniqueTogether }
 
    provider DevProvider from ./Dev.ts
 }

@@ -25,12 +25,15 @@ import {
   type RuntimeAuthScope,
   type TaoAuthCapabilities,
   type TaoAuthConnection,
-  type TaoAuthCredential,
-  type TaoAuthCredentialRequest,
+  type TaoAuthConnectionSession,
   type TaoAuthDeclaration,
   type TaoAuthIdentity,
   type TaoAuthInput,
+  type TaoAuthIssuedProof,
   type TaoAuthOutcome,
+  type TaoAuthPrincipal,
+  type TaoAuthProof,
+  type TaoAuthProofRequest,
   type TaoAuthProvider,
   type TaoAuthResult,
   type TaoAuthSecretStorage,
@@ -135,6 +138,13 @@ import {
   testNavKind as testNavigationKind,
 } from './TR-navigation'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
+import type {
+  TaoAuthPairing,
+  TaoAuthProofKind,
+  TaoDataAcceptance,
+  TaoDataCapability,
+  TaoDataPairing,
+} from './TR-pairing'
 import {
   beginPersistedStateLaunch,
   beginPersistedStateTest,
@@ -871,6 +881,9 @@ class TR {
 
   /** VisualNativeRoot preserves filtered native controls while making their Studio occurrence selectable. */
   static VisualNativeRoot(layout: TR.TaoVisualLayout | undefined, child: React.ReactNode): React.ReactNode {
+    if (TRTaoProps.TaoPropsControls.visualRowRoot(layout)) {
+      return createElement(NativeVisualRowRoot, { child, layout })
+    }
     const props = TRTaoProps.TaoPropsControls.visualNativeProps(layout)
     return Object.keys(props).length === 0
       ? child
@@ -1392,10 +1405,18 @@ namespace TR {
   export type AuthInput = TaoAuthInput
   export type AuthOutcome = TaoAuthOutcome
   export type AuthResult = TaoAuthResult
-  export type AuthCredential = TaoAuthCredential
-  export type AuthCredentialRequest = TaoAuthCredentialRequest
+  export type AuthConnectionSession = TaoAuthConnectionSession
+  export type AuthPrincipal = TaoAuthPrincipal
+  export type AuthProof = TaoAuthProof
+  export type AuthIssuedProof = TaoAuthIssuedProof
+  export type AuthProofRequest = TaoAuthProofRequest
   export type AuthSecretStorage = TaoAuthSecretStorage
   export type AuthDeclaration = TaoAuthDeclaration
+  export type AuthPairing = TaoAuthPairing
+  export type AuthProofKind = TaoAuthProofKind
+  export type DataAcceptance = TaoDataAcceptance
+  export type DataCapability = TaoDataCapability
+  export type DataPairing = TaoDataPairing
   export type ConfiguredAuth = TaoConfiguredAuth
   export type DataAuthBinding = TaoDataAuthBinding
   export type AppDatasourceBinding = import('./TR-data').TaoAppDatasourceBinding
@@ -1451,6 +1472,10 @@ namespace TR {
   export type DataProvider = TaoDataProvider
   /** DataProviderContext carries one schema mount and plain evaluated configuration. */
   export type DataProviderContext = TaoDataProviderContext
+  /** DataAuthenticationContext is what the account datasource receives to resolve a signed-in principal. */
+  export type DataAuthenticationContext = import('./TR-data').TaoDataAuthenticationContext
+  /** DataAuthentication is the account a datasource resolved, with its own credential and release. */
+  export type DataAuthentication = import('./TR-data').TaoDataAuthentication
   /** DataFillRequest carries the query descriptor a connection's fill is offered. */
   export type DataFillRequest = TaoFillRequest
   /** DataFillOps is what a connection's fill receives to land fetched rows in the store. */
@@ -1684,6 +1709,14 @@ function queryStatus(
     return { status: 'error', message: query.Error, rows: query, ...advisory }
   }
   return { status: 'ready', rows: query, ...advisory }
+}
+
+function NativeVisualRowRoot({ child, layout }: {
+  child: React.ReactNode
+  layout: TR.TaoVisualLayout | undefined
+}): React.ReactElement {
+  const props = InteractionControls.UseNativeRowRoot(layout)
+  return createElement(requireReactNativeRuntime().View, props, child)
 }
 
 export default TR

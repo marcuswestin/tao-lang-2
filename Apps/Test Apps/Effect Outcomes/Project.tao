@@ -1,5 +1,0 @@
-project {
-   id "effect-outcomes"
-   name "Effect Outcomes"
-   version "0.1.0"
-}

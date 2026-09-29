@@ -1,6 +1,6 @@
 # Cloud setup
 
-All three providers enter through `./bootstrap-tao-dev-env --install-nix` from the
+All three providers enter through `./.config/bootstrap-tao-dev-env --install-nix` from the
 repository root. It provisions the locked portable Linux tools noninteractively,
 then calls `./agent setup`, the sole owner of repository dependencies and generated
 adapters. `--install-nix` explicitly permits installation when Nix is missing.
@@ -19,7 +19,7 @@ disposable environment rather than treating its partial profile as a cache.
 Set **both Setup script and Maintenance script** in the cloud environment to:
 
 ```sh
-./bootstrap-tao-dev-env --install-nix
+./.config/bootstrap-tao-dev-env --install-nix
 ```
 
 Maintenance refreshes a cached environment after its task branch is checked out.
@@ -47,7 +47,7 @@ The hand-maintained `.cursor/environment.json` runs the same bootstrap in
 Feature branches overlay the active Build and may change its locked tools or
 dependencies. Cursor documents session startup and branch checkout separately;
 their ordering remains unproved. Until hosted proof establishes that `start`
-sees the requested checkout, explicitly run `./bootstrap-tao-dev-env --install-nix`
+sees the requested checkout, explicitly run `./.config/bootstrap-tao-dev-env --install-nix`
 after checking out or changing the task branch and before testing.
 
 Builds retain disk state, not exported shell variables or processes; the

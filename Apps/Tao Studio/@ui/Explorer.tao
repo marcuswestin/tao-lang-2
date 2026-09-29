@@ -1,0 +1,242 @@
+use DesignToken, DesignTokens, File, Files, Screen, Screens, View, Views from @data
+use Col, Text from @tao/ui
+
+function StudioFolderIsExpanded(CollapsedFolders list of text, FolderPath text) returns boolean {
+   return StudioFolderIsExpanded(CollapsedFolders, FolderPath) from ../../../packages/ides/studio/studio-src/StudioFolderExpansion.ts
+}
+
+workspace
+function StudioToggleFolder(CollapsedFolders list of text, FolderPath text) returns list of text {
+   return StudioToggleFolder(CollapsedFolders, FolderPath) from ../../../packages/ides/studio/studio-src/StudioFolderExpansion.ts
+}
+
+folder
+view FilesPanel(CollapsedFolders list of text, ToggleFolder action(text)) {
+   state NewPath = ""
+   action Create() {
+      do CreateFile(NewPath)
+      set NewPath = ""
+   }
+   action ChangeNewPath(Value text) {
+      set NewPath = Value
+   }
+   render FilesPanelSurface() {
+      FileCreateBar(NewPath, ChangeNewPath, Create)
+      FileTree(FolderPath: "", CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
+}  }
+
+view FilesPanelSurface() accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view FileCreateBar(Path text, Change action(text), Create action()) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+// Disclosure stays Studio-local: Tao has no generic tree construct. The app owns its device-local
+// collapsed-path set, so recursive occurrences have explicit stable identity without ambient state.
+view Disclosure(Label text, FolderPath text, CollapsedFolders list of text, ToggleFolder action(text)) {
+   let Expanded = StudioFolderIsExpanded(CollapsedFolders, FolderPath)
+   action Toggle() {
+      do ToggleFolder(FolderPath)
+   }
+   render TreeFolder(Label, Expanded, Toggle) {
+      when Expanded {
+         true -> { @@content }
+         otherwise -> { }
+}  }  }
+
+view TreeFolder(Label text, Expanded boolean, Toggle action()) accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view FileTree(FolderPath text, CollapsedFolders list of text, ToggleFolder action(text)) {
+   query Children = Files with {
+      where ParentPath == FolderPath
+   }
+   render Col() {
+      guard Children {
+         loading -> { Text("Loading Studio files…") }
+         error -> Message { Text(Message) }
+      }
+      loop Children / File {
+         when File.Folder {
+            true -> { Disclosure(Label: File.Name, FolderPath: File.Path, CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder) {
+               FileTree(FolderPath: File.Path, CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
+            } }
+            otherwise -> { FileRow(File) }
+}  }  }  }
+
+view FileRow(File) {
+   state RenamePath = File.Path
+   state Renaming = false
+   state ConfirmDelete = false
+   state Moving = false
+   state TargetPackage = ""
+   state RelocateScenarios = true
+   action Open() {
+      do OpenFile(File.Path)
+   }
+   action ChangeRenamePath(Value text) {
+      set RenamePath = Value
+   }
+   action BeginRename() {
+      set ConfirmDelete = false
+      set Moving = false
+      set Renaming = true
+   }
+   action CancelRename() {
+      set RenamePath = File.Path
+      set Renaming = false
+   }
+   action Rename() {
+      do RenameFile(Path: File.Path, SourceVersion: File.Version, TargetPath: RenamePath)
+      set Renaming = false
+   }
+   action BeginDelete() {
+      set Renaming = false
+      set Moving = false
+      set ConfirmDelete = true
+   }
+   action CancelDelete() {
+      set ConfirmDelete = false
+   }
+   action Delete() {
+      do DeleteFile(Path: File.Path, SourceVersion: File.Version)
+   }
+   action BeginMove() {
+      set ConfirmDelete = false
+      set Renaming = false
+      set Moving = true
+   }
+   action ChangeTargetPackage(Value text) {
+      set TargetPackage = Value
+   }
+   action ChangeRelocateScenarios(Value boolean) {
+      set RelocateScenarios = Value
+   }
+   action Move() {
+      do MoveGeneratedSource(Path: File.Path, SourceVersion: File.Version, TargetPackage: TargetPackage, RelocateScenarios: RelocateScenarios)
+      set Moving = false
+   }
+   render TreeFileRow(Name: File.Name, Path: File.Path, Dirty: File.Dirty, DiagnosticCount: File.DiagnosticCount, RenamePath: RenamePath, Renaming: Renaming, ConfirmDelete: ConfirmDelete, Moving: Moving, TargetPackage: TargetPackage, Open: Open, ChangeRenamePath: ChangeRenamePath, BeginRename: BeginRename, CancelRename: CancelRename, Rename: Rename, BeginDelete: BeginDelete, CancelDelete: CancelDelete, Delete: Delete, BeginMove: BeginMove, ChangeTargetPackage: ChangeTargetPackage, RelocateScenarios: RelocateScenarios, ChangeRelocateScenarios: ChangeRelocateScenarios, Move: Move)
+}
+
+view TreeFileRow(Name text, Path text, Dirty boolean, DiagnosticCount number, RenamePath text, Renaming boolean, ConfirmDelete boolean, Moving boolean, TargetPackage text, Open action(), ChangeRenamePath action(text), BeginRename action(), CancelRename action(), Rename action(), BeginDelete action(), CancelDelete action(), Delete action(), BeginMove action(), ChangeTargetPackage action(text), RelocateScenarios boolean, ChangeRelocateScenarios action(boolean), Move action()) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+folder
+view StudioPanelSurface(Title text) accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view StudioPaletteRow(Label text, Detail text, Kind text, Name text, Insert action()) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view StudioSourceRow(Label text, Detail text, Open action()) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view StudioDesignTokenRow(Label text, Detail text, Kind text, Open action()) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view StudioDesignTokenSection(Title text) accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view ComponentPaletteItem(Name text, Label text, Kind text) {
+   action Insert() {
+      do InsertComponent(Name)
+   }
+   render StudioPaletteRow(Label: Label, Detail: Kind, Kind: "component", Name: Name, Insert: Insert)
+}
+
+folder
+view ComponentsPanel() {
+   render StudioPanelSurface("Components") {
+      ComponentPaletteItem(Name: "Text", Label: "Text", Kind: "Element")
+      ComponentPaletteItem(Name: "TextFrame", Label: "TextFrame", Kind: "Element")
+      ComponentPaletteItem(Name: "TextMultiline", Label: "TextMultiline", Kind: "Element")
+      ComponentPaletteItem(Name: "Number", Label: "Number", Kind: "Element")
+      ComponentPaletteItem(Name: "Image", Label: "Image", Kind: "Element")
+      ComponentPaletteItem(Name: "Progress", Label: "Progress", Kind: "Element")
+      ComponentPaletteItem(Name: "Button", Label: "Button", Kind: "Element")
+      ComponentPaletteItem(Name: "FormButton", Label: "FormButton", Kind: "Element")
+      ComponentPaletteItem(Name: "Checkbox", Label: "Checkbox", Kind: "Element")
+      ComponentPaletteItem(Name: "Switch", Label: "Switch", Kind: "Element")
+      ComponentPaletteItem(Name: "Slider", Label: "Slider", Kind: "Element")
+      ComponentPaletteItem(Name: "Picker", Label: "Picker", Kind: "Element")
+      ComponentPaletteItem(Name: "SegmentedControl", Label: "SegmentedControl", Kind: "Element")
+      ComponentPaletteItem(Name: "DatePicker", Label: "DatePicker", Kind: "Element")
+      ComponentPaletteItem(Name: "TextInput", Label: "Text input", Kind: "Element")
+      ComponentPaletteItem(Name: "Spinner", Label: "Spinner", Kind: "Element")
+      ComponentPaletteItem(Name: "Box", Label: "Box", Kind: "Container")
+      ComponentPaletteItem(Name: "Stack", Label: "Stack", Kind: "Container")
+      ComponentPaletteItem(Name: "Col", Label: "Column", Kind: "Container")
+      ComponentPaletteItem(Name: "Row", Label: "Row", Kind: "Container")
+      ComponentPaletteItem(Name: "WrappingRow", Label: "Wrapping row", Kind: "Container")
+      ComponentPaletteItem(Name: "Panes", Label: "Panes", Kind: "Container")
+      ComponentPaletteItem(Name: "ScrollView", Label: "Scroll view", Kind: "Container")
+}  }
+
+view ProjectViewRow(View) {
+   action Open() {
+      do OpenScreen(View.StableId)
+   }
+   render StudioSourceRow(Label: View.Name, Detail: View.SourcePath, Open: Open)
+}
+
+folder
+view ProjectViewsPanel() {
+   query ProjectViews = Views
+   render StudioPanelSurface("Project views") {
+      guard ProjectViews {
+         loading -> { Text("Loading compiled views…") }
+         error -> Message { Text(Message) }
+      }
+      loop ProjectViews / View {
+         ProjectViewRow(View)
+}  }  }
+
+view ScreenRow(Screen) {
+   action Open() {
+      do OpenScreen(Screen.StableId)
+   }
+   render StudioSourceRow(Label: Screen.Name, Detail: Screen.SourcePath, Open: Open)
+}
+
+folder
+view ScreensPanel() {
+   query ProjectScreens = Screens
+   render StudioPanelSurface("Screens") {
+      guard ProjectScreens {
+         loading -> { Text("Loading compiled screens…") }
+         error -> Message { Text(Message) }
+      }
+      loop ProjectScreens / Screen {
+         ScreenRow(Screen)
+}  }  }
+
+view DesignTokenRow(DesignToken) {
+   action Open() {
+      do OpenSource(Path: DesignToken.SourcePath, SourceVersion: DesignToken.SourceVersion, Start: DesignToken.Start)
+   }
+   render StudioDesignTokenRow(Label: DesignToken.Name, Detail: DesignToken.Value, Kind: DesignToken.Kind, Open: Open)
+}
+
+view DesignTokenKindGroup(TokenKind text, Title text) {
+   query Tokens = DesignTokens with {
+      where Kind == TokenKind
+   }
+   render Col() {
+      when Tokens {
+         empty -> { }
+         otherwise -> { StudioDesignTokenSection(Title) {
+            loop Tokens / DesignToken {
+               DesignTokenRow(DesignToken)
+            }
+         } }
+}  }  }
+
+folder
+view DesignTokensPanel() {
+   query Tokens = DesignTokens
+   render StudioPanelSurface("Design") {
+      guard Tokens {
+         loading -> { Text("Loading parser-owned design values…") }
+         error -> Message { Text(Message) }
+      }
+      DesignTokenKindGroup(TokenKind: "color", Title: "colors")
+      DesignTokenKindGroup(TokenKind: "bundle", Title: "bundles")
+      DesignTokenKindGroup(TokenKind: "size", Title: "sizes")
+      DesignTokenKindGroup(TokenKind: "text", Title: "text")
+      DesignTokenKindGroup(TokenKind: "screen", Title: "screens")
+      DesignTokenKindGroup(TokenKind: "style", Title: "styles")
+      DesignTokenKindGroup(TokenKind: "default", Title: "defaults")
+      DesignTokenKindGroup(TokenKind: "token", Title: "tokens")
+}  }

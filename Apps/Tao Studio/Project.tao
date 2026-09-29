@@ -1,5 +1,0 @@
-project {
-   id "tao-studio-client"
-   name "Tao Studio Client"
-   version "0.1.0"
-}

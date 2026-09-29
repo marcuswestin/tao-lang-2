@@ -7,7 +7,7 @@
  */
 
 import { Switch } from '@shared/core'
-import type { StudioCanvasViewport, StudioPreviewCanvasShortcutMessage } from '../../StudioProtocol'
+import type { StudioCanvasViewport, StudioCanvasZoomCommand } from '../../StudioProtocol'
 
 type StudioCanvasViewportState = StudioCanvasViewport
 type CanvasRect = Readonly<{ bottom: number; left: number; right: number; top: number }>
@@ -45,24 +45,36 @@ function grid(host: HTMLElement): HTMLElement | null {
   )
 }
 
+/**
+ * Both planes the host holds share its pan and zoom: Draw lays the preview grid's running cells over
+ * its own canvas, so the two must move as one.
+ */
+function surfaces(host: HTMLElement): readonly HTMLElement[] {
+  return [
+    ...host.querySelectorAll<HTMLElement>(':scope > .studio-preview-grid, :scope > [data-tao-studio-draw-canvas]'),
+  ]
+}
+
 /** canvasScale reports the zoom a node is rendered under, so a pointer gesture can undo it. */
 export function canvasScale(node: Element | null | undefined): number {
   const host = node?.closest<HTMLElement>('[data-canvas-surface="on"]') ?? null
-  const surface = host === null ? null : grid(host)
-  return host === null || surface === null || node === undefined || !surface.contains(node)
+  return host === null || node === undefined || !surfaces(host).some(surface => surface.contains(node))
     ? 1
     : states.get(host)?.z ?? 1
 }
 
-/** applyCanvasViewport writes the current pan and zoom onto the grid; the matrix calls it after each reconcile. */
+/** applyCanvasViewport writes the current pan and zoom onto the surfaces; the matrix calls it after each reconcile. */
 export function applyCanvasViewport(host: HTMLElement): void {
-  const surface = grid(host)
-  if (surface === null) {
+  if (grid(host) === null) {
     return
   }
   const current = state(host)
   host.dataset['canvasSurface'] = 'on'
-  surface.style.transform = `translate(${current.x}px, ${current.y}px) scale(${current.z})`
+  for (const surface of surfaces(host)) {
+    surface.style.transform = `translate(${current.x}px, ${current.y}px) scale(${current.z})`
+    // Handles and selection strokes scale by the inverse, so they keep one on-screen width at any zoom.
+    surface.style.setProperty('--studio-canvas-counter-scale', String(1 / current.z))
+  }
   const pill = host.querySelector<HTMLElement>(':scope > .studio-canvas-zoom')
   if (pill !== null) {
     pill.textContent = `${Math.round(current.z * 100)}%`
@@ -91,8 +103,9 @@ export function canvasRevealDelta(
 /** revealCanvasNode pans the transformed preview plane; `scrollIntoView` would move the clipped host itself. */
 export function revealCanvasNode(node: Element | null | undefined): boolean {
   const host = node?.closest<HTMLElement>('[data-canvas-surface="on"]') ?? null
-  const surface = host === null ? null : grid(host)
-  if (host === null || surface === null || node === undefined || node === null || !surface.contains(node)) {
+  if (
+    host === null || node === undefined || node === null || !surfaces(host).some(surface => surface.contains(node))
+  ) {
     return false
   }
   const delta = canvasRevealDelta(host.getBoundingClientRect(), node.getBoundingClientRect())
@@ -118,7 +131,7 @@ export type StudioCanvasViewportControls = Readonly<{
   iframeWheel: (gesture: StudioCanvasWheelGesture, frame: Element) => void
   /** Space presses in a focused preview cannot bubble into the parent document. */
   iframePanKey: (held: boolean, frame: Element) => void
-  iframeShortcut: (command: StudioPreviewCanvasShortcutMessage['command'], frame: Element) => void
+  iframeShortcut: (command: StudioCanvasZoomCommand, frame: Element) => void
   zoomTo: (scale: number, anchor?: Readonly<{ x: number; y: number }>) => void
 }>
 
@@ -252,12 +265,32 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     })
     publish()
   }
-  const shortcut = (command: StudioPreviewCanvasShortcutMessage['command']): void => {
+  /** A zoom step keeps the selection in view: its centre lands in the host's centre at the new scale. */
+  const zoomStep = (direction: 1 | -1): void => {
+    const target = deps.selectionBounds?.()
+    if (target === undefined) {
+      zoomTo(nextStop(current.z, direction))
+      return
+    }
+    const bounds = host.getBoundingClientRect()
+    const next = nextStop(current.z, direction)
+    const x = ((target.left + target.right) / 2 - bounds.left - current.x) / current.z
+    const y = ((target.top + target.bottom) / 2 - bounds.top - current.y) / current.z
+    Object.assign(current, { x: bounds.width / 2 - x * next, y: bounds.height / 2 - y * next, z: next })
+    publish()
+  }
+  const shortcut = (command: StudioCanvasZoomCommand): void => {
     Switch(command, {
-      fit,
+      // ⌘0 fits what is selected, and the whole canvas only when nothing is.
+      fit: () => {
+        const selected = deps.selectionBounds?.()
+        return selected === undefined ? fit() : frameBounds(selected)
+      },
       reset,
-      'zoom-in': () => zoomTo(nextStop(current.z, 1)),
-      'zoom-out': () => zoomTo(nextStop(current.z, -1)),
+      'zoom-focused': () => frameBounds(deps.focusedBounds?.()),
+      'zoom-in': () => zoomStep(1),
+      'zoom-out': () => zoomStep(-1),
+      'zoom-selection': () => frameBounds(deps.selectionBounds?.()),
     })
     deps.onGestureEnd?.()
   }
@@ -502,22 +535,16 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
     if (deps.enabled?.() === false) {
       return
     }
-    if (event.key === ' ' && !event.isComposing && !isTypingTarget(event.target)) {
+    if (event.key === ' ' && !event.isComposing && !isStudioTypingTarget(event.target)) {
       event.preventDefault()
       event.stopPropagation()
       setSpaceHeld(true)
       return
     }
-    if (event.isComposing || !(event.metaKey || event.ctrlKey) || isTypingTarget(event.target)) {
+    if (event.isComposing || isStudioTypingTarget(event.target)) {
       return
     }
-    const command = event.key === '0' ? 'fit' : event.key === '1'
-      ? 'reset'
-      : event.key === '=' || event.key === '+'
-      ? 'zoom-in'
-      : event.key === '-'
-      ? 'zoom-out'
-      : undefined
+    const command = canvasShortcutCommand(event)
     if (command !== undefined) {
       event.preventDefault()
       event.stopPropagation()
@@ -614,6 +641,47 @@ export function mountCanvasViewport(deps: StudioCanvasViewportDeps): StudioCanva
   }
 }
 
+const modifiedShortcuts: Readonly<Record<string, StudioCanvasZoomCommand>> = {
+  '0': 'fit',
+  '1': 'reset',
+  '=': 'zoom-in',
+  '+': 'zoom-in',
+  '-': 'zoom-out',
+}
+
+/** Shift turns a digit into punctuation that differs by keyboard layout, so ⇧1 and ⇧2 are read from the physical key. */
+const shiftedShortcuts: Readonly<Record<string, StudioCanvasZoomCommand>> = {
+  Digit1: 'zoom-selection',
+  Digit2: 'zoom-focused',
+}
+
+/**
+ * canvasShortcutCommand names the canvas command a key press asks for: ⌘0, ⌘1, ⌘+ and ⌘− with the
+ * platform modifier, ⇧1 and ⇧2 with Shift alone. ⌘0 fits the selection when there is one and the
+ * whole canvas otherwise; ⌘+ and ⌘− keep the selection centred.
+ */
+function canvasShortcutCommand(
+  event: Readonly<{
+    altKey?: boolean | undefined
+    code?: string | undefined
+    ctrlKey?: boolean | undefined
+    key?: string | undefined
+    metaKey?: boolean | undefined
+    shiftKey?: boolean | undefined
+  }>,
+): StudioCanvasZoomCommand | undefined {
+  const modified = event.metaKey === true || event.ctrlKey === true
+  if (modified) {
+    return event.key !== undefined && Object.hasOwn(modifiedShortcuts, event.key)
+      ? modifiedShortcuts[event.key]
+      : undefined
+  }
+  return event.shiftKey === true && event.altKey !== true && event.code !== undefined
+      && Object.hasOwn(shiftedShortcuts, event.code)
+    ? shiftedShortcuts[event.code]
+    : undefined
+}
+
 /** nextStop moves one notch along the zoom ladder, so ⌘+ and ⌘− land on round percentages. */
 export function nextStop(scale: number, direction: 1 | -1): number {
   const stops = direction === 1 ? zoomStops : [...zoomStops].reverse()
@@ -621,7 +689,8 @@ export function nextStop(scale: number, direction: 1 | -1): number {
     ?? clampScale(direction === 1 ? maximumScale : minimumScale)
 }
 
-function isTypingTarget(target: EventTarget | null): boolean {
+/** Keys typed into a field or the code editor belong to it, not to canvas shortcuts. */
+export function isStudioTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
     return false
   }

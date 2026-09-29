@@ -102,6 +102,9 @@ Examples:
   ./agent unsandboxed prepare-release studio --repo OWNER/REPO --version 0.0.1
   ./agent unsandboxed prepare-release ide-extension
   ./agent unsandboxed capabilities
+  ./agent unsandboxed setup-ios --xcode-version 27.1 --runtime-version 27.1
+  ./agent unsandboxed setup-visionos Apps/VisionHello --xcode-version 27.0
+  ./agent unsandboxed setup-watchos Apps/WatchHello --xcode-version 27.0 --runtime-version 27.0 --apply
   ./agent unsandboxed watchman status
   ./agent unsandboxed watchman start
   ./agent unsandboxed land --dry-run
@@ -109,7 +112,10 @@ Examples:
   ./agent unsandboxed merge-recover
   ./agent unsandboxed simulators list booted
   ./agent unsandboxed simulators run <device-udid>
+  ./agent unsandboxed simulators launch <device-udid> <bundle-id>
   ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios
+  ./agent unsandboxed test-watch Apps/HNReader
+  ./agent unsandboxed standalone-cli-acceptance
   ./agent unsandboxed studio Apps/HNReader
   ./agent unsandboxed studio-ps --json
   ./agent unsandboxed studio-stop --launch <launch-id>

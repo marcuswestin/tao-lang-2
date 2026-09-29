@@ -38,9 +38,13 @@ export const datasourceMembershipValidationMessages = {
     `Relationship '${entity}.${field}' crosses a datasource boundary; '${entity}' and '${relation}' are stored by different datasources, so write it as '(reference)'.`,
 } as const
 
-type ProjectDataScope = {
+/** ProjectDataScope is one project's data: the files it reads, their catalog, and its store partition. */
+export type ProjectDataScope = {
   readonly collections: readonly AST.EntityDataDeclaration[]
   readonly datasources: readonly AST.DatasourceDeclaration[]
+  readonly files: readonly AST.TaoFile[]
+  /** key names the scope for memoized project-wide results: the project root, or the lone file. */
+  readonly key: string
   readonly plan: ASTUtils.DataStorePlan
 }
 
@@ -70,7 +74,7 @@ export function validateDatasourceMembership(file: AST.TaoFile, ctx: ValidationC
  * validation that is the entry's whole graph; in the editor, where every document in the repository
  * is loaded, it keeps one project's datasources from partitioning another project's collections.
  */
-function projectDataScope(file: AST.TaoFile, ctx: ValidationContext): ProjectDataScope {
+export function projectDataScope(file: AST.TaoFile, ctx: ValidationContext): ProjectDataScope {
   const path = AST.getDocument(file).uri.path
   const projectDirectories = ctx.memo('datasource-membership.projectDirectories', () =>
     ctx.workspaceFiles
@@ -84,7 +88,13 @@ function projectDataScope(file: AST.TaoFile, ctx: ValidationContext): ProjectDat
       : ctx.workspaceFiles.filter(candidate => FS.pathIsWithin(AST.getDocument(candidate).uri.path, root))
     const collections = files.flatMap(candidate => candidate.statements.filter(AST.isEntityDataDeclaration))
     const datasources = files.flatMap(candidate => candidate.statements.filter(AST.isDatasourceDeclaration))
-    return { collections, datasources, plan: ASTUtils.planDataStores(collections, datasources) }
+    return {
+      collections,
+      datasources,
+      files,
+      key: root ?? path,
+      plan: ASTUtils.planDataStores(collections, datasources),
+    }
   })
 }
 

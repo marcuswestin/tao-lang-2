@@ -6,6 +6,7 @@ type ICloud is datasource with {
    StorageKey text?
    // The iCloud container identifier; defaults to the app's first entitled container when omitted.
    Container text?
+   supports { Relations, UniqueFields, UniqueTogether }
 
    provider ICloudProvider from ./ICloud.ts
 }

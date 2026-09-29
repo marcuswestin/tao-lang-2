@@ -17,6 +17,16 @@
   normal terminal if the task cannot write a protected generated output. Then run
   `codex-config-generation.test.ts` and the freshness gate to prove exact parity. An unchanged
   worktree needs no regeneration.
+- **2026-09-26 recurrence:** Adding the named Apple setup operations made `./agent setup` exit 1
+  with a clear protected generated-rule diagnostic. The existing authorized
+  `./agent unsandboxed fix-agent-config` operation regenerated the files successfully. The ordinary
+  setup path now fails loudly; the host recovery path is usable when the session permits it.
+  Finalization also exposed a generated-settings merge conflict that stopped regeneration at JSON
+  parsing. The generator now rebuilds that conflicted output from the resolved canonical permissions
+  and hooks in temporary output before replacing it. Both source files are parsed first because the
+  underlying generator can skip malformed input and emit only part of the settings. Its schema-load
+  failure result is also checked before replacement. Regression coverage checks successful recovery
+  and retention of the conflict when source input has invalid syntax or schema.
 - **Proposed change:** Provide a repository-owned regeneration path that can replace the generated
   harness files without granting general writes to mutable harness configuration, and make `./agent
   setup` exit non-zero, rather than 0, when it skipped a generated file it was asked to write.

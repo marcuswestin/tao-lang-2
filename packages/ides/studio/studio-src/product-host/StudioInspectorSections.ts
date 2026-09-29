@@ -55,6 +55,7 @@ export function StudioInspectorDataLines(
 
 /** Inspector actions that act on the selected render as a whole; each lowers to one source action. */
 const studioInspectorActions: Readonly<Record<string, Readonly<{ action: Record<string, unknown>; label: string }>>> = {
+  'make-view': { action: { kind: 'extract-view' }, label: 'Make view' },
   'remove-element': { action: { kind: 'remove-render' }, label: 'Remove element' },
   'wrap-col': { action: { kind: 'wrap-render', wrapper: 'Col' }, label: 'Wrap in Col' },
   'wrap-row': { action: { kind: 'wrap-render', wrapper: 'Row' }, label: 'Wrap in Row' },
@@ -62,7 +63,9 @@ const studioInspectorActions: Readonly<Record<string, Readonly<{ action: Record<
 }
 
 export function StudioInspectorActionIds(inspection: string, selection: string): string[] {
-  return StudioInspectorReady(inspection, selection) ? ['wrap-row', 'wrap-col', 'wrap-stack', 'remove-element'] : []
+  return StudioInspectorReady(inspection, selection)
+    ? ['wrap-row', 'wrap-col', 'wrap-stack', 'make-view', 'remove-element']
+    : []
 }
 
 export function StudioInspectorActionLabel(actionId: string): string {
@@ -90,5 +93,10 @@ export function StudioInspectorAction(selection: string, actionId: string): stri
   if (selected === undefined || definition === undefined) {
     Errors.throwUserInput('The selected element does not expose that Studio action.')
   }
-  return JSON.stringify({ ...definition.action, renderId: selected.renderId })
+  // Selection-wide actions take a list of renders; the inspector offers them for its one selection.
+  return JSON.stringify(
+    definition.action['kind'] === 'extract-view'
+      ? { ...definition.action, renderIds: [selected.renderId] }
+      : { ...definition.action, renderId: selected.renderId },
+  )
 }

@@ -44,6 +44,9 @@
       "@e2e-testing": [
         "./testing/e2e-testing/HostTestingCommand.ts"
       ],
+      "@tao-cli/watchos-project": [
+        "./cli/tao-cli/cli-src/watchos-project.ts"
+      ],
       "@shared": [
         "./shared/shared-src/shared.ts"
       ],
@@ -75,7 +78,7 @@
         "./compiler/compiler-src/compiler.ts"
       ],
       "@native-bindings": [
-        "./native-bindings/native-bindings-src/native-bindings.ts"
+        "./apps/native-bindings/native-bindings-src/native-bindings.ts"
       ],
       "@compiler/workspace": [
         "./compiler/compiler-src/workspace/index.ts"

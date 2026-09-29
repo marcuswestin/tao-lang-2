@@ -35,7 +35,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Public boundary: publish, projections (§4)                  | Skillet · the shared recipe as a different read-only type                     | Post-MVP | —                         |
 | Projection with a filtered relation (§4)                    | Hearth · a shared list shows open items and nothing finished                  | Post-MVP | —                         |
 | Generated publication preview (§4)                          | Skillet · "this is what crosses the boundary" before creating the link        | Post-MVP | —                         |
-| Direct write verbs (§5)                                     | WordFlower · document operations (single-user subset)                         | MVP      | —                         |
+| Direct write verbs (§5)                                     | WordFlower · Pin/Unpin via single-row toggle; create/update/delete            | MVP      | in Current                |
 | Named transactions, for-caller (§5)                         | Skillet · StartKitchen and membership operations                              | Post-MVP | —                         |
 | One atomic commit across rows (§5)                          | Skillet · StartKitchen; Wayfare · CreateTrip mints the owner's own seat       | Post-MVP | —                         |
 | Bulk write verbs (`update each`, `delete each`) (§5)        | Skillet · clear what was bought; Hearth · clear a finished list               | Post-MVP | —                         |
@@ -53,10 +53,10 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Attention reducer and locale-aware narrowing (§9)           | WordFlower · workspace targeting and document-title engagement                | MVP      | in Current[^11]           |
 | Command ordering, hiding, and verb surface (§8)             | WordFlower · draft and finished document rows                                 | MVP      | in Current[^11]           |
 | Generated interaction surfaces and key allocation (§8, §13) | WordFlower · hints, overview, draft verbs, and command palette                | MVP      | in Current[^12]           |
-| Narrowing feedback and off-window targeting (§9)            | WordFlower · subdued nonmatches; virtualized libraries                        | MVP      | partially in Current[^13] |
-| Pointer/touch attention parity (§9)                         | WordFlower · contextual verbs and region focus                                | MVP      | partially in Current[^13] |
+| Narrowing feedback and off-window targeting (§9)            | WordFlower · mounted row reveal; subdued nonmatches; virtualized libraries    | MVP      | partially in Current[^13] |
+| Pointer/touch attention parity (§9)                         | WordFlower · long-press/right-click verbs; region focus                       | MVP      | partially in Current[^13] |
 | Verb-pending chooser and input surfaces (§8–§9)             | WordFlower · commands with open entity and scalar slots                       | MVP      | in Current[^13]           |
-| Generated contextual Help (§9, §13)                         | WordFlower · explain the focused region and target                            | MVP      | pending[^13]              |
+| Generated contextual Help (§9, §13)                         | WordFlower · explain the focused region and target while typing               | MVP      | in Current[^13]           |
 | Accessibility projection (§9)                               | WordFlower · selectable rows, controls, and generated surfaces                | MVP      | partially in Current[^13] |
 | Multi-target interaction (§9)                               | Story 12 · bulk operations                                                    | Post-MVP | pending[^13]              |
 | OS menu bar (§8)                                            | WordFlower · command menus                                                    | Post-MVP | —                         |
@@ -81,7 +81,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Rendered nav, root view with arguments; frame retired (§10) | WordFlower · shell with persistent focus bar; Test Apps · Shell               | MVP      | in Current                |
 | Device-local entities (§2, §11)                             | **WordFlower · focus session as data** (journey smoke)                        | **MVP**  | compiler-proven           |
 | Restoration policy (§10)                                    | WordFlower · relaunch                                                         | MVP      | in Current                |
-| Project identity and release metadata (§10)                 | WordFlower · a checked-in project id; Skillet · `version`, `DefaultApp`       | MVP      | partially in Current      |
+| Project identity and release metadata (§10)                 | WordFlower · a checked-in project id; Skillet · `version`, `app`              | MVP      | partially in Current      |
 | App composition, variants, providers (§11)                  | WordFlower · app root + test variants                                         | MVP      | partially in Current      |
 | InstantDB datasource (§11)                                  | WordFlower · sync                                                             | MVP      | experimental              |
 | Datasource membership, bound sets (§6)                      | HNReader · a feed store beside the reader's own bookmarks                     | MVP      | in Current[^14]           |
@@ -194,16 +194,17 @@ Hearth (occurrence queries, nearness) and Wayfare (files, offline documents, dra
     defaults; hidden layers do not participate in accessibility traversal. The Tao Future designs
     restyle both without declaring or owning the layers, which is the whole intended author surface.
 
-[^13]: The landed interaction core narrows mounted nodes, routes press/focus/hover through semantic
-    operations, presents verb-pending entity and scalar slots, and projects roles, names, and state
-    to controls. Required entity slots accept an already-decided candidate or use mounted and
-    store-backed choices; scalar slots use inline input. Focused runtime coverage proves displayed
-    choices and dispatched values share one canonical resolver.
-    Selectable rows additionally feed accessibility focus into Tao attention and expose custom
-    actions. The keyboard plan's **Remaining decided implementation** ledger owns subdued
-    nonmatches, off-window loop rows and scroll-to-target, long-press/right-click and empty-region
-    adapters, the Help layer, multi-target behavior, broader custom actions,
-    and real-device assistive-technology validation.
+[^13]: The interaction core narrows mounted nodes, reveals a selected row below the viewport,
+    routes press/focus/hover and long-press/right-click through semantic operations, presents
+    verb-pending entity and scalar slots, and generates contextual Help only while typing narrows
+    choices. Controls derive names from Title, Label, or visible text; Description supplies a hint,
+    and missing or uncertain names receive a diagnostic with a source fix. Selectable rows and
+    suitable action controls expose directly invokable verbs as accessibility actions. Focused
+    runtime coverage and a rendered WordFlower web pass establish web interaction, including
+    creation, rename, deletion, pinned-first order, Help, pointer menus, and mounted-row reveal;
+    they do not establish native screen-reader acceptance. The keyboard plan's
+    **Remaining decided implementation** ledger owns subdued nonmatches, empty-region click,
+    drag/drop, unmounted virtualized targeting, and native assistive-technology validation.
 
 [^1]: The dialect migration tranche retired `data <status>` (Decisions §16). Data MVP reaches
     snapshot save error through fault injection. Test World Controls and WordFlower

@@ -22,6 +22,7 @@ export type StartedStudioClientDevReload = {
 
 export const StudioClientDevReload = {
   testing: {
+    isStudioClientSource,
     isStudioServerSource,
     studioClientAssetSnapshot,
   },
@@ -49,6 +50,16 @@ function isStudioServerSource(path: string): boolean {
   return !normalized.includes('/studio-src/client/')
     && !normalized.includes('/studio-src/code-editor/')
     && !normalized.endsWith('Panel.ts')
+}
+
+/**
+ * Whether a change to a path can change the Studio client. A `.tao.ts` file is the bridge metadata
+ * the compiler writes beside a Tao source, not a source: compiling the client writes it, so a fresh
+ * checkout's first page load would otherwise republish the client it had just built and reload the
+ * page. Its content follows from the `.tao` file, whose own change is already watched.
+ */
+function isStudioClientSource(path: string): boolean {
+  return ['.tao', '.ts', '.tsx'].includes(FS.extname(path)) && !path.endsWith('.tao.ts')
 }
 
 /** Rebuilds the browser-owned Studio shell and publishes only complete client bundles. */
@@ -159,7 +170,7 @@ async function subscribeStudioClientSources(listener: StudioClientChangeListener
   let timer: ReturnType<typeof setTimeout> | undefined
   let serverSourcesChanged = false
   const schedule = (path: string) => {
-    if (!['.tao', '.ts', '.tsx'].includes(FS.extname(path))) {
+    if (!isStudioClientSource(path)) {
       return
     }
     serverSourcesChanged ||= isStudioServerSource(path)

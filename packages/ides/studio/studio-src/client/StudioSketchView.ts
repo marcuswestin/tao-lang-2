@@ -5,9 +5,11 @@ import type {
   StudioSketchSnapUndoResult,
 } from '../StudioProjectSession'
 import type { StudioSketch, StudioSketchRect } from '../StudioSketchCatalog'
-import { canvasScale } from './matrix/StudioCanvasViewport'
+import { canvasScale, isStudioTypingTarget } from './matrix/StudioCanvasViewport'
+import { studioDrawLiveHeight } from './matrix/StudioDrawLiveCells'
 import { type StudioFeedDrop, StudioFeedTransfer } from './StudioFeedController'
 import type { StudioFeedExampleValues, StudioFeedSample } from './StudioFeedSamples'
+import { StudioSketchBadge, type StudioSketchConvertIntent } from './StudioSketchBadge'
 import {
   StudioSketchGeometry,
   type StudioSketchGeometryState,
@@ -81,22 +83,55 @@ function settleSketchChange(sketch: StudioSketch, change: StudioSketchRectChange
 }
 
 export type StudioSketchViewOptions = Readonly<{
+  /**
+   * confirmRemove asks the person before a removal that deletes a file, answering whether to go on.
+   * Without it such a removal does not happen.
+   */
+  confirmRemove?: (question: string) => Promise<boolean>
+  /** onConvert switches a root rectangle's badge and answers with the catalog's sketches afterwards. */
+  onConvert?: (intent: StudioSketchConvertIntent) => Promise<readonly StudioSketch[]>
   onCreateSketch?: (input: Readonly<{ height: number; width: number; x: number; y: number }>) => Promise<void> | void
+  /** onDeleteRects deletes free rectangles from one sketch and answers with the catalog's sketches afterwards. */
+  onDeleteRects?: (sketchId: string, rectIds: readonly string[]) => Promise<readonly StudioSketch[]>
+  /** dropInto lets a whole frame be dragged onto another view's running cell to render its view there. */
+  dropInto?: StudioSketchDropInto
   onFeedDrop?: (payload: StudioFeedDrop, sketchId: string, rectId?: string) => Promise<void>
   onError?: (error: unknown) => void
   onFlowAction?: (request: StudioSketchViewFlowActionRequest) => Promise<StudioSketchSnapApplyResult>
+  /** onMove places a root rectangle at a new canvas origin and answers with the catalog's sketches afterwards. */
+  onMove?: (move: StudioSketchFrameMove) => Promise<readonly StudioSketch[]>
   onRectChange?: (
     change: StudioSketchRectChange,
   ) => Promise<readonly StudioSketch[] | void> | readonly StudioSketch[] | void
+  /**
+   * onRemove takes a root rectangle off the canvas and answers with the catalog's sketches afterwards.
+   * A source-backed card leaves the catalog only; a drawn definition also deletes its generated file.
+   */
+  onRemove?: (sketchId: string) => Promise<readonly StudioSketch[]>
   onSnap?: (
     request: StudioSketchViewSnapRequest,
   ) => Promise<StudioSketchSnapApplyResult | StudioSketchSnapProposalResult>
   onUnsnap?: (request: StudioSketchViewUnsnapRequest) => Promise<StudioSketchSnapApplyResult>
   onUndoSnap?: (request: StudioSketchViewUndoRequest) => Promise<StudioSketchSnapUndoResult>
+  /** renderableViews lists the views a render rectangle can start from, read when a badge menu opens. */
+  renderableViews?: () => readonly string[]
   sketches: readonly StudioSketch[]
   exampleValues?: StudioFeedExampleValues
   sourceVersion?: string
   sourceVersions?: Readonly<Record<string, string>>
+}>
+
+/** Viewport coordinates, as a pointer event reports them. */
+type StudioSketchClientPoint = Readonly<{ x: number; y: number }>
+
+/**
+ * Where a dragged frame can land besides the canvas: `target` names the running cell under the point
+ * that would take it, if any, which the frame carries while it hovers, and `drop` renders the frame's
+ * view into that cell's view.
+ */
+export type StudioSketchDropInto = Readonly<{
+  drop: (point: StudioSketchClientPoint, sketch: StudioSketch) => Promise<void>
+  target: (point: StudioSketchClientPoint, sketch: StudioSketch) => string | undefined
 }>
 
 type StudioSketchViewSnapRequest = Readonly<{
@@ -259,6 +294,8 @@ export const StudioSketchRenderGate = {
 
 export type StudioSketchBoardPointer = Readonly<{
   activePointer?: number
+  /** contextMenu is a Control-click, which opens the rectangle's menu instead of drawing. */
+  contextMenu?: boolean
   inToolbar: boolean
   onHandle: boolean
   primary: boolean
@@ -271,7 +308,164 @@ export type StudioSketchBoardPointer = Readonly<{
  */
 export const StudioSketchBoardInput = {
   beginsGesture(pointer: StudioSketchBoardPointer): boolean {
-    return pointer.activePointer === undefined && pointer.primary && !pointer.inToolbar && !pointer.onHandle
+    return pointer.activePointer === undefined && pointer.primary && pointer.contextMenu !== true
+      && !pointer.inToolbar && !pointer.onHandle
+  },
+} as const
+
+export type StudioSketchTool = 'rect' | 'select' | 'text'
+
+type StudioSketchBox = Readonly<{ height: number; width: number; x: number; y: number }>
+
+/**
+ * StudioSketchTools is the Draw canvas's one tool strip (decisions B and G). V selects: a press on a
+ * rectangle picks it up, and a drag across empty sketch space draws a marquee. R draws a frame on
+ * empty canvas and a rectangle inside a sketch; T draws a Text rectangle inside a sketch. A drawing
+ * tool is used once and hands back to V, as in Figma.
+ */
+export const StudioSketchTools = {
+  all: [
+    { key: 'v', label: 'Select', tool: 'select' },
+    { key: 'r', label: 'Rectangle', tool: 'rect' },
+    { key: 't', label: 'Text', tool: 'text' },
+  ] as const satisfies readonly Readonly<{ key: string; label: string; tool: StudioSketchTool }>[],
+  initial: 'select' as StudioSketchTool,
+  afterDraw(): StudioSketchTool {
+    return 'select'
+  },
+  /** boardPress says what a press inside a sketch begins; a drawing tool draws even over a rectangle. */
+  boardPress(tool: StudioSketchTool, onRect: boolean): 'draw' | 'marquee' | 'pick' {
+    return tool !== 'select' ? 'draw' : onRect ? 'pick' : 'marquee'
+  },
+  /** canvasPress says what a press on empty canvas, outside every sketch, begins. */
+  canvasPress(tool: StudioSketchTool): 'clear' | 'draw-frame' | 'none' {
+    return tool === 'rect' ? 'draw-frame' : tool === 'select' ? 'clear' : 'none'
+  },
+  drawKind(tool: StudioSketchTool): 'Placeholder' | 'Text' {
+    return tool === 'text' ? 'Text' : 'Placeholder'
+  },
+  fromKey(key: string): StudioSketchTool | undefined {
+    return StudioSketchTools.all.find(entry => entry.key === key)?.tool
+  },
+} as const
+
+/** A marquee that travels less than this many pixels on both axes was a click on the frame. */
+const marqueeClickExtent = 3
+
+/** StudioSketchMarquee picks the free rectangles a V drag across empty sketch space touches. */
+export const StudioSketchMarquee = {
+  box(origin: StudioSketchPoint, point: StudioSketchPoint): StudioSketchBox {
+    return rectFromPoints(origin, point)
+  },
+  click(box: StudioSketchBox): boolean {
+    return box.width < marqueeClickExtent && box.height < marqueeClickExtent
+  },
+  /** pick answers the rectangles overlapping the box, added to the earlier selection when Shift is held. */
+  pick(
+    rects: readonly StudioSketchRect[],
+    box: StudioSketchBox,
+    before: ReadonlySet<string>,
+    additive: boolean,
+  ): ReadonlySet<string> {
+    const touched = rects.filter(rect =>
+      rect.x < box.x + box.width && rect.x + rect.width > box.x && rect.y < box.y + box.height
+      && rect.y + rect.height > box.y
+    ).map(rect => rect.id)
+    return new Set([...(additive ? before : []), ...touched])
+  },
+} as const
+
+export type StudioSketchKeyCommand =
+  | 'clear'
+  | 'delete-rects'
+  | 'none'
+  | 'remove-frame'
+  | 'tool-rect'
+  | 'tool-select'
+  | 'tool-text'
+
+export type StudioSketchKeyInput = Readonly<{
+  composing: boolean
+  frameSelected: boolean
+  key: string
+  modified: boolean
+  selectedRects: number
+  tool?: StudioSketchTool
+  typing: boolean
+}>
+
+/**
+ * StudioSketchKeys routes a key pressed while the Draw canvas has the person's attention. Delete or
+ * Backspace deletes the selected free rectangles when there are any and otherwise removes the selected
+ * rectangle frame. V, R, and T pick a tool. Escape first puts a drawing tool back to V, then clears
+ * the selection. Keys typed into a field, or held with a modifier, are never the canvas's.
+ */
+export const StudioSketchKeys = {
+  command(input: StudioSketchKeyInput): StudioSketchKeyCommand {
+    if (input.typing || input.composing || input.modified) {
+      return 'none'
+    }
+    const tool = StudioSketchTools.fromKey(input.key)
+    if (tool !== undefined) {
+      return `tool-${tool}`
+    }
+    if (input.key === 'Escape') {
+      return input.tool !== undefined && input.tool !== 'select'
+        ? 'tool-select'
+        : input.selectedRects > 0 || input.frameSelected
+        ? 'clear'
+        : 'none'
+    }
+    if (input.key !== 'Delete' && input.key !== 'Backspace') {
+      return 'none'
+    }
+    return input.selectedRects > 0 ? 'delete-rects' : input.frameSelected ? 'remove-frame' : 'none'
+  },
+  /** routes says whether a key can mean anything to the canvas, before its target is inspected. */
+  routes(key: string): boolean {
+    return key === 'Delete' || key === 'Backspace' || key === 'Escape'
+      || StudioSketchTools.fromKey(key) !== undefined
+  },
+} as const
+
+type StudioSketchFrameMove = Readonly<{ sketchId: string; x: number; y: number }>
+
+export type StudioSketchFrameDragState = Readonly<{
+  moved: boolean
+  origin: StudioSketchPoint
+  pointerId: number
+  scale: number
+  start: StudioSketchPoint
+}>
+
+/** A press on a frame's header that travels less than this many screen pixels is a click, not a drag. */
+const frameDragThreshold = 3
+
+/**
+ * StudioSketchFrameDrag follows a root rectangle dragged by its header. The pointer travels in screen
+ * pixels and the canvas may be zoomed, so the offset is divided by the zoom; the origin stays on the
+ * canvas's nonnegative quadrant and on whole pixels, as the catalog stores it.
+ */
+export const StudioSketchFrameDrag = {
+  begin(
+    pointerId: number,
+    origin: StudioSketchPoint,
+    start: StudioSketchPoint,
+    scale: number,
+  ): StudioSketchFrameDragState {
+    return { moved: false, origin, pointerId, scale: scale > 0 ? scale : 1, start }
+  },
+  update(
+    drag: StudioSketchFrameDragState,
+    client: StudioSketchPoint,
+  ): Readonly<{ drag: StudioSketchFrameDragState; x: number; y: number }> {
+    const dx = client.x - drag.start.x
+    const dy = client.y - drag.start.y
+    return {
+      drag: drag.moved || Math.hypot(dx, dy) >= frameDragThreshold ? { ...drag, moved: true } : drag,
+      x: Math.max(0, Math.round(drag.origin.x + dx / drag.scale)),
+      y: Math.max(0, Math.round(drag.origin.y + dy / drag.scale)),
+    }
   },
 } as const
 
@@ -453,8 +647,19 @@ export const StudioSketchView = {
     let viewSourceVersions: Record<string, string> = { ...options.sourceVersions }
     const snapStates = new Map<string, StudioSketchSnapUiState>()
     let selected: Readonly<{ rectId: string; rectIds: ReadonlySet<string>; sketchId: string }> | undefined
+    /** The root rectangle selected as a whole; never at the same time as rectangles inside one. */
+    let selectedFrame: string | undefined
+    /** Whether the person's last press landed on the Draw canvas, which is when its keys are the canvas's. */
+    let canvasActive = false
+    const frames = new Map<string, HTMLElement>()
+    const removing = new Set<string>()
+    let deletingRects = false
+    let frameDrag:
+      | Readonly<{ frame: HTMLElement; name: HTMLElement; sketch: StudioSketch; state: StudioSketchFrameDragState }>
+      | undefined
     let outerGesture: StudioSketchOuterGesture | undefined
     let disposed = false
+    const lifetime = new AbortController()
     let inlineEdit: {
       cancel(): void
       invalidated: boolean
@@ -462,6 +667,31 @@ export const StudioSketchView = {
       rect: StudioSketchRect
       sketchId: string
     } | undefined
+    let tool = StudioSketchTools.initial
+    // The strip sits beside the Draw canvas rather than on it, so it neither pans nor zooms.
+    const strip = document.createElement('nav')
+    strip.className = 'studio-draw-tools'
+    strip.dataset['taoStudioDrawTools'] = 'true'
+    strip.setAttribute('aria-label', 'Draw tools')
+    const toolButtons = StudioSketchTools.all.map(entry => {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.dataset['taoStudioDrawTool'] = entry.tool
+      button.textContent = entry.key.toUpperCase()
+      button.title = `${entry.label} (${entry.key.toUpperCase()})`
+      button.setAttribute('aria-label', entry.label)
+      button.addEventListener('click', () => setTool(entry.tool))
+      return button
+    })
+    strip.append(...toolButtons)
+    const setTool = (next: StudioSketchTool): void => {
+      tool = next
+      workspace.dataset['taoStudioSketchTool'] = next
+      for (const button of toolButtons) {
+        button.setAttribute('aria-pressed', String(button.dataset['taoStudioDrawTool'] === next))
+      }
+    }
+    setTool(tool)
     let gate = StudioSketchRenderGate.initial()
     const gestureLock: StudioSketchGestureLock = {
       begin() {
@@ -614,6 +844,261 @@ export const StudioSketchView = {
       input.focus()
       input.select()
     }
+    const convert = (intent: StudioSketchConvertIntent): void => {
+      const pending = options.onConvert?.(intent)
+      void pending?.then(next => receive(next), error => options.onError?.(error))
+    }
+    /** Removing a drawn definition deletes its generated file, so it waits for the person to agree. */
+    const remove = (sketchId: string): void => {
+      const sketch = sketches.find(candidate => candidate.id === sketchId)
+      const onRemove = options.onRemove
+      if (disposed || sketch === undefined || onRemove === undefined || removing.has(sketchId)) {
+        return
+      }
+      removing.add(sketchId)
+      const question = StudioSketchBadge.removalQuestion(sketch)
+      const confirmed = question === undefined
+        ? Promise.resolve(true)
+        : options.confirmRemove?.(question) ?? Promise.resolve(false)
+      void confirmed.then(async agreed => {
+        if (!agreed || disposed) {
+          return
+        }
+        const next = await onRemove(sketchId)
+        if (selectedFrame === sketchId) {
+          selectedFrame = undefined
+        }
+        receive(next)
+      }).catch(error => options.onError?.(error)).finally(() => removing.delete(sketchId))
+    }
+    const paintFrames = (): void => {
+      for (const [id, frame] of frames) {
+        if (id === selectedFrame) {
+          frame.dataset['selected'] = 'true'
+        } else {
+          delete frame.dataset['selected']
+        }
+      }
+    }
+    const selectFrame = (sketchId: string): void => {
+      const hadRects = selected !== undefined
+      selected = undefined
+      selectedFrame = sketchId
+      if (hadRects) {
+        render(gate.deferred?.sketches ?? sketches)
+      } else {
+        paintFrames()
+      }
+      renderInspector(inspector, sketches, selected, commit)
+    }
+    const clearSelection = (): void => {
+      selected = undefined
+      selectedFrame = undefined
+      render(gate.deferred?.sketches ?? sketches)
+    }
+    const boardTools: StudioSketchBoardTools = {
+      current: () => tool,
+      handBack: () => setTool(StudioSketchTools.afterDraw()),
+      // A drawn Text rectangle opens for typing once its commit has settled and the board re-rendered.
+      drawn: (sketchId, rectId) => {
+        const rect = sketches.find(sketch => sketch.id === sketchId)?.rects.find(candidate => candidate.id === rectId)
+        const element = [...frames.get(sketchId)?.querySelectorAll<HTMLElement>('[data-tao-studio-sketch-rect]') ?? []]
+          .find(candidate => candidate.dataset['taoStudioSketchRect'] === rectId)
+        if (rect?.kind === 'Text' && element !== undefined) {
+          editText(sketchId, rect, element)
+        }
+      },
+    }
+    const selectedFreeRects = (): Readonly<{ rectIds: readonly string[]; sketchId: string }> | undefined => {
+      const sketch = sketches.find(candidate => candidate.id === selected?.sketchId)
+      if (sketch === undefined || selected === undefined) {
+        return undefined
+      }
+      const rectIds = [...StudioSketchSelection.settle(sketch, selected.rectIds)]
+      return rectIds.length === 0 ? undefined : { rectIds, sketchId: sketch.id }
+    }
+    const deleteRects = (target: Readonly<{ rectIds: readonly string[]; sketchId: string }>): void => {
+      const onDeleteRects = options.onDeleteRects
+      if (onDeleteRects === undefined || deletingRects) {
+        return
+      }
+      deletingRects = true
+      void onDeleteRects(target.sketchId, target.rectIds).then(next => {
+        selected = undefined
+        receive(next)
+      }, error => {
+        options.onError?.(error)
+        render(gate.deferred?.sketches ?? sketches)
+      }).finally(() => {
+        deletingRects = false
+      })
+    }
+    const endFrameDrag = (drag: NonNullable<typeof frameDrag>): void => {
+      try {
+        drag.name.releasePointerCapture?.(drag.state.pointerId)
+      } catch {
+        // The capture was already gone.
+      }
+      delete drag.frame.dataset['taoStudioSketchMoving']
+      delete drag.frame.dataset['taoStudioSketchDropInto']
+      gestureLock.end()
+    }
+    /** The view a frame released at this point would be rendered into, when it is over another's running cell. */
+    const dropIntoTarget = (sketch: StudioSketch, event: PointerEvent): string | undefined =>
+      options.dropInto?.target({ x: event.clientX, y: event.clientY }, sketch)
+    /**
+     * attachFrame makes a root rectangle selectable and movable as a whole: its header selects it and
+     * drags it, a card's body selects it, and a right-click or Control-click anywhere on it opens its menu.
+     */
+    const attachFrame = (frame: HTMLElement, sketch: StudioSketch): void => {
+      frame.addEventListener('contextmenu', event => {
+        event.preventDefault()
+        event.stopPropagation()
+        if (disposed || inlineEdit !== undefined || frameDrag !== undefined) {
+          return
+        }
+        const at = relativePoint(frame, event)
+        selectFrame(sketch.id)
+        StudioSketchBadge.contextMenu(document, frames.get(sketch.id) ?? frame, sketch, at, remove)
+      })
+      const cardBody = frame.querySelector<HTMLElement>(':scope > [data-tao-studio-sketch-card-body]')
+      cardBody?.addEventListener('pointerdown', event => {
+        const target = event.target as Element | null
+        if (
+          !disposed && primaryPointer(event) && !event.ctrlKey
+          && target?.closest('button, select, input, textarea, [contenteditable="true"]') === null
+        ) {
+          selectFrame(sketch.id)
+        }
+      })
+      const name = frame.querySelector<HTMLElement>(':scope > [data-tao-studio-sketch-name]')
+      if (name === null) {
+        return
+      }
+      name.addEventListener('pointerdown', event => {
+        if (
+          disposed || inlineEdit !== undefined || frameDrag !== undefined || !primaryPointer(event) || event.ctrlKey
+        ) {
+          return
+        }
+        event.preventDefault()
+        event.stopPropagation()
+        frameDrag = {
+          frame,
+          name,
+          sketch,
+          state: StudioSketchFrameDrag.begin(
+            event.pointerId,
+            { x: sketch.x, y: sketch.y },
+            { x: event.clientX, y: event.clientY },
+            canvasScale(frame),
+          ),
+        }
+        name.setPointerCapture?.(event.pointerId)
+        frame.dataset['taoStudioSketchMoving'] = 'true'
+        gestureLock.begin()
+      })
+      name.addEventListener('pointermove', event => {
+        if (frameDrag?.name !== name || event.pointerId !== frameDrag.state.pointerId) {
+          return
+        }
+        const next = StudioSketchFrameDrag.update(frameDrag.state, { x: event.clientX, y: event.clientY })
+        frameDrag = { ...frameDrag, state: next.drag }
+        if (next.drag.moved) {
+          frame.style.left = `${next.x}px`
+          frame.style.top = `${next.y}px`
+          const into = dropIntoTarget(sketch, event)
+          if (into === undefined) {
+            delete frame.dataset['taoStudioSketchDropInto']
+          } else {
+            frame.dataset['taoStudioSketchDropInto'] = into
+          }
+        }
+      })
+      name.addEventListener('pointerup', event => {
+        const drag = frameDrag
+        if (drag?.name !== name || event.pointerId !== drag.state.pointerId) {
+          return
+        }
+        frameDrag = undefined
+        const next = StudioSketchFrameDrag.update(drag.state, { x: event.clientX, y: event.clientY })
+        selectFrame(sketch.id)
+        if (!next.drag.moved || (next.x === sketch.x && next.y === sketch.y)) {
+          frame.style.left = `${sketch.x}px`
+          frame.style.top = `${sketch.y}px`
+          endFrameDrag(drag)
+          return
+        }
+        // Released over another view's running cell, the frame renders there and stays where it was.
+        if (options.dropInto !== undefined && dropIntoTarget(sketch, event) !== undefined) {
+          frame.style.left = `${sketch.x}px`
+          frame.style.top = `${sketch.y}px`
+          endFrameDrag(drag)
+          void options.dropInto.drop({ x: event.clientX, y: event.clientY }, sketch).catch(error =>
+            options.onError?.(error)
+          )
+          return
+        }
+        frame.style.left = `${next.x}px`
+        frame.style.top = `${next.y}px`
+        // The frame stays where it was dropped until the catalog answers; a refusal puts it back.
+        const onMove = options.onMove
+        StudioSketchPointerRelease.afterCommit(
+          () =>
+            onMove === undefined
+              ? render(gate.deferred?.sketches ?? sketches)
+              : onMove({ sketchId: sketch.id, x: next.x, y: next.y }).then(moved => receive(moved), error => {
+                options.onError?.(error)
+                render(gate.deferred?.sketches ?? sketches)
+              }),
+          () => endFrameDrag(drag),
+        )
+      })
+      const cancelFrameDrag = (event: PointerEvent): void => {
+        const drag = frameDrag
+        if (drag?.name !== name || event.pointerId !== drag.state.pointerId) {
+          return
+        }
+        frameDrag = undefined
+        frame.style.left = `${sketch.x}px`
+        frame.style.top = `${sketch.y}px`
+        endFrameDrag(drag)
+      }
+      name.addEventListener('pointercancel', cancelFrameDrag)
+      name.addEventListener('lostpointercapture', cancelFrameDrag)
+    }
+    const onDocumentPointerDown = (event: Event): void => {
+      const target = event.target as Node | null
+      canvasActive = workspace.contains(target) || strip.contains(target)
+    }
+    const onDocumentKeyDown = (event: KeyboardEvent): void => {
+      if (disposed || !canvasActive || gate.activeGestures > 0 || !StudioSketchKeys.routes(event.key)) {
+        return
+      }
+      const rects = selectedFreeRects()
+      const command = StudioSketchKeys.command({
+        composing: event.isComposing === true,
+        frameSelected: selectedFrame !== undefined,
+        key: event.key,
+        modified: event.metaKey === true || event.ctrlKey === true || event.altKey === true,
+        selectedRects: rects?.rectIds.length ?? 0,
+        tool,
+        typing: isStudioTypingTarget(event.target),
+      })
+      if (command === 'none') {
+        return
+      }
+      event.preventDefault()
+      if (command === 'tool-rect' || command === 'tool-select' || command === 'tool-text') {
+        setTool(command === 'tool-rect' ? 'rect' : command === 'tool-text' ? 'text' : 'select')
+      } else if (command === 'clear') {
+        clearSelection()
+      } else if (command === 'delete-rects' && rects !== undefined) {
+        deleteRects(rects)
+      } else if (command === 'remove-frame' && selectedFrame !== undefined) {
+        remove(selectedFrame)
+      }
+    }
     const renderNow = (nextSketches: readonly StudioSketch[], nextSourceVersion?: string): void => {
       if (disposed) {
         return
@@ -627,8 +1112,33 @@ export const StudioSketchView = {
           selected = rectIds.size === 0 ? undefined : { ...selected, rectIds }
         }
       }
-      const boards = sketches.map(sketch =>
-        renderSketch(
+      if (!sketches.some(sketch => sketch.id === selectedFrame)) {
+        selectedFrame = undefined
+      }
+      frames.clear()
+      const boards = sketches.map(sketch => {
+        const frame = renderFrame(sketch)
+        frames.set(sketch.id, frame)
+        attachFrame(frame, sketch)
+        return frame
+      })
+      workspace.replaceChildren(...boards, inspector)
+      paintFrames()
+      renderInspector(inspector, sketches, selected, commit)
+    }
+    const renderFrame = (sketch: StudioSketch): HTMLElement => {
+      {
+        const badge = StudioSketchBadge.element(
+          document,
+          sketch,
+          options.renderableViews ?? (() => []),
+          convert,
+          remove,
+        )
+        if (StudioSketchBadge.sourceBacked(sketch)) {
+          return StudioSketchBadge.card(document, sketch, badge)
+        }
+        const frame = renderSketch(
           document,
           sketch,
           (() => {
@@ -641,6 +1151,10 @@ export const StudioSketchView = {
           () => selected,
           value => {
             selected = value
+            if (value !== undefined && selectedFrame !== undefined) {
+              selectedFrame = undefined
+              paintFrames()
+            }
             renderInspector(inspector, sketches, selected, commit)
           },
           commit,
@@ -654,22 +1168,43 @@ export const StudioSketchView = {
             receive(authoritative)
           },
           gestureLock,
+          lifetime.signal,
           editText,
           () => inlineEdit !== undefined || disposed,
           options.onError,
           options.onFeedDrop,
           exampleValues[sketch.id],
+          () => selectFrame(sketch.id),
+          boardTools,
         )
-      )
-      workspace.replaceChildren(...boards, inspector)
-      renderInspector(inspector, sketches, selected, commit)
+        frame.querySelector(`:scope > [data-tao-studio-sketch-name]`)?.append(badge)
+        return frame
+      }
     }
+    // The document hears a press first and forgets the canvas when it landed elsewhere; the workspace,
+    // which sits inside it, claims the press again when it landed on the canvas.
+    document.addEventListener('pointerdown', onDocumentPointerDown, true)
+    document.addEventListener('keydown', onDocumentKeyDown, true)
+    workspace.addEventListener('pointerdown', () => {
+      canvasActive = true
+    }, true)
     workspace.addEventListener('pointerdown', event => {
       if (
         disposed || inlineEdit !== undefined || event.target !== workspace || outerGesture !== undefined
         || !primaryPointer(event)
       ) {
         return
+      }
+      const press = StudioSketchTools.canvasPress(tool)
+      if (press === 'clear' && (selected !== undefined || selectedFrame !== undefined)) {
+        clearSelection()
+      }
+      if (press !== 'draw-frame') {
+        return
+      }
+      if (selectedFrame !== undefined) {
+        selectedFrame = undefined
+        paintFrames()
       }
       outerGesture = StudioSketchOuterDrawing.begin(outerGesture, event.pointerId, relativePoint(workspace, event))
       workspace.setPointerCapture?.(event.pointerId)
@@ -701,6 +1236,7 @@ export const StudioSketchView = {
         return
       }
       paintOuterPreview(workspace, undefined)
+      setTool(StudioSketchTools.afterDraw())
       const optimisticId = crypto.randomUUID()
       const name = StudioSketchViewNames.next(sketches)
       sketches = [
@@ -753,12 +1289,18 @@ export const StudioSketchView = {
     workspace.addEventListener('pointercancel', cancelOuter)
     workspace.addEventListener('lostpointercapture', cancelOuter)
     host.append(workspace)
+    const stripHost = host.parentElement ?? host
+    stripHost.append(strip)
     render(sketches)
     return {
       dispose() {
         disposed = true
+        lifetime.abort()
         inlineEdit?.cancel()
+        document.removeEventListener('pointerdown', onDocumentPointerDown, true)
+        document.removeEventListener('keydown', onDocumentKeyDown, true)
         workspace.remove()
+        strip.remove()
       },
       render: receive,
     }
@@ -768,6 +1310,68 @@ export const StudioSketchView = {
 type StudioSketchGestureLock = Readonly<{
   begin(): void
   end(): void
+}>
+
+/** Keep a toolbar press attached through click, and release the render gate if the press is interrupted. */
+export function protectSketchToolbarPress(
+  toolbar: HTMLElement,
+  document: Document,
+  gestureLock: StudioSketchGestureLock,
+  signal: AbortSignal,
+  maxPressMs = 30_000,
+): void {
+  let pointerId: number | undefined
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const cleanup = (): void => {
+    pointerId = undefined
+    if (timeout !== undefined) {
+      clearTimeout(timeout)
+    }
+    timeout = undefined
+    document.removeEventListener('pointerup', finish, true)
+    document.removeEventListener('pointercancel', cancelPointer, true)
+    document.defaultView?.removeEventListener('blur', cancel)
+    signal.removeEventListener('abort', cancel)
+  }
+  const cancel = (): void => {
+    if (pointerId === undefined) {
+      return
+    }
+    cleanup()
+    gestureLock.end()
+  }
+  const cancelPointer = (event: PointerEvent): void => {
+    if (event.pointerId === pointerId) {
+      cancel()
+    }
+  }
+  const finish = (event: PointerEvent): void => {
+    if (event.pointerId !== pointerId) {
+      return
+    }
+    cleanup()
+    // Click follows pointerup synchronously; flushing here would replace its target before click.
+    setTimeout(() => gestureLock.end(), 0)
+  }
+  toolbar.addEventListener('pointerdown', event => {
+    if (signal.aborted || !primaryPointer(event) || pointerId !== undefined) {
+      return
+    }
+    pointerId = event.pointerId
+    gestureLock.begin()
+    timeout = setTimeout(cancel, maxPressMs)
+    document.addEventListener('pointerup', finish, true)
+    document.addEventListener('pointercancel', cancelPointer, true)
+    document.defaultView?.addEventListener('blur', cancel)
+    signal.addEventListener('abort', cancel)
+  })
+}
+
+/** The canvas's active tool as a board reads it, the hand-back when a draw is released, and its settled commit. */
+type StudioSketchBoardTools = Readonly<{
+  current(): StudioSketchTool
+  drawn(sketchId: string, rectId: string): void
+  handBack(): void
 }>
 
 function renderSketch(
@@ -783,11 +1387,14 @@ function renderSketch(
   onUndoSnap: StudioSketchViewOptions['onUndoSnap'],
   renderAuthoritative: (sketches: readonly StudioSketch[], sourceVersion: string) => void,
   gestureLock: StudioSketchGestureLock,
+  lifetime: AbortSignal,
   editText: (sketchId: string, rect: StudioSketchRect, element: HTMLElement) => void,
   editingText: () => boolean,
   onError: StudioSketchViewOptions['onError'],
   onFeedDrop: StudioSketchViewOptions['onFeedDrop'],
-  exampleValues?: Readonly<Record<string, StudioFeedSample>>,
+  exampleValues: Readonly<Record<string, StudioFeedSample>> | undefined,
+  selectFrame: () => void,
+  tools: StudioSketchBoardTools,
 ): HTMLElement {
   // The frame stacks the toolbar above the board and the proposal below it. Nothing but rectangles
   // may sit inside the board: an absolutely positioned toolbar once wrapped down over it and the
@@ -815,6 +1422,9 @@ function renderSketch(
   board.style.width = `${sketch.width}px`
   let activePointer: number | undefined
   let duplicateSourceId: string | undefined
+  let marquee:
+    | Readonly<{ additive: boolean; before: ReadonlySet<string>; origin: StudioSketchPoint }>
+    | undefined
   let busy = false
   /** A failure is shown on the board and reported to the host, which outlives a re-rendered board. */
   const reportError = (error: unknown): void => {
@@ -911,6 +1521,7 @@ function renderSketch(
   }
   const toolbar = document.createElement('nav')
   toolbar.dataset['taoStudioSketchSnapControls'] = sketch.id
+  protectSketchToolbarPress(toolbar, document, gestureLock, lifetime)
   toolbar.style.alignItems = 'center'
   toolbar.style.display = 'flex'
   toolbar.style.flexWrap = 'wrap'
@@ -978,7 +1589,12 @@ function renderSketch(
   dropTarget.style.border = '1px dashed currentColor'
   dropTarget.style.display = 'flex'
   dropTarget.style.justifyContent = 'center'
-  dropTarget.style.minHeight = '44px'
+  // In Draw the view's running cell is laid over this slot, which grows to the cell's height. The
+  // cell runs at the frame's own size, so the view lays out in the space it was drawn in.
+  dropTarget.dataset['taoStudioDrawLiveSlot'] = sketch.view
+  dropTarget.dataset['taoStudioDrawLiveWidth'] = String(sketch.width)
+  dropTarget.dataset['taoStudioDrawLiveHeight'] = String(sketch.height)
+  dropTarget.style.minHeight = `max(44px, var(${studioDrawLiveHeight}, 0px))`
   dropTarget.style.width = `${sketch.width}px`
   frame.append(name, board, dropTarget, toolbar)
   const gapIndicator = document.createElement('div')
@@ -991,7 +1607,16 @@ function renderSketch(
     // the visible sibling target underneath the free-geometry overlay remains reachable.
     const targets = document.elementsFromPoint?.(event.clientX, event.clientY)
       ?? [document.elementFromPoint(event.clientX, event.clientY)].filter(candidate => candidate !== null)
-    return StudioSketchDragTarget.ownsAny(targets, sketch.id)
+    return StudioSketchDragTarget.ownsAny(targets, sketch.id) || overLiveSlot(event)
+  }
+  /** In Draw a filled slot lets pointers through to the boards around it, so hit testing cannot see it. */
+  const overLiveSlot = (event: PointerEvent): boolean => {
+    if (dropTarget.dataset['taoStudioDrawLiveFilled'] === undefined) {
+      return false
+    }
+    const rect = dropTarget.getBoundingClientRect()
+    return event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top
+      && event.clientY <= rect.bottom
   }
   const moveRelease = (event: PointerEvent): StudioSketchMoveRelease => ({
     duplicate: duplicateSourceId !== undefined,
@@ -1093,7 +1718,7 @@ function renderSketch(
     const selectedIds = selection()?.sketchId === sketch.id
       ? selection()?.rectIds ?? new Set<string>()
       : new Set<string>()
-    void requestSnap(StudioSketchSelection.rectIds(sketch, selectedIds))
+    void requestSnap(StudioSketchSelection.rectIds({ ...sketch, rects: state.rects }, selectedIds))
   })
   undo.addEventListener('click', () => {
     if (
@@ -1196,6 +1821,7 @@ function renderSketch(
     const target = event.target as HTMLElement | null
     const begins = StudioSketchBoardInput.beginsGesture({
       ...(activePointer === undefined ? {} : { activePointer }),
+      contextMenu: event.ctrlKey,
       inToolbar: toolbar.contains(target),
       onHandle: target?.dataset?.['taoStudioSketchHandle'] !== undefined,
       primary: primaryPointer(event),
@@ -1205,11 +1831,24 @@ function renderSketch(
     }
     const location = point(event)
     const hit = StudioSketchGeometry.hit(state.rects, location)
-    if (hit === undefined) {
+    const press = StudioSketchTools.boardPress(tools.current(), hit !== undefined)
+    if (press === 'marquee') {
+      const current = selection()
+      marquee = {
+        additive: event.shiftKey,
+        before: current?.sketchId === sketch.id ? current.rectIds : new Set(),
+        origin: location,
+      }
+      capturePointer(event.pointerId)
+      board.dataset['taoStudioSketchGesture'] = 'marquee'
+      event.preventDefault()
+      return
+    }
+    if (press === 'draw') {
       const id = crypto.randomUUID()
-      state = StudioSketchGeometry.beginDraw(state, id, location)
+      state = StudioSketchGeometry.beginDraw(state, id, location, { kind: StudioSketchTools.drawKind(tools.current()) })
       select({ rectId: id, rectIds: new Set([id]), sketchId: sketch.id })
-    } else {
+    } else if (hit !== undefined) {
       state = { ...state, selectedId: hit.id }
       const selectedIds = selection()?.sketchId === sketch.id
         ? selection()?.rectIds ?? new Set<string>()
@@ -1245,7 +1884,44 @@ function renderSketch(
       editText(sketch.id, rect, element)
     }
   })
+  const marqueeElement = document.createElement('div')
+  marqueeElement.dataset['taoStudioSketchMarquee'] = sketch.id
+  marqueeElement.style.pointerEvents = 'none'
+  marqueeElement.style.position = 'absolute'
+  /** selectRects makes a set of free rectangles the selection, or clears it when the set is empty. */
+  const selectRects = (rectIds: ReadonlySet<string>): void => {
+    const [first] = rectIds
+    state = { ...state, selectedId: first }
+    select(first === undefined ? undefined : { rectId: first, rectIds, sketchId: sketch.id })
+    paint()
+  }
+  const sweep = (event: PointerEvent): StudioSketchBox | undefined => {
+    if (marquee === undefined) {
+      return undefined
+    }
+    const box = StudioSketchMarquee.box(marquee.origin, point(event))
+    Object.assign(marqueeElement.style, {
+      height: `${box.height}px`,
+      left: `${box.x}px`,
+      top: `${box.y}px`,
+      width: `${box.width}px`,
+    })
+    if (!board.contains(marqueeElement)) {
+      board.append(marqueeElement)
+    }
+    return box
+  }
+  const endMarquee = (pointerId: number): void => {
+    marquee = undefined
+    marqueeElement.remove()
+    releasePointer(pointerId)
+  }
   board.addEventListener('pointermove', event => {
+    const box = event.pointerId === activePointer ? sweep(event) : undefined
+    if (box !== undefined && marquee !== undefined) {
+      selectRects(StudioSketchMarquee.pick(state.rects, box, marquee.before, marquee.additive))
+      return
+    }
     if (state.gesture === undefined || event.pointerId !== activePointer) {
       return
     }
@@ -1268,6 +1944,10 @@ function renderSketch(
     if (event.pointerId !== activePointer) {
       return
     }
+    if (marquee !== undefined) {
+      endMarquee(event.pointerId)
+      return
+    }
     state = StudioSketchGeometry.cancelPointer(state)
     duplicateSourceId = undefined
     paint()
@@ -1277,6 +1957,20 @@ function renderSketch(
   board.addEventListener('lostpointercapture', cancelGesture)
   board.addEventListener('pointerup', event => {
     if (event.pointerId !== activePointer) {
+      return
+    }
+    const sweeping = marquee
+    const box = sweep(event)
+    if (sweeping !== undefined && box !== undefined) {
+      endMarquee(event.pointerId)
+      // A press that swept nothing was a click on the frame itself; Shift keeps what was selected.
+      if (!StudioSketchMarquee.click(box)) {
+        selectRects(StudioSketchMarquee.pick(state.rects, box, sweeping.before, sweeping.additive))
+      } else if (sweeping.additive) {
+        selectRects(sweeping.before)
+      } else {
+        selectFrame()
+      }
       return
     }
     const gesture = state.gesture
@@ -1298,6 +1992,8 @@ function renderSketch(
       return
     }
     state = StudioSketchGeometry.endPointer(state, point(event))
+    // A press on the empty board that drew nothing was a click on the frame itself.
+    const clickedFrame = gesture.kind === 'draw' && !state.rects.some(candidate => candidate.id === gesture.id)
     const rect = state.rects.find(candidate => candidate.id === state.selectedId)
     let change: StudioSketchRectChange | undefined
     if (rect !== undefined) {
@@ -1317,9 +2013,21 @@ function renderSketch(
     }
     duplicateSourceId = undefined
     paint()
+    if (clickedFrame) {
+      selectFrame()
+    }
+    // The tool goes back to V on release, not when the commit answers: a tool picked in between is the person's.
+    if (change?.kind === 'add') {
+      tools.handBack()
+    }
     StudioSketchPointerRelease.afterCommit(
       () => change === undefined ? undefined : onChange?.(change),
-      () => releasePointer(event.pointerId),
+      () => {
+        releasePointer(event.pointerId)
+        if (change?.kind === 'add') {
+          tools.drawn(sketch.id, change.rect.id)
+        }
+      },
     )
   })
   paint()

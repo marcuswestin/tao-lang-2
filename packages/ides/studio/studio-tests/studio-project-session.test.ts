@@ -2,6 +2,7 @@ import { loadSemanticSnapshot, Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
 import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { Deferred, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
+import { studioGeneratedSourceHeader } from '../studio-src/StudioGeneratedSources'
 import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
 import {
   StudioProjectSession,
@@ -114,6 +115,60 @@ Test('Studio project open repairs generated Studio sources to read-only mode', a
       projectRoot: root,
     })
 
+    Expect(await FS.fileMode(paths['@/studio/View1.tao'])).toBe(0o444)
+  })
+})
+
+Test('Visual edits and their undo reach a generated Studio view and leave it read-only', async () => {
+  await withTaoFiles('tao-studio-generated-edit-', {
+    '@/studio/View1.tao': `${studioGeneratedSourceHeader}\nuse Col, Text from @tao/ui\n\npublic\nview View1() {\n`
+      + '   render Col() {\n      Text("Before")\n}  }\n',
+    'Garden.tao': 'app Garden { view Main }\nview Main() { }\n',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    session.registerPreview({ previewInstanceId: 'preview-generated' })
+    const file = await session.readFile('@/studio/View1.tao')
+    const selected = 'Text("Before")'
+    const start = file.content.indexOf(selected)
+    const envelope = {
+      action: {
+        entry: ['pad', 12],
+        kind: 'set-layout-entry',
+        renderId: `${FS.resolvePath(file.path, session.projectRoot)}:${start}:${start + selected.length}`,
+      },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'generated-checkpoint', phase: 'single' },
+      identity: {
+        ...session.identity(),
+        occurrence: { nodeKind: 'render', renderOwner: 'View1' },
+        path: file.path,
+        previewInstanceId: 'preview-generated',
+        sourceVersion: file.sourceVersion,
+      },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'generated-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    } as const
+
+    const applied = await session.applySourceAction(envelope)
+    Expect(await FS.readText(paths['@/studio/View1.tao'])).toContain('Text("Before") [pad 12]')
+    Expect(await FS.fileMode(paths['@/studio/View1.tao'])).toBe(0o444)
+
+    await session.undoSourceAction({
+      channel: studioProtocolChannel,
+      checkpointId: envelope.checkpoint.id,
+      identity: { ...envelope.identity, sourceVersion: applied.sourceVersion },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'generated-undo',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action-undo',
+    })
+    Expect(await FS.readText(paths['@/studio/View1.tao'])).toBe(file.content)
     Expect(await FS.fileMode(paths['@/studio/View1.tao'])).toBe(0o444)
   })
 })
@@ -586,12 +641,12 @@ Test('Studio project session publishes every project app variant with a safe rel
   })
 })
 
-Test('Studio project session opens the project DefaultApp when the command line named none', async () => {
+Test('Studio project session opens the project app when the command line named none', async () => {
   await withTaoFiles('tao-studio-default-app-', {
-    'Project.tao': 'project { id "reader" name "Reader" DefaultApp Second }\n',
+    'Project.tao': 'project { id "reader" name "Reader" app Second }\n',
     'Reader.tao': 'app First { view Main }\napp Second { view Main }\nview Main() { }\n',
   }, async (_paths, root) => {
-    // A project that names its DefaultApp has already answered "which app"; Studio used to refuse
+    // A project that names its app has already answered "which app"; Studio used to refuse
     // every multi-app project until someone repeated that answer as --app.
     const session = await StudioProjectSession.open({ async compile() {}, projectRoot: root })
     Expect(session.appName).toBe('Second')
@@ -601,9 +656,9 @@ Test('Studio project session opens the project DefaultApp when the command line 
   })
 })
 
-Test('Studio project session lets an explicit entry override the project DefaultApp', async () => {
+Test('Studio project session lets an explicit entry override the project app', async () => {
   await withTaoFiles('tao-studio-explicit-entry-', {
-    'Project.tao': 'project { id "reader" name "Reader" DefaultApp Second }\n',
+    'Project.tao': 'project { id "reader" name "Reader" app Second }\n',
     'First.tao': 'app First { view FirstMain }\nview FirstMain() { }\n',
     'Second.tao': 'app Second { view SecondMain }\nview SecondMain() { }\n',
   }, async (_paths, root) => {
@@ -2066,7 +2121,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     Expect(events.some(event => event.type === 'preview-manifest-changed')).toBe(true)
     Expect(handshake.capabilities.matrix).toEqual({
       concurrentCells: true,
-      scheme: 'reactive-browser-fixed-light-native',
+      scheme: 'reactive-browser-native',
       version: 2,
     })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/preview/cell/reconfigure' })

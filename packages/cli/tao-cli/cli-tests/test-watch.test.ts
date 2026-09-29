@@ -306,6 +306,8 @@ Describe('runTestWatchCommand real watch-set wiring', () => {
           return { failed: false }
         },
         signal: controller.signal,
+        startWatcher: (onChange, roots) =>
+          startDebouncedWatcher(roots, onChange, { debounceMs: WATCH_DEBOUNCE_MS, usePolling: true }),
       })
 
       await waitUntil(() => calls === 1)
@@ -324,9 +326,8 @@ Describe('runTestWatchCommand real watch-set wiring', () => {
   })
 
   // The whole point of watching the selected directory is to notice a test file that does not exist
-  // yet, so finding none at startup must not end the command. Polling is forced here because a
-  // brand-new file's native "add" event is not reliable inside this suite's sandbox; an edit to an
-  // already-known file (the case the test above covers) is unaffected and needs no such override.
+  // yet, so finding none at startup must not end the command. Verification runs in a sandbox
+  // without native file events, so both real watcher tests request polling explicitly.
   Test('keeps watching a selected directory with no tests yet, and reruns once one is added', async () => {
     await withTaoFixture({
       'Project.tao': 'project { id "watch-empty" name "Watch Empty" }\n',
@@ -340,8 +341,8 @@ Describe('runTestWatchCommand real watch-set wiring', () => {
           return { failed: false }
         },
         signal: controller.signal,
-        startWatcher: onChange =>
-          startDebouncedWatcher([rootDir], onChange, { debounceMs: WATCH_DEBOUNCE_MS, usePolling: true }),
+        startWatcher: (onChange, roots) =>
+          startDebouncedWatcher(roots, onChange, { debounceMs: WATCH_DEBOUNCE_MS, usePolling: true }),
       })
 
       await waitUntil(() => calls === 1)

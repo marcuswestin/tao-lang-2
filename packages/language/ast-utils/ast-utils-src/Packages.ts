@@ -138,15 +138,33 @@ export namespace Packages {
     let current = root
     let previous = ''
     while (current !== previous) {
-      const project = FS.resolvePath('Project.tao', current)
-      if (await FS.isFile(project)) {
-        return project
+      const declared = await projectDeclarationFile(current)
+      if (declared !== undefined) {
+        return declared
       }
       if (await FS.exists(FS.resolvePath('.git', current))) {
         return undefined
       }
       previous = current
       current = FS.dirname(current)
+    }
+    return undefined
+  }
+
+  /** projectDeclarationFile returns the `.tao` file in `directory` that declares project metadata. */
+  async function projectDeclarationFile(directory: string): Promise<string | undefined> {
+    const named = FS.resolvePath('Project.tao', directory)
+    if (await FS.isFile(named) && await fileDeclaresProject(named)) {
+      return named
+    }
+    for (const name of (await FS.listDir(directory).catch(() => [])).toSorted()) {
+      const path = FS.resolvePath(name, directory)
+      if (path === named || FS.extname(path) !== '.tao' || !await FS.isFile(path)) {
+        continue
+      }
+      if (await fileDeclaresProject(path)) {
+        return path
+      }
     }
     return undefined
   }

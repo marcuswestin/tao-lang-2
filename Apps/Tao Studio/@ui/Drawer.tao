@@ -1,0 +1,311 @@
+use Col, Text, TextInput from @tao/ui
+
+folder
+view StudioDrawerPanel(Tab text, Compile StudioCompilePanel, Problems StudioProblemsPanel, Data StudioDataPanel, Debug StudioDebugPanel, Tests StudioTestsPanel, Logs StudioLogsPanel) {
+   action Dispatch(Name text, Payload text) {
+      do ProductPanelAction(Name: Name, Payload: Payload)
+   }
+   render Col() {
+      when StudioPanelSelected(Tab: Tab, Panel: "Compile") {
+         true -> { StudioCompilePanelView(Compile: Compile, Dispatch: Dispatch) }
+         otherwise -> { }
+      }
+      when StudioPanelSelected(Tab: Tab, Panel: "Problems") {
+         true -> { StudioProblemsPanelView(Problems: Problems, Dispatch: Dispatch) }
+         otherwise -> { }
+      }
+      when StudioPanelSelected(Tab: Tab, Panel: "Data") {
+         true -> { StudioDataPanelView(Data: Data, Dispatch: Dispatch) }
+         otherwise -> { }
+      }
+      when StudioPanelSelected(Tab: Tab, Panel: "Tests") {
+         true -> { StudioTestsPanelView(Tests: Tests, Dispatch: Dispatch) }
+         otherwise -> { }
+      }
+      when StudioPanelSelected(Tab: Tab, Panel: "Logs") {
+         true -> { StudioLogsPanelView(Logs: Logs, Dispatch: Dispatch) }
+         otherwise -> { }
+      }
+      when StudioPanelSelected(Tab: Tab, Panel: "Debug") {
+         true -> { StudioDebugPanelView(Debug: Debug, Dispatch: Dispatch) }
+         otherwise -> { }
+}  }  }
+
+folder
+view StudioDataRailPanel(Data StudioDataPanel) {
+   action Dispatch(Name text, Payload text) {
+      do ProductPanelAction(Name: Name, Payload: Payload)
+   }
+   render StudioPanelSurface("Data") {
+      StudioDataPanelView(Data: Data, Dispatch: Dispatch)
+}  }
+
+view StudioPanelCommand(Label text, Command StudioPanelAction, Dispatch action(text, text), Disabled boolean) {
+   action Invoke() {
+      do Dispatch(Command.Name, Command.Payload)
+   }
+   render StudioButton(Label: Label, Press: Invoke, Disabled: Disabled, Variant: "secondary")
+}
+
+view StudioProblemRows(Rows list of StudioProblemPanelRow, Dispatch action(text, text)) {
+   render Col() {
+      when Rows {
+         empty -> { Text("No problems.") }
+         otherwise -> { loop Rows / Row {
+            when Row.Actionable {
+               true -> { StudioPanelCommand(Label: Row.Label, Command: Row.Action, Dispatch: Dispatch, Disabled: false) }
+               otherwise -> { Text(Row.Label) }
+            }
+            Text(Row.Detail)
+            when Row.Path {
+               empty -> { }
+               otherwise -> {
+                  Text(Row.Path)
+                  when Row.HasPosition {
+                     true -> { Text("Line { Row.Line + 1 }:{ Row.Column + 1 }") }
+                     otherwise -> { }
+            }  }  }
+         } }
+}  }  }
+
+view StudioCompilePanelView(Compile StudioCompilePanel, Dispatch action(text, text)) {
+   render Col() {
+      Text("Compile: { Compile.Status }")
+      Text(Compile.Message)
+      Text("Revision { Compile.CompileRevision } · applied { Compile.AppliedRevision } · { Compile.DiagnosticCount } diagnostics")
+      StudioProblemRows(Rows: Compile.Diagnostics, Dispatch: Dispatch)
+}  }
+
+view StudioProblemsPanelView(Problems StudioProblemsPanel, Dispatch action(text, text)) {
+   render StudioProblemRows(Rows: Problems.Rows, Dispatch: Dispatch)
+}
+
+view StudioDataPanelView(Data StudioDataPanel, Dispatch action(text, text)) {
+   render Col() {
+      StudioFeedPanelView(Feed: Data.Feed, Dispatch: Dispatch)
+      StudioPanelCommand(Label: "Refresh data", Command: Data.RefreshAction, Dispatch: Dispatch, Disabled: Data.Loading)
+      StudioPanelCommand(Label: "Capture fixture", Command: Data.CaptureAction, Dispatch: Dispatch, Disabled: false)
+      when Data.Source {
+         empty -> { Text("Select a preview cell to inspect live data.") }
+         otherwise -> { Text("Active cell: { Data.Source }") }
+      }
+      when Data.Loading {
+         true -> { Text("Refreshing live app data…") }
+         otherwise -> { }
+      }
+      when Data.Error {
+         empty -> { }
+         otherwise -> { Text(Data.Error) }
+      }
+      when Data.Tables {
+         empty -> { Text("No captured entity tables.") }
+         otherwise -> { loop Data.Tables / Table {
+            StudioDataTableView(Table)
+         } }
+}  }  }
+
+view StudioFeedPanelView(Feed StudioFeedPanel, Dispatch action(text, text)) {
+   action ChangeEntity(Value text) {
+      do Dispatch("feed-action", StudioFeedEntityPayload(Value))
+   }
+   action ChangeSource(Value text) {
+      do Dispatch("feed-action", StudioFeedSourcePayload(Value))
+   }
+   action ChangeSeed(Value text) {
+      do Dispatch("feed-action", StudioFeedSeedPayload(Value))
+   }
+   action SubmitSeed() { }
+   render Col() {
+      Text("Feed")
+      Text("Transient examples and proposals · Keep applies; Discard cancels.")
+      StudioChoice(Value: Feed.Entity, Change: ChangeEntity, Options: Feed.Entities, Label: "Feed entity")
+      StudioSegmented(Value: Feed.Source, Change: ChangeSource, Options: Feed.Sources, Label: "Feed source")
+      TextInput(Value: Feed.Seed, Change: ChangeSeed, Submit: SubmitSeed, Label: "Feed seed")
+      StudioPanelCommand(Label: "Keep", Command: Feed.KeepAction, Dispatch: Dispatch, Disabled: not Feed.CanKeep)
+      StudioPanelCommand(Label: "Discard", Command: Feed.DiscardAction, Dispatch: Dispatch, Disabled: not Feed.CanDiscard)
+      StudioPanelCommand(Label: "Undo Keep", Command: Feed.UndoAction, Dispatch: Dispatch, Disabled: not Feed.CanUndo)
+      when Feed.Notice {
+         empty -> { }
+         otherwise -> { Text(Feed.Notice) }
+      }
+      when Feed.Loading {
+         true -> { Text("Loading feed…") }
+         otherwise -> { }
+      }
+      when Feed.Pending {
+         true -> { Text("Saving feed change…") }
+         otherwise -> { }
+      }
+      when Feed.Error {
+         empty -> { }
+         otherwise -> { Text(Feed.Error) }
+      }
+      when Feed.Rows {
+         empty -> { Text("Choose an entity and source to browse examples.") }
+         otherwise -> { loop Feed.Rows / Row {
+            StudioFeedRowView(Row: Row, Dispatch: Dispatch, Disabled: Feed.Pending or Feed.Loading)
+         } }
+}  }  }
+
+view StudioFeedRowView(Row StudioFeedRow, Dispatch action(text, text), Disabled boolean) {
+   action Select() {
+      do Dispatch(Row.SelectAction.Name, Row.SelectAction.Payload)
+   }
+   render Col() {
+      StudioFeedRowControl(Label: Row.Label, Selected: Row.Selected, Select: Select, Disabled: Disabled, Payload: Row.DragPayload)
+      loop Row.Fields / Field {
+         StudioFeedDrag(Payload: Field.DragPayload, Label: Field.Label, Disabled: Disabled) [feedChip] {
+            Text("{ Field.Label }: { Field.Value }")
+}  }  }  }
+
+view StudioFeedRowControl(Label text, Selected boolean, Select action(), Disabled boolean, Payload text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+view StudioFeedDrag(Payload text, Label text, Disabled boolean) accepts content from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+function StudioFeedEntityPayload(Entity text) returns text {
+   return StudioFeedEntityPayload(Entity) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioFeedSourcePayload(Source text) returns text {
+   return StudioFeedSourcePayload(Source) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioFeedSeedPayload(Seed text) returns text {
+   return StudioFeedSeedPayload(Seed) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+view StudioDataTableView(Table StudioDataPanelTable) {
+   render Col() {
+      Text(StudioDataTableTitle(Datasource: Table.Datasource, Entity: Table.Entity))
+      Text("{ Table.RetainedRowCount } of { Table.TotalRowCount } rows")
+      StudioDataRows(Rows: Table.Rows)
+}  }
+
+view StudioDataRows(Rows list of text) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+function StudioDataTableTitle(Datasource text, Entity text) returns text {
+   return StudioDataTableTitle(Datasource: Datasource, Entity: Entity) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+view StudioTestsPanelView(Tests StudioTestsPanel, Dispatch action(text, text)) {
+   render Col() {
+      StudioPanelCommand(Label: "Run tests", Command: Tests.RunAction, Dispatch: Dispatch, Disabled: not Tests.Available or Tests.Running)
+      when Tests.Watch {
+         true -> { StudioPanelCommand(Label: "Disable compile watch", Command: Tests.WatchAction, Dispatch: Dispatch, Disabled: false) }
+         otherwise -> { StudioPanelCommand(Label: "Enable compile watch", Command: Tests.WatchAction, Dispatch: Dispatch, Disabled: false) }
+      }
+      when Tests.Running {
+         true -> { Text("Running Tao tests…") }
+         otherwise -> { }
+      }
+      when Tests.Reason {
+         empty -> { }
+         otherwise -> { Text(Tests.Reason) }
+      }
+      when Tests.Error {
+         empty -> { }
+         otherwise -> { Text(Tests.Error) }
+      }
+      when Tests.Summary {
+         empty -> { }
+         otherwise -> { Text(Tests.Summary) }
+      }
+      loop Tests.Failures / Failure {
+         StudioPanelCommand(Label: Failure.Label, Command: Failure.Action, Dispatch: Dispatch, Disabled: false)
+         Text(Failure.Detail)
+         Text(Failure.Path)
+         when Failure.HasPosition {
+            true -> { Text("Line { Failure.Line }:{ Failure.Column }") }
+            otherwise -> { }
+      }  }
+      when Tests.Output {
+         empty -> { }
+         otherwise -> { Text(Tests.Output) }
+}  }  }
+
+view StudioLogsPanelView(Logs StudioLogsPanel, Dispatch action(text, text)) {
+   render Col() {
+      StudioPanelCommand(Label: "Clear logs", Command: Logs.ClearAction, Dispatch: Dispatch, Disabled: false)
+      when Logs.Source {
+         empty -> { Text("Device console history; select a preview cell for browser logs.") }
+         otherwise -> { Text("Active cell: { Logs.Source }; connected device lines are labeled below.") }
+      }
+      Text("Showing { Logs.RetainedCount } of { Logs.TotalCount } messages")
+      when Logs.Rows {
+         empty -> { Text("No console messages from the active preview or device.") }
+         otherwise -> { loop Logs.Rows / Row {
+            Text("{ Row.Level } · { Row.Timestamp } · { Row.Message }")
+         } }
+}  }  }
+
+view StudioDebugPanelView(Debug StudioDebugPanel, Dispatch action(text, text)) {
+   render Col() {
+      StudioPanelCommand(Label: "Break", Command: Debug.BreakAction, Dispatch: Dispatch, Disabled: Debug.Paused)
+      // Continue also cancels a Break armed before any action reaches a statement gate.
+      StudioPanelCommand(Label: "Continue", Command: Debug.ContinueAction, Dispatch: Dispatch, Disabled: false)
+      StudioPanelCommand(Label: "Step over", Command: Debug.StepOverAction, Dispatch: Dispatch, Disabled: not Debug.Paused)
+      StudioPanelCommand(Label: "Step into", Command: Debug.StepIntoAction, Dispatch: Dispatch, Disabled: not Debug.Paused)
+      StudioPanelCommand(Label: "Step out", Command: Debug.StepOutAction, Dispatch: Dispatch, Disabled: not Debug.Paused)
+      StudioPanelCommand(Label: "Clear journal", Command: Debug.ClearAction, Dispatch: Dispatch, Disabled: false)
+      when Debug.Source {
+         empty -> { Text("Select a preview cell to debug the app running in it.") }
+         otherwise -> { Text("Active cell: { Debug.Source }") }
+      }
+      when Debug.Paused {
+         true -> { StudioDebugPauseView(Debug) }
+         otherwise -> { Text("Running. Break stops the next statement any action reaches.") }
+      }
+      Text("Action journal")
+      when Debug.Journal {
+         empty -> { Text("No actions have run in this cell yet.") }
+         otherwise -> { loop Debug.Journal / Entry {
+            Text("{ Entry.Action } · { Entry.Detail }")
+         } }
+}  }  }
+
+view StudioDebugPauseView(Debug StudioDebugPanel) {
+   render Col() {
+      Text("Paused at { Debug.PausedAt }")
+      loop Debug.Frames / Frame {
+         Text("in { Frame }")
+      }
+      Text("Scope")
+      when Debug.Scope {
+         empty -> { Text("Nothing is bound in this action's scope.") }
+         otherwise -> { loop Debug.Scope / Binding {
+            Text("{ Binding.Name } = { Binding.Value }")
+         } }
+      }
+      Text("Pending writes")
+      when Debug.PendingWrites {
+         empty -> { Text("This action has written nothing yet.") }
+         otherwise -> { loop Debug.PendingWrites / Write {
+            Text("{ Write.Kind } { Write.Target }: { Write.Committed } → { Write.Pending }")
+         } }
+}  }  }
+
+folder
+view StudioSearchPanel(Rows list of StudioSearchPanelRow) {
+   action Dispatch(Name text, Payload text) {
+      do ProductPanelAction(Name: Name, Payload: Payload)
+   }
+   render Col() {
+      when Rows {
+         empty -> { Text("No search results.") }
+         otherwise -> { loop Rows / Row {
+            StudioSearchHitRow(Row: Row, Dispatch: Dispatch)
+         } }
+}  }  }
+
+view StudioSearchHitRow(Row StudioSearchPanelRow, Dispatch action(text, text)) {
+   action Open() {
+      do Dispatch(Row.Action.Name, Row.Action.Payload)
+   }
+   render StudioSearchHit(Label: Row.Label, Kind: Row.Kind, Detail: Row.Detail, Path: Row.Path, Line: Row.Line, Column: Row.Column, Open: Open)
+}
+
+view StudioSearchHit(Label text, Kind text, Detail text, Path text, Line number, Column number, Open action()) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+
+function StudioPanelSelected(Tab text, Panel text) returns boolean {
+   return StudioPanelSelected(Tab: Tab, Panel: Panel) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}

@@ -11,14 +11,20 @@
   `direnv allow` was also needed first, and it must run from an unsandboxed shell because the allow file
   lives under `~/.local/share/direnv`.
 - **Workaround:** Run `just _parser-gen` after `./agent setup` in a new worktree.
+- **2026-09-26 recurrence:** After `./agent start-branch feat/visionos-minimal`, `./agent setup`
+  reported success but `./agent tao fix Apps/VisionHello` still failed with `Cannot find module
+  './_gen_tao-parser/module'` from `packages/language/parser/parser-src/parserASTExport.ts`.
+  `./agent parser-gen` repaired the checkout, after which the sample's fix and behavior journey
+  succeeded. This is a parser bootability recurrence, separate from the Studio host acceptance below;
+  the archived DEVENV-049 describes the same failure mode.
 - **Proposed change:** Implemented: the one setup recipe now orders `deps`, `_parser-gen`, and
   `_agent-config`, and every harness setup comment states the same bootability contract.
-- **Dependencies:** DEVENV-063 now makes the managed-host boundary fail fast, but a real Studio host
-  run from an ordinary shell is still required before this entry can resolve.
+- **Dependencies:** The historical Watchman failures are recorded in archived DEVENV-063.
+  A Studio smoke through a named host operation is still required before this entry can resolve.
 - **Acceptance:** Parser generation and the subsequent CLI check passed from the fresh integration
   worktree on 2026-09-19. The headless Studio launch then reached Metro but failed because Watchman
   could not write its LaunchAgent and Metro exhausted macOS file watchers, so the Studio half remains
-  open under DEVENV-063 rather than being reported as green. Reverified on 2026-09-20 from the fresh
+  recorded under DEVENV-063 rather than being reported as green. Reverified on 2026-09-20 from the fresh
   `feat/devenv-landing-followups` checkout: `./agent setup` generated the parser, `./tao check
   Apps/HNReader` completed with zero noncanonical files, and the first real-app Studio case passed.
   The subsequent Metro-backed case again failed with Watchman denied and Node watcher `EMFILE`, so
@@ -31,5 +37,5 @@
   with `Your macOS system limit does not allow enough watchers for Metro` and `EMFILE: too many open
   files, watch`. That is host-boundary evidence, not a parser regression, so the Studio acceptance
   remains open.
-  Resolve this entry only after the same smoke reaches readiness in a supported host shell.
+  Resolve this entry only after the same smoke reaches readiness through a named host operation.
 - **Source:** 2026-09-04 Studio visual design work.

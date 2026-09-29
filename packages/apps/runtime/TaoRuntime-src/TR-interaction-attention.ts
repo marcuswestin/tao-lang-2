@@ -220,6 +220,16 @@ export class InteractionAttention {
     return activate ? activate() : fallback?.()
   }
 
+  /** A secondary pointer gesture selects a mounted target and opens its applicable verbs. */
+  targetAndOpenVerbs(identity: string | undefined): void {
+    const node = this.node(identity)
+    if (!node || !this.targetable(node)) {
+      return
+    }
+    this.target(node.identity)
+    this.openVerbs()
+  }
+
   /** invokeVerb reruns applicability at dispatch so an assistive action never invokes stale state. */
   invokeVerb(targetIdentity: string, verbIdentity: string): boolean {
     const target = this.node(targetIdentity)
@@ -284,6 +294,7 @@ export class InteractionAttention {
     this.#palette = false
     this.#paletteTarget = undefined
     node.live?.focus?.()
+    node.live?.scrollIntoView?.()
     this.recomputeCandidates()
     this.emit()
   }
@@ -336,6 +347,10 @@ export class InteractionAttention {
       this.recomputePendingCandidates()
     } else {
       this.recomputeCandidates()
+      if (memory.narrowing.length > 0) {
+        memory.target = this.#candidates[0]
+        this.node(memory.target)?.live?.scrollIntoView?.()
+      }
     }
     this.emit()
   }
@@ -873,6 +888,10 @@ export class InteractionAttention {
       memory.target = this.#candidates[0]
     } else if (memory.target && !this.#candidates.includes(memory.target)) {
       memory.target = undefined
+    }
+    if (memory.narrowing.length > 0 && memory.target === undefined) {
+      memory.target = this.#candidates[0]
+      this.node(memory.target)?.live?.scrollIntoView?.()
     }
   }
 

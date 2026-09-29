@@ -1,0 +1,35 @@
+use StackNav from @tao/nav
+use Col, FormButton, Text from @tao/ui
+
+project {
+   id "vision-hello"
+   name "Hello Tao"
+   version "0.1.0"
+   app VisionHello
+   remote none
+}
+
+app VisionHello {
+   Name "Hello Tao"
+   Navigator StackNav {
+      Initial Home
+}  }
+
+scene Home() {
+   Title "Hello Tao"
+   state Count = 0
+   action Increment() {
+      set Count += 1
+   }
+   action Reset() {
+      set Count = 0
+   }
+   render Col() [gap 12, pad 24] {
+      Text("Hello from Tao")
+      Text("Count: { Count }")
+      FormButton("Increment") {
+         on press Increment
+      }
+      FormButton("Reset") {
+         on press Reset
+}  }  }

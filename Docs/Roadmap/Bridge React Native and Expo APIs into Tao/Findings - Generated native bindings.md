@@ -5,7 +5,7 @@
 The experimental `tao bridge` command imports **both Expo and React Native** through separate source
 adapters. Both currently read installed public TypeScript declarations using Tao's existing TypeScript
 compiler API. They feed a common catalog and one Tao/TypeScript emitter. The generator, catalog,
-adapters, and output writer now live in the private [`@native-bindings` package](../../../packages/native-bindings/README.md).
+adapters, and output writer now live in the private [`@native-bindings` package](../../../packages/apps/native-bindings/README.md).
 The CLI owns arguments/reporting; the compiler consumes generated Tao as ordinary source. No third-party
 dependency was added.
 

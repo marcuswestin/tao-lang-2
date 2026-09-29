@@ -29,7 +29,11 @@ import { absoluteSourcePath, StudioSourceNavigation } from '../StudioEditor'
 import { revealCanvasNode } from './StudioCanvasViewport'
 import { StudioDebugEvents } from './StudioDebugEvents'
 import { invalidatePreviewJourneyRecording, StudioJourneyRecorder } from './StudioJourneyRecording'
-import type { StudioInteractionMode, StudioPreviewConnection } from './StudioPreviewConnection'
+import {
+  type StudioInteractionMode,
+  type StudioPreviewConnection,
+  StudioPreviewPublication,
+} from './StudioPreviewConnection'
 import { StudioReviewDom } from './StudioReviewDom'
 import { runtimeCaptureWithEnvironment } from './StudioRuntimeCapture'
 import { openRuntimeFailureSource, showRuntimeFailure, type StudioOpenFile } from './StudioRuntimeFailurePanel'
@@ -43,8 +47,12 @@ type StudioPreviewMessageActions = {
   canvasPanKey?: (message: StudioPreviewCanvasPanKeyMessage) => void
   canvasShortcut?: (message: StudioPreviewCanvasShortcutMessage) => void
   changed?: () => void
+  /** Whether a preview pick may move keyboard focus into the editor; Design and Draw keep it on the canvas. */
+  editorTakesFocus?: () => boolean
   feedDrop?: (message: StudioPreviewFeedDropMessage) => Promise<void>
-  inspect: (selection: StudioInspectorSelection) => void
+  /** Additive selections come from a shift-click and join the selection instead of replacing it. */
+  inspect: (selection: StudioInspectorSelection, additive?: boolean) => void
+  layoutMeasured?: () => void
   reveal?: () => void
 }
 
@@ -118,6 +126,26 @@ export function postCanvasGestureOwnership(
     owned,
     protocolVersion: studioProtocolVersion,
     type: 'set-canvas-gestures',
+  }, preview.origin)
+}
+
+/**
+ * Tells one cell to drop its selection outlines: a plain pick in another cell started a new selection,
+ * and each cell otherwise keeps outlining what was last picked in it.
+ */
+export function postClearSelection(preview: StudioPreviewConnection, handshake: StudioHandshake): void {
+  const target = preview.iframe.contentWindow
+  if (target === null) {
+    return
+  }
+  target.postMessage({
+    channel: studioProtocolChannel,
+    identity: {
+      ...(preview.cellIdentity ?? handshake.identity),
+      previewInstanceId: preview.previewInstanceId,
+    },
+    protocolVersion: studioProtocolVersion,
+    type: 'clear-selection',
   }, preview.origin)
 }
 
@@ -261,6 +289,7 @@ export async function handlePreviewMessage(
       const measurement = received(message, type)
       if (preview.cellIdentity === undefined || matchesExactPreviewCellIdentity(preview, measurement.identity)) {
         preview.layoutMeasurements = measurement
+        actions.layoutMeasured?.()
       }
       await StudioApiClient.previewLayoutMeasurements(measurement).catch(ignoreSupersededPreviewReport)
     },
@@ -348,10 +377,16 @@ function receiveJourneyReplay(
   preview: StudioPreviewConnection,
   message: StudioWindowMessageOf<'preview-journey-replay-failed' | 'preview-journey-replay-settled'>,
 ): void {
-  if (!matchesExactPreviewCellIdentity(preview, message.identity)) {
+  const cellIdentity = preview.cellIdentity
+  if (cellIdentity === undefined || !matchesExactPreviewCellIdentity(preview, message.identity)) {
     return
   }
   preview.journeyReplayStatus = message.type === 'preview-journey-replay-settled' ? 'settled' : 'failed'
+  preview.journeyReplayResult = {
+    ...(message.type === 'preview-journey-replay-failed' ? { error: message.error } : {}),
+    revision: StudioReviewDom.journeyRevision(cellIdentity, preview.previewInstanceId),
+    status: preview.journeyReplayStatus,
+  }
   if (preview.frame !== undefined) {
     if (message.type === 'preview-journey-replay-settled') {
       StudioReviewDom.status(preview.frame, 'ready')
@@ -430,13 +465,21 @@ async function receivePreviewApplied(
   }
   if (identity !== undefined) {
     preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)
+    preview.appliedIdentity = { identity, previewInstanceId: preview.previewInstanceId }
   }
   if (preview.frame !== undefined && StudioReviewDom.appliedReady(preview.journeyReplayStatus)) {
     StudioReviewDom.status(preview.frame, 'ready')
   }
   // A frame can acknowledge its previous revision while Studio publishes the next manifest.
   // The server correctly rejects that stale report; it does not indicate a broken preview.
-  await StudioApiClient.previewApplied(message).catch(ignoreSupersededPreviewReport)
+  try {
+    await StudioApiClient.previewApplied(message)
+    if (identity !== undefined) {
+      StudioPreviewPublication.acknowledged(preview, identity, message.identity.previewInstanceId)
+    }
+  } catch (error) {
+    ignoreSupersededPreviewReport(error)
+  }
 }
 
 async function receiveSourceAction(
@@ -533,6 +576,7 @@ async function receiveSelectSource(
 ): Promise<void> {
   actions.activate?.()
   const opened = await StudioSourceNavigation.openAndSelect({
+    focus: actions.editorTakesFocus?.() ?? true,
     identity: message.identity,
     openFile,
     project: handshake.identity.project,
@@ -542,13 +586,16 @@ async function receiveSelectSource(
     return
   }
   actions.reveal?.()
-  actions.inspect(StudioInspector.selection({
-    ...message,
-    identity: {
-      ...message.identity,
-      ...(preview.cell === undefined ? {} : { scenarioId: preview.cell.scenarioId }),
-    },
-  }))
+  actions.inspect(
+    StudioInspector.selection({
+      ...message,
+      identity: {
+        ...message.identity,
+        ...(preview.cell === undefined ? {} : { scenarioId: preview.cell.scenarioId }),
+      },
+    }),
+    message.additive === true,
+  )
 }
 
 export function requestRuntimeCapture(

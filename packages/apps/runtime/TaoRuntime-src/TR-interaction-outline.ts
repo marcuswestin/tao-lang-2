@@ -34,8 +34,10 @@ type TaoOutlineControlDescriptor = Readonly<{
   declaration: string
   kind: 'control'
   label?: string
+  description?: string
+  nameStatus: 'known' | 'uncertain' | 'missing'
   role: 'action' | 'input'
-  /** view is the rendered view's name, the label of last resort for a control the site left unnamed. */
+  /** view identifies the declaration and is never substituted for an accessible name. */
   view: string
 }>
 
@@ -358,7 +360,11 @@ export function visualOrder(nodes: readonly TaoOutlineLiveNode[]): readonly TaoO
 }
 
 /** TaoOutlineRowRoot is what a loop row hands the native root that renders it. */
-export type TaoOutlineRowRoot = Readonly<{ label: string }>
+export type TaoOutlineRowRoot = Readonly<{
+  capabilities: TaoOutlineLiveEntry
+  identity: string
+  label: string
+}>
 
 /**
  * InteractionOutline is the registry every mounted outline node joins for exactly as long as it is
@@ -812,8 +818,11 @@ export function useOutlineItem(
   capabilities.commandPolicy = undefined
   capabilities.entityType = undefined
   capabilities.runtimeValue = undefined
-  if (descriptor && label !== undefined && !descriptor.selectable && descriptor.root === 'single') {
-    rowRoots.set(value, Object.freeze({ label }))
+  if (
+    descriptor && label !== undefined && identity !== undefined && !descriptor.selectable
+    && descriptor.root === 'single'
+  ) {
+    rowRoots.set(value, Object.freeze({ capabilities, identity, label }))
   }
   useRegisteredNode(
     descriptor && identity !== undefined
@@ -863,6 +872,7 @@ export function rowRootOf(value: object): TaoOutlineRowRoot | undefined {
 export type TaoInteractionOccurrence = Readonly<{
   control?: string
   capabilities: TaoOutlineLiveEntry
+  description?: string
   region?: string
   regionDeclaration?: string
   regionSubjects?: readonly string[]
@@ -903,7 +913,7 @@ export function useOutlineOccurrence(
       ? {
         identity: controlIdentity,
         kind: control.role,
-        label: () => capabilities.label?.() ?? control.label ?? control.view,
+        label: () => capabilities.label?.() ?? control.label,
         live: capabilities,
         ...((effectiveRegionIdentity ?? parent) === undefined ? {} : { parent: effectiveRegionIdentity ?? parent }),
         provenance: { occurrence: control.identity },
@@ -913,6 +923,9 @@ export function useOutlineOccurrence(
   return {
     capabilities,
     ...(controlIdentity === undefined ? {} : { control: controlIdentity }),
+    ...((control?.description ?? owner?.description) === undefined
+      ? {}
+      : { description: control?.description ?? owner?.description }),
     ...(regionIdentity === undefined
       ? {
         ...(owner?.region === undefined ? {} : { region: owner.region }),

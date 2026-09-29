@@ -4,7 +4,7 @@ import { planShipPipeline, planUnsignedArchive, runShipPipeline } from '../cli-s
 
 Describe('tao ship Apple command pipeline', () => {
   Test('derives the exact local Apple command vectors', () => {
-    const runtimeRoot = '/repo/packages/runtime-toolchain'
+    const runtimeRoot = '/repo/packages/apps/expo-host'
     const plan = planShipPipeline({
       archivePath: '/tmp/WordFlower.xcarchive',
       exportPath: '/tmp/export',

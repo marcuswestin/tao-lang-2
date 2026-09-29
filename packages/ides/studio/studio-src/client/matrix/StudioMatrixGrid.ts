@@ -50,6 +50,10 @@ function reconcileMatrix<Item>(
       row.dataset['taoStudioGroupView'] = group.subjectView
       row.dataset['taoStudioGroupViewId'] = group.subjectViewId
     }
+    // A drawn view's row is what Draw lays under that view's frame on its canvas.
+    writeOptionalData(row, 'taoStudioGroupSketchView', group.sketchView)
+    writeOptionalData(row, 'taoStudioGroupSourcePath', group.sketchSourcePath)
+    writeOptionalData(row, 'taoStudioGroupSourceVersion', group.sketchSourceVersion)
     const heading = row.querySelector<HTMLElement>(':scope > .studio-preview-group-label')
       ?? document.createElement('h2')
     heading.className = 'studio-preview-group-label'
@@ -81,21 +85,33 @@ function reconcileMatrix<Item>(
   applyCanvasViewport(parent)
 }
 
+function writeOptionalData(element: HTMLElement, key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete element.dataset[key]
+  } else {
+    element.dataset[key] = value
+  }
+}
+
 /**
  * The grid is appended rather than replacing the parent, because the Draw canvas is mounted beside it
  * and a compile remount must not steal it. Everything else the preview pane held before the matrix
  * arrived -- the connecting placeholder, and the whole-app iframe an app without scenarios ran in --
  * has no owner once the grid is up, so it is removed here rather than left stacked over the cells.
- * The zoom pill and the focus bar belong to the canvas surface and stay.
+ * The zoom pill, the focus bar, the Draw tool strip, the edit log and the selection HUD belong to the
+ * canvas surface and stay.
  */
 function retireDepartedPreviewChildren(parent: HTMLElement, canvas: HTMLElement): void {
+  const kept = [
+    'data-tao-studio-draw-canvas',
+    'data-tao-studio-draw-tools',
+    'data-tao-studio-canvas-zoom',
+    'data-tao-studio-canvas-bar',
+    'data-tao-studio-edit-log',
+    'data-tao-studio-selection-hud',
+  ]
   for (const child of [...parent.children]) {
-    if (
-      child === canvas
-      || child.hasAttribute('data-tao-studio-draw-canvas')
-      || child.hasAttribute('data-tao-studio-canvas-zoom')
-      || child.hasAttribute('data-tao-studio-canvas-bar')
-    ) {
+    if (child === canvas || kept.some(attribute => child.hasAttribute(attribute))) {
       continue
     }
     child.remove()

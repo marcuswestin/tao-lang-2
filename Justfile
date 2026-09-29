@@ -103,12 +103,17 @@ auth-review-server *ARGS:
 clerk-review *ARGS: _parser-gen
     ./dev clerk-review {{ ARGS }}
 
+# Push Auth Review to your Instant Cloud app and run it in tao dev; requires its stored App ID and admin token
+[group('Run')]
+instant-review *ARGS: _parser-gen
+    ./dev instant-review {{ ARGS }}
+
 # Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
 [group('Run')]
 studio project="Apps/HNReader": _parser-gen
     ./dev studio "{{ project }}"
 
-# Launch Tao Studio in its local Electrobun shell; offers to stop another session holding the native host
+# Launch this worktree's Tao Studio in its local Electrobun shell; offers to stop another session of it in this worktree
 [group('Run')]
 studio-native project="Apps/HNReader": _parser-gen
     ./dev studio-native "{{ project }}"
@@ -127,6 +132,21 @@ studio-companion-simulator simulator="":
 [group('Run')]
 companion-host-build *ARGS:
     ./dev companion-host-build {{ ARGS }}
+
+# Inspect or install a requested side-by-side Xcode and iOS runtime; --apply installs, agents use the named host operation
+[group('Setup')]
+setup-ios *ARGS:
+    ./dev setup-ios {{ ARGS }}
+
+# Guide Vision Pro toolchain, pairing, signing, build and launch; --simulator selects optional simulator setup
+[group('Setup')]
+setup-visionos *ARGS:
+    ./dev setup-visionos {{ ARGS }}
+
+# Guide Apple Watch toolchain and simulator runtime setup, then export and run a Tao watch app
+[group('Setup')]
+setup-watchos *ARGS:
+    ./dev setup-watchos {{ ARGS }}
 
 # Publish the built Companion hosts to their GitHub release, where tao dev downloads them; needs gh
 [group('Run')]
@@ -367,16 +387,21 @@ merge-main *args:
 my-branch name='':
     ./dev my-branch {{ quote(name) }}
 
+# Show this checkout's branch, changed files, verification, and next step without changing anything
+[group('Mine')]
+my-status:
+    ./dev my-status
+
 # Fast-forward main, move the mirrors that follow it, and merge it into your branch
 [group('Mine')]
 my-sync:
     ./dev sync-main
 
-# Hand the merge conflicts in this checkout to an agent (claude or codex), which resolves them, verifies, and commits
+# Hand merge conflicts in this checkout to an agent for best-effort focused checks and a merge commit
 [group('Mine')]
 my-resolve agent='claude' *ARGS:
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then printf 'No conflicted files: there is nothing to resolve.\n'; exit 1; fi
-    {{ if agent == "claude" { "claude" } else if agent == "codex" { "codex" } else { error("my-resolve takes claude or codex") } }} {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Then run \`./agent verify\`, and commit the merge with \`git commit --no-edit\` once it is green. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what the verification said."
+    {{ if agent == "claude" { "claude" } else if agent == "codex" { "codex" } else { error("my-resolve takes claude or codex") } }} {{ ARGS }} "Finish the merge that is in progress in this checkout, on branch $(git symbolic-ref --quiet --short HEAD). Resolve every conflicted file on its merits, keeping both sides' intent rather than taking one side wholesale, and preserving work you did not write. Read AGENTS.md first. Run available focused checks on the resolved files, report checks that concurrent work prevents, and commit the merge with \`git commit --no-edit\`. Leave full verification to landing. Do not land anything on main, do not push, and do not touch other worktrees. Report what you resolved in each file and what checks ran."
 
 # Squash-merge your dev/* branch into main; the same landing agents use, with the same gates
 [group('Mine')]

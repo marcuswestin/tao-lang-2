@@ -11,7 +11,7 @@ import { Describe, Expect, Test } from '@shared/test'
 const ISSUE_TEMPLATES = ['could-not-build-it.yml', 'this-confused-me.yml']
 
 /** The command every form and the contributing guide tells a reporter to run. */
-const FINGERPRINT_COMMAND = './agent doctor --fingerprint'
+const FINGERPRINT_COMMAND = 'tao doctor --fingerprint'
 
 async function githubFile(relativePath: string): Promise<string> {
   return await FS.readText(Repo.resolvePath(`.github/${relativePath}`))
@@ -24,7 +24,7 @@ Describe('feedback intake', () => {
       text: await githubFile(`ISSUE_TEMPLATE/${name}`),
     })))
     const contributing = await githubFile('CONTRIBUTING.md')
-    const devCli = await FS.readText(Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/dev.ts'))
+    const visitorCli = await FS.readText(Repo.resolvePath('packages/cli/tao-cli/cli-src/tao-cli.ts'))
 
     for (const template of templates) {
       Expect(template.text).toContain(FINGERPRINT_COMMAND)
@@ -33,7 +33,7 @@ Describe('feedback intake', () => {
       Expect(template.text.split('id: fingerprint')[1]).toContain('required: false')
     }
     Expect(contributing).toContain(FINGERPRINT_COMMAND)
-    Expect(devCli).toContain("'--fingerprint'")
+    Expect(visitorCli).toContain("'--fingerprint'")
   })
 
   Test('routes the open-ended half of each framing to a discussion template that exists', async () => {

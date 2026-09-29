@@ -82,6 +82,60 @@ async function relativeTaoFiles(directory: string): Promise<string[]> {
 }
 
 Describe('tao create command', () => {
+  Test('fresh one-feature and two-feature projects use native navigation and UI', async () => {
+    await withRoot(async (root, output) => {
+      const one = await runCreate('A notebook for short notes', {
+        ai: 'none',
+        cwd: root,
+        interactive: false,
+        output,
+        runTests: false,
+        yes: true,
+      })
+      Expect(one.created).toBe(true)
+      Expect(await FS.readText(FS.resolvePath('Chrome.tao', one.directory)))
+        .toContain('use StackNav from @tao/nav')
+      Expect(await FS.readText(FS.resolvePath('Items/Items.tao', one.directory)))
+        .toContain('from @tao/ui')
+
+      const twoPlan: JsonObject = {
+        ...wholePlan,
+        name: 'Trip Notes',
+        id: 'trip-notes',
+        entities: [
+          ...(wholePlan['entities'] as JsonObject[]),
+          {
+            plural: 'Notes',
+            singular: 'Note',
+            purpose: 'One note.',
+            fields: [{ name: 'Title', type: 'text', title: true }],
+          },
+        ],
+      }
+      const provider = new ScriptedGenerationProvider([
+        { kind: 'answer', value: twoPlan },
+        { kind: 'answer', value: sampleRows },
+        { kind: 'answer', value: { rows: [{ Title: 'Packing list' }] } },
+      ])
+      const two = await runCreate('Trip notes', {
+        cwd: root,
+        interactive: false,
+        lanes: [fakeLane(provider)],
+        output,
+        runTests: false,
+        yes: true,
+      })
+      Expect(two.created).toBe(true)
+      const chrome = await FS.readText(FS.resolvePath('Chrome.tao', two.directory))
+      Expect(chrome).toContain('use SelectionNav, StackNav from @tao/nav')
+      Expect(chrome).toContain('Display "automatic"')
+      Expect(await FS.readText(FS.resolvePath('Trips/Trips.tao', two.directory)))
+        .toContain('from @tao/ui')
+      Expect(await FS.readText(FS.resolvePath('Notes/Notes.tao', two.directory)))
+        .toContain('from @tao/ui')
+    })
+  })
+
   Test('creates the plain starter without a model and lists what it wrote', async () => {
     await withRoot(async (root, output, captured) => {
       const tested: string[] = []
@@ -265,7 +319,7 @@ Describe('tao create command', () => {
         runTests: false,
       })
       Expect(result.plan.palette).toEqual(palette)
-      Expect(lowerCreationPlan(result.plan)['Design.tao']).toContain('canvas #fdf6e3')
+      Expect(lowerCreationPlan(result.plan)['Design.tao']).toContain('canvasLight #fdf6e3')
       Expect(captured()).toContain(`Read colors from ${FS.displayPath(image)}.`)
     })
   })

@@ -1,5 +1,6 @@
 import type TR from '@runtime/TR'
 import { Assert, FS, Repo } from '@shared'
+import { TaoFileIcon } from '@shared/core'
 import { Expect, Test } from '@shared/test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -259,22 +260,31 @@ Test('Tao Studio product host retains viewport ownership over generated Tao layo
 })
 
 Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in Tao', async () => {
-  const source = await FS.readText(Repo.resolvePath('Apps/Tao Studio/TaoStudioClient.tao'))
+  const source = (await Promise.all([
+    'TaoStudioClient.tao',
+    '@ui/Workbench.tao',
+    '@ui/Explorer.tao',
+    '@ui/Context.tao',
+    '@ui/Inspector.tao',
+    '@ui/PanelState.tao',
+    '@ui/Drawer.tao',
+    '@ui/Scenario.tao',
+  ].map(path => FS.readText(Repo.resolvePath(`Apps/Tao Studio/${path}`))))).join('\n')
 
   Expect(source).toContain('Navigator SlotNav')
   Expect(source).not.toContain('StackNav')
   Expect(source).not.toContain('Title "Tao Studio"')
   Expect(source).not.toContain('FormButton(')
-  Expect(source).toContain('use Checkbox, Col, Text, TextInput from @tao/ui')
+  Expect(source).toContain('use Col, Text from @tao/ui')
   Expect(source).not.toMatch(/\bButton\(/)
   Expect(source).not.toMatch(/\bPicker\(/)
   Expect(source).toContain(
     'view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from '
-      + '../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
+      + '../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
   )
   Expect(source).toContain(
     'view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from '
-      + '../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
+      + '../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
   )
   Expect(source).toContain('@environment StudioEnvironmentPanel(')
   Expect(source).toContain('view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPresetId text')
@@ -394,6 +404,19 @@ Test('Tao Studio foreign file views render compact tree rows with contextual edi
   Expect(textContent(deleting)).toContain('Delete Roadmap.tao?')
 })
 
+Test('Tao Studio file rows mark Tao files with the lotus glyph the IDE extension ships', () => {
+  const tao = renderToStaticMarkup(React.createElement(TreeFileRow, fileRowProps({})))
+  const other = renderToStaticMarkup(
+    React.createElement(TreeFileRow, fileRowProps({ Name: 'notes.md', Path: 'Folder/notes.md' })),
+  )
+
+  Expect(tao).toContain('class="studio-file-icon"')
+  Expect(tao).toContain(`d="${TaoFileIcon.path}"`)
+  Expect(tao).not.toContain('studio-file-kind')
+  Expect(other).toContain('<span aria-hidden="true" class="studio-file-kind" data-kind="md">md</span>')
+  Expect(other).not.toContain('studio-file-icon')
+})
+
 Test('Design token rows group under a kind heading and swatch parseable colors', () => {
   const color = StudioDesignTokenRow({
     Detail: '#ff6600',
@@ -461,7 +484,7 @@ Test('Tao-owned component rows preserve canonical drag snippets at the native bo
 })
 
 Test('Tao-owned component inventory stays aligned with the canonical Studio palette', async () => {
-  const source = await FS.readText(Repo.resolvePath('Apps/Tao Studio/TaoStudioClient.tao'))
+  const source = await FS.readText(Repo.resolvePath('Apps/Tao Studio/@ui/Explorer.tao'))
   const taoComponents = [...source.matchAll(/ComponentPaletteItem\(Name: "([^"]+)"/g)].map(match => match[1])
 
   Expect(taoComponents).toEqual(studioPaletteComponents.map(component => component.component))
@@ -673,8 +696,13 @@ Test('Tao-owned inspector Data and Actions expose only the published active sele
     'wrap-row',
     'wrap-col',
     'wrap-stack',
+    'make-view',
     'remove-element',
   ])
+  Expect(JSON.parse(StudioInspectorAction(selection, 'make-view'))).toEqual({
+    kind: 'extract-view',
+    renderIds: ['/workspace/Garden.tao:20:42'],
+  })
   Expect(StudioInspectorActionLabel('wrap-col')).toBe('Wrap in Col')
   Expect(JSON.parse(StudioInspectorAction(selection, 'wrap-row'))).toEqual({
     kind: 'wrap-render',

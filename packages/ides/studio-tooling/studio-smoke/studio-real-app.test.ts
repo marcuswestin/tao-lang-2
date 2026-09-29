@@ -68,6 +68,9 @@ Test('Studio compiles, visually edits, and undoes the real HNReader app', async 
     })
     preview.session.registerPreview({ previewInstanceId: 'real-app-preview' })
     const initialCompile = await preview.session.compileInitial()
+    if (initialCompile.status !== 'compiled') {
+      Errors.throwUnexpected(`Initial HNReader compile failed: ${JSON.stringify(initialCompile.diagnostics)}`)
+    }
     const initial = await preview.session.readFile('HNReader.tao')
     const identity = {
       ...preview.session.identity(),

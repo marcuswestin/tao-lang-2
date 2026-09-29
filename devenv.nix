@@ -5,7 +5,7 @@ let
     inherit pkgs;
     bunPkgs = import inputs.bun-nixpkgs { system = pkgs.stdenv.system; };
   };
-  hutchPkg = pkgs.callPackage ./nix/hutch.nix { nodejs = toolchain.node; };
+  hutchPkg = pkgs.callPackage ./.config/nix/hutch.nix { nodejs = toolchain.node; };
 in
 {
   name = "tao-lang";

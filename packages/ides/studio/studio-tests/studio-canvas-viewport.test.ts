@@ -7,7 +7,17 @@ import {
 
 class CanvasElement extends EventTarget {
   dataset: Record<string, string> = {}
-  style: Record<string, string> = {}
+  properties: Record<string, string> = {}
+  style: Record<string, string> & { setProperty: (name: string, value: string) => void } = Object.defineProperty(
+    {} as Record<string, string> & { setProperty: (name: string, value: string) => void },
+    'setProperty',
+    {
+      enumerable: false,
+      value: (name: string, value: string) => {
+        this.properties[name] = value
+      },
+    },
+  )
   attributes = new Map<string, string>()
   children: CanvasElement[] = []
   captures = new Set<number>()
@@ -47,6 +57,13 @@ class CanvasElement extends EventTarget {
       : selector.includes('preview-grid')
       ? this.children[0]!
       : this.children[1] ?? null
+  }
+  /** The host's surfaces: the grid first, then the Draw canvas when one is mounted. */
+  querySelectorAll(): CanvasElement[] {
+    return [
+      this.children[0],
+      this.children.find(child => child.dataset['taoStudioDrawCanvas'] === 'true'),
+    ].filter((child): child is CanvasElement => child !== undefined)
   }
   setPointerCapture(id: number): void {
     this.captures.add(id)
@@ -276,6 +293,73 @@ Test('Studio restores viewport and menu frames selection in the current transfor
   })
 })
 
+Test('Studio Shift+1 frames the selection and Shift+2 the focused frame, from the page or a focused preview', () => {
+  let focused: { left: number; top: number; right: number; bottom: number } | undefined
+  canvasTest(({ controls, document, host }) => {
+    // Shift turns the digit into punctuation, so the physical key names the command.
+    const selection = emit(document, 'keydown', { code: 'Digit1', key: '!', shiftKey: true })
+    Expect(selection.defaultPrevented).toBe(true)
+    // Screen rect 120,130..320,230 fills the 500x400 host at 2.18x with 32px of padding.
+    const framed = controls.state()
+    Expect(framed.z).toBe(2.18)
+    Expect(framed.x).toBeCloseTo(-186)
+    Expect(framed.y).toBeCloseTo(-127)
+    Expect(host.children[0]!.properties['--studio-canvas-counter-scale']).toBe(String(1 / 2.18))
+    const before = controls.state()
+    Expect(emit(document, 'keydown', { code: 'Digit2', key: '@', shiftKey: true }).defaultPrevented).toBe(true)
+    Expect(controls.state()).toEqual(before)
+    focused = { left: 20, top: 30, right: 238, bottom: 139 }
+    emit(document, 'keydown', { code: 'Digit2', key: '@', shiftKey: true })
+    Expect(controls.state().z).toBe(4)
+    controls.reset()
+    const frame = new CanvasElement()
+    host.append(frame)
+    controls.iframeShortcut('zoom-selection', frame as unknown as Element)
+    Expect(controls.state()).toEqual(framed)
+    controls.reset()
+    const input = new CanvasElement()
+    input.typing = true
+    const typing = new Event('keydown', { cancelable: true })
+    Object.defineProperties(typing, {
+      code: { value: 'Digit1' },
+      shiftKey: { value: true },
+      target: { value: input },
+    })
+    document.dispatchEvent(typing)
+    Expect(typing.defaultPrevented).toBe(false)
+    Expect(emit(document, 'keydown', { altKey: true, code: 'Digit1', shiftKey: true }).defaultPrevented).toBe(false)
+    Expect(emit(document, 'keydown', { code: 'Digit3', shiftKey: true }).defaultPrevented).toBe(false)
+    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 1 })
+  }, {
+    focusedBounds: () => focused,
+    selectionBounds: () => ({ left: 120, top: 130, right: 320, bottom: 230 }),
+  })
+})
+
+Test('Studio ⌘0 fits the selection and ⌘+/⌘− keep it centred, and fit the whole canvas without one', () => {
+  let selection: { left: number; top: number; right: number; bottom: number } | undefined = {
+    left: 120,
+    top: 130,
+    right: 320,
+    bottom: 230,
+  }
+  canvasTest(({ controls, document }) => {
+    // The 500x400 host sits at 20,30, so the selection's centre is host point 200,150.
+    emit(document, 'keydown', { key: '=', metaKey: true })
+    Expect(controls.state()).toEqual({ x: -50, y: -25, z: 1.5 })
+    controls.reset()
+    emit(document, 'keydown', { key: '-', metaKey: true })
+    Expect(controls.state()).toEqual({ x: 100, y: 87.5, z: 0.75 })
+    controls.reset()
+    emit(document, 'keydown', { key: '0', metaKey: true })
+    Expect(controls.state().z).toBe(2.18)
+    Expect(controls.state().x).toBeCloseTo(-186)
+    selection = undefined
+    emit(document, 'keydown', { key: '0', metaKey: true })
+    Expect(controls.state()).toEqual({ x: 0, y: 0, z: 0.5 })
+  }, { selectionBounds: () => selection })
+})
+
 Test('Studio iframe shortcuts require a contained frame and enabled canvas', () => {
   canvasTest(({ controls, host, enabled }) => {
     const frame = new CanvasElement()
@@ -344,6 +428,8 @@ Test('Studio Draw Space panning transforms Draw and returns geometry ownership o
     }
     Expect(controls.state()).toEqual({ x: 90, y: 37.5, z: 1 })
     Expect(draw.style['transform']).toBe('translate(90px, 37.5px) scale(1)')
-    Expect(host.children[0]!.style['transform']).toBe('translate(0px, 0px) scale(1)')
+    // The grid moves with Draw, so the running views laid over drawn frames stay under them.
+    Expect(host.children[0]!.style['transform']).toBe('translate(90px, 37.5px) scale(1)')
+    Expect(host.children[0]!.properties['--studio-canvas-counter-scale']).toBe('1')
   })
 })

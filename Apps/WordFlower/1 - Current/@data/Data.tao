@@ -10,7 +10,10 @@ data Workspaces / Workspace { // the plural collection, then the singular entity
    Documents (owned), // deleting this owner also deletes its Documents
 
    index CreatedAt,
-   order by CreatedAt,
+   index Pinned,
+   order by Pinned desc,
+
+   commands { Pin, Unpin },
 }
 
 workspace
@@ -54,8 +57,27 @@ data FocusSessions / FocusSession {
 }
 
 // Entity commands live with the entity policy they participate in, so the data package never
-// imports the UI package that renders them. `Finish` and `Duplicate` are the ordered defaults;
+// imports the UI package that renders them. `Pin` and `Unpin` invert the workspace's stored flag;
+// `Finish` and `Duplicate` are the ordered document defaults;
 // destructive deletion is available only where a view explicitly lists it.
+workspace
+command Pin(Workspace) {
+   Title "Pin workspace"
+   Description "Moves this workspace to the top of the library."
+   Key "i"
+   Enabled Workspace.Pinned is no
+   do -> { toggle Workspace.Pinned }
+}
+
+workspace
+command Unpin(Workspace) {
+   Title "Unpin workspace"
+   Description "Returns this workspace to the unpinned library."
+   Key "u"
+   Enabled Workspace.Pinned is yes
+   do -> { toggle Workspace.Pinned }
+}
+
 workspace
 command Finish(Document) {
    Title "Finish document"

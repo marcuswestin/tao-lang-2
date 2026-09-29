@@ -296,7 +296,7 @@ Describe('gate catalog metadata', () => {
       const suite of [
         'ai/generation',
         'testing/host-control',
-        'providers/icloud',
+        'apps/providers/icloud',
         'apps/runtime',
         'shared',
         'apps/stdlib',
@@ -377,11 +377,19 @@ Describe('gate catalog metadata', () => {
       args: ['studio-canary'],
       command: 'just',
       cwd: REPOSITORY_ROOT,
+      env: { [GateCatalog.GUI_LEASE_HELD_ENV_KEY]: 'true' },
     })
     Expect(nodeOf('studio-canary').workerPool).toBeUndefined()
     for (const name of STUDIO_SMOKES) {
-      Expect(nodeOf(name).workerPool).toBe(GateCatalog.STUDIO_SMOKE_POOL)
-      Expect(typeof nodeOf(name).run).toBe('function')
+      const node = nodeOf(name)
+      Expect(node.workerPool).toBe(GateCatalog.STUDIO_SMOKE_POOL)
+      Expect(typeof node.run).toBe('function')
+      const command = typeof node.run === 'function' ? node.run({ slots: 1, workerIndex: 0 }) : node.run
+      Expect(command.env).toEqual(
+        name === 'studio-smoke-native'
+          ? { [GateCatalog.GUI_LEASE_HELD_ENV_KEY]: 'true' }
+          : undefined,
+      )
     }
   })
 

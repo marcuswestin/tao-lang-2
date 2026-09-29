@@ -1,4 +1,0 @@
-project {
-   id "agent-commands"
-   name "Agent Commands"
-}

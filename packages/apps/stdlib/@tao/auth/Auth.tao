@@ -41,8 +41,9 @@ type LoginFlow is {
    Reset action()
 }
 
+// Without a Method the flow uses Password when the app's Auth offers it, and otherwise the method it lists first.
 public
-function SignInFlow(Method text default "Password") returns LoginFlow {
+function SignInFlow(Method text? default none) returns LoginFlow {
    return SignInFlow(Method: Method) from ./AuthFlow.ts
 }
 

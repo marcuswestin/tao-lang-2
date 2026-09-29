@@ -1,0 +1,319 @@
+use Text, TextInput from @tao/ui
+
+folder
+view StudioInspectorSummary(CurrentSourceVersion text, Inspection text, Selection text, Content text, Path text) {
+   render StudioInspectorSummarySurface() {
+      loop StudioInspectorSummaryLines(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Content: Content, Path: Path) / Line {
+         Text(Line)
+}  }  }
+
+folder
+view StudioInspectorLayout(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, CanUndo boolean, Apply action(text, boolean), Undo action()) {
+   state Drafts = StudioInspectorLayoutDrafts(Inspection)
+   action ChangeDrafts(Value text) {
+      set Drafts = Value
+   }
+   render StudioInspectorSection("Layout") {
+      when StudioInspectorReady(Inspection: Inspection, Selection: Selection) {
+         false -> { Text(StudioInspectorStatus(Inspection: Inspection, Selection: Selection)) }
+         otherwise -> {
+            loop StudioInspectorLayoutFieldIds() / FieldId {
+               StudioInspectorLayoutField(Drafts: StudioInspectorDraftsFor(Section: "layout", Inspection: Inspection, Drafts: Drafts), FieldId: FieldId, ChangeDrafts: ChangeDrafts)
+            }
+            loop StudioInspectorLayoutActionIds() / ActionId {
+               StudioInspectorLayoutCommand(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: StudioInspectorDraftsFor(Section: "layout", Inspection: Inspection, Drafts: Drafts), Busy: Busy, ActionId: ActionId, Apply: Apply)
+      }  }  }
+      StudioInspectorUndoMarker() {
+         StudioButton(Label: "Undo visual edit", Press: Undo, Disabled: not StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo), Variant: "ghost")
+}  }  }
+
+view StudioInspectorLayoutField(Drafts text, FieldId text, ChangeDrafts action(text)) {
+   action Change(Value text) {
+      do ChangeDrafts(StudioInspectorUpdateDraft(Drafts: Drafts, FieldId: FieldId, Value: Value))
+   }
+   action Submit() { }
+   render StudioInspectorField(StudioInspectorLayoutFieldLabel(FieldId)) {
+      when StudioInspectorLayoutFieldUsesPicker(FieldId) {
+         true -> { StudioChoice(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Options: StudioInspectorLayoutFieldOptions(FieldId), Label: StudioInspectorLayoutFieldLabel(FieldId)) }
+         otherwise -> { TextInput(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Submit: Submit, Label: StudioInspectorLayoutFieldLabel(FieldId)) }
+}  }  }
+
+view StudioInspectorLayoutCommand(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean, ActionId text, Apply action(text, boolean)) {
+   action Invoke() {
+      do Apply(StudioInspectorLayoutAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts, ActionId: ActionId), false)
+   }
+   render StudioButton(Label: StudioInspectorLayoutActionLabel(ActionId), Press: Invoke, Disabled: not StudioInspectorLayoutActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId), Variant: "secondary")
+}
+
+folder
+view StudioInspectorStyle(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Apply action(text, boolean)) {
+   state Drafts = StudioInspectorStyleDrafts(Inspection)
+   action ChangeDrafts(Value text) {
+      set Drafts = Value
+   }
+   action ApplyStyle() {
+      do Apply(StudioInspectorStyleAction(Inspection: Inspection, Selection: Selection, Drafts: StudioInspectorDraftsFor(Section: "style", Inspection: Inspection, Drafts: Drafts)), true)
+   }
+   render StudioInspectorSection("Style") {
+      when StudioInspectorReady(Inspection: Inspection, Selection: Selection) {
+         false -> { Text(StudioInspectorStatus(Inspection: Inspection, Selection: Selection)) }
+         otherwise -> {
+            loop StudioInspectorStyleFieldIds() / FieldId {
+               StudioInspectorStyleField(Inspection: Inspection, Drafts: StudioInspectorDraftsFor(Section: "style", Inspection: Inspection, Drafts: Drafts), FieldId: FieldId, ChangeDrafts: ChangeDrafts)
+            }
+            StudioButton(Label: "Apply style entry", Press: ApplyStyle, Disabled: not StudioInspectorStyleActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: StudioInspectorDraftsFor(Section: "style", Inspection: Inspection, Drafts: Drafts), Busy: Busy), Variant: "primary")
+            loop StudioInspectorStylePromotionIds(Inspection) / PromotionId {
+               StudioInspectorStylePromotion(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId, Apply: Apply)
+            }
+            loop StudioInspectorStyleNotes(Inspection) / Note {
+               Text(Note)
+}  }  }  }  }
+
+view StudioInspectorStyleField(Inspection text, Drafts text, FieldId text, ChangeDrafts action(text)) {
+   action Change(Value text) {
+      do ChangeDrafts(StudioInspectorUpdateDraft(Drafts: Drafts, FieldId: FieldId, Value: Value))
+   }
+   action Submit() { }
+   render StudioInspectorField(StudioInspectorStyleFieldLabel(FieldId)) {
+      when StudioInspectorStyleFieldUsesPicker(FieldId) {
+         true -> { StudioChoice(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Options: StudioInspectorStyleFieldOptions(Inspection: Inspection, FieldId: FieldId), Label: StudioInspectorStyleFieldLabel(FieldId)) }
+         otherwise -> { TextInput(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Submit: Submit, Label: StudioInspectorStyleFieldLabel(FieldId)) }
+}  }  }
+
+view StudioInspectorStylePromotion(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, PromotionId text, Apply action(text, boolean)) {
+   action Promote() {
+      do Apply(StudioInspectorStylePromotionAction(Inspection: Inspection, Selection: Selection, PromotionId: PromotionId), true)
+   }
+   render StudioButton(Label: StudioInspectorStylePromotionLabel(Inspection: Inspection, PromotionId: PromotionId), Press: Promote, Disabled: not StudioInspectorStylePromotionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId), Variant: "secondary")
+}
+
+folder
+view StudioInspectorData(Inspection text, Selection text, ActiveCellId text, ActiveCellRevision number, ActiveScenarioId text) {
+   render StudioInspectorSection("Data") {
+      loop StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, ActiveCellId: ActiveCellId, ActiveCellRevision: ActiveCellRevision, ActiveScenarioId: ActiveScenarioId) / Line {
+         Text(Line)
+}  }  }
+
+// The Text section is canvas mode's binding surface: a Text leaf's literal can be edited, or the leaf
+// pointed at any parameter, loop item, local value, or entity field visible where it renders.
+// The draft names the element it was typed for, so selecting another Text leaf shows that leaf's
+// literal rather than the previous draft; the host resolves the draft against the inspection.
+folder
+view StudioInspectorText(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Apply action(text, boolean)) {
+   state Draft = ""
+   action ChangeDraft(Value text) {
+      set Draft = StudioInspectorTextUpdateDraft(Inspection: Inspection, Value: Value)
+   }
+   action SetText() {
+      do Apply(StudioInspectorSetTextAction(Selection: Selection, Content: StudioInspectorTextDraft(Inspection: Inspection, Draft: Draft)), false)
+   }
+   render StudioInspectorSection("Text") {
+      Text(StudioInspectorTextStatus(Inspection: Inspection, Selection: Selection))
+      when StudioInspectorTextAvailable(Inspection: Inspection, Selection: Selection) {
+         false -> { }
+         otherwise -> {
+            TextInput(Value: StudioInspectorTextDraft(Inspection: Inspection, Draft: Draft), Change: ChangeDraft, Submit: SetText, Label: "Text content")
+            StudioButton(Label: "Set text", Press: SetText, Disabled: not StudioInspectorSetTextValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, Draft: Draft), Variant: "primary")
+            loop StudioInspectorTextCandidates(Inspection) / Expression {
+               StudioInspectorTextBinding(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, Expression: Expression, Apply: Apply)
+}  }  }  }  }
+
+view StudioInspectorTextBinding(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Expression text, Apply action(text, boolean)) {
+   action Bind() {
+      do Apply(StudioInspectorBindTextAction(Selection: Selection, Expression: Expression), false)
+   }
+   render StudioButton(Label: StudioInspectorTextBindingLabel(Inspection: Inspection, Expression: Expression), Press: Bind, Disabled: not StudioInspectorTextActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy), Variant: "secondary")
+}
+
+folder
+view StudioInspectorActions(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Apply action(text, boolean)) {
+   render StudioInspectorSection("Actions") {
+      when StudioInspectorReady(Inspection: Inspection, Selection: Selection) {
+         false -> { Text(StudioInspectorStatus(Inspection: Inspection, Selection: Selection)) }
+         otherwise -> { loop StudioInspectorActionIds(Inspection: Inspection, Selection: Selection) / ActionId {
+            StudioInspectorActionCommand(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId, Apply: Apply)
+         } }
+}  }  }
+
+view StudioInspectorActionCommand(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, ActionId text, Apply action(text, boolean)) {
+   action Invoke() {
+      do Apply(StudioInspectorAction(Selection: Selection, ActionId: ActionId), false)
+   }
+   render StudioButton(Label: StudioInspectorActionLabel(ActionId), Press: Invoke, Disabled: not StudioInspectorActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId), Variant: "secondary")
+}
+
+function StudioInspectorReady(Inspection text, Selection text) returns boolean {
+   return StudioInspectorReady(Inspection: Inspection, Selection: Selection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStatus(Inspection text, Selection text) returns text {
+   return StudioInspectorStatus(Inspection: Inspection, Selection: Selection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorSummaryLines(CurrentSourceVersion text, Inspection text, Selection text, Content text, Path text) returns list of text {
+   return StudioInspectorSummaryLines(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Content: Content, Path: Path) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorUndoAvailable(Busy boolean, CanUndo boolean) returns boolean {
+   return StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutDrafts(Inspection text) returns text {
+   return StudioInspectorLayoutDrafts(Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutFieldIds() returns list of text {
+   return StudioInspectorLayoutFieldIds() from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutFieldLabel(FieldId text) returns text {
+   return StudioInspectorLayoutFieldLabel(FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutFieldUsesPicker(FieldId text) returns boolean {
+   return StudioInspectorLayoutFieldUsesPicker(FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutFieldOptions(FieldId text) returns list of text {
+   return StudioInspectorLayoutFieldOptions(FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorDraft(Drafts text, FieldId text) returns text {
+   return StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorUpdateDraft(Drafts text, FieldId text, Value text) returns text {
+   return StudioInspectorUpdateDraft(Drafts: Drafts, FieldId: FieldId, Value: Value) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutActionIds() returns list of text {
+   return StudioInspectorLayoutActionIds() from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutActionLabel(ActionId text) returns text {
+   return StudioInspectorLayoutActionLabel(ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutActionValid(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean, ActionId text) returns boolean {
+   return StudioInspectorLayoutActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutAction(Inspection text, Selection text, Drafts text, ActionId text) returns text {
+   return StudioInspectorLayoutAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts, ActionId: ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleDrafts(Inspection text) returns text {
+   return StudioInspectorStyleDrafts(Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleFieldIds() returns list of text {
+   return StudioInspectorStyleFieldIds() from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleFieldLabel(FieldId text) returns text {
+   return StudioInspectorStyleFieldLabel(FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleFieldUsesPicker(FieldId text) returns boolean {
+   return StudioInspectorStyleFieldUsesPicker(FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleFieldOptions(Inspection text, FieldId text) returns list of text {
+   return StudioInspectorStyleFieldOptions(Inspection: Inspection, FieldId: FieldId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleActionValid(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean) returns boolean {
+   return StudioInspectorStyleActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleAction(Inspection text, Selection text, Drafts text) returns text {
+   return StudioInspectorStyleAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStylePromotionIds(Inspection text) returns list of text {
+   return StudioInspectorStylePromotionIds(Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStylePromotionLabel(Inspection text, PromotionId text) returns text {
+   return StudioInspectorStylePromotionLabel(Inspection: Inspection, PromotionId: PromotionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStylePromotionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, PromotionId text) returns boolean {
+   return StudioInspectorStylePromotionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStylePromotionAction(Inspection text, Selection text, PromotionId text) returns text {
+   return StudioInspectorStylePromotionAction(Inspection: Inspection, Selection: Selection, PromotionId: PromotionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleNotes(Inspection text) returns list of text {
+   return StudioInspectorStyleNotes(Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorDataLines(Inspection text, Selection text, ActiveCellId text, ActiveCellRevision number, ActiveScenarioId text) returns list of text {
+   return StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, ActiveCellId: ActiveCellId, ActiveCellRevision: ActiveCellRevision, ActiveScenarioId: ActiveScenarioId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextAvailable(Inspection text, Selection text) returns boolean {
+   return StudioInspectorTextAvailable(Inspection: Inspection, Selection: Selection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextStatus(Inspection text, Selection text) returns text {
+   return StudioInspectorTextStatus(Inspection: Inspection, Selection: Selection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextLiteral(Inspection text) returns text {
+   return StudioInspectorTextLiteral(Inspection: Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorDraftsFor(Section text, Inspection text, Drafts text) returns text {
+   return StudioInspectorDraftsFor(Section: Section, Inspection: Inspection, Drafts: Drafts) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextDraft(Inspection text, Draft text) returns text {
+   return StudioInspectorTextDraft(Inspection: Inspection, Draft: Draft) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextUpdateDraft(Inspection text, Value text) returns text {
+   return StudioInspectorTextUpdateDraft(Inspection: Inspection, Value: Value) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorSetTextValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Draft text) returns boolean {
+   return StudioInspectorSetTextValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, Draft: Draft) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextCandidates(Inspection text) returns list of text {
+   return StudioInspectorTextCandidates(Inspection: Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextBindingLabel(Inspection text, Expression text) returns text {
+   return StudioInspectorTextBindingLabel(Inspection: Inspection, Expression: Expression) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextActionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean) returns boolean {
+   return StudioInspectorTextActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorSetTextAction(Selection text, Content text) returns text {
+   return StudioInspectorSetTextAction(Selection: Selection, Content: Content) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorBindTextAction(Selection text, Expression text) returns text {
+   return StudioInspectorBindTextAction(Selection: Selection, Expression: Expression) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorActionIds(Inspection text, Selection text) returns list of text {
+   return StudioInspectorActionIds(Inspection: Inspection, Selection: Selection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorActionLabel(ActionId text) returns text {
+   return StudioInspectorActionLabel(ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorActionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, ActionId text) returns boolean {
+   return StudioInspectorActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}
+
+function StudioInspectorAction(Selection text, ActionId text) returns text {
+   return StudioInspectorAction(Selection: Selection, ActionId: ActionId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+}

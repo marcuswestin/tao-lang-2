@@ -1,0 +1,13 @@
+use AuthProvider from @tao/auth
+
+// InstantAuth signs in with InstantDB's own email codes. An InstantDB datasource at the same address
+// shares its client, so the sign-in authenticates that datasource. Its issuer is `instantdb:<AppId>`.
+public
+type InstantAuth is AuthProvider with {
+   AppId text
+   ApiURI text?
+   WebsocketURI text?
+   issues { Session }
+
+   provider InstantAuthProvider from ./InstantAuth.ts
+}

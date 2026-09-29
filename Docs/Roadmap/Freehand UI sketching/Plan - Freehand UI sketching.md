@@ -6,7 +6,8 @@ record first; this plan cites the decisions rather than reopening their alternat
 tooling, Slice 1 (Draw), and Slice 2 (Snap) have landed; Slice 3 (Feed) is implemented on
 `feat/studio-feed-client` and awaits visual acceptance and landing. "Figma-at-home strides" and "Canvas-first design mode" below are two additional, currently
 active bodies of work that polish the landed slices and the Studio canvas UI without reopening
-FS-D1–FS-D20 or reordering the FS-D20 sequence.
+FS-D1–FS-D20. Decision H below moves the canvas strides ahead of L2; the rest of the FS-D20 order is
+unchanged.
 
 ## Ground rules
 
@@ -47,8 +48,8 @@ FS-D1–FS-D20 or reordering the FS-D20 sequence.
 | 5  | Slice 3 — Feed                     | Bind a sketch to real, generated, live, or library data      | Slice 2                                     | XL   |
 | 6  | L2 — executable dialect            | WordFlower yes/no parameters and postfix conditions          | Slice 3                                     | XL   |
 | 7  | Slice 4 — Variants                 | Duplicate scenario cells and edit one argument state         | L2                                          | L    |
-| 8  | L3 — positioned container          | Studio's Tao client renders free rectangle rows              | Slice 4; settled container/offset spellings | XL   |
-| 9  | Slice 5 — Tao-rendered canvas      | Replace the matrix overlay with the L3 container             | L3                                          | M    |
+| 8  | L3 — `Layer` (landed 2026-09-27)   | Studio's Draw canvas is to render free rectangles as layers  | Landed ahead of Slice 4 by Developer choice | S    |
+| 9  | Slice 5 — Tao-rendered canvas      | Replace the matrix overlay with `Layer` views                | L3                                          | M    |
 | 10 | Slice 6 — Focus-in                 | Open an occurrence's owning view with provenance arguments   | Interaction-outline provenance              | L    |
 | 11 | Slice 7 — Companion                | Pencil-mode sketching in one paired native cell              | Slice 5; companion app shell                | XL   |
 
@@ -340,33 +341,32 @@ scenario naming and `when` output.
 
 ---
 
-## L3 — the positioned container
+## L3 — `Layer`
 
-**Decision.** FS-D5, constrained by KEY-D7.
+**Decision.** FS-D5, amended 2026-09-27: `Decisions.md` §9 decides `Layer`, replacing the `Canvas`
+container and `at x y` offset this slice first proposed.
 
 **Goal.** Let Studio's own Tao client render Studio-owned rectangle rows without making absolute
-positioning a product-layout escape hatch.
+positioning a clause every view accepts.
 
-**Dependencies.** Slice 4 and the spellings below. **Size.** XL.
+**Dependencies.** None; it landed ahead of Slice 4 by Developer choice. **Size.** S.
 
-**Forcing feature.** The Studio canvas renders its catalog through a positioned container and direct
-child offsets.
+**Forcing feature.** Studio's Draw canvas will render free rectangles as `Layer` views inside the
+canvas frame; that is Slice 5, so until it lands the canvas still draws them in its TypeScript
+overlay.
 
-**Introduces.** One positioned stdlib container and one direct-child offset clause, with validation
-restricting offsets to that parent. The runtime accepts reactive Studio data and preserves ordinary
-selection, accessibility, and event semantics. WordFlower contains the smallest honest forcing
-example needed to absorb the spelling.
+**Introduces.** Implemented 2026-09-27: `@tao/ui` `Layer` with optional `InsetTop`, `InsetRight`,
+`InsetBottom`, and `InsetLeft`, lowered to React Native absolute positioning inside the injected
+render. An axis with no inset sits at its start edge; children stack and hug like `Stack`; source
+order is paint order. Because `Layer` is a view and not a clause, no validation restricts where it
+appears.
 
-**Tests.** Tao behavior tests prove offsets, sizing, ordering, invalid parents/nesting, events, and
-web/native behavior. Studio journey compares Tao rendering against the Slice 1 overlay geometry.
+**Tests.** `Apps/Test Apps/Runtime Stdlib Tests` renders a `Layer` in its Tao behavior test, and
+`layout-e2e.jest-test.tsx` asserts the lowered styles, since Tao tests cannot yet assert layout.
+The Studio journey against Slice 1 overlay geometry lands with Slice 5.
 
-**Reconcile.** `Decisions.md` §9 and KEY-D7's floating anchored-layer relationship, Layout/UI,
-stdlib catalog, WordFlower tiers, and Coverage.
-
-**Open before starting.** Settle in `2 - Next` the container name (`Canvas` recommended), the offset
-spelling (`at x y` recommended), accepted value types, whether nesting is legal, and the explicit
-relationship to KEY-D7's floating anchored layers. This container renders Studio data; it does not
-reinstate product-source sketches withdrawn by FS-D1.
+**Reconcile.** Done for `Decisions.md` §9, Layout/UI, and the product document. WordFlower gains a
+forcing example only if one of its screens needs an overlay.
 
 ---
 
@@ -374,7 +374,7 @@ reinstate product-source sketches withdrawn by FS-D1.
 
 **Decision.** FS-D5.
 
-**Goal.** Replace the TypeScript rectangle overlay with the L3 container in Studio's own Tao client.
+**Goal.** Replace the TypeScript rectangle overlay with `Layer` views in Studio's own Tao client.
 
 **Dependencies.** L3. **Size.** M.
 
@@ -562,18 +562,26 @@ of it stays catalog-only, so no language change and no compile per keystroke.
   Shift+arrows by ten, coalesced into one `update-rect` per burst. Escape cancels a gesture in
   progress, otherwise clears selection. ⌘D duplicates in place with a small offset
   (`duplicate-rect`). ⌘A selects every free rectangle in the sketch. ⇧A snaps the selection, or every
-  free rectangle when nothing is selected. Enter edits the selected rectangle's content. T, B, and I
-  retype the selection to `Text`, `Button`, and `Image`. Tab and Shift+Tab walk `rectOrder`.
+  free rectangle when nothing is selected. Enter edits the selected rectangle's content. ⇧T, ⇧B, and
+  ⇧I retype the selection to `Text`, `Button`, and `Image` (decision I). Tab and Shift+Tab walk
+  `rectOrder`.
 - **b. Tool model.** V is select: dragging empty sketch space draws a marquee, Shift adds to it. R
   is draw: dragging creates a rectangle as today. T draws a `Text` rectangle. Dragging empty canvas
   outside any sketch still creates a sketch. A three-button strip above the sketch shows the active
-  tool. Ruled by decision B.
+  tool. Ruled by decision B, refined by decision G: the strip is one canvas-wide strip, and R draws a
+  frame on empty canvas and a rectangle inside a sketch. **Implemented 2026-09-27:** the strip sits
+  on the canvas's top edge outside the zoom; V is the resting tool, a drawing tool hands back to V
+  after one shape as in Figma, T opens its new rectangle for typing, and Escape hands back to V
+  before clearing selection. Decision I moves stride 1a's retype keys to Shift so they no longer
+  collide with the tools.
 - **c. Constraints.** Shift keeps a square while drawing or corner-resizing and locks the axis while
   moving; Option resizes from the centre.
 - **d. Undo.** ⌘Z and ⇧⌘Z walk one client-held, time-ordered stack over catalog gestures and source
   checkpoints. A catalog entry stores its inverse action and replays it through the versioned
   endpoint with the expected revision; a source entry reuses the existing checkpoint undo. Ruled by
-  decision C.
+  decisions C and F. **⌘Z implemented 2026-09-27:** each rectangle gesture and frame move is one edit
+  log row whose inverse is a `restore-sketch` of the sketch's prior geometry, applied only while the
+  sketch still holds what the gesture left. ⇧⌘Z redo remains open.
 - **e. Numbers.** X, Y, W, and H fields that accept arithmetic (`100+20`), a sketch size badge with
   the `phone`, `tablet`, and `laptop` presets, and edge handles on the sketch itself. Resizing the
   sketch is one transaction: the catalog size plus the generated `Placeholder` size and `device`
@@ -691,8 +699,15 @@ Every edit lands in that one definition and shows in every occurrence.
 
 ### After these strides
 
-FS-D20's order continues unchanged: L2, Slice 4 Variants, L3, Slice 5 Tao-rendered canvas, Slice 6
-Focus-in, Slice 7 Companion. Stride 2d's flow gestures serve variant cells later, and stride 1's
+Decision H puts the canvas work ahead of L2, headed by the live-preview composition slice: a drawn
+definition renders as a live cell under its Draw board, so drawing composes real rendered views, and a
+drawn group dropped into a preview inserts its code there. Its first cut is implemented: each drawn
+view runs under its frame in Draw, reusing the grid's cells so nothing reloads, and a drawn frame
+dragged by its header onto another drawn view's running cell renders into that view at the end of its
+first render block (`Docs/Spec/Tao Studio.md`, "Selection, grouping, and the edit log"). Still open in
+the slice: dropping at a chosen gap using the palette's gap indicators, dropping into source-backed
+views that are not drawn, and live cells inside render cards. FS-D20's order then continues: L2, Slice 4
+Variants, L3, Slice 5 Tao-rendered canvas, Slice 6 Focus-in, Slice 7 Companion. Stride 2d's flow gestures serve variant cells later, and stride 1's
 undo stack is what Slice 4's cell edits will join.
 
 ### Decisions
@@ -709,6 +724,18 @@ Settled by the Developer on 2026-09-04, taking the recommendations.
   on the real-screen corpus. Keeping FS-D11's rule set unchanged was declined.
 - **E. Stride order.** 0, 1, 2, 3, 4. Taking Feed first was declined; every later gesture reuses
   selection, keys, and undo.
+
+Settled by the Developer on 2026-09-27, taking the recommendations.
+
+- **F. Draw edits on the one stack.** ⌘Z covers Draw's catalog-only sketch edits in the same stack
+  and edit log as visual source edits, rather than a separate Draw-only undo.
+- **G. One tool strip.** A single canvas-wide strip; R draws a frame on empty canvas and a rectangle
+  inside a sketch, rather than separate frame and rectangle tools.
+- **H. Canvas before L2.** The canvas strides go before the L2 language tranche, headed by the
+  live-preview composition slice.
+- **I. Retype keys.** Delegated by the Developer: bare V, R, and T pick tools, and Shift plus a
+  letter acts on the selection, so ⇧T, ⇧B, and ⇧I retype to `Text`, `Button`, and `Image`, alongside
+  ⇧A for Snap.
 
 A decision discovered during implementation joins the next round with the Developer; it is not decided silently.
 
@@ -988,6 +1015,33 @@ size equals the occurrence size within 1 px, Focus tool outlines the owner not t
 dwell-to-enter lands as a child, empty states present) and a screenshot pair in
 `.artifacts/studio-smoke/` reviewed by eye before landing. The simulated lane runs in `verify-full`
 and met "Figma-at-home strides"'s ten-green-runs condition on 2026-09-20.
+
+## Draw workbench
+
+Two Draw-mode frames were compared on 2026-09-26. The Developer chose frame A (code with the scenario
+inputs pinned under it on the left, the canvas centre, the full inspector right) with frame B's
+selection HUD and edit log from the start, and B's multi-cell stage once scenario variants land.
+
+Decided alongside it:
+
+1. Free placement stays sketch data (FS-D1) and shows as a ghost line in the code pane.
+2. ⌘G extracts a view; ⌥⌘G wraps the selection inline in `Row` or `Col`.
+3. An extracted view lives in its parent's file when the parent is hand-written, and in `@/studio/`
+   when the parent was born on the canvas.
+4. A root rectangle that renders an existing view is a scenario entry.
+5. Isolate captures arguments once FS-D15 lands; until then it starts from the view's first scenario
+   entry.
+
+### Where it stands
+
+- **Done:** the frame, Shift-click multi-select with ⌘G and ⌥⌘G, the edit log that ⌘Z walks back,
+  visual edits and their undo writing `@/studio` views through the generated-source gate, the
+  selection HUD, and the Definition/Render badge on root rectangles with render entries and detach.
+  Focusing a view opens its declaration in the code pane.
+  `Docs/Spec/Tao Studio.md` records the contract.
+- **Next:** show free placement as a ghost line in the code pane, and fold the rest of a focused
+  view's file away.
+- **After scenario variants:** B's multi-cell stage, one row of cells per variant of the isolated view.
 
 ## Post-MVP target — paper sketch to editable Studio views
 
