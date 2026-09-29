@@ -205,8 +205,14 @@ Describe('tao connect', () => {
         'deploy',
         'deploy',
       ])
-      Expect(pauses).toEqual([20_000])
-      Expect(terminal.outputText()).toContain('retrying in 20 seconds (attempt 2 of 6)')
+      Expect(pauses).toEqual([10_000])
+      Expect(terminal.outputText()).toContain(
+        'Waiting for Firebase project to finish setup. Retrying in 10 seconds (attempt 2 of 10)…',
+      )
+      Expect(terminal.outputText()).toContain(
+        'Firebase connect completed.\nTo open Hosted CRUD in Expo Go and choose Firebase',
+      )
+      Expect(terminal.outputText()).not.toContain('Appwrite')
       Expect(calls.find(call => call[0] === 'login')).toEqual(['login', '--reauth'])
       Expect(calls.filter(call => call[0] === 'deploy')[0]).toContain('auth,firestore:rules')
       Expect(await FS.readJson(FS.resolvePath('.tao/firebase-connect/firebase.json', root))).toEqual({

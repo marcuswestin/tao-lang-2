@@ -18,8 +18,8 @@ type FirebaseProvisionOptions = {
 }
 
 /** A project created seconds earlier answers 403 until Google propagates its permissions and APIs. */
-const DEPLOY_ATTEMPTS = 6
-const DEPLOY_RETRY_MILLISECONDS = 20_000
+const DEPLOY_ATTEMPTS = 10
+const DEPLOY_RETRY_MILLISECONDS = 10_000
 
 /** Provisions the disposable Hosted CRUD Firebase backend through Google's supported CLI. */
 export async function provisionFirebase(options: FirebaseProvisionOptions): Promise<FirebaseConfig> {
@@ -198,7 +198,7 @@ export async function provisionFirebase(options: FirebaseProvisionOptions): Prom
         throw error
       }
       HCI.writeLine(
-        `Firebase is still granting access to the new project; retrying in ${
+        `Waiting for Firebase project to finish setup. Retrying in ${
           DEPLOY_RETRY_MILLISECONDS / 1000
         } seconds (attempt ${attempt + 1} of ${DEPLOY_ATTEMPTS})…`,
         out,

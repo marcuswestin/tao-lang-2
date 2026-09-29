@@ -190,26 +190,25 @@ export async function runTaoConnect(
   await FS.writeJson(publicPath, { ...publicConfig, [provider]: publicFields })
 
   HCI.writeLine(`Saved public ${provider} config to ${FS.displayPath(publicPath)}.`, out)
+  const service = provider === 'firebase' ? 'Firebase' : 'Appwrite'
   if (provider === 'firebase' && !firebaseAutomated) {
+    HCI.writeLine('Firebase settings were saved, but cloud resources were not provisioned or checked.', out)
     HCI.writeLine('Next in Firebase Console:', out)
     HCI.writeLine('1. Security > Authentication > Sign-in method: enable Email/Password and Save.', out)
     HCI.writeLine('2. Databases & Storage > Firestore: create a database in a chosen location.', out)
     HCI.writeLine('   Choose production mode initially, then open Firestore > Rules.', out)
     HCI.writeLine('3. Paste Apps/Hosted CRUD/src/firebase/firestore.rules and click Publish.', out)
-    HCI.writeLine('4. From the repository root run just hosted-crud, scan the QR code in Expo Go,', out)
-    HCI.writeLine('   and choose Firebase on the first screen.', out)
   } else {
-    HCI.writeLine('Appwrite project configuration applied. Next:', out)
-    HCI.writeLine('1. From the repository root run just hosted-crud, scan the QR code in Expo Go,', out)
-    HCI.writeLine('   and choose Appwrite on the first screen.', out)
-  }
-  if (provider === 'firebase' && !firebaseAutomated) {
-    HCI.writeLine('Firebase settings were saved, but cloud resources were not provisioned or checked.', out)
+    HCI.writeLine(`${service} connect completed.`, out)
   }
   HCI.writeLine(
-    'Only Apps/Hosted CRUD currently reads the public settings. A normal Tao app still needs a provider bridge.',
+    `To open Hosted CRUD in Expo Go and choose ${service} on its first screen, run from the repository root:`,
     out,
   )
+  HCI.writeLine('', out)
+  HCI.writeLine('    just hosted-crud', out)
+  HCI.writeLine('', out)
+  HCI.writeLine('', out)
 }
 
 function parseFirebaseConfigSnippet(snippet: string): Record<string, string> {
