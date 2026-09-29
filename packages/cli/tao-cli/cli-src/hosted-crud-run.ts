@@ -2,7 +2,7 @@ import { CLI, Errors, FS, HCI } from '@shared'
 import type { Writable } from 'node:stream'
 
 type ExpoResult = { exitCode: number | null; stdout: string; stderr: string }
-export type ExpoRunner = (
+type ExpoRunner = (
   expo: string,
   args: readonly string[],
   cwd: string,
