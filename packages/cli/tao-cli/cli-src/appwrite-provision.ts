@@ -112,7 +112,10 @@ export async function provisionAppwriteProject(
   if (projects.length > 0) {
     HCI.writeLine(`Appwrite projects in this organization: ${projects.map(value => value['$id']).join(', ')}`, out)
   }
-  const current = options.currentProjectId?.includes('REPLACE_WITH') ? undefined : options.currentProjectId
+  // A run that failed after creating its project never saved the ID; reuse that project rather than
+  // spending one of the Free plan's two.
+  const current = (options.currentProjectId?.includes('REPLACE_WITH') ? undefined : options.currentProjectId)
+    ?? projects.map(value => String(value['$id'])).find(id => id.startsWith('tao-hosted-crud-'))
   const generated = `tao-hosted-crud-${Platform.randomUUID().replaceAll('-', '').slice(0, 6)}`
   const entered = (await options.prompts.text(
     current

@@ -209,6 +209,24 @@ Describe('tao connect', () => {
     }
   })
 
+  Test('reuses a Tao-created Appwrite project whose ID a failed run never saved', async () => {
+    const root = await mkTestDir('tao-connect-appwrite-orphan-')
+    try {
+      const cli = fakeAppwriteCli([{ $id: 'other', region: 'fra' }, { $id: 'tao-hosted-crud-abc123', region: 'syd' }])
+      await runTaoConnect('appwrite', root, {
+        ...scripted(['', '']).options,
+        appwriteRunner: cli.runner,
+        fetch: fakeAppwriteCloud('tao-hosted-crud-abc123').fetchImpl,
+      })
+      Expect(await FS.readJson(FS.resolvePath('tao.connections.json', root))).toMatchObject({
+        appwrite: { endpoint: 'https://syd.cloud.appwrite.io/v1', projectId: 'tao-hosted-crud-abc123' },
+      })
+      Expect(cli.calls.some(call => call.args[1] === 'create-project')).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('declining a typed Appwrite project ID creates nothing', async () => {
     const root = await mkTestDir('tao-connect-appwrite-decline-')
     try {
