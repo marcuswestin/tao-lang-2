@@ -108,7 +108,8 @@ async function askIPhoneSignedIn(account: string, options: HostedCrudRunOptions)
   }
   const answer = await HCI.askText({
     ...terminal,
-    message: `Type yes once Expo Go on your iPhone is signed in as ${account}, or press Return to use the iOS Simulator`,
+    message:
+      `Type yes once Expo Go on your iPhone is signed in as ${account}, or press Return to use the iOS Simulator`,
     validate: value => ['', 'y', 'yes'].includes(value.trim().toLowerCase()) ? undefined : 'Type yes, or press Return.',
   })
   return answer.trim() !== ''
