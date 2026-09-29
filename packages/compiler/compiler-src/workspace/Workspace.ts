@@ -1,4 +1,3 @@
-import { Packages } from '@ast-utils'
 import { type AST, Langium, Parser, type ParseResult } from '@parser'
 import { Assert, type Diagnostic, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
@@ -218,7 +217,10 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     if (Object.keys(this.project.services.sourceOverrides ?? {}).length > 0) {
       return
     }
-    const projectRoot = await Packages.containingProjectRoot(this.project.root) ?? this.project.root
+    // The package index already found the containing project root when this workspace opened.
+    // Asking again re-read and re-parsed every root `.tao` file on each compile, about 10ms a
+    // Studio preview edit, and could disagree with the root that imports resolve against.
+    const projectRoot = this.project.packagesContext.index.projectRoot
     await BridgeMetadata.write(files.filter(file => FS.pathIsWithin(file.path, projectRoot)))
   }
 

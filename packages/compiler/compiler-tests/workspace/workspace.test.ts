@@ -667,6 +667,39 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
+  // Bridge metadata reuses the project root the package index found when the workspace opened,
+  // rather than re-reading and re-parsing every root file per compile to find it again.
+  Test('writes bridge metadata for imported files under the project root the workspace opened in', async () => {
+    await withTaoFiles(
+      'tao-workspace-bridge-project-root-',
+      {
+        'App/Project.tao': 'project { id "bridge-root" name "Bridge Root" }',
+        'App/@data/Data.tao': 'workspace action Read() returns text from ./Bindings.ts',
+        'App/@data/Bindings.ts': 'export const Read = () => "read"\n',
+        'App/screens/Main.tao': `
+          use Read from @data
+          app BridgeRoot { view MainView }
+          view MainView() {
+            action Load() { let Value = do Read() }
+            render Empty()
+          }
+          view Empty() { render inject ${tsFence} return null ${fence} }
+        `,
+      },
+      async (paths, rootDir) => {
+        const workspace = await Workspace.open(FS.resolvePath('App/screens', rootDir))
+
+        for (let compile = 0; compile < 2; compile += 1) {
+          const compiled = await workspace.compile(paths['App/screens/Main.tao']!)
+          Expect(errorMessages(compiled.validation)).toEqual([])
+        }
+
+        Expect(await FS.readText(`${paths['App/@data/Data.tao']!}.ts`)).toContain('Sidecar.Read')
+        Expect(await FS.isFile(Repo.resolvePath('packages/apps/stdlib/@tao/Prelude.tao.ts'))).toBe(false)
+      },
+    )
+  })
+
   Test('rejects entry files outside the workspace root', async () => {
     await withTaoFiles(
       'tao-workspace-root-',
