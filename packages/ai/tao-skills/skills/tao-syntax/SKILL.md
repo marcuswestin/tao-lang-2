@@ -1,6 +1,8 @@
 ---
 name: tao-syntax
-description: Write implemented Tao declarations, render trees, slots, expressions, conditions, and canonical source.
+description: >-
+  Write implemented Tao syntax. Use before authoring or correcting declarations, render trees,
+  slots, expressions, conditions, or canonical source; future language design needs a separate decision.
 ---
 
 # Tao Syntax

@@ -10,8 +10,9 @@ from vendor examples around Tao's named permission boundary.
 Codex sees a skill's name and description first, then loads its body when the request matches or
 the user invokes it. Claude Code similarly uses descriptions for automatic selection, with the
 body loaded on invocation. This is model selection, not a guaranteed hook before every window
-opens. Tao's root guide therefore explicitly requires reading this skill before launching or
-controlling development or test UI. The Developer need not repeat its name in each request.
+opens. This skill's YAML description owns its before-launch and computer-control activation
+conditions; the root guide only points to the owner. The Developer need not repeat its name in
+each request, but discovery still depends on the harness exposing and selecting the skill.
 [OpenAI skills](https://developers.openai.com/plugins/concepts/skills),
 [Claude Code skills](https://code.claude.com/docs/en/skills).
 
@@ -134,20 +135,21 @@ No native app was launched during this audit; no hidden Electrobun mode is claim
 
 ## Repository cross-check
 
-| Finding                                                                              | Resolution or remaining evidence                                                                                                                                                                   |
-| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Quiet skill was discoverable but not explicitly required by the root guide before UI | Added the root read-before-launch instruction; retained the skill's specific trigger description.                                                                                                  |
-| Quiet skill's hidden-first wording conflicted with in-app browser preference         | In-app review now comes first; headless execution remains for needed automation, isolation, and repeatability.                                                                                     |
-| Browser skill exempted verification but left headless dev loops ambiguous            | Explicitly exempted repository-controlled headless development runners and explained the two sessions.                                                                                             |
-| Help implied a DevTools endpoint alone provided automation                           | Help now requires a CDP client and identifies the separate in-app app URL.                                                                                                                         |
-| Chrome failed-start cleanup lacked normal shutdown escalation                        | Shared one bounded termination/profile cleanup path for startup failure and normal exit.                                                                                                           |
-| Native proof lanes existed but were hard to discover                                 | Added exact named smoke examples and the visible/native consent boundary to help.                                                                                                                  |
-| Agent role/default configuration named an older Sol release                          | Selection policy now uses newest available GPT-6 Sol; concrete canonical defaults refreshed to the current catalog ID. Generated Codex outputs still require a normal-terminal setup on this host. |
-| Simulator screenshot/input discoverability and full lifecycle proof                  | Remain follow-up work; boot/install success is not UI acceptance.                                                                                                                                  |
+| Finding                                                                      | Resolution or remaining evidence                                                                                                                                                                                          |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Quiet UI activation was duplicated in the root guide                         | Made the YAML description the activation owner; kept only a root ownership pointer.                                                                                                                                       |
+| Quiet skill's hidden-first wording conflicted with in-app browser preference | In-app review now comes first; headless execution remains for needed automation, isolation, and repeatability.                                                                                                            |
+| Browser skill exempted verification but left headless dev loops ambiguous    | Explicitly exempted repository-controlled headless development runners and explained the two sessions.                                                                                                                    |
+| Help implied a DevTools endpoint alone provided automation                   | Help now requires a CDP client and identifies the separate in-app app URL.                                                                                                                                                |
+| Chrome failed-start cleanup lacked normal shutdown escalation                | Shared one bounded termination/profile cleanup path for startup failure and normal exit.                                                                                                                                  |
+| Native proof lanes existed but were hard to discover                         | Added exact named smoke examples and the visible/native consent boundary to help.                                                                                                                                         |
+| Agent role/default configuration named an older Sol release                  | Selection policy now uses newest available GPT-6 Sol; concrete canonical defaults refreshed to the current catalog ID. Generated defaults now match canonical sources; configuration freshness and generation tests pass. |
+| Simulator screenshot/input discoverability and full lifecycle proof          | Remain follow-up work; boot/install success is not UI acceptance.                                                                                                                                                         |
 
 `.rulesync/permissions.jsonc` already admits named app-dev, Studio smoke, simulator lifecycle, and
 Android diagnostics/boot operations. This pass adds no host-operation name, network exception,
 dependency, or native permission grant. Installed harness browser tools and native automation
-consent cannot be established by a repository configuration file alone. Setup in this session
-reported protected Codex outputs unwritable; do not call those generated defaults refreshed until
-setup succeeds from an allowed host context.
+consent cannot be established by a repository configuration file alone. Earlier setup attempts
+reported protected Codex outputs unwritable. The current generated defaults subsequently matched
+their canonical sources, and configuration freshness and generation tests passed; those checks
+establish repository configuration consistency, not host UI permissions.

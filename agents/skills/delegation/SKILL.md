@@ -1,7 +1,10 @@
 ---
 name: delegation
 description: >-
-  Decide whether to hand work to a subagent, which model tier and effort it runs at, what its brief must contain, and how to check what it returns. Use when a task involves broad search, codebase exploration, web research, long command output, independent review, or two workstreams that could run at once, whenever choosing between doing work yourself and spawning an agent, and whenever the Developer asks you to write, print, or hand over a prompt for another agent to run. Also covers dividing significant multi-piece work across concurrent writers with exclusive path ownership (`references/parallel-implementation.md`, used when two or more substantial workstreams can proceed concurrently without sharing mutable seams) and fanning a large read-only review out across many units (`references/review-fanout.md`, used to audit every merge on main, review a tranche, or review every commit).
+  Delegate work, select subagent models and effort, write briefs, and assess returns. Use for
+  broad searches, codebase exploration, web research, long outputs, independent reviews,
+  background work, parallel implementation, or review fan-outs; also before first delegation or
+  preparing another agent's prompt.
 ---
 
 # Delegation

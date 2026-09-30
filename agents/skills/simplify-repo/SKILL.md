@@ -1,10 +1,9 @@
 ---
 name: simplify-repo
 description: >-
-  Plan and run a repository-wide simplification pass: remove code through shared functions, bring
-  code to the house patterns, shrink agent instructions and documentation, move written rules into
-  code that enforces them, and consolidate packages. Use when the Developer asks to simplify the repo, run a
-  simplification or cleanup pass, reduce instructions or docs, or invokes /simplify-repo.
+  Plan and run Tao repository simplification. Use when asked for a repository cleanup pass,
+  reduced instructions or documentation, package consolidation, or /simplify-repo; organize
+  changes around shared functions, established patterns, and enforceable rules.
 ---
 
 # Simplify Repo

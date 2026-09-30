@@ -71,6 +71,7 @@ change that addressed it.
 - [DEVENV-A-MERGE-OF-MAIN-LEAVES-THE-CODEX-CONFIG-MISSING-UNTIL-SETUP-RUNS — A merge of main leaves the Codex config missing until setup runs](<Developer environment upgrades/DEVENV-A-MERGE-OF-MAIN-LEAVES-THE-CODEX-CONFIG-MISSING-UNTIL-SETUP-RUNS.md>) — In progress
 - [DEVENV-ACTIVE-NETWORK-POLICY-KEEPS-OLD-DOMAINS — Active network policy keeps old domains](<Developer environment upgrades/DEVENV-ACTIVE-NETWORK-POLICY-KEEPS-OLD-DOMAINS.md>) — Blocked
 - [DEVENV-ADMITTED-SEAT-HELD-BY-REGISTRATION-NOT-DEMAND — An admitted seat is held by registration, not by demand](<Developer environment upgrades/DEVENV-ADMITTED-SEAT-HELD-BY-REGISTRATION-NOT-DEMAND.md>) — Candidate
+- [DEVENV-ANDROID-EMULATOR-LEASE-RELEASE-PRECEDES-EXIT — Android emulator lease release precedes confirmed exit](<Developer environment upgrades/DEVENV-ANDROID-EMULATOR-LEASE-RELEASE-PRECEDES-EXIT.md>) — Candidate
 - [DEVENV-APP-DEV-WEB-OPENS-CHROME-IN-THE-FOREGROUND — `app-dev --web` opens Chrome in the foreground](<Developer environment upgrades/DEVENV-APP-DEV-WEB-OPENS-CHROME-IN-THE-FOREGROUND.md>) — In progress
 - [DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM — Claude Code is below the configured Opus minimum](<Developer environment upgrades/DEVENV-CLAUDE-CODE-BELOW-CONFIGURED-OPUS-MINIMUM.md>) — Candidate
 - [DEVENV-CODEX-HOST-COMMANDS-COST-THE-CREDENTIAL-READ-DENIES — Codex host commands cost the credential read denies](<Developer environment upgrades/DEVENV-CODEX-HOST-COMMANDS-COST-THE-CREDENTIAL-READ-DENIES.md>) — Deferred

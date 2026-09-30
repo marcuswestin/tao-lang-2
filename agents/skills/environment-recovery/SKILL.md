@@ -1,7 +1,10 @@
 ---
 name: environment-recovery
 description: >-
-  Recover a Tao worktree whose tooling is wrong rather than whose code is wrong: a missing devenv profile, a tool shell without `.devenv/profile/bin` on PATH, a `bun install` the sandbox denied, a sandbox denial you cannot tell from a missing host tool, headless Chrome the host blocks, or a stray process and the port it is holding. Use when a repository command fails for a reason that is not the branch, when `which bun` looks wrong, when an install reports EEXIST or PermissionDenied, or when choosing between a sandboxed and an unsandboxed shell.
+  Recover Tao tooling failures that command output and checkout diagnosis do not resolve. Use for
+  missing devenv profiles, wrong Bun or PATH, denied installs, EEXIST, PermissionDenied,
+  host-blocked browsers, stray processes, or occupied ports; also when choosing sandboxed versus
+  host execution.
 ---
 
 # Environment Recovery

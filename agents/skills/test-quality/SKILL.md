@@ -1,7 +1,9 @@
 ---
 name: test-quality
 description: >-
-  Write, review, consolidate, or delete Tao tests: vacuous or self-fulfilling assertions, coverage before a parity claim, shared test helpers, global test state, captured output, test file naming, and README claims a journey does not prove.
+  Assess and improve Tao test quality. Use when writing, reviewing, consolidating, or deleting
+  tests, or assessing parity coverage, vacuous assertions, shared helpers, global state, captured
+  output, test naming, or claims that behavior journeys do not prove.
 ---
 
 # Test Quality

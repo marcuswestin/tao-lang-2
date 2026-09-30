@@ -1,7 +1,10 @@
 ---
 name: verification-lanes
 description: >-
-  Choose and use Tao test, verification, retry, sandbox, reporting, and human merge workflows.
+  Choose and interpret Tao verification workflows. Use when selecting or running test and
+  verification lanes, diagnosing failures, retrying, choosing sandbox or host execution,
+  assessing cache or test selection, reporting long gates, preparing finalize, or evaluating
+  landing evidence and merge readiness.
 ---
 
 # Verification Lanes

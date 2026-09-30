@@ -1,6 +1,10 @@
 ---
 name: browser-use
-description: Choose the harness's in-app browser for interactive browsing, development review, and browser UI. Use an external interactive browser only when the Developer requests it. Repository-controlled headless development and verification runners use their configured Chrome.
+description: >-
+  Choose a browser surface for interactive browsing, browser UI automation, and development
+  review. Use before those activities: prefer the harness's in-app browser; external interactive
+  browsers require the Developer's request. Repository headless runners keep their configured
+  Chrome.
 ---
 
 # Browser Use

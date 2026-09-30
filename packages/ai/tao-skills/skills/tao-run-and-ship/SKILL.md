@@ -1,6 +1,9 @@
 ---
 name: tao-run-and-ship
-description: Run Tao apps through Expo, use Studio and visual review, and ship through TestFlight or App Store Connect.
+description: >-
+  Run and ship Tao apps. Use when starting an Expo dev loop, opening an app in Studio for review,
+  preparing device execution, or releasing through TestFlight or App Store Connect; publishing still
+  requires the user's authorization.
 ---
 
 # Tao Run and Ship

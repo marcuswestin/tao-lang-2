@@ -1,6 +1,8 @@
 ---
 name: tao-create
-description: Create a Tao project from a description or add a starter-shaped feature by hand.
+description: >-
+  Create a Tao project or starter-shaped feature. Use when asked to generate a new Tao app from a
+  description, choose a starter, or add a feature that follows the starter's project structure.
 ---
 
 # Tao Create

@@ -1,6 +1,8 @@
 ---
 name: tao-design
-description: Define and apply Tao's implemented color tokens and reusable layout/style clause bundles.
+description: >-
+  Define and apply Tao design tokens and reusable style bundles. Use when changing app colors,
+  promoting repeated layout/style clauses into bundles, or selecting and applying an implemented design.
 ---
 
 # Tao Design

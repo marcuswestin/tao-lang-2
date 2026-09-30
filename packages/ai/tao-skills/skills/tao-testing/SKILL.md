@@ -1,6 +1,8 @@
 ---
 name: tao-testing
-description: Write Tao behavior journeys, selectors, fixtures, Studio scenarios, and visual reviews.
+description: >-
+  Prove Tao app behavior and prepare review scenarios. Use when writing or fixing .test.tao journeys,
+  choosing selectors or fixtures, adding Studio scenarios, or reviewing app visuals.
 ---
 
 # Tao Testing

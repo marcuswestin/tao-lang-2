@@ -1,6 +1,8 @@
 ---
 name: tao-project
-description: Work safely in a Tao app project: understand its files, generated code, edit loop, diagnostics, and available Tao skills.
+description: >-
+  Orient work in a Tao app project and choose its edit loop. Use when starting or resuming app work,
+  locating authoring files versus generated code, interpreting Tao diagnostics, or selecting an app skill.
 ---
 
 # Tao Project

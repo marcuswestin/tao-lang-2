@@ -43,7 +43,7 @@ The Developer is Tao's author, project lead, and language designer, and decides 
 ## Permissions
 
 - Research the open web, run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack, all without asking.
-- Before launching or controlling UI for development or testing, read `quiet-ui-workflows`; prefer in-app visuals and avoid stealing focus.
+- `quiet-ui-workflows` owns UI launches and control.
 - Bash uses an OS sandbox. The harness grants one host exception per named `./agent unsandboxed X` operation; its editable wrapper admits only named argv prefixes from `.rulesync/permissions.jsonc`, then runs repository code and children on the host. Deeper subcommands are checked by the wrapper, not separately granted by the harness. Use named simulator, device, build, remote, and process operations from `./agent help`, never raw host-tool names after `unsandboxed`. For an unlisted host operation, diagnose read-only, name it, and pause for the Developer's explicit approval; `environment-recovery` owns the details.
 - Before intentionally changing what any `./agent unsandboxed` operation can run, accept, or reach—including its permission rules, wrapper, dispatch, target, or called implementation—obtain the Developer's approval for that change, unless the current request already authorizes it as necessary to achieve its stated goal. Approval for one behavior change does not cover later ones. After an authorized pass that intentionally changes unsandboxed behavior, clearly tell the Developer what changed.
 - Land only with the Developer's authorization for this slice, lasting through retries. Use `./agent unsandboxed land`. On a host or queued-merge failure, stop and surface the intervention (`verification-lanes`).

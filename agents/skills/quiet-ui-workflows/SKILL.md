@@ -1,9 +1,9 @@
 ---
 name: quiet-ui-workflows
 description: >-
-  Keep the Developer's desktop undisturbed when launching or controlling browsers, Studio,
-  native apps, simulators, or visual tests. Use before any UI launch or computer-control
-  session, and when choosing hidden, headless, in-app, background, or visible execution.
+  Preserve the Developer's focus during UI automation. Use before launching or controlling
+  browsers, Studio, native apps, simulators, visual tests, or any computer-control session; also
+  when choosing in-app, headless, hidden, background, or visible execution.
 ---
 
 # Quiet UI Workflows
