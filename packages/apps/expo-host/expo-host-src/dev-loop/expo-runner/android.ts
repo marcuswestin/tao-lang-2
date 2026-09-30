@@ -85,6 +85,11 @@ export function createAndroid(
 export const Android = createAndroid(ExpoConfig, ExpoMetro)
 
 async function ensureEmulator(): Promise<void> {
+  if (Platform.runtimeProcess.env['TAO_AGENT_ANDROID_QUIET'] === '1') {
+    const serial = await requireBootedEmulator()
+    DevLoopOutput.logDevLoop('dev', `Using reserved Android emulator ${serial}.`)
+    return
+  }
   await requireCommand(
     'emulator',
     'Android emulator CLI not found. Enter ./enter-tao-dev-env to expose the pinned Android SDK.',
@@ -435,6 +440,13 @@ async function listAdbDevices(): Promise<string[]> {
 }
 
 async function findRunningEmulator(): Promise<string | undefined> {
+  if (Platform.runtimeProcess.env['TAO_AGENT_ANDROID_QUIET'] === '1') {
+    const assigned = Platform.runtimeProcess.env['TAO_AGENT_ANDROID_SERIAL']
+    if (!assigned) {
+      return undefined
+    }
+    return (await listAdbDevices()).includes(assigned) ? assigned : undefined
+  }
   return (await listAdbDevices()).find(serial => serial.startsWith('emulator-'))
 }
 
@@ -515,7 +527,9 @@ async function requireBootedEmulator(): Promise<string> {
   const serial = await findRunningEmulator()
   if (!serial || !await isEmulatorBooted(serial)) {
     Errors.throwUserInput(
-      'No booted Android emulator found. Start one with `just android` or `./dev android-emulator`.',
+      Platform.runtimeProcess.env['TAO_AGENT_ANDROID_QUIET'] === '1'
+        ? 'No reserved Android emulator is booted. Restart app-dev with --android or request --emulator <serial>.'
+        : 'No booted Android emulator found. Start one with `just android` or `./dev android-emulator`.',
     )
   }
   return serial

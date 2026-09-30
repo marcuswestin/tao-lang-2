@@ -29,6 +29,7 @@ Describe('agent worktree profile bootstrap', () => {
           'print -r -- "$ANDROID_HOME"',
           'print -r -- "$ANDROID_SDK_ROOT"',
           'print -r -- "$ANDROID_USER_HOME"',
+          'print -r -- "$ANDROID_AVD_HOME"',
         ].join('\n'),
         fixture,
         profile,
@@ -41,6 +42,7 @@ Describe('agent worktree profile bootstrap', () => {
         FS.resolvePath('libexec/android-sdk', profile),
         FS.resolvePath('libexec/android-sdk', profile),
         FS.resolvePath('.android', fixture.worktree),
+        FS.resolvePath('.android/avd', fixture.worktree),
       ])
       Expect(await FS.realPath(profile)).toBe(await FS.realPath(fixture.primaryProfile))
     } finally {
