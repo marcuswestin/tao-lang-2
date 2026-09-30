@@ -20,7 +20,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'reclaim --execute': { command: './dev', fixedArgs: ['reclaim', '--execute'], argsPolicy: 'none' },
   'prepare-release studio': { command: './dev', fixedArgs: ['prepare-release', 'studio'] },
   'prepare-release ide-extension': { command: './dev', fixedArgs: ['prepare-release', 'ide-extension'] },
-  'app-dev': { command: './tao', fixedArgs: ['dev'], server: true },
+  'app-dev': { command: './dev', fixedArgs: ['app-dev'], server: true },
   'test-watch': { command: './tao', fixedArgs: ['test', '--watch'], server: true },
   'standalone-cli-acceptance': { command: 'just', fixedArgs: ['standalone-cli-acceptance'], argsPolicy: 'none' },
   // Dev loops that watch files run on the host, where Watchman and the OS file-event service are
@@ -30,7 +30,7 @@ export const HOST_COMMAND_TARGETS: Readonly<Record<string, HostCommandTarget>> =
   'studio-native': { command: 'just', fixedArgs: ['studio-native'], server: true },
   'studio-ps': { command: './dev', fixedArgs: ['studio-ps'], argsPolicy: 'studio-list' },
   'studio-stop': { command: './dev', fixedArgs: ['studio-stop'], argsPolicy: 'studio-stop' },
-  'docker-desktop start': { command: 'open', fixedArgs: ['-a', 'Docker'], argsPolicy: 'none' },
+  'docker-desktop start': { command: 'open', fixedArgs: ['-g', '-a', 'Docker'], argsPolicy: 'none' },
   // One daemon serves this login's worktrees; no arbitrary Watchman commands or socket overrides.
   'watchman start': { command: './dev', fixedArgs: ['watchman', 'start'], argsPolicy: 'none' },
   'watchman status': { command: './dev', fixedArgs: ['watchman', 'status'], argsPolicy: 'none' },

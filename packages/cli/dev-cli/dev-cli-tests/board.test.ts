@@ -188,6 +188,14 @@ Describe('board', () => {
         repositoryRoot: worktreePath,
         startedAt: new Date().toISOString(),
       })
+      await FS.writeJson(FS.resolvePath('resource-android.lease', registryRoot), {
+        command: 'agent app-dev Android AVD Tao_Agent_Pixel_1 (auto-started, headless)',
+        id: 'android-lease',
+        name: 'android-emulator:emulator-5554',
+        pid: process.pid,
+        repositoryRoot: worktreePath,
+        startedAt: new Date().toISOString(),
+      })
       const run = fakeGitRun({
         [routeKey('git', ['worktree', 'list', '--porcelain'], Repo.getRoot())]: {
           stdout: porcelainListing([{ branch: 'feat/resources', head: 'c'.repeat(40), path: worktreePath }]),
@@ -201,6 +209,9 @@ Describe('board', () => {
       Expect(landing?.live).toBe(true)
       Expect(staleThing?.live).toBe(false)
       Expect(report.verdict).toContain('resource lease')
+      Expect(formatBoardReport(report)).toContain(
+        'device android-emulator:emulator-5554 held by agent app-dev Android AVD Tao_Agent_Pixel_1 (auto-started, headless)',
+      )
     } finally {
       await FS.remove(registryRoot)
       await FS.remove(worktreePath)

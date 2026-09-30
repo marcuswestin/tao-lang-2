@@ -84,7 +84,7 @@ Describe('Expo dev-loop command helpers', () => {
 
     Expect(presented.host).toBe('Simulator')
     Expect(commands).toEqual([
-      ['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM-OLD'],
+      ['open', '-g', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM-OLD'],
     ])
   })
 
@@ -107,8 +107,8 @@ Describe('Expo dev-loop command helpers', () => {
 
     Expect(presented.host).toBe('Device Hub')
     Expect(commands).toEqual([
-      ['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM PRO/27'],
-      ['open', 'devices://device/open?id=SIM%20PRO%2F27'],
+      ['open', '-g', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM PRO/27'],
+      ['open', '-g', 'devices://device/open?id=SIM%20PRO%2F27'],
     ])
   })
 
@@ -132,9 +132,9 @@ Describe('Expo dev-loop command helpers', () => {
     Expect(presented.host).toBe('Device Hub')
     Expect(presented.result.exitCode).toBe(0)
     Expect(commands).toEqual([
-      ['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM-27'],
-      ['open', 'devices://device/open?id=SIM-27'],
-      ['open', '-a', 'DeviceHub'],
+      ['open', '-g', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM-27'],
+      ['open', '-g', 'devices://device/open?id=SIM-27'],
+      ['open', '-g', '-a', 'DeviceHub'],
     ])
   })
 

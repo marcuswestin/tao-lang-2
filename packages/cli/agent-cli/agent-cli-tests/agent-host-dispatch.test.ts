@@ -126,10 +126,10 @@ Describe('named host command dispatch', () => {
           },
         })
       Expect((await invoke(['start'])).exitCode).toBe(0)
-      Expect(await FS.readText(log)).toBe('-a\nDocker\n')
+      Expect(await FS.readText(log)).toBe('-g\n-a\nDocker\n')
       Expect((await invoke(['start', '-a', 'Terminal'])).exitCode).toBe(2)
       Expect((await invoke(['stop'])).exitCode).toBe(2)
-      Expect(await FS.readText(log)).toBe('-a\nDocker\n')
+      Expect(await FS.readText(log)).toBe('-g\n-a\nDocker\n')
       Expect((await invoke(['start'], '1')).exitCode).toBe(1)
     } finally {
       await FS.remove(root)
@@ -204,7 +204,7 @@ Describe('named host command dispatch', () => {
       const open = FS.resolvePath('open', bin)
       await FS.writeText(
         open,
-        '#!/usr/bin/env zsh\nprintf "%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$2" == Simulator ]]; then exit 1; fi\n',
+        '#!/usr/bin/env zsh\nprintf "%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$3" == Simulator ]]; then exit 1; fi\n',
       )
       await FS.chmod(open, 0o755)
       const result = await CLI.run(Platform.runtimeProcess.execPath, {
@@ -213,7 +213,7 @@ Describe('named host command dispatch', () => {
         env: { PATH: `${bin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`, TAO_HOST_LOG: log },
       })
       Expect(result.exitCode).toBe(0)
-      Expect((await FS.readText(log)).trim().split('\n')).toEqual(['-a Simulator', '-a DeviceHub'])
+      Expect((await FS.readText(log)).trim().split('\n')).toEqual(['-g -a Simulator', '-g -a DeviceHub'])
     } finally {
       await FS.remove(root)
     }
@@ -235,7 +235,7 @@ Describe('named host command dispatch', () => {
       )
       await FS.writeText(
         open,
-        '#!/usr/bin/env zsh\nprintf "open:%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$1" == -a && "$2" == Simulator ]]; then exit 1; fi\n',
+        '#!/usr/bin/env zsh\nprintf "open:%s\\n" "$*" >> "$TAO_HOST_LOG"\nif [[ "$2" == -a && "$3" == Simulator ]]; then exit 1; fi\n',
       )
       await FS.chmod(xcrun, 0o755)
       await FS.chmod(open, 0o755)
@@ -248,8 +248,8 @@ Describe('named host command dispatch', () => {
       Expect(result.exitCode).toBe(0)
       Expect((await FS.readText(log)).trim().split('\n')).toEqual([
         'xcrun:simctl boot SIM PRO/27',
-        'open:-a Simulator --args -CurrentDeviceUDID SIM PRO/27',
-        'open:devices://device/open?id=SIM%20PRO%2F27',
+        'open:-g -a Simulator --args -CurrentDeviceUDID SIM PRO/27',
+        'open:-g devices://device/open?id=SIM%20PRO%2F27',
       ])
     } finally {
       await FS.remove(root)

@@ -111,6 +111,21 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('app-dev')
+    .description('Run the agent dev loop with reserved iOS/Android devices and owned Chrome.')
+    .argument(
+      '[args...]',
+      'Arguments for tao dev; --show-simulator, --show-emulator, or --show-browser requests a window.',
+    )
+    .allowUnknownOption()
+    .action(async (args: string[]) => {
+      await runExitCommand(async () => {
+        const { runAgentAppDev } = await import('./simulators/AgentAppDev')
+        return await runAgentAppDev(args)
+      })
+    })
+
+  commands
     .command('test-host')
     .description('Run the opt-in real-host testing prototype, independently of existing suites.')
     .argument(

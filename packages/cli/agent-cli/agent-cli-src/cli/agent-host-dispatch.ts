@@ -116,7 +116,7 @@ function validStudioArgs(args: readonly string[], stop: boolean): boolean {
   return true
 }
 
-/** Boot one selected device and bring its Simulator or Device Hub window forward. */
+/** Boot one selected device and present its viewer without activating it. */
 async function runSimulator(args: readonly string[]): Promise<number> {
   if (args.length !== 1) {
     HCI.writeErrorLine('Usage: ./agent unsandboxed simulators run <device-udid>')
@@ -133,21 +133,21 @@ async function runSimulator(args: readonly string[]): Promise<number> {
 
 /** Present the selected simulator on either Xcode's Simulator or Device Hub. */
 async function openSimulator(udid?: string): Promise<number> {
-  const simulatorArgs = ['-a', 'Simulator']
+  const simulatorArgs = ['-g', '-a', 'Simulator']
   if (udid !== undefined) {
     simulatorArgs.push('--args', '-CurrentDeviceUDID', udid)
   }
   const attempts = [simulatorArgs]
   if (udid !== undefined) {
-    attempts.push([`devices://device/open?id=${encodeURIComponent(udid)}`])
+    attempts.push(['-g', `devices://device/open?id=${encodeURIComponent(udid)}`])
   }
-  attempts.push(['-a', 'DeviceHub'])
+  attempts.push(['-g', '-a', 'DeviceHub'])
   for (const openArgs of attempts) {
     const opened = await CLI.run('open', { args: openArgs, stdio: 'pipe' })
     if (opened.exitCode === 0 && opened.error === undefined) {
       return 0
     }
-    if (openArgs[0] === '-a' && openArgs[1] === 'DeviceHub') {
+    if (openArgs[1] === '-a' && openArgs[2] === 'DeviceHub') {
       HCI.writeErrorLine(opened.stderr.trim() || opened.error?.message || 'Could not open simulator host.')
       return opened.exitCode ?? 1
     }

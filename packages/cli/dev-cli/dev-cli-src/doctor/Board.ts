@@ -258,8 +258,11 @@ function formatMachineSection(machine: BoardMachine): string {
   }
   for (const resource of machine.resources) {
     const liveness = resource.live ? '' : ' (stale)'
+    const device = /^(?:ios-simulator|android-emulator|android-avd):/u.test(resource.owner.name)
     lines.push(
-      `  resource ${resource.owner.name} held by ${resource.owner.command} in ${resource.owner.repositoryRoot} `
+      `  ${
+        device ? 'device' : 'resource'
+      } ${resource.owner.name} held by ${resource.owner.command} in ${resource.owner.repositoryRoot} `
         + `(pid ${resource.owner.pid}, since ${resource.owner.startedAt})${liveness}`,
     )
   }
