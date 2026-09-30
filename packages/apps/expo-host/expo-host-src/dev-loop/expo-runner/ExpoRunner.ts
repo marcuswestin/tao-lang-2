@@ -74,6 +74,7 @@ function createSessionFromConfig(
     openStartupTargets: (requested?: readonly DevStartupTarget[], shouldStop?: () => boolean) =>
       targets.openStartupTargets(requested, shouldStop),
     openWeb: targets.openWeb,
+    stopWeb: targets.stopWeb,
     reloadExpoApps: metro.reloadExpoApps,
     releasePortReservation,
     startExpo: () => startExpo(config, targets.openPreparedAndroid),

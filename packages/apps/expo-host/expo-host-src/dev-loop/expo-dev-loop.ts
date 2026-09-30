@@ -127,6 +127,9 @@ async function runDevLoopWithActiveReporter(
   const stopServices = async () => {
     await watcher?.close()
     watcher = undefined
+    await expo.stopWeb().catch(error => {
+      DevLoopOutput.logDevLoop('dev', `Could not stop agent Chrome: ${Errors.formatForUser(error)}`, 'warn')
+    })
     const desktopProcess = desktop
     if (desktopProcess !== undefined) {
       desktopProcess.kill('SIGTERM')
