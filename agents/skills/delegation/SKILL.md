@@ -6,14 +6,14 @@ description: >-
 
 # Delegation
 
-Optimize wall-clock time to finish the whole task you own, not tokens, not your own context, and not the elegance of the split. A subagent starts with no memory of this session, pays a fixed startup cost before its first useful tool call, and sees only the brief you write; spend that when it buys back more than it costs. This skill owns whether to delegate, which tier, what the brief says, and what to do with the report; `references/parallel-implementation.md` owns coordinating concurrent writers, `references/review-fanout.md` owns dividing a review too large for one context.
+Optimize wall-clock time to finish the whole task. A subagent pays a startup cost and needs a self-contained brief; delegate when it saves more than it costs. This skill owns delegation, tier selection, briefs, and return checks. `references/parallel-implementation.md` owns concurrent writers; `references/review-fanout.md` owns dividing a large review.
 
 ## Delegate when
 
 - **The work compresses**: large input, small conclusion — sweeping many files for a pattern, reading a long log down to the failures, a page of vendor docs for one fact. Holds even when you could do it quickly yourself, because what you'd carry afterwards is worse than what you'd carry now.
 - **It is big enough to amortize**: roughly ten or more tool calls, or 15k+ tokens pulled through context for a conclusion you could state in a paragraph. That threshold is only recognisable once crossed, so apply it forward: before opening the third file to answer one question, hand the question over. Delegating raises total tokens, since the agent re-reads what you already know, and lowers what you carry for the rest of the session — the second is what the session is paid on.
 - **It can run while you work**: anything your next two or three steps do not depend on goes to a background agent, launched before your own step rather than after.
-- **It wants a different model than yours**: mechanical breadth deserves a cheaper model, a hard judgment call a stronger one — see routing below.
+- **Its model or effort should differ from yours**: apply the harness-specific routing below.
 - **It should not be able to write**: review, audit, and second opinions are more trustworthy from an agent that cannot quietly fix what it finds and report success.
 
 ## Do not delegate when
@@ -32,7 +32,7 @@ For those, ask when the exchange buys something a subagent of your own would not
 
 ## Model and effort routing
 
-Work is routed to a tier, spelled per harness in one table, so a model release changes one table instead of every skill and profile.
+For every GPT task and tier, use the newest GPT-6 Sol available in the harness. Only routine execution with settled inputs and steps, requiring no exploration, judgment, or diagnosis, uses the newest GPT-6 Luna instead. This overrides broader fast/frontier task labels below for GPT; Claude routing is unchanged. Table IDs are concrete generated defaults, not a version ceiling. Never invent a latest alias.
 
 | Work                                                                       | Tier                                        | Effort |
 | -------------------------------------------------------------------------- | ------------------------------------------- | ------ |
@@ -46,9 +46,9 @@ Work is routed to a tier, spelled per harness in one table, so a model release c
 | Tier     | Claude Code `model` | Codex CLI `model` | Cursor `model`     |
 | -------- | ------------------- | ----------------- | ------------------ |
 | fast     | `haiku`             | `gpt-6-luna`      | `composer-2.5`     |
-| standard | `opus`              | `gpt-6-sol`       | `claude-opus-5-5`  |
-| deep     | `opus`              | `gpt-6-sol`       | `claude-opus-5-5`  |
-| frontier | `fable`             | `gpt-6-astra`     | `claude-fable-5-1` |
+| standard | `opus`              | `gpt-6.1-sol`     | `claude-opus-5-5`  |
+| deep     | `opus`              | `gpt-6.1-sol`     | `claude-opus-5-5`  |
+| frontier | `fable`             | `gpt-6.1-sol`     | `claude-fable-5-1` |
 
 `repo-lint` checks profile pins against this table; Codex `[agents]` defaults come from the standard row. See [model routing](references/model-routing.md) for precedence, availability, effort syntax, and completed-task measurement.
 
@@ -56,7 +56,7 @@ Downward is the usual direction: a deep or frontier orchestrator almost never le
 
 ## Choosing the tier
 
-The table decides: when a task matches a row, take it and say which tier you chose in one line, without asking. Ask the Developer only when the work fits no row and your confidence between two tiers is low, when you are about to spend the frontier tier or expect the agent to run more than about ten minutes, or when the log already shows this kind of task re-run at a different tier — as one question with your recommendation marked, then write the answer into the table above so it does not recur.
+Apply the GPT policy first, then the table; say the chosen tier in one line without asking. Ask only when the work fits no row and confidence between tiers is low, when spending a frontier model in another harness, when expecting a run over ten minutes, or when this work has already been rerun at another tier. Mark your recommendation and record the answer so it does not recur.
 
 ## The brief
 

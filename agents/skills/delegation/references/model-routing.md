@@ -13,7 +13,14 @@ Claude Code and Codex accept `low`/`medium`/`high`/`xhigh` effort in `effort` an
 
 [Codex subagent precedence](https://developers.openai.com/codex/subagents) gives an explicit spawn
 model priority over `agents.default_subagent_model`; a custom agent file can pin its own model.
-The repository generates `[agents]` from the standard row. Cursor documents
+The repository generates `[agents]` from the standard row. Every GPT task follows the skill's newest
+GPT-6 Sol policy, including frontier work; only routine execution of fully determined steps uses
+newest GPT-6 Luna. Inventories, research, failure interpretation, implementation judgment, and reviews
+use Sol. Pass the selected concrete ID explicitly when the harness allows it. Generated defaults
+and role files still require concrete IDs. `model-audit` reports when those
+defaults lag; refreshing them is a separate repository change, not an automatic catalog rewrite.
+An unavailable newest release is a reported limitation, not permission to silently change families.
+Cursor documents
 [`claude-opus-5-5`](https://cursor.com/docs/models/claude-opus-5-5) and
 [`[effort=high]`](https://cursor.com/docs/subagents), but the exact combination remains a live
 harness check on each installed version. Model catalog entries alone do not establish account access.

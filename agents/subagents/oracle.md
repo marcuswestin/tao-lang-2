@@ -6,7 +6,7 @@ description: >-
   caller keeps circling, or a judgment worth more than the caller's own model.
 targets: [codexcli, claudecode, cursor]
 codexcli:
-  model: gpt-6-sol
+  model: gpt-6.1-sol
   model_reasoning_effort: xhigh
   sandbox_mode: read-only
   nickname_candidates: [Counsel, Verdict, Diagnosis, Fork, Judgment, Depth]
