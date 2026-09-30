@@ -114,11 +114,17 @@ Examples:
   ./agent unsandboxed simulators run <device-udid>
   ./agent unsandboxed simulators launch <device-udid> <bundle-id>
   ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios
+  ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --ios --show-simulator
+  ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --android
+  ./agent unsandboxed app-dev Apps/HNReader --app HNReaderStub --web
   ./agent unsandboxed test-watch Apps/HNReader
   ./agent unsandboxed standalone-cli-acceptance
   ./agent unsandboxed studio Apps/HNReader
   ./agent unsandboxed studio-ps --json
   ./agent unsandboxed studio-stop --launch <launch-id>
+  ./agent unsandboxed studio-smoke --native packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts
+  ./agent unsandboxed studio-smoke --native packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
+  ./agent unsandboxed studio-smoke --native packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
   ./agent unsandboxed local-instantdb start
   ./agent unsandboxed pods install <ios-directory>
   ./agent setup --refresh-lockfile
@@ -127,6 +133,22 @@ unsandboxed accepts only named argv prefixes in .rulesync/permissions.jsonc's ag
 Each name runs its fixed host implementation with following arguments forwarded as argv, without
 a shell. It fails before dispatch if still sandboxed. Other host operations need the Developer's
 explicit approval; plain commands remain sandboxed.
+
+Agent app-dev --ios reserves a reusable simulator across worktrees, boots it without a viewer,
+and shuts down only a device it selected and booted. Add --show-simulator for an inactive viewer,
+or --simulator <udid> to reserve a specific available device. A dev loop started without --ios
+must be restarted with --ios before its interactive i shortcut can open a simulator.
+Agent app-dev --android reserves a reusable AVD across worktrees, boots it without a window,
+and stops only the emulator it started. Add --show-emulator for a visible window, or
+--emulator <serial> to reserve a specific booted device without stopping it afterward.
+Agent app-dev web opens Google Chrome with an isolated profile and no window. Add
+--show-browser when a visible Chrome window is requested. Attach a CDP-capable client to the
+printed DevTools URL for automation/screenshots of that Chrome session. For interactive in-app
+review, open the printed app URL; it uses a separate browser session. Chrome closes with the loop.
+Native Studio uses Electrobun and opens windows. Its --no-browser option is not a hidden mode.
+The three native smoke examples above exercise simulated-user behavior, semantic host control,
+and external accessibility/physical input respectively; Mac2 may activate the app and needs
+native automation/accessibility consent. Give a heads-up before a visible native host check.
 
 Watchman is one shared daemon per user. status does not start it; start is idempotent;
 watchman stop disconnects subscriptions in every worktree. Startup uses the primary checkout's
