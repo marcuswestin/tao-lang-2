@@ -153,6 +153,15 @@ and `19-28-14`/`19-28-15` reports, plus
 `.artifacts/logs/agent/studio-proof-real-app/2026-10-01T19-28-57-943Z-76022.log`.
 These are separate browser acceptance results, not a complete native `verify-full` claim.
 
+After the idle-reset and ledger-clock repairs, uncached changed verification passed in 66.8s.
+Complete verification then passed every check, including all app and runtime suites, but rejected
+green evidence because a temporary Watchman cookie disappeared between tree snapshots. Its test
+results and corrected full-test wall-clock boundary are retained under
+`.artifacts/logs/verify/2026-10-01T19-59-26-856Z-49771-70f0917e/`; it is not green tree evidence.
+The repository now excludes the tool's reserved `.watchman-cookie-*` artifacts according to
+[Watchman's synchronization contract](https://facebook.github.io/watchman/docs/cookies), preserving
+the source-drift guard. The concrete exclusion finding is resolved in the environment archive.
+
 The first finalization run reported a definite process-fixture assertion failure, drained its
 running work, and reported 100 checks not run, including runtime/app work. Its incomplete evidence
 is preserved under `.artifacts/logs/verify/2026-10-01T19-33-22-800Z-8510-3a0295de/`; the prior green

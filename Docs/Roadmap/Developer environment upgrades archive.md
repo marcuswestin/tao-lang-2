@@ -115,4 +115,5 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-THE-ANDROID-EMULATOR-CANNOT-START-IN-THE-SANDBOX — The Android emulator cannot start in the sandbox](<Developer environment upgrades/Archive/DEVENV-THE-ANDROID-EMULATOR-CANNOT-START-IN-THE-SANDBOX.md>) — Resolved
 - [DEVENV-TIMED-OUT-RUNTIME-FIXTURES-MOUNT-LATE — Timed-out runtime fixture preparation can mount in a later test](<Developer environment upgrades/Archive/DEVENV-TIMED-OUT-RUNTIME-FIXTURES-MOUNT-LATE.md>) — Resolved
 - [DEVENV-VM-ACCEPTANCE-RECEIPT-REMAINS-NONTERMINAL — VM acceptance receipt remains nonterminal](<Developer environment upgrades/Archive/DEVENV-VM-ACCEPTANCE-RECEIPT-REMAINS-NONTERMINAL.md>) — Resolved
+- [DEVENV-WATCHMAN-COOKIES-INVALIDATE-VERIFICATION-EVIDENCE — Watchman cookies invalidate verification evidence](<Developer environment upgrades/Archive/DEVENV-WATCHMAN-COOKIES-INVALIDATE-VERIFICATION-EVIDENCE.md>) — Resolved
 - [DEVENV-WORKFLOW-REPORTS-INCLUDE-CONCURRENT-TEST-FAILURES — Workflow reports include concurrent test failures](<Developer environment upgrades/Archive/DEVENV-WORKFLOW-REPORTS-INCLUDE-CONCURRENT-TEST-FAILURES.md>) — Resolved
