@@ -135,7 +135,7 @@ Describe('versioned run summary', () => {
     Expect(gateExitCode(summary)).toBe(1)
   })
 
-  Test('rolls a suite up as skipped only when every one of its shards was skipped', () => {
+  Test('reports a partially run suite as incomplete while preserving the work that ran', () => {
     const skippedShard = (name: string) =>
       finishedState({ name }, { elapsedMs: 0, exitCode: undefined, reason: 'proved green', status: 'skipped' })
     const suiteOf = (name: string) => (name.startsWith('dev') ? 'dev' : undefined)
@@ -154,11 +154,30 @@ Describe('versioned run summary', () => {
       suiteOf,
     })
 
-    // Reporting a half-run suite as skipped would hide work; reporting it as passed would claim
-    // coverage the skipped shard did not deliver, which is why the reason survives the rollup.
+    // The reason preserves work that ran without claiming the missing shard passed.
     Expect(rollupSuites(allSkipped.gates)[0]?.status).toBe('skipped')
     Expect(rollupSuites(allSkipped.gates)[0]?.reason).toBe('proved green')
-    Expect(rollupSuites(partlyRan.gates)[0]?.status).toBe('passed')
+    Expect(rollupSuites(partlyRan.gates)[0]?.status).toBe('skipped')
+    Expect(rollupSuites(partlyRan.gates)[0]?.reason).toContain('1 not run: proved green')
+  })
+
+  Test('a failed suite names shards that fail-fast left unrun', () => {
+    const summary = buildSummary({
+      elapsedMs: 10,
+      lane: 'verify',
+      logRoot: '/unused',
+      states: [
+        finishedState({ name: 'dev#1' }, { status: 'failed', exitCode: 1, fullOutput: 'defect' }),
+        finishedState({ name: 'dev#2' }, {
+          status: 'skipped',
+          elapsedMs: 0,
+          reason: 'not run after definite failure: dev#1',
+        }),
+      ],
+      suiteOf: () => 'dev',
+    })
+    Expect(rollupSuites(summary.gates)[0]?.status).toBe('failed')
+    Expect(formatGateSummary(summary)).toContain('1 not run: not run after definite failure: dev#1')
   })
 
   Test('appends what the schedule achieved, and where it lost time', () => {

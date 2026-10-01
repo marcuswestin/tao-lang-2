@@ -510,8 +510,8 @@ Describe('test runner suite registry', () => {
     Expect(byName.get('apps/expo-host')?.node.cost).toBe(2)
     // An untuned Bun suite is one unsharded process that cannot use more than one core, so it
     // reserves one slot and the scheduler packs the rest of the run around it.
-    Expect(byName.get('language/parser')?.node.cost).toBeUndefined()
-    Expect(byName.get('language/parser')?.node.serial).toBe(true)
+    Expect(byName.get('language/parser:core')?.node.cost).toBeUndefined()
+    Expect(byName.get('language/parser:core')?.node.serial).toBe(true)
     // A suite that declares a width is not serial: it says so precisely because one of its
     // processes uses more than one core, which is what the reservation is for.
     Expect(byName.get('cli/dev-cli')?.node.cost).toBe(2)

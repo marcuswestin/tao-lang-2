@@ -1,0 +1,119 @@
+# Test responsibility audit
+
+This pass on `feat/test-responsibility` reviews authored tests, verification routines, and
+production assertions against the responsibility policy in
+[test-quality](../../agents/skills/test-quality/SKILL.md). Landing is a separate decision.
+
+## Coverage and dispositions
+
+The starting filename inventory is 588 TypeScript `*.test.ts` files, 47 Tao `*.test.tao`
+files, and 24 `*.host.spec.ts` files. Runner registrations also select runtime Jest tests,
+smoke files, fixtures, and generated templates. Filename counts alone do not establish audit
+coverage. Detailed path accounting, batches, findings, and independent reviews are kept locally
+under `.artifacts/audit/test-responsibility/`.
+
+All ten workstreams completed. The consolidated baseline ledger accounts for 2,201 unique paths:
+2,070 reviewed and 131 excluded with reasons, with no pending rows. Reconciliation of the 2,057
+tracked executable/configuration candidates against that ledger left no unassigned paths. The
+larger ledger also includes context documents and fixtures. Reviews combined runner discovery,
+complete test/registration reads, and source scans followed by reads of assertion, validation,
+error, mutable-state, and adapter sites; this is responsibility accounting, not a claim that every
+source line received an independent review. New policy/scheduler files and their tests received
+integration review separately.
+
+| Workstream                  | Coverage                                                                            |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| Language and compiler       | Parser, validator, formatter, source actions, compiler and AST utilities            |
+| Runtime and hosting         | Runtime/standard library, Expo host, plugins and native bindings                    |
+| Data/services and shared/AI | Providers, services, shared utilities and implementation code                       |
+| CLI and test infrastructure | Product/developer commands, drivers, host control and harnesses                     |
+| Editors and applications    | Studio, companion, extension, active apps and behavior journeys                     |
+| Primary seams               | Scheduling, selection, root/hidden configuration, workflows and canonical templates |
+
+The 44 frozen future-app source/configuration/journey paths were reviewed read-only and remain
+outside active discovery. Installed dependencies, generated output, secrets, and frozen archives
+were excluded; static documentation/assets and configuration without checks are also accounted
+as exclusions. Generated harness copies defer to their reviewed canonical sources.
+
+- Replaced the URI path assertion in `parser-tests/package-api.test.ts` with a callable export
+  check. [URI path construction](https://code.visualstudio.com/api/references/vscode-api#Uri) belongs to the dependency; the surviving package API test proves
+  Tao's wrapper exports the callable API alongside its other public symbols.
+- Retain real Git, Jest, browser, and native-tool integrations when they prove Tao invocation,
+  configuration, encoding, state changes, cleanup, or error handling. Retain boundary checks for
+  mutable/external data, fixture validity, Tao invariants, and necessary type narrowing.
+- Removed the direct no-throw transpilation assertion in `studio-electrobun.test.ts`.
+  [The bundler uses the transpiler](https://bun.sh/docs/bundler); the neighboring real build of the
+  same materialized entrypoint and source-shape assertions retain Tao's packaging contract.
+- Both changes received independent review. No production check met the removal standard.
+  Retained examples include Git branch/worktree command selection and cleanup, Jest configuration
+  and Tao runtime execution, source diagnostic invariants, unknown network/provider output,
+  filesystem races, native lifecycle checks, and assertion error taxonomy. No expensive adapter
+  execution was replaced merely because it involved an external tool.
+- Retain the iOS fmt workaround pending confirmation of the resolved pod and supported Xcode
+  build. The affected React Native 0.81/fmt 11.0.2/Xcode 26 combination has an
+  [upstream fmt 12.1 fix in React Native 0.85](https://reactnative.dev/blog/2026/04/07/react-native-0.85).
+  Tao currently pins React Native 0.86.3, but the resolved pod and supported Xcode build must be
+  confirmed before removing the plugin and its insertion/idempotence/unknown-Podfile tests.
+- Future R14 notification, timezone, Connection/Sync, and window/drop semantics are unresolved
+  design material, preserved without turning proposals into implemented assertions.
+- Fixed one fixture precondition discovered during verification: `app-modules.test.ts` now compiles
+  its maintained native-bridge app before checking source-adjacent binding types, with runtime
+  output isolated in a test-owned directory. Removing all three generated binding metadata files
+  before running it still passed all six tests; the original real TypeScript check remains.
+
+Ambiguous checks stay in place. Two assertion changes are the outcome of the audit, not a target
+for removal volume.
+
+## Verification behavior
+
+Broad checks, verification, changed tests, and unfiltered full tests fail fast. Explicit file,
+directory, and nonempty name scopes collect failures; a repository-root target remains broad.
+Retries and targeted mutation runs preserve their diagnostic behavior. Individual checkers retain
+their diagnostics. Command help owns the public details, and
+[verification-lanes](../../agents/skills/verification-lanes/SKILL.md) owns lane selection.
+
+Failure policy is carried through test preparation and gate execution. A definite failure stops
+new admissions; running work drains and releases resources. Timeout confirmation and known-flake
+classification remain in the existing runner. Unstarted work produces no test observations or
+complete-run evidence. A partially run suite reports its missing work rather than a full pass.
+
+The catalog selects parser lexer and syntax-parse, validator phrases, and formatter phrases as
+small core nodes. They are partitioned out of ordinary shards and run once. Expensive app/Expo
+suites wait only on core nodes selected in that request, through an ordering barrier that includes
+cleanup and failure classification. Confirmed failures stop admissions; tolerated raw failures and
+timeouts retain their existing outcome policy. Targeted and changed scopes are not widened, and
+unrelated checks have no global barrier.
+
+## Measurements and evidence
+
+Three uncontended warm samples after shared setup measured each file process, including startup:
+
+| File                | Warm milliseconds | Median |
+| ------------------- | ----------------- | ------ |
+| Parser lexer        | 172, 163, 167     | 167    |
+| Parser syntax-parse | 152, 155, 165     | 155    |
+| Validator phrases   | 273, 262, 265     | 265    |
+| Formatter phrases   | 180, 176, 173     | 176    |
+
+The separate-process median sum is 763ms. This fits the approximately three-second file and
+ten-second combined selection budgets; these are not timing assertions. A contended validator
+sample was excluded and replaced. Raw summaries are indexed in local `core-samples.json`.
+This does not promise a faster successful full run.
+
+Focused tests prove explicit failure policy, root-target handling, no selection widening, one
+execution per core file across shard counts, delayed app admission, and honest partial reporting.
+Disabling the final app ordering barrier deliberately failed three assertions, including premature
+app admission and shared preparation; disabling broad failure policy also failed its admission
+test. Both implementations were restored. The definite-core-failure fixture prevented its app
+node from being admitted. Existing graph and gate tests cover timeout confirmation and resource
+release. The final verification package run passed 796 tests in 40 files, including real ledger
+history for tolerated core flakes and incomplete-run reporting. Raw mutation and focused evidence
+is in the task-local command logs. Broad, sandbox, and reachable host results are recorded in the
+lane reports; an interrupted or skipped host lane establishes no host acceptance.
+
+One display-only edge remains: during asynchronous classification of an already failed ordering
+prerequisite, the TUI may briefly say its dependent is waiting for local capacity. The scheduler
+still waits for classification and cleanup; execution and evidence are unaffected.
+
+Recommend a separate [recurring repository pass](<Recurring repository pass.md>) for unrelated
+cross-cutting concerns; this pass changes neither dependency pins nor permission reach nor model routing.

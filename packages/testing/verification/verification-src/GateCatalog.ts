@@ -118,6 +118,10 @@ const DEFAULT_METADATA: GateMetadata = { cost: 1, reads: ['gen-app', 'gen-ide', 
 
 /** SuiteTuning is what one test suite needs beyond the defaults every suite gets. */
 export type SuiteTuning = {
+  /** Repository-relative, measured small core files; execute once before dependent app suites. */
+  preflightFiles?: readonly string[]
+  /** Wait for the core files present in this request; absent core selections add no dependency. */
+  afterPreflight?: boolean
   /** Extra runner arguments: Bun's `--concurrent`, a longer per-test timeout. */
   args?: readonly string[]
   /** First-run split for a suite whose measured whole-process cost makes a cold serial run expensive. */
@@ -185,7 +189,7 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // so a hand-written `--timeout=60000` here would no longer say more than the default already does
   // — and under enough load it says less, since the computed deadline can pass 60,000 while this one
   // could not.
-  ['apps/expo-host', { cost: 2, reads: ['gen-parser', 'tao', 'ts'], shardCost: 2 }],
+  ['apps/expo-host', { afterPreflight: true, cost: 2, reads: ['gen-parser', 'tao', 'ts'], shardCost: 2 }],
   // Its tests lower and validate whole starter projects, which is seconds of real work per test.
   // Bun's five-second default was calibrated when this suite was one process beside a handful of
   // others; sharded, and beside every other suite in the lane, a healthy test can sit behind other
@@ -196,7 +200,11 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // Eight initial shards still grouped a 24s tail after splitting those files; twelve lets the
   // scheduler spread the work within its existing CPU budget until measured costs take over.
   ['cli/tao-cli', { coldShardCount: 12 }],
-  ['language/validator', { args: ['--concurrent'], reads: ['gen-parser', 'tao', 'ts'] }],
+  ['language/validator', {
+    args: ['--concurrent'],
+    preflightFiles: ['packages/language/validator/validator-tests/phrases.test.ts'],
+    reads: ['gen-parser', 'tao', 'ts'],
+  }],
 
   // Jest's own worker pool already parallelizes the whole run, so splitting it into single-worker
   // processes adds startups without adding parallelism: 30 files in one process at `--maxWorkers=3`
@@ -204,7 +212,7 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   // handed a reservation and the matching `--maxWorkers`, and left whole.
   [
     'runtime-jest',
-    { cost: 3, priority: 4, reads: ['gen-parser', 'tao', 'ts'], shardable: false },
+    { afterPreflight: true, cost: 3, priority: 4, reads: ['gen-parser', 'tao', 'ts'], shardable: false },
   ],
   // The Tao behavior tests validate and compile once per lane, then each `./tao test` shard runs
   // Jest against its own app roots in the shared compiled run.
@@ -216,6 +224,7 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
   [
     'tao-apps',
     {
+      afterPreflight: true,
       budgetEnvKeys: [BUDGET_KEY_TAO_TEST],
       // Two app-root shards cut a measured 49.7s whole run to 27.8s with modest extra CPU. A new
       // worktree uses that conservative split before it has trustworthy local timing history.
@@ -246,8 +255,19 @@ const SUITE_TUNING = new Map<string, SuiteTuning>([
 
   // These language-service suites load generated parser code and repository Tao source, including
   // the standard library, but never consume the shared generated-app directory.
-  ['language/formatter', { reads: ['gen-parser', 'tao', 'ts'] }],
-  ['language/parser', { reads: ['gen-parser', 'tao', 'ts'] }],
+  // Three warm file-process samples fit the selection budget; these are ordinary tests,
+  // partitioned into stable core nodes, not timing assertions or a wider selection.
+  ['language/formatter', {
+    preflightFiles: ['packages/language/formatter/formatter-tests/phrases.test.ts'],
+    reads: ['gen-parser', 'tao', 'ts'],
+  }],
+  ['language/parser', {
+    preflightFiles: [
+      'packages/language/parser/parser-tests/lexer.test.ts',
+      'packages/language/parser/parser-tests/syntax-parse.test.ts',
+    ],
+    reads: ['gen-parser', 'tao', 'ts'],
+  }],
   ['language/source-actions', { reads: ['gen-parser', 'tao', 'ts'] }],
 ])
 

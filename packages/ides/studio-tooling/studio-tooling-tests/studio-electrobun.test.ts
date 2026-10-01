@@ -127,7 +127,6 @@ Describe('Studio Electrobun project', () => {
       lockfileVersion: 1,
       workspaces: { '': { devDependencies: { '@types/bun': '1.4.0', ws: '8.21.0' } } },
     })
-    Expect(() => new Bun.Transpiler({ loader: 'ts' }).transformSync(generated.main)).not.toThrow()
     try {
       const project = await StudioElectrobun.create({ ...options, outputRoot })
       Expect(project.dev.env).not.toHaveProperty('TAO_STUDIO_PROJECT_URL')

@@ -303,22 +303,22 @@ dev app_path="Apps" APP="":
 # A name pattern narrows the same default scope rather than replacing it: `just test "<name>"` is the
 # changed suites filtered to that name, not every suite filtered to it. Scope and filter compose, so
 # the fast default stays fast and only `test-all` widens it.
-# Run the suites this branch's diff reaches; a wider change can still break a suite it never ran, so `test-all` before a merge. One optional target is a test path or a test name
+# Run changed suites, fail fast; explicit file/name targets collect failures. Selection can miss a regression, so `test-all` before a merge
 [group('Dev')]
 test target="": _compile-word-flower-app
     if [ {{ quote(target) }} = '' ]; then ./dev test-changed; elif [ -e {{ quote(target) }} ]; then printf 'Running tests in %s\n' {{ quote(target) }}; ./dev test-file {{ quote(target) }}; else printf 'Filtering the changed suites to tests matching "%s"\n' {{ quote(target) }}; ./dev test-changed --name {{ quote(target) }}; fi
 
-# Run every test suite, whatever this branch changed; the scope `verify` runs. One optional test-name pattern filters them
+# Run every test suite, fail fast; an explicit test-name pattern collects failures in that filtered scope
 [group('Dev')]
 test-all pattern="": _compile-word-flower-app
     ./dev test{{ if pattern == "" { "" } else { " " + quote(pattern) } }}
 
-# Run tests selected by changes since a ref; defaults to this branch's main merge base
+# Run implicitly selected changed suites, fail fast; defaults to this branch's main merge base
 [group('Dev')]
 test-changed ref="": _compile-word-flower-app
     ./dev test-changed {{ if ref == "" { "" } else { "\"" + ref + "\"" } }}
 
-# Run one package Bun or runtime Jest test file, or every test file under a directory
+# Collect failures in one test file/directory; a repository-root target remains fail fast
 [group('Dev')]
 test-file path: _compile-word-flower-app
     ./dev test-file "{{ path }}"
@@ -328,7 +328,7 @@ test-file path: _compile-word-flower-app
 test-mutation path: _compile-word-flower-app
     ./dev test-mutation {{ quote(path) }}
 
-# Re-run files that are not green since this checkout's latest complete test run
+# Collect failures in files not green since this checkout's latest complete test run
 [group('Dev')]
 test-retry: _compile-word-flower-app
     ./dev test-retry
@@ -469,7 +469,7 @@ fix: _parser-gen
     ./tao fix
     just --fmt
 
-# Check all code without changing it or running tests: Tao and dprint canonical source, lint, types. --no-cache ignores a recorded green tree
+# Check all code, fail fast between checks: canonical source, lint, types. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 check no_cache='false':
@@ -616,14 +616,14 @@ clean-all: clean-scratch
 # Full verification lanes lower their CLI process to below-normal scheduling priority before
 # launching gates; children inherit it. This leaves job counts and admission unchanged.
 # A host or sandbox refusal prints a warning and verification continues at inherited priority.
-# Verify everything: fix, check, and every test suite. --no-cache ignores a recorded green tree
+# Verify everything, fail fast between checks: fix, check, all tests. --no-cache ignores a recorded green tree
 [arg('complete', long='complete', value='true')]
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify complete='false' no_cache='false': _deps
     ./dev gates _fix-dprint _fix-tao _fix-just-fmt _fix-ledger-index _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check dead-exports --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run ./agent studio-smoke or ./agent verify-full" --green-tree verify verify-full-sandbox verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
-# Verify narrowed to the suites the branch diff reaches: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
+# Verify changed suites, fail fast: the iteration gate, never merge evidence. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
 [group('Dev')]
 verify-changed no_cache='false': _deps

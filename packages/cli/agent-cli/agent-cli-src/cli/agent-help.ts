@@ -147,6 +147,12 @@ test runs the suites the branch diff reaches, which can be green while a suite t
 never ran; a name pattern filters those same suites rather than widening back out to all of them.
 test-all runs every suite, and takes an optional name pattern of its own.
 
+Broad checks, verification, bare test/test-changed, and unfiltered test-all stop admitting new work
+after a definite failure. Running work drains and cleans up before the lane releases its leases.
+Explicit file/directory/name targets and test-retry collect failures in that scope; a repository-root
+target remains broad. Individual checkers retain their diagnostics. Filtered or aborted runs are
+never complete coverage: diagnose the failed scope, fix it, then repeat broad verification.
+
 Each verification scope is its own command rather than a flag: verify-changed runs the gates plus
 the test suites the branch diff reaches (iterate with it); verify runs every suite (the gate before
 a reviewed commit or a merge); verify-full adds the browser, native, and bundle lanes, two of which

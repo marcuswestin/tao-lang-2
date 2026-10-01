@@ -1,7 +1,8 @@
 import { Assert, CLI, FS, Platform, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import ts from 'typescript'
 import { PROJECT_TSCONFIG, TaoAppModules } from '../cli-src/app-modules'
+import { runCompile } from '../cli-src/compile-command'
 
 const PINNED_PROJECT_TSCONFIG = `{
   "compilerOptions": {
@@ -80,6 +81,18 @@ Describe('Tao app TypeScript modules', () => {
   })
 
   Test('typechecks in-repo app sidecars that import @tao/runtime', async () => {
+    const appPath = Repo.resolvePath('Apps/Test Apps/Native Bridge/App.tao')
+    const root = await mkTestDir('tao-app-modules-runtime-')
+    try {
+      await withCapturedOutput(() =>
+        runCompile(appPath, {
+          runtimePackageRoot: FS.resolvePath('runtime', root),
+        })
+      )
+    } finally {
+      await FS.remove(root)
+    }
+
     const result = await CLI.run(Repo.resolvePath('node_modules/.bin/tsc'), {
       args: ['--project', Repo.resolvePath('Apps/tsconfig.json')],
     })

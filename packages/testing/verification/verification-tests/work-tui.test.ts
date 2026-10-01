@@ -56,6 +56,15 @@ Describe('work dashboard', () => {
     )
   })
 
+  Test('names core ordering barriers without treating settled failures as waiting work', () => {
+    const core = state('parser:core', [], 'running')
+    const app = state('app')
+    app.node.after = ['parser:core']
+    Expect(WorkTUI.testing.dashboardSummaryText([core, app])).toBe('1 node blocked on parser:core → app')
+    core.status = 'failed'
+    Expect(WorkTUI.testing.dashboardSummaryText([core, app])).toBe('1 node waiting for local capacity')
+  })
+
   Test('groups only explicitly marked shards and leaves names opaque', () => {
     const items = WorkTUI.testing.dashboardItems([
       shard('tao-apps', 1, 'running'),

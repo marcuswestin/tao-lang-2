@@ -146,14 +146,13 @@ async function busyRegistryRoot(laneCount = 1): Promise<string> {
 }
 
 Describe('repository gate runner', () => {
-  Test('full verification stops after a definite failure and keeps a complete diagnostic record', async () => {
+  Test('broad verification stops after a definite failure and keeps a complete diagnostic record', async () => {
     const root = await mkTestDir('tao-gate-runner-fail-fast-')
     const started: string[] = []
     try {
       const summary = await runGates({
         gates: ['first', 'second'],
         jobs: 1,
-        lane: 'verify-full',
         logRoot: FS.resolvePath('logs', root),
         machineLoadAverage: IDLE_MACHINE,
         registryRoot: FS.resolvePath('registry', root),
@@ -176,6 +175,18 @@ Describe('repository gate runner', () => {
     } finally {
       await FS.remove(root)
     }
+  })
+
+  Test('diagnostic execution collects failures within its explicit scope', async () => {
+    const { started, summary } = await run(['first', 'second'], {
+      first: { exitCode: 1, output: 'first defect' },
+      second: { exitCode: 1, output: 'second defect' },
+    }, { failurePolicy: 'collect-all', jobs: 1 })
+    Expect(started).toEqual(['first', 'second'])
+    Expect(summary.gates.map(gate => gate.status)).toEqual(['failed', 'failed'])
+    Expect(summary.warnings.some(warning => warning.startsWith('verification stopped after definite failure'))).toBe(
+      false,
+    )
   })
 
   Test('full verification keeps admitting checks after a timeout that may recover on retry', async () => {
@@ -205,7 +216,7 @@ Describe('repository gate runner', () => {
   Test('fails the wrapper when one gate fails, never hiding its status', async () => {
     const { summary } = await run(['_repo-lint', '_typecheck'], {
       _typecheck: { exitCode: 2, output: 'error TS2345: bad argument' },
-    })
+    }, { failurePolicy: 'collect-all' })
 
     Expect(summary.status).toBe('failed')
     Expect(gateExitCode(summary)).toBe(1)
@@ -229,7 +240,7 @@ Describe('repository gate runner', () => {
     // replaced by one node per suite, each reporting under the suite it belongs to.
     const { started, summary } = await run(['_repo-lint', '_test'], {
       _test: { exitCode: 1, output: 'a recipe that must never run' },
-    })
+    }, { failurePolicy: 'collect-all' })
 
     Expect(started).toContain('_repo-lint')
     Expect(started).not.toContain('_test')
@@ -888,7 +899,9 @@ Describe('gate runner green trees', () => {
       Expect(started).toEqual(['_fix-dprint'])
       Expect(summary.status).toBe('failed')
       Expect(summary.gates.find(gate => gate.name === '_repo-lint')?.status).toBe('skipped')
-      Expect(summary.gates.find(gate => gate.name === '_repo-lint')?.reason).toContain('dependency failed')
+      Expect(summary.gates.find(gate => gate.name === '_repo-lint')?.reason).toBe(
+        'not run after definite failure: _fix-dprint',
+      )
     } finally {
       await FS.remove(root)
     }

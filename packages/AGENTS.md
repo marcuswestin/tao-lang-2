@@ -5,6 +5,7 @@ Implement language features as vertical slices. Use the same focused feature nam
 ## Ownership
 
 - Put expected Tao semantic and source-shape diagnostics in the validator. Compiler codegen assumes validated input and uses assertions only for local type contraction.
+- `test-quality` owns test responsibility and the proof boundaries between parser, validator, formatter, compiler, and runtime.
 - Every diagnostic sentence lives in a `*ValidationMessages` object beside the validator that emits it, so validators never inline one at the `ctx.error(node, message)` call and tests assert through those same factories rather than retyping the text.
 - Use `AST.*` from `@parser` for parser-owned structure and traversal. Put shared semantic helpers in `@ast-utils`; package consumers must not call Langium AST utilities directly. `packages/language/parser/AGENTS.md` owns scoping and grammar-keyword rules.
 - Use shared `Switch` helpers for union dispatch instead of native `switch`; prefer generated `AST.is<Type>` guards for grammar-declared unions. `repo-lint` rejects an if/else-if chain over one discriminant outside its shrinking allowlist. A wire union dispatches with `Switch.on(message, 'type', handlers)` and ignores a branch with `Switch.nothing`; every `Switch` form reads own keys only.
