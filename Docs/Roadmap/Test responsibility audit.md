@@ -125,7 +125,7 @@ Disabling the final app ordering barrier deliberately failed three assertions, i
 app admission and shared preparation; disabling broad failure policy also failed its admission
 test. Both implementations were restored. The definite-core-failure fixture prevented its app
 node from being admitted. Existing graph and gate tests cover timeout confirmation and resource
-release. The final verification package run passed 796 tests in 40 files, including real ledger
+release. The initial verification package run passed 796 tests in 40 files, including real ledger
 history for tolerated core flakes and incomplete-run reporting. Raw mutation and focused evidence
 is in the task-local command logs. Broad, sandbox, and reachable host results are recorded in the
 lane reports; an interrupted or skipped host lane establishes no host acceptance.
@@ -161,6 +161,15 @@ results and corrected full-test wall-clock boundary are retained under
 The repository now excludes the tool's reserved `.watchman-cookie-*` artifacts according to
 [Watchman's synchronization contract](https://facebook.github.io/watchman/docs/cookies), preserving
 the source-drift guard. The concrete exclusion finding is resolved in the environment archive.
+
+With that exclusion, changed verification passed in 49.2s, uncached complete verification passed
+in 110.8s, and uncached full sandbox verification passed in 117.8s with nine explicit host skips.
+The final verification package passed 797 tests in 40 files. Complete and sandbox reports are under
+`.artifacts/logs/verify/2026-10-01T20-06-36-095Z-39039-def4660f/` and
+`.artifacts/logs/verify-full-sandbox/2026-10-01T20-08-54-109Z-78967-0eae00bc/`.
+Their core process sums were 1.517s and 1.455s respectively. The production ledger recorded the
+complete run's calendar start, `2026-10-01T20:06:36.095Z`. No performance comparison is inferred from
+these load-dependent lane durations. No core dependency was unselected or admitted twice.
 
 The first finalization run reported a definite process-fixture assertion failure, drained its
 running work, and reported 100 checks not run, including runtime/app work. Its incomplete evidence
