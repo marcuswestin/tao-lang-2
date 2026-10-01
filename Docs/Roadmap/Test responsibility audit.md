@@ -49,6 +49,9 @@ as exclusions. Generated harness copies defer to their reviewed canonical source
   and Tao runtime execution, source diagnostic invariants, unknown network/provider output,
   filesystem races, native lifecycle checks, and assertion error taxonomy. No expensive adapter
   execution was replaced merely because it involved an external tool.
+- No test asserting header-first skill-reading behavior was found. The surviving profile and
+  instruction tests exercise Tao's metadata parser, trigger descriptions, and routing-table
+  propagation into its tools and Studio defaults; they do not claim to prove an agent's reading order.
 - Retain the iOS fmt workaround pending confirmation of the resolved pod and supported Xcode
   build. The affected React Native 0.81/fmt 11.0.2/Xcode 26 combination has an
   [upstream fmt 12.1 fix in React Native 0.85](https://reactnative.dev/blog/2026/04/07/react-native-0.85).
@@ -110,6 +113,29 @@ release. The final verification package run passed 796 tests in 40 files, includ
 history for tolerated core flakes and incomplete-run reporting. Raw mutation and focused evidence
 is in the task-local command logs. Broad, sandbox, and reachable host results are recorded in the
 lane reports; an interrupted or skipped host lane establishes no host acceptance.
+
+The committed implementation passed uncached `verify-changed` (100.7s), complete `verify` (162.2s),
+and `verify-full-sandbox` (261.5s). The changed lane confirmed two contention timeouts by isolated
+passing retries; the complete and sandbox lanes reported no failed nodes. Sandbox verification
+included bundle proof and explicitly skipped nine host-only gates. Logs are respectively under
+`.artifacts/logs/verify-changed/2026-10-01T19-17-21-132Z-51580-bbde8fc1/`,
+`.artifacts/logs/verify/2026-10-01T19-19-22-970Z-70842-66d25a55/`, and
+`.artifacts/logs/verify-full-sandbox/2026-10-01T19-22-18-740Z-99197-6c223870/`.
+The complete run's core nodes used 448ms parser, 747ms validator, and 353ms formatter (1.548s
+combined process time under load); sandbox core nodes used 4.184s combined. These successful runs
+avoided no admissions, whereas the controlled failure fixture prevented its app admission.
+
+Full native host acceptance remains outstanding: the listed host operations cover browser smoke
+files, but omit standalone `verify-full`, native smoke, and native canary. This observed command gap
+is recorded in the developer-environment ledger; permission reach is unchanged.
+
+All seven reachable host browser files passed (12 tests): launch and ownership cleanup, real-app
+compile/edit/undo and live Metro refresh, simulated-user edits, keyboard navigation, dialog teardown,
+agent-chat ordering/stale undo, and network simulation. Their command reports are in
+`.artifacts/logs/agent/studio-smoke/2026-10-01T19-27-44-449Z-68921.log`, neighboring keyboard/dialog
+and `19-28-14`/`19-28-15` reports, plus
+`.artifacts/logs/agent/studio-proof-real-app/2026-10-01T19-28-57-943Z-76022.log`.
+These are separate browser acceptance results, not a complete native `verify-full` claim.
 
 One display-only edge remains: during asynchronous classification of an already failed ordering
 prerequisite, the TUI may briefly say its dependent is waiting for local capacity. The scheduler
