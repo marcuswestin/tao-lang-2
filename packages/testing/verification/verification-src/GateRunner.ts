@@ -159,6 +159,8 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   })
   const now = options.now ?? Time.nowMs
   const startedAt = now()
+  // Durations use a monotonic clock; retry settlement compares wall-clock timestamps.
+  const testRunStartedAt = Date.now()
   const fingerprintOf = treeFingerprinter(options)
   // Fingerprinted before anything runs. A --no-cache run reads no proof but still needs this seed,
   // because the drift guard below compares what the readers proved against what the run leaves.
@@ -522,7 +524,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
         ),
       observations,
       repositoryRoot: location.repositoryRoot,
-      startedAt,
+      startedAt: testRunStartedAt,
     })
   }
   await RunArtifacts.finishRun({

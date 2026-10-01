@@ -85,9 +85,11 @@ hand-edit it. Archiving rules live in the `devenv-upgrades` skill.
 - [DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION — Doctor test observes concurrent artifact creation](<Developer environment upgrades/Archive/DEVENV-DOCTOR-TEST-OBSERVES-CONCURRENT-ARTIFACT-CREATION.md>) — Resolved
 - [DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH — Emulator exit can report a prior launch's failure](<Developer environment upgrades/Archive/DEVENV-EMULATOR-EXIT-LOG-CAN-REPORT-PRIOR-LAUNCH.md>) — Resolved
 - [DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION — A fixed short `timeoutMs` around real work loses to contention](<Developer environment upgrades/Archive/DEVENV-FIXED-SHORT-TIMEOUTS-LOSE-TO-CONTENTION.md>) — Resolved
+- [DEVENV-FULL-TEST-LEDGER-USES-MONOTONIC-TIME — Full-test ledger uses monotonic time](<Developer environment upgrades/Archive/DEVENV-FULL-TEST-LEDGER-USES-MONOTONIC-TIME.md>) — Resolved
 - [DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE — Gate scratch cleanup denied in managed worktree](<Developer environment upgrades/Archive/DEVENV-GATE-SCRATCH-CLEANUP-DENIED-IN-MANAGED-WORKTREE.md>) — Resolved
 - [DEVENV-GUEST-AGENT-AUDIT-PRIVACY — Guest agent audit privacy](<Developer environment upgrades/Archive/DEVENV-GUEST-AGENT-AUDIT-PRIVACY.md>) — Resolved
 - [DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND — Host-test artifacts accumulate without bound](<Developer environment upgrades/Archive/DEVENV-HOST-TEST-ARTIFACTS-ACCUMULATE-WITHOUT-BOUND.md>) — Resolved
+- [DEVENV-IDLE-RESET-FIXTURE-ASSUMES-SLEEP-CADENCE — Idle-reset fixture assumes sleep cadence](<Developer environment upgrades/Archive/DEVENV-IDLE-RESET-FIXTURE-ASSUMES-SLEEP-CADENCE.md>) — Resolved
 - [DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND — Jest cache identities and direct runs grow without bound](<Developer environment upgrades/Archive/DEVENV-JEST-CACHE-IDENTITIES-AND-DIRECT-RUNS-GROW-WITHOUT-BOUND.md>) — Resolved
 - [DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND — Jest's transform cache grows without bound](<Developer environment upgrades/Archive/DEVENV-JEST-TRANSFORM-CACHE-GROWS-WITHOUT-BOUND.md>) — Resolved
 - [DEVENV-LANDING-PREFLIGHT-MISSES-HUTCH-LAUNCHER — Landing preflight misses the native Hutch launcher](<Developer environment upgrades/Archive/DEVENV-LANDING-PREFLIGHT-MISSES-HUTCH-LAUNCHER.md>) — Resolved

@@ -1,11 +1,24 @@
 import { Errors, FS } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, settle, Test, testOverrideSlot, until } from '@shared/test'
+import {
+  Deferred,
+  Describe,
+  Expect,
+  mkTestDir,
+  setClockForTest,
+  settle,
+  Test,
+  testOverrideSlot,
+  until,
+} from '@shared/test'
 import { runGates } from '../verification-src/GateRunner'
 import type { GeneratedEvidence, GeneratedOutput } from '../verification-src/GeneratedEvidence'
 import { GreenTree } from '../verification-src/GreenTree'
 import { MachineLanes } from '../verification-src/MachineLanes'
 import { RunArtifacts } from '../verification-src/RunArtifacts'
 import { classifyFailure, formatGateSummary, gateExitCode } from '../verification-src/RunSummary'
+import { TestLedger } from '../verification-src/TestLedger'
+import { TestNodes } from '../verification-src/TestNodes'
+import { TestRunner } from '../verification-src/TestRunner'
 import { WorkGraph } from '../verification-src/WorkGraph'
 
 type GateScript = Record<string, { exitCode: number; output: string }>
@@ -13,6 +26,80 @@ type GateScript = Record<string, { exitCode: number; output: string }>
 const resourceAcquisition = testOverrideSlot<typeof MachineLanes.acquireResource>({
   read: () => MachineLanes.acquireResource,
   write: value => Object.defineProperty(MachineLanes, 'acquireResource', { value }),
+})
+
+const testPlanSlot = testOverrideSlot<typeof TestRunner.testNodesFor>({
+  read: () => TestRunner.testNodesFor,
+  write: value => Object.defineProperty(TestRunner, 'testNodesFor', { value }),
+})
+
+Describe('gate test evidence', () => {
+  Test('records full-run wall time and preserves it when fail-fast leaves tests unrun', async () => {
+    const root = await mkTestDir('tao-gate-test-evidence-')
+    let wallTime = Date.UTC(2026, 9, 1, 12)
+    const restoreClock = setClockForTest(() => wallTime)
+    const original = TestRunner.testNodesFor
+    const files = ['first', 'second'].map(name => `packages/shared/shared-tests/${name}.test.ts`)
+    const restorePlan = testPlanSlot.install(async options => {
+      if (options.repositoryRoot !== root) {
+        return original(options)
+      }
+      // Supply a small runner inventory while keeping graph execution and evidence recording real.
+      const plan = TestNodes.build({
+        ledger: { version: 1, tests: {} },
+        timings: { version: 1, nodes: {} },
+        selected: files.map((file, index) => ({
+          name: `fixture-${index}`,
+          files: [file],
+          buildProcess: (name, selected) => ({
+            command: 'fixture-runner',
+            args: [],
+            files: selected,
+            testReport: { format: 'bun-junit', suite: name, path: FS.resolvePath(`${name}.xml`, root) },
+          }),
+        })),
+      })
+      return { ...plan, states: [...plan.states] }
+    })
+    let fail = false
+    try {
+      for (const file of files) {
+        await FS.writeText(FS.resolvePath(file, root), '// test inventory fixture\n')
+      }
+      const execute = () =>
+        runGates({
+          gates: ['_test'],
+          jobs: 1,
+          now: () => 123,
+          machineLoadAverage: IDLE_MACHINE,
+          repositoryRoot: root,
+          registryRoot: FS.resolvePath('registry', root),
+          logRoot: FS.resolvePath(fail ? 'partial-logs' : 'complete-logs', root),
+          runGate: async name => {
+            const file = files[Number(name.split('-')[1])]
+            const failure = fail ? '<failure message="Tao regression" />' : ''
+            await FS.writeText(
+              FS.resolvePath(`${name}.xml`, root),
+              `<testsuite tests="1"><testcase file="${file}" name="protects Tao">${failure}</testcase></testsuite>`,
+            )
+            return { exitCode: fail ? 1 : 0, output: fail ? 'Tao regression' : '' }
+          },
+        })
+      Expect((await execute()).status).toBe('passed')
+      const fullRunAt = new Date(wallTime).toISOString()
+      Expect((await TestLedger.load(root)).lastFullRunStartedAt).toBe(fullRunAt)
+      fail = true
+      wallTime += 1_000
+      const partial = await execute()
+      Expect(partial.status).toBe('failed')
+      Expect(partial.gates.some(gate => gate.status === 'skipped')).toBe(true)
+      Expect((await TestLedger.load(root)).lastFullRunStartedAt).toBe(fullRunAt)
+    } finally {
+      restorePlan()
+      restoreClock()
+      await FS.remove(root)
+    }
+  })
 })
 
 Describe('gate release lifetime', () => {

@@ -67,6 +67,22 @@ as exclusions. Generated harness copies defer to their reviewed canonical source
 Ambiguous checks stay in place. Two assertion changes are the outcome of the audit, not a target
 for removal volume.
 
+Finalization exposed one additional fixture assumption: `process-supervision.test.ts` expected a
+real shell sleeping 150ms between outputs to keep within a 500ms idle deadline. System scheduling
+[does not guarantee that cadence](https://pubs.opengroup.org/onlinepubs/009696799/functions/sleep.html).
+The focused file passed, but the host broad run correctly reported a bound failure and stopped.
+Its useful Tao proof is output-triggered deadline reset; that proof now uses controlled idle-timer
+progression while retaining the real child/pipes and adjacent real timeout/tree checks. Removing
+the output-triggered restart deliberately failed the replacement; production code was restored.
+The restored file passes all 15 tests, and nested cleanup restores both timer overrides on failure.
+
+The failed run also exposed an evidence-clock bug: gate verification passed monotonic elapsed
+time to the ledger's calendar full-run boundary, producing a 1970 timestamp. The runner now captures
+wall time separately and retains monotonic durations. A real graph/report/ledger regression proves
+the full-run wall-clock boundary and that an aborted run leaves it unchanged; both corresponding
+mutations failed, and the restored gate file passes 41 tests. These two concrete environment
+findings are resolved in the developer-environment archive; native acceptance remains separate.
+
 ## Verification behavior
 
 Broad checks, verification, changed tests, and unfiltered full tests fail fast. Explicit file,
@@ -136,6 +152,12 @@ agent-chat ordering/stale undo, and network simulation. Their command reports ar
 and `19-28-14`/`19-28-15` reports, plus
 `.artifacts/logs/agent/studio-proof-real-app/2026-10-01T19-28-57-943Z-76022.log`.
 These are separate browser acceptance results, not a complete native `verify-full` claim.
+
+The first finalization run reported a definite process-fixture assertion failure, drained its
+running work, and reported 100 checks not run, including runtime/app work. Its incomplete evidence
+is preserved under `.artifacts/logs/verify/2026-10-01T19-33-22-800Z-8510-3a0295de/`; the prior green
+implementation runs do not make that finalization green. This is observed admission avoidance,
+not a performance comparison between runs with different host scheduling load.
 
 One display-only edge remains: during asynchronous classification of an already failed ordering
 prerequisite, the TUI may briefly say its dependent is waiting for local capacity. The scheduler
