@@ -7,7 +7,10 @@ datasources.md`). Both are specified in `Docs/Spec/Tao Data.md`.
 ```text
 Apps/HNReader/
   @model/Data.tao     shared entities, importable throughout this project
-  HNReader.tao        the project, both app variants, datasources, navigation, and design
+  HNReader.tao        the project and both app variants
+  Data.tao            the feed, bookmark, and reading-history datasources
+  Navigation.tao      the two stacks behind one toggle bar
+  Design.tao          the palette, sizes, and styles
   Feed.tao            the front page and its story rows
   Reading.tao         the device-local reading history
   Story.tao           one story and its comment thread

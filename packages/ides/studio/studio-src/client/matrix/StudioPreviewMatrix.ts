@@ -20,6 +20,16 @@ import {
 } from './StudioPreviewConnection'
 import { StudioReviewDom } from './StudioReviewDom'
 
+/**
+ * Latency experiment: `?taoStudioPreviews=first` on the Studio page connects only the first scenario's
+ * preview, so each save reaches one iframe instead of every cell.
+ */
+function connectedCells(manifest: StudioPreviewManifestV2): readonly StudioPreviewCell[] {
+  const firstOnly = typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('taoStudioPreviews') === 'first'
+  return firstOnly ? manifest.cells.slice(0, 1) : manifest.cells
+}
+
 export async function connectPreviews(
   parent: HTMLElement,
   previewUrl: string | undefined,
@@ -42,16 +52,18 @@ export async function connectPreviews(
   const manifest = handshake.previewManifest
   if (manifest !== undefined && manifest.cells.length > 0) {
     const compatibilitySignature = previewCompatibilitySignature(manifest)
-    const connections = await Promise.all(manifest.cells.map(cell =>
-      connectCellPreview(
-        previewUrl,
-        origin,
-        handshake,
-        manifest,
-        cell,
-        signal,
-      )
-    ))
+    const connections = await Promise.all(
+      connectedCells(manifest).map(cell =>
+        connectCellPreview(
+          previewUrl,
+          origin,
+          handshake,
+          manifest,
+          cell,
+          signal,
+        )
+      ),
+    )
     for (const connection of connections) {
       connection.manifestCompatibilitySignature = compatibilitySignature
     }
@@ -262,7 +274,8 @@ export async function refreshCellPreviews(
   )
   const interactionMode = previews[0]?.interactionMode ?? 'run'
   const setInteractionMode = previews[0]?.setInteractionMode
-  const nextConnections = await Promise.all(manifest.cells.map(async cell => {
+  const cells = connectedCells(manifest)
+  const nextConnections = await Promise.all(cells.map(async cell => {
     const previous = previousByCell.get(cell.cellId)
     if (previous !== undefined) {
       return previous
@@ -272,7 +285,7 @@ export async function refreshCellPreviews(
     connection.setInteractionMode = setInteractionMode
     return connection
   }))
-  const nextIds = new Set(manifest.cells.map(cell => cell.cellId))
+  const nextIds = new Set(cells.map(cell => cell.cellId))
   for (const preview of previews) {
     if (preview.cell !== undefined && nextIds.has(preview.cell.cellId)) {
       continue

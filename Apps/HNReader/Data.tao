@@ -1,0 +1,48 @@
+use Bookmarks, Comments, ReadingEntries, Stories from @model
+use CloudKit from @tao/data/providers/cloudkit
+use Http from @tao/data/providers/http
+use Local from @tao/data/providers/local
+
+// Three datasources. Stories and comments come from query-driven Http, bookmarks follow the reader
+// through iCloud, and reading history belongs to this device. Each datasource states the collections
+// it stores, and cross-store rows name stories with a `reference`.
+type HNSource is Http with {
+   Adapter item is HNAdapter from ./HNAdapter.ts
+   CacheFor duration is 5.min
+}
+
+type StubSource is Http with {
+   Adapter item is StubAdapter from ./StubAdapter.ts
+}
+
+folder
+datasource HackerNews = HNSource {
+   Data {
+      Stories,
+      Comments
+}  }
+
+folder
+datasource StubNews = StubSource {
+   Data {
+      Stories,
+      Comments
+}  }
+
+// CloudKit is Apple-native, so off a device the bookmarks still work from their local checkpoint and
+// the missing native side shows as a sync error. Checks replace it with an in-memory store.
+folder
+datasource Personal = CloudKit {
+   StorageKey "HNReaderBookmarksDev"
+   Data {
+      Bookmarks
+}  }
+
+// Reading history is device-owned rather than a field on the remote feed row. The real and stub
+// variants bind this same declaration, so a feed refill cannot erase what this device opened.
+folder
+datasource ReadingHistory = Local {
+   StorageKey "HNReaderReadingHistory"
+   Data {
+      ReadingEntries
+}  }

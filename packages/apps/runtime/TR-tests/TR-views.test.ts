@@ -777,6 +777,24 @@ Describe('TR.Views sketch elements', () => {
     Expect(flattenStyle(release.props['style'])).toEqual({ height: 52, width: 52 })
   })
 
+  Test('hatches a wide Placeholder across its whole width', () => {
+    const restoreDevelopment = setReactNativeDevModeForTest(true)
+    let wide: RuntimeElement
+    try {
+      wide = renderRuntimeElement(TR.Views.Placeholder({
+        label: 'View5',
+        layout: { layout: TR.Layout.create([['width', 464], ['height', 386]]) },
+      }))
+    } finally {
+      restoreDevelopment()
+    }
+    const hatch = fragmentChildren(wide)[0]!
+    const firstLine = String(hatch.props['children']).split('\n')[0]!
+    // About 20 points per stroke; the six strokes every placeholder once drew covered only 120.
+    Expect([...firstLine].filter(character => character === '╱').length * 20).toBeGreaterThanOrEqual(464)
+    Expect(flattenStyle(hatch.props['style'])['right']).toBeUndefined()
+  })
+
   Test('extends the Placeholder hatch through a tall declared height', () => {
     const restoreDevelopment = setReactNativeDevModeForTest(true)
     let placeholder: RuntimeElement
