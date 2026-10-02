@@ -1,0 +1,45 @@
+{
+  "id": "QA-HNREADER-SKETCH-FIXTURES",
+  "status": "fixed-awaiting-qa",
+  "phase": 2,
+  "surfaceId": "visual:hnreader",
+  "dimension": "visual",
+  "channel": "sketch-draft-1",
+  "severity": "minor",
+  "title": "committed Studio sketches ship inside the HNReader demo",
+  "observed": "At 0aa8ebcf Apps/HNReader/@/studio/View1-4.tao (committed in 47fa4dc9) each declare a sketch scenario. Captured, they show Placeholder boxes on a dark canvas and, for View2, a completely blank screen: its empty Text is padded 390px from the right of a 390px viewport.",
+  "impact": "A reader opening the demo in Studio or tao review sees four unnamed placeholder scenarios beside the real rows, one of them blank.",
+  "location": "Apps/HNReader/@/studio/View2.tao:6-8",
+  "affectedPhases": [
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "The Developer decides whether the demo keeps these sketches as a deliberate Studio sketch-review fixture, moves them to a test fixture, or removes them; a kept blank sketch is not.",
+  "recheck": "recapture HNReader and inspect every sketch/draft cell.",
+  "evidence": [
+    "Apps/HNReader/README.md"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/hnreader/sketch-draft-355d5a7f7994.png",
+      "sha256": "9446d9e0a7a1d96fda3aa93b56cbd17bb8ec16a40b689d3f49d7e06612d47dbc"
+    },
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/hnreader/sketch-draft-3e216aaa808d.png",
+      "sha256": "1577b1f7abf89a3a7506fcb773c707c06ec4ce097680b5b7dc76d127ffd3665e"
+    },
+    {
+      "path": "Docs/QA/evidence/recheck-0aa8ebcf/hnreader/source-snapshot.json",
+      "sha256": "5c552efe4d2b9f23cba78562aa2a73c0ee88132e624fbeeac6d5cb38bb968aa3"
+    }
+  ],
+  "createdAt": "2026-09-29T16:22:50.775Z",
+  "updatedAt": "2026-10-02T19:21:50.900Z",
+  "confidence": "design-judgment",
+  "requiredReviewer": "developer",
+  "relatedStories": [],
+  "notes": "Developer decided 2026-10-02 to delete the leftover sketches: Apps/HNReader/@/studio/View1-4.tao and .tao-project/studio/sketches.jsonc are removed. The Studio feed journey builds its own View1 in a temporary copy, so nothing depended on them.",
+  "owner": "developer"
+}

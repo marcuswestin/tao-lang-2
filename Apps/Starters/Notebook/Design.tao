@@ -54,7 +54,7 @@ design NotebookDesign {
       NavigationChromeButton [pad 8, radius 8, ink accentStrong, weight 600]
 
       screen [fill, content top stretch, pad 24, background canvas]
-      column [width max 720, gap 16]
+      column [width max 720, gap 16, centered]
       eyebrow [size 13, line 18, weight 700, ink accentStrong]
       sectionTitle [size 20, line 26, weight 700, ink ink]
       body [size 16, line 24, ink inkMuted]
