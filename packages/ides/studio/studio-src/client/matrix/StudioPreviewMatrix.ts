@@ -21,12 +21,17 @@ import {
 import { StudioReviewDom } from './StudioReviewDom'
 
 /**
- * Latency experiment: `?taoStudioPreviews=first` on the Studio page connects only the first scenario's
- * preview, so each save reaches one iframe instead of every cell.
+ * Latency experiment, on for now: Studio connects only the first scenario's preview, so each save
+ * reaches one iframe instead of every cell. Flip this to false, or add `?taoStudioPreviews=all` to the
+ * Studio URL, to connect every cell again.
  */
+const studioFirstPreviewOnly = true
+
 function connectedCells(manifest: StudioPreviewManifestV2): readonly StudioPreviewCell[] {
-  const firstOnly = typeof window !== 'undefined'
-    && new URLSearchParams(window.location.search).get('taoStudioPreviews') === 'first'
+  const requested = typeof window === 'undefined'
+    ? null
+    : new URLSearchParams(window.location.search).get('taoStudioPreviews')
+  const firstOnly = requested === 'first' || (studioFirstPreviewOnly && requested !== 'all')
   return firstOnly ? manifest.cells.slice(0, 1) : manifest.cells
 }
 
