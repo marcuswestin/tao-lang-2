@@ -35,7 +35,7 @@ For those, ask when the exchange buys something a subagent of your own would not
 
 ## Model and effort routing
 
-For every GPT task and tier, use the newest GPT-6 Sol available in the harness. Only routine execution with settled inputs and steps, requiring no exploration, judgment, or diagnosis, uses the newest GPT-6 Luna instead. This overrides broader fast/frontier task labels below for GPT; Claude routing is unchanged. Table IDs are concrete generated defaults, not a version ceiling. Never invent a latest alias.
+For every GPT task and tier, use the newest GPT-6 Sol available in the harness. Only routine execution with settled inputs and steps, requiring no exploration, judgment, or diagnosis, uses the newest GPT-6 Luna instead. This overrides broader fast/frontier task labels below for GPT. For Claude Code and Cursor, use the newest available release within the table's selected Claude family; preserve each tier's family. Table IDs are concrete generated defaults, not a version ceiling. Keep supported rolling aliases where offered; never invent a latest alias.
 
 | Work                                                                       | Tier                                        | Effort |
 | -------------------------------------------------------------------------- | ------------------------------------------- | ------ |

@@ -24,6 +24,11 @@ Cursor documents
 [`claude-opus-5-5`](https://cursor.com/docs/models/claude-opus-5-5) and
 [`[effort=high]`](https://cursor.com/docs/subagents), but the exact combination remains a live
 harness check on each installed version. Model catalog entries alone do not establish account access.
+For both Claude Code and Cursor, select the newest release the harness offers within the tier's
+selected Claude family. Claude Code's supported aliases resolve within an install; Cursor's
+concrete IDs must be refreshed as newer releases become available. Preserve those families and
+the existing non-Claude fast entry. Missing access is a limitation to report, not grounds to
+invent an alias or silently switch families.
 
 Measure cost **per successfully completed task**, including retries and reviewers. For each
 subagent, record uncached input, cache writes, cached reads, and output separately; apply current
@@ -38,7 +43,11 @@ does not establish a cheaper completed task. Missing usage data stays unknown.
 transcript metadata provide them. Spawn hooks do not share an agent ID with start hooks, so a
 transcript observation cannot establish which explicit selection produced it.
 
-`./agent model-audit` compares the table with what this machine ran instead: a Codex id the
+`./agent model-audit` also compares the personal Codex `[agents].default_subagent_model`, when set,
+with the repository's standard default. It reports only the selected model IDs and never dumps
+personal configuration; refreshing a personal setting needs separate authorization.
+
+The routing audit compares the table with what this machine ran: a Codex id the
 installed catalog supersedes; a full Claude id behind a newer model of its family; and a Claude
 Code install whose latest request under an alias ran an older model than another install ran,
 unless its version also ran the newer one, which makes the older model a session's own choice.
