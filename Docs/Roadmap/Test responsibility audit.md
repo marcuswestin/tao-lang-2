@@ -6,6 +6,30 @@ production assertions against the responsibility policy in
 
 ## Coverage and dispositions
 
+### Serial reduction follow-up
+
+The follow-up starts at `3d8e49906` with 707 authored test files: 589 TypeScript tests,
+47 Tao journeys, 47 runtime Jest files, and 24 host specs. Its exact ordered queue and
+per-file dispositions live in `.artifacts/audit/test-responsibility/serial-pass/`.
+Each file is read afresh, one at a time; independent package reviews run while the primary
+review pauses. Completion of the first audit below does not imply completion of this follow-up.
+
+The shared package is the first completed group: 12 files read, eight runnable cases removed,
+and repetitive assertions/input variants trimmed. The large shared suite now passes 95 cases,
+the helper suite 20, and the dispatch suite three. Removed cases covered native filesystem
+delegation, duplicate identity/settlement examples, a native module-mocking smoke, a repeated
+rollback failure input, and a trivial no-op return. Tao-owned rollback, races, supervision,
+guarding, adapter decisions, and cleanup remain covered. Two elapsed-time upper-bound
+assertions were removed; timeout abandonment still has a never-settling Deferred proof.
+The existing child-completion stress regression remains, marked `REMOVAL CANDIDATE` pending
+a smaller fixture that reliably reproduces the known upstream defect. Independent review
+found no actionable gaps. The remaining 695 files are pending; this is not a complete pass.
+
+Runnable-case reductions count actual cases, including parameter rows. Consolidation and
+parameterization alone do not count as reductions. Aggressive candidates remain executable
+with an inline `// REMOVAL CANDIDATE: <reason>` comment. Production behavior, runtime guards,
+dependencies, permissions, and the completed scheduling policy remain unchanged.
+
 The starting filename inventory is 588 TypeScript `*.test.ts` files, 47 Tao `*.test.tao`
 files, and 24 `*.host.spec.ts` files. Runner registrations also select runtime Jest tests,
 smoke files, fixtures, and generated templates. Filename counts alone do not establish audit
