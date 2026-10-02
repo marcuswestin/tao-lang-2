@@ -14,6 +14,8 @@ export type StudioNativeIdentity = {
   appName: string
   bundleIdentifier: string
   hostResourceName: string
+  /** Tests wait for their own host and never offer to stop its current owner. */
+  testing?: boolean
 }
 
 /** StudioWorktree is the checkout a development Studio is launched from. */
@@ -25,9 +27,20 @@ type StudioWorktree = {
 }
 
 export const StudioNativeIdentity = {
+  forTest,
   forWorktree,
   of,
 } as const
+
+/** A stable test app keeps native consent across runs while separating every checkout. */
+async function forTest(repositoryRoot: string = Repo.getRoot()): Promise<StudioNativeIdentity> {
+  const realPath = await FS.realPath(repositoryRoot)
+  const hash = Platform.sha256Hex(realPath).slice(0, 12)
+  return {
+    ...identity(`${defaultStudioAppName} Test — ${hash}`, `${defaultStudioBundleIdentifier}.test-${hash}`),
+    testing: true,
+  }
+}
 
 /** forWorktree derives the development Studio identity of the checkout at `repositoryRoot`. */
 async function forWorktree(repositoryRoot: string = Repo.getRoot()): Promise<StudioNativeIdentity> {

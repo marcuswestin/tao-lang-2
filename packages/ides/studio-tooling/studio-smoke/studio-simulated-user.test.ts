@@ -10,6 +10,7 @@ import {
 } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { type StartedStudioNative, StudioNative } from '../studio-tooling-src/StudioNative'
+import { StudioNativeTestRun } from '../studio-tooling-src/StudioNativeTestRun'
 import { exerciseStudioFeed } from './studio-feed-journey'
 
 const scrollingTail = Array.from({ length: 80 }, (_, index) => `// scroll proof ${index + 1}`).join('\n')
@@ -116,7 +117,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     const projectUrl = `${studio.url}/sessions/${encodeURIComponent(current.sessionId)}`
     if (Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_NATIVE'] === 'true') {
       native = await StudioNative.start({
-        artifactRoot: FS.resolvePath('electrobun', artifactParent),
+        ...await StudioNativeTestRun.nativeOptions((await StudioNativeTestRun.create(artifactParent)).root),
         nativeHostCommand: 'studio-smoke-native',
         previewUrl: preview.url,
         projectUrl,

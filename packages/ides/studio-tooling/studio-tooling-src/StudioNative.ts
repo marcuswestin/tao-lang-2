@@ -17,6 +17,7 @@ import {
   type MachineResourceOwner,
 } from '@verification/MachineLanes'
 import { PackageGraph } from '@verification/PackageGraph'
+import { UiVisibility } from '@verification/UiVisibility'
 import { delimiter as pathDelimiter } from 'node:path'
 import {
   defaultStudioAppName,
@@ -51,6 +52,8 @@ const nativeHostTakeoverWaitMs = 10_000
 type StudioNativeOptions = {
   artifactRoot?: string
   hutchPath?: string
+  /** Mutable Hutch home for this launch; development retains its existing home. */
+  hutchHome?: string
   /** Development app identity; defaults to the one derived from this worktree. */
   identity?: StudioNativeIdentity
   /** Operation recorded in this worktree's native-host lease. */
@@ -59,6 +62,8 @@ type StudioNativeOptions = {
   /** Undefined opens the Welcome window only: `--no-browser` must not add a project window. */
   projectUrl?: string
   probe?: boolean
+  /** Permission for visible test windows; development keeps its normal guided launch. */
+  showStudio?: boolean
   showWindow?: boolean
   signal?: AbortSignal
   studioUrl: string
@@ -195,6 +200,14 @@ async function start(
   options: StudioNativeOptions,
   lifecycleOptions: NativeStartLifecycleOptions = {},
 ): Promise<StartedStudioNative> {
+  if (
+    options.showWindow !== false
+    && (options.probe === true || /(?:^|-)(?:smoke|canary|test|manual)(?:-|$)/.test(options.nativeHostCommand ?? ''))
+  ) {
+    UiVisibility.requireStudio(
+      options.showStudio ?? Platform.runtimeProcess.env[UiVisibility.STUDIO_ENV_KEY] === 'true',
+    )
+  }
   const interruption = createNativeInterruption(options.signal, lifecycleOptions.onProcessSignal)
   let nativeHostLease: NativeHostLease | undefined
   try {
@@ -205,7 +218,13 @@ async function start(
       'native host lease',
       async () =>
         await acquireNativeHostLeases(
-          { command, name: identity.hostResourceName, probe: options.probe === true },
+          {
+            command,
+            name: identity.hostResourceName,
+            probe: options.probe === true,
+            signal: interruption.signal,
+            testing: identity.testing,
+          },
           lifecycleOptions.nativeHost,
         ),
       { signal: interruption.signal },
@@ -248,7 +267,7 @@ async function startWithInterruption(
     'isolate Hutch mutable state',
     async () =>
       await StudioHutchHome.prepare({
-        targetHome: Repo.resolvePath('.artifacts/user/studio-hutch-home'),
+        targetHome: options.hutchHome ?? Repo.resolvePath('.artifacts/user/studio-hutch-home'),
       }),
     phaseOptions,
   )
@@ -424,7 +443,7 @@ async function startWithInterruption(
  * verification run, which fails at once as busy rather than stop another worktree's run.
  */
 async function acquireNativeHostLeases(
-  request: { command: string; name: string; probe: boolean },
+  request: { command: string; name: string; probe: boolean; signal?: AbortSignal; testing?: boolean },
   dependencies: NativeHostLeaseDependencies = {},
 ): Promise<NativeHostLease> {
   const hostLease = await acquireNativeHostLease(request, dependencies)
@@ -438,6 +457,7 @@ async function acquireNativeHostLeases(
       maxAgeMs: Number.POSITIVE_INFINITY,
       name: nativeProbeResourceName,
       repositoryRoot: Repo.getRoot(),
+      signal: request.signal,
       waitTimeoutMs: 0,
     })
   } catch (error) {
@@ -463,7 +483,7 @@ async function acquireNativeHostLeases(
  * on a default answer.
  */
 async function acquireNativeHostLease(
-  host: { command: string; name: string },
+  host: { command: string; name: string; signal?: AbortSignal; testing?: boolean },
   dependencies: NativeHostLeaseDependencies = {},
 ): Promise<MachineResourceLease> {
   const acquire = dependencies.acquire ?? MachineLanes.acquireResource
@@ -476,12 +496,16 @@ async function acquireNativeHostLease(
       maxAgeMs: Number.POSITIVE_INFINITY,
       name: host.name,
       repositoryRoot: Repo.getRoot(),
+      signal: host.signal,
       waitTimeoutMs,
     })
   try {
-    return await request(0)
+    return await request(host.testing === true ? 10 * 60_000 : 0)
   } catch (error) {
-    if (!(error instanceof MachineResourceBusyError) || !(dependencies.isInteractive ?? HCI.isInteractive)()) {
+    if (
+      host.testing === true || !(error instanceof MachineResourceBusyError)
+      || !(dependencies.isInteractive ?? HCI.isInteractive)()
+    ) {
       throw error
     }
     const owner = error.owner

@@ -2,6 +2,7 @@ import type { HostRevision, HostTarget } from '@host-control'
 import { Errors, FS, Platform, Repo } from '@shared'
 import { Expect, Test } from '@shared/test'
 import { StudioNative } from '../studio-tooling-src/StudioNative'
+import { StudioNativeTestRun } from '../studio-tooling-src/StudioNativeTestRun'
 
 const firstRevision: HostRevision = { build: 'studio-host-control-1', source: 'fixture-1' }
 const secondRevision: HostRevision = { build: 'studio-host-control-2', source: 'fixture-2' }
@@ -17,8 +18,9 @@ const stateTarget: HostTarget = {
 }
 
 Test('StartedStudioNative exposes its real Electrobun renderer through fenced semantic host control', async () => {
-  const artifactRoot = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
+  const artifactBase = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
     ?? FS.resolvePath('.artifacts/tests/studio-smoke/host-control', Repo.getRoot())
+  const { root: artifactRoot } = await StudioNativeTestRun.create(artifactBase)
   const studioPort = smokePort('TAO_STUDIO_SMOKE_SERVER_PORT', 42_000)
   const previewPort = smokePort('TAO_STUDIO_SMOKE_PREVIEW_PORT', 42_001)
   const studioServer = Bun.serve({
@@ -35,7 +37,7 @@ Test('StartedStudioNative exposes its real Electrobun renderer through fenced se
   try {
     const studioUrl = `http://127.0.0.1:${studioServer.port}`
     native = await StudioNative.start({
-      artifactRoot: FS.resolvePath('electrobun', artifactRoot),
+      ...await StudioNativeTestRun.nativeOptions(artifactRoot),
       nativeHostCommand: 'studio-host-control-smoke',
       previewUrl: `http://127.0.0.1:${previewServer.port}`,
       projectUrl: `${studioUrl}/sessions/host-control-fixture`,

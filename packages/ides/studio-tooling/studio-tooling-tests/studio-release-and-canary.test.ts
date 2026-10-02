@@ -1,5 +1,5 @@
 import { Errors, FS } from '@shared'
-import { Deferred, Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { GateCatalog } from '@verification/GateCatalog'
 import { MachineLanes } from '@verification/MachineLanes'
 import {
@@ -204,18 +204,29 @@ Describe('Studio native canary', () => {
     passed: true,
   }
 
-  Test('runs its automatic native probe hidden so completion never waits for a person', () => {
+  Test('shows the canary only with explicit visible-test permission', () => {
     Expect(StudioCanaryCommand.testing.canaryStudioDevOptions({
       appName: 'HNReader',
       artifactRoot: '/tmp/canary',
       hutchPath: '/tmp/hutch',
       projectRoot: '/repo/Apps/HNReader',
+      showStudio: true,
     })).toMatchObject({
       browser: true,
       native: true,
       nativeProbe: true,
-      nativeShowWindow: false,
+      nativeShowStudio: true,
+      nativeShowWindow: true,
     })
+    for (const showStudio of [undefined, false]) {
+      Expect(StudioCanaryCommand.testing.canaryStudioDevOptions({
+        appName: 'HNReader',
+        artifactRoot: '/tmp/canary',
+        hutchPath: '/tmp/hutch',
+        projectRoot: '/repo/Apps/HNReader',
+        showStudio,
+      })).toMatchObject({ nativeShowStudio: false, nativeShowWindow: false })
+    }
   })
 
   Test('reports the classified Studio startup failure instead of guessing AppKit rejected it', () => {
@@ -249,22 +260,26 @@ Describe('Studio native canary', () => {
     const registryRoot = FS.resolvePath('registry', artifactRoot)
     const startupFailure = new Errors.HostEnvironmentError('The device trust store is read-only.')
     try {
-      const exitCode = await StudioCanaryCommand.testing.runStudioCanary({
-        artifactRoot,
-        projectRoot: '/tmp/project',
-      }, {
-        blockedReason: async () => undefined,
-        readLaunches: async () => [],
-        readProbeResult: async () => undefined,
-        registryRoot,
-        runStudioDev: async options => {
-          options.onFailure?.(startupFailure)
-          Errors.throwHostEnvironment('Studio cleanup failed.')
-        },
-        survivingOwnedPids: async () => [],
-      })
+      const captured = await withCapturedOutput(async () =>
+        await StudioCanaryCommand.testing.runStudioCanary({
+          artifactRoot,
+          projectRoot: '/tmp/project',
+        }, {
+          blockedReason: async () => undefined,
+          readLaunches: async () => [],
+          readProbeResult: async () => undefined,
+          registryRoot,
+          runStudioDev: async options => {
+            Expect(options.nativeShowWindow).toBe(false)
+            options.onFailure?.(startupFailure)
+            Errors.throwHostEnvironment('Studio cleanup failed.')
+          },
+          survivingOwnedPids: async () => [],
+        })
+      )
 
-      Expect(exitCode).toBe(1)
+      Expect(captured.result).toBe(1)
+      Expect(captured.stderr).toBe('')
       const invocationRoot = await onlyCanaryInvocationRoot(artifactRoot)
       Expect(await FS.readJson(FS.resolvePath('canary.json', invocationRoot))).toMatchObject({
         blockedReason: 'Studio failed before the native probe reported (host environment): '
@@ -301,24 +316,34 @@ Describe('Studio native canary', () => {
         }
         await release.promise
         await FS.writeJson(FS.resolvePath('artifacts/runtime-result.json', nativeRoot), passingProbe)
+        options.onCleanup?.({ resourcesStopped: true })
         return 0
       },
       survivingOwnedPids: async () => [],
     }
     try {
-      const runs = [
-        StudioCanaryCommand.testing.runStudioCanary({ artifactRoot, projectRoot: '/tmp/one' }, dependencies),
-        StudioCanaryCommand.testing.runStudioCanary({ artifactRoot, projectRoot: '/tmp/two' }, dependencies),
-      ]
-      await firstStarted.promise
-      Expect(starts).toBe(1)
-      const blocked = await MachineLanes.tryAcquireResource({
-        name: GateCatalog.GUI_RESOURCE,
-        registryRoot: dependencies.registryRoot,
+      const captured = await withCapturedOutput(async () => {
+        const runs = [
+          StudioCanaryCommand.testing.runStudioCanary(
+            { artifactRoot, projectRoot: '/tmp/one', showStudio: true },
+            dependencies,
+          ),
+          StudioCanaryCommand.testing.runStudioCanary(
+            { artifactRoot, projectRoot: '/tmp/two', showStudio: true },
+            dependencies,
+          ),
+        ]
+        await firstStarted.promise
+        Expect(starts).toBe(1)
+        const blocked = await MachineLanes.tryAcquireResource({
+          name: GateCatalog.GUI_RESOURCE,
+          registryRoot: dependencies.registryRoot,
+        })
+        Expect(blocked).toBeUndefined()
+        release.resolve()
+        return await Promise.all(runs)
       })
-      Expect(blocked).toBeUndefined()
-      release.resolve()
-      Expect(await Promise.all(runs)).toEqual([0, 0])
+      Expect(captured.result).toEqual([0, 0])
       Expect(new Set(nativeRoots).size).toBe(2)
 
       const invocationNames = await FS.listDir(FS.resolvePath('invocations', artifactRoot))
@@ -425,13 +450,16 @@ Describe('Studio native canary', () => {
     Expect(formatCanaryReport(report)).toContain('BLOCKED   Hutch is not installed')
   })
 
-  Test('selects HNReader when the default project is used, even if only --project was set', () => {
+  Test('defaults to the keyboard fixture and selects HNReader only when explicitly requested', () => {
     const repositoryRoot = '/repo'
     const defaultRoot = FS.resolvePath('Apps/HNReader', repositoryRoot)
 
     Expect(resolveCanaryTarget({}, repositoryRoot)).toEqual({
-      appName: 'HNReader',
-      projectRoot: defaultRoot,
+      appName: 'KeyboardNavigationAcceptance',
+      projectRoot: FS.resolvePath(
+        'packages/ides/studio-tooling/studio-smoke/fixtures/runtime-keyboard-navigation',
+        repositoryRoot,
+      ),
     })
     Expect(resolveCanaryTarget({ projectRoot: 'Apps/HNReader' }, repositoryRoot)).toEqual({
       appName: 'HNReader',
@@ -471,10 +499,16 @@ Describe('Studio native canary', () => {
     await FS.writeText(FS.resolvePath('current/electrobun/app', invocations), 'build')
     await FS.writeText(FS.resolvePath('running/electrobun/app', invocations), 'build')
     for (const name of ['unreported', 'passed', 'failed']) {
+      const root = FS.resolvePath(name, invocations)
+      await FS.writeJson(FS.resolvePath('invocation.json', root), {
+        ownerPid: 999_999_999,
+        root: await FS.realPath(root),
+        version: 1,
+      })
       await FS.setModifiedTimeMs(FS.resolvePath(name, invocations), stale)
     }
 
-    await StudioCanaryCommand.testing.sweepEarlierCanaryInvocations(artifactBase, 'current')
+    await StudioCanaryCommand.testing.sweepEarlierCanaryInvocations(artifactBase, 'current', async () => true)
 
     Expect(await FS.exists(FS.resolvePath('unreported', invocations))).toBe(false)
     Expect(await FS.exists(FS.resolvePath('passed/electrobun', invocations))).toBe(false)
@@ -492,44 +526,80 @@ async function onlyCanaryInvocationRoot(artifactRoot: string): Promise<string> {
 }
 
 Describe('Studio native manual checks', () => {
+  Test('refuses before terminal inspection, artifact creation, or native launch without permission', async () => {
+    const root = await mkTestDir('tao-studio-manual-consent-')
+    const artifactRoot = FS.resolvePath('manual', root)
+    const effects: string[] = []
+    try {
+      await Expect(StudioManualChecks.run({ artifactRoot }, {
+        isInteractive: () => {
+          effects.push('terminal')
+          return true
+        },
+        runStudio: async () => {
+          effects.push('launch')
+          return 0
+        },
+        writeLine: () => effects.push('output'),
+      })).rejects.toThrow('--show-studio')
+      Expect(effects).toEqual([])
+      Expect(await FS.exists(artifactRoot)).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('launches a visible non-probe workflow and names every check the person is to judge', async () => {
     const artifactRoot = await mkTestDir('tao-studio-manual-checks-')
     const launches: unknown[] = []
     const output: string[] = []
-    const exitCode = await StudioManualChecks.run({ artifactRoot }, {
-      isInteractive: () => true,
-      runStudio: async options => {
-        launches.push(options)
-        return 0
-      },
-      writeLine: line => output.push(line),
-    })
+    const captured = await withCapturedOutput(async () =>
+      await StudioManualChecks.run({ artifactRoot, showStudio: true }, {
+        isInteractive: () => true,
+        runStudio: async options => {
+          launches.push(options)
+          options.onCleanup?.({ resourcesStopped: true })
+          return 0
+        },
+        writeLine: line => output.push(line),
+      })
+    )
 
-    Expect(exitCode).toBe(0)
+    Expect(captured.result).toBe(0)
+    Expect(captured.stderr).toContain('WARNING: Native Studio tests open Electrobun windows.')
     Expect(launches).toHaveLength(1)
-    Expect(launches[0]).toMatchObject({ browser: true, native: true })
+    Expect(launches[0]).toMatchObject({
+      browser: true,
+      native: true,
+      nativeHostCommand: 'studio-manual-checks',
+      nativeShowStudio: true,
+      nativeShowWindow: true,
+    })
     Expect(launches[0]).not.toHaveProperty('nativeProbe')
     Expect(output.join('\n')).toContain('Tao Studio will open for these manual checks:')
     for (const check of STUDIO_MANUAL_CHECKS) {
       Expect(output.join('\n')).toContain(check)
     }
-    Expect(await FS.readJson(FS.resolvePath('manual-checks.json', artifactRoot))).toMatchObject({
-      checks: STUDIO_MANUAL_CHECKS,
-      status: 'launched',
-      version: 2,
-    })
+    Expect(await FS.readJson(FS.resolvePath('manual-checks.json', await onlyCanaryInvocationRoot(artifactRoot))))
+      .toMatchObject({
+        checks: STUDIO_MANUAL_CHECKS,
+        status: 'launched',
+        version: 2,
+      })
   })
 
   Test('refuses to enter a human workflow from a non-interactive gate', async () => {
     let launches = 0
-    await Expect(StudioManualChecks.run({}, {
-      isInteractive: () => false,
-      runStudio: async () => {
-        launches += 1
-        return 0
-      },
-      writeLine() {},
-    })).rejects.toThrow('require an interactive terminal')
+    await withCapturedOutput(async () =>
+      await Expect(StudioManualChecks.run({ showStudio: true }, {
+        isInteractive: () => false,
+        runStudio: async () => {
+          launches += 1
+          return 0
+        },
+        writeLine() {},
+      })).rejects.toThrow('require an interactive terminal')
+    )
     Expect(launches).toBe(0)
   })
 
@@ -540,17 +610,23 @@ Describe('Studio native manual checks', () => {
   Test('ends successfully when the person interrupts the launch, recording what it was', async () => {
     const artifactRoot = await mkTestDir('tao-studio-manual-interrupt-')
     const output: string[] = []
-    const exitCode = await StudioManualChecks.run({ artifactRoot }, {
-      isInteractive: () => true,
-      runStudio: async () => 130,
-      writeLine: line => output.push(line),
-    })
+    const captured = await withCapturedOutput(async () =>
+      await StudioManualChecks.run({ artifactRoot, showStudio: true }, {
+        isInteractive: () => true,
+        runStudio: async options => {
+          options.onCleanup?.({ resourcesStopped: true })
+          return 130
+        },
+        writeLine: line => output.push(line),
+      })
+    )
 
-    Expect(exitCode).toBe(0)
+    Expect(captured.result).toBe(0)
     Expect(output.join('\n')).toContain('press Ctrl-C')
-    Expect(await FS.readJson(FS.resolvePath('manual-checks.json', artifactRoot))).toMatchObject({
-      launchExitCode: 130,
-      status: 'launched',
-    })
+    Expect(await FS.readJson(FS.resolvePath('manual-checks.json', await onlyCanaryInvocationRoot(artifactRoot))))
+      .toMatchObject({
+        launchExitCode: 130,
+        status: 'launched',
+      })
   })
 })

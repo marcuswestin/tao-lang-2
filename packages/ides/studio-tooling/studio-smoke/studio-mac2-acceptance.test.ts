@@ -8,7 +8,9 @@ import {
 import { MachineResources } from '@host-control'
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { Expect, Test } from '@shared/test'
+import { StudioMac2TestRun } from '../studio-tooling-src/StudioMac2TestRun'
 import { StudioNative } from '../studio-tooling-src/StudioNative'
+import { StudioNativeTestRun } from '../studio-tooling-src/StudioNativeTestRun'
 
 const revision = { build: 'studio-mac2-acceptance-1', source: 'studio-mac2-smoke' }
 
@@ -17,8 +19,9 @@ const revision = { build: 'studio-mac2-acceptance-1', source: 'studio-mac2-smoke
  * deliberately retains the physical-input lease and server when remote deletion is ambiguous.
  */
 Test('Studio Mac2 acceptance observes the launched native application and preserves its artifacts', async () => {
-  const artifactRoot = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
+  const artifactBase = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
     ?? FS.resolvePath('.artifacts/tests/studio-smoke/mac2-acceptance', Repo.getRoot())
+  const { root: artifactRoot } = await StudioNativeTestRun.create(artifactBase)
   const appiumHome = FS.resolvePath('appium-mac2-home', artifactRoot)
   const studioPort = smokePort('TAO_STUDIO_SMOKE_SERVER_PORT', 42_020)
   const previewPort = smokePort('TAO_STUDIO_SMOKE_PREVIEW_PORT', 42_021)
@@ -35,11 +38,15 @@ Test('Studio Mac2 acceptance observes the launched native application and preser
   let native: Awaited<ReturnType<typeof StudioNative.start>> | undefined
   let controller: Mac2HostController | undefined
   let closeController: (() => Promise<void>) | undefined
+  let mac2: Awaited<ReturnType<typeof StudioMac2TestRun.prepare>> | undefined
+  let serverStopped = false
+  let primaryFailure: { error: unknown } | undefined
   try {
     await provisionMac2DriverHome(appiumHome)
+    mac2 = await StudioMac2TestRun.prepare({ artifactRoot })
     const studioUrl = `http://127.0.0.1:${studioServer.port}`
     native = await StudioNative.start({
-      artifactRoot: FS.resolvePath('electrobun', artifactRoot),
+      ...await StudioNativeTestRun.nativeOptions(artifactRoot),
       nativeHostCommand: 'studio-mac2-acceptance-smoke',
       previewUrl: `http://127.0.0.1:${previewServer.port}`,
       projectUrl: `${studioUrl}/sessions/mac2-acceptance-fixture`,
@@ -53,11 +60,18 @@ Test('Studio Mac2 acceptance observes the launched native application and preser
     const serverLogPath = FS.resolvePath('appium-mac2/server.log', artifactRoot)
     const factory = createStudioMac2AcceptanceFactory({
       capabilities: {
+        'appium:appPath': await StudioMac2TestRun.appPath(native.project.root, studioBundleIdentifier),
+        'appium:bootstrapRoot': mac2.bootstrapRoot,
         'appium:bundleId': studioBundleIdentifier,
+        'appium:noReset': true,
+        'appium:skipAppKill': true,
+        'appium:systemPort': mac2.systemPort,
+        'appium:webDriverAgentMacUrl': mac2.webDriverAgentMacUrl,
         // Keep the WDA/Xcode diagnosis in the run log when macOS blocks a future attach.
         'appium:showServerLogs': true,
       },
       cleanupArtifacts: async () => {
+        await mac2!.cleanup(serverStopped)
         await FS.writeJson(FS.resolvePath('appium-mac2/cleanup.json', artifactRoot), {
           lifecycle: 'closed',
           version: 1,
@@ -65,6 +79,7 @@ Test('Studio Mac2 acceptance observes the launched native application and preser
         await FS.remove(appiumHome)
       },
       driverHome: appiumHome,
+      desktopLeases: mac2.desktopLeases,
       resolveTarget: target => {
         if (target.kind === 'scoped') {
           return Errors.throwUnexpected('Mac2 resolves scoped targets before requesting a leaf locator.')
@@ -76,8 +91,8 @@ Test('Studio Mac2 acceptance observes the launched native application and preser
       },
       server: {
         command: appiumCommand(),
-        environment: { ...Platform.runtimeProcess.env },
-        reservations: appiumPortReservations('studio-mac2-acceptance'),
+        environment: mac2.environment,
+        reservations: appiumPortReservations(artifactRoot),
       },
       startServer: async options => {
         const server = await startAppiumServer(options)
@@ -85,6 +100,7 @@ Test('Studio Mac2 acceptance observes the launched native application and preser
           close: async () => {
             await FS.writeText(serverLogPath, server.logs())
             await server.close()
+            serverStopped = true
           },
           logs: server.logs,
           url: server.url,
@@ -114,11 +130,19 @@ Test('Studio Mac2 acceptance observes the launched native application and preser
     closeController = undefined
     Expect(await FS.isFile(FS.resolvePath('appium-mac2/server.log', artifactRoot))).toBe(true)
     Expect(await FS.isFile(FS.resolvePath('appium-mac2/cleanup.json', artifactRoot))).toBe(true)
+  } catch (error) {
+    primaryFailure = { error }
   } finally {
-    await closeController?.()
-    await native?.stop()
-    studioServer.stop(true)
-    previewServer.stop(true)
+    await StudioMac2TestRun.finish({
+      cleanupWda: async () => await mac2?.cleanup(serverStopped),
+      closeController,
+      primaryFailure,
+      stopFixtures: () => {
+        studioServer.stop(true)
+        previewServer.stop(true)
+      },
+      stopNative: async () => await native?.stop(),
+    })
   }
 }, 300_000)
 

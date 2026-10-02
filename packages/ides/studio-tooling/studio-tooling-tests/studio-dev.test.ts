@@ -1249,6 +1249,7 @@ Describe('Studio smoke resource isolation', () => {
   Test('delivers the original classified startup failure to an in-process observer', async () => {
     const root = await mkTestDir('tao-studio-failure-observer-')
     const failures: unknown[] = []
+    const cleanupResults: unknown[] = []
     try {
       const captured = await withCapturedOutput(async () =>
         await runStudioDev({
@@ -1256,6 +1257,7 @@ Describe('Studio smoke resource isolation', () => {
           native: true,
           nativeHutchPath: FS.resolvePath('missing-hutch', root),
           onFailure: error => failures.push(error),
+          onCleanup: result => cleanupResults.push(result),
           projectRoot: Repo.getRoot(),
           userStateRoot: FS.resolvePath('user-state', root),
         })
@@ -1263,6 +1265,7 @@ Describe('Studio smoke resource isolation', () => {
 
       Expect(captured.result).toBe(1)
       Expect(failures).toHaveLength(1)
+      Expect(cleanupResults).toEqual([{ resourcesStopped: true }])
       Expect(failures[0]).toBeInstanceOf(Errors.UserInputError)
       Expect(Errors.messageOf(failures[0])).toContain('Hutch executable specified by --hutch was not found')
     } finally {
