@@ -258,6 +258,23 @@ Describe('QA evidence register', () => {
           await input(root, 'visual-person', { ...visual, reviewer: 'human', evidence: [image] }),
         )).reviewer,
       ).toBe('human')
+      const site = { ...observation, surfaceId: 'story:WEB1', dimension: 'functional', channel: 'public-site' }
+      await Expect(qa.recordFile(await input(root, 'site-no-url', { ...site, evidence: [image] })))
+        .rejects.toThrow('https reviewedUrl')
+      await Expect(
+        qa.recordFile(
+          await input(root, 'site-no-image', {
+            ...site,
+            reviewedUrl: 'https://example.com/tao',
+            evidence: ['README.md'],
+          }),
+        ),
+      ).rejects.toThrow('screenshot of that page')
+      Expect(
+        (await qa.recordFile(
+          await input(root, 'site-pass', { ...site, reviewedUrl: 'https://example.com/tao', evidence: [image] }),
+        )).reviewedUrl,
+      ).toBe('https://example.com/tao')
       Expect((await new QaInventory(root).build(1)).dirty).toBe(false)
       await FS.writeText(FS.resolvePath('packages/example/source.ts', root), 'export const value = 3\n')
       const dirtyRun = await qa.run(1, 'all')

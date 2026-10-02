@@ -33,6 +33,13 @@ Describe('Project release toolchain compatibility', () => {
       await Expect(ReleaseToolchain.requireMatchingProjectRelease(source, 'editor')).rejects.toThrow('Tao development')
       await FS.writeJson(lock, { toolchain: { version: 'development' } })
       await Expect(ReleaseToolchain.requireMatchingProjectRelease(source, 'Studio')).resolves.toBeUndefined()
+      await FS.writeText(lock, '{ "toolchain": { "version": "0.4.3" ')
+      await Expect(ReleaseToolchain.requireMatchingProjectRelease(source, 'editor', own)).rejects.toThrow(
+        `The Tao project lock at ${lock} is not valid JSONC`,
+      )
+      await Expect(ReleaseToolchain.requireMatchingProjectRelease(source, 'editor', own)).rejects.toThrow(
+        'git restore .tao-project/lock.jsonc',
+      )
     } finally {
       await FS.remove(root)
     }

@@ -1,6 +1,8 @@
 import { CLI, Errors, FS, HCI, Platform, ReleaseCapabilities } from '@shared'
 import { type QaDimension, QaInventory, type QaInventoryData, type QaReviewer, type QaSurface } from './QaInventory'
 
+const IMAGE_PATTERN = /\.(png|jpe?g|webp)$/iu
+
 type Outcome = 'not-run' | 'pass' | 'friction' | 'fail' | 'blocked'
 type Snapshot = Pick<QaSurface, 'sourceHash' | 'rendererHash' | 'profileHash'>
 type Observation = Snapshot & {
@@ -14,6 +16,7 @@ type Observation = Snapshot & {
   environment: { platform: string; architecture: string; runtime: string }
   inputs: { source: string; dependencySnapshot: string }
   artifact?: { version: string; digest: string; sourceCommit: string }
+  reviewedUrl?: string
   provenance: {
     snapshotBasis: 'import-time' | 'observation-time'
     originalDependencies: 'unknown' | 'recorded'
@@ -248,6 +251,17 @@ export class QaRegister {
     if (dimension === 'visual' && outcome === 'pass') {
       await this.requireInspectedCapture(evidence, reviewer, surface, channel)
     }
+    // Nothing is built for the published site, so the page that was read and how it looked are the evidence.
+    const reviewedUrl = channel === 'public-site' && outcome === 'pass' ? input['reviewedUrl'] : undefined
+    if (
+      channel === 'public-site' && outcome === 'pass'
+      && (typeof reviewedUrl !== 'string' || !/^https:\/\/\S+$/u.test(reviewedUrl)
+        || !evidence.some(item => IMAGE_PATTERN.test(item.path)))
+    ) {
+      Errors.throwUserInput(
+        'A public-site pass must name the https reviewedUrl it read and cite a screenshot of that page.',
+      )
+    }
     if (input['historical'] !== undefined && typeof input['historical'] !== 'boolean') {
       Errors.throwUserInput('historical must be a boolean.')
     }
@@ -320,6 +334,7 @@ export class QaRegister {
       },
       inputs: { source: surface.source, dependencySnapshot },
       ...(artifact ? { artifact } : {}),
+      ...(typeof reviewedUrl === 'string' ? { reviewedUrl } : {}),
       surfaceId,
       dimension,
       outcome,
@@ -709,7 +724,7 @@ export class QaRegister {
     surface: QaSurface,
     channel: string,
   ): Promise<void> {
-    const images = evidence.filter(item => /\.(png|jpe?g|webp)$/iu.test(item.path))
+    const images = evidence.filter(item => IMAGE_PATTERN.test(item.path))
     if (!images.length) {
       Errors.throwUserInput(
         'A visual pass requires an inspected image, not capture success or unchanged digests alone.',

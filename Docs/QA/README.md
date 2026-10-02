@@ -100,7 +100,8 @@ snapshot under `inputs/`. Historical records explicitly label those snapshot fie
 mark original dependencies unknown, and link original capture/run metadata through evidence. Release story passes outside documentation require `executionProfile`
 to match the requested phase and an `artifact` containing `version`, `digest`, and `sourceCommit`;
 `public-site` stories (the published front door and repository) are exempt, since nothing is built
-for them, while WEB2's download half stays on `installed-cli`.
+for them, while WEB2's download half stays on `installed-cli`. Instead, a `public-site` pass must
+name the `https` page it read as `reviewedUrl` and cite a screenshot of that page.
 A run that inventoried uncommitted inputs cannot record an artifact, because nothing was built from
 its candidate commit. Development profiles cannot satisfy installed public-artifact acceptance. Reports re-hash evidence and compare source, shared
 dependencies, renderer and profile. A missing or changed evidence file is `needs-recheck`.
