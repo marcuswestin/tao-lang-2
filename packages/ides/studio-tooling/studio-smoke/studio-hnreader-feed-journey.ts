@@ -106,7 +106,8 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await driver.waitForInFrame(livePreviewUrl, `Boolean(${renderedRect(snappedId)})`, { timeoutMs: 30_000 })
     await waitForCompiledPreview(driver)
     HCI.logProcessInfo('HNReader Feed', 'Generated Story and Title drops')
-    await driver.click('.studio-agent-collapse')
+    // Studio opens the agent minimized, so the Data rail is not covered.
+    await driver.waitFor(`document.querySelector('.studio-agent-panel')?.getAttribute('data-minimized') === 'true'`)
     await driver.click('.studio-rail-button[data-panel="data"]')
     await driver.waitFor(`document.querySelector('${feedPanel} [aria-label="Feed entity"]') !== null`)
     await driver.waitFor(`document.querySelector('${feedPanel} [aria-label="Feed entity"]')?.value === 'Story'`)

@@ -201,8 +201,11 @@ export type StudioPreviewHost = {
       appendChild(element: StudioPreviewOverlay): void
       getBoundingClientRect?(): StudioPreviewRect
     }
-    createElement(name: 'div'): StudioPreviewOverlay
+    createElement(name: 'div' | 'style'): StudioPreviewOverlay
     elementFromPoint?(x: number, y: number): StudioPreviewElement | null
+    head?: {
+      appendChild(element: StudioPreviewOverlay): void
+    }
     querySelectorAll(selector: string): ArrayLike<StudioPreviewElement>
     removeEventListener: StudioPreviewDocumentListener
   }
@@ -896,6 +899,21 @@ export function mountStudioPreviewBridge(
   const editingGesture = (event: StudioPreviewPointerEvent): boolean =>
     event.taoStudioJourney !== true && interactionMode !== 'run'
 
+  /** In edit mode every element under the pointer is something a click selects, so it says so. */
+  let editCursor: StudioPreviewOverlay | undefined
+  const setInteractionMode = (mode: 'edit' | 'run') => {
+    interactionMode = mode
+    if (mode === 'run') {
+      editCursor?.remove()
+      editCursor = undefined
+    } else if (editCursor === undefined && host.document.head !== undefined) {
+      editCursor = host.document.createElement('style')
+      editCursor.setAttribute('data-tao-studio-overlay', 'edit-cursor')
+      editCursor.textContent = `${studioRenderSelector}, ${studioRenderSelector} * { cursor: pointer !important; }`
+      host.document.head.appendChild(editCursor)
+    }
+  }
+
   const disarmDrag = () => {
     drag = undefined
     dragOverlay?.remove()
@@ -973,7 +991,7 @@ export function mountStudioPreviewBridge(
         id: control.recordingId,
         sequence: 0,
       }
-      interactionMode = 'run'
+      setInteractionMode('run')
       clearEditSelection()
       postRecordingState(recording, 'recording')
     } else if (recording?.id === control.recordingId) {
@@ -1380,7 +1398,7 @@ export function mountStudioPreviewBridge(
       if (mode !== 'edit' && mode !== 'run') {
         return
       }
-      interactionMode = mode
+      setInteractionMode(mode)
       if (mode === 'run') {
         clearEditSelection()
       }
@@ -1503,6 +1521,7 @@ export function mountStudioPreviewBridge(
     for (const outline of groupOverlays.splice(0)) {
       outline.remove()
     }
+    setInteractionMode('run')
     disarmDrag()
   }
 }

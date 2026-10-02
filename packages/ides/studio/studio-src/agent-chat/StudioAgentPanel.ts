@@ -7,7 +7,6 @@ import { mountStudioAgentChatPanel, type StudioAgentChatPanelHooks } from './Stu
 
 export type AgentPanelPosition = Readonly<{ left: number; top: number }>
 
-const agentMinimizedStorageKey = 'tao-studio:agent-minimized:v1'
 const agentPositionStorageKey = 'tao-studio:agent-position:v1'
 
 /** The panel's own CSS sizes, used when the element cannot be measured yet. */
@@ -141,7 +140,6 @@ export function mountStudioAgentPanel(root: HTMLElement, hooks: StudioAgentChatP
 
   function setMinimized(minimized: boolean): void {
     panel.dataset['minimized'] = String(minimized)
-    store(agentMinimizedStorageKey, String(minimized))
     collapse.textContent = minimized ? '+' : '–'
     collapse.title = minimized ? 'Expand agent' : 'Minimize agent'
     collapse.setAttribute('aria-label', collapse.title)
@@ -230,17 +228,15 @@ export function mountStudioAgentPanel(root: HTMLElement, hooks: StudioAgentChatP
     setMinimized(panel.dataset['minimized'] !== 'true')
   })
 
+  // Studio always opens on the canvas, with the agent a pill until asked for. Minimizing comes before
+  // placement: clamping a bottom-corner pill as if it were the full panel walks it upward on every load.
+  setMinimized(true)
+
   try {
     if (typeof window !== 'undefined') {
       // The stored position was clamped against the display it was dragged on. A smaller one now, or
       // a smaller window, would leave the panel off-screen with no way back, so it is re-clamped here
       // and again on every resize rather than trusted as written.
-      const restoredMinimized = window.localStorage.getItem(agentMinimizedStorageKey) === 'true'
-      // Size is part of the saved state. Applying it after placement clamps a bottom-corner pill as if it
-      // were the full panel on every reload, visibly walking it upward.
-      if (restoredMinimized) {
-        setMinimized(true)
-      }
       const saved = StudioAgentPosition.parse(window.localStorage.getItem(agentPositionStorageKey))
       if (saved !== undefined) {
         place(saved)

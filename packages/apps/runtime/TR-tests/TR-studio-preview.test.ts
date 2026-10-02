@@ -521,6 +521,24 @@ Describe('Studio preview runtime bridge', () => {
     cleanup()
   })
 
+  Test('shows a pointer over selectable elements only while in edit mode', () => {
+    const fake = previewHost([])
+    const head: FakeOverlay[] = []
+    fake.host.document.head = { appendChild: element => head.push(element as FakeOverlay) }
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    const cursors = () => head.filter(element => !element.removed)
+    Expect(cursors()).toHaveLength(0)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    Expect(cursors()).toHaveLength(1)
+    Expect(cursors()[0]?.textContent).toContain('cursor: pointer')
+    fake.dispatchWindow('message', interactionModeMessage('run', fake.parent))
+    Expect(cursors()).toHaveLength(0)
+    fake.dispatchWindow('message', interactionModeMessage('edit', fake.parent))
+    cleanup()
+    Expect(cursors()).toHaveLength(0)
+  })
+
   Test('drops its selection outlines when Studio says a plain pick started a selection in another cell', () => {
     const first = renderElement('/project/Main.tao', 10, 20, { height: 20, left: 0, top: 0, width: 20 })
     const second = renderElement('/project/Main.tao', 30, 40, { height: 20, left: 30, top: 0, width: 20 })

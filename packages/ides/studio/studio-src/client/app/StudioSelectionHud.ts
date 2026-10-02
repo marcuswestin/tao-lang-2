@@ -128,7 +128,7 @@ export type StudioSelectionHudDeps = Readonly<{
 }>
 
 /**
- * The selection HUD floats beside the element selected in the preview, in Design and Draw: direction,
+ * The selection HUD floats beside the element selected in the preview, in Design, Draw, or Edit mode: direction,
  * alignment, gap, pad and sizing, each one edit away. With several elements selected it offers ⌘G
  * and ⌥⌘G instead. `render` rebuilds it for a new selection; `place` only follows pan, zoom and
  * layout.

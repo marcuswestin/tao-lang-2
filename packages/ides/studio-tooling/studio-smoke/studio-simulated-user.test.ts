@@ -145,10 +145,8 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       })()`,
         { timeoutMs: 30_000 },
       )
-      // The agent panel opens as a floating window over the workbench, covering the inspector and
-      // the lower half of every divider. Minimize it once, as anyone about to work in the editor
-      // would, so the rest of the journey reaches the workbench rather than the panel. It stays
-      // minimized across the reloads below, which is why this is done once.
+      // Expanded, the agent panel floats over the inspector and the lower half of every divider.
+      // Studio opens it minimized; the journey confirms that before reaching for the workbench.
       await browser.waitFor(
         `document.querySelector('.studio-agent-panel [data-tao-studio-agent-collapse], .studio-agent-collapse')
           instanceof HTMLButtonElement`,

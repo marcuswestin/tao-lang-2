@@ -438,7 +438,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       bounds: () => studioCanvasSelectionBounds(view.preview, inspection.selected(), previews),
       busy: () => mutations.busy(),
       command: command => void applySelectionCommand(command),
-      enabled: canvasOwnsInput,
+      // Edit mode is a request to edit what is clicked, whichever layout frames the canvas.
+      enabled: () => canvasOwnsInput() || view.interactionMode.dataset['mode'] === 'edit',
       groupSize: () => inspection.selectedGroup().length,
       host: view.preview,
       inspection: () => inspection.inspection(),
@@ -501,6 +502,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }
       selectionHud?.render()
     }
+    const renderSelectionHud = (): void => selectionHud?.render()
+    view.interactionMode.addEventListener('click', renderSelectionHud)
+    lifetime.add(() => view.interactionMode.removeEventListener('click', renderSelectionHud))
     root.addEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership)
     lifetime.add(() => root.removeEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership))
     publish()
