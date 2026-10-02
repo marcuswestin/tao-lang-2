@@ -20,19 +20,47 @@ import {
 } from './StudioPreviewConnection'
 import { StudioReviewDom } from './StudioReviewDom'
 
+const fastDrawStorageKey = 'tao-studio-fast-draw'
+
 /**
- * Latency experiment, on for now: Studio connects only the first scenario's preview, so each save
- * reaches one iframe instead of every cell. Flip this to false, or add `?taoStudioPreviews=all` to the
- * Studio URL, to connect every cell again.
+ * StudioFastDraw is a latency experiment: while it is on, Studio creates an iframe for the first
+ * scenario's preview only, so no other cell loads a page, runs its JavaScript, or receives an update.
+ * The toolbar toggles it and the choice is remembered per browser; `?taoStudioPreviews=first` or `=all`
+ * on the Studio URL overrides the remembered choice for that load.
  */
-const studioFirstPreviewOnly = true
+export const StudioFastDraw = {
+  enabled(): boolean {
+    if (typeof window === 'undefined') {
+      return false
+    }
+    const requested = new URLSearchParams(window.location.search).get('taoStudioPreviews')
+    if (requested === 'first' || requested === 'all') {
+      return requested === 'first'
+    }
+    try {
+      return window.localStorage.getItem(fastDrawStorageKey) === 'on'
+    } catch {
+      return false
+    }
+  },
+  set(enabled: boolean): void {
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('taoStudioPreviews')) {
+      url.searchParams.delete('taoStudioPreviews')
+      window.history.replaceState(window.history.state, '', url)
+    }
+    try {
+      window.localStorage.setItem(fastDrawStorageKey, enabled ? 'on' : 'off')
+    } catch {
+      // A browser without storage keeps the choice for this page only, through the URL.
+      url.searchParams.set('taoStudioPreviews', enabled ? 'first' : 'all')
+      window.history.replaceState(window.history.state, '', url)
+    }
+  },
+}
 
 function connectedCells(manifest: StudioPreviewManifestV2): readonly StudioPreviewCell[] {
-  const requested = typeof window === 'undefined'
-    ? null
-    : new URLSearchParams(window.location.search).get('taoStudioPreviews')
-  const firstOnly = requested === 'first' || (studioFirstPreviewOnly && requested !== 'all')
-  return firstOnly ? manifest.cells.slice(0, 1) : manifest.cells
+  return StudioFastDraw.enabled() ? manifest.cells.slice(0, 1) : manifest.cells
 }
 
 export async function connectPreviews(

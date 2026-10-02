@@ -21,7 +21,7 @@ import {
   nextStop,
 } from '../studio-src/client/matrix/StudioCanvasViewport'
 import { expectPreviewRevision } from '../studio-src/client/matrix/StudioPreviewConnection'
-import { watchCellPreviewLoad } from '../studio-src/client/matrix/StudioPreviewMatrix'
+import { StudioFastDraw, watchCellPreviewLoad } from '../studio-src/client/matrix/StudioPreviewMatrix'
 import {
   StudioApiClient,
   StudioApiError,
@@ -2042,6 +2042,47 @@ Test('Studio preview frames carry their managed session into cross-origin bootst
   ))
   Expect(legacy.searchParams.has('taoStudioCell')).toBe(false)
   Expect(legacy.searchParams.has('taoStudioSessionId')).toBe(false)
+})
+
+Test('Studio Fast draw is off by default, remembers its choice, and yields to the URL override', () => {
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  const stored = new Map<string, string>()
+  const location = new URL('http://127.0.0.1:4276/')
+  const fakeWindow = {
+    history: {
+      replaceState(_state: unknown, _title: string, url: URL) {
+        location.href = url.href
+      },
+      state: null,
+    },
+    localStorage: {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => stored.set(key, value),
+    },
+    location,
+  }
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: fakeWindow })
+  try {
+    Expect(StudioFastDraw.enabled()).toBe(false)
+    StudioFastDraw.set(true)
+    Expect(StudioFastDraw.enabled()).toBe(true)
+
+    location.search = '?taoStudioPreviews=all'
+    Expect(StudioFastDraw.enabled()).toBe(false)
+    StudioFastDraw.set(true)
+    Expect(location.searchParams.has('taoStudioPreviews')).toBe(false)
+    Expect(StudioFastDraw.enabled()).toBe(true)
+
+    StudioFastDraw.set(false)
+    location.search = '?taoStudioPreviews=first'
+    Expect(StudioFastDraw.enabled()).toBe(true)
+  } finally {
+    if (previousWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window
+    } else {
+      Object.defineProperty(globalThis, 'window', previousWindow)
+    }
+  }
 })
 
 Test('Studio retained previews preserve independent cell revisions and safely fall back to a new base', async () => {

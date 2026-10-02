@@ -51,7 +51,7 @@ export {
   StudioPreviewSuspension,
   StudioRetainedPreview,
 } from './matrix/StudioPreviewConnection'
-export { connectPreviews, refreshCellPreviews } from './matrix/StudioPreviewMatrix'
+export { connectPreviews, refreshCellPreviews, StudioFastDraw } from './matrix/StudioPreviewMatrix'
 export { previewBundleNoticeFor, previewNoticeFor, studioPreviewNotice } from './matrix/StudioPreviewNotice'
 export { StudioReviewDom } from './matrix/StudioReviewDom'
 export {

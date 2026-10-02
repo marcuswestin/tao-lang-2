@@ -79,6 +79,7 @@ import {
   refreshCellPreviews,
   StudioActivePreview,
   StudioDebugEvents,
+  StudioFastDraw,
   StudioMatrixView,
 } from './StudioMatrixView'
 import type { StudioDrawerTab } from './StudioProductPanels'
@@ -507,6 +508,34 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     lifetime.add(() => view.interactionMode.removeEventListener('click', renderSelectionHud))
     root.addEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership)
     lifetime.add(() => root.removeEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership))
+    // Connects the cells the manifest and the Fast draw switch call for, and drops the rest.
+    function replanPreviews(manifest: NonNullable<typeof previewManifest>): void {
+      if (config.previewUrl === undefined) {
+        return
+      }
+      void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
+        activePreview.reconcile(wirePreview)
+        previewActivation.reconcile()
+        previewNotice.render()
+        previewNotice.checkBundle()
+      }).catch(error => {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = Errors.messageOf(error)
+      })
+    }
+    const renderFastDraw = (): void => {
+      view.fastDraw.setAttribute('aria-pressed', String(StudioFastDraw.enabled()))
+    }
+    const toggleFastDraw = (): void => {
+      StudioFastDraw.set(!StudioFastDraw.enabled())
+      renderFastDraw()
+      if (previewManifest !== undefined) {
+        replanPreviews(previewManifest)
+      }
+    }
+    renderFastDraw()
+    view.fastDraw.addEventListener('click', toggleFastDraw)
+    lifetime.add(() => view.fastDraw.removeEventListener('click', toggleFastDraw))
     publish()
     void feed.refresh()
     view.searchInput.addEventListener('input', () => search.schedule())
@@ -638,17 +667,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           view.status.dataset['state'] = 'error'
           view.status.textContent = Errors.messageOf(error)
         })
-        if (config.previewUrl !== undefined) {
-          void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
-            activePreview.reconcile(wirePreview)
-            previewActivation.reconcile()
-            previewNotice.render()
-            previewNotice.checkBundle()
-          }).catch(error => {
-            view.status.dataset['state'] = 'error'
-            view.status.textContent = Errors.messageOf(error)
-          })
-        }
+        replanPreviews(manifest)
         commands.render()
         drawer.loadDataIfVisible()
       },

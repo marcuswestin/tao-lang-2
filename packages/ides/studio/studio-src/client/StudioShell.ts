@@ -22,6 +22,7 @@ export type StudioClientView = {
   globalLoading: HTMLElement
   inspector: HTMLElement
   canvasFocus: HTMLButtonElement
+  fastDraw: HTMLButtonElement
   interactionMode: HTMLButtonElement
   preview: HTMLElement
   project: HTMLSelectElement
@@ -268,6 +269,7 @@ export function studioShellMarkup(): string {
     studioIcon('phone', 'small')
   }Device</button>
           <button class="studio-interaction-mode" type="button">Mode: Run</button>
+          <button class="studio-fast-draw" type="button" aria-pressed="false" title="Load only the first preview, so no other preview's page runs">Fast draw</button>
           <button class="studio-reload" type="button" title="Reload preview" aria-label="Reload preview">${
     studioIcon('reload')
   }</button>
@@ -394,6 +396,7 @@ export function createStudioShell(
     betaShip: requiredButton(root, '.studio-beta-ship'),
     globalLoading: requiredElement(root, '.studio-global-loading'),
     inspector: requiredElement(root, '.studio-inspector-content'),
+    fastDraw: requiredButton(root, '.studio-fast-draw'),
     interactionMode: requiredButton(root, '.studio-interaction-mode'),
     preview,
     project: requiredSelect(root, '.studio-project'),

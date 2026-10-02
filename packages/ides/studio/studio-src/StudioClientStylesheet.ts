@@ -207,11 +207,11 @@ kbd {
   text-align: left; text-overflow: ellipsis; white-space: nowrap;
 }
 .studio-status-diagnostic:hover { text-decoration: underline; text-underline-offset: 3px; }
-.studio-device, .studio-interaction-mode, .studio-reload, .studio-beta-ship, .studio-canvas-focus {
+.studio-device, .studio-interaction-mode, .studio-fast-draw, .studio-reload, .studio-beta-ship, .studio-canvas-focus {
   align-items: center; background: transparent; border: 1px solid transparent; border-radius: var(--studio-radius);
   color: var(--studio-text-muted); cursor: pointer; display: inline-flex; font-weight: 500; gap: 6px; height: 26px; padding: 0 9px; white-space: nowrap;
 }
-.studio-device:hover, .studio-interaction-mode:hover, .studio-reload:hover { background: var(--studio-surface-hover); color: var(--studio-text); }
+.studio-device:hover, .studio-interaction-mode:hover, .studio-fast-draw:hover, .studio-reload:hover { background: var(--studio-surface-hover); color: var(--studio-text); }
 .studio-device[aria-expanded="true"] { background: var(--studio-accent-surface); color: var(--studio-text); }
 .studio-device[data-state="connected"] { color: var(--studio-positive); }
 .studio-device[data-state="pairing"] { color: var(--studio-warning); }
@@ -222,6 +222,7 @@ kbd {
 .studio-interaction-mode[data-mode="edit"]::before { background: var(--studio-accent); }
 .studio-interaction-mode[data-mode="run"] { color: var(--studio-text); }
 .studio-interaction-mode[data-mode="run"]::before { background: var(--studio-positive); }
+.studio-fast-draw[aria-pressed="true"] { background: var(--studio-accent-surface); border-color: var(--studio-accent); color: var(--studio-text); }
 .studio-reload { padding: 0; width: 26px; }
 .studio-beta-ship { background: var(--studio-accent); color: var(--studio-accent-ink); font-weight: 600; }
 .studio-beta-ship:hover:not(:disabled) { background: var(--studio-accent-strong); }
