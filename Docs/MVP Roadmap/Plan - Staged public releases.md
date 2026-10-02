@@ -37,6 +37,31 @@ hosted-data scope. The capability catalog classifies every CLI command and optio
 public build hides any entry point nobody classified, so a new surface cannot reach a release by
 default.
 
+**Decided 2026-10-02, to implement on a branch after the staged-release QA work lands:**
+
+- `tao ship` requires a mode: `--internal` (the team's internal testers), `--beta` (external
+  TestFlight testers), or `--app-store`. `--internal` and `--beta` are release 5; `--app-store`
+  stays behind the deferred external-distribution capability. Release 5's acceptance includes one
+  external tester through Beta App Review.
+- Tao creates one TestFlight group by default, **Beta testers**, in place of the current `Tao
+  Internal` and `Tao External` groups.
+- `--add <email>` names one tester per flag and repeats. `--beta --add` with a team member adds them
+  to Beta testers without telling them about internal builds.
+- `--internal --add` with someone outside the team invites them to the App Store Connect team as
+  Marketing, limited to this app. Tao first warns what that role can and cannot do and that they must
+  accept and set up their account before they can receive internal builds, asks for each invitee's
+  first and last name, and needs an interactive yes even with `--yes`. The build still ships to
+  existing internal testers; the output lists pending invitees, and a later `--internal` ship adds
+  them once accepted.
+- Only Account Holders and Admins can ship, because shipping needs an Admin team API key; setup
+  guidance says so plainly.
+- AI assistance — `tao create --ai` and Studio's Agent panel — becomes a deferred `ai-assist`
+  capability. Public builds create without it and hide both until a phase proves them.
+
+A malformed `.tao-project/lock.jsonc` keeps refusing editors and Studio; its message names the file,
+the parse problem, and the recovery paths and what each would lose (decided and implemented
+2026-10-02).
+
 ## Quality workflow
 
 Use [the durable QA register](../QA/README.md) for on-demand, incremental reviews and evidence,

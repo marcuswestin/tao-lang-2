@@ -286,6 +286,19 @@ proves, so a public build must hide later surfaces and a reviewer must be able t
   The Developer accepted simulator observation in place of a physical device for A18 on 2026-09-28;
   build and launch evidence alone does not close the visual and accessibility checks.
 
+### A22 — Light and dark mode in every app
+
+- [ ] **Before MVP:** review every app under `Apps/` (starters, reference apps, the reading-list
+      tutorial app, and test apps a visitor can reach) in light and dark appearance, and give each
+      one a deliberate, legible design in both.
+- Developer decision: requested 2026-10-02, deferred until after the staged-release QA branch. The
+  reading-list tutorial app is the priority and must be excellent in both appearances, since it is
+  the first app a newcomer builds.
+- Context: `Docs/Tutorials/Your First Tao App.md`, `Apps/Starters/`, `Apps/HNReader/`, A18's
+  appearance work, and `./agent unsandboxed storage qa` for a dated screenshot round to review.
+- Done: a screenshot round shows every app correct in both appearances, and the tutorial's finished
+  app has been reviewed by the Developer.
+
 ## Environment reach
 
 Reducing what a developer's machine must already have. The prebuilt-host half follows `R7`'s
