@@ -14,6 +14,15 @@ description: >-
 Run a host-only lane through its listed wrapper shape, such as `./agent unsandboxed studio-smoke`;
 the plain `./agent` shape stays sandboxed.
 
+`quiet-ui-workflows` owns authorization for visible windows and focus during host lanes. Native
+host-control, Mac2, and manual checks require `--show-studio` after that authorization; otherwise
+defer them before launch. Native canary and simulated-user probes run with hidden windows and
+need no visibility flag. Ordinary native development launches open Welcome; `--no-browser`
+does not hide it. Report deferred visible acceptance separately from completed quiet checks.
+
+For development loops used during acceptance, follow `quiet-ui-workflows`' managed-session
+guidance. A background start receipt or successful reload dispatch is not a behavior-test verdict.
+
 ## The machine-wide landing lock
 
 You do not claim it by hand. Ready `./agent unsandboxed land` processes queue FIFO, ahead of new broad lanes;

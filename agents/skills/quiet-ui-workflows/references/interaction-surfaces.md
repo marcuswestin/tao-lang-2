@@ -110,11 +110,14 @@ remain host acceptance checks.
 
 ## Native desktop apps
 
-Tao Studio currently uses Electrobun, not Electron. Its `--no-browser` avoids opening a project but
-still creates the Welcome window. Treat native Studio launch as visible. The semantic host driver
+Ordinary native Tao Studio development launches use Electrobun and open the Welcome window;
+`--no-browser` does not hide it. Native canary and simulated-user probes explicitly request hidden
+windows and run without a visibility flag. `StudioElectrobunAppSource.ts` implements that probe
+mode with `hidden: forceHidden || !showWindows`; it is separate from the visible development
+default. Host-control, Mac2, and manual checks require `--show-studio` and otherwise defer before
+launch. The parent skill owns scoped authorization for windows and focus. The semantic host driver
 and external Appium Mac2 driver prove different things; Mac2 can activate the application and
-deliver physical input, so it can interrupt the desktop. Give a heads-up and use the existing
-machine-wide desktop lease for those checks.
+deliver physical input. Use the existing machine-wide desktop lease for those checks.
 
 Requirements: prepared Electrobun app and Hutch environment, plus Xcode/XCTest, the installed
 Mac2 driver, Xcode Helper Accessibility permission, and native automation consent for the external
@@ -131,7 +134,8 @@ be activated by a driver; a web preview cannot prove native menus, focus, or win
 
 The exact named native smoke examples are discoverable in `./agent help`. They cover simulated
 user behavior, semantic host control, and external accessibility/physical input separately.
-No native app was launched during this audit; no hidden Electrobun mode is claimed.
+Hidden probe configuration is source evidence; it does not establish that every native driver
+journey preserves focus. No native app was launched during this audit.
 
 ## Repository cross-check
 
