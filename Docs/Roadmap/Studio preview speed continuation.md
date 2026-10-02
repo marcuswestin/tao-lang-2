@@ -179,6 +179,10 @@ Each slice is measured on its own with the latency harness, so each gain is attr
    Expected, inferred rather than measured: parse 35ms → about 8–15ms, the whole compile about
    15–20% faster before validate and emit become per-document. Stay on Langium 4.3.x: a 4.4.0
    report shows large regressions on unclosed calls, which mid-edit saves produce.
+3. **After this project: Langium 4.4.** Measure Studio preview speed on 4.3.x with the latency harness,
+   including a half-typed save that leaves a call unclosed; then, with the Developer's approval for
+   the version change, update to 4.4 and measure the same cases again to see whether a difference
+   is noticeable.
 
 ## Completion bar
 
