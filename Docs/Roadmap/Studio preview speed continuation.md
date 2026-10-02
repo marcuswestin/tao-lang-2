@@ -162,6 +162,22 @@ Each slice is measured on its own with the latency harness, so each gain is attr
       includes `compileRevision` today).
    4. Cache emitted modules per file, reusing a module whose source and dependencies did not
       change. Expected to save most of the 50ms emit phase on a one-file edit.
+
+   Then try these one at a time, measuring each, and keep only the ones that help:
+
+   5. Bundle a preview-only manifest. The preview reads only `scenarios` and `fixtures` from
+      `TaoStudioManifest.ts`; Studio uses the compiler's manifest in process. Emitting just those, without
+      source ranges, keeps the file byte-identical across ordinary edits, so a length-changing edit or a
+      move no longer re-runs the generated root and re-renders the whole tree. Narrow the type the
+      preview reads, and test that a length-changing edit leaves the file unchanged. Estimated, not
+      measured: 10–40ms per such edit on HNReader.
+   6. Let a refreshed design reach the running app. `RuntimeAppDefinition.design` caches the design once
+      per app object (`TR-navigation-app.ts`), so today only a new app object, built when the app shell
+      re-runs, shows a design edit.
+   7. Re-render only what a design edit affects: a design store versioned per color and per style, with
+      each element subscribing to the names its styles resolved. It pays off only with a delivery path
+      that skips re-running the app shell: either the generated design module accepts its own hot
+      update and replaces the store's values, or Studio sends a design change over the runtime bridge.
 2. **Slice after.** Reuse Langium documents across compiles. Langium 4.3 (the pinned version) offers
    document-level reuse only, through `DocumentBuilder.update(changed, deleted)`; no LL(k) parser
    reparses a text range. Stages, each measured:
