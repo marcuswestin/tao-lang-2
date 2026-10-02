@@ -40,8 +40,11 @@ export function createExpoTargets(
 ) {
   const context = { android, config, metro }
   let chromeLaunch: Promise<AgentChromeSession> | undefined
-  const openSessionWeb = async (): Promise<boolean> => {
+  const openSessionWeb = async (shouldStop: () => boolean = () => false): Promise<boolean> => {
     const url = context.metro.endpointUrl(await context.metro.expoOpenEndpoint('web')) ?? context.config.EXPO_ORIGIN
+    if (shouldStop()) {
+      return false
+    }
     if (Platform.runtimeProcess.env['TAO_AGENT_BROWSER_QUIET'] !== '1') {
       return await openChromeWebUrl(context, url)
     }
@@ -85,8 +88,7 @@ async function openAndroid(context: ExpoTargetContext): Promise<boolean> {
   try {
     await context.android.ensureEmulator()
     await context.android.ensureRuntime()
-    await openPreparedAndroidAndSay(context)
-    return true
+    return await openPreparedAndroidAndSay(context)
   } catch (error) {
     DevLoopOutput.logDevLoop('dev', `Could not open Android: ${Errors.formatForUser(error)}`, 'warn')
     return false
@@ -110,11 +112,17 @@ async function openIosSimulator(
     return false
   }
   const inCompanion = await prepareCompanionOnSimulator(context, simulator)
+  if (shouldStop()) {
+    return false
+  }
   const link = inCompanion
     ? companionDevClientUrl({ host: '127.0.0.1', port: context.config.EXPO_PORT })
     : context.metro.endpointUrl(await context.metro.expoOpenEndpoint('ios'))
       ?? await context.metro.expoLink('ios')
       ?? context.config.EXPO_GO_URL
+  if (shouldStop()) {
+    return false
+  }
   const result = await CLI.run('xcrun', { args: ['simctl', 'openurl', simulator.udid, link] })
   if (result.exitCode === 0 && result.error === undefined) {
     DevLoopOutput.logDevLoop(
@@ -177,24 +185,25 @@ export function simulatorOpenFailure(
 /** openStartupTargets opens startup targets while keeping Android limited to already-available devices. */
 async function openStartupTargets(
   context: ExpoTargetContext,
-  openWeb: () => Promise<boolean>,
+  openWeb: (shouldStop?: () => boolean) => Promise<boolean>,
   requested: readonly DevStartupTarget[] = [],
   shouldStop: () => boolean = () => false,
-): Promise<void> {
+): Promise<readonly { target: DevStartupTarget; dispatched: boolean }[]> {
   const openers = {
-    web: openWeb,
+    web: () => openWeb(shouldStop),
     ios: () => openIosSimulator(context, shouldStop),
-    android: () => openAvailableAndroid(context),
+    android: () => openAvailableAndroid(context, shouldStop),
     desktop: async () => false,
   }
-  await Promise.all(requested.map(async target => {
+  return await Promise.all(requested.map(async target => {
     if (shouldStop()) {
-      return
+      return { target, dispatched: false }
     }
     try {
-      await openers[target]()
+      return { target, dispatched: await openers[target]() }
     } catch (error) {
       DevLoopOutput.logDevLoop('dev', `skipped ${target} launch: ${Errors.formatForUser(error)}`, 'warn')
+      return { target, dispatched: false }
     }
   }))
 }
@@ -204,23 +213,35 @@ async function openPreparedAndroid(context: ExpoTargetContext, url?: string): Pr
   await context.android.openRuntime(url)
 }
 
-async function openAvailableAndroid(context: ExpoTargetContext): Promise<boolean> {
+async function openAvailableAndroid(context: ExpoTargetContext, shouldStop: () => boolean): Promise<boolean> {
   if (await context.android.prepareAvailableRuntime()) {
-    await openPreparedAndroidAndSay(context)
-    return true
+    if (shouldStop()) {
+      return false
+    }
+    return await openPreparedAndroidAndSay(context, shouldStop)
   }
   return false
 }
 
-async function openPreparedAndroidAndSay(context: ExpoTargetContext): Promise<void> {
+async function openPreparedAndroidAndSay(
+  context: ExpoTargetContext,
+  shouldStop: () => boolean = () => false,
+): Promise<boolean> {
   const endpoint = await context.metro.expoOpenEndpoint('android')
-  const runtime = await context.android.openRuntime(context.metro.endpointUrl(endpoint))
+  if (shouldStop()) {
+    return false
+  }
+  const runtime = await context.android.openRuntime(context.metro.endpointUrl(endpoint), shouldStop)
+  if (runtime === undefined || shouldStop()) {
+    return false
+  }
   DevLoopOutput.logDevLoop(
     'dev',
     `opened Android${
       runtime === 'companion' ? ` (${CompanionIdentity.name})` : context.metro.formatOpenedRuntime(endpoint)
     }`,
   )
+  return true
 }
 
 async function ensureIosSimulator(

@@ -56,6 +56,12 @@ secrets *ARGS:
 setup-clerk *ARGS:
     ./dev setup-clerk {{ ARGS }}
 
+# Manage recorded background app loops: start, status, logs, stop, restart, reload
+[group('Sessions')]
+[positional-arguments]
+dev-loop *ARGS:
+    ./dev dev-loop "$@"
+
 # Launch the agent harness with the Bash sandbox off; switch a running session with /sandbox
 [group('Sessions')]
 session-unsandboxed *ARGS:
@@ -166,24 +172,30 @@ agents-demo: _parser-gen
     ./.artifacts/agents-demo/agents run AppendEntry --args '{"Message":"Hello from just agents-demo","Quantity":3,"Marked":true}' --stop-after
 
 # Run an explicit slow Studio smoke file in an isolated lane
+[arg('native', long='native', value='true')]
+[arg('run_id', long='run-id')]
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-smoke test_file="packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts" run_id="local":
-    ./dev studio-smoke --run-id "{{ run_id }}" "{{ test_file }}"
+studio-smoke test_file="packages/ides/studio-tooling/studio-smoke/studio-launch.test.ts" run_id="local" native='false' show_studio='false':
+    ./dev studio-smoke {{ if native == "true" { "--native" } else { "" } }} {{ if show_studio == "true" { "--show-studio" } else { "" } }} --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Run an explicit slow Studio shell smoke through Electrobun
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-smoke-native test_file="packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts" run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" "{{ test_file }}"
+studio-smoke-native test_file="packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts" run_id="local" show_studio='false':
+    ./dev studio-smoke --native {{ if show_studio == "true" { "--show-studio" } else { "" } }} --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Prove semantic host control against the owned native Studio shell
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-host-control-smoke run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
+studio-host-control-smoke run_id="local" show_studio='false':
+    ./dev studio-smoke --native {{ if show_studio == "true" { "--show-studio" } else { "" } }} --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts
 
 # Probe external Studio accessibility and physical input through Appium Mac2
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-mac2-acceptance run_id="local":
-    ./dev studio-smoke --native --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
+studio-mac2-acceptance run_id="local" show_studio='false':
+    ./dev studio-smoke --native {{ if show_studio == "true" { "--show-studio" } else { "" } }} --run-id "{{ run_id }}" packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts
 
 # Prove Studio compile/edit/undo against the real HNReader app
 [group('Host proofs')]
@@ -196,9 +208,10 @@ keyboard-navigation-smoke run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" --worker 4 packages/ides/studio-tooling/studio-smoke/runtime-keyboard-navigation.test.ts
 
 # Run native Tao Studio against a deterministic project and report what it proved
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-canary project="Apps/HNReader" app="HNReader":
-    ./dev studio-canary --project "{{ project }}" --app "{{ app }}"
+studio-canary project="Apps/HNReader" app="HNReader" show_studio='false':
+    ./dev studio-canary {{ if show_studio == "true" { "--show-studio" } else { "" } }} --project "{{ project }}" --app "{{ app }}"
 
 # Export real release and Studio-preview iOS bundles and prove only the preview carries Studio code
 [group('Host proofs')]
@@ -211,9 +224,10 @@ native-module-check:
     ./dev native-module-check
 
 # Run the native Studio checks that require a person; never part of test or verify
+[arg('show_studio', long='show-studio', value='true')]
 [group('Host proofs')]
-studio-manual-checks project="Apps/HNReader" app="HNReader":
-    ./dev studio-manual-checks --project "{{ project }}" --app "{{ app }}"
+studio-manual-checks project="Apps/HNReader" app="HNReader" show_studio='false':
+    ./dev studio-manual-checks {{ if show_studio == "true" { "--show-studio" } else { "" } }} --project "{{ project }}" --app "{{ app }}"
 
 # Validate a built native Studio release without publishing anything
 [group('Ship')]
@@ -409,11 +423,12 @@ my-land *ARGS:
 [arg('dry_run', long='dry-run', value='true')]
 [arg('message_file', long='message-file')]
 [arg('redraft', long='redraft', value='true')]
+[arg('show_studio', long='show-studio', value='true')]
 [arg('skip_verify', long='skip-verify', value='true')]
 [arg('skip_verify_full', long='skip-verify-full', value='true')]
 [group('Ship')]
-land dry_run='false' message_file='' redraft='false' skip_verify='false' skip_verify_full='false':
-    ./dev land {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }} {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }}
+land dry_run='false' message_file='' redraft='false' skip_verify='false' skip_verify_full='false' show_studio='false':
+    ./dev land {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if redraft == "true" { "--redraft" } else { "" } }} {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }}
 
 # The cheap-gate barrier a landing runs first, inside the lock, before anything expensive. It is
 # `check` — generation and formatting consistency, repository lint, types — plus `dead-exports`, and
@@ -429,20 +444,36 @@ land-barrier: check dead-exports
 [arg('abort', long='abort')]
 [arg('dry_run', long='dry-run', value='true')]
 [arg('message_file', long='message-file')]
+[arg('show_studio', long='show-studio', value='true')]
 [arg('skip_all', long='skip-all', value='true')]
 [arg('skip_verify', long='skip-verify', value='true')]
 [arg('skip_verify_full', long='skip-verify-full', value='true')]
 [group('Ship')]
-merge-with-main skip_verify='false' skip_verify_full='false' skip_all='false' dry_run='false' message_file='' abort='':
-    ./dev merge-with-main {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
+merge-with-main skip_verify='false' skip_verify_full='false' skip_all='false' dry_run='false' message_file='' abort='' show_studio='false':
+    ./dev merge-with-main {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if skip_verify == "true" { "--skip-verify" } else { "" } }} {{ if skip_verify_full == "true" { "--skip-verify-full" } else { "" } }} {{ if skip_all == "true" { "--skip-all" } else { "" } }} {{ if dry_run == "true" { "--dry-run" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
 
-# Format code, without applying the other Tao source fixes
+# Format code, optionally only named files, without applying the other Tao source fixes
 [group('Dev')]
-fmt: _parser-gen
-    dprint fmt --incremental=false --excludes "@/" "**/@/**"
-    dprint check --incremental=false --allow-no-files "@/**/*" "**/@/**/*"
-    ./tao fmt
-    just --fmt
+[positional-arguments]
+fmt *PATHS: _parser-gen
+    #!/usr/bin/env zsh
+    set -e
+    if (( $# > 0 )); then
+        for task_format_file in "$@"; do
+            [[ -f "$task_format_file" ]] || { print -u2 -r -- "Formatting requires a file: $task_format_file"; exit 2; }
+            [[ "$task_format_file" == /* ]] || task_format_file="./$task_format_file"
+            case "$task_format_file" in
+                *.tao) ./tao fmt "$task_format_file" ;;
+                */Justfile) just --fmt --justfile "$task_format_file" ;;
+                *) dprint fmt --incremental=false "$task_format_file" ;;
+            esac
+        done
+    else
+        dprint fmt --incremental=false --excludes "@/" "**/@/**"
+        dprint check --incremental=false --allow-no-files "@/**/*" "**/@/**/*"
+        ./tao fmt
+        just --fmt
+    fi
 
 # Each harness write-protects its own agent configuration — skills, hooks, settings — against shell
 # commands, while allowing the harness's own edit tools, so that a change to an agent's instructions
@@ -635,9 +666,10 @@ verify-changed no_cache='false': _deps
 # headless and parallel-safe, so refusing the whole lane priced six gates at the cost of two.
 # Verify everything plus browser, native and bundle lanes; stop starting checks after a definite failure. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
+[arg('show_studio', long='show-studio', value='true')]
 [group('Dev')]
-verify-full no_cache='false': _deps
-    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
+verify-full no_cache='false' show_studio='false': _deps
+    ./dev gates {{ VERIFY_FULL_GATES }} --lane verify-full {{ if show_studio == "true" { "--show-studio" } else { "" } }} {{ if VERIFY_FULL_SKIPPED == "" { "" } else { "--skipped \"" + VERIFY_FULL_SKIPPED + "\"" } }} --green-tree verify-full {{ if no_cache == "true" { "--no-cache" } else { "" } }}
 
 # Run verify-full's gate membership in a managed shell, skipping the host-only lanes and claiming nothing about them. --no-cache ignores a recorded green tree
 [arg('no_cache', long='no-cache', value='true')]
@@ -657,8 +689,13 @@ verify-full-sandbox no_cache='false':
 # and it is not `--no-cache` on a name: a flag would have to be remembered, and this one has to be
 # chosen deliberately anyway.
 # Everything, slowest first to last: delete artifacts, verify-full against nothing cached, then the checks that need a person at the keyboard. Reach for it when a green may be stale, or before a release
+[arg('show_studio', long='show-studio', value='true')]
 [group('Dev')]
-verify-repo: clean (verify-full "true") studio-manual-checks
+verify-repo show_studio='false':
+    test "{{ show_studio }}" = true || { echo 'Native checks require --show-studio; no cleanup or tests were run.' >&2; exit 1; }
+    just clean
+    just verify-full --no-cache --show-studio
+    just studio-manual-checks --show-studio
 
 # Private
 #########

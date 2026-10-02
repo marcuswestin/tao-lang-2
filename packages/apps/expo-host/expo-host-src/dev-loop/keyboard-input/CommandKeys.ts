@@ -49,7 +49,8 @@ export async function handleCommandKey(key: string, context: CommandKeyContext):
 
 const COMMAND_HANDLERS = {
   q: context => context.finish(0),
-  r: context => CommandRunner.runNonInteractiveCommand('reload app', context.expo.reloadExpoApps),
+  r: context =>
+    CommandRunner.runNonInteractiveCommand('reload app', () => context.expo.reloadExpoApps(context.shouldStop)),
   d: context => CommandRunner.runNonInteractiveCommand('open Tao desktop', context.openDesktop ?? (async () => false)),
   p: context =>
     CommandRunner.runNonInteractiveCommand(

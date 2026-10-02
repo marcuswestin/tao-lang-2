@@ -803,16 +803,17 @@ Describe('agent worktree profile bootstrap', () => {
   })
 
   Test('the exhaustive pass composes the recipes it is made of rather than restating their gates', async () => {
-    const commands = await justCommands('verify-repo')
+    const commands = await justCommands('verify-repo', '--show-studio')
 
     // Clean first, then a verification that trusts no recorded evidence, then the checks a person
     // performs. Composing the three means widening `verify-full` widens this too.
-    Expect(commands).toContain('./dev clean')
-    Expect(commands).toContain('--lane verify-full ')
-    Expect(commands).toContain('--no-cache')
-    Expect(commands).toContain('./dev studio-manual-checks')
-    Expect(commands.indexOf('./dev clean')).toBeLessThan(commands.indexOf('--lane verify-full '))
-    Expect(commands.indexOf('--lane verify-full ')).toBeLessThan(commands.indexOf('./dev studio-manual-checks'))
+    Expect(commands).toContain('test "true" = true')
+    Expect(commands).toContain('just clean')
+    Expect(commands).toContain('just verify-full --no-cache --show-studio')
+    Expect(commands).toContain('just studio-manual-checks --show-studio')
+    Expect(commands.indexOf('test "true"')).toBeLessThan(commands.indexOf('just clean'))
+    Expect(commands.indexOf('just clean')).toBeLessThan(commands.indexOf('just verify-full'))
+    Expect(commands.indexOf('just verify-full')).toBeLessThan(commands.indexOf('just studio-manual-checks'))
     // It runs `verify-full`'s gate list because it runs `verify-full`, not because it holds a copy.
     Expect(await justRecipeNames()).toContain('verify-repo')
   })

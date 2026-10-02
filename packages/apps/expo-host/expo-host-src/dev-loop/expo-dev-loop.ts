@@ -1,4 +1,5 @@
 import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import type { DevLoopActions, DevLoopControlHooks } from '@shared/DevLoopControl'
 import { DesktopHost } from '../desktop-host'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import { devDataAppKey, devDataEnvironment } from './dev-data/DevDataBootstrap'
@@ -48,11 +49,51 @@ export async function runDevLoop(
   reporter: DevLoopReporter = lineDevLoopReporter(),
   startupTargets: readonly DevStartupTarget[] = [],
   device?: string,
+  control?: DevLoopControlHooks,
 ): Promise<DevLoopOutcome> {
   const restoreDevLoopReporter = setDevLoopReporter(reporter)
+  let activeActions: DevLoopActions | undefined
+  let stopped = false
+  let complete!: () => void
+  const completion = new Promise<void>(resolve => {
+    complete = resolve
+  })
+  const unbind = control?.bind({
+    stop: async () => {
+      stopped = true
+      await activeActions?.stop()
+      await completion
+    },
+    restart: async () => {
+      if (activeActions === undefined) {
+        Errors.throwUserInput('The dev loop is still starting.')
+      }
+      await activeActions.restart()
+    },
+    reload: async () => {
+      if (activeActions === undefined) {
+        Errors.throwUserInput('The dev loop is still starting.')
+      }
+      await activeActions.reload()
+    },
+  })
+  const activeControl: DevLoopControlHooks | undefined = control === undefined ? undefined : {
+    emit: control.emit,
+    bind: actions => {
+      activeActions = actions
+      if (stopped) {
+        void actions.stop()
+      }
+      return () => {
+        activeActions = undefined
+      }
+    },
+  }
   try {
-    return await runDevLoopWithActiveReporter(selection, startupTargets, device)
+    return await runDevLoopWithActiveReporter(selection, startupTargets, device, activeControl)
   } finally {
+    unbind?.()
+    complete()
     restoreDevLoopReporter()
   }
 }
@@ -61,7 +102,9 @@ async function runDevLoopWithActiveReporter(
   selection: DevAppSelection,
   startupTargets: readonly DevStartupTarget[],
   device?: string,
+  control?: DevLoopControlHooks,
 ): Promise<DevLoopOutcome> {
+  await control?.emit({ type: 'starting' })
   const toolchainRepo = Repo.tryGetRoot(RuntimeToolchainPaths.packageRoot)
   const repoRoot = toolchainRepo ?? selection.projectRoot
   const repositoryControlsAvailable = toolchainRepo !== undefined
@@ -97,7 +140,10 @@ async function runDevLoopWithActiveReporter(
   let watcher: DevFileWatcher | undefined
   let desktop: ReturnType<typeof DesktopHost.runDev> | undefined
   let finished = false
-  let cleanupStarted = false
+  let cleanupPromise: Promise<void> | undefined
+  let finishPromise: Promise<void> | undefined
+  let requestedOutcome: DevLoopOutcome | undefined
+  let startupDispatch: Promise<readonly { target: DevStartupTarget; dispatched: boolean }[]> | undefined
   let exitLoop!: (outcome: DevLoopOutcome) => void
 
   const done = new Promise<DevLoopOutcome>(resolve => {
@@ -106,41 +152,59 @@ async function runDevLoopWithActiveReporter(
   const shouldStop = () => finished
 
   const finish = async (outcome: DevLoopOutcome) => {
-    if (finished) {
-      return
+    if (outcome.kind === 'exit') {
+      requestedOutcome = outcome
+    } else {
+      requestedOutcome ??= outcome
     }
-    finished = true
-    await cleanup()
-    exitLoop(outcome)
+    finishPromise ??= (async () => {
+      finished = true
+      try {
+        await cleanup()
+        exitLoop(requestedOutcome!)
+      } catch (error) {
+        await control?.emit({ type: 'cleanup-failed', message: Errors.formatForUser(error) })
+        exitLoop({ kind: 'exit', exitCode: 1 })
+        throw error
+      }
+    })()
+    return await finishPromise
   }
 
   const cleanup = async () => {
-    if (cleanupStarted) {
-      return
-    }
-    cleanupStarted = true
-    keyInput?.stop()
-    keyInput = undefined
-    await stopServices()
+    cleanupPromise ??= (async () => {
+      keyInput?.stop()
+      keyInput = undefined
+      await startupDispatch
+      await stopServices()
+    })()
+    return await cleanupPromise
   }
 
   const stopServices = async () => {
-    await watcher?.close()
+    const closingWatcher = watcher
     watcher = undefined
-    await expo.stopWeb().catch(error => {
-      DevLoopOutput.logDevLoop('dev', `Could not stop agent Chrome: ${Errors.formatForUser(error)}`, 'warn')
-    })
     const desktopProcess = desktop
-    if (desktopProcess !== undefined) {
-      desktopProcess.kill('SIGTERM')
-      await desktopProcess.waitForClose()
-      await desktopProcess.closeOutput()
-      desktop = undefined
+    desktop = undefined
+    const results = await Promise.allSettled([
+      closingWatcher?.close(),
+      expo.stopWeb(),
+      (async () => {
+        if (desktopProcess !== undefined) {
+          desktopProcess.kill('SIGTERM')
+          await desktopProcess.waitForClose()
+          await desktopProcess.closeOutput()
+        }
+      })(),
+      expoServer.stop(),
+      devData.stop(),
+    ])
+    const failures = results.flatMap(result =>
+      result.status === 'rejected' ? [Errors.formatForUser(result.reason)] : []
+    )
+    if (failures.length > 0) {
+      Errors.throwHostEnvironment(`Dev-loop cleanup failed: ${failures.join('; ')}`)
     }
-    await expoServer.stop()
-    await devData.stop().catch(error => {
-      DevLoopOutput.logDevLoop('data', `Could not stop the dev data server: ${Errors.formatForLog(error)}`, 'warn')
-    })
   }
 
   const requestFinish = (exitCode: number) => {
@@ -161,8 +225,18 @@ async function runDevLoopWithActiveReporter(
   const removeSigterm = Platform.onProcessSignal('SIGTERM', () => {
     requestFinish(143)
   })
+  const unbindControl = control?.bind({
+    stop: () => finish({ kind: 'exit', exitCode: 0 }),
+    restart: () => finish({ kind: 'restart' }),
+    reload: async () => {
+      await expo.reloadExpoApps(shouldStop)
+    },
+  })
 
   try {
+    if (shouldStop()) {
+      return await done
+    }
     DevLoopOutput.logDevLoop('dev', `Tao dev app: ${appPath}`)
     DevLoopOutput.logDevLoop('dev', `Expo Metro port: ${expo.config.EXPO_PORT}`)
     DevLoopOutput.logDevLoop('dev', `Dev data: tao-dev-data-v1 on port ${devData.port}, app ${devDataApp}`)
@@ -256,7 +330,8 @@ async function runDevLoopWithActiveReporter(
     if (shouldStop()) {
       return await done
     }
-    void expo.openStartupTargets(startupTargets.filter(target => target !== 'desktop'), shouldStop)
+    startupDispatch = expo.openStartupTargets(startupTargets.filter(target => target !== 'desktop'), shouldStop)
+    const dispatch = await startupDispatch
     if (device !== undefined) {
       void expo.openPhysicalDevice(device, shouldStop).catch(error => {
         if (!shouldStop()) {
@@ -267,13 +342,26 @@ async function runDevLoopWithActiveReporter(
     if (startupTargets.includes('desktop')) {
       void openDesktop()
     }
+    if (!shouldStop() && control !== undefined) {
+      const failed = dispatch.filter(result => !result.dispatched)
+      if (failed.length > 0) {
+        await control.emit({
+          type: 'failed',
+          message: `Could not dispatch targets: ${failed.map(result => result.target).join(', ')}.`,
+        })
+      } else {
+        await control.emit({ type: 'ready', url: expo.config.EXPO_ORIGIN, targets: dispatch })
+      }
+    }
     return await done
   } catch (error) {
     DevLoopOutput.recordFailure('dev', Run.formatFailure(error))
+    await control?.emit({ type: 'failed', message: Errors.formatForUser(error) })
     throw error
   } finally {
     removeSigint()
     removeSigterm()
+    unbindControl?.()
     await cleanup()
     await output?.stop()
   }

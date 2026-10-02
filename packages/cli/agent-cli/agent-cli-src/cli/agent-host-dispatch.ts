@@ -1,4 +1,5 @@
-import { CLI, FS, HCI, Platform } from '@shared'
+import { CLI, Errors, FS, HCI, Platform } from '@shared'
+import { parseDevLoopArgs } from '../agent-config/DevLoopArgs'
 import { agentHostCommands, hostCommandKind, hostCommandPrefix } from '../agent-config/HostCommandPolicy'
 import { hostCommandTarget } from '../agent-config/HostCommandTargets'
 
@@ -22,6 +23,19 @@ async function run(): Promise<number> {
     return 2
   }
   const args = argv.slice(prefix.length)
+  if (target.argsPolicy === 'dev-loop') {
+    try {
+      parseDevLoopArgs(args)
+    } catch (error) {
+      const failure = Errors.formatForUser(error)
+      if (args.includes('--json')) {
+        HCI.writeLine(JSON.stringify({ version: 1, status: 'refused', failure, warnings: [] }))
+      } else {
+        HCI.writeErrorLine(failure)
+      }
+      return 2
+    }
+  }
   if (
     (target.argsPolicy === 'studio-list' || target.argsPolicy === 'studio-stop')
     && !validStudioArgs(args, target.argsPolicy === 'studio-stop')

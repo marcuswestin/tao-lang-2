@@ -2,12 +2,14 @@ import { runWithCommands } from '@cli-kit/RunWithCommands'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { DeveloperBranchCommand, SyncMainCommand } from '@verification/DeveloperWorkflow'
 import { FinalizeCommand, LandCommand, MergeMainCommand, StartBranchCommand } from '@verification/Finalize'
+import { GateCatalog } from '@verification/GateCatalog'
 import { runGates } from '@verification/GateRunner'
 import { GreenTree } from '@verification/GreenTree'
 import { LandingLock } from '@verification/LandingLock'
 import { landedReport, MergeWithMainCommand } from '@verification/MergeWithMain'
 import { formatGateSummary, formatVerdict, gateExitCode } from '@verification/RunSummary'
 import { TestRunner } from '@verification/TestRunner'
+import { UiVisibility } from '@verification/UiVisibility'
 import { VerificationLanes } from '@verification/VerificationLanes'
 import { WorkReporter } from '@verification/WorkReporter'
 import { CleanCommand } from './clean/CleanCommand'
@@ -41,6 +43,7 @@ type TestChangedCommandOptions = TestCommandOptions & {
 }
 
 type GatesCommandOptions = {
+  showStudio?: boolean
   /**
    * Commander reads `--no-cache` as the negation of a `cache` option that defaults to true, so the
    * flag arrives here as `cache === false` rather than as a positive field of its own.
@@ -56,6 +59,7 @@ type GatesCommandOptions = {
 }
 
 type LandCommandOptions = {
+  showStudio?: boolean
   dryRun?: boolean
   messageFile?: string
   redraft?: boolean
@@ -64,6 +68,7 @@ type LandCommandOptions = {
 }
 
 type MergeCommandOptions = {
+  showStudio?: boolean
   abort?: string
   dryRun?: boolean
   messageFile?: string
@@ -122,6 +127,18 @@ await runWithCommands(commands => {
       await runExitCommand(async () => {
         const { runAgentAppDev } = await import('./simulators/AgentAppDev')
         return await runAgentAppDev(args)
+      })
+    })
+
+  commands
+    .command('dev-loop')
+    .description('Manage recorded background app development loops without a runtime timer.')
+    .argument('[args...]', 'start, status, logs, stop, restart, or reload; use --help for options.')
+    .allowUnknownOption()
+    .action(async (args: string[]) => {
+      await runExitCommand(async () => {
+        const { runDevLoopCommand } = await import('./dev-loop/DevLoopCommand')
+        return await runDevLoopCommand(args)
       })
     })
 
@@ -241,6 +258,7 @@ await runWithCommands(commands => {
 
   commands
     .command('land')
+    .option('--show-studio', 'Permit native Studio windows during landing verification.')
     .description('Land this feature branch: prepare unlocked, then integrate, verify, squash and push under one lock.')
     .option('--dry-run', 'Report readiness and the plan, and change nothing.')
     .option('--message-file <path>', 'Must name the canonical .artifacts/merge/<branch>.msg file.')
@@ -249,6 +267,9 @@ await runWithCommands(commands => {
     .option('--skip-verify-full', 'Skip just verify-full; the staged squash then gets just verify --complete.')
     .action(async (options: LandCommandOptions = {}) => {
       try {
+        if (options.showStudio === true && options.dryRun !== true && options.skipVerifyFull !== true) {
+          UiVisibility.warn(UiVisibility.studioWarnings)
+        }
         if (options.dryRun !== true && options.skipVerifyFull !== true) {
           const host = await readAgentCapabilities()
           const missing = unavailableLandingCapabilities(host)
@@ -262,6 +283,7 @@ await runWithCommands(commands => {
           }
         }
         await LandCommand.run({
+          showStudio: options.showStudio,
           dryRun: options.dryRun === true,
           messageFile: options.messageFile,
           redraft: options.redraft === true,
@@ -358,6 +380,7 @@ await runWithCommands(commands => {
 
   commands
     .command('gates')
+    .option('--show-studio', 'Permit selected native Studio tests to open windows.')
     .description('Run repository gates in parallel and report one verification summary.')
     .argument('<gates...>', 'Just recipe names to run as gates.')
     .option('--jobs <count>', 'Maximum number of gates to run at once.')
@@ -376,6 +399,12 @@ await runWithCommands(commands => {
     // uncaught stack with a code frame from inside the error helper.
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       await runExitCommand(async () => {
+        UiVisibility.preflightGates(
+          options.skipUnsandboxed === true
+            ? gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+            : gates,
+          options.showStudio,
+        )
         // Keep this process-wide change at the CLI boundary, not in the reusable gate runner.
         // Gate children inherit it; the invoking shell and landing process keep their priority.
         if (VerificationLanes.VERIFY_OR_WIDER.includes(options.lane ?? VerificationLanes.VERIFY)) {
@@ -389,6 +418,7 @@ await runWithCommands(commands => {
         const verdict = { color: WorkReporter.colorizes(outputMode) }
         return await holdingLandingLock(options.lane ?? 'verify', async () => {
           const summary = await runGates({
+            showStudio: options.showStudio,
             gates,
             greenTree: options.greenTree === undefined || options.greenTree.length === 0
               ? undefined
@@ -415,6 +445,7 @@ await runWithCommands(commands => {
 
   commands
     .command('merge-with-main')
+    .option('--show-studio', 'Permit native Studio windows during full verification.')
     .description('Squash-merge the current feature branch into main and push it; flags only remove work.')
     .option('--skip-verify', 'Skip the staged-squash just verify --complete pass.')
     .option(
@@ -428,6 +459,7 @@ await runWithCommands(commands => {
     .action(async (options: MergeCommandOptions = {}) => {
       try {
         await MergeWithMainCommand.run({
+          showStudio: options.showStudio,
           abortSnapshot: options.abort,
           dryRun: options.dryRun === true,
           messageFile: options.messageFile,
@@ -889,16 +921,21 @@ await runWithCommands(commands => {
 
   commands
     .command('studio-canary')
+    .option('--show-studio', 'Permit native Studio windows for this canary.')
     .description('Run native Tao Studio against a deterministic project and report what it proved.')
     .option('--project <path>', 'Tao project folder to open.')
     .option('--app <name>', 'App declaration within the selected project.')
     .option('--artifact-root <path>', 'Where the canary writes its artifacts.')
     .option('--hutch <path>', 'Explicit Hutch executable path.')
     .action(
-      async (options: { app?: string; artifactRoot?: string; hutch?: string; project?: string } = {}) => {
+      async (
+        options: { app?: string; artifactRoot?: string; hutch?: string; project?: string; showStudio?: boolean } = {},
+      ) => {
         const { StudioCanaryCommand } = await import('@studio-tooling/StudioCanaryCommand')
         Platform.runtimeProcess.exit(
           await StudioCanaryCommand.canary({
+            showStudio: options.showStudio === true
+              || Platform.runtimeProcess.env[UiVisibility.STUDIO_ENV_KEY] === 'true',
             appName: options.app,
             artifactRoot: options.artifactRoot,
             hutchPath: options.hutch,
@@ -910,17 +947,23 @@ await runWithCommands(commands => {
 
   commands
     .command('studio-manual-checks')
+    .option('--show-studio', 'Permit native Studio windows and manual interaction.')
     .description('Run native Studio checks that require a person and record their results.')
     .option('--project <path>', 'Tao project folder to open.')
     .option('--app <name>', 'App declaration within the selected project.')
     .option('--artifact-root <path>', 'Where the manual workflow writes its artifacts.')
     .option('--hutch <path>', 'Explicit Hutch executable path.')
     .action(
-      async (options: { app?: string; artifactRoot?: string; hutch?: string; project?: string } = {}) => {
+      async (
+        options: { app?: string; artifactRoot?: string; hutch?: string; project?: string; showStudio?: boolean } = {},
+      ) => {
         try {
+          UiVisibility.requireStudio(options.showStudio)
+          UiVisibility.warn(UiVisibility.studioWarnings)
           const { StudioManualChecks } = await import('@studio-tooling/StudioManualChecks')
           Platform.runtimeProcess.exit(
             await StudioManualChecks.run({
+              showStudio: options.showStudio,
               appName: options.app,
               artifactRoot: options.artifactRoot,
               hutchPath: options.hutch,
@@ -1214,17 +1257,34 @@ await runWithCommands(commands => {
     )
     .option('--worker <index>', 'Zero-based worker index.', '0')
     .option('--native', 'Run the shell smoke through Electrobun instead of Chrome.')
+    .option('--show-studio', 'Permit native Studio windows for this smoke.')
     .action(async (files, options) => {
       const { StudioSmoke } = await import('@studio-tooling/StudioSmoke')
       Platform.runtimeProcess.exit(
         await StudioSmoke.run({
           files,
           native: options.native,
+          showStudio: options.showStudio === true
+            || Platform.runtimeProcess.env[UiVisibility.STUDIO_ENV_KEY] === 'true',
           runId: options.runId,
           shardIndex: options.shard === undefined ? undefined : parseNonNegativeInteger(options.shard, '--shard'),
           workerIndex: parseNonNegativeInteger(options.worker, '--worker'),
         }),
       )
+    })
+
+  commands
+    .command('android-recover')
+    .description('Release retained emulator fences only after their owned processes have stopped.')
+    .requiredOption('--avd <name>', 'Retained Android virtual device name.')
+    .requiredOption('--generation <id>', 'Recovery generation printed by failed cleanup.')
+    .action(async (options: { avd: string; generation: string }) => {
+      await runExitCommand(async () => {
+        const { AndroidRecovery } = await import('./simulators/AndroidRecovery')
+        await AndroidRecovery.recover(options.avd, options.generation)
+        HCI.writeLine(`Released stopped Android emulator fences for ${options.avd}.`)
+        return 0
+      })
     })
 
   commands

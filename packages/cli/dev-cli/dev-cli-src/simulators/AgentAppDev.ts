@@ -1,5 +1,7 @@
+import { type MachineResourceOwner, MachineResources } from '@host-control'
 import { CLI, Errors, HCI, Platform, Repo } from '@shared'
 import { MachineLanes, type MachineResourceLease } from '@verification/MachineLanes'
+import { UiVisibility } from '@verification/UiVisibility'
 import { type AgentAndroidReservation, reserveAndroidEmulator } from './AgentAndroidEmulator'
 
 type Simulator = {
@@ -21,6 +23,8 @@ export type AgentAppDevOperations = {
   tryAcquireResource: typeof MachineLanes.tryAcquireResource
   write: (message: string) => void
   writeError: (message: string) => void
+  retainResources?: typeof MachineResources.retain
+  recoverResources?: typeof MachineResources.recoverRetained
 }
 
 const liveOperations: AgentAppDevOperations = {
@@ -33,11 +37,35 @@ const liveOperations: AgentAppDevOperations = {
   writeError: HCI.writeErrorLine,
 }
 
+export type AgentAppDevDevice = {
+  platform: 'ios' | 'android'
+  id: string
+  owned: boolean
+  state: 'reserved' | 'booted' | 'released' | 'retained'
+  generation?: string
+}
+
+type ManagedAppDev = {
+  childEnv: Platform.ProcessEnv
+  onChild: (child: CLI.StartedCommand) => Promise<void>
+  shouldStop: () => boolean
+  onOutput: NonNullable<CLI.CommandSpec['onOutput']>
+  onDevice?: (device: AgentAppDevDevice) => Promise<void>
+}
+
 /** Agent app-dev owns its device reservations for the lifetime of its dev loop. */
 export async function runAgentAppDev(
   args: readonly string[],
   operations: AgentAppDevOperations = liveOperations,
+  managed?: ManagedAppDev,
 ): Promise<number> {
+  if (managed !== undefined) {
+    operations = {
+      ...operations,
+      write: message => managed.onOutput('stdout', Buffer.from(`${message}\n`)),
+      writeError: message => managed.onOutput('stderr', Buffer.from(`${message}\n`)),
+    }
+  }
   const forwarded: string[] = []
   let iosVisible = false
   let androidVisible = false
@@ -76,14 +104,37 @@ export async function runAgentAppDev(
   }
 
   let selected: Awaited<ReturnType<typeof reserveSimulator>> | undefined
+  const warnings = UiVisibility.warningsForCommand('app-dev', args)
+  for (const warning of warnings) {
+    operations.writeError(`WARNING: ${warning}`)
+  }
   let androidSelected: AgentAndroidReservation | undefined
   let child: CLI.StartedCommand | undefined
   const removeSignals = (['SIGHUP', 'SIGINT', 'SIGTERM'] as const).map(signal =>
     operations.onSignal(signal, () => child?.kill(signal === 'SIGHUP' ? 'SIGTERM' : signal))
   )
   try {
-    selected = ios ? await reserveSimulator(operations, requestedUdid) : undefined
+    if (managed?.shouldStop()) {
+      return 0
+    }
+    selected = ios ? await reserveSimulator(operations, requestedUdid, managed) : undefined
+    if (managed?.shouldStop()) {
+      return 0
+    }
     androidSelected = android ? await reserveAndroidEmulator(operations, requestedSerial, androidVisible) : undefined
+    if (androidSelected !== undefined && managed !== undefined) {
+      const owner = await MachineResources.readOwner({ name: `android-avd:${androidSelected.avdName}` })
+      await managed?.onDevice?.({
+        platform: 'android',
+        id: androidSelected.serial,
+        owned: androidSelected.autoStarted,
+        state: 'booted',
+        generation: owner?.retention === undefined ? undefined : owner.id,
+      })
+    }
+    if (managed?.shouldStop()) {
+      return 0
+    }
     if (selected !== undefined) {
       operations.write(
         `iOS simulator: ${selected.simulator.name} (${selected.simulator.udid}); ${
@@ -101,46 +152,112 @@ export async function runAgentAppDev(
         TAO_AGENT_ANDROID_SERIAL: androidSelected?.serial ?? '',
         TAO_AGENT_BROWSER_QUIET: '1',
         TAO_AGENT_BROWSER_VISIBLE: browserVisible ? '1' : '0',
+        TAO_DEV_LOOP_WORKER_CREDENTIALS: '',
+        TAO_DEV_LOOP_SELECTION_ONLY: '',
+        ...managed?.childEnv,
       },
       processPolicy: 'server',
-      stdio: 'inherit',
+      stdio: managed === undefined ? 'inherit' : 'pipe',
+      onOutput: managed?.onOutput,
     })
+    await managed?.onChild(child)
     const result = await child.waitForClose()
     return result.exitCode ?? 1
   } finally {
+    for (const warning of warnings) {
+      operations.writeError(`WARNING: ${warning}`)
+    }
     for (const remove of removeSignals) {
       remove()
     }
     try {
       await androidSelected?.release()
+      if (androidSelected !== undefined) {
+        await managed?.onDevice?.({
+          platform: 'android',
+          id: androidSelected.serial,
+          owned: androidSelected.autoStarted,
+          state: 'released',
+        })
+      }
     } finally {
       if (selected !== undefined) {
+        let shutdownProved = true
         try {
           if (selected.autoSelected && selected.bootedHere) {
             const shutdown = await operations.run('xcrun', {
               args: ['simctl', 'shutdown', selected.simulator.udid],
             })
             if (shutdown.exitCode !== 0 || shutdown.error !== undefined) {
+              shutdownProved = false
               operations.writeError(
                 `Could not shut down owned simulator ${selected.simulator.udid}: ${
                   shutdown.stderr.trim() || shutdown.error?.message || 'unknown error'
                 }`,
               )
             }
+            shutdownProved &&= (await listSimulators(operations)).some(device =>
+              device.udid === selected!.simulator.udid && device.state === 'Shutdown'
+            )
           }
+        } catch (error) {
+          shutdownProved = false
+          operations.writeError(Errors.formatForUser(error))
         } finally {
-          await selected.lease.release()
+          if (shutdownProved) {
+            if (selected.retained !== undefined) {
+              await (operations.recoverResources ?? MachineResources.recoverRetained)({
+                generation: selected.retained.id,
+                name: selected.lease.owner.name,
+                shutdown: async () => true,
+              })
+            } else {
+              await selected.lease.release()
+            }
+            await managed?.onDevice?.({
+              platform: 'ios',
+              id: selected.simulator.udid,
+              owned: selected.autoSelected && selected.bootedHere,
+              state: 'released',
+            })
+          } else {
+            if (selected.retained === undefined) {
+              await (operations.retainResources ?? MachineResources.retain)({
+                owners: [selected.lease.owner],
+                processes: [],
+                quarantined: true,
+                reason: `Shutdown of owned simulator ${selected.simulator.udid} was not proved.`,
+              })
+            }
+            await managed?.onDevice?.({
+              platform: 'ios',
+              id: selected.simulator.udid,
+              owned: true,
+              state: 'retained',
+              generation: selected.retained?.id,
+            })
+          }
+        }
+        if (!shutdownProved) {
+          Errors.throwHostEnvironment(
+            `Owned simulator ${selected.simulator.udid} remains quarantined because shutdown was not proved.`,
+          )
         }
       }
     }
   }
 }
 
-async function reserveSimulator(operations: AgentAppDevOperations, requestedUdid?: string): Promise<{
+async function reserveSimulator(
+  operations: AgentAppDevOperations,
+  requestedUdid?: string,
+  managed?: ManagedAppDev,
+): Promise<{
   bootedHere: boolean
   lease: MachineResourceLease
   autoSelected: boolean
   simulator: Simulator
+  retained?: MachineResourceOwner
 }> {
   const pool = await operations.acquireResource({
     command: 'agent app-dev simulator selection',
@@ -164,7 +281,7 @@ async function reserveSimulator(operations: AgentAppDevOperations, requestedUdid
         repositoryRoot: Repo.getRoot(),
         waitTimeoutMs: 0,
       })
-      return bootReservedSimulator(operations, simulator, lease, false)
+      return bootReservedSimulator(operations, simulator, lease, false, managed)
     }
 
     for (const simulator of devices) {
@@ -177,7 +294,7 @@ async function reserveSimulator(operations: AgentAppDevOperations, requestedUdid
         repositoryRoot: Repo.getRoot(),
       })
       if (lease !== undefined) {
-        return bootReservedSimulator(operations, simulator, lease, true)
+        return bootReservedSimulator(operations, simulator, lease, true, managed)
       }
     }
 
@@ -195,7 +312,7 @@ async function reserveSimulator(operations: AgentAppDevOperations, requestedUdid
         repositoryRoot: Repo.getRoot(),
       })
       if (lease !== undefined) {
-        return bootReservedSimulator(operations, simulator, lease, true)
+        return bootReservedSimulator(operations, simulator, lease, true, managed)
       }
     }
 
@@ -233,7 +350,7 @@ async function reserveSimulator(operations: AgentAppDevOperations, requestedUdid
       waitTimeoutMs: 0,
     })
     operations.write(`Created reusable ${name} (${udid}); CoreSimulator stores it outside this checkout.`)
-    return bootReservedSimulator(operations, simulator, lease, true)
+    return bootReservedSimulator(operations, simulator, lease, true, managed)
   } finally {
     await pool.release()
   }
@@ -244,18 +361,52 @@ async function bootReservedSimulator(
   simulator: Simulator,
   lease: MachineResourceLease,
   autoSelected: boolean,
+  managed?: ManagedAppDev,
 ) {
+  let retained: MachineResourceOwner | undefined
   try {
     const bootedHere = simulator.state !== 'Booted'
+    if (managed !== undefined && autoSelected && bootedHere) {
+      retained = await (operations.retainResources ?? MachineResources.retain)({
+        owners: [lease.owner],
+        processes: [],
+        quarantined: true,
+        reason: `Owned simulator ${simulator.udid} requires verified shutdown before release.`,
+      })
+    }
+    await managed?.onDevice?.({
+      platform: 'ios',
+      id: simulator.udid,
+      owned: autoSelected && bootedHere,
+      state: 'reserved',
+      generation: retained?.id,
+    })
     if (bootedHere) {
       const boot = await operations.run('xcrun', { args: ['simctl', 'boot', simulator.udid] })
       if (boot.exitCode !== 0 || boot.error !== undefined) {
         Errors.throwHostEnvironment(`Could not boot ${simulator.name}: ${boot.stderr.trim() || boot.error?.message}`)
       }
     }
-    return { autoSelected, bootedHere, lease, simulator }
+    await managed?.onDevice?.({
+      platform: 'ios',
+      id: simulator.udid,
+      owned: autoSelected && bootedHere,
+      state: 'booted',
+      generation: retained?.id,
+    })
+    return { autoSelected, bootedHere, lease, simulator, retained }
   } catch (error) {
-    await lease.release()
+    if (retained === undefined) {
+      await lease.release()
+    } else {
+      await managed?.onDevice?.({
+        platform: 'ios',
+        id: simulator.udid,
+        owned: true,
+        state: 'retained',
+        generation: retained.id,
+      })
+    }
     throw error
   }
 }

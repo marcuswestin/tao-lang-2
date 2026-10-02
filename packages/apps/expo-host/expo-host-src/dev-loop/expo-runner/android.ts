@@ -72,7 +72,8 @@ export function createAndroid(
     },
     listPhysicalDevices,
     openExpoGoOnSerial: (serial: string, url: string = config.EXPO_GO_URL) => openExpoGoOnSerial(serial, url),
-    openRuntime: (expoGoUrl: string = config.EXPO_GO_URL) => openRuntime(config, metro, runtimes, expoGoUrl),
+    openRuntime: (expoGoUrl: string = config.EXPO_GO_URL, shouldStop?: () => boolean) =>
+      openRuntime(config, metro, runtimes, expoGoUrl, shouldStop),
     openRuntimeOnSerial: (serial: string, expoGoUrl: string, metroHost: string) =>
       openRuntimeOnSerial(config, runtimes, serial, expoGoUrl, metroHost),
     prepareAvailableRuntime: () => prepareAvailableRuntime(config, compatibility, prepare),
@@ -316,10 +317,19 @@ async function openRuntime(
   metro: ExpoMetroSession,
   runtimes: ReadonlyMap<string, AndroidRuntime>,
   expoGoUrl: string,
-): Promise<AndroidRuntime> {
-  await metro.waitForMetro()
+  shouldStop: () => boolean = () => false,
+): Promise<AndroidRuntime | undefined> {
+  if (!await metro.waitForMetro(shouldStop) || shouldStop()) {
+    return undefined
+  }
   const serial = await requireBootedEmulator()
+  if (shouldStop()) {
+    return undefined
+  }
   await reverseMetroPort(config, serial)
+  if (shouldStop()) {
+    return undefined
+  }
   return await openRuntimeOnSerial(config, runtimes, serial, expoGoUrl, '127.0.0.1')
 }
 
