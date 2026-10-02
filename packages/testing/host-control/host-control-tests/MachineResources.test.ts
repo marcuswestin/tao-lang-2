@@ -1,5 +1,5 @@
-import { CLI, FS, Platform, Repo } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { CLI, Errors, FS, Platform, Repo } from '@shared'
+import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import {
   MachineResourceBusyError,
   MachineResourceFenceError,
@@ -39,6 +39,303 @@ const aliveIdentity = (startedAt: string) => async (): Promise<ProcessIdentity> 
 })
 
 Describe('machine resource leases', () => {
+  Test('cancels a pending acquisition while preserving the current owner', async () => {
+    const root = await mkTestDir('tao-resource-cancel-')
+    const abort = new AbortController()
+    const inspectedHolder = Deferred()
+    let inspections = 0
+    try {
+      const owner = await writeOwner(root)
+      const pending = MachineResources.acquire({
+        command: 'cancelled contender',
+        name: resourceName,
+        registryRoot: root,
+        repositoryRoot: root,
+        signal: abort.signal,
+        waitTimeoutMs: 600_000,
+        processIdentity: async () => {
+          if (++inspections === 2) {
+            inspectedHolder.resolve()
+          }
+          return { evidence: 'alive', startedAt: 'same-process-start' }
+        },
+      })
+      const rejected = Expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+      await inspectedHolder.promise
+      await settle()
+      abort.abort()
+      await rejected
+      Expect(await MachineResources.readOwner({ name: resourceName, registryRoot: root })).toEqual(owner)
+      Expect(await FS.exists(FS.resolvePath('.mutex', root))).toBe(false)
+    } finally {
+      abort.abort()
+      await FS.remove(root)
+    }
+  })
+
+  Test('cancels a registry wait without removing the holder mutex or leaving a contender', async () => {
+    const root = await mkTestDir('tao-resource-cancel-mutex-')
+    const abort = new AbortController()
+    try {
+      const holder = FS.resolvePath('holder.json', root)
+      await FS.writeJson(holder, { pid: Platform.runtimeProcess.pid, startedAt: new Date().toISOString() })
+      await FS.symlink('holder.json', FS.resolvePath('.mutex', root))
+      const pending = MachineResources.acquire({
+        command: 'cancelled registry waiter',
+        name: resourceName,
+        registryRoot: root,
+        repositoryRoot: root,
+        processIdentity: aliveIdentity('same-process-start'),
+        signal: abort.signal,
+        waitTimeoutMs: 600_000,
+      })
+      const rejected = Expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+      await until(async () => (await FS.listDir(FS.resolvePath('.mutex-contenders', root)).catch(() => [])).length > 0)
+      abort.abort()
+      await rejected
+      Expect(await FS.realPath(FS.resolvePath('.mutex', root))).toBe(await FS.realPath(holder))
+      Expect(await FS.listDir(FS.resolvePath('.mutex-contenders', root))).toEqual([])
+      Expect(await FS.exists(resourcePath(root))).toBe(false)
+    } finally {
+      abort.abort()
+      await FS.remove(root)
+    }
+  })
+
+  Test('releases a successful claim when cancellation races with stale-owner replacement', async () => {
+    const root = await mkTestDir('tao-resource-cancel-claim-')
+    const abort = new AbortController()
+    let inspections = 0
+    try {
+      await writeOwner(root)
+      await Expect(MachineResources.acquire({
+        command: 'claim race',
+        name: resourceName,
+        registryRoot: root,
+        repositoryRoot: root,
+        signal: abort.signal,
+        processIdentity: async () => {
+          if (++inspections === 1) {
+            return { evidence: 'alive', startedAt: 'same-process-start' }
+          }
+          abort.abort()
+          return { evidence: 'gone' }
+        },
+      })).rejects.toMatchObject({ name: 'AbortError' })
+      Expect(await FS.exists(resourcePath(root))).toBe(false)
+      const subsequent = await MachineResources.acquire({
+        command: 'next caller',
+        name: resourceName,
+        registryRoot: root,
+        repositoryRoot: root,
+        processIdentity: aliveIdentity('same-process-start'),
+        waitTimeoutMs: 0,
+      })
+      await subsequent.release()
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('pre-cancelled acquisition leaves an absent registry untouched', async () => {
+    const root = await mkTestDir('tao-resource-pre-cancel-')
+    const missing = FS.resolvePath('absent', root)
+    const abort = new AbortController()
+    abort.abort()
+    try {
+      await Expect(MachineResources.acquire({
+        command: 'pre-cancelled',
+        name: resourceName,
+        registryRoot: missing,
+        repositoryRoot: root,
+        signal: abort.signal,
+      })).rejects.toMatchObject({ name: 'AbortError' })
+      Expect(await FS.exists(missing)).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('read-only diagnostics leave a missing registry absent', async () => {
+    const root = await mkTestDir('tao-host-control-read-only-')
+    const missing = FS.resolvePath('missing-registry', root)
+    try {
+      Expect(await MachineResources.listOwners({ registryRoot: missing })).toEqual([])
+      Expect(await MachineResources.readOwner({ name: resourceName, registryRoot: missing })).toBeUndefined()
+      Expect(await FS.exists(missing)).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('read-only diagnostics tolerate a retained manifest removed after directory listing', async () => {
+    const root = await mkTestDir('tao-host-control-reader-race-')
+    try {
+      const result = await CLI.run(Platform.runtimeProcess.execPath, {
+        args: [
+          `--tsconfig=${Repo.resolvePath('packages/testing/host-control/tsconfig.json')}`,
+          '-e',
+          `
+const shared = {...await import(${JSON.stringify(Repo.resolvePath('packages/shared/shared-src/shared.ts'))})};
+const {MockModule, testOverrideSlot} = await import(${
+            JSON.stringify(Repo.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts'))
+          });
+const FS = {...shared.FS};
+MockModule('@shared', () => ({...shared, FS}));
+const {MachineResources} = await import(${
+            JSON.stringify(Repo.resolvePath('packages/testing/host-control/host-control-src/MachineResources.ts'))
+          });
+const root = ${JSON.stringify(root)};
+const lease = await MachineResources.acquire({command: 'reader race', name: 'reader-race', registryRoot: root, repositoryRoot: root});
+const retained = await MachineResources.retain({owners: [lease.owner], processes: [], quarantined: true, reason: 'reader race', registryRoot: root});
+const manifest = FS.resolvePath(retained.id + '.json', FS.resolvePath('.retentions', root));
+const original = FS.resolvePath('resource-reader-race.lease', root);
+const readJson = FS.readJson;
+let removed = false;
+const slot = testOverrideSlot({read: () => FS.readJson, write: value => {FS.readJson = value}});
+const restore = slot.install(async path => {
+  if (path === manifest && !removed) {
+    removed = true;
+    await FS.remove(original);
+    await FS.remove(manifest);
+  }
+  return await readJson(path);
+});
+try {
+  const owners = await MachineResources.listOwners({registryRoot: root});
+  shared.Platform.runtimeConsole.info(JSON.stringify({removed, owners, manifestExists: await FS.exists(manifest)}));
+} finally {
+  restore();
+}
+`,
+        ],
+      })
+      Expect(result.stderr).toBe('')
+      Expect(result.exitCode).toBe(0)
+      Expect(JSON.parse(result.stdout)).toEqual({ removed: true, owners: [], manifestExists: false })
+    } finally {
+      await FS.remove(root)
+    }
+  })
+  Test('retention atomically rotates every fence to a survivor and survives parent exit and PID reuse', async () => {
+    const root = await mkTestDir('tao-host-control-retention-')
+    try {
+      const options = { processIdentity: aliveIdentity('parent'), registryRoot: root, repositoryRoot: root }
+      const first = await MachineResources.acquire({ ...options, command: 'AVD', name: resourceName })
+      const second = await MachineResources.acquire({ ...options, command: 'serial', name: 'android-serial' })
+      const retained = await MachineResources.retain({
+        owners: [first.owner, second.owner],
+        processes: [{ command: 'emulator', pid: 2 ** 29, startedAt: 'actual-emulator-start' }],
+        quarantined: false,
+        reason: 'child survived shutdown',
+        registryRoot: root,
+      })
+      Expect(retained.id).not.toBe(first.generation)
+      Expect(retained.pid).toBe(2 ** 29)
+      Expect(retained.processStartedAt).toBe('actual-emulator-start')
+      Expect((await MachineResources.readOwner({ name: 'android-serial', registryRoot: root }))?.id).toBe(retained.id)
+      Expect((await MachineResources.readOwner({ name: resourceName, registryRoot: root }))?.pid).toBe(2 ** 29)
+      // Simulate a crash partway through recovery: the atomic manifest still fences both targets.
+      await FS.remove(resourcePath(root))
+      Expect((await MachineResources.listOwners({ registryRoot: root })).map(owner => owner.name).sort()).toEqual([
+        'android-serial',
+        resourceName,
+      ].sort())
+      await Promise.all([first.release(), second.release()])
+      for (const name of [resourceName, 'android-serial']) {
+        for (const identity of [{ evidence: 'gone' }, { evidence: 'alive', startedAt: 'reused-pid' }] as const) {
+          await Expect(MachineResources.acquire({
+            ...options,
+            command: 'contender after parent exit',
+            maxAgeMs: 0,
+            name,
+            processIdentity: async () => identity,
+            waitTimeoutMs: 0,
+          })).rejects.toBeInstanceOf(MachineResourceBusyError)
+        }
+      }
+      let recoveryOwner: MachineResourceOwner | undefined
+      await MachineResources.recoverRetained({
+        generation: retained.id,
+        name: resourceName,
+        registryRoot: root,
+        shutdown: async owner => {
+          recoveryOwner = owner
+          return true
+        },
+      })
+      Expect(recoveryOwner?.retention?.resourceNames).toEqual([resourceName, 'android-serial'])
+      for (const name of [resourceName, 'android-serial']) {
+        const available = await MachineResources.acquire({ ...options, command: 'recovered', name, waitTimeoutMs: 0 })
+        await available.release()
+      }
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('recovery checks generation before shutdown and owner again before clearing any fence', async () => {
+    const root = await mkTestDir('tao-host-control-recovery-fence-')
+    try {
+      const lease = await MachineResources.acquire({
+        command: 'owned',
+        name: resourceName,
+        registryRoot: root,
+        repositoryRoot: root,
+      })
+      const retained = await MachineResources.retain({
+        owners: [lease.owner],
+        processes: [],
+        quarantined: true,
+        reason: 'unknown child',
+        registryRoot: root,
+      })
+      let shutdowns = 0
+      await Expect(MachineResources.recoverRetained({
+        generation: lease.generation,
+        name: resourceName,
+        registryRoot: root,
+        shutdown: async () => {
+          shutdowns++
+          return true
+        },
+      })).rejects.toBeInstanceOf(MachineResourceFenceError)
+      Expect(shutdowns).toBe(0)
+      await Expect(MachineResources.recoverRetained({
+        generation: retained.id,
+        name: resourceName,
+        registryRoot: root,
+        shutdown: async () => false,
+      })).rejects.toBeInstanceOf(Errors.HostEnvironmentError)
+      let replacement: MachineResourceOwner | undefined
+      await Expect(MachineResources.recoverRetained({
+        generation: retained.id,
+        name: resourceName,
+        registryRoot: root,
+        shutdown: async owner => {
+          replacement = await MachineResources.retain({
+            owners: [owner],
+            processes: [],
+            quarantined: true,
+            reason: 'new generation',
+            registryRoot: root,
+          })
+          return true
+        },
+      })).rejects.toBeInstanceOf(MachineResourceFenceError)
+      await Expect(MachineResources.acquire({
+        command: 'contender',
+        name: resourceName,
+        registryRoot: root,
+        repositoryRoot: root,
+        waitTimeoutMs: 0,
+        processIdentity: async () => ({ evidence: 'gone' }),
+      })).rejects.toBeInstanceOf(MachineResourceBusyError)
+      Expect(replacement?.id).not.toBe(retained.id)
+    } finally {
+      await FS.remove(root)
+    }
+  })
   Test('concurrent releases join one pending registry cleanup', async () => {
     const root = await mkTestDir('tao-host-control-release-')
     try {

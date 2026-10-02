@@ -1,19 +1,24 @@
 import { emulatorExitMessage } from '@expo-host/dev-loop/expo-runner/android'
+import { type MachineResourceOwner, MachineResources } from '@host-control'
 import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { MachineLanes, type MachineResourceLease } from '@verification/MachineLanes'
+import { AndroidRecovery, type AndroidRecoveryOperations } from './AndroidRecovery'
 
 const POOL_SIZE = 4
 const AVD_PREFIX = 'Tao_Agent_Pixel_'
 const SYSTEM_IMAGE = 'system-images;android-36;google_apis;arm64-v8a'
 const BOOT_TIMEOUT_MS = 180_000
 
-export type AgentAndroidOperations = {
+export type AgentAndroidOperations = AndroidRecoveryOperations & {
   acquireResource: typeof MachineLanes.acquireResource
   run: typeof CLI.run
   start: typeof CLI.start
   tryAcquireResource: typeof MachineLanes.tryAcquireResource
   write: (message: string) => void
   writeError: (message: string) => void
+  /** Injected by tests to exercise failed startup without waiting for a real boot. */
+  bootTimeoutMs?: number
+  bootIntervalMs?: number
 }
 
 export type AgentAndroidReservation = {
@@ -63,7 +68,100 @@ export async function reserveAndroidEmulator(
   let serialLease: MachineResourceLease | undefined
   let leasedSerial: string | undefined
   let outputTail = ''
+  let captured: ReturnType<typeof AndroidRecovery.capture> | undefined
+  let cleaning: Promise<void> | undefined
+  let retainedOwnership: MachineResourceOwner | undefined
+  let publishedCapture = ''
+  const owners = (): MachineResourceOwner[] => {
+    const current = (original: MachineResourceOwner): MachineResourceOwner =>
+      retainedOwnership?.retention?.resourceNames.includes(original.name)
+        ? { ...retainedOwnership, name: original.name, command: original.command }
+        : original
+    return [current(selection.lease.owner), ...(serialLease === undefined ? [] : [current(serialLease.owner)])]
+  }
+  const publishOwnership = async (): Promise<void> => {
+    if (captured === undefined || captured.processes.length === 0) {
+      return
+    }
+    const key = JSON.stringify([captured.processes, captured.uncertain, leasedSerial])
+    if (key === publishedCapture) {
+      return
+    }
+    retainedOwnership = await (operations.retainResources ?? MachineResources.retain)({
+      owners: owners(),
+      processes: captured.processes,
+      processGroupPid: captured.rootPid,
+      quarantined: captured.uncertain,
+      reason: `Android emulator ${selection.avdName} ownership captured during startup.`,
+      registryRoot: operations.registryRoot,
+    })
+    publishedCapture = key
+  }
+  const cleanup = (): Promise<void> =>
+    cleaning ??= (async () => {
+      let stopped = started === undefined
+      let failure: unknown
+      const attempt = async (work: () => void | Promise<void>): Promise<void> => {
+        try {
+          await work()
+        } catch (error) {
+          if (failure === undefined) {
+            failure = error
+          } else {
+            operations.writeError(`Additional Android cleanup failure: ${Errors.formatForLog(error)}`)
+          }
+        }
+      }
+      await attempt(async () => {
+        if (started !== undefined) {
+          stopped = await AndroidRecovery.stop({
+            ...operations,
+            avdName: selection.avdName,
+            capture: captured ?? AndroidRecovery.capture(started, operations),
+            owners: owners(),
+            serial: leasedSerial,
+            started,
+          })
+        }
+      })
+      if (stopped) {
+        if (retainedOwnership !== undefined) {
+          await attempt(() =>
+            (operations.recoverResources ?? MachineResources.recoverRetained)({
+              name: `android-avd:${selection.avdName}`,
+              generation: retainedOwnership!.id,
+              registryRoot: operations.registryRoot,
+              shutdown: async () => true,
+            })
+          )
+        }
+        // Publication can fail after serial acquisition. Generation-fenced release also
+        // cleans up any original lease that never joined the durable handoff.
+        await attempt(async () => {
+          await serialLease?.release()
+        })
+        await attempt(() => selection.lease.release())
+      }
+      await attempt(async () => {
+        await started?.closeOutput()
+      })
+      await attempt(() => {
+        started?.dispose()
+      })
+      if (failure !== undefined) {
+        throw failure
+      }
+    })()
   try {
+    // Publish an intent before spawning: even a parent killed between spawn and kernel
+    // identity capture must leave the AVD quarantined rather than available for adoption.
+    retainedOwnership = await (operations.retainResources ?? MachineResources.retain)({
+      owners: owners(),
+      processes: [],
+      quarantined: true,
+      reason: `Android emulator ${selection.avdName} launch intent; child identity is not yet captured.`,
+      registryRoot: operations.registryRoot,
+    })
     started = operations.start('emulator', {
       args: [
         '-avd',
@@ -77,28 +175,38 @@ export async function reserveAndroidEmulator(
         ...(visible ? [] : ['-no-window', '-no-audio']),
       ],
       detached: true,
+      processPolicy: 'server',
       onOutput: (_stream, chunk) => {
         outputTail = (outputTail + chunk.toString('utf8')).slice(-16_000)
       },
       stdio: 'pipe',
       unref: true,
     })
+    captured = AndroidRecovery.capture(started, operations)
+    await publishOwnership()
     const serial = await Time.pollUntil(async () => {
+      captured = AndroidRecovery.capture(started!, operations, captured)
+      await publishOwnership()
       const candidate = [...(await runningAvds(operations)).entries()]
         .find(([, name]) => name === selection.avdName)?.[0]
       if (candidate !== undefined && candidate !== leasedSerial) {
-        await serialLease?.release()
+        if (serialLease !== undefined) {
+          Errors.throwHostEnvironment(
+            `Android AVD ${selection.avdName} changed serial while booting; its fences need recovery.`,
+          )
+        }
         serialLease = await acquireSerial(operations, candidate, selection.avdName, true, visible)
         leasedSerial = candidate
+        await publishOwnership()
       }
       return candidate !== undefined && await isBooted(operations, candidate) ? candidate : undefined
     }, {
-      intervalMs: 2_000,
+      intervalMs: operations.bootIntervalMs ?? 2_000,
       stop: () =>
         started?.error !== undefined
         || (started?.exitCode !== null && started?.exitCode !== undefined)
         || (started?.signalCode !== null && started?.signalCode !== undefined),
-      timeoutMs: BOOT_TIMEOUT_MS,
+      timeoutMs: operations.bootTimeoutMs ?? BOOT_TIMEOUT_MS,
     })
     if (serial === undefined) {
       const logPath = Repo.resolvePath(`.artifacts/logs/agent-android/${selection.avdName}.log`)
@@ -112,48 +220,23 @@ export async function reserveAndroidEmulator(
       )
     }
     operations.write(
-      `Android emulator: ${selection.avdName} (${serial}); ${visible ? 'viewer requested' : 'no window opened'}.`,
+      `Android emulator: ${selection.avdName} (${serial}); ${visible ? 'viewer requested' : 'no window opened'}. `
+        + `Ownership generation: ${retainedOwnership.id}.`,
     )
     return {
       avdName: selection.avdName,
       autoStarted: true,
       serial,
-      release: async () => {
-        try {
-          const stopped = await operations.run('adb', { args: ['-s', serial, 'emu', 'kill'] })
-          if (stopped.error !== undefined || stopped.exitCode !== 0) {
-            operations.writeError(
-              `Could not stop owned Android emulator ${serial}: ${
-                stopped.stderr.trim() || stopped.error?.message || 'unknown error'
-              }`,
-            )
-            started?.kill('SIGTERM')
-          } else {
-            const exited = await Time.pollUntil(
-              async () =>
-                (started?.exitCode !== null || started?.signalCode !== null)
-                  && !(await runningAvds(operations)).has(serial)
-                  ? true
-                  : undefined,
-              { intervalMs: 250, timeoutMs: 30_000 },
-            )
-            if (exited !== true) {
-              operations.writeError(`Android emulator ${serial} did not exit after the stop request.`)
-              started?.kill('SIGTERM')
-            }
-          }
-        } finally {
-          await serialLease?.release()
-          await selection.lease.release()
-          await started?.closeOutput()
-        }
-      },
+      release: cleanup,
     }
   } catch (error) {
-    started?.kill('SIGTERM')
-    await started?.closeOutput()
-    await serialLease?.release()
-    await selection.lease.release()
+    try {
+      await cleanup()
+    } catch (cleanupError) {
+      operations.writeError(
+        `Android cleanup failed while preserving the startup failure: ${Errors.formatForLog(cleanupError)}`,
+      )
+    }
     throw error
   }
 }

@@ -1,3 +1,4 @@
+import { MachineResources } from '@host-control'
 import { CLI, Errors, FS, Platform, Repo } from '@shared'
 import { GreenTree, type GreenTreeRecord } from '@verification/GreenTree'
 import { LandingLock, type LandingLockRecord, type LandingQueueWaiter } from '@verification/LandingLock'
@@ -18,7 +19,6 @@ const MERGE_ARTIFACT_ROOT = '.artifacts/merge'
 /** Fields a finalize state file's shape might use for its one-line summary; the format is another
  * agent's concurrent work, so this list is a best-effort guess and a miss just prints "recorded". */
 const FINALIZE_SUMMARY_FIELDS = ['state', 'phase', 'status', 'summary', 'message'] as const
-const RESOURCE_LEASE_SUFFIX = '.lease'
 
 export type BoardDependencies = {
   /** Injected by tests so a verdict does not depend on this machine's actual load at test time. */
@@ -258,12 +258,15 @@ function formatMachineSection(machine: BoardMachine): string {
   }
   for (const resource of machine.resources) {
     const liveness = resource.live ? '' : ' (stale)'
+    const retention = resource.owner.retention === undefined
+      ? ''
+      : ` (${resource.owner.retention.quarantined ? 'quarantined' : 'retained'}; generation ${resource.owner.id})`
     const device = /^(?:ios-simulator|android-emulator|android-avd):/u.test(resource.owner.name)
     lines.push(
       `  ${
         device ? 'device' : 'resource'
       } ${resource.owner.name} held by ${resource.owner.command} in ${resource.owner.repositoryRoot} `
-        + `(pid ${resource.owner.pid}, since ${resource.owner.startedAt})${liveness}`,
+        + `(pid ${resource.owner.pid}, since ${resource.owner.startedAt})${liveness}${retention}`,
     )
   }
   return lines.join('\n')
@@ -561,59 +564,16 @@ async function readBoardMachine(
 }
 
 /**
- * readResourceLeases reads named host-resource leases (such as a landing lease held during
- * merge-with-main) directly from the registry directory. `MachineLanes` does not export a lister
- * for these, only acquire/release, so this reads the same directory its lane registrations live in
- * and validates each `*.lease` file's shape defensively: a lease this run cannot parse, or a
- * resource-lease mechanism that does not exist yet on an older registry, is skipped rather than
- * failing the whole report.
+ * readResourceLeases resolves retained handoffs before reporting each target's owner. Original
+ * lease files can still name an exited parent while a retained generation fences its emulator.
  */
 async function readResourceLeases(root: string): Promise<BoardResourceLease[]> {
-  let entries: string[]
-  try {
-    entries = await FS.listDir(root)
-  } catch {
-    return []
-  }
   const leases: BoardResourceLease[] = []
-  for (const entry of entries) {
-    if (!entry.endsWith(RESOURCE_LEASE_SUFFIX)) {
-      continue
-    }
-    const owner = await readResourceOwner(FS.resolvePath(entry, root))
-    if (owner === undefined) {
-      continue
-    }
+  for (const owner of await MachineResources.listOwners({ registryRoot: root })) {
     const canonicalOwner = { ...owner, repositoryRoot: await canonicalPath(owner.repositoryRoot) }
     leases.push({ live: await MachineLanes.ownerIsLive(canonicalOwner), owner: canonicalOwner })
   }
   return leases
-}
-
-async function readResourceOwner(path: string): Promise<MachineResourceOwner | undefined> {
-  try {
-    const value = await FS.readJson<Partial<MachineResourceOwner>>(path)
-    if (
-      typeof value !== 'object' || value === null
-      || typeof value.id !== 'string'
-      || typeof value.name !== 'string'
-      || typeof value.pid !== 'number'
-      || typeof value.startedAt !== 'string'
-    ) {
-      return undefined
-    }
-    return {
-      command: value.command ?? value.name,
-      id: value.id,
-      name: value.name,
-      pid: value.pid,
-      processStartedAt: value.processStartedAt,
-      repositoryRoot: value.repositoryRoot ?? '<unknown worktree>',
-      startedAt: value.startedAt,
-    }
-  } catch {
-    return undefined
-  }
 }
 
 async function canonicalPath(path: string): Promise<string> {

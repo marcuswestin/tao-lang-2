@@ -1,3 +1,4 @@
+import { type MachineResourceOwner, MachineResources } from '@host-control'
 import { CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { Database } from 'bun:sqlite'
@@ -385,6 +386,49 @@ Describe('reclaim', () => {
     const row = report.worktrees.find(worktree => worktree.path === candidate)
     Expect(row?.verdict).toBe('live')
     Expect(row?.evidence).toEqual(['holds a lane, a resource lease, or the landing lock'])
+  })
+
+  Test('retained and quarantined emulator fences prevent reclaim after parent exit', async () => {
+    for (const quarantined of [false, true]) {
+      const calls: string[] = []
+      const { candidate, registryRoot, run } = await scenario({ calls })
+      try {
+        const dependencies = { inSandbox: () => false, readThreads: noThreads, registryRoot, run }
+        const stale = await reclaim(dependencies)
+        Expect(stale.worktrees.find(row => row.path === candidate)?.verdict).toBe('reclaimable')
+        const original: MachineResourceOwner = {
+          command: 'agent app-dev Android',
+          id: 'exited-parent',
+          name: 'android-emulator:emulator-5554',
+          pid: 2 ** 30,
+          repositoryRoot: `${candidate}/.`,
+          startedAt: '2020-01-01T00:00:00.000Z',
+        }
+        const path = FS.resolvePath('resource-android-emulator_emulator-5554.lease', registryRoot)
+        await FS.writeJson(path, original)
+        await MachineResources.retain({
+          owners: [original],
+          processes: quarantined ? [] : [{ command: 'emulator', pid: 2 ** 29, startedAt: 'emulator-start' }],
+          quarantined,
+          reason: 'shutdown remains unproved',
+          registryRoot,
+        })
+
+        const report = await reclaim(dependencies)
+        const row = report.worktrees.find(worktree => worktree.path === candidate)
+
+        Expect(row?.verdict).toBe('live')
+        Expect(row?.evidence).toEqual(['holds a lane, a resource lease, or the landing lock'])
+        Expect(await execute(stale, dependencies)).toEqual([
+          { outcome: 'skipped-now-live', path: candidate, reason: 'took a lane since the report' },
+        ])
+        Expect(calls).not.toContain(routeKey('git', ['worktree', 'remove', candidate], Repo.getRoot()))
+        Expect(await FS.readJson<MachineResourceOwner>(path)).toEqual(original)
+      } finally {
+        await FS.remove(registryRoot)
+        await FS.remove(FS.dirname(candidate))
+      }
+    }
   })
 
   Test('uncommitted changes make a worktree live', async () => {

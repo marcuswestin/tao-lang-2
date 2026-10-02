@@ -1,5 +1,6 @@
-import { CLI, Errors } from '@shared'
-import { Expect, Test } from '@shared/test'
+import type { MachineResourceOwner } from '@host-control'
+import { CLI, Errors, Platform, ProcessTree, Repo, type TrackedProcess } from '@shared'
+import { Deferred, Expect, Test, until } from '@shared/test'
 import { type AgentAndroidOperations, reserveAndroidEmulator } from '../dev-cli-src/simulators/AgentAndroidEmulator'
 
 function fixture() {
@@ -8,9 +9,43 @@ function fixture() {
   const held = new Set<string>()
   const starts: string[][] = []
   const stopped: string[] = []
-  const processes = new Map<string, { exitCode: number | null; signalCode: 'SIGTERM' | null }>()
+  const signals: string[] = []
+  const errors: string[] = []
+  const retained: Parameters<NonNullable<AgentAndroidOperations['retainResources']>>[0][] = []
+  const ownership: typeof retained = []
+  const disposed: string[] = []
+  const durable = new Map<string, MachineResourceOwner>()
+  const identities = new Map<number, TrackedProcess>()
+  const groups = new Set<number>()
+  const children = new Map<number, TrackedProcess[]>()
+  const processes = new Map<string, {
+    exitCode: number | null
+    signalCode: 'SIGTERM' | null
+    pid: number
+    close: ReturnType<typeof Deferred<CLI.CommandCloseResult>>
+  }>()
   let nextPort = 5556
   let agentBooted = true
+  let graceful = true
+  let terminate = true
+  let force = true
+  let unknownTree = false
+  let startupFailure = false
+  let holdClose = false
+  let generation = 0
+  const generations = new Map<string, string>()
+  const finish = (serial: string) => {
+    const state = processes.get(serial)!
+    running.delete(serial)
+    identities.delete(state.pid)
+    if (!(children.get(state.pid) ?? []).some(child => identities.has(child.pid))) {
+      groups.delete(state.pid)
+    }
+    state.signalCode = 'SIGTERM'
+    if (!holdClose) {
+      state.close.resolve({ exitCode: null, signal: 'SIGTERM' })
+    }
+  }
   const result = (stdout = ''): CLI.CommandResult => ({
     args: [],
     command: 'fake',
@@ -24,14 +59,82 @@ function fixture() {
       Errors.throwHostEnvironment(`Already leased ${name}`)
     }
     held.add(name)
+    const id = `${name}-${++generation}`
+    generations.set(name, id)
+    const owner = { command: 'test', id, name, pid: 1, repositoryRoot: '.', startedAt: new Date().toISOString() }
+    durable.set(name, owner)
     return {
-      owner: { command: 'test', id: name, name, pid: 1, repositoryRoot: '.', startedAt: new Date().toISOString() },
+      owner,
       release: async () => {
-        held.delete(name)
+        if (generations.get(name) === id) {
+          held.delete(name)
+        }
       },
     }
   }
   const operations: AgentAndroidOperations = {
+    // budget-ok: fake process transitions are immediate; these bounds exercise escalation rather than host timing.
+    shutdownTimeoutMs: 10,
+    bootTimeoutMs: 30_000,
+    bootIntervalMs: 1,
+    processTree: {
+      descendants: pid => {
+        if (unknownTree) {
+          Errors.throwHostEnvironment('Unknown descendants')
+        }
+        return children.get(pid) ?? []
+      },
+      identities: pids =>
+        new Map(pids.flatMap(pid => identities.has(pid) ? [[pid, identities.get(pid)!] as const] : [])),
+      isGroupAlive: pid => groups.has(pid),
+      processGroupOf: pid => pid,
+      signalTracked: (tracked, signal) => {
+        signals.push(signal)
+        for (const expected of tracked) {
+          if (
+            identities.get(expected.pid)?.startedAt === expected.startedAt
+            && (signal === 'SIGTERM' ? terminate : force)
+          ) {
+            const serial = [...processes].find(([, state]) => state.pid === expected.pid)?.[0]
+            if (serial !== undefined) {
+              finish(serial)
+            }
+          }
+        }
+      },
+    },
+    retainResources: async options => {
+      ;(options.reason.includes('shutdown') ? retained : ownership).push(options)
+      const id = `retained-generation-${++generation}`
+      const owner = {
+        ...options.owners[0]!,
+        id,
+        pid: options.processes[0]?.pid ?? options.owners[0]!.pid,
+        processStartedAt: options.processes[0]?.startedAt,
+        retention: {
+          processes: [...options.processes],
+          quarantined: options.quarantined,
+          reason: options.reason,
+          resourceNames: options.owners.map(owner => owner.name),
+        },
+      }
+      for (const owner of options.owners) {
+        generations.set(owner.name, id)
+      }
+      for (const original of options.owners) {
+        durable.set(original.name, { ...owner, name: original.name, command: original.command })
+      }
+      return owner
+    },
+    recoverResources: async options => {
+      const owner = durable.get(options.name)!
+      Expect(owner.id).toBe(options.generation)
+      Expect(await options.shutdown(owner)).toBe(true)
+      for (const name of owner.retention!.resourceNames) {
+        held.delete(name)
+        durable.delete(name)
+      }
+    },
     acquireResource: async options => lease(options.name),
     tryAcquireResource: async options => held.has(options.name) ? undefined : lease(options.name),
     run: async (command, spec) => {
@@ -56,9 +159,15 @@ function fixture() {
       }
       if (command === 'adb' && args[2] === 'emu' && args[3] === 'kill') {
         stopped.push(args[1]!)
-        running.delete(args[1]!)
-        processes.get(args[1]!)!.signalCode = 'SIGTERM'
+        if (graceful) {
+          finish(args[1]!)
+        }
         return result()
+      }
+      if (command === 'lsof') {
+        const serial = `emulator-${args.find(arg => arg.startsWith('-iTCP:'))?.slice(6)}`
+        const pid = processes.get(serial)?.pid
+        return result(pid === undefined ? '' : `p${pid}\n`)
       }
       Errors.throwUnexpected(`Unexpected fake command ${command} ${args.join(' ')}`)
     },
@@ -71,31 +180,79 @@ function fixture() {
       const serial = `emulator-${nextPort}`
       nextPort += 2
       running.set(serial, args[args.indexOf('-avd') + 1]!)
-      const state = { exitCode: null as number | null, signalCode: null as 'SIGTERM' | null }
+      const pid = 2 ** 29 + nextPort
+      const state = {
+        exitCode: null as number | null,
+        signalCode: null as 'SIGTERM' | null,
+        pid,
+        close: Deferred<CLI.CommandCloseResult>(),
+      }
+      identities.set(pid, { command: 'emulator', pid, startedAt: `start-${pid}` })
+      groups.add(pid)
       processes.set(serial, state)
+      if (startupFailure) {
+        state.exitCode = 1
+      }
       return {
+        dispose: () => {
+          disposed.push(serial)
+        },
         closeOutput: async () => {},
         error: undefined,
+        pid,
+        waitForClose: () => state.close.promise,
         get exitCode() {
           return state.exitCode
         },
         get signalCode() {
           return state.signalCode
         },
-        kill: () => {
-          running.delete(serial)
-          state.signalCode = 'SIGTERM'
+        kill: (signal: Parameters<CLI.StartedCommand['kill']>[0]) => {
+          if (signal === 'SIGTERM' ? terminate : force) {
+            finish(serial)
+          }
           return true
         },
       } as unknown as CLI.StartedCommand
     },
     write: () => {},
-    writeError: () => {},
+    writeError: message => errors.push(message),
   }
   return {
     avds,
     held,
     operations,
+    processes,
+    errors,
+    signals,
+    retained,
+    ownership,
+    durable,
+    disposed,
+    exitAndReuseSerial: (serial: string, avdName: string) => {
+      finish(serial)
+      running.set(serial, avdName)
+    },
+    identities,
+    addSurvivingChild: (serial: string) => {
+      const parent = processes.get(serial)!
+      const child = { command: 'qemu', pid: parent.pid + 100_000, startedAt: 'actual-qemu-start' }
+      identities.set(child.pid, child)
+      children.set(parent.pid, [child])
+      return child
+    },
+    setShutdown: (options: { graceful?: boolean; terminate?: boolean; force?: boolean; holdClose?: boolean }) => {
+      graceful = options.graceful ?? graceful
+      terminate = options.terminate ?? terminate
+      force = options.force ?? force
+      holdClose = options.holdClose ?? holdClose
+    },
+    failStartup: () => {
+      startupFailure = true
+    },
+    unknownTree: () => {
+      unknownTree = true
+    },
     running,
     setAgentBooted: (booted: boolean) => {
       agentBooted = booted
@@ -147,4 +304,333 @@ Test('the Android serial is leased while the emulator is still booting', async (
   const opened = await opening
   await opened.release()
   Expect([...f.held]).toEqual([])
+})
+
+Test('leases stay fenced until the authoritative child close completes, even after ADB disappears', async () => {
+  const f = fixture()
+  const reservation = await reserveAndroidEmulator(f.operations)
+  f.setShutdown({ holdClose: true })
+  const releasing = reservation.release()
+  await until(() => f.stopped.length === 1)
+  Expect(f.running.has(reservation.serial)).toBe(false)
+  Expect(f.held.has(`android-avd:${reservation.avdName}`)).toBe(true)
+  Expect(f.held.has(`android-emulator:${reservation.serial}`)).toBe(true)
+  f.processes.get(reservation.serial)!.close.resolve({ exitCode: null, signal: 'SIGTERM' })
+  await releasing
+  Expect([...f.held]).toEqual([])
+  Expect(f.retained).toEqual([])
+})
+
+Test('owned emulator shutdown escalates through TERM and KILL and joins concurrent release', async () => {
+  const f = fixture()
+  const reservation = await reserveAndroidEmulator(f.operations)
+  f.setShutdown({ graceful: false, terminate: false })
+  await Promise.all([reservation.release(), reservation.release()])
+  Expect(f.stopped).toEqual([reservation.serial])
+  Expect(f.signals).toEqual(['SIGTERM', 'SIGKILL'])
+  Expect([...f.held]).toEqual([])
+})
+
+Test('failed startup and boot timeout use the same bounded shutdown and release only after close', async () => {
+  for (const failure of ['exit', 'timeout']) {
+    const f = fixture()
+    if (failure === 'exit') {
+      f.failStartup()
+    } else {
+      f.setAgentBooted(false)
+      // budget-ok: injected fake boot failure, with no real host startup to await.
+      f.operations.bootTimeoutMs = 10
+    }
+    f.setShutdown({ graceful: false, terminate: false })
+    await Expect(reserveAndroidEmulator(f.operations)).rejects.toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect(f.signals).toEqual(['SIGTERM', 'SIGKILL'])
+    Expect([...f.held]).toEqual([])
+    Expect(f.retained).toEqual([])
+  }
+})
+
+Test('unconfirmed child termination hands both fences to the actual surviving process', async () => {
+  const f = fixture()
+  const reservation = await reserveAndroidEmulator(f.operations)
+  f.setShutdown({ graceful: false, terminate: false, force: false })
+  await reservation.release()
+  Expect(f.retained).toHaveLength(1)
+  const retention = f.retained[0]!
+  Expect(retention.owners.map(owner => owner.name)).toEqual([
+    `android-avd:${reservation.avdName}`,
+    `android-emulator:${reservation.serial}`,
+  ])
+  Expect(retention.processes).toEqual([{
+    command: 'emulator',
+    pid: f.processes.get(reservation.serial)!.pid,
+    startedAt: `start-${f.processes.get(reservation.serial)!.pid}`,
+  }])
+  Expect(retention.quarantined).toBe(false)
+  Expect(f.held.size).toBe(2)
+  Expect(f.errors[0]).toContain('--generation retained-generation')
+  const next = await reserveAndroidEmulator(f.operations)
+  Expect(next.avdName).toBe('Tao_Agent_Pixel_2')
+  f.setShutdown({ graceful: true })
+  await next.release()
+  Expect(f.held.size).toBe(2)
+})
+
+Test('unknown descendants quarantine the fences despite successful ADB shutdown and child close', async () => {
+  const f = fixture()
+  const reservation = await reserveAndroidEmulator(f.operations)
+  f.unknownTree()
+  await reservation.release()
+  Expect(f.retained[0]!.quarantined).toBe(true)
+  Expect(f.retained[0]!.processes).toEqual([])
+  Expect(f.held.size).toBe(2)
+  Expect(f.errors[0]).toContain('quarantined')
+})
+
+Test('a closed emulator launcher transfers both fences to its actual surviving descendant', async () => {
+  const f = fixture()
+  const reservation = await reserveAndroidEmulator(f.operations)
+  const child = f.addSurvivingChild(reservation.serial)
+  f.setShutdown({ terminate: false, force: false })
+  await reservation.release()
+  Expect(f.processes.get(reservation.serial)!.signalCode).toBe('SIGTERM')
+  Expect(f.retained[0]!.processes).toEqual([child])
+  Expect(f.retained[0]!.processGroupPid).toBe(f.processes.get(reservation.serial)!.pid)
+  Expect(f.retained[0]!.quarantined).toBe(false)
+  Expect(f.held.size).toBe(2)
+})
+
+Test('ADB failure escalates through the owned child and a spawn exception releases the unused AVD', async () => {
+  const f = fixture()
+  const reservation = await reserveAndroidEmulator(f.operations)
+  const run = f.operations.run
+  f.operations.run = async (command, spec) => {
+    if (command === 'adb' && spec?.args?.[3] === 'kill') {
+      Errors.throwHostEnvironment('ADB shutdown unavailable')
+    }
+    return await run(command, spec)
+  }
+  await reservation.release()
+  Expect(f.signals).toEqual(['SIGTERM'])
+  Expect([...f.held]).toEqual([])
+
+  const spawn = fixture()
+  spawn.operations.start = () => Errors.throwHostEnvironment('Cannot spawn emulator')
+  await Expect(reserveAndroidEmulator(spawn.operations)).rejects.toBeInstanceOf(Errors.HostEnvironmentError)
+  Expect([...spawn.held]).toEqual([])
+  Expect(spawn.retained).toEqual([])
+})
+
+Test('shutdown never sends ADB kill to a reused serial or an unowned console listener', async () => {
+  const reused = fixture()
+  const reservation = await reserveAndroidEmulator(reused.operations)
+  reused.exitAndReuseSerial(reservation.serial, 'Replacement_Pixel')
+  await reservation.release()
+  Expect(reused.stopped).toEqual([])
+  Expect(reused.running.get(reservation.serial)).toBe('Replacement_Pixel')
+  Expect(reused.disposed).toEqual([reservation.serial])
+
+  for (const mode of ['foreign-listener', 'wrong-avd', 'listener-unavailable']) {
+    const f = fixture()
+    const own = await reserveAndroidEmulator(f.operations)
+    const run = f.operations.run
+    f.operations.run = async (command, spec) => {
+      const original = await run(command, spec)
+      if (command === 'lsof') {
+        return mode === 'listener-unavailable'
+          ? { ...original, exitCode: 1 }
+          : { ...original, stdout: 'p987654321\n' }
+      }
+      if (mode === 'wrong-avd' && command === 'adb' && spec?.args?.[3] === 'avd') {
+        return { ...original, stdout: 'Replacement_Pixel\nOK\n' }
+      }
+      return original
+    }
+    await own.release()
+    Expect(f.stopped).toEqual([])
+    Expect(f.signals).toEqual(['SIGTERM'])
+    Expect(f.retained).toEqual([])
+  }
+})
+
+Test('an asynchronous real spawn error releases the unused AVD after authoritative close', async () => {
+  const f = fixture()
+  let missingAtReturn = false
+  let disposed = false
+  let child: CLI.StartedCommand | undefined
+  f.operations.start = (_command, spec) => {
+    child = CLI.start(Repo.resolvePath(`.artifacts/missing-emulator-${Platform.randomUUID()}`), spec)
+    missingAtReturn = child.pid === undefined && child.error === undefined
+    const dispose = child.dispose
+    child.dispose = () => {
+      disposed = true
+      dispose()
+    }
+    return child
+  }
+  await Expect(reserveAndroidEmulator(f.operations)).rejects.toBeInstanceOf(Errors.HostEnvironmentError)
+  Expect(missingAtReturn).toBe(true)
+  Expect(child!.pid).toBeUndefined()
+  Expect(child!.error).toBeDefined()
+  Expect([...f.held]).toEqual([])
+  Expect(f.retained).toEqual([])
+  Expect(disposed).toBe(true)
+})
+
+Test('startup publishes durable child and serial ownership before release or parent exit', async () => {
+  const f = fixture()
+  const start = f.operations.start
+  f.operations.start = (command, spec) => {
+    Expect(f.ownership).toHaveLength(1)
+    Expect(f.durable.get('android-avd:Tao_Agent_Pixel_1')!.retention!.quarantined).toBe(true)
+    Expect(f.durable.get('android-avd:Tao_Agent_Pixel_1')!.retention!.processes).toEqual([])
+    return start(command, spec)
+  }
+  const reservation = await reserveAndroidEmulator(f.operations)
+  Expect(f.ownership).toHaveLength(3)
+  Expect(f.ownership[0]!.processes).toEqual([])
+  Expect(f.ownership[0]!.quarantined).toBe(true)
+  const owner = f.durable.get(`android-avd:${reservation.avdName}`)!
+  Expect(owner.pid).toBe(f.processes.get(reservation.serial)!.pid)
+  Expect(owner.retention!.resourceNames).toEqual([
+    `android-avd:${reservation.avdName}`,
+    `android-emulator:${reservation.serial}`,
+  ])
+  Expect(f.durable.get(`android-emulator:${reservation.serial}`)!.id).toBe(owner.id)
+  await reservation.release()
+  Expect([...f.held]).toEqual([])
+})
+
+Test('startup failure remains primary when retention or output cleanup also fails', async () => {
+  const f = fixture()
+  f.failStartup()
+  f.setShutdown({ graceful: false, terminate: false, force: false })
+  const retain = f.operations.retainResources!
+  f.operations.retainResources = options => {
+    if (options.reason.includes('shutdown')) {
+      Errors.throwHostEnvironment('Retention registry denied')
+    }
+    return retain(options)
+  }
+  const start = f.operations.start
+  f.operations.start = (command, spec) => {
+    const child = start(command, spec)
+    child.closeOutput = async () => Errors.throwHostEnvironment('Output flush failed')
+    return child
+  }
+  let primary: unknown
+  try {
+    await reserveAndroidEmulator(f.operations)
+  } catch (error) {
+    primary = error
+  }
+  Expect(primary).toBeInstanceOf(Errors.HostEnvironmentError)
+  Expect(Errors.asError(primary).message).toContain('Android emulator exited before it booted')
+  Expect(f.errors.join('\n')).toContain('Retention registry denied')
+  Expect(f.errors.join('\n')).toContain('Output flush failed')
+  Expect(f.errors.join('\n')).toContain('"processes":')
+  Expect(f.disposed).toHaveLength(1)
+  Expect(f.durable.get('android-avd:Tao_Agent_Pixel_1')!.retention).toBeDefined()
+})
+
+Test('failed serial ownership publication releases the unretained serial after proven shutdown', async () => {
+  const f = fixture()
+  const retain = f.operations.retainResources!
+  f.operations.retainResources = async options => {
+    if (options.owners.some(owner => owner.name.startsWith('android-emulator:'))) {
+      Errors.throwHostEnvironment('Serial publication failed')
+    }
+    return await retain(options)
+  }
+  await Expect(reserveAndroidEmulator(f.operations)).rejects.toMatchObject({ message: 'Serial publication failed' })
+  Expect(f.stopped).toEqual(['emulator-5556'])
+  Expect([...f.held]).toEqual([])
+  Expect(f.disposed).toEqual(['emulator-5556'])
+})
+
+Test('retention disposes real CLI pipes before the owning worker exits and leaves its child recoverable', async () => {
+  const result = await CLI.run(Platform.runtimeProcess.execPath, {
+    args: [
+      `--tsconfig=${Repo.resolvePath('packages/cli/dev-cli/tsconfig.json')}`,
+      '-e',
+      `
+const {CLI, Errors, Platform, ProcessTree} = await import(${
+        JSON.stringify(Repo.resolvePath('packages/shared/shared-src/shared.ts'))
+      });
+const {reserveAndroidEmulator} = await import(${
+        JSON.stringify(Repo.resolvePath('packages/cli/dev-cli/dev-cli-src/simulators/AgentAndroidEmulator.ts'))
+      });
+const avdName = 'Tao_Agent_Pixel_1';
+let child;
+let disposed = false;
+let published;
+let shutdownRetention = false;
+let running = false;
+const lease = name => ({owner: {command: 'test', id: Platform.randomUUID(), name, pid: Platform.runtimeProcess.pid, repositoryRoot: '.', startedAt: new Date().toISOString()}, release: async () => {}});
+const result = stdout => ({args: [], command: 'fixture', exitCode: 0, signal: null, stdout, stderr: ''});
+const operations = {
+  bootTimeoutMs: 1000,
+  bootIntervalMs: 1,
+  shutdownTimeoutMs: 10,
+  processTree: {...ProcessTree, signalTracked: () => {}},
+  acquireResource: async options => lease(options.name),
+  tryAcquireResource: async options => lease(options.name),
+  retainResources: async options => {
+    shutdownRetention ||= options.reason.includes('shutdown');
+    published = { ...options.owners[0], id: Platform.randomUUID(), pid: options.processes[0]?.pid ?? options.owners[0].pid, processStartedAt: options.processes[0]?.startedAt, retention: {processes: options.processes, quarantined: options.quarantined, reason: options.reason, resourceNames: options.owners.map(owner => owner.name)}};
+    return published;
+  },
+  recoverResources: async () => { Errors.throwUnexpected('Unexpected recovery'); },
+  start: () => {
+    running = true;
+    child = CLI.start(Platform.runtimeProcess.execPath, {args: ['-e', "setInterval(() => {}, 100)"], detached: true, processPolicy: 'server', stdio: 'pipe', unref: true});
+    const identity = ProcessTree.identities([child.pid]).get(child.pid);
+    Platform.runtimeConsole.info(JSON.stringify({child: identity}));
+    const dispose = child.dispose;
+    child.dispose = () => {disposed = true; dispose();};
+    child.kill = () => false;
+    return child;
+  },
+  run: async (command, spec) => {
+    const args = spec?.args ?? [];
+    if (command === 'emulator') return result(${JSON.stringify('Tao_Agent_Pixel_1\n')});
+    if (command === 'lsof') return result('');
+    if (args[0] === 'devices') return result(running ? ${
+        JSON.stringify('List of devices attached\nemulator-5590\tdevice\n')
+      } : ${JSON.stringify('List of devices attached\n')});
+    if (args[3] === 'avd') return result(${JSON.stringify('Tao_Agent_Pixel_1\nOK\n')});
+    if (args[2] === 'shell') return result(${JSON.stringify('1\n')});
+    return result('');
+  },
+  write: () => {}, writeError: () => {},
+};
+const reservation = await reserveAndroidEmulator(operations);
+await reservation.release();
+Platform.runtimeConsole.info(JSON.stringify({disposed, shutdownRetention, ownedNames: published.retention.resourceNames}));
+`,
+    ],
+    processPolicy: 'test',
+    timeoutMs: 30_000,
+  })
+  const lines = result.stdout.trim().split(/\r?\n/u)
+  const child = JSON.parse(lines[0] ?? '{}').child as TrackedProcess | undefined
+  try {
+    if (result.exitCode !== 0) {
+      Errors.throwUnexpected(`Android worker failed: ${result.stderr}; output: ${result.stdout}`)
+    }
+    Expect(result.stderr).toBe('')
+    Expect(result.exitCode).toBe(0)
+    Expect(result.error).toBeUndefined()
+    Expect(JSON.parse(lines[1] ?? '{}')).toEqual({
+      disposed: true,
+      shutdownRetention: true,
+      ownedNames: ['android-avd:Tao_Agent_Pixel_1', 'android-emulator:emulator-5590'],
+    })
+    Expect(child).toBeDefined()
+    Expect(ProcessTree.identities([child!.pid]).get(child!.pid)?.startedAt).toBe(child!.startedAt)
+  } finally {
+    if (child !== undefined) {
+      ProcessTree.signalTracked([child], 'SIGKILL')
+      await until(() => ProcessTree.identities([child.pid]).get(child.pid)?.startedAt !== child.startedAt)
+    }
+  }
 })

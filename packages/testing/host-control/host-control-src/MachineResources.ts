@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Platform, Time } from '@shared'
+import { CLI, Errors, FS, Platform, Time, type TrackedProcess } from '@shared'
 
 /** MachineResourceLease prevents another process from mutating one named host target. */
 export type MachineResourceLease = {
@@ -23,6 +23,36 @@ export type MachineResourceOwner = {
   repositoryRoot: string
   /** Lease acquisition time, used only for diagnostics and never as proof that an owner is stale. */
   startedAt: string
+  /** Retained targets require explicit, identity-fenced recovery, even after their owner exits. */
+  retention?: {
+    processes: TrackedProcess[]
+    processGroupPid?: number
+    quarantined: boolean
+    reason: string
+    resourceNames: string[]
+  }
+}
+
+type RetainResourcesOptions = {
+  owners: readonly MachineResourceOwner[]
+  processes: readonly TrackedProcess[]
+  processGroupPid?: number
+  quarantined: boolean
+  reason: string
+  registryRoot?: string
+}
+
+type RecoverResourcesOptions = {
+  generation: string
+  name: string
+  registryRoot?: string
+  /** Return true only after proving that every captured process and descendant has stopped. */
+  shutdown: (owner: MachineResourceOwner) => Promise<boolean>
+}
+
+type RetentionRecord = {
+  originalOwners: MachineResourceOwner[]
+  retainedOwner: MachineResourceOwner
 }
 
 export type ProcessIdentity = {
@@ -49,6 +79,8 @@ export type AcquireResourceOptions = ResourceOptions & {
   repositoryRoot: string
   /** Maximum bounded wait before reporting the current owner. */
   waitTimeoutMs?: number
+  /** Cancels queued acquisition without stopping the current target owner. */
+  signal?: AbortSignal
 }
 
 type MutexRecord = {
@@ -102,15 +134,49 @@ async function acquire(options: AcquireResourceOptions): Promise<MachineResource
   const waitTimeoutMs = Math.max(0, options.waitTimeoutMs ?? RESOURCE_WAIT_TIMEOUT_MS)
   const deadline = Time.nowMs() + waitTimeoutMs
   while (true) {
-    const outcome = await claim(options)
+    throwIfAcquisitionAborted(options.signal)
+    const outcome = await claim(options, options.signal)
+    if (options.signal?.aborted === true) {
+      await outcome.lease?.release()
+      throwIfAcquisitionAborted(options.signal)
+    }
     if (outcome.lease !== undefined) {
       return outcome.lease
     }
     if (Time.nowMs() >= deadline) {
       throw new MachineResourceBusyError(outcome.owner)
     }
-    await Time.sleep(Math.min(RESOURCE_POLL_MS, Math.max(1, deadline - Time.nowMs())))
+    await waitForAcquisitionPoll(Math.min(RESOURCE_POLL_MS, Math.max(1, deadline - Time.nowMs())), options.signal)
   }
+}
+
+function throwIfAcquisitionAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted === true) {
+    throw Errors.abortError('Machine resource acquisition was cancelled.')
+  }
+}
+
+async function waitForAcquisitionPoll(milliseconds: number, signal: AbortSignal | undefined): Promise<void> {
+  if (signal === undefined) {
+    await Time.sleep(milliseconds)
+    return
+  }
+  throwIfAcquisitionAborted(signal)
+  await new Promise<void>((resolve, reject) => {
+    function finish() {
+      signal!.removeEventListener('abort', abort)
+      resolve()
+    }
+    function abort() {
+      signal!.removeEventListener('abort', abort)
+      reject(Errors.abortError('Machine resource acquisition was cancelled.'))
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    if (signal.aborted) {
+      abort()
+    }
+    void Time.sleep(milliseconds).then(finish, reject)
+  })
 }
 
 /** tryAcquire atomically claims one named host target across all worktrees. */
@@ -120,6 +186,7 @@ async function tryAcquire(options: ResourceOptions): Promise<MachineResourceLeas
 
 async function claim(
   options: ResourceOptions,
+  signal?: AbortSignal,
 ): Promise<{ lease?: MachineResourceLease; owner: MachineResourceOwner }> {
   const root = options.registryRoot ?? registryRoot()
   const generation = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
@@ -136,20 +203,26 @@ async function claim(
   }
   let existingOwner: MachineResourceOwner | undefined
   try {
-    const acquired = await withRegistryLock(root, async () => {
-      const existing = normalizeResourceRecord(await readRecord<unknown>(path))
-      if (existing !== undefined && await resourceOwnerIsLive(existing, processIdentity)) {
-        existingOwner = existing
-        return false
-      }
-      await FS.remove(path).catch(() => {})
-      await atomicWriteJson(path, owner)
-      return true
-    }, options.lockTimeoutMs)
+    const acquired = await withRegistryLock(
+      root,
+      async () => {
+        const existing = await readResourceOwner(root, options.name)
+        if (existing !== undefined && await resourceOwnerIsLive(existing, processIdentity)) {
+          existingOwner = existing
+          return false
+        }
+        await FS.remove(path).catch(() => {})
+        await atomicWriteJson(path, owner)
+        return true
+      },
+      options.lockTimeoutMs,
+      signal,
+    )
     if (!acquired) {
       return { owner: existingOwner ?? owner }
     }
   } catch (error) {
+    throwIfAcquisitionAborted(signal)
     Errors.throwHostEnvironment(`Cannot coordinate machine resource '${options.name}'.`, { cause: error })
   }
 
@@ -163,7 +236,7 @@ async function claim(
         throw new MachineResourceFenceError(owner.name, suppliedGeneration)
       }
       await withRegistryLock(root, async () => {
-        const current = normalizeResourceRecord(await readRecord<unknown>(path))
+        const current = await readResourceOwner(root, options.name)
         if (current?.id !== generation) {
           throw new MachineResourceFenceError(owner.name, suppliedGeneration)
         }
@@ -176,7 +249,7 @@ async function claim(
       // Early release and a caller's final cleanup must join the same filesystem work.
       // Otherwise one can return while the other still uses a disposable registry.
       return releasing ??= withRegistryLock(root, async () => {
-        const existing = normalizeResourceRecord(await readRecord<unknown>(path))
+        const existing = await readResourceOwner(root, options.name)
         if (existing?.id === generation) {
           await FS.remove(path)
         }
@@ -196,11 +269,203 @@ async function ownerIsLive(owner: MachineResourceOwner): Promise<boolean> {
   return await resourceOwnerIsLive(owner, inspectProcessIdentity)
 }
 
+/** readOwner resolves an atomic retained handoff for registry diagnostics as well as acquisition. */
+async function readOwner(
+  options: Pick<ResourceOptions, 'name' | 'registryRoot'>,
+): Promise<MachineResourceOwner | undefined> {
+  const root = options.registryRoot ?? registryRoot()
+  return await readResourceOwner(root, options.name)
+}
+
+/** listOwners includes retained fences even if an interrupted recovery removed an original lease file. */
+async function listOwners(options: { registryRoot?: string } = {}): Promise<MachineResourceOwner[]> {
+  const root = options.registryRoot ?? registryRoot()
+  // Diagnostics do not create mutex files. Mutations recheck the snapshot under the registry lock.
+  return await (async () => {
+    const names = new Set<string>()
+    const files = await FS.listDir(root).catch(error => {
+      if (errorCode(error) === 'ENOENT') {
+        return []
+      }
+      throw error
+    })
+    for (const file of files) {
+      if (file.startsWith('resource-') && file.endsWith('.lease')) {
+        const owner = normalizeResourceRecord(await readRecord<unknown>(FS.resolvePath(file, root)))
+        if (owner !== undefined) {
+          names.add(owner.name)
+        }
+      }
+    }
+    for (const { record } of await retentionRecords(root)) {
+      for (const owner of record.originalOwners) {
+        names.add(owner.name)
+      }
+    }
+    const owners: MachineResourceOwner[] = []
+    for (const name of names) {
+      const owner = await readResourceOwner(root, name)
+      if (owner !== undefined) {
+        owners.push(owner)
+      }
+    }
+    return owners
+  })()
+}
+
+/** retain atomically transfers all target fences to a surviving process and rotates their generation. */
+async function retain(options: RetainResourcesOptions): Promise<MachineResourceOwner> {
+  const root = options.registryRoot ?? registryRoot()
+  const first = options.owners[0]
+  if (first === undefined) {
+    Errors.throwUnexpected('Expected at least one resource to retain.')
+  }
+  return await withRegistryLock(root, async () => {
+    for (const expected of options.owners) {
+      const current = await readResourceOwner(root, expected.name)
+      if (!sameOwner(current, expected)) {
+        throw new MachineResourceFenceError(expected.name, expected.id)
+      }
+    }
+    const survivor = options.processes[0]
+    const generation = `${survivor?.pid ?? first.pid}-${Platform.randomUUID()}`
+    const retention = {
+      processes: [...options.processes],
+      processGroupPid: options.processGroupPid,
+      quarantined: options.quarantined || survivor === undefined,
+      reason: options.reason,
+      resourceNames: options.owners.map(owner => owner.name),
+    }
+    const retainedOwner: MachineResourceOwner = {
+      ...first,
+      id: generation,
+      pid: survivor?.pid ?? first.pid,
+      processStartedAt: survivor?.startedAt,
+      retention,
+    }
+    // One atomic manifest publishes the handoff for every fence. A crash cannot leave one
+    // fence following the old parent PID while the other follows the surviving emulator.
+    await atomicWriteJson(
+      retentionPath(root, generation),
+      {
+        originalOwners: [...options.owners],
+        retainedOwner,
+      } satisfies RetentionRecord,
+    )
+    return retainedOwner
+  })
+}
+
+/** recoverRetained never removes a fence based on lease age, owner death, or ADB absence. */
+async function recoverRetained(options: RecoverResourcesOptions): Promise<void> {
+  const root = options.registryRoot ?? registryRoot()
+  const snapshot = await withRegistryLock(root, async () => {
+    const owner = await readResourceOwner(root, options.name)
+    if (owner?.id !== options.generation || owner.name !== options.name || owner.retention === undefined) {
+      throw new MachineResourceFenceError(options.name, options.generation)
+    }
+    return owner
+  })
+  if (!await options.shutdown(snapshot)) {
+    Errors.throwHostEnvironment(`Machine resource '${options.name}' shutdown is unproved; its fences remain retained.`)
+  }
+  await withRegistryLock(root, async () => {
+    const owners: MachineResourceOwner[] = []
+    for (const name of snapshot.retention!.resourceNames) {
+      const current = await readResourceOwner(root, name)
+      if (!sameOwner(current, { ...snapshot, name })) {
+        throw new MachineResourceFenceError(name, options.generation)
+      }
+      owners.push(current!)
+    }
+    for (const owner of owners) {
+      await FS.remove(resourcePath(root, owner.name))
+    }
+    const names = new Set(snapshot.retention!.resourceNames)
+    for (const { path, record } of await retentionRecords(root)) {
+      if (record.retainedOwner.retention!.resourceNames.every(name => names.has(name))) {
+        await FS.remove(path)
+      }
+    }
+  })
+}
+
+function sameOwner(current: MachineResourceOwner | undefined, expected: MachineResourceOwner): boolean {
+  return current?.id === expected.id && current.pid === expected.pid
+    && current.name === expected.name && current.repositoryRoot === expected.repositoryRoot
+    && current.processStartedAt === expected.processStartedAt
+}
+
+function retentionPath(root: string, generation: string): string {
+  return FS.resolvePath(`${generation.replaceAll(/[^a-zA-Z0-9._-]/g, '_')}.json`, FS.resolvePath('.retentions', root))
+}
+
+async function readResourceOwner(root: string, name: string): Promise<MachineResourceOwner | undefined> {
+  let current = normalizeResourceRecord(await readRecord<unknown>(resourcePath(root, name)))
+  const pending = await retentionRecords(root)
+  // Follow rotated generations, independent of directory enumeration order.
+  for (let round = 0; round < pending.length; round++) {
+    let advanced = false
+    for (const entry of pending) {
+      const expected = entry.record.originalOwners.find(owner => owner.name === name)
+      if (expected !== undefined && (current === undefined || sameOwner(current, expected))) {
+        current = { ...entry.record.retainedOwner, command: expected.command, name }
+        advanced = true
+      }
+    }
+    if (!advanced) {
+      break
+    }
+  }
+  return current
+}
+
+async function retentionRecords(root: string): Promise<{ path: string; record: RetentionRecord }[]> {
+  const directory = FS.resolvePath('.retentions', root)
+  const files = await FS.listDir(directory).catch(error => {
+    if (errorCode(error) === 'ENOENT') {
+      return []
+    }
+    throw error
+  })
+  const records: { path: string; record: RetentionRecord }[] = []
+  for (const file of files.filter(file => file.endsWith('.json'))) {
+    const path = FS.resolvePath(file, directory)
+    const record = await FS.readJson<RetentionRecord>(path).catch(error => {
+      if (errorCode(error) === 'ENOENT') {
+        return undefined
+      }
+      Errors.throwHostEnvironment(
+        `Cannot read retained machine resource identities in '${file}'; targets remain fenced.`,
+        { cause: error },
+      )
+    })
+    // A read-only diagnostic can race a successful recovery after listing the directory.
+    if (record === undefined) {
+      continue
+    }
+    if (
+      record === null || !Array.isArray(record.originalOwners)
+      || record.originalOwners.length === 0
+      || !record.originalOwners.every(owner => normalizeResourceRecord(owner) !== undefined)
+      || normalizeResourceRecord(record.retainedOwner)?.retention === undefined
+    ) {
+      Errors.throwHostEnvironment(
+        `Cannot read retained machine resource identities in '${file}'; targets remain fenced.`,
+      )
+    }
+    records.push({ path, record })
+  }
+  return records
+}
+
 async function withRegistryLock<T>(
   root: string,
   work: () => Promise<T>,
   timeoutMs = MUTEX_ACQUIRE_TIMEOUT_MS,
+  signal?: AbortSignal,
 ): Promise<T> {
+  throwIfAcquisitionAborted(signal)
   await FS.mkdir(root)
   const ownerRoot = FS.resolvePath('.mutex-contenders', root)
   const ownerPath = FS.resolvePath(`${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.json`, ownerRoot)
@@ -214,32 +479,34 @@ async function withRegistryLock<T>(
   )
   const deadline = Time.nowMs() + Math.max(0, timeoutMs)
 
-  while (true) {
-    try {
-      await FS.symlink(FS.relativePath(root, ownerPath), linkPath)
-      break
-    } catch (error) {
-      if (errorCode(error) !== 'EEXIST') {
-        await FS.remove(ownerPath).catch(() => {})
-        throw error
-      }
-      const existing = await readRecord<MutexRecord>(linkPath)
-      if (existing === undefined || mutexIsStale(existing)) {
-        const staleTarget = await mutexTarget(linkPath)
-        if (staleTarget !== undefined) {
-          await reclaimStaleMutex(root, linkPath, staleTarget)
-        }
-        continue
-      }
-      if (Time.nowMs() >= deadline) {
-        await FS.remove(ownerPath).catch(() => {})
-        throw new RegistryLockTimeoutError('Timed out waiting for the machine-lane registry lock.')
-      }
-      await Time.sleep(LOCK_POLL_MS)
-    }
-  }
-
   try {
+    while (true) {
+      throwIfAcquisitionAborted(signal)
+      try {
+        await FS.symlink(FS.relativePath(root, ownerPath), linkPath)
+        break
+      } catch (error) {
+        if (errorCode(error) !== 'EEXIST') {
+          await FS.remove(ownerPath).catch(() => {})
+          throw error
+        }
+        const existing = await readRecord<MutexRecord>(linkPath)
+        if (existing === undefined || mutexIsStale(existing)) {
+          const staleTarget = await mutexTarget(linkPath)
+          if (staleTarget !== undefined) {
+            await reclaimStaleMutex(root, linkPath, staleTarget)
+          }
+          continue
+        }
+        if (Time.nowMs() >= deadline) {
+          await FS.remove(ownerPath).catch(() => {})
+          throw new RegistryLockTimeoutError('Timed out waiting for the machine-lane registry lock.')
+        }
+        await waitForAcquisitionPoll(LOCK_POLL_MS, signal)
+      }
+    }
+
+    throwIfAcquisitionAborted(signal)
     return await work()
   } finally {
     const resolved = await FS.realPath(linkPath).catch(() => undefined)
@@ -327,6 +594,24 @@ function normalizeResourceRecord(value: unknown): MachineResourceOwner | undefin
     return undefined
   }
   const record = value as Partial<MachineResourceOwner>
+  const retention = record.retention
+  const retentionValid = retention === undefined || (
+    typeof retention === 'object' && retention !== null
+    && typeof retention.reason === 'string'
+    && typeof retention.quarantined === 'boolean'
+    && Array.isArray(retention.resourceNames) && retention.resourceNames.length > 0
+    && retention.resourceNames.every(name => typeof name === 'string')
+    && retention.resourceNames.includes(record.name!)
+    && Array.isArray(retention.processes)
+    && retention.processes.every(process =>
+      typeof process === 'object' && process !== null
+      && Number.isSafeInteger(process.pid) && process.pid > 1
+      && typeof process.startedAt === 'string' && process.startedAt.length > 0
+      && typeof process.command === 'string'
+    )
+    && (retention.processGroupPid === undefined
+      || (Number.isSafeInteger(retention.processGroupPid) && retention.processGroupPid > 1))
+  )
   const valid = typeof record.id === 'string'
     && typeof record.name === 'string'
     && Number.isInteger(record.pid)
@@ -336,6 +621,7 @@ function normalizeResourceRecord(value: unknown): MachineResourceOwner | undefin
     && (record.processStartedAt === undefined || typeof record.processStartedAt === 'string')
     && (record.command === undefined || typeof record.command === 'string')
     && (record.repositoryRoot === undefined || typeof record.repositoryRoot === 'string')
+    && retentionValid
   if (!valid) {
     return undefined
   }
@@ -347,6 +633,7 @@ function normalizeResourceRecord(value: unknown): MachineResourceOwner | undefin
     processStartedAt: record.processStartedAt,
     repositoryRoot: record.repositoryRoot ?? '<unknown worktree>',
     startedAt: record.startedAt!,
+    ...(record.retention === undefined ? {} : { retention: record.retention }),
   }
 }
 
@@ -367,6 +654,9 @@ async function resourceOwnerIsLive(
   owner: MachineResourceOwner,
   inspect: (pid: number) => Promise<ProcessIdentity>,
 ): Promise<boolean> {
+  if (owner.retention !== undefined) {
+    return true
+  }
   const identity = await inspect(owner.pid)
   if (identity.evidence === 'gone') {
     return false
@@ -412,7 +702,11 @@ function resourcePath(root: string, name: string): string {
 
 export const MachineResources = {
   acquire,
+  listOwners,
   ownerIsLive,
+  readOwner,
+  recoverRetained,
+  retain,
   registryRoot,
   tryAcquire,
 } as const

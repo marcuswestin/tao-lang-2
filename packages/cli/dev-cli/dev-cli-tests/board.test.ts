@@ -1,3 +1,4 @@
+import { type MachineResourceOwner, MachineResources } from '@host-control'
 import { type CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { GreenTree } from '@verification/GreenTree'
@@ -188,7 +189,7 @@ Describe('board', () => {
         repositoryRoot: worktreePath,
         startedAt: new Date().toISOString(),
       })
-      await FS.writeJson(FS.resolvePath('resource-android.lease', registryRoot), {
+      await FS.writeJson(FS.resolvePath('resource-android-emulator_emulator-5554.lease', registryRoot), {
         command: 'agent app-dev Android AVD Tao_Agent_Pixel_1 (auto-started, headless)',
         id: 'android-lease',
         name: 'android-emulator:emulator-5554',
@@ -212,6 +213,57 @@ Describe('board', () => {
       Expect(formatBoardReport(report)).toContain(
         'device android-emulator:emulator-5554 held by agent app-dev Android AVD Tao_Agent_Pixel_1 (auto-started, headless)',
       )
+    } finally {
+      await FS.remove(registryRoot)
+      await FS.remove(worktreePath)
+    }
+  })
+
+  Test('reports retained and quarantined emulator fences after parent exit without pruning them', async () => {
+    const registryRoot = await mkTestDir('tao-board-retention-')
+    const worktreePath = await mkTestDir('tao-board-worktree-')
+    try {
+      const run = fakeGitRun({
+        [routeKey('git', ['worktree', 'list', '--porcelain'], Repo.getRoot())]: {
+          stdout: porcelainListing([{ branch: 'feat/retained', head: 'c'.repeat(40), path: worktreePath }]),
+        },
+      })
+      for (const quarantined of [false, true]) {
+        const serial = quarantined ? 'emulator-5556' : 'emulator-5554'
+        const name = `android-emulator:${serial}`
+        const path = FS.resolvePath(`resource-android-emulator_${serial}.lease`, registryRoot)
+        const original: MachineResourceOwner = {
+          command: 'agent app-dev Android',
+          id: `exited-parent-${serial}`,
+          name,
+          pid: 2 ** 30,
+          repositoryRoot: `${worktreePath}/.`,
+          startedAt: '2020-01-01T00:00:00.000Z',
+        }
+        await FS.writeJson(path, original)
+        const retained = await MachineResources.retain({
+          owners: [original],
+          processes: quarantined ? [] : [{ command: 'emulator', pid: 2 ** 29, startedAt: 'emulator-start' }],
+          quarantined,
+          reason: 'shutdown remains unproved',
+          registryRoot,
+        })
+
+        const report = await board({ ...quietMachine, registryRoot, run })
+        const resource = report.machine.resources.find(entry => entry.owner.name === name)
+
+        Expect(resource?.live).toBe(true)
+        Expect(resource?.owner.id).toBe(retained.id)
+        Expect(resource?.owner.pid).toBe(quarantined ? 2 ** 30 : 2 ** 29)
+        Expect(resource?.owner.repositoryRoot).toBe(await FS.realPath(worktreePath))
+        Expect(resource?.owner.retention?.quarantined).toBe(quarantined)
+        Expect(report.verdict).toContain(name)
+        Expect(formatBoardReport(report)).toContain(`device ${name} held by agent app-dev Android`)
+        Expect(formatBoardReport(report)).toContain(
+          `(${quarantined ? 'quarantined' : 'retained'}; generation ${retained.id})`,
+        )
+        Expect(await FS.readJson<MachineResourceOwner>(path)).toEqual(original)
+      }
     } finally {
       await FS.remove(registryRoot)
       await FS.remove(worktreePath)
