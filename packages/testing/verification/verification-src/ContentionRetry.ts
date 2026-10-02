@@ -19,6 +19,8 @@ import { WorkGraph, type WorkRunOptions, type WorkState } from './WorkGraph'
 
 /** RetryOptions describes the finished run whose contended timeouts are being confirmed. */
 export type RetryOptions = {
+  /** Preserve the original lane's scoped test consent, no-cache and admission environment. */
+  env?: WorkRunOptions['env']
   contention: ContentionReport
   location: RunLocation
   /** The original top-level lane, used to stop new admissions and drain peer reservations. */
@@ -93,6 +95,7 @@ async function confirmContendedFailures(options: RetryOptions): Promise<RetryOut
     attempt.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(attempt.node)}.retry.log`, options.location.logRoot)
     try {
       await WorkGraph.run([attempt], {
+        env: options.env,
         jobs: 1,
         runNode: options.runNode,
         slotBroker: options.machineLane,
@@ -113,6 +116,7 @@ async function confirmContendedFailures(options: RetryOptions): Promise<RetryOut
       attempt.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(attempt.node)}.resume.log`, options.location.logRoot)
     }
     await WorkGraph.run(attempts, {
+      env: options.env,
       jobs: options.machineLane?.ceiling ?? 1,
       runNode: options.runNode,
       slotBroker: options.machineLane,

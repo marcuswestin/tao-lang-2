@@ -48,6 +48,7 @@ async function runLane(root: string, options: LaneOptions): Promise<LaneRun> {
   // readings so a test can make the prepare phase change the tree and observe which one is recorded.
   const readings = [...options.hashes ?? [options.hash]]
   const summary = await runGates({
+    showStudio: true,
     gates: options.gates,
     greenTree: {
       captureGenerated: stableGeneratedEvidence,

@@ -17,6 +17,8 @@ import { resolveRunStdio, runAgentCommand } from '../agent-cli-src/runner/AgentR
 const LOG = "console['log']"
 const ERROR_LOG = "console['error']"
 const EXIT = "process['exit']"
+const STUDIO_WARNING = 'Native Studio tests open Electrobun windows. Native keyboard or Mac2 checks may take focus; '
+  + 'external accessibility checks require macOS automation/accessibility consent.'
 
 async function writeProbeScript(scratch: string, body: readonly string[]): Promise<string> {
   const path = FS.resolvePath('probe.ts', scratch)
@@ -333,6 +335,157 @@ Describe('agent runner', () => {
       Expect(parsed.failures).toEqual([])
       Expect(parsed.tail).toEqual(['quiet output'])
       Expect(captured.stdout.trim().split('\n').length).toBe(1)
+    } finally {
+      await FS.remove(scratch)
+    }
+  })
+
+  Test('retains and deduplicates structured summary warnings without classifying child prose', async () => {
+    const scratch = await mkTestDir('tao-agent-runner-warnings-summary-')
+    try {
+      await FS.writeJson(FS.resolvePath('summary.json', scratch), {
+        gates: [],
+        status: 'passed',
+        version: 2,
+        warnings: ['The selected child opens a visible window.', 'The selected child opens a visible window.'],
+      })
+      const script = await writeProbeScript(scratch, [
+        `${LOG}('WARNING: arbitrary child prose')`,
+        `${LOG}('Summary: summary.json')`,
+        'for (let i = 0; i < 30; i += 1) {',
+        `  ${LOG}(\`child line \${i}\`)`,
+        '}',
+        `${EXIT}(0)`,
+      ])
+      const captured = await withCapturedOutput(() =>
+        runAgentCommand({
+          args: ['--json', '--max-lines', '1'],
+          command: 'probe',
+          cwd: scratch,
+          spawnArgs: [script],
+          spawnCommand: 'bun',
+        })
+      )
+
+      const report = JSON.parse(captured.stdout) as { exitCode: number; tail: string[]; warnings: string[] }
+      Expect(report.exitCode).toBe(0)
+      Expect(report.warnings).toEqual(['The selected child opens a visible window.'])
+      Expect(report.tail).toEqual(['child line 29'])
+      Expect(captured.stdout.trim().split('\n').length).toBe(1)
+      Expect(captured.stderr).toBe('')
+    } finally {
+      await FS.remove(scratch)
+    }
+  })
+
+  Test('warns before a declared visible command starts, preserving one JSON object on stdout', async () => {
+    const scratch = await mkTestDir('tao-agent-runner-warnings-start-')
+    try {
+      await FS.writeJson(FS.resolvePath('summary.json', scratch), {
+        failures: [],
+        warnings: [STUDIO_WARNING, 'A nested selected check may take focus.'],
+      })
+      const script = await writeProbeScript(scratch, [
+        `${LOG}('child started')`,
+        `${LOG}('Summary: summary.json')`,
+        `${EXIT}(0)`,
+      ])
+      const captured = await withCapturedOutput(() =>
+        runAgentCommand({
+          args: ['--show-studio', '--json', '--verbose'],
+          command: 'verify-full',
+          cwd: scratch,
+          spawnArgs: [script],
+          spawnCommand: 'bun',
+        })
+      )
+
+      Expect(captured.result).toBe(0)
+      Expect(captured.stderr).toBe(`WARNING: ${STUDIO_WARNING}\n`)
+      Expect(captured.stdout.trim().split('\n').length).toBe(1)
+      const report = JSON.parse(captured.stdout) as { warnings: string[] }
+      Expect(report.warnings).toEqual([STUDIO_WARNING, 'A nested selected check may take focus.'])
+      const log = await FS.readText(FS.resolvePath('.artifacts/logs/agent/verify-full/latest.log', scratch))
+      Expect(log.startsWith(`WARNING: ${STUDIO_WARNING}\nchild started\n`)).toBe(true)
+    } finally {
+      await FS.remove(scratch)
+    }
+  })
+
+  Test('refuses visible host-control checks before spawning while reporting and logging the refusal', async () => {
+    const scratch = await mkTestDir('tao-agent-runner-visible-refusal-')
+    try {
+      const marker = FS.resolvePath('spawned', scratch)
+      const script = await writeProbeScript(scratch, [`await Bun.write(${JSON.stringify(marker)}, 'spawned')`])
+      const captured = await withCapturedOutput(() =>
+        runAgentCommand({
+          args: ['--json'],
+          command: 'studio-host-control-smoke',
+          cwd: scratch,
+          spawnArgs: [script],
+          spawnCommand: 'bun',
+        })
+      )
+
+      Expect(captured.result).toBe(1)
+      Expect(await FS.exists(marker)).toBe(false)
+      const report = JSON.parse(captured.stdout) as { exitCode: number; tail: string[]; warnings: string[] }
+      Expect(report.exitCode).toBe(1)
+      Expect(report.tail.join('\n')).toContain('then pass --show-studio. No selected native checks were run.')
+      Expect(report.warnings).toEqual([])
+      const log = await FS.readText(
+        FS.resolvePath('.artifacts/logs/agent/studio-host-control-smoke/latest.log', scratch),
+      )
+      Expect(log).toContain('then pass --show-studio. No selected native checks were run.')
+    } finally {
+      await FS.remove(scratch)
+    }
+  })
+
+  Test('allows quiet full verification without visible Studio consent or warnings', async () => {
+    const scratch = await mkTestDir('tao-agent-runner-quiet-verify-')
+    try {
+      const script = await writeProbeScript(scratch, [`${LOG}('quiet child ran')`, `${EXIT}(0)`])
+      const captured = await withCapturedOutput(() =>
+        runAgentCommand({
+          args: ['--json'],
+          command: 'verify-full',
+          cwd: scratch,
+          spawnArgs: [script],
+          spawnCommand: 'bun',
+        })
+      )
+
+      Expect(captured.result).toBe(0)
+      const report = JSON.parse(captured.stdout) as { exitCode: number; tail: string[]; warnings: string[] }
+      Expect(report.exitCode).toBe(0)
+      Expect(report.tail).toEqual(['quiet child ran'])
+      Expect(report.warnings).toEqual([])
+      Expect(captured.stderr).toBe('')
+    } finally {
+      await FS.remove(scratch)
+    }
+  })
+
+  Test('keeps visible-command warnings ahead of streamed output and in the final successful report', async () => {
+    const scratch = await mkTestDir('tao-agent-runner-warnings-verbose-')
+    try {
+      const script = await writeProbeScript(scratch, [`${LOG}('child started')`, `${EXIT}(0)`])
+      const captured = await withCapturedOutput(() =>
+        runAgentCommand({
+          args: ['--show-studio', '--verbose'],
+          command: 'verify-full',
+          cwd: scratch,
+          spawnArgs: [script],
+          spawnCommand: 'bun',
+        })
+      )
+
+      Expect(captured.result).toBe(0)
+      const warning = `WARNING: ${STUDIO_WARNING}`
+      Expect(captured.stdout.indexOf(warning)).toBeLessThan(captured.stdout.indexOf('child started'))
+      Expect(captured.stdout.slice(captured.stdout.indexOf('REPORT:'))).toContain(warning)
+      Expect(captured.stderr).toBe('')
     } finally {
       await FS.remove(scratch)
     }

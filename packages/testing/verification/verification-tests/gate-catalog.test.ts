@@ -64,6 +64,7 @@ async function runLane(gates: readonly string[], jobs: number, startBarrierCount
       releaseStartBarrier = resolve
     })
     await runGates({
+      showStudio: true,
       gates,
       jobs,
       // The machine is exactly as wide as the lane, so what the broker grants is what `jobs` says

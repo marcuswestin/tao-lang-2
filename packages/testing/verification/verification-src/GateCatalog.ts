@@ -83,6 +83,10 @@ export type GateMetadata =
      * false green, which is why it is a declared property of the node rather than a heuristic.
      */
     hostDependent?: boolean
+    /** Inherently visible test surface; its workflow requires the matching show option. */
+    visibleSurface?: 'studio'
+    /** Quiet by default, but the scoped show option selects visible windows. */
+    optionalVisibleSurface?: 'studio'
     /**
      * Declares that this node rewrites tracked source into its canonical form and derives nothing:
      * its whole output is the tree, which a tree hash does describe. Only such a writer can be
@@ -341,6 +345,22 @@ function studioSmoke(
 
 function buildCatalog(): ReadonlyMap<string, GateMetadata> {
   return new Map<string, GateMetadata>([
+    ['studio-host-control-smoke', {
+      ...studioSmoke(
+        'studio-host-control-smoke',
+        'packages/ides/studio-tooling/studio-smoke/studio-host-control.test.ts',
+        { native: true, resources: [GUI_RESOURCE] },
+      ),
+      visibleSurface: 'studio',
+    }],
+    ['studio-mac2-acceptance', {
+      ...studioSmoke(
+        'studio-mac2-acceptance',
+        'packages/ides/studio-tooling/studio-smoke/studio-mac2-acceptance.test.ts',
+        { native: true, resources: [GUI_RESOURCE] },
+      ),
+      visibleSurface: 'studio',
+    }],
     // The prepare phase, in the order its declared classes imply: the Justfile first because every
     // recipe parses it, then the parser generator and dprint in parallel, then `./tao fix`, then the
     // WordFlower compile, which reads the `.tao` sources `./tao fix` has just canonicalized.
@@ -470,6 +490,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       'studio-canary',
       {
         ...studioLane([GUI_RESOURCE, HNREADER_PROJECT_RESOURCE]),
+        optionalVisibleSurface: 'studio',
         priority: GUI_PRIORITY,
         timeoutMs: STUDIO_CANARY_TIMEOUT_MS,
       },

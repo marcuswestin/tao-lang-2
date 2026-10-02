@@ -67,6 +67,7 @@ Describe('two lanes in one checkout', () => {
 
     const lane = async (name: string, registryRoot: string): Promise<GateSummary> =>
       await runGates({
+        showStudio: true,
         gates: [PREPARE_GATE, READER_GATE],
         jobs: 2,
         lane: name,
@@ -129,6 +130,7 @@ Describe('two lanes in one checkout', () => {
     const hashes = ['tree-before', 'tree-after']
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: [READER_GATE],
         greenTree: { hashTree: async () => hashes.shift() ?? 'tree-after', lanes: ['verify'] },
         logRoot: FS.resolvePath('logs', root),
@@ -180,6 +182,7 @@ Describe('two lanes in one checkout', () => {
     await gitInit(root)
     await FS.writeText(FS.resolvePath('kept.txt', root), 'kept\n')
     const summary = await runGates({
+      showStudio: true,
       gates: [READER_GATE],
       // No injected hasher: the run fingerprints this checkout itself, paths and all.
       greenTree: { lanes: ['verify'] },
@@ -205,6 +208,7 @@ Describe('two lanes in one checkout', () => {
     try {
       const lane = async (name: string, registryRoot: string) =>
         await runGates({
+          showStudio: true,
           gates,
           greenTree: { hashTree: async () => 'shared-tree', lanes: [name] },
           jobs: 2,
@@ -266,6 +270,7 @@ Describe('two lanes in one checkout', () => {
     try {
       const lane = async (registryRoot: string) =>
         await runGates({
+          showStudio: true,
           gates: [READER_GATE],
           lane: 'verify',
           registryRoot,
@@ -309,6 +314,7 @@ Describe('the machine-wide gui lease', () => {
       // gui or not, is a scheduling fact for the CPU broker alone.
       Expect(GateCatalog.metadata(READER_GATE).resources ?? []).toEqual([])
       const summary = await runGates({
+        showStudio: true,
         gates: [READER_GATE],
         lane: 'verify',
         registryRoot,
@@ -332,6 +338,7 @@ Describe('the machine-wide gui lease', () => {
       // Not awaited yet: the gate itself waits on `guiHeld`, so awaiting here before releasing it
       // would deadlock the test against its own assertion.
       const pending = runGates({
+        showStudio: true,
         gates: ['studio-canary'],
         lane: 'verify-full',
         registryRoot,
@@ -378,6 +385,7 @@ Describe('the machine-wide gui lease', () => {
     })
     try {
       const summary = runGates({
+        showStudio: true,
         gates: ['studio-canary'],
         guiLeaseWaitMs: 200,
         lane: 'verify-full',
@@ -391,6 +399,7 @@ Describe('the machine-wide gui lease', () => {
 
       await holder.release()
       const retried = await runGates({
+        showStudio: true,
         gates: ['studio-canary'],
         lane: 'verify-full',
         registryRoot,
@@ -414,6 +423,7 @@ Describe('the machine-wide gui lease', () => {
     let attempts = 0
     try {
       const pending = runGates({
+        showStudio: true,
         gates: ['studio-canary'],
         lane: 'verify-full',
         machineLoadAverage: () => 0,

@@ -24,6 +24,8 @@ export type AgentRunOutcome = {
    * are never affected — a log failure must never cost the run's real result. */
   logUnavailable?: string
   output: string
+  /** Warnings from the selected command and its own structured summary, independent of the tail. */
+  warnings?: readonly string[]
 }
 
 export type BuildReportOptions = {
@@ -93,7 +95,12 @@ function outcomeStatus(exitCode: number): 'failed' | 'passed' {
  */
 export function buildReportText(outcome: AgentRunOutcome, options: BuildReportOptions = {}): string {
   const failed = failedBlock(outcome.failures)
-  const lines = ['REPORT:', verdictLine(outcome), ...failed]
+  const lines = [
+    'REPORT:',
+    verdictLine(outcome),
+    ...(outcome.warnings ?? []).map(warning => `WARNING: ${warning}`),
+    ...failed,
+  ]
   if (options.verbose !== true) {
     const bounded = boundOutput(
       outcome.output,
@@ -142,6 +149,7 @@ export type AgentJsonReport = {
   logPath: string
   logUnavailable?: string
   tail: readonly string[]
+  warnings: readonly string[]
 }
 
 /** buildJsonReport renders the same outcome `--json` asked for instead of the printed report. */
@@ -163,5 +171,6 @@ export function buildJsonReport(outcome: AgentRunOutcome, options: BuildReportOp
     logPath: outcome.logPath,
     ...(outcome.logUnavailable === undefined ? {} : { logUnavailable: outcome.logUnavailable }),
     tail: boundedFailures.failures.length > 0 ? stripChildFailedBlock(bounded.lines) : bounded.lines,
+    warnings: outcome.warnings ?? [],
   }
 }

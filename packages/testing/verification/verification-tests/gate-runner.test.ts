@@ -45,6 +45,7 @@ Describe('gate release lifetime', () => {
     })
     let finished = false
     const run = runGates({
+      showStudio: true,
       gates: ['_fix-dprint', 'studio-canary', '_typecheck'],
       jobs: 8,
       machineCpuCount: 8,
@@ -105,6 +106,7 @@ async function run(gates: readonly string[], script: GateScript, extra: Record<s
   try {
     const started: string[] = []
     const summary = await runGates({
+      showStudio: true,
       gates,
       jobs: 2,
       logRoot: FS.resolvePath('logs', root),
@@ -151,6 +153,7 @@ Describe('repository gate runner', () => {
     const started: string[] = []
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['first', 'second'],
         jobs: 1,
         lane: 'verify-full',
@@ -313,6 +316,7 @@ Describe('repository gate runner', () => {
     const registryRoot = await mkTestDir('tao-gate-runner-contended-lanes-')
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_repo-lint'],
         machineCpuCount: 8,
         machineLoadAverage: CONTENDED_MACHINE,
@@ -349,6 +353,7 @@ Describe('repository gate runner', () => {
     let laneId: string | undefined
     try {
       await runGates({
+        showStudio: true,
         gates: ['_doctor-json'],
         registryRoot,
         repositoryRoot: root,
@@ -371,6 +376,7 @@ Describe('repository gate runner', () => {
     Expect(priority).toBeDefined()
     const started: string[] = []
     const pending = runGates({
+      showStudio: true,
       gates: ['studio-smoke-native', '_fix-just-fmt'],
       jobs: 2,
       registryRoot,
@@ -409,6 +415,7 @@ Describe('repository gate runner', () => {
     const root = await mkTestDir('tao-gate-runner-json-')
     try {
       await runGates({
+        showStudio: true,
         gates: ['_repo-lint'],
         jsonPath: 'summary.json',
         logRoot: FS.resolvePath('logs', root),
@@ -429,6 +436,7 @@ Describe('repository gate runner', () => {
     const root = await mkTestDir('tao-gate-runner-artifacts-')
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_repo-lint'],
         lane: 'check',
         registryRoot: FS.resolvePath('registry', root),
@@ -453,6 +461,7 @@ Describe('repository gate runner', () => {
     const held = Deferred()
     try {
       const finished = runGates({
+        showStudio: true,
         gates: ['first', 'held'],
         jobs: 2,
         logRoot: FS.resolvePath('logs', root),
@@ -516,6 +525,7 @@ Describe('repository gate runner', () => {
     const registryRoot = await mkTestDir('tao-gate-runner-lanes-')
     try {
       await runGates({
+        showStudio: true,
         gates: ['_repo-lint'],
         machineLoadAverage: IDLE_MACHINE,
         registryRoot,
@@ -541,6 +551,7 @@ Describe('repository gate runner', () => {
     const registryRoot = await mkTestDir('tao-gate-runner-lanes-')
     try {
       await runGates({
+        showStudio: true,
         gates: ['_repo-lint', '_doctor-json'],
         machineLoadAverage: IDLE_MACHINE,
         registryRoot,
@@ -629,6 +640,7 @@ Describe('gate runner under a shared machine', () => {
     let declined = false
 
     const finished = runGates({
+      showStudio: true,
       gates: ['_repo-lint', '_dprint-check', '_runtime-pack-check'],
       logRoot: FS.resolvePath('logs', root),
       machineCpuCount: 4,
@@ -682,6 +694,7 @@ Describe('gate runner under a shared machine', () => {
     const root = await mkTestDir('tao-gate-runner-')
 
     await runGates({
+      showStudio: true,
       gates: ['_repo-lint'],
       registryRoot,
       repositoryRoot: root,
@@ -701,6 +714,7 @@ Describe('gate runner under a shared machine', () => {
     let attempts = 0
 
     const summary = await runGates({
+      showStudio: true,
       gates: ['_repo-lint'],
       logRoot: FS.resolvePath('logs', root),
       registryRoot,
@@ -749,6 +763,7 @@ Describe('gate runner green trees', () => {
   ) {
     const started: string[] = []
     const summary = await runGates({
+      showStudio: true,
       // Two recordable readers that read no generated class, so a record stands for them in a lane
       // holding no generator. `_typecheck` reads both generated trees and is the wrong default here.
       gates: options.gates ?? ['_dprint-check', '_repo-lint'],
@@ -827,6 +842,7 @@ Describe('gate runner green trees', () => {
     const hashes = ['tree-before', 'tree-after']
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_repo-lint'],
         greenTree: { hashTree: async () => hashes.shift()!, lanes: ['verify'] },
         logRoot: FS.resolvePath('logs', root),
@@ -851,6 +867,7 @@ Describe('gate runner green trees', () => {
     const started: string[] = []
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_fix-dprint', '_repo-lint'],
         greenTree: { hashTree: async () => hashes.shift()!, lanes: ['verify'] },
         logRoot: FS.resolvePath('logs', root),
@@ -875,6 +892,7 @@ Describe('gate runner green trees', () => {
     const started: string[] = []
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_fix-dprint', '_repo-lint'],
         logRoot: FS.resolvePath('logs', root),
         registryRoot: FS.resolvePath('registry', root),
@@ -936,6 +954,7 @@ Describe('gate runner green trees', () => {
     let capture = 0
     try {
       const summary = await runGates({
+        showStudio: true,
         gates: ['_parser-gen', '_repo-lint'],
         greenTree: {
           captureGenerated: async () => ({
@@ -1040,6 +1059,7 @@ Describe('gate runner green trees', () => {
       // own rewrite and not concurrent drift — which is the case only this guard catches.
       const hashes = ['tree-1', 'tree-2', 'tree-2']
       const moved = await runGates({
+        showStudio: true,
         gates: ['_fix-dprint', '_repo-lint', '_typecheck'],
         greenTree: {
           hashTree: async () => hashes.shift()!,
