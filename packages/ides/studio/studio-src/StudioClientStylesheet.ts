@@ -710,7 +710,19 @@ kbd {
   box-shadow: 0 8px 24px #0004; display: none; flex-wrap: wrap; font-size: 11px; gap: 6px; left: 0;
   max-width: calc(100% - 16px); padding: 4px 6px; position: absolute; top: 0; white-space: nowrap; z-index: 6;
 }
-.tao-studio-product-host:is([data-layout-preset="design"], [data-layout-preset="draw"]) .studio-selection-hud:not([hidden]) { display: flex; }
+/* Whether it shows is the HUD's own call: Design, Draw, or the preview's edit mode in any layout. */
+.studio-selection-hud:not([hidden]) { display: flex; }
+.studio-selection-hud-actions { position: relative; }
+.studio-selection-hud-actions-toggle { align-items: center; display: flex; padding: 2px 3px; }
+.studio-selection-hud-menu {
+  background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px;
+  box-shadow: 0 8px 24px #0004; display: flex; flex-direction: column; left: -7px; min-width: 140px; padding: 4px;
+  position: absolute; top: calc(100% + 9px); z-index: 1;
+}
+.studio-selection-hud-menu[hidden] { display: none; }
+.studio-selection-hud-menu[data-above="true"] { bottom: calc(100% + 9px); top: auto; }
+.studio-selection-hud .studio-selection-hud-menu button { border: 0; padding: 4px 8px; text-align: left; }
+.studio-selection-hud .studio-selection-hud-menu button:hover:not(:disabled) { background: var(--studio-surface-hover); }
 .studio-selection-hud-name { color: var(--studio-text-muted); font: 11px var(--studio-mono); padding-right: 2px; }
 .studio-selection-hud label { align-items: center; color: var(--studio-text-muted); display: flex; gap: 4px; }
 .studio-selection-hud :is(button, input, select) {

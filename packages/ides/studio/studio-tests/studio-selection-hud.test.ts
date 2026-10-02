@@ -22,6 +22,7 @@ import {
   studioProtocolChannel,
   studioProtocolVersion,
 } from '../studio-src/StudioProtocol'
+import { studioRenderActionIds, StudioRenderActions } from '../studio-src/StudioRenderActions'
 
 const path = '/workspace/app/Main.tao'
 
@@ -127,6 +128,29 @@ Describe('Studio selection HUD', () => {
     Expect(studioSelectionHudAction(renderId, 'sizing', 'unset')?.['heads']).toEqual(['claim', 'fill', 'hug'])
     Expect(studioSelectionHudAction(renderId, 'gap', '')?.['heads']).toEqual(['gap'])
     Expect(studioSelectionHudAction(renderId, 'pad', '')?.['heads']).toEqual(['pad'])
+  })
+
+  Test("offers the inspector's actions, with a move only toward a side that has a sibling", () => {
+    const renderId = `${path}:10:40`
+    const last = { ...inspection('Text', []), moves: { up: { beforeId: `${path}:0:8`, draggedId: renderId } } }
+    Expect(studioRenderActionIds.map(StudioRenderActions.label)).toEqual([
+      'Move up',
+      'Move down',
+      'Wrap in Row',
+      'Wrap in Col',
+      'Wrap in Stack',
+      'Make view',
+      'Remove element',
+    ])
+    Expect(StudioRenderActions.action(last, 'move-up')).toEqual({
+      beforeId: `${path}:0:8`,
+      draggedId: renderId,
+      kind: 'move-render',
+    })
+    Expect(StudioRenderActions.action(last, 'move-down')).toBeUndefined()
+    Expect(StudioRenderActions.action(last, 'wrap-col')).toEqual({ kind: 'wrap-render', renderId, wrapper: 'Col' })
+    Expect(StudioRenderActions.action(last, 'make-view')).toEqual({ kind: 'extract-view', renderIds: [renderId] })
+    Expect(StudioRenderActions.action(last, 'unknown')).toBeUndefined()
   })
 
   Test('sits under the selection, above it when there is no room below, and inside the host', () => {
