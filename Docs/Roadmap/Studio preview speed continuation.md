@@ -134,17 +134,51 @@ first edit after launch. Run the harness with
    the byte-stable marker's first-compile versions with the new revision, so the next Draw action was
    correctly rejected as stale. The bootstrap response now carries its own revision's versions and
    never replaces a newer applied revision. The real-app smoke performs Draw after Code.
-4. **Observed but not fixed.** Editing `HNReader.tao` itself blanks the preview in both modes: Fast
+4. **Observed but not fixed.** Editing the file that declares HNReader's datasources (then
+   `HNReader.tao`, now `Data.tao`) blanks the preview in both modes: Fast
    Refresh reconfigures the datasource declaration, which clears store handles, while the fixture
    hook's applied guard skips re-seeding. The harness edits a Studio view beside it instead. In two of
    seven HNReader measurement cases one edit never painted: once Metro sent `update-start` with nothing
    after it for 30s, once the frame's document was replaced without an iframe `load` event. Neither
    reproduced in the next runs; the harness now records Metro's non-update messages for the next one.
-5. **Next speed step.** Every compile still reads, parses, and links every file in the graph (parse
-   35ms), then validates and emits all of it. Reusing unchanged documents' parses is the largest
-   remaining Tao-owned slice, but compiler and validator caches keyed by AST nodes (for example
-   resolved imports and inferred types) would need invalidation for dependents of the changed file,
-   so it needs its own design rather than a shortcut.
+5. **Fast draw.** A toolbar toggle beside the mode button connects only the first scenario's preview,
+   so no other cell has an iframe. It is the way to feel a single-preview Studio before deciding what
+   the multi-cell matrix should cost.
+
+## Next slices
+
+Each slice is measured on its own with the latency harness, so each gain is attributable.
+
+1. **Next slice.**
+   1. Fix the blank preview after editing the datasource file (`Data.tao`): re-seed fixtures when
+      Fast Refresh re-runs datasource declarations.
+   2. Fix the `runtime capture domain 'navigation' is registered exactly once` error a hot reload
+      raises from the module-level registration in `TR-navigation-app.ts`.
+   3. Stop every compile from re-rendering the whole preview tree. Each compile's runtime update
+      sets root state in the generated `App.tsx`; nothing below it is memoized, `<TaoApp />` is a new
+      element each render, and the lens publish callback changes with each config, so every lens
+      render re-renders. Make the app element stable, read the config in `publishLens` from a ref,
+      and keep scenarios with steps from remounting when their steps did not change (their cell key
+      includes `compileRevision` today).
+   4. Cache emitted modules per file, reusing a module whose source and dependencies did not
+      change. Expected to save most of the 50ms emit phase on a one-file edit.
+2. **Slice after.** Reuse Langium documents across compiles. Langium 4.3 (the pinned version) offers
+   document-level reuse only, through `DocumentBuilder.update(changed, deleted)`; no LL(k) parser
+   reparses a text range. Stages, each measured:
+   1. Keep one preview `Workspace` and its services across compiles, feeding source overrides through
+      an overlay file system instead of opening a new workspace whenever overrides are present. Split
+      the 35ms parse phase into service creation, reads, parsing, and linking first.
+   2. Replace the delete-and-rebuild in `linkDocuments` with `update`, translating reachable-set
+      changes into deleted documents. Langium's `isAffected` relinks only documents with a reference
+      into a changed file, so folder visibility and sibling discovery, which resolve names outside the
+      reference index, need their own invalidation (relink the folder, or reset every document; an
+      unchanged document then still skips its reparse).
+   3. Per-document validation and emit caches, which need Tao's own dependency tracking, since a
+      file's diagnostics can depend on other files beyond Langium references.
+
+   Expected, inferred rather than measured: parse 35ms → about 8–15ms, the whole compile about
+   15–20% faster before validate and emit become per-document. Stay on Langium 4.3.x: a 4.4.0
+   report shows large regressions on unclosed calls, which mid-edit saves produce.
 
 ## Completion bar
 
