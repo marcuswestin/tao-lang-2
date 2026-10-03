@@ -199,6 +199,14 @@ Each slice is measured on its own with the latency harness, so each gain is attr
    including a half-typed save that leaves a call unclosed; then, with the Developer's approval for
    the version change, update to 4.4 and measure the same cases again to see whether a difference
    is noticeable.
+4. **After this project lands: evaluate stable render ids.** A render id is a file path plus source
+   offsets, which generated modules and design styles embed, so an edit that changes length shifts
+   every later id in the file. Every Studio edit therefore carries the source versions it was made
+   against, and the server refuses one made against an outdated preview ("Wait for the refreshed
+   preview"). Evaluate an id that survives edits, with the server resolving it to the current source
+   position when an edit arrives: whether edits could then apply while a compile is in flight, what
+   keeping ids stable across edits costs (written tags, or the server tracking elements between
+   revisions), and how it interacts with tags, which are unique only within their block.
 
 ## Completion bar
 
