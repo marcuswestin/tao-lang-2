@@ -4,7 +4,7 @@
 folder
 design HNDesign {
    colors {
-      paperLight #f6f6ef
+      paperLight #f8f8f8
       cardLight #ffffff
       inkLight #21211c
       inkMutedLight #6e6e66

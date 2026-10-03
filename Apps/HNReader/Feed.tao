@@ -80,6 +80,6 @@ view StoryRow(Story) {
    render Row() [storyCard, gap 10] {
       Text("{ Story.Rank }.") [rank]
       Col() [gap sm, claim 1, compress] {
-         Text("{ Story.Score } points by { Story.Author } · { Story.CommentCount } comments") [meta]
          TextMultiline(Story.Title) [storyTitle]
+         Text("{ Story.Score } points by { Story.Author } · { Story.CommentCount } comments") [meta]
 }  }  }

@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
-  "nextViewNumber": 5,
-  "revision": 60,
+  "nextViewNumber": 6,
+  "revision": 73,
   "sketches": [
     {
       "height": 259,
@@ -35,50 +35,6 @@
       "width": 373,
       "x": 915,
       "y": 53
-    },
-    {
-      "height": 202,
-      "id": "617a33e1-9be6-4dc0-a5a9-578502b65353",
-      "name": "View2",
-      "project": "HNReader",
-      "rectOrder": [
-        "dd2290c5-90d2-4e4c-87a6-4231726f3312",
-        "e24865bb-a14c-439e-a621-86106258ce06"
-      ],
-      "rects": [
-        {
-          "height": 62.08203125,
-          "id": "e24865bb-a14c-439e-a621-86106258ce06",
-          "kind": "Box",
-          "width": 210.3515625,
-          "x": 112.78125,
-          "y": 59.58984375
-        }
-      ],
-      "snapped": [
-        {
-          "rect": {
-            "height": 82.6328125,
-            "id": "dd2290c5-90d2-4e4c-87a6-4231726f3312",
-            "kind": "Text",
-            "width": 209.609375,
-            "x": 23.921875,
-            "y": 23.8828125
-          },
-          "target": {
-            "elementName": "Text",
-            "path": "@/studio/View2.tao",
-            "renderId": "@/studio/View2.tao:367:381",
-            "sourceVersion": "text-v1:474:0bq3xmn186pher",
-            "studioRectId": "dd2290c5-90d2-4e4c-87a6-4231726f3312",
-            "view": "View2"
-          }
-        }
-      ],
-      "view": "View2",
-      "width": 624,
-      "x": 101,
-      "y": 1280
     },
     {
       "height": 167,
@@ -183,6 +139,111 @@
       "width": 161,
       "x": 464,
       "y": 58
+    },
+    {
+      "height": 386,
+      "id": "48e0125f-bad2-40b3-be07-d66bc5558244",
+      "name": "View5",
+      "project": "HNReader",
+      "rectOrder": [
+        "b11675e5-5cf5-49ed-96bb-bc660db3c7d6",
+        "6b8400bc-b356-4b80-be4b-b0a1fbc1054e",
+        "a9822bcb-a96b-43ab-b2df-162ba52a9086",
+        "de00fde6-2a0f-4f6e-aa66-2ec4ca4e0418",
+        "e6689863-abd6-4154-8917-81c4fc541c8c"
+      ],
+      "rects": [
+        {
+          "height": 83.44921875,
+          "id": "a9822bcb-a96b-43ab-b2df-162ba52a9086",
+          "kind": "Placeholder",
+          "width": 317.28515625,
+          "x": 62.26171875,
+          "y": 229.9921875
+        }
+      ],
+      "snapped": [
+        {
+          "rect": {
+            "content": "Hi",
+            "height": 59.28515625,
+            "id": "b11675e5-5cf5-49ed-96bb-bc660db3c7d6",
+            "kind": "Text",
+            "width": 196.359375,
+            "x": 58.88671875,
+            "y": 45.078125
+          },
+          "target": {
+            "elementName": "Text",
+            "path": "@/studio/View5.tao",
+            "renderId": "@/studio/View5.tao:396:412",
+            "sourceVersion": "text-v1:1136:0nqbxhq1oag7ne",
+            "studioRectId": "b11675e5-5cf5-49ed-96bb-bc660db3c7d6",
+            "view": "View5"
+          }
+        },
+        {
+          "rect": {
+            "content": "There",
+            "height": 61.25390625,
+            "id": "6b8400bc-b356-4b80-be4b-b0a1fbc1054e",
+            "kind": "Text",
+            "width": 221.67578125,
+            "x": 58.5546875,
+            "y": 130.39453125
+          },
+          "target": {
+            "elementName": "Text",
+            "path": "@/studio/View5.tao",
+            "renderId": "@/studio/View5.tao:584:612",
+            "sourceVersion": "text-v1:1136:0nqbxhq1oag7ne",
+            "studioRectId": "6b8400bc-b356-4b80-be4b-b0a1fbc1054e",
+            "view": "View5"
+          }
+        },
+        {
+          "rect": {
+            "content": "Left",
+            "height": 43.5703125,
+            "id": "de00fde6-2a0f-4f6e-aa66-2ec4ca4e0418",
+            "kind": "Text",
+            "width": 113.328125,
+            "x": 78.70703125,
+            "y": 250.29296875
+          },
+          "target": {
+            "elementName": "Text",
+            "path": "@/studio/View5.tao",
+            "renderId": "@/studio/View5.tao:816:843",
+            "sourceVersion": "text-v1:1136:0nqbxhq1oag7ne",
+            "studioRectId": "de00fde6-2a0f-4f6e-aa66-2ec4ca4e0418",
+            "view": "View5"
+          }
+        },
+        {
+          "rect": {
+            "content": "Right",
+            "height": 42.46484375,
+            "id": "e6689863-abd6-4154-8917-81c4fc541c8c",
+            "kind": "Text",
+            "width": 141.75,
+            "x": 213.84765625,
+            "y": 248.27734375
+          },
+          "target": {
+            "elementName": "Text",
+            "path": "@/studio/View5.tao",
+            "renderId": "@/studio/View5.tao:1021:1040",
+            "sourceVersion": "text-v1:1136:0nqbxhq1oag7ne",
+            "studioRectId": "e6689863-abd6-4154-8917-81c4fc541c8c",
+            "view": "View5"
+          }
+        }
+      ],
+      "view": "View5",
+      "width": 464,
+      "x": 305,
+      "y": 630
     }
   ]
 }
