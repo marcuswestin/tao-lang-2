@@ -1,4 +1,5 @@
 import { type ExpoFetch, fetchExpoOpenEndpoint } from '@expo-host/dev-loop/expo-runner/metro'
+import { Ports } from '@expo-host/dev-loop/expo-runner/Ports'
 import {
   startStudioProcessTree,
   stopStudioProcessTree,
@@ -52,7 +53,8 @@ const OUTPUT_TAIL_CHARS = 20_000
  * reload, open the iOS Simulator, or stop. It returns once the person stops it.
  */
 export async function runMetroSession(options: MetroSessionOptions): Promise<void> {
-  const port = options.port ?? METRO_PORT
+  // Another checkout's dev loop often holds 8081 already; Expo Go reads the port from the code, so any port works.
+  const port = options.port ?? await Ports.findAvailable(METRO_PORT)
   const origin = `http://localhost:${port}`
   const fetchImpl = options.fetch ?? fetch
   const out = { output: options.output }

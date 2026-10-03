@@ -54,7 +54,7 @@ function fakeMetro(events: object[], options: { exitCode?: number } = {}) {
     }
     return new Response('ok')
   }
-  return { fetch, metro, pollMs: 5, requests, started: () => started }
+  return { fetch, metro, pollMs: 5, port: 8081, requests, started: () => started }
 }
 
 async function until(check: () => boolean): Promise<void> {

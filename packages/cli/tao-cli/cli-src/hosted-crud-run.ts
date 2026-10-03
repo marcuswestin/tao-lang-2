@@ -21,6 +21,7 @@ type HostedCrudRunOptions = {
   metro?: MetroStarter
   fetch?: ExpoFetch
   pollMs?: number
+  port?: number
 }
 
 const EXPO_GO_INSTALL_URL = 'https://expo.dev/go'
@@ -77,6 +78,7 @@ export async function runHostedCrud(path = '.', options: HostedCrudRunOptions = 
     openSimulator: !onIPhone,
     output: options.output,
     pollMs: options.pollMs,
+    port: options.port,
     project,
   })
 }
