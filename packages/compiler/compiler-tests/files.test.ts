@@ -678,6 +678,7 @@ Describe('compiler: files and packages', () => {
           'modules/external/AuthViews.files/AuthFlow.ts',
           'modules/external/AuthViews.files/AuthViews.tsx',
           'modules/external/Prelude.tao.tsx',
+          'modules/external/ReadContext.tao.tsx',
           'modules/external/Views.tao-2.injection-1.tsx',
           'modules/external/Views.tao-2.tsx',
           'modules/external/Views.tao.injection-1.tsx',

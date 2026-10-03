@@ -266,8 +266,10 @@ proves, so a public build must hide later surfaces and a reviewer must be able t
   On 2026-10-03 a screenshot whose own preview logs a console error became a failed screenshot, the
   surface kinds took plain names (release requirements, screenshot sets, dev checks), the starter
   column and sketch findings became fixed-awaiting-qa, and a re-recorded Notebook capture closed the
-  panel-stretch finding. The column finding awaits the Developer's recheck. Further automated
-  checks are A23.
+  panel-stretch finding. The Developer accepted the centered tablet column from the recorded
+  screenshot on 2026-10-03. Source documentation repairs clarify release availability, checkout
+  commands, tutorial entry and packaged skills; their required human and published-artifact checks
+  remain separate. Further automated checks are A23.
 - Remaining: human DOC1 and install passes, installed-artifact and marketplace evidence, the
   unreviewed starter skills, CLI help text, and Spec documents; recapturing HNReader's phase-2
   cells; declaring capture cells for story visual channels, which agents cannot pass until then.
@@ -477,7 +479,7 @@ as sibling references. Transcription against a settled decision record, with the
 
 - Context: `Docs/Roadmap/Tao Revolution/Decisions.md`, `Process.md` step 2, `Apps/WordFlower/README.md`.
 - Landed: the tier is written to the decisions section by section — §13's `colors`/`sizes`/`text`/
-  `screens`/`styles`/`rules` in place of the token-and-recipe stack, §5's single `guard default`,
+  `screens`/`styles`/`rules` in place of the token-and-recipe stack, §5's single app-scoped `guard`,
   §8's `check` as the action's early exit, §7's write-through `bind` and composed `draft`, §10's
   `CollapseOrder`, `Width`, `Compact`, `reveal`, and `link`, §15's foreign action and view heads in
   place of `unsafe ts`, and §16's `fixture`, devices, store-query assertions, and `prepare`.
@@ -511,7 +513,7 @@ equals MVP.
 - Scope settled in the 2026-09-25 decision rounds (`Coverage.md` carries the tiers): MVP ships
   `required` forms with `create … with` and `Problems(…)`, `check`, `when do` with `saved` /
   `rejected` / `error` and declared-case branches plus the unhandled-failure warning, the
-  runtime-supplied `guard default`, query `search`, plural `phrase`s, the bridge metadata module, a
+  runtime-supplied app-scoped `guard`, query `search`, plural `phrase`s, the bridge metadata module, a
   document export behind `fails`, and the test world's `on`/`with`, `network`, `wait for sync`,
   and `datasource fails after`. Deferred: `validate` and `refuse when`, `queued`, `group by`,
   preferences with `Me` and `@tao/auth`, copy extraction and `words`, clock and collaborator

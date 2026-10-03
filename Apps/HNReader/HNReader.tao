@@ -192,9 +192,9 @@ scene FrontPage() {
          loading -> { Col() [stateBox] {
             Spinner()
          } }
-         error -> Message { Col() [stateBox, gap 6] {
+         error -> Context { Col() [stateBox, gap 6] {
             Text("Couldn't reach Hacker News") [problemTitle]
-            Text(Message) [meta]
+            Text(Context.Message) [meta]
          } }
       }
       if TopStories is refreshing {
@@ -343,9 +343,9 @@ scene StoryScreen(Story) {
                   loading -> { Col() [stateBox] {
                      Spinner()
                   } }
-                  error -> Message { Col() [stateBox, gap 6] {
+                  error -> Context { Col() [stateBox, gap 6] {
                      Text("Couldn't load comments") [problemTitle]
-                     Text(Message) [meta]
+                     Text(Context.Message) [meta]
                   } }
                }
                when Thread {
@@ -385,7 +385,7 @@ view BookmarkRow(Bookmark) {
       guard Bookmark.Story {
          loading -> { Text("Loading story…") [notice] }
          missing -> { Text("This story is not in the feed right now.") [notice] }
-         error -> Message { Text(Message) [notice] }
+         error -> Context { Text(Context.Message) [notice] }
       }
       TextMultiline(Bookmark.Story.Title) [storyTitle]
       Text("{ Bookmark.Story.Score } points by { Bookmark.Story.Author }") [meta]

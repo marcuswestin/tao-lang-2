@@ -92,10 +92,13 @@ export namespace Packages {
       },
       async intrinsicFilePaths() {
         const prelude = FS.resolvePath('@tao/Prelude.tao', context.stdlibRoot)
+        const readContext = FS.resolvePath('@tao/data/ReadContext.tao', context.stdlibRoot)
         const stdlibProject = FS.resolvePath('Project.tao', context.stdlibRoot)
         const project = await ancestorProjectFile(context.index.projectRoot)
         return await Promise.all(
-          [project, stdlibProject, prelude].map(async path => path && await FS.isFile(path) ? path : undefined),
+          [project, stdlibProject, prelude, readContext].map(async path =>
+            path && await FS.isFile(path) ? path : undefined
+          ),
         )
           .then(paths => paths.filter((path): path is string => path !== undefined))
       },

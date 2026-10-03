@@ -39,9 +39,9 @@ scene IngredientList() {
          }  }
          guard Ingredients {
             loading -> { Spinner() }
-            error -> Message {
+            error -> Context {
                Text("Ingredients could not be loaded") [sectionTitle]
-               TextMultiline(Message) [body]
+               TextMultiline(Context.Message) [body]
          }  }
          guard Ingredients empty -> { Col() [panel] {
             Text("No ingredients yet") [sectionTitle]
@@ -100,7 +100,7 @@ scene IngredientDetail(Ingredient) {
          guard Ingredient {
             loading -> { Spinner() }
             missing -> { TextMultiline("This ingredient no longer exists.") [body] }
-            error -> Message { TextMultiline("The ingredient could not be loaded: { Message }") [body] }
+            error -> Context { TextMultiline("The ingredient could not be loaded: { Context.Message }") [body] }
          }
 
          #ingredientNameDraft

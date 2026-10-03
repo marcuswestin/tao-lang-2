@@ -97,7 +97,7 @@ Describe('compiler: functional core', () => {
               loading -> { Text("Loading") }
               missing -> { Text("Missing") }
               unauthorized -> { Text("Unauthorized") }
-              error -> Message { Text(Message) }
+              error -> Context { Text(Context.Message) }
             }
             if Document.Final is Final { Text("Final") }
             if Document.Final is Draft { Text("Draft") }
@@ -117,16 +117,16 @@ Describe('compiler: functional core', () => {
     Expect(code).toContain('TR.GuardRender(_Scope.Document.evaluate(), [')
     Expect(code).toContain('["missing", _TaoCasePayload =>')
     Expect(code).toContain('["unauthorized", _TaoCasePayload =>')
+    Expect(code).toMatch(/<_Scope\.Text\s+Value=\{[^}]*_Scope\.Context[^}]*\["Message"\]/)
     Expect(code.match(/TR\.If\(/g)).toHaveLength(4)
   })
 
   Test('hands unnamed exceptional cases to the read net the app carries', async () => {
     const compiled = await Compiler.compileCode(`
-      app NetApp { view Main }
-      guard default {
+      app NetApp { view Main guard {
         loading -> Text("Opening…")
-        error -> Message { Text(Message) }
-      }
+        error -> Context { Text(Context.Message) }
+      } }
       data Documents / Document { Title text }
       view Main() {
         query Documents = Documents with { }
@@ -140,27 +140,50 @@ Describe('compiler: functional core', () => {
     `)
 
     const code = compiled.files[0]?.code ?? ''
-    Expect(code).toContain('_Scope._TaoReadNet = TR.ReadNet({')
+    Expect(code).toContain('readNet: () => TR.MergeReadNet(undefined, TR.ReadNet({')
     Expect(code).toContain('"loading": (_ViewProps, _TaoCasePayload) =>')
-    Expect(code).toContain('_Scope.Message = _TaoCasePayload')
-    Expect(code).toContain('readNet: () => _Scope._TaoReadNet,')
+    Expect(code).toContain('_Scope.Context = _TaoCasePayload')
+    Expect(code).toMatch(/<_Scope\.Text\s+Value=\{[^}]*_Scope\.Context[^}]*\["Message"\]/)
     Expect(code).toMatch(
-      /TR\.GuardRender\(_Scope\.Documents\.evaluate\(\), \[\s*\], \(\) => <>[\s\S]*<\/>, _ViewProps\.__tao\)/,
+      /TR\.GuardRender\(_Scope\.Documents\.evaluate\(\), \[\s*\], \(\) => <>[\s\S]*<\/>, _ViewProps\.__tao, \{"readKind":"query"\}\)/,
     )
   })
 
-  Test('carries a sibling file read net into every app module', async () => {
+  Test('compiles entity when error binders through the text-compatible read path', async () => {
+    const compiled = await Compiler.compileCode(`
+      app NetApp { view Shell }
+      data Documents / Document { Title text }
+      view Shell() { render Text("Ready") }
+      view Main(Document) {
+        render Stack() {
+          when Document {
+            error -> Message { Text(Message) }
+            otherwise -> { Text("Ready") }
+          }
+        }
+      }
+      view Stack() { render inject Content @@content \`\`\`ts\nreturn Content\n\`\`\` }
+      view Text(Value text) { render inject Value \`\`\`ts\nreturn null\n\`\`\` }
+    `)
+    const code = compiled.files[0]?.code ?? ''
+    Expect(code).toContain('TR.WhenReadRender(_Scope.Document.evaluate(), [')
+    Expect(code).toContain('_Scope.Message = _TaoCasePayload')
+  })
+
+  Test('inherits and patches app read net cases across modules', async () => {
     await withTaoFiles(
       'tao-compiler-read-net-',
       {
         'Project.tao': `project { id "compiler-read-net" name "Compiler read net" }`,
         'Main.tao': `
-          app NetApp { view Home }
-          view Home() { render inject ${tsFence} return null ${fence} }
+          use Base from ./Net
+          app NetApp = Base with { guard { error -> Context { Text(Context.Message) } } }
+          view Text(Value text) { render inject ${tsFence} return null ${fence} }
         `,
         'Net.tao': `
-          guard default { missing -> { Gone() } }
-          view Gone() { render inject ${tsFence} return null ${fence} }
+          workspace app Base { view Home guard { missing -> { Gone() } } }
+          workspace view Gone() { render inject ${tsFence} return null ${fence} }
+          workspace view Home() { render inject ${tsFence} return null ${fence} }
         `,
       },
       async paths => {
@@ -168,10 +191,10 @@ Describe('compiler: functional core', () => {
         const app = compiled.files.find(file => file.relativePath === 'App.tsx')?.code ?? ''
         const net = compiled.files.find(file => file.relativePath === 'modules/Net.tao.tsx')?.code ?? ''
 
-        Expect(app).toContain("import { _TaoReadNet } from './modules/Net.tao'")
-        Expect(app).toContain("TR.Use(_Scope, '_TaoReadNet', () => _TaoReadNet)")
-        Expect(app).toContain('readNet: () => _Scope._TaoReadNet,')
-        Expect(net).toContain('export const _TaoReadNet = _Scope._TaoReadNet')
+        Expect(app).toContain('TR.MergeReadNet(')
+        Expect(app).toContain('.definition.readNet?.(), TR.ReadNet({')
+        Expect(app).toContain('"error": (_ViewProps, _TaoCasePayload) =>')
+        Expect(net).toContain('"missing": (_ViewProps, _TaoCasePayload) =>')
       },
     )
   })

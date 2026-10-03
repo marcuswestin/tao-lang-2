@@ -52,6 +52,7 @@ test "Test world controls" {
       network offline
       enter "Offline Dev" into #draft
       press #add
-      expect text "Could not save data: Network is offline."
+      expect text "Unable to load these items."
+      expect missing text "Network is offline."
    }
 }

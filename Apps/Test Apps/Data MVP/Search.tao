@@ -2,16 +2,10 @@ use Memory from @tao/data/providers/memory
 use StackNav from @tao/nav
 use Col, FormButton, Text, TextInput from @tao/ui
 
-project {
-   id "search"
-   name "Search"
-   version "0.1.0"
-}
-
 app SearchApp {
    Name "Search"
    Navigator StackNav {
-      Initial MainView
+      Initial SearchView
    }
    Datasource Memory { }
 }
@@ -22,7 +16,7 @@ data Documents / Document {
    Owner text (default ""),
 }
 
-scene MainView() {
+scene SearchView() {
    Title "Search"
    state Find = ""
    query Found = Documents with {

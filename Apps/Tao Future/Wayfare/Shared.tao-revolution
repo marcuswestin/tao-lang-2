@@ -11,13 +11,7 @@ let Me = Account
 let MyTrip = Me.CurrentTrip
 
 // -- The safety net -----------------------------------------------------------------------------------------
-guard default {
-   loading -> Spinner(Label: "Opening Wayfare…")
-   missing -> EmptyState(Icon: "questionmark.folder", Title: "This is gone", Body: "Someone on the trip may have removed it.")
-   unauthorized -> EmptyState(Icon: "lock", Title: "You don't have access to this", Body: "Ask the trip's owner to invite you back.")
-   rejected -> Problem { Text(Problem) [caption, danger] }
-   error -> Message { Text(Message) [body] }
-}
+
 
 // -- Frames --------------------------------------------------------------------------------------------------
 view Section(Title text) {

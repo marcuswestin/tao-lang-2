@@ -45,9 +45,18 @@ use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 // translation and `words` blocks are Post-MVP.
 //
 // READ NET. Every app has a read net for the exceptional read cases a guard site does not name:
-// loading, missing, unauthorized, and error. The runtime supplies it; a file-level `guard default`
+// loading, missing, unauthorized, and error. The runtime supplies it; an app's `guard { … }` block
 // restyles it case by case, as WordFlower does for loading and error. A bare `guard Subject` sends
 // every exceptional case to the net, and a site names only the cases it treats specially.
+//
+// This tranche decides:
+// - The read net belongs to the app, not the project. `guard { … }` is an app statement, at most one
+//   per app; a variant's `with { guard { … } }` replaces only the cases it names and inherits the
+//   rest. File-level `guard default` is retired, so one project can hold apps with different nets
+// - Every exceptional read branch may bind a ReadContext. Context.Message is safe display copy;
+//   subject/read metadata is supplied when known. Timing, progress, cause and recovery fields are
+//   optional: an unavailable or unimplemented field is none, never invented information or an
+//   inert action. Provider diagnostics stay out of this context
 //
 // SEARCH. A field marked `(search)` is part of its entity's search corpus, and a query's
 // `search <term>` keeps the rows whose search fields match the term with the matcher keyboard
@@ -598,7 +607,17 @@ app WordFlower {
    Design WordFlowerDesign
    view WordFlowerShell(WordFlowerNavigator)
    Datasource DeviceStore // offline-first: the device owns the writing; sync is a variant
-}
+
+   // The read net: a guard site that does not name an exceptional read case sends it here. The
+   // runtime supplies every case; WordFlower restyles loading and error and keeps the runtime's
+   // missing and unauthorized sentences. Every variant below inherits it.
+   guard {
+      loading -> Context {
+         Spinner()
+         TextMultiline(Context.Message) [body]
+      }
+      error -> Context { TextMultiline(Context.Message) [body] }
+}  }
 
 app WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
@@ -621,14 +640,6 @@ app WordFlowerInstantDB = WordFlower with {
 app WordFlowerLocalInstantDB = WordFlower with {
    Name "WordFlower - Local InstantDB"
    Datasource WordFlowerLocalInstantDBStore
-}
-
-// The read net: a guard site that does not name an exceptional read case sends it here. The runtime
-// supplies every case; WordFlower restyles loading and error and keeps the runtime's missing and
-// unauthorized sentences.
-guard default {
-   loading -> Spinner()
-   error -> Message { TextMultiline("Could not load this: { Message }") [body] }
 }
 
 fixture StudioWorkspace {

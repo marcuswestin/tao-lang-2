@@ -1,7 +1,7 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
-import { type CodegenOptions, type Compiled, gen, ReadNetBinding, resolveRef } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileAccountBinding, needsAuthContext } from './auth-context'
 import { activeDataStorePlan, activeFixtureStores } from './data-store-context'
@@ -45,6 +45,15 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
   const crossModuleBase = base && appInheritanceLeavesModule(app, base) ? base : undefined
   const configuration = crossModuleBase ? directAppConfiguration(app) : ASTUtils.effectiveAppConfiguration(app)
   const baseReference = crossModuleBase ? appDefinitionReference(crossModuleBase) : undefined
+  const directBaseReference = base ? appDefinitionReference(base) : undefined
+  const ownGuard = directAppGuard(app)
+  const readNet = ownGuard
+    ? gen`TR.MergeReadNet(${
+      directBaseReference ? gen`${directBaseReference}.definition.readNet?.()` : gen`undefined`
+    }, ${Compile.AppGuardStatement(ownGuard, options)})`
+    : directBaseReference
+    ? gen`${directBaseReference}.definition.readNet?.()`
+    : undefined
   const inheritedConfiguration = crossModuleBase ? ASTUtils.effectiveAppConfiguration(crossModuleBase) : undefined
   const authNavigation = needsAuthContext(root) || needsAuthContext(app)
   const navigator = compileResolvedAppProperty(
@@ -121,7 +130,7 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       ? gen`design: () => ${design},`
       : gen.noop()
   }
-      ${options.readNet ? gen`readNet: () => ${gen.scopeName({ name: ReadNetBinding })},` : gen.noop()}
+      ${readNet ? gen`readNet: () => ${readNet},` : gen.noop()}
       auxiliaries: ${authNavigation ? gen`(_TaoAuthScope?: TR.AuthScope)` : gen`()`} => ({
         ${
     crossModuleBase
@@ -422,6 +431,17 @@ function directAppBase(app: AST.AppValueDeclaration): AST.AppValueDeclaration | 
   const target = resolveRef(expression.target)
   Assert.is(target, AST.isAppValueDeclaration, 'validated app reference resolves a complete app value')
   return target
+}
+
+/** directAppGuard returns only this declaration's guard, so each variant patches its immediate base. */
+function directAppGuard(app: AST.AppValueDeclaration): AST.AppGuardStatement | undefined {
+  if (AST.isAppDeclaration(app) && app.block) {
+    return app.block.statements.find(AST.isAppGuardStatement)
+  }
+  const expression = app.value
+  return expression && AST.isRefinementExpression(expression)
+    ? expression.patchBlock.entries.find(entry => entry.appGuard)?.appGuard
+    : undefined
 }
 
 /** appInheritanceLeavesModule keeps every chain containing a foreign ancestor on runtime values. */

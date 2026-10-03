@@ -44,7 +44,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         const validation = await workspace.validate(paths['Main.tao']!)
         const compiled = await workspace.compile(paths['Main.tao']!)
 
-        Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(6)
+        Expect(parseResult.files.map(file => file.ast.$type)).toHaveLength(7)
         Expect(parseResult.files.some(file => file.path.endsWith('/@tao/Prelude.tao'))).toBe(true)
         Expect(parseResult.files.some(file => file.path.endsWith('/@tao/auth/Auth.tao'))).toBe(true)
         Expect(errorMessages(validation)).toEqual([])
@@ -57,6 +57,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           Repo.resolvePath('packages/apps/stdlib/@tao/auth/Auth.ts'),
           Repo.resolvePath('packages/apps/stdlib/@tao/auth/AuthFlow.ts'),
           Repo.resolvePath('packages/apps/stdlib/@tao/auth/AuthViews.tsx'),
+          Repo.resolvePath('packages/apps/stdlib/@tao/data/ReadContext.tao'),
         ].sort())
       },
     )

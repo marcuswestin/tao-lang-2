@@ -1,4 +1,4 @@
-// The design: a palette, element defaults, and the bundles the scenes apply at render sites.
+// The design: a palette and the bundles the scenes apply at render sites.
 folder
 design PantryDesign {
    colors {

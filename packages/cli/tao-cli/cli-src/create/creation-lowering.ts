@@ -200,7 +200,7 @@ ${raw('dark', 'Dark')}
 ${semantic}`
     : `      // Every bundle spells these names.
 ${raw('light', '')}`
-  return `// The design: a palette, element defaults, and the bundles the scenes apply at render sites.
+  return `// The design: a palette and the bundles the scenes apply at render sites.
 folder
 design ${names.design} {
    colors {
@@ -338,9 +338,9 @@ scene ${listScene(entity)}() {
          }
          guard ${entity.plural} {
             loading -> { Spinner() }
-            error -> Message {
+            error -> Context {
                Text(${taoString(`${pluralWords} could not be loaded`)}) [sectionTitle]
-               TextMultiline(Message) [body]
+               TextMultiline(Context.Message) [body]
             }
          }
          guard ${entity.plural} empty -> {
@@ -400,8 +400,8 @@ ${flagActions.map(action => `${action}\n`).join('')}   action Delete${singular}(
          guard ${singular} {
             loading -> { Spinner() }
             missing -> { TextMultiline(${taoString(`This ${singularWords} no longer exists.`)}) [body] }
-            error -> Message { TextMultiline(${
-    taoString(`The ${singularWords} could not be loaded: { Message }`)
+            error -> Context { TextMultiline(${
+    taoString(`The ${singularWords} could not be loaded: { Context.Message }`)
   }) [body] }
          }
 ${detailInputs.join('\n')}${detailNumbers.join('')}${detailFlags.join('\n')}

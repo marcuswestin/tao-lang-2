@@ -8,6 +8,7 @@ import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { preludeValidationMessages } from '../validator-src/validators/prelude-validator'
 import { projectValidationMessages } from '../validator-src/validators/project-validator'
 import { testValidationMessages } from '../validator-src/validators/tests-validator'
+import { typeValidationMessages } from '../validator-src/validators/types-validator'
 import { useValidationMessages, validateVisibleDeclarations } from '../validator-src/validators/use-validator'
 import {
   accepts,
@@ -102,6 +103,19 @@ Describe('validator: workspace structure', () => {
       ])
     })
   })
+
+  Test(
+    'requires an explicit import to name the intrinsic read context',
+    rejects(
+      stubApp('view ReadError(Context ReadContext) { render Fixture() }'),
+      typeValidationMessages.unknownType('ReadContext'),
+    ),
+  )
+
+  Test(
+    'accepts a reusable view with the public read context contract',
+    accepts(`use ReadContext from @tao/data\n${stubApp('view ReadError(Context ReadContext) { render Fixture() }')}`),
+  )
 
   Test(
     'rejects primitive declarations outside the pinned prelude',
