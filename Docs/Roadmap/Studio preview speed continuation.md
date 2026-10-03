@@ -1,108 +1,96 @@
 # Studio preview speed continuation
 
-Handoff written 2026-09-29 for the next implementation branch. Start from the committed tip of
-`feat/studio-preview-workspace-reuse`, not from `main`. This document is the handoff for the Studio
-preview latency work; [Tao tooling performance](<Tao tooling performance.md>) contains broader
-language and tooling measurements. Do not treat older CLI benchmarks as edit-to-paint timings.
+Handoff written 2026-10-03 for the successor of `feat/studio-preview-latency-next`. Start a new
+`feat/` branch and worktree from that branch's tip, not from `main`. This document owns the Studio
+preview latency project; [Decisions - Project folder layout](<Tao CLI workflows/Decisions - Project folder layout.md>)
+owns the project folder layout work this project also carries. [Tao tooling performance](<Tao tooling performance.md>)
+holds broader language and tooling measurements; do not treat older CLI benchmarks as edit-to-paint
+timings.
 
 ## Current state
 
-1. `4eb41b8a` reuses a Studio preview `Workspace` across ordinary revisions and uses a syntax-only
-   check for drafts. Its roadmap changes describe remaining incremental compilation work.
-2. `9c86b215` adds browser Studio `--preview-publication on|off`, default `on`. In `off`, the first
-   compile still creates `TaoStudioPublication.ts`; later compiles keep that file byte-identical.
-   Studio sends current cell identities and source versions over the runtime bridge, skips exact
-   publication acknowledgments and their iframe reload retry, and keeps Draw/Edit interaction mode
-   after a Fast Refresh bridge remount. Native/device launches reject `off`. This is an experiment:
-   `off` cannot prove that an iframe applied the exact latest revision and may leave an unnoticed
-   stale preview. Source-action version and occurrence checks remain in place.
-3. The branch includes `main` through `94ec269f`; the integration commit was `65efbbd1`. Before
-   this handoff document, the tree was clean. `./agent check`, `./agent verify-changed`, `./agent
-   verify`, and `./agent unsandboxed finalize` passed. The final `finalize` integrated `main` and
-   verified that exact tree. A real Metro smoke run passed four cases, including publication-off
-   Draw then Code edits without an iframe `load`. An earlier HNReader Feed smoke timeout passed on
-   a complete isolated rerun. None of these runs measured the speed gain. This handoff document
-   has not been verified; the Developer requested a commit and prompt before any further gate.
-4. The branch is deliberately unlanded. Its reviewed merge message is
-   `.artifacts/merge/feat/studio-preview-workspace-reuse.msg`; that ignored artifact does not travel
-   to a fresh worktree, so the successor branch needs its own message and `finalize` result.
+1. The branch carries Next slice steps 1–4 (`709a58700`, `b49ea2df3`, `e36cdd8df`, `25369076f`),
+   then a `WIP: route project .tao state through ProjectLocal` commit, then this handoff. The WIP
+   commit is an untested first pass at the folder layout and fails the tests it has not updated;
+   the decisions document's "Implementation state" says what it does and does not do.
+2. Neither `./agent verify` nor `finalize` has run on this tip; steps 1–4 ran their focused tests
+   and, where the step says so, a real Metro smoke. The branch is unlanded, and
+   landing waits for the Developer's explicit authorization.
+3. The edit-to-paint harness runs with
+   `./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/studio-preview-latency.test.ts <run-id>`.
+   Under the machine's usual load (load average near 100 during this branch) timings are
+   indicative only; record the load beside every number.
+
+## The work, in order
+
+1. **First, together:** preview activation (below, and Next slice step 5) and the project folder
+   layout (the decisions document). They meet at `.tao/local/studio/session.json`, where the active
+   previews persist, so build the layout's `local/` path before or with the activation's
+   persistence.
+2. The rest of step 5: the activation gate, the lagging-cell watchdog, then the sequential-loading
+   measurement.
+3. Next slice steps 6–8, each measured on its own.
+4. Commit reviewed paths, update this document, run `./agent verify-changed`, `./agent verify`,
+   the real Metro smokes, and `./agent unsandboxed finalize`; review the merge message and the full
+   diff; propose landing. Do not land.
+5. The later slices under Next slices stay for after this project lands. When the whole project is
+   finished, remind the Developer to review the syntax and structure of Tao tests and scenarios
+   (Next slices item 6).
+
+## Preview activation, specified
+
+The Developer's decisions: show every preview but render none until the developer activates it;
+each preview has its own toggle, off by default; the active set is per developer and per project.
+
+1. **Every preview starts inactive**, the whole-app cell included. An inactive cell shows its
+   scenario name and a short hint to activate it, and has no iframe, so it loads no bundle and
+   registers no HMR client.
+2. **The toggle** is an icon-only button in each cell's header: a tiny lightning bolt. Active, the
+   bolt is filled a subtle yellow; inactive, it is a grey outline with no fill. It carries
+   `aria-pressed`, and its label and tooltip read "Activate preview" or "Deactivate preview".
+   Deactivating removes the cell's iframe.
+3. **Naming in code.** `StudioActivePreview` (`studio-src/client/StudioApp.ts:139`) already means
+   the selected cell, so the new set needs another name, such as live previews; keep "Activate" as
+   the words the developer sees.
+4. **Persistence.** The set of activated cell ids (`cellId`, `StudioApp.ts:143`) per app lives in
+   `.tao/local/studio/session.json`, read and written by the Studio server: the handshake carries
+   it, and the client reports each change. An id no longer in the manifest is dropped. The
+   selected cell (`StudioApp.ts:133`) and editor tabs (`StudioEditorTabs.ts:147`) move into the same
+   file under the layout decision.
+5. **Fast draw goes**, with its browser setting and its `?taoStudioPreviews` override:
+   `studio-src/client/matrix/StudioPreviewMatrix.ts:23-64` (`connectedCells` at `:62` becomes the
+   activated cells), `StudioApp.ts:526-538`, `StudioShell.ts:25` and `:399` with the
+   `.studio-fast-draw` button, and the tests at `studio-tests/studio-client.test.ts:2066-2070` and
+   `studio-tests/studio-mount-lifecycle.test.ts:39` and `:123`.
+6. **An active cell is never suspended.** `observePreviewVisibility`
+   (`matrix/StudioPreviewConnection.ts:284-311`, called from `StudioPreviewCellView.ts:188`) swaps
+   an off-screen cell to `about:blank` and reloads it on return, and that reload is what registers a
+   cell mid-update. Remove it for active cells;
+   `studio-tooling/studio-smoke/studio-network-simulation.test.ts:121` and `:176` describe it.
+7. **Tests that assume every cell loads** must activate the cells they use, through the toggle or a
+   seeded `session.json`: `studio-smoke/studio-real-app.test.ts`,
+   `studio-smoke/studio-preview-latency.test.ts`, `studio-smoke/studio-datasource-edit.test.ts`,
+   and the Jest matrix tests under `packages/ides/studio/studio-tests/`.
+8. **Proof:** a focused test per behavior (default off, toggle on and off, persistence across a
+   Studio restart, no suspension); then the HNReader race case under real Metro with several cells
+   active, editing while scrolling, with no `RevisionNotFoundError`. Show the Developer a screenshot
+   of both toggle states.
 
 ## Where to look
 
+- `packages/ides/studio/studio-src/client/matrix/`: `StudioPreviewMatrix.ts` (cells, iframes,
+  `src` at `:162` and the whole app at `:238`), `StudioPreviewConnection.ts`,
+  `StudioPreviewCellView.ts`, `StudioPreviewBridge.ts`.
 - `packages/ides/studio/studio-src/StudioPreviewSession.ts`: reused workspace and preview compile.
-- `packages/apps/expo-host/expo-host-src/runtime.ts`: generated file publication, stable marker,
-  browser bootstrap, runtime updates, whole-app updates, and generated preview root.
-- `packages/ides/studio/studio-src/client/matrix/StudioPreviewMatrix.ts` and
-  `StudioPreviewBridge.ts`: retained iframes, runtime messages, acknowledgement behavior.
+- `packages/apps/expo-host/expo-host-src/runtime.ts`: generated file publication, browser bootstrap,
+  runtime and whole-app updates, generated preview root.
 - `packages/apps/runtime/TaoRuntime-src/TR-studio-preview.tsx`: preview mount and applied messages.
 - `packages/ides/studio-tooling/studio-tooling-src/StudioDev.ts` and
-  `packages/cli/dev-cli/dev-cli-src/dev.ts`: launch flag and Metro/Watchman setup.
-- `packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts`: real Metro continuity tests.
-- `packages/compiler/compiler-src/workspace/` and `packages/language/parser/`: parse, link,
-  validation, and compile graph work to inspect before designing partial compilation.
-
-## First actions in the successor branch
-
-1. Create a **new named `feat/` branch and its own worktree from the committed handoff tip**, using
-   the repository's supported worktree/branch workflow. Do not edit this branch or assume its
-   ignored `.artifacts/` files follow you. Run `./agent help` first and inspect the new worktree's
-   `git status --short --branch` and `./agent board` before a machine-wide lane.
-2. Verify the inherited tree before changing code. Run these from the new worktree root, in order:
-
-   ```sh
-   ./agent verify-changed
-   ./agent verify
-   ./agent unsandboxed studio-smoke packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts studio-publication-handoff
-   ```
-
-   `verify` may reuse an exact-tree green record; report that as reuse, not a fresh run. The browser
-   smoke owns its temporary project and Chrome instance. If the new worktree lacks generated parser
-   output and a command says it cannot find `_gen_tao-parser/module`, run `./agent parser-gen`, then
-   retry the original command. On any failure, read the `./agent` report and named log; distinguish
-   a deterministic product failure from host contention. Do not increase a timeout as a diagnosis.
-3. For a human feel test, run one mode at a time and stop Studio with Ctrl+C between trials:
-
-   ```sh
-   ./agent unsandboxed studio Apps/HNReader --preview-publication on
-   ./agent unsandboxed studio Apps/HNReader --preview-publication off
-   ```
-
-   Compare repeated Tao code saves, Draw moves, Code-then-Draw transitions, iframe reload count,
-   interaction state, errors, and whether the preview actually shows each final edit. The first
-   compile always writes the marker in both modes; compare subsequent edits. This flag changes the
-   `./agent unsandboxed studio` launch behavior only for browser Studio, as authorized by the
-   feature request.
-
-## Work to resume after baseline verification
-
-1. **Measure the real edit-to-paint critical path in both modes.** Timestamp editor save,
-   `StudioCompileCoordinator` queue/start/end, workspace parse/link/validate/codegen, generated
-   file publication, Watchman notification, Metro transform/HMR send, iframe module application,
-   React render, and paint. Record warm/cold runs, which `.tao` file changed, on/off flag, machine
-   load, p50/p95, and exact iframe reload count. The older tooling report measured Langium parsing
-   at roughly 14ms for a 37-file graph; it does **not** prove compilation or parsing dominates this
-   loop. Do not pursue a new compiler language without a measured dominant CPU slice.
-2. **Resolve the Code-to-Draw source-version mismatch.** During a preliminary publication-off smoke
-   that performed a Code edit before a Draw move, the frame reported a 463-character source version
-   while the active editor reported 485 characters, and Studio correctly rejected the Draw action
-   as stale. The temporary tab-refresh workaround was removed. The committed smoke performs Draw
-   before Code, so it proves both paths work but not that Code-then-Draw works. Reproduce with
-   exact editor text, disk text, draft/save events, manifest source versions, and frame identity;
-   compare default `on` with `off` before attributing this to the flag. Preserve stale-source and
-   occurrence guards. Add a focused regression only after identifying the real cause.
-3. **Implement the next measured, independently evaluable speed step.** Favor changed-file
-   parse/compile and writing only genuinely changed generated modules when dependency and manifest
-   semantics allow it. A changed `.tao` file can affect imported views, app roots, scenario/fixture
-   manifests, and removed outputs; a naive timestamp skip can silently publish stale code. Explore
-   Langium's in-memory incremental document updates and a dependency-aware invalidation graph in
-   the existing `Workspace` before replacing the parser or compiler language. Consider a fast
-   compile lane with deferred full validation only if diagnostics, rollback, and Draw source safety
-   remain clear. Keep each step separately runnable for a feel test.
-4. After new code, commit only reviewed task paths; run the focused test, `./agent
-   verify-changed`, `./agent verify`, the real Metro smoke, and `./agent unsandboxed finalize`.
-   Read and edit the successor branch's merge message when `finalize` asks. Review the full diff.
-   The successor may propose landing only after the Developer has tried the visible behavior and
-   explicitly authorizes landing. `./agent unsandboxed land` is the landing command.
+  `packages/cli/dev-cli/dev-cli-src/dev.ts`: launch and Metro/Watchman setup.
+- Metro 0.84.6's HMR internals, for the race: `metro/src/HmrServer.js`,
+  `metro/src/IncrementalBundler.js` (`updateGraph`), `metro/src/DeltaBundler/DeltaCalculator.js`
+  (`getDelta`), and `metro/src/Server.js` (bundle requests also call `updateGraph`). Read them in
+  `node_modules`; a Metro patch is a dependency change and needs the Developer's approval.
 
 ## Results from `feat/studio-preview-latency-next`
 
@@ -153,7 +141,7 @@ first edit after launch. Run the harness with
    an update: Studio suspends a cell scrolled out of view to `about:blank` and reloads it when it
    returns, and the harness recorded two suspended HNReader cells resuming during the edit itself,
    so it hits HNReader's many cells and never the one-file app, and a user scrolling while editing
-   can hit it too. Fixing it means patching Metro or reloading a cell that falls out of sync. The
+   can hit it too. Step 5 of the next slice fixes it in Studio, without patching Metro. The
    harness waits for cells to stop loading before its first edit and records every cell load in its
    failure diagnostics.
 5. **Fast draw.** A toolbar toggle beside the mode button connects only the first scenario's preview,
@@ -165,7 +153,7 @@ first edit after launch. Run the harness with
 Each slice is measured on its own with the latency harness, so each gain is attributable.
 
 1. **Next slice**, in this order. The first two are fixes, because an edit that blanks the preview or
-   throws cannot be timed. Steps 3, 6, and 7 are experiments: measure each and keep only the ones that
+   throws cannot be timed. Steps 3, 7, and 8 are experiments: measure each and keep only the ones that
    help.
    1. Done: fix the blank preview after editing the datasource file (`Data.tao`) by reseeding
       fixtures when Fast Refresh rebinds a store.
@@ -186,14 +174,45 @@ Each slice is measured on its own with the latency harness, so each gain is attr
       Not timed: the machine ran at load average ~100, and the HNReader cases hit the Metro race
       above. A Jest test proves the view renders once across a new config while the Lens reports
       both revisions.
-   5. Cache emitted modules per file, reusing a module whose source and dependencies did not
+   5. Render only the previews the developer activates, which removes the Metro HMR race above.
+      Studio lists every scenario's preview, but none renders until its own Activate toggle is on,
+      and each starts off; [Preview activation, specified](#preview-activation-specified) has the
+      details. The active set is per developer and per project, so it lives in
+      `.tao/local/studio/session.json` under
+      [Decisions - Project folder layout](<Tao CLI workflows/Decisions - Project folder layout.md>).
+      Fast draw, which connects only the first scenario's preview, goes, along with its
+      browser setting and its `?taoStudioPreviews` override: activating one preview does the same.
+      An active preview keeps its iframe when scrolled out of view, so scrolling no longer registers
+      a cell mid-update. Activating a preview while an update is in
+      flight waits, with a timeout, until every connected cell has applied it. A cell still behind
+      the latest published revision a few seconds after the others reloads once, the backstop for
+      any registration that still overlaps an update. Patching Metro was ruled out: making
+      `IncrementalBundler.updateGraph` fall back to the graph's latest revision stops the
+      `RevisionNotFoundError`, but `DeltaCalculator.getDelta` gives pending changes to whichever
+      caller asks first, and a cell's bundle request asks too (`Server.js`), so the cells already
+      connected would receive an empty update and silently miss the edit. A correct patch keeps a
+      per-graph log of deltas so each client group catches up from its own revision: a fork of
+      Metro's bundler internals to carry across upgrades. Retrying after `RevisionNotFoundError`
+      was ruled out for the same reason: a retry from the latest revision delivers an edit two HMR
+      updates raced over, but not one a bundle request took first, and a resuming cell's bundle
+      request is this race's trigger.
+
+      Then measure loading active previews one at a time, in order, against all at once. Today
+      Studio sets every cell's `src` together (`StudioPreviewMatrix.ts`); the first cell paints
+      first only because the cells, same-site frames in one renderer, execute one bundle each on a
+      shared main thread. Expected, inferred rather than measured: the first preview paints sooner,
+      since it no longer shares the thread with other cells parsing the same bundle; the last
+      paints at about the same time, or a little later where downloads stop overlapping; Studio's
+      own UI stays responsive between cells; and fewer cells register with Metro at once. Keep it if
+      the first preview is faster and the last is no slower than noise.
+   6. Cache emitted modules per file, reusing a module whose source and dependencies did not
       change. Expected to save most of the 50ms emit phase on a one-file edit. It is compiler-side
       and independent of the other steps, so it can move or run in parallel.
-   6. Let a refreshed design reach the running app. `RuntimeAppDefinition.design` caches the design once
+   7. Let a refreshed design reach the running app. `RuntimeAppDefinition.design` caches the design once
       per app object (`TR-navigation-app.ts`), so today only a new app object, built when the app shell
       re-runs, shows a design edit.
-   7. Re-render only what a design edit affects: a design store versioned per color and per style, with
-      each element subscribing to the names its styles resolved. It builds on step 6, whose
+   8. Re-render only what a design edit affects: a design store versioned per color and per style, with
+      each element subscribing to the names its styles resolved. It builds on step 7, whose
       measurement decides whether it is worth doing. It pays off only with a delivery path that skips
       re-running the app shell: either the generated design module accepts its own hot update and
       replaces the store's values, or Studio sends a design change over the runtime bridge.
@@ -239,13 +258,16 @@ Each slice is measured on its own with the latency harness, so each gain is attr
    Internal probes that observe tags without an index (`__tao_navigation_title`, ready and receipt
    markers) must stay unique or name an occurrence. Today `[n]` exists only in `select #tag[n]`;
    whether other steps accept it is a language decision for the Developer.
+6. **When this whole project is finished: review test and scenario syntax.** The Developer reviews the
+   syntax and structure of Tao tests and scenarios as a whole.
 
 ## Completion bar
 
-The successor can report completion when it has a committed, clean, independently runnable branch;
-repeatable edit-to-paint numbers for both flag modes; a proven explanation and fix (or explicit
-baseline classification) for Code-then-Draw; no accidental iframe reload on compatible edits;
-source-action safety retained; focused, repository, and real Metro evidence for the exact tip; a
-reviewed merge message and successful `finalize`; and a concise statement of the measured speed
-gain and remaining dominant slice. Do not report test success or a stable marker as a measured
-latency improvement. Landing remains a separate Developer decision.
+The successor can report completion when it has a committed, clean branch with: previews inactive
+by default behind their toggles, persisted per developer and project; no `RevisionNotFoundError`
+in the HNReader race case under real Metro; the folder layout of the decisions document, with its
+migration and tests; each of steps 5–8 measured, kept or dropped on its numbers; source-action
+safety retained; focused, repository, and real Metro evidence for the exact tip; a reviewed merge
+message and successful `finalize`; and a concise statement of the measured gain and the remaining
+dominant slice. Do not report test success as a measured latency improvement. Landing remains a
+separate Developer decision.
