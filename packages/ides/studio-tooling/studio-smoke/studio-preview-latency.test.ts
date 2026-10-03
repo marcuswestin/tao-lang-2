@@ -100,9 +100,9 @@ type LatencyProject = {
 const hnreaderRoot = Repo.resolvePath('Apps/HNReader')
 
 /**
- * A view beside HNReader's own. Editing HNReader.tao itself re-executes the module that declares its
- * datasources, and Fast Refresh then rebinds their stores under fixture handles the cells still
- * hold, which blanks the preview; that failure is tracked separately from this measurement.
+ * A view beside HNReader's own, so the measurement times an ordinary view edit. Editing Data.tao
+ * re-executes its datasource declarations and every cell reseeds its fixture, a cost measured
+ * separately from this one.
  */
 const hnreaderProbeSource = (label: string) =>
   `use Col, Text from @tao/ui

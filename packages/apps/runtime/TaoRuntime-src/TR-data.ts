@@ -684,6 +684,7 @@ export const DataControls = {
 registerRuntimeCaptureDomain({
   capture: () => captureDataSchemas() as TaoRuntimeJson,
   domain: 'data',
+  module: 'TR-data',
   restore: value => restoreDataSchemas(value as unknown as TaoDataCapture),
   version: 1,
 })

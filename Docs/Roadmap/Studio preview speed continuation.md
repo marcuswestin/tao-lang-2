@@ -134,10 +134,13 @@ first edit after launch. Run the harness with
    the byte-stable marker's first-compile versions with the new revision, so the next Draw action was
    correctly rejected as stale. The bootstrap response now carries its own revision's versions and
    never replaces a newer applied revision. The real-app smoke performs Draw after Code.
-4. **Observed but not fixed.** Editing the file that declares HNReader's datasources (then
-   `HNReader.tao`, now `Data.tao`) blanks the preview in both modes: Fast
-   Refresh reconfigures the datasource declaration, which clears store handles, while the fixture
-   hook's applied guard skips re-seeding. The harness edits a Studio view beside it instead. In two of
+4. **Edit failures.** Editing the file that declares HNReader's datasources (then `HNReader.tao`,
+   now `Data.tao`) blanked the preview in both modes: Fast Refresh rebinds each store to a new
+   declaration, which starts its cell overlay empty, while the fixture hook applied only once. The hook
+   now reseeds when a store's declaration changes. Editing runtime source while Studio ran raised
+   `runtime capture domain 'navigation' is registered exactly once` in every cell, because a hot
+   reload re-ran the module's top-level registration; a module now replaces its own registration. The
+   harness still edits a Studio view, so it times an ordinary edit. Not fixed: in two of
    seven HNReader measurement cases one edit never painted: once Metro sent `update-start` with nothing
    after it for 30s, once the frame's document was replaced without an iframe `load` event. Neither
    reproduced in the next runs; the harness now records Metro's non-update messages for the next one.
@@ -152,10 +155,10 @@ Each slice is measured on its own with the latency harness, so each gain is attr
 1. **Next slice**, in this order. The first two are fixes, because an edit that blanks the preview or
    throws cannot be timed. Steps 3, 6, and 7 are experiments: measure each and keep only the ones that
    help.
-   1. Fix the blank preview after editing the datasource file (`Data.tao`): re-seed fixtures when
-      Fast Refresh re-runs datasource declarations.
-   2. Fix the `runtime capture domain 'navigation' is registered exactly once` error a hot reload
-      raises from the module-level registration in `TR-navigation-app.ts`.
+   1. Done: fix the blank preview after editing the datasource file (`Data.tao`) by reseeding
+      fixtures when Fast Refresh rebinds a store.
+   2. Done: fix the `runtime capture domain 'navigation' is registered exactly once` error a hot
+      reload raised from the module-level registration in `TR-navigation-app.ts`.
    3. Bundle a preview-only manifest. The preview reads only `scenarios` and `fixtures` from
       `TaoStudioManifest.ts`; Studio uses the compiler's manifest in process. Emitting just those, without
       source ranges, keeps the file byte-identical across ordinary edits, so a length-changing edit or a

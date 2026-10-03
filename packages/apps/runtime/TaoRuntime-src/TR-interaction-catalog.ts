@@ -531,6 +531,7 @@ registerRuntimeCaptureDomain({
       outline: interactionOutline.read(),
     }) as unknown as TaoRuntimeJson,
   domain: 'interaction',
+  module: 'TR-interaction-catalog',
   version: 2,
 })
 

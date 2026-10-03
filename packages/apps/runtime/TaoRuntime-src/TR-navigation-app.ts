@@ -764,6 +764,7 @@ function restoreNavigationApps(value: TaoRuntimeJson): void {
 registerRuntimeCaptureDomain({
   capture: captureNavigationApps,
   domain: 'navigation',
+  module: 'TR-navigation-app',
   restore: restoreNavigationApps,
   version: 1,
 })
