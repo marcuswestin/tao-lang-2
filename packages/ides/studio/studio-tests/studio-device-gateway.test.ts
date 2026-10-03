@@ -240,7 +240,7 @@ Describe('Studio device gateway handshake', () => {
   })
 
   Test('names every malformed handshake and enforces the hello limit and timeout', async () => {
-    await withGateway({ handshakeTimeoutMs: 60 }, async env => {
+    await withGateway({}, async env => {
       const cases: Array<[string, string | Record<string, unknown>, TaoStudioDeviceRejectCode]> = [
         ['unknown metro port', hello(env, { metroPort: 1 }), 'unknown-session'],
         ['unknown session id', hello(env, { sessionId: 'nope' }), 'unknown-session'],
@@ -260,6 +260,9 @@ Describe('Studio device gateway handshake', () => {
         device.sendText(typeof frame === 'string' ? frame : JSON.stringify(frame))
         Expect([label, (await device.rejected()).code]).toEqual([label, code])
       }
+    })
+    // Only the silent connection needs a short expiry; input diagnostics must not race it.
+    await withGateway({ handshakeTimeoutMs: 60 }, async env => {
       const silent = new TestDevice(env.gateway.port)
       await silent.open()
       Expect((await silent.rejected()).code).toBe('timeout')

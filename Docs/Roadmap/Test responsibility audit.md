@@ -269,8 +269,8 @@ Independent review accepted both changes.
 All 707 authored test files have received fresh serial reads and independent package reviews.
 The pass discards 317 runnable cases; seven unchanged-proof consolidations receive no removal
 credit. Four whole files are deleted, leaving 703 authored files. Compared with the follow-up
-baseline, their source contains 1394 fewer uppercase `Expect` call sites and 5448 fewer lines
-(189819 to 184371). These literal counts exclude lowercase Jest and Tao `expect` calls and do
+baseline, their source contains 1394 fewer uppercase `Expect` call sites and 5445 fewer lines
+(189819 to 184374). These literal counts exclude lowercase Jest and Tao `expect` calls and do
 not represent runtime assertion counts. Seventy-three executable removal-candidate comments
 retain uncertain overlaps and their coverage tradeoffs. No deletion quota or exact parity
 claim is imposed.
@@ -399,15 +399,27 @@ compared with the prior 263 Jest cases. The complete deterministic tooling packa
 cases (`2026-10-03T16-16-43-036Z-54447-9a39b90a`) and typecheck passes
 (`2026-10-03T16-16-23-807Z-52880`).
 
-Parser and subsequent package changes await commit because staging was denied at the shared
-Git metadata path; the environment ledger records the obstruction. The named host smoke command
-also refused before dispatch while still sandboxed: no browser/native process started, so changed
-smoke files have no new host acceptance. Both limitations are preserved without retrying or
-bypassing denied paths. The final `finalize --check` preview refuses the dirty tree
-(`2026-10-03T20-10-47-125Z-26841`); it makes no changes. Reviewed edits remain uncommitted
-and the branch is not ready to land. Only the earlier shared chunk is committed. No new speed comparison has been collected. Gate durations under parallel load are correctness
+Parser and subsequent package changes are committed at `d5f602442`. After the Developer changed
+the task's approval setting and authorized a retry, the guarded script passed `verify-changed`
+(`2026-10-03T21-18-30-926Z-35801-ac5f8fb7`), rechecked all 472 reviewed paths, and committed
+only those paths. Git inspection confirmed a clean worktree and index. The resolved metadata
+denial is archived in the environment ledger; repository permission reach is unchanged.
+The earlier named host smoke refused before dispatch while still sandboxed: no browser/native
+process started, so changed smoke files have no new host acceptance. Host verification and
+finalization remain outstanding; the earlier `finalize --check` dirty-tree refusal
+(`2026-10-03T20-10-47-125Z-26841`) is historical evidence. No landing has been attempted.
+No new speed comparison has been collected. Gate durations under parallel load are correctness
 metadata only; no faster-successful-run claim is made. A separate recurring repository pass is
 recommended for cross-cutting environment, routing and host-operation gaps recorded here.
+
+The permission-recovery documentation gate exposed a malformed-handshake fixture racing its
+shared 60 ms expiry under contention (`2026-10-03T21-20-31-033Z-50300-27118856`); the unchanged
+file passed all 27 cases in scoped diagnosis. The malformed-input checks now use the normal
+deadline, while a separate sequential fixture retains the short expiry for a silent connection.
+All assertions and cases remain, cleanup is unchanged, independent review found no gaps, and
+the amended file passes all 27 cases (`2026-10-03T21-26-15-490Z-94546-500736ab`). This is a
+fixture correction, not another removal or a timing comparison. Final follow-up gate evidence
+is recorded with the other centralized run records.
 
 The developer CLI changed gate stopped on an unchanged Studio legacy-lock process case; its
 complete isolated file then passed 16 cases. The aborted run left 49 checks unrun and establishes
