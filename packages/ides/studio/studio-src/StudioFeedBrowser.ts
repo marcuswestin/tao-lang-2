@@ -45,7 +45,7 @@ export const StudioFeedBrowser = {
   build(
     manifest: StudioPreviewManifestV2,
     options: Readonly<{
-      activeScenarioId?: string
+      focusedScenarioId?: string
       liveRows?: Readonly<Record<string, readonly StudioFeedInventoryRow[]>>
       seed: string
     }>,
@@ -57,12 +57,12 @@ export const StudioFeedBrowser = {
     const declarations = manifest.generationDeclarations.filter(
       (declaration): declaration is EntityGenerationDeclaration => declaration.kind === 'entity',
     )
-    const scenario = options.activeScenarioId === undefined
+    const scenario = options.focusedScenarioId === undefined
       ? manifest.scenarios[0]
-      : manifest.scenarios.find(candidate => candidate.scenarioId === options.activeScenarioId)
+      : manifest.scenarios.find(candidate => candidate.scenarioId === options.focusedScenarioId)
     Assert.input(
-      options.activeScenarioId === undefined || scenario !== undefined,
-      `Studio feed scenario does not exist: ${options.activeScenarioId}.`,
+      options.focusedScenarioId === undefined || scenario !== undefined,
+      `Studio feed scenario does not exist: ${options.focusedScenarioId}.`,
     )
     const promotions = new Map<StudioFeedItemId, Promotion>()
     const entities = declarations.map(declaration => {

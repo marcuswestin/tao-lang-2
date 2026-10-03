@@ -10,6 +10,7 @@ import {
 } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { type StartedStudioNative, StudioNative } from '../studio-tooling-src/StudioNative'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 import { exerciseStudioFeed } from './studio-feed-journey'
 
 const scrollingTail = Array.from({ length: 80 }, (_, index) => `// scroll proof ${index + 1}`).join('\n')
@@ -131,6 +132,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       browser = await StudioCdp.launchChrome({ artifactRoot: artifactParent })
       await browser.setViewport(1_440, 900)
       await browser.goto(projectUrl)
+      await activateSmokePreviews(browser)
       await browser.waitFor(
         `(() => {
         const shell = document.querySelector('.studio-shell')
@@ -206,7 +208,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         const rect = frame.getBoundingClientRect()
         return { height: rect.height, width: rect.width }
       })()`)
-      await browser.clickAtOffset('.studio-preview-cell .studio-preview-activation-shield', {
+      await browser.clickAtOffset('.studio-preview-cell .studio-preview-focus-shield', {
         x: transformedFrame.width * 0.72,
         y: transformedFrame.height * 0.62,
       })
@@ -468,7 +470,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await waitForCompileAfter(browser, compileRevision)
 
       const generatedSketchPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
-      const sketchCatalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)
+      const sketchCatalogPath = FS.resolvePath('.tao/store/studio/sketches.jsonc', projectRoot)
       // A 360-pixel board needs a canvas column wider than the Design preset leaves at 1440; a
       // designer's display gives the sketch room, and the pointer gesture below is checked against it.
       await browser.setViewport(1_920, 1_080)
@@ -533,6 +535,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       )).toBe(true)
 
       await browser.goto(projectUrl)
+      await activateSmokePreviews(browser)
       await enterDrawPreset(browser)
       await browser.waitFor(
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${persistedSketch.id}"]`)})
@@ -608,6 +611,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(snappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
 
       await browser.goto(projectUrl)
+      await activateSmokePreviews(browser)
       await enterDrawPreset(browser)
       await browser.waitFor(
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})

@@ -10,7 +10,7 @@ Installable agent skills that let an agent create, edit, run, test, and ship a T
    - `.agents/skills/<name>/` (canonical copy, not symlink).
    - `AGENTS.md` (the `tao-project` skill body, with a skills index) and `CLAUDE.md` containing `@AGENTS.md`.
    - `.claude/skills/<name>` → copy of the same folders. Cursor and Codex read `.agents/skills` directly.
-   - `.tao-project/skills.version` stamped with the skill package version.
+   - `skillsVersion` in `.tao/store/lock.jsonc`, stamped with the skill package version.
 4. Proof: `packages/ai/tao-skills/skills-tests/skills-snippets.test.ts` extracts every ` ```tao ` fence from every skill, drops each into a scratch copy of the `Pantry` starter (or a fenced file path if the fence names one), and runs `tao check`. A snippet that does not check fails the build. The byte-for-byte starter comparison in `test-starter-lowering.ts` gains the installed skill files.
 
 ## Skills

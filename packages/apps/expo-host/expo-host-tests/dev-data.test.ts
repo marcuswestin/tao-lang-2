@@ -1,5 +1,5 @@
 import TR from '@runtime/TR'
-import { CLI, Errors, FS, Platform, Repo, Time } from '@shared'
+import { CLI, Errors, FS, Platform, ProjectLocal, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   type DevDataBootstrap,
@@ -8,7 +8,6 @@ import {
   resolveDevDataBootstrap,
 } from '../../stdlib/@tao/data/providers/dev/Dev'
 import {
-  DEV_DATA_ROOT_PATH,
   devDataAppKey,
   devDataEnvironment,
   devDataManifest,
@@ -43,7 +42,6 @@ Describe('dev data bootstrap', () => {
       TAO_DEV_DATA_CAPABILITY: testCapability,
       TAO_DEV_DATA_PORT: '4321',
     })
-    Expect(DEV_DATA_ROOT_PATH).toBe('.artifacts/user/dev-data')
   })
 
   Test('resolves the client bootstrap from the manifest the server wrote and the bundle host', () => {
@@ -77,6 +75,148 @@ Describe('dev data bootstrap', () => {
 // own Bun.serve instance. These integration tests deliberately retain process-level concurrency
 // inside their assertions, but own Bun servers and WebSocket clients serially at the file boundary.
 Describe('dev data server', () => {
+  ServerTest('keeps registered apps in their own project without the routing hash or global fallback', async () => {
+    const rootDir = await mkTestDir('tao-dev-data-fallback-')
+    const firstProject = await mkTestDir('tao-dev-data-project-')
+    const secondProject = await mkTestDir('tao-dev-data-project-')
+    const server = await DevDataServer.start({ rootDir })
+    const firstApp = await server.registerProject(firstProject, 'Notes')
+    const secondApp = await server.registerProject(secondProject, 'Notes')
+    const first = DevProvider(() => host(server.port, firstApp, server.capability))
+      .connect({ configuration: {}, schema, storageKey: 'Shared Notes' })
+    const second = DevProvider(() => host(server.port, secondApp, server.capability))
+      .connect({ configuration: {}, schema, storageKey: 'Shared Notes' })
+    try {
+      Expect(firstApp).not.toBe(secondApp)
+      const staleLock = ProjectLocal.cacheResolve('dev-data/locks/Notes/Shared%20Notes.json.lock', firstProject)
+      await FS.symlink(FS.resolvePath('crashed-owner.json', firstProject), staleLock)
+      Expect(await first.load()).toBeUndefined()
+      Expect(await second.load()).toBeUndefined()
+      await first.save('{"first":true}')
+      Expect(await second.load()).toBeUndefined()
+      await second.save('{"second":true}')
+
+      const filename = 'Shared%20Notes.json'
+      Expect(await FS.readJson(ProjectLocal.localResolve(`dev-data/Notes/${filename}`, firstProject))).toEqual({
+        format: 'tao-dev-data-state-v1',
+        revision: 1,
+        snapshot: '{"first":true}',
+      })
+      Expect(await FS.readJson(ProjectLocal.localResolve(`dev-data/Notes/${filename}`, secondProject))).toEqual({
+        format: 'tao-dev-data-state-v1',
+        revision: 1,
+        snapshot: '{"second":true}',
+      })
+      Expect(await FS.exists(FS.resolvePath(`${firstApp}/${filename}`, rootDir))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath(`${secondApp}/${filename}`, rootDir))).toBe(false)
+      Expect(await FS.listDir(ProjectLocal.localResolve('dev-data/Notes', firstProject))).toEqual([filename])
+      Expect(await FS.listDir(ProjectLocal.cacheResolve('dev-data/locks/Notes', firstProject))).toEqual([])
+      Expect(await FS.listDir(ProjectLocal.cacheResolve('dev-data/tmp/Notes', firstProject))).toEqual([])
+    } finally {
+      first.close?.()
+      second.close?.()
+      await server.stop()
+    }
+  })
+
+  ServerTest('serializes registered project writers across independent authorities', async () => {
+    const rootDir = await mkTestDir('tao-dev-data-fallback-')
+    const projectRoot = await mkTestDir('tao-dev-data-project-')
+    const firstServer = await DevDataServer.start({ rootDir })
+    const secondServer = await DevDataServer.start({ rootDir })
+    const firstApp = await firstServer.registerProject(projectRoot, 'Notes')
+    const secondApp = await secondServer.registerProject(projectRoot, 'Notes')
+    const first = DevProvider(() => host(firstServer.port, firstApp, firstServer.capability))
+      .connect({ configuration: {}, schema, storageKey: 'Notes' })
+    const second = DevProvider(() => host(secondServer.port, secondApp, secondServer.capability))
+      .connect({ configuration: {}, schema, storageKey: 'Notes' })
+    try {
+      Expect(firstApp).toBe(secondApp)
+      Expect(await Promise.all([first.load(), second.load()])).toEqual([undefined, undefined])
+      const raced = await Promise.allSettled([first.save('{"writer":1}'), second.save('{"writer":2}')])
+      Expect(raced.filter(result => result.status === 'fulfilled')).toHaveLength(1)
+      Expect(raced.filter(result => result.status === 'rejected')).toHaveLength(1)
+      const state = await FS.readJson<{ revision: number }>(
+        ProjectLocal.localResolve('dev-data/Notes/Notes.json', projectRoot),
+      )
+      Expect(state.revision).toBe(1)
+    } finally {
+      first.close?.()
+      second.close?.()
+      await firstServer.stop()
+      await secondServer.stop()
+    }
+  })
+
+  ServerTest("moves only an app's legacy snapshots into project local storage before serving them", async () => {
+    const rootDir = await mkTestDir('tao-dev-data-old-routing-')
+    const legacyRoot = await mkTestDir('tao-dev-data-old-studio-')
+    const projectRoot = await mkTestDir('tao-dev-data-project-')
+    const app = devDataAppKey(projectRoot, 'Notes')
+    const otherApp = devDataAppKey('/another/project', 'Notes')
+    const oldAppDir = FS.resolvePath(app, legacyRoot)
+    const fallbackAppDir = FS.resolvePath(app, rootDir)
+    await FS.mkdir(oldAppDir)
+    await FS.mkdir(fallbackAppDir)
+    await FS.writeJson(FS.resolvePath('Notes.json', oldAppDir), {
+      format: 'tao-dev-data-state-v1',
+      revision: 4,
+      snapshot: '{"old":true}',
+    })
+    await FS.writeJson(FS.resolvePath('Conflict.json', oldAppDir), {
+      format: 'tao-dev-data-state-v1',
+      revision: 2,
+      snapshot: '{"oldConflict":true}',
+    })
+    await FS.writeText(FS.resolvePath('unrecognized.txt', oldAppDir), 'keep')
+    await FS.symlink(FS.resolvePath('Notes.json', oldAppDir), FS.resolvePath('Linked.json', oldAppDir))
+    await FS.writeJson(FS.resolvePath('Settings.json', fallbackAppDir), {
+      format: 'tao-dev-data-state-v1',
+      revision: 3,
+      snapshot: '{"fallback":true}',
+    })
+    await FS.mkdir(FS.resolvePath(otherApp, legacyRoot))
+    await FS.writeText(FS.resolvePath(`${otherApp}/Notes.json`, legacyRoot), '{"foreign":true}')
+    const localAppDir = ProjectLocal.localResolve('dev-data/Notes', projectRoot)
+    await FS.mkdir(localAppDir)
+    await FS.writeJson(FS.resolvePath('Conflict.json', localAppDir), {
+      format: 'tao-dev-data-state-v1',
+      revision: 8,
+      snapshot: '{"local":true}',
+    })
+
+    const server = await DevDataServer.start({ legacyRootDirs: [legacyRoot], rootDir })
+    const connections = ['Notes', 'Conflict', 'Settings'].map(storageKey =>
+      DevProvider(() => host(server.port, app, server.capability))
+        .connect({ configuration: {}, schema, storageKey })
+    )
+    try {
+      Expect(await server.registerProject(projectRoot, 'Notes')).toBe(app)
+      Expect(await Promise.all(connections.map(connection => connection.load()))).toEqual([
+        '{"old":true}',
+        '{"local":true}',
+        '{"fallback":true}',
+      ])
+      Expect(await FS.readJson(FS.resolvePath('Notes.json', localAppDir))).toEqual({
+        format: 'tao-dev-data-state-v1',
+        revision: 4,
+        snapshot: '{"old":true}',
+      })
+      Expect(await FS.isFile(FS.resolvePath('Settings.json', localAppDir))).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('Notes.json', oldAppDir))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('Settings.json', fallbackAppDir))).toBe(false)
+      Expect(await FS.isFile(FS.resolvePath('Conflict.json', oldAppDir))).toBe(true)
+      Expect(await FS.isFile(FS.resolvePath('unrecognized.txt', oldAppDir))).toBe(true)
+      Expect(await FS.isSymbolicLink(FS.resolvePath('Linked.json', oldAppDir))).toBe(true)
+      Expect(await FS.isFile(FS.resolvePath(`${otherApp}/Notes.json`, legacyRoot))).toBe(true)
+    } finally {
+      for (const connection of connections) {
+        connection.close?.()
+      }
+      await server.stop()
+    }
+  })
+
   ServerTest('answers the probe and refuses streams without a well-formed app key', async () => {
     const server = await DevDataServer.start({ rootDir: await mkTestDir('tao-dev-data-') })
     try {

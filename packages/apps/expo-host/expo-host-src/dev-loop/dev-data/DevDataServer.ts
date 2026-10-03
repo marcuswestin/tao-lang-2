@@ -1,10 +1,11 @@
-import { CLI, Errors, FS, Json, Platform, Time } from '@shared'
-import { DevDataProtocol } from './DevDataBootstrap'
+import { CLI, Errors, FS, Json, Platform, ProjectLocal, Time } from '@shared'
+import { devDataAppKey, DevDataProtocol, devDataSafeAppName } from './DevDataBootstrap'
 
 /** The capability-authenticated, filesystem-serialized authority behind the `Dev` datasource. */
 export type DevDataServerOptions = {
   capability?: string
   hostname?: string
+  legacyRootDirs?: readonly string[]
   log?: (line: string) => void
   port?: number
   rootDir: string
@@ -22,6 +23,7 @@ type SocketData = { app: string; key: string; topic: string }
 type Socket = Bun.ServerWebSocket<SocketData>
 type DurableStream = { revision: number; snapshot: string | undefined }
 type Stream = DurableStream & { data: SocketData; queue: Promise<unknown> }
+type ProjectStorage = { dataDir: string; lockDir: string; temporaryDir: string }
 
 const appNamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
 const capabilityPattern = /^[A-Za-z0-9_-]{32,256}$/
@@ -35,12 +37,15 @@ export class DevDataServer {
   readonly port: number
   readonly rootDir: string
   readonly #log: (line: string) => void
+  readonly #legacyRootDirs: readonly string[]
   readonly #server: Bun.Server<SocketData>
   readonly #streams = new Map<string, Stream>()
+  readonly #projects = new Map<string, ProjectStorage>()
   readonly #refreshTimer: ReturnType<typeof setInterval>
 
   private constructor(options: DevDataServerOptions) {
     this.rootDir = options.rootDir
+    this.#legacyRootDirs = [options.rootDir, ...(options.legacyRootDirs ?? [])]
     this.capability = options.capability
       ?? `${Platform.randomUUID().replaceAll('-', '')}${Platform.randomUUID().replaceAll('-', '')}`
     if (!capabilityPattern.test(this.capability)) {
@@ -71,6 +76,53 @@ export class DevDataServer {
   static async start(options: DevDataServerOptions): Promise<DevDataServer> {
     await FS.mkdir(options.rootDir)
     return new DevDataServer(options)
+  }
+
+  /** Register an app before publishing its manifest; its files then stay in that project's .tao. */
+  async registerProject(projectRoot: string, appName: string): Promise<string> {
+    await ProjectLocal.prepare(projectRoot)
+    const app = devDataAppKey(projectRoot, appName)
+    const safeName = devDataSafeAppName(appName)
+    const storage = {
+      dataDir: ProjectLocal.localResolve(`dev-data/${safeName}`, projectRoot),
+      lockDir: ProjectLocal.cacheResolve(`dev-data/locks/${safeName}`, projectRoot),
+      temporaryDir: ProjectLocal.cacheResolve(`dev-data/tmp/${safeName}`, projectRoot),
+    }
+    await Promise.all([FS.mkdir(storage.dataDir), FS.mkdir(storage.lockDir), FS.mkdir(storage.temporaryDir)])
+    await this.#migrateLegacyApp(app, storage)
+    this.#projects.set(app, storage)
+    return app
+  }
+
+  async #migrateLegacyApp(app: string, storage: ProjectStorage): Promise<void> {
+    for (const root of this.#legacyRootDirs) {
+      const oldAppDir = FS.resolvePath(app, root)
+      if (!await FS.isDirectory(oldAppDir) || await FS.isSymbolicLink(oldAppDir)) {
+        continue
+      }
+      for (const entry of await FS.listDir(oldAppDir)) {
+        if (!entry.endsWith('.json') || entry === '.json') {
+          continue
+        }
+        const source = FS.resolvePath(entry, oldAppDir)
+        if (!await FS.isFile(source) || await FS.isSymbolicLink(source)) {
+          continue
+        }
+        const destination = FS.resolvePath(entry, storage.dataDir)
+        const destinationLock = FS.resolvePath(`${entry}.lock`, storage.lockDir)
+        const sourceLock = `${source}.lock`
+        await withFileLock(destinationLock, async () => {
+          await withFileLock(sourceLock, async () => {
+            if (
+              await FS.isFile(source) && !await FS.isSymbolicLink(source)
+              && !await FS.exists(destination) && !await FS.isSymbolicLink(destination)
+            ) {
+              await FS.move(source, destination)
+            }
+          })
+        })
+      }
+    }
   }
 
   async stop(): Promise<void> {
@@ -194,6 +246,7 @@ export class DevDataServer {
       const next = { revision: current.revision + 1, snapshot }
       await writeAtomically(
         this.#pathFor(data),
+        this.#temporaryPath(data),
         JSON.stringify({
           format: stateFormat,
           revision: next.revision,
@@ -236,11 +289,26 @@ export class DevDataServer {
   }
 
   #pathFor(data: SocketData): string {
-    return FS.resolvePath(`${data.app}/${encodeURIComponent(data.key)}.json`, this.rootDir)
+    const filename = `${encodeURIComponent(data.key)}.json`
+    const project = this.#projects.get(data.app)
+    return project === undefined
+      ? FS.resolvePath(`${data.app}/${filename}`, this.rootDir)
+      : FS.resolvePath(filename, project.dataDir)
   }
 
   #lockPath(data: SocketData): string {
-    return `${this.#pathFor(data)}.lock`
+    const project = this.#projects.get(data.app)
+    return project === undefined
+      ? `${this.#pathFor(data)}.lock`
+      : FS.resolvePath(`${encodeURIComponent(data.key)}.json.lock`, project.lockDir)
+  }
+
+  #temporaryPath(data: SocketData): string {
+    const project = this.#projects.get(data.app)
+    const filename = `${encodeURIComponent(data.key)}.json.${Platform.randomUUID()}.tmp`
+    return project === undefined
+      ? FS.resolvePath(filename, FS.dirname(this.#pathFor(data)))
+      : FS.resolvePath(filename, project.temporaryDir)
   }
 }
 
@@ -334,8 +402,7 @@ async function lockTarget(lockPath: string): Promise<string | undefined> {
     : undefined
 }
 
-async function writeAtomically(path: string, content: string): Promise<void> {
-  const temporaryPath = `${path}.${Platform.randomUUID()}.tmp`
+async function writeAtomically(path: string, temporaryPath: string, content: string): Promise<void> {
   try {
     await FS.writeText(temporaryPath, content)
     await FS.move(temporaryPath, path)

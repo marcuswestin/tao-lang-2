@@ -7,7 +7,7 @@ import type { StudioPreviewConnection } from './StudioPreviewConnection'
 const studioCanvasChromeSelector = '[data-tao-studio-canvas-chrome]'
 
 /** Input selection is separate from the preview used for inspection and source actions. */
-export function mountPreviewActivation(host: HTMLElement, previews: readonly StudioPreviewConnection[]): {
+export function mountPreviewFocus(host: HTMLElement, previews: readonly StudioPreviewConnection[]): {
   reconcile: () => void
   clear: () => void
   dispose: () => void
@@ -29,14 +29,14 @@ export function mountPreviewActivation(host: HTMLElement, previews: readonly Stu
   const panning = (): boolean => host.dataset['canvasPanReady'] === 'true' || host.dataset['canvasPanning'] === 'true'
   const update = (): void => {
     for (const [preview, entry] of entries) {
-      const active = preview === selected
-      entry.iframe.style.pointerEvents = active ? entry.pointerEvents : 'none'
-      entry.iframe.tabIndex = active ? entry.tabIndex : -1
-      if (!active && document.activeElement === entry.iframe) {
+      const focused = preview === selected
+      entry.iframe.style.pointerEvents = focused ? entry.pointerEvents : 'none'
+      entry.iframe.tabIndex = focused ? entry.tabIndex : -1
+      if (!focused && document.activeElement === entry.iframe) {
         entry.iframe.blur()
       }
-      entry.shield.hidden = active
-      if (active) {
+      entry.shield.hidden = focused
+      if (focused) {
         entry.marker.dataset['previewInteractive'] = 'true'
       } else {
         delete entry.marker.dataset['previewInteractive']
@@ -47,7 +47,7 @@ export function mountPreviewActivation(host: HTMLElement, previews: readonly Stu
     selected = undefined
     update()
   }
-  const activate = (preview: StudioPreviewConnection, event: Event): void => {
+  const focus = (preview: StudioPreviewConnection, event: Event): void => {
     if (event.defaultPrevented || !entries.has(preview)) {
       return
     }
@@ -58,7 +58,7 @@ export function mountPreviewActivation(host: HTMLElement, previews: readonly Stu
     }
     selected = preview
     update()
-    preview.activate?.()
+    preview.focus?.()
   }
   const reconcile = (): void => {
     if (disposed) {
@@ -90,17 +90,17 @@ export function mountPreviewActivation(host: HTMLElement, previews: readonly Stu
       const viewport = iframe.closest<HTMLElement>('.studio-preview-cell-viewport') ?? host
       const shield = document.createElement('button')
       shield.type = 'button'
-      shield.className = 'studio-preview-activation-shield'
-        + (viewport === host ? ' studio-preview-activation-whole-app' : '')
-      shield.setAttribute('aria-label', `Activate ${preview.scenarioLabel ?? (iframe.title || 'preview')}`)
+      shield.className = 'studio-preview-focus-shield'
+        + (viewport === host ? ' studio-preview-focus-whole-app' : '')
+      shield.setAttribute('aria-label', `Focus ${preview.scenarioLabel ?? (iframe.title || 'preview')}`)
       const click = (event: MouseEvent): void => {
         if (event.button === 0) {
-          activate(preview, event)
+          focus(preview, event)
         }
       }
       const keydown = (event: KeyboardEvent): void => {
         if (event.key === 'Enter' || event.key === ' ') {
-          activate(preview, event)
+          focus(preview, event)
         }
       }
       shield.addEventListener('click', click)

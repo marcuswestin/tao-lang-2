@@ -6,6 +6,7 @@ import {
 } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 import { exerciseHnreaderFeed } from './studio-hnreader-feed-journey'
 
 Test(
@@ -136,16 +137,21 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
     await browser.setViewport(1_440, 900)
     await browser.goto(studio.readiness.sessionUrl)
+    await browser.waitFor("document.querySelector('.studio-preview-activation-toggle') !== null")
+    Expect(await browser.evaluate("document.querySelectorAll('.studio-preview-cell iframe').length")).toBe(0)
+    await browser.captureScreenshot('preview-inactive')
+    await activateSmokePreviews(browser)
     await browser.waitFor(
       `document.querySelector('.studio-preview-cell iframe') instanceof HTMLIFrameElement`,
       { timeoutMs: 30_000 },
     )
     // The native button renders its title uppercase on web, and innerText reports the transformed text.
     await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('Increment') === true`)
+    await browser.captureScreenshot('preview-active')
 
     await browser.click('[data-preset="design"]')
     await browser.waitFor(`document.querySelector('.studio-canvas-zoom') !== null`)
-    await activateFirstPreview(browser)
+    await focusFirstPreview(browser)
     await browser.withKeyHeld(' ', async () => {
       await browser!.waitFor(`document.querySelector('.studio-preview')?.dataset.canvasPanReady === 'true'`)
       const before = await canvasTranslation(browser!)
@@ -185,6 +191,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
       `fetch(location.pathname + '/api/protocol').then(r => r.json()).then(h => h.canvasViewport?.z === 1.5)`,
     )
     await browser.goto(studio.readiness.sessionUrl)
+    await activateSmokePreviews(browser)
     await browser.waitFor(
       `document.querySelector('.studio-preview-grid')?.style.transform === ${JSON.stringify(savedCamera)}`,
     )
@@ -223,7 +230,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     // Edit mode gives Studio every click for selection, so the press happens in Run mode, the way a
     // person would press it, and the drag after it happens back in Edit mode.
     await setInteractionMode(browser, 'run')
-    await exerciseInactivePreview(browser, previewUrl)
+    await exerciseUnfocusedPreview(browser, previewUrl)
     await pressIncrementOnce(browser, previewUrl)
     await exercisePreviewFocusRelease(browser, previewUrl)
     await browser.evaluateInFrame(
@@ -276,7 +283,7 @@ Test('Studio drag refreshes the real Metro preview without blanking, reloading, 
     await browser.waitForInFrame(previewUrl, `window.__taoSmokeMode === 'edit'`)
 
     const compileRevision = await waitForCompileAfter(browser, -1)
-    await activateFirstPreview(browser)
+    await focusFirstPreview(browser)
     await dragThirdBetweenFirstAndSecond(browser, previewUrl)
     await waitForSourceOrder(sourcePath, ['Text("First")', 'Text("Third")', 'Text("Second")'])
     const movedRevision = await waitForCompileAfter(browser, compileRevision)
@@ -672,25 +679,25 @@ async function dragRenderBetween(
   )
 }
 
-async function activateFirstPreview(browser: StudioCdp): Promise<void> {
+async function focusFirstPreview(browser: StudioCdp): Promise<void> {
   if (
     !await browser.evaluate<boolean>(
       `document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`,
     )
   ) {
-    await browser.clickAtOffset('.studio-preview-cell .studio-preview-activation-shield', { x: 100, y: 250 })
+    await browser.clickAtOffset('.studio-preview-cell .studio-preview-focus-shield', { x: 100, y: 250 })
   }
   await browser.waitFor(`document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`)
 }
 
-async function exerciseInactivePreview(browser: StudioCdp, previewUrl: string): Promise<void> {
+async function exerciseUnfocusedPreview(browser: StudioCdp, previewUrl: string): Promise<void> {
   await browser.waitFor(`document.querySelectorAll('[data-preview-interactive="true"]').length === 0`)
   await browser.evaluateInFrame(
     previewUrl,
     `(() => {
-    window.__taoInactiveEvents = []
+    window.__taoUnfocusedEvents = []
     for (const type of ['pointermove', 'pointerdown', 'click', 'wheel']) {
-      document.addEventListener(type, () => window.__taoInactiveEvents.push(type), true)
+      document.addEventListener(type, () => window.__taoUnfocusedEvents.push(type), true)
     }
   })()`,
   )
@@ -703,7 +710,7 @@ async function exerciseInactivePreview(browser: StudioCdp, previewUrl: string): 
   await browser.dragBy('.studio-preview-cell iframe', { x: 40, y: 20 })
   Expect(await canvasTranslation(browser)).toEqual({ x: before.x + 30, y: before.y })
   Expect(await browser.evaluate(`document.querySelectorAll('[data-preview-interactive="true"]').length`)).toBe(0)
-  Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoInactiveEvents')).toEqual([])
+  Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoUnfocusedEvents')).toEqual([])
   // Click directly over Increment: selecting the preview must not also press its button.
   const point = await browser.evaluateInFrame<{ x: number; y: number }>(
     previewUrl,
@@ -715,9 +722,9 @@ async function exerciseInactivePreview(browser: StudioCdp, previewUrl: string): 
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
   })()`,
   )
-  await browser.clickAtOffset('.studio-preview-cell .studio-preview-activation-shield', point)
+  await browser.clickAtOffset('.studio-preview-cell .studio-preview-focus-shield', point)
   await browser.waitFor(`document.querySelector('.studio-preview-cell')?.dataset.previewInteractive === 'true'`)
-  Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoInactiveEvents.includes("click")')).toBe(false)
+  Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoUnfocusedEvents.includes("click")')).toBe(false)
   Expect(
     await browser.evaluateInFrame(
       previewUrl,
@@ -727,6 +734,8 @@ async function exerciseInactivePreview(browser: StudioCdp, previewUrl: string): 
 }
 
 async function exerciseExclusivePreviewSelection(browser: StudioCdp): Promise<void> {
+  await browser.waitFor(`document.querySelectorAll('.studio-preview-cell').length === 2`)
+  await activateSmokePreviews(browser)
   await browser.waitFor(`document.querySelectorAll('.studio-preview-cell iframe').length === 2`)
   await browser.pressShortcut('0')
   const frames = await browser.evaluate<string[]>(
@@ -786,7 +795,7 @@ async function exercisePreviewFocusRelease(browser: StudioCdp, previewUrl: strin
   await browser.pressShortcut('1')
   Expect(await browser.evaluateInFrame(previewUrl, 'window.__taoInactiveKeys')).toEqual([])
   await browser.click('.studio-canvas-zoom')
-  await activateFirstPreview(browser)
+  await focusFirstPreview(browser)
   await browser.clickAtOffset('.studio-preview-cell iframe', { x: 100, y: 250 })
 }
 
@@ -816,6 +825,7 @@ Test('Studio publication-off preview renders edits without reloading its frame',
     browser = await StudioCdp.launchChrome({ artifactRoot: studio.readiness.artifactRoot })
     await browser.setViewport(1_440, 900)
     await browser.goto(studio.readiness.sessionUrl)
+    await activateSmokePreviews(browser)
     await browser.waitFor(`document.querySelector('.studio-preview-cell iframe') instanceof HTMLIFrameElement`)
     await waitForPreview(browser, studio, previewUrl, `document.body?.textContent?.includes('First') === true`)
     await browser.click('[data-preset="design"]')
@@ -837,7 +847,7 @@ Test('Studio publication-off preview renders edits without reloading its frame',
     )
     await setInteractionMode(browser, 'edit')
     await browser.waitForInFrame(previewUrl, `window.__taoPublicationOffMode === 'edit'`)
-    await activateFirstPreview(browser)
+    await focusFirstPreview(browser)
     await browser.evaluate(`(() => {
       window.__taoPublicationOffActions = []
       window.addEventListener('message', event => {

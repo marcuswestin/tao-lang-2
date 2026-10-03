@@ -61,11 +61,32 @@ Describe('tao create lowering', () => {
       },
     }
     Expect(validateCreationPlan(plan)).toEqual([])
+    const files = lowerCreationPlan(plan)
+    Expect(files['.gitignore']).toBe([
+      '# Operating system and editor files',
+      '.DS_Store',
+      '.idea/',
+      '.vscode/',
+      '',
+      '# Tao generated sidecars',
+      '*.tao.ts',
+      '',
+      '# Tooling output',
+      'node_modules/',
+      '.expo/',
+      '*.tsbuildinfo',
+      '*.log',
+      '',
+      '# Plain-text secrets',
+      '.env',
+      '.env.*',
+      '',
+    ].join('\n'))
 
     const root = await mkTestDir('tao-create-lowering-')
     try {
       const generated = FS.resolvePath('field-notes', root)
-      await writeCreationFiles(generated, lowerCreationPlan(plan))
+      await writeCreationFiles(generated, files)
       await runFix(generated, { cwd: root })
       const workspace = await Workspace.open(generated)
       const problems: string[] = []

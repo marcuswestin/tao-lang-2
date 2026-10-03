@@ -30,9 +30,9 @@ export function StudioInspectorDraftsFor(section: string, inspection: string, dr
 export function StudioInspectorDataLines(
   inspection: string,
   selection: string,
-  activeCellId: string,
-  activeCellRevision: number,
-  activeScenarioId: string,
+  focusedCellId: string,
+  focusedCellRevision: number,
+  focusedScenarioId: string,
 ): string[] {
   const selected = studioInspectorSelection(selection)
   const candidate = studioInspectorInspection(inspection)
@@ -46,10 +46,10 @@ export function StudioInspectorDataLines(
     parsed?.text === undefined
       ? 'Binding metadata: not published for this render.'
       : `Text bindings: ${parsed.text.candidates.length} values in scope; bind one in the Text section.`,
-    activeCellId === ''
-      ? 'Datasource context: no active preview cell.'
-      : `Datasource context: cell ${activeCellId} revision ${activeCellRevision}.`,
-    activeScenarioId === '' ? 'Scenario context: none.' : `Scenario context: ${activeScenarioId}.`,
+    focusedCellId === ''
+      ? 'Datasource context: no focused preview cell.'
+      : `Datasource context: cell ${focusedCellId} revision ${focusedCellRevision}.`,
+    focusedScenarioId === '' ? 'Scenario context: none.' : `Scenario context: ${focusedScenarioId}.`,
     'Entity tables are available in the Data panel.',
   ]
 }

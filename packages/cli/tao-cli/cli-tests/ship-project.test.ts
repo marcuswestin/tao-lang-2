@@ -146,6 +146,8 @@ Describe('tao ship project discovery', () => {
       const project = await discoverShipProject(paths['App.tao']!)
       await writeProjectVersion(project, '2.0.0')
       Expect(await FS.readText(paths['App.tao']!)).toContain('version "2.0.0"')
+      Expect(await FS.listDir(FS.resolvePath('.tao/cache/tmp', project.root))).toEqual([])
+      Expect(await FS.listDir(FS.resolvePath('.tao/cache/locks', project.root))).toEqual([])
     })
   })
 

@@ -203,6 +203,30 @@ Home folder, for state not tied to one project:
 
 ## Implementation state
 
+The successor `feat/studio-preview-speed`, based exactly on `8ecf581e7`, implements the decided
+`store/`, `local/`, and `cache/` paths, their two-rule ignore file, created-project ignore defaults,
+and recognized one-time migrations. Committed lock/secrets/sketch writes stage and lock under cache;
+skills version shares the project lock transaction. Dev data drops the redundant project hash on
+disk, retained builds remain local, and agent-only desktop sources live in `agents/`. Home Studio
+launches, recents, trust, and logs and literal app-id agent state have recognized legacy migrations.
+Unknown entries, symlinks, and destination file conflicts remain untouched; recognized directories
+merge without dropping either side. Browser project focus/tabs and the prior viewport file import
+into `.tao/local/studio/session.json` alongside per-app activated previews.
+
+Focused migration, CLI, skills, Dev data, and launch tests pass; the full Studio and Studio-tooling
+source test directories pass. Mutation checks prove that the shared skills/pin lock and one-time
+recent-project merge regressions detect their deliberately removed behavior. The real Metro smoke
+passes all four real-app journeys, including persisted HNReader reopen and edits in both publication
+modes. `test-host agents --demo` builds the packaged desktop app with the `agents/` entry point and
+executes its command successfully. Final review fixes preserve linked-parent targets, retain unknown
+legacy private ignore coverage, merge concurrent home recents, and reproduce committed starter store
+files. Studio compile-error recovery, ordered focus/tab saves, manifest pruning, and exact browser
+registration release have source regressions; the full Studio directory passes. Committed gates and
+the whole-project final verification remain pending. The four
+[open decisions](#open) remain with the Developer; their undecided behavior is retained pending an answer.
+
+Historical starting point:
+
 Commit `WIP: route project .tao state through ProjectLocal` on `feat/studio-preview-latency-next`
 is a first pass, untested, that predates decisions 2, 5, 6, 10, and 11. It adds `ProjectLocal`
 (`packages/shared/shared-src/ProjectLocal.ts`) with `storeResolve`, `cacheResolve`, `stagingPath`,

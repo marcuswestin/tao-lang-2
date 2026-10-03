@@ -171,7 +171,7 @@ async function accept(release: string): Promise<void> {
         run: async () => {
           await shell(project, 'tao build --web --compile-only')
           const compiled: string[] = []
-          for await (const path of FS.walk(ProjectLocal.storeResolve('builds', project))) {
+          for await (const path of FS.walk(ProjectLocal.localResolve('builds', project))) {
             if (path.endsWith('/compiled/web/_gen_tao-app/App.tsx')) {
               compiled.push(path)
             }
@@ -189,7 +189,7 @@ async function accept(release: string): Promise<void> {
             Errors.throwUnexpected('The first web build did not say it was installing the host.')
           }
           const sites: string[] = []
-          for await (const path of FS.walk(ProjectLocal.storeResolve('builds', project))) {
+          for await (const path of FS.walk(ProjectLocal.localResolve('builds', project))) {
             if (path.includes('/web/') && path.endsWith('/index.html')) {
               sites.push(path)
             }
@@ -408,7 +408,7 @@ scene CounterView() {
  * release listing.
  */
 async function versionPinWorks(environment: Platform.ProcessEnv, project: string, version: string): Promise<void> {
-  const lock = JSON.parse(Text.stripJsonc(await FS.readText(FS.resolvePath('.tao-project/lock.jsonc', project))))
+  const lock = JSON.parse(Text.stripJsonc(await FS.readText(ProjectLocal.storeResolve('lock.jsonc', project))))
   if (lock?.toolchain?.version !== version) {
     Errors.throwUnexpected(`tao create pinned ${JSON.stringify(lock?.toolchain)}, not Tao ${version}.`)
   }

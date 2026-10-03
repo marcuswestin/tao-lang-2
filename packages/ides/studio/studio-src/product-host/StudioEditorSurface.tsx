@@ -207,9 +207,9 @@ export function StudioCodeEditor(): React.ReactElement {
   return (
     <div
       className="studio-editor-tao-surface"
-      data-active-cell={state.activeCell?.cellId}
+      data-focused-cell={state.focusedCell?.cellId}
       data-active-file={file.path}
-      data-active-scenario={state.activeCell?.scenarioId}
+      data-focused-scenario={state.focusedCell?.scenarioId}
       data-selected-render={state.selectedRender?.renderId}
       data-state-revision={state.revision}
       onKeyDown={onLensKeyDown}

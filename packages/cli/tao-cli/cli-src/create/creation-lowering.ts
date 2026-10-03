@@ -22,6 +22,26 @@ export type LowerCreationPlanOptions = {
 
 const TAB_ICONS = ['list.bullet', 'book', 'tray.full', 'star', 'tag', 'folder']
 const COMMENT_WIDTH = 100
+const PROJECT_GITIGNORE = [
+  '# Operating system and editor files',
+  '.DS_Store',
+  '.idea/',
+  '.vscode/',
+  '',
+  '# Tao generated sidecars',
+  '*.tao.ts',
+  '',
+  '# Tooling output',
+  'node_modules/',
+  '.expo/',
+  '*.tsbuildinfo',
+  '*.log',
+  '',
+  '# Plain-text secrets',
+  '.env',
+  '.env.*',
+  '',
+].join('\n')
 
 /**
  * lowerCreationPlan writes the canonical project layout for a validated plan: App, Data, Chrome, Design,
@@ -39,7 +59,7 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
     'Scenarios.tao': scenariosFile(plan, names),
     [`${names.app}.test.tao`]: testFile(plan, names),
     'tsconfig.json': PROJECT_TSCONFIG,
-    '.gitignore': '*.tao.ts\n.tao/\nnode_modules/\n',
+    '.gitignore': PROJECT_GITIGNORE,
     // The reserved root generated package exists from day one, committed empty, so Studio and the
     // compiler have their folder before the first generated file lands.
     '@/.gitkeep': '',

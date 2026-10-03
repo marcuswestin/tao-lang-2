@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Platform, Time } from '@shared'
+import { CLI, Errors, FS, Platform, TaoHome, Time } from '@shared'
 
 type AgentMetadata = { protocolVersion: 1; appId: string; appName: string; buildId: string }
 type AgentSession = AgentMetadata & {
@@ -39,10 +39,13 @@ export async function runAppAgentCommand(
       return failure('invalid_app', 'The app has no supported background service metadata. Rebuild with --agents.')
     }
     const app = metadata as AgentMetadata
+    if (!/^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*$/u.test(app.appId)) {
+      return failure('invalid_app', 'The app has an invalid background service identifier.')
+    }
     const stateRootOverride = Platform.runtimeProcess.env['TAO_AGENT_STATE_ROOT']
-    const stateRoot = stateRootOverride
-      ?? FS.resolvePath('Library/Caches/Tao/agents', FS.homeDir())
-    const directory = FS.resolvePath(Platform.sha256Hex(app.appId).slice(0, 24), stateRoot)
+    const directory = stateRootOverride
+      ? FS.resolvePath(app.appId, stateRootOverride)
+      : await TaoHome.prepareAgentState(app.appId)
     const sessionPath = FS.resolvePath('session.json', directory)
     const session = await readSession(sessionPath)
     if (session && Platform.processIsAlive(session.pid)) {

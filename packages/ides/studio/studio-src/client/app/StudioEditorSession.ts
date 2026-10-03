@@ -3,7 +3,7 @@ import { type StudioDraftFile, StudioDraftSync } from '../../StudioDraftSync'
 import { StudioTextMateLanguage } from '../../StudioTextMateLanguage'
 import { StudioApiClient, type StudioCompileState, type StudioFile } from '../StudioApiClient'
 import { StudioCodeEditor, studioHostDocumentUpdate, StudioOpenFileLifecycle } from '../StudioEditor'
-import { StudioEditorTabs } from '../StudioEditorTabs'
+import { StudioEditorTabs, type StudioEditorTabSnapshot } from '../StudioEditorTabs'
 import { showOpenFile, type StudioClientView } from '../StudioShell'
 import { showSourceActionError } from '../StudioVisualEditing'
 import { type StudioOpenDiagnostic, StudioStatusLine } from './StudioCompileEvents'
@@ -28,12 +28,14 @@ export type StudioOpenDocument = Readonly<{ content: string; saved: boolean }>
 export type StudioEditorSessionDeps = Readonly<{
   compileState: () => StudioCompileState
   identity: Readonly<{ appName: string; project: string }>
+  initialTabs?: StudioEditorTabSnapshot
+  onTabsChanged?: (snapshot: StudioEditorTabSnapshot) => void
   /** A document edit: the search panel re-runs when it has a query. */
   onDocumentChanged: () => void
   /** A code-editor save wrote `path` outside any visual edit. */
   onSaved: (path: string) => void
   openCompileDiagnostic: StudioOpenDiagnostic
-  /** Tells the active preview which source the editor now shows or selects. */
+  /** Tells the focused preview which source the editor now shows or selects. */
   postSelection: (file: StudioDraftFile, editor: EditorView) => void
   publish: () => void
   renderInspector: () => void
@@ -82,6 +84,8 @@ export class StudioEditorSession {
       availablePaths: projectFiles.map(file => file.path),
       project: deps.identity.project,
       storage: window.localStorage,
+      ...(deps.initialTabs === undefined ? {} : { initial: deps.initialTabs }),
+      onChange: deps.onTabsChanged,
     })
   }
 

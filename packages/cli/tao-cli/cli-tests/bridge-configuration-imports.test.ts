@@ -33,6 +33,7 @@ export function MemoryProvider(): TR.DataProvider {
       const results = await runCheck(root)
       Expect(results.flatMap(result => result.diagnostics ?? []).filter(diagnostic => diagnostic.severity === 'error'))
         .toEqual([])
+      Expect(await FS.isFile(FS.resolvePath('.tao/cache/bridge-check/tsconfig.json', root))).toBe(true)
       Expect(await FS.readText(FS.resolvePath('Derived.tao.ts', root)))
         .toContain('export type ExtendedConfig =')
       await FS.remove(FS.resolvePath('Derived.tao.ts', root))

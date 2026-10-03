@@ -1,12 +1,12 @@
 import { Expect, Test } from '@shared/test'
 import { StudioAppNavigation } from '../studio-src/client/app/StudioAppNavigation'
-import type { StudioActivePreview } from '../studio-src/client/StudioMatrixView'
+import type { StudioFocusedPreview } from '../studio-src/client/StudioMatrixView'
 
 Test('Studio treats the first device selection snapshot as state and only reveals later taps', async () => {
   const opened: string[] = []
   let reveals = 0
   const navigation = new StudioAppNavigation({
-    activePreview: { activate() {} } as unknown as StudioActivePreview,
+    focusedPreview: { focus() {} } as unknown as StudioFocusedPreview,
     focusEditor() {},
     async openFile(path) {
       opened.push(path)

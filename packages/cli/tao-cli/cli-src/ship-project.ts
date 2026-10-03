@@ -2,7 +2,7 @@ import { ASTUtils } from '@ast-utils'
 import { Workspace } from '@compiler/workspace'
 import Formatter from '@formatter'
 import { AST, Parser } from '@parser'
-import { Errors, FS, Platform, Repo } from '@shared'
+import { Errors, FS, ProjectLocal, Repo } from '@shared'
 import { findTaoProjectSource } from './project-root'
 import type { ShipVersion } from './ship-model'
 
@@ -254,23 +254,26 @@ export function selectShipApp(project: ShipProject, requested?: string): ShipPro
 
 /** writeProjectVersion updates only the authored project version then restores canonical formatting. */
 export async function writeProjectVersion(project: ShipProject, version: ShipVersion): Promise<void> {
-  const source = await FS.readText(project.projectSourcePath)
-  const parsed = await Parser.parseCode(source, { validation: false })
-  const declaration = parsed.entry.ast.statements.find(AST.isProjectDeclaration)
-  if (!declaration) {
-    Errors.throwUnexpected(`Project declaration disappeared from ${project.projectSourcePath}.`)
-  }
-  const versionNode = declaration.block.statements.find(AST.isProjectVersion)
-  const cst = versionNode?.$cstNode
-  if (!cst) {
-    Errors.throwUnexpected(`Project version in ${project.projectSourcePath} has no source location.`)
-  }
-  const replaced = `${source.slice(0, cst.offset)}version ${JSON.stringify(version)}${source.slice(cst.end)}`
-  const temporary = `${project.projectSourcePath}.${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.tmp`
-  try {
-    await FS.writeText(temporary, await Formatter.formatCode(replaced))
-    await FS.move(temporary, project.projectSourcePath)
-  } finally {
-    await FS.remove(temporary).catch(() => {})
-  }
+  await ProjectLocal.prepare(project.root)
+  await FS.withFileMutationLock(project.projectSourcePath, project.root, async () => {
+    const source = await FS.readText(project.projectSourcePath)
+    const parsed = await Parser.parseCode(source, { validation: false })
+    const declaration = parsed.entry.ast.statements.find(AST.isProjectDeclaration)
+    if (!declaration) {
+      Errors.throwUnexpected(`Project declaration disappeared from ${project.projectSourcePath}.`)
+    }
+    const versionNode = declaration.block.statements.find(AST.isProjectVersion)
+    const cst = versionNode?.$cstNode
+    if (!cst) {
+      Errors.throwUnexpected(`Project version in ${project.projectSourcePath} has no source location.`)
+    }
+    const replaced = `${source.slice(0, cst.offset)}version ${JSON.stringify(version)}${source.slice(cst.end)}`
+    const temporary = ProjectLocal.stagingPath(project.projectSourcePath, project.root)
+    try {
+      await FS.writeText(temporary, await Formatter.formatCode(replaced))
+      await FS.move(temporary, project.projectSourcePath)
+    } finally {
+      await FS.remove(temporary).catch(() => {})
+    }
+  }, { lockDirectory: ProjectLocal.cacheResolve('locks', project.root) })
 }

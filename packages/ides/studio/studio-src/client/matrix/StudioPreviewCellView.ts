@@ -15,7 +15,6 @@ import {
 } from './StudioFixtureActions'
 import { invalidatePreviewJourneyRecording } from './StudioJourneyRecording'
 import {
-  observePreviewVisibility,
   setPreviewSource,
   type StudioPreviewConnection,
   StudioPreviewFrameUrl,
@@ -105,7 +104,9 @@ export function renderCellPreview(
   }
   const label = document.createElement('header')
   label.className = 'studio-preview-cell-label'
-  label.textContent = scenario?.label ?? cell.scenarioId
+  const name = document.createElement('span')
+  name.textContent = scenario?.label ?? cell.scenarioId
+  label.append(name, previewActivationToggle(connection))
   connection.scenarioLabel = scenario?.label ?? cell.scenarioId
 
   const details = document.createElement('span')
@@ -113,7 +114,9 @@ export function renderCellPreview(
   details.textContent = `${cell.environment.viewport.width}×${cell.environment.viewport.height} · ${
     StudioCellControls.networkLabel(cell.environment)
   }${new URL(previewUrl).searchParams.get('taoStudioPublication') === 'off' ? ' · publication checks off' : ''}`
-  label.append(details)
+  if (connection.activated) {
+    label.append(details)
+  }
 
   const form = document.createElement('form')
   form.className = 'studio-preview-cell-controls'
@@ -182,10 +185,16 @@ export function renderCellPreview(
   viewport.style.width = `${cell.environment.viewport.width}px`
   connection.iframe.style.height = '100%'
   connection.iframe.style.width = '100%'
-  if (existingViewport === null) {
-    viewport.append(connection.iframe)
+  if (connection.activated) {
+    if (!viewport.contains(connection.iframe)) {
+      viewport.replaceChildren(connection.iframe)
+    }
+  } else {
+    const hint = document.createElement('span')
+    hint.className = 'studio-preview-inactive-hint'
+    hint.textContent = 'Activate preview to load this scenario.'
+    viewport.replaceChildren(hint)
   }
-  observePreviewVisibility(frame, connection)
 
   const remount = async (
     configuration: Readonly<{
@@ -417,7 +426,7 @@ export function renderCellPreview(
       if (!request.ok || target === null) {
         reject(
           request.ok
-            ? new Errors.HostEnvironmentError('The active preview is not connected.')
+            ? new Errors.HostEnvironmentError('The focused preview is not connected.')
             : new Errors.UserInputError(request.issues.join(' ')),
         )
         return
@@ -462,12 +471,12 @@ export function renderCellPreview(
 
   frame.tabIndex = 0
   frame.setAttribute('aria-label', `${connection.scenarioLabel} preview`)
-  frame.onclick = () => connection.activate?.()
-  frame.onfocus = () => connection.activate?.()
+  frame.onclick = () => connection.focus?.()
+  frame.onfocus = () => connection.focus?.()
   frame.onkeydown = event => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      connection.activate?.()
+      connection.focus?.()
     }
   }
   const previousLabel = frame.querySelector<HTMLElement>(':scope > .studio-preview-cell-label')
@@ -480,4 +489,25 @@ export function renderCellPreview(
     frame.append(viewport)
   }
   connection.changed?.()
+}
+
+export function previewActivationToggle(connection: StudioPreviewConnection): HTMLButtonElement {
+  const button = document.createElement('button')
+  button.className = 'studio-preview-activation-toggle'
+  button.type = 'button'
+  const title = connection.activated ? 'Deactivate preview' : 'Activate preview'
+  button.title = title
+  button.setAttribute('aria-label', title)
+  button.setAttribute('aria-pressed', String(connection.activated === true))
+  button.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.4 2 4 13h7l-.4 9L20 10h-7l.4-8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>'
+  button.addEventListener('click', event => {
+    event.stopPropagation()
+    button.disabled = true
+    void connection.toggleActivation?.().catch(error => {
+      button.disabled = false
+      button.title = String(error)
+    })
+  })
+  return button
 }

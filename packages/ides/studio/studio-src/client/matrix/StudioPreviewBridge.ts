@@ -41,7 +41,7 @@ import { openRuntimeFailureSource, showRuntimeFailure, type StudioOpenFile } fro
 
 /** The actions the app wires into the bridge so a preview message can reach the editor and inspector. */
 type StudioPreviewMessageActions = {
-  activate?: () => void
+  focus?: () => void
   applySourceAction: (envelope: StudioSourceActionEnvelope) => Promise<void>
   canvasGesture?: (gesture: StudioPreviewCanvasGestureMessage) => void
   canvasGesturesOwned?: () => boolean
@@ -534,7 +534,7 @@ async function receiveSourceAction(
   message: StudioWindowMessageOf<'source-action'>,
   actions: StudioPreviewMessageActions,
 ): Promise<void> {
-  actions.activate?.()
+  actions.focus?.()
   await actions.applySourceAction({
     ...message,
     identity: {
@@ -551,7 +551,7 @@ function receiveRuntimeFailure(
   openFile: StudioOpenFileRequest,
   actions: StudioPreviewMessageActions,
 ): void {
-  actions.activate?.()
+  actions.focus?.()
   const capture = runtimeCaptureWithEnvironment(
     message.capture,
     preview.cell?.environment,
@@ -621,7 +621,7 @@ async function receiveSelectSource(
   openFile: StudioOpenFileRequest,
   actions: StudioPreviewMessageActions,
 ): Promise<void> {
-  actions.activate?.()
+  actions.focus?.()
   const opened = await StudioSourceNavigation.openAndSelect({
     focus: actions.editorTakesFocus?.() ?? true,
     identity: message.identity,
@@ -651,7 +651,7 @@ export function requestRuntimeCapture(
 ): Promise<StudioRuntimeCaptureArtifact> {
   const target = preview.iframe.contentWindow
   if (target === null) {
-    return Promise.reject(new Errors.HostEnvironmentError('The active preview is not connected.'))
+    return Promise.reject(new Errors.HostEnvironmentError('The focused preview is not connected.'))
   }
   preview.runtimeCaptureRequest?.reject(
     new Errors.UnexpectedBehaviorError('A newer live-data refresh replaced this request.'),
@@ -664,7 +664,7 @@ export function requestRuntimeCapture(
     const timeout = setTimeout(() => {
       if (preview.runtimeCaptureRequest?.requestId === requestId) {
         preview.runtimeCaptureRequest = undefined
-        reject(new Errors.HostEnvironmentError('The active preview did not return live app data.'))
+        reject(new Errors.HostEnvironmentError('The focused preview did not return live app data.'))
       }
     }, 5_000)
     preview.runtimeCaptureRequest = { reject, requestId, resolve, timeout }

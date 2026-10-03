@@ -1,10 +1,10 @@
-import { CLI, Errors, FS, HCI, Json, Platform, TaoHome, Text } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, ProjectLocal, TaoHome, Text } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import { PROJECT_LOCK_RELATIVE_PATH } from './project-lock-path'
 import { TaoVersion } from './tao-version'
 
 /**
- * ToolchainPin makes a project run under the Tao release it pins. `.tao-project/lock.jsonc` carries
+ * ToolchainPin makes a project run under the Tao release it pins. `.tao/store/lock.jsonc` carries
  * `toolchain.version`, which `tao create` writes; `tao +0.4.1 <command>` and `TAO_VERSION` choose a
  * release explicitly and win over the pin, in that order. A project with no pin runs under
  * whichever release `bin/tao` points at.
@@ -96,6 +96,9 @@ async function projectPin(start: string): Promise<string | undefined> {
   let directory = FS.resolvePath(start)
   while (true) {
     const lock = FS.resolvePath(PROJECT_LOCK_RELATIVE_PATH, directory)
+    if (await FS.isFile(lock) || await FS.isFile(FS.resolvePath('.tao-project/lock.jsonc', directory))) {
+      await ProjectLocal.prepare(directory)
+    }
     if (await FS.isFile(lock)) {
       let parsed: unknown
       try {

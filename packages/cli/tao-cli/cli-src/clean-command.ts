@@ -58,11 +58,11 @@ async function listBuilds(path: string): Promise<CleanCandidate[]> {
   const roots = new Set([targetRoot, ...projects.map(project => project.root)])
   const candidates: CleanCandidate[] = []
   for (const root of roots) {
-    // Builds made before `.tao/store/` existed move there first, so clean still lists them.
+    // Builds made before `.tao/local/` existed move there first, so clean still lists them.
     if (await FS.isDirectory(ProjectLocal.root(root))) {
       await ProjectLocal.prepare(root)
     }
-    const buildsRoot = ProjectLocal.storeResolve('builds', root)
+    const buildsRoot = ProjectLocal.localResolve('builds', root)
     if (!await FS.isDirectory(buildsRoot) || await FS.isSymbolicLink(buildsRoot)) {
       continue
     }
@@ -90,7 +90,7 @@ async function listBuilds(path: string): Promise<CleanCandidate[]> {
 }
 
 async function assertBuildCandidate(path: string, projectRoot: string): Promise<void> {
-  const buildsRoot = ProjectLocal.storeResolve('builds', projectRoot)
+  const buildsRoot = ProjectLocal.localResolve('builds', projectRoot)
   const realRoot = await FS.realPath(buildsRoot)
   const realCandidate = await FS.realPath(path)
   if (FS.dirname(realCandidate) !== realRoot || await FS.isSymbolicLink(path)) {

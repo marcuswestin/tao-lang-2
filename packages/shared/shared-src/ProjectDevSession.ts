@@ -25,7 +25,7 @@ async function acquire(projectRoot: string, surface: DevSessionSurface): Promise
   release: () => Promise<void>
 }> {
   const root = await FS.realPath(projectRoot)
-  const sessionsRoot = ProjectLocal.storeResolve('sessions', root)
+  const sessionsRoot = ProjectLocal.localResolve('sessions', root)
   const activePath = FS.resolvePath('owner.json', sessionsRoot)
   await ProjectLocal.prepare(root)
   await FS.mkdir(sessionsRoot)
@@ -40,7 +40,7 @@ async function acquire(projectRoot: string, surface: DevSessionSurface): Promise
     status: 'active',
   }
 
-  await FS.withFileMutationLock(activePath, sessionsRoot, async () => {
+  await FS.withFileMutationLock(activePath, root, async () => {
     const current = await readOwner(activePath)
     if (current !== undefined) {
       if (ownerIsLive(current)) {
@@ -52,20 +52,20 @@ async function acquire(projectRoot: string, surface: DevSessionSurface): Promise
     }
     await FS.writeJson(recordPath(sessionsRoot, record.id), record)
     await FS.writeJson(activePath, ownerOf(record))
-  })
+  }, { lockDirectory: ProjectLocal.cacheResolve('locks', root) })
 
   let releasing: Promise<void> | undefined
   return {
     record,
     release: () => {
-      releasing ??= FS.withFileMutationLock(activePath, sessionsRoot, async () => {
+      releasing ??= FS.withFileMutationLock(activePath, root, async () => {
         const current = await readOwner(activePath)
         if (current?.id !== record.id) {
           return
         }
         await finishRecord(sessionsRoot, record.id, 'completed')
         await FS.remove(activePath)
-      })
+      }, { lockDirectory: ProjectLocal.cacheResolve('locks', root) })
       return releasing
     },
   }

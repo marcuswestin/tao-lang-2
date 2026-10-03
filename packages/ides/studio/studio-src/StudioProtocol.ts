@@ -298,6 +298,12 @@ export type StudioCanvasViewportSaveRequest = Readonly<{
   viewport: StudioCanvasViewport
 }>
 
+export type StudioSessionAppState = Readonly<{
+  activatedCellIds: readonly string[]
+  focusedCellId?: string
+  editorTabs?: Readonly<{ activePath?: string; paths: readonly string[] }>
+}>
+
 export type StudioSessionHandshake = {
   apps: readonly StudioAppVariant[]
   capabilities: {
@@ -329,6 +335,7 @@ export type StudioSessionHandshake = {
   previewManifest?: StudioPreviewManifestV2
   sketchCatalog: StudioSketchCatalogSnapshot
   canvasViewport?: StudioCanvasViewport
+  studioSession: StudioSessionAppState
   protocolVersion: typeof studioProtocolVersion
   type: 'handshake'
 }

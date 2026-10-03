@@ -3,6 +3,7 @@ import { Expect, mkTestDir, runCleanups, until } from '@shared/test'
 import type { StudioSketchCatalogSnapshot } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 
 /** The manual Feed review, driven through Chrome against an isolated HNReader Metro preview. */
 export async function exerciseHnreaderFeed(): Promise<void> {
@@ -33,6 +34,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     const driver = browser
     await driver.setViewport(1_920, 1_080)
     await driver.goto(studio.readiness.sessionUrl)
+    await activateSmokePreviews(driver)
     HCI.logProcessInfo('HNReader Feed', 'draw board and rectangles')
     await driver.waitFor(`document.querySelector('[data-preset="draw"]') !== null`)
     await driver.click('[data-preset="draw"]')
@@ -40,7 +42,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     await driver.waitFor(`document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`)
     await driver.click(rectangleTool)
     await driver.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 110 }, { steps: 12 })
-    const catalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)
+    const catalogPath = FS.resolvePath('.tao/store/studio/sketches.jsonc', projectRoot)
     const viewPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
     const fixturePath = FS.resolvePath('@/studio/Sketches.tao', projectRoot)
     await until(async () => await FS.isFile(catalogPath) && await FS.isFile(viewPath))
@@ -197,6 +199,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
     HCI.logProcessInfo('HNReader Feed', 'reopen persisted project')
     studio = await startStudioSmokeLaunch({ appName: 'HNReaderStub', projectRoot, repositoryRoot: Repo.getRoot() })
     await driver.goto(studio.readiness.sessionUrl)
+    await activateSmokePreviews(driver)
     const reopenedFrame = await sketchFrame(driver, 'View1')
     previewUrl = await driver.evaluate<string>(`document.querySelector(${JSON.stringify(reopenedFrame)}).src`)
     await waitForRenderedTitle(driver, previewUrl, snappedId)
@@ -245,7 +248,7 @@ export async function exerciseHnreaderFeed(): Promise<void> {
             rootChildren: document.getElementById('tao-studio-root')?.childElementCount,
           })`,
         ).catch(Errors.messageOf),
-        catalog: await FS.readJson(FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)).catch(
+        catalog: await FS.readJson(FS.resolvePath('.tao/store/studio/sketches.jsonc', projectRoot)).catch(
           Errors.messageOf,
         ),
         error: Errors.messageOf(error),
@@ -279,6 +282,7 @@ const feedButtons = `${feedPanel} button`
 const rectangleTool = '[data-tao-studio-draw-tool="rect"]'
 
 async function waitForCompiledPreview(browser: StudioCdp): Promise<void> {
+  await activateSmokePreviews(browser)
   await browser.waitFor(
     `(() => {
       const status = document.querySelector('.studio-status')
@@ -382,13 +386,16 @@ async function sketchFrame(browser: StudioCdp, view: string): Promise<string> {
     })
     const scenario = manifest.scenarios.find(scenario => scenario.subjectId === subject?.subjectId)
     const cell = manifest.cells.find(cell => cell.scenarioId === scenario?.scenarioId)
-    return cell ? '[data-tao-studio-cell="' + cell.cellId + '"] iframe' : ''
+    return cell ? '[data-tao-studio-cell="' + cell.cellId + '"]' : ''
   })`
   await browser.waitFor(
     `(${expression}).then(selector => selector !== '' && document.querySelector(selector) !== null)`,
     { timeoutMs: 30_000 },
   )
-  return await browser.evaluate<string>(expression)
+  await activateSmokePreviews(browser)
+  const frame = `${await browser.evaluate<string>(expression)} iframe`
+  await browser.waitFor(`document.querySelector(${JSON.stringify(frame)}) !== null`, { timeoutMs: 30_000 })
+  return frame
 }
 
 async function dropTitleInFrame(

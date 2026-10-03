@@ -63,8 +63,7 @@ function wordFlowerAbsorbedParityIssues(directory: WordFlowerDirectory): string[
 }
 
 function isWordFlowerParityFile(file: SourceFile): boolean {
-  return file.path !== '.tao-project/lock.jsonc'
-    && !file.path.split('/').some(segment => segment === '.tao' || segment === 'node_modules')
+  return !file.path.split('/').some(segment => segment === '.tao' || segment === 'node_modules')
     && !file.path.endsWith('.tao.ts')
 }
 
@@ -482,32 +481,32 @@ const RAW_ERROR_ALLOWLIST = [
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:884',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:905',
   'packages/ides/studio-tooling/studio-tooling-src/StudioElectrobunAppSource.ts:908',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:239',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:351',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:359',
-  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:376',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:20',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:199',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:517',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:545',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:238',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:350',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:358',
+  'packages/ides/studio-tooling/studio-smoke/studio-network-simulation.test.ts:375',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:21',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:206',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:524',
   'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:552',
-  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:639',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:205',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:970',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:975',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:980',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1005',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1244',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1265',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1452',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1496',
-  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1522',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:559',
+  'packages/ides/studio-tooling/studio-smoke/studio-real-app.test.ts:646',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:207',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:974',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:979',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:984',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1009',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1248',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1269',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1456',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1500',
+  'packages/ides/studio-tooling/studio-smoke/studio-simulated-user.test.ts:1526',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:306',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:328',
   'packages/apps/runtime/TR-tests/TR-studio-preview.test.ts:1101',
   'packages/ides/studio/studio-src/StudioWelcome.ts:83',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:713',
-  'packages/ides/studio/studio-tests/studio-client.test.ts:3974',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:712',
+  'packages/ides/studio/studio-tests/studio-client.test.ts:3926',
   // Expo config plugins execute as standalone CommonJS host scripts.
   'packages/apps/providers/icloud/plugins/with-tao-icloud.cjs:32',
   'packages/apps/expo-host/plugins/with-ios-fmt-compat.cjs:14',

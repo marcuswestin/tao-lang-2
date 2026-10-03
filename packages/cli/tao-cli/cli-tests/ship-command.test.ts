@@ -34,7 +34,7 @@ Describe('tao ship command', () => {
       Expect(output).toContain('Ship Notes 1.2.3 (202609021405)')
       Expect(output).toContain('Create an Admin App Store Connect API team key')
       Expect(output).toContain('Prebuild the iOS project')
-      Expect(await FS.exists(FS.resolvePath('.tao-project', FS.dirname(paths['App.tao']!)))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.tao/store/lock.jsonc', FS.dirname(paths['App.tao']!)))).toBe(false)
     })
   })
 
@@ -83,7 +83,7 @@ Describe('tao ship command', () => {
     }
     const root = await mkGitTestDir('tao-ship-command-')
     await initGitTestRepository(root, {
-      commit: { files: { '.tao-project/lock.jsonc': JSON.stringify(lock), 'App.tao': source } },
+      commit: { files: { '.tao/store/lock.jsonc': JSON.stringify(lock), 'App.tao': source } },
     })
     const terminal = fakeTerminal()
     await runShipCommand(root, {
@@ -183,7 +183,7 @@ async function expectFreshBuildForIneligibleCheckpoint(
     },
   }
   await withTaoFiles('tao-ship-command-', {
-    '.tao-project/lock.jsonc': JSON.stringify(lock),
+    '.tao/store/lock.jsonc': JSON.stringify(lock),
     'App.tao': source,
   }, async paths => {
     const terminal = fakeTerminal()

@@ -1,78 +1,269 @@
+import { Errors, Text } from './core/shared-core'
 import * as FS from './FS'
 import * as Platform from './Platform'
 
-/**
- * ProjectLocal owns a project's own `.tao/` folder: what Tao keeps for one developer beside a
- * project and never commits. The folder holds three entries and nothing else. `store/` keeps what a
- * developer would lose if it vanished: dev-session history, local dev data, and retained builds.
- * `cache/` keeps what Tao regenerates, along with the temporary files and locks Tao uses while it
- * writes anywhere in the project, so a committed folder never shows one. `.gitignore` ignores the
- * whole folder, so a project without an ignore file of its own still never commits it.
- *
- * Committed project state is `.tao-project/`; machine-wide state is `TaoHome`.
- */
-export const ProjectLocal = { cacheResolve, prepare, root, stagingPath, storeResolve }
+/** ProjectLocal owns committed, durable local, and regenerable state beside a Tao project. */
+export const ProjectLocal = { cacheResolve, localResolve, prepare, root, stagingPath, storeResolve }
 
-const IGNORE_FILE_CONTENT = '*\n'
-
-/** Each entry of the layout before `store/` and `cache/`, with where it now lives; a child moves before its parent. */
-const legacyEntries = [
-  ['sessions', 'store/sessions'],
-  ['builds', 'store/builds'],
-  ['dev/data', 'store/dev-data'],
-  ['dev', 'cache/dev'],
-  ['bridge-check.tsconfig.json', 'cache/bridge-check.tsconfig.json'],
-  ['browser-acceptance', 'cache/browser-acceptance'],
-] as const
+const IGNORE_FILE_CONTENT = 'local/\ncache/\n'
+const LEGACY_IGNORE_START = '# Tao retained legacy entries (managed)\n'
+const LEGACY_IGNORE_END = '# End Tao retained legacy entries\n'
 
 /** root is the project's `.tao/` folder. */
 function root(projectRoot: string): string {
   return FS.resolvePath('.tao', projectRoot)
 }
 
-/** storeResolve names a path a developer keeps: it survives until they delete it. */
+/** storeResolve names project state shared with everyone and committed with the project. */
 function storeResolve(relativePath: string, projectRoot: string): string {
   return FS.resolvePath(relativePath, FS.resolvePath('store', root(projectRoot)))
 }
 
-/** cacheResolve names a path Tao regenerates, safe to delete while no Tao process uses the project. */
+/** localResolve names durable state belonging to one developer of this project. */
+function localResolve(relativePath: string, projectRoot: string): string {
+  return FS.resolvePath(relativePath, FS.resolvePath('local', root(projectRoot)))
+}
+
+/** cacheResolve names regenerable state, temporary files, and locks. */
 function cacheResolve(relativePath: string, projectRoot: string): string {
   return FS.resolvePath(relativePath, FS.resolvePath('cache', root(projectRoot)))
 }
 
-/**
- * stagingPath names a fresh temporary file to write before moving it onto `targetPath`, a file in the
- * same project. It sits in the cache, so an interrupted write never leaves a stray beside the target.
- */
+/** Stage a fresh file in the project's cache before publishing it to a committed destination. */
 function stagingPath(targetPath: string, projectRoot: string): string {
   return cacheResolve(`tmp/${FS.basename(targetPath)}.${Platform.randomUUID()}.tmp`, projectRoot)
 }
 
-/**
- * prepare readies the folder before a write: it moves any entry of the older layout to where it now
- * lives and makes `.gitignore` ignore everything. It is idempotent and safe to run concurrently.
- */
+/** Move recognized older entries once, without replacing conflicting destinations or unknown files. */
 async function prepare(projectRoot: string): Promise<void> {
-  const folder = root(projectRoot)
-  for (const [from, to] of legacyEntries) {
-    await moveLegacyEntry(FS.resolvePath(from, folder), FS.resolvePath(to, folder))
+  const project = await FS.realPath(projectRoot)
+  const folder = root(project)
+  const lockDirectory = cacheResolve('locks', project)
+  await FS.mkdirWithinBoundary(lockDirectory, project)
+  await FS.mkdirWithinBoundary(cacheResolve('tmp', project), project)
+  await FS.withFileMutationLock(folder, project, async () => {
+    const rootIgnorePath = FS.resolvePath('.gitignore', project)
+    const nestedIgnorePath = FS.resolvePath('.gitignore', folder)
+    for (const path of [rootIgnorePath, nestedIgnorePath]) {
+      if (await hasLinkedComponent(project, path) || await FS.isDirectory(path)) {
+        Errors.throwHostEnvironment(`Cannot migrate the project ignore file at ${path}.`)
+      }
+    }
+    const rootIgnore = await FS.isFile(rootIgnorePath) ? await FS.readText(rootIgnorePath) : ''
+    const nestedIgnore = await FS.isFile(nestedIgnorePath) ? await FS.readText(nestedIgnorePath) : ''
+    const hadLegacyBlanket = rootIgnore.split('\n').includes('.tao/') || nestedIgnore.split('\n').includes('*')
+    await FS.mkdirWithinBoundary(storeResolve('', project), project)
+    await FS.mkdirWithinBoundary(localResolve('', project), project)
+    await migrateOldTao(folder, project)
+    await migrateProjectStore(project)
+    const retained = hadLegacyBlanket && !rootIgnore.includes(LEGACY_IGNORE_START)
+      ? await retainedLegacyPaths(project)
+      : []
+    await removeLegacyRootIgnore(project, retained)
+    if (!await FS.isFile(nestedIgnorePath) || await FS.readText(nestedIgnorePath) !== IGNORE_FILE_CONTENT) {
+      const stagedPath = stagingPath(nestedIgnorePath, project)
+      await FS.writeText(stagedPath, IGNORE_FILE_CONTENT)
+      await FS.move(stagedPath, nestedIgnorePath)
+    }
+  }, { lockDirectory })
+}
+
+/** Remove only the old generated rule that hid the entire committed `.tao/` tree. */
+async function removeLegacyRootIgnore(project: string, captured: readonly string[]): Promise<void> {
+  const ignorePath = FS.resolvePath('.gitignore', project)
+  if (await FS.isSymbolicLink(ignorePath) || await FS.isDirectory(ignorePath)) {
+    Errors.throwHostEnvironment(`Cannot migrate the project ignore file at ${ignorePath}.`)
   }
-  const ignorePath = FS.resolvePath('.gitignore', folder)
-  if (!await FS.isFile(ignorePath) || await FS.readText(ignorePath) !== IGNORE_FILE_CONTENT) {
-    await FS.writeText(ignorePath, IGNORE_FILE_CONTENT)
+  const current = await FS.isFile(ignorePath) ? await FS.readText(ignorePath) : ''
+  const previousStart = current.indexOf(LEGACY_IGNORE_START)
+  const previousEnd = previousStart < 0 ? -1 : current.indexOf(LEGACY_IGNORE_END, previousStart)
+  if (previousStart >= 0 && previousEnd < 0) {
+    Errors.throwHostEnvironment(`Incomplete Tao legacy ignore rules at ${ignorePath}.`)
+  }
+  const withoutManaged = previousEnd < 0
+    ? current
+    : current.slice(0, previousStart > 0 && current[previousStart - 1] === '\n' ? previousStart - 1 : previousStart)
+      + current.slice(previousEnd + LEGACY_IGNORE_END.length)
+  const withoutBlanket = withoutManaged.split('\n').filter(line => line !== '.tao/').join('\n')
+  const retained = previousEnd < 0
+    ? captured
+    : current.slice(previousStart + LEGACY_IGNORE_START.length, previousEnd).split('\n').filter(Boolean)
+  const updated = retained.length === 0
+    ? withoutBlanket
+    : `${withoutBlanket}${withoutBlanket.length > 0 ? '\n' : ''}${LEGACY_IGNORE_START}${
+      retained.join('\n')
+    }\n${LEGACY_IGNORE_END}`
+  if (updated === current) {
+    return
+  }
+  const stagedPath = stagingPath(ignorePath, project)
+  await FS.writeText(stagedPath, updated)
+  await FS.move(stagedPath, ignorePath)
+}
+
+/** Capture only entries the older blanket hid and migration could not move. */
+async function retainedLegacyPaths(project: string): Promise<string[]> {
+  const folder = root(project)
+  const paths: string[] = []
+  for (const entry of await FS.listDir(folder)) {
+    if (['.gitignore', 'store', 'local', 'cache'].includes(entry)) {
+      continue
+    }
+    const path = FS.resolvePath(entry, folder)
+    paths.push(
+      gitIgnoreLiteral(FS.relativePath(project, path), !await FS.isSymbolicLink(path) && await FS.isDirectory(path)),
+    )
+  }
+  const storeRoot = storeResolve('', project)
+  for await (const path of FS.walk(storeRoot, { includeHidden: true })) {
+    const relative = FS.relativePath(storeRoot, path)
+    if (
+      ['lock.jsonc', 'secrets.jsonc', 'studio/sketches.jsonc'].includes(relative)
+      && !await FS.isSymbolicLink(path)
+    ) {
+      continue
+    }
+    paths.push(gitIgnoreLiteral(FS.relativePath(project, path), false))
+  }
+  return [...new Set(paths)].sort()
+}
+
+/** Quote a literal project path so Git cannot interpret a filename as a pattern. */
+function gitIgnoreLiteral(relativePath: string, directory: boolean): string {
+  if (/[\r\n]/u.test(relativePath)) {
+    Errors.throwHostEnvironment(`Cannot preserve Git ignore coverage for ${JSON.stringify(relativePath)}.`)
+  }
+  const escaped = relativePath.replace(/[\\*?\[\]#! ]/gu, '\\$&')
+  return `/${escaped}${directory ? '/' : ''}`
+}
+
+async function migrateOldTao(folder: string, project: string): Promise<void> {
+  for (
+    const [from, to] of [
+      ['sessions', 'sessions'],
+      ['builds', 'builds'],
+    ] as const
+  ) {
+    await moveIfFree(FS.resolvePath(from, folder), localResolve(to, project), project)
+    await moveIfFree(storeResolve(from, project), localResolve(to, project), project)
+  }
+
+  await migrateDevData(FS.resolvePath('dev/data', folder), project)
+  await migrateDevData(storeResolve('dev-data', project), project)
+  for (const name of ['runtime', 'node_modules', 'expo-home', 'desktop'] as const) {
+    await moveIfFree(FS.resolvePath(`dev/${name}`, folder), cacheResolve(`dev/${name}`, project), project)
+  }
+  await moveIfFree(FS.resolvePath('dev/logs', folder), cacheResolve('logs', project), project)
+  await moveIfFree(cacheResolve('dev/logs', project), cacheResolve('logs', project), project)
+  await moveIfFree(
+    FS.resolvePath('bridge-check.tsconfig.json', folder),
+    cacheResolve('bridge-check/tsconfig.json', project),
+    project,
+  )
+  await moveIfFree(
+    cacheResolve('bridge-check.tsconfig.json', project),
+    cacheResolve('bridge-check/tsconfig.json', project),
+    project,
+  )
+  await moveIfFree(FS.resolvePath('browser-acceptance', folder), cacheResolve('browser-acceptance', project), project)
+  for (
+    const path of [FS.resolvePath('dev/data', folder), FS.resolvePath('dev', folder), storeResolve('dev-data', project)]
+  ) {
+    if (!await hasLinkedComponent(project, path) && await FS.isDirectory(path)) {
+      await FS.removeEmptyDirectory(path)
+    }
   }
 }
 
-async function moveLegacyEntry(from: string, to: string): Promise<void> {
-  if (!await FS.exists(from) || await FS.exists(to)) {
+async function migrateDevData(from: string, project: string): Promise<void> {
+  if (await hasLinkedComponent(project, from) || !await FS.isDirectory(from)) {
     return
   }
-  try {
+  for (const entry of await FS.listDir(from)) {
+    const match = /^(.+)-[0-9a-f]{8}$/.exec(entry)
+    if (match === null) {
+      continue
+    }
+    await moveIfFree(FS.resolvePath(entry, from), localResolve(`dev-data/${match[1]}`, project), project)
+  }
+}
+
+async function migrateProjectStore(project: string): Promise<void> {
+  const oldRoot = FS.resolvePath('.tao-project', project)
+  await moveIfFree(FS.resolvePath('lock.jsonc', oldRoot), storeResolve('lock.jsonc', project), project)
+  await moveIfFree(
+    FS.resolvePath('studio/sketches.jsonc', oldRoot),
+    storeResolve('studio/sketches.jsonc', project),
+    project,
+  )
+  await moveIfFree(FS.resolvePath('secrets/secrets.jsonc', project), storeResolve('secrets.jsonc', project), project)
+
+  await foldSkillsVersion(oldRoot, project)
+  const oldStudio = FS.resolvePath('studio', oldRoot)
+  if (!await hasLinkedComponent(project, oldStudio) && await FS.isDirectory(oldStudio)) {
+    await FS.removeEmptyDirectory(oldStudio)
+  }
+  if (!await hasLinkedComponent(project, oldRoot) && await FS.isDirectory(oldRoot)) {
+    await FS.removeEmptyDirectory(oldRoot)
+  }
+}
+
+async function foldSkillsVersion(oldRoot: string, project: string): Promise<void> {
+  const skillsPath = FS.resolvePath('skills.version', oldRoot)
+  const lockPath = storeResolve('lock.jsonc', project)
+  if (
+    await hasLinkedComponent(project, skillsPath) || await hasLinkedComponent(project, lockPath)
+    || !await FS.isFile(skillsPath)
+  ) {
+    return
+  }
+  const version = (await FS.readText(skillsPath)).trim()
+  const lock: unknown = await FS.isFile(lockPath)
+    ? JSON.parse(Text.stripJsonc(await FS.readText(lockPath)))
+    : { schemaVersion: 1 }
+  if (typeof lock !== 'object' || lock === null || Array.isArray(lock)) {
+    return
+  }
+  const fields = lock as Record<string, unknown>
+  if (fields['skillsVersion'] !== undefined && fields['skillsVersion'] !== version) {
+    return
+  }
+  if (fields['skillsVersion'] === undefined) {
+    const stagedPath = stagingPath(lockPath, project)
+    await FS.writeJson(stagedPath, { ...fields, skillsVersion: version })
+    await FS.move(stagedPath, lockPath)
+  }
+  await FS.remove(skillsPath)
+}
+
+async function moveIfFree(from: string, to: string, project: string): Promise<void> {
+  if (await hasLinkedComponent(project, from) || await hasLinkedComponent(project, to) || !await FS.exists(from)) {
+    return
+  }
+  if (!await FS.exists(to)) {
     await FS.move(from, to)
-  } catch (error) {
-    // Another process preparing the same project moved it first.
-    if (await FS.exists(from)) {
-      throw error
+    return
+  }
+  if (!await FS.isDirectory(from) || !await FS.isDirectory(to)) {
+    return
+  }
+  for (const entry of await FS.listDir(from)) {
+    await moveIfFree(FS.resolvePath(entry, from), FS.resolvePath(entry, to), project)
+  }
+  await FS.removeEmptyDirectory(from)
+}
+
+/** Inspect each lexical path component without following a link into another tree. */
+async function hasLinkedComponent(project: string, path: string): Promise<boolean> {
+  if (!FS.pathIsWithin(path, project)) {
+    Errors.throwHostEnvironment(`Project state path escaped ${project}: ${path}.`)
+  }
+  let current = project
+  for (const component of FS.relativePath(project, path).split('/').filter(Boolean)) {
+    current = FS.resolvePath(component, current)
+    if (await FS.isSymbolicLink(current)) {
+      return true
     }
   }
+  return false
 }

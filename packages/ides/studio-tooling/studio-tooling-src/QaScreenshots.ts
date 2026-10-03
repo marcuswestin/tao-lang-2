@@ -279,7 +279,7 @@ async function withStudio(
 
 /** sessionRecords lists the dev-session history records a project holds, leaving out its live owner. */
 async function sessionRecords(projectRoot: string): Promise<ReadonlySet<string>> {
-  const root = ProjectLocal.storeResolve('sessions', projectRoot)
+  const root = ProjectLocal.localResolve('sessions', projectRoot)
   return new Set(
     await FS.isDirectory(root)
       ? (await FS.listDir(root)).filter(name => name.endsWith('.json') && name !== 'owner.json')
@@ -294,7 +294,7 @@ async function sessionRecords(projectRoot: string): Promise<ReadonlySet<string>>
  * only when nothing but its own ignore file is left.
  */
 async function removeNewSessionRecords(projectRoot: string, before: ReadonlySet<string>): Promise<void> {
-  const sessions = ProjectLocal.storeResolve('sessions', projectRoot)
+  const sessions = ProjectLocal.localResolve('sessions', projectRoot)
   for (const name of await sessionRecords(projectRoot)) {
     if (!before.has(name)) {
       await FS.remove(FS.resolvePath(name, sessions))

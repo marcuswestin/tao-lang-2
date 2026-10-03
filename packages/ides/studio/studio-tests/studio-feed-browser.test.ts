@@ -121,7 +121,7 @@ Describe('Studio feed browser', () => {
       'live',
       'library',
     ])
-    Expect(() => StudioFeedBrowser.build(manifest(), { activeScenarioId: 'missing', seed: 'seed' }))
+    Expect(() => StudioFeedBrowser.build(manifest(), { focusedScenarioId: 'missing', seed: 'seed' }))
       .toThrow('scenario does not exist')
   })
 })

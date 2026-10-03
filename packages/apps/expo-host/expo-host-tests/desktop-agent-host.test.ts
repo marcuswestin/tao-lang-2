@@ -232,7 +232,7 @@ function HostTest(name: string, work: (fixture: Fixture) => Promise<void>): void
   Test(name, () => {
     const result = hostTestTail.then(async () => {
       const root = await mkTestDir('desktop-agent-host-')
-      const state = FS.resolvePath(Platform.sha256Hex(manifest.appId).slice(0, 24), root)
+      const state = FS.resolvePath(manifest.appId, root)
       const sessionPath = FS.resolvePath('session.json', state)
       const restore = stateRootSlot.install(root)
       const hosts: Host[] = []

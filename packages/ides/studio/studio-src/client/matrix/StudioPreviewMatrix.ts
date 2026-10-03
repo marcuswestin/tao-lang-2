@@ -9,7 +9,7 @@ import { StudioMatrixGrid } from './StudioMatrixGrid'
 import { previewMatrixPlan, type StudioMatrixGroup, StudioMatrixLayout } from './StudioMatrixLayout'
 import { StudioDrawCanvas, StudioMatrixSketches } from './StudioMatrixSketches'
 import { postInteractionMode, postPreviewRuntimeUpdate, postWholeAppPublicationUpdate } from './StudioPreviewBridge'
-import { renderCellPreview } from './StudioPreviewCellView'
+import { previewActivationToggle, renderCellPreview } from './StudioPreviewCellView'
 import {
   disconnectPreviews,
   expectPreviewRevision,
@@ -20,47 +20,8 @@ import {
 } from './StudioPreviewConnection'
 import { StudioReviewDom } from './StudioReviewDom'
 
-const fastDrawStorageKey = 'tao-studio-fast-draw'
-
-/**
- * StudioFastDraw is a latency experiment: while it is on, Studio creates an iframe for the first
- * scenario's preview only, so no other cell loads a page, runs its JavaScript, or receives an update.
- * The toolbar toggles it and the choice is remembered per browser; `?taoStudioPreviews=first` or `=all`
- * on the Studio URL overrides the remembered choice for that load.
- */
-export const StudioFastDraw = {
-  enabled(): boolean {
-    if (typeof window === 'undefined') {
-      return false
-    }
-    const requested = new URLSearchParams(window.location.search).get('taoStudioPreviews')
-    if (requested === 'first' || requested === 'all') {
-      return requested === 'first'
-    }
-    try {
-      return window.localStorage.getItem(fastDrawStorageKey) === 'on'
-    } catch {
-      return false
-    }
-  },
-  set(enabled: boolean): void {
-    const url = new URL(window.location.href)
-    if (url.searchParams.has('taoStudioPreviews')) {
-      url.searchParams.delete('taoStudioPreviews')
-      window.history.replaceState(window.history.state, '', url)
-    }
-    try {
-      window.localStorage.setItem(fastDrawStorageKey, enabled ? 'on' : 'off')
-    } catch {
-      // A browser without storage keeps the choice for this page only, through the URL.
-      url.searchParams.set('taoStudioPreviews', enabled ? 'first' : 'all')
-      window.history.replaceState(window.history.state, '', url)
-    }
-  },
-}
-
 function connectedCells(manifest: StudioPreviewManifestV2): readonly StudioPreviewCell[] {
-  return StudioFastDraw.enabled() ? manifest.cells.slice(0, 1) : manifest.cells
+  return manifest.cells
 }
 
 export async function connectPreviews(
@@ -93,6 +54,7 @@ export async function connectPreviews(
           handshake,
           manifest,
           cell,
+          handshake.studioSession?.activatedCellIds.includes(cell.cellId) ?? false,
           signal,
         )
       ),
@@ -101,6 +63,7 @@ export async function connectPreviews(
       connection.manifestCompatibilitySignature = compatibilitySignature
     }
     renderConnectionGrid(parent, manifest, connections, previewUrl)
+    wireActivation(parent, connections, manifest, previewUrl, handshake)
     StudioMatrixSketches.render(
       parent,
       handshake.identity.project,
@@ -110,7 +73,15 @@ export async function connectPreviews(
     StudioMatrixSketches.renderable(parent, StudioMatrixLayout.renderableViews(manifest, handshake.identity.project))
     return connections
   }
-  const wholeApp = await connectWholeAppPreview(parent, previewUrl, origin, handshake, signal)
+  const wholeApp = await connectWholeAppPreview(
+    parent,
+    previewUrl,
+    origin,
+    handshake,
+    handshake.studioSession?.activatedCellIds.includes('whole-app') ?? false,
+    signal,
+  )
+  wireActivation(parent, [wholeApp], manifest, previewUrl, handshake)
   if (manifest !== undefined) {
     wholeApp.manifestCompatibilitySignature = previewCompatibilitySignature(manifest)
   }
@@ -145,6 +116,238 @@ function renderConnectionGrid(
   }
 }
 
+function renderWholeApp(parent: HTMLElement, connection: StudioPreviewConnection, appName: string): void {
+  const existing = parent.querySelector<HTMLElement>(':scope > .studio-whole-app-preview')
+  const card = existing ?? document.createElement('section')
+  card.className = 'studio-preview-cell studio-whole-app-preview'
+  card.dataset['cellId'] = 'whole-app'
+  const label = card.querySelector<HTMLElement>(':scope > .studio-preview-cell-label')
+    ?? document.createElement('header')
+  label.className = 'studio-preview-cell-label'
+  const name = document.createElement('span')
+  name.textContent = `${appName} · whole app`
+  label.replaceChildren(name, previewActivationToggle(connection))
+  const viewport = card.querySelector<HTMLElement>(':scope > .studio-preview-cell-viewport')
+    ?? document.createElement('div')
+  viewport.className = 'studio-preview-cell-viewport'
+  if (connection.activated) {
+    if (!viewport.contains(connection.iframe)) {
+      viewport.replaceChildren(connection.iframe)
+    }
+  } else {
+    const hint = document.createElement('span')
+    hint.className = 'studio-preview-inactive-hint'
+    hint.textContent = 'Activate preview to load the app.'
+    viewport.replaceChildren(hint)
+  }
+  if (label.parentElement !== card) {
+    card.append(label)
+  }
+  if (viewport.parentElement !== card) {
+    card.append(viewport)
+  }
+  connection.frame = card
+  if (existing === null) {
+    StudioDrawCanvas.retain(parent, () => parent.replaceChildren(card))
+  }
+}
+
+type StudioActivationState = {
+  identity: string
+  activatedCellIds: Set<string>
+  connections: readonly StudioPreviewConnection[]
+  context: {
+    manifest: StudioPreviewManifestV2 | undefined
+    previewUrl: string
+    handshake: StudioHandshake
+  }
+  tail: Promise<void>
+}
+
+const activationStates = new WeakMap<HTMLElement, StudioActivationState>()
+const maxActivationContextAttempts = 3
+
+function releaseCellInstance(previewInstanceId: string): () => void {
+  let released = false
+  return () => {
+    if (released) {
+      return
+    }
+    released = true
+    void StudioApiClient.releaseCellInstance(previewInstanceId).catch(() => {})
+  }
+}
+
+export function wireActivation(
+  parent: HTMLElement,
+  connections: readonly StudioPreviewConnection[],
+  manifest: StudioPreviewManifestV2 | undefined,
+  previewUrl: string,
+  handshake: StudioHandshake,
+): void {
+  const identity = `${handshake.identity.project}\0${handshake.identity.appName}`
+  let state = activationStates.get(parent)
+  if (state === undefined || state.identity !== identity) {
+    if (state !== undefined) {
+      state.connections = []
+    }
+    state = {
+      identity,
+      activatedCellIds: new Set(
+        handshake.studioSession?.activatedCellIds
+          ?? connections.filter(connection => connection.activated).map(connection =>
+            connection.cell?.cellId ?? 'whole-app'
+          ),
+      ),
+      connections,
+      context: { manifest, previewUrl, handshake },
+      tail: Promise.resolve(),
+    }
+    activationStates.set(parent, state)
+  } else {
+    state.connections = connections
+    state.context = { manifest, previewUrl, handshake }
+    if (manifest !== undefined) {
+      const available = new Set(connections.map(connection => connection.cell?.cellId ?? 'whole-app'))
+      let pruned = false
+      for (const id of state.activatedCellIds) {
+        if (!available.has(id)) {
+          state.activatedCellIds.delete(id)
+          pruned = true
+        }
+      }
+      if (pruned) {
+        const activation = state
+        const save = activation.tail.then(async () => {
+          if (activationStates.get(parent) === activation) {
+            await StudioApiClient.saveStudioSessionField('activatedCellIds', [...activation.activatedCellIds])
+          }
+        })
+        activation.tail = save.catch(() => {})
+      }
+    }
+  }
+  const activation = state
+  for (const connection of connections) {
+    connection.toggleActivation = () => {
+      const requested = activation.tail.then(async () => {
+        const current = (): boolean =>
+          activationStates.get(parent) === activation && activation.connections.includes(connection)
+        if (!current()) {
+          return
+        }
+        const id = connection.cell?.cellId ?? 'whole-app'
+        const next = !activation.activatedCellIds.has(id)
+        let savedWithoutMount = false
+        const pruneSavedActivation = async (): Promise<void> => {
+          if (savedWithoutMount && activationStates.get(parent) === activation) {
+            savedWithoutMount = false
+            await StudioApiClient.saveStudioSessionField('activatedCellIds', [...activation.activatedCellIds])
+          }
+        }
+        let releaseRegistered: (() => void) | undefined
+        try {
+          for (let attempt = 0; attempt < maxActivationContextAttempts; attempt++) {
+            if (!current()) {
+              await pruneSavedActivation()
+              return
+            }
+            const context = activation.context
+            const { manifest, previewUrl, handshake } = context
+            const cell = connection.cell
+            let previewInstanceId: string | undefined
+            let cellIdentity: StudioCellIdentity | undefined
+            releaseRegistered = undefined
+            if (next) {
+              previewInstanceId = crypto.randomUUID()
+              if (cell === undefined) {
+                await StudioApiClient.previewInstance({ previewInstanceId })
+              } else {
+                Assert(manifest, 'a preview manifest for an activated scenario')
+                cellIdentity = {
+                  appName: handshake.identity.appName,
+                  cellId: cell.cellId,
+                  cellRevision: cell.cellRevision,
+                  compileRevision: manifest.compileRevision,
+                  manifestRevision: manifest.manifestRevision,
+                  project: handshake.identity.project,
+                }
+                await StudioApiClient.cellInstance({ ...cellIdentity, previewInstanceId })
+                releaseRegistered = releaseCellInstance(previewInstanceId)
+              }
+            }
+            if (!current()) {
+              releaseRegistered?.()
+              await pruneSavedActivation()
+              return
+            }
+            if (activation.context !== context || connection.cell !== cell) {
+              releaseRegistered?.()
+              continue
+            }
+            const activatedCellIds = new Set(activation.activatedCellIds)
+            if (next) {
+              activatedCellIds.add(id)
+            } else {
+              activatedCellIds.delete(id)
+            }
+            await StudioApiClient.saveStudioSessionField('activatedCellIds', [...activatedCellIds])
+            savedWithoutMount = true
+            if (!current()) {
+              releaseRegistered?.()
+              await pruneSavedActivation()
+              return
+            }
+            if (activation.context !== context || connection.cell !== cell) {
+              releaseRegistered?.()
+              continue
+            }
+            activation.activatedCellIds = activatedCellIds
+            savedWithoutMount = false
+            connection.activated = next
+            if (next) {
+              connection.previewInstanceId = previewInstanceId!
+              connection.releaseCellInstance = releaseRegistered
+              if (cellIdentity !== undefined) {
+                connection.cellIdentity = cellIdentity
+                connection.expectedRevision = cellIdentity.compileRevision
+              }
+              connection.navigationPending = true
+              connection.iframe.src = StudioPreviewFrameUrl.create(
+                previewUrl,
+                connection.previewInstanceId,
+                window.location,
+                cell !== undefined,
+              )
+            } else {
+              connection.releaseCellInstance?.()
+              connection.releaseCellInstance = undefined
+              StudioPreviewPublication.cancel(connection)
+              connection.appliedIdentity = undefined
+              connection.iframe.src = 'about:blank'
+              connection.iframe.remove()
+            }
+            if (cell === undefined) {
+              renderWholeApp(parent, connection, handshake.identity.appName)
+              StudioDrawCanvas.ensure(parent)
+            } else if (connection.frame !== undefined && manifest !== undefined) {
+              renderCellPreview(connection.frame, connection, previewUrl, manifest)
+            }
+            return
+          }
+          Errors.throwHostEnvironment('The preview changed repeatedly while activation was in progress. Try again.')
+        } catch (error) {
+          releaseRegistered?.()
+          await pruneSavedActivation()
+          throw error
+        }
+      })
+      activation.tail = requested.catch(() => {})
+      return requested
+    }
+  }
+}
+
 /**
  * connectWholeAppPreview shows the running app in one frame. It is the preview for an app that declares no
  * scenarios, so there are no cells to lay out.
@@ -154,16 +357,22 @@ async function connectWholeAppPreview(
   previewUrl: string,
   origin: string,
   handshake: StudioHandshake,
+  activated: boolean,
   signal?: AbortSignal,
 ): Promise<StudioPreviewConnection> {
   const previewInstanceId = crypto.randomUUID()
-  await StudioApiClient.previewInstance({ previewInstanceId }, signal)
+  if (activated) {
+    await StudioApiClient.previewInstance({ previewInstanceId }, signal)
+  }
   const iframe = document.createElement('iframe')
-  iframe.src = StudioPreviewFrameUrl.create(previewUrl, previewInstanceId, window.location)
+  if (activated) {
+    iframe.src = StudioPreviewFrameUrl.create(previewUrl, previewInstanceId, window.location)
+  }
   iframe.title = `${handshake.identity.appName} live preview`
-  StudioDrawCanvas.retain(parent, () => parent.replaceChildren(iframe))
+  const connection: StudioPreviewConnection = { activated, iframe, interactionMode: 'run', origin, previewInstanceId }
+  renderWholeApp(parent, connection, handshake.identity.appName)
   StudioDrawCanvas.ensure(parent)
-  return { iframe, interactionMode: 'run', origin, previewInstanceId }
+  return connection
 }
 
 function connectionGroups(
@@ -222,6 +431,7 @@ async function connectCellPreview(
   handshake: StudioHandshake,
   manifest: StudioPreviewManifestV2,
   cell: StudioPreviewCell,
+  activated: boolean,
   signal?: AbortSignal,
 ): Promise<StudioPreviewConnection> {
   const previewInstanceId = crypto.randomUUID()
@@ -233,19 +443,25 @@ async function connectCellPreview(
     manifestRevision: manifest.manifestRevision,
     project: handshake.identity.project,
   }
-  await StudioApiClient.cellInstance({ ...cellIdentity, previewInstanceId }, signal)
+  if (activated) {
+    await StudioApiClient.cellInstance({ ...cellIdentity, previewInstanceId }, signal)
+  }
   const iframe = document.createElement('iframe')
-  iframe.src = StudioPreviewFrameUrl.create(previewUrl, previewInstanceId, window.location, true)
+  if (activated) {
+    iframe.src = StudioPreviewFrameUrl.create(previewUrl, previewInstanceId, window.location, true)
+  }
   iframe.title = `${cell.scenarioId} live preview`
   const connection: StudioPreviewConnection = {
     cell,
     cellIdentity,
+    activated,
     expectedRevision: manifest.compileRevision,
     iframe,
     navigationPending: true,
     interactionMode: 'run',
     origin,
     previewInstanceId,
+    ...(activated ? { releaseCellInstance: releaseCellInstance(previewInstanceId) } : {}),
   }
   watchCellPreviewLoad(connection, handshake)
   return connection
@@ -276,10 +492,9 @@ export async function refreshCellPreviews(
   const wholeApp = previews.find(preview => preview.cell === undefined)
   const plan = previewMatrixPlan(manifest.cells.length, wholeApp !== undefined)
   if (plan === 'keep-whole-app') {
-    if (!parent.contains(wholeApp!.iframe)) {
-      StudioDrawCanvas.retain(parent, () => parent.replaceChildren(wholeApp!.iframe))
-    }
+    renderWholeApp(parent, wholeApp!, handshake.identity.appName)
     StudioDrawCanvas.ensure(parent)
+    wireActivation(parent, previews, manifest, previewUrl, handshake)
     if (wholeApp !== undefined) {
       wholeApp.manifestCompatibilitySignature = compatibilitySignature
       if (resetRetained) {
@@ -288,8 +503,10 @@ export async function refreshCellPreviews(
             once: true,
           })
         }
-        wholeApp.iframe.src = wholeApp.iframe.src
-      } else if (!publicationChecks) {
+        if (wholeApp.activated) {
+          wholeApp.iframe.src = wholeApp.iframe.src
+        }
+      } else if (!publicationChecks && wholeApp.activated) {
         postWholeAppPublicationUpdate(wholeApp, manifest, handshake)
       }
     }
@@ -297,9 +514,10 @@ export async function refreshCellPreviews(
   }
   if (plan === 'create-whole-app') {
     disconnectPreviews(previews, 'This app no longer declares scenarios, so its cells were replaced.')
-    const next = await connectWholeAppPreview(parent, previewUrl, origin, handshake)
+    const next = await connectWholeAppPreview(parent, previewUrl, origin, handshake, false)
     next.manifestCompatibilitySignature = compatibilitySignature
     previews.splice(0, previews.length, next)
+    wireActivation(parent, previews, manifest, previewUrl, handshake)
     return
   }
   const previousByCell = new Map(
@@ -313,7 +531,15 @@ export async function refreshCellPreviews(
     if (previous !== undefined) {
       return previous
     }
-    const connection = await connectCellPreview(previewUrl, origin, handshake, manifest, cell)
+    const pendingActivation = activationStates.get(parent)
+    const connection = await connectCellPreview(
+      previewUrl,
+      origin,
+      handshake,
+      manifest,
+      cell,
+      pendingActivation?.activatedCellIds.has(cell.cellId) ?? false,
+    )
     connection.interactionMode = interactionMode
     connection.setInteractionMode = setInteractionMode
     return connection
@@ -329,11 +555,30 @@ export async function refreshCellPreviews(
   for (const preview of nextConnections) {
     preview.manifestCompatibilitySignature = compatibilitySignature
   }
+  for (const preview of nextConnections) {
+    if (preview.activated) {
+      continue
+    }
+    const cell = manifest.cells.find(candidate => candidate.cellId === preview.cell!.cellId)!
+    preview.cell = cell
+    preview.cellIdentity = {
+      appName: handshake.identity.appName,
+      cellId: cell.cellId,
+      cellRevision: cell.cellRevision,
+      compileRevision: manifest.compileRevision,
+      manifestRevision: manifest.manifestRevision,
+      project: handshake.identity.project,
+    }
+  }
   renderConnectionGrid(parent, manifest, nextConnections, previewUrl)
+  wireActivation(parent, nextConnections, manifest, previewUrl, handshake)
   StudioMatrixSketches.rerender(parent, StudioMatrixLayout.sketchSourceVersions(manifest))
   StudioMatrixSketches.renderable(parent, StudioMatrixLayout.renderableViews(manifest, handshake.identity.project))
 
   await Promise.all(nextConnections.map(async preview => {
+    if (!preview.activated) {
+      return
+    }
     const cell = manifest.cells.find(candidate => candidate.cellId === preview.cell!.cellId)!
     if (!previousByCell.has(cell.cellId)) {
       return
@@ -393,7 +638,7 @@ export async function refreshCellPreviews(
     // A scenario contract change invalidates all browser interaction state. Metro's ordinary
     // compatible refresh keeps the iframe realm; only this structural change reloads it.
     for (const preview of nextConnections) {
-      if (previousByCell.has(preview.cell!.cellId)) {
+      if (preview.activated && previousByCell.has(preview.cell!.cellId)) {
         StudioPreviewPublication.navigating(preview)
         preview.iframe.src = preview.iframe.src
       }

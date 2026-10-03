@@ -1,5 +1,5 @@
 import Runtime, { HostDependencies, RuntimeToolchainPaths, type ShipManifest as RuntimeShipManifest } from '@expo-host'
-import { CLI, Errors, FS, HCI, Platform } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal } from '@shared'
 import { createAppStoreConnectToken } from './app-store-connect-auth'
 import { type AppStoreBuild, AppStoreConnectClient } from './app-store-connect-client'
 import type { PreparedShip, ShipCommandOptions } from './ship-command'
@@ -45,6 +45,7 @@ export async function executePreparedShip(
   options: ShipCommandOptions,
   dependencies: ShipExecutorDependencies = {},
 ): Promise<void> {
+  await ProjectLocal.prepare(prepared.project.root)
   if (prepared.reuseBuild && prepared.git.root === undefined) {
     Errors.throwUserInput('A build outside Git cannot be reused because Tao cannot prove its exact source provenance.')
   }
@@ -58,9 +59,9 @@ export async function executePreparedShip(
   })
   const progress = new ShipProgress(phases, options)
   const needsCommandLog = options.update === true || !prepared.reuseBuild
-  const logPath = FS.resolvePath(
-    `.artifacts/logs/ship/${prepared.app.name}-${prepared.buildNumber}.log`,
-    prepared.git.root ?? prepared.project.root,
+  const logPath = ProjectLocal.cacheResolve(
+    `logs/ship/${prepared.app.name}-${prepared.buildNumber}.log`,
+    prepared.project.root,
   )
   const logFile = needsCommandLog ? await freshShipLog(logPath, options) : undefined
   try {
@@ -159,8 +160,8 @@ async function executePreparedShipRun(
       validationMode: 'release',
     })
     progress.step('bundle-export')
-    await exportAndProve(runtimeRoot, runner, logFile)
-    const artifacts = FS.resolvePath(`.artifacts/ship/${prepared.app.name}`, runtimeRoot)
+    const artifacts = ProjectLocal.cacheResolve(`ship/${prepared.app.name}`, prepared.project.root)
+    await exportAndProve(runtimeRoot, artifacts, runner, logFile)
     await runShipPipeline(
       planShipPipeline({
         archivePath: FS.resolvePath(`${activePrepared.app.name}.xcarchive`, artifacts),
@@ -491,7 +492,12 @@ async function executeUpdate(
     validationMode: 'release',
   })
   progress.step('bundle-export')
-  const exportRoot = await exportAndProve(runtimeRoot, runner, logFile)
+  const exportRoot = await exportAndProve(
+    runtimeRoot,
+    ProjectLocal.cacheResolve(`ship/${prepared.app.name}`, prepared.project.root),
+    runner,
+    logFile,
+  )
   progress.step('update-publish')
   const publication = await publicationFromExport(
     client,
@@ -511,10 +517,11 @@ async function executeUpdate(
 
 async function exportAndProve(
   runtimeRoot: string,
+  artifactsRoot: string,
   runner: ShipCommandRunner,
   logFile?: FS.FileHandle,
 ): Promise<string> {
-  const exportRoot = FS.resolvePath('.artifacts/ship/export', runtimeRoot)
+  const exportRoot = FS.resolvePath('export', artifactsRoot)
   await FS.remove(exportRoot)
   const expo = RuntimeToolchainPaths.expoCommand(runtimeRoot, [
     'export',

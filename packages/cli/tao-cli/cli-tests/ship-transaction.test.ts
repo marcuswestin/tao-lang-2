@@ -1,20 +1,41 @@
-import { CLI, FS, Time } from '@shared'
-import { Describe, Expect, initGitTestRepository, mkGitTestDir, mkTestDir, Test, until } from '@shared/test'
+import { CLI, FS, Platform, ProjectLocal, TaoHome, Time } from '@shared'
+import {
+  Describe,
+  Expect,
+  initGitTestRepository,
+  mkGitTestDir,
+  mkTestDir,
+  Test,
+  testOverrideSlot,
+  until,
+} from '@shared/test'
 import { readProjectLock } from '../cli-src/ship-lock'
 import { shipContentHash } from '../cli-src/ship-model'
 
 const transactionModule = FS.resolvePath('packages/cli/tao-cli/cli-src/ship-transaction.ts')
 const lockModule = FS.resolvePath('packages/cli/tao-cli/cli-src/ship-lock.ts')
 const commandModule = FS.resolvePath('packages/cli/tao-cli/cli-src/ship-command.ts')
+const skillsModule = FS.resolvePath('packages/ai/tao-skills/skills-src/tao-skills.ts')
 const sharedModule = FS.resolvePath('packages/shared/shared-src/shared.ts')
 const testModule = FS.resolvePath('packages/shared/shared-src/testing/Test-Bun.ts')
 const tsconfig = FS.resolvePath('packages/cli/tao-cli/tsconfig.json')
+const taoHomeSlot = testOverrideSlot({
+  read: () => Platform.runtimeProcess.env['TAO_HOME'],
+  write: value => {
+    if (value === undefined) {
+      delete Platform.runtimeProcess.env['TAO_HOME']
+    } else {
+      Platform.runtimeProcess.env['TAO_HOME'] = value
+    }
+  },
+})
 
 Describe('tao ship cross-process transactions', () => {
   Test('keeps one stale reclaimer across older and freshly started contenders', async () => {
     const root = await mkTestDir('tao-ship-stale-transaction-', { location: 'host' })
+    const restoreHome = taoHomeSlot.install(FS.resolvePath('tao-home', root))
     const repositoryKey = shipContentHash([await FS.realPath(root)])
-    const coordinationRoot = FS.resolvePath(`tao-ship-coordination/${repositoryKey}`, FS.tmpdir())
+    const coordinationRoot = TaoHome.cacheResolve(`ship/locks/${repositoryKey}`)
     const workers: Array<{ command: CLI.StartedCommand; result?: CLI.CommandCloseResult }> = []
     const startContender = (index: number) => {
       const command = CLI.start('bun', {
@@ -87,14 +108,16 @@ Describe('tao ship cross-process transactions', () => {
         worker.command.dispose()
       }
       await FS.remove(coordinationRoot)
+      restoreHome()
       await FS.remove(root)
     }
   })
 
   Test('reacquires a stale-owner claim displaced while the claimant is alive', async () => {
     const root = await mkTestDir('tao-ship-displaced-claim-', { location: 'host' })
+    const restoreHome = taoHomeSlot.install(FS.resolvePath('tao-home', root))
     const repositoryKey = shipContentHash([await FS.realPath(root)])
-    const coordinationRoot = FS.resolvePath(`tao-ship-coordination/${repositoryKey}`, FS.tmpdir())
+    const coordinationRoot = TaoHome.cacheResolve(`ship/locks/${repositoryKey}`)
     const staleOwnerPath = FS.resolvePath('ship-transaction-stale.json', coordinationRoot)
     const lockPath = FS.resolvePath('ship-transaction.lock', coordinationRoot)
     const claimPath = FS.resolvePath(
@@ -149,17 +172,20 @@ Describe('tao ship cross-process transactions', () => {
       }
       worker.dispose()
       await FS.remove(coordinationRoot)
+      restoreHome()
       await FS.remove(root)
     }
   })
 
   Test('serializes projects that share one Git repository', async () => {
     const root = await mkGitTestDir('tao-ship-repository-transaction-')
-    await initGitTestRepository(root)
-    const projects = [FS.resolvePath('one', root), FS.resolvePath('two', root)]
-    await Promise.all(projects.map(FS.mkdir))
-    const results = await Promise.all(projects.map((project, index) =>
-      runWorker(`
+    const restoreHome = taoHomeSlot.install(FS.resolvePath('tao-home', root))
+    try {
+      await initGitTestRepository(root)
+      const projects = [FS.resolvePath('one', root), FS.resolvePath('two', root)]
+      await Promise.all(projects.map(FS.mkdir))
+      const results = await Promise.all(projects.map((project, index) =>
+        runWorker(`
       import { withShipTransaction } from ${JSON.stringify(transactionModule)}
       import { FS } from ${JSON.stringify(sharedModule)}
       const marker = ${JSON.stringify(FS.resolvePath('inside.lock', root))}
@@ -169,12 +195,18 @@ Describe('tao ship cross-process transactions', () => {
         await FS.remove(marker)
       })
     `)
-    ))
-    Expect(results.map(result => result.exitCode)).toEqual([0, 0])
+      ))
+      Expect(results.map(result => result.exitCode)).toEqual([0, 0])
+      Expect(await FS.exists(FS.resolvePath('inside.lock', root))).toBe(false)
+    } finally {
+      restoreHome()
+      await FS.remove(root)
+    }
   })
 
   Test('admits only one independent ship process at a time', async () => {
     const root = await mkTestDir('tao-ship-transaction-', { location: 'host' })
+    const restoreHome = taoHomeSlot.install(FS.resolvePath('tao-home', root))
     try {
       const results = await Promise.all(
         Array.from({ length: 6 }, (_, index) =>
@@ -193,6 +225,7 @@ Describe('tao ship cross-process transactions', () => {
       Expect(results.map(result => result.exitCode)).toEqual([0, 0, 0, 0, 0, 0])
       Expect(await FS.exists(FS.resolvePath('inside.lock', root))).toBe(false)
     } finally {
+      restoreHome()
       await FS.remove(root)
     }
   })
@@ -226,6 +259,56 @@ Describe('tao ship cross-process transactions', () => {
         'app-5',
       ])
     } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('skills installation and toolchain pin share one committed-lock mutation lock', async () => {
+    const root = await mkTestDir('tao-skills-lock-writers-', { location: 'host' })
+    const lockPath = ProjectLocal.storeResolve('lock.jsonc', root)
+    const lockDirectory = ProjectLocal.cacheResolve('locks', root)
+    let installers: Promise<CLI.CommandCloseResult>[] = []
+    let completedWhileHeld = false
+    try {
+      await ProjectLocal.prepare(root)
+      await FS.writeText(lockPath, '{"schemaVersion":1,"skillsVersion":"0.9.0"}\n')
+      const markers = [FS.resolvePath('skills-started', root), FS.resolvePath('pin-started', root)]
+      const finished = [false, false]
+      await FS.withFileMutationLock(lockPath, root, async () => {
+        installers = [
+          runWorker(`
+            import { FS } from ${JSON.stringify(sharedModule)}
+            import { installTaoSkills } from ${JSON.stringify(skillsModule)}
+            await FS.writeText(${JSON.stringify(markers[0])}, '')
+            await installTaoSkills(${JSON.stringify(root)})
+          `).then(result => {
+            finished[0] = true
+            return result
+          }),
+          runWorker(`
+            import { FS } from ${JSON.stringify(sharedModule)}
+            import { writeToolchainPin } from ${JSON.stringify(lockModule)}
+            await FS.writeText(${JSON.stringify(markers[1])}, '')
+            await writeToolchainPin(${JSON.stringify(root)}, '9.9.9')
+          `).then(result => {
+            finished[1] = true
+            return result
+          }),
+        ]
+        await until(async () => (await Promise.all(markers.map(FS.exists))).every(Boolean), {
+          description: 'both committed-lock writers to start',
+        })
+        await Time.sleep(250)
+        completedWhileHeld = finished.some(Boolean)
+      }, { lockDirectory })
+      const results = await Promise.all(installers)
+      Expect(completedWhileHeld).toBe(false)
+      Expect(results.map(result => result.exitCode)).toEqual([0, 0])
+      const lock = await readProjectLock(root)
+      Expect(lock.skillsVersion).toBe('1.0.0')
+      Expect(lock.toolchain?.version).toBe('9.9.9')
+    } finally {
+      await Promise.allSettled(installers)
       await FS.remove(root)
     }
   })

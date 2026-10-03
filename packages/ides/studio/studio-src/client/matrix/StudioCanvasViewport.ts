@@ -136,7 +136,7 @@ export type StudioCanvasViewportControls = Readonly<{
 }>
 
 export type StudioCanvasViewportDeps = Readonly<{
-  /** Neutral Design canvas and inactive previews may offer drag navigation without Space. */
+  /** Neutral Design canvas and unfocused previews may offer drag navigation without Space. */
   canPanWithoutSpace?: (event: PointerEvent) => boolean
   /** Canvas shortcuts are active in the Design and Draw presets. */
   enabled?: () => boolean

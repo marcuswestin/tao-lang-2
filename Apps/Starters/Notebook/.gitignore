@@ -1,3 +1,17 @@
+# Operating system and editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Tao generated sidecars
 *.tao.ts
-.tao/
+
+# Tooling output
 node_modules/
+.expo/
+*.tsbuildinfo
+*.log
+
+# Plain-text secrets
+.env
+.env.*

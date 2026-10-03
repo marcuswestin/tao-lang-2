@@ -1,4 +1,4 @@
-import { Errors, FS, Json, Platform, Text } from '@shared'
+import { Errors, FS, Json, ProjectLocal, Text } from '@shared'
 import { PROJECT_LOCK_RELATIVE_PATH } from './project-lock-path'
 import { withShipLockWrite } from './ship-transaction'
 
@@ -83,6 +83,7 @@ export type InstallsLock = {
 export type TaoProjectLock = {
   installs?: InstallsLock
   schemaVersion: 1
+  skillsVersion?: string
   ship?: {
     apps: Record<string, ShipLockEntry>
   }
@@ -95,6 +96,7 @@ export type TaoProjectLock = {
 export const SHIP_LOCK_RELATIVE_PATH = PROJECT_LOCK_RELATIVE_PATH
 
 export async function readProjectLock(projectRoot: string): Promise<TaoProjectLock> {
+  await ProjectLocal.prepare(projectRoot)
   const path = FS.resolvePath(SHIP_LOCK_RELATIVE_PATH, projectRoot)
   if (!await FS.exists(path)) {
     return { schemaVersion: 1 }
@@ -113,11 +115,13 @@ export async function readProjectLock(projectRoot: string): Promise<TaoProjectLo
 
 /** writeProjectLock writes the Tao-owned lock in deterministic, reviewable JSONC form. */
 export async function writeProjectLock(projectRoot: string, lock: TaoProjectLock): Promise<string> {
-  const path = FS.resolvePath(SHIP_LOCK_RELATIVE_PATH, projectRoot)
-  return await withShipLockWrite(projectRoot, async () => {
-    const fresh = await readProjectLock(projectRoot)
+  await ProjectLocal.prepare(projectRoot)
+  const root = await FS.realPath(projectRoot)
+  const path = FS.resolvePath(SHIP_LOCK_RELATIVE_PATH, root)
+  return await withShipLockWrite(root, async () => {
+    const fresh = await readProjectLock(root)
     const merged = mergeProjectLocks(fresh, lock)
-    const temporary = `${path}.${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.tmp`
+    const temporary = ProjectLocal.stagingPath(path, root)
     try {
       await FS.writeText(temporary, `${JSON.stringify(merged, null, 2)}\n`)
       await FS.move(temporary, path)
@@ -167,7 +171,10 @@ export function mergeProjectLocks(fresh: TaoProjectLock, incoming: TaoProjectLoc
   const shipping = fresh.ship === undefined && incoming.ship === undefined
     ? {}
     : { ship: { ...fresh.ship, ...incoming.ship, apps } }
-  return { ...fresh, ...incoming, ...shipping }
+  // Skills are installed by their own writer. A ship or toolchain caller may carry an older
+  // snapshot, so the lock's current version wins when its other concerns are merged.
+  const skillsVersion = fresh.skillsVersion ?? incoming.skillsVersion
+  return { ...fresh, ...incoming, ...shipping, ...(skillsVersion === undefined ? {} : { skillsVersion }) }
 }
 
 /**

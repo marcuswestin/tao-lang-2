@@ -168,7 +168,13 @@ Describe('tao create command', () => {
       Expect(captured()).toContain('tao dev a-notebook-for')
       Expect(await FS.readText(FS.resolvePath('App.tao', result.directory))).toContain('id "a-notebook-for"')
       Expect(await FS.readText(FS.resolvePath('tsconfig.json', result.directory))).toContain('"@tao/runtime"')
-      Expect(await FS.readText(FS.resolvePath('.tao-project/skills.version', result.directory))).toBe('1.0.0\n')
+      Expect(
+        (await FS.readJson<{ skillsVersion: string }>(FS.resolvePath('.tao/store/lock.jsonc', result.directory)))
+          .skillsVersion,
+      )
+        .toBe('1.0.0')
+      Expect(await FS.exists(FS.resolvePath('.tao-project/skills.version', result.directory))).toBe(false)
+      Expect(await FS.readText(FS.resolvePath('.gitignore', result.directory))).not.toContain('.tao/')
       Expect(await FS.readText(FS.resolvePath('CLAUDE.md', result.directory))).toBe('@AGENTS.md\n')
       Expect(await FS.readText(FS.resolvePath('.agents/skills/tao-project/SKILL.md', result.directory)))
         .toBe(await FS.readText(FS.resolvePath('.claude/skills/tao-project/SKILL.md', result.directory)))

@@ -382,7 +382,7 @@ Describe('Store key', () => {
     const before = store.state.writes
 
     await Expect(SecretsCommand.testing.openSecrets(access(mac, store))).rejects.toThrow(
-      'is not the one secrets/secrets.jsonc records in storeKey.recipient',
+      'is not the one .tao/store/secrets.jsonc records in storeKey.recipient',
     )
     const added = await add(mac, store, 'BETA', 'beta')
 
@@ -422,7 +422,7 @@ Describe('Store key', () => {
     const key = store.state.current.storeKey
 
     await Expect(loser.save({ BETA: 'beta' })).rejects.toThrow(
-      'store key in secrets/secrets.jsonc changed while saving',
+      'store key in .tao/store/secrets.jsonc changed while saving',
     )
     Expect(store.state.current.storeKey).toEqual(key)
     Expect(Object.keys(store.state.current.secrets)).toEqual(['ALPHA'])
@@ -471,7 +471,7 @@ Describe('Store key', () => {
     const failure = await SecretsCommand.testing.openSecrets(access(mac, store)).catch(Errors.asError)
 
     Expect(failure).toBeInstanceOf(Errors.UserInputError)
-    Expect(String(failure)).toContain('STRAY in secrets/secrets.jsonc does not decrypt with the store key')
+    Expect(String(failure)).toContain('STRAY in .tao/store/secrets.jsonc does not decrypt with the store key')
     Expect(String(failure)).toContain('Re-add it with `just secrets add STRAY`.')
     Expect(mac.counter.uses).toBe(1)
   })

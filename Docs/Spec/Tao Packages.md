@@ -7,7 +7,7 @@ declaration visibility, `use ... from ...` imports for relative Tao source paths
 stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports, the reserved root
 `@[/subfolder]` generated package, and public self-hosted `nav` and `datasource` declarations. Import renaming,
 `requires` resolution, external workspace installation, remotes, other CLI package commands, and package
-publishing remain future work. `.tao-project/lock.jsonc` is already the single Tao-written envelope for
+publishing remain future work. `.tao/store/lock.jsonc` is the single Tao-written envelope for
 shipping; its `installs` concern is reserved for the future package resolver rather than a second lockfile.
 
 The implemented package surface includes `@tao/text`, `@tao/time`, `@tao/linking`, and the curated
@@ -432,20 +432,20 @@ the declaration object across module boundaries and import traversal order.
   a filesystem-only transaction; `tao publish` distributes the project and its public API only
   - You install a published app to your device with `tao install --app <tao project>`
 
-## The `.tao-project` folder
+## The `.tao` folder
 
-- The root project folder contains `.tao-project/`, with installed projects, lockfiles, and more
-  - `.tao-project/installs/...`
-  - `.tao-project/lock.jsonc` — the project's only Tao-written lock, sectioned per concern; package
+- The root project folder contains `.tao/`, with committed state in `store/` and regenerable state in `cache/`:
+  - `.tao/store/installs/...`
+  - `.tao/store/lock.jsonc` — the project's only Tao-written lock, sectioned per concern; package
     resolution will own `installs` and the implemented shipping path owns `ship`. Each writer atomically
     merges fresh state so the concerns do not overwrite one another.
-  - `.tao-project/cache/...`
+  - `.tao/cache/...`
 
 ## Dependency version locks (planned)
 
-- Tao will install required sub-projects in `.tao-project/installs/...`
+- Tao will install required sub-projects in `.tao/store/installs/...`
   - And track the required packages and resolved versions in the `installs` section of
-    `.tao-project/lock.jsonc`
+    `.tao/store/lock.jsonc`
   - `installs` is a flat resolved graph for all dependencies
     - `requires` entries declare what a project requested: `version` (a semver range) or `ref` (a git branch/commit/tag), never both
     - Every resolved project is pinned to an immutable `resolvedCommit`; `resolvedVersion` is also recorded when resolved from a semver range

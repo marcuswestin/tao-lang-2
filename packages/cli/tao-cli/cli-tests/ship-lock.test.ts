@@ -51,7 +51,7 @@ Describe('tao ship project lock', () => {
     const root = await mkTestDir('tao-ship-lock-')
     try {
       await FS.writeText(
-        FS.resolvePath('.tao-project/lock.jsonc', root),
+        FS.resolvePath('.tao/store/lock.jsonc', root),
         `{
         // Tao owns this file.
         "schemaVersion": 1,
@@ -74,18 +74,39 @@ Describe('tao ship project lock', () => {
       },
       requires: { design: { version: '^1.2.0' } },
     }
-    const withInstalls = putInstallsLock({ schemaVersion: 1 }, installs)
+    const withInstalls = putInstallsLock({ schemaVersion: 1, skillsVersion: '1.0.0' }, installs)
     const shipping = putShipLockEntry({ schemaVersion: 1 }, promoteShipEntry(suggestion()))
 
     Expect(mergeProjectLocks(withInstalls, shipping)).toEqual({
       installs,
       schemaVersion: 1,
+      skillsVersion: '1.0.0',
       ship: shipping.ship,
     })
     Expect(mergeProjectLocks(shipping, withInstalls)).toEqual({
       installs,
       schemaVersion: 1,
+      skillsVersion: '1.0.0',
       ship: shipping.ship,
     })
+  })
+
+  Test('preserves a newer installed skills version against a stale lock snapshot', async () => {
+    const root = await mkTestDir('tao-ship-lock-skills-')
+    try {
+      await writeProjectLock(root, { schemaVersion: 1 })
+      const path = FS.resolvePath('.tao/store/lock.jsonc', root)
+      await FS.writeText(path, '{"schemaVersion":1,"skillsVersion":"2.0.0"}\n')
+      await writeProjectLock(root, {
+        schemaVersion: 1,
+        skillsVersion: '1.0.0',
+        toolchain: { version: '9.9.9' },
+      })
+      const result = await readProjectLock(root)
+      Expect(result.skillsVersion).toBe('2.0.0')
+      Expect(result.toolchain?.version).toBe('9.9.9')
+    } finally {
+      await FS.remove(root)
+    }
   })
 })

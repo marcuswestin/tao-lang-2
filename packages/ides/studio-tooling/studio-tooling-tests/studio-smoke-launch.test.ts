@@ -1,7 +1,37 @@
-import { CLI, FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { CLI, FS, Platform } from '@shared'
+import { Describe, Expect, mkTestDir, Test as RunnerTest, testOverrideSlot } from '@shared/test'
 import { launchDirectory, writeManifestAtomically } from '../studio-tooling-src/StudioLaunchManifest'
 import { readinessFromOutput, startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
+
+const taoHomeSlot = testOverrideSlot<string | undefined>({
+  read: () => Platform.runtimeProcess.env['TAO_HOME'],
+  write: value => {
+    if (value === undefined) {
+      delete Platform.runtimeProcess.env['TAO_HOME']
+    } else {
+      Platform.runtimeProcess.env['TAO_HOME'] = value
+    }
+  },
+})
+const homeTestState = globalThis as typeof globalThis & { __taoStudioHomeTestTail?: Promise<void> }
+
+function Test(name: string, run: () => void | Promise<void>): void {
+  RunnerTest(name, () => {
+    const previous = homeTestState.__taoStudioHomeTestTail ?? Promise.resolve()
+    const running = previous.then(async () => {
+      const home = await mkTestDir('tao-studio-smoke-home-')
+      const restore = taoHomeSlot.install(home)
+      try {
+        await run()
+      } finally {
+        restore()
+        await FS.remove(home)
+      }
+    })
+    homeTestState.__taoStudioHomeTestTail = running.then(() => {}, () => {})
+    return running
+  })
+}
 
 const readinessLine = JSON.stringify({
   appName: 'HNReader',

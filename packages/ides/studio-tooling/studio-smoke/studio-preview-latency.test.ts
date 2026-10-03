@@ -1,7 +1,8 @@
-import { Assert, Errors, FS, HCI, Repo, Time } from '@shared'
+import { Assert, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 
 /**
  * Measures Studio's edit-to-paint path against real Metro, once per preview publication mode, for a
@@ -41,6 +42,7 @@ type EditSample = {
   edit: number
   frameLoads: number
   hmrAt?: number
+  loadAverage: number
   mode: 'on' | 'off'
   paintAt?: number
   publishedAt: number
@@ -181,6 +183,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     await browser.addInitScript(probeScript)
     await browser.setViewport(1_440, 900)
     await browser.goto(studio.readiness.sessionUrl)
+    await activateSmokePreviews(browser)
     // Load events do not bubble, but a capturing listener on the document sees every cell's.
     await browser.evaluate(`(() => {
         window.__taoCellLoadAt = Date.now()
@@ -193,7 +196,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         return true
       })()`)
     const frame = JSON.stringify(project.frameSelector)
-    // A cell off-screen keeps `about:blank` until it scrolls into view, and a cell can remount
+    // An activated cell keeps its iframe off-screen, and a cell can remount
     // between two reads, so its URL is read in the same poll that sees it loaded. Every cell
     // shares the Metro origin; the chosen cell's own URL names exactly one frame.
     const previewUrl = await Time.pollUntil(
@@ -228,6 +231,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     await browser.evaluate(`(() => {
         const now = () => performance.timeOrigin + performance.now()
         window.__taoLatencyLoads = 0
+        window.__taoCellLoads = []
         document.querySelector(${frame}).addEventListener('load', () => { window.__taoLatencyLoads += 1 })
         window.addEventListener('keydown', event => {
           if ((event.metaKey || event.ctrlKey) && event.key === 's') window.__taoLatencySaveAt = now()
@@ -256,6 +260,17 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         diskSaveAt = Date.now()
         await FS.writeText(sourcePath, project.sourceFor(marker))
       }
+      // Editing while the canvas moves must not suspend and resume active HMR clients.
+      if (project.name === 'HNReader') {
+        await browser.evaluate(`(async () => {
+          const cells = [...document.querySelectorAll('.studio-preview-cell')]
+          cells[${edit} % cells.length]?.scrollIntoView({ block: 'start' })
+          await new Promise(resolve => requestAnimationFrame(resolve))
+          // Chrome withholds iframe paint callbacks outside the viewport. Return the measured
+          // cell before waiting for its paint, after scrolling during the in-flight edit.
+          document.querySelector(${frame})?.scrollIntoView({ block: 'nearest' })
+        })()`)
+      }
       const painted = await Time.pollUntil(
         async () =>
           await browser!.evaluateInFrame<boolean>(
@@ -274,7 +289,10 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         )
         const disk = await FS.readText(sourcePath)
         const status = await browser.evaluate(`document.querySelector('.studio-status')?.textContent`)
-        const diagnostics = FS.resolvePath(`latency-${marker}.json`, studio.readiness.artifactRoot)
+        const diagnostics = FS.resolvePath(
+          `latency-${project.name}-${mode}-${marker}.json`,
+          studio.readiness.artifactRoot,
+        )
         await FS.writeJson(diagnostics, {
           browserEvents: browser.browserEvents().slice(-40),
           cellLoads: await browser.evaluate('window.__taoCellLoads'),
@@ -303,6 +321,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         edit,
         frameLoads: await browser.evaluate<number>('window.__taoLatencyLoads'),
         hmrAt: probe.hmr.find(message => message.at >= saveAt)?.at,
+        loadAverage: Platform.loadAverage(),
         mode,
         paintAt: probe.painted[marker],
         publishedAt: await newestModification(generatedRoot),
@@ -311,8 +330,21 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
       })
       await Time.sleep(500)
     }
-    await reportSamples(`${project.name} publication-${mode}`, samples)
+    const evidence = {
+      browserEvents: browser.browserEvents(),
+      cellLoads: await browser.evaluate<unknown[]>('window.__taoCellLoads'),
+      metroMessages: await browser.evaluateInFrame<unknown[]>(previewUrl, 'window.__taoLatencyProbe.other', {
+        world: 'page',
+      }),
+      activatedCells: await browser.evaluate<number>(
+        'document.querySelectorAll(".studio-preview-activation-toggle[aria-pressed=true]").length',
+      ),
+    }
+    await reportSamples(`${project.name} publication-${mode}`, samples, evidence)
     Expect(samples.at(-1)!.frameLoads).toBe(0)
+    Expect(evidence.cellLoads).toEqual([])
+    Expect(evidence.activatedCells).toBeGreaterThan(project.name === 'HNReader' ? 1 : 0)
+    Expect(JSON.stringify(evidence)).not.toContain('RevisionNotFoundError')
   } finally {
     await browser?.close()
     await studio?.stop()
@@ -342,12 +374,22 @@ async function newestModification(root: string): Promise<number> {
   return newest
 }
 
-async function reportSamples(label: string, samples: readonly EditSample[]): Promise<void> {
+async function reportSamples(
+  label: string,
+  samples: readonly EditSample[],
+  evidence: {
+    browserEvents: ReturnType<StudioCdp['browserEvents']>
+    cellLoads: unknown[]
+    metroMessages: unknown[]
+    activatedCells: number
+  },
+): Promise<void> {
   const span = (from: number | undefined, to: number | undefined) =>
     from === undefined || to === undefined ? undefined : Math.round(to - from)
   const rows = samples.map(sample => ({
     edit: sample.edit,
     frameLoads: sample.frameLoads,
+    loadAverage: sample.loadAverage,
     saveToSource: span(sample.saveAt, sample.sourceWrittenAt),
     sourceToPublished: span(sample.sourceWrittenAt, sample.publishedAt),
     publishedToHmr: span(sample.publishedAt, sample.hmrAt),
@@ -366,9 +408,14 @@ async function reportSamples(label: string, samples: readonly EditSample[]): Pro
   )
   const slug = label.replaceAll(/[^a-z0-9]+/giu, '-').toLowerCase()
   const path = Repo.resolvePath(`.artifacts/tests/studio-smoke/preview-latency/${slug}-${Date.now()}.json`)
-  await FS.writeJson(path, { label, rows, samples, summary })
+  const machine = {
+    cpus: Platform.cpuCount(),
+    loadAverageMinimum: Math.min(...samples.map(sample => sample.loadAverage)),
+    loadAverageMaximum: Math.max(...samples.map(sample => sample.loadAverage)),
+  }
+  await FS.writeJson(path, { label, machine, rows, samples, summary, evidence })
   HCI.writeLine(`${label} cold ${JSON.stringify(rows[0])}`)
-  HCI.writeLine(`${label} warm ${JSON.stringify(summary)}`)
+  HCI.writeLine(`${label} warm ${JSON.stringify(summary)}; machine ${JSON.stringify(machine)}`)
   HCI.writeLine(`${label} samples: ${path}`)
 }
 

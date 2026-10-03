@@ -87,7 +87,7 @@ uses local Xcode and App Store Connect, while OTA uses Tao's Expo-protocol updat
   Xcode archive/export, resumable App Store Connect/TestFlight lifecycle, and Tao-hosted OTA publish
   and compatible rollback.
 - The command is serialized per repository and filesystem-only. It atomically writes the authored
-  project version and the `ship` concern of `.tao-project/lock.jsonc`, while preserving concurrent
+  project version and the `ship` concern of `.tao/store/lock.jsonc`, while preserving concurrent
   lock concerns, the Git index, refs, and commit history byte-for-byte.
 - Release provenance records the exact HEAD and dirty-tree fingerprint without requiring a clean
   checkout. Build numbers are monotonic over local and remote history.
@@ -496,7 +496,7 @@ split them:
    the ship pipeline must honor its guarantees (a `secret` never serializes into a prompt, never into
    an error report — see _Error reports in production_ below).
 2. **Deploy credentials and provider configuration**: App Store Connect keys (the accepted ones —
-   `issuerId`, `keyId` — already live in `.tao-project/lock.jsonc`, per _Precedent: accepted project
+   `issuerId`, `keyId` — already live in `.tao/store/lock.jsonc`, per _Precedent: accepted project
    metadata_ below), Play service-account keys, InstantDB admin tokens, API keys a sidecar needs. No
    general owner yet; an app's `AppId` values are still hardcoded in `.tao` source, survivable only
    because InstantDB app ids are public client values.
@@ -509,7 +509,7 @@ datasource WordFlowerStore = InstantDB { AppId config InstantAppId }
 ```
 
 with `tao ship` resolving `InstantAppId` per variant from the ship service's config store (or a
-local `.tao-project/` file for the fully-local lane), prompting on first miss. Admin-grade values (an
+local `.tao/store/` file for the fully-local lane), prompting on first miss. Admin-grade values (an
 Instant admin token, an ASC key) never reach the client bundle at all — they are consumed
 server-side by the ship/backend service; the type system can enforce the split (client-config vs
 server-credential) because the compiler knows which side each consumer runs on. **Seam flag**: the
@@ -800,7 +800,7 @@ Each has a recommended default so slice 1 can start on the ruling alone.
    replaced by `tao ship` recipes.
 2. **Where the identifier facts live.** Settled on 2026-09-02, after the search the Developer asked for;
    see _Precedent: accepted project metadata_ below. The ship facts are accepted project metadata
-   in the project's `.tao-project/` folder: the `ship` section of one repository-tracked
+   in the project's `.tao/store/` folder: the `ship` section of one repository-tracked
    `lock.jsonc` that the developer commits,
    written by `tao ship` and never hand-edited, with the bundle identifier rule
    `<namespace>.<project id>[.<variant>]`. The Developer's follow-up ruling the same day: one lock file for
@@ -844,17 +844,17 @@ on 2026-09-02 found it in three places, and together they say what decision 2 sh
   `maxEditScope` bounds what generation may touch. Its rules are the useful ones: never rewrite a
   user-locked value, keep generated changes explainable, prefer edits at the token and recipe
   level.
-- **This repository's packages spec**, `Docs/Spec/Tao Packages.md`, names `.tao-project/` at the
-  project root. The single Tao-written `.tao-project/lock.jsonc` has independent `installs` and
+- **This repository's packages spec**, `Docs/Spec/Tao Packages.md`, names `.tao/store/` at the
+  project root. The single Tao-written `.tao/store/lock.jsonc` has independent `installs` and
   `ship` concerns plus top-level `schemaVersion`; writers atomically merge fresh state.
 
 What the precedent settles for ship. The identifier facts are exactly this category of data:
 Tao derives or accepts them once, production builds read them, nobody types them into source,
 and a stale or missing entry must fail the build rather than ship something wrong. So they
-belong in `.tao-project/`, not in a bespoke file beside the entry declaration, and they follow
+belong in `.tao/store/`, not in a bespoke file beside the entry declaration, and they follow
 the design lock's contract rather than inventing one:
 
-- `.tao-project/lock.jsonc` is the project's one Tao-written lock, with a top-level section per
+- `.tao/store/lock.jsonc` is the project's one Tao-written lock, with a top-level section per
   concern. `tao ship` owns the `ship` section: per app variant, the bundle identifier, lifecycle
   checkpoints, build provenance, update channel, supported binaries, runtime identity, and
   semantic schema identity. Every

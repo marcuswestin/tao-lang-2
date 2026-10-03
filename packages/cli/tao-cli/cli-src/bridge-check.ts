@@ -43,7 +43,7 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
       ...typescript.sys,
       onUnRecoverableConfigFileDiagnostic: () => {},
     })?.options
-  const configPath = ProjectLocal.cacheResolve('bridge-check.tsconfig.json', workspaceRoot)
+  const configPath = ProjectLocal.cacheResolve('bridge-check/tsconfig.json', workspaceRoot)
   const projectTypeRoots = inheritedOptions?.typeRoots ?? visibleTypeRoots(FS.dirname(configPath))
   const projectTypes = inheritedOptions?.types ?? typescript.getAutomaticTypeDirectiveNames({
     ...inheritedOptions,

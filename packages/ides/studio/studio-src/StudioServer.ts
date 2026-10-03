@@ -780,6 +780,10 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
   },
   dataFill: async ({ datasource, request }) => jsonReply(await datasource.fill(dataFillRequest(await request.json()))),
   canvasViewport: bodyTo((session, body) => session.saveCanvasViewport(body)),
+  studioSession: bodyTo(async (session, body) => {
+    await session.saveStudioSessionField(body)
+    return { saved: true }
+  }),
   feedBrowse: bodyTo((session, body) => session.browseFeed(body)),
   feedAction: bodyTo((session, body) => session.applyFeedAction(body)),
   file: async ({ session, url }) =>
@@ -804,6 +808,11 @@ const sessionHandlers: Readonly<Record<StudioSessionRouteKey, StudioSessionHandl
       session.previewCellBootstrap(requiredQuery(url, 'previewInstanceId', 'Missing Studio preview instance id.')),
     ),
   previewCellInstance: bodyTo((session, body) => session.registerCellPreview(body)),
+  previewCellRelease: bodyTo((session, body) => {
+    Assert.input(Json.isRecord(body) && typeof body['previewInstanceId'] === 'string', 'Expected preview instance id.')
+    session.unregisterCellPreview(body['previewInstanceId'])
+    return { released: true }
+  }),
   previewCellReconfigure: bodyTo((session, body) => session.reconfigureCell(body)),
   previewDiagnosis: async ({ options }) => jsonReply(await previewDiagnosis(options.previewUrl)),
   previewInstance: bodyTo((session, body) => session.registerPreview(body)),

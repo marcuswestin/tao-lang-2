@@ -87,7 +87,7 @@ async function proveCommands(id: string, root: string): Promise<void> {
   })
   await FS.writeJson(FS.resolvePath('command-build.json', root), build)
   Assert(build.exitCode === 0, 'the Local fixture builds as a real static packaged app', { build })
-  const buildsRoot = ProjectLocal.storeResolve('builds', fixture)
+  const buildsRoot = ProjectLocal.localResolve('builds', fixture)
   const records = (await FS.listDir(buildsRoot)).filter(name => !name.startsWith('.') && name !== 'agents')
   Assert(records.length === 1, 'the isolated fixture has exactly one build record', { records })
   const record = await FS.readJson<{

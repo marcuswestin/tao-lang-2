@@ -244,7 +244,7 @@ export function mainSource(): string {
         testCommandPath: import.meta.dir + '/../service/test-command.js',
         testNodePath: import.meta.dir + '/../service/bin/node',
         studioClientBundlePath: import.meta.dir + '/../service/studio.js',
-        userStateRoot: Utils.paths.userData,
+        legacyUserStateRoot: Utils.paths.userData,
       })
       : undefined
     const studioUrl = localHttpUrl(packagedService?.url ?? externalStudioUrl!, 'Studio server')

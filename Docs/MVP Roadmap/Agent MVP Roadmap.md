@@ -381,7 +381,7 @@ from the development loop, which no virtualization approach can do.
 ### A10 — Publication hygiene audit — **done**
 
 Whatever becomes public carries the agent instructions, the Developer's roadmap notes, machine-specific files,
-and a committed `secrets/secrets.jsonc`.
+and a committed `.tao/store/secrets.jsonc`.
 
 - Landed: `Report - Publication audit.md` beside this file, and on 2026-09-22 the fixes `R2` left
   mandatory — the WordFlower ship lock untracked and ignored (`P15`; rotating the App Store Connect

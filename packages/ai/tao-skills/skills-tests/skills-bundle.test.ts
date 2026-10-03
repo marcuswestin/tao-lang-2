@@ -1,7 +1,27 @@
 import { CLI, Errors, FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { installTaoSkills } from '../skills-src/tao-skills'
 
 Describe('Tao skills bundle', () => {
+  Test('records the installed version in the committed project lock without losing other fields', async () => {
+    const project = await mkTestDir('tao-skills-lock-')
+    try {
+      const lockPath = FS.resolvePath('.tao/store/lock.jsonc', project)
+      await FS.writeText(lockPath, '{"schemaVersion":1,"toolchain":{"version":"0.4.0"}}\n')
+      const installed = await installTaoSkills(project)
+      Expect(installed.paths).toContain('.tao/store/lock.jsonc')
+      Expect(await FS.readJson(lockPath)).toEqual({
+        schemaVersion: 1,
+        skillsVersion: '1.0.0',
+        toolchain: { version: '0.4.0' },
+      })
+      Expect(await FS.exists(FS.resolvePath('.tao-project/skills.version', project))).toBe(false)
+      Expect(await FS.listDir(FS.resolvePath('.tao/store', project))).toEqual(['lock.jsonc'])
+    } finally {
+      await FS.remove(project)
+    }
+  })
+
   Test('exposes the package through the in-repository skill link', async () => {
     Expect(await FS.realPath(Repo.resolvePath('agents/skills/tao-skills'))).toBe(
       Repo.resolvePath('packages/ai/tao-skills/skills'),

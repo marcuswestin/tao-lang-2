@@ -3,7 +3,7 @@ import type { StudioTestStatus } from '../../StudioTestRunner'
 import { StudioApiClient, type StudioHandshake } from '../StudioApiClient'
 import {
   requestRuntimeCapture,
-  type StudioActivePreview,
+  type StudioFocusedPreview,
   StudioRuntimeData,
   type StudioRuntimeDataTable,
 } from '../StudioMatrixView'
@@ -12,7 +12,7 @@ import { StudioDataFillCoordinator } from './StudioDataFillCoordinator'
 import type { StudioDataPanelSnapshot, StudioTestPanelSnapshot } from './StudioProductHostState'
 
 export type StudioDrawerPanelsDeps = Readonly<{
-  activePreview: StudioActivePreview
+  focusedPreview: StudioFocusedPreview
   handshake: StudioHandshake
   /** Publishes the drawer's state; the Tao product host renders the panels. */
   render: () => void
@@ -21,7 +21,7 @@ export type StudioDrawerPanelsDeps = Readonly<{
 
 /**
  * The bottom drawer and the rail panel that mirrors its Data tab: which tab is showing, the live
- * data polled from the active cell while a data view is visible, and the test run status.
+ * data polled from the focused cell while a data view is visible, and the test run status.
  */
 export class StudioDrawerPanels {
   readonly #deps: StudioDrawerPanelsDeps
@@ -43,10 +43,10 @@ export class StudioDrawerPanels {
       this.#dataError = undefined
       deps.render()
       try {
-        const preview = deps.activePreview.current()
+        const preview = deps.focusedPreview.current()
         Assert.input(preview, 'Select a connected preview cell to inspect live app data.')
         const capture = await requestRuntimeCapture(preview, deps.handshake)
-        if (isLatest() && preview === deps.activePreview.current()) {
+        if (isLatest() && preview === deps.focusedPreview.current()) {
           this.#dataResult = StudioRuntimeData.tables(capture)
           this.#dataLoading = false
           deps.render()
@@ -110,14 +110,14 @@ export class StudioDrawerPanels {
     }
   }
 
-  /** The Logs tab reads straight from the active preview, so it re-renders when that preview changes. */
+  /** The Logs tab reads straight from the focused preview, so it re-renders when that preview changes. */
   renderIfLogs(): void {
     if (this.#tab === 'Logs') {
       this.#deps.render()
     }
   }
 
-  /** The active cell changed: its predecessor's tables no longer apply. */
+  /** The focused cell changed: its predecessor's tables no longer apply. */
   resetData(): void {
     this.#dataResult = []
   }

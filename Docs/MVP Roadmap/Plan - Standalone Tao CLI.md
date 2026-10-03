@@ -114,10 +114,10 @@ it must respect the session's actual host permissions; a repository alias cannot
 The Developer requests an explicit check-in before removing any temporary route added in this pass.
 
 Implementation update (2026-09-22): the first `tao dev` slice now generates its Expo host in the
-selected project's `.tao/dev/runtime`, keeps Expo and dev-data state in that project, and uses a
-shared CLI/Studio owner with retained `.tao/sessions/` records. Bare `tao dev` opens no target.
+selected project's `.tao/cache/dev/runtime`, keeps Expo and dev-data state in that project, and uses a
+shared CLI/Studio owner with retained `.tao/local/sessions/` records. Bare `tao dev` opens no target.
 The next branch implements local static web exports, local Electrobun `.app` builds, desktop dev
-opening, retained `.tao/builds/` records, and interactive build cleanup; it does not yet package
+opening, retained `.tao/local/builds/` records, and interactive build cleanup; it does not yet package
 or publish the standalone CLI, or implement native builds and shipping.
 The findings below are the historical pre-implementation baseline; packaging and publishing a
 relocatable CLI remain in this standalone program. The decided command behavior is in
@@ -595,7 +595,7 @@ first public release; Homebrew, npm, and other platforms are later possibilities
 
 ### The per-project version pin
 
-`.tao-project/lock.jsonc` is already the one Tao-written envelope, with `schemaVersion: 1` and
+`.tao/store/lock.jsonc` is the one Tao-written envelope, with `schemaVersion: 1` and
 independent `installs` and `ship` concerns that each side preserves without interpreting. Add a
 third:
 
@@ -607,7 +607,7 @@ third:
 ```
 
 `~/.tao/bin/tao` is a shim, not the toolchain. On each invocation it walks up from the working
-directory for `.tao-project/lock.jsonc`, reads `toolchain.version`, and execs
+directory for `.tao/store/lock.jsonc`, reads `toolchain.version`, and execs
 `~/.tao/versions/<version>/tao`. The pin is exact, and the shim asks before downloading a missing
 version. `TAO_VERSION` overrides the pin; `tao +0.4.1 <command>` is the explicit form. A project
 with no pin uses the installed default, and `tao create` writes the pin it used.
@@ -676,7 +676,7 @@ it. The whole run takes about 25 s.
   `~/.local/share/tao`, reading `$HOME` as the install script does. The Companion's downloaded
   hosts move from `~/.tao/hosts` to its `hosts/`.
 - The per-project generated root already exists on `main`: `tao build --compile-only` writes under
-  the project's `.tao/builds/`, and `tao dev` under `.tao/dev/runtime`. Only the retiring
+  the project's `.tao/local/builds/`, and `tao dev` under `.tao/cache/dev/runtime`. Only the retiring
   `tao compile` still writes into the host, into the installed version's `resources/host/`.
 - The release build rewrites the staged host so it installs outside the repository (below), adds
   `@shared/core` to the payload, and resolves the host's `bun.lock` once per release.
@@ -731,7 +731,7 @@ iCloud-backed app from the binary will not find it; that belongs with shipping f
 checkout. This is the biggest slice; it may need splitting once the seam is drawn.
 
 _Web landed 2026-09-25; iOS still open._ Most of this slice had already happened on
-`main`: `tao dev` generates its host under the project's `.tao/dev/runtime`, keeps Expo's log and
+`main`: `tao dev` generates its host under the project's `.tao/cache/dev/runtime`, keeps Expo's log and
 dev data in the project, watches only the project outside a checkout, and gates the checkout-only
 keys (`c`, `f`, `t`, `v`, `e`). What remained for web, now done:
 
@@ -819,7 +819,7 @@ public repository. What it settled:
 - The release notes list what the binary cannot do yet from `KNOWN_GAPS` in `standalone-build.ts`,
   which later slices shorten as they land.
 
-**8. The version pin and the shim.** `toolchain` in `.tao-project/lock.jsonc`, the shim's
+**8. The version pin and the shim.** `toolchain` in `.tao/store/lock.jsonc`, the shim's
 resolve-and-exec, `tao check-for-updates`, and `tao create` writing the pin. Implementation decision 3
 replaced the `tao install <version>` and `tao update` this slice first named.
 
@@ -830,7 +830,7 @@ command, and that `check-for-updates` reads the listing.
 - **Every release binary is its own shim**, so there is no separate shim binary and `bin/tao` stays
   the installer's link to the default release. Before the CLI loads, `tao-standalone.ts` asks
   `ToolchainPin.delegate` which release the run wants: `tao +0.4.1 …`, then `TAO_VERSION`, then the
-  nearest `.tao-project/lock.jsonc`'s `toolchain.version`. The nearest lock decides even when it pins
+  nearest `.tao/store/lock.jsonc`'s `toolchain.version`. The nearest lock decides even when it pins
   nothing, so a nested project does not inherit an outer pin. Another release runs the command on the
   same terminal and this one exits with its status, so a handed-off run pays a second binary start;
   `TAO_HANDED_OFF_BY` stops a mislabelled binary from handing the run on forever. A development build

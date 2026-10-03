@@ -102,6 +102,7 @@ async function run(options: StudioSmokeOptions): Promise<number> {
       const result = await CLI.run('bun', {
         args: ['test', ...options.files.map(path => FS.resolvePath(path)), '--timeout=180000'],
         env: {
+          TAO_HOME: FS.resolvePath('home', allocation.artifactRoot),
           TAO_STUDIO_SMOKE_ARTIFACT_ROOT: allocation.artifactRoot,
           TAO_STUDIO_SMOKE_NATIVE: options.native === true ? 'true' : 'false',
           TAO_STUDIO_SMOKE_PREVIEW_PORT: String(allocation.previewPort),

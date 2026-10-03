@@ -1061,7 +1061,7 @@ Describe('Studio smoke resource isolation', () => {
 
   Test('persists and reloads validated recent projects in device-local Studio state', async () => {
     const stateRoot = await mkTestDir('tao-studio-state-')
-    const statePath = FS.resolvePath('recent-projects.json', stateRoot)
+    const statePath = FS.resolvePath('studio/recent-projects.json', stateRoot)
     const store = createRecentProjectStore(statePath)
     const recent = [
       { appName: 'First', lastOpenedAt: '2026-08-30T12:00:00.000Z', project: '/projects/first' },
@@ -1081,7 +1081,7 @@ Describe('Studio smoke resource isolation', () => {
 
   Test('ignores malformed or unsupported recent-project state', async () => {
     const stateRoot = await mkTestDir('tao-studio-state-')
-    const statePath = FS.resolvePath('recent-projects.json', stateRoot)
+    const statePath = FS.resolvePath('studio/recent-projects.json', stateRoot)
     const store = createRecentProjectStore(statePath)
     try {
       await FS.writeText(statePath, '{not json')
@@ -1092,6 +1092,37 @@ Describe('Studio smoke resource isolation', () => {
         version: 1,
       })
       await Expect(store.load()).resolves.toEqual([])
+    } finally {
+      await FS.remove(stateRoot)
+    }
+  })
+
+  Test('merges concurrent recent-project stores from fresh disk state by project and app', async () => {
+    const stateRoot = await mkTestDir('tao-studio-state-')
+    const statePath = FS.resolvePath('studio/recent-projects.json', stateRoot)
+    const first = createRecentProjectStore(statePath)
+    const second = createRecentProjectStore(statePath)
+    const older = { appName: 'Notes', project: '/one', lastOpenedAt: '2026-10-01T12:00:00Z' }
+    const newer = { ...older, lastOpenedAt: '2026-10-03T12:00:00Z' }
+    const other = { appName: 'Notes', project: '/two', lastOpenedAt: '2026-10-02T12:00:00Z' }
+    try {
+      await Promise.all([first.save([older, other]), second.save([newer])])
+      await Promise.all([first.flush(), second.flush()])
+      Expect(await FS.readJson(statePath)).toEqual({ version: 1, recent: [newer, other] })
+      Expect(await FS.listDir(FS.resolvePath('studio', stateRoot))).toEqual(['recent-projects.json'])
+      Expect(await FS.listDir(FS.resolvePath('cache/studio/tmp', stateRoot))).toEqual([])
+      Expect(await FS.listDir(FS.resolvePath('cache/studio/locks', stateRoot))).toEqual([])
+
+      const thirteen = Array.from({ length: 13 }, (_, index) => ({
+        appName: `App${index}`,
+        project: `/project/${index}`,
+        lastOpenedAt: new Date(Date.UTC(2026, 9, 4, index)).toISOString(),
+      }))
+      await first.save(thirteen)
+      const capped = await first.load()
+      Expect(capped).toHaveLength(12)
+      Expect(capped[0]?.appName).toBe('App12')
+      Expect(capped.at(-1)?.appName).toBe('App1')
     } finally {
       await FS.remove(stateRoot)
     }

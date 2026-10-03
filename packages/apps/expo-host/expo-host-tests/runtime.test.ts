@@ -381,7 +381,9 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain('return <TaoApp />')
         // studio-preview-runtime-dedupe.jest-test.tsx proves a held element keeps the app from rendering again.
         Expect(stableRoot).toContain('const [TaoAppElement] = React.useState(() => <TaoApp />)')
-        Expect(stableRoot).toContain('<TR.Studio.PreviewBridge config={config}>{TaoAppElement}</TR.Studio.PreviewBridge>')
+        Expect(stableRoot).toContain(
+          '<TR.Studio.PreviewBridge config={config}>{TaoAppElement}</TR.Studio.PreviewBridge>',
+        )
         Expect(stableRoot).not.toContain('<TR.Studio.PreviewBridge config={config}><TaoApp />')
         Expect(await FS.readText(taoAppPath)).toContain(
           'export default TaoApps["Preview"]',

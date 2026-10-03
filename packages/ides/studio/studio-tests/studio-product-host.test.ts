@@ -78,7 +78,7 @@ import {
   TreeFolder,
 } from '../studio-src/TaoStudioProductHost'
 
-function activeCell(cellRevision: number): NonNullable<StudioProductHostState['activeCell']> {
+function focusedCell(cellRevision: number): NonNullable<StudioProductHostState['focusedCell']> {
   return {
     cellId: 'cell:one',
     cellRevision,
@@ -208,8 +208,8 @@ Test('Tao Studio environment number inputs expose their field labels', () => {
 })
 
 Test('Tao Studio keeps scenario and environment drafts mounted across each other remounting the cell', () => {
-  const before = activeCell(7)
-  const after = activeCell(8)
+  const before = focusedCell(7)
+  const after = focusedCell(8)
   Expect(StudioProductHostMountIdentity.environment(after)).toBe(
     StudioProductHostMountIdentity.environment(before),
   )
@@ -287,7 +287,7 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
       + '../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
   )
   Expect(source).toContain('@environment StudioEnvironmentPanel(')
-  Expect(source).toContain('view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPresetId text')
+  Expect(source).toContain('view StudioEnvironmentPanel(FocusedCellId text, CellRevision number, ViewportPresetId text')
   Expect(source).toContain('view StudioScenarioEnvironment(')
   Expect(source).not.toContain('view StudioScenarioEnvironmentControls(')
   Expect(source).toContain('state Drafts = StudioScenarioArgumentDrafts(State)')

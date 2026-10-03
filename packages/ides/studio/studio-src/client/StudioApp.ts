@@ -2,7 +2,8 @@ import { applyCanvasViewport, isStudioTypingTarget } from './matrix/StudioCanvas
 import { StudioDrawLiveCells } from './matrix/StudioDrawLiveCells'
 import { mountFeedDropOverlay } from './matrix/StudioFeedDropOverlays'
 import { StudioMatrixSketches } from './matrix/StudioMatrixSketches'
-import { mountPreviewActivation } from './matrix/StudioPreviewActivation'
+import { reconcilePreviewActivation } from './matrix/StudioPreviewActivationWiring'
+import { mountPreviewFocus } from './matrix/StudioPreviewFocus'
 import { StudioFeedController } from './StudioFeedController'
 /**
  * StudioApp mounts the imperative workbench shell and wires its parts together. Each part under
@@ -77,13 +78,14 @@ import {
   postDebugCommand,
   postEditorSelection,
   refreshCellPreviews,
-  StudioActivePreview,
   StudioDebugEvents,
-  StudioFastDraw,
+  StudioFocusedPreview,
   StudioMatrixView,
+  type StudioPreviewConnection,
 } from './StudioMatrixView'
 import type { StudioDrawerTab } from './StudioProductPanels'
 import { StudioRailPanels } from './StudioRailPanels'
+import { StudioSessionWriter } from './StudioSessionWriter'
 import {
   createStudioShell,
   type StudioClientConfig,
@@ -124,32 +126,41 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     StudioMountSignal.throwIfAborted(signal)
     const handshake = await StudioApiClient.handshake(signal)
     StudioMountSignal.throwIfAborted(signal)
+    const sessionWriter = new StudioSessionWriter(StudioApiClient.saveStudioSessionField)
+    const saveFocusedPreview = (id: string): void => {
+      void sessionWriter.save('focusedCellId', id).catch(error => showSourceActionError(view.status, error))
+    }
     const openCompileDiagnostic = (diagnostic: StudioCompileDiagnostic): void =>
       void navigation.openCompileDiagnostic(diagnostic)
     StudioStatusLine.update(view.status, handshake.compile, openCompileDiagnostic)
     const previews = await connectPreviews(view.preview, config.previewUrl, handshake, signal)
     lifetime.add(() => disconnectPreviews(previews))
     StudioMountSignal.throwIfAborted(signal)
-    const cellStorageKey = `tao-studio:active-cell:${handshake.identity.project}:${handshake.identity.appName}`
-    let initialCellId: string | undefined
-    try {
-      initialCellId = window.localStorage.getItem(cellStorageKey) ?? undefined
-    } catch {}
+    const oldCellStorageKey = `tao-studio:active-cell:${handshake.identity.project}:${handshake.identity.appName}`
+    let initialCellId = handshake.studioSession?.focusedCellId
+    if (initialCellId === undefined) {
+      try {
+        initialCellId = window.localStorage.getItem(oldCellStorageKey) ?? undefined
+      } catch {}
+      if (initialCellId !== undefined) {
+        saveFocusedPreview(initialCellId)
+      }
+    }
     let refreshFeed = (): void => {}
-    const activePreview = new StudioActivePreview(previews, {
+    let pendingFocusedCellId = handshake.previewManifest === undefined ? initialCellId : undefined
+    const focusedPreview = new StudioFocusedPreview(previews, {
       initialCellId,
-      onActivate: preview => {
+      onFocus: preview => {
+        pendingFocusedCellId = undefined
         refreshFeed()
-        const id = preview.cell?.cellId ?? preview.cellIdentity?.cellId
+        const id = preview.cell?.cellId ?? preview.cellIdentity?.cellId ?? 'whole-app'
         if (id !== undefined) {
-          try {
-            window.localStorage.setItem(cellStorageKey, id)
-          } catch {}
+          saveFocusedPreview(id)
         }
       },
     })
-    const previewActivation = mountPreviewActivation(view.preview, previews)
-    lifetime.add(() => previewActivation.dispose())
+    const previewFocus = mountPreviewFocus(view.preview, previews)
+    lifetime.add(() => previewFocus.dispose())
     configureInteractionMode(view.interactionMode, previews, handshake)
     let deviceLogs: readonly StudioDeviceLog[] = []
     let deviceLensSamples: NonNullable<StudioDeviceStatus['lensSamples']> = []
@@ -198,7 +209,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       feed.liveChanged()
       StudioMatrixSketches.examples(
         view.preview,
-        feed.examples(previewManifest, activePreview.current()?.cell?.scenarioId),
+        feed.examples(previewManifest, focusedPreview.current()?.cell?.scenarioId),
       )
       publishStudioHostSnapshot({
         activeFile: session.activeFile(),
@@ -214,7 +225,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         inspected: inspection.selected(),
         inspection: inspection.inspection(),
         journeyBusy: preview => scenarios.journeyBusy(preview),
-        preview: activePreview.current(),
+        preview: focusedPreview.current(),
         project,
         projectFiles,
         revealRevision: editorRevealRevision,
@@ -238,6 +249,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     const session = new StudioEditorSession({
       compileState: () => compileState,
       identity: handshake.identity,
+      initialTabs: handshake.studioSession?.editorTabs,
+      onTabsChanged: tabs => {
+        void sessionWriter.save('editorTabs', tabs).catch(error => showSourceActionError(view.status, error))
+      },
       onDocumentChanged: () => {
         search.scheduleIfActive()
         // Typing in the code editor supersedes the element a visual edit meant to keep selected.
@@ -250,7 +265,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         publish()
       },
       openCompileDiagnostic,
-      postSelection: (file, editor) => postEditorSelection(activePreview.current(), handshake, file, editor),
+      postSelection: (file, editor) => postEditorSelection(focusedPreview.current(), handshake, file, editor),
       publish,
       renderInspector,
       signal,
@@ -258,7 +273,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }, projectFiles)
     lifetime.add(() => session.dispose())
     const inspection = new StudioInspection({ active: () => session.active(), project, publish, view })
-    const drawer = new StudioDrawerPanels({ activePreview, handshake, render: publish, tabs: view.drawerTabs })
+    const drawer = new StudioDrawerPanels({ focusedPreview, handshake, render: publish, tabs: view.drawerTabs })
     lifetime.add(() => drawer.dispose())
     const search = new StudioProjectSearch({
       diagnostics: () => compileState.diagnostics ?? [],
@@ -281,7 +296,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           StudioCompileStatus.completed(completion, compileState),
           openCompileDiagnostic,
         ),
-      currentIdentity: () => currentSourceIdentity(handshake, activePreview.current(), session.activeFile()),
+      currentIdentity: () => currentSourceIdentity(handshake, focusedPreview.current(), session.activeFile()),
       editor: () => session.editor(),
       focusEditor: focusVisibleEditor,
       inspected: () => inspection.selected(),
@@ -303,11 +318,11 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       mutate: request =>
         StudioMatrixSketches.runFeed(view.preview, revision => StudioApiClient.feedAction(request(revision)), signal),
       context: () => {
-        const cell = activePreview.current()?.cell
+        const cell = focusedPreview.current()?.cell
         const scenario = previewManifest?.scenarios.find(item => item.scenarioId === cell?.scenarioId)
         const subject = previewManifest?.subjects.find(item => item.subjectId === scenario?.subjectId)
         return {
-          activeScenarioId: cell?.scenarioId,
+          focusedScenarioId: cell?.scenarioId,
           cellId: cell?.cellId,
           sketchId: subject?.kind === 'view'
             ? StudioMatrixSketches.sketchForView(view.preview, subject.viewName)
@@ -351,9 +366,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         view.status.textContent = `Wait for ${request.targetView} to finish compiling, then drop again.`
         return
       }
-      // The target cell becomes the active preview, as any cell a visual edit comes from does, so the
+      // The target cell becomes the focused preview, as any cell a visual edit comes from does, so the
       // edit's ⌘Z walks back under that same cell's identity.
-      activePreview.activate(preview)
+      focusedPreview.focus(preview)
       await mutations.submitPreviewAction(
         { kind: 'insert-project-view', viewName: request.viewName, viewSourcePath: request.viewSourcePath },
         {
@@ -367,14 +382,14 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       )
     }))
     const scenarios = new StudioScenarioActions({
-      activePreview,
+      focusedPreview,
       apply: envelope => mutations.apply(envelope),
       canMutate: () => mutations.canMutate(),
       publish,
       status: view.status,
     })
     const navigation = new StudioAppNavigation({
-      activePreview,
+      focusedPreview,
       focusEditor: focusVisibleEditor,
       openFile: path => session.openFile(path),
       onReveal: advanceEditorReveal,
@@ -449,7 +464,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     const disposeFeedDropOverlay = mountFeedDropOverlay(view.preview, previews, canvasGesturesOwned)
     lifetime.add(disposeFeedDropOverlay)
     const previewWiring = {
-      activePreview,
+      focusedPreview,
       canvasGesturesOwned,
       drawer,
       handshake,
@@ -493,9 +508,20 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       status: view.status,
     }
     const wirePreview = wireStudioPreviews(previewWiring)
+    const activationWired = new WeakMap<StudioPreviewConnection, () => Promise<void>>()
+    const wireActivationReconcile = (): void => {
+      reconcilePreviewActivation(previews, activationWired, preview => {
+        previewFocus.reconcile()
+        if (preview.activated) {
+          focusedPreview.focus(preview)
+        }
+        publish()
+      })
+    }
+    wireActivationReconcile()
     const publishCanvasGestureOwnership = (): void => {
       canvasViewport?.cancelPan()
-      previewActivation.clear()
+      previewFocus.clear()
       view.preview.dataset['canvasWorkspace'] = root.dataset['layoutPreset'] === 'draw' ? 'draw' : 'preview'
       applyCanvasViewport(view.preview)
       for (const preview of previews) {
@@ -508,14 +534,17 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     lifetime.add(() => view.interactionMode.removeEventListener('click', renderSelectionHud))
     root.addEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership)
     lifetime.add(() => root.removeEventListener(studioLayoutPresetChangedEvent, publishCanvasGestureOwnership))
-    // Connects the cells the manifest and the Fast draw switch call for, and drops the rest.
+    // Reconciles the manifest while retaining each activated cell's iframe.
     function replanPreviews(manifest: NonNullable<typeof previewManifest>): void {
       if (config.previewUrl === undefined) {
         return
       }
       void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
-        activePreview.reconcile(wirePreview)
-        previewActivation.reconcile()
+        wireActivationReconcile()
+        const restoredCellId = pendingFocusedCellId
+        pendingFocusedCellId = undefined
+        focusedPreview.reconcile(wirePreview, restoredCellId)
+        previewFocus.reconcile()
         previewNotice.render()
         previewNotice.checkBundle()
       }).catch(error => {
@@ -523,19 +552,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         view.status.textContent = Errors.messageOf(error)
       })
     }
-    const renderFastDraw = (): void => {
-      view.fastDraw.setAttribute('aria-pressed', String(StudioFastDraw.enabled()))
-    }
-    const toggleFastDraw = (): void => {
-      StudioFastDraw.set(!StudioFastDraw.enabled())
-      renderFastDraw()
-      if (previewManifest !== undefined) {
-        replanPreviews(previewManifest)
-      }
-    }
-    renderFastDraw()
-    view.fastDraw.addEventListener('click', toggleFastDraw)
-    lifetime.add(() => view.fastDraw.removeEventListener('click', toggleFastDraw))
     publish()
     void feed.refresh()
     view.searchInput.addEventListener('input', () => search.schedule())
@@ -560,7 +576,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     drawer.select(initialDrawerTab)
 
     const commands = mountStudioCommandPalette({
-      activePreview,
+      focusedPreview,
       insertComponent: component => mutations.insertComponent(component),
       insertProjectView: projectView => mutations.insertProjectView(projectView),
       onScenarioActivated: () => {
@@ -700,7 +716,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       enabled: canvasOwnsInput,
       canPanWithoutSpace: event =>
         root.dataset['layoutPreset'] === 'design'
-        && previewActivation.canPanWithoutSpace(event),
+        && previewFocus.canPanWithoutSpace(event),
       host: view.preview,
       initialState: handshake.canvasViewport,
       onChange: next => {
@@ -817,8 +833,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           await applied
         }
       },
-      async applyActiveCellEnvironment(identity, environment) {
-        const preview = activePreview.current()
+      async applyFocusedCellEnvironment(identity, environment) {
+        const preview = focusedPreview.current()
         if (preview?.cell === undefined || preview.reconfigureEnvironment === undefined) {
           Errors.throwUserInput('Select a Studio scenario cell before changing its environment.')
         }
@@ -928,7 +944,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           return
         }
         if (name.startsWith('debug-')) {
-          const preview = activePreview.current()
+          const preview = focusedPreview.current()
           if (preview === undefined) {
             Errors.throwUserInput('Select a connected preview cell before using the debugger.')
           }
@@ -941,7 +957,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           return
         }
         if (name === 'clear-logs') {
-          const preview = activePreview.current()
+          const preview = focusedPreview.current()
           if (preview !== undefined) {
             preview.runtimeLogs = []
           }
@@ -994,7 +1010,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (editor.state.selection.main.anchor !== safeAnchor || editor.state.selection.main.head !== safeHead) {
           editor.dispatch({ selection: { anchor: safeAnchor, head: safeHead } })
         }
-        postEditorSelection(activePreview.current(), handshake, active.file, editor)
+        postEditorSelection(focusedPreview.current(), handshake, active.file, editor)
       },
       async undoInspectorAction() {
         await mutations.undoLatest()

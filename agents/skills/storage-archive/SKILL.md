@@ -61,4 +61,4 @@ itself, iterate with `./agent tao _preview qa <project> --screenshot --dest .art
   `.artifacts/scratch/tao-studio-chrome-*`. In zsh write the glob as
   `.artifacts/scratch/tao-studio-chrome-*(N)`, since an unmatched glob aborts the whole command line,
   deletions included. A capture removes its own Studio session records from the project's
-  `.tao/sessions/`; a record left there is from an interrupted run and may go.
+  `.tao/local/sessions/`; a record left there is from an interrupted run and may go.

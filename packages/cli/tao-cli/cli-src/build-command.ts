@@ -51,7 +51,7 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
   const app = await chooseTaoApp(path, options.appName, 'Build')
   const buildsRoot = options.output
     ? FS.resolvePath(options.output)
-    : ProjectLocal.storeResolve('builds', app.projectRoot)
+    : ProjectLocal.localResolve('builds', app.projectRoot)
   if (
     FS.pathIsWithin(buildsRoot, app.projectRoot)
     && !['.tao', '.artifacts'].includes(FS.relativePath(app.projectRoot, buildsRoot).split('/')[0]!)

@@ -2,7 +2,7 @@
 
 ## Project secrets
 
-`tao secrets` keeps encrypted values in `secrets/secrets.jsonc` beside the nearest Tao project
+`tao secrets` keeps encrypted values in `.tao/store/secrets.jsonc` beside the nearest Tao project
 declaration. Commit that file so collaborators can use it. Secret names and recipient public keys are
 readable; values are encrypted with `age`. On macOS, install `age` and `age-plugin-se` (for example,
 `brew install age age-plugin-se`). Tao creates one machine identity backed by the Secure Enclave and

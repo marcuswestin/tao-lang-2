@@ -41,7 +41,7 @@ release-capable datasource configuration.
 - `--notes <text>` sets TestFlight notes; `--no-wait` returns after upload.
 - `--update` publishes a compatible over-the-air bundle; `--rollback` republishes the prior bundle.
 
-The command records accepted store/build state under `.tao-project/` and may commit a version bump or
+The command records accepted store/build state under `.tao/store/` and may commit a version bump or
 tag a release. Review the dry run and Git state before authorizing it.
 
 Publishing a Tao project for other Tao projects to import is unavailable. Do not use proposed

@@ -7,6 +7,7 @@ import {
   StudioSessionManager,
 } from '@studio'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 
 const initialSource = `use Text from @tao/ui
 app AgentBrowser {
@@ -137,6 +138,7 @@ Test('Studio agent streams, serializes turns, and refuses stale undo in Chrome',
     browser = await StudioCdp.launchChrome({ artifactRoot: artifactParent })
     await browser.setViewport(1_440, 900)
     await browser.goto(`${studio.url}/sessions/${encodeURIComponent(current.sessionId)}`)
+    await activateSmokePreviews(browser)
     try {
       await browser.waitFor(`document.querySelector('.chat-cloud:not(:disabled)') instanceof HTMLInputElement`, {
         timeoutMs: 30_000,

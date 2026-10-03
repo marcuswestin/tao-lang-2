@@ -1,7 +1,7 @@
 import { Errors, FS, HCI, Platform, ProjectLocal, Repo } from '@shared'
 import { DesktopHost } from '../desktop-host'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
-import { devDataAppKey, devDataEnvironment } from './dev-data/DevDataBootstrap'
+import { devDataEnvironment } from './dev-data/DevDataBootstrap'
 import { DevDataServer } from './dev-data/DevDataServer'
 import { DevFileWatcher } from './DevFileWatcher'
 import { DevLoopOutput, type DevLoopReporter, lineDevLoopReporter, setDevLoopReporter } from './DevLoopOutput'
@@ -72,14 +72,14 @@ async function runDevLoopWithActiveReporter(
   const runtime = await DevRuntime.prepare(selection.projectRoot)
   // The dev data server starts first: its port and the app's key go into Expo's environment, where
   // the checked-in `app.config.js` writes them into the manifest every development build reads.
-  const devDataApp = devDataAppKey(selection.projectRoot, appName)
   const devData = await DevDataServer.start({
     log: line => DevLoopOutput.logDevLoop('data', line),
-    // Records a developer entered while developing are kept, unlike the rest of the dev state.
-    rootDir: ProjectLocal.storeResolve('dev-data', selection.projectRoot),
+    rootDir: ProjectLocal.cacheResolve('dev-data/fallback', selection.projectRoot),
   })
   let expo: ExpoRunnerSession
+  let devDataApp: string
   try {
+    devDataApp = await devData.registerProject(selection.projectRoot, appName)
     expo = await createDevLoopExpoSession(PREFERRED_EXPO_PORT, stateRoot)
   } catch (error) {
     await devData.stop().catch(() => {})
@@ -90,7 +90,7 @@ async function runDevLoopWithActiveReporter(
   const expoServer = expo.createServer(runtime.root, {
     command: installedLauncher,
     env: { ...installedLauncher?.env, ...devDataEnvironment(devData.port, devDataApp, devData.capability) },
-    logRoot: FS.resolvePath('logs', stateRoot),
+    logRoot: ProjectLocal.cacheResolve('logs', selection.projectRoot),
     runtimeToolchainSourceRoot: runtime.sourceRoot,
   })
   const output = DevLoopOutput.start()

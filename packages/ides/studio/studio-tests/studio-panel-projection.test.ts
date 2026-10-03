@@ -75,7 +75,7 @@ Describe('Studio structured panel projection', () => {
     })
   })
 
-  Test('retains bounded Data rows with loading, error, and active-cell source identity', () => {
+  Test('retains bounded Data rows with loading, error, and focused-cell source identity', () => {
     const rows = Array.from({ length: StudioPanelBounds.dataRowsPerTable + 3 }, (_, Id) => ({ Id }))
     const panels = StudioPanelProjection.project({
       ...baseInput(),
@@ -145,7 +145,7 @@ Describe('Studio structured panel projection', () => {
     })
   })
 
-  Test('retains only bounded active-cell Logs and structured Search source/action rows', () => {
+  Test('retains only bounded focused-cell Logs and structured Search source/action rows', () => {
     const logs = Array.from({ length: StudioPanelBounds.logs + 2 }, (_, timestamp) => ({
       arguments: [timestamp],
       level: 'log' as const,

@@ -7,7 +7,7 @@
 // value. The Mac asks for Touch ID or the login passcode because the kernel asks, not because this code does;
 // nothing here ever sees or stores a passphrase.
 
-import { CLI, Errors, FS, HCI, Platform, Repo, SecretsFile } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, SecretsFile } from '@shared'
 import { createAgeCipher } from 'tao-cli-kit/age-cipher'
 import {
   type Cipher,
@@ -22,7 +22,7 @@ import {
 } from 'tao-cli-kit/secrets'
 
 /** Committed: readable keys, readable metadata, encrypted values. */
-const STORE_PATH = 'secrets/secrets.jsonc'
+const STORE_PATH = '.tao/store/secrets.jsonc'
 /** Outside the repository, so every worktree on this machine shares one identity. */
 const IDENTITY_PATH = '~/.config/tao/secrets-identity.txt'
 
@@ -120,6 +120,7 @@ function ageCipher(identityPath?: string): Cipher {
 }
 
 async function readStore(): Promise<SecretStore> {
+  await ProjectLocal.prepare(Repo.getRoot())
   const path = Repo.resolvePath(STORE_PATH)
   if (!await FS.exists(path)) {
     return { recipients: [], secrets: {} }
@@ -141,12 +142,17 @@ function liveStoreAccess(cipher: Cipher = ageCipher(), now = () => new Date()): 
 
 /** Every encrypted-store writer uses this lock; prompts and encryption happen before entering it. */
 async function withStoreMutation<Value>(work: () => Promise<Value>): Promise<Value> {
-  return await FS.withFileMutationLock(Repo.resolvePath(STORE_PATH), Repo.getRoot(), work)
+  const projectRoot = Repo.getRoot()
+  await ProjectLocal.prepare(projectRoot)
+  return await FS.withFileMutationLock(Repo.resolvePath(STORE_PATH), projectRoot, work, {
+    lockDirectory: ProjectLocal.cacheResolve('locks', projectRoot),
+  })
 }
 
 async function writeStore(store: SecretStore): Promise<void> {
   const path = Repo.resolvePath(STORE_PATH)
-  const temporary = `${path}.${Platform.randomUUID()}.tmp`
+  await ProjectLocal.prepare(Repo.getRoot())
+  const temporary = ProjectLocal.stagingPath(path, Repo.getRoot())
   await FS.mkdir(FS.dirname(path))
   try {
     await FS.writeText(temporary, formatStore(store), { mode: 0o600 })

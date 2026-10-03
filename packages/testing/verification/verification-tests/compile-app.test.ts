@@ -145,10 +145,10 @@ Describe('app compilation staleness stamp', () => {
     const tao = compiler()
     try {
       await run(root, tao.compile)
-      await FS.writeText(FS.resolvePath('Apps/Example/.tao/dev/runtime/App.tsx', root), 'generated dev app\n')
+      await FS.writeText(FS.resolvePath('Apps/Example/.tao/cache/dev/runtime/App.tsx', root), 'generated dev app\n')
       await FS.symlink(
         FS.resolvePath('packages/stdlib', root),
-        FS.resolvePath('Apps/Example/.tao/dev/runtime/node_modules/tao-runtime', root),
+        FS.resolvePath('Apps/Example/.tao/cache/dev/runtime/node_modules/tao-runtime', root),
       )
 
       Expect(await run(root, tao.compile)).toBe(0)

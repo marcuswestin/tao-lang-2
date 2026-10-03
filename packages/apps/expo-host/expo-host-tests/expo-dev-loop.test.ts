@@ -561,21 +561,38 @@ Describe('Expo dev-loop port helpers', () => {
   Test('selects another port when a second listener owns the preferred port after release', async () => {
     const blocker = createServer()
     blocker.unref()
-    if (!await listenIfSupported(blocker, '::1')) {
-      return
-    }
-    const address = blocker.address()
-    const preferredPort = typeof address === 'object' && address !== null ? address.port : undefined
     const otherOwner = createServer()
     otherOwner.unref()
+    let preferredPort: number | undefined
     try {
-      if (preferredPort === undefined) {
-        Errors.throwHostEnvironment('Expected the test listener to have a TCP port.')
+      // An IPv6 ephemeral allocation does not reserve the same IPv4 port. Retry fixture
+      // setup if another process owns that address, then exercise the product exactly once.
+      for (let attempt = 0; attempt < 10; attempt++) {
+        if (!await listenIfSupported(blocker, '::1')) {
+          return
+        }
+        const address = blocker.address()
+        preferredPort = typeof address === 'object' && address !== null ? address.port : undefined
+        if (preferredPort === undefined) {
+          Errors.throwHostEnvironment('Expected the test listener to have a TCP port.')
+        }
+        try {
+          await new Promise<void>((resolve, reject) => {
+            otherOwner.once('error', reject)
+            otherOwner.listen({ host: '127.0.0.1', ipv6Only: true, port: preferredPort }, resolve)
+          })
+          break
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') {
+            throw error
+          }
+          await new Promise<void>((resolve, reject) => blocker.close(error => error ? reject(error) : resolve()))
+          preferredPort = undefined
+        }
       }
-      await new Promise<void>((resolve, reject) => {
-        otherOwner.once('error', reject)
-        otherOwner.listen({ host: '127.0.0.1', ipv6Only: true, port: preferredPort }, resolve)
-      })
+      if (preferredPort === undefined) {
+        Errors.throwHostEnvironment('Could not reserve both loopback addresses for the port collision fixture.')
+      }
       await new Promise<void>((resolve, reject) => {
         blocker.close(error => error ? reject(error) : resolve())
       })

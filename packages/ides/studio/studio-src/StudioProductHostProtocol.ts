@@ -7,7 +7,7 @@ import type { StudioCanonicalSourceAction } from './StudioProtocol'
 import { StudioForeignActionFailure } from './TaoStudioServerActions'
 
 export type StudioProductHostActions = Readonly<{
-  applyActiveCellEnvironment: (
+  applyFocusedCellEnvironment: (
     identity: StudioProductHostCellIdentity,
     environment: StudioProductHostEnvironment,
   ) => Promise<void>
@@ -51,7 +51,7 @@ export type StudioProductHostEnvironment = Readonly<{
 }>
 
 export type StudioProductHostState = Readonly<{
-  activeCell?: Readonly<{
+  focusedCell?: Readonly<{
     cellId: string
     cellRevision: number
     networkErrorMessage?: string
@@ -107,7 +107,7 @@ type StudioProductHostRequest =
   | Readonly<{
     environment: StudioProductHostEnvironment
     identity: StudioProductHostCellIdentity
-    kind: 'apply-active-cell-environment'
+    kind: 'apply-focused-cell-environment'
   }>
   | Readonly<{ action: StudioCanonicalSourceAction; kind: 'apply-inspector-action'; proposed: boolean }>
   | Readonly<{ kind: 'create-file'; path: string }>
@@ -168,7 +168,7 @@ export function publishStudioProductHostState(
 ): StudioProductHostState {
   activeState = Object.freeze({
     ...state,
-    activeCell: freezeOptional(state.activeCell),
+    focusedCell: freezeOptional(state.focusedCell),
     activeFile: freezeOptional(state.activeFile),
     inspector: freezeOptional(state.inspector),
     lensLines: state.lensLines === undefined ? undefined : Object.freeze([...state.lensLines]),
@@ -222,14 +222,14 @@ export async function requestStudioProductHostCreateFile(path: string): Promise<
   await requestFileAction({ kind: 'create-file', path })
 }
 
-export async function requestStudioProductHostApplyActiveCellEnvironment(
+export async function requestStudioProductHostApplyFocusedCellEnvironment(
   identity: StudioProductHostCellIdentity,
   environment: StudioProductHostEnvironment,
 ): Promise<void> {
   assertStudioProductHostCellIdentity(identity)
   assertStudioProductHostEnvironment(environment)
   await requestConflictAction(
-    { environment, identity, kind: 'apply-active-cell-environment' },
+    { environment, identity, kind: 'apply-focused-cell-environment' },
     'This preview changed while its environment was being edited.',
   )
 }
@@ -346,8 +346,8 @@ async function requestConflictAction(action: StudioProductHostRequest, message: 
 
 async function execute(actions: StudioProductHostActions, action: StudioProductHostRequest): Promise<void> {
   await Switch.kind<StudioProductHostRequest, Promise<void>>(action, {
-    'apply-active-cell-environment': async applied =>
-      await actions.applyActiveCellEnvironment(applied.identity, applied.environment),
+    'apply-focused-cell-environment': async applied =>
+      await actions.applyFocusedCellEnvironment(applied.identity, applied.environment),
     'apply-inspector-action': async applied => await actions.applyInspectorAction(applied.action, applied.proposed),
     'create-file': async created => await actions.createFile(created.path),
     'delete-file': async removed => await actions.deleteFile(removed.path, removed.sourceVersion),

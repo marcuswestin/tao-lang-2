@@ -22,10 +22,7 @@ local.properties
 .artifacts/*
 !.artifacts/.gitkeep
 _gen_*/
-**/.tao-project/studio/sketches.jsonc.*.tmp
-Apps/WordFlower/1 - Current/.tao-project/lock.jsonc
-# Project-local development sessions and generated runtime state.
-**/.tao/
+# Project-local state uses .tao/.gitignore; store/ is committed.
 
 # Disposable package diagnostics. Scripts here inherit their package tsconfig and workspace context.
 packages/*/.scratch/
@@ -38,7 +35,7 @@ packages/apps/expo-host/android/
 packages/ides/studio-companion-app/ios/
 packages/ides/studio-companion-app/android/
 
-# Decrypted secrets, written by `just secrets`. The encrypted originals live in secrets/secrets.jsonc.
+# Decrypted secrets, written by `just secrets`. Project encrypted originals live in .tao/store/secrets.jsonc.
 .env.secrets
 # Local overrides kept by hand. Nothing generates this, so nothing can overwrite it.
 .env.local

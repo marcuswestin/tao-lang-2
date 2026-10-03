@@ -9,6 +9,52 @@ timings.
 
 ## Current state
 
+The successor worktree is `feat/studio-preview-speed`, created from exactly `8ecf581e7`, with no
+landing authorized. Its first pair is in progress: every scenario and the whole-app preview now
+default to no iframe, with per-cell lightning toggles and server-persisted app activation in
+`.tao/local/studio/session.json`. Selection and its Tao ProductHost/feed boundary use focused names;
+the old browser focus/tabs and viewport import once into the project session. Fast draw and
+off-screen suspension are removed, and real smokes explicitly activate their cells. The decided
+layout implementation is recorded in the [layout decisions](<Tao CLI workflows/Decisions - Project folder layout.md#implementation-state>).
+
+Source tests pass for the complete Studio and Studio-tooling directories, and `verify-changed`
+passes the integrated source, compiler, runtime, CLI, and app checks.
+Mutation checks caught deliberately removed activation serialization and callback rewiring. A real
+browser run exposed an empty session-save response; the endpoint now returns JSON, with a real HTTP
+regression. The corrected real-app Metro smoke passes all four journeys (run
+`activation-layout-final-20261003`, 46.1 seconds); both toggle screenshots, including a rendered
+active preview, were inspected in its `home/studio/launches/browser/screenshots/` artifacts.
+Final review corrected revision changes during activation, shared home-state concurrency,
+linked-parent migration hazards, compile-error recovery, ordered focus/tab writes, manifest pruning,
+and browser-registration cleanup. The activation baseline below is measured; it is not an A/B
+speed claim. The activation gate/watchdog, sequential experiment,
+and steps 6–8 are not yet done.
+The four Developer-owned layout questions remain pending before the first pair can be called complete.
+
+### Activation baseline, 2026-10-03
+
+Run `activation-baseline-final-20261003`, alone with no other tests or agents from this task.
+Each case made eight edits; warm figures discard the first. All 32 edits passed, with zero iframe
+loads across every activated cell and no recorded `RevisionNotFoundError`. HNReader scrolled among
+three active cells during edits, returning the measured cell into view before awaiting its paint:
+Chrome withholds iframe animation-frame callbacks off-screen even after the DOM changes.
+
+| Case                              | Active cells | Source→published p50 ms | Total p50 / p95 ms | One-minute load min–max / 18 CPUs |
+| --------------------------------- | ------------ | ----------------------- | ------------------ | --------------------------------- |
+| One-file, editor, publication on  | 1            | 26                      | 179 / 249          | 2.79–2.86                         |
+| One-file, editor, publication off | 1            | 27                      | 184 / 198          | 2.91–3.08                         |
+| HNReader, disk, publication on    | 3            | 156                     | 288 / 328          | 2.88–3.13                         |
+| HNReader, disk, publication off   | 3            | 165                     | 308 / 382          | 2.87–4.96                         |
+
+Stage samples, browser events, Metro messages, cell counts and cell loads are retained under
+`.artifacts/tests/studio-smoke/preview-latency/`. The earlier off-screen measurement attempt failed
+the paint wait after successfully applying the DOM edit, and is excluded. These figures establish
+a new baseline; differences from the historical loaded-machine runs below are not attributable gains.
+The prior corrected repeat (`activation-baseline-visible-20261003`, load 3.78–4.92) measured
+183/184ms one-file medians and 306/321ms HNReader medians, illustrating run-to-run spread.
+
+Historical handoff state:
+
 1. The branch carries Next slice steps 1–4 (`709a58700`, `b49ea2df3`, `e36cdd8df`, `25369076f`),
    then a `WIP: route project .tao state through ProjectLocal` commit, then this handoff. The WIP
    commit is an untested first pass at the folder layout and fails the tests it has not updated;

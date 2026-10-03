@@ -36,7 +36,6 @@ function fixture() {
     'device',
     'devicePopover',
     'interactionMode',
-    'fastDraw',
     'drawerTabs',
     'searchInput',
     'rail',
@@ -120,9 +119,8 @@ await mockClient('StudioMatrixView', () => ({
   },
   disconnectPreviews: () => current.disposed.push('previews'),
   configureInteractionMode() {},
-  StudioFastDraw: { enabled: () => false, set() {} },
   mountCanvasViewport: () => ({ cancelPan() {}, dispose: () => current.disposed.push('viewport') }),
-  StudioActivePreview: class {
+  StudioFocusedPreview: class {
     current() {
       return undefined
     }

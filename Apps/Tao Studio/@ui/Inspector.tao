@@ -88,9 +88,9 @@ view StudioInspectorStylePromotion(CurrentSourceVersion text, Inspection text, S
 }
 
 folder
-view StudioInspectorData(Inspection text, Selection text, ActiveCellId text, ActiveCellRevision number, ActiveScenarioId text) {
+view StudioInspectorData(Inspection text, Selection text, FocusedCellId text, FocusedCellRevision number, FocusedScenarioId text) {
    render StudioInspectorSection("Data") {
-      loop StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, ActiveCellId: ActiveCellId, ActiveCellRevision: ActiveCellRevision, ActiveScenarioId: ActiveScenarioId) / Line {
+      loop StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, FocusedCellId: FocusedCellId, FocusedCellRevision: FocusedCellRevision, FocusedScenarioId: FocusedScenarioId) / Line {
          Text(Line)
 }  }  }
 
@@ -250,8 +250,8 @@ function StudioInspectorStyleNotes(Inspection text) returns list of text {
    return StudioInspectorStyleNotes(Inspection) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
-function StudioInspectorDataLines(Inspection text, Selection text, ActiveCellId text, ActiveCellRevision number, ActiveScenarioId text) returns list of text {
-   return StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, ActiveCellId: ActiveCellId, ActiveCellRevision: ActiveCellRevision, ActiveScenarioId: ActiveScenarioId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
+function StudioInspectorDataLines(Inspection text, Selection text, FocusedCellId text, FocusedCellRevision number, FocusedScenarioId text) returns list of text {
+   return StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, FocusedCellId: FocusedCellId, FocusedCellRevision: FocusedCellRevision, FocusedScenarioId: FocusedScenarioId) from ../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx
 }
 
 function StudioInspectorTextAvailable(Inspection text, Selection text) returns boolean {

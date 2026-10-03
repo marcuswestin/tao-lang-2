@@ -2,6 +2,7 @@ import { Errors, FS } from '@shared'
 import { Expect, until } from '@shared/test'
 import { type StudioProjectSession, studioProtocolChannel, studioProtocolVersion } from '@studio'
 import type { StudioCdp } from '../studio-tooling-src/StudioCdp'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 
 /** Invoked by the simulated-user lane: the real Feed controls drive the real source/compiler session. */
 export async function exerciseStudioFeed(
@@ -198,6 +199,8 @@ async function feedDragToPreview(
   const subject = manifest.subjects.find(subject => subject.kind === 'view' && subject.viewName === sketch.view)!
   const scenario = manifest.scenarios.find(scenario => scenario.subjectId === subject.subjectId)!
   const cell = manifest.cells.find(cell => cell.scenarioId === scenario.scenarioId)!
+  await browser.waitFor(`document.querySelector('[data-tao-studio-cell="${cell.cellId}"]') !== null`)
+  await activateSmokePreviews(browser)
   const frameSelector = `[data-tao-studio-cell="${cell.cellId}"] iframe`
   await browser.waitFor(`document.querySelector(${JSON.stringify(frameSelector)}) instanceof HTMLIFrameElement`)
   const url = await browser.evaluate<string>(`document.querySelector(${JSON.stringify(frameSelector)}).src`)

@@ -1,10 +1,23 @@
-import { DEV_DATA_ROOT_PATH, devDataAppKey, devDataManifest } from '@expo-host/dev-loop/dev-data/DevDataBootstrap'
+import { devDataAppKey, devDataManifest } from '@expo-host/dev-loop/dev-data/DevDataBootstrap'
 import { DevDataServer } from '@expo-host/dev-loop/dev-data/DevDataServer'
 import { ExpoRunner } from '@expo-host/dev-loop/expo-runner/ExpoRunner'
 import { detectLanIPv4 } from '@expo-host/dev-loop/expo-runner/lan-host'
 import { CompanionIdentity } from '@expo-host/dev-loop/prebuilt-host/CompanionIdentity'
 import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation/apple-server'
-import { CLI, Errors, FS, HCI, Json, Platform, ProjectDevSession, Repo, SecretsFile, Time } from '@shared'
+import {
+  CLI,
+  Errors,
+  FS,
+  HCI,
+  Json,
+  Platform,
+  ProjectDevSession,
+  ProjectLocal,
+  Repo,
+  SecretsFile,
+  TaoHome,
+  Time,
+} from '@shared'
 import {
   openStudioPreviewSession,
   resolveStudioProjectRoot,
@@ -28,6 +41,13 @@ import { StudioBrowser } from './StudioBrowser'
 import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
 import { startStudioDeviceCli } from './StudioDeviceCli'
 import { createStudioDeviceLauncher } from './StudioDeviceLaunch'
+import {
+  mergeStudioRecentProjects,
+  prepareStudioHome,
+  readStudioRecentProjects,
+  withStudioRecentsLock,
+  writeStudioRecentProjects,
+} from './StudioHome'
 import { describeOwnProcess, openLaunchRecord, type StudioLaunchRecord } from './StudioLaunchManifest'
 import { createStudioLifecycleLog, type StudioLifecycleLog } from './StudioLifecycleLog'
 import { StudioNative } from './StudioNative'
@@ -110,9 +130,10 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   let deviceCli: Awaited<ReturnType<typeof startStudioDeviceCli>> | undefined
   let devDataServer: DevDataServer | undefined
   let trustStore: StudioDeviceTrustStore | undefined
-  const userStateRoot = options.userStateRoot ?? Repo.resolvePath('.artifacts/user/studio')
+  const legacyUserStateRoot = options.userStateRoot ?? Repo.resolvePath('.artifacts/user/studio')
+  const userStateRoot = options.userStateRoot ?? await prepareStudioHome(legacyUserStateRoot)
   const recentProjects = createRecentProjectStore(FS.resolvePath('recent-projects.json', userStateRoot))
-  const canvasViewportStore = new StudioCanvasViewportStore(FS.resolvePath('project-viewports', userStateRoot))
+  const canvasViewportStore = new StudioCanvasViewportStore(FS.resolvePath('project-viewports', legacyUserStateRoot))
   const mode = options.native === true ? 'native' : 'browser'
   const artifactRoot = FS.resolvePath(`launches/${mode}`, userStateRoot)
   let launch: StudioLaunchRecord | undefined
@@ -171,10 +192,11 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     // names its own app key, so the projects' `Dev` datasources never share a stream.
     devDataServer = await DevDataServer.start({
       log: line => HCI.logProcessInfo('studio-data', line),
-      rootDir: options.devDataRoot ?? Repo.resolvePath(DEV_DATA_ROOT_PATH),
+      rootDir: options.devDataRoot ?? TaoHome.cacheResolve('studio/dev-data-routing'),
+      legacyRootDirs: [Repo.resolvePath('.artifacts/user/dev-data'), FS.resolvePath('dev-data', legacyUserStateRoot)],
     })
     HCI.logProcessInfo('studio', `Dev data: tao-dev-data-v1 on port ${devDataServer.port}`)
-    const devDataAuthority = { capability: devDataServer.capability, port: devDataServer.port }
+    const devDataAuthority = devDataServer
     const projects = createProjectOpeners(
       options.entryPath,
       async (request, entryPath) =>
@@ -510,7 +532,11 @@ export async function openStudioProjectResource(
   request: StudioProjectOpenRequest,
   options: {
     /** The dev data authority written into the preview manifest; absent in launches without one. */
-    devDataAuthority?: { capability: string; port: number }
+    devDataAuthority?: {
+      capability: string
+      port: number
+      registerProject?: (projectRoot: string, appName: string) => Promise<string>
+    }
     /** The device gateway port written into the preview manifest; absent in launches without a gateway. */
     deviceGatewayPort?: number
     entryPath: string | undefined
@@ -563,7 +589,7 @@ export async function openStudioProjectResource(
     expoServer = expo.createServer(previewRuntime.root, {
       command: options.expoCommand,
       env: metroEnvironment,
-      logRoot: options.logRoot,
+      logRoot: options.logRoot ?? ProjectLocal.cacheResolve('logs', project.projectRoot),
       runtimeToolchainSourceRoot: runtimeToolchainRoot,
     })
     expoServer.onUnexpectedExit(() => options.stop(1))
@@ -580,10 +606,13 @@ export async function openStudioProjectResource(
     if (options.devDataAuthority !== undefined) {
       // The app key needs the session's resolved app name, and Metro has not started yet, so the
       // manifest still takes the fact before any bundle is served.
+      const appKey = options.devDataAuthority.registerProject === undefined
+        ? devDataAppKey(project.projectRoot, session.appName)
+        : await options.devDataAuthority.registerProject(project.projectRoot, session.appName)
       await previewRuntime.configure({
         devData: devDataManifest(
           options.devDataAuthority.port,
-          devDataAppKey(project.projectRoot, session.appName),
+          appKey,
           options.devDataAuthority.capability,
         ),
       })
@@ -835,29 +864,15 @@ export function createRecentProjectStore(path: string): RecentProjectStore {
       return pending
     },
     async load() {
-      try {
-        if (!await FS.isFile(path)) {
-          return []
-        }
-        const value = await FS.readJson(path)
-        if (!Json.isRecord(value) || value['version'] !== 1 || !Array.isArray(value['recent'])) {
-          return []
-        }
-        return value['recent'].filter(isRecentProject).slice(0, 12)
-      } catch {
-        return []
-      }
+      return await readStudioRecentProjects(path) ?? []
     },
     save(recent) {
-      const snapshot = recent.filter(isRecentProject).slice(0, 12)
+      const snapshot = recent.filter(isRecentProject)
       const write = async () => {
-        const temporaryPath = `${path}.${crypto.randomUUID()}.tmp`
-        try {
-          await FS.writeJson(temporaryPath, { recent: snapshot, version: 1 })
-          await FS.move(temporaryPath, path)
-        } finally {
-          await FS.remove(temporaryPath)
-        }
+        await withStudioRecentsLock(path, async () => {
+          const current = await readStudioRecentProjects(path) ?? []
+          await writeStudioRecentProjects(path, mergeStudioRecentProjects(current, snapshot))
+        })
       }
       const saving = pending.then(write, write)
       pending = saving

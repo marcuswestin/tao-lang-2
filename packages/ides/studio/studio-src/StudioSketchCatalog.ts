@@ -1,7 +1,7 @@
-import { Assert, CLI, Errors, FS, Json, Platform, Switch, Time } from '@shared'
+import { Assert, CLI, Errors, FS, Json, Platform, ProjectLocal, Switch, Time } from '@shared'
 
 export const studioSketchCatalogFormatVersion = 1 as const
-export const studioSketchCatalogRelativePath = '.tao-project/studio/sketches.jsonc'
+export const studioSketchCatalogRelativePath = '.tao/store/studio/sketches.jsonc'
 
 type StudioSketchFieldBinding = Readonly<{
   parameter: string
@@ -214,7 +214,7 @@ export class StudioSketchCatalog {
   #mutationLane: Promise<void> = Promise.resolve()
 
   constructor(readonly projectRoot: string, io: StudioSketchCatalogIO = {}) {
-    this.#catalogPath = FS.resolvePath(studioSketchCatalogRelativePath, projectRoot)
+    this.#catalogPath = ProjectLocal.storeResolve('studio/sketches.jsonc', projectRoot)
     this.#io = io
   }
 
@@ -318,7 +318,7 @@ export class StudioSketchCatalog {
   }
 
   async #write(catalog: StudioSketchCatalogSnapshot): Promise<void> {
-    const temporaryPath = `${this.#catalogPath}.${crypto.randomUUID()}.tmp`
+    const temporaryPath = ProjectLocal.cacheResolve(`studio/tmp/sketches-${crypto.randomUUID()}.tmp`, this.projectRoot)
     try {
       await (this.#io.writeTemporary ?? FS.writeText)(
         temporaryPath,
@@ -339,7 +339,12 @@ export class StudioSketchCatalog {
   }
 
   #withCatalogLock<Result>(work: () => Promise<Result>): Promise<Result> {
-    return withCatalogLock(`${this.#catalogPath}.lock`, work)
+    return (async () => {
+      await ProjectLocal.prepare(this.projectRoot)
+      await FS.mkdir(ProjectLocal.cacheResolve('studio/locks', this.projectRoot))
+      await FS.mkdir(ProjectLocal.cacheResolve('studio/tmp', this.projectRoot))
+      return await withCatalogLock(ProjectLocal.cacheResolve('studio/locks/sketches.lock', this.projectRoot), work)
+    })()
   }
 }
 
@@ -930,7 +935,7 @@ function portableTargetPath(path: string, projectRoot: string): string {
   if (FS.pathIsWithin(path, projectRoot)) {
     return FS.relativePath(projectRoot, path)
   }
-  for (const marker of ['/@/', '/.tao-project/']) {
+  for (const marker of ['/@/', '/.tao-project/', '/.tao/store/']) {
     const index = path.lastIndexOf(marker)
     if (index >= 0) {
       return path.slice(index + 1)

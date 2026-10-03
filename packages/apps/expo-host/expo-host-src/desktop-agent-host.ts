@@ -1,4 +1,4 @@
-import { Errors, FS, Platform } from '@shared'
+import { Errors, FS, Platform, TaoHome } from '@shared'
 
 type AgentManifest = Readonly<{ protocolVersion: 1; appId: string; appName: string; buildId: string }>
 type AgentSession = AgentManifest & {
@@ -32,9 +32,13 @@ export async function startDesktopAgentHost(options: {
   reportError(error: unknown): void
 }> {
   const { manifest } = options
+  if (!/^[A-Za-z0-9]+(?:[.-][A-Za-z0-9]+)*$/u.test(manifest.appId)) {
+    Errors.throwUserInput('The app has an invalid background service identifier.')
+  }
   const baseRoot = Platform.runtimeProcess.env['TAO_AGENT_STATE_ROOT']
-    ?? FS.resolvePath('Library/Caches/Tao/agents', FS.homeDir())
-  const stateRoot = FS.resolvePath(Platform.sha256Hex(manifest.appId).slice(0, 24), baseRoot)
+  const stateRoot = baseRoot === undefined
+    ? await TaoHome.prepareAgentState(manifest.appId)
+    : FS.resolvePath(manifest.appId, baseRoot)
   await FS.mkdir(stateRoot)
   await FS.chmod(stateRoot, 0o700)
   const sessionPath = FS.resolvePath('session.json', stateRoot)

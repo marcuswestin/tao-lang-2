@@ -1,7 +1,8 @@
-import { Errors, FS, Repo, Time } from '@shared'
+import { Errors, FS, HCI, Repo, Time } from '@shared'
 import { Expect, mkTestDir, Test } from '@shared/test'
 import { StudioCdp } from '../studio-tooling-src/StudioCdp'
 import { startStudioSmokeLaunch } from '../studio-tooling-src/StudioSmokeLaunch'
+import { activateSmokePreviews } from '../studio-tooling-src/StudioSmokePreviews'
 
 /**
  * Editing the file that declares HNReader's datasources re-runs those declarations under Fast
@@ -78,6 +79,7 @@ Test('a fixture row stays on screen after the datasource file is edited', async 
     await browser.addInitScript(hmrProbeScript)
     await browser.setViewport(1_440, 900)
     await browser.goto(studio.readiness.sessionUrl)
+    await activateSmokePreviews(browser)
     const selector = '.studio-preview-cell iframe[title*="DatasourceProbe"]'
     const previewUrl = await loadedPreviewUrl(browser, selector)
     const showsProbe = `document.body?.textContent?.includes(${JSON.stringify(probeTitle)}) === true`
@@ -116,7 +118,7 @@ Test('a fixture row stays on screen after the datasource file is edited', async 
         }),
         text,
       })
-      console.log(`datasource edit diagnostics: ${diagnostics}`)
+      HCI.writeLine(`datasource edit diagnostics: ${diagnostics}`)
     }
     Expect(text).toContain(probeTitle)
     Expect(await browser.evaluate<number>('window.__taoFrameLoads')).toBe(0)
@@ -128,7 +130,7 @@ Test('a fixture row stays on screen after the datasource file is edited', async 
 }, 300_000)
 
 /**
- * A cell off-screen keeps `about:blank` until it scrolls into view, and a cell can remount between
+ * An activated cell keeps its iframe off-screen, and a cell can remount between
  * two reads, so its URL is read in the same poll that sees it loaded.
  */
 async function loadedPreviewUrl(browser: StudioCdp, selector: string): Promise<string> {
