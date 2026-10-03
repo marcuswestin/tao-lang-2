@@ -102,6 +102,7 @@ export type ReviewBrowser = Pick<
   | 'captureElementScreenshotAt'
   | 'close'
   | 'evaluate'
+  | 'frameIdOf'
   | 'goto'
   | 'rendererFingerprint'
   | 'waitFor'
@@ -349,10 +350,24 @@ async function captureReviewCell(
     if (!unstable) {
       await FS.remove(previousPath)
     }
+    // A screen that threw can still look right, so its own page's errors fail it. Their text stays out of the
+    // artifacts, which must not retain arbitrary preview content. A frame it cannot find fails too, since an
+    // unattributed console proves nothing.
+    const frameId = await browser.frameIdOf(`[data-tao-review-capture="${marker}"] iframe`)
+    const pageErrors = browser.browserEvents().filter(event =>
+      frameId !== undefined && event.frameId === frameId && (event.level === 'error' || event.level === 'assert')
+    ).length
+    const consoleUnchecked = frameId === undefined
     const error = [
       current.error,
       ...(unstable ? [`The preview kept changing across ${stableCaptureAttempts + 1} settled captures.`] : []),
-    ].filter((message): message is string => message !== undefined).join(' ')
+      ...(consoleUnchecked ? ['The preview frame was not found, so its console could not be checked.'] : []),
+      ...(pageErrors === 0
+        ? []
+        : [`The preview logged ${pageErrors} error(s) or uncaught exception(s) in the browser console.`]),
+    ].filter((message): message is string =>
+      message !== undefined
+    ).join(' ')
     return {
       environment: current.environment,
       ...(error.length === 0 ? {} : { error }),
@@ -362,7 +377,7 @@ async function captureReviewCell(
       renderInputs: current.renderInputs,
       screenshot,
       sha256,
-      status: current.status === 'failed' || unstable ? 'failed' : 'captured',
+      status: current.status === 'failed' || unstable || consoleUnchecked || pageErrors > 0 ? 'failed' : 'captured',
     }
   } catch (error) {
     return {

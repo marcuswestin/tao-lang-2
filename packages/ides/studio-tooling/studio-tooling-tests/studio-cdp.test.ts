@@ -572,4 +572,27 @@ Describe('Studio browser CDP harness', () => {
     })
     Expect(browser.browserEvents()).toEqual([])
   })
+
+  Test('names the frame whose page logged each console message or exception', async () => {
+    const transport = new FakeCdpTransport()
+    const browser = StudioCdp.testing.create(transport)
+    transport.emit('Runtime.executionContextCreated', {
+      context: { auxData: { frameId: 'cell-frame', isDefault: true }, id: 7 },
+    })
+    transport.emit('Runtime.consoleAPICalled', {
+      args: [{ value: 'cell failed' }],
+      executionContextId: 7,
+      timestamp: 21,
+      type: 'error',
+    })
+    transport.emit('Runtime.exceptionThrown', {
+      exceptionDetails: { executionContextId: 9, text: 'elsewhere', timestamp: 22 },
+    })
+
+    Expect(browser.browserEvents()).toEqual([
+      { frameId: 'cell-frame', kind: 'console', level: 'error', text: 'cell failed', timestamp: 21 },
+      { kind: 'exception', level: 'error', text: 'elsewhere', timestamp: 22 },
+    ])
+    await browser.close()
+  })
 })
