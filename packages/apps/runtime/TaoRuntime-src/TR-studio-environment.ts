@@ -215,12 +215,13 @@ export const StudioEnvironmentControls = {
   /**
    * useFixture applies fixture creates and ordered prepare updates after datasource binding. An app
    * with several stores passes all of them: each create lands in the store that holds its entity, and
-   * each update in the store that holds the row it names.
+   * each update in the store that holds the row it names. `revision` changes whenever the fixture is
+   * applied again, so whatever captured the earlier handles can be rebuilt with the new ones.
    */
   useFixture(
     stores: TaoDataSchema | readonly TaoDataSchema[] | undefined,
     auth?: RuntimeAuthScope,
-  ): Readonly<{ handles: Readonly<Record<string, unknown>>; ready: boolean }> {
+  ): Readonly<{ handles: Readonly<Record<string, unknown>>; ready: boolean; revision: number }> {
     const host = React.useContext(StudioHostContext)
     // seededFrom holds the declaration each store was bound to when the fixture was last applied, or
     // was first bound to afterwards; seeding counts applications so only the latest one commits.
@@ -232,7 +233,10 @@ export const StudioEnvironmentControls = {
       throw failure
     }
     const schemas = stores === undefined ? [] : Array.isArray(stores) ? stores : [stores as TaoDataSchema]
-    const [handles, setHandles] = React.useState<Readonly<Record<string, unknown>>>({})
+    const [seed, setSeed] = React.useState<Readonly<{ handles: Readonly<Record<string, unknown>>; revision: number }>>({
+      handles: {},
+      revision: 0,
+    })
     const [ready, setReady] = React.useState(host === undefined || schemas.length === 0)
     React.useEffect(() => {
       mounted.current = true
@@ -261,6 +265,12 @@ export const StudioEnvironmentControls = {
       }
       for (const schema of schemas) {
         host.registerSchema(schema)
+      }
+      if (seeded !== undefined) {
+        // The rendered rows' handles belong to the retired connection, so nothing reads them until the
+        // new ones arrive. Without an awaited auth step they arrive in this same commit, so the cell
+        // never renders empty.
+        setReady(false)
       }
       seededFrom.current = boundTo
       const application = ++seeding.current
@@ -323,7 +333,7 @@ export const StudioEnvironmentControls = {
           }
         }
         if (current()) {
-          setHandles(Object.freeze({ ...resolved }))
+          setSeed({ handles: Object.freeze({ ...resolved }), revision: application })
           setReady(true)
         }
       }
@@ -333,7 +343,7 @@ export const StudioEnvironmentControls = {
         }
       })
     })
-    return { handles, ready }
+    return { handles: seed.handles, ready, revision: seed.revision }
   },
 
   /** Argument resolves fixture handles and wraps plain values for generated Tao view props. */

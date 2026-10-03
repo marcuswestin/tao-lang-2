@@ -3,6 +3,7 @@ import { createTaoJourneyReplayGate, replayTaoJourney, type TaoJourneyStep } fro
 import { Describe, Expect, Test } from '@shared/test'
 import { act, render } from '@testing-library/react-native'
 import { createElement, type ReactElement, useEffect, useRef, useState } from 'react'
+import { Text } from 'react-native'
 import { MemoryProvider } from '../../stdlib/@tao/data/providers/memory/Memory'
 
 /**
@@ -197,17 +198,24 @@ Describe('Studio preview runtime identity dedupe', () => {
   })
 
   // A hot-reloaded datasource module re-runs its declarations, so the app root binds the same store to
-  // a new declaration and provider, whose cell overlay starts empty. The cell seeds it again.
+  // a new declaration and provider, whose cell overlay starts empty. The cell seeds it again, and a
+  // focused view, which takes its arguments once per mount, is remounted by the fixture's revision.
   Test('reseeds the fixture when a store is rebound to a new datasource declaration', async () => {
     const schema = TR.Data.Schema({
       name: 'StudioReboundData',
       entities: { Entry: { collection: 'Entries', fields: { Name: { kind: 'text' } } } },
     })
-    let seed: { handles: Readonly<Record<string, unknown>>; ready: boolean } | undefined
-    function FixtureSubject({ declaration }: { declaration: ReturnType<typeof TR.Data.Declaration> }): null {
+    let seed: ReturnType<typeof TR.Studio.Environment.useFixture> | undefined
+    function FocusedView({ entry }: { entry: unknown }): ReactElement {
+      const [mounted] = useState(entry)
+      return createElement(Text, null, String(TR.Data.Read(mounted, 'Name')))
+    }
+    function FixtureSubject(
+      { declaration }: { declaration: ReturnType<typeof TR.Data.Declaration> },
+    ): ReactElement | null {
       TR.Data.UseConfigured(schema, TR.Data.Configure(declaration, {}))
       seed = TR.Studio.Environment.useFixture(schema)
-      return null
+      return seed.ready ? createElement(FocusedView, { entry: seed.handles['Example'], key: seed.revision }) : null
     }
     const cell = {
       ...cellPayload({ cellRevision: 0, compileRevision: 1, manifestRevision: 'compile:1' }),
@@ -225,18 +233,21 @@ Describe('Studio preview runtime identity dedupe', () => {
       await act(async () => await TR.Data.Settle(schema))
       Expect(rows()).toHaveLength(1)
       const original = seed?.handles['Example']
+      const revision = seed?.revision
 
       screen.rerender(host(first))
       await act(async () => await TR.Data.Settle(schema))
       Expect(rows()).toHaveLength(1)
       Expect(seed?.handles['Example']).toBe(original)
+      Expect(seed?.revision).toBe(revision)
 
       screen.rerender(host(TR.Data.Declaration('StudioReboundMemory', MemoryProvider())))
       await act(async () => await TR.Data.Settle(schema))
       Expect(rows()).toHaveLength(1)
       Expect(seed?.ready).toBe(true)
       Expect(seed?.handles['Example']).not.toBe(original)
-      Expect(TR.Data.Read(seed?.handles['Example'], 'Name')).toBe('Seeded')
+      Expect(seed?.revision).not.toBe(revision)
+      Expect(screen.getByText('Seeded')).toBeTruthy()
     } finally {
       screen.unmount()
     }

@@ -137,7 +137,9 @@ first edit after launch. Run the harness with
 4. **Edit failures.** Editing the file that declares HNReader's datasources (then `HNReader.tao`,
    now `Data.tao`) blanked the preview in both modes: Fast Refresh rebinds each store to a new
    declaration, which starts its cell overlay empty, while the fixture hook applied only once. The hook
-   now reseeds when a store's declaration changes. Editing runtime source while Studio ran raised
+   now reseeds when a store's declaration changes, and a focused view, which takes its arguments once
+   per mount, remounts with the new rows' handles; `studio-datasource-edit.test.ts` proves it under
+   real Metro. Editing runtime source while Studio ran raised
    `runtime capture domain 'navigation' is registered exactly once` in every cell, because a hot
    reload re-ran the module's top-level registration; a module now replaces its own registration. The
    harness still edits a Studio view, so it times an ordinary edit. Not fixed: in two of

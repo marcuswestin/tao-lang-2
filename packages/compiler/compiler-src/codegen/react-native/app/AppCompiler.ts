@@ -240,7 +240,9 @@ function compileFixtureSeed(options: CodegenOptions, auth: boolean): Compiled {
  * not compiler code, so the only Tao module in scope is `TR` from `@runtime/TR`, and `TR.Errors` is
  * where the runtime publishes its error taxonomy to a compiled program. A call through that property
  * chain returns `never` without narrowing afterwards, so the guard reads as `??` rather than an
- * `if`, which keeps the entry a defined factory for `TR.Studio.SubjectHost` below.
+ * `if`, which keeps the entry a defined factory for `TR.Studio.SubjectHost` below. The host builds
+ * its app from the arguments once per mount, so it is keyed by the fixture's revision: a reseed
+ * after a hot reload remounts it with the new rows' handles.
  */
 function compileStudioSubject(options: CodegenOptions, app: { name: string }, auth: boolean): Compiled {
   if (!options.studio) {
@@ -260,7 +262,7 @@ function compileStudioSubject(options: CodegenOptions, app: { name: string }, au
       )
       return ${
     auth ? gen`<TR.Auth.Host scope={_TaoAuthScope}>` : gen.noop()
-  }<TR.AppShell><TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} /></TR.AppShell>${
+  }<TR.AppShell><TR.Studio.SubjectHost key={_TaoFixtureSeed.revision} arguments={_TaoStudioArgs} definition={_TaoStudioSubject} /></TR.AppShell>${
     auth ? gen`</TR.Auth.Host>` : gen.noop()
   }
     }

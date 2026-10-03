@@ -526,7 +526,9 @@ Describe('Tao runtime app generation', () => {
     Expect(taoApp).toContain(JSON.stringify(scenario?.subject.subjectId))
     // The focused view mounts under a navigator of its own rather than bare, so `present` inside
     // it — which `WorkspaceRow` does — has somewhere to go.
-    Expect(taoApp).toContain('<TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} />')
+    Expect(taoApp).toContain(
+      '<TR.Studio.SubjectHost key={_TaoFixtureSeed.revision} arguments={_TaoStudioArgs} definition={_TaoStudioSubject} />',
+    )
     Expect(taoApp).toContain('TR.NavKind.Slot()')
     Expect(taoApp).toContain('restoration: { exclusions: [], mode: \'fresh\' as const, variant: "WordFlower" }')
     Expect(stableRoot).toContain('<TR.Studio.Environment.Host cell={TaoStudioCell}>')

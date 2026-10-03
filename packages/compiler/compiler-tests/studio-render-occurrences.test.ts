@@ -446,7 +446,7 @@ Describe('compiler: Studio render occurrences', () => {
         `${JSON.stringify(`${paths['Main.tao']}#OwnerCard`)}: subjectArguments => ({`,
       )
       Expect(compiled.code).toContain(
-        '<TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} />',
+        '<TR.Studio.SubjectHost key={_TaoFixtureSeed.revision} arguments={_TaoStudioArgs} definition={_TaoStudioSubject} />',
       )
       Expect(compiled.code).toContain('restoration: { exclusions: [], mode: \'fresh\' as const, variant: "Preview" }')
 
