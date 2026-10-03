@@ -133,13 +133,15 @@ Describe('agent config generation', () => {
       await FS.writeText(agent, '#!/bin/sh\necho "detached HEAD warning" >&2\nexit 0\n')
       await FS.chmod(agent, 0o755)
 
-      const success = await CLI.run(script, { cwd: root })
+      // A cloud session's own CLAUDE_CODE_REMOTE would route setup to the bootstrap this fixture lacks.
+      const env = { CLAUDE_CODE_REMOTE: '' }
+      const success = await CLI.run(script, { cwd: root, env })
       Expect(success.exitCode).toBe(0)
       Expect(success.stdout).toBe('')
       Expect(success.stderr).toBe('')
 
       await FS.writeText(agent, '#!/bin/sh\necho "setup failed"\necho "recovery detail" >&2\nexit 7\n')
-      const failure = await CLI.run(script, { cwd: root })
+      const failure = await CLI.run(script, { cwd: root, env })
       Expect(failure.exitCode).toBe(7)
       Expect(failure.stderr).toContain('setup failed')
       Expect(failure.stderr).toContain('recovery detail')
@@ -163,7 +165,7 @@ Describe('agent config generation', () => {
       await FS.writeText(bun, '#!/usr/bin/env zsh\necho "notice from ${2:t}"\nexit 3\n')
       await FS.chmod(bun, 0o755)
 
-      const result = await CLI.run(script, { cwd: root, env: { CLAUDE_ENV_FILE: '' } })
+      const result = await CLI.run(script, { cwd: root, env: { CLAUDE_CODE_REMOTE: '', CLAUDE_ENV_FILE: '' } })
 
       Expect(result.exitCode).toBe(0)
       Expect(result.stdout).toBe('notice from agent-model-audit.ts\n')

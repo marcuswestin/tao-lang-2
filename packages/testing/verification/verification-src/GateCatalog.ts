@@ -99,6 +99,11 @@ export type GateMetadata =
     /** True when the node needs host capabilities the managed agent sandbox deliberately denies. */
     requiresUnsandboxed?: boolean
     /**
+     * True when the node drives the macOS window server or native launcher. A lane on any other host
+     * reports it skipped rather than running it, so it proves nothing there and is never green.
+     */
+    requiresMacOS?: boolean
+    /**
      * The process the node runs, or a builder over what the graph admitted; absent, the node is
      * `just <name>`. A public recipe and a catalog command may share a name: the recipe is the
      * human spelling with its own defaults, the command is what the graph runs under that name.
@@ -461,6 +466,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
           },
         ),
         priority: GUI_PRIORITY,
+        requiresMacOS: true,
       },
     ],
     // The canary once hung after printing its verdict on a launch-owned process that survived
@@ -471,6 +477,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       {
         ...studioLane([GUI_RESOURCE, HNREADER_PROJECT_RESOURCE]),
         priority: GUI_PRIORITY,
+        requiresMacOS: true,
         timeoutMs: STUDIO_CANARY_TIMEOUT_MS,
       },
     ],
@@ -574,6 +581,7 @@ function node(name: string, repositoryRoot: string): WorkNode {
   const {
     hostDependent: _hostDependent,
     reads: _reads,
+    requiresMacOS: _requiresMacOS,
     requiresUnsandboxed: _requiresUnsandboxed,
     run,
     writes: _writes,

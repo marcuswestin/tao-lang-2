@@ -134,6 +134,38 @@ Describe('cloud setup lifecycle', () => {
     })
   })
 
+  Test(
+    'a remote session hands the payload and routing notice to the title step, and keeps the notice if it fails',
+    async () => {
+      await withCloudFixture(async (root, env) => {
+        // Stands in for the profile's bun: the audit prints a notice, the title step echoes its inputs.
+        const bun = FS.resolvePath('.devenv/profile/bin/bun', root)
+        await FS.writeText(
+          bun,
+          '#!/bin/sh\ncase "$2" in\n'
+            + '  */agent-model-audit.ts) echo "routing notice" ;;\n'
+            + '  */CloudSessionTitleEntry.ts) printf "payload=%s notice=%s\\n" "$(cat)" "$3"; exit "${TAO_TEST_TITLE_STATUS:-0}" ;;\n'
+            + 'esac\n',
+        )
+        await FS.chmod(bun, 0o755)
+        const payload = '{"session_title":"Rum tests","source":"startup"}'
+        const remote = { ...env, CLAUDE_CODE_REMOTE: 'true' }
+
+        const titled = await CLI.run(FS.resolvePath(HOOK, root), { cwd: root, env: remote, stdin: payload })
+        Expect(titled.exitCode).toBe(0)
+        Expect(titled.stdout).toBe(`payload=${payload} notice=routing notice\n`)
+
+        const failed = await CLI.run(FS.resolvePath(HOOK, root), {
+          cwd: root,
+          env: { ...remote, TAO_TEST_TITLE_STATUS: '1' },
+          stdin: payload,
+        })
+        Expect(failed.exitCode).toBe(0)
+        Expect(failed.stdout).toBe(`payload=${payload} notice=routing notice\nrouting notice\n`)
+      })
+    },
+  )
+
   for (const phase of ['install', 'start'] as const) {
     Test(`Cursor ${phase} invokes the common bootstrap and propagates its failure`, async () => {
       await withCloudFixture(async (root, env) => {
