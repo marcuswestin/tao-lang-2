@@ -181,6 +181,17 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     await browser.addInitScript(probeScript)
     await browser.setViewport(1_440, 900)
     await browser.goto(studio.readiness.sessionUrl)
+    // Load events do not bubble, but a capturing listener on the document sees every cell's.
+    await browser.evaluate(`(() => {
+        window.__taoCellLoadAt = Date.now()
+        window.__taoCellLoads = []
+        document.addEventListener('load', event => {
+          if (!(event.target instanceof HTMLIFrameElement)) return
+          window.__taoCellLoadAt = Date.now()
+          window.__taoCellLoads.push({ at: window.__taoCellLoadAt, src: event.target.src, title: event.target.title })
+        }, true)
+        return true
+      })()`)
     const frame = JSON.stringify(project.frameSelector)
     // A cell off-screen keeps `about:blank` until it scrolls into view, and a cell can remount
     // between two reads, so its URL is read in the same poll that sees it loaded. Every cell
@@ -204,6 +215,16 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
     const generatedRoot = await generatedRootFor(projectRoot)
     await browser.click('[data-preset="design"]')
     await browser.waitFor(`document.querySelector('.cm-content') !== null`)
+    // A cell that finishes loading registers with Metro's HMR server, and a registration that overlaps
+    // an edit's update can leave the bundle's cells on a revision Metro deleted, so later edits never
+    // arrive (see the edit failures in the Studio preview speed roadmap). The layout change above
+    // brings more cells into view, and the edits start once none has loaded for a while, so they time
+    // an edit rather than that race.
+    const settled = await Time.pollUntil(
+      async () => await browser!.evaluate<boolean>('Date.now() - window.__taoCellLoadAt > 3000') || undefined,
+      { intervalMs: 250, timeoutMs: 60_000 },
+    )
+    Assert.defined(settled, `the ${project.name} preview cells stop loading`)
     await browser.evaluate(`(() => {
         const now = () => performance.timeOrigin + performance.now()
         window.__taoLatencyLoads = 0
@@ -256,6 +277,7 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
         const diagnostics = FS.resolvePath(`latency-${marker}.json`, studio.readiness.artifactRoot)
         await FS.writeJson(diagnostics, {
           browserEvents: browser.browserEvents().slice(-40),
+          cellLoads: await browser.evaluate('window.__taoCellLoads'),
           disk,
           frameLoads: await browser.evaluate<number>('window.__taoLatencyLoads'),
           expected: project.sourceFor(marker),

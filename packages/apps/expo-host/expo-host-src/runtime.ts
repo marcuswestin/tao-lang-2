@@ -684,6 +684,10 @@ function StudioBrowserApp() {
 }
 
 function StudioPreviewContent({ cell, config, manifest }: any) {
+  // Each compile delivers a new config, which re-renders this root. One app element for the mounted
+  // lifetime lets React skip the app below it; Fast Refresh still re-renders the views it changed, and
+  // the Lens wrappers, which read the config's publisher, still report the new source versions.
+  const [TaoAppElement] = React.useState(() => <TaoApp />)
   React.useEffect(() => {
     const environment = cell?.cell?.environment
     if (environment === undefined) return
@@ -694,7 +698,7 @@ function StudioPreviewContent({ cell, config, manifest }: any) {
     })
   }, [cell])
   if (cell === undefined) {
-    return <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
+    return <TR.Studio.PreviewBridge config={config}>{TaoAppElement}</TR.Studio.PreviewBridge>
   }
   // This resolved contract is plain wire data. A changed fixture, environment, replay, subject,
   // or explicit cell revision remounts providers and fixture owners together. Authored journey
@@ -713,10 +717,11 @@ function StudioPreviewCellContent({ cellContract, config }: any) {
   // State survives Fast Refresh; useMemo may recompute even with unchanged dependencies. The key
   // above owns replacement, so this provider contract keeps one object for its mounted lifetime.
   const [TaoStudioCell] = React.useState(() => JSON.parse(cellContract))
+  const [TaoAppElement] = React.useState(() => <TaoApp />)
   return (
     <TR.Studio.ReplayHost replay={TaoStudioCell.replay}>
       <TR.Studio.Environment.Host cell={TaoStudioCell}>
-        <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>
+        <TR.Studio.PreviewBridge config={config}>{TaoAppElement}</TR.Studio.PreviewBridge>
       </TR.Studio.Environment.Host>
     </TR.Studio.ReplayHost>
   )

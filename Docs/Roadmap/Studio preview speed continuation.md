@@ -177,12 +177,15 @@ Each slice is measured on its own with the latency harness, so each gain is attr
       last, since the same-length markers it used never moved a range. One-file app warm p50,
       publication on: 275 and 216ms against 689ms with the full manifest; the machine was loaded and
       the spread is wide, so the gain is indicative only.
-   4. Stop every compile from re-rendering the whole preview tree. Each compile's runtime update
-      sets root state in the generated `App.tsx`; nothing below it is memoized, `<TaoApp />` is a new
-      element each render, and the lens publish callback changes with each config, so every lens
-      render re-renders. Make the app element stable, read the config in `publishLens` from a ref,
-      and keep scenarios with steps from remounting when their steps did not change (their cell key
-      includes `compileRevision` today).
+   4. Done, in part: a compile's new config no longer re-renders every view. The generated preview
+      root holds one `<TaoApp />` element per mounted cell, so React skips the app below the bridge;
+      Fast Refresh still re-renders the views an edit changed. `publishLens` still changes with the
+      config on purpose: the Lens panel matches samples by source version, and the cheap Lens
+      wrappers re-render to report the new one. Scenarios with steps still remount per compile,
+      since a code edit can change what a replayed step does; changing that is a product decision.
+      Not timed: the machine ran at load average ~100, and the HNReader cases hit the Metro race
+      above. A Jest test proves the view renders once across a new config while the Lens reports
+      both revisions.
    5. Cache emitted modules per file, reusing a module whose source and dependencies did not
       change. Expected to save most of the 50ms emit phase on a one-file edit. It is compiler-side
       and independent of the other steps, so it can move or run in parallel.

@@ -2,7 +2,8 @@ import TR from '@runtime/TR'
 import { createTaoJourneyReplayGate, replayTaoJourney, type TaoJourneyStep } from '@runtime/TR-studio-journey'
 import { Describe, Expect, Test } from '@shared/test'
 import { act, render } from '@testing-library/react-native'
-import { createElement, type ReactElement, useEffect, useRef, useState } from 'react'
+import { StudioLensHost, StudioLensRender } from '@runtime/TR-studio-lens'
+import { createElement, type ReactElement, useCallback, useEffect, useRef, useState } from 'react'
 import { Text } from 'react-native'
 import { MemoryProvider } from '../../stdlib/@tao/data/providers/memory/Memory'
 
@@ -315,5 +316,34 @@ Describe('Studio preview runtime identity dedupe', () => {
       .toBe(false)
     // The very first applied runtime has no previous cell to compare against, so it is never a no-op.
     Expect(sameRuntimeIdentity(undefined, baseNext)).toBe(false)
+  })
+
+  // Each compile hands the preview root a new config. The root holds one app element for its mounted
+  // lifetime, as StudioPreviewCellContent does, so the views below it do not render again, while the
+  // Lens wrappers, which read the config's publisher, still report a sample for the new revision.
+  Test('a new config re-renders the Lens wrappers but not the app held as one element', () => {
+    let viewRenders = 0
+    const published: string[] = []
+    const identity = { end: 10, kind: 'render', sourcePath: 'Feed.tao', start: 0 } as const
+    function View(): ReactElement {
+      viewRenders += 1
+      return createElement(Text, null, 'Feed')
+    }
+    function App(): ReactElement {
+      return createElement(StudioLensRender, { identity }, createElement(View))
+    }
+    function PreviewRoot({ revision }: { revision: string }): ReactElement {
+      const [app] = useState(() => createElement(App))
+      const publish = useCallback(() => published.push(revision), [revision])
+      return createElement(StudioLensHost, { publish }, app)
+    }
+    const screen = render(createElement(PreviewRoot, { revision: 'compile:1' }))
+    try {
+      screen.rerender(createElement(PreviewRoot, { revision: 'compile:2' }))
+      Expect(viewRenders).toBe(1)
+      Expect(published).toEqual(['compile:1', 'compile:2'])
+    } finally {
+      screen.unmount()
+    }
   })
 })
