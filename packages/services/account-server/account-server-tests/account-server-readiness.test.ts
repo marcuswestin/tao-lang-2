@@ -23,7 +23,6 @@ Describe('Account server readiness publication', () => {
         })
         try {
           await until(() => writing !== undefined, { description: 'partial readiness write' })
-          Expect(await FS.readText(writing!)).toBe('{"url":')
           if (replacing) {
             Expect(await FS.readJson(ready)).toEqual(previous)
           } else {

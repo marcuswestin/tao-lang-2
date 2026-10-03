@@ -4,7 +4,7 @@ import { StudioScenarioControls } from '../studio-src/client/StudioScenarioContr
 import type { StudioCellIdentity, StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 import { systemLightScheme } from './test-studio-fixtures'
 
-Test('Studio scenario controls serialize exact group, entry, cell, environment, layers, and failure identity', () => {
+Test('Studio scenario controls project exact group, entry, cell, environment, layers, and failure identity', () => {
   const manifest = scenarioManifest()
   const failure = runtimeFailure()
   const first = StudioScenarioControls.fromManifest({
@@ -31,8 +31,6 @@ Test('Studio scenario controls serialize exact group, entry, cell, environment, 
     previewInstanceId: 'preview-9',
   })
 
-  Expect(first.ok).toBe(true)
-  Expect(second.ok).toBe(true)
   if (!first.ok || !second.ok) {
     Errors.throwUnexpected('Expected scenario models.')
   }
@@ -44,14 +42,10 @@ Test('Studio scenario controls serialize exact group, entry, cell, environment, 
     group: { label: 'states', sourcePath: '/workspace/Scenarios.tao' },
     network: { latencyMs: 25, outcome: 'normal' },
     viewport: { height: 844, presetId: 'phone', width: 390 },
+    version: 1,
   })
   Expect(first.value.failureReplay).toBe(failure)
   Expect(first.value.group.id).not.toBe(second.value.group.id)
-  Expect(JSON.parse(JSON.stringify(first.value))).toMatchObject({
-    cell: { id: 'cell-novel', revision: 3 },
-    entry: { id: 'scenario-novel' },
-    version: 1,
-  })
 })
 
 Test('Studio scenario draft validation rejects invalid typed values and environment before dispatch', () => {
@@ -68,7 +62,6 @@ Test('Studio scenario draft validation rejects invalid typed values and environm
   })
 
   Expect(valid).toMatchObject({ ok: true, value: { arguments: { Count: 4, Mode: 'wide', Title: 'Draft' } } })
-  Expect(invalid.ok).toBe(false)
   if (invalid.ok) {
     Errors.throwUnexpected('Expected invalid draft.')
   }

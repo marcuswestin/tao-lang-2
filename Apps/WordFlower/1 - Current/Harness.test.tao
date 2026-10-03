@@ -12,23 +12,17 @@ app WordFlowerNavHarness {
    // An app without data omits `Datasource` entirely
 }
 
-// These four apps cross the two independent declaration sugars. Each is a complete app value with
-// the same mounted behavior: primitive head versus inferred `let`, and canonical construction versus
-// explicit `with`. The checks below run all four, so every spelling must compile and work.
+// Two representative apps cover primitive/canonical and inferred/explicit spellings through
+// mounted behavior. Package language tests own the remaining syntax combinations.
 app WordFlowerStackByNav {
    Name "WordFlower Declaration Head"
    Navigator StackByNav
 }
 
-app WordFlowerStackByNavWith = app with {
-   Name "WordFlower Declaration Head With"
-   Navigator StackByNavWith
-}
-
 // A deterministic navigation harness. It keeps stack, slot, and root-replacement acceptance
 // independent of the product app, its data, and its design. Keeping the complete harness in this
 // test sidecar prevents its implementation-only app variants from crowding the interactive picker.
-// One complete type and four equivalent value spellings make the declaration/refinement contract
+// One complete type and two representative value spellings make the declaration/refinement contract
 // executable. `HarnessStack` is the rare type declaration; each value below has that same
 // precise inferred type and the same configured behavior. The primitive `nav` head adds a family
 // constraint, while `let` infers it. A constructor block may expose or omit the core `with` without
@@ -41,23 +35,11 @@ workspace
 nav StackByNav = HarnessStack { }
 
 workspace
-nav StackByNavWith = HarnessStack with { }
-
-workspace
-let StackByLet = HarnessStack { }
-
-workspace
 let StackByLetWith = HarnessStack with { }
 
 workspace
 nav HarnessNavigator = SlotNav {
    Initial StackByNav
-}
-
-folder
-let WordFlowerStackByLet = app {
-   Name "WordFlower Declaration Let"
-   Navigator StackByLet
 }
 
 folder
@@ -128,22 +110,11 @@ test "WordFlower navigation foundation" {
    }
 }
 
-// All four checks must mount the same complete app/nav behavior. Together they prove that primitive
-// value heads and inferred `let` bindings are equivalent, and that an explicit constructor `with`
-// is equivalent to its canonical omission.
+// Representative primitive and inferred declarations mount the same initial scene. Language
+// package tests cover the declaration/refinement rules.
 test "WordFlower declaration refinement forms" {
    test "a primitive head with canonical construction works" {
       run WordFlowerStackByNav
-
-      expect text "Harness home marker"
-   }
-   test "a primitive head with explicit refinement works" {
-      run WordFlowerStackByNavWith
-
-      expect text "Harness home marker"
-   }
-   test "an inferred let with canonical construction works" {
-      run WordFlowerStackByLet
 
       expect text "Harness home marker"
    }

@@ -32,7 +32,8 @@ entry below for every starter folder, as `repo-lint` requires.
 
 The one-entity starter: a `StackNav` over a list scene, a row view, and a detail scene for `Notes`,
 with a text title, a text body, a yes/no flag, and a creation time. It proves the single-feature
-shape: adding a row, opening it, renaming it, and keeping rows across a relaunch.
+shape: adding a row, opening it, and renaming it. Persistence is covered by the local-data
+and runtime ownership suites.
 
 ## Pantry
 

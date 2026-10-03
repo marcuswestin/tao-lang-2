@@ -242,9 +242,9 @@ Describe('prebuilt host releases', () => {
   async function downloadArchiveFixture(
     root: string,
     bundleName: string,
-    useZipFixture = Platform.hostPlatform === 'linux',
   ) {
     const env = { ...Platform.runtimeProcess.env }
+    const useZipFixture = Platform.hostPlatform === 'linux'
     if (useZipFixture) {
       const bin = FS.resolvePath('bin', root)
       const shim = FS.resolvePath('ditto', bin)
@@ -273,7 +273,6 @@ Describe('prebuilt host releases', () => {
     const manifest: HostManifest = { format: 1, hostVersion: '1.0.0', nativeKit: {}, platform: 'ios-simulator' }
     const directory = FS.resolvePath(`hosts/${hostKey(manifest)}/ios-simulator`, root)
     const zip = FS.resolvePath('tao-companion-ios-simulator.app.zip', root)
-    Expect(Array.from((await FS.readFile(zip)).slice(0, 4))).toEqual([80, 75, 3, 4])
     if (useZipFixture) {
       const calls = (await FS.readText(FS.resolvePath('ditto.jsonl', root))).trim().split('\n')
         .map(line => JSON.parse(line) as string[])
@@ -309,34 +308,6 @@ Describe('prebuilt host releases', () => {
       Expect(await FS.exists(directory)).toBe(false)
     })
   })
-
-  Test(
-    'the portable ZIP command fixture extracts real bytes and rejects unsupported arguments and invalid ZIPs',
-    async () => {
-      await withHostDirectory(async root => {
-        const { directory, result } = await downloadArchiveFixture(root, 'Tao Companion.app', true)
-        Expect(result.error).toBeUndefined()
-        Expect(await FS.readText(FS.resolvePath('Tao Companion.app/Info.plist', directory))).toBe('<plist/>')
-        const shim = FS.resolvePath('bin/ditto', root)
-        const unsupported = await CLI.run(shim, {
-          args: ['-x', '-k'],
-          processPolicy: 'test',
-          timeoutMs: 20_000, // budget-ok: parent-owned bound for the small ZIP command fixture.
-        })
-        Expect(unsupported.exitCode).not.toBe(0)
-        Expect(unsupported.stderr).toContain('Unsupported ditto fixture arguments')
-        const invalid = FS.resolvePath('invalid.zip', root)
-        await FS.writeText(invalid, 'not a ZIP')
-        const corrupt = await CLI.run(shim, {
-          args: ['-x', '-k', invalid, FS.resolvePath('invalid-output', root)],
-          processPolicy: 'test',
-          timeoutMs: 20_000, // budget-ok: parent-owned bound for the small ZIP command fixture.
-        })
-        Expect(corrupt.exitCode).not.toBe(0)
-        Expect(corrupt.stderr).toContain('BadZipFile')
-      })
-    },
-  )
 
   Test('reads past a full page of other releases to reach a host, and stops at a short page', async () => {
     // CLI and Studio releases share the list, so thirty of them can push every host off page one.

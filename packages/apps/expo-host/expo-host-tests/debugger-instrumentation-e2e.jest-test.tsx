@@ -66,7 +66,7 @@ Describe('generated debugger instrumentation', () => {
           await Promise.resolve()
           await new Promise<void>(resolve => queueMicrotask(resolve))
         })
-        await waitFor(() => Expect(screen.getByText('0')).toBeDefined())
+        await waitFor(() => screen.getByText('0'))
         const paused = nextDebugEvent('paused')
         TR.Debug.Break()
         try {
@@ -78,13 +78,13 @@ Describe('generated debugger instrumentation', () => {
           button.props.onPress()
           await paused
 
-          Expect(screen.getByText('0')).toBeDefined()
+          screen.getByText('0')
           Expect(TR.Debug.Paused()?.step).toMatchObject({ action: 'AddTwo', path: '0' })
           Expect(TR.Debug.Paused()?.step.declaration).toContain('tao-debugger-generated')
           Expect(TR.Debug.Paused()?.step.statement).toBe('block.statements[1].block.statements[0]')
 
           act(() => TR.Debug.Continue())
-          await waitFor(() => Expect(screen.getByText('2')).toBeDefined())
+          await waitFor(() => screen.getByText('2'))
         } finally {
           TR.Debug.Reset()
         }

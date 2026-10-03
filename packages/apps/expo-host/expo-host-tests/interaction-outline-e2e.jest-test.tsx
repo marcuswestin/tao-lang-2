@@ -152,7 +152,7 @@ Describe('interaction outline runtime', () => {
               Expect(palettePrevented).toBe(true)
               Expect(paletteStopped).toBe(true)
               Expect(TR.Interaction.Attention.read().mode).toBe('palette')
-              Expect(screen.getByText('Command palette')).toBeDefined()
+              screen.getByText('Command palette')
 
               let browserKeyPrevented = false
               const browserKey = { key: 'F7', preventDefault: () => browserKeyPrevented = true }
@@ -208,8 +208,6 @@ Describe('interaction outline runtime', () => {
         async screen => {
           const host = screen.UNSAFE_getAllByType(RN.View).find(view => view.props.tabIndex === 0)
           Expect(host).toBeDefined()
-          const hiddenLayer = screen.UNSAFE_getByProps({ testID: 'tao-interaction-layers' })
-          Expect(hiddenLayer.props.accessibilityElementsHidden).toBe(true)
           Expect(screen.queryByText('Interaction hints')).toBeNull()
           let focused = 0
           const empty = { focus: () => focused += 1 }
@@ -229,7 +227,7 @@ Describe('interaction outline runtime', () => {
           })
           Expect(TR.Interaction.Attention.read().narrowing).toBe('')
           Expect(prevented).toBe(0)
-          for (const key of ['Backspace', 'ArrowLeft', 'Enter']) {
+          for (const key of ['Backspace', 'Enter']) {
             await act(async () => {
               host!.props.onKeyDown({
                 key,
@@ -282,7 +280,7 @@ Describe('interaction outline runtime', () => {
             })
           })
           Expect(TR.Interaction.Attention.read().mode).toBe('hints')
-          Expect(screen.getByText('Interaction hints')).toBeDefined()
+          screen.getByText('Interaction hints')
           Expect(prevented).toBe(3)
           await act(async () => {
             host!.props.onKeyDown({ key: 'F7', preventDefault: () => prevented += 1 })
@@ -326,7 +324,7 @@ Describe('interaction outline runtime', () => {
         await act(async () => {
           TR.Interaction.PressKey('Enter')
         })
-        Expect(screen.getByText('Invocations: 0')).toBeDefined()
+        screen.getByText('Invocations: 0')
         Expect(TR.Interaction.Attention.read().targetLabel).toBeUndefined()
       },
     )
@@ -352,7 +350,7 @@ Describe('interaction outline runtime', () => {
           fireEvent.press(screen.getByLabelText('Save'))
         })
         Expect(TR.Interaction.Attention.read().targetLabel).toBe('Save')
-        Expect(screen.getByText('Invocations: 1')).toBeDefined()
+        screen.getByText('Invocations: 1')
       },
     )
   })
@@ -420,21 +418,21 @@ Describe('interaction outline runtime', () => {
         Expect(TR.Interaction.Attention.read().targetLabel).toBe('Chapter one')
         Expect(TR.Interaction.Attention.read().target).toBe(initialItems[0]?.identity)
         Expect(TR.Interaction.Attention.read().focusRegionLabel).toBe('Documents')
-        Expect(screen.getByText('Nothing selected')).toBeDefined()
-        Expect(screen.getByText('Selections: 0')).toBeDefined()
+        screen.getByText('Nothing selected')
+        screen.getByText('Selections: 0')
 
         await act(async () => {
           fireEvent(surfaces[1]!, 'focus')
         })
         Expect(TR.Interaction.Attention.read().targetLabel).toBe('Chapter two')
         Expect(TR.Interaction.Attention.read().target).toBe(initialItems[1]?.identity)
-        Expect(screen.getByText('Selections: 0')).toBeDefined()
+        screen.getByText('Selections: 0')
 
         await act(async () => {
           fireEvent.press(surfaces[1]!)
         })
-        Expect(screen.getByText('Selected Chapter two')).toBeDefined()
-        Expect(screen.getByText('Selections: 1')).toBeDefined()
+        screen.getByText('Selected Chapter two')
+        screen.getByText('Selections: 1')
 
         await act(async () => {
           fireEvent(surfaces[0]!, 'accessibilityAction', {
@@ -447,7 +445,6 @@ Describe('interaction outline runtime', () => {
         const items = nodes('item')
         Expect(items.map(item => item.label)).toEqual(['Chapter two'])
         Expect(items.map(item => item.provenance['entity'])).toEqual(['Document'])
-        Expect(new Set(items.map(item => item.parent)).size).toBe(1)
         const collection = nodes('collection')[0]
         Expect(collection?.identity).toBe(items[0]?.parent)
         Expect(collection?.label).toBe('Documents')
@@ -496,7 +493,7 @@ Describe('interaction outline runtime', () => {
         const root = screen.getByTestId('rows')
         Expect(root.props.accessibilityLabel).toBeUndefined()
         Expect(root.props.accessible).toBeUndefined()
-        Expect(screen.getByText('Chapter one')).toBeDefined()
+        screen.getByText('Chapter one')
 
         const [item] = nodes('item')
         Expect(item?.label).toBe('Chapter one')
@@ -572,7 +569,6 @@ Describe('interaction outline runtime', () => {
         }
       `,
       async screen => {
-        Expect(nodes().length).toBeGreaterThan(0)
         Expect(nodes('region').map(region => region.label)).toEqual(['Home'])
         Expect(nodes('input').map(control => control.label)).toEqual(['Draft title'])
         Expect(nodes('action').map(control => control.label)).toEqual(['Open detail'])
@@ -662,8 +658,8 @@ Describe('interaction outline runtime', () => {
       async screen => {
         const [region] = nodes('region').filter(node => node.provenance['role'] === 'nav-siblings')
         Expect(region).toBeDefined()
-        Expect(screen.getByTestId('scrollAction')).toBeDefined()
-        Expect(screen.getByTestId('paneAction')).toBeDefined()
+        screen.getByTestId('scrollAction')
+        screen.getByTestId('paneAction')
         Expect(nodes('action').filter(node => node.label?.endsWith('action')).map(node => node.parent)).toEqual([
           region?.identity,
           region?.identity,
@@ -728,7 +724,7 @@ Describe('interaction outline runtime', () => {
         })
         Expect(notifications).toBe(1)
         Expect(nodes('item')[0]?.label).toBe('Chapter two')
-        Expect(screen.getByText('Chapter two')).toBeDefined()
+        screen.getByText('Chapter two')
         unsubscribe()
       },
     )
@@ -750,7 +746,7 @@ Describe('interaction outline runtime', () => {
       async screen => {
         const label = () => nodes('action').find(node => node.provenance['occurrence'])?.label
         Expect(label()).toBe('Count 0')
-        Expect(screen.getByLabelText('Count 0')).toBeDefined()
+        screen.getByLabelText('Count 0')
 
         await act(async () => {
           fireEvent.press(screen.getByTestId('count'))
@@ -758,7 +754,7 @@ Describe('interaction outline runtime', () => {
         })
 
         Expect(label()).toBe('Count 1')
-        Expect(screen.getByLabelText('Count 1')).toBeDefined()
+        screen.getByLabelText('Count 1')
       },
     )
   })

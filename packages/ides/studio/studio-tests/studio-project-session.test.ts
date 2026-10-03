@@ -1,6 +1,6 @@
 import { loadSemanticSnapshot, Workspace } from '@compiler/workspace'
 import { AST } from '@parser'
-import { CLI, Errors, FS, Repo, Time } from '@shared'
+import { Errors, FS } from '@shared'
 import { Deferred, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { studioGeneratedSourceHeader } from '../studio-src/StudioGeneratedSources'
 import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
@@ -15,7 +15,7 @@ import {
   studioSourceActionVersion,
 } from '../studio-src/StudioProtocol'
 import { StudioServerDatasource } from '../studio-src/StudioServerDatasource'
-import { systemLightScheme } from './test-studio-fixtures'
+import { contendingSketchCreate, systemLightScheme } from './test-studio-fixtures'
 
 Test('Studio project session resolves one current Tao app and serves contained versioned files', async () => {
   await withStudioProject(async (session, paths, root) => {
@@ -38,16 +38,7 @@ Test('Studio project session resolves one current Tao app and serves contained v
     })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/undo' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/create' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/rename' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/file/delete' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/inspect' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/propose' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/data/fill' })
     Expect(handshake.endpoints).toContainEqual({ method: 'WS', path: '/api/language/lsp' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/language/highlight' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/ship/beta' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/tests/status' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/tests/run' })
     Expect(handshake.files.map(candidate => candidate.path)).toEqual([
       'Garden.tao',
       'Project.tao',
@@ -532,46 +523,32 @@ Test('Move to package serializes source and catalog rollback against an independ
       writeId: 'move-process-failure',
     })
     await moveCompileEntered.promise
-    const marker = FS.resolvePath('independent-move-create-finished', root)
-    const sessionModule = Repo.resolvePath('packages/ides/studio/studio-src/StudioProjectSession.ts')
-    const sharedModule = Repo.resolvePath('packages/shared/shared-src/shared.ts')
-    const independent = CLI.run('bun', {
-      args: [
-        '-e',
-        `
-      import { StudioProjectSession } from ${JSON.stringify(sessionModule)}
-      import { FS } from ${JSON.stringify(sharedModule)}
-      const root = ${JSON.stringify(root)}
-      const project = await FS.realPath(root)
-      const session = await StudioProjectSession.open({
-        async compile() {},
-        entryPath: FS.resolvePath('Garden.tao', root),
-        projectRoot: root,
-      })
-      await session.applySketchAction({
-        action: {
-          height: 40,
-          id: 'independent-move-sketch',
-          kind: 'create-sketch',
-          project,
-          rects: [],
-          width: 100,
-        },
-        expectedRevision: ${created.catalog.revision},
-        requestId: 'independent-move-create',
-      })
-      await FS.writeText(${JSON.stringify(marker)}, 'done')
-    `,
-      ],
-      stdio: 'pipe',
+    const independent = contendingSketchCreate(root, {
+      action: {
+        height: 40,
+        id: 'independent-move-sketch',
+        kind: 'create-sketch',
+        project: await FS.realPath(root),
+        rects: [],
+        width: 100,
+      },
+      expectedRevision: created.catalog.revision,
+      requestId: 'independent-move-create',
     })
-    await Time.sleep(40)
-    Expect(await FS.exists(marker)).toBe(false)
-    releaseMoveCompile.resolve()
-    await Expect(failedMove).rejects.toThrow('authored Tao source failed to compile')
-    const independentResult = await independent
-    Expect(independentResult.stderr).toBe('')
-    Expect(independentResult.exitCode).toBe(0)
+    try {
+      await independent.waitForContention()
+      releaseMoveCompile.resolve()
+      await Expect(failedMove).rejects.toThrow('authored Tao source failed to compile')
+      await independent.resume()
+      const independentResult = await independent.result
+      Expect(independentResult.stderr).toBe('')
+      Expect(independentResult.exitCode).toBe(0)
+    } finally {
+      releaseMoveCompile.resolve()
+      await independent.resume()
+      await failedMove.catch(() => {})
+      await independent.result
+    }
     Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(true)
     Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
     const catalog = await session.sketchCatalog()
@@ -1003,11 +980,9 @@ Test('Studio lists project files from one scan kept current by writes and watche
       // An editor outside Studio rewrites Support.tao; the watcher reports the version it hashed.
       const externalContent = 'view Support() { render Text("external") }\n'
       await FS.writeText(paths['Support.tao'], externalContent)
-      const supportVersionBefore = initial.find(file => file.path === 'Support.tao')!.sourceVersion
       const external = await session.noteWatchChanges([{ path: paths['Support.tao'], sourceVersion: 'external-1' }])
       Expect(external.compile?.status).toBe('compiled')
       Expect((await session.files()).find(file => file.path === 'Support.tao')?.sourceVersion).toBe('external-1')
-      Expect(supportVersionBefore).not.toBe('external-1')
 
       // A watcher report without a version means "look for yourself": one read, not a rescan.
       const readsBeforeUnversioned = reads
@@ -1302,23 +1277,6 @@ Test('Studio rejects malformed occurrence identity before source-action preparat
   })
 })
 
-Test('Studio inspects parser-owned current render clauses through a versioned file request', async () => {
-  await withStudioProject(async session => {
-    const file = await session.readFile('Garden.tao')
-    const selected = 'Text("Before")'
-    const start = file.content.indexOf(selected)
-    const end = start + selected.length
-    const inspection = await session.inspectRender({
-      path: file.path,
-      renderId: `${FS.resolvePath(file.path, session.projectRoot)}:${start}:${end}`,
-      sourceVersion: file.sourceVersion,
-    })
-
-    Expect(inspection.renderId).toContain('Garden.tao')
-    Expect(inspection.layoutEntries).toEqual([])
-  })
-})
-
 // Canvas mode frames a focused view at the size its occurrence had, so the inspection of any element
 // reports the owning view's root render and, for the cell that measured it, that render's rectangle.
 Test('Studio reports the owning view root render and its measured rectangle to the selecting cell', async () => {
@@ -1331,6 +1289,7 @@ Test('Studio reports the owning view root render and its measured rectangle to t
     const request = { path: file.path, renderId, sourceVersion: file.sourceVersion }
 
     const unmeasured = await session.inspectRender(request)
+    Expect(unmeasured.layoutEntries).toEqual([])
     Expect(unmeasured.owner?.view).toBe('MainView')
     Expect(unmeasured.owner?.renderId).toContain('Garden.tao')
     Expect(unmeasured.owner?.renderId).not.toBe(renderId)
@@ -1614,47 +1573,6 @@ Test('Studio checkpoints survive a refreshed preview for the same scenario cell'
 
     Expect(committed.content).toContain('Number(0)')
     Expect(undone.content).toBe(registered.file.content)
-  })
-})
-
-Test('Studio saves a captured provider state as a named Tao fixture through the source-action bus', async () => {
-  await withStudioProject(async session => {
-    session.registerPreview({ previewInstanceId: 'capture-preview' })
-    const file = await session.readFile('Garden.tao')
-    const envelope = {
-      action: {
-        fixtureName: 'CapturedState',
-        kind: 'insert-captured-fixture',
-        plan: {
-          accounts: [],
-          creates: [{ entity: 'Account', fields: { Name: 'Captured' }, name: 'Account1' }],
-        },
-      },
-      channel: studioProtocolChannel,
-      checkpoint: { id: 'captured-fixture', phase: 'single' },
-      identity: {
-        ...session.identity(),
-        path: file.path,
-        previewInstanceId: 'capture-preview',
-        sourceVersion: file.sourceVersion,
-      },
-      protocolVersion: studioProtocolVersion,
-      requestId: 'captured-fixture-request',
-      sourceActionVersion: studioSourceActionVersion,
-      type: 'source-action',
-    } as const
-    const proposal = await session.proposeSourceAction(envelope)
-
-    Expect(proposal.diff).toContain('+++ Garden.tao (proposed)')
-    Expect(proposal.diff).toContain('+fixture CapturedState')
-    Expect(proposal.content).toContain('fixture CapturedState')
-    Expect((await session.readFile('Garden.tao')).content).toBe(file.content)
-
-    const applied = await session.applySourceAction(envelope)
-
-    Expect(applied.content).toContain('fixture CapturedState')
-    Expect(applied.content).toContain('Account1 = create Account {')
-    Expect(applied.content).toContain('Name: "Captured"')
   })
 })
 

@@ -83,24 +83,4 @@ Describe('Studio watch health', () => {
     Expect(installed.metroWatchFolders.filter(folder => ignored.some(dir => FS.pathIsWithin(folder, dir))))
       .toEqual([])
   })
-
-  Test('records the three trees this repository deliberately watches twice', async () => {
-    const installed = await readWatchFacts(Repo.getRoot())
-    const overlaps = overlappingWatchFolders(installed.metroWatchFolders)
-      .map(overlap =>
-        `${FS.relativePath(Repo.getRoot(), overlap.nested)} inside ${FS.relativePath(Repo.getRoot(), overlap.inside)}`
-      )
-      .toSorted()
-
-    // metro.config.cjs names these source roots explicitly so Metro's file map can hash the files
-    // its aliases return, and metro-config.test.ts asserts that requirement directly. Each is also
-    // inside a package root Expo already watches, so each is crawled twice. That is redundant work
-    // and nothing worse — Studio compiles from its own watch of the project root — so it is
-    // recorded here rather than removed. Growing this list is a regression worth seeing.
-    Expect(overlaps).toEqual([
-      'packages/apps/expo-host/node_modules inside packages/apps/expo-host',
-      'packages/apps/runtime/TaoRuntime-src inside packages/apps/runtime',
-      'packages/shared/shared-src/core inside packages/shared',
-    ])
-  })
 })

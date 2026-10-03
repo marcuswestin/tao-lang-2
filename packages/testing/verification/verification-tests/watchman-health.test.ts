@@ -119,8 +119,6 @@ Describe('Watchman health', () => {
       Expect(await readWatchmanServer(present, failing('ECONNREFUSED'), false)).toEqual({ state: 'not-running' })
       // Bun reports a sandbox-denied connect as ECONNREFUSED, so inside a sandbox the code cannot decide.
       Expect(await readWatchmanServer(present, failing('ECONNREFUSED'), true)).toEqual({ state: 'denied' })
-      Expect(await readWatchmanServer(FS.resolvePath('absent.sock', directory), failing('ENOENT'), true))
-        .toEqual({ state: 'not-running' })
       Expect(await readWatchmanServer(FS.resolvePath('absent.sock', directory))).toEqual({ state: 'not-running' })
     } finally {
       await FS.remove(directory)

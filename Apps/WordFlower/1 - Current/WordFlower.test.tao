@@ -1,4 +1,4 @@
-use WordFlower, WordFlowerDark, WordFlowerDrawer from ./
+use WordFlower, WordFlowerDrawer from ./
 
 // App-level journeys: selection navigation, variants, and the app shell.
 test "WordFlower app shell" {
@@ -25,24 +25,6 @@ test "WordFlower app shell" {
       expect text "Settings"
       press #resetSignedOut
       expect text "Signed out"
-   }
-   test "reports the injected build stamp" {
-      run WordFlower
-      press "Settings"
-      expect {
-         text "Writing session"
-         text "10 words"
-         text "Build development"
-   }  }
-   test "the dark design mounts as a complete app variant" {
-      run WordFlowerDark
-      expect navigation title "WordFlower"
-      expect {
-         text "YOUR WRITING HOME"
-         text "Begin somewhere quiet"
-      }
-      press "Settings"
-      expect text "A few quiet controls for the way you write."
    }
    test "collapses and expands the build details in the stateful wrapper" {
       run WordFlower

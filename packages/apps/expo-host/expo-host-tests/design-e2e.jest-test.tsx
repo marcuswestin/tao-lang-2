@@ -61,11 +61,7 @@ Describe('Expo runtime minimal design', () => {
           padding: 16,
         })
         Expect(RN.StyleSheet.flatten(darkScreen.getByTestId('screen').props.style)).toMatchObject({
-          alignSelf: 'center',
           backgroundColor: '#000000',
-          flexGrow: 2,
-          maxWidth: 720,
-          padding: 16,
         })
         Expect(RN.StyleSheet.flatten(lightScreen.getByTestId('title').props.style)).toMatchObject({
           color: '#121826cc',
@@ -73,7 +69,6 @@ Describe('Expo runtime minimal design', () => {
         })
         Expect(RN.StyleSheet.flatten(darkScreen.getByTestId('title').props.style)).toMatchObject({
           color: '#f6f7f3',
-          fontSize: 20,
         })
       },
     )

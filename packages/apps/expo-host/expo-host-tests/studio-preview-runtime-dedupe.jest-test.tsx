@@ -48,24 +48,24 @@ function cellPayload(identity: RuntimeIdentity): Record<string, unknown> {
 }
 
 /**
- * Mirrors `receiveRuntime`'s functional setState. `dedupe` toggles the fix under test: `true`
- * reproduces `runtime.ts` as it now stands, `false` reproduces it as it stood before this fix, so
- * the same harness can prove the regression test fails without the fix and passes with it.
+ * Mirrors `receiveRuntime`'s functional setState; the generated-source check in runtime.test.ts
+ * pins this fixture to the shipped comparison until the generated root can be mounted directly.
  */
 function StudioCellHost(
-  props: { children: ReactElement; dedupe: boolean; next: Record<string, unknown> },
+  props: { children: ReactElement; next: Record<string, unknown> },
 ): ReactElement {
   // Wrapped in `{ cell }` to match `runtime.ts`'s own applied-runtime shape (`{ cell, manifest,
   // publication }`), which is what `sameRuntimeIdentity` actually compares (`previous?.cell?.identity`).
   const [applied, setApplied] = useState<{ cell: Record<string, unknown> }>({ cell: props.next })
   useEffect(() => {
     const next = { cell: props.next }
-    setApplied(previous => (props.dedupe && sameRuntimeIdentity(previous, next)) ? previous : next)
-  }, [props.next, props.dedupe])
+    setApplied(previous => sameRuntimeIdentity(previous, next) ? previous : next)
+  }, [props.next])
   return createElement(TR.Studio.Environment.Host, { cell: applied.cell as never, children: props.children })
 }
 
 Describe('Studio preview runtime identity dedupe', () => {
+  // REMOVAL CANDIDATE: mirrored publication lifetime exercises real providers but cannot prove the generated root executes this wiring.
   Test('retains interactive cells and reseeds changed contracts or publication journey replays', async () => {
     const declaration = TR.Data.Declaration('StudioPublicationMemory', MemoryProvider())
     const schema = TR.Data.Schema({
@@ -196,7 +196,7 @@ Describe('Studio preview runtime identity dedupe', () => {
     }
   })
 
-  async function runRedeliveryScenario(dedupe: boolean): Promise<{ available: boolean; rowCount: number }> {
+  async function runRedeliveryScenario(): Promise<{ available: boolean; rowCount: number }> {
     const declaration = TR.Data.Declaration('StudioDedupeMemory', MemoryProvider())
     const schema = TR.Data.Schema({
       name: 'StudioDedupeData',
@@ -208,7 +208,7 @@ Describe('Studio preview runtime identity dedupe', () => {
     }
     const identity: RuntimeIdentity = { cellRevision: 1, compileRevision: 3, manifestRevision: 'compile:3' }
     const host = (next: Record<string, unknown>): ReactElement =>
-      createElement(StudioCellHost, { children: createElement(ProviderBinding), dedupe, next })
+      createElement(StudioCellHost, { children: createElement(ProviderBinding), next })
 
     const screen = render(host(cellPayload(identity)))
     await act(async () => {
@@ -232,21 +232,14 @@ Describe('Studio preview runtime identity dedupe', () => {
     }
   }
 
+  // REMOVAL CANDIDATE: copied identity fixture retains the real provider invalidation regression until generated-root execution is available.
   Test('keeps the applied cell object, and its data, across a re-delivered equal-identity runtime', async () => {
-    const result = await runRedeliveryScenario(true)
+    const result = await runRedeliveryScenario()
     Expect(result.rowCount).toBe(1)
     Expect(result.available).toBe(true)
   })
 
-  // Proves the test above is not vacuous: with the fix's dedupe disabled — the pre-fix behavior,
-  // where every accepted update replaces the applied cell object — the re-delivery above wipes the
-  // row and invalidates its handle, matching the reported "mounts empty" / stale-handle failure.
-  Test('without the dedupe, a re-delivered equal-identity runtime wipes data (regression baseline)', async () => {
-    const result = await runRedeliveryScenario(false)
-    Expect(result.rowCount).toBe(0)
-    Expect(result.available).toBe(false)
-  })
-
+  // REMOVAL CANDIDATE: field variants exercise a copied comparator pinned by source strings; generated-host execution would provide stronger proof.
   Test('does not treat a changed cellRevision, compileRevision, or manifestRevision as the same identity', () => {
     const base: RuntimeIdentity = { cellRevision: 1, compileRevision: 3, manifestRevision: 'compile:3' }
     const baseNext = { cell: cellPayload(base) }

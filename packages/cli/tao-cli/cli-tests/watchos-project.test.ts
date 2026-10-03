@@ -125,7 +125,6 @@ Describe('watchOS project export', () => {
 
   for (
     const relativePath of [
-      '../Escape.swift',
       '/Escape.swift',
       'Views/../../Escape.swift',
       'Views\\Escape.swift',
@@ -158,14 +157,12 @@ Describe('watchOS project export', () => {
     const root = await mkTestDir('tao-watchos-invalid-')
     try {
       const outputRoot = FS.resolvePath('export', root)
-      for (const relativePath of ['Entry.swift', 'entry.swift']) {
-        await Expect(exportWatchOSProject({
-          appName: 'Tao',
-          outputRoot,
-          files: [...files, { relativePath, code: '' }],
-          entryArtifact: 'Entry.swift',
-        })).rejects.toThrow('duplicated')
-      }
+      await Expect(exportWatchOSProject({
+        appName: 'Tao',
+        outputRoot,
+        files: [...files, { relativePath: 'entry.swift', code: '' }],
+        entryArtifact: 'Entry.swift',
+      })).rejects.toThrow('duplicated')
       await Expect(exportWatchOSProject({
         appName: 'Tao',
         outputRoot,

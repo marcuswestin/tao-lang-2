@@ -11,16 +11,6 @@ Describe('parser: injections', () => {
     Expect(parseResult.entry.ast.statements).toHaveLength(1)
   })
 
-  Test('parses render injections', async () => {
-    const parseResult = await testParseCode('view Native() { render inject ```ts\nreturn null\n``` }')
-    const view = parseResult.entry.ast.statements[0]
-
-    Expect.Is(view, AST.isViewDeclaration)
-    const render = AST.blockStatementOf(view, 0)
-    Expect.Is(render, AST.isRenderStatement)
-    Expect(render.injection?.tsCodeBlock).toContain('return null')
-  })
-
   Test('parses inject arguments', async () => {
     const parseResult = await testParseCode(`
       let UserName = "the Developer"
@@ -36,6 +26,7 @@ Describe('parser: injections', () => {
     const render = AST.blockStatementOf(view, 0)
     Expect.Is(render, AST.isRenderStatement)
     Expect.Is(render.injection, AST.isInjection)
+    Expect(render.injection.tsCodeBlock).toContain('return null')
     const args = AST.injectionArgumentsOf(render.injection)
 
     Expect(args).toHaveLength(4)

@@ -32,7 +32,6 @@ Describe('parser: phrases', () => {
     Expect.Is(documentGone.text, AST.isStringLiteral)
 
     Expect(itemCount.text).toBeUndefined()
-    Expect(itemCount.forms).toHaveLength(2)
     Expect(itemCount.forms.map(form => form.category)).toEqual(['one', 'other'])
 
     const main = result.entry.ast.statements.find(statement =>

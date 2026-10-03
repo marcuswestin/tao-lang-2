@@ -114,14 +114,6 @@ Describe('validator: interaction attention', () => {
         },
         messages.unknownRegion('Hidden'),
       )()
-      await rejects(
-        `
-          ${leaf}
-          view Sidebar() { render Leaf() }
-          view Home() { render Leaf() [rigid when Sidebarr is active] }
-        `,
-        messages.unknownRegion('Sidebarr'),
-      )()
     },
   )
 

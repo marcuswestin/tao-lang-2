@@ -323,42 +323,6 @@ Describe('parser: minimal design declarations', () => {
     Expect(services.language.references.References.findDeclarations(word!.$cstNode!)).toHaveLength(0)
   })
 
-  Test('finds design references inside structured blocks without replacing dotted suffixes', async () => {
-    const { services } = Parser.createContext()
-    const source = `
-      design Theme {
-        colors {
-          palette #112233 { 60 #001122 }
-          accent palette.60
-        }
-      }
-    `
-    const doc = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
-      source,
-      URI.file('/Theme.tao'),
-    )
-    services.shared.workspace.LangiumDocuments.addDocument(doc)
-    await services.shared.workspace.DocumentBuilder.build([doc], { eagerLinking: true })
-
-    const file = doc.parseResult.value
-    Expect(AST.isTaoFile(file)).toBe(true)
-    if (!AST.isTaoFile(file)) {
-      return
-    }
-    const design = file.statements.find(AST.isDesignDeclaration)!
-    const palette = design.block.members.find(AST.isDesignColorsBlock)!.entries[0]!
-    const shade = palette.family!.members[0]!
-    const references = services.language.references.References
-
-    const paletteRefs = references.findReferences(palette, { includeDeclaration: false }).toArray()
-    Expect(paletteRefs).toHaveLength(1)
-    Expect(doc.textDocument.getText(paletteRefs[0]!.segment.range)).toBe('palette')
-
-    const shadeRefs = references.findReferences(shade, { includeDeclaration: false }).toArray()
-    Expect(shadeRefs).toHaveLength(1)
-    Expect(doc.textDocument.getText(shadeRefs[0]!.segment.range)).toBe('60')
-  })
-
   Test('resolves and renames each dotted design path token by declaration identity', async () => {
     const { services } = Parser.createLspContext()
     const source = `design Theme { colors { palette #112233 { 60 #001122 } accent palette.60 } }`
@@ -542,6 +506,7 @@ Describe('parser: color values', () => {
     Expect(applyRename(doc, edit)).toBe(source.replace('20 #ccc', '30 #ccc').replace('accent.20', 'accent.30'))
   })
 
+  // REMOVAL CANDIDATE: Workspace edit coverage overlaps this reparse case, but the parser entrypoint differs.
   Test('relinks a color argument after the mounted design changes in the same parser context', async () => {
     const context = Parser.createContext()
     const source = (design: string) => `

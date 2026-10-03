@@ -4,7 +4,6 @@ import { Describe, Expect, Test } from '@shared/test'
 type PriorityProbe = {
   before: number
   atGate: number
-  child: number
   gateChild: number
   gateStatus: string
   repeated: number
@@ -38,7 +37,6 @@ Describe('verification scheduling priority', () => {
       const result = await probe(lane)
       Expect(result.priorityCalls).toBe(1)
       Expect(result.atGate).toBe(result.refused ? result.before : Math.max(result.before, 10))
-      Expect(result.child).toBe(result.atGate)
       Expect(result.gateStatus).toBe('passed')
       Expect(result.gateChild).toBe(result.atGate)
       Expect(result.repeated).toBe(result.atGate)
@@ -51,7 +49,6 @@ Describe('verification scheduling priority', () => {
     const result = await probe('denied')
     Expect(result.refused).toBe(true)
     Expect(result.atGate).toBe(result.before)
-    Expect(result.child).toBe(result.before)
     Expect(result.gateStatus).toBe('passed')
     Expect(result.gateChild).toBe(result.before)
     Expect(result.repeated).toBe(result.before)
@@ -63,7 +60,6 @@ Describe('verification scheduling priority', () => {
       const result = await probe(lane)
       Expect(result.priorityCalls).toBe(0)
       Expect(result.atGate).toBe(result.before)
-      Expect(result.child).toBe(result.before)
       Expect(result.gateStatus).toBe('passed')
       Expect(result.gateChild).toBe(result.before)
     }

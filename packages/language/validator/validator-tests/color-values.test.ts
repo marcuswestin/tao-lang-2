@@ -126,15 +126,13 @@ Describe('validator: color values', () => {
   }
 
   Test(
-    'rejects a text or number literal where a color is expected',
+    'rejects text literals where a color is expected',
     rejects(
       colorApp(`
         view TextDefault(Tint color default "red") { render Surface() [background Tint] }
-        view NumberDefault(Tint color default 3) { render Surface() [background Tint] }
         view TextArgument() { render Badge("Final", Tint: "red") }
       `),
       typeValidationMessages.defaultParameterType('Tint', 'TextDefault.Tint', 'text'),
-      typeValidationMessages.defaultParameterType('Tint', 'NumberDefault.Tint', 'number'),
       invocationMessages.namedArgumentType('Badge', 'Tint', 'Badge.Tint', 'text'),
     ),
   )

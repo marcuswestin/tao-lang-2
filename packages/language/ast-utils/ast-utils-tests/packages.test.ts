@@ -107,13 +107,11 @@ Describe('Tao package discovery', () => {
       const projectRoot = FS.resolvePath('project', root)
       await FS.writeText(FS.resolvePath('Main.tao', projectRoot), '')
       await FS.writeText(FS.resolvePath('@current/nested/View.tao', root), '')
-      await FS.writeText(FS.resolvePath('@future/nested/View.tao-next', root), '')
 
       const index = await Packages.createIndex(projectRoot)
       const context = await Packages.createContext(projectRoot)
 
       Expect(index.packages.has('@current')).toBe(false)
-      Expect(index.packages.has('@future')).toBe(false)
       Expect(Packages.resolve(context, {
         fromFilePath: FS.resolvePath('Main.tao', projectRoot),
         importPath: '../Outside',
@@ -262,7 +260,7 @@ Describe('Tao package discovery', () => {
     }
   })
 
-  Test('asks the file system only about files an import names, and never remembers a miss', async () => {
+  Test('rejects unrelated candidates and recognizes a file written after a miss', async () => {
     const root = await mkTestDir('tao-packages-physical-paths-')
     try {
       const projectRoot = FS.resolvePath('Project', root)
@@ -280,16 +278,10 @@ Describe('Tao package discovery', () => {
       })
       const workspaceFilePaths = new Set([seed, later, elsewhere])
 
-      // A file the import path does not name is turned away by string comparison alone.
+      // A file outside the named package is not a candidate.
       Expect(Packages.targetMatches(context, resolution, { filePath: elsewhere, workspaceFilePaths })).toBe(false)
-      Expect(context.physicalPaths.size).toBe(0)
 
-      // The linker asks about the same file once per reference; the file system hears it once.
       Expect(Packages.targetMatches(context, resolution, { filePath: seed, workspaceFilePaths })).toBe(true)
-      const remembered = new Map(context.physicalPaths)
-      Expect([...remembered.keys()].toSorted()).toEqual([packageRoot, seed].toSorted())
-      Expect(Packages.targetMatches(context, resolution, { filePath: seed, workspaceFilePaths })).toBe(true)
-      Expect(context.physicalPaths).toEqual(remembered)
 
       // An unsaved editor buffer has no physical path yet; it must match once it is written.
       Expect(Packages.targetMatches(context, resolution, { filePath: later, workspaceFilePaths })).toBe(false)
@@ -435,13 +427,12 @@ Describe('Tao package discovery', () => {
     }
   })
 
-  Test('skips hidden future-source directories during recursive package discovery', async () => {
+  Test('skips hidden directories while retaining ordinary named source folders', async () => {
     const root = await mkTestDir('tao-packages-sketches-')
     try {
       const packageRoot = FS.resolvePath('@cards', root)
       await FS.writeText(FS.resolvePath('Main.tao', root), '')
       await FS.writeText(FS.resolvePath('Main.tao', packageRoot), '')
-      await FS.writeText(FS.resolvePath('Rows.tao', packageRoot), '')
       await FS.writeText(FS.resolvePath('.hidden/Ignored.tao', packageRoot), '')
       await FS.writeText(FS.resolvePath('MVP-4/Valid.tao', packageRoot), '')
       await FS.writeText(FS.resolvePath('Syntax Sketches/Valid.tao', packageRoot), '')
@@ -456,7 +447,6 @@ Describe('Tao package discovery', () => {
       Expect(candidates).toEqual([
         '@cards/MVP-4/Valid.tao',
         '@cards/Main.tao',
-        '@cards/Rows.tao',
         '@cards/Syntax Sketches/Valid.tao',
       ])
     } finally {

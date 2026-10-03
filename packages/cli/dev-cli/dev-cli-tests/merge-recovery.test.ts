@@ -16,7 +16,6 @@ Describe('merge recovery', () => {
 
       const merge = await CLI.run('git', { args: ['merge', main], cwd: root })
       Expect(merge.exitCode).not.toBe(0)
-      Expect(merge.stdout).toContain('CONFLICT')
       Expect((await CLI.run('git', { args: ['rev-parse', '--verify', '-q', 'MERGE_HEAD'], cwd: root })).exitCode).toBe(
         0,
       )

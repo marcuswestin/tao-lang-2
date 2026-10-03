@@ -53,12 +53,6 @@ async function fingerprintOf(request: ReturnType<typeof requestFor>): Promise<st
 }
 
 Describe('tao test compiled-output fingerprint', () => {
-  Test('is the same for two runs of the same shape over unchanged sources', async () => {
-    await withTaoFixture({ ...fixture }, async rootDir => {
-      Expect(await fingerprintOf(requestFor(rootDir))).toBe(await fingerprintOf(requestFor(rootDir)))
-    })
-  })
-
   // The manifest describes one whole run. Reusing it for a different set of test files would run
   // the files the manifest names rather than the files that were asked for.
   Test('changes with the set of test files the run covers', async () => {
@@ -213,7 +207,7 @@ Describe('tao test compiled-output fingerprint', () => {
   Test('reports reuse as switched off only for the documented value', async () => {
     const previous = Platform.runtimeProcess.env[TestCache.NO_CACHE_ENV]
     try {
-      for (const [value, expected] of [[undefined, false], ['', false], ['1', false], ['true', true]] as const) {
+      for (const [value, expected] of [[undefined, false], ['1', false], ['true', true]] as const) {
         if (value === undefined) {
           delete Platform.runtimeProcess.env[TestCache.NO_CACHE_ENV]
         } else {

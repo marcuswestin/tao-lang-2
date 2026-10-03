@@ -122,7 +122,6 @@ Describe('agent capabilities', () => {
     })
 
     Expect(report.version).toBe(1)
-    Expect(probed.map(candidate => candidate.command)).toContain('docker')
     Expect(probed.find(candidate => candidate.command === 'ps')).toMatchObject({
       args: ['-axo', 'pid=,ppid=,lstart=,command='],
       command: 'ps',

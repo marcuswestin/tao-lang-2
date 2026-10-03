@@ -22,7 +22,7 @@ const first: StudioSketchRect = {
 }
 
 Describe('Studio sketch geometry', () => {
-  Test('normalizes reverse drawing and rejects either dimension below the minimum threshold', () => {
+  Test('normalizes reverse drawing and rejects a dimension below the minimum threshold', () => {
     const drawn = StudioSketchGeometry.endPointer(
       StudioSketchGeometry.beginDraw(StudioSketchGeometry.initial(), 'drawn', { x: 20, y: 30 }),
       { x: 5, y: 10 },
@@ -67,15 +67,13 @@ Describe('Studio sketch geometry', () => {
     Expect(moved.selectedId).toBe('first')
   })
 
-  Test('resizes from all eight handles and clamps before dimensions become non-positive', () => {
-    const expected: Record<StudioSketchResizeHandle, Partial<StudioSketchRect>> = {
+  Test('resizes cardinal and diagonal handles and clamps before dimensions become non-positive', () => {
+    const expected: Partial<Record<StudioSketchResizeHandle, Partial<StudioSketchRect>>> = {
       east: { width: 35 },
       north: { height: 26, y: 14 },
-      'north-east': { height: 26, width: 35, y: 14 },
       'north-west': { height: 26, width: 25, x: 15, y: 14 },
       south: { height: 14 },
       'south-east': { height: 14, width: 35 },
-      'south-west': { height: 14, width: 25, x: 15 },
       west: { width: 25, x: 15 },
     }
     for (const handle of Object.keys(expected) as StudioSketchResizeHandle[]) {

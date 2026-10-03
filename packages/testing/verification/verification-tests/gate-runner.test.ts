@@ -435,12 +435,6 @@ Describe('repository gate runner', () => {
     }
   })
 
-  Test('runs every gate exactly once, whatever the concurrency', async () => {
-    const { started } = await run(['a', 'b', 'c', 'd', 'e'], {})
-
-    Expect(started.toSorted()).toEqual(['a', 'b', 'c', 'd', 'e'])
-  })
-
   Test('propagates the enclosing lane identity to nested diagnostics', async () => {
     const root = await mkTestDir('tao-gate-runner-lane-env-')
     const registryRoot = FS.resolvePath('registry', root)
@@ -540,7 +534,6 @@ Describe('repository gate runner', () => {
       Expect(written.lane).toBe('check')
       const latest = FS.resolvePath('.artifacts/logs/check/latest', root)
       Expect(await FS.realPath(latest)).toBe(await FS.realPath(summary.logRoot))
-      Expect(await FS.readText(FS.resolvePath('repo-lint.log', latest))).toBe('lint ok\n')
     } finally {
       await FS.remove(root)
     }

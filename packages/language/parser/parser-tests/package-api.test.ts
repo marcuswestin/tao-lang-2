@@ -6,6 +6,7 @@ import { AST, Langium, Parser } from '@parser'
 import { testParseCode } from './test-parse'
 
 Describe('parser package API', () => {
+  // REMOVAL CANDIDATE: Static imports and feature suites exercise most exports; review the public API obligation before deleting this smoke.
   Test('exports parser, AST, Langium, package, and workspace entrypoints', async () => {
     Expect(Parser.lexCode('app MyApp { view MainView } view MainView() { }').errors).toEqual([])
 

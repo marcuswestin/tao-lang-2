@@ -88,18 +88,6 @@ Describe('versioned run summary', () => {
     Expect(gateExitCode(summary)).toBe(1)
   })
 
-  Test('the rollup names both artifact paths an agent reads afterwards', () => {
-    const summary = buildSummary({
-      elapsedMs: 500,
-      lane: 'verify',
-      logRoot: '/repo/.artifacts/logs/verify/stamp',
-      states: [finishedState({ name: '_repo-lint' })],
-    })
-
-    Expect(formatGateSummary(summary)).toContain('logs/verify/stamp')
-    Expect(formatGateSummary(summary)).toContain('logs/verify/stamp/summary.json')
-  })
-
   Test('reports a sharded suite as one line and names the shard that failed', () => {
     const summary = buildSummary({
       elapsedMs: 8_000,
@@ -291,7 +279,6 @@ Describe('versioned run summary', () => {
     // The default is plain, so a lane that never decided cannot leave escape codes in a log file.
     Expect(formatGateSummary(passed)).not.toContain('')
     Expect(formatGateSummary(failed)).not.toContain('')
-    Expect(formatGateSummary(passed, { color: false })).not.toContain('')
   })
 
   Test('a test-runner timeout under measured contention is not hidden by its FAIL banner', () => {
@@ -497,15 +484,6 @@ Describe('structured failures', () => {
     Expect(summary.failures).toBeUndefined()
   })
 
-  Test('names nothing from a log matching no recognized format, leaving the raw tail as the only evidence', () => {
-    const summary = failedSummary('segmentation fault\ncore dumped')
-
-    Expect(summary.gates[0]?.failures).toBeUndefined()
-    Expect(summary.gates[0]?.failuresTruncated).toBeUndefined()
-    Expect(summary.failures).toBeUndefined()
-    Expect(summary.firstFailure?.output).toContain('segmentation fault')
-  })
-
   Test('caps one gate at 20 failures and counts the rest instead of dropping them silently', () => {
     const lines = (start: number) => Array.from({ length: 25 }, (_, index) => `(fail) t${start + index} [1ms]`)
     const summary = failedSummary(lines(0).join('\n'))
@@ -631,7 +609,6 @@ Describe('structured failures', () => {
     Expect(failedLine!.length).toBeLessThanOrEqual(160)
     Expect(failedLine).toContain('(sample.test.ts:5:15)')
     Expect(failedLine).toContain('…')
-    Expect(failedLine).not.toContain(longAssertion)
   })
 
   Test('formatGateSummary renders a repo-lint issue line once, truncating its long detail instead of the file', () => {

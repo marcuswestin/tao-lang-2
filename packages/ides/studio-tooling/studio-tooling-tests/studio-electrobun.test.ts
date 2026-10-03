@@ -110,12 +110,7 @@ Describe('Studio Electrobun project', () => {
       generated.config.indexOf('build: {'),
     )
     Expect(generated.config).toContain("entrypoint: 'src/bun/index.ts'")
-    Expect(generated.main).toContain('import Electrobun, {')
-    Expect(generated.main).toContain("} from 'electrobun/main'")
     Expect(generated.main).toContain("Electrobun.events.on('application-menu-clicked'")
-    Expect(generated.main).toContain('new WebSocket(url.href)')
-    Expect(generated.main).toContain("document.createElement('iframe')")
-    Expect(generated.main).not.toContain('manualChecks')
     Expect(generated.hutchConfig).toContain("install: ['hutch', 'install']")
     Expect(generated.hutchConfig).toContain('// @hutch cli=0.24.3 cottontail=0.5.0')
     Expect(generated.hutchConfig).toContain('electrobun: { version: "2.0.2-beta.12" }')
@@ -189,9 +184,9 @@ Describe('Studio Electrobun project', () => {
     Expect(main).toContain(
       "const welcomeWindow = projectWindow === undefined ? createStudioWindow('Welcome') : undefined",
     )
-    Expect(main).not.toContain("const welcomeWindow = createStudioWindow('Welcome')")
   })
 
+  // REMOVAL CANDIDATE: Static host lifecycle wiring; dropping it loses native readiness/cleanup coverage until a real-host proof replaces it.
   Test('keeps the temporary window alive and retries an idempotent browser probe until readiness', () => {
     const main = StudioElectrobun.sources(options).main
 

@@ -34,6 +34,7 @@ function recordingSchema(): { saved: string[]; schema: ReturnType<typeof TR.Data
 }
 
 Describe('Tao action transactions', () => {
+  // REMOVAL CANDIDATE: Async response-release coverage also preserves asking writes and one commit; this adds synchronous interrupt completion.
   Test('lets a response root interrupt an ask and restores the suspended transaction', async () => {
     const { saved, schema } = recordingSchema()
     let respond!: () => void
@@ -377,15 +378,15 @@ Describe('Tao action transactions', () => {
     TR.Errors.reset()
     const stop = TR.Errors.onFailure(() => {})
     try {
-      for (let index = 0; index < 55; index += 1) {
+      for (let index = 0; index < 52; index += 1) {
         TR.Action(() => {
           throw new UnexpectedBehaviorError(`failure ${index}`)
         }, { name: `Failure${index}` }).jsValue.invoke()
       }
       const history = TR.Errors.capture()
       Expect(history).toHaveLength(50)
-      Expect(history[0]?.action).toBe('Failure5')
-      Expect(history[49]?.action).toBe('Failure54')
+      Expect(history[0]?.action).toBe('Failure2')
+      Expect(history[49]?.action).toBe('Failure51')
     } finally {
       stop()
       TR.Errors.reset()

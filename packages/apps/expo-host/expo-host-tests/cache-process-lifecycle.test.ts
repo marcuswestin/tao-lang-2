@@ -95,7 +95,7 @@ Describe('cache process lifecycle', () => {
       await FS.writeText(legacy, 'preserve legacy')
       try {
         const counts: number[] = []
-        for (let index = 0; index < 5; index += 1) {
+        for (let index = 0; index < 3; index += 1) {
           const runtime = FS.resolvePath(`runtime-${index}`, home)
           const source = kind === 'managed'
             ? `const root = JestTransformCache.root(${JSON.stringify(runtime)});
@@ -121,7 +121,7 @@ Describe('cache process lifecycle', () => {
             Expect(await FS.listDir(FS.resolvePath(`${identity}/leases`, parent))).toEqual([])
           }
         }
-        Expect(counts).toEqual([1, 2, 2, 2, 2])
+        Expect(counts).toEqual([1, 2, 2])
         Expect(await FS.readText(legacy)).toBe('preserve legacy')
         const loginFiles: string[] = []
         for await (const path of FS.walk(FS.resolvePath('login-home/.cache', home), { includeHidden: true })) {

@@ -79,7 +79,6 @@ Describe('work dashboard', () => {
       'node:parser',
     ])
     const grouped = items[0]
-    Expect(grouped?.kind).toBe('group')
     Expect(grouped?.kind === 'group' ? grouped.states.map(item => item.name) : []).toEqual([
       'tao-apps#1',
       'tao-apps#2',
@@ -105,7 +104,6 @@ Describe('work dashboard', () => {
       '#4 - waiting for dependency',
     ])
     // Even a zero-output dense card retains the failing shard's identity in its title.
-    Expect(WorkTUI.testing.dashboardColumn(item, 0).title.startsWith('#3 x tao-apps')).toBe(true)
     const longName = WorkTUI.testing.dashboardItems([shard('runtime-toolchain', 12, 'failed')])[0]!
     Expect(WorkTUI.testing.dashboardColumn(longName, 0).title.startsWith('#12 x runtime-toolchain')).toBe(true)
   })

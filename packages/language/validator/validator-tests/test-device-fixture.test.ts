@@ -88,7 +88,7 @@ Describe('validator: test device and fixture clauses', () => {
   )
 
   Test(
-    'accepts a fixture whose entity the running app does bind, alongside a sibling app that cannot',
+    'accepts a fixture whose entity the running app does bind',
     accepts(
       `
         use Local from @tao/data/providers/local

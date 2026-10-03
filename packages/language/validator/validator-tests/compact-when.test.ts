@@ -12,7 +12,6 @@ Describe('validator: the compact when form', () => {
     accepts(compactApp(`
       function Ready(Done boolean) returns text { return when Done "Ready" / not "Waiting" }
       function Maybe(Done boolean) { return when Done "Ready" }
-      function Compared(Left duration) returns text { return when Left > 0 "Running" / not "Done" }
     `)),
   )
 

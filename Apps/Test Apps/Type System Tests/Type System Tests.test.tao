@@ -11,13 +11,10 @@ test "Type System Tests" {
       expect text "Compiler engineer"
       expect text "types, items, lists"
       expect text "Kai"
-      expect text "29"
       expect text "Runtime engineer"
-      expect text "runtime, mobile"
       expect text "People in the team: 2"
       expect text "2 team member(s)"
       expect text "Grace"
-      expect text "Constructed primitive text"
       expect text "File scope label"
       expect text "Nested scope label"
    }

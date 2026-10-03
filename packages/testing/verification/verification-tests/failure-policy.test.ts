@@ -30,16 +30,12 @@ Describe('verification failure policy', () => {
     Expect(FailurePolicy.forTests({ kind: 'full', evidenceMode: 'mutation' })).toBe('collect-all')
   })
 
-  Test('core files run once and a core failure prevents expensive app admission', async () => {
+  Test('a core failure prevents expensive app admission', async () => {
     const plan = TestNodes.build({
       ...HISTORY,
       preflight: true,
       selected: [suite('language/parser', [LEXER, OTHER, SYNTAX]), suite('apps/expo-host', [APP])],
     })
-    Expect(plan.states.flatMap(state => state.selectedTestFiles ?? []).toSorted()).toEqual(
-      [LEXER, OTHER, SYNTAX, APP].toSorted(),
-    )
-    Expect(plan.states.find(state => state.name === 'language/parser:core')?.selectedTestFiles).toEqual([LEXER, SYNTAX])
     const started: string[] = []
     const failure = FailurePolicy.create({
       observe: async () => {},

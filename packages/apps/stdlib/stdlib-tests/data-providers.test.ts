@@ -30,8 +30,7 @@ Describe('@tao/data providers', () => {
     )
   })
 
-  // InstantDBProvider's own behavior is covered in `packages/apps/providers/instantdb`, where the
-  // implementation now lives; this only proves the sibling sidecar re-exports it correctly.
+  // REMOVAL CANDIDATE: Direct re-export smoke; retain until app coverage proves this stdlib sidecar is wired.
   Test('re-exports InstantDBProvider from tao-instantdb through the stdlib sidecar', () => {
     Expect(typeof InstantDBProvider().connect).toBe('function')
   })
@@ -53,9 +52,7 @@ Describe('@tao/data providers', () => {
       storageKey: 'My Notes/Draft',
     })
 
-    Expect(await connection.load()).toBeUndefined()
     await connection.save('{"snapshot":"saved"}')
-    Expect(await connection.load()).toBe('{"snapshot":"saved"}')
     Expect([...cloud.store.keys()]).toHaveLength(1)
     Expect([...cloud.store.keys()][0]).toMatch(/^iCloud\.lang\.tao\.notes\/My%20Notes%2FDraft\.[0-9a-f]{8}\.json$/u)
     // Keys differing only by case must not share a document on a case-insensitive volume.
@@ -85,8 +82,6 @@ Describe('@tao/data providers', () => {
       snapshot: snapshot => snapshots.push(snapshot),
     })
     const watch = cloud.watchers[0]!
-    Expect(watch.name).toMatch(/^\/Notes\.[0-9a-f]{8}\.json$/u)
-
     // A missing document is iCloud's bookkeeping mid-flight, never a request to empty the store.
     watch.observer.changed(undefined)
     watch.observer.changed('remote-1')

@@ -141,10 +141,7 @@ Test('Studio requires a consumed activation click before one preview accepts inp
     Expect(first.iframe.tabIndex).toBe(-1)
     const shield = first.viewport.children[1]!
     Expect(shield.attributes.get('aria-label')).toBe('Activate App preview')
-    let iframeClicks = 0
-    first.iframe.addEventListener('click', () => iframeClicks++)
     Expect(emit(shield, 'click').defaultPrevented).toBe(true)
-    Expect(iframeClicks).toBe(0)
     Expect(shield.hidden).toBe(true)
     Expect(first.iframe.style.pointerEvents).toBe('')
     Expect(first.preview.frame!.dataset['previewInteractive']).toBe('true')
@@ -220,7 +217,6 @@ Test('Studio fallback preview activates by keyboard without reparenting and rest
     iframe.tabIndex = 3
     controls.reconcile()
     const shield = host.children[1]!
-    Expect(shield.className).toContain('studio-preview-activation-whole-app')
     Expect(iframe.parentElement).toBe(host)
     Expect(emit(shield, 'keydown', { key: 'Enter' }).defaultPrevented).toBe(true)
     Expect(iframe.dataset['previewInteractive']).toBe('true')

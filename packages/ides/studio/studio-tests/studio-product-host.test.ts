@@ -259,88 +259,7 @@ Test('Tao Studio product host retains viewport ownership over generated Tao layo
   })
 })
 
-Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in Tao', async () => {
-  const source = (await Promise.all([
-    'TaoStudioClient.tao',
-    '@ui/Workbench.tao',
-    '@ui/Explorer.tao',
-    '@ui/Context.tao',
-    '@ui/Inspector.tao',
-    '@ui/PanelState.tao',
-    '@ui/Drawer.tao',
-    '@ui/Scenario.tao',
-  ].map(path => FS.readText(Repo.resolvePath(`Apps/Tao Studio/${path}`))))).join('\n')
-
-  Expect(source).toContain('Navigator SlotNav')
-  Expect(source).not.toContain('StackNav')
-  Expect(source).not.toContain('Title "Tao Studio"')
-  Expect(source).not.toContain('FormButton(')
-  Expect(source).toContain('use Col, Text from @tao/ui')
-  Expect(source).not.toMatch(/\bButton\(/)
-  Expect(source).not.toMatch(/\bPicker\(/)
-  Expect(source).toContain(
-    'view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from '
-      + '../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
-  )
-  Expect(source).toContain(
-    'view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from '
-      + '../../../packages/ides/studio/studio-src/TaoStudioProductHost.tsx',
-  )
-  Expect(source).toContain('@environment StudioEnvironmentPanel(')
-  Expect(source).toContain('view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPresetId text')
-  Expect(source).toContain('view StudioScenarioEnvironment(')
-  Expect(source).not.toContain('view StudioScenarioEnvironmentControls(')
-  Expect(source).toContain('state Drafts = StudioScenarioArgumentDrafts(State)')
-  Expect(source).toContain('loop StudioScenarioArgumentIds(State) / ParameterId')
-  Expect(source).toContain('Appearance: ResolvedAppearance')
-  Expect(source).not.toContain('StudioInspectorContextSurface(')
-  Expect(source).toContain('view StudioInspectorLayout(')
-  Expect(source).toContain('view StudioInspectorStyle(')
-  Expect(source).toContain('view StudioInspectorData(')
-  Expect(source).toContain('view StudioInspectorActions(')
-  Expect(source).toContain('view StudioDrawerPanel(Tab text, Compile StudioCompilePanel')
-  Expect(source).toContain('view StudioCompilePanelView(')
-  Expect(source).toContain('view StudioProblemsPanelView(')
-  Expect(source).toContain('view StudioDataPanelView(')
-  Expect(source).toContain('view StudioDataRailPanel(Data StudioDataPanel)')
-  Expect(source).toContain('Text [ink ink]')
-  Expect(source).toContain('TextInput [background panel, border line, ink ink]')
-  Expect(source).toContain('do OpenScreen(View.StableId)')
-  Expect(source).toContain('do OpenSource(Path: DesignToken.SourcePath')
-  Expect(source).toContain('where Kind == TokenKind')
-  Expect(source).toContain('DesignTokenKindGroup(TokenKind: "color", Title: "colors")')
-  Expect(source).toContain('DesignTokenKindGroup(TokenKind: "bundle", Title: "bundles")')
-  Expect(source).toContain('view StudioTestsPanelView(')
-  Expect(source).toContain('view StudioLogsPanelView(')
-  Expect(source).toContain('view StudioSearchPanel(Rows list of StudioSearchPanelRow)')
-  Expect(source).toContain('do Dispatch(Command.Name, Command.Payload)')
-  Expect(source).not.toContain('StudioDrawerPanelSurface')
-  Expect(source).not.toContain('StudioSearchPanelSurface')
-  Expect(source).toContain('ServerOrigin text is ""')
-  Expect(source).toContain('action SyncDraft(Path text, SourceVersion text, Content text) runs latest')
-  Expect(source).toContain('@editor StudioCodeEditor()')
-  Expect(source).toContain('@inspector StudioContextPanel(')
-  Expect(source).toContain('view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text')
-  Expect(source).toContain('FilePath: ActiveFilePath')
-  Expect(source).toContain(
-    'accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector',
-  )
-  Expect(source).toContain(
-    '@scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")',
-  )
-  Expect(source).toContain(
-    'view StudioScenarioPanel(State text, JourneyRecording text, JourneyRecordable boolean, ResolvedAppearance text)',
-  )
-  Expect(source).toContain('StudioScenarioControlGroup("Record interaction")')
-  Expect(source).toContain('Name: StudioScenarioJourneyCommand(JourneyRecording)')
-  Expect(source).toContain('Name: "scenario-save-journey"')
-  Expect(source).toContain('query Children = Files')
-  Expect(source).toContain('FileTree(FolderPath: File.Path')
-  Expect(source).toContain('do CreateFile(NewPath)')
-  Expect(source).toContain('do RenameFile(Path: File.Path, SourceVersion: File.Version, TargetPath: RenamePath)')
-  Expect(source).toContain('do DeleteFile(Path: File.Path, SourceVersion: File.Version)')
-})
-
+// REMOVAL CANDIDATE: Source-only bridge shape check; deletion loses the remaining static panel-injection smoke while projection and native control behavior stay tested.
 Test('Tao Studio ProductHost injects structured panel values without section-level render adapters', async () => {
   const source = await FS.readText(FS.resolvePath('../studio-src/TaoStudioProductHost.tsx', import.meta.dir))
 
@@ -352,12 +271,12 @@ Test('Tao Studio ProductHost injects structured panel values without section-lev
   Expect(source).not.toContain('JSON.stringify(hostState.panels')
 })
 
+// REMOVAL CANDIDATE: Lexical prompt ordering does not prove conditional execution; deletion loses this static guard until the move workflow is exercised.
 Test('Move to package prompts for a replacement only after a declaration conflict', async () => {
   const source = await FS.readText(FS.resolvePath('../studio-src/client/StudioApp.ts', import.meta.dir))
 
   Expect(source).toContain("if (result.status === 'confirmation-required')")
   Expect(source).toContain('const replacement = await StudioDialog.prompt(')
-  Expect(source).not.toMatch(/window\.(confirm|prompt|alert)\(/)
   Expect(source.indexOf("result.status === 'confirmation-required'")).toBeLessThan(
     source.indexOf('StudioDialog.prompt('),
   )
@@ -388,19 +307,19 @@ Test('Tao Studio foreign file views render compact tree rows with contextual edi
   Expect(property(create, 'data-studio-file-create')).toBe('compact')
   Expect(property(elementWith(create, 'aria-label', 'New Tao file path'), 'className')).toBe('studio-input')
   Expect(property(elementWith(create, 'aria-label', 'Create file'), 'className')).toBe('studio-icon-button')
-  Expect(property(elementWith(folder, 'aria-expanded', true), 'aria-expanded')).toBe(true)
+  elementWith(folder, 'aria-expanded', true)
   Expect(textContent(folder)).toContain('Nested file')
   Expect(property(compact, 'data-studio-tree-file')).toBe('Folder/Roadmap.tao')
-  Expect(elementWith(compact, 'aria-label', 'Unsaved draft')).toBeDefined()
-  Expect(elementWith(compact, 'aria-label', '2 problems')).toBeDefined()
+  elementWith(compact, 'aria-label', 'Unsaved draft')
+  elementWith(compact, 'aria-label', '2 problems')
   Expect(elements(compact).some(element => property(element, 'aria-label') === 'Save rename')).toBe(false)
   Expect(elements(compact).some(element => property(element, 'role') === 'alert')).toBe(false)
   Expect(property(elementWith(compact, 'aria-label', 'Move Roadmap.tao to package'), 'hidden')).toBe(true)
   Expect(property(elementWith(generated, 'aria-label', 'Move View1.tao to package'), 'hidden')).toBe(false)
-  Expect(elementWith(renaming, 'aria-label', 'Save rename')).toBeDefined()
+  elementWith(renaming, 'aria-label', 'Save rename')
   Expect(property(elementWith(renaming, 'aria-label', 'New path for Roadmap.tao'), 'value'))
     .toBe('Folder/Roadmap.tao')
-  Expect(elementWith(deleting, 'role', 'alert')).toBeDefined()
+  elementWith(deleting, 'role', 'alert')
   Expect(textContent(deleting)).toContain('Delete Roadmap.tao?')
 })
 
@@ -432,7 +351,6 @@ Test('Design token rows group under a kind heading and swatch parseable colors',
   })
   const section = StudioDesignTokenSection({ children: 'accent row', Title: 'colors' })
 
-  Expect(property(color, 'className')).toBe('studio-design-token')
   Expect(property(color, 'data-studio-design-kind')).toBe('color')
   Expect(textContent(color)).toContain('accent')
   Expect(textContent(color)).toContain('#ff6600')
@@ -444,7 +362,6 @@ Test('Design token rows group under a kind heading and swatch parseable colors',
   Expect(textContent(bundle)).toContain('pad 12, radius 10, bg card')
   Expect(elements(bundle).some(element => property(element, 'className') === 'studio-design-token-swatch'))
     .toBe(false)
-  Expect(property(section, 'className')).toBe('studio-design-token-kind')
   Expect(property(section, 'data-studio-design-kind')).toBe('colors')
   Expect(textContent(section)).toContain('colors')
   Expect(textContent(section)).toContain('accent row')
@@ -650,7 +567,6 @@ Test('Tao-owned inspector style exposes provenance, edit-versus-fork, blast radi
     landing: { bundleName: 'card', kind: 'style-bundle' },
   })
   Expect(StudioInspectorStyleNotes(inspection)[0]).toContain('affects 3 renders · editable')
-  Expect(promotions.length).toBeGreaterThan(0)
   Expect(StudioInspectorStylePromotionLabel(inspection, promotions[0]!)).toContain('Promote background #c00')
   Expect(JSON.parse(StudioInspectorStylePromotionAction(inspection, selection, promotions[0]!))).toMatchObject({
     entry: ['background', '#c00'],

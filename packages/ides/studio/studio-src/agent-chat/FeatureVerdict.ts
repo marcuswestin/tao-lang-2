@@ -26,7 +26,7 @@ function names(run: TestRunSummary | undefined): Set<string> {
 }
 
 /** firstLine keeps a verdict readable: a test failure's message is often a whole diff. */
-export function firstLine(message: string): string {
+function firstLine(message: string): string {
   const line = message.split('\n').map(entry => entry.trim()).find(entry => entry !== '')
   return line ?? 'no detail'
 }

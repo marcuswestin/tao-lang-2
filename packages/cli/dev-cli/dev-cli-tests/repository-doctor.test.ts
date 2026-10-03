@@ -173,7 +173,7 @@ Describe('repository doctor', () => {
     }))
 
     const hooks = report.checks.filter(check => check.name === 'git hooks')
-    Expect(hooks.every(hook => hook.status === 'warn')).toBe(true)
+    Expect(hooks.map(hook => hook.status)).toEqual(['warn', 'warn'])
     Expect(hooks[0]?.detail).toContain('commit-msg is not installed')
     Expect(hooks[0]?.remediation).toContain('./agent setup')
     Expect(report.status).toBe('warn')
@@ -218,7 +218,7 @@ Describe('repository doctor', () => {
     }))
 
     const hooks = report.checks.filter(check => check.name === 'git hooks')
-    Expect(hooks.every(hook => hook.status === 'pass')).toBe(true)
+    Expect(hooks.map(hook => hook.status)).toEqual(['pass', 'pass'])
     Expect(hooks[0]?.detail).toContain('was not written by this repository')
   })
 
@@ -476,11 +476,6 @@ Describe('repository doctor', () => {
     const check = checks.find(candidate => candidate.name === 'worktree path')
     Expect(check?.status).toBe('fail')
     Expect(check?.remediation).toContain('git worktree move /tmp/probe /w')
-  })
-
-  Test('passes when the worktree is at its real path', () => {
-    const checks = repositoryDoctorChecks(facts())
-    Expect(checks.find(candidate => candidate.name === 'worktree path')?.status).toBe('pass')
   })
 })
 

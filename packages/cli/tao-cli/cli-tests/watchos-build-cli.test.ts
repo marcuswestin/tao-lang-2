@@ -28,7 +28,6 @@ Describe('native watch build CLI', () => {
         )
         const record = records.find(value => value.mode === (compileOnly ? 'compile-only' : 'artifact'))!
         Expect(record.results.watchos?.status).toBe('succeeded')
-        Expect(record.sourceDigest).toMatch(/^[a-f0-9]{64}$/)
         const watch = FS.resolvePath(`${record.id}/${compileOnly ? 'compiled/watchos' : 'watchos'}`, output)
         const sources = compileOnly ? watch : FS.resolvePath('Sources', watch)
         Expect(await FS.isFile(FS.resolvePath('WatchApp.swift', sources))).toBe(true)

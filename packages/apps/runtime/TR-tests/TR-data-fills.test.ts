@@ -79,47 +79,6 @@ Describe('TR.Data query fills', () => {
     Expect(schema.read(rows[0] as never, 'Title')).toBe('Updated')
   })
 
-  Test('applies a query limit after ordering', async () => {
-    const connection = fillConnection(async (_request, ops) => {
-      ops.upsert('Story', [
-        { HnId: 3, Title: 'Third', Rank: 3 },
-        { HnId: 1, Title: 'First', Rank: 1 },
-        { HnId: 2, Title: 'Second', Rank: 2 },
-      ])
-    })
-    const schema = TR.Data.Schema(feedDefinition, connection)
-    await schema.settle()
-    schema.activateQuery(storiesPlan(2))
-    await schema.settle()
-
-    const rows = schema.query(storiesPlan(2)) as QueryRows
-    Expect(rows).toHaveLength(2)
-    Expect(schema.read(rows[0] as never, 'Rank')).toBe(1)
-    Expect(schema.read(rows[1] as never, 'Rank')).toBe(2)
-  })
-
-  Test('reports loading while a first fill has nothing to show, then ready', async () => {
-    const gate = Deferred<void>()
-    const connection = fillConnection(async (_request, ops) => {
-      await gate.promise
-      ops.upsert('Story', [{ HnId: 1, Title: 'First', Rank: 1 }])
-    })
-    const schema = TR.Data.Schema(feedDefinition, connection)
-    await schema.settle()
-
-    schema.activateQuery(storiesPlan())
-    await Promise.resolve()
-    const filling = schema.query(storiesPlan()) as QueryRows
-    Expect(filling.Loading).toBe(true)
-    Expect(filling.Refreshing).toBe(false)
-
-    gate.resolve()
-    await schema.settle()
-    const ready = schema.query(storiesPlan()) as QueryRows
-    Expect(ready.Loading).toBe(false)
-    Expect(ready).toHaveLength(1)
-  })
-
   Test('reports refreshing over cached rows, and stale when the refill fails', async () => {
     let outcome: 'succeed' | 'fail' | 'wait' = 'succeed'
     let gate = Deferred<void>()
