@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 405 applicable release acceptance cells are incomplete.
 
-Candidate source: `a663b55da9dc1f4caa71e2c910e5b747e46485e4`. Tree digest `c8fc2d6285c63be6`; content hashes are stored per observation.
+Candidate source: `4b566ac5e0bb211b7dd97d4695d9458c351e226d`. Tree digest `765087f3f7b426d8`; content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 

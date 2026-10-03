@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 197 applicable release acceptance cells are incomplete.
 
-Candidate source: `a663b55da9dc1f4caa71e2c910e5b747e46485e4`. Tree digest `c8fc2d6285c63be6`; content hashes are stored per observation.
+Candidate source: `4b566ac5e0bb211b7dd97d4695d9458c351e226d`. Tree digest `765087f3f7b426d8`; content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -87,7 +87,7 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - [doc:packages/ides/ide-extension/README.md / text / source / agent](results/20261003205757361-eefc161c-9221-4452-81aa-73ae22cf64db.json): **pass**, current; execution profile development.
 - [story:DOC1 / text / public-docs / agent](results/20260929164745704-ed103852-c9b5-4943-88e7-845ce08c5db6.json): **fail**, needs-recheck; execution profile development.
 - [story:CLI10 / text / public-docs / agent](results/20260929164746126-3212fbd6-713d-476c-9933-d8fdf1c912c3.json): **fail**, needs-recheck; execution profile development.
-- [visual:notebook / visual / tablet-dark / developer](results/20261003212213871-ff816847-510e-4b38-beab-821bf0353a7c.json): **pass**, current; execution profile development.
+- [visual:notebook / visual / tablet-dark / developer](results/20261003215642084-91c248d9-653a-46de-883b-0936ebfd4f4c.json): **pass**, current; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-create/SKILL.md / text / source / agent](results/20261003205751575-29aa8baa-6053-49ba-8ea0-614742016167.json): **pass**, current; execution profile development.
 - [doc:packages/ai/tao-skills/skills/tao-project/SKILL.md / text / source / agent](results/20261003205753790-3f282d51-cff3-4af7-bf17-8cd415f2eed2.json): **pass**, current; execution profile development.
 
