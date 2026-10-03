@@ -1,0 +1,12 @@
+# DEVENV-STUDIO-STARTUP-STAGES-NEED-MEASUREMENT — Studio startup stages need measurement
+
+- **Status:** Planned
+- **Section:** Deferred
+- **Area:** Studio launch latency and startup feedback.
+- **Impact:** A developer can wait a long time after `Apple Foundation Models: available` before the browser opens, without seeing which preparation step is running.
+- **Evidence:** On 2026-10-03 the Developer reported slow `./agent unsandboxed studio Apps/Starters/Notebook` startup at that log marker. Source at `StudioDev.ts:213-242` awaits initial project opening before bundling/serving the Studio client. Project opening resolves the project and release, acquires ownership/ports, creates the preview runtime, checks Watchman, opens the project session/watcher, compiles, starts Metro and waits for readiness. Server/page readiness precedes browser opening. This is a source trace and a Developer observation, not a timing measurement; no startup stage has been proved unnecessary.
+- **Workaround:** Review the saved QA screenshot while Studio prepares; keep an existing session for repeated work when suitable.
+- **Proposed change:** After the staged-release QA branch lands, instrument command bootstrap, parser freshness, service availability, project resolution, preview runtime/Watchman/session setup, initial compile, Metro readiness, Studio client bundling, HTTP readiness, browser opening and first usable preview paint. Separate cold/warm startup and quiet/contended samples; serialize samples and discard warm-up. Attribute the critical path before removing work or changing order. Evaluate parallel independent preparation, persistent workspace reuse, earlier shell/progress presentation and deferred optional services. Preserve compile-before-Metro's documented file-crawl race boundary.
+- **Dependencies:** Begin after the staged-release QA branch lands. Coordinate with the existing Studio preview publication/workspace performance work; do not infer startup gains from edit-to-paint fixture timings.
+- **Acceptance:** A reproducible report names each measured stage, command-to-shell and command-to-usable-preview latency, sample conditions and before/after results. Chosen changes improve measured or perceived startup without stale preview publication, duplicate services or focus stealing. The Developer confirms the Notebook launch experience.
+- **Source:** Developer request and startup source trace on 2026-10-03, `feat/staged-release-qa-3`.
