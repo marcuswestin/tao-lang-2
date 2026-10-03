@@ -263,6 +263,10 @@ proves, so a public build must hide later surfaces and a reviewer must be able t
   starter skills, and editor readme, and recaptured the reading-list, Notebook, and HNReader
   scenarios. The findings it records are report-only; product fixes are separately scoped. Phase-1
   cells were re-recorded at `442e6416` after the catalog began classifying subcommands by full path.
+  On 2026-10-03 a screenshot whose own preview logs a console error became a failed screenshot, the
+  surface kinds took plain names (release requirements, screenshot sets, dev checks), and the
+  starter column, sketch and panel-stretch findings became fixed-awaiting-qa. Further automated
+  checks are A23.
 - Remaining: human DOC1 and install passes, installed-artifact and marketplace evidence, the
   unreviewed starter skills, CLI help text, and Spec documents; recapturing HNReader's phase-2
   cells; declaring capture cells for story visual channels, which agents cannot pass until then.
@@ -298,6 +302,26 @@ proves, so a public build must hide later surfaces and a reviewer must be able t
   appearance work, and `./agent unsandboxed storage qa` for a dated screenshot round to review.
 - Done: a screenshot round shows every app correct in both appearances, and the tutorial's finished
   app has been reviewed by the Developer.
+
+### A23 — Design checks a capture can make on its own
+
+- [ ] **Before release 3:** extend the QA capture so it finds design defects without a reviewer,
+      after the staged-release QA branch lands.
+- Developer decisions, 2026-10-03:
+  - Screenshot every app that declares scenarios, found automatically, so Pantry and new apps are
+    covered without editing the QA inventory by hand.
+  - Add element-tree checks to the browser capture: text contrast, tap-target size, overlapping
+    elements, and content overflowing its container. They read the rendered elements, not pixels.
+  - Let an app state its own design rules in a `rules` section of `Design.tao`, with Tao's defaults
+    when it states none. This is language surface, so it goes through `2 - Next` and `Decisions.md`
+    before it is built.
+  - Agent visual review reuses the existing `--ai` lanes under the deferred `ai-assist` capability.
+  - A separate `--suggest` report offers design recommendations and never creates findings.
+- Context: `packages/ides/studio-tooling/studio-tooling-src/StudioReview.ts` (capture),
+  `packages/cli/dev-cli/dev-cli-src/qa/QaInventory.ts` (the hand-listed screenshot sets),
+  `TR-studio-preview.tsx` (computed styles), and `Docs/QA/README.md`.
+- Done: a capture of every scenario app reports each check per screenshot, a failing check fails
+  that screenshot, and the rules section is decided and implemented.
 
 ## Environment reach
 
