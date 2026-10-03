@@ -149,35 +149,38 @@ first edit after launch. Run the harness with
 
 Each slice is measured on its own with the latency harness, so each gain is attributable.
 
-1. **Next slice.**
+1. **Next slice**, in this order. The first two are fixes, because an edit that blanks the preview or
+   throws cannot be timed. Steps 3, 6, and 7 are experiments: measure each and keep only the ones that
+   help.
    1. Fix the blank preview after editing the datasource file (`Data.tao`): re-seed fixtures when
       Fast Refresh re-runs datasource declarations.
    2. Fix the `runtime capture domain 'navigation' is registered exactly once` error a hot reload
       raises from the module-level registration in `TR-navigation-app.ts`.
-   3. Stop every compile from re-rendering the whole preview tree. Each compile's runtime update
+   3. Bundle a preview-only manifest. The preview reads only `scenarios` and `fixtures` from
+      `TaoStudioManifest.ts`; Studio uses the compiler's manifest in process. Emitting just those, without
+      source ranges, keeps the file byte-identical across ordinary edits, so a length-changing edit or a
+      move no longer re-runs the generated root and re-renders the whole tree. Narrow the type the
+      preview reads, and test that a length-changing edit leaves the file unchanged. Estimated, not
+      measured: 10–40ms per such edit on HNReader; same-length edits gain nothing. It goes before
+      step 4 because today a length-changing edit re-renders the root for both reasons, so each gain
+      is measurable only alone.
+   4. Stop every compile from re-rendering the whole preview tree. Each compile's runtime update
       sets root state in the generated `App.tsx`; nothing below it is memoized, `<TaoApp />` is a new
       element each render, and the lens publish callback changes with each config, so every lens
       render re-renders. Make the app element stable, read the config in `publishLens` from a ref,
       and keep scenarios with steps from remounting when their steps did not change (their cell key
       includes `compileRevision` today).
-   4. Cache emitted modules per file, reusing a module whose source and dependencies did not
-      change. Expected to save most of the 50ms emit phase on a one-file edit.
-
-   Then try these one at a time, measuring each, and keep only the ones that help:
-
-   5. Bundle a preview-only manifest. The preview reads only `scenarios` and `fixtures` from
-      `TaoStudioManifest.ts`; Studio uses the compiler's manifest in process. Emitting just those, without
-      source ranges, keeps the file byte-identical across ordinary edits, so a length-changing edit or a
-      move no longer re-runs the generated root and re-renders the whole tree. Narrow the type the
-      preview reads, and test that a length-changing edit leaves the file unchanged. Estimated, not
-      measured: 10–40ms per such edit on HNReader.
+   5. Cache emitted modules per file, reusing a module whose source and dependencies did not
+      change. Expected to save most of the 50ms emit phase on a one-file edit. It is compiler-side
+      and independent of the other steps, so it can move or run in parallel.
    6. Let a refreshed design reach the running app. `RuntimeAppDefinition.design` caches the design once
       per app object (`TR-navigation-app.ts`), so today only a new app object, built when the app shell
       re-runs, shows a design edit.
    7. Re-render only what a design edit affects: a design store versioned per color and per style, with
-      each element subscribing to the names its styles resolved. It pays off only with a delivery path
-      that skips re-running the app shell: either the generated design module accepts its own hot
-      update and replaces the store's values, or Studio sends a design change over the runtime bridge.
+      each element subscribing to the names its styles resolved. It builds on step 6, whose
+      measurement decides whether it is worth doing. It pays off only with a delivery path that skips
+      re-running the app shell: either the generated design module accepts its own hot update and
+      replaces the store's values, or Studio sends a design change over the runtime bridge.
 2. **Slice after.** Reuse Langium documents across compiles. Langium 4.3 (the pinned version) offers
    document-level reuse only, through `DocumentBuilder.update(changed, deleted)`; no LL(k) parser
    reparses a text range. Stages, each measured:
@@ -207,6 +210,19 @@ Each slice is measured on its own with the latency harness, so each gain is attr
    position when an edit arrives: whether edits could then apply while a compile is in flight, what
    keeping ids stable across edits costs (written tags, or the server tracking elements between
    revisions), and how it interacts with tags, which are unique only within their block.
+5. **After this project lands: one tag rule in every environment.** `#tag` and `#tag[n]` must behave
+   the same in every environment and every step, and `#tag` must fail when it matches more than one
+   element. `./tao test` already does: every tag step requires exactly one match
+   (`requireSingleMatch`, `requireSingleTag`, and the journey event adapter in
+   `expo-host-src/testing/test-runner.tsx`), proven by the runtime test "rejects a tag without a row
+   index when it matches more than one element". The host drivers do not: Playwright
+   (`host-control-playwright.ts` `locatorFor`), Appium XCUITest, Appium UiAutomator2, and Appium Mac2
+   default a missing `occurrence` to 1, `HostControl.ts` documents that default, and
+   `PlaywrightHostControl.host.spec.ts` asserts it. Make an omitted occurrence on a tag target
+   require exactly one match in every driver, update that spec, and prove it on each host lane.
+   Internal probes that observe tags without an index (`__tao_navigation_title`, ready and receipt
+   markers) must stay unique or name an occurrence. Today `[n]` exists only in `select #tag[n]`;
+   whether other steps accept it is a language decision for the Developer.
 
 ## Completion bar
 
