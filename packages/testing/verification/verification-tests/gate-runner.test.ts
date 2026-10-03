@@ -286,6 +286,21 @@ Describe('repository gate runner', () => {
     ).toBe(true)
   })
 
+  Test('skips the macOS-only gates off macOS and runs them on it', async () => {
+    const macOnly = ['studio-smoke-native', 'studio-canary']
+    const linux = await run(['_repo-lint', ...macOnly], {}, { hostPlatform: 'linux' })
+    const darwin = await run(['_repo-lint', ...macOnly], {}, { hostPlatform: 'darwin' })
+
+    Expect(linux.started).toEqual(['_repo-lint'])
+    Expect(linux.summary.gates.filter(gate => gate.status === 'skipped').map(gate => gate.name)).toEqual(macOnly)
+    Expect(
+      linux.summary.gates.filter(gate => gate.status === 'skipped').every(gate =>
+        gate.reason === 'requires macOS; not run on linux'
+      ),
+    ).toBe(true)
+    Expect(darwin.started.toSorted()).toEqual(['_repo-lint', ...macOnly].toSorted())
+  })
+
   Test('surfaces warnings a gate printed without failing on them', async () => {
     const { summary } = await run(['_ide-extension-build'], {
       '_ide-extension-build': { exitCode: 0, output: 'Warning: rule declared but never referenced' },
