@@ -1,85 +1,156 @@
 # Hosted provider continuation
 
-This handoff is for a new `feat/hosted-provider-free-tier-acceptance` branch created from the
-committed tip of `feat/hosted-provider-candidates`. Read the [candidate roadmap](<Hosted data provider candidates.md>)
-and the [Hosted CRUD guide](../../Apps/Hosted%20CRUD/README.md) before changing code.
+This handoff is for a new feature branch created from the committed tip of
+`feat/hosted-provider-free-tier-acceptance`, which itself grew from `feat/hosted-provider-candidates`.
+Read the [candidate roadmap](<Hosted data provider candidates.md>), the
+[Hosted CRUD guide](../../Apps/Hosted%20CRUD/README.md), and `A21`/`A22` in the
+[Agent MVP Roadmap](<../MVP Roadmap/Agent MVP Roadmap.md>) before changing code.
 
-## State at handoff — 2026-09-29
+## State at handoff — 2026-10-03
 
-- The branch contains separate Jazz/Clerk, Convex/Clerk, and Pylon/PylonAuth provider pilots and an
-  Expo Go Hosted CRUD comparison of Firebase Auth + RxDB and Appwrite Auth + Legend. The Hosted CRUD
-  app is a standalone spike; it is not yet a Tao datasource or evidence for Tao `supports`.
-- `./tao connect firebase 'Apps/Hosted CRUD'` now uses bundled Firebase CLI 15.32.0 and a local
-  Google sign-in. It can create or reuse a project and web app, create default Firestore, enable
-  Email/Password Auth, and deploy the pilot rules. It preserves manual Firebase snippet entry.
-  The implementation was committed as `af11227c`; focused tests, typecheck, `verify-changed`, and
-  `verify` passed on that tree. The packaged CLI returned its version with an isolated local config.
-  None of that proves a real Firebase project or an iPhone run.
-- `./tao connect appwrite 'Apps/Hosted CRUD'` configures an **existing** Appwrite Cloud project
-  using its project API key: platform, email/password Auth, and TablesDB Notes. A project API key
-  cannot create the project. A Partners organization key could create a project but would still
-  require a separate project credential to configure resources. The guide describes the one manual
-  project creation and key issuance step. There is no local Appwrite key file in the source checkout.
-  _Superseded on this branch:_ the bundled Appwrite CLI's browser sign-in now creates or reuses
-  the project and issues a 15-minute organization-issued project key, matching Firebase's flow.
-- The source checkout has one unrelated dirty tracked file, `Apps/Hosted CRUD/tao.connections.json`,
-  owned by the Developer. It was never staged, reset, stashed, or inspected for this handoff.
-  `./agent unsandboxed finalize` refused that dirty worktree. Do not carry its contents into the
-  new branch implicitly or discard it. No Google token, service account JSON, or Appwrite key
-  should be pasted into chat or committed.
-- Firebase CLI login is kept in its own local user configuration outside the project. Appwrite's
-  project key is stored in the ignored, owner-only `.tao/connect-secrets.json`, which is **not
-  encrypted**. Public app identifiers go in `tao.connections.json`.
+### Done and committed
 
-## Developer setup and first verification
+- **Firebase automation.** `./tao connect firebase 'Apps/Hosted CRUD'` uses the bundled Firebase CLI
+  and a local Google sign-in. It creates or reuses a project and web app, Firestore, and
+  Email/Password Auth, and deploys the pilot rules. The pilot project is `tao-hosted-crud-79c429`.
+- **Appwrite automation.** `./tao connect appwrite 'Apps/Hosted CRUD'` uses the bundled Appwrite CLI
+  28.1.0 (`appwrite-provision.ts`). Return automates; `manual` keeps the older pasted-key path. It
+  works as follows:
+  - Browser sign-in.
+  - Picks the organization.
+  - Reuses the saved project, or any existing `tao-hosted-crud-*` project, before offering to create
+    one. The Free plan allows **2 projects**, and the Developer's organization has both in use:
+    `My first project` and `tao-hosted-crud-160214` in `fra`.
+  - Issues a 15-minute ephemeral project key that it never stores.
+  - Configures the platform, Auth, and the TablesDB `tao_notes`/`notes` table, retrying 401/503
+    while a new project warms up.
 
-Create a new managed worktree from the committed `feat/hosted-provider-candidates` tip, then a
-named `feat/hosted-provider-free-tier-acceptance` branch there. Tell the Developer its exact
-absolute path before asking them to run commands. In the new worktree, the Developer should run
-the following with `<NEW_WORKTREE>` replaced by the path supplied by the new agent:
+  Appwrite 2.3 takes index fields as `attributes`.
+- **Public IDs** for both stacks are committed in `Apps/Hosted CRUD/tao.connections.json`.
+- **Expo Go runs on the Developer's iPhone for both stacks.** The Developer confirmed that sign-in
+  and basic note CRUD work. Since Expo SDK 57, Expo Go on a physical iPhone needs the **same Expo
+  account** signed in to both Expo CLI and Expo Go; `tao connect run` checks this and asks. This is
+  a first-experience cost to report.
+- **Provider switching** no longer requires signing out. Each provider keeps its own session
+  (`App.tsx`).
+- **Tao's own run screen.** `tao connect run` no longer shows Expo's terminal UI
+  (`hosted-crud-metro.ts`).
+  - How it runs: Expo starts headless as `node --require <preload> <expo> start --go --port N`,
+    with stdin ignored.
+  - The preload (`metro-events-preload.cjs.txt`, copied to the app's ignored
+    `.tao/connect-run/`) wraps Metro's `MetroTerminalReporter.update` and writes events as JSON
+    lines.
+  - The screen shows:
+    - Expo's own Expo Go URL, from `GET /_expo/open?platform=ios` with an `Origin` header, as a QR
+      code.
+    - Per-platform bundling progress.
+    - Bundling errors with file, line and column.
+    - `client_log` lines.
+  - Keys: `r` reloads (`/message?method=reload`); `i` opens the iOS Simulator
+    (`POST /_expo/open?platform=ios`); `?` reprints the code; `q` or Ctrl-C stops the process tree.
+  - It takes a free port when 8081 is busy.
+  - When Expo stops early, it prints Expo's output tail and writes it to `.tao/connect-run/expo.log`.
+  - Verified so far: against real Metro headlessly (QR, URL, bundle event, reload, stop) and by
+    focused tests.
+  - **Not yet verified on a device or in the Simulator.** The Developer's first try hit a busy port
+    8081, which led to the free-port fix; it has not been retried since.
+- **Spike findings** behind the screen are recorded under A22. Expo's `/events` socket is broken,
+  and `CI=1` disables watching. The reporter hook depends on Expo internals.
+
+### Not done
+
+1. **Developer device checks of the new run screen** (the steps below).
+2. **Acceptance evidence for both stacks** ("Acceptance work after setup" below): two devices,
+   offline restart, account switch, and direct hostile requests. None of it has been collected yet.
+3. **A hostile-request probe script.** It authenticates as one test account and attempts
+   cross-account reads, writes, forged `ownerId`, and deletes against Firebase and Appwrite
+   directly. The Developer types the test accounts' passwords locally; never ask for them in chat,
+   and never create cloud accounts or enter passwords yourself.
+4. **The comparison write-up**: which stack is the easier first experience, plus the unmet gates.
+   Put it in this document and the [candidate roadmap](<Hosted data provider candidates.md>).
+5. **Repository gates and finalize.**
+   - `main` has moved past this branch (`origin/main` is not an ancestor). Bring it in with
+     `./agent merge-main`, or `./agent unsandboxed merge-main` if it refuses, before `verify`.
+   - In the sandbox, `verify`'s dev-cli `contributor-linux-test` fails on an xcrun cache error;
+     that is tracked separately and is not this branch's defect.
+   - Then run `./agent unsandboxed finalize`. **Do not land without the Developer's explicit
+     authorization.**
+
+### Decisions waiting on the Developer
+
+1. Whether to land this branch once the evidence and gates are done.
+2. Whether the dev loop should get the same run screen. It is an unchecked A22 item, together with
+   a test that starts real Metro and checks the event and URL shapes so that an Expo upgrade fails
+   loudly.
+3. The provider-dependency install policy described under "Later" below.
+4. The Developer is adding a rule-break reporting bullet to `AGENTS.md` by hand; agents are blocked
+   from editing it.
+
+### Constraints and environment notes
+
+- **Secrets.** Never paste or commit Google tokens, service-account JSON, or Appwrite keys. The
+  Developer completes browser sign-ins and key entry locally. Appwrite's manual-path key lives in
+  the ignored, owner-only, **unencrypted** `.tao/connect-secrets.json`.
+- **The older source checkout.** `/Users/ro/.codex/worktrees/0629/tao-lang-2` holds a
+  Developer-owned uncommitted `Apps/Hosted CRUD/tao.connections.json`. Never alter it or carry it
+  over.
+- **Unsandboxed runs.** Appwrite CLI network calls (the sandbox breaks its TLS) and Metro both need
+  an unsandboxed shell.
+- **Headless smoke test.** To smoke-test the run screen without a device, call `runMetroSession`
+  from a scratch Bun script under `.artifacts/tmp/`, unsandboxed. Use a `PassThrough` input marked
+  `isTTY` with a no-op `setRawMode`, `interactive: true`, `openSimulator: false`, and a spare
+  `port`. Fetch the Expo Go manifest's bundle URL to trigger a build, then write `r` and `q`.
+- **Busy ports.** Other worktrees' dev loops often hold 8081. One for `Apps/HNReader` in the
+  primary checkout was running on 2026-10-03. Do not stop another checkout's process.
+- **Cosmetic issue.** A prompt printed twice during connect is noted in A22 and not fixed.
+
+## Developer verification steps
+
+Run these from the new worktree root. Tell the Developer its absolute path first.
 
 ```sh
-cd '<NEW_WORKTREE>'
-./tao connect firebase 'Apps/Hosted CRUD'
-./tao connect appwrite 'Apps/Hosted CRUD'
 ./tao connect run 'Apps/Hosted CRUD'
 ```
 
-For Firebase, press Return at the config prompt to use automation, complete the browser sign-in
-if needed, and press Return to create a new disposable project under a generated ID and again for the
-default `nam5` Firestore region. If reusing an existing project, approve replacing its rules only after checking that the
-pilot rules are appropriate. Do not select Firebase Hosting. For Appwrite, press Return to automate
-with the bundled Appwrite CLI 28.1.0: complete its browser sign-in, then press Return to create a
-project and again for the `fra` region ([its guide](../../Apps/Hosted%20CRUD/src/appwrite/README.md)).
-Setup uses a 15-minute key it never stores; `manual` keeps the older pasted-key path. `./tao connect run` signs Expo CLI in to an Expo account if needed and launches
-Metro; sign in to Expo Go on the iPhone with the same account, then scan the QR code on a reachable
-network. No Apple Developer account is required for this Expo Go path.
+1. **iPhone:** type `yes`, then scan the QR code with the camera.
+   - a. **Verify:** `iOS bundled in …s` appears and the app opens in Expo Go.
+   - b. Press `r`. **Verify:** `Reloading connected apps.` appears and the app reloads.
+   - c. Add `console.log('hi')` to `src/App.tsx`. **Verify:** `app log: hi` appears.
+   - d. Break the syntax. **Verify:** `Bundling failed in …:line:col` appears with a code frame.
+     Undo both edits.
+   - e. Press `q`. **Verify:** `Stopped Metro.` appears.
+2. **Simulator:** rerun the command and press Return at the question. **Verify:**
+   `Opened Expo Go in the iOS Simulator.` appears and the app runs there.
 
-The next agent should collect the exact command output and cloud resource IDs with secrets
-redacted. If a command fails, fix the repository-owned defect and rerun the focused command before
-claiming setup success. Do not silently replace an existing project's rules or tables.
+If `connect firebase` or `connect appwrite` must be rerun, press Return to reuse the existing
+projects. Do not create new Appwrite projects; the Free plan limit is already reached.
 
 ## Acceptance work after setup
 
 1. For **each** free-tier stack, measure first account to first synced note and record manual
-   setup actions. On two devices, create/edit/toggle/delete notes and confirm updates in both
-   directions. Then disconnect one device, queue create/update/delete, kill and relaunch Expo Go,
-   reconnect, and verify durable replay and one final state on both devices.
-2. Sign out and switch between two accounts, including while offline with cached rows. Check
-   that notes from the other account never appear. Use direct Firebase/Appwrite client requests
-   authenticated as the second account to attempt cross-account reads, writes, forged ownership,
-   and deletes; record server responses separately from UI filtering. Examine Appwrite's
+   setup actions. On two devices (the iPhone and the Simulator are enough), create, edit, toggle and
+   delete notes and confirm updates in both directions. Then disconnect one device, queue a create,
+   an update and a delete, kill and relaunch Expo Go, reconnect, and verify durable replay and one
+   final state on both devices.
+2. Sign out and switch between two accounts, including while offline with cached rows. Check that
+   notes from the other account never appear. Use direct Firebase/Appwrite client requests
+   authenticated as the second account to attempt cross-account reads, writes, forged ownership, and
+   deletes; record server responses separately from UI filtering. Examine Appwrite's
    client-controlled `ownerId` and whether its row permissions actually enforce isolation.
 3. Inspect failures for missing Expo Go modules, authentication restoration, conflict handling,
-   duplicate rows, partial sync, data leaks, and errors after an app restart. Compare actual
-   setup effort and behavior, then recommend which stack is the easier first Tao experience.
-   Record a failed gate as a finding; do not declare a Tao capability from this standalone app.
-4. Keep the original Jazz/Convex/Pylon pilot gates separate. Jazz alpha.57 cannot currently
-   reject a direct same-value write to a protected field based on submitted field intent, and
-   server-enforced `(owned)` deletion remains unresolved; keep `supports { }`. Convex needs a
-   disposable deployment and hosted direct-request/device proof. Pylon needs hosted deployment,
-   native sign-in, direct-request proof, and full offline working-set/replay/account-switch proof.
-   The [pilot findings](<Hosted data provider candidates.md#pilot-findings--2026-09-28>) have details.
+   duplicate rows, partial sync, data leaks, and errors after an app restart. Compare actual setup
+   effort and behavior, then recommend which stack is the easier first Tao experience. Record a
+   failed gate as a finding; do not declare a Tao capability from this standalone app.
+4. Keep the original Jazz/Convex/Pylon pilot gates separate.
+   - Jazz alpha.57 cannot currently reject a direct same-value write to a protected field based on
+     submitted field intent, and server-enforced `(owned)` deletion remains unresolved; keep
+     `supports { }`.
+   - Convex needs a disposable deployment and hosted direct-request and device proof.
+   - Pylon needs a hosted deployment, native sign-in, direct-request proof, and full offline
+     working-set, replay and account-switch proof.
+
+   The [pilot findings](<Hosted data provider candidates.md#pilot-findings--2026-09-28>) have
+   details.
 
 ## Later: move the winning stack into Tao and the CLI flow
 
@@ -101,28 +172,29 @@ becomes a Tao datasource:
 
 ## Repository checks and completion
 
-After fixing any observed issue, run the **focused changed test** while editing, then the required
-branch gates from the new worktree root. The new agent runs these repository commands; the
-Developer need only run the interactive connect and Expo Go commands above:
+After fixing any observed issue, run the **focused changed test** while editing, then the branch
+gates from the worktree root:
 
 ```sh
+./agent test-file packages/cli/tao-cli/cli-tests/hosted-crud-run.test.ts
 ./agent test-file packages/cli/tao-cli/cli-tests/connect-command.test.ts
 ./agent verify-changed
 ./agent verify
 ```
 
-Use additional focused app/provider tests for whatever code actually changes. Never label a local
-test, generated backend, native compile, or cached verification result as hosted/device/offline
-proof. Stage and commit only reviewed changes made on the new branch. The connect flow may modify
-the tracked public `tao.connections.json`; resolve its disposition with the Developer before
-staging, restoring, or finalizing, and keep the ignored Appwrite key out of Git. With a clean
-worktree and completed review, run `./agent unsandboxed finalize`. Landing the original
-Jazz/Convex/Pylon slice requires all agreed hosted/native/offline gates and separate Developer
-authorization; a failure should remain an explicit pilot finding on an unlanded branch.
+App tests run with `bun test --cwd "Apps/Hosted CRUD" src`. Never label a local test, generated
+backend, native compile, or cached verification result as hosted, device, or offline proof. Stage
+and commit only reviewed changes. If a connect run modifies `tao.connections.json`, ask the
+Developer before committing the change. With a clean worktree and completed review, run
+`./agent unsandboxed finalize`.
 
-Final completion means: a committed and reviewable new branch; a documented winner or bounded
-failure for the Firebase/Appwrite first-experience comparison backed by real cloud, two-device,
-offline-restart, and hostile-client evidence; accurate roadmap and app guides; required repository
-gates passed; clean finalization if the Developer resolves connection-file ownership; and a clear
-remaining-gate statement for Jazz, Convex, and Pylon. Do not claim provider readiness or land an
-unmet required gate.
+Final completion means:
+
+- A committed, reviewable branch.
+- A documented winner, or a bounded failure, for the Firebase/Appwrite first-experience comparison,
+  backed by real cloud, two-device, offline-restart, and hostile-client evidence.
+- Accurate roadmap and app guides.
+- The required repository gates passed, and clean finalization.
+- A clear statement of the remaining gates for Jazz, Convex, and Pylon.
+
+Do not claim provider readiness or land an unmet required gate.
