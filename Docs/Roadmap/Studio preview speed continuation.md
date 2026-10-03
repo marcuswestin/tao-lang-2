@@ -49,14 +49,16 @@ each preview has its own toggle, off by default; the active set is per developer
    bolt is filled a subtle yellow; inactive, it is a grey outline with no fill. It carries
    `aria-pressed`, and its label and tooltip read "Activate preview" or "Deactivate preview".
    Deactivating removes the cell's iframe.
-3. **Naming in code.** `StudioActivePreview` (`studio-src/client/StudioApp.ts:139`) already means
-   the selected cell, so the new set needs another name, such as live previews; keep "Activate" as
-   the words the developer sees.
+3. **Naming in code.** "Active" now means activated. Rename `StudioActivePreview`
+   (`studio-src/client/StudioApp.ts:139`), which means the selected cell, to `StudioFocusedPreview`,
+   along with its file, its `onActivate` callback, its tests, and the
+   `tao-studio:active-cell:<project>:<app>` key (`StudioApp.ts:133`), so "active" and "activate"
+   refer only to the toggle.
 4. **Persistence.** The set of activated cell ids (`cellId`, `StudioApp.ts:143`) per app lives in
    `.tao/local/studio/session.json`, read and written by the Studio server: the handshake carries
-   it, and the client reports each change. An id no longer in the manifest is dropped. The
-   selected cell (`StudioApp.ts:133`) and editor tabs (`StudioEditorTabs.ts:147`) move into the same
-   file under the layout decision.
+   it, and the client reports each change. An id no longer in the manifest is dropped. The focused
+   preview (`StudioApp.ts:133`) and editor tabs (`StudioEditorTabs.ts:147`) move into the same file
+   under the layout decision.
 5. **Fast draw goes**, with its browser setting and its `?taoStudioPreviews` override:
    `studio-src/client/matrix/StudioPreviewMatrix.ts:23-64` (`connectedCells` at `:62` becomes the
    activated cells), `StudioApp.ts:526-538`, `StudioShell.ts:25` and `:399` with the

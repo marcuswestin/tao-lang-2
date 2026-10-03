@@ -43,6 +43,16 @@ Where Tao keeps a project's state on disk, and what a project commits. Decided 2
    Older entries: `.tao/sessions/`, `.tao/builds/`, `.tao/dev/` (with `dev/data/`),
    `.tao/bridge-check.tsconfig.json`, `.tao/browser-acceptance/`, `.tao-project/`, and
    `secrets/secrets.jsonc`.
+10. **`skills.version` becomes a field of `store/lock.jsonc`.** `installTaoSkills`
+    (`packages/ai/tao-skills/skills-src/tao-skills.ts:74`) writes it beside the skill files it
+    installs into the project (`.agents/skills/`, `.claude/skills/`, `AGENTS.md`, `CLAUDE.md`), so a
+    later Tao can tell whether those committed files are stale. It is per project because those
+    files are, and `lock.jsonc` already records which Tao release the project pins. The migration
+    folds an existing `.tao-project/skills.version` into the field.
+11. **Datasource adapters get a Tao API to read and write `store/`, `local/`, and `cache/`.** Today
+    only the `Dev` datasource's server writes into the project, through its own protocol. Whether
+    the API is built in this project or deferred is to be decided; when deferred, it gets its own
+    roadmap entry.
 
 ## The tree
 
@@ -54,9 +64,8 @@ Every kind of entry, shown three times where a project can hold several.
 └── .tao/
     ├── .gitignore                   local/ and cache/
     ├── store/                       committed
-    │   ├── lock.jsonc               toolchain pin (from .tao-project/)
+    │   ├── lock.jsonc               toolchain pin and skills version (from .tao-project/)
     │   ├── secrets.jsonc            from secrets/
-    │   ├── skills.version           until open item 1 folds it away
     │   └── studio/
     │       └── sketches.jsonc       from .tao-project/studio/
     ├── local/                       ignored, one developer
@@ -85,7 +94,7 @@ Every kind of entry, shown three times where a project can hold several.
     │   │   ├── 2026-10-02T…/
     │   │   └── 2026-10-03T…/
     │   └── studio/
-    │       └── session.json         active previews, selected cell, editor tabs, canvas viewport
+    │       └── session.json         active previews, focused preview, editor tabs, canvas viewport
     └── cache/                       ignored, regenerable
         ├── bridge-check/
         │   └── tsconfig.json
@@ -137,10 +146,13 @@ Home folder, for state not tied to one project:
 
 1. **Builds:** `.tao/builds/<ISO>-<uuid8>/`; `builds/agents` links the newest agent client
    (`packages/cli/tao-cli/cli-src/agent-client-build.ts:38-45`).
-2. **Dev loop:** `.tao/dev/{runtime,node_modules,expo-home,logs/expo[-port].log,desktop/…}`. The
-   desktop host's files, including the four agent-only ones, are listed in
-   `packages/apps/expo-host/expo-host-src/desktop-host.ts:20-53`. Check that Electrobun's build
-   accepts entry points under `agents/` before moving them.
+2. **Dev loop:** `.tao/dev/{runtime,node_modules,expo-home,logs/expo[-port].log,desktop/…}`.
+   `desktop/` is the desktop host: the Electrobun macOS app shell Tao generates to run a Tao app as
+   a desktop app, against Metro in development or a static export in a build (`DesktopHost`,
+   `packages/apps/expo-host/expo-host-src/desktop-host.ts:10-56`). Its files, including the four
+   agent-only ones, are written at `:22-54`; with agents its `src/bun/index.ts` is a different
+   source too (`:45`). Check that Electrobun's build accepts entry points under `agents/` before
+   moving them.
 3. **Dev data:** `.tao/dev/data/<AppName>-<sha256(projectRoot)[:8]>/<encodeURIComponent(key)>.json`
    (`dev-loop/dev-data/DevDataBootstrap.ts:37-41`, `DevDataServer.ts:239`). Each file is one
    durable stream for one storage key of the `Dev` datasource
@@ -159,7 +171,8 @@ Home folder, for state not tied to one project:
    activation), `tao-studio:agent-position:v1`; per project `tao-studio:active-cell:<project>:<app>`
    (`studio-src/client/StudioApp.ts:133`) and `tao-studio:editor-tabs:v1:<project>:<app>`
    (`studio-src/client/StudioEditorTabs.ts:147`). The per-project keys move to
-   `local/studio/session.json`, read and written through the Studio server.
+   `local/studio/session.json`, read and written through the Studio server; the active cell is
+   renamed the focused preview there (see the continuation's preview activation item 3).
 7. **Agents service:** `~/Library/Caches/Tao/agents/<hash>/` moves to `~/.tao/agents/`.
 8. **Temporary and lock writers into committed state** (decision 4):
    1. Sketch catalog: `studio-src/StudioSketchCatalog.ts:321` (staging) and `:341-342` (lock).
@@ -179,15 +192,10 @@ Home folder, for state not tied to one project:
 
 ## Open
 
-1. **`skills.version`.** `installTaoSkills` (`packages/ai/tao-skills/skills-src/tao-skills.ts:74`)
-   writes it beside the skill files it installs into the project (`.agents/skills/`,
-   `.claude/skills/`, `AGENTS.md`, `CLAUDE.md`), so a later Tao can tell whether those committed
-   files are stale. It is per project because those files are. Recommended: make it a field of
-   `store/lock.jsonc`, which already records which Tao release the project pins, rather than a file
-   of its own.
-2. **A storage API for datasource adapters.** Only the `Dev` datasource's server writes into the
-   project, through its own protocol. Whether other adapters (`local`, `memory`, `http`, …) get a
-   Tao API to read and write `store/`, `local/`, or `cache/` is a product decision.
+1. **When the adapter storage API is built** (decision 11): in this project or deferred.
+2. **The desktop host's folder name.** `cache/dev/desktop/` holds the generated Electrobun shell, not
+   a desktop app's output, while a build's `desktop/` is the built app. Recommended:
+   `cache/dev/desktop-host/`, matching `DesktopHost`, with `agents/` inside it.
 3. **Home Studio preferences.** Whether the global browser keys in item 6 move to
    `~/.tao/studio/prefs.json` or stay in the browser.
 4. **The generated app.** `_gen_tao-app` sits in the toolchain root, shared by every project;
@@ -196,7 +204,7 @@ Home folder, for state not tied to one project:
 ## Implementation state
 
 Commit `WIP: route project .tao state through ProjectLocal` on `feat/studio-preview-latency-next`
-is a first pass, untested, that predates decisions 2, 5, and 6. It adds `ProjectLocal`
+is a first pass, untested, that predates decisions 2, 5, 6, 10, and 11. It adds `ProjectLocal`
 (`packages/shared/shared-src/ProjectLocal.ts`) with `storeResolve`, `cacheResolve`, `stagingPath`,
 `prepare`, and a legacy-entry move, and routes dev sessions, the dev runtime, dev data, builds,
 clean, the bridge check, standalone acceptance, the desktop agent proof, and the QA screenshot
