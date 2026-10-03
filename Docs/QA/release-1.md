@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 197 applicable release acceptance cells are incomplete.
 
-Candidate source: `3705ae8a6973879a57a956b1b4cacc483febf623`. Tree digest `47b638fd5c831d6c`; content hashes are stored per observation.
+Candidate source: `7678e5fac11498dfb9022d147374a7f6599d6635`. Tree digest `a8205a0bc3ee937c`; content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -52,7 +52,7 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 
 | Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
-| 1                | visual    | 7              | 7        | 0            | 7             | 0       | 0       | 0        | 0    | 100.0%     | 0.0%     |
+| 1                | visual    | 7              | 7        | 4            | 0             | 0       | 0       | 3        | 0    | 100.0%     | 57.1%    |
 | 2                | visual    | 2              | 0        | 0            | 0             | 2       | 0       | 0        | 0    | 0.0%       | 0.0%     |
 
 ## Development checks
@@ -67,13 +67,13 @@ These are scoped observations; supplementary source checks do not fill public-ar
 
 - [source:hnreader-browser / functional / browser-preview / agent](results/20260926231617926-1968d386-8122-4163-986f-f35daa0834b5.json): **pass**, needs-recheck; execution profile development.
 - [story:IDE2 / functional / source-test / agent](results/20260926231619160-57cfe8d3-d8db-4bc2-ba6c-984277f401ba.json): **pass**, needs-recheck; execution profile development.
-- [visual:notebook / visual / phone / agent](results/20260929164853846-35b3b651-21e2-4c34-aeec-822dab32cd1b.json): **friction**, needs-recheck; execution profile development.
-- [visual:notebook / visual / notes-groceries / agent](results/20260929164852965-3db7bcc2-f487-49e0-9d92-3727c99a9491.json): **friction**, needs-recheck; execution profile development.
-- [visual:notebook / visual / notes-ideas / agent](results/20260929164853407-0fe04d5b-e3b5-4bf4-ae99-10855a9054c7.json): **friction**, needs-recheck; execution profile development.
-- [visual:notebook / visual / tablet-dark / agent](results/20260929164854283-944942a7-47d8-429d-b924-e84a449c8be9.json): **friction**, needs-recheck; execution profile development.
-- [visual:reading-list / visual / phone-light / agent](results/20260929164851646-a2d826fe-bdcc-44b5-9a95-a28ea4d89651.json): **friction**, needs-recheck; execution profile development.
-- [visual:reading-list / visual / desktop / agent](results/20260929164852523-f39fe2e8-d1a6-44d1-af8c-d4b6c9bb7b3f.json): **friction**, needs-recheck; execution profile development.
-- [visual:reading-list / visual / phone-dark / agent](results/20260929164852084-fd48299f-7e82-459c-a9e5-f9b906bfaa1d.json): **friction**, needs-recheck; execution profile development.
+- [visual:notebook / visual / phone / agent](results/20261003173523921-78676217-977d-4397-9c6f-b1f34e99996d.json): **pass**, current; execution profile development.
+- [visual:notebook / visual / notes-groceries / agent](results/20261003173525288-3fb34a34-8931-4d5c-983d-bb016da95455.json): **pass**, current; execution profile development.
+- [visual:notebook / visual / notes-ideas / agent](results/20261003173525898-a95130d7-6b03-47fa-8008-49d8922ac23a.json): **pass**, current; execution profile development.
+- [visual:notebook / visual / tablet-dark / agent](results/20261003173524612-e3558bf0-b9c2-4fa8-af68-2bd1d6de7c35.json): **pass**, current; execution profile development.
+- [visual:reading-list / visual / phone-light / agent](results/20261003173522174-649e3a4d-a0e0-4230-ba18-d988c43baae4.json): **friction**, current; execution profile development.
+- [visual:reading-list / visual / desktop / agent](results/20261003173523322-4a99baea-8f7f-44eb-a5dc-654912ea6f4a.json): **friction**, current; execution profile development.
+- [visual:reading-list / visual / phone-dark / agent](results/20261003173522714-22fb1399-9d9a-4ee9-a1e6-c4d7c953c298.json): **friction**, current; execution profile development.
 - [source:tutorial-replay / functional / source-test / agent](results/20260926234030950-0bffcf10-c348-45bf-a81d-17168b22b136.json): **pass**, needs-recheck; execution profile development.
 - [doc:README.md / text / source / agent](results/20260929164741352-3fc11f52-ad4f-40e6-9f31-91467c9d7b93.json): **fail**, current; execution profile development.
 - [doc:Docs/Tutorials/Your First Tao App.md / text / source / agent](results/20260929164741776-aaf386a7-5dda-4d3f-a3ca-245248438795.json): **fail**, current; execution profile development.
@@ -112,7 +112,6 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - QA-STARTER-AGENTS-LATER-TOOLS (open; major; phase 1): Starter agent guide makes tao review part of the edit loop
 - QA-STARTER-DESIGN-COMMENT (open; minor; phase 1): Release-1 starter design comment names removed element defaults
 - QA-TUTORIAL-RENAME-PROSE (open; minor; phase 1): Tutorial explains syntax its snippet does not use
-- QA-NOTEBOOK-PANEL-STRETCH (fixed-awaiting-qa; major; phase 1): Notebook panels and rows grow to fill spare height
 - QA-NOTEBOOK-TABLET-COLUMN (fixed-awaiting-qa; minor; phase 1): the Notebook column hugs the left edge on tablet
 - QA-HNREADER-SKETCH-FIXTURES (fixed-awaiting-qa; minor; phase 2): committed Studio sketches ship inside the HNReader demo
 
@@ -325,13 +324,9 @@ These are scoped observations; supplementary source checks do not fill public-ar
 - doc:packages/ai/tao-skills/skills/tao-testing/SKILL.md / text / source / agent: fail
 - doc:packages/ai/tao-skills/skills/tao-visibility/SKILL.md / text / source / agent: friction
 - doc:packages/ides/ide-extension/README.md / text / source / agent: friction
-- visual:reading-list / visual / phone-light / agent: needs-recheck
-- visual:reading-list / visual / phone-dark / agent: needs-recheck
-- visual:reading-list / visual / desktop / agent: needs-recheck
-- visual:notebook / visual / phone / agent: needs-recheck
-- visual:notebook / visual / tablet-dark / agent: needs-recheck
-- visual:notebook / visual / notes-groceries / agent: needs-recheck
-- visual:notebook / visual / notes-ideas / agent: needs-recheck
+- visual:reading-list / visual / phone-light / agent: friction
+- visual:reading-list / visual / phone-dark / agent: friction
+- visual:reading-list / visual / desktop / agent: friction
 - source:hnreader-browser / functional / browser-preview / agent: needs-recheck
 - source:tutorial-replay / functional / source-test / agent: needs-recheck
 
