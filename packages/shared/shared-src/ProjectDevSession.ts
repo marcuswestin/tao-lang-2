@@ -1,6 +1,7 @@
 import { Errors } from './core/shared-core'
 import * as FS from './FS'
 import * as Platform from './Platform'
+import { ProjectLocal } from './ProjectLocal'
 
 type DevSessionSurface = 'cli' | 'studio'
 type DevSessionRecord = {
@@ -24,8 +25,9 @@ async function acquire(projectRoot: string, surface: DevSessionSurface): Promise
   release: () => Promise<void>
 }> {
   const root = await FS.realPath(projectRoot)
-  const sessionsRoot = FS.resolvePath('.tao/sessions', root)
+  const sessionsRoot = ProjectLocal.storeResolve('sessions', root)
   const activePath = FS.resolvePath('owner.json', sessionsRoot)
+  await ProjectLocal.prepare(root)
   await FS.mkdir(sessionsRoot)
   const ownIdentity = processStartedAt(Platform.runtimeProcess.pid)
   const record: DevSessionRecord = {

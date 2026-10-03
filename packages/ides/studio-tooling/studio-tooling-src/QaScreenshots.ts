@@ -1,6 +1,6 @@
 import Compiler from '@compiler'
 import { Workspace } from '@compiler/workspace'
-import { CLI, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, Time } from '@shared'
 import { StudioCdp, type StudioCdpRendererFingerprint } from './StudioCdp'
 import { type ReviewBrowser, StudioReview } from './StudioReview'
 import { type StartedStudioSmokeLaunch, startStudioSmokeLaunch } from './StudioSmokeLaunch'
@@ -277,11 +277,9 @@ async function withStudio(
   }
 }
 
-const sessionsPath = '.tao/sessions'
-
 /** sessionRecords lists the dev-session history records a project holds, leaving out its live owner. */
 async function sessionRecords(projectRoot: string): Promise<ReadonlySet<string>> {
-  const root = FS.resolvePath(sessionsPath, projectRoot)
+  const root = ProjectLocal.storeResolve('sessions', projectRoot)
   return new Set(
     await FS.isDirectory(root)
       ? (await FS.listDir(root)).filter(name => name.endsWith('.json') && name !== 'owner.json')
@@ -292,19 +290,24 @@ async function sessionRecords(projectRoot: string): Promise<ReadonlySet<string>>
 /**
  * removeNewSessionRecords deletes the history records a capture's own Studio launch left in the
  * project, and the directories they emptied, so repeated captures do not pile records into an
- * ignored folder nobody reads. A record that was there before the launch stays.
+ * ignored folder nobody reads. A record that was there before the launch stays, and `.tao/` goes
+ * only when nothing but its own ignore file is left.
  */
 async function removeNewSessionRecords(projectRoot: string, before: ReadonlySet<string>): Promise<void> {
+  const sessions = ProjectLocal.storeResolve('sessions', projectRoot)
   for (const name of await sessionRecords(projectRoot)) {
     if (!before.has(name)) {
-      await FS.remove(FS.resolvePath(`${sessionsPath}/${name}`, projectRoot))
+      await FS.remove(FS.resolvePath(name, sessions))
     }
   }
-  for (const directory of [sessionsPath, '.tao']) {
-    const path = FS.resolvePath(directory, projectRoot)
+  for (const path of [sessions, FS.dirname(sessions)]) {
     if (await FS.isDirectory(path) && await FS.isEmptyDirectory(path)) {
       await FS.remove(path)
     }
+  }
+  const folder = ProjectLocal.root(projectRoot)
+  if (await FS.isDirectory(folder) && (await FS.listDir(folder)).every(name => name === '.gitignore')) {
+    await FS.remove(folder)
   }
 }
 

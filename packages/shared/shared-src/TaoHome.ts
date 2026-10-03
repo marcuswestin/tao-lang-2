@@ -9,7 +9,7 @@ import * as Platform from './Platform'
  * spells the same installed-state rule in shell because it runs before any Tao binary exists.
  *
  * Project state is not here. A project's builds, sessions, and generated hosts stay under its own
- * `.tao/`, so deleting a project deletes them and no project reaches into another.
+ * `.tao/` (`ProjectLocal`), so deleting a project deletes them and no project reaches into another.
  */
 
 /** DECLARED_ROOT_ENV relocates everything Tao writes outside a project. */

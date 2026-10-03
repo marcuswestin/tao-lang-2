@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Repo, Text, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo, Text, Time } from '@shared'
 import { StandaloneScenarios } from './standalone-scenarios'
 
 /**
@@ -171,7 +171,7 @@ async function accept(release: string): Promise<void> {
         run: async () => {
           await shell(project, 'tao build --web --compile-only')
           const compiled: string[] = []
-          for await (const path of FS.walk(FS.resolvePath('.tao/builds', project))) {
+          for await (const path of FS.walk(ProjectLocal.storeResolve('builds', project))) {
             if (path.endsWith('/compiled/web/_gen_tao-app/App.tsx')) {
               compiled.push(path)
             }
@@ -189,7 +189,7 @@ async function accept(release: string): Promise<void> {
             Errors.throwUnexpected('The first web build did not say it was installing the host.')
           }
           const sites: string[] = []
-          for await (const path of FS.walk(FS.resolvePath('.tao/builds', project))) {
+          for await (const path of FS.walk(ProjectLocal.storeResolve('builds', project))) {
             if (path.includes('/web/') && path.endsWith('/index.html')) {
               sites.push(path)
             }
@@ -466,7 +466,7 @@ async function devLoopServesWeb(environment: Platform.ProcessEnv, project: strin
         args: [
           `http://127.0.0.1:${port}/`,
           FS.resolvePath('App.tao', project),
-          ACCEPTANCE_LOG_DIR ?? FS.resolvePath('.tao/browser-acceptance', project),
+          ACCEPTANCE_LOG_DIR ?? ProjectLocal.cacheResolve('browser-acceptance', project),
         ],
         cwd: project,
         env: {

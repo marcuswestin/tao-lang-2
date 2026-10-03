@@ -1,6 +1,6 @@
 import { Workspace } from '@compiler/workspace'
 import Runtime, { HostDependencies, RuntimeToolchainPaths } from '@expo-host'
-import { Assert, CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Assert, CLI, Errors, FS, HCI, Platform, ProjectLocal, Repo } from '@shared'
 import { AgentClientBuild } from './agent-client-build'
 import { buildDesktopApp } from './desktop-build'
 import { chooseTaoApp } from './dev-app-selection'
@@ -49,7 +49,9 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
     Errors.throwUserInput('--agents requires a packaged desktop build.')
   }
   const app = await chooseTaoApp(path, options.appName, 'Build')
-  const buildsRoot = options.output ? FS.resolvePath(options.output) : FS.resolvePath('.tao/builds', app.projectRoot)
+  const buildsRoot = options.output
+    ? FS.resolvePath(options.output)
+    : ProjectLocal.storeResolve('builds', app.projectRoot)
   if (
     FS.pathIsWithin(buildsRoot, app.projectRoot)
     && !['.tao', '.artifacts'].includes(FS.relativePath(app.projectRoot, buildsRoot).split('/')[0]!)
@@ -76,7 +78,7 @@ export async function runTaoBuild(path: string, options: BuildOptions): Promise<
         .version,
   }
   if (!options.output) {
-    await ensureBuildsIgnored(app.projectRoot)
+    await ProjectLocal.prepare(app.projectRoot)
   }
   const progress = new BuildProgress(selectedTargets, id)
   try {
@@ -280,14 +282,6 @@ function parseTargetSelection(value: string): BuildTarget[] | undefined {
     return undefined
   }
   return targets.filter((_, index) => parts.includes(String(index + 1)))
-}
-
-async function ensureBuildsIgnored(projectRoot: string): Promise<void> {
-  const ignorePath = FS.resolvePath('.tao/.gitignore', projectRoot)
-  const existing = await FS.exists(ignorePath) ? await FS.readText(ignorePath) : ''
-  if (!existing.split(/\r?\n/).includes('builds/')) {
-    await FS.writeText(ignorePath, `${existing}${existing && !existing.endsWith('\n') ? '\n' : ''}builds/\n`)
-  }
 }
 
 async function snapshotProject(projectRoot: string, snapshotRoot: string): Promise<string> {

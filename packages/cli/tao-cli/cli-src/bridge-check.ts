@@ -1,5 +1,5 @@
 import { RuntimeToolchainPaths } from '@expo-host'
-import { CLI, type Diagnostic, FS, Platform, TaoResources } from '@shared'
+import { CLI, type Diagnostic, FS, Platform, ProjectLocal, TaoResources } from '@shared'
 import { TaoAppModules } from './app-modules'
 
 /** checkBridgeModules asks TypeScript to check generated Tao contracts and their imported sidecars. */
@@ -43,7 +43,8 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
       ...typescript.sys,
       onUnRecoverableConfigFileDiagnostic: () => {},
     })?.options
-  const projectTypeRoots = inheritedOptions?.typeRoots ?? visibleTypeRoots(workspaceRoot)
+  const configPath = ProjectLocal.cacheResolve('bridge-check.tsconfig.json', workspaceRoot)
+  const projectTypeRoots = inheritedOptions?.typeRoots ?? visibleTypeRoots(FS.dirname(configPath))
   const projectTypes = inheritedOptions?.types ?? typescript.getAutomaticTypeDirectiveNames({
     ...inheritedOptions,
     typeRoots: projectTypeRoots,
@@ -55,7 +56,6 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
     ]),
   ]
   const bridgeTypes = [...new Set([...projectTypes, ...ambientTypes])]
-  const configPath = FS.resolvePath('.tao/bridge-check.tsconfig.json', workspaceRoot)
   const config = {
     ...(inheritedConfig === undefined ? {} : { extends: inheritedConfig }),
     compilerOptions: {
@@ -81,6 +81,7 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
     files: modules,
     include: [],
   }
+  await ProjectLocal.prepare(workspaceRoot)
   await FS.writeJson(configPath, config)
   const tsc = resourceRoot === undefined
     ? FS.resolvePath('../../../../node_modules/typescript/bin/tsc', import.meta.dir)
@@ -144,10 +145,10 @@ export async function checkBridgeModules(workspaceRoot: string, modules: readonl
   }]
 }
 
-/** TypeScript's default ambient lookup visits node_modules/@types in every ancestor directory. */
-function visibleTypeRoots(workspaceRoot: string): string[] {
+/** TypeScript's default ambient lookup visits node_modules/@types in the config's directory and every ancestor. */
+function visibleTypeRoots(configDirectory: string): string[] {
   const roots: string[] = []
-  let directory = FS.resolvePath('.tao', workspaceRoot)
+  let directory = configDirectory
   while (true) {
     roots.push(FS.resolvePath('node_modules/@types', directory))
     const parent = FS.dirname(directory)

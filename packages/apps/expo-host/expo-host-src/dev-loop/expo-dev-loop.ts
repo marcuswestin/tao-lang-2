@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Errors, FS, HCI, Platform, ProjectLocal, Repo } from '@shared'
 import { DesktopHost } from '../desktop-host'
 import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import { devDataAppKey, devDataEnvironment } from './dev-data/DevDataBootstrap'
@@ -68,14 +68,15 @@ async function runDevLoopWithActiveReporter(
     && FS.pathIsWithin(selection.projectRoot, toolchainRepo)
   DevLoopOutput.showCheckoutControls(repositoryControlsAvailable)
   const { appName, appPath } = selection
-  const stateRoot = FS.resolvePath('.tao/dev', selection.projectRoot)
+  const stateRoot = ProjectLocal.cacheResolve('dev', selection.projectRoot)
   const runtime = await DevRuntime.prepare(selection.projectRoot)
   // The dev data server starts first: its port and the app's key go into Expo's environment, where
   // the checked-in `app.config.js` writes them into the manifest every development build reads.
   const devDataApp = devDataAppKey(selection.projectRoot, appName)
   const devData = await DevDataServer.start({
     log: line => DevLoopOutput.logDevLoop('data', line),
-    rootDir: FS.resolvePath('data', stateRoot),
+    // Records a developer entered while developing are kept, unlike the rest of the dev state.
+    rootDir: ProjectLocal.storeResolve('dev-data', selection.projectRoot),
   })
   let expo: ExpoRunnerSession
   try {
