@@ -438,8 +438,7 @@ Describe('Expo dev-loop port helpers', () => {
       })
       return true
     } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code
-      if (host.includes(':') && (code === 'EAFNOSUPPORT' || code === 'EADDRNOTAVAIL')) {
+      if (host.includes(':') && Ports.isUnavailableAddressFamily(error as NodeJS.ErrnoException, host)) {
         return false
       }
       throw error
@@ -552,6 +551,22 @@ Describe('Expo dev-loop port helpers', () => {
         ? ['0.0.0.0', '127.0.0.1']
         : ['0.0.0.0'],
     )
+  })
+
+  Test('keeps IPv4 reservations when the runtime reports IPv6 unsupported without an error code', async () => {
+    const reserved: string[] = []
+    const reservation = await Ports.reserveAvailable(49_152, async (port, host) => {
+      if (host.includes(':')) {
+        // Bun's shape for EAFNOSUPPORT on a host with IPv6 disabled: this message and no code.
+        Errors.throwHostEnvironment(`Failed to listen at ${host}`)
+      }
+      reserved.push(host)
+      return { port, release: async () => {} }
+    })
+
+    Expect(reservation.port).toBe(49_152)
+    Expect(reserved).toEqual(Platform.hostPlatform === 'darwin' ? ['0.0.0.0', '127.0.0.1'] : ['0.0.0.0'])
+    await reservation.release()
   })
 
   // A dev client that retries Metro's port connects to the reservation long before Expo starts.

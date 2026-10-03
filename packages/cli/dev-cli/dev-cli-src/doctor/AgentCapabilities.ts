@@ -17,7 +17,9 @@ export type CapabilityReport = {
   version: 1
 }
 
-const LANDING_REQUIRED_CAPABILITIES = new Set(['Watchman socket', 'CoreSimulator service', 'Hutch native launcher'])
+const LANDING_REQUIRED_CAPABILITIES = new Set(['Watchman socket'])
+/** Only the native gates need these, and `verify-full` skips those gates off macOS. */
+const MACOS_LANDING_REQUIRED_CAPABILITIES = new Set(['CoreSimulator service', 'Hutch native launcher'])
 
 export type ProbeResult = {
   error?: unknown
@@ -138,8 +140,14 @@ export function classifyCapability(probe: CapabilityProbe, result: ProbeResult):
 }
 
 /** Required probes, rather than an inherited harness marker, decide whether landing can run host gates. */
-export function unavailableLandingCapabilities(report: CapabilityReport): readonly CapabilityCheck[] {
-  return report.checks.filter(check => LANDING_REQUIRED_CAPABILITIES.has(check.name) && check.status !== 'available')
+export function unavailableLandingCapabilities(
+  report: CapabilityReport,
+  hostPlatform: string = Platform.hostPlatform,
+): readonly CapabilityCheck[] {
+  const required = (name: string) =>
+    LANDING_REQUIRED_CAPABILITIES.has(name)
+    || (hostPlatform === 'darwin' && MACOS_LANDING_REQUIRED_CAPABILITIES.has(name))
+  return report.checks.filter(check => required(check.name) && check.status !== 'available')
 }
 
 /** readAgentCapabilities probes host seams without installing tools, opening apps, or signalling processes. */

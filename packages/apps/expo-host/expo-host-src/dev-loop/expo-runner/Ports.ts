@@ -20,6 +20,7 @@ export const Ports = {
   formatKillCommand: ProcessListeners.formatKillCommand,
   formatListeners: ProcessListeners.formatListeners,
   formatLsofListeners: ProcessListeners.formatLsofListeners,
+  isUnavailableAddressFamily,
   normalizeReservationError,
   reserveAvailable,
   selectAvailable,
@@ -61,8 +62,7 @@ async function reservePort(port: number, reserve: PortReservationProbe): Promise
       try {
         reservation = await reserve(selectedPort, host)
       } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code
-        if (host.includes(':') && (code === 'EAFNOSUPPORT' || code === 'EADDRNOTAVAIL')) {
+        if (host.includes(':') && isUnavailableAddressFamily(error as NodeJS.ErrnoException, host)) {
           // Hosts with IPv6 disabled still need their IPv4 reservations.
           continue
         }
@@ -80,6 +80,15 @@ async function reservePort(port: number, reserve: PortReservationProbe): Promise
     await release()
     throw error
   }
+}
+
+/** isUnavailableAddressFamily reports a listen failure meaning this host cannot bind `host`'s family. */
+function isUnavailableAddressFamily(error: NodeJS.ErrnoException, host: string): boolean {
+  if (error.code === 'EAFNOSUPPORT' || error.code === 'EADDRNOTAVAIL') {
+    return true
+  }
+  // Bun reports EAFNOSUPPORT as a bare error without a code; its other listen failures keep theirs.
+  return error.code === undefined && error.message === `Failed to listen at ${host}`
 }
 
 async function reserveAddress(port: number, host: string): Promise<PortReservation | undefined> {
