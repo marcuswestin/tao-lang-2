@@ -294,6 +294,14 @@ export class RuntimeDataSchema {
     return JSON.stringify([declaration, storageKey, this.name, ...(binding.auth ? [binding.auth.accountId] : [])])
   }
 
+  /**
+   * boundDeclaration is the datasource declaration this store is connected through. Binding a
+   * different one replaces the connection, so the store's rows start again from that connection's.
+   */
+  boundDeclaration(): TaoDatasourceDeclaration | undefined {
+    return typeof this.providerBinding === 'object' ? this.providerBinding.declaration : undefined
+  }
+
   async resetFromRecovery(): Promise<void> {
     RuntimeAssert.defined(
       this.connection.reset,

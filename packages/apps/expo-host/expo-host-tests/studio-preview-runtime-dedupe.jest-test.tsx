@@ -196,6 +196,52 @@ Describe('Studio preview runtime identity dedupe', () => {
     }
   })
 
+  // A hot-reloaded datasource module re-runs its declarations, so the app root binds the same store to
+  // a new declaration and provider, whose cell overlay starts empty. The cell seeds it again.
+  Test('reseeds the fixture when a store is rebound to a new datasource declaration', async () => {
+    const schema = TR.Data.Schema({
+      name: 'StudioReboundData',
+      entities: { Entry: { collection: 'Entries', fields: { Name: { kind: 'text' } } } },
+    })
+    let seed: { handles: Readonly<Record<string, unknown>>; ready: boolean } | undefined
+    function FixtureSubject({ declaration }: { declaration: ReturnType<typeof TR.Data.Declaration> }): null {
+      TR.Data.UseConfigured(schema, TR.Data.Configure(declaration, {}))
+      seed = TR.Studio.Environment.useFixture(schema)
+      return null
+    }
+    const cell = {
+      ...cellPayload({ cellRevision: 0, compileRevision: 1, manifestRevision: 'compile:1' }),
+      fixture: { accounts: [], creates: [{ entity: 'Entry', fields: { Name: 'Seeded' }, name: 'Example' }] },
+    }
+    const host = (declaration: ReturnType<typeof TR.Data.Declaration>): ReactElement =>
+      createElement(TR.Studio.Environment.Host, {
+        cell: cell as never,
+        children: createElement(FixtureSubject, { declaration }),
+      })
+    const rows = () => schema.query({ entity: 'Entry', filters: [] })
+    const first = TR.Data.Declaration('StudioReboundMemory', MemoryProvider())
+    const screen = render(host(first))
+    try {
+      await act(async () => await TR.Data.Settle(schema))
+      Expect(rows()).toHaveLength(1)
+      const original = seed?.handles['Example']
+
+      screen.rerender(host(first))
+      await act(async () => await TR.Data.Settle(schema))
+      Expect(rows()).toHaveLength(1)
+      Expect(seed?.handles['Example']).toBe(original)
+
+      screen.rerender(host(TR.Data.Declaration('StudioReboundMemory', MemoryProvider())))
+      await act(async () => await TR.Data.Settle(schema))
+      Expect(rows()).toHaveLength(1)
+      Expect(seed?.ready).toBe(true)
+      Expect(seed?.handles['Example']).not.toBe(original)
+      Expect(TR.Data.Read(seed?.handles['Example'], 'Name')).toBe('Seeded')
+    } finally {
+      screen.unmount()
+    }
+  })
+
   async function runRedeliveryScenario(dedupe: boolean): Promise<{ available: boolean; rowCount: number }> {
     const declaration = TR.Data.Declaration('StudioDedupeMemory', MemoryProvider())
     const schema = TR.Data.Schema({

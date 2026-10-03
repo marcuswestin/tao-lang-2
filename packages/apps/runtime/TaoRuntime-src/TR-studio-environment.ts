@@ -3,7 +3,14 @@ import { Arrays } from './core/RuntimeCore'
 import { RuntimeAssert } from './TR-assert'
 import type { RuntimeAuthScope } from './TR-auth'
 import { createElement } from './TR-create-element'
-import type { TaoDataConnection, TaoDataProvider, TaoDataSchema, TaoFillOps, TaoFillRequest } from './TR-data'
+import type {
+  TaoDataConnection,
+  TaoDataProvider,
+  TaoDataSchema,
+  TaoDatasourceDeclaration,
+  TaoFillOps,
+  TaoFillRequest,
+} from './TR-data'
 import { entityHandle, metadataOf } from './TR-data-entity'
 import { UserInputError } from './TR-errors'
 import {
@@ -215,7 +222,11 @@ export const StudioEnvironmentControls = {
     auth?: RuntimeAuthScope,
   ): Readonly<{ handles: Readonly<Record<string, unknown>>; ready: boolean }> {
     const host = React.useContext(StudioHostContext)
-    const applied = React.useRef(false)
+    // seededFrom holds the declaration each store was bound to when the fixture was last applied, or
+    // was first bound to afterwards; seeding counts applications so only the latest one commits.
+    const seededFrom = React.useRef<readonly (TaoDatasourceDeclaration | undefined)[] | undefined>(undefined)
+    const seeding = React.useRef(0)
+    const mounted = React.useRef(true)
     const [failure, setFailure] = React.useState<unknown>(undefined)
     if (failure !== undefined) {
       throw failure
@@ -223,15 +234,37 @@ export const StudioEnvironmentControls = {
     const schemas = stores === undefined ? [] : Array.isArray(stores) ? stores : [stores as TaoDataSchema]
     const [handles, setHandles] = React.useState<Readonly<Record<string, unknown>>>({})
     const [ready, setReady] = React.useState(host === undefined || schemas.length === 0)
+    React.useEffect(() => {
+      mounted.current = true
+      return () => {
+        mounted.current = false
+      }
+    }, [])
+    // Checked after every commit, after the app root has bound its datasources. A hot-reloaded
+    // datasource module binds its stores to new declarations whose connections start empty, so the
+    // cell seeds them again from its fixture instead of showing an empty app. A store bound for the
+    // first time after seeding is not reseeded: its first connection carries the rows it already holds.
     React.useLayoutEffect(() => {
-      if (host === undefined || schemas.length === 0 || applied.current) {
+      if (host === undefined || schemas.length === 0) {
         return
+      }
+      const boundTo = schemas.map(schema => schema.boundDeclaration())
+      const seeded = seededFrom.current
+      if (seeded !== undefined && seeded.length === boundTo.length) {
+        const rebound = boundTo.some((declaration, index) =>
+          seeded[index] !== undefined && seeded[index] !== declaration
+        )
+        if (!rebound) {
+          seededFrom.current = boundTo.map((declaration, index) => seeded[index] ?? declaration)
+          return
+        }
       }
       for (const schema of schemas) {
         host.registerSchema(schema)
       }
-      applied.current = true
-      let active = true
+      seededFrom.current = boundTo
+      const application = ++seeding.current
+      const current = () => mounted.current && seeding.current === application
       const apply = async () => {
         const resolved: Record<string, unknown> = {}
         const fixture = host.cell.fixture
@@ -289,20 +322,17 @@ export const StudioEnvironmentControls = {
             auth.finishFixture()
           }
         }
-        if (active) {
+        if (current()) {
           setHandles(Object.freeze({ ...resolved }))
           setReady(true)
         }
       }
       void apply().catch(error => {
-        if (active) {
+        if (current()) {
           setFailure(error)
         }
       })
-      return () => {
-        active = false
-      }
-    }, [host, schemas.length, auth])
+    })
     return { handles, ready }
   },
 
