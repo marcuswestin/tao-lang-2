@@ -59,8 +59,8 @@ design PantryDesign {
       sectionTitle [size 20, line 26, weight 700, ink ink]
       body [size 16, line 24, ink inkMuted]
       caption [size 14, line 20, ink inkMuted]
-      panel [gap 14, pad 20, radius 18, background surface, border line]
-      card [gap 10, pad 16, radius 14, background surface, border line]
+      panel [hug, gap 14, pad 20, radius 18, background surface, border line]
+      card [hug, gap 10, pad 16, radius 14, background surface, border line]
       buttonSecondary [background surface, border line, ink accentStrong]
       buttonDanger [background dangerSoft, border danger, ink danger]
    }
