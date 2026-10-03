@@ -258,9 +258,7 @@ Describe('Expo runtime', () => {
 
     Expect(layoutBoundWidth(viewStyle)).toBe(0.5)
     Expect(String(layoutBoundColor(viewStyle))).toMatch(/^#[0-9a-f]{6}$/)
-    if (viewStyle.boxShadow) {
-      Expect(String(viewStyle.boxShadow)).toContain(String(layoutBoundColor(viewStyle)))
-    }
+    Expect(viewStyle.borderWidth).toBeUndefined()
     Expect(layoutBoundWidth(textStyle)).toBe(0.5)
     Expect(layoutBoundColor(textStyle)).not.toBe(layoutBoundColor(viewStyle))
   })
@@ -291,7 +289,7 @@ Describe('Expo runtime', () => {
     Expect(nextColor).toBe(initialColor)
   })
 
-  Test('does not override existing bounding-box styles with dev layout bounds', () => {
+  Test('keeps an author border and draws dev layout bounds as an outline beside it', () => {
     TR.setDevMode({ layoutBounds: true })
 
     const screen = render(createElement(
@@ -303,7 +301,7 @@ Describe('Expo runtime', () => {
 
     Expect(style.borderWidth).toBe(1)
     Expect(style.borderColor).toBeUndefined()
-    Expect(style.outlineWidth).toBeUndefined()
+    Expect(style.outlineWidth).toBe(0.5)
   })
 
   Test('preserves resolved Tao layout styles when adding dev layout bounds', () => {
@@ -398,12 +396,12 @@ Describe('Expo runtime', () => {
   })
 })
 
-function layoutBoundWidth(style: { borderWidth?: unknown; outlineWidth?: unknown } | undefined): unknown {
-  return style?.outlineWidth ?? style?.borderWidth
+function layoutBoundWidth(style: { outlineWidth?: unknown } | undefined): unknown {
+  return style?.outlineWidth
 }
 
-function layoutBoundColor(style: { borderColor?: unknown; outlineColor?: unknown } | undefined): unknown {
-  return style?.outlineColor ?? style?.borderColor
+function layoutBoundColor(style: { outlineColor?: unknown } | undefined): unknown {
+  return style?.outlineColor
 }
 
 function TaoRuntimeBox(props: { __tao?: TR.TaoProps; children?: ReactNode }): ReactElement {
