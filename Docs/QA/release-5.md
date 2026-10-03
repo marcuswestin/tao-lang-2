@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 405 applicable release acceptance cells are incomplete.
 
-Candidate source: `0a1177d90b439fb43af6d680ccf7529f0be72c48`. Tree digest `a0d0f3e17f1b267b`; content hashes are stored per observation.
+Candidate source: `3705ae8a6973879a57a956b1b4cacc483febf623`. Tree digest `47b638fd5c831d6c`; content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -91,7 +91,7 @@ None recorded.
 - QA-STARTER-AGENTS-LATER-TOOLS (open; major; phase 1): Starter agent guide makes tao review part of the edit loop
 - QA-STARTER-DESIGN-COMMENT (open; minor; phase 1): Release-1 starter design comment names removed element defaults
 - QA-TUTORIAL-RENAME-PROSE (open; minor; phase 1): Tutorial explains syntax its snippet does not use
-- QA-NOTEBOOK-PANEL-STRETCH (open; major; phase 1): Notebook panels and rows grow to fill spare height
+- QA-NOTEBOOK-PANEL-STRETCH (fixed-awaiting-qa; major; phase 1): Notebook panels and rows grow to fill spare height
 - QA-NOTEBOOK-TABLET-COLUMN (fixed-awaiting-qa; minor; phase 1): the Notebook column hugs the left edge on tablet
 - QA-HNREADER-SKETCH-FIXTURES (fixed-awaiting-qa; minor; phase 2): committed Studio sketches ship inside the HNReader demo
 

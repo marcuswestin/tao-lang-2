@@ -1,9 +1,9 @@
 {
   "version": 1,
   "phase": 5,
-  "commit": "0a1177d90b439fb43af6d680ccf7529f0be72c48",
+  "commit": "3705ae8a6973879a57a956b1b4cacc483febf623",
   "dirty": false,
-  "treeDigest": "a0d0f3e17f1b267b10818033a7cbe3ccdc39ebc8d32f6f1c952fb46b54fbaf25",
+  "treeDigest": "47b638fd5c831d6c2927f68993c84c5f645bf94ae2769f8850991e460f5ab8ec",
   "surfaces": [
     {
       "id": "doc:.config/nix/hutch-proxy-tests/README.md",
@@ -616,7 +616,7 @@
           "source"
         ]
       },
-      "sourceHash": "f354d15a58a2aceee240d59176de7abf86fb530a36c387c169291d506df908fa",
+      "sourceHash": "b9f6cfef780e8f039ff905112cd8264d00119745d59c4108fc73e88fc109cf95",
       "rendererHash": "not-applicable",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05",
       "scopeNote": "Editorial review of this document; reviewing a plan does not accept its product claims."
@@ -7935,8 +7935,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "a090920dfacbc4c9414921b0b5403aa51175853404f4daac25b1114ed6fd3653",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "bc153897087536bfa35b28661b654896f7098f13810f38dd366393b7bf01ce88",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -7977,8 +7977,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "3ce4f99ef6df3e7e023c9c481386a0c0ecbae48bf1914b6a0d583d94453b2613",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "65ad990b812d586b7b44eb2a7d38e78c02eba3347c82765d1c9b8b77edb5bb97",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8014,8 +8014,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "e50a056f36c2cd59d7c3b2cbe08f20ce75d954bd265ee9309cb5455aa73cdb95",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "7ef0b2dc9eaa22175c5bb8f175ca1c8434c0bf1f460c51f1d2596e1660f7dba7",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8050,8 +8050,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "2372dc1790940f90dc4710de7bf3ae379458e1bd1533595a2f12dae9cc6d3f8e",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "343d04935d01a4ca319fe6b3c8c89aa15e14eec340ad1891bf862772d867be88",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8086,8 +8086,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "f32379f6156b201d1867c06c4f8d196d98ce403e3ba3aa64578906d3ccd38c74",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "0857eb4d0af34e43e9d45c18f220bd14e19ce0eacb6dba603d36ba0c9635fb68",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8124,8 +8124,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "c5328fdcfd5aad8477eee583203efc815d9055da4ea9c753f5404926d3760ed6",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "83c1aa4ad3b50dcb299073bf10b5b975d3d160c593c588e5a76b7db642327e02",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8162,8 +8162,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "637ec391e04aa777b5fe9830340f238e283d6fef2076011c2f5574c918d46116",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "bc800535ed7e38ffb7ecf9f86eb4e410e769f7af8c13238908b5e89d2d06426c",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8200,8 +8200,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "992f343a33e16c6471d9a510ea4f183f1f5354bef9b1722d68aa49939b971dbf",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "9407bbe4b861490a94a752445227fc7a64200b7ac9078dedd306749c0566800f",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8240,8 +8240,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "82aa64a3aa844d26fffd8843249e1b9e8bfc488213103d2420ced2e9f156fb88",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "0d6abeafade72ee9b868d63e52373bbba40aab84e1ee088627832a604eed7109",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8276,8 +8276,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "5c628181bfa7a90d02866483a5e14d6ae7fe2042a7b63846ffcaceab2f1dfa0f",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "d3e04288e274f7679dd3b9f0dc6d2426fe3e2dcba14a4f46a0163dd6a051fda0",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8312,8 +8312,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "13efd170b82eb249b1595d3399f64e8758552fabb53c2ee3c2264f87e5e39af2",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "9839e9c77b7784cee03b69753486d50cdd06c1948e323da9730cf9cc862e88e8",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8348,8 +8348,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "41766c57f3e9e8e0cb2e2862ca6e84978ad7600dce01f6f77cfb97a8b1d26583",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "11884a03053a59a356ae82ff7ef345b529422a1fd53904e751c33fd1270c8731",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8385,8 +8385,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "ccfc4c3f77fb05c8b46c0eb0607e6bf33f5b451bdd54ee34e6ef51a8cdd22f2c",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "c067c97ccf81f3d9d76f666da0d949405dfb63d63b7e2cd4351040f4b071ea15",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8421,8 +8421,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "565f61ef997d642a9d3ed4e95e2ce29f034d2b4012d9b9e5226c05f220d21e31",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "2f47eb3f70b98e13231247c4e0123021c31ce112ff7becdabf1ac0120fdb3ca8",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8458,8 +8458,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "069b4a4773649e690ba2fe3250e0cb54380338a5c6d111d55e23bbe0b632379d",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "b772d148a7918854c13ec75cea20e27f23b81591d7cddd4cc23e27d64f223af9",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8499,8 +8499,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "3b9e323cba49c9369a841a8daf20e3055c9850a74eafda33b438d83dfb4aeac8",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "309ef3b92db4186f6ceb504ea7e92cd51cdb224d45e6010fe89c978269170c73",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8540,8 +8540,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "ca1f76baa987f16d424fc41a5fd457522fdb3b140d993313738d0cd792743330",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "422c38e1acaee931cbc4e446b83df0f7e8e3b6c12a2d5dc2aac66a1ee1ee28e3",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8580,8 +8580,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "c59aa5e0dc508e5b4c283f6692b923f495a64d3391c8c9a79d100bffddfb3548",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "6b5ce803ef5cc3dbdec730cfceb8b1811119e0136c6a4386a26e7bb70134ad3d",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8620,8 +8620,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "1e5200d305f4e1441c01e34cd738e82b8b63c52074c008c4a7b4c6ddd6b00ae5",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "02456a4248aaca461ee6f4778117ca3c0e33ac5b69fbfa68cbcc868b0a931792",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8660,8 +8660,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "7793007e85e8a58299d7972ac28bcd40a1ee40d0d604dbc91b0f5e8c076d1913",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "05b5ada0a17f534a7060315863daebac814fd7363c63dabccfc4b8bd890428d4",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8700,8 +8700,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "d062c1bb24f3936180d5a09ff225162cf5eb845560a31b2b5cf62ed6115dd7cc",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "9730a898dc11894f8828a73db3247ec5ce98f06e49f36e614cfb6b1cec746af3",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8740,8 +8740,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "2c148935554724e7a8ea7450639887dd45df66aa76a7385da796295272c7aa18",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "751c442f6356643945440d2ba761312aa44c3a404d870f3244eadc41df616829",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8780,8 +8780,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "46d948758f65a5a720c4570355bbc37b7df83d258c2064a43ef4d4d0b01cc347",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "1fddfcae60a899ca2816e8183740d4d7be7a7c8dd8f3451d47ae71e454c6a3fd",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8820,8 +8820,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "14d4c54ba0be0b26b1db3d55097337f4e77f948b8b0cd90c205a33aeb95c3dc2",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "49c54541f8a2ce5c0f647f21ae73ecf9f5eccc77fc70ff389bc7827044885aa7",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8860,8 +8860,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "a20b6b785ca65415a541acf7f5a2697f524c520b6f0fe9b73a0d2524fd125819",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "39c1eb008c63a549f07b99875d9a07a321a2f742c798049bdb93631cd4c79e38",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8901,8 +8901,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "a45746a5b144c98273aab5cbd2bb920fee36ddb43f3a4de176891bcaadb6f81b",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "cef2678b52d923287a4a395129fa59dfe8df67d298df8a4c010947aea7ddd530",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8941,8 +8941,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "43828d01ff8f5ae63a2765ee5312f1fcd90c6a2afb522141849983966387670c",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "79cd0e9b5e762a24b7305d1610fa842507805dd48e74480848975723be619505",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -8981,8 +8981,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "22e1e3753abd4f0b1005ed182d15e1122732380c4a56f4016bc5e248b12c1613",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "72d7a3c8f523f55613a5c9b5c7b79b0ac0f72bee6037dc2330ce977d8d96badb",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9021,8 +9021,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "14a80524ff1e783e36f58e6418cb56fe907d3dcabff7b24eb454a66abf0626e3",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "cf6f681d1ad4c0408058c317633eea4bd93560a577fc8cb23c63822b2244f4c0",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9061,8 +9061,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "d4a5cb1504234c2af7b487708df7cca750d28c03b630d40875564613646a9cfb",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "30f096d2c17902f85b47e9254ef48f0331746792a234e7fc6ab60c8a7cf58c9b",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9101,8 +9101,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "e1fdafbcc8c29055494839dc1c2fd278d9b387f40a5a8355292fe8629f5f9504",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "17c02b5a3e79d215e92282d43e36dcf1a0510c80c722de0dccb696f9b2378364",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9141,8 +9141,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "035f22855ef7f487c03358d6cdcb2715bddcdc5bfac05f21688bf9f53c68050f",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "2e38fd1d5ac0dcdeb6b388dd14c7ce7a5464403513bfb49443942b3b3ffd5c0f",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9181,8 +9181,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "d4e593a5b14fc2e33ebf83dcd05a5de4f4a0041a80f59b5a7152768b086167bc",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "c922915a0140a67a482a8b85ec455232c79dc06f1f889ffdcaf87b72ff231ec4",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9220,8 +9220,8 @@
       "requirements": [
         "agent"
       ],
-      "sourceHash": "75c0644d1727f39b3a53dbd6924acce95f9b0c0261c9507651ed23b5a07e820d",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "52ec1789dc79955e2a684755215241605a6fbe5135f894a7d3d6b395b93e486b",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9262,8 +9262,8 @@
         "human",
         "developer"
       ],
-      "sourceHash": "0d77d78d5ad5382c0f79b4bbb75acd69a7a5e18de60381dc2f7437d4ab9dbacb",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "f952caf89fe46cfd58143df083505968a470bc780d11bc525e3f89164fce98af",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9302,8 +9302,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "89aaf6aae0cff85f212282178b31c2cdacff2184a285cb5bde8de890ed92521e",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "48d4edced1a8bc20cea8b623f8af093bc3107e73766d2ad406c442e215f09363",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9342,8 +9342,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "fa9a0cb0d3cf2a2bd402702b7bf0f2fd5c48a9f8bded0f6362d3643dc1d8b65a",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "edb6c32b70f68e40e4d1e0ad5160f48f06bcc56560ed95de070153ab5bbb9d99",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9380,8 +9380,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "9c68f0e093e635527e76d6faa3dfd03c526de7b1e82794131a84b73208bfac54",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "3c3daea675835a35a73207efba7408674aa1e405bc6e046ed23033a93688564d",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9420,8 +9420,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "6a7011063ee1ec49857f36996821b0dba256deb174bdc1e35ebce1ed47d9e07a",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "a1cbffaeb750c503323476f509191835d54f3fb30f9b7ac939697f03318986ed",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9460,8 +9460,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "659e48b3fc7ab7455f04d5da45eb50fadac710fb99c10fd7ef6cd7ebbe27bce9",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "fe1ca92da9f5459626cb89523d56e83e977b92ac992e8c88a7975308b528b964",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9503,8 +9503,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "8731c33e4f5a78d08bab785cca6223492f83f1bc3b07cf61325b2d9ee1b48f96",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "ebc25888899f37f2b66dcc8e3be256c624be88f8afad3bc40e096570b0f2479c",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9540,8 +9540,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "975b042d97729c2d932cdc489e4c8422eb6105ae6fe9ee5bc090ecc224dc025e",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "e8395c07bd2639e85037f214caae1822835dd597c23cce0fb355cb4d1a5ec464",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9577,8 +9577,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "4a7e124664a535805163b2ed49a0423cf4b6b4abc4dbc311c536cf120d2e490f",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "a3a21a4537e1c08724379d76d6bde4e765a516511949c903e1cbf2e3cae80470",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9614,8 +9614,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "3109ce210ee671ae64c19126f9cb4bf325f277154bc18b94f1c6924846397ca0",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "381fb4a89a50ac769eedb4da2f731660f23008bc0c059a62bac9f991558da14a",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9651,8 +9651,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "ca35d32054be8cfd2e8ebcd915bf2ecefcf2bd6d86a410778bb4d074afbb1404",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "e9fd4c755235854e2316647169d8f91ebcaf60f7c94f07870ddf64d26e8fc020",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9688,8 +9688,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "7b998660576409889837af708c2ec20dbcf7d2126982b454aa64423ba3e09e56",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "66d73336c9e483747e6e9e776e018495c8790f1437ba9ec0d352324bad1ccfbc",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9725,8 +9725,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "60123c6ff28a11f33ae08c5099dfc1c4cb37aeec60ddd7208dfc2cbeacf58db4",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "95d0f0f79e648aa767040058e459c2d06399d66fbfb284919d7597b45e70b4ea",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9762,8 +9762,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "86e3dc18389db9247f3ac63506aefdc4e424a3180fad4a8d3043d496209b88bb",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "c82fd22f22c2eefc44ebd7b7df7bb782d81aa4d28e6e65cf309ffe14aa60288d",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9800,8 +9800,8 @@
         "agent",
         "developer"
       ],
-      "sourceHash": "f9d4d9b73315d74b220bf1d433f37bf00292e0849ecf67ccf0d57a056cc49559",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "8afe20ab6958ce9e06915d9e2a2fd3b9b424c4389474dae366f01d93c6964d0d",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05"
     },
     {
@@ -9838,8 +9838,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "2bf331a03aa9040da6696108eaa127de4011cb8901d98d17085e16854ab69bc5",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "4d1570e57cb0d7e289c2db03322231ca2a7e9d851bb86c2ef8b80504e75245b8",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05",
       "scopeNote": "Two real Apple devices with the same person: offline edit reconciliation, relaunch persistence and account-switch isolation. This does not accept the deferred hosted-data APP3 story."
     },
@@ -9879,8 +9879,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "2bf331a03aa9040da6696108eaa127de4011cb8901d98d17085e16854ab69bc5",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "4d1570e57cb0d7e289c2db03322231ca2a7e9d851bb86c2ef8b80504e75245b8",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05",
       "scopeNote": "Exercise adapter success/error/retry, datasource identity and writes, and references across sources."
     },
@@ -9920,8 +9920,8 @@
         "agent",
         "human"
       ],
-      "sourceHash": "2bf331a03aa9040da6696108eaa127de4011cb8901d98d17085e16854ab69bc5",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "4d1570e57cb0d7e289c2db03322231ca2a7e9d851bb86c2ef8b80504e75245b8",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05",
       "scopeNote": "Inspect adaptive design and interactive scenario identity in the native workbench; source tests remain supplementary."
     },
@@ -9949,8 +9949,8 @@
           "browser-preview"
         ]
       },
-      "sourceHash": "245682ada8c4579019a6cc5723df6e37794adc8dac2c2ee85cebc0018c6e638f",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "0318d2c968a8cd44d84adeabefdd176c0522ac01488ba48671fb2ffe4ed7c12a",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -9978,8 +9978,8 @@
           "source-test"
         ]
       },
-      "sourceHash": "245682ada8c4579019a6cc5723df6e37794adc8dac2c2ee85cebc0018c6e638f",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "0318d2c968a8cd44d84adeabefdd176c0522ac01488ba48671fb2ffe4ed7c12a",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -10017,8 +10017,8 @@
           "desktop"
         ]
       },
-      "sourceHash": "245682ada8c4579019a6cc5723df6e37794adc8dac2c2ee85cebc0018c6e638f",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "0318d2c968a8cd44d84adeabefdd176c0522ac01488ba48671fb2ffe4ed7c12a",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -10059,8 +10059,8 @@
           "notes-ideas"
         ]
       },
-      "sourceHash": "245682ada8c4579019a6cc5723df6e37794adc8dac2c2ee85cebc0018c6e638f",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "0318d2c968a8cd44d84adeabefdd176c0522ac01488ba48671fb2ffe4ed7c12a",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     },
@@ -10095,8 +10095,8 @@
           "rows-wrapping"
         ]
       },
-      "sourceHash": "245682ada8c4579019a6cc5723df6e37794adc8dac2c2ee85cebc0018c6e638f",
-      "rendererHash": "2fd4b9d0985089c5ac9ab1dabd078bc1e044e81cf8d069687a3344abda585540",
+      "sourceHash": "0318d2c968a8cd44d84adeabefdd176c0522ac01488ba48671fb2ffe4ed7c12a",
+      "rendererHash": "f6136fb92d1001bceaec2c8de255eaad692a8c5d333195a6d518277b8a5bd1c7",
       "profileHash": "1507bf55bb0aae34f42805bb987ea8b3b6cc9b9c3e3a357300b575a78bf09a05",
       "scopeNote": "Scoped development-source pilot evidence; never substitutes for a complete release story or required human review."
     }
@@ -10216,7 +10216,7 @@
     },
     {
       "path": "Apps/Starters/Notebook/Design.tao",
-      "sha256": "a17d8f90a89daefa616edbdfb11ae97a9ddc3c76e9043075b4f41eb3f19f1d78"
+      "sha256": "e485a55bb2534c750a7b36a9d3555d28779b91b53423fa1f951f72b3d026a065"
     },
     {
       "path": "Apps/Starters/Notebook/Notebook.test.tao",
@@ -10268,7 +10268,7 @@
     },
     {
       "path": "Apps/Starters/Pantry/Design.tao",
-      "sha256": "b9c21465f6df7dfb0b6928fc51080c559bc05204f3a1fb5a37b4d488ad4be00d"
+      "sha256": "01280756dc1a90fa70ee63256e2f3cb724cb1ad4049e4a4b7df23e1b5dc09500"
     },
     {
       "path": "Apps/Starters/Pantry/Ingredients/Ingredients.tao",
@@ -13944,7 +13944,7 @@
     },
     {
       "path": "packages/cli/tao-cli/cli-src/create/creation-lowering.ts",
-      "sha256": "8c10ad4bcfb41b0d32e11b439cce48e786d890e1e204bab897d48bdd8d6e54ea"
+      "sha256": "7948b7051f3f5ac85e68bbec76a148d21098888cfcef81672d948d2bbaab4302"
     },
     {
       "path": "packages/cli/tao-cli/cli-src/create/creation-pipeline.ts",
