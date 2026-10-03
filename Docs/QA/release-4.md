@@ -2,7 +2,7 @@
 
 Verdict: **not-ready**. 393 applicable release acceptance cells are incomplete.
 
-Candidate source: `442e6416f4c705efb8f236021cf8220b4d02306e`. Tree digest `99fdc875cd6ae533`; content hashes are stored per observation.
+Candidate source: `0a1177d90b439fb43af6d680ccf7529f0be72c48`. Tree digest `a0d0f3e17f1b267b`; content hashes are stored per observation.
 
 Reviewed counts include observations that found friction, failure, blockage, or became stale. Passed counts require current source, renderer, profile, evidence, channel, and reviewer. Human and Developer requirements remain separate. No generated report authorizes publication.
 
@@ -28,7 +28,7 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 | 5                | visual     | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
 | 5                | text       | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
 
-## Additional staged release acceptance
+## Release requirements beyond the original stories
 
 | Introduced phase | Dimension  | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | ---------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
@@ -48,13 +48,18 @@ Reviewed counts include observations that found friction, failure, blockage, or 
 | ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
 | 1                | text      | 282            | 0        | 0            | 0             | 282     | 0       | 0        | 0    | 0.0%       | 0.0%     |
 
-## Scoped development probes
+## Screenshot sets (development evidence)
+
+| Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
+| ---------------- | --------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
+| 1                | visual    | 7              | 0        | 0            | 0             | 7       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+| 2                | visual    | 2              | 0        | 0            | 0             | 2       | 0       | 0        | 0    | 0.0%       | 0.0%     |
+
+## Development checks
 
 | Introduced phase | Dimension  | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |
 | ---------------- | ---------- | -------------- | -------- | ------------ | ------------- | ------- | ------- | -------- | ---- | ---------- | -------- |
 | 1                | functional | 2              | 0        | 0            | 0             | 2       | 0       | 0        | 0    | 0.0%       | 0.0%     |
-| 1                | visual     | 7              | 0        | 0            | 0             | 7       | 0       | 0        | 0    | 0.0%       | 0.0%     |
-| 2                | visual     | 4              | 0        | 0            | 0             | 4       | 0       | 0        | 0    | 0.0%       | 0.0%     |
 
 ## Recorded assessments
 
@@ -87,8 +92,8 @@ None recorded.
 - QA-STARTER-DESIGN-COMMENT (open; minor; phase 1): Release-1 starter design comment names removed element defaults
 - QA-TUTORIAL-RENAME-PROSE (open; minor; phase 1): Tutorial explains syntax its snippet does not use
 - QA-NOTEBOOK-PANEL-STRETCH (open; major; phase 1): Notebook panels and rows grow to fill spare height
-- QA-NOTEBOOK-TABLET-COLUMN (open; minor; phase 1): the Notebook column hugs the left edge on tablet
-- QA-HNREADER-SKETCH-FIXTURES (open; minor; phase 2): committed Studio sketches ship inside the HNReader demo
+- QA-NOTEBOOK-TABLET-COLUMN (fixed-awaiting-qa; minor; phase 1): the Notebook column hugs the left edge on tablet
+- QA-HNREADER-SKETCH-FIXTURES (fixed-awaiting-qa; minor; phase 2): committed Studio sketches ship inside the HNReader demo
 
 ## Applicable gaps
 
@@ -485,8 +490,6 @@ None recorded.
 - acceptance:cloudkit-private-sync / visual / physical-device / human: not-run
 - acceptance:cloudkit-private-sync / text / public-docs / agent: not-run
 - acceptance:cloudkit-private-sync / text / public-docs / human: not-run
-- source:hnreader-browser / functional / browser-preview / agent: not-run
-- source:tutorial-replay / functional / source-test / agent: not-run
 - visual:reading-list / visual / phone-light / agent: not-run
 - visual:reading-list / visual / phone-dark / agent: not-run
 - visual:reading-list / visual / desktop / agent: not-run
@@ -496,8 +499,8 @@ None recorded.
 - visual:notebook / visual / notes-ideas / agent: not-run
 - visual:hnreader / visual / rows-leading / agent: not-run
 - visual:hnreader / visual / rows-wrapping / agent: not-run
-- visual:hnreader / visual / sketch-draft-1 / agent: not-run
-- visual:hnreader / visual / sketch-draft-2 / agent: not-run
+- source:hnreader-browser / functional / browser-preview / agent: not-run
+- source:tutorial-replay / functional / source-test / agent: not-run
 
 ## Deferred beyond release 5
 

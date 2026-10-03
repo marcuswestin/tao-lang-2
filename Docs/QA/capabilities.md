@@ -1,6 +1,6 @@
 # Release capability coverage
 
-Generated from the shared capability catalog. Available means eligible in the profile, not behavior accepted. Read the matching release packet for actual unrun, blocked and stale obligations. Channel prerequisites remain in the inventory and staged release plan.
+Generated from the shared capability catalog. Available means eligible in the profile, not behavior accepted. Read the matching release packet for actual unrun, blocked and stale requirements. Channel prerequisites remain in the inventory and staged release plan.
 
 | Capability            | Label                                                  | Introduced  | Available phases          | Acceptance subjects                      |
 | --------------------- | ------------------------------------------------------ | ----------- | ------------------------- | ---------------------------------------- |
