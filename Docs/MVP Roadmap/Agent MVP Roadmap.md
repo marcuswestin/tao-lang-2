@@ -264,8 +264,9 @@ proves, so a public build must hide later surfaces and a reviewer must be able t
   scenarios. The findings it records are report-only; product fixes are separately scoped. Phase-1
   cells were re-recorded at `442e6416` after the catalog began classifying subcommands by full path.
   On 2026-10-03 a screenshot whose own preview logs a console error became a failed screenshot, the
-  surface kinds took plain names (release requirements, screenshot sets, dev checks), and the
-  starter column, sketch and panel-stretch findings became fixed-awaiting-qa. Further automated
+  surface kinds took plain names (release requirements, screenshot sets, dev checks), the starter
+  column and sketch findings became fixed-awaiting-qa, and a re-recorded Notebook capture closed the
+  panel-stretch finding. The column finding awaits the Developer's recheck. Further automated
   checks are A23.
 - Remaining: human DOC1 and install passes, installed-artifact and marketplace evidence, the
   unreviewed starter skills, CLI help text, and Spec documents; recapturing HNReader's phase-2
