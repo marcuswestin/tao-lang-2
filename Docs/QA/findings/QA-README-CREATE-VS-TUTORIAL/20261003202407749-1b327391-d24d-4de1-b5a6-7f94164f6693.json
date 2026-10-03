@@ -1,0 +1,45 @@
+{
+  "id": "QA-README-CREATE-VS-TUTORIAL",
+  "status": "fixed-awaiting-qa",
+  "phase": 1,
+  "surfaceId": "doc:README.md",
+  "dimension": "text",
+  "channel": "source",
+  "severity": "major",
+  "title": "README and tutorial start from incompatible projects",
+  "observed": "README says to run `./tao create \"A reading list\"`, which writes a multi-file starter with its own project; the tutorial expects one file whose project id is \"reading-list\".",
+  "impact": "A newcomer cannot tell whether to paste tutorial step 1 into the generated starter, where it conflicts, or somewhere else.",
+  "location": "README.md:60; Docs/Tutorials/Your First Tao App.md:10-15",
+  "affectedPhases": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "expected": "The front door and the tutorial name one consistent starting project.",
+  "recheck": "Follow README then the tutorial from a clean directory.",
+  "evidence": [
+    "README.md",
+    "Docs/Tutorials/Your First Tao App.md"
+  ],
+  "evidenceHashes": [
+    {
+      "path": "README.md",
+      "sha256": "13f55bbdabb00f9793c0bee10d2bb8efcacc05fdc5dcfb89ebaf356e0003eafc"
+    },
+    {
+      "path": "Docs/Tutorials/Your First Tao App.md",
+      "sha256": "7a4b7e1952404036618d0f2c89693d58e1afd2f311c6a24c050120649fd4d1c6"
+    }
+  ],
+  "createdAt": "2026-09-29T16:13:45.287Z",
+  "updatedAt": "2026-10-03T20:24:07.749Z",
+  "confidence": "confirmed",
+  "requiredReviewer": "agent",
+  "relatedStories": [
+    "DOC1",
+    "CLI2"
+  ],
+  "notes": "Source documentation repair implemented and reviewed in the staged-release QA slice. This is source evidence only; the finding stays unresolved until its original acceptance recheck is completed: Follow README then the tutorial from a clean directory."
+}
