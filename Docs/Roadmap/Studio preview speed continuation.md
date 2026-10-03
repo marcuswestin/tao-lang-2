@@ -142,10 +142,20 @@ first edit after launch. Run the harness with
    real Metro. Editing runtime source while Studio ran raised
    `runtime capture domain 'navigation' is registered exactly once` in every cell, because a hot
    reload re-ran the module's top-level registration; a module now replaces its own registration. The
-   harness still edits a Studio view, so it times an ordinary edit. Not fixed: in two of
-   seven HNReader measurement cases one edit never painted: once Metro sent `update-start` with nothing
-   after it for 30s, once the frame's document was replaced without an iframe `load` event. Neither
-   reproduced in the next runs; the harness now records Metro's non-update messages for the next one.
+   harness still edits a Studio view, so it times an ordinary edit. Not fixed: an HNReader cell
+   often stops applying edits after its first or second one. Its frame gets two overlapping
+   `update-start` messages for one edit, then Metro answers the next with `RevisionNotFoundError`,
+   and the web client reports "Expo CLI and the web client are out of sync" and applies nothing
+   more. Metro 0.84's source shows the likely race: every cell of one bundle shares an HMR client
+   group, a cell that registers runs its initial update for the whole group outside the group's
+   serial change queue, and when that overlaps a file-change update, the later `updateGraph` call
+   leaves the group on a revision id the earlier one deleted. It needs a cell that registers during
+   an update: Studio suspends a cell scrolled out of view to `about:blank` and reloads it when it
+   returns, and the harness recorded two suspended HNReader cells resuming during the edit itself,
+   so it hits HNReader's many cells and never the one-file app, and a user scrolling while editing
+   can hit it too. Fixing it means patching Metro or reloading a cell that falls out of sync. The
+   harness waits for cells to stop loading before its first edit and records every cell load in its
+   failure diagnostics.
 5. **Fast draw.** A toolbar toggle beside the mode button connects only the first scenario's preview,
    so no other cell has an iframe. It is the way to feel a single-preview Studio before deciding what
    the multi-cell matrix should cost.
@@ -161,14 +171,12 @@ Each slice is measured on its own with the latency harness, so each gain is attr
       fixtures when Fast Refresh rebinds a store.
    2. Done: fix the `runtime capture domain 'navigation' is registered exactly once` error a hot
       reload raised from the module-level registration in `TR-navigation-app.ts`.
-   3. Bundle a preview-only manifest. The preview reads only `scenarios` and `fixtures` from
-      `TaoStudioManifest.ts`; Studio uses the compiler's manifest in process. Emitting just those, without
-      source ranges, keeps the file byte-identical across ordinary edits, so a length-changing edit or a
-      move no longer re-runs the generated root and re-renders the whole tree. Narrow the type the
-      preview reads, and test that a length-changing edit leaves the file unchanged. Estimated, not
-      measured: 10–40ms per such edit on HNReader; same-length edits gain nothing. It goes before
-      step 4 because today a length-changing edit re-renders the root for both reasons, so each gain
-      is measurable only alone.
+   3. Done, kept: the preview bundles a manifest of only `scenarios` and `fixtures`, without source
+      ranges, so an edit that changes a file's length leaves `TaoStudioManifest.ts` byte-identical;
+      Studio keeps the whole manifest in process. The harness now makes every edit longer than the
+      last, since the same-length markers it used never moved a range. One-file app warm p50,
+      publication on: 275 and 216ms against 689ms with the full manifest; the machine was loaded and
+      the spread is wide, so the gain is indicative only.
    4. Stop every compile from re-rendering the whole preview tree. Each compile's runtime update
       sets root state in the generated `App.tsx`; nothing below it is memoized, `<TaoApp />` is a new
       element each render, and the lens publish callback changes with each config, so every lens

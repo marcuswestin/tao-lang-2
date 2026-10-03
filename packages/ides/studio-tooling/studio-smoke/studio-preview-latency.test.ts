@@ -216,7 +216,9 @@ async function measureLatency(mode: 'on' | 'off', project: LatencyProject): Prom
 
     const samples: EditSample[] = []
     for (let edit = 1; edit <= EDITS_PER_MODE; edit += 1) {
-      const marker = `Edit${edit}x`
+      // Each marker is longer than the last, as most real edits change a file's length and so move
+      // every source range after them.
+      const marker = `Edit${edit}${'x'.repeat(edit)}`
       await browser.evaluateInFrame(previewUrl, `window.__taoLatencyProbe.watch.push(${JSON.stringify(marker)})`, {
         world: 'page',
       })
