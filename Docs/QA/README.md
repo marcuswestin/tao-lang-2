@@ -26,7 +26,7 @@ vendor, alias and evidence exclusions. Generated harness copies (`.agents`, `.cl
 Missing tracked documents are explicit exclusions. Secret namespaces are never read.
 
 The generated [capability table](capabilities.md) maps each shared capability to its release
-availability and acceptance obligations; eligibility alone never proves behavior.
+availability and acceptance requirements; eligibility alone never proves behavior.
 
 The inventory preserves every ID and additive A/P/D tag from the 49-story release QA plan. Every
 story can receive agent evidence; P additionally needs human judgment, and D specifically needs
@@ -35,6 +35,14 @@ uncoached-reader requirement in addition to the creator pass. Agent evidence sat
 decision: Studio starts in 3, physical Companion/private CloudKit in 4, and author shipping in 5.
 Android and the original hosted-data clause remain deferred. APP3 retains its original hosted-data identity and stays deferred. Separate
 `acceptance:cloudkit-private-sync` records the private same-person CloudKit journey. Earlier channels remain required as phases accumulate.
+
+The inventory has five kinds of surface. A _story_ is a row of the 49-story plan. A _release
+requirement_ (`acceptance:` IDs) is acceptance the staged release plan adds beyond those stories,
+such as HTTP data or CloudKit sync; stories and release requirements together decide a packet's
+verdict. A _document_ is one authored file awaiting editorial review. A _screenshot set_
+(`visual:` IDs) names the captured cells that show one app's views, and a _dev check_ (`source:`
+IDs) is a development-source journey; both are scoped development evidence and never stand in for
+a story or release requirement.
 
 `run` freezes source, renderer/dependency and release-profile hashes and saves an immutable manifest
 under `.artifacts/qa/runs/RUN-ID/`. It executes local inline link existence checks and the existing
@@ -45,7 +53,9 @@ selected surface for observation; none silently passes. Capture through
 `./agent unsandboxed qa-capture PROJECT --app APP --output .artifacts/qa/CAPTURE-ID` produces images
 for later inspection. Its `source-snapshot.json` copies every cell's status from the review
 manifest and is `complete` only when every cell was captured; otherwise it is `partial`. A capture
-failure blocks that visual assessment, and capture success alone does not judge a picture.
+failure blocks that visual assessment, and capture success alone does not judge a picture. A cell
+whose own preview logged a console error or uncaught exception is `failed`, even if its picture
+looks right; the message stays out of the artifacts, so reproduce it in a dev session to read it.
 
 Interrupted runs resume only with their original phase, scope and unchanged inputs. Completed
 checks remain immutable; an interrupted individual check can execute again. Unique run/result IDs
@@ -79,7 +89,7 @@ Reviewers are `agent`, `human`, and `developer`; record the actual reviewer. Eve
 requires existing, nonempty repository-relative evidence and notes. A visual pass additionally
 requires an image. An agent's visual pass must also cite the capture's `complete`
 `source-snapshot.json`; every cited image must be the screenshot of a `captured` cell there, by file
-name and SHA-256, and a probe channel must cite the cell the inventory names for it (for example
+name and SHA-256, and a screenshot-set channel must cite the cell the inventory names for it (for example
 `phone-dark` is `QA views/dark`). The snapshot must record the app the surface names, so a capture of
 another project cannot stand in, and an agent cannot pass a channel for which the inventory declares
 no capture cell; today that leaves every story's visual channels to a person. A person may cite a
@@ -87,8 +97,8 @@ screenshot alone. No visual pass may cite a
 `partial` or `blocked` capture snapshot. Recording rejects source changes since the frozen run. `historical: true` with original `observedAt` and `commit`
 imports earlier observations honestly: they always need recheck against the current candidate.
 
-Dedicated `source:hnreader-browser`, `source:tutorial-replay`, `visual:reading-list`, and
-`visual:notebook`, and `visual:hnreader` probes retain the pilot's limited claims. Story IDs use `story:DOC1`, etc.; document
+The `source:hnreader-browser` and `source:tutorial-replay` dev checks and the `visual:reading-list`,
+`visual:notebook` and `visual:hnreader` screenshot sets retain the pilot's limited claims. Story IDs use `story:DOC1`, etc.; document
 IDs use `doc:README.md`, etc. Source tests and browser previews may supplement stories, but cannot
 fill their installed CLI, marketplace, native, device, public download or TestFlight cells.
 Different visual scenarios are distinct channels. Never mark a failed dark capture passed because
@@ -171,4 +181,4 @@ compare artifact digests with the release receipt before a publication decision.
 
 Closed findings remain historical events. If their linked proof becomes stale, reports show
 `closure-needs-recheck`; changed runs include those surfaces and every unresolved finding.
-Reviewer, channel, related-story and phase obligations cannot be weakened by a later transition.
+A later transition cannot weaken a finding's reviewer, channel, related stories or phase.

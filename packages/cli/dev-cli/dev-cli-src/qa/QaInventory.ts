@@ -8,7 +8,9 @@ export type QaReviewer = 'agent' | 'human' | 'developer'
 export type QaSurface = {
   id: string
   title: string
-  kind: 'document' | 'story' | 'probe' | 'obligation'
+  /** A release requirement is acceptance beyond the original stories; screenshot sets and dev checks are scoped
+   * development evidence that never substitutes for either. */
+  kind: 'document' | 'story' | 'release-requirement' | 'screenshot-set' | 'dev-check'
   source: string
   phase: number | 'deferred'
   tags: string[]
@@ -129,10 +131,10 @@ export class QaInventory {
         ).join('\n')
       }`,
     )
-    // Obligations are defined by the staged release plan, which the shared hash leaves out as a roadmap.
-    const obligationSource = 'Docs/MVP Roadmap/Plan - Staged public releases.md'
-    const obligationHash = Platform.sha256Hex(
-      `${sourceHash}\n${Platform.sha256Hex(await FS.readFile(FS.resolvePath(obligationSource, this.root)))}`,
+    // Release requirements are defined by the staged release plan, which the shared hash leaves out as a roadmap.
+    const requirementSource = 'Docs/MVP Roadmap/Plan - Staged public releases.md'
+    const requirementHash = Platform.sha256Hex(
+      `${sourceHash}\n${Platform.sha256Hex(await FS.readFile(FS.resolvePath(requirementSource, this.root)))}`,
     )
     for (
       const match of plan.matchAll(
@@ -176,15 +178,15 @@ export class QaInventory {
     surfaces.push({
       id: 'acceptance:cloudkit-private-sync',
       title: 'Private same-person CloudKit synchronization',
-      kind: 'obligation',
-      source: obligationSource,
+      kind: 'release-requirement',
+      source: requirementSource,
       phase: ReleaseCapabilities.catalog.cloudkit.phase,
       tags: ['P'],
       channels: ['cloudkit-two-device', 'physical-device', 'public-docs'],
       dimensions: ['functional', 'visual', 'text'],
       dimensionChannels: { functional: ['cloudkit-two-device'], visual: ['physical-device'], text: ['public-docs'] },
       requirements: ['agent', 'human'],
-      sourceHash: obligationHash,
+      sourceHash: requirementHash,
       rendererHash,
       profileHash,
       scopeNote:
@@ -212,21 +214,21 @@ export class QaInventory {
       surfaces.push({
         id: `acceptance:${entry.id}`,
         title: entry.title,
-        kind: 'obligation',
-        source: obligationSource,
+        kind: 'release-requirement',
+        source: requirementSource,
         phase: entry.phase,
         tags: ['P'],
         channels: [...entry.channels, 'public-docs'],
         dimensions: ['functional', 'visual', 'text'],
         dimensionChannels: { functional: entry.channels, visual: entry.channels, text: ['public-docs'] },
         requirements: ['agent', 'human'],
-        sourceHash: obligationHash,
+        sourceHash: requirementHash,
         rendererHash,
         profileHash,
         scopeNote: entry.note,
       })
     }
-    const probes: {
+    const checks: {
       id: string
       title: string
       source: string
@@ -277,25 +279,20 @@ export class QaInventory {
         title: 'HNReaderStub browser capture cells',
         source: 'Apps/HNReader',
         dimension: 'visual',
-        channels: ['rows-leading', 'rows-wrapping', 'sketch-draft-1', 'sketch-draft-2'],
-        captureCells: {
-          'rows-leading': 'rows/leading',
-          'rows-wrapping': 'rows/wrapping',
-          'sketch-draft-1': 'sketch/draft',
-          'sketch-draft-2': 'sketch/draft',
-        },
+        channels: ['rows-leading', 'rows-wrapping'],
+        captureCells: { 'rows-leading': 'rows/leading', 'rows-wrapping': 'rows/wrapping' },
         captureApp: 'HNReaderStub',
       },
     ]
-    for (const probe of probes) {
+    for (const check of checks) {
       surfaces.push({
-        ...probe,
-        kind: 'probe',
-        phase: probe.id === 'visual:hnreader' ? 2 : 1,
+        ...check,
+        kind: check.dimension === 'visual' ? 'screenshot-set' : 'dev-check',
+        phase: check.id === 'visual:hnreader' ? 2 : 1,
         tags: ['A'],
         requirements: ['agent'],
-        dimensions: [probe.dimension],
-        dimensionChannels: { [probe.dimension]: probe.channels },
+        dimensions: [check.dimension],
+        dimensionChannels: { [check.dimension]: check.channels },
         sourceHash,
         rendererHash,
         profileHash,

@@ -120,7 +120,7 @@ export class QaRegister {
     )
     await this.atomic(
       'Docs/QA/capabilities.md',
-      `# Release capability coverage\n\nGenerated from the shared capability catalog. Available means eligible in the profile, not behavior accepted. Read the matching release packet for actual unrun, blocked and stale obligations. Channel prerequisites remain in the inventory and staged release plan.\n\n| Capability | Label | Introduced | Available phases | Acceptance subjects |\n| --- | --- | --- | --- | --- |\n${
+      `# Release capability coverage\n\nGenerated from the shared capability catalog. Available means eligible in the profile, not behavior accepted. Read the matching release packet for actual unrun, blocked and stale requirements. Channel prerequisites remain in the inventory and staged release plan.\n\n| Capability | Label | Introduced | Available phases | Acceptance subjects |\n| --- | --- | --- | --- | --- |\n${
         rows.join('\n')
       }\n`,
     )
@@ -302,7 +302,7 @@ export class QaRegister {
       }
     }
     if (
-      outcome === 'pass' && (surface.kind === 'story' || surface.kind === 'obligation') && dimension !== 'text'
+      outcome === 'pass' && (surface.kind === 'story' || surface.kind === 'release-requirement') && dimension !== 'text'
       && !['source-test', 'browser-preview', 'public-docs', 'public-site'].includes(channel)
       && (executionProfile !== run.phase || !artifact)
     ) {
@@ -454,7 +454,7 @@ export class QaRegister {
         || previous.phase !== finding.phase)
     ) {
       Errors.throwUserInput(
-        'A finding transition cannot weaken or replace its original reviewer, related stories, or phase obligations.',
+        'A finding transition cannot weaken or replace its original reviewer, related stories, or phase.',
       )
     }
     if (status === 'verified-closed') {
@@ -493,7 +493,7 @@ export class QaRegister {
     const rows: string[] = []
     const gaps: string[] = []
     const releaseGaps: string[] = []
-    for (const kind of ['story', 'obligation', 'document', 'probe'] as const) {
+    for (const kind of ['story', 'release-requirement', 'document', 'screenshot-set', 'dev-check'] as const) {
       for (let introduced = 1; introduced <= 5; introduced += 1) {
         for (const dimension of ['functional', 'visual', 'text'] as const) {
           let total = 0, reviewed = 0, passed = 0, stale = 0, blocked = 0, friction = 0, failed = 0
@@ -535,7 +535,7 @@ export class QaRegister {
                   if (kind !== 'document' || result) {
                     gaps.push(gap)
                   }
-                  if (kind === 'story' || kind === 'obligation') {
+                  if (kind === 'story' || kind === 'release-requirement') {
                     releaseGaps.push(gap)
                   }
                 }
@@ -571,16 +571,18 @@ export class QaRegister {
       + '[Pilot and annotated findings](pilot.md) · [Finding records](findings.json) · [Capability availability](capabilities.md)\n\n'
     const tableHeader =
       '| Introduced phase | Dimension | Required cells | Reviewed | Current pass | Needs recheck | Not run | Blocked | Friction | Fail | Reviewed % | Passed % |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n'
-    const table =
-      ([['story', 'Original release story acceptance'], ['obligation', 'Additional staged release acceptance'], [
-        'document',
-        'All-document editorial progress',
-      ], ['probe', 'Scoped development probes']] as const)
-        .map(([kind, title]) =>
-          `## ${title}\n\n${tableHeader}${
-            rows.filter(row => row.startsWith(`${kind}:`)).map(row => row.slice(kind.length + 1)).join('\n')
-          }`
-        ).join('\n\n')
+    const table = ([
+      ['story', 'Original release story acceptance'],
+      ['release-requirement', 'Release requirements beyond the original stories'],
+      ['document', 'All-document editorial progress'],
+      ['screenshot-set', 'Screenshot sets (development evidence)'],
+      ['dev-check', 'Development checks'],
+    ] as const)
+      .map(([kind, title]) =>
+        `## ${title}\n\n${tableHeader}${
+          rows.filter(row => row.startsWith(`${kind}:`)).map(row => row.slice(kind.length + 1)).join('\n')
+        }`
+      ).join('\n\n')
     const findingsText = `\n\n## Unresolved findings and accepted limitations\n\n${
       open.map(finding =>
         `- ${finding.id} (${
@@ -716,7 +718,7 @@ export class QaRegister {
   /**
    * requireInspectedCapture accepts a visual pass only for an image a complete capture attests. An agent must
    * cite the capture's `source-snapshot.json`; each cited image must be the screenshot of a captured cell there,
-   * and a probe channel must be shown by its own named cell. A person may cite a screenshot alone.
+   * and a screenshot-set channel must be shown by its own named cell. A person may cite a screenshot alone.
    */
   private async requireInspectedCapture(
     evidence: Observation['evidence'],

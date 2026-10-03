@@ -29,6 +29,7 @@ Describe('isolated QA capture', () => {
       await FS.writeText(FS.resolvePath('node_modules/vendor.js', original), 'vendor must not be copied')
       await FS.writeText(FS.resolvePath('secrets/token.json', original), '{"path":"../outside"}')
       await FS.writeText(FS.resolvePath('credentials/account.json', original), '{"path":"../outside"}')
+      await FS.writeText(FS.resolvePath('App.tao.ts', original), 'import type TR from "../../runtime/TR"\n')
       const capture = new QaCapture(root, async (staged, options) => {
         Expect(staged).not.toBe(original)
         Expect(await FS.exists(FS.resolvePath('.tao', staged))).toBe(false)

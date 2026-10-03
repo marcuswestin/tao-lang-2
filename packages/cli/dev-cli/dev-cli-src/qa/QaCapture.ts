@@ -202,6 +202,8 @@ export class QaCapture {
         !/\.(?:tao|[cm]?[jt]sx?|jsonc?|css|svg|png|jpe?g|webp|gif|ico|ttf|otf|woff2?|mp3|mp4|wav|md|txt)$/iu.test(
           relative,
         )
+        // A `.tao.ts` file is compiler output a type check leaves beside its source; the staged copy compiles its own.
+        || relative.endsWith('.tao.ts')
       ) {
         excluded.push(relative)
         continue
