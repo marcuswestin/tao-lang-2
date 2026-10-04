@@ -33,13 +33,13 @@ datasource UnavailableHistoryNews = UnavailableHistorySource {
 }  }
 
 datasource UnavailableHistoryStore = Local {
-   StorageKey "HNReaderUnavailableHistoryTest"
+   StorageKey "HNReaderUnavailableHistoryTest",
    Data {
       ReadingEntries
 }  }
 
 datasource UnavailableBookmarkStore = Local {
-   StorageKey "HNReaderUnavailableBookmarkTest"
+   StorageKey "HNReaderUnavailableBookmarkTest",
    Data {
       Bookmarks
 }  }

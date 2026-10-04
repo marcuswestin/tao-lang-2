@@ -37,11 +37,11 @@ view Main() { render inject \`\`\`ts return null \`\`\` }`,
       )
       Expect(module).toBeDefined()
       Expect(module?.path).toBe(FS.resolvePath('.tao-ts/Main.tao.ts', root))
-      Expect(module?.code).toContain('import * as Sidecar from "../Bindings"')
+      Expect(module?.code).toContain('import type * as Sidecar from "../Bindings"')
       Expect(module?.code).toContain('// Source: ../Main.tao:2:1')
-      Expect(module?.code).toContain('Sidecar.Read satisfies Read')
+      Expect(module?.code).toContain('__TaoBridgeCheck<Read, typeof Sidecar.Read>')
       const sourceLine = module?.sourceMappings.find(mapping =>
-        module.code.split('\n')[mapping.generated.start.line]?.includes('Sidecar.Read satisfies Read')
+        module.code.split('\n')[mapping.generated.start.line]?.includes('__TaoBridgeCheck<Read, typeof Sidecar.Read>')
       )
       Expect(sourceLine?.source).toEqual({
         start: { line: 1, character: 0 },
@@ -94,7 +94,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }`,
         packageName: 'another-publication',
         packageVersion: '3.0.0',
       })).toBe(BridgeMetadata.dependencySnapshotPath(consumer, paths['Bindings.ts']!, origin))
-      Expect(module?.code).toContain('import * as Sidecar from "./Bindings"')
+      Expect(module?.code).toContain('import type * as Sidecar from "./Bindings"')
     })
   })
 
@@ -117,7 +117,7 @@ view Main() { render inject \`\`\`ts return null \`\`\` }`,
         sourcePath: paths['Child/Words.ts'],
         path: BridgeMetadata.dependencySnapshotPath(root, paths['Child/Words.ts']!, origin),
       }])
-      Expect(module?.code).toContain('import * as Sidecar from "./Words"')
+      Expect(module?.code).toContain('import type * as Sidecar from "./Words"')
     })
   })
 

@@ -15,8 +15,8 @@ Describe('validator: auth data syntax', () => {
     data Accounts / Account { DisplayName text, Notes, }
     data Notes / Note { Owner Account, Body text, }
     let Store = Reference {
-      ServerURL "http://localhost:4738"
-      Resource "test"
+      ServerURL "http://localhost:4738",
+      Resource "test",
       Offline { Account, Me, Me.Notes }
     }
   `),

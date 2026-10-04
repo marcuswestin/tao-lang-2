@@ -460,6 +460,20 @@ function moduleFor(
   const caseSets = typeStatements.filter(AST.isTypeDeclaration).filter(declaration =>
     AST.isCaseSetTypeExpression(declaration.type)
   )
+  const reservedNames = new Set([
+    'TR',
+    ...contracts.map((_, index) => contractTypeName(contracts, index)),
+    ...typeStatements.filter(isRuntimeConfigurableDeclaration).map(declaration => `${declaration.name}Config`),
+    ...caseSets.map(declaration => declaration.name),
+  ])
+  const reserveName = (base: string): string => {
+    let name = base
+    for (let suffix = 1; reservedNames.has(name); suffix++) {
+      name = `${base}_${suffix}`
+    }
+    reservedNames.add(name)
+    return name
+  }
   if (
     contracts.some(contract => contract.type.includes('TR.'))
     || caseSets.length > 0
@@ -479,13 +493,20 @@ function moduleFor(
     Assert.defined(onlyPath, 'single bridge sidecar has one path')
     imports.set(onlyPath, 'Sidecar')
   }
-  for (const [path, name] of imports) {
+  for (const [path, plannedName] of imports) {
+    const name = reserveName(plannedName)
+    imports.set(path, name)
     const sidecar = FS.resolvePath(path, FS.dirname(sourcePath))
     const implementation = implementationPaths.find(item => item.sourcePath === sidecar)?.path ?? sidecar
     const relative = FS.relativePath(FS.dirname(modulePath), implementation).replace(/\.tsx?$/, '')
-    lines.push(`import * as ${name} from ${JSON.stringify(relative.startsWith('.') ? relative : `./${relative}`)}`)
+    lines.push(`import type * as ${name} from ${JSON.stringify(relative.startsWith('.') ? relative : `./${relative}`)}`)
   }
   lines.push('')
+  const checkName = reserveName('__TaoBridgeCheck')
+  if (contracts.length > 0) {
+    // Exported type aliases remain erased and valid under noUnusedLocals.
+    lines.push(`export type ${checkName}<Expected, Actual extends Expected> = Actual`, '')
+  }
   for (const declaration of caseSets) {
     sourceComment(declaration.$cstNode?.range)
     lines.push(caseSetTypeDeclaration(declaration))
@@ -501,17 +522,25 @@ function moduleFor(
     sourceComment(contract.sourceRange)
     lines.push(`export type ${typeName} = ${contract.type}`)
     mapLine(contract.sourceRange)
-    lines.push(`${sidecar}.${contract.exportName} satisfies ${typeName}`)
+    lines.push(
+      `export type ${
+        reserveName(`__TaoBridgeSignature${index + 1}`)
+      } = ${checkName}<${typeName}, typeof ${sidecar}.${contract.exportName}>`,
+    )
     mapLine(contract.sourceRange)
     if (contract.arity !== undefined) {
       lines.push(
-        `void (null as unknown as ${contract.arity} satisfies Parameters<typeof ${sidecar}.${contract.exportName}>['length'])`,
+        `export type ${
+          reserveName(`__TaoBridgeArity${index + 1}`)
+        } = ${checkName}<Parameters<typeof ${sidecar}.${contract.exportName}>['length'], ${contract.arity}>`,
       )
       mapLine(contract.sourceRange)
     }
     if (contract.result !== undefined) {
       lines.push(
-        `void (null as unknown as ReturnType<typeof ${sidecar}.${contract.exportName}> satisfies ${contract.result})`,
+        `export type ${
+          reserveName(`__TaoBridgeResult${index + 1}`)
+        } = ${checkName}<${contract.result}, ReturnType<typeof ${sidecar}.${contract.exportName}>>`,
       )
       mapLine(contract.sourceRange)
     }

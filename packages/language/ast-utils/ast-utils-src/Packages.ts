@@ -187,6 +187,9 @@ export namespace Packages {
             .filter(AST.isDeclaration)
             .filter(declaration => declarationIsImportableFromUse(declaration, resolution))
             .filter(declaration =>
+              !AST.isUseStatement(useStatement) || !useStatement.all || visibilityOf(declaration) === 'public'
+            )
+            .filter(declaration =>
               resolution.relation !== 'external-publication'
               || selectedPublication?.publicDeclarations.includes(declaration) === true
             )

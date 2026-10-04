@@ -38,11 +38,11 @@ export function MemoryProvider(): TR.DataProvider {
       Expect(await FS.realPath(FS.resolvePath(`${specifier}.ts`, FS.dirname(metadataPath)))).toBe(
         await FS.realPath(FS.resolvePath('../../../apps/runtime/TaoRuntime-src/TR.ts', import.meta.dir)),
       )
-      Expect(metadata).toContain('Sidecar2.MemoryProvider satisfies MemoryProvider')
+      Expect(metadata).toContain('__TaoBridgeCheck<MemoryProvider, typeof Sidecar2.MemoryProvider>')
       Expect(metadata).toContain('export type MemoryConfig =')
       Expect(metadata).toContain('export type CustomMemoryConfig =')
-      Expect(metadata.split('MemoryProvider satisfies MemoryProvider').length).toBe(2)
-      Expect(metadata).toContain('unknown as 1 satisfies Parameters<typeof Sidecar1.OpenUrl>')
+      Expect(metadata.split('__TaoBridgeCheck<MemoryProvider, typeof Sidecar2.MemoryProvider>').length).toBe(2)
+      Expect(metadata).toContain("__TaoBridgeCheck<Parameters<typeof Sidecar1.OpenUrl>['length'], 1>")
       await FS.writeText(FS.resolvePath('OpenUrl.ts', root), 'export function OpenUrl(): number { return 1 }\n')
       const wrong = await runCheck(root)
       Expect(

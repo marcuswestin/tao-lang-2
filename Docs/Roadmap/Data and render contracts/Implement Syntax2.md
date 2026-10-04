@@ -4,8 +4,21 @@ Requested 2026-10-04. Deliver [Apps/Syntax2](../../../Apps/Syntax2/README.md) as
 implementing its accepted, non-deferred requirements and graduating dependency-complete source
 from `.tao.future` to `.tao`. Source files are the forcing target, not evidence of parser acceptance.
 This task records the implementation program. The design baseline landed on main at
-`825637cd72395958bfbab396e5e8de13e604b90e`; the first coordinator-owned render foundation is in
-progress. Separate implementation manager threads have not yet been launched.
+`825637cd72395958bfbab396e5e8de13e604b90e`. The first render foundation and executable shell landed
+at `3bcd71647bfcbc5e6a371c3cd8fcccba8b1fb6f2` after full host verification. Four separate manager
+worktrees delivered A1 nominal/binding, B1 accessibility prefixes, D1 open failure contracts and
+C1 checked-quantity runtime storage. The integration branch adds public wildcard imports, erased
+native sidecar type checks and preparatory comma migration. Its first-wave combined host proof
+passed before later runtime changes; fresh combined verification is required for landing.
+Reviewed second-wave renderer descriptors provide independently mounted placements, fresh captures
+and own-property default selection. Lexical cleanup runtime joins admitted work, drains serial
+LIFO cleanup and preserves primary failures; scoped foreign thenables are adopted once. These
+runtime leaves do not yet expose the selected slot/defer source grammar or compiler lowering.
+Concrete callable signatures now cover required inputs before preferring exact matches, preserving
+ambiguity and ordinary argument binding. Uniform native accessors are undergoing a bounded
+complete-output identity repair in their separate worktree and are excluded from this landing.
+Checked native factory publication, capabilities, full slots, units, cleanup lowering and app
+adapter/list graduation remain. No language stream is complete.
 Reconciled with the 2026-10-04 project/module migration before baseline landing.
 
 Planning readiness: **100% for the high-level implementation plan**, reviewed 2026-10-04.

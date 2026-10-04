@@ -217,6 +217,9 @@ function capturedFixtureImportEdits(file: AST.TaoFile, entityNames: readonly str
       Errors.throwUserInput(`Studio captured entity is not uniquely available in this source file: ${name}`)
     }
     const use = matchingUses[0]!
+    if (use.all) {
+      continue
+    }
     const names = additions.get(use) ?? new Set(use.importedDeclarations.map(reference => reference.$refText))
     names.add(name)
     additions.set(use, names)
@@ -371,8 +374,11 @@ export async function retargetScenarioRender(
       },
   ]
   const nameInFile = file.statements.some(statement =>
-    (AST.isDeclaration(statement) && statement.name === request.view)
-    || (AST.isUseStatement(statement) && statement.importedDeclarations.some(item => item.$refText === request.view))
+    (AST.isDeclaration(statement) && AST.declarationNamespace(statement) === 'value' && statement.name === request.view)
+    || (AST.isUseStatement(statement)
+      && (AST.resolvedImportedDeclarations(statement).some(declaration =>
+        AST.declarationNamespace(declaration) === 'value' && declaration.name === request.view
+      ) || statement.importedDeclarations.some(item => item.$refText === request.view && item.ref === undefined)))
   )
   const originalUse = file.statements.filter(AST.isUseStatement)
     .find(use => AST.resolvedImportedDeclarations(use).includes(original))

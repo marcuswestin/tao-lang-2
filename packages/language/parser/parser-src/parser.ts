@@ -254,7 +254,7 @@ function createLspServices(options: CreateParserLspContextOptions & { packages: 
   return registerLanguage(shared, language)
 }
 
-/** Relink color reads when an app edit changes which design supplies them. */
+/** Relink implicit dependencies that have no authored Langium reference. */
 class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
   constructor(services: Langium.LangiumSharedCoreServices) {
     super(services)
@@ -277,6 +277,12 @@ class TaoDocumentBuilder extends Langium.DefaultDocumentBuilder {
     }
     if (changedUris.size === 0 || !AST.isTaoFile(document.parseResult.value)) {
       return false
+    }
+    // An unused wildcard still depends on the target's complete public name set. Changes can
+    // introduce collisions, remove exports or change publication selection without an old ref.
+    // Conservatively revalidate its owner rather than trusting reference-only dependency indexes.
+    if (document.parseResult.value.statements.some(statement => AST.isUseStatement(statement) && statement.all)) {
+      return true
     }
     return AST.streamAllContents(document.parseResult.value).some(node =>
       (AST.isValueReference(node) || AST.isMemberAccessExpression(node))

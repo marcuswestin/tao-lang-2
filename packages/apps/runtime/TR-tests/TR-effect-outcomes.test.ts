@@ -2,6 +2,7 @@ import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import { deferTransactionCommit } from '../TaoRuntime-src/TR-action-transactions'
 import type { TaoDataSchemaDefinition } from '../TaoRuntime-src/TR-data'
+import type { TaoEffectContract } from '../TaoRuntime-src/TR-effect-outcomes'
 
 const definition: TaoDataSchemaDefinition = {
   name: 'OutcomeNotes',
@@ -55,6 +56,7 @@ function failingExport(schema: ReturnType<typeof TR.Data.Schema>, mode: string):
 async function runOutcome(
   callee: (schema: ReturnType<typeof TR.Data.Schema>) => TR.Action<[]>,
   outcomeNames: readonly string[],
+  effectContract: TaoEffectContract = contract,
 ): Promise<{ ran: string[]; reports: unknown[]; schema: ReturnType<typeof TR.Data.Schema>; tail: boolean }> {
   const { schema } = notesSchema()
   const ran: string[] = []
@@ -65,7 +67,7 @@ async function runOutcome(
     TR.Data.Create(schema, 'Note', { Title: TR.Value('Caller') })
     await TR.WhenDo(
       () => TR.Do(callee(schema)),
-      contract,
+      effectContract,
       outcomeNames.map(name => [name, message => ran.push(`${name}: ${message.evaluate().jsValue}`)] as const),
     )
     tail = true
@@ -208,6 +210,256 @@ Describe('Tao effect outcomes', () => {
     await root.jsValue.invoke()
 
     Expect(seen).toEqual(['rejected: TooLarge sentence.', 'error: The disk went away.'])
+  })
+
+  Test('executes known and additional dynamic failures of an open named wrapper', async () => {
+    const openContract = { declared: ['Offline'], open: true, name: 'Wrapper' }
+    for (const mode of ['Offline', 'TooLarge', 'throw']) {
+      const { ran, reports, schema, tail } = await runOutcome(
+        schema => TR.Action(async () => await TR.Do(failingExport(schema, mode)), { name: 'Wrapper' }),
+        ['Offline', 'rejected', 'error'],
+        openContract,
+      )
+      const expected = mode === 'Offline'
+        ? 'Offline: Offline sentence.'
+        : mode === 'TooLarge'
+        ? 'rejected: TooLarge sentence.'
+        : 'error: The disk went away.'
+
+      Expect(ran).toEqual([expected])
+      Expect(reports).toEqual([])
+      Expect(tail).toBe(true)
+      Expect(titles(schema)).toEqual(['Caller'])
+    }
+  })
+
+  Test('keeps a deliberate extra case an error when the contract is closed', async () => {
+    const { ran } = await runOutcome(
+      schema => failingExport(schema, 'TooLarge'),
+      ['TooLarge', 'rejected', 'error'],
+      { declared: ['Offline'], name: 'Export' },
+    )
+
+    Expect(ran).toEqual(['error: TooLarge sentence.'])
+  })
+
+  Test('never treats an arbitrary throw as a known Unexpected modeled failure', async () => {
+    const { ran } = await runOutcome(
+      schema => failingExport(schema, 'throw'),
+      ['Unexpected', 'rejected', 'error'],
+      { declared: ['Unexpected'], open: true, name: 'Export' },
+    )
+
+    Expect(ran).toEqual(['error: The disk went away.'])
+  })
+
+  Test('routes a raw foreign throw to error while restoring its savepoint', async () => {
+    const { ran, reports, schema, tail } = await runOutcome(
+      schema =>
+        TR.ForeignAction(
+          () => {
+            TR.Data.Create(schema, 'Note', { Title: TR.Value('Foreign') })
+            TR.Errors.failHost('The disk went away.')
+          },
+          'Publish',
+          [],
+        ),
+      ['rejected', 'error'],
+      { declared: [], open: true, name: 'Publish' },
+    )
+
+    Expect(reports).toEqual([])
+    Expect(tail).toBe(true)
+    Expect(titles(schema)).toEqual(['Caller'])
+    Expect(ran).toEqual(['error: The disk went away.'])
+  })
+
+  Test('preserves a raw foreign throw through a named joined wrapper', async () => {
+    const reached: string[] = []
+    const { ran, reports, schema, tail } = await runOutcome(
+      schema =>
+        TR.Action(async () => {
+          TR.Data.Create(schema, 'Note', { Title: TR.Value('Wrapper') })
+          const publish = TR.ForeignAction(
+            () => {
+              TR.Data.Create(schema, 'Note', { Title: TR.Value('Foreign') })
+              TR.Errors.failHost('The disk went away.')
+            },
+            'Publish',
+            [],
+          )
+          await TR.Do(publish)
+          reached.push('after publish')
+        }, { name: 'Wrapper' }),
+      ['rejected', 'error'],
+      { declared: [], open: true, name: 'Wrapper' },
+    )
+
+    Expect(reached).toEqual([])
+    Expect(reports).toEqual([])
+    Expect(tail).toBe(true)
+    Expect(titles(schema)).toEqual(['Caller'])
+    Expect(ran).toEqual(['error: The disk went away.'])
+  })
+
+  Test('preserves a raw foreign throw through a joined result wrapper', async () => {
+    const reached: string[] = []
+    const { ran, reports, schema, tail } = await runOutcome(
+      schema =>
+        TR.Action(async () => {
+          TR.Data.Create(schema, 'Note', { Title: TR.Value('Wrapper') })
+          const read = TR.ForeignAction(
+            () => {
+              TR.Data.Create(schema, 'Note', { Title: TR.Value('Read') })
+              TR.Errors.failHost('The disk went away.')
+            },
+            'Read',
+            [],
+          )
+          await TR.DoResult<string>(read)
+          reached.push('after read')
+        }, { name: 'ReadAndDiscard' }),
+      ['rejected', 'error'],
+      { declared: [], open: true, name: 'ReadAndDiscard' },
+    )
+
+    Expect(reached).toEqual([])
+    Expect(reports).toEqual([])
+    Expect(tail).toBe(true)
+    Expect(titles(schema)).toEqual(['Caller'])
+    Expect(ran).toEqual(['error: The disk went away.'])
+  })
+
+  Test('routes actual typed provider cases including Unexpected to rejected in an open contract', async () => {
+    const ProviderFailure = TR.Enum(
+      TR.Navigation.Identity(['tao.declaration', 1, 'tests', '@workspace', 'Outcomes', 'enum', 'ProviderFailure']),
+      ['Offline', 'Unexpected'],
+    )
+    for (const caseName of ['Offline', 'Unexpected']) {
+      const { ran, reports, schema, tail } = await runOutcome(
+        schema =>
+          TR.ForeignAction(
+            () => {
+              TR.Data.Create(schema, 'Note', { Title: TR.Value('Foreign') })
+              throw { case: ProviderFailure[caseName]! }
+            },
+            'Publish',
+            [],
+          ),
+        ['rejected', 'error'],
+        { declared: ['Offline'], open: true, name: 'Publish' },
+      )
+
+      Expect(reports).toEqual([])
+      Expect(tail).toBe(true)
+      Expect(titles(schema)).toEqual(['Caller'])
+      Expect(ran).toEqual(["rejected: Couldn't finish 'Publish.' Nothing was changed."])
+    }
+  })
+
+  Test('handles a known case locally and propagates the open remainder to its caller', async () => {
+    const locallyHandled: string[] = []
+    const partial = (schema: ReturnType<typeof TR.Data.Schema>, mode: string): TR.Action<[]> =>
+      TR.Action(async () => {
+        TR.Data.Create(schema, 'Note', { Title: TR.Value('Wrapper') })
+        await TR.WhenDo(
+          () => TR.Do(failingExport(schema, mode)),
+          { declared: ['Offline'], open: true, name: 'Export' },
+          [['Offline', message => locallyHandled.push(message.evaluate().jsValue as string)]],
+        )
+      }, { name: 'Partial' })
+    const handled = await runOutcome(schema => partial(schema, 'Offline'), ['saved'], {
+      declared: [],
+      open: true,
+      name: 'Partial',
+    })
+    const propagated = await runOutcome(schema => partial(schema, 'TooLarge'), ['rejected'], {
+      declared: [],
+      open: true,
+      name: 'Partial',
+    })
+    const unhandled = await runOutcome(schema => partial(schema, 'TooLarge'), ['saved'], {
+      declared: [],
+      open: true,
+      name: 'Partial',
+    })
+
+    Expect(locallyHandled).toEqual(['Offline sentence.'])
+    Expect(handled.ran).toEqual(['saved: '])
+    Expect(titles(handled.schema)).toEqual(['Caller', 'Wrapper'])
+    Expect(propagated.ran).toEqual(['rejected: TooLarge sentence.'])
+    Expect(titles(propagated.schema)).toEqual(['Caller'])
+    Expect(propagated.reports).toEqual([])
+    Expect(unhandled.ran).toEqual([])
+    Expect(unhandled.tail).toBe(false)
+    Expect(titles(unhandled.schema)).toEqual([])
+    Expect(unhandled.reports).toEqual([Expect['objectContaining']({
+      action: 'Root',
+      case: 'TooLarge',
+      frames: ['Root', 'Partial', 'Export'],
+    })])
+  })
+
+  Test('preserves joined result failure and savepoint rollback through an open wrapper', async () => {
+    const { ran, reports, schema, tail } = await runOutcome(
+      schema =>
+        TR.Action(async () => {
+          const read = TR.ForeignAction(
+            async () => {
+              TR.Data.Create(schema, 'Note', { Title: TR.Value('Read') })
+              TR.Fail(ExportFailure['TooLarge']!, 'TooLarge sentence.')
+            },
+            'Read',
+            [],
+          )
+          await TR.DoResult<string>(read)
+          TR.Data.Create(schema, 'Note', { Title: TR.Value('After read') })
+        }, { name: 'ReadAndDiscard' }),
+      ['rejected', 'error'],
+      { declared: [], open: true, name: 'ReadAndDiscard' },
+    )
+
+    Expect(ran).toEqual(['rejected: TooLarge sentence.'])
+    Expect(reports).toEqual([])
+    Expect(tail).toBe(true)
+    Expect(titles(schema)).toEqual(['Caller'])
+  })
+
+  Test('contains a dynamic failure in detached work without rolling back its launcher', async () => {
+    const { schema } = notesSchema()
+    const ran: string[] = []
+    const reports: unknown[] = []
+    const stop = TR.Errors.onFailure(report => reports.push(report))
+    let finished!: () => void
+    const committed = new Promise<void>(resolve => {
+      finished = resolve
+    })
+    const root = TR.Action(() => {
+      TR.Data.Create(schema, 'Note', { Title: TR.Value('Caller') })
+      TR.Async(async () => {
+        TR.Data.Create(schema, 'Note', { Title: TR.Value('Detached') })
+        await TR.WhenDo(
+          () => TR.Do(failingExport(schema, 'TooLarge')),
+          { declared: [], open: true, name: 'Callback' },
+          [
+            ['rejected', message => ran.push(message.evaluate().jsValue as string)],
+            ['error', message => ran.push(`error: ${message.evaluate().jsValue}`)],
+          ],
+        )
+        deferTransactionCommit(finished)
+      })
+    }, { name: 'Root' })
+    try {
+      await root.jsValue.invoke()
+      await committed
+      await TR.Data.Settle(schema)
+
+      Expect(ran).toEqual(['TooLarge sentence.'])
+      Expect(reports).toEqual([])
+      Expect(titles(schema)).toEqual(['Caller', 'Detached'])
+    } finally {
+      stop()
+    }
   })
 
   Test('never reuses the id of a row the rolled-back verb created', async () => {

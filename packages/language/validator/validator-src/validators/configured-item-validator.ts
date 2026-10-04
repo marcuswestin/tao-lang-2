@@ -252,7 +252,7 @@ function bindUnambiguousConfiguredItemCandidates(state: ConfiguredItemBindingSta
   })
   bindConfiguredEntries(state.remainingCandidates, state.remainingExpected, {
     candidateType: configuredItemCandidateType,
-    matches: Type.isAssignable,
+    matches: Type.isAssignableToConstruction,
     blockedCandidateTypes,
   })
   return blockedCandidateTypes
@@ -269,7 +269,7 @@ function reportRemainingConfiguredItemCandidates(
       continue
     }
     const matches = [...state.remainingExpected].filter(property =>
-      Type.isAssignable(actual, Type.itemFieldType(property))
+      Type.isAssignableToConstruction(actual, Type.itemFieldType(property))
     )
     if (matches.length > 1) {
       state.ctx.error(
@@ -292,7 +292,7 @@ function reportRemainingConfiguredItemFields(
   for (const property of state.remainingExpected) {
     const matches = [...state.remainingCandidates].filter(candidate =>
       !candidateTypeIsBlocked(configuredItemCandidateType(candidate), blockedCandidateTypes)
-      && Type.isAssignable(configuredItemCandidateType(candidate), Type.itemFieldType(property))
+      && Type.isAssignableToConstruction(configuredItemCandidateType(candidate), Type.itemFieldType(property))
     )
     if (matches.length > 1) {
       state.ctx.error(state.block, configuredItemValidationMessages.ambiguousField(property.name))

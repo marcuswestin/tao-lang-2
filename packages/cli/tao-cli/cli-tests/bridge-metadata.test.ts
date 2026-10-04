@@ -20,7 +20,7 @@ Describe('TypeScript bridge metadata', () => {
         .toEqual([])
       const metadata = await FS.readText(FS.resolvePath('.tao-ts/Main.tao.ts', root))
       Expect(metadata).toContain('export type CountWords = (arg0: string) => number')
-      Expect(metadata).toContain('Sidecar.CountWords satisfies CountWords')
+      Expect(metadata).toContain('__TaoBridgeCheck<CountWords, typeof Sidecar.CountWords>')
       await FS.remove(FS.resolvePath('.tao-ts/Main.tao.ts', root))
       await runCheck(root)
       Expect(await FS.isFile(FS.resolvePath('.tao-ts/Main.tao.ts', root))).toBe(true)

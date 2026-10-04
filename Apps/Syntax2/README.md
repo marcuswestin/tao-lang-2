@@ -3,7 +3,7 @@
 Future-source forcing app for the accepted render, nominal typing, capability, quantity and action
 contracts. Requested 2026-10-04. The goal is to implement everything required to run this app, in
 vertical slices, progressively moving source from `.tao.future` to `.tao`. This is an implementation
-target. A minimal executable shell now uses the first render foundation; unsupported future source
+target. A minimal executable shell now uses the first render foundation and public wildcard imports; unsupported future source
 remains undiscovered.
 
 ## Source and authority

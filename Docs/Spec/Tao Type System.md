@@ -144,6 +144,14 @@ its exact or nominal type identifies exactly one remaining slot; declaration or 
 breaks a tie. The validator reports unknown and duplicate labels, label/type-name collisions,
 same-type ambiguity, unmatched values, and missing required slots.
 
+Implicit nominal admission follows declared ancestry upward; it does not narrow a typed ancestor
+into a descendant or cross sibling branches. Parameters referencing an existing named type preserve
+that identity. After explicit labels and exact identities, the binder considers compatible assignments
+together and accepts only pairs present in every maximum matching. Ambiguous alternatives remain
+errors instead of depending on argument order. Repeated primitive roles require explicit owner labels
+when unlabelled values cannot distinguish them. Contextual construction of literals and declared field
+contracts remains separate from callable admission, including member writes and configured slots.
+
 Defaults may be omitted. A defaulted slot does not compete for an unlabeled value, so override it
 with its owner label. A required parameter cannot follow a defaulted one; a default must match its
 parameter type and may refer only to earlier parameters in the same declaration.
@@ -515,14 +523,18 @@ compiler copies the named sidecar beside its generated module and imports the ex
 declaration, or case-set declaration. The initial root TypeScript configuration extends `.tao/typescript/tsconfig.json`, whose
 authored/generated overlay resolves unchanged relative imports such as
 `import type { Drawer } from './Drawer.tao'` in handwritten sidecars. The module
-exports Tao-derived contract types and checks each sidecar's named export with `satisfies`.
+exports Tao-derived contract types and checks each sidecar's named export with erased TypeScript
+constraints. Sidecar imports in this companion are type-only: loading it does not initialize native
+implementations. Signature, accepted argument count, and return compatibility remain separate checks,
+and their diagnostics map back to the Tao declaration.
 Configuration declarations also export their `<Declaration>Config` type there. Generated output is ignored by Git;
 authors edit the Tao declaration and handwritten sidecar, and may import its generated types if
 useful. Compiled Tao modules and their
 configuration declaration companions export the same contract types for copied sidecars. `tao check`
 also runs TypeScript over the generated modules and their sidecars, reporting a missing export or a
-parameter or result mismatch as an error. The check includes the callable arity, so a function with
-too few or too many parameters cannot silently satisfy a call boundary. Tao fills defaulted foreign
+parameter or result mismatch as an error. The check includes callable arity, so a function that cannot
+accept the declared argument count cannot silently satisfy a call boundary; compatible optional or
+rest parameters remain valid. Tao fills defaulted foreign
 action and view parameters before invoking the sidecar, so its TypeScript signature receives every
 declared parameter. Action-valued foreign arguments retain an invokable runtime action value.
 
@@ -599,6 +611,12 @@ patches its named entries, and may add or replace direct keyed entries when the 
 keyed item contract. A keyed patch is whole-item replacement, not a deep merge, and must satisfy the
 complete keyed-item contract. The descriptor retains its declaration identity across imports,
 aliases, and generated modules.
+
+Canonical item literals and configuration value blocks separate adjacent value entries with commas.
+`tao fix` migrates omitted separators with the legacy parser before formatting, including nested
+values and comment gaps. Configuration directives such as `view`, `requires`, restoration and app
+guards reset the value run; declarations and render children retain their existing separators. The
+parser still accepts legacy omitted value commas during this migration phase.
 
 ```tao
 public
