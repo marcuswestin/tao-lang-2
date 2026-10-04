@@ -39,11 +39,7 @@ export const ActionsCompiler = {
       action,
       gen`
       ${gen.scopeName(action)} = TR.Action(${asyncKeyword}(${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
-        const _TaoActionContinuation = TR.ActionContinuation()
-        return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
-          ${gen.list(parameters, Compile.ActionParameterBinding)}
-          ${Compile.ActionBlockBody(action.block)}
-        })
+        return ${Compile.ActionScopedBlock(action.block, gen.list(parameters, Compile.ActionParameterBinding))}
       }, {
         name: ${gen.jsLiteral(action.name)},
         ${AST.findOwningView(action) ? gen`owner: _TaoActionOwner,` : gen``}
@@ -148,10 +144,7 @@ export const ActionsCompiler = {
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
     return gen`
       TR.Action(${asyncKeyword}() => {
-        const _TaoActionContinuation = TR.ActionContinuation()
-        return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
-          ${Compile.ActionBlockBody(action.block)}
-        })
+        return ${Compile.ActionScopedBlock(action.block)}
       }, { ${AST.findOwningView(action) ? gen`owner: _TaoActionOwner,` : gen``}
         ${actionBlockInterruptsAsk(action.block) ? gen`interrupt: true,` : gen``} })
     `
@@ -201,6 +194,17 @@ export const ActionsCompiler = {
     })
   },
 
+  /** ActionScopedBlock returns the completion of one lexical action frame and its local bindings. */
+  ActionScopedBlock(block: AST.ActionBlock | undefined, bindings?: Compiled, asyncBoundary = false): Compiled {
+    const asyncKeyword = actionBlockRequiresAsync(block) ? gen`async ` : gen``
+    const boundaryKeyword = asyncBoundary ? gen`async ` : gen``
+    return gen`TR.BlockScope(_Scope, ${boundaryKeyword}_Scope => TR.ActionScope(${asyncKeyword}() => {
+      const _TaoActionContinuation = TR.ActionContinuation()
+      ${bindings ?? gen.noop()}
+      ${Compile.ActionBlockBody(block)}
+    }))`
+  },
+
   /** ActionBlockBody compiles one callback-owned action block. */
   ActionBlockBody(block: AST.ActionBlock | undefined): Compiled {
     // Every caller declares the continuation before the body; an empty body must still read it,
@@ -213,6 +217,7 @@ export const ActionsCompiler = {
         gen`
         TR.ResumeActionContinuation(_TaoActionContinuation)
         ${Compile.ActionStatement(statement)}
+        TR.ResumeActionContinuation(_TaoActionContinuation)
       `)
     }
     const owner = debugOwner(block)
@@ -226,6 +231,7 @@ export const ActionsCompiler = {
       } }, _Scope)
         TR.ResumeActionContinuation(_TaoActionContinuation)
         ${Compile.ActionStatement(statement)}
+        TR.ResumeActionContinuation(_TaoActionContinuation)
       `)
   },
 
@@ -237,10 +243,7 @@ export const ActionsCompiler = {
   /** AsyncActionStatement launches an isolated action sub-block without delaying its caller. */
   AsyncActionStatement(statement: AST.AsyncActionStatement): Compiled {
     return gen`TR.Async(() => {
-      const _TaoActionContinuation = TR.ActionContinuation()
-      return TR.BlockScope(_Scope, async _Scope => {
-        ${Compile.ActionBlockBody(statement.block)}
-      })
+      return ${Compile.ActionScopedBlock(statement.block, undefined, true)}
     })`
   },
 
@@ -276,17 +279,17 @@ export const ActionsCompiler = {
       gen.list(
         statement.outcomes,
         outcome =>
-          gen`[${gen.jsLiteral(outcome.case)}, async _TaoCasePayload => TR.BlockScope(_Scope, async _Scope => {
-          ${outcome.payload ? gen`${gen.scopeName(outcome.payload)} = _TaoCasePayload` : ''}
-          ${Compile.ActionBlockBody(outcome.block)}
-        })],`,
+          gen`[${gen.jsLiteral(outcome.case)}, async _TaoCasePayload => ${
+            Compile.ActionScopedBlock(
+              outcome.block,
+              outcome.payload ? gen`${gen.scopeName(outcome.payload)} = _TaoCasePayload` : gen.noop(),
+            )
+          }],`,
       )
     }
       ${
       statement.otherwise
-        ? gen`['otherwise', async () => TR.BlockScope(_Scope, async _Scope => {
-        ${Compile.ActionBlockBody(statement.otherwise.block)}
-      })],`
+        ? gen`['otherwise', async () => ${Compile.ActionScopedBlock(statement.otherwise.block)}],`
         : gen.noop()
     }
     ])`
@@ -346,10 +349,12 @@ export const ActionsCompiler = {
       gen.list(
         ASTUtils.guardBranches(statement),
         branch =>
-          gen`[${gen.jsLiteral(branch.case)}, async _TaoCasePayload => TR.BlockScope(_Scope, async _Scope => {
-          ${branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : ''}
-          ${Compile.ActionBlockBody(branch.block)}
-        })],`,
+          gen`[${gen.jsLiteral(branch.case)}, async _TaoCasePayload => ${
+            Compile.ActionScopedBlock(
+              branch.block,
+              branch.payload ? gen`${gen.scopeName(branch.payload)} = _TaoCasePayload` : gen.noop(),
+            )
+          }],`,
       )
     }
     ])) return`
@@ -363,9 +368,7 @@ export const ActionsCompiler = {
   /** IfActionStatement lazily executes one action sub-block without terminating its caller. */
   IfActionStatement(statement: AST.IfActionStatement): Compiled {
     return gen`await TR.If(${Compile.Expression(statement.condition)}, async () =>
-      TR.BlockScope(_Scope, async _Scope => {
-        ${Compile.ActionBlockBody(statement.block)}
-      })
+      ${Compile.ActionScopedBlock(statement.block)}
     )`
   },
 } as const
